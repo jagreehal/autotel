@@ -1126,4 +1126,159 @@ describe('Functional API', () => {
       expect(collector.getSpans()).toHaveLength(1);
     });
   });
+
+  describe('Array attribute support', () => {
+    it('should support string array attributes', async () => {
+      const collector = createTraceCollector();
+
+      await trace(async (ctx: TraceContext) => {
+        ctx.setAttribute('tags', ['qa', 'test', 'automated']);
+        return 'done';
+      });
+
+      const spans = collector.getSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.attributes['tags']).toEqual(['qa', 'test', 'automated']);
+    });
+
+    it('should support number array attributes', async () => {
+      const collector = createTraceCollector();
+
+      await trace(async (ctx: TraceContext) => {
+        ctx.setAttribute('scores', [95, 87, 92]);
+        return 'done';
+      });
+
+      const spans = collector.getSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.attributes['scores']).toEqual([95, 87, 92]);
+    });
+
+    it('should support boolean array attributes', async () => {
+      const collector = createTraceCollector();
+
+      await trace(async (ctx: TraceContext) => {
+        ctx.setAttribute('flags', [true, false, true]);
+        return 'done';
+      });
+
+      const spans = collector.getSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.attributes['flags']).toEqual([true, false, true]);
+    });
+
+    it('should support mixed attributes including arrays via setAttributes', async () => {
+      const collector = createTraceCollector();
+
+      await trace(async (ctx: TraceContext) => {
+        ctx.setAttributes({
+          'user.id': 'user_123',
+          environment: 'development',
+          version: '1.0.0',
+          tags: ['qa', 'test'],
+          scores: [1, 2, 3],
+        });
+        return 'done';
+      });
+
+      const spans = collector.getSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.attributes['user.id']).toBe('user_123');
+      expect(spans[0]!.attributes['environment']).toBe('development');
+      expect(spans[0]!.attributes['tags']).toEqual(['qa', 'test']);
+      expect(spans[0]!.attributes['scores']).toEqual([1, 2, 3]);
+    });
+  });
+
+  describe('Full OTel Span API', () => {
+    it('should support addEvent for span events', async () => {
+      const collector = createTraceCollector();
+
+      // Verify the method can be called without error
+      const result = await trace(async (ctx: TraceContext) => {
+        ctx.addEvent('order.started', { 'order.id': '123' });
+        ctx.addEvent('items.fetched', { 'item.count': 5 });
+        return 'done';
+      });
+
+      expect(result).toBe('done');
+      expect(collector.getSpans()).toHaveLength(1);
+    });
+
+    it('should support updateName for dynamic span naming', async () => {
+      const collector = createTraceCollector();
+
+      await trace('initial.name', async (ctx: TraceContext) => {
+        ctx.updateName('updated.name');
+        return 'done';
+      });
+
+      const spans = collector.getSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.name).toBe('updated.name');
+    });
+
+    it('should support isRecording', async () => {
+      const collector = createTraceCollector();
+      let wasRecording = false;
+
+      await trace(async (ctx: TraceContext) => {
+        wasRecording = ctx.isRecording();
+        return 'done';
+      });
+
+      expect(wasRecording).toBe(true);
+      expect(collector.getSpans()).toHaveLength(1);
+    });
+
+    it('should support addLink for span links', async () => {
+      const collector = createTraceCollector();
+
+      // Create a mock span context to link to
+      const linkContext = {
+        traceId: '0af7651916cd43dd8448eb211c80319c',
+        spanId: 'b7ad6b7169203331',
+        traceFlags: 1,
+      };
+
+      // Verify the method can be called without error
+      const result = await trace(async (ctx: TraceContext) => {
+        ctx.addLink({ context: linkContext });
+        return 'done';
+      });
+
+      expect(result).toBe('done');
+      expect(collector.getSpans()).toHaveLength(1);
+    });
+
+    it('should support addLinks for multiple span links', async () => {
+      const collector = createTraceCollector();
+
+      const links = [
+        {
+          context: {
+            traceId: '0af7651916cd43dd8448eb211c80319c',
+            spanId: 'b7ad6b7169203331',
+            traceFlags: 1,
+          },
+        },
+        {
+          context: {
+            traceId: '0af7651916cd43dd8448eb211c80319d',
+            spanId: 'b7ad6b7169203332',
+            traceFlags: 1,
+          },
+        },
+      ];
+
+      // Verify the method can be called without error
+      const result = await trace(async (ctx: TraceContext) => {
+        ctx.addLinks(links);
+        return 'done';
+      });
+
+      expect(result).toBe('done');
+      expect(collector.getSpans()).toHaveLength(1);
+    });
+  });
 });

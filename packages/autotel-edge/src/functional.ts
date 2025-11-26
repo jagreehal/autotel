@@ -194,6 +194,11 @@ function createDummyCtx(): TraceContext {
     setAttributes: () => {},
     setStatus: () => {},
     recordException: () => {},
+    addEvent: () => {},
+    addLink: () => {},
+    addLinks: () => {},
+    updateName: () => {},
+    isRecording: () => false,
   } as unknown as TraceContext;
 }
 
