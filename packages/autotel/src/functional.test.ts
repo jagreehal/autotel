@@ -926,6 +926,76 @@ describe('Functional API', () => {
       expect(spans[0]!.attributes['request.id']).toBe('req-456');
       expect(spans[0]!.attributes['operation.name']).toBe('fetchUser');
     });
+
+    it('should not create orphan spans when nesting span() inside trace() immediate execution', async () => {
+      const collector = createTraceCollector();
+
+      // This was causing a bug where span() was called during pattern detection,
+      // creating an orphan span outside of the trace() context
+      await trace('user-request-trace', async (ctx: TraceContext) => {
+        ctx.setAttribute('input.query', 'What is the capital of France?');
+
+        // Nested span should be a child of user-request-trace
+        await span(
+          {
+            name: 'llm-call',
+            attributes: { model: 'gpt-4' },
+          },
+          async () => {
+            // Simulate LLM call
+            return 'The capital of France is Paris.';
+          },
+        );
+
+        ctx.setAttribute('output', 'Successfully answered.');
+      });
+
+      const spans = collector.getSpans();
+
+      // KEY ASSERTION: Should have exactly 2 spans, NOT 3
+      // Before the fix, there would be 3 spans:
+      // 1. An orphan llm-call (created during pattern detection)
+      // 2. user-request-trace (the parent)
+      // 3. llm-call (proper child)
+      expect(spans).toHaveLength(2);
+
+      // Verify we have the correct span names
+      const spanNames = spans.map((s) => s.name).toSorted();
+      expect(spanNames).toEqual(['llm-call', 'user-request-trace']);
+
+      // Verify attributes on each span
+      const parentSpan = spans.find((s) => s.name === 'user-request-trace');
+      const childSpan = spans.find((s) => s.name === 'llm-call');
+
+      expect(parentSpan).toBeDefined();
+      expect(childSpan).toBeDefined();
+
+      expect(parentSpan!.attributes['input.query']).toBe(
+        'What is the capital of France?',
+      );
+      expect(parentSpan!.attributes['output']).toBe('Successfully answered.');
+      expect(childSpan!.attributes['model']).toBe('gpt-4');
+    });
+
+    it('should not execute async function during pattern detection', async () => {
+      const collector = createTraceCollector();
+      let executionCount = 0;
+
+      // This async function should only be executed ONCE, not twice
+      // (once during pattern detection + once for actual execution = BUG)
+      await trace('single-execution', async (ctx: TraceContext) => {
+        executionCount++;
+        ctx.setAttribute('execution.count', executionCount);
+        return 'done';
+      });
+
+      // Function should have been executed exactly once
+      expect(executionCount).toBe(1);
+
+      const spans = collector.getSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.attributes['execution.count']).toBe(1);
+    });
   });
 
   describe('baggage', () => {
