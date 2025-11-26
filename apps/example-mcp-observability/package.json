@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "autotel": "workspace:*",
-    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.1",
     "express": "^5.1.0",
     "dotenv": "^17.2.3"
   },

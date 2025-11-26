@@ -1,6 +1,3 @@
-import { resolve } from 'node-env-resolver';
-import { string, url, optional } from 'node-env-resolver/validators';
-
 /**
  * Standard OpenTelemetry environment variables
  */
@@ -39,16 +36,64 @@ export interface EnvConfig {
 }
 
 /**
- * Resolve OpenTelemetry environment variables using node-env-resolver
+ * Validate URL format
+ */
+function isValidUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve OpenTelemetry environment variables from process.env
  */
 export function resolveOtelEnv(): OtelEnvVars {
-  return resolve({
-    OTEL_SERVICE_NAME: string({ optional: true }),
-    OTEL_EXPORTER_OTLP_ENDPOINT: url({ optional: true }),
-    OTEL_EXPORTER_OTLP_HEADERS: string({ optional: true }),
-    OTEL_RESOURCE_ATTRIBUTES: string({ optional: true }),
-    OTEL_EXPORTER_OTLP_PROTOCOL: optional(['http', 'grpc'] as const),
-  });
+  const env: OtelEnvVars = {};
+
+  // OTEL_SERVICE_NAME - optional string
+  if (process.env.OTEL_SERVICE_NAME) {
+    const value = process.env.OTEL_SERVICE_NAME.trim();
+    if (value) {
+      env.OTEL_SERVICE_NAME = value;
+    }
+  }
+
+  // OTEL_EXPORTER_OTLP_ENDPOINT - optional URL
+  if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+    const value = process.env.OTEL_EXPORTER_OTLP_ENDPOINT.trim();
+    if (value && isValidUrl(value)) {
+      env.OTEL_EXPORTER_OTLP_ENDPOINT = value;
+    }
+  }
+
+  // OTEL_EXPORTER_OTLP_HEADERS - optional string
+  if (process.env.OTEL_EXPORTER_OTLP_HEADERS) {
+    const value = process.env.OTEL_EXPORTER_OTLP_HEADERS.trim();
+    if (value) {
+      env.OTEL_EXPORTER_OTLP_HEADERS = value;
+    }
+  }
+
+  // OTEL_RESOURCE_ATTRIBUTES - optional string
+  if (process.env.OTEL_RESOURCE_ATTRIBUTES) {
+    const value = process.env.OTEL_RESOURCE_ATTRIBUTES.trim();
+    if (value) {
+      env.OTEL_RESOURCE_ATTRIBUTES = value;
+    }
+  }
+
+  // OTEL_EXPORTER_OTLP_PROTOCOL - optional enum ('http' | 'grpc')
+  if (process.env.OTEL_EXPORTER_OTLP_PROTOCOL) {
+    const value = process.env.OTEL_EXPORTER_OTLP_PROTOCOL.trim().toLowerCase();
+    if (value === 'http' || value === 'grpc') {
+      env.OTEL_EXPORTER_OTLP_PROTOCOL = value;
+    }
+  }
+
+  return env;
 }
 
 /**
