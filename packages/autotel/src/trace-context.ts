@@ -7,6 +7,8 @@ import type {
   SpanStatusCode,
   BaggageEntry,
   Context,
+  Link,
+  TimeInput,
 } from '@opentelemetry/api';
 import { context, propagation } from '@opentelemetry/api';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -92,10 +94,28 @@ export type AttributeValue =
  * Span methods available on trace context
  */
 export interface SpanMethods {
+  /** Set a single attribute on the span */
   setAttribute(key: string, value: AttributeValue): void;
+  /** Set multiple attributes on the span */
   setAttributes(attrs: Record<string, AttributeValue>): void;
+  /** Set the status of the span */
   setStatus(status: { code: SpanStatusCode; message?: string }): void;
-  recordException(exception: Error): void;
+  /** Record an exception on the span */
+  recordException(exception: Error, time?: TimeInput): void;
+  /** Add an event to the span (for logging milestones/checkpoints) */
+  addEvent(
+    name: string,
+    attributesOrStartTime?: Record<string, AttributeValue> | TimeInput,
+    startTime?: TimeInput,
+  ): void;
+  /** Add a link to another span */
+  addLink(link: Link): void;
+  /** Add multiple links to other spans */
+  addLinks(links: Link[]): void;
+  /** Update the span name dynamically */
+  updateName(name: string): void;
+  /** Check if the span is recording */
+  isRecording(): boolean;
 }
 
 /**
@@ -367,6 +387,11 @@ export function createTraceContext<
     setAttributes: span.setAttributes.bind(span),
     setStatus: span.setStatus.bind(span),
     recordException: span.recordException.bind(span),
+    addEvent: span.addEvent.bind(span),
+    addLink: span.addLink.bind(span),
+    addLinks: span.addLinks.bind(span),
+    updateName: span.updateName.bind(span),
+    isRecording: span.isRecording.bind(span),
     ...baggageHelpers,
   };
 }

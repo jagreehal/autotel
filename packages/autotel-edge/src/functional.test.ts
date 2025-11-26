@@ -20,9 +20,11 @@ describe('Functional API', () => {
       setStatus: vi.fn(),
       recordException: vi.fn(),
       end: vi.fn(),
-      isRecording: () => true,
+      isRecording: vi.fn().mockReturnValue(true),
       updateName: vi.fn(),
       addEvent: vi.fn(),
+      addLink: vi.fn(),
+      addLinks: vi.fn(),
     };
 
     mockTracer = {
@@ -745,6 +747,69 @@ describe('Functional API', () => {
         tags: ['qa', 'test'],
         scores: [1, 2, 3],
       });
+    });
+  });
+
+  describe('Full OTel Span API', () => {
+    it('should support addEvent for span events', async () => {
+      await trace(async (ctx) => {
+        ctx.addEvent('order.started', { 'order.id': '123' });
+        ctx.addEvent('items.fetched', { 'item.count': 5 });
+        return 'done';
+      });
+
+      expect(mockSpan.addEvent).toHaveBeenCalledWith('order.started', { 'order.id': '123' });
+      expect(mockSpan.addEvent).toHaveBeenCalledWith('items.fetched', { 'item.count': 5 });
+    });
+
+    it('should support updateName for dynamic span naming', async () => {
+      await trace('initial.name', async (ctx) => {
+        ctx.updateName('updated.name');
+        return 'done';
+      });
+
+      expect(mockSpan.updateName).toHaveBeenCalledWith('updated.name');
+    });
+
+    it('should support isRecording', async () => {
+      let wasRecording = false;
+
+      await trace(async (ctx) => {
+        wasRecording = ctx.isRecording();
+        return 'done';
+      });
+
+      expect(wasRecording).toBe(true);
+      expect(mockSpan.isRecording).toHaveBeenCalled();
+    });
+
+    it('should support addLink for span links', async () => {
+      const linkContext = {
+        traceId: 'linked-trace-id',
+        spanId: 'linked-span-id',
+        traceFlags: 1,
+      };
+
+      await trace(async (ctx) => {
+        ctx.addLink({ context: linkContext });
+        return 'done';
+      });
+
+      expect(mockSpan.addLink).toHaveBeenCalledWith({ context: linkContext });
+    });
+
+    it('should support addLinks for multiple span links', async () => {
+      const links = [
+        { context: { traceId: 'trace-1', spanId: 'span-1', traceFlags: 1 } },
+        { context: { traceId: 'trace-2', spanId: 'span-2', traceFlags: 1 } },
+      ];
+
+      await trace(async (ctx) => {
+        ctx.addLinks(links);
+        return 'done';
+      });
+
+      expect(mockSpan.addLinks).toHaveBeenCalledWith(links);
     });
   });
 });
