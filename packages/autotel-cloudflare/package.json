@@ -1,6 +1,6 @@
 {
   "name": "autotel-cloudflare",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "The #1 OpenTelemetry package for Cloudflare Workers - complete bindings coverage, native CF OTel integration, advanced sampling",
   "type": "module",
   "main": "./dist/index.js",
