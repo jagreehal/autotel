@@ -1,0 +1,61 @@
+# Autotel YAML Configuration Example
+# Copy to autotel.yaml in your project root
+#
+# Environment variable substitution supported:
+#   ${env:VAR_NAME}           - Required env var (warns if missing)
+#   ${env:VAR_NAME:-default}  - With default value
+#
+# Configuration Priority (highest to lowest):
+# 1. Explicit init({ ... }) parameters
+# 2. This YAML file (autotel.yaml or AUTOTEL_CONFIG_FILE)
+# 3. Environment variables (OTEL_*, AUTOTEL_*)
+# 4. Built-in defaults
+
+service:
+  name: my-service
+  version: 1.0.0
+  environment: ${env:NODE_ENV:-development}
+
+exporter:
+  # OTLP endpoint - supports any OpenTelemetry-compatible backend
+  endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4318}
+  # Protocol: http (default) or grpc
+  protocol: http
+  # Headers for authentication
+  headers:
+    # Honeycomb
+    # x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+    # Datadog
+    # DD-API-KEY: ${env:DD_API_KEY}
+    # Generic OTLP auth
+    # Authorization: Bearer ${env:OTLP_AUTH_TOKEN}
+
+# Resource attributes (appear on all traces/metrics)
+resource:
+  deployment.environment: ${env:NODE_ENV:-development}
+  # team: backend
+  # region: us-east-1
+
+# Sampling configuration (optional)
+# sampling:
+#   type: adaptive  # or 'always_on', 'always_off', 'ratio'
+#   # For ratio sampler:
+#   # ratio: 0.1
+#   # For adaptive sampler:
+#   baseline_rate: 0.1
+#   always_sample_errors: true
+#   always_sample_slow: true
+#   slow_threshold_ms: 1000
+
+# Integrations to enable (auto-instrumentation)
+# Can be:
+# - Array of strings: ['express', 'http', 'pino']
+# - Object with enabled flags: { express: { enabled: true } }
+integrations:
+  - express
+  - http
+  - pino
+
+# Debug mode - prints spans to console
+# Useful for development without a collector
+debug: false

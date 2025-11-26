@@ -39,6 +39,7 @@ import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import { resolveConfigFromEnv } from './env-config';
+import { loadYamlConfig } from './yaml-config.js';
 import { PinoInstrumentation } from '@opentelemetry/instrumentation-pino';
 import { WinstonInstrumentation } from '@opentelemetry/instrumentation-winston';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
@@ -845,26 +846,24 @@ function createLoggerInstrumentation(
 }
 
 export function init(cfg: AutotelConfig): void {
-  // Resolve environment variables (standard OTEL env vars)
+  // Resolve configs in priority order: explicit > yaml > env > defaults
   const envConfig = resolveConfigFromEnv();
+  const yamlConfig = loadYamlConfig() ?? {};
 
-  // Merge configs: explicit config > env vars > defaults
-  // Note: We merge envConfig first, then cfg overrides it
+  // Merge configs: explicit config > yaml file > env vars > defaults
   const mergedConfig: AutotelConfig = {
-    ...envConfig,
-    ...cfg,
+    ...envConfig, // Environment variables (lowest priority)
+    ...yamlConfig, // YAML file (middle priority)
+    ...cfg, // Explicit config (highest priority)
     // Deep merge for resourceAttributes
     resourceAttributes: {
       ...envConfig.resourceAttributes,
+      ...yamlConfig.resourceAttributes,
       ...cfg.resourceAttributes,
     },
     // Handle otlpHeaders merge (can be string or object)
     otlpHeaders:
-      cfg.otlpHeaders === undefined
-        ? envConfig.otlpHeaders === undefined
-          ? undefined
-          : envConfig.otlpHeaders
-        : cfg.otlpHeaders,
+      cfg.otlpHeaders ?? yamlConfig.otlpHeaders ?? envConfig.otlpHeaders,
   } as AutotelConfig;
 
   // Set logger (use provided or default to silent)

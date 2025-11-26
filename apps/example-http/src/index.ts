@@ -1,26 +1,20 @@
 /**
  * HTTP Server example with autotel
- * 
+ *
  * This example shows:
  * - HTTP server with Express
- * - Automatic HTTP instrumentation
+ * - Automatic HTTP/Express instrumentation via ESM loader hook
  * - Manual tracing in routes
  * - Error tracking
- * 
+ *
  * Run: pnpm start
+ *
+ * Note: Instrumentation is initialized in instrumentation.ts via --import flag
  */
 
 import 'dotenv/config';
 import express from 'express';
-import { init, trace, type TraceContext } from 'autotel';
-
-// Initialize autotel with simple integrations
-init({
-  service: 'example-http-server',
-  endpoint: process.env.OTLP_ENDPOINT || 'http://localhost:4318',
-  // Simple! No manual imports needed - just specify integration names
-  integrations: ['express', 'http'],
-});
+import { trace, type TraceContext } from 'autotel';
 
 const app = express();
 

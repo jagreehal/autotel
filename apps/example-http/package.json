@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "tsx --import ./instrumentation.ts src/index.ts"
   },
   "dependencies": {
     "autotel": "workspace:*",
-    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "dotenv": "^17.2.3"
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.5",

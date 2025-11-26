@@ -116,6 +116,22 @@
       "types": "./dist/decorators.d.ts",
       "import": "./dist/decorators.js",
       "require": "./dist/decorators.cjs"
+    },
+    "./register": {
+      "types": "./dist/register.d.ts",
+      "import": "./dist/register.js"
+    },
+    "./auto": {
+      "types": "./dist/auto.d.ts",
+      "import": "./dist/auto.js"
+    },
+    "./hook.mjs": {
+      "import": "./src/hook.mjs"
+    },
+    "./yaml": {
+      "types": "./dist/yaml-config.d.ts",
+      "import": "./dist/yaml-config.js",
+      "require": "./dist/yaml-config.cjs"
     }
   },
   "files": [
@@ -163,8 +179,10 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
+    "import-in-the-middle": "^1.11.0",
+    "yaml": "^2.6.0",
     "@opentelemetry/api-logs": "^0.208.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.1",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.208.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
     "@opentelemetry/instrumentation-pino": "^0.55.0",
@@ -173,8 +191,7 @@
     "@opentelemetry/sdk-metrics": "^2.2.0",
     "@opentelemetry/sdk-node": "^0.208.0",
     "@opentelemetry/sdk-trace-base": "^2.2.0",
-    "@opentelemetry/semantic-conventions": "^1.38.0",
-    "node-env-resolver": "^6.1.0"
+    "@opentelemetry/semantic-conventions": "^1.38.0"
   },
   "peerDependencies": {
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.208.0",
@@ -186,7 +203,7 @@
     "@opentelemetry/resource-detector-gcp": "^0.43.0",
     "@opentelemetry/sdk-logs": "^0.208.0",
     "@opentelemetry/sdk-trace-node": "^2.2.0",
-    "@traceloop/node-server-sdk": "^0.20.1",
+    "@traceloop/node-server-sdk": "^0.21.1",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.2"
   },
@@ -233,7 +250,7 @@
     "@edge-runtime/vm": "^5.0.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-async-hooks": "^2.2.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.1",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.208.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.208.0",
@@ -253,8 +270,8 @@
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/eslint-config-prettier": "^6.11.3",
     "@types/node": "^24.10.1",
-    "@typescript-eslint/eslint-plugin": "^8.47.0",
-    "@typescript-eslint/parser": "^8.47.0",
+    "@typescript-eslint/eslint-plugin": "^8.48.0",
+    "@typescript-eslint/parser": "^8.48.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^62.0.0",
     "pino": "^10.1.0",
@@ -263,9 +280,9 @@
     "tsup": "^8.5.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.47.0",
+    "typescript-eslint": "^8.48.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^4.0.13",
+    "vitest": "^4.0.14",
     "vitest-mock-extended": "^3.1.0",
     "winston": "^3.18.3"
   },
