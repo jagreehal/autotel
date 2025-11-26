@@ -699,4 +699,52 @@ describe('Functional API', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('operation.name', 'fetchUser');
     });
   });
+
+  describe('Array attribute support', () => {
+    it('should support string array attributes', async () => {
+      await trace(async (ctx) => {
+        ctx.setAttribute('tags', ['qa', 'test', 'automated']);
+        return 'done';
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tags', ['qa', 'test', 'automated']);
+    });
+
+    it('should support number array attributes', async () => {
+      await trace(async (ctx) => {
+        ctx.setAttribute('scores', [95, 87, 92]);
+        return 'done';
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('scores', [95, 87, 92]);
+    });
+
+    it('should support boolean array attributes', async () => {
+      await trace(async (ctx) => {
+        ctx.setAttribute('flags', [true, false, true]);
+        return 'done';
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('flags', [true, false, true]);
+    });
+
+    it('should support mixed attributes including arrays via setAttributes', async () => {
+      await trace(async (ctx) => {
+        ctx.setAttributes({
+          'user.id': 'user_123',
+          environment: 'development',
+          tags: ['qa', 'test'],
+          scores: [1, 2, 3],
+        });
+        return 'done';
+      });
+
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'user.id': 'user_123',
+        environment: 'development',
+        tags: ['qa', 'test'],
+        scores: [1, 2, 3],
+      });
+    });
+  });
 });

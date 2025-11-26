@@ -2,7 +2,7 @@
  * Trace context types and utilities
  */
 
-import type { Span, SpanStatusCode } from '@opentelemetry/api';
+import type { AttributeValue, Span, SpanStatusCode } from '@opentelemetry/api';
 
 /**
  * WeakMap to store span names for active spans.
@@ -24,8 +24,8 @@ export interface TraceContextBase {
  * Span methods available on trace context
  */
 export interface SpanMethods {
-  setAttribute(key: string, value: string | number | boolean): void;
-  setAttributes(attrs: Record<string, string | number | boolean>): void;
+  setAttribute(key: string, value: AttributeValue): void;
+  setAttributes(attrs: Record<string, AttributeValue>): void;
   setStatus(status: { code: SpanStatusCode; message?: string }): void;
   recordException(exception: Error): void;
 }
