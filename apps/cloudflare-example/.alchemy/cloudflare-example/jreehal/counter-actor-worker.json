@@ -1,0 +1,58 @@
+{
+  "kind": "cloudflare::Worker",
+  "id": "counter-actor-worker",
+  "fqn": "cloudflare-example/jreehal/counter-actor-worker",
+  "seq": 1,
+  "data": {},
+  "status": "updated",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "cloudflare::Worker",
+    "Symbol(alchemy::ResourceID)": "counter-actor-worker",
+    "Symbol(alchemy::ResourceFQN)": "cloudflare-example/jreehal/counter-actor-worker",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 1,
+    "entrypoint": "./src/actor-worker.ts",
+    "compatibilityFlags": [
+      "nodejs_compat"
+    ],
+    "bindings": {
+      "CounterActor": {
+        "type": "durable_object_namespace",
+        "id": "counter-actor",
+        "className": "CounterActor",
+        "scriptName": "cloudflare-example-counter-actor-worker-jreehal",
+        "sqlite": true
+      }
+    },
+    "type": "service",
+    "id": "counter-actor-worker",
+    "name": "cloudflare-example-counter-actor-worker-jreehal",
+    "cwd": "",
+    "compatibilityDate": "2025-11-19",
+    "format": "esm",
+    "createdAt": 1764026862590,
+    "updatedAt": {
+      "@date": "2025-11-24T23:40:29.234Z"
+    },
+    "url": "https://cloudflare-example-counter-actor-worker-jreehal.jag-reehal.workers.dev",
+    "dev": {
+      "hasRemote": true
+    }
+  },
+  "props": {
+    "entrypoint": "./src/actor-worker.ts",
+    "compatibilityFlags": [
+      "nodejs_compat"
+    ],
+    "bindings": {
+      "CounterActor": {
+        "type": "durable_object_namespace",
+        "id": "counter-actor",
+        "className": "CounterActor",
+        "sqlite": true
+      }
+    }
+  }
+}

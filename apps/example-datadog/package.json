@@ -1,0 +1,28 @@
+{
+  "name": "@jagreehal/example-datadog",
+  "version": "1.0.4",
+  "private": true,
+  "type": "module",
+  "description": "Example demonstrating Datadog integration with autotel using OTLP",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "debug-proxy": "tsx src/debug-proxy.ts",
+    "start:debug": "tsx src/index-debug.ts"
+  },
+  "dependencies": {
+    "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
+    "@opentelemetry/sdk-logs": "^0.208.0",
+    "autotel": "workspace:*",
+    "dotenv": "^17.2.3",
+    "pino": "^10.1.0"
+  },
+  "comments": {
+    "logs-packages": "The @opentelemetry/sdk-logs and exporter-logs-otlp-http packages are optional peer dependencies of autotel. They are only needed if you want to export logs via OTLP. For traces and metrics only, you can omit these packages."
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

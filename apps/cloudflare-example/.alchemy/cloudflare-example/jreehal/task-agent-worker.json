@@ -1,0 +1,58 @@
+{
+  "kind": "cloudflare::Worker",
+  "id": "task-agent-worker",
+  "fqn": "cloudflare-example/jreehal/task-agent-worker",
+  "seq": 2,
+  "data": {},
+  "status": "updated",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "cloudflare::Worker",
+    "Symbol(alchemy::ResourceID)": "task-agent-worker",
+    "Symbol(alchemy::ResourceFQN)": "cloudflare-example/jreehal/task-agent-worker",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 2,
+    "entrypoint": "./src/agent-worker.ts",
+    "compatibilityFlags": [
+      "nodejs_compat"
+    ],
+    "bindings": {
+      "TaskAgent": {
+        "type": "durable_object_namespace",
+        "id": "task-agent",
+        "className": "TaskAgent",
+        "scriptName": "cloudflare-example-task-agent-worker-jreehal",
+        "sqlite": true
+      }
+    },
+    "type": "service",
+    "id": "task-agent-worker",
+    "name": "cloudflare-example-task-agent-worker-jreehal",
+    "cwd": "",
+    "compatibilityDate": "2025-11-19",
+    "format": "esm",
+    "createdAt": 1764026863013,
+    "updatedAt": {
+      "@date": "2025-11-24T23:40:36.226Z"
+    },
+    "url": "https://cloudflare-example-task-agent-worker-jreehal.jag-reehal.workers.dev",
+    "dev": {
+      "hasRemote": true
+    }
+  },
+  "props": {
+    "entrypoint": "./src/agent-worker.ts",
+    "compatibilityFlags": [
+      "nodejs_compat"
+    ],
+    "bindings": {
+      "TaskAgent": {
+        "type": "durable_object_namespace",
+        "id": "task-agent",
+        "className": "TaskAgent",
+        "sqlite": true
+      }
+    }
+  }
+}

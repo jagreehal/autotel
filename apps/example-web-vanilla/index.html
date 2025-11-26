@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autotel Web - Vanilla JS Example</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="max-w-4xl mx-auto px-6 py-12">
+    <h1 class="text-4xl font-bold text-gray-900 mb-8">🔍 Autotel Web - Vanilla JS Example</h1>
+
+    <div class="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-6 mb-8">
+      <p class="font-semibold text-gray-900 mb-3">What this demonstrates:</p>
+      <ul class="space-y-2 text-gray-700">
+        <li class="flex items-start">
+          <span class="mr-2">•</span>
+          <span>Browser SDK initialization with <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">init()</code></span>
+        </li>
+        <li class="flex items-start">
+          <span class="mr-2">•</span>
+          <span>Automatic <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> header injection on fetch requests</span>
+        </li>
+        <li class="flex items-start">
+          <span class="mr-2">•</span>
+          <span>Distributed tracing from browser → backend (mock API)</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="mb-8">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Try it out:</h2>
+      <div class="flex flex-wrap gap-3">
+        <button onclick="makeSimpleRequest()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
+          Make Simple Request
+        </button>
+        <button onclick="makeTracedRequest()" class="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
+          Make Traced Request
+        </button>
+        <button onclick="showTraceContext()" class="bg-orange-600 hover:bg-orange-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
+          Show Current Trace Context
+        </button>
+      </div>
+    </div>
+
+    <div id="result" class="bg-gray-100 rounded-lg p-6 min-h-[150px] font-mono text-sm text-gray-800 whitespace-pre-wrap"></div>
+
+  <script type="module">
+    // Import autotel-web
+    import { init, trace, getActiveContext } from '../../packages/autotel-web/dist/index.js'
+
+    // Initialize the SDK
+    init({
+      service: 'vanilla-js-example',
+      version: '1.0.0',
+      debug: true,  // Enable debug logging to see initialization
+      resourceAttributes: {
+        'deployment.environment': 'development'
+      }
+    })
+
+    console.log('✅ Autotel Web initialized!')
+
+    // Simple fetch request
+    window.makeSimpleRequest = async function() {
+      const result = document.getElementById('result')
+      result.textContent = 'Making request...'
+
+      try {
+        // This request will automatically include traceparent header
+        const response = await fetch('https://jsonplaceholder.typicode.com/posts/1')
+        const data = await response.json()
+
+        result.textContent = `✅ Success!\n\n` +
+          `Response:\n${JSON.stringify(data, null, 2)}\n\n` +
+          `Check the Network tab in DevTools to see the traceparent header!`
+      } catch (error) {
+        result.textContent = `❌ Error: ${error.message}`
+      }
+    }
+
+    // Traced fetch request (with context)
+    window.makeTracedRequest = trace(ctx => async function() {
+      const result = document.getElementById('result')
+      result.textContent = 'Making traced request...'
+
+      // Add custom attributes to the span
+      ctx.setAttribute('request.type', 'traced-fetch')
+      ctx.setAttribute('user.action', 'button-click')
+
+      try {
+        const response = await fetch('https://jsonplaceholder.typicode.com/users/1')
+        const data = await response.json()
+
+        ctx.setAttribute('user.id', data.id)
+        ctx.setAttribute('user.name', data.name)
+
+        result.textContent = `✅ Traced request completed!\n\n` +
+          `Trace ID: ${ctx.traceId}\n` +
+          `Span ID: ${ctx.spanId}\n\n` +
+          `Response:\n${JSON.stringify(data, null, 2)}\n\n` +
+          `Custom attributes added:\n` +
+          `- request.type: traced-fetch\n` +
+          `- user.action: button-click\n` +
+          `- user.id: ${data.id}\n` +
+          `- user.name: ${data.name}`
+      } catch (error) {
+        ctx.recordException(error)
+        result.textContent = `❌ Error: ${error.message}`
+      }
+    })
+
+    // Show current trace context
+    window.showTraceContext = function() {
+      const result = document.getElementById('result')
+      const ctx = getActiveContext()
+
+      if (ctx) {
+        result.textContent = `📊 Active Trace Context:\n\n` +
+          `Trace ID: ${ctx.traceId}\n` +
+          `Span ID: ${ctx.spanId}\n` +
+          `Correlation ID: ${ctx.correlationId}`
+      } else {
+        result.textContent = `ℹ️ No active trace context.\n\n` +
+          `Trace context is only available inside traced functions.\n` +
+          `Try clicking "Make Traced Request" first!`
+      }
+    }
+  </script>
+
+    <div class="mt-12 pt-8 border-t border-gray-200">
+      <h3 class="text-xl font-semibold text-gray-900 mb-4">How to verify trace propagation:</h3>
+      <ol class="space-y-2 text-gray-700 list-decimal list-inside mb-8">
+        <li>Open DevTools (F12)</li>
+        <li>Go to the Network tab</li>
+        <li>Click one of the buttons above</li>
+        <li>Click on the request in the Network tab</li>
+        <li>Look for <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> in the Request Headers section</li>
+        <li>You should see: <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent: 00-{trace-id}-{span-id}-01</code></li>
+      </ol>
+
+      <h3 class="text-xl font-semibold text-gray-900 mb-4">What happens in a real app:</h3>
+      <p class="text-gray-700 mb-4">
+        In a production setup, your backend would extract the <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> header
+        and continue the trace. For example:
+      </p>
+      <pre class="bg-gray-100 p-6 rounded-lg overflow-x-auto text-sm">
+<span class="text-gray-600">// Backend (Express + Autotel)</span>
+<span class="text-blue-600">import</span> { init, trace } <span class="text-blue-600">from</span> <span class="text-green-600">'autotel'</span>
+
+<span class="text-blue-600">init</span>({ service: <span class="text-green-600">'my-api'</span>, endpoint: <span class="text-green-600">'http://localhost:4318'</span> })
+
+app.<span class="text-blue-600">get</span>(<span class="text-green-600">'/api/users/:id'</span>, <span class="text-blue-600">async</span> (req, res) => {
+  <span class="text-gray-600">// traceparent header is automatically extracted!</span>
+  <span class="text-blue-600">const</span> user = <span class="text-blue-600">await</span> <span class="text-blue-600">trace</span>(() => db.users.findById(req.params.id))()
+  res.json(user)
+})
+      </pre>
+    </div>
+  </div>
+</body>
+</html>

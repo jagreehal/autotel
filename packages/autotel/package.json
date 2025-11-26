@@ -1,0 +1,280 @@
+{
+  "name": "autotel",
+  "version": "2.1.0",
+  "description": "Write Once, Observe Anywhere",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./instrumentation": {
+      "types": "./dist/instrumentation.d.ts",
+      "import": "./dist/instrumentation.js",
+      "require": "./dist/instrumentation.cjs"
+    },
+    "./logger": {
+      "types": "./dist/logger.d.ts",
+      "import": "./dist/logger.js",
+      "require": "./dist/logger.cjs"
+    },
+    "./sampling": {
+      "types": "./dist/sampling.d.ts",
+      "import": "./dist/sampling.js",
+      "require": "./dist/sampling.cjs"
+    },
+    "./event": {
+      "types": "./dist/event.d.ts",
+      "import": "./dist/event.js",
+      "require": "./dist/event.cjs"
+    },
+    "./event-subscriber": {
+      "types": "./dist/event-subscriber.d.ts",
+      "import": "./dist/event-subscriber.js",
+      "require": "./dist/event-subscriber.cjs"
+    },
+    "./event-testing": {
+      "types": "./dist/event-testing.d.ts",
+      "import": "./dist/event-testing.js",
+      "require": "./dist/event-testing.cjs"
+    },
+    "./metric": {
+      "types": "./dist/metric.d.ts",
+      "import": "./dist/metric.js",
+      "require": "./dist/metric.cjs"
+    },
+    "./metric-testing": {
+      "types": "./dist/metric-testing.d.ts",
+      "import": "./dist/metric-testing.js",
+      "require": "./dist/metric-testing.cjs"
+    },
+    "./metric-helpers": {
+      "types": "./dist/metric-helpers.d.ts",
+      "import": "./dist/metric-helpers.js",
+      "require": "./dist/metric-helpers.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
+    },
+    "./exporters": {
+      "types": "./dist/exporters.d.ts",
+      "import": "./dist/exporters.js",
+      "require": "./dist/exporters.cjs"
+    },
+    "./processors": {
+      "types": "./dist/processors.d.ts",
+      "import": "./dist/processors.js",
+      "require": "./dist/processors.cjs"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js",
+      "require": "./dist/config.cjs"
+    },
+    "./tail-sampling-processor": {
+      "types": "./dist/tail-sampling-processor.d.ts",
+      "import": "./dist/tail-sampling-processor.js",
+      "require": "./dist/tail-sampling-processor.cjs"
+    },
+    "./functional": {
+      "types": "./dist/functional.d.ts",
+      "import": "./dist/functional.js",
+      "require": "./dist/functional.cjs"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "import": "./dist/http.js",
+      "require": "./dist/http.cjs"
+    },
+    "./db": {
+      "types": "./dist/db.d.ts",
+      "import": "./dist/db.js",
+      "require": "./dist/db.cjs"
+    },
+    "./trace-helpers": {
+      "types": "./dist/trace-helpers.d.ts",
+      "import": "./dist/trace-helpers.js",
+      "require": "./dist/trace-helpers.cjs"
+    },
+    "./tracer-provider": {
+      "types": "./dist/tracer-provider.d.ts",
+      "import": "./dist/tracer-provider.js",
+      "require": "./dist/tracer-provider.cjs"
+    },
+    "./semantic-helpers": {
+      "types": "./dist/semantic-helpers.d.ts",
+      "import": "./dist/semantic-helpers.js",
+      "require": "./dist/semantic-helpers.cjs"
+    },
+    "./decorators": {
+      "types": "./dist/decorators.d.ts",
+      "import": "./dist/decorators.js",
+      "require": "./dist/decorators.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "ci": "npm run build && npm run check-format && npm run check-exports && npm run lint && npm run test",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src/**/*.ts",
+    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check src/**/*.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:watch": "vitest --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts",
+    "test:all": "pnpm test && pnpm test:integration",
+    "check-format": "prettier --check ./src",
+    "check-exports": "attw --pack . --ignore-rules false-esm no-resolution cjs-resolves-to-esm",
+    "clean": "rimraf dist",
+    "quality": "pnpm type-check && pnpm test && pnpm lint && pnpm format:check && pnpm build && pnpm check-exports"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "typescript",
+    "observability",
+    "tracing",
+    "logging",
+    "instrumentation",
+    "apm",
+    "functional",
+    "analytics",
+    "metrics",
+    "business-metrics",
+    "product-analytics",
+    "telemetry",
+    "monitoring"
+  ],
+  "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": "^0.208.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.208.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
+    "@opentelemetry/instrumentation-pino": "^0.55.0",
+    "@opentelemetry/instrumentation-winston": "^0.53.0",
+    "@opentelemetry/resources": "^2.2.0",
+    "@opentelemetry/sdk-metrics": "^2.2.0",
+    "@opentelemetry/sdk-node": "^0.208.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0",
+    "node-env-resolver": "^6.1.0"
+  },
+  "peerDependencies": {
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.208.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.208.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.208.0",
+    "@opentelemetry/resource-detector-aws": "^2.8.0",
+    "@opentelemetry/resource-detector-container": "^0.7.11",
+    "@opentelemetry/resource-detector-gcp": "^0.43.0",
+    "@opentelemetry/sdk-logs": "^0.208.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@traceloop/node-server-sdk": "^0.20.1",
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/exporter-logs-otlp-grpc": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-logs-otlp-http": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-metrics-otlp-grpc": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-trace-otlp-grpc": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-logs": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-trace-node": {
+      "optional": true
+    },
+    "@opentelemetry/resource-detector-aws": {
+      "optional": true
+    },
+    "@opentelemetry/resource-detector-gcp": {
+      "optional": true
+    },
+    "@opentelemetry/resource-detector-container": {
+      "optional": true
+    },
+    "@traceloop/node-server-sdk": {
+      "optional": true
+    },
+    "pino": {
+      "optional": true
+    },
+    "pino-pretty": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@edge-runtime/vm": "^5.0.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/context-async-hooks": "^2.2.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.208.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.208.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.208.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.208.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
+    "@opentelemetry/resource-detector-aws": "^2.8.0",
+    "@opentelemetry/resource-detector-container": "^0.7.11",
+    "@opentelemetry/resource-detector-gcp": "^0.43.0",
+    "@opentelemetry/resources": "^2.2.0",
+    "@opentelemetry/sdk-logs": "^0.208.0",
+    "@opentelemetry/sdk-metrics": "^2.2.0",
+    "@opentelemetry/sdk-node": "^0.208.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0",
+    "@total-typescript/ts-reset": "^0.6.1",
+    "@total-typescript/tsconfig": "^1.0.4",
+    "@types/eslint-config-prettier": "^6.11.3",
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-unicorn": "^62.0.0",
+    "pino": "^10.1.0",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.1.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.47.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^4.0.13",
+    "vitest-mock-extended": "^3.1.0",
+    "winston": "^3.18.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme"
+}

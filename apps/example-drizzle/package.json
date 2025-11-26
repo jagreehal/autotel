@@ -1,0 +1,26 @@
+{
+  "name": "@jagreehal/example-drizzle",
+  "version": "1.0.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "docker-compose up -d && tsx src/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.15",
+    "autotel": "workspace:*",
+    "autotel-plugins": "workspace:*",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.44.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "drizzle-kit": "^0.31.7",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

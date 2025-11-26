@@ -1,0 +1,21 @@
+{
+  "name": "@jagreehal/example-http",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "express": "^5.1.0",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

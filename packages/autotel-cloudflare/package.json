@@ -1,0 +1,107 @@
+{
+  "name": "autotel-cloudflare",
+  "version": "2.1.0",
+  "description": "The #1 OpenTelemetry package for Cloudflare Workers - complete bindings coverage, native CF OTel integration, advanced sampling",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bindings": {
+      "types": "./dist/bindings.d.ts",
+      "import": "./dist/bindings.js"
+    },
+    "./handlers": {
+      "types": "./dist/handlers.d.ts",
+      "import": "./dist/handlers.js"
+    },
+    "./sampling": {
+      "types": "./dist/sampling.d.ts",
+      "import": "./dist/sampling.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js"
+    },
+    "./logger": {
+      "types": "./dist/logger.d.ts",
+      "import": "./dist/logger.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    },
+    "./actors": {
+      "types": "./dist/actors.d.ts",
+      "import": "./dist/actors.js"
+    },
+    "./agents": {
+      "types": "./dist/agents.d.ts",
+      "import": "./dist/agents.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src/**/*.ts",
+    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "cloudflare-workers",
+    "cloudflare",
+    "workers",
+    "observability",
+    "tracing",
+    "bindings",
+    "kv",
+    "r2",
+    "d1",
+    "durable-objects",
+    "workers-ai"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "dependencies": {
+    "autotel-edge": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/resources": "^2.2.0"
+  },
+  "peerDependencies": {
+    "@cloudflare/workers-types": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251121.0",
+    "@opentelemetry/context-async-hooks": "^2.2.0",
+    "@types/node": "^24.10.1",
+    "rimraf": "^6.1.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13",
+    "vitest-mock-extended": "^3.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-cloudflare"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-cloudflare#readme"
+}

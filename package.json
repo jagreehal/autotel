@@ -1,0 +1,60 @@
+{
+  "name": "autotel-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Write Once, Observe Anywhere - Zero-boilerplate OpenTelemetry for JavaScript/TypeScript",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "turbo format",
+    "test": "turbo test",
+    "test:integration": "turbo test:integration",
+    "clean": "turbo clean",
+    "type-check": "turbo type-check",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish",
+    "quality": "turbo run build && turbo run lint && turbo run format && turbo run type-check && turbo run test && turbo run test:integration"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@eslint/js": "^9.39.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-unicorn": "^62.0.0",
+    "prettier": "^3.6.2",
+    "turbo": "^2.6.1",
+    "typescript-eslint": "^8.47.0"
+  },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=8"
+  },
+  "packageManager": "pnpm@10.23.0",
+  "pnpm": {
+    "overrides": {
+      "vite": ">=7.1.11"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jagreehal/autotel.git"
+  },
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme",
+  "dependencies": {
+    "node-env-resolver": "^6.1.0"
+  }
+}

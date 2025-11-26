@@ -1,0 +1,42 @@
+{
+  "kind": "cloudflare::Worker",
+  "id": "hello-worker",
+  "fqn": "cloudflare-example/jreehal/hello-worker",
+  "seq": 0,
+  "data": {},
+  "status": "updated",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "cloudflare::Worker",
+    "Symbol(alchemy::ResourceID)": "hello-worker",
+    "Symbol(alchemy::ResourceFQN)": "cloudflare-example/jreehal/hello-worker",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 0,
+    "entrypoint": "./src/worker.ts",
+    "compatibilityFlags": [
+      "nodejs_compat"
+    ],
+    "type": "service",
+    "id": "hello-worker",
+    "name": "cloudflare-example-hello-worker-jreehal",
+    "cwd": "",
+    "compatibilityDate": "2025-11-19",
+    "format": "esm",
+    "bindings": {},
+    "createdAt": 1764026862288,
+    "updatedAt": {
+      "@date": "2025-11-24T23:40:23.781Z"
+    },
+    "url": "https://cloudflare-example-hello-worker-jreehal.jag-reehal.workers.dev",
+    "dev": {
+      "hasRemote": true
+    }
+  },
+  "props": {
+    "entrypoint": "./src/worker.ts",
+    "compatibilityFlags": [
+      "nodejs_compat"
+    ]
+  }
+}

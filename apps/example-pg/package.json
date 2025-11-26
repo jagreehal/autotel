@@ -1,0 +1,22 @@
+{
+  "name": "@jagreehal/example-example-pg",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx --import ./src/instrumentation.mjs src/index.ts",
+    "bun:start": "bun --import ./src/instrumentation.mjs src/index.ts"
+  },
+  "dependencies": {
+    "@opentelemetry/instrumentation-pg": "^0.55.0",
+    "autotel": "workspace:*",
+    "dotenv": "^17.2.3",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

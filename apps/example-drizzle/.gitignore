@@ -1,0 +1,6 @@
+node_modules
+dist
+.env
+drizzle/dev.db
+drizzle/dev.db-wal
+drizzle/dev.db-shm

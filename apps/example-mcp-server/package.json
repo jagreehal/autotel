@@ -1,0 +1,22 @@
+{
+  "name": "@jagreehal/example-mcp-server",
+  "version": "0.1.3",
+  "private": true,
+  "type": "module",
+  "description": "Example MCP server with autotel-mcp instrumentation",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "autotel": "workspace:*",
+    "autotel-mcp": "workspace:*",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

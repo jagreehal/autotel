@@ -1,0 +1,16 @@
+{
+  "extends": "../../packages/autotel/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      // "autotel": ["../../packages/autotel/src"],
+      // "autotel-subscribers": ["../../packages/autotel-subscribers/src/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}
+

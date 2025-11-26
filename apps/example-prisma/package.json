@@ -1,0 +1,25 @@
+{
+  "name": "@jagreehal/example-prisma",
+  "version": "1.0.4",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@prisma/client": "^7.0.0",
+    "@prisma/instrumentation": "^7.0.0",
+    "autotel": "workspace:*",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "prisma": "^7.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

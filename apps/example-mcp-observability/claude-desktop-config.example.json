@@ -1,0 +1,19 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/config.json",
+  "mcpServers": {
+    "opentelemetry": {
+      "command": "uvx",
+      "args": [
+        "opentelemetry-mcp",
+        "--backend",
+        "jaeger",
+        "--url",
+        "http://localhost:16686"
+      ],
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "MAX_TRACES_PER_QUERY": "100"
+      }
+    }
+  }
+}

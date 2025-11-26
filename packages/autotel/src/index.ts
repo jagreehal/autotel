@@ -1,0 +1,158 @@
+/**
+ * autotel - Simplified OpenTelemetry instrumentation
+ *
+ * @example Minimal setup
+ * ```typescript
+ * import { init, trace, track } from 'autotel'
+ *
+ * init({ service: 'my-app' })
+ *
+ * export const createUser = trace(ctx => async (data: CreateUserData) => {
+ *   track('user.signup', { userId: data.id, plan: data.plan })
+ * })
+ * ```
+ *
+ * @example With events
+ * ```typescript
+ * import { init, trace, track } from 'autotel'
+ * import { PostHogSubscriber } from 'autotel-subscribers'
+ *
+ * init({
+ *   service: 'my-app',
+ *   subscribers: [new PostHogSubscriber({ apiKey: '...' })]
+ * })
+ *
+ * export const createUser = trace(ctx => async (data: CreateUserData) => {
+ *   track('user.signup', { userId: data.id })
+ * })
+ * ```
+ */
+
+// Core initialization
+export { init, type AutotelConfig } from './init';
+
+// Baggage span processor
+export {
+  BaggageSpanProcessor,
+  type BaggageSpanProcessorOptions,
+} from './baggage-span-processor';
+
+// Functional API (re-export for convenience)
+export type {
+  TraceContext,
+  SpanOptions,
+  WithNewContextOptions,
+  WithBaggageOptions,
+  InstrumentOptions,
+} from './functional';
+export {
+  trace,
+  instrument,
+  withTracing,
+  span,
+  withNewContext,
+  withBaggage,
+  ctx,
+} from './functional';
+
+// Operation context (for advanced usage)
+export type { OperationContext } from './operation-context';
+export {
+  getOperationContext,
+  runInOperationContext,
+} from './operation-context';
+
+// Global track function
+export { track } from './track';
+
+// Graceful shutdown
+export { flush, shutdown } from './shutdown';
+
+// Re-export sampling strategies
+export {
+  type Sampler,
+  type SamplingContext,
+  AlwaysSampler,
+  NeverSampler,
+  RandomSampler,
+  AdaptiveSampler,
+  UserIdSampler,
+} from './sampling';
+
+// Events API
+export { Event, getEvents, resetEvents, type EventsOptions } from './event';
+
+// Metrics API
+export {
+  Metric,
+  getMetrics,
+  resetMetrics,
+  type MetricsOptions,
+} from './metric';
+
+// Meter helpers for custom metrics
+export {
+  getMeter,
+  createCounter,
+  createHistogram,
+  createUpDownCounter,
+  createObservableGauge,
+} from './metric-helpers';
+
+// Tracer helpers for custom spans
+export {
+  getTracer,
+  getActiveSpan,
+  getActiveContext,
+  runWithSpan,
+  finalizeSpan,
+  createDeterministicTraceId,
+  flattenMetadata,
+} from './trace-helpers';
+
+// Isolated tracer provider support (advanced - for library authors)
+export {
+  setAutotelTracerProvider,
+  getAutotelTracerProvider,
+  getAutotelTracer,
+} from './tracer-provider';
+
+// Semantic convention helpers
+export {
+  traceLLM,
+  traceDB,
+  traceHTTP,
+  traceMessaging,
+  type LLMConfig,
+  type DBConfig,
+  type HTTPConfig,
+  type MessagingConfig,
+} from './semantic-helpers';
+
+// Re-export events types
+export type {
+  EventSubscriber,
+  EventAttributes,
+  FunnelStatus,
+  OutcomeStatus,
+} from './event-subscriber';
+
+// Re-export OpenTelemetry APIs for convenience
+// (Users shouldn't need to import @opentelemetry/api directly)
+// Note: OTel's trace is exported as 'otelTrace' to avoid naming conflict with autotel's trace()
+// Plugin developers can also access it directly: import { otelTrace } from 'autotel'
+export {
+  context,
+  propagation,
+  SpanStatusCode,
+  trace as otelTrace,
+} from '@opentelemetry/api';
+
+// Re-export common OpenTelemetry types and utilities
+// This allows plugins and apps to use OTel without needing separate @opentelemetry/api installation
+export type { Span, SpanContext, Tracer, Context } from '@opentelemetry/api';
+export { SpanKind } from '@opentelemetry/api';
+// Note: trace exported from functional.ts, context/propagation/SpanStatusCode already exported above
+
+// Export typed baggage helper
+export { defineBaggageSchema } from './trace-context';

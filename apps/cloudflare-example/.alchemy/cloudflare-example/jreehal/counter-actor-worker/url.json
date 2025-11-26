@@ -1,0 +1,23 @@
+{
+  "kind": "cloudflare::WorkerSubdomain",
+  "id": "url",
+  "fqn": "cloudflare-example/jreehal/counter-actor-worker/url",
+  "seq": 0,
+  "data": {},
+  "status": "updated",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "cloudflare::WorkerSubdomain",
+    "Symbol(alchemy::ResourceID)": "url",
+    "Symbol(alchemy::ResourceFQN)": "cloudflare-example/jreehal/counter-actor-worker/url",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 0,
+    "url": "https://cloudflare-example-counter-actor-worker-jreehal.jag-reehal.workers.dev"
+  },
+  "props": {
+    "scriptName": "cloudflare-example-counter-actor-worker-jreehal",
+    "retain": false,
+    "dev": false
+  }
+}

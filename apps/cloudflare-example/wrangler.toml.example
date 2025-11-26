@@ -1,0 +1,93 @@
+# Example wrangler.toml configuration
+# This file demonstrates how to configure Cloudflare Workers with autotel-edge
+# Note: This project uses alchemy.run.ts, but this shows the equivalent wrangler.toml setup
+
+name = "cloudflare-example"
+main = "src/worker.ts"
+compatibility_date = "2024-10-11"
+compatibility_flags = ["nodejs_compat"]
+
+# Environment variables
+[vars]
+# OTLP_ENDPOINT = "http://localhost:4318/v1/traces"  # For local dev
+# ENVIRONMENT = "development"  # or "production"
+# DISABLE_INSTRUMENTATION = "false"
+
+# Secrets (set via: wrangler secret put OTLP_ENDPOINT)
+# These should be set as secrets in production:
+# - OTLP_ENDPOINT: Your OTLP collector endpoint
+# - OTLP_HEADERS: JSON string of headers (e.g., '{"Authorization": "Bearer token"}')
+
+# Optional bindings (uncomment and configure as needed)
+
+# KV Namespace
+# [[kv_namespaces]]
+# binding = "MY_KV"
+# id = "your-kv-namespace-id"
+# preview_id = "your-preview-kv-namespace-id"
+
+# R2 Bucket
+# [[r2_buckets]]
+# binding = "MY_R2"
+# bucket_name = "my-bucket"
+
+# D1 Database
+# [[d1_databases]]
+# binding = "MY_D1"
+# database_name = "my-database"
+# database_id = "your-database-id"
+
+# Service Binding (to another Worker)
+# [[services]]
+# binding = "MY_SERVICE"
+# service = "my-other-worker"
+# environment = "production"
+
+# Scheduled Triggers (Cron)
+# [[triggers.crons]]
+# cron = "0 0 * * *"  # Daily at midnight
+
+# Queue Consumers
+# [[queues.consumers]]
+# queue = "my-queue"
+# max_batch_size = 10
+# max_batch_timeout = 30
+
+# Email Routing (requires Email Routing setup)
+# This is configured in the Cloudflare dashboard under Email Routing
+
+# Durable Objects (if using)
+# [[durable_objects.bindings]]
+# name = "MY_DO"
+# class_name = "MyDurableObject"
+# script_name = "cloudflare-example"
+
+# Cloudflare Actors Example (see src/actor-worker.ts)
+# [[durable_objects.bindings]]
+# name = "CounterActor"
+# class_name = "CounterActor"
+# script_name = "cloudflare-example"
+
+# SQLite migrations for Actors (required for Actors with storage)
+# [[migrations]]
+# new_sqlite_classes = ["CounterActor"]
+# tag = "v1"
+
+# Observability Configuration
+# Cloudflare Workers now support native OpenTelemetry export
+# Configure destinations in the Cloudflare dashboard:
+# - Go to Workers & Pages > Your Worker > Settings > Observability
+# - Add destinations (Honeycomb, Grafana Cloud, Axiom, etc.)
+# - Configure sampling rates
+
+# For local development with OTLP collector:
+# docker run -p 4318:4318 -p 4317:4317 \
+#   -v $(pwd)/otel-collector-config.yaml:/etc/otelcol/config.yaml \
+#   otel/opentelemetry-collector:latest
+
+
+
+
+
+
+

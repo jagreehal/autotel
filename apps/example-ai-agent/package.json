@@ -1,0 +1,27 @@
+{
+  "name": "@jagreehal/example-ai-agent",
+  "version": "1.0.7",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start:multi-agent": "tsx src/multi-agent-workflow.ts",
+    "start:multi-agent-openllmetry": "tsx src/multi-agent-workflow-with-openllmetry.ts",
+    "start:rag": "tsx src/rag-pipeline.ts"
+  },
+  "dependencies": {
+    "@openai/agents": "^0.3.3",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.0",
+    "@traceloop/node-server-sdk": "^0.20.1",
+    "openai": "^6.9.1",
+    "autotel": "workspace:*",
+    "autotel-subscribers": "workspace:*",
+    "dotenv": "^17.2.3",
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

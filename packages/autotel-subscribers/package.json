@@ -1,0 +1,141 @@
+{
+  "name": "autotel-subscribers",
+  "version": "4.0.0",
+  "description": "Write Once, Observe Anywhere - Event subscribers for autotel (PostHog, Mixpanel, Amplitude, Segment)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./posthog": {
+      "types": "./dist/posthog.d.ts",
+      "import": "./dist/posthog.js",
+      "require": "./dist/posthog.cjs"
+    },
+    "./mixpanel": {
+      "types": "./dist/mixpanel.d.ts",
+      "import": "./dist/mixpanel.js",
+      "require": "./dist/mixpanel.cjs"
+    },
+    "./segment": {
+      "types": "./dist/segment.d.ts",
+      "import": "./dist/segment.js",
+      "require": "./dist/segment.cjs"
+    },
+    "./amplitude": {
+      "types": "./dist/amplitude.d.ts",
+      "import": "./dist/amplitude.js",
+      "require": "./dist/amplitude.cjs"
+    },
+    "./webhook": {
+      "types": "./dist/webhook.d.ts",
+      "import": "./dist/webhook.js",
+      "require": "./dist/webhook.cjs"
+    },
+    "./slack": {
+      "types": "./dist/slack.d.ts",
+      "import": "./dist/slack.js",
+      "require": "./dist/slack.cjs"
+    },
+    "./factories": {
+      "types": "./dist/factories.d.ts",
+      "import": "./dist/factories.js",
+      "require": "./dist/factories.cjs"
+    },
+    "./middleware": {
+      "types": "./dist/middleware.d.ts",
+      "import": "./dist/middleware.js",
+      "require": "./dist/middleware.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "require": "./dist/testing/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "examples",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "npx eslint 'src/**/*.ts' 'examples/**/*.ts'",
+    "lint:fix": "npx eslint 'src/**/*.ts' 'examples/**/*.ts' --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "autotel",
+    "opentelemetry",
+    "analytics",
+    "posthog",
+    "mixpanel",
+    "amplitude",
+    "segment",
+    "webhook",
+    "adapters",
+    "business-metrics",
+    "product-analytics",
+    "telemetry",
+    "observability"
+  ],
+  "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "peerDependencies": {
+    "autotel": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "posthog-node": {
+      "optional": true
+    },
+    "mixpanel": {
+      "optional": true
+    },
+    "@segment/analytics-node": {
+      "optional": true
+    },
+    "@amplitude/analytics-node": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@amplitude/analytics-node": "^1.5.26",
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@cloudflare/workers-types": "^4.20251121.0",
+    "@prisma/client": "^7.0.0",
+    "@segment/analytics-node": "^2.3.0",
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "autotel": "workspace:*",
+    "drizzle-orm": "^0.44.7",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-unicorn": "^62.0.0",
+    "mixpanel": "^0.19.1",
+    "mongoose": "^9.0.0",
+    "posthog-node": "^5.13.2",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.1.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.47.0",
+    "vitest": "^4.0.13"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme"
+}

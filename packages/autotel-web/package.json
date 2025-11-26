@@ -1,0 +1,69 @@
+{
+  "name": "autotel-web",
+  "version": "1.1.0",
+  "description": "Ultra-lightweight browser SDK for distributed tracing - propagates W3C traceparent headers to backends using Autotel (~2-5KB gzipped)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./privacy": {
+      "types": "./dist/privacy.d.ts",
+      "import": "./dist/privacy.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src/**/*.ts",
+    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "browser",
+    "web",
+    "distributed-tracing",
+    "w3c-trace-context",
+    "traceparent",
+    "observability",
+    "tracing",
+    "spa",
+    "react",
+    "vue",
+    "nextjs"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "rimraf": "^6.1.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13",
+    "vitest-mock-extended": "^3.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-web"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-web#readme"
+}

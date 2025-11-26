@@ -1,0 +1,93 @@
+{
+  "name": "autotel-backends",
+  "version": "2.0.1",
+  "description": "Vendor backend configurations for Autotel (Honeycomb, Datadog, etc.)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./honeycomb": {
+      "types": "./dist/honeycomb.d.ts",
+      "import": "./dist/honeycomb.js"
+    },
+    "./datadog": {
+      "types": "./dist/datadog.d.ts",
+      "import": "./dist/datadog.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "ci": "npm run build && npm run check-format && npm run check-exports && npm run lint && npm run test",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src/**/*.ts",
+    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check src/**/*.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:watch": "vitest --config vitest.unit.config.ts",
+    "check-format": "prettier --check ./src",
+    "check-exports": "attw --pack . --ignore-rules false-esm no-resolution cjs-resolves-to-esm",
+    "clean": "rimraf dist",
+    "quality": "pnpm type-check && pnpm test && pnpm lint && pnpm format:check && pnpm build && pnpm check-exports"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "autotel",
+    "backend",
+    "honeycomb",
+    "datadog",
+    "configuration",
+    "observability",
+    "tracing",
+    "telemetry",
+    "vendor"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "dependencies": {
+    "autotel": "workspace:*"
+  },
+  "peerDependencies": {
+    "@opentelemetry/exporter-logs-otlp-http": ">=0.57.0",
+    "@opentelemetry/sdk-logs": ">=0.57.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/exporter-logs-otlp-http": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-logs": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-unicorn": "^62.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-backends"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme"
+}

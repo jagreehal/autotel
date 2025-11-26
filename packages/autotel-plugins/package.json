@@ -1,0 +1,105 @@
+{
+  "name": "autotel-plugins",
+  "version": "0.4.0",
+  "description": "OpenTelemetry instrumentation for libraries without official support (Drizzle ORM)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./drizzle": {
+      "types": "./dist/drizzle.d.ts",
+      "import": "./dist/drizzle.js",
+      "require": "./dist/drizzle.cjs"
+    },
+    "./mongoose": {
+      "types": "./dist/mongoose.d.ts",
+      "import": "./dist/mongoose.js",
+      "require": "./dist/mongoose.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "ci": "npm run build && npm run check-format && npm run check-exports && npm run lint && npm run test",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src/**/*.ts",
+    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check src/**/*.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:watch": "vitest --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts",
+    "test:all": "pnpm test && pnpm test:integration",
+    "check-format": "prettier --check ./src",
+    "check-exports": "attw --pack . --ignore-rules false-esm no-resolution cjs-resolves-to-esm",
+    "clean": "rimraf dist",
+    "quality": "pnpm type-check && pnpm test && pnpm lint && pnpm format:check && pnpm build && pnpm check-exports"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "instrumentation",
+    "plugins",
+    "drizzle",
+    "drizzle-orm",
+    "mongoose",
+    "mongodb",
+    "database",
+    "orm",
+    "observability",
+    "tracing",
+    "telemetry"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/instrumentation": "^0.57.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0",
+    "autotel": "workspace:*"
+  },
+  "peerDependencies": {
+    "drizzle-orm": ">=0.44.7",
+    "mongoose": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    },
+    "mongoose": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "drizzle-orm": "^0.44.7",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-unicorn": "^62.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-plugins"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme"
+}

@@ -1,0 +1,88 @@
+{
+  "name": "autotel-mcp",
+  "version": "2.0.0",
+  "description": "OpenTelemetry instrumentation for Model Context Protocol (MCP) with distributed tracing support",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src/**/*.ts",
+    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts",
+    "clean": "rimraf dist",
+    "format": "prettier --write .",
+    "format:check": "prettier --check src/**/*.ts"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "mcp",
+    "model-context-protocol",
+    "distributed-tracing",
+    "observability",
+    "instrumentation",
+    "w3c-trace-context"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "autotel": "*"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@opentelemetry/context-async-hooks": "^2.2.0",
+    "@opentelemetry/core": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@types/node": "^24.10.1",
+    "autotel": "workspace:*",
+    "autotel-edge": "workspace:*",
+    "rimraf": "^6.1.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13",
+    "vitest-mock-extended": "^3.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-mcp#readme"
+}

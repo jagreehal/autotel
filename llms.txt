@@ -1,0 +1,239 @@
+# Autotel (https://github.com/jagreehal/autotel)
+
+> OpenTelemetry instrumentation wrapper for Node.js and edge runtimes. Instrument code once and export to any OTLP-compatible backend.
+
+Functional API wrapper around OpenTelemetry with automatic span lifecycle management, tail sampling, rate limiting, circuit breakers, and PII redaction. Reduces typical SDK setup from 30+ lines to 5-10 lines.
+
+**Core Packages:**
+- `autotel` - Main package with trace/span/init functions for Node.js
+- `autotel-edge` - Lightweight version for Cloudflare Workers, Vercel Edge, Deno Deploy
+- `autotel-adapters` - Analytics adapters for PostHog, Mixpanel, Amplitude, Segment
+
+**Approach:** Functional wrappers (`trace()`, `span()`, `instrument()`) that handle span lifecycle, error recording, and context propagation automatically.
+
+**Main APIs:**
+- **Tracing**: `trace()`, `span()`, `withTracing()`, `instrument()`, `@Trace` decorators
+- **Analytics**: `track()`, `Analytics` class, adapters for PostHog/Mixpanel/Amplitude/Segment
+- **Metrics**: `Metrics` class, `createCounter()`, `createHistogram()` helpers
+- **Logging**: `createLogger()` with automatic trace context (pino/winston)
+- **Database**: `instrumentDatabase()` for query tracing (Drizzle support)
+- **LLM**: OpenLLMetry integration (OpenAI/Anthropic/LangChain/LlamaIndex)
+- **Serverless**: `flush()` for Lambda/Vercel, `autoFlush` for edge runtimes
+- **Runtime**: Adaptive sampling (10% baseline, 100% errors), rate limiting, circuit breakers, PII redaction
+- **Debug**: `debug: boolean` for local development and production debugging
+- **Custom**: Helpers for instrumenting queues, cron jobs, custom libraries
+
+## Getting Started
+
+- [Main README](https://github.com/jagreehal/autotel/blob/main/README.md): Project overview, installation, quick start examples
+- [Migration Guide](docs/MIGRATION.md): 5-minute migration from vanilla OpenTelemetry with pattern-by-pattern transformations
+
+### Quick Init
+
+```ts
+import { init } from 'autotel';
+
+init({
+  service: 'checkout-api',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4318',
+  environment: process.env.NODE_ENV ?? 'local',
+  integrations: true, // pulls in @opentelemetry/auto-instrumentations-node
+  adapters: [], // add PostHog/Mixpanel/Amplitude from autotel-adapters
+});
+```
+
+### Environment Variables (Zero-Code Config)
+
+Autotel supports standard OpenTelemetry environment variables:
+
+```bash
+export OTEL_SERVICE_NAME=my-app
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_PROTOCOL=http  # or 'grpc'
+export OTEL_EXPORTER_OTLP_HEADERS=x-api-key=secret
+export OTEL_RESOURCE_ATTRIBUTES=deployment.environment=prod,team=backend
+```
+
+Then minimal init:
+```ts
+init({ service: 'my-app' }); // Picks up env vars automatically
+```
+
+Precedence: Explicit config > env vars > defaults
+
+### Quick Debug Mode (Local Development)
+
+```ts
+import { init } from 'autotel';
+
+// Console-only mode - no backend setup required
+init({
+  service: 'my-app',
+  debug: true  // Prints spans to console
+});
+
+// Or for production debugging (console + backend)
+init({
+  service: 'my-app',
+  debug: true,  // See spans locally while still sending to backend
+  endpoint: 'https://otlp.datadoghq.com'
+});
+
+// Or via environment variable
+// AUTOLEMETRY_DEBUG=true node server.js
+```
+
+**Debug options:**
+- `debug: true`: Print spans to console AND send to backend (if endpoint configured)
+  - No endpoint = console-only (perfect for local development)
+  - With endpoint = console + backend (verify before choosing provider)
+- No debug flag: Send to backend only (default)
+
+### Migrating a Manual Span (from MIGRATION.md → Pattern 3)
+
+```ts
+import { trace } from 'autotel';
+
+export const createUser = trace((ctx) => async (data: CreateUserInput) => {
+  ctx.setAttributes({
+    'user.id': data.id,
+    'user.plan': data.plan,
+  });
+
+  // Errors are auto-recorded, status auto-set
+  return await db.users.create(data);
+});
+```
+
+### Tail Sampling (https://github.com/jagreehal/autotel/blob/main/docs/MIGRATION.md → Pattern 5)
+
+```ts
+import { AdaptiveSampler, init } from 'autotel';
+
+init({
+  service: 'checkout',
+  sampler: new AdaptiveSampler({
+    baselineSampleRate: 0.1,
+    alwaysSampleErrors: true,
+    slowThresholdMs: 750,
+  }),
+});
+```
+
+### Serverless Flush (README → Serverless section)
+
+```ts
+import { init, trace, flush } from 'autotel';
+
+init({ service: 'my-lambda', endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT });
+
+export const handler = trace(async (event) => {
+  const result = await processEvent(event);
+  await flush({ timeout: 3000 });
+  return result;
+});
+```
+
+## Core Documentation
+
+- [Core Package (autotel)](https://github.com/jagreehal/autotel/blob/main/packages/autotel/README.md): Complete API reference (1350 lines) covering functional API (trace, span, withTracing, instrument, decorators), analytics & metrics, logger integration, custom instrumentation (queues, cron, database, low-level spans), serverless & edge support, OpenLLMetry integration, runtime controls (sampling, rate limiting, circuit breakers, PII redaction), and configuration options.
+- [Edge Runtime (autotel-edge)](https://github.com/jagreehal/autotel/blob/main/packages/autotel-edge/README.md): Edge-optimized OpenTelemetry for Cloudflare Workers, bundle size constraints (~43KB vs 700KB), automatic flush behavior
+- [Analytics Adapters](https://github.com/jagreehal/autotel/blob/main/  packages/autotel-adapters/README.md): Product analytics integration with PostHog, Mixpanel, Amplitude, Segment, webhook adapters
+
+## Examples
+
+- [Basic Example](https://github.com/jagreehal/autotel/blob/main/apps/example-basic/README.md): Simple trace() usage, demonstrates functional API patterns
+- [HTTP Server Example](https://github.com/jagreehal/autotel/blob/main/apps/example-http/README.md): Express/HTTP instrumentation with auto-instrumentations
+- [Cloudflare Workers Example](https://github.com/jagreehal/autotel/blob/main/apps/cloudflare-example/README.md): Edge runtime deployment with autotel-edge
+- [AI Agent Example](https://github.com/jagreehal/autotel/blob/main/apps/example-ai-agent/README.md): Tracing AI agent workflows with LLM calls
+
+## Usage Recipes
+
+### Add tracing to an Express server (README → Quick Start)
+
+```ts
+import './instrumentation'; // calls init() once
+import express from 'express';
+import { trace } from 'autotel';
+
+const app = express();
+
+app.get(
+  '/users/:id',
+  trace(async function getUser(req, res) {
+    const user = await db.users.find(req.params.id);
+    res.json(user);
+  }),
+);
+```
+
+### Track product analytics alongside traces (README → Business Metrics & Analytics)
+
+```ts
+import { init, track } from 'autotel';
+import { PostHogAdapter } from 'autotel-adapters';
+
+init({
+  service: 'checkout-api',
+  adapters: [new PostHogAdapter({ apiKey: process.env.POSTHOG_KEY! })],
+});
+
+export const processOrder = trace(async (order) => {
+  track('order.completed', {
+    orderId: order.id,
+    amount: order.total,
+  });
+  return charge(order);
+});
+```
+
+### Instrument Drizzle database queries (README → Database Instrumentation)
+
+```ts
+import { instrumentDatabase } from 'autotel/db';
+import { drizzle } from 'drizzle-orm/postgres-js';
+
+const db = drizzle(pool);
+
+instrumentDatabase(db, {
+  dbSystem: 'postgresql',
+  dbName: 'myapp',
+});
+
+export const getUsers = trace(async () => {
+  return await db.select().from(users);
+});
+```
+
+### Observe LLM calls with OpenLLMetry (README → LLM Observability)
+
+```ts
+import { init } from 'autotel';
+
+init({
+  service: 'rag-service',
+  endpoint: process.env.OTLP_ENDPOINT,
+  openllmetry: {
+    enabled: true,
+    options: {
+      disableBatch: process.env.NODE_ENV !== 'production',
+      apiKey: process.env.TRACELOOP_API_KEY,
+    },
+  },
+});
+```
+
+## Migration Nuggets
+
+- Replace `NODE_OPTIONS="--require @opentelemetry/auto-instrumentations-node/register"` with `init({ integrations: true })`
+- Swap manual `new NodeSDK()` setups for a single `init()` call and `shutdown()` in signal handlers
+- Wrap functions with `trace()` instead of manually calling `tracer.startSpan()` / `span.end()`
+- Use `AdaptiveSampler` for tail sampling—captures 100% of errors/slow spans while keeping cost low
+
+## Troubleshooting & Support
+
+- **No spans showing up?** Confirm `OTLP_ENDPOINT`/`endpoint` is reachable and check exporter logs.
+- **Need to disable metrics?** Set `metrics: false` or use `AUTOTELEMETRY_METRICS=off`.
+- **Serverless exports missing?** Call `await flush()` before returning or enable `autoFlush: true`.
+- **Debugging locally?** Use `ConsoleSpanExporter` to print spans to console, or `InMemorySpanExporter` for test assertions. See [Troubleshooting & Debugging](packages/autotel/README.md#troubleshooting--debugging) section.
+- **Have questions?** See `https://github.com/jagreehal/autotel/blob/main/docs/MIGRATION.md` for pattern-by-pattern guides or open an issue in the repo.

@@ -1,0 +1,28 @@
+{
+  "name": "cloudflare-example",
+  "version": "1.0.1",
+  "description": "",
+  "main": "index.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.23.0",
+  "dependencies": {
+    "@cloudflare/actors": "0.0.1-beta.6",
+    "@opentelemetry/api": "^1.9.0",
+    "agents": "^0.2.23",
+    "alchemy": "^0.78.0",
+    "autotel-cloudflare": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251121.0",
+    "typescript": "^5.9.3"
+  }
+}
