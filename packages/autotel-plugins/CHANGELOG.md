@@ -1,5 +1,16 @@
 # autotel-plugins
 
+## 0.6.0
+
+### Minor Changes
+
+- 79f49aa: Updated example
+
+### Patch Changes
+
+- Updated dependencies [79f49aa]
+  - autotel@2.2.0
+
 ## 0.5.0
 
 ### Minor Changes
