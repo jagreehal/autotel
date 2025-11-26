@@ -1,5 +1,16 @@
 # autotel-cloudflare
 
+## 2.3.0
+
+### Minor Changes
+
+- 79f49aa: Updated example
+
+### Patch Changes
+
+- Updated dependencies [79f49aa]
+  - autotel-edge@3.1.0
+
 ## 2.2.0
 
 ### Minor Changes
