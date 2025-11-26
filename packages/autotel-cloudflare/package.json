@@ -86,13 +86,13 @@
     "@cloudflare/workers-types": "^4.0.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251121.0",
+    "@cloudflare/workers-types": "^4.20251126.0",
     "@opentelemetry/context-async-hooks": "^2.2.0",
     "@types/node": "^24.10.1",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.13",
+    "vitest": "^4.0.14",
     "vitest-mock-extended": "^3.1.0"
   },
   "repository": {

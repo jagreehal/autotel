@@ -24,6 +24,9 @@ export default defineConfig({
     http: 'src/http.ts',
     db: 'src/db.ts',
     decorators: 'src/decorators.ts',
+    register: 'src/register.ts',
+    auto: 'src/auto.ts',
+    'yaml-config': 'src/yaml-config.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats
   dts: true,

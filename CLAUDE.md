@@ -134,15 +134,72 @@ Autotel supports standard OpenTelemetry environment variables for configuration.
 
 ### Configuration Precedence
 
-Environment variables provide defaults that are overridden by explicit `init()` config:
+Configuration is resolved in the following priority order (highest to lowest):
+
+1. **Explicit `init()` parameters** - Direct code configuration
+2. **YAML file** - `autotel.yaml` or `AUTOTEL_CONFIG_FILE` env var
+3. **Environment variables** - `OTEL_*`, `AUTOTEL_*` env vars
+4. **Built-in defaults** - Sensible defaults for development
 
 ```typescript
-// Explicit config takes precedence over env vars
+// Explicit config takes precedence over YAML and env vars
 init({
-  service: 'my-service',  // Overrides OTEL_SERVICE_NAME
-  endpoint: 'http://localhost:4318'  // Overrides OTEL_EXPORTER_OTLP_ENDPOINT
+  service: 'my-service',  // Overrides YAML and OTEL_SERVICE_NAME
+  endpoint: 'http://localhost:4318'  // Overrides YAML and OTEL_EXPORTER_OTLP_ENDPOINT
 })
 ```
+
+### YAML Configuration
+
+Autotel supports YAML file configuration for a declarative setup without code changes. Create an `autotel.yaml` file in your project root:
+
+```yaml
+# autotel.yaml
+service:
+  name: my-service
+  version: 1.0.0
+  environment: ${env:NODE_ENV:-development}
+
+exporter:
+  endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4318}
+  protocol: http
+  headers:
+    x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+
+resource:
+  deployment.environment: ${env:NODE_ENV:-development}
+  team: backend
+
+integrations:
+  - express
+  - http
+  - pino
+
+debug: false
+```
+
+**Key features:**
+- **Auto-discovery**: Automatically loads `autotel.yaml` or `autotel.yml` from the current directory
+- **Explicit path**: Set `AUTOTEL_CONFIG_FILE=./config/otel.yaml` to use a custom path
+- **Environment variable substitution**: Use `${env:VAR_NAME}` or `${env:VAR_NAME:-default}` in YAML values
+- **Programmatic loading**: Use `loadYamlConfigFromFile()` from `autotel/yaml` for custom loading
+
+**Usage with autotel/auto (zero-config):**
+```bash
+# Just create autotel.yaml and run:
+tsx --import autotel/auto src/index.ts
+```
+
+**Programmatic loading:**
+```typescript
+import { loadYamlConfigFromFile } from 'autotel/yaml';
+import { init } from 'autotel';
+
+const yamlConfig = loadYamlConfigFromFile('./config/otel.yaml');
+init({ ...yamlConfig, debug: true });
+```
+
+See `packages/autotel/autotel.yaml.example` for a complete template.
 
 ### Example Usage
 
@@ -172,11 +229,18 @@ See `packages/autotel/.env.example` for a complete template.
 
 ### Implementation Details
 
-Environment variable resolution is handled by `node-env-resolver` in `packages/autotel/src/env-config.ts`. The resolver:
+**Environment variable resolution** is handled in `packages/autotel/src/env-config.ts`. The resolver:
 - Validates env var formats (URLs, enum values)
 - Parses complex values (comma-separated key=value pairs)
 - Provides type-safe config objects
-- Merges with explicit config (explicit config wins)
+
+**YAML configuration** is handled in `packages/autotel/src/yaml-config.ts`. The loader:
+- Auto-discovers `autotel.yaml` or `autotel.yml` in the current directory
+- Supports `AUTOTEL_CONFIG_FILE` env var for custom paths
+- Substitutes `${env:VAR}` and `${env:VAR:-default}` syntax in YAML values
+- Converts YAML structure to `AutotelConfig` type
+
+**Config merging** happens in `init()` with the priority: `explicit > yaml > env > defaults`
 
 ## Development Commands
 
@@ -593,13 +657,41 @@ All components implement graceful shutdown:
 - Context propagation uses minimal AsyncLocalStorage polyfill
 
 ### Auto-Instrumentation Requirements
-- **CommonJS is simpler** - No loader hooks required, just use `--require ./instrumentation.js`
-- **ESM requires experimental loader hook** - Use `--experimental-loader=@opentelemetry/instrumentation/hook.mjs --import ./instrumentation.mjs`
-- This is an OpenTelemetry upstream requirement, not an autotel limitation
-- Autotel itself works identically in both ESM and CJS
-- The loader hook patches module loading to enable instrumentation in ESM environments
-- For tsx users: `NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --import ./instrumentation.ts" tsx src/server.ts`
-- See OpenTelemetry's official ESM docs for version-specific NODE_OPTIONS configurations
+
+**ESM Setup (Node 20.6+) - Recommended:**
+
+autotel provides simplified ESM instrumentation. No need to install extra packages or use complex NODE_OPTIONS!
+
+**Option A: With instrumentation.ts (explicit init, full control):**
+```typescript
+// instrumentation.ts
+import 'autotel/register';  // MUST be first!
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  integrations: ['express', 'http', 'pino'],
+});
+```
+
+```bash
+tsx --import ./instrumentation.ts src/index.ts
+```
+
+**Option B: Zero-config (reads from env vars):**
+```bash
+OTEL_SERVICE_NAME=my-app tsx --import autotel/auto src/index.ts
+```
+
+Env vars: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `AUTOTEL_INTEGRATIONS` (comma-separated or 'true'), `AUTOTEL_DEBUG`
+
+**Legacy (Node 18+):**
+```bash
+NODE_OPTIONS="--experimental-loader=autotel/hook.mjs --import ./instrumentation.ts" tsx src/index.ts
+```
+
+**CommonJS:**
+No loader hooks required, just use `--require ./instrumentation.js`
 
 ### Peer Dependencies
 - OpenTelemetry auto-instrumentations are included as a regular dependency (as of v2.1.0)

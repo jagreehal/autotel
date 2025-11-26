@@ -192,10 +192,24 @@ function looksLikeTraceFactory(fn: GenericFunction): boolean {
 /**
  * Check if a function that takes ctx returns another function (factory pattern)
  * vs returning a value directly (immediate execution pattern)
+ *
+ * IMPORTANT: For async functions, we skip probing entirely and assume immediate execution.
+ * This is because:
+ * - Factory pattern: `(ctx) => async (...args) => result` - outer function is SYNC
+ * - Immediate execution: `async (ctx) => result` - function itself is ASYNC
+ *
+ * Probing async functions by executing them causes side effects (like creating orphan spans)
+ * because the async function starts executing synchronously until the first await.
  */
 function isFactoryReturningFunction(
   fnWithCtx: (ctx: TraceContext) => unknown,
 ): boolean {
+  // Async functions with ctx parameter are always immediate execution
+  // because factory patterns have a sync outer function that returns the async inner
+  if (isAsyncFunction(fnWithCtx)) {
+    return false;
+  }
+
   try {
     const result = fnWithCtx(createDummyCtx());
     return typeof result === 'function';
