@@ -11,7 +11,7 @@
  */
 
 import 'dotenv/config';
-import { init, trace, Metric, track, shutdown, type TraceContext } from 'autotel';
+import { init, trace, span, Metric, track, shutdown, type TraceContext } from 'autotel';
 
 import pino from 'pino';
 
@@ -125,8 +125,37 @@ export const createOrder = trace((ctx: TraceContext) => async (userId: string, i
 // Main function to run examples
 async function main() {
   logger.info('🚀 Starting autotel example...\n');
-  
+
   try {
+    // TEST: Verify trace() with nested span() doesn't create orphan spans
+    logger.info('🔬 TEST: trace() with nested span() - should create exactly 2 spans');
+    await trace('user-request-trace', async (ctx) => {
+      ctx.setAttributes({
+        'input.query': 'What is the capital of France?',
+      });
+
+      await span(
+        {
+          name: 'llm-call',
+          attributes: {
+            model: 'gpt-4',
+            'input.role': 'user',
+            'input.content': 'What is the capital of France?',
+          },
+        },
+        async (generationCtx) => {
+          generationCtx.setAttributes({
+            'output.content': 'The capital of France is Paris.',
+          });
+        }
+      );
+
+      ctx.setAttributes({
+        output: 'Successfully answered.',
+      });
+    });
+    logger.info('✅ TEST PASSED: If you see exactly 2 spans (user-request-trace + llm-call) with same traceId, the fix works!\n');
+
     // Example 1: Create a user
     logger.info('📝 Example 1: Creating user');
     const user = await createUser('Alice', 'alice@example.com');
