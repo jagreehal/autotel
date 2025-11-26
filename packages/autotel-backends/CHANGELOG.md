@@ -1,5 +1,16 @@
 # autotel-backends
 
+## 2.2.0
+
+### Minor Changes
+
+- 79f49aa: Updated example
+
+### Patch Changes
+
+- Updated dependencies [79f49aa]
+  - autotel@2.2.0
+
 ## 2.1.0
 
 ### Minor Changes
