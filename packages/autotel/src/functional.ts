@@ -1641,11 +1641,11 @@ export function trace<TReturn = unknown>(
   name: string,
   fn: ExcludeFactoryReturn<(ctx: TraceContext) => TReturn>,
 ): TReturn;
-// Overload 2b: Name + factory sync function with no args - non-generic for type inference
-export function trace(
+// Overload 2b: Name + factory sync function with no args
+export function trace<TReturn = unknown>(
   name: string,
-  fnFactory: (ctx: TraceContext) => () => unknown,
-): () => unknown;
+  fnFactory: (ctx: TraceContext) => () => TReturn,
+): () => TReturn;
 // Overload 2c: Name + factory sync function - non-generic for type inference
 export function trace<TArgs extends unknown[], TReturn>(
   name: string,
@@ -1675,11 +1675,11 @@ export function trace<TReturn = unknown>(
   options: TracingOptions<[], TReturn>,
   fn: (ctx: TraceContext) => TReturn,
 ): TReturn;
-// Overload 3b: Options + factory sync function with no args - non-generic for type inference
-export function trace(
-  options: TracingOptions,
-  fnFactory: (ctx: TraceContext) => () => unknown,
-): () => unknown;
+// Overload 3b: Options + factory sync function with no args
+export function trace<TReturn = unknown>(
+  options: TracingOptions<[], TReturn>,
+  fnFactory: (ctx: TraceContext) => () => TReturn,
+): () => TReturn;
 // Overload 3c: Options + factory sync function - non-generic for type inference
 export function trace<TArgs extends unknown[], TReturn>(
   options: TracingOptions<TArgs, TReturn>,
@@ -1745,11 +1745,11 @@ export function trace<TReturn = unknown>(
   name: string,
   fn: ExcludeFactoryReturn<(ctx: TraceContext) => Promise<TReturn>>,
 ): Promise<TReturn>;
-// Overload 5b: Name + factory async function with no args - non-generic for type inference
-export function trace(
+// Overload 5b: Name + factory async function with no args
+export function trace<TReturn = unknown>(
   name: string,
-  fnFactory: (ctx: TraceContext) => () => Promise<unknown>,
-): () => Promise<unknown>;
+  fnFactory: (ctx: TraceContext) => () => Promise<TReturn>,
+): () => Promise<TReturn>;
 // Overload 5c: Name + factory async function - non-generic for type inference
 export function trace<TArgs extends unknown[], TReturn>(
   name: string,
@@ -1781,11 +1781,11 @@ export function trace<TReturn = unknown>(
   options: TracingOptions<[], TReturn>,
   fn: (ctx: TraceContext) => Promise<TReturn>,
 ): Promise<TReturn>;
-// Overload 6b: Options + factory async function with no args - non-generic for type inference
-export function trace(
-  options: TracingOptions,
-  fnFactory: (ctx: TraceContext) => () => Promise<unknown>,
-): () => Promise<unknown>;
+// Overload 6b: Options + factory async function with no args
+export function trace<TReturn = unknown>(
+  options: TracingOptions<[], TReturn>,
+  fnFactory: (ctx: TraceContext) => () => Promise<TReturn>,
+): () => Promise<TReturn>;
 // Overload 6c: Options + factory async function - non-generic for type inference
 export function trace<TArgs extends unknown[], TReturn>(
   options: TracingOptions<TArgs, TReturn>,
