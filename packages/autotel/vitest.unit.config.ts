@@ -8,6 +8,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.integration.test.ts', 'node_modules/**'],
+    setupFiles: ['./vitest.setup.ts'],
     pool: 'forks',
     poolOptions: {
       forks: {

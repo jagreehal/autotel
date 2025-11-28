@@ -41,6 +41,18 @@ import { BaggageSpanProcessor } from './baggage-span-processor';
 import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config.js';
 
+/**
+ * Silent logger (no-op) - used as default when user doesn't provide one.
+ * Internal autotel logs are silent by default to avoid spam.
+ * Users can import { autotelLogger } from 'autotel/logger' to create their own.
+ */
+const silentLogger: Logger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  debug: () => {},
+};
+
 // Type imports for exporters
 type OTLPExporterConfig = {
   url?: string;
@@ -208,15 +220,7 @@ function formatEndpointUrl(
   return endpoint;
 }
 
-/**
- * Default silent logger (no-op) when user doesn't provide one
- */
-const silentLogger: Logger = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  debug: () => {},
-};
+// Built-in logger is created dynamically in init() with service name
 
 export interface AutotelConfig {
   /** Service name (required) */
@@ -735,7 +739,7 @@ let initialized = false;
 let config: AutotelConfig | null = null;
 let sdk: NodeSDK | null = null;
 let warnedOnce = false;
-let logger: Logger = silentLogger;
+let logger: Logger = silentLogger; // Silent by default - no spam
 let validationConfig: Partial<ValidationConfig> | null = null;
 
 /**
@@ -896,7 +900,7 @@ export function init(cfg: AutotelConfig): void {
       cfg.otlpHeaders ?? yamlConfig.otlpHeaders ?? envConfig.otlpHeaders,
   } as AutotelConfig;
 
-  // Set logger (use provided or default to silent)
+  // Set logger (use provided or default to silent - no spam)
   logger = mergedConfig.logger || silentLogger;
 
   // Warn if re-initializing (same behavior in all environments)
