@@ -4,6 +4,15 @@
 
 ### Minor Changes
 
+- 31edf41: Lazy-load logger + auto instrumentation packages so we only require
+  optional peers when a matching logger/integration is configured. Expose
+  test hooks for the loader so we can simulate different setups without
+  installing every instrumentation locally.
+
+## 2.4.0
+
+### Minor Changes
+
 - 38f0462: Fixed TypeScript type inference for `trace()` function when using the two-argument form (`trace(name, fn)`) or options form (`trace(options, fn)`). Factory functions with no arguments now correctly infer their return types instead of defaulting to `unknown`.
 
 ## 2.3.0

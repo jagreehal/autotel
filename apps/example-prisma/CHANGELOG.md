@@ -1,5 +1,12 @@
 # @jagreehal/example-prisma
 
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [31edf41]
+  - autotel@2.4.0
+
 ## 1.0.7
 
 ### Patch Changes
