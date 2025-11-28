@@ -1,15 +1,35 @@
 /**
  * Logger types and utilities for autotel
  *
- * **Recommended Approach:** Bring your own logger (Pino, Winston, Bunyan, etc.)
+ * **Zero-Config Option:** Don't provide a logger to `init()` and autotel uses
+ * a built-in structured JSON logger with automatic trace context injection.
  *
- * Simply create your logger instance and pass it to `init()`.
- * Autotel automatically instruments Pino and Winston to:
- * - Inject trace context (traceId, spanId) into log records
- * - Record errors in the active span
- * - Bridge logs to OpenTelemetry Logs API for OTLP export
+ * **BYOL (Bring Your Own Logger):** Pass Pino or Winston to `init()` for
+ * automatic instrumentation with trace context and OTLP log export.
  *
- * @example Using Pino (recommended, auto-instrumented)
+ * @example Zero-config (uses built-in logger)
+ * ```typescript
+ * import { init } from 'autotel';
+ *
+ * init({ service: 'my-app' });
+ * // Internal logs: {"level":"info","service":"my-app","msg":"...","traceId":"..."}
+ * ```
+ *
+ * @example Using built-in logger directly
+ * ```typescript
+ * import { createBuiltinLogger, runWithLogLevel } from 'autotel/logger';
+ *
+ * const log = createBuiltinLogger('my-service');
+ * log.info('User created', { userId: '123' });
+ * // Output: {"level":"info","service":"my-service","msg":"User created",...,"traceId":"..."}
+ *
+ * // Dynamic log level per-request
+ * runWithLogLevel('debug', () => {
+ *   log.debug('Debug info for this request only');
+ * });
+ * ```
+ *
+ * @example Using Pino (recommended for production, auto-instrumented)
  * ```typescript
  * import pino from 'pino';  // npm install pino
  * import { init } from 'autotel';
@@ -57,6 +77,16 @@
  *   debug: (msg, extra) => console.debug(msg, extra),
  * };
  * init({ service: 'my-app', logger });
+ * ```
+ *
+ * @example BYOL helper: inject trace context into any logger
+ * ```typescript
+ * import bunyan from 'bunyan';
+ * import { getTraceContext } from 'autotel/logger';
+ *
+ * const bunyanLogger = bunyan.createLogger({ name: 'myapp' });
+ * const ctx = getTraceContext();
+ * bunyanLogger.info({ ...ctx, userId: '123' }, 'Creating user');
  * ```
  */
 
@@ -244,3 +274,17 @@ export function LoggedOperation(
     };
   };
 }
+
+// ============================================================================
+// Built-in Logger (re-exports)
+// ============================================================================
+
+export {
+  autotelLogger,
+  createBuiltinLogger,
+  runWithLogLevel,
+  getTraceContext,
+  getActiveLogLevel,
+  type BuiltinLogLevel,
+  type BuiltinLoggerOptions,
+} from './autotel-logger';
