@@ -1,5 +1,12 @@
 # autotel-mcp
 
+## 7.0.0
+
+### Patch Changes
+
+- Updated dependencies [745ab4c]
+  - autotel@2.5.0
+
 ## 6.0.0
 
 ### Patch Changes
