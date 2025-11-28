@@ -40,9 +40,6 @@ import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config.js';
-import { PinoInstrumentation } from '@opentelemetry/instrumentation-pino';
-import { WinstonInstrumentation } from '@opentelemetry/instrumentation-winston';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 
 // Type imports for exporters
 type OTLPExporterConfig = {
@@ -78,7 +75,7 @@ function loadGRPCTraceExporter(): new (
     return OTLPTraceExporterGRPC;
   } catch {
     throw new Error(
-      'gRPC trace exporter not found. Install with: pnpm add @opentelemetry/exporter-trace-otlp-grpc',
+      'gRPC trace exporter not found. Install @opentelemetry/exporter-trace-otlp-grpc',
     );
   }
 }
@@ -101,7 +98,39 @@ function loadGRPCMetricExporter(): new (
     return OTLPMetricExporterGRPC;
   } catch {
     throw new Error(
-      'gRPC metric exporter not found. Install with: pnpm add @opentelemetry/exporter-metrics-otlp-grpc',
+      'gRPC metric exporter not found. Install @opentelemetry/exporter-metrics-otlp-grpc',
+    );
+  }
+}
+
+/**
+ * Lazy-load Pino instrumentation (optional peer dependency)
+ * Only loads when a Pino logger is detected
+ */
+function loadPinoInstrumentation(): new () => unknown {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@opentelemetry/instrumentation-pino');
+    return mod.PinoInstrumentation;
+  } catch {
+    throw new Error(
+      'Pino instrumentation not found. Install @opentelemetry/instrumentation-pino',
+    );
+  }
+}
+
+/**
+ * Lazy-load Winston instrumentation (optional peer dependency)
+ * Only loads when a Winston logger is detected
+ */
+function loadWinstonInstrumentation(): new () => unknown {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@opentelemetry/instrumentation-winston');
+    return mod.WinstonInstrumentation;
+  } catch {
+    throw new Error(
+      'Winston instrumentation not found. Install @opentelemetry/instrumentation-winston',
     );
   }
 }
@@ -442,7 +471,7 @@ export interface AutotelConfig {
    * - false: always disabled
    * - 'auto': always enabled (same as true)
    *
-   * Can be overridden with AUTOTELEMETRY_METRICS=on|off env var
+   * Can be overridden with AUTOTEL_METRICS=on|off env var
    */
   metrics?: boolean | 'auto';
 
@@ -716,7 +745,7 @@ export function resolveMetricsFlag(
   configFlag: boolean | 'auto' = 'auto',
 ): boolean {
   // 1. Check env var override (highest priority)
-  const envFlag = process.env.AUTOTELEMETRY_METRICS;
+  const envFlag = process.env.AUTOTEL_METRICS;
   if (envFlag === 'on' || envFlag === 'true') return true;
   if (envFlag === 'off' || envFlag === 'false') return false;
 
@@ -820,11 +849,10 @@ function normalizeOtlpHeaders(
 
 /**
  * Auto-detect logger type and return appropriate instrumentation
- * Detects Pino and Winston loggers based on their unique properties
+ * Detects Pino and Winston loggers based on their unique properties.
+ * Lazy-loads the instrumentation package only when needed.
  */
-function createLoggerInstrumentation(
-  logger: Logger,
-): PinoInstrumentation | WinstonInstrumentation | null {
+function createLoggerInstrumentation(logger: Logger): unknown | null {
   // Type guard: check for Pino-specific properties
   // Pino has 'child' and 'bindings' methods
   if (
@@ -832,12 +860,14 @@ function createLoggerInstrumentation(
     'bindings' in logger &&
     typeof logger.child === 'function'
   ) {
+    const PinoInstrumentation = loadPinoInstrumentation();
     return new PinoInstrumentation();
   }
 
   // Type guard: check for Winston-specific properties
   // Winston has 'transports' array or 'defaultMeta' property
   if ('transports' in logger || 'defaultMeta' in logger) {
+    const WinstonInstrumentation = loadWinstonInstrumentation();
     return new WinstonInstrumentation();
   }
 
@@ -999,7 +1029,11 @@ export function init(cfg: AutotelConfig): void {
   if (cfg.logger) {
     const loggerInstrumentation = createLoggerInstrumentation(cfg.logger);
     if (loggerInstrumentation) {
-      finalInstrumentations = [...finalInstrumentations, loggerInstrumentation];
+      finalInstrumentations = [
+        ...finalInstrumentations,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        loggerInstrumentation as any,
+      ];
       logger.debug(
         `[autotel] Auto-enabled ${loggerInstrumentation.constructor.name} for logger`,
       );
@@ -1253,6 +1287,53 @@ const INSTRUMENTATION_CLASS_TO_PACKAGE: Record<string, string> = {
 };
 
 /**
+ * Type for the auto-instrumentations loader function
+ * @internal Used for testing injection
+ */
+export type AutoInstrumentationsLoader = (
+  config?: Record<string, { enabled?: boolean }>,
+) => unknown[];
+
+/**
+ * Lazy-load auto-instrumentations (optional peer dependency)
+ * Only loads when integrations config is truthy, avoiding ~40+ package imports at startup.
+ */
+function loadNodeAutoInstrumentations(): AutoInstrumentationsLoader {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@opentelemetry/auto-instrumentations-node');
+    return mod.getNodeAutoInstrumentations;
+  } catch {
+    throw new Error(
+      'Auto-instrumentations not found. Install @opentelemetry/auto-instrumentations-node',
+    );
+  }
+}
+
+/**
+ * Injectable loader for testing. Set to override the default loader.
+ * @internal
+ */
+let _autoInstrumentationsLoader: (() => AutoInstrumentationsLoader) | null =
+  null;
+
+/**
+ * @internal Set custom loader (for testing)
+ */
+export function _setAutoInstrumentationsLoader(
+  loader: (() => AutoInstrumentationsLoader) | null,
+): void {
+  _autoInstrumentationsLoader = loader;
+}
+
+/**
+ * @internal Reset loader to default (for testing cleanup)
+ */
+export function _resetAutoInstrumentationsLoader(): void {
+  _autoInstrumentationsLoader = null;
+}
+
+/**
  * Get auto-instrumentations based on simple integration names
  * Excludes instrumentations that are manually provided to avoid conflicts
  */
@@ -1263,6 +1344,11 @@ function getAutoInstrumentations(
   if (integrations === false) {
     return [];
   }
+
+  // Use injected loader if set (for testing), otherwise lazy-load
+  const getNodeAutoInstrumentations = _autoInstrumentationsLoader
+    ? _autoInstrumentationsLoader()
+    : loadNodeAutoInstrumentations();
 
   // Build exclusion config for manual instrumentations
   const exclusionConfig: Record<string, { enabled: boolean }> = {};

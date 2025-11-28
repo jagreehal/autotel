@@ -369,16 +369,14 @@ describe('injectTraceContext', () => {
 
   it('should inject baggage set via ctx.setBaggage()', async () => {
     const { trace } = await import('./functional');
-    const { propagation, context: otelContext } = await import(
-      '@opentelemetry/api'
-    );
+    const { propagation, context: otelContext } =
+      await import('@opentelemetry/api');
     const { init } = await import('./init');
     const { shutdown } = await import('./shutdown');
     const { InMemorySpanExporter } = await import('./exporters');
     const { SimpleSpanProcessor } = await import('./processors');
-    const { AsyncLocalStorageContextManager } = await import(
-      '@opentelemetry/context-async-hooks'
-    );
+    const { AsyncLocalStorageContextManager } =
+      await import('@opentelemetry/context-async-hooks');
 
     // Clean up any existing SDK first
     await shutdown().catch(() => {

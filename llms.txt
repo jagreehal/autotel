@@ -233,7 +233,7 @@ init({
 ## Troubleshooting & Support
 
 - **No spans showing up?** Confirm `OTLP_ENDPOINT`/`endpoint` is reachable and check exporter logs.
-- **Need to disable metrics?** Set `metrics: false` or use `AUTOTELEMETRY_METRICS=off`.
+- **Need to disable metrics?** Set `metrics: false` or use `AUTOTEL_METRICS=off`.
 - **Serverless exports missing?** Call `await flush()` before returning or enable `autoFlush: true`.
 - **Debugging locally?** Use `ConsoleSpanExporter` to print spans to console, or `InMemorySpanExporter` for test assertions. See [Troubleshooting & Debugging](packages/autotel/README.md#troubleshooting--debugging) section.
 - **Have questions?** See `https://github.com/jagreehal/autotel/blob/main/docs/MIGRATION.md` for pattern-by-pattern guides or open an issue in the repo.

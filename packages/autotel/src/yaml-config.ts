@@ -23,8 +23,21 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { parse as parseYaml } from 'yaml';
 import type { AutotelConfig } from './init.js';
+
+/**
+ * Lazy-load yaml parser (optional peer dependency)
+ * Only loads when a YAML config file is actually found
+ */
+function loadYamlParser(): (content: string) => unknown {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('yaml');
+    return mod.parse;
+  } catch {
+    throw new Error('YAML parser not found. Install with: pnpm add yaml');
+  }
+}
 
 /**
  * YAML config structure
@@ -194,6 +207,7 @@ export function loadYamlConfig(): Partial<AutotelConfig> | null {
 
   try {
     const content = readFileSync(filePath, 'utf8');
+    const parseYaml = loadYamlParser();
     const rawYaml = parseYaml(content) as YamlConfig;
     const substituted = substituteEnvVarsDeep(rawYaml) as YamlConfig;
     return yamlToAutotelConfig(substituted);
@@ -227,6 +241,7 @@ export function loadYamlConfigFromFile(
 ): Partial<AutotelConfig> {
   const resolved = path.resolve(filePath);
   const content = readFileSync(resolved, 'utf8');
+  const parseYaml = loadYamlParser();
   const rawYaml = parseYaml(content) as YamlConfig;
   const substituted = substituteEnvVarsDeep(rawYaml) as YamlConfig;
   return yamlToAutotelConfig(substituted);

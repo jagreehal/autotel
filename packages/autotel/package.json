@@ -1,6 +1,6 @@
 {
   "name": "autotel",
-  "version": "2.4.0",
+  "version": "2.3.0",
   "description": "Write Once, Observe Anywhere",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -179,14 +179,9 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "import-in-the-middle": "^2.0.0",
-    "yaml": "^2.8.1",
     "@opentelemetry/api-logs": "^0.208.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.67.2",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.208.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
-    "@opentelemetry/instrumentation-pino": "^0.55.0",
-    "@opentelemetry/instrumentation-winston": "^0.53.0",
     "@opentelemetry/resources": "^2.2.0",
     "@opentelemetry/sdk-metrics": "^2.2.0",
     "@opentelemetry/sdk-node": "^0.208.0",
@@ -194,20 +189,28 @@
     "@opentelemetry/semantic-conventions": "^1.38.0"
   },
   "peerDependencies": {
+    "@opentelemetry/auto-instrumentations-node": "^0.67.2",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.208.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.208.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.208.0",
+    "@opentelemetry/instrumentation-pino": "^0.55.0",
+    "@opentelemetry/instrumentation-winston": "^0.53.0",
     "@opentelemetry/resource-detector-aws": "^2.8.0",
     "@opentelemetry/resource-detector-container": "^0.7.11",
     "@opentelemetry/resource-detector-gcp": "^0.43.0",
     "@opentelemetry/sdk-logs": "^0.208.0",
     "@opentelemetry/sdk-trace-node": "^2.2.0",
     "@traceloop/node-server-sdk": "^0.22.0",
+    "import-in-the-middle": "^2.0.0",
     "pino": "^10.1.0",
-    "pino-pretty": "^13.1.2"
+    "pino-pretty": "^13.1.2",
+    "yaml": "^2.8.1"
   },
   "peerDependenciesMeta": {
+    "@opentelemetry/auto-instrumentations-node": {
+      "optional": true
+    },
     "@opentelemetry/exporter-logs-otlp-grpc": {
       "optional": true
     },
@@ -218,6 +221,12 @@
       "optional": true
     },
     "@opentelemetry/exporter-trace-otlp-grpc": {
+      "optional": true
+    },
+    "@opentelemetry/instrumentation-pino": {
+      "optional": true
+    },
+    "@opentelemetry/instrumentation-winston": {
       "optional": true
     },
     "@opentelemetry/sdk-logs": {
@@ -238,10 +247,16 @@
     "@traceloop/node-server-sdk": {
       "optional": true
     },
+    "import-in-the-middle": {
+      "optional": true
+    },
     "pino": {
       "optional": true
     },
     "pino-pretty": {
+      "optional": true
+    },
+    "yaml": {
       "optional": true
     }
   },
@@ -251,6 +266,10 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-async-hooks": "^2.2.0",
     "@opentelemetry/auto-instrumentations-node": "^0.67.2",
+    "import-in-the-middle": "^2.0.0",
+    "yaml": "^2.8.1",
+    "@opentelemetry/instrumentation-pino": "^0.55.0",
+    "@opentelemetry/instrumentation-winston": "^0.53.0",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.208.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.208.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.208.0",
@@ -275,7 +294,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^62.0.0",
     "pino": "^10.1.0",
-    "prettier": "^3.6.2",
+    "prettier": "^3.7.1",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "tsx": "^4.20.6",

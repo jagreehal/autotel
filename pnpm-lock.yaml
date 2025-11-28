@@ -432,9 +432,6 @@ importers:
       '@opentelemetry/api-logs':
         specifier: ^0.208.0
         version: 0.208.0
-      '@opentelemetry/auto-instrumentations-node':
-        specifier: ^0.67.2
-        version: 0.67.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: ^0.208.0
         version: 0.208.0(@opentelemetry/api@1.9.0)
@@ -481,6 +478,9 @@ importers:
       '@edge-runtime/vm':
         specifier: ^5.0.0
         version: 5.0.0
+      '@opentelemetry/auto-instrumentations-node':
+        specifier: ^0.67.2
+        version: 0.67.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/context-async-hooks':
         specifier: ^2.2.0
         version: 2.2.0(@opentelemetry/api@1.9.0)
@@ -539,8 +539,8 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
+        specifier: ^3.7.1
+        version: 3.7.1
       rimraf:
         specifier: ^6.1.2
         version: 6.1.2
@@ -5727,6 +5727,11 @@ packages:
 
   prettier@3.6.2:
     resolution: {integrity: sha512-I7AIg5boAr5R0FFtJ6rCfD+LFsWHp81dolrFD8S79U9tb8Az2nGrJncnMSnys+bpQJfRUzqs9hnA81OAA3hCuQ==}
+    engines: {node: '>=14'}
+    hasBin: true
+
+  prettier@3.7.1:
+    resolution: {integrity: sha512-RWKXE4qB3u5Z6yz7omJkjWwmTfLdcbv44jUVHC5NpfXwFGzvpQM798FGv/6WNK879tc+Cn0AAyherCl1KjbyZQ==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -11691,7 +11696,7 @@ snapshots:
       js-yaml: 4.1.1
       lodash: 4.17.21
       minimist: 1.2.8
-      prettier: 3.6.2
+      prettier: 3.7.1
       tinyglobby: 0.2.15
 
   json-schema-traverse@0.4.1: {}
@@ -12327,6 +12332,8 @@ snapshots:
   prettier@2.8.8: {}
 
   prettier@3.6.2: {}
+
+  prettier@3.7.1: {}
 
   pretty-ms@9.3.0:
     dependencies:
