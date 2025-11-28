@@ -438,12 +438,6 @@ importers:
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: ^0.208.0
         version: 0.208.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-pino':
-        specifier: ^0.55.0
-        version: 0.55.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-winston':
-        specifier: ^0.53.0
-        version: 0.53.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources':
         specifier: ^2.2.0
         version: 2.2.0(@opentelemetry/api@1.9.0)
@@ -462,15 +456,9 @@ importers:
       '@traceloop/node-server-sdk':
         specifier: ^0.22.0
         version: 0.22.0(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3)(zod@3.25.76))
-      import-in-the-middle:
-        specifier: ^2.0.0
-        version: 2.0.0
       pino-pretty:
         specifier: ^13.1.2
         version: 13.1.2
-      yaml:
-        specifier: ^2.8.1
-        version: 2.8.1
     devDependencies:
       '@arethetypeswrong/cli':
         specifier: ^0.18.2
@@ -496,6 +484,12 @@ importers:
       '@opentelemetry/exporter-trace-otlp-grpc':
         specifier: ^0.208.0
         version: 0.208.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-pino':
+        specifier: ^0.55.0
+        version: 0.55.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-winston':
+        specifier: ^0.53.0
+        version: 0.53.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-aws':
         specifier: ^2.8.0
         version: 2.8.0(@opentelemetry/api@1.9.0)
@@ -535,6 +529,9 @@ importers:
       eslint-plugin-unicorn:
         specifier: ^62.0.0
         version: 62.0.0(eslint@9.39.1(jiti@2.6.1))
+      import-in-the-middle:
+        specifier: ^2.0.0
+        version: 2.0.0
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -568,6 +565,9 @@ importers:
       winston:
         specifier: ^3.18.3
         version: 3.18.3
+      yaml:
+        specifier: ^2.8.1
+        version: 2.8.1
 
   packages/autotel-backends:
     dependencies:
