@@ -1,5 +1,4 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
@@ -201,9 +200,8 @@ export async function initInstrumentation(
     // ignore
   }
   try {
-    const containerDetectors = await import(
-      '@opentelemetry/resource-detector-container'
-    );
+    const containerDetectors =
+      await import('@opentelemetry/resource-detector-container');
     detectors.push(containerDetectors.containerDetector);
   } catch {
     // ignore
@@ -232,10 +230,14 @@ export async function initInstrumentation(
   }
 
   // Default to selective (near-zero overhead) vs full auto (~81% overhead)
-  const instrumentations =
-    config.selectiveInstrumentation === false
-      ? [getNodeAutoInstrumentations()]
-      : config.instrumentations || [];
+  // Lazy-load to avoid importing ~40+ packages at module evaluation time
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let instrumentations: any[] = config.instrumentations || [];
+  if (config.selectiveInstrumentation === false) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@opentelemetry/auto-instrumentations-node');
+    instrumentations = [mod.getNodeAutoInstrumentations()];
+  }
 
   const traceExporter = new OTLPTraceExporter({
     url: `${config.otlpEndpoint || 'http://localhost:4318'}/v1/traces`,

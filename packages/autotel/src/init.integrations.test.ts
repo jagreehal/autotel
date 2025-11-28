@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NodeSDK } from '@opentelemetry/sdk-node';
 import type { DeepMockProxy } from 'vitest-mock-extended';
 import { mockDeep } from 'vitest-mock-extended';
+import {
+  _setAutoInstrumentationsLoader,
+  _resetAutoInstrumentationsLoader,
+  type AutoInstrumentationsLoader,
+} from './init';
 
 type SdkRecord = {
   options: Record<string, unknown>;
@@ -13,7 +18,6 @@ const mockedModules = [
   '@opentelemetry/exporter-trace-otlp-http',
   '@opentelemetry/exporter-metrics-otlp-http',
   '@opentelemetry/sdk-metrics',
-  '@opentelemetry/auto-instrumentations-node',
 ];
 
 // Mock instrumentation classes with exact names from OpenTelemetry
@@ -145,15 +149,16 @@ async function loadInitWithMocks() {
     PeriodicExportingMetricReader: MockPeriodicExportingMetricReader,
   }));
 
-  vi.doMock('@opentelemetry/auto-instrumentations-node', () => ({
-    getNodeAutoInstrumentations: mockGetNodeAutoInstrumentations,
-  }));
+  const initModule = await import('./init');
 
-  const mod = await import('./init');
+  // Inject the mock loader via the exported setter
+  initModule._setAutoInstrumentationsLoader(
+    () => mockGetNodeAutoInstrumentations as AutoInstrumentationsLoader,
+  );
 
   return {
-    init: mod.init,
-    getConfig: mod.getConfig,
+    init: initModule.init,
+    getConfig: initModule.getConfig,
     sdkInstances,
     traceExporterOptions,
     metricExporterOptions,
@@ -161,12 +166,14 @@ async function loadInitWithMocks() {
     logMessages,
     mockLogger,
     mockGetNodeAutoInstrumentations,
+    initModule,
   };
 }
 
 describe('init() integrations vs instrumentations', () => {
   beforeEach(() => {
     vi.resetModules();
+    _resetAutoInstrumentationsLoader();
   });
 
   afterEach(() => {
@@ -174,7 +181,8 @@ describe('init() integrations vs instrumentations', () => {
       vi.doUnmock(mod);
     }
     vi.clearAllMocks();
-    delete process.env.AUTOTELEMETRY_METRICS;
+    _resetAutoInstrumentationsLoader();
+    delete process.env.AUTOTEL_METRICS;
   });
 
   it('excludes manual instrumentations from auto-instrumentations when integrations: true', async () => {

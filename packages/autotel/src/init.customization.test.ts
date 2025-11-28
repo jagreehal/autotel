@@ -97,7 +97,7 @@ describe('init() customization', () => {
       vi.doUnmock(mod);
     }
     vi.clearAllMocks();
-    delete process.env.AUTOTELEMETRY_METRICS;
+    delete process.env.AUTOTEL_METRICS;
     delete process.env.NODE_ENV;
   });
 

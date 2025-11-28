@@ -129,7 +129,7 @@ describe('init() OpenLLMetry integration', () => {
       vi.doUnmock(mod);
     }
     vi.clearAllMocks();
-    delete process.env.AUTOTELEMETRY_METRICS;
+    delete process.env.AUTOTEL_METRICS;
     delete process.env.NODE_ENV;
     delete process.env.TRACELOOP_API_KEY;
   });

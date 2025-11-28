@@ -873,7 +873,7 @@ NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --im
 
 ```bash
 # Disable metrics without touching code (metrics are ON by default)
-AUTOTELEMETRY_METRICS=off node server.js
+AUTOTEL_METRICS=off node server.js
 
 # Point at a different collector
 OTLP_ENDPOINT=https://otel.mycompany.com node server.js
