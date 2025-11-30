@@ -658,24 +658,31 @@ All components implement graceful shutdown:
 
 ### Auto-Instrumentation Requirements
 
-**ESM Setup (Node 20.6+) - Recommended:**
+**ESM Setup (Node 18.19+) - Recommended:**
 
-autotel provides simplified ESM instrumentation. No need to install extra packages or use complex NODE_OPTIONS!
+For ESM apps using auto-instrumentation (Pino, Express, HTTP, etc.), you need to:
+1. Install `@opentelemetry/auto-instrumentations-node` as a **direct dependency** in your app
+2. Import `autotel/register` **first** to register the ESM loader hooks
+3. Pass instrumentations directly to `init()` using `getNodeAutoInstrumentations()`
 
-**Option A: With instrumentation.ts (explicit init, full control):**
+**Option A: With instrumentation.mjs (explicit init, full control):**
 ```typescript
-// instrumentation.ts
-import 'autotel/register';  // MUST be first!
+// instrumentation.mjs
+import 'autotel/register';  // MUST be first import!
 import { init } from 'autotel';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 
 init({
   service: 'my-app',
-  integrations: ['express', 'http', 'pino'],
+  instrumentations: getNodeAutoInstrumentations({
+    '@opentelemetry/instrumentation-pino': { enabled: true },
+    '@opentelemetry/instrumentation-http': { enabled: true },
+  }),
 });
 ```
 
 ```bash
-tsx --import ./instrumentation.ts src/index.ts
+tsx --import ./instrumentation.mjs src/index.ts
 ```
 
 **Option B: Zero-config (reads from env vars):**
@@ -685,16 +692,19 @@ OTEL_SERVICE_NAME=my-app tsx --import autotel/auto src/index.ts
 
 Env vars: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `AUTOTEL_INTEGRATIONS` (comma-separated or 'true'), `AUTOTEL_DEBUG`
 
-**Legacy (Node 18+):**
+**Legacy (Node 18.0-18.18):**
 ```bash
-NODE_OPTIONS="--experimental-loader=autotel/hook.mjs --import ./instrumentation.ts" tsx src/index.ts
+NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --import ./instrumentation.mjs" tsx src/index.ts
 ```
 
 **CommonJS:**
 No loader hooks required, just use `--require ./instrumentation.js`
 
+**Why ESM requires direct dependency:**
+OpenTelemetry's ESM instrumentation uses `import-in-the-middle` to hook into module loading. For this to work, the auto-instrumentations package must be resolvable from your app's node_modules, not just from autotel's dependencies.
+
 ### Peer Dependencies
-- OpenTelemetry auto-instrumentations are included as a regular dependency (as of v2.1.0)
+- `@opentelemetry/auto-instrumentations-node` - **optional** peer dependency (install in your app for ESM instrumentation)
 - Logger integrations (pino, winston) are optional peer dependencies
 - OpenLLMetry integration (@traceloop/node-server-sdk) is optional peer dependency
 - gRPC exporters are optional peer dependencies

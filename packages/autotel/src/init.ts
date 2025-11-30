@@ -116,38 +116,6 @@ function loadGRPCMetricExporter(): new (
 }
 
 /**
- * Lazy-load Pino instrumentation (optional peer dependency)
- * Only loads when a Pino logger is detected
- */
-function loadPinoInstrumentation(): new () => unknown {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@opentelemetry/instrumentation-pino');
-    return mod.PinoInstrumentation;
-  } catch {
-    throw new Error(
-      'Pino instrumentation not found. Install @opentelemetry/instrumentation-pino',
-    );
-  }
-}
-
-/**
- * Lazy-load Winston instrumentation (optional peer dependency)
- * Only loads when a Winston logger is detected
- */
-function loadWinstonInstrumentation(): new () => unknown {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@opentelemetry/instrumentation-winston');
-    return mod.WinstonInstrumentation;
-  } catch {
-    throw new Error(
-      'Winston instrumentation not found. Install @opentelemetry/instrumentation-winston',
-    );
-  }
-}
-
-/**
  * Helper: Create trace exporter based on protocol
  */
 function createTraceExporter(
@@ -489,43 +457,31 @@ export interface AutotelConfig {
   environment?: string;
 
   /**
-   * Logger instance for structured logging with automatic trace correlation
+   * Logger instance for internal autotel diagnostic messages
    *
-   * **Recommended:** Bring your own Pino or Winston instance
+   * This logger is used by autotel internally to log initialization, warnings,
+   * and debug information. Any logger with info/warn/error/debug methods works.
    *
-   * Autotel automatically instruments Pino and Winston loggers to:
-   * - Inject trace context (traceId, spanId) into every log record
-   * - Record errors in the active OpenTelemetry span
-   * - Bridge logs to the OpenTelemetry Logs API for OTLP export to Grafana, Datadog, etc.
+   * **For OTel instrumentation of your application logs**, use the `integrations` option:
+   * - `integrations: ['pino']` - Injects traceId/spanId into Pino logs
+   * - `integrations: ['winston']` - Injects traceId/spanId into Winston logs
    *
-   * Supports any logger with 4 methods: info/warn/error/debug
    * Default: silent logger (no-op)
    *
-   * @example Using Pino (recommended)
+   * @example Pino with OTel instrumentation
    * ```typescript
-   * import pino from 'pino'  // npm install pino
+   * import pino from 'pino'
    * import { init } from 'autotel'
    *
    * const logger = pino({ level: 'info' })
-   * init({ service: 'my-app', logger })
-   *
-   * // Logs automatically include traceId/spanId and export via OTLP!
-   * logger.info('User created', { userId: '123' })
-   * ```
-   *
-   * @example Using Winston
-   * ```typescript
-   * import winston from 'winston'  // npm install winston
-   * import { init } from 'autotel'
-   *
-   * const logger = winston.createLogger({
-   *   level: 'info',
-   *   format: winston.format.json()
+   * init({
+   *   service: 'my-app',
+   *   logger,                   // For autotel's internal logs
+   *   integrations: ['pino']    // For OTel trace context in YOUR logs
    * })
-   * init({ service: 'my-app', logger })
    * ```
    *
-   * @example Custom logger (any logger with 4 methods)
+   * @example Custom logger for autotel diagnostics
    * ```typescript
    * const logger = {
    *   info: (msg, extra) => console.log(msg, extra),
@@ -851,34 +807,6 @@ function normalizeOtlpHeaders(
  * ```
  */
 
-/**
- * Auto-detect logger type and return appropriate instrumentation
- * Detects Pino and Winston loggers based on their unique properties.
- * Lazy-loads the instrumentation package only when needed.
- */
-function createLoggerInstrumentation(logger: Logger): unknown | null {
-  // Type guard: check for Pino-specific properties
-  // Pino has 'child' and 'bindings' methods
-  if (
-    'child' in logger &&
-    'bindings' in logger &&
-    typeof logger.child === 'function'
-  ) {
-    const PinoInstrumentation = loadPinoInstrumentation();
-    return new PinoInstrumentation();
-  }
-
-  // Type guard: check for Winston-specific properties
-  // Winston has 'transports' array or 'defaultMeta' property
-  if ('transports' in logger || 'defaultMeta' in logger) {
-    const WinstonInstrumentation = loadWinstonInstrumentation();
-    return new WinstonInstrumentation();
-  }
-
-  // Unknown logger type - no instrumentation
-  return null;
-}
-
 export function init(cfg: AutotelConfig): void {
   // Resolve configs in priority order: explicit > yaml > env > defaults
   const envConfig = resolveConfigFromEnv();
@@ -1029,22 +957,19 @@ export function init(cfg: AutotelConfig): void {
   let finalInstrumentations: NodeSDKConfiguration['instrumentations'] =
     cfg.instrumentations ? [...cfg.instrumentations] : [];
 
-  // Auto-enable logger instrumentation if a logger is provided
-  if (cfg.logger) {
-    const loggerInstrumentation = createLoggerInstrumentation(cfg.logger);
-    if (loggerInstrumentation) {
-      finalInstrumentations = [
-        ...finalInstrumentations,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        loggerInstrumentation as any,
-      ];
-      logger.debug(
-        `[autotel] Auto-enabled ${loggerInstrumentation.constructor.name} for logger`,
+  if (cfg.integrations !== undefined && cfg.integrations !== false) {
+    // Check for ESM mode and provide guidance
+    const isESM = isESMMode();
+    if (isESM) {
+      logger.info(
+        '[autotel] ESM mode detected. For auto-instrumentation to work:\n' +
+          '  1. Install @opentelemetry/auto-instrumentations-node as a direct dependency\n' +
+          '  2. Import autotel/register FIRST in your instrumentation file\n' +
+          '  3. Use getNodeAutoInstrumentations() directly instead of integrations\n' +
+          '  See: https://github.com/jagreehal/autotel#esm-setup',
       );
     }
-  }
 
-  if (cfg.integrations !== undefined) {
     try {
       // Detect manual instrumentations to avoid conflicts
       const manualInstrumentationNames = getInstrumentationNames(
@@ -1052,11 +977,7 @@ export function init(cfg: AutotelConfig): void {
       );
 
       // Warn if both integrations and manual instrumentations are provided
-      if (
-        manualInstrumentationNames.size > 0 &&
-        cfg.integrations !== false &&
-        cfg.integrations !== undefined
-      ) {
+      if (manualInstrumentationNames.size > 0) {
         const manualNames = [...manualInstrumentationNames].join(', ');
         logger.info(
           `[autotel] Detected manual instrumentations (${manualNames}). ` +
@@ -1299,6 +1220,29 @@ export type AutoInstrumentationsLoader = (
 ) => unknown[];
 
 /**
+ * Detect if we're running in ESM mode
+ */
+function isESMMode(): boolean {
+  // Check if we're in an ESM context by looking for common ESM indicators
+  try {
+    // In ESM, module.exports doesn't exist in the global scope the same way
+    // Also check if the package.json type is "module"
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('node:fs');
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(`${process.cwd()}/package.json`, 'utf8'),
+      );
+      return pkg.type === 'module';
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Lazy-load auto-instrumentations (optional peer dependency)
  * Only loads when integrations config is truthy, avoiding ~40+ package imports at startup.
  */
@@ -1308,8 +1252,26 @@ function loadNodeAutoInstrumentations(): AutoInstrumentationsLoader {
     const mod = require('@opentelemetry/auto-instrumentations-node');
     return mod.getNodeAutoInstrumentations;
   } catch {
+    const isESM = isESMMode();
+    const baseMessage = '@opentelemetry/auto-instrumentations-node not found.';
+
+    if (isESM) {
+      throw new Error(
+        `${baseMessage}\n\n` +
+          'ESM Setup Required:\n' +
+          '1. Install as a direct dependency: pnpm add @opentelemetry/auto-instrumentations-node\n' +
+          '2. Create instrumentation.mjs with:\n' +
+          "   import 'autotel/register';  // MUST be first!\n" +
+          "   import { init } from 'autotel';\n" +
+          "   import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';\n" +
+          '   init({ service: "my-app", instrumentations: getNodeAutoInstrumentations() });\n' +
+          '3. Run with: tsx --import ./instrumentation.mjs src/index.ts\n\n' +
+          'See: https://github.com/jagreehal/autotel#esm-setup',
+      );
+    }
+
     throw new Error(
-      'Auto-instrumentations not found. Install @opentelemetry/auto-instrumentations-node',
+      `${baseMessage} Install it: pnpm add @opentelemetry/auto-instrumentations-node`,
     );
   }
 }

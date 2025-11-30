@@ -227,14 +227,20 @@ describe('init() integrations vs instrumentations', () => {
     expect(instrumentations).toContain(manualMongoDBInstrumentation);
     expect(instrumentations).toContain(manualMongooseInstrumentation);
 
-    // Check that warning was logged
-    const infoMessages = logMessages.filter((log) => log.level === 'info');
-    expect(infoMessages).toHaveLength(1);
-    expect(infoMessages[0].message).toContain(
+    // Check that warning was logged about detected manual instrumentations
+    const manualInstrumentationWarnings = logMessages.filter(
+      (log) => log.level === 'info' && log.message.includes('Detected manual'),
+    );
+    expect(manualInstrumentationWarnings).toHaveLength(1);
+    expect(manualInstrumentationWarnings[0].message).toContain(
       'Detected manual instrumentations',
     );
-    expect(infoMessages[0].message).toContain('MongoDBInstrumentation');
-    expect(infoMessages[0].message).toContain('MongooseInstrumentation');
+    expect(manualInstrumentationWarnings[0].message).toContain(
+      'MongoDBInstrumentation',
+    );
+    expect(manualInstrumentationWarnings[0].message).toContain(
+      'MongooseInstrumentation',
+    );
   });
 
   it('excludes manual instrumentations from specific auto-integrations list', async () => {
@@ -272,10 +278,14 @@ describe('init() integrations vs instrumentations', () => {
     const instrumentations = options.instrumentations as unknown[];
     expect(instrumentations).toContain(manualMongoDBInstrumentation);
 
-    // Check that warning was logged
-    const infoMessages = logMessages.filter((log) => log.level === 'info');
-    expect(infoMessages).toHaveLength(1);
-    expect(infoMessages[0].message).toContain('MongoDBInstrumentation');
+    // Check that warning was logged about detected manual instrumentations
+    const manualInstrumentationWarnings = logMessages.filter(
+      (log) => log.level === 'info' && log.message.includes('Detected manual'),
+    );
+    expect(manualInstrumentationWarnings).toHaveLength(1);
+    expect(manualInstrumentationWarnings[0].message).toContain(
+      'MongoDBInstrumentation',
+    );
   });
 
   it('does not log warning when no manual instrumentations provided', async () => {
@@ -367,8 +377,12 @@ describe('init() integrations vs instrumentations', () => {
     expect(instrumentations).toContain(manualHttpInstrumentation);
 
     // Check that warning was logged (because manual HTTP provided with auto-integrations)
-    const infoMessages = logMessages.filter((log) => log.level === 'info');
-    expect(infoMessages).toHaveLength(1);
-    expect(infoMessages[0].message).toContain('HttpInstrumentation');
+    const manualInstrumentationWarnings = logMessages.filter(
+      (log) => log.level === 'info' && log.message.includes('Detected manual'),
+    );
+    expect(manualInstrumentationWarnings).toHaveLength(1);
+    expect(manualInstrumentationWarnings[0].message).toContain(
+      'HttpInstrumentation',
+    );
   });
 });

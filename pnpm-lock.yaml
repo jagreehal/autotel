@@ -110,8 +110,8 @@ importers:
   apps/example-basic:
     dependencies:
       '@opentelemetry/auto-instrumentations-node':
-        specifier: ^0.67.1
-        version: 0.67.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
+        specifier: ^0.67.2
+        version: 0.67.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
       autotel:
         specifier: workspace:*
         version: link:../../packages/autotel
@@ -122,8 +122,8 @@ importers:
         specifier: ^17.2.3
         version: 17.2.3
       pino:
-        specifier: ^10.1.0
-        version: 10.1.0
+        specifier: ^9.6.0
+        version: 9.14.0
       pino-pretty:
         specifier: ^13.1.2
         version: 13.1.2
@@ -438,6 +438,9 @@ importers:
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: ^0.208.0
         version: 0.208.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation':
+        specifier: ^0.208.0
+        version: 0.208.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources':
         specifier: ^2.2.0
         version: 2.2.0(@opentelemetry/api@1.9.0)
@@ -456,6 +459,9 @@ importers:
       '@traceloop/node-server-sdk':
         specifier: ^0.22.0
         version: 0.22.0(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3)(zod@3.25.76))
+      import-in-the-middle:
+        specifier: ^2.0.0
+        version: 2.0.0
       pino-pretty:
         specifier: ^13.1.2
         version: 13.1.2
@@ -484,12 +490,6 @@ importers:
       '@opentelemetry/exporter-trace-otlp-grpc':
         specifier: ^0.208.0
         version: 0.208.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-pino':
-        specifier: ^0.55.0
-        version: 0.55.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-winston':
-        specifier: ^0.53.0
-        version: 0.53.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-aws':
         specifier: ^2.8.0
         version: 2.8.0(@opentelemetry/api@1.9.0)
@@ -529,9 +529,6 @@ importers:
       eslint-plugin-unicorn:
         specifier: ^62.0.0
         version: 62.0.0(eslint@9.39.1(jiti@2.6.1))
-      import-in-the-middle:
-        specifier: ^2.0.0
-        version: 2.0.0
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -5650,6 +5647,10 @@ packages:
 
   pino@10.1.0:
     resolution: {integrity: sha512-0zZC2ygfdqvqK8zJIr1e+wT1T/L+LF6qvqvbzEQ6tiMAoTqEVK9a1K3YRu8HEUvGEvNqZyPJTtb2sNIoTkB83w==}
+    hasBin: true
+
+  pino@9.14.0:
+    resolution: {integrity: sha512-8OEwKp5juEvb/MjpIc4hjqfgCNysrS94RIOMXYvpYCdm/jglrKEiAYmiumbmGhCvs+IcInsphYDFwqrjr7398w==}
     hasBin: true
 
   pirates@4.0.7:
@@ -12265,6 +12266,20 @@ snapshots:
   pino-std-serializers@7.0.0: {}
 
   pino@10.1.0:
+    dependencies:
+      '@pinojs/redact': 0.4.0
+      atomic-sleep: 1.0.0
+      on-exit-leak-free: 2.1.2
+      pino-abstract-transport: 2.0.0
+      pino-std-serializers: 7.0.0
+      process-warning: 5.0.0
+      quick-format-unescaped: 4.0.4
+      real-require: 0.2.0
+      safe-stable-stringify: 2.5.0
+      sonic-boom: 4.2.0
+      thread-stream: 3.1.0
+
+  pino@9.14.0:
     dependencies:
       '@pinojs/redact': 0.4.0
       atomic-sleep: 1.0.0
