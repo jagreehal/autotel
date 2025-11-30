@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
+    "start:pino-esm": "tsx --import ./src/instrumentation.mjs src/test-pino-esm.ts",
     "start:webhook": "tsx src/webhook-server.ts"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.67.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.2",
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "dotenv": "^17.2.3",
-    "pino": "^10.1.0",
+    "pino": "^9.6.0",
     "pino-pretty": "^13.1.2"
   },
   "devDependencies": {

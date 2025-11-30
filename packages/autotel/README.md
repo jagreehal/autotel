@@ -831,7 +831,38 @@ init({
 
 OpenTelemetry's auto-instrumentation packages require special setup depending on your module system:
 
-**CommonJS (Simpler - Recommended)**
+**ESM Setup (Recommended for Node 18.19+)**
+
+Use `autotel/register` for clean ESM instrumentation without complex `NODE_OPTIONS`:
+
+```typescript
+// instrumentation.mjs (or .ts)
+import 'autotel/register'; // MUST be first import!
+import { init } from 'autotel';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+
+init({
+  service: 'my-app',
+  instrumentations: getNodeAutoInstrumentations({
+    '@opentelemetry/instrumentation-pino': { enabled: true },
+  }),
+});
+```
+
+```bash
+# Run with --import flag
+tsx --import ./instrumentation.mjs src/server.ts
+# or with Node
+node --import ./instrumentation.mjs src/server.js
+```
+
+**Requirements for ESM instrumentation:**
+
+- Install `@opentelemetry/auto-instrumentations-node` as a **direct dependency** in your app
+- Import `autotel/register` **before** any other imports
+- Use `--import` flag (not `--require`)
+
+**CommonJS Setup**
 
 No special flags required. Just use `--require`:
 
@@ -846,21 +877,21 @@ No special flags required. Just use `--require`:
 node --require ./instrumentation.js src/server.js
 ```
 
-**ESM (Requires Experimental Loader Hook)**
-
-If you need ESM, use the `--experimental-loader` flag:
+**Zero-Config ESM (reads from env vars):**
 
 ```bash
-NODE_OPTIONS="--import ./instrumentation.mjs --experimental-loader=@opentelemetry/instrumentation/hook.mjs" node src/server.js
+OTEL_SERVICE_NAME=my-app tsx --import autotel/auto src/index.ts
 ```
 
-For tsx users:
+**Legacy ESM (Node 18.0-18.18)**
+
+If you can't use `autotel/register`, use the `--experimental-loader` flag:
 
 ```bash
 NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --import ./instrumentation.ts" tsx src/server.ts
 ```
 
-**Note:** The loader hook is an OpenTelemetry upstream requirement for ESM, not an autotel limitation. Autotel itself works identically in both ESM and CJS. See [OpenTelemetry ESM docs](https://opentelemetry.io/docs/languages/js/getting-started/nodejs/#esm-support) for details.
+**Note:** The loader hook is an OpenTelemetry upstream requirement for ESM, not an autotel limitation. See [OpenTelemetry ESM docs](https://opentelemetry.io/docs/languages/js/getting-started/nodejs/#esm-support) for details.
 
 ## Operational Safety & Runtime Controls
 

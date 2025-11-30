@@ -1,41 +1,37 @@
 /**
- * ESM instrumentation registration for Node.js 20.6+
+ * ESM instrumentation registration for Node.js 18.19+
  *
  * This module registers the OpenTelemetry ESM loader hook using the modern
- * node:module register() API. This eliminates the need for NODE_OPTIONS.
+ * node:module register() API. This eliminates the need for NODE_OPTIONS or
+ * --experimental-loader flags.
  *
- * Usage in instrumentation.ts:
+ * Usage in instrumentation.mjs:
  * ```typescript
- * import 'autotel/register';
+ * import 'autotel/register';  // MUST be first import!
  * import { init } from 'autotel';
  *
  * init({
  *   service: 'my-app',
- *   integrations: ['express', 'http', 'pino'],
+ *   instrumentations: [...],  // or integrations: ['express', 'http', 'pino']
  * });
  * ```
  *
  * Then run:
  * ```bash
- * tsx --import ./instrumentation.ts src/index.ts
+ * node --import ./instrumentation.mjs src/index.js
+ * # or with tsx:
+ * tsx --import ./instrumentation.mjs src/index.ts
  * ```
  *
- * No NODE_OPTIONS needed!
+ * No NODE_OPTIONS or --experimental-loader needed!
  *
- * @requires Node.js 20.6.0 or later
+ * @requires Node.js 18.19.0 or later
+ * @see https://github.com/open-telemetry/opentelemetry-js/blob/main/doc/esm-support.md
  * @see https://nodejs.org/api/module.html#moduleregisterspecifier-parenturl-options
  */
 
 import { register } from 'node:module';
-import { createAddHookMessageChannel } from 'import-in-the-middle';
 
-const { registerOptions, waitForAllMessagesAcknowledged } =
-  createAddHookMessageChannel();
-
-register('import-in-the-middle/hook.mjs', import.meta.url, registerOptions);
-
-/**
- * Wait for all hook messages to be acknowledged.
- * Useful for ensuring all instrumentation is properly registered before proceeding.
- */
-export { waitForAllMessagesAcknowledged };
+// Use the official OpenTelemetry instrumentation hook which wraps import-in-the-middle
+// This ensures proper integration with OTel's instrumentation system
+register('@opentelemetry/instrumentation/hook.mjs', import.meta.url);
