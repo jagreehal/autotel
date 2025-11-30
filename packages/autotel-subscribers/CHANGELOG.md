@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 10.0.0
+
+### Patch Changes
+
+- Updated dependencies [2ae2ece]
+  - autotel@2.6.0
+
 ## 9.0.0
 
 ### Patch Changes
