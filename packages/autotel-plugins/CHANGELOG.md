@@ -1,5 +1,12 @@
 # autotel-plugins
 
+## 0.6.6
+
+### Patch Changes
+
+- Updated dependencies [bc0e668]
+  - autotel@2.7.0
+
 ## 0.6.5
 
 ### Patch Changes

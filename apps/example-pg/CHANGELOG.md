@@ -1,5 +1,12 @@
 # @jagreehal/example-example-pg
 
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [bc0e668]
+  - autotel@2.7.0
+
 ## 1.0.7
 
 ### Patch Changes
