@@ -180,7 +180,7 @@ init({
   service: 'my-app',
   // Datadog (traces + metrics + logs via OTLP)
   endpoint: 'https://otlp.datadoghq.com',
-  otlpHeaders: 'dd-api-key=...',
+  headers: 'dd-api-key=...',
 });
 
 init({
@@ -188,7 +188,7 @@ init({
   // Honeycomb (gRPC protocol)
   protocol: 'grpc',
   endpoint: 'api.honeycomb.io:443',
-  otlpHeaders: {
+  headers: {
     'x-honeycomb-team': process.env.HONEYCOMB_API_KEY!,
   },
 });
@@ -572,7 +572,7 @@ const db = drizzle(pool);
 
 instrumentDatabase(db, {
   dbSystem: 'postgresql',
-  dbName: 'myapp',
+  database: 'myapp',
 });
 
 await db.select().from(users); // queries emit spans automatically
@@ -750,11 +750,11 @@ init({
 
 ## Auto Instrumentation & Advanced Configuration
 
-- `integrations` – Enable OpenTelemetry auto-instrumentations (HTTP, Express, Fastify, Prisma, Pino…). Requires `@opentelemetry/auto-instrumentations-node`.
+- `autoInstrumentations` – Enable OpenTelemetry auto-instrumentations (HTTP, Express, Fastify, Prisma, Pino…). Requires `@opentelemetry/auto-instrumentations-node`.
 - `instrumentations` – Provide manual instrumentation instances, e.g., `new HttpInstrumentation()`.
 - `resource` / `resourceAttributes` – Declare cluster/region/tenant metadata once and it flows everywhere.
 - `spanProcessor`, `metricReader`, `logRecordProcessors` – Plug in any OpenTelemetry exporter or your in-house pipeline.
-- `otlpHeaders` – Attach vendor auth headers when using the built-in OTLP HTTP exporters.
+- `headers` – Attach vendor auth headers when using the built-in OTLP HTTP exporters.
 - `sdkFactory` – Receive the Autotel defaults and return a fully customized `NodeSDK` for the rare cases you need complete control.
 
 ```typescript
@@ -768,23 +768,23 @@ init({
     'cloud.region': 'us-east-1',
     'deployment.environment': 'production',
   },
-  integrations: ['http', 'express', 'pino'],
+  autoInstrumentations: ['http', 'express', 'pino'],
   instrumentations: [new HttpInstrumentation()],
-  otlpHeaders: 'Authorization=Basic ...',
+  headers: 'Authorization=Basic ...',
   subscribers: [new PostHogSubscriber({ apiKey: 'phc_xxx' })],
 });
 ```
 
-### ⚠️ Integrations vs. Manual Instrumentations
+### ⚠️ autoInstrumentations vs. Manual Instrumentations
 
-When using both `integrations` and `instrumentations`, manual instrumentations always take precedence. If you need custom configs (like `requireParentSpan: false` for standalone scripts), use **one or the other**:
+When using both `autoInstrumentations` and `instrumentations`, manual instrumentations always take precedence. If you need custom configs (like `requireParentSpan: false` for standalone scripts), use **one or the other**:
 
 #### Option A: Auto-instrumentations only (all defaults)
 
 ```typescript
 init({
   service: 'my-app',
-  integrations: true, // All libraries with default configs
+  autoInstrumentations: true, // All libraries with default configs
 });
 ```
 
@@ -796,7 +796,7 @@ import { MongooseInstrumentation } from '@opentelemetry/instrumentation-mongoose
 
 init({
   service: 'my-app',
-  integrations: false, // Must be false to avoid conflicts
+  autoInstrumentations: false, // Must be false to avoid conflicts
   instrumentations: [
     new MongoDBInstrumentation({
       requireParentSpan: false, // Custom config for scripts/cron jobs
@@ -815,7 +815,7 @@ import { MongoDBInstrumentation } from '@opentelemetry/instrumentation-mongodb';
 
 init({
   service: 'my-app',
-  integrations: ['http', 'express'], // Auto for most libraries
+  autoInstrumentations: ['http', 'express'], // Auto for most libraries
   instrumentations: [
     // Manual config only for libraries that need custom settings
     new MongoDBInstrumentation({
@@ -899,7 +899,7 @@ NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --im
 - **Rate limiting & circuit breakers** – Prevent telemetry storms when backends misbehave.
 - **Validation** – Configurable attribute/event name lengths, maximum counts, and nesting depth.
 - **Sensitive data redaction** – Passwords, tokens, API keys, and any custom regex you provide are automatically masked before export.
-- **Auto-flush** – Events buffers drain when root spans end (disable with `autoFlushEvents: false`).
+- **Auto-flush** – Events buffers drain when root spans end (disable with `flushOnRootSpanEnd: false`).
 - **Runtime flags** – Toggle metrics or swap endpoints via env vars without code edits.
 
 ```bash
@@ -923,16 +923,16 @@ init({
   version?: string;
   environment?: string;
   baggage?: boolean | string; // Auto-copy baggage to span attributes
-  autoFlushEvents?: boolean;  // Auto-flush events (default: true)
-  autoFlush?: boolean;           // Auto-flush spans (default: false)
-  integrations?: string[] | boolean | Record<string, { enabled?: boolean }>;
+  flushOnRootSpanEnd?: boolean;  // Auto-flush events (default: true)
+  forceFlushOnShutdown?: boolean;  // Force-flush spans on shutdown (default: false)
+  autoInstrumentations?: string[] | boolean | Record<string, { enabled?: boolean }>;
   instrumentations?: NodeSDKConfiguration['instrumentations'];
   spanProcessor?: SpanProcessor;
   metricReader?: MetricReader;
   logRecordProcessors?: LogRecordProcessor[];
   resource?: Resource;
   resourceAttributes?: Record<string, string>;
-  otlpHeaders?: Record<string, string> | string;
+  headers?: Record<string, string> | string;
   sdkFactory?: (defaults: NodeSDK) => NodeSDK;
   validation?: Partial<ValidationConfig>;
   logger?: Logger; // created via createLogger() or bring your own
@@ -1368,8 +1368,8 @@ Enable automatic span flushing on root span completion:
 ```typescript
 init({
   service: 'my-lambda',
-  autoFlushEvents: true, // enabled by default (events only)
-  autoFlush: true, // flush spans on root completion
+  flushOnRootSpanEnd: true, // enabled by default (events only)
+  forceFlushOnShutdown: true, // flush spans on root completion
 });
 
 export const handler = trace(async (event) => {
@@ -1388,7 +1388,7 @@ export const handler = trace(async (event) => {
 
 **When to use:**
 
-- Use `autoFlush: true` for serverless functions where latency is acceptable
+- Use `forceFlushOnShutdown: true` for serverless functions where latency is acceptable
 - Use manual `flush()` for more control over when flushing occurs
 - Use neither for long-running services (batch export is more efficient)
 

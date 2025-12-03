@@ -23,16 +23,23 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import type { AutotelConfig } from './init.js';
+import type { AutotelConfig } from './init';
+import {
+  AdaptiveSampler,
+  AlwaysSampler,
+  NeverSampler,
+  RandomSampler,
+} from './sampling';
 
 /**
  * Lazy-load yaml parser (optional peer dependency)
  * Only loads when a YAML config file is actually found
  */
+import { requireModule } from './node-require';
+
 function loadYamlParser(): (content: string) => unknown {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('yaml');
+    const mod = requireModule<{ parse: (content: string) => unknown }>('yaml');
     return mod.parse;
   } catch {
     throw new Error('YAML parser not found. Install with: pnpm add yaml');
@@ -63,7 +70,7 @@ export interface YamlConfig {
     always_sample_slow?: boolean;
     slow_threshold_ms?: number;
   };
-  integrations?: string[] | Record<string, { enabled?: boolean }>;
+  autoInstrumentations?: string[] | Record<string, { enabled?: boolean }>;
   debug?: boolean;
 }
 
@@ -169,22 +176,70 @@ function yamlToAutotelConfig(yaml: YamlConfig): Partial<AutotelConfig> {
   // Exporter configuration
   if (yaml.exporter?.endpoint) config.endpoint = yaml.exporter.endpoint;
   if (yaml.exporter?.protocol) config.protocol = yaml.exporter.protocol;
-  if (yaml.exporter?.headers) config.otlpHeaders = yaml.exporter.headers;
+  if (yaml.exporter?.headers) config.headers = yaml.exporter.headers;
 
   // Resource attributes (flattened)
   if (yaml.resource) config.resourceAttributes = yaml.resource;
 
   // Integrations
-  if (yaml.integrations) config.integrations = yaml.integrations;
+  if (yaml.autoInstrumentations)
+    config.autoInstrumentations = yaml.autoInstrumentations;
 
   // Debug mode
   if (yaml.debug !== undefined) config.debug = yaml.debug;
 
-  // Note: sampling config would need to create Sampler instances
-  // which is better handled in init.ts based on the yaml.sampling object
-  // For now, we pass it through as-is and let init.ts handle it
+  // Sampling configuration
+  const sampler = createSamplerFromYaml(yaml.sampling);
+  if (sampler) config.sampler = sampler;
 
   return config;
+}
+
+function createSamplerFromYaml(
+  sampling?: YamlConfig['sampling'],
+): AutotelConfig['sampler'] {
+  if (!sampling) return undefined;
+
+  const type = sampling.type ?? 'adaptive';
+
+  try {
+    switch (type) {
+      case 'adaptive': {
+        return new AdaptiveSampler({
+          baselineSampleRate: sampling.baseline_rate,
+          alwaysSampleErrors: sampling.always_sample_errors,
+          alwaysSampleSlow: sampling.always_sample_slow,
+          slowThresholdMs: sampling.slow_threshold_ms,
+        });
+      }
+      case 'always_on': {
+        return new AlwaysSampler();
+      }
+      case 'always_off': {
+        return new NeverSampler();
+      }
+      case 'ratio': {
+        if (sampling.ratio === undefined) {
+          console.warn(
+            '[autotel] sampling.ratio missing in YAML sampling config. Falling back to adaptive sampler.',
+          );
+          return new AdaptiveSampler();
+        }
+        return new RandomSampler(sampling.ratio);
+      }
+      default: {
+        console.warn(
+          `[autotel] Unknown sampling type "${type}" in YAML config. Falling back to defaults.`,
+        );
+        return undefined;
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[autotel] Failed to configure sampling from YAML: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
 }
 
 /**

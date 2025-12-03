@@ -34,6 +34,7 @@
 
 import { trace, context, SpanStatusCode } from '@opentelemetry/api';
 import type { Span, Tracer, Context } from '@opentelemetry/api';
+import { requireModule } from './node-require';
 
 /**
  * WeakMap to store span names for active spans
@@ -298,8 +299,9 @@ export function getActiveContext(): Context {
   // Check stored context first (from baggage setters), then fall back to active context
   // This ensures ctx.setBaggage() changes are visible to OpenTelemetry operations
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getActiveContextWithBaggage } = require('./trace-context');
+    const { getActiveContextWithBaggage } = requireModule<{
+      getActiveContextWithBaggage: () => Context;
+    }>('./trace-context');
     return getActiveContextWithBaggage();
   } catch {
     // Fallback if trace-context isn't available

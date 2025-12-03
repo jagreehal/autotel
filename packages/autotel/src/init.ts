@@ -39,7 +39,8 @@ import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import { resolveConfigFromEnv } from './env-config';
-import { loadYamlConfig } from './yaml-config.js';
+import { loadYamlConfig } from './yaml-config';
+import { requireModule, safeRequire } from './node-require';
 
 /**
  * Silent logger (no-op) - used as default when user doesn't provide one.
@@ -79,11 +80,10 @@ function loadGRPCTraceExporter(): new (
 
   try {
     // Dynamic import for optional peer dependency
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const grpcModule = require('@opentelemetry/exporter-trace-otlp-grpc');
-    OTLPTraceExporterGRPC = grpcModule.OTLPTraceExporter as new (
-      config: OTLPExporterConfig,
-    ) => SpanExporter;
+    const grpcModule = requireModule<{
+      OTLPTraceExporter: new (config: OTLPExporterConfig) => SpanExporter;
+    }>('@opentelemetry/exporter-trace-otlp-grpc');
+    OTLPTraceExporterGRPC = grpcModule.OTLPTraceExporter;
     return OTLPTraceExporterGRPC;
   } catch {
     throw new Error(
@@ -102,11 +102,12 @@ function loadGRPCMetricExporter(): new (
 
   try {
     // Dynamic import for optional peer dependency
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const grpcModule = require('@opentelemetry/exporter-metrics-otlp-grpc');
-    OTLPMetricExporterGRPC = grpcModule.OTLPMetricExporter as new (
-      config: OTLPExporterConfig,
-    ) => PushMetricExporter;
+    const grpcModule = requireModule<{
+      OTLPMetricExporter: new (
+        config: OTLPExporterConfig,
+      ) => PushMetricExporter;
+    }>('@opentelemetry/exporter-metrics-otlp-grpc');
+    OTLPMetricExporterGRPC = grpcModule.OTLPMetricExporter;
     return OTLPMetricExporterGRPC;
   } catch {
     throw new Error(
@@ -198,12 +199,12 @@ export interface AutotelConfig {
   subscribers?: EventSubscriber[];
 
   /**
-   * Additional OpenTelemetry instrumentations to register.
-   * Useful when you want HTTP/Prisma/etc auto instrumentation alongside
-   * the functional helpers.
+   * Additional OpenTelemetry instrumentations to register (raw OTel classes).
+   * Useful when you need custom instrumentation configs or instrumentations
+   * not covered by autoInstrumentations.
    *
    * **Important:** If you need custom instrumentation configs (like `requireParentSpan: false`),
-   * use EITHER manual instrumentations OR integrations, not both for the same library.
+   * use EITHER manual instrumentations OR autoInstrumentations, not both for the same library.
    * Manual instrumentations always take precedence over auto-instrumentations.
    *
    * @example Manual instrumentations with custom config
@@ -212,7 +213,7 @@ export interface AutotelConfig {
    *
    * init({
    *   service: 'my-app',
-   *   integrations: false,  // Disable auto-instrumentations
+   *   autoInstrumentations: false,  // Disable auto-instrumentations
    *   instrumentations: [
    *     new MongoDBInstrumentation({
    *       requireParentSpan: false  // Custom config
@@ -227,7 +228,7 @@ export interface AutotelConfig {
    *
    * init({
    *   service: 'my-app',
-   *   integrations: ['http', 'express'],  // Auto for these
+   *   autoInstrumentations: ['http', 'express'],  // Auto for these
    *   instrumentations: [
    *     new MongoDBInstrumentation({
    *       requireParentSpan: false  // Manual config for MongoDB
@@ -239,33 +240,33 @@ export interface AutotelConfig {
   instrumentations?: NodeSDKConfiguration['instrumentations'];
 
   /**
-   * Simple integration names for auto-instrumentation.
+   * Simple names for auto-instrumentation.
    * Uses @opentelemetry/auto-instrumentations-node (peer dependency).
    *
    * **Important:** If you provide manual instrumentations for the same library,
    * the manual config takes precedence and auto-instrumentation for that library is disabled.
    *
-   * @example Enable all integrations (simple approach)
+   * @example Enable all auto-instrumentations (simple approach)
    * ```typescript
    * init({
    *   service: 'my-app',
-   *   integrations: true  // Enable all with defaults
+   *   autoInstrumentations: true  // Enable all with defaults
    * })
    * ```
    *
-   * @example Enable specific integrations
+   * @example Enable specific auto-instrumentations
    * ```typescript
    * init({
    *   service: 'my-app',
-   *   integrations: ['express', 'pino', 'http']
+   *   autoInstrumentations: ['express', 'pino', 'http']
    * })
    * ```
    *
-   * @example Configure specific integrations
+   * @example Configure specific auto-instrumentations
    * ```typescript
    * init({
    *   service: 'my-app',
-   *   integrations: {
+   *   autoInstrumentations: {
    *     express: { enabled: true },
    *     pino: { enabled: true },
    *     http: { enabled: false }
@@ -279,7 +280,7 @@ export interface AutotelConfig {
    *
    * init({
    *   service: 'my-app',
-   *   integrations: false,  // Use manual control
+   *   autoInstrumentations: false,  // Use manual control
    *   instrumentations: [
    *     new MongoDBInstrumentation({
    *       requireParentSpan: false  // Custom config not available with auto
@@ -288,7 +289,10 @@ export interface AutotelConfig {
    * })
    * ```
    */
-  integrations?: string[] | boolean | Record<string, { enabled?: boolean }>;
+  autoInstrumentations?:
+    | string[]
+    | boolean
+    | Record<string, { enabled?: boolean }>;
 
   /**
    * OTLP endpoint for traces/metrics/logs
@@ -393,10 +397,19 @@ export interface AutotelConfig {
   resource?: Resource;
 
   /**
-   * Headers for default OTLP exporters. Accepts either an object map or
+   * Headers for OTLP exporters. Accepts either an object map or
    * a "key=value" comma separated string.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   endpoint: 'https://api.honeycomb.io',
+   *   headers: { 'x-honeycomb-team': 'YOUR_API_KEY' }
+   * })
+   * ```
    */
-  otlpHeaders?: Record<string, string> | string;
+  headers?: Record<string, string> | string;
 
   /**
    * OTLP protocol to use for traces, metrics, and logs
@@ -462,9 +475,9 @@ export interface AutotelConfig {
    * This logger is used by autotel internally to log initialization, warnings,
    * and debug information. Any logger with info/warn/error/debug methods works.
    *
-   * **For OTel instrumentation of your application logs**, use the `integrations` option:
-   * - `integrations: ['pino']` - Injects traceId/spanId into Pino logs
-   * - `integrations: ['winston']` - Injects traceId/spanId into Winston logs
+   * **For OTel instrumentation of your application logs**, use the `autoInstrumentations` option:
+   * - `autoInstrumentations: ['pino']` - Injects traceId/spanId into Pino logs
+   * - `autoInstrumentations: ['winston']` - Injects traceId/spanId into Winston logs
    *
    * Default: silent logger (no-op)
    *
@@ -476,8 +489,8 @@ export interface AutotelConfig {
    * const logger = pino({ level: 'info' })
    * init({
    *   service: 'my-app',
-   *   logger,                   // For autotel's internal logs
-   *   integrations: ['pino']    // For OTel trace context in YOUR logs
+   *   logger,                       // For autotel's internal logs
+   *   autoInstrumentations: ['pino'] // For OTel trace context in YOUR logs
    * })
    * ```
    *
@@ -495,41 +508,41 @@ export interface AutotelConfig {
   logger?: Logger;
 
   /**
-   * Automatically flush events queue when root spans end
-   * - true: Auto-flush on root span completion (default)
+   * Flush events queue when root spans end
+   * - true: Flush on root span completion (default)
    * - false: Use batching (events flush every 10 seconds automatically)
    *
    * Only flushes on root spans to avoid excessive network calls.
    * Default is true for serverless/short-lived processes. Set to false
    * for long-running services where batching is more efficient.
    */
-  autoFlushEvents?: boolean;
+  flushOnRootSpanEnd?: boolean;
 
   /**
-   * Include OpenTelemetry span flushing in auto-flush (default: false)
+   * Force-flush OpenTelemetry spans on shutdown (default: false)
    *
-   * When enabled, spans are force-flushed along with events events on root
+   * When enabled, spans are force-flushed along with events on root
    * span completion. This is useful for serverless/short-lived processes where
    * spans may not export before the process ends.
    *
    * - true: Force-flush spans on root span completion (~50-200ms latency)
    * - false: Spans export via normal batch processor (default behavior)
    *
-   * Only applies when autoFlushEvents is also enabled.
+   * Only applies when flushOnRootSpanEnd is also enabled.
    *
    * Note: For edge runtimes (Cloudflare Workers, Vercel Edge), use the
    * 'autotel-edge' package instead, which handles this automatically.
    *
-   * @example Serverless with auto-flush
+   * @example Serverless with force-flush
    * ```typescript
    * init({
    *   service: 'my-lambda',
-   *   autoFlushEvents: true,
-   *   autoFlush: true, // Force-flush spans
+   *   flushOnRootSpanEnd: true,
+   *   forceFlushOnShutdown: true, // Force-flush spans
    * });
    * ```
    */
-  autoFlush?: boolean;
+  forceFlushOnShutdown?: boolean;
 
   /**
    * Automatically copy baggage entries to span attributes
@@ -823,9 +836,8 @@ export function init(cfg: AutotelConfig): void {
       ...yamlConfig.resourceAttributes,
       ...cfg.resourceAttributes,
     },
-    // Handle otlpHeaders merge (can be string or object)
-    otlpHeaders:
-      cfg.otlpHeaders ?? yamlConfig.otlpHeaders ?? envConfig.otlpHeaders,
+    // Handle headers merge (can be string or object)
+    headers: cfg.headers ?? yamlConfig.headers ?? envConfig.headers,
   } as AutotelConfig;
 
   // Set logger (use provided or default to silent - no spam)
@@ -844,7 +856,7 @@ export function init(cfg: AutotelConfig): void {
   // Initialize OpenTelemetry
   // Only use endpoint if explicitly configured (no default fallback)
   const endpoint = mergedConfig.endpoint;
-  const otlpHeaders = normalizeOtlpHeaders(mergedConfig.otlpHeaders);
+  const otlpHeaders = normalizeOtlpHeaders(mergedConfig.headers);
   const version = mergedConfig.version || detectVersion();
   const environment =
     mergedConfig.environment || process.env.NODE_ENV || 'development';
@@ -854,7 +866,7 @@ export function init(cfg: AutotelConfig): void {
   const hostname = detectHostname();
 
   let resource = resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: cfg.service,
+    [ATTR_SERVICE_NAME]: mergedConfig.service,
     [ATTR_SERVICE_VERSION]: version,
     // Support both old and new OpenTelemetry semantic conventions for environment
     'deployment.environment': environment, // Deprecated but widely supported
@@ -871,26 +883,31 @@ export function init(cfg: AutotelConfig): void {
     );
   }
 
-  if (cfg.resource) {
-    resource = resource.merge(cfg.resource);
+  if (mergedConfig.resource) {
+    resource = resource.merge(mergedConfig.resource);
   }
 
-  if (cfg.resourceAttributes) {
-    resource = resource.merge(resourceFromAttributes(cfg.resourceAttributes));
+  if (mergedConfig.resourceAttributes) {
+    resource = resource.merge(
+      resourceFromAttributes(mergedConfig.resourceAttributes),
+    );
   }
 
   // Resolve OTLP protocol (http or grpc)
-  const protocol = resolveProtocol(cfg.protocol);
+  const protocol = resolveProtocol(mergedConfig.protocol);
 
   // Build array of span processors (supports multiple)
   const spanProcessors: SpanProcessor[] = [];
 
-  if (cfg.spanProcessors && cfg.spanProcessors.length > 0) {
+  if (mergedConfig.spanProcessors && mergedConfig.spanProcessors.length > 0) {
     // User provided custom processors (full control)
-    spanProcessors.push(...cfg.spanProcessors);
-  } else if (cfg.spanExporters && cfg.spanExporters.length > 0) {
+    spanProcessors.push(...mergedConfig.spanProcessors);
+  } else if (
+    mergedConfig.spanExporters &&
+    mergedConfig.spanExporters.length > 0
+  ) {
     // User provided custom exporters (wrap each with tail sampling)
-    for (const exporter of cfg.spanExporters) {
+    for (const exporter of mergedConfig.spanExporters) {
       spanProcessors.push(
         new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter)),
       );
@@ -910,18 +927,18 @@ export function init(cfg: AutotelConfig): void {
   // SDK will still work but won't export traces
 
   // Add baggage span processor if enabled
-  if (cfg.baggage) {
+  if (mergedConfig.baggage) {
     const prefix =
-      typeof cfg.baggage === 'string'
-        ? cfg.baggage
-          ? `${cfg.baggage}.`
+      typeof mergedConfig.baggage === 'string'
+        ? mergedConfig.baggage
+          ? `${mergedConfig.baggage}.`
           : ''
         : 'baggage.';
     spanProcessors.push(new BaggageSpanProcessor({ prefix }));
   }
 
   // Apply debug mode configuration
-  const debugMode = resolveDebugFlag(cfg.debug);
+  const debugMode = resolveDebugFlag(mergedConfig.debug);
 
   if (debugMode) {
     // Debug enabled: add console processor
@@ -931,9 +948,9 @@ export function init(cfg: AutotelConfig): void {
   // Build array of metric readers (supports multiple)
   const metricReaders: MetricReader[] = [];
 
-  if (cfg.metricReaders && cfg.metricReaders.length > 0) {
+  if (mergedConfig.metricReaders && mergedConfig.metricReaders.length > 0) {
     // User provided custom metric readers
-    metricReaders.push(...cfg.metricReaders);
+    metricReaders.push(...mergedConfig.metricReaders);
   } else if (metricsEnabled && endpoint) {
     // Default: OTLP metrics exporter (only if endpoint is configured)
     const metricExporter = createMetricExporter(protocol, {
@@ -949,15 +966,21 @@ export function init(cfg: AutotelConfig): void {
   }
 
   let logRecordProcessors: LogRecordProcessor[] | undefined;
-  if (cfg.logRecordProcessors && cfg.logRecordProcessors.length > 0) {
-    logRecordProcessors = [...cfg.logRecordProcessors];
+  if (
+    mergedConfig.logRecordProcessors &&
+    mergedConfig.logRecordProcessors.length > 0
+  ) {
+    logRecordProcessors = [...mergedConfig.logRecordProcessors];
   }
 
-  // Handle instrumentations: merge manual instrumentations with auto-integrations
+  // Handle instrumentations: merge manual instrumentations with auto-instrumentations
   let finalInstrumentations: NodeSDKConfiguration['instrumentations'] =
-    cfg.instrumentations ? [...cfg.instrumentations] : [];
+    mergedConfig.instrumentations ? [...mergedConfig.instrumentations] : [];
 
-  if (cfg.integrations !== undefined && cfg.integrations !== false) {
+  if (
+    mergedConfig.autoInstrumentations !== undefined &&
+    mergedConfig.autoInstrumentations !== false
+  ) {
     // Check for ESM mode and provide guidance
     const isESM = isESMMode();
     if (isESM) {
@@ -965,7 +988,7 @@ export function init(cfg: AutotelConfig): void {
         '[autotel] ESM mode detected. For auto-instrumentation to work:\n' +
           '  1. Install @opentelemetry/auto-instrumentations-node as a direct dependency\n' +
           '  2. Import autotel/register FIRST in your instrumentation file\n' +
-          '  3. Use getNodeAutoInstrumentations() directly instead of integrations\n' +
+          '  3. Use getNodeAutoInstrumentations() directly instead of autoInstrumentations\n' +
           '  See: https://github.com/jagreehal/autotel#esm-setup',
       );
     }
@@ -973,21 +996,21 @@ export function init(cfg: AutotelConfig): void {
     try {
       // Detect manual instrumentations to avoid conflicts
       const manualInstrumentationNames = getInstrumentationNames(
-        cfg.instrumentations ?? [],
+        mergedConfig.instrumentations ?? [],
       );
 
-      // Warn if both integrations and manual instrumentations are provided
+      // Warn if both autoInstrumentations and manual instrumentations are provided
       if (manualInstrumentationNames.size > 0) {
         const manualNames = [...manualInstrumentationNames].join(', ');
         logger.info(
           `[autotel] Detected manual instrumentations (${manualNames}). ` +
             'These will take precedence over auto-instrumentations. ' +
-            'Tip: Set integrations:false if you want full manual control, or remove manual configs to use auto-instrumentations.',
+            'Tip: Set autoInstrumentations:false if you want full manual control, or remove manual configs to use auto-instrumentations.',
         );
       }
 
       const autoInstrumentations = getAutoInstrumentations(
-        cfg.integrations,
+        mergedConfig.autoInstrumentations,
         manualInstrumentationNames,
       );
       if (autoInstrumentations && autoInstrumentations.length > 0) {
@@ -1021,7 +1044,9 @@ export function init(cfg: AutotelConfig): void {
     sdkOptions.logRecordProcessors = logRecordProcessors;
   }
 
-  sdk = cfg.sdkFactory ? cfg.sdkFactory(sdkOptions) : new NodeSDK(sdkOptions);
+  sdk = mergedConfig.sdkFactory
+    ? mergedConfig.sdkFactory(sdkOptions)
+    : new NodeSDK(sdkOptions);
 
   if (!sdk) {
     throw new Error('[autotel] sdkFactory must return a NodeSDK instance');
@@ -1030,14 +1055,14 @@ export function init(cfg: AutotelConfig): void {
   sdk.start();
 
   // Initialize OpenLLMetry if enabled (after SDK starts to reuse tracer provider)
-  if (cfg.openllmetry?.enabled) {
-    // Try synchronous initialization first (for require-based modules)
-    let initializedSync = false;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const traceloop = require('@traceloop/node-server-sdk');
+  if (mergedConfig.openllmetry?.enabled) {
+    const traceloop = safeRequire<{
+      initialize?: (options?: Record<string, unknown>) => void;
+    }>('@traceloop/node-server-sdk');
+
+    if (traceloop) {
       const initOptions: Record<string, unknown> = {
-        ...cfg.openllmetry.options,
+        ...mergedConfig.openllmetry.options,
       };
 
       // Reuse autotel's tracer provider
@@ -1050,120 +1075,28 @@ export function init(cfg: AutotelConfig): void {
         // Ignore if tracer provider not available
       }
 
+      // Pass span exporter to OpenLLMetry if provided
+      if (mergedConfig.spanExporters?.[0]) {
+        initOptions.exporter = mergedConfig.spanExporters[0];
+      }
+
       if (typeof traceloop.initialize === 'function') {
         traceloop.initialize(initOptions);
         logger.info('[autotel] OpenLLMetry initialized successfully');
-        initializedSync = true;
-      }
-    } catch (error) {
-      // If require fails, try async import (for ESM modules or when module not found)
-      if (
-        error instanceof Error &&
-        (error.message.includes('Cannot find module') ||
-          error.message.includes('Module not found') ||
-          error.message.includes('Cannot resolve module') ||
-          error.message.includes('Dynamic require'))
-      ) {
-        // Try async import as fallback - this will work with ESM/tsx and mocks in tests
-        initializeOpenLLMetry(
-          cfg.openllmetry.options,
-          sdk,
-          cfg.spanExporters?.[0], // Pass first exporter if available
-        ).catch((error_) => {
-          logger.warn(
-            `[autotel] OpenLLMetry initialization error: ${error_ instanceof Error ? error_.message : String(error_)}`,
-          );
-        });
-      } else if (!initializedSync) {
+      } else {
         logger.warn(
-          `[autotel] Failed to initialize OpenLLMetry: ${error instanceof Error ? error.message : String(error)}`,
+          '[autotel] OpenLLMetry initialize function not found. Check @traceloop/node-server-sdk version.',
         );
       }
-    }
-  }
-
-  initialized = true;
-}
-
-/**
- * Initialize OpenLLMetry integration
- * Dynamically imports @traceloop/node-server-sdk and initializes it
- * Returns a promise but can be called without awaiting (fire-and-forget)
- */
-async function initializeOpenLLMetry(
-  options?: Record<string, unknown>,
-  sdkInstance?: NodeSDK,
-  spanExporter?: SpanExporter,
-): Promise<void> {
-  try {
-    // Try synchronous require first (for testing/mocking), then fall back to dynamic import
-    let traceloop: {
-      initialize?: (options?: Record<string, unknown>) => void;
-      instrumentations?: unknown[];
-    };
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      traceloop = require('@traceloop/node-server-sdk');
-    } catch {
-      // Fall back to dynamic import if require fails (ESM modules)
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore - optional peer dependency
-      traceloop = await import('@traceloop/node-server-sdk');
-    }
-
-    // Prepare initialization options
-    const initOptions: Record<string, unknown> = {
-      ...options,
-    };
-
-    // Pass span exporter to OpenLLMetry if provided
-    // This ensures OpenLLMetry uses the same exporter as autotel
-    if (spanExporter) {
-      initOptions.exporter = spanExporter;
-    }
-
-    // Reuse autotel's tracer provider if SDK is available
-    if (sdkInstance) {
-      try {
-        // Type assertion needed as getTracerProvider is not in the public NodeSDK interface
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const tracerProvider = (sdkInstance as any).getTracerProvider();
-        initOptions.tracerProvider = tracerProvider;
-      } catch (error) {
-        logger.debug(
-          `[autotel] Could not get tracer provider for OpenLLMetry: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    // Initialize OpenLLMetry
-    if (typeof traceloop.initialize === 'function') {
-      traceloop.initialize(initOptions);
-      logger.info('[autotel] OpenLLMetry initialized successfully');
     } else {
-      logger.warn(
-        '[autotel] OpenLLMetry initialize function not found. Check @traceloop/node-server-sdk version.',
-      );
-    }
-  } catch (error) {
-    // Gracefully handle missing dependency
-    if (
-      error instanceof Error &&
-      (error.message.includes('Cannot find module') ||
-        error.message.includes('Module not found') ||
-        error.message.includes('Cannot resolve module'))
-    ) {
       logger.warn(
         '[autotel] OpenLLMetry enabled but @traceloop/node-server-sdk is not installed. ' +
           'Install it as a peer dependency to use OpenLLMetry integration.',
       );
-    } else {
-      logger.warn(
-        `[autotel] Failed to initialize OpenLLMetry: ${error instanceof Error ? error.message : String(error)}`,
-      );
     }
   }
+
+  initialized = true;
 }
 
 /**
@@ -1227,8 +1160,7 @@ function isESMMode(): boolean {
   try {
     // In ESM, module.exports doesn't exist in the global scope the same way
     // Also check if the package.json type is "module"
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('node:fs');
+    const fs = requireModule<typeof import('node:fs')>('node:fs');
     try {
       const pkg = JSON.parse(
         fs.readFileSync(`${process.cwd()}/package.json`, 'utf8'),
@@ -1248,8 +1180,9 @@ function isESMMode(): boolean {
  */
 function loadNodeAutoInstrumentations(): AutoInstrumentationsLoader {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@opentelemetry/auto-instrumentations-node');
+    const mod = requireModule<{
+      getNodeAutoInstrumentations: AutoInstrumentationsLoader;
+    }>('@opentelemetry/auto-instrumentations-node');
     return mod.getNodeAutoInstrumentations;
   } catch {
     const isESM = isESMMode();
@@ -1425,8 +1358,7 @@ export function getDefaultSampler(): Sampler {
 function detectVersion(): string {
   try {
     // Try to read package.json from cwd using fs
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('node:fs');
+    const fs = requireModule<typeof import('node:fs')>('node:fs');
     const pkg = JSON.parse(
       fs.readFileSync(`${process.cwd()}/package.json`, 'utf8'),
     );
@@ -1460,8 +1392,7 @@ function detectHostname(): string | undefined {
 
   // Priority 3: System hostname
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const os = require('node:os') as typeof import('node:os');
+    const os = requireModule<typeof import('node:os')>('node:os');
     return os.hostname();
   } catch {
     // os module not available (edge runtime, browser, etc.)

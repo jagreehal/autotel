@@ -12,7 +12,7 @@
  *
  * init({
  *   service: 'my-app',
- *   instrumentations: [...],  // or integrations: ['express', 'http', 'pino']
+ *   instrumentations: [...],  // or autoInstrumentations: ['express', 'http', 'pino']
  * });
  * ```
  *

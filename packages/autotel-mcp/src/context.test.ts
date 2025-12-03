@@ -4,7 +4,7 @@ import {
   extractOtelContextFromMeta,
   injectOtelContextToMeta,
   activateTraceContext,
-} from './context.js';
+} from './context';
 
 describe('Context Utilities', () => {
   describe('extractOtelContextFromMeta', () => {

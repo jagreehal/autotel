@@ -1,7 +1,7 @@
 import { type Attributes, SpanStatusCode } from '@opentelemetry/api';
 import { trace, type TraceContext } from 'autotel';
-import { injectOtelContextToMeta } from './context.js';
-import { type McpInstrumentationConfig, DEFAULT_CONFIG } from './types.js';
+import { injectOtelContextToMeta } from './context';
+import { type McpInstrumentationConfig, DEFAULT_CONFIG } from './types';
 
 /**
  * Build span attributes for MCP client operations
@@ -42,8 +42,8 @@ function buildClientSpanAttributes(
  *
  * @example
  * ```typescript
- * import { Client } from '@modelcontextprotocol/sdk/client/index.js';
- * import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+ * import { Client } from '@modelcontextprotocol/sdk/client/index';
+ * import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio';
  * import { instrumentMcpClient } from 'autotel-mcp/client';
  * import { init } from 'autotel';
  *

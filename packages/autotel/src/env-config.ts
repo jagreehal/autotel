@@ -31,7 +31,7 @@ export interface EnvConfig {
   service?: string;
   endpoint?: string;
   protocol?: 'http' | 'grpc';
-  otlpHeaders?: Record<string, string>;
+  headers?: Record<string, string>;
   resourceAttributes?: Record<string, string>;
 }
 
@@ -183,7 +183,7 @@ export function envToConfig(env: OtelEnvVars): EnvConfig {
   }
 
   if (env.OTEL_EXPORTER_OTLP_HEADERS) {
-    config.otlpHeaders = parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS);
+    config.headers = parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS);
   }
 
   const resourceAttrs = parseResourceAttributes(env.OTEL_RESOURCE_ATTRIBUTES);

@@ -1,5 +1,5 @@
 import { context, propagation, type Context } from '@opentelemetry/api';
-import type { McpTraceMeta } from './types.js';
+import type { McpTraceMeta } from './types';
 
 /**
  * Extract OpenTelemetry context from MCP _meta field

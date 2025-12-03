@@ -356,11 +356,11 @@ export interface TracingOptions<
   startNewRoot?: boolean;
 
   /**
-   * Automatically flush events queue when span ends
+   * Flush events queue when span ends
    * Only flushes on root spans (to avoid excessive flushing)
    * @default true
    */
-  autoFlushEvents?: boolean;
+  flushOnRootSpanEnd?: boolean;
 }
 
 /**
@@ -587,39 +587,42 @@ function getCtxValue<
  * })
  * ```
  */
-export const ctx = new Proxy({} as TraceContext, {
-  get(_target, prop) {
-    const ctxValue = getCtxValue();
-    if (!ctxValue) {
-      return;
-    }
-    return ctxValue[prop as keyof typeof ctxValue];
-  },
+export const ctx = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const ctxValue = getCtxValue();
+      if (!ctxValue) {
+        return;
+      }
+      return ctxValue[prop as keyof typeof ctxValue];
+    },
 
-  has(_target, prop) {
-    const ctxValue = getCtxValue();
-    if (!ctxValue) {
-      return false;
-    }
-    return prop in ctxValue;
-  },
+    has(_target, prop) {
+      const ctxValue = getCtxValue();
+      if (!ctxValue) {
+        return false;
+      }
+      return prop in ctxValue;
+    },
 
-  ownKeys() {
-    const ctxValue = getCtxValue();
-    if (!ctxValue) {
-      return [];
-    }
-    return Object.keys(ctxValue);
-  },
+    ownKeys() {
+      const ctxValue = getCtxValue();
+      if (!ctxValue) {
+        return [];
+      }
+      return Object.keys(ctxValue);
+    },
 
-  getOwnPropertyDescriptor(_target, prop) {
-    const ctxValue = getCtxValue();
-    if (!ctxValue) {
-      return;
-    }
-    return Object.getOwnPropertyDescriptor(ctxValue, prop);
+    getOwnPropertyDescriptor(_target, prop) {
+      const ctxValue = getCtxValue();
+      if (!ctxValue) {
+        return;
+      }
+      return Object.getOwnPropertyDescriptor(ctxValue, prop);
+    },
   },
-}) as TraceContext;
+);
 
 /**
  * Core tracing wrapper for async functions (internal implementation)
@@ -684,8 +687,8 @@ function wrapWithTracing<TArgs extends unknown[], TReturn>(
     const isRootSpan =
       options.startNewRoot || otelTrace.getActiveSpan() === undefined;
     const shouldAutoFlush =
-      options.autoFlushEvents ?? getInitConfig()?.autoFlushEvents ?? true;
-    const shouldAutoFlushSpans = getInitConfig()?.autoFlush ?? false;
+      options.flushOnRootSpanEnd ?? getInitConfig()?.flushOnRootSpanEnd ?? true;
+    const shouldAutoFlushSpans = getInitConfig()?.forceFlushOnShutdown ?? false;
 
     const flushIfNeeded = async () => {
       if (!shouldAutoFlush || !isRootSpan) return;
@@ -973,12 +976,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
     const isRootSpan =
       options.startNewRoot || otelTrace.getActiveSpan() === undefined;
     const shouldAutoFlush =
-      options.autoFlushEvents ?? getInitConfig()?.autoFlushEvents ?? true;
-    const shouldAutoFlushSpans = getInitConfig()?.autoFlush ?? false;
+      options.flushOnRootSpanEnd ?? getInitConfig()?.flushOnRootSpanEnd ?? true;
+    const shouldAutoFlushSpans = getInitConfig()?.forceFlushOnShutdown ?? false;
 
     // Note: This is intentionally fire-and-forget (void) for synchronous functions.
     // Synchronous functions cannot await flush completion without blocking execution.
-    // The autoFlush guarantee only applies to async functions.
+    // The forceFlushOnShutdown guarantee only applies to async functions.
     const flushIfNeeded = () => {
       if (!shouldAutoFlush || !isRootSpan) return;
 
@@ -1227,8 +1230,8 @@ function executeImmediately<TReturn = unknown>(
   const isRootSpan =
     options.startNewRoot || otelTrace.getActiveSpan() === undefined;
   const shouldAutoFlush =
-    options.autoFlushEvents ?? getInitConfig()?.autoFlushEvents ?? true;
-  const shouldAutoFlushSpans = getInitConfig()?.autoFlush ?? false;
+    options.flushOnRootSpanEnd ?? getInitConfig()?.flushOnRootSpanEnd ?? true;
+  const shouldAutoFlushSpans = getInitConfig()?.forceFlushOnShutdown ?? false;
 
   const callCounter = options.withMetrics
     ? meter.createCounter(`${spanName}.calls`, {
@@ -1320,7 +1323,7 @@ function executeImmediately<TReturn = unknown>(
         };
 
         // Sync handlers for synchronous results (can't await)
-        // NOTE: autoFlush will NOT block for synchronous trace() calls
+        // NOTE: forceFlushOnShutdown will NOT block for synchronous trace() calls
         // Flush is fire-and-forget, so spans may be dropped if process exits immediately
         const onSuccessSync = (result: TReturn) => {
           const duration = performance.now() - startTime;
