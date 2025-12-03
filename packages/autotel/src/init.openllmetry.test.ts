@@ -228,7 +228,7 @@ describe('init() OpenLLMetry integration', () => {
     init({
       service: 'test-app',
       openllmetry: { enabled: true },
-      integrations: false, // This means selectiveInstrumentation is true by default
+      autoInstrumentations: false, // This means selectiveInstrumentation is true by default
     });
 
     const options = sdkInstances.at(-1)?.options as Record<string, unknown>;

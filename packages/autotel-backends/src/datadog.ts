@@ -222,7 +222,7 @@ export function createDatadogConfig(
   const cloudConfig: AutotelConfig = {
     ...baseConfig,
     endpoint: otlpEndpoint,
-    otlpHeaders: authHeaders,
+    headers: authHeaders,
   };
 
   // Add log export if enabled

@@ -24,8 +24,8 @@ npm install autotel-mcp @modelcontextprotocol/sdk autotel
 ### Server-Side Instrumentation
 
 ```typescript
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
 import { instrumentMcpServer } from 'autotel-mcp/server';
 import { init } from 'autotel';
 
@@ -77,8 +77,8 @@ await server.connect(new StdioServerTransport());
 ### Client-Side Instrumentation
 
 ```typescript
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio';
 import { instrumentMcpClient } from 'autotel-mcp/client';
 import { init } from 'autotel';
 

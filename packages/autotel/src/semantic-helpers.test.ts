@@ -23,7 +23,7 @@ describe('Semantic Helpers', () => {
       const generateText = traceLLM({
         model: 'gpt-4',
         operation: 'chat',
-        system: 'openai',
+        provider: 'openai',
       })((_ctx) => async (prompt: string) => {
         return `Response to: ${prompt}`;
       });
@@ -54,7 +54,7 @@ describe('Semantic Helpers', () => {
       const embed = traceLLM({
         model: 'text-embedding-3-small',
         operation: 'embedding',
-        system: 'openai',
+        provider: 'openai',
       })((_ctx) => async (_text: string) => [0.1, 0.2, 0.3]);
 
       await embed('test text');
@@ -87,7 +87,7 @@ describe('Semantic Helpers', () => {
       const getUser = traceDB({
         system: 'postgresql',
         operation: 'SELECT',
-        dbName: 'app_db',
+        database: 'app_db',
         collection: 'users',
       })((_ctx) => async (userId: string) => {
         return { id: userId, name: 'John' };

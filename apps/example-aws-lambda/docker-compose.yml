@@ -1,0 +1,43 @@
+services:
+  localstack:
+    container_name: autotel-localstack
+    image: localstack/localstack:latest
+    ports:
+      - '127.0.0.1:4566:4566' # LocalStack Gateway
+      - '127.0.0.1:4510-4559:4510-4559' # external services port range
+    environment:
+      # LocalStack configuration: https://docs.localstack.cloud/references/configuration/
+      - DEBUG=${DEBUG:-0}
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - SERVICES=s3,dynamodb,sqs,lambda
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - PERSISTENCE=${PERSISTENCE:-0}
+    volumes:
+      - '${LOCALSTACK_VOLUME_DIR:-./.localstack}:/var/lib/localstack'
+      - '/var/run/docker.sock:/var/run/docker.sock'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:4566/_localstack/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Optional: OpenTelemetry Collector for testing
+  otel-collector:
+    container_name: autotel-otel-collector
+    image: otel/opentelemetry-collector:latest
+    command: ['--config=/etc/otel-collector-config.yaml']
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - '4317:4317' # OTLP gRPC receiver
+      - '4318:4318' # OTLP HTTP receiver
+      - '8888:8888' # Prometheus metrics
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+volumes:
+  localstack_data:

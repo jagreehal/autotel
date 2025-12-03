@@ -176,7 +176,7 @@ describe('env-config', () => {
         OTEL_EXPORTER_OTLP_HEADERS: 'api-key=secret,x-custom=value',
       });
 
-      expect(config.otlpHeaders).toEqual({
+      expect(config.headers).toEqual({
         'api-key': 'secret',
         'x-custom': 'value',
       });
@@ -231,7 +231,7 @@ describe('env-config', () => {
         service: 'my-api',
         endpoint: 'https://api.honeycomb.io',
         protocol: 'http',
-        otlpHeaders: {
+        headers: {
           'x-honeycomb-team': 'abc123',
           'x-honeycomb-dataset': 'production',
         },

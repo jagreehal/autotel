@@ -92,7 +92,7 @@ describe('PostHogSubscriber', () => {
 
     it('should throw if no apiKey and no client provided', () => {
       expect(() => new PostHogSubscriber({})).toThrow(
-        'PostHogSubscriber requires either apiKey or client to be provided',
+        'PostHogSubscriber requires either apiKey, client, or useGlobalClient to be provided',
       );
     });
 
@@ -208,7 +208,7 @@ describe('PostHogSubscriber', () => {
       expect(mockCapture).toHaveBeenCalledWith({
         distinctId: 'anonymous',
         event: 'page.viewed',
-        properties: undefined,
+        properties: {}, // Empty object due to automatic undefined/null filtering
       });
     });
 

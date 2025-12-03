@@ -45,9 +45,12 @@ export const FEATURE_FLAGS = {
 } as const;
 
 /**
- * Global configuration options
+ * Runtime configuration for OpenTelemetry instrumentation
+ *
+ * This configures the tracer and meter used by autotel's functional API.
+ * Use `configure()` to set custom tracer/meter instances.
  */
-export interface InstrumentationConfig {
+export interface RuntimeConfig {
   /**
    * Tracer name for OpenTelemetry
    * @default 'app'
@@ -77,7 +80,7 @@ export interface InstrumentationConfig {
  * Internal configuration state
  */
 class Config {
-  private config: Required<InstrumentationConfig> = {
+  private config: Required<RuntimeConfig> = {
     tracerName: 'app',
     meterName: 'app',
     tracer: getAutotelTracer('app'),
@@ -94,7 +97,7 @@ class Config {
   /**
    * Update global configuration
    */
-  configure(options: InstrumentationConfig): void {
+  configure(options: RuntimeConfig): void {
     if (options.tracerName) {
       this.config.tracerName = options.tracerName;
       this.config.tracer = getAutotelTracer(options.tracerName);
@@ -114,7 +117,7 @@ class Config {
   /**
    * Get current configuration
    */
-  get(): Required<InstrumentationConfig> {
+  get(): Required<RuntimeConfig> {
     return this.config;
   }
 
@@ -145,14 +148,14 @@ const globalConfig = new Config();
  * })
  * ```
  */
-export function configure(options: InstrumentationConfig): void {
+export function configure(options: RuntimeConfig): void {
   globalConfig.configure(options);
 }
 
 /**
  * Get current configuration (internal use)
  */
-export function getConfig(): Required<InstrumentationConfig> & {
+export function getConfig(): Required<RuntimeConfig> & {
   featureFlags: typeof FEATURE_FLAGS;
 } {
   return {

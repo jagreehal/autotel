@@ -86,11 +86,33 @@
  * ```
  */
 
-import type { EventAttributes } from 'autotel/event-subscriber';
+import type { EventAttributes, EventAttributesInput } from 'autotel/event-subscriber';
 import { EventSubscriber, type EventPayload } from './event-subscriber-base';
 
 // Type-only import to avoid runtime dependency
 import type { PostHog } from 'posthog-node';
+
+/**
+ * Error context for enhanced error handling
+ *
+ * Provides detailed context about the event that caused an error.
+ */
+export interface ErrorContext {
+  /** The error that occurred */
+  error: Error;
+
+  /** Event name (if applicable) */
+  eventName?: string;
+
+  /** Event type (event, funnel, outcome, value) */
+  eventType?: 'event' | 'funnel' | 'outcome' | 'value';
+
+  /** Event attributes (filtered) */
+  attributes?: EventAttributes;
+
+  /** Subscriber name */
+  subscriberName: string;
+}
 
 export interface PostHogConfig {
   /** PostHog API key (starts with phc_) - required if not providing custom client */
@@ -104,6 +126,41 @@ export interface PostHogConfig {
 
   /** Custom PostHog client instance (bypasses apiKey/host) */
   client?: PostHog;
+
+  /**
+   * Use global browser client (window.posthog)
+   *
+   * When true, uses the PostHog client already loaded on the page via script tag.
+   * This is useful for Next.js apps that initialize PostHog in _app.tsx.
+   *
+   * @example
+   * ```typescript
+   * // Browser - uses window.posthog
+   * const subscriber = new PostHogSubscriber({
+   *   useGlobalClient: true,
+   * });
+   * ```
+   */
+  useGlobalClient?: boolean;
+
+  /**
+   * Serverless mode preset (AWS Lambda, Vercel Functions, Next.js API routes)
+   *
+   * When true, auto-configures for serverless environments:
+   * - flushAt: 1 (send immediately, don't batch)
+   * - flushInterval: 0 (disable interval-based flushing)
+   * - requestTimeout: 3000 (shorter timeout for fast responses)
+   *
+   * @example
+   * ```typescript
+   * // Vercel / Next.js API route
+   * const subscriber = new PostHogSubscriber({
+   *   apiKey: 'phc_...',
+   *   serverless: true,
+   * });
+   * ```
+   */
+  serverless?: boolean;
 
   // Serverless optimizations
   /** Flush batch when it reaches this size (default: 20, set to 1 for immediate send) */
@@ -122,9 +179,48 @@ export interface PostHogConfig {
   /** Send feature flag evaluation events (default: true) */
   sendFeatureFlags?: boolean;
 
+  /**
+   * Automatically filter out undefined and null values from attributes
+   *
+   * When true (default), undefined and null values are removed before sending.
+   * This improves DX when passing objects with optional properties.
+   *
+   * @default true
+   *
+   * @example
+   * ```typescript
+   * // With filterUndefinedValues: true (default)
+   * subscriber.trackEvent('user.action', {
+   *   userId: user.id,
+   *   email: user.email,        // might be undefined - will be filtered
+   *   plan: user.subscription,  // might be null - will be filtered
+   * });
+   * ```
+   */
+  filterUndefinedValues?: boolean;
+
   // Error handling
   /** Error callback for debugging and monitoring */
   onError?: (error: Error) => void;
+
+  /**
+   * Enhanced error callback with event context
+   *
+   * Provides detailed context about the event that caused the error.
+   * If both onError and onErrorWithContext are provided, both are called.
+   *
+   * @example
+   * ```typescript
+   * const subscriber = new PostHogSubscriber({
+   *   apiKey: 'phc_...',
+   *   onErrorWithContext: (ctx) => {
+   *     console.error(`Failed to track ${ctx.eventType}: ${ctx.eventName}`, ctx.error);
+   *     Sentry.captureException(ctx.error, { extra: ctx });
+   *   }
+   * });
+   * ```
+   */
+  onErrorWithContext?: (context: ErrorContext) => void;
 
   /** Enable debug logging (default: false) */
   debug?: boolean;
@@ -171,16 +267,35 @@ export class PostHogSubscriber extends EventSubscriber {
   private posthog: PostHog | null = null;
   private config: PostHogConfig;
   private initPromise: Promise<void> | null = null;
+  /** True when using browser's window.posthog (different API signature) */
+  private isBrowserClient = false;
 
   constructor(config: PostHogConfig) {
     super();
 
-    if (!config.apiKey && !config.client) {
-      throw new Error('PostHogSubscriber requires either apiKey or client to be provided');
+    // Apply serverless preset first (can be overridden by explicit config)
+    if (config.serverless) {
+      config = {
+        flushAt: 1,
+        flushInterval: 0,
+        requestTimeout: 3000,
+        ...config, // User config overrides serverless defaults
+      };
+    }
+
+    // Validate: need either apiKey, client, or useGlobalClient
+    if (!config.apiKey && !config.client && !config.useGlobalClient) {
+      throw new Error(
+        'PostHogSubscriber requires either apiKey, client, or useGlobalClient to be provided',
+      );
     }
 
     this.enabled = config.enabled ?? true;
-    this.config = config;
+    // Default filterUndefinedValues to true
+    this.config = {
+      filterUndefinedValues: true,
+      ...config,
+    };
 
     if (this.enabled) {
       // Start initialization immediately but don't block constructor
@@ -190,14 +305,29 @@ export class PostHogSubscriber extends EventSubscriber {
 
   private async initialize(): Promise<void> {
     try {
-      // Use custom client if provided
+      // Option 1: Use global browser client (window.posthog)
+      if (this.config.useGlobalClient) {
+        const globalWindow = typeof globalThis === 'undefined' ? undefined : (globalThis as Record<string, unknown>);
+        if (globalWindow?.posthog) {
+          this.posthog = globalWindow.posthog as PostHog;
+          this.isBrowserClient = true;
+          this.setupErrorHandling();
+          return;
+        }
+        throw new Error(
+          'useGlobalClient enabled but window.posthog not found. ' +
+            'Ensure PostHog script is loaded before initializing the subscriber.',
+        );
+      }
+
+      // Option 2: Use custom client if provided
       if (this.config.client) {
         this.posthog = this.config.client;
         this.setupErrorHandling();
         return;
       }
 
-      // Dynamic import to avoid adding posthog-node as a hard dependency
+      // Option 3: Create new PostHog client with dynamic import
       const { PostHog } = await import('posthog-node');
 
       this.posthog = new PostHog(this.config.apiKey!, {
@@ -247,25 +377,46 @@ export class PostHogSubscriber extends EventSubscriber {
   protected async sendToDestination(payload: EventPayload): Promise<void> {
     await this.ensureInitialized();
 
-    // Build properties object, including value if present
-    let properties: any = payload.attributes;
+    // Filter attributes if enabled (default: true)
+    const filteredAttributes =
+      this.config.filterUndefinedValues === false
+        ? payload.attributes
+        : this.filterAttributes(payload.attributes as EventAttributesInput);
+
+    // Build properties object, including value and funnel metadata if present
+    const properties: Record<string, unknown> = { ...filteredAttributes };
     if (payload.value !== undefined) {
-      properties = { ...payload.attributes, value: payload.value };
+      properties.value = payload.value;
+    }
+    // Add funnel progression metadata
+    if (payload.stepNumber !== undefined) {
+      properties.step_number = payload.stepNumber;
+    }
+    if (payload.stepName !== undefined) {
+      properties.step_name = payload.stepName;
     }
 
-    // Build PostHog capture payload
-    const capturePayload: any = {
-      distinctId: this.extractDistinctId(payload.attributes),
-      event: payload.name,
-      properties,
-    };
+    const distinctId = this.extractDistinctId(filteredAttributes);
 
-    // Add groups if present in attributes
-    if (payload.attributes?.groups) {
-      capturePayload.groups = payload.attributes.groups;
+    // Browser client has different API signature
+    if (this.isBrowserClient) {
+      // Browser API: capture(eventName, properties)
+      (this.posthog as any)?.capture(payload.name, properties);
+    } else {
+      // Server API: capture({ distinctId, event, properties, groups })
+      const capturePayload: any = {
+        distinctId,
+        event: payload.name,
+        properties,
+      };
+
+      // Add groups if present in attributes
+      if (filteredAttributes?.groups) {
+        capturePayload.groups = filteredAttributes.groups;
+      }
+
+      this.posthog?.capture(capturePayload);
     }
-
-    this.posthog?.capture(capturePayload);
   }
 
   // Feature Flag Methods
@@ -524,7 +675,20 @@ export class PostHogSubscriber extends EventSubscriber {
    * Handle errors with custom error handler
    */
   protected handleError(error: Error, payload: EventPayload): void {
+    // Call basic onError if provided
     this.config.onError?.(error);
+
+    // Call enhanced onErrorWithContext if provided
+    if (this.config.onErrorWithContext) {
+      this.config.onErrorWithContext({
+        error,
+        eventName: payload.name,
+        eventType: payload.type,
+        attributes: payload.attributes,
+        subscriberName: this.name,
+      });
+    }
+
     super.handleError(error, payload);
   }
 }

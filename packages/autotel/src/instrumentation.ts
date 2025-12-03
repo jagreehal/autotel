@@ -19,6 +19,7 @@ import {
 } from '@opentelemetry/semantic-conventions/incubating';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { requireModule } from './node-require';
 
 /**
  * Parse OTLP headers string into object format
@@ -69,8 +70,8 @@ export interface InstrumentationConfig {
   serviceVersion?: string;
   deploymentEnvironment?: string;
   otlpEndpoint?: string;
-  /** OTLP headers for authentication (e.g., Grafana Cloud) */
-  otlpHeaders?: string;
+  /** Headers for authentication (e.g., Grafana Cloud, Honeycomb) */
+  headers?: string;
   /** Resource attributes as comma-separated key=value pairs */
   resourceAttributes?: string;
   /** Enable async resource detection for process/host info (default: false) */
@@ -173,8 +174,8 @@ export async function initInstrumentation(
     await shutdownInstrumentation(currentSDK);
   }
 
-  // Parse OTLP headers and resource attributes
-  const otlpHeaders = parseOtlpHeaders(config.otlpHeaders);
+  // Parse headers and resource attributes
+  const otlpHeaders = parseOtlpHeaders(config.headers);
   const customResourceAttributes = parseResourceAttributes(
     config.resourceAttributes,
   );
@@ -234,8 +235,9 @@ export async function initInstrumentation(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let instrumentations: any[] = config.instrumentations || [];
   if (config.selectiveInstrumentation === false) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@opentelemetry/auto-instrumentations-node');
+    const mod = requireModule<{
+      getNodeAutoInstrumentations: () => unknown[];
+    }>('@opentelemetry/auto-instrumentations-node');
     instrumentations = [mod.getNodeAutoInstrumentations()];
   }
 

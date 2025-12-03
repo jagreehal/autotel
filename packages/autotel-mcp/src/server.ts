@@ -1,7 +1,7 @@
 import { context, type Attributes, SpanStatusCode } from '@opentelemetry/api';
 import { trace, type TraceContext } from 'autotel';
-import { extractOtelContextFromMeta } from './context.js';
-import { type McpInstrumentationConfig, DEFAULT_CONFIG } from './types.js';
+import { extractOtelContextFromMeta } from './context';
+import { type McpInstrumentationConfig, DEFAULT_CONFIG } from './types';
 
 /**
  * Build span attributes for MCP operations
@@ -142,7 +142,7 @@ function wrapHandler<T extends (...args: any[]) => any>(
  *
  * @example
  * ```typescript
- * import { McpServer } from '@modelcontextprotocol/sdk/server/index.js';
+ * import { McpServer } from '@modelcontextprotocol/sdk/server/index';
  * import { instrumentMcpServer } from 'autotel-mcp/server';
  * import { init } from 'autotel';
  *

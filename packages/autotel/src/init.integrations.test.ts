@@ -185,7 +185,7 @@ describe('init() integrations vs instrumentations', () => {
     delete process.env.AUTOTEL_METRICS;
   });
 
-  it('excludes manual instrumentations from auto-instrumentations when integrations: true', async () => {
+  it('excludes manual instrumentations from auto-instrumentations when autoInstrumentations: true', async () => {
     const {
       init,
       sdkInstances,
@@ -203,7 +203,7 @@ describe('init() integrations vs instrumentations', () => {
 
     init({
       service: 'test-app',
-      integrations: true,
+      autoInstrumentations: true,
       instrumentations: [
         manualMongoDBInstrumentation,
         manualMongooseInstrumentation,
@@ -243,7 +243,7 @@ describe('init() integrations vs instrumentations', () => {
     );
   });
 
-  it('excludes manual instrumentations from specific auto-integrations list', async () => {
+  it('excludes manual instrumentations from specific autoInstrumentations list', async () => {
     const {
       init,
       sdkInstances,
@@ -258,7 +258,7 @@ describe('init() integrations vs instrumentations', () => {
 
     init({
       service: 'test-app',
-      integrations: ['http', 'mongodb'],
+      autoInstrumentations: ['http', 'mongodb'],
       instrumentations: [manualMongoDBInstrumentation],
       logger: mockLogger,
     });
@@ -293,7 +293,7 @@ describe('init() integrations vs instrumentations', () => {
 
     init({
       service: 'test-app',
-      integrations: true,
+      autoInstrumentations: true,
       logger: mockLogger,
     });
 
@@ -304,7 +304,7 @@ describe('init() integrations vs instrumentations', () => {
     expect(infoMessages).toHaveLength(0);
   });
 
-  it('does not log warning when integrations is false', async () => {
+  it('does not log warning when autoInstrumentations is false', async () => {
     const { init, mockLogger, logMessages } = await loadInitWithMocks();
 
     const manualMongoDBInstrumentation = new MongoDBInstrumentation({
@@ -313,7 +313,7 @@ describe('init() integrations vs instrumentations', () => {
 
     init({
       service: 'test-app',
-      integrations: false,
+      autoInstrumentations: false,
       instrumentations: [manualMongoDBInstrumentation],
       logger: mockLogger,
     });
@@ -325,7 +325,7 @@ describe('init() integrations vs instrumentations', () => {
     expect(infoMessages).toHaveLength(0);
   });
 
-  it('handles object-style integrations config with manual instrumentations', async () => {
+  it('handles object-style autoInstrumentations config with manual instrumentations', async () => {
     const { init, sdkInstances, autoInstrumentationsConfig, mockLogger } =
       await loadInitWithMocks();
 
@@ -335,7 +335,7 @@ describe('init() integrations vs instrumentations', () => {
 
     init({
       service: 'test-app',
-      integrations: {
+      autoInstrumentations: {
         http: { enabled: true },
         mongodb: { enabled: true },
       },
@@ -366,7 +366,7 @@ describe('init() integrations vs instrumentations', () => {
 
     init({
       service: 'test-app',
-      integrations: ['mongodb', 'mongoose'],
+      autoInstrumentations: ['mongodb', 'mongoose'],
       instrumentations: [manualHttpInstrumentation],
       logger: mockLogger,
     });

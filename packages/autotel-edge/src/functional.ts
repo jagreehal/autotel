@@ -199,7 +199,7 @@ function createDummyCtx(): TraceContext {
     addLinks: () => {},
     updateName: () => {},
     isRecording: () => false,
-  } as unknown as TraceContext;
+  } as TraceContext;
 }
 
 function truncateErrorMessage(message: string): string {

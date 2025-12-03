@@ -40,6 +40,27 @@
 export type EventAttributes = Record<string, string | number | boolean>;
 
 /**
+ * Permissive input type for event attributes
+ *
+ * Accepts undefined/null values which will be filtered out before sending.
+ * This improves DX when working with optional properties from objects.
+ *
+ * @example
+ * ```typescript
+ * // No need to filter out undefined values manually
+ * event.trackEvent('user.action', {
+ *   userId: user.id,
+ *   email: user.email,        // might be undefined
+ *   plan: user.subscription,  // might be null
+ * });
+ * ```
+ */
+export type EventAttributesInput = Record<
+  string,
+  string | number | boolean | undefined | null
+>;
+
+/**
  * Funnel step status
  */
 export type FunnelStatus = 'started' | 'completed' | 'abandoned' | 'failed';
@@ -99,6 +120,33 @@ export interface EventSubscriber {
   trackValue(
     name: string,
     value: number,
+    attributes?: EventAttributes,
+  ): Promise<void>;
+
+  /**
+   * Track funnel progression with custom step names
+   *
+   * Unlike trackFunnelStep which uses FunnelStatus enum values,
+   * this method allows any string as the step name for flexible funnel tracking.
+   *
+   * @param funnelName - Name of the funnel (e.g., "checkout", "onboarding")
+   * @param stepName - Custom step name (e.g., "cart_viewed", "payment_entered")
+   * @param stepNumber - Optional numeric position in the funnel
+   * @param attributes - Optional event attributes
+   *
+   * @example
+   * ```typescript
+   * // Track custom checkout steps
+   * await subscriber.trackFunnelProgression('checkout', 'cart_viewed', 1);
+   * await subscriber.trackFunnelProgression('checkout', 'shipping_selected', 2);
+   * await subscriber.trackFunnelProgression('checkout', 'payment_entered', 3);
+   * await subscriber.trackFunnelProgression('checkout', 'order_confirmed', 4);
+   * ```
+   */
+  trackFunnelProgression?(
+    funnelName: string,
+    stepName: string,
+    stepNumber?: number,
     attributes?: EventAttributes,
   ): Promise<void>;
 

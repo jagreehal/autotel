@@ -9,6 +9,7 @@ import type { Span, Context } from '@opentelemetry/api';
 import { propagation, context as otelContext } from '@opentelemetry/api';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import { requireModule } from './node-require';
 
 export interface BaggageSpanProcessorOptions {
   /**
@@ -67,8 +68,9 @@ export class BaggageSpanProcessor implements SpanProcessor {
     // Check stored context from ctx.setBaggage() if still no baggage
     if (!baggage) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { getActiveContextWithBaggage } = require('../trace-context');
+        const { getActiveContextWithBaggage } = requireModule<{
+          getActiveContextWithBaggage: () => Context;
+        }>('./trace-context');
         const storedContext = getActiveContextWithBaggage();
         baggage = propagation.getBaggage(storedContext);
       } catch {

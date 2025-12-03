@@ -33,7 +33,7 @@ describe('createHoneycombConfig()', () => {
         service: 'my-service',
         protocol: 'grpc',
         endpoint: 'api.honeycomb.io:443',
-        otlpHeaders: {
+        headers: {
           'x-honeycomb-team': 'test-api-key',
         },
       });
@@ -65,7 +65,7 @@ describe('createHoneycombConfig()', () => {
         service: 'test-service',
       });
 
-      expect(config.otlpHeaders).toMatchObject({
+      expect(config.headers).toMatchObject({
         'x-honeycomb-team': 'my-secret-key',
       });
     });
@@ -77,7 +77,7 @@ describe('createHoneycombConfig()', () => {
         dataset: 'production',
       });
 
-      expect(config.otlpHeaders).toMatchObject({
+      expect(config.headers).toMatchObject({
         'x-honeycomb-team': 'test-key',
         'x-honeycomb-dataset': 'production',
       });
@@ -90,7 +90,7 @@ describe('createHoneycombConfig()', () => {
         sampleRate: 10,
       });
 
-      expect(config.otlpHeaders).toMatchObject({
+      expect(config.headers).toMatchObject({
         'x-honeycomb-team': 'test-key',
         'x-honeycomb-samplerate': '10',
       });
@@ -104,7 +104,7 @@ describe('createHoneycombConfig()', () => {
         sampleRate: 100,
       });
 
-      expect(config.otlpHeaders).toMatchObject({
+      expect(config.headers).toMatchObject({
         'x-honeycomb-team': 'test-key',
         'x-honeycomb-dataset': 'my-dataset',
         'x-honeycomb-samplerate': '100',
@@ -118,10 +118,8 @@ describe('createHoneycombConfig()', () => {
         sampleRate: 50,
       });
 
-      expect(typeof config.otlpHeaders?.['x-honeycomb-samplerate']).toBe(
-        'string',
-      );
-      expect(config.otlpHeaders?.['x-honeycomb-samplerate']).toBe('50');
+      expect(typeof config.headers?.['x-honeycomb-samplerate']).toBe('string');
+      expect(config.headers?.['x-honeycomb-samplerate']).toBe('50');
     });
   });
 
@@ -199,7 +197,7 @@ describe('createHoneycombConfig()', () => {
         version: '3.2.1',
         protocol: 'grpc',
         endpoint: 'custom.endpoint.io:9000',
-        otlpHeaders: {
+        headers: {
           'x-honeycomb-team': 'complete-test-key',
           'x-honeycomb-dataset': 'complete-dataset',
           'x-honeycomb-samplerate': '25',
@@ -217,7 +215,7 @@ describe('createHoneycombConfig()', () => {
         environment: 'production',
       });
 
-      expect(config.otlpHeaders).toHaveProperty('x-honeycomb-dataset');
+      expect(config.headers).toHaveProperty('x-honeycomb-dataset');
       expect(config.protocol).toBe('grpc');
     });
 
@@ -228,7 +226,7 @@ describe('createHoneycombConfig()', () => {
         environment: 'production',
       });
 
-      expect(config.otlpHeaders).not.toHaveProperty('x-honeycomb-dataset');
+      expect(config.headers).not.toHaveProperty('x-honeycomb-dataset');
       expect(config.protocol).toBe('grpc');
     });
 
@@ -239,10 +237,7 @@ describe('createHoneycombConfig()', () => {
         sampleRate: 100, // Sample 1% of traces
       });
 
-      expect(config.otlpHeaders).toHaveProperty(
-        'x-honeycomb-samplerate',
-        '100',
-      );
+      expect(config.headers).toHaveProperty('x-honeycomb-samplerate', '100');
     });
   });
 });

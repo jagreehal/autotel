@@ -165,7 +165,7 @@ describe('init() customization', () => {
     init({
       service: 'headers-app',
       endpoint: 'http://localhost:4318',
-      otlpHeaders: 'Authorization=Basic abc123',
+      headers: 'Authorization=Basic abc123',
     });
 
     expect(traceExporterOptions[0]).toMatchObject({

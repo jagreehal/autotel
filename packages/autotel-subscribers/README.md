@@ -191,10 +191,54 @@ const events = new Event('checkout', {
 });
 
 // Sent to: OpenTelemetry + PostHog
-events.trackEvent('order.completed', { 
-  userId: '123', 
-  amount: 99.99 
+events.trackEvent('order.completed', {
+  userId: '123',
+  amount: 99.99
 });
+```
+
+**Serverless Configuration (AWS Lambda, Vercel, Next.js):**
+
+```typescript
+const subscriber = new PostHogSubscriber({
+  apiKey: 'phc_...',
+  serverless: true,  // Auto-configures for serverless (flushAt: 1, flushInterval: 0)
+});
+```
+
+**Browser Usage (with global PostHog client):**
+
+```typescript
+// When PostHog is already loaded via script tag
+const subscriber = new PostHogSubscriber({
+  useGlobalClient: true,  // Uses window.posthog
+});
+```
+
+**Advanced Options:**
+
+```typescript
+const subscriber = new PostHogSubscriber({
+  apiKey: 'phc_...',
+
+  // Automatic filtering (enabled by default)
+  filterUndefinedValues: true,  // Removes undefined/null from attributes
+
+  // Enhanced error handling
+  onErrorWithContext: (ctx) => {
+    console.error(`${ctx.eventType} failed: ${ctx.eventName}`, ctx.error);
+    Sentry.captureException(ctx.error, { extra: ctx });
+  },
+});
+```
+
+**Custom Funnel Tracking:**
+
+```typescript
+// Track custom step names (not limited to 'started'/'completed')
+event.trackFunnelProgression('checkout', 'cart_viewed', 1);
+event.trackFunnelProgression('checkout', 'shipping_selected', 2);
+event.trackFunnelProgression('checkout', 'payment_entered', 3);
 ```
 
 ### Mixpanel
@@ -357,28 +401,39 @@ All subscribers implement these methods:
 ```typescript
 interface EventSubscriber {
   // Track events
-  trackEvent(name: string, attributes?: Record<string, any>): void;
-  
-  // Track conversion funnels
+  trackEvent(name: string, attributes?: Record<string, any>): Promise<void>;
+
+  // Track conversion funnels (enum-based steps)
   trackFunnelStep(
-    funnelName: string, 
+    funnelName: string,
     step: 'started' | 'completed' | 'abandoned' | 'failed',
     attributes?: Record<string, any>
-  ): void;
-  
+  ): Promise<void>;
+
+  // Track funnel progression (custom step names)
+  trackFunnelProgression?(
+    funnelName: string,
+    stepName: string,         // Any string, not limited to enum
+    stepNumber?: number,      // Optional numeric position
+    attributes?: Record<string, any>
+  ): Promise<void>;
+
   // Track business outcomes
   trackOutcome(
     operationName: string,
     outcome: 'success' | 'failure' | 'partial',
     attributes?: Record<string, any>
-  ): void;
-  
+  ): Promise<void>;
+
   // Track business values (revenue, counts, etc.)
   trackValue(
-    name: string, 
+    name: string,
     value: number,
     attributes?: Record<string, any>
-  ): void;
+  ): Promise<void>;
+
+  // Flush and clean up resources
+  shutdown?(): Promise<void>;
 }
 ```
 

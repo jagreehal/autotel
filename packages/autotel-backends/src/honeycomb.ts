@@ -179,6 +179,6 @@ export function createHoneycombConfig(
     version,
     protocol: 'grpc', // Honeycomb uses gRPC for better performance
     endpoint,
-    otlpHeaders: headers,
+    headers,
   };
 }

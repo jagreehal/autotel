@@ -1,0 +1,166 @@
+{
+  "name": "autotel-tanstack",
+  "version": "1.0.0",
+  "description": "OpenTelemetry instrumentation for TanStack Start - automatic tracing for server functions, middleware, and route loaders",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "browser": {
+        "types": "./dist/browser/index.d.ts",
+        "import": "./dist/browser/index.js"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./auto": {
+      "types": "./dist/auto.d.ts",
+      "import": "./dist/auto.js"
+    },
+    "./middleware": {
+      "browser": {
+        "types": "./dist/browser/middleware.d.ts",
+        "import": "./dist/browser/middleware.js"
+      },
+      "types": "./dist/middleware.d.ts",
+      "import": "./dist/middleware.js"
+    },
+    "./server-functions": {
+      "browser": {
+        "types": "./dist/browser/server-functions.d.ts",
+        "import": "./dist/browser/server-functions.js"
+      },
+      "types": "./dist/server-functions.d.ts",
+      "import": "./dist/server-functions.js"
+    },
+    "./loaders": {
+      "browser": {
+        "types": "./dist/browser/loaders.d.ts",
+        "import": "./dist/browser/loaders.js"
+      },
+      "types": "./dist/loaders.d.ts",
+      "import": "./dist/loaders.js"
+    },
+    "./context": {
+      "browser": {
+        "types": "./dist/browser/context.d.ts",
+        "import": "./dist/browser/context.js"
+      },
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js"
+    },
+    "./handlers": {
+      "browser": {
+        "types": "./dist/browser/handlers.d.ts",
+        "import": "./dist/browser/handlers.js"
+      },
+      "types": "./dist/handlers.d.ts",
+      "import": "./dist/handlers.js"
+    },
+    "./testing": {
+      "browser": {
+        "types": "./dist/browser/testing.d.ts",
+        "import": "./dist/browser/testing.js"
+      },
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    },
+    "./debug-headers": {
+      "browser": {
+        "types": "./dist/browser/debug-headers.d.ts",
+        "import": "./dist/browser/debug-headers.js"
+      },
+      "types": "./dist/debug-headers.d.ts",
+      "import": "./dist/debug-headers.js"
+    },
+    "./metrics": {
+      "browser": {
+        "types": "./dist/browser/metrics.d.ts",
+        "import": "./dist/browser/metrics.js"
+      },
+      "types": "./dist/metrics.d.ts",
+      "import": "./dist/metrics.js"
+    },
+    "./error-reporting": {
+      "browser": {
+        "types": "./dist/browser/error-reporting.d.ts",
+        "import": "./dist/browser/error-reporting.js"
+      },
+      "types": "./dist/error-reporting.d.ts",
+      "import": "./dist/error-reporting.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src/**/*.ts",
+    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check src/**/*.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "clean": "rimraf dist",
+    "quality": "pnpm type-check && pnpm test && pnpm lint && pnpm format:check && pnpm build"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "tanstack",
+    "tanstack-start",
+    "tanstack-router",
+    "react-start",
+    "solid-start",
+    "observability",
+    "tracing",
+    "server-functions",
+    "middleware",
+    "loaders",
+    "ssr",
+    "full-stack"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "autotel": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tanstack/react-start": "^1.139.14",
+    "@tanstack/solid-start": "^1.139.14"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-start": {
+      "optional": true
+    },
+    "@tanstack/solid-start": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@types/node": "^24.10.1",
+    "rimraf": "^6.1.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14",
+    "vitest-mock-extended": "^3.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-tanstack"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-tanstack#readme"
+}

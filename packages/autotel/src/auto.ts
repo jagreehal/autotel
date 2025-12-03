@@ -35,8 +35,8 @@
 
 import { register } from 'node:module';
 import { createAddHookMessageChannel } from 'import-in-the-middle';
-import { init } from './init.js';
-import { loadYamlConfig } from './yaml-config.js';
+import { init } from './init';
+import { loadYamlConfig } from './yaml-config';
 
 // Register ESM hooks first (must happen before any instrumented modules load)
 const { registerOptions } = createAddHookMessageChannel();
@@ -45,14 +45,17 @@ register('import-in-the-middle/hook.mjs', import.meta.url, registerOptions);
 // Load YAML config if present (init.ts will also load it, but we need values here)
 const yamlConfig = loadYamlConfig();
 
-// Parse integrations from environment variable (fallback if not in YAML)
-const integrationsEnv = process.env.AUTOTEL_INTEGRATIONS;
-const integrations: string[] | boolean | Record<string, { enabled?: boolean }> =
-  integrationsEnv === 'true'
-    ? true // Enable all integrations
-    : integrationsEnv
-      ? integrationsEnv.split(',').map((s) => s.trim())
-      : (yamlConfig?.integrations ?? ['http', 'express']); // YAML > default
+// Parse auto-instrumentations from environment variable (fallback if not in YAML)
+const autoInstrumentationsEnv = process.env.AUTOTEL_INTEGRATIONS;
+const autoInstrumentations:
+  | string[]
+  | boolean
+  | Record<string, { enabled?: boolean }> =
+  autoInstrumentationsEnv === 'true'
+    ? true // Enable all auto-instrumentations
+    : autoInstrumentationsEnv
+      ? autoInstrumentationsEnv.split(',').map((s) => s.trim())
+      : (yamlConfig?.autoInstrumentations ?? ['http', 'express']); // YAML > default
 
 // Auto-initialize with YAML config merged with env var defaults
 // init() will load YAML again and merge properly, but we pass overrides here
@@ -60,5 +63,5 @@ init({
   service:
     yamlConfig?.service ?? process.env.OTEL_SERVICE_NAME ?? 'unknown-service',
   debug: yamlConfig?.debug ?? process.env.AUTOTEL_DEBUG === 'true',
-  integrations,
+  autoInstrumentations,
 });
