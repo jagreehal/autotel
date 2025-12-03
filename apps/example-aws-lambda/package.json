@@ -1,0 +1,29 @@
+{
+  "name": "@jagreehal/example-aws-lambda",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "RUN_TESTS=true tsx src/index.ts",
+    "test": "RUN_TESTS=true tsx src/index.ts",
+    "setup": "pnpm exec tsx src/setup-localstack.ts",
+    "test:localstack": "tsx src/test-with-localstack.ts",
+    "localstack:up": "docker-compose up -d",
+    "localstack:down": "docker-compose down",
+    "localstack:logs": "docker-compose logs -f localstack"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-aws": "workspace:*",
+    "@aws-sdk/client-s3": "^3.943.0",
+    "@aws-sdk/client-dynamodb": "^3.943.0",
+    "@aws-sdk/client-sqs": "^3.943.0",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.159",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

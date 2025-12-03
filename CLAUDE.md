@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Autotel is a monorepo containing three packages that provide ergonomic OpenTelemetry instrumentation for Node.js and edge runtimes. The core philosophy is "Write once, observe everywhere" - instrument code a single time and stream observability data to any OTLP-compatible backend without vendor lock-in.
+Autotel is a monorepo containing multiple packages that provide ergonomic OpenTelemetry instrumentation for Node.js and edge runtimes. The core philosophy is "Write once, observe everywhere" - instrument code a single time and stream observability data to any OTLP-compatible backend without vendor lock-in.
 
 ## Package Architecture
 
@@ -110,6 +110,83 @@ Event subscribers for product events platforms (PostHog, Mixpanel, Amplitude, Se
 - Transport-agnostic (works with any MCP transport, not just HTTP)
 - Consistent span naming and attributes
 
+### `packages/autotel-tanstack` (TanStack Start)
+**NEW:** OpenTelemetry instrumentation for TanStack Start applications. Provides automatic tracing for server functions, middleware, and route loaders.
+
+- **Middleware-Based API**: Aligns with TanStack's middleware pattern for seamless integration
+- **Server Function Tracing**: Automatic spans for `createServerFn()` calls with argument/result capture
+- **Route Loader Tracing**: Trace `loader()` and `beforeLoad()` functions with route context
+- **Handler Wrapper**: Wrap `createStartHandler()` for complete request tracing
+- **Distributed Tracing**: W3C Trace Context propagation via headers (traceparent, tracestate, baggage)
+- **Zero-Config Mode**: Just `import 'autotel-tanstack/auto'` to enable tracing
+- **Tree-Shakeable Entry Points**:
+  - `autotel-tanstack` - Everything (convenience re-exports)
+  - `autotel-tanstack/auto` - Zero-config auto-instrumentation
+  - `autotel-tanstack/middleware` - Middleware integration
+  - `autotel-tanstack/server-functions` - Server function wrappers
+  - `autotel-tanstack/loaders` - Route loader instrumentation
+  - `autotel-tanstack/handlers` - Handler wrappers
+  - `autotel-tanstack/context` - Context propagation utilities
+  - `autotel-tanstack/testing` - Test utilities
+
+**Bundle Size:** ~25KB total
+
+**Key APIs:**
+
+```typescript
+// Middleware approach (recommended)
+import { tracingMiddleware } from 'autotel-tanstack/middleware';
+
+export const startInstance = createStart(() => ({
+  requestMiddleware: [tracingMiddleware()],
+}));
+
+// Server function middleware
+export const getUser = createServerFn({ method: 'GET' })
+  .middleware([tracingMiddleware({ type: 'function' })])
+  .handler(async ({ data: id }) => {
+    return await db.users.findUnique({ where: { id } });
+  });
+```
+
+```typescript
+// Explicit wrappers
+import { traceServerFn } from 'autotel-tanstack/server-functions';
+import { traceLoader } from 'autotel-tanstack/loaders';
+
+export const getUser = traceServerFn(
+  createServerFn({ method: 'GET' }).handler(async ({ data }) => { ... }),
+  { name: 'getUser' }
+);
+
+export const Route = createFileRoute('/users/$userId')({
+  loader: traceLoader(async ({ params }) => { ... }),
+});
+```
+
+```typescript
+// Handler wrapper (full control)
+import { wrapStartHandler } from 'autotel-tanstack/handlers';
+
+export default wrapStartHandler({
+  service: 'my-app',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+})(createStartHandler(defaultStreamHandler));
+```
+
+```typescript
+// Zero-config (env var configuration)
+import 'autotel-tanstack/auto';
+// Set OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS
+```
+
+**Span Attributes:**
+- HTTP: `http.request.method`, `url.path`, `http.response.status_code`
+- Server Functions: `rpc.method`, `tanstack.server_function.name`
+- Loaders: `tanstack.loader.route_id`, `tanstack.loader.type`
+
+**Framework Support:** Both TanStack React Start and Solid Start
+
 ## Environment Variables
 
 Autotel supports standard OpenTelemetry environment variables for configuration. This enables zero-code configuration changes across environments and compatibility with the broader OTEL ecosystem.
@@ -170,7 +247,7 @@ resource:
   deployment.environment: ${env:NODE_ENV:-development}
   team: backend
 
-integrations:
+autoInstrumentations:
   - express
   - http
   - pino
@@ -475,6 +552,36 @@ The library uses standard OpenTelemetry context propagation:
 - Use `withNewContext()` to create isolated trace trees
 - Context includes custom attributes via `runInOperationContext()`
 
+### Dynamic Module Loading (CJS/ESM Compatibility)
+**Never use `await import()` for dynamic module loading.** Instead, use the `node-require` helper functions from `./node-require`:
+
+```typescript
+// ❌ DON'T: Using async import()
+const mod = await import('some-module');
+
+// ✅ DO: Use node-require helpers
+import { safeRequire, requireModule } from './node-require';
+
+// For optional dependencies (returns undefined if missing)
+const traceloop = safeRequire('@traceloop/node-server-sdk');
+if (traceloop) {
+  traceloop.initialize({ ... });
+}
+
+// For required dependencies (throws if missing)
+const fs = requireModule<typeof import('node:fs')>('node:fs');
+const content = fs.readFileSync('file.txt', 'utf8');
+```
+
+**Why?**
+- `init()` and other core functions must remain **synchronous**
+- `await import()` makes functions async, breaking the API contract
+- The `node-require` helper uses `createRequire()` pattern for ESM compatibility
+- Works in both CJS and ESM builds (tsup handles the differences)
+- Consistent, synchronous module loading across the codebase
+
+**Implementation:** See `packages/autotel/src/node-require.ts` for details.
+
 ### Advanced Features (v1.1.0+)
 
 #### Deterministic Trace IDs
@@ -564,7 +671,7 @@ import { traceLLM, traceDB, traceHTTP, traceMessaging } from 'autotel/semantic-h
 export const generateText = traceLLM({
   model: 'gpt-4-turbo',
   operation: 'chat',
-  system: 'openai'
+  provider: 'openai'
 })(ctx => async (prompt: string) => {
   const response = await openai.chat.completions.create({ /* ... */ })
   ctx.setAttribute('gen.ai.usage.completion_tokens', response.usage.completion_tokens)
@@ -575,7 +682,7 @@ export const generateText = traceLLM({
 export const getUser = traceDB({
   system: 'postgresql',
   operation: 'SELECT',
-  dbName: 'app_db',
+  database: 'app_db',
   collection: 'users'
 })(ctx => async (userId: string) => {
   const query = 'SELECT * FROM users WHERE id = $1'
@@ -690,7 +797,7 @@ tsx --import ./instrumentation.mjs src/index.ts
 OTEL_SERVICE_NAME=my-app tsx --import autotel/auto src/index.ts
 ```
 
-Env vars: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `AUTOTEL_INTEGRATIONS` (comma-separated or 'true'), `AUTOTEL_DEBUG`
+Env vars: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `AUTOTEL_AUTO_INSTRUMENTATIONS` (comma-separated or 'true'), `AUTOTEL_DEBUG`
 
 **Legacy (Node 18.0-18.18):**
 ```bash

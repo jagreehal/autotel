@@ -47,11 +47,11 @@ resource:
 #   always_sample_slow: true
 #   slow_threshold_ms: 1000
 
-# Integrations to enable (auto-instrumentation)
+# Auto-instrumentations to enable
 # Can be:
 # - Array of strings: ['express', 'http', 'pino']
 # - Object with enabled flags: { express: { enabled: true } }
-integrations:
+autoInstrumentations:
   - express
   - http
   - pino

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_CONFIG } from './types.js';
+import { DEFAULT_CONFIG } from './types';
 
 describe('DEFAULT_CONFIG', () => {
   it('should have correct default values', () => {

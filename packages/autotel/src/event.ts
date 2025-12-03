@@ -50,6 +50,7 @@ import { getLogger, getValidationConfig, getConfig } from './init';
 import {
   type EventSubscriber,
   type EventAttributes,
+  type EventAttributesInput,
   type FunnelStatus,
   type OutcomeStatus,
 } from './event-subscriber';
@@ -61,6 +62,7 @@ import { getOperationContext } from './operation-context';
 // Re-export types for convenience
 export type {
   EventAttributes,
+  EventAttributesInput,
   FunnelStatus,
   OutcomeStatus,
 } from './event-subscriber';
@@ -520,6 +522,158 @@ export class Event {
     });
 
     await Promise.allSettled(shutdownPromises);
+  }
+
+  /**
+   * Shutdown the Event instance and all subscribers
+   *
+   * Unlike `flush()`, this method:
+   * - Shuts down all subscribers
+   * - Prevents further event tracking (hasSubscribers becomes false)
+   * - Should only be called once at application shutdown
+   *
+   * @example
+   * ```typescript
+   * // In Next.js API route with after()
+   * import { after } from 'next/server';
+   *
+   * export async function POST(req: Request) {
+   *   const event = new Event('checkout', { subscribers: [...] });
+   *   event.trackEvent('order.completed', { orderId: '123' });
+   *
+   *   after(async () => {
+   *     await event.shutdown();
+   *   });
+   *
+   *   return Response.json({ success: true });
+   * }
+   * ```
+   */
+  async shutdown(): Promise<void> {
+    if (!this.hasSubscribers) return;
+
+    await Promise.allSettled(
+      this.subscribers.map(async (subscriber) => {
+        if (subscriber.shutdown) {
+          try {
+            await subscriber.shutdown();
+          } catch (error) {
+            getLogger().error(
+              `[Events] Failed to shutdown subscriber ${subscriber.name || 'Unknown'}`,
+              error instanceof Error ? error : undefined,
+              { subscriberName: subscriber.name || 'Unknown' },
+            );
+          }
+        }
+      }),
+    );
+
+    // Prevent further tracking after shutdown
+    this.hasSubscribers = false;
+  }
+
+  /**
+   * Track funnel progression with custom step names
+   *
+   * Unlike trackFunnelStep which uses FunnelStatus enum values,
+   * this method allows any string as the step name for flexible funnel tracking.
+   *
+   * @param funnelName - Name of the funnel (e.g., "checkout", "onboarding")
+   * @param stepName - Custom step name (e.g., "cart_viewed", "payment_entered")
+   * @param stepNumber - Optional numeric position in the funnel
+   * @param attributes - Optional event attributes
+   *
+   * @example
+   * ```typescript
+   * // Track custom checkout steps
+   * event.trackFunnelProgression('checkout', 'cart_viewed', 1);
+   * event.trackFunnelProgression('checkout', 'shipping_selected', 2);
+   * event.trackFunnelProgression('checkout', 'payment_entered', 3);
+   * event.trackFunnelProgression('checkout', 'order_confirmed', 4);
+   * ```
+   */
+  trackFunnelProgression(
+    funnelName: string,
+    stepName: string,
+    stepNumber?: number,
+    attributes?: EventAttributes,
+  ): void {
+    // Auto-attach all available telemetry context
+    const enrichedAttributes = this.enrichWithTelemetryContext(attributes);
+
+    this.logger?.info('Funnel progression tracked', {
+      funnel: funnelName,
+      stepName,
+      stepNumber,
+      attributes: enrichedAttributes,
+    });
+
+    // Record for testing (as funnel step with custom name)
+    this.collector?.recordFunnelStep({
+      funnel: funnelName,
+      status: stepName as FunnelStatus, // Cast for testing collector
+      attributes: {
+        ...enrichedAttributes,
+        step_name: stepName,
+        ...(stepNumber === undefined ? {} : { step_number: stepNumber }),
+      },
+      service: this.serviceName,
+      timestamp: Date.now(),
+    });
+
+    // Notify subscribers that support trackFunnelProgression
+    if (this.hasSubscribers) {
+      void this.notifySubscribers(async (subscriber) => {
+        await (subscriber.trackFunnelProgression
+          ? subscriber.trackFunnelProgression(
+              funnelName,
+              stepName,
+              stepNumber,
+              enrichedAttributes,
+            )
+          : // Fall back to trackFunnelStep with step as custom name (cast)
+            subscriber.trackFunnelStep(funnelName, stepName as FunnelStatus, {
+              ...enrichedAttributes,
+              step_name: stepName,
+              ...(stepNumber === undefined ? {} : { step_number: stepNumber }),
+            }));
+      });
+    }
+  }
+
+  /**
+   * Track multiple events in a batch
+   *
+   * Useful for bulk event tracking with consistent timestamps.
+   * Events are sent to subscribers individually but processed together.
+   *
+   * @param events - Array of events to track
+   *
+   * @example
+   * ```typescript
+   * event.trackBatch([
+   *   { name: 'item.viewed', attributes: { itemId: '1' } },
+   *   { name: 'item.viewed', attributes: { itemId: '2' } },
+   *   { name: 'cart.updated', attributes: { itemCount: 2 } },
+   * ]);
+   * ```
+   */
+  trackBatch(
+    events: Array<{ name: string; attributes?: EventAttributesInput }>,
+  ): void {
+    // Filter attributes and track each event
+    for (const event of events) {
+      // Filter undefined/null values from attributes
+      const filteredAttributes = event.attributes
+        ? (Object.fromEntries(
+            Object.entries(event.attributes).filter(
+              ([, v]) => v !== undefined && v !== null,
+            ),
+          ) as EventAttributes)
+        : undefined;
+
+      this.trackEvent(event.name, filteredAttributes);
+    }
   }
 }
 

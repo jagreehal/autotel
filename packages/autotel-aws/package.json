@@ -1,0 +1,184 @@
+{
+  "name": "autotel-aws",
+  "version": "0.1.0",
+  "description": "OpenTelemetry instrumentation for AWS",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./lambda": {
+      "types": "./dist/lambda.d.ts",
+      "import": "./dist/lambda.js",
+      "require": "./dist/lambda.cjs"
+    },
+    "./lambda/auto": {
+      "types": "./dist/lambda-auto.d.ts",
+      "import": "./dist/lambda-auto.js",
+      "require": "./dist/lambda-auto.cjs"
+    },
+    "./sdk": {
+      "types": "./dist/sdk.d.ts",
+      "import": "./dist/sdk.js",
+      "require": "./dist/sdk.cjs"
+    },
+    "./s3": {
+      "types": "./dist/s3.d.ts",
+      "import": "./dist/s3.js",
+      "require": "./dist/s3.cjs"
+    },
+    "./dynamodb": {
+      "types": "./dist/dynamodb.d.ts",
+      "import": "./dist/dynamodb.js",
+      "require": "./dist/dynamodb.cjs"
+    },
+    "./sqs": {
+      "types": "./dist/sqs.d.ts",
+      "import": "./dist/sqs.js",
+      "require": "./dist/sqs.cjs"
+    },
+    "./sns": {
+      "types": "./dist/sns.d.ts",
+      "import": "./dist/sns.js",
+      "require": "./dist/sns.cjs"
+    },
+    "./kinesis": {
+      "types": "./dist/kinesis.d.ts",
+      "import": "./dist/kinesis.js",
+      "require": "./dist/kinesis.cjs"
+    },
+    "./step-functions": {
+      "types": "./dist/step-functions.d.ts",
+      "import": "./dist/step-functions.js",
+      "require": "./dist/step-functions.cjs"
+    },
+    "./eventbridge": {
+      "types": "./dist/eventbridge.d.ts",
+      "import": "./dist/eventbridge.js",
+      "require": "./dist/eventbridge.cjs"
+    },
+    "./xray": {
+      "types": "./dist/xray.d.ts",
+      "import": "./dist/xray.js",
+      "require": "./dist/xray.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
+    },
+    "./attributes": {
+      "types": "./dist/attributes.d.ts",
+      "import": "./dist/attributes.js",
+      "require": "./dist/attributes.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:layer": "bash scripts/build-layer.sh",
+    "dev": "tsup --watch",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
+    "lint": "eslint src/",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "aws",
+    "lambda",
+    "observability",
+    "tracing",
+    "x-ray",
+    "aws-sdk",
+    "dynamodb",
+    "s3",
+    "sqs",
+    "sns"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "peerDependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-sqs": "^3.0.0",
+    "@aws-sdk/client-sns": "^3.0.0",
+    "@aws-sdk/client-kinesis": "^3.0.0",
+    "@aws-sdk/client-sfn": "^3.0.0",
+    "@aws-sdk/client-lambda": "^3.0.0",
+    "@aws-sdk/client-eventbridge": "^3.0.0",
+    "@middy/core": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "@aws-sdk/client-dynamodb": {
+      "optional": true
+    },
+    "@aws-sdk/client-sqs": {
+      "optional": true
+    },
+    "@aws-sdk/client-sns": {
+      "optional": true
+    },
+    "@aws-sdk/client-kinesis": {
+      "optional": true
+    },
+    "@aws-sdk/client-sfn": {
+      "optional": true
+    },
+    "@aws-sdk/client-lambda": {
+      "optional": true
+    },
+    "@aws-sdk/client-eventbridge": {
+      "optional": true
+    },
+    "@middy/core": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0",
+    "@opentelemetry/propagator-aws-xray": "^2.1.4"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.943.0",
+    "@aws-sdk/client-dynamodb": "^3.943.0",
+    "@aws-sdk/client-sqs": "^3.943.0",
+    "@aws-sdk/client-sns": "^3.943.0",
+    "@aws-sdk/client-kinesis": "^3.943.0",
+    "@aws-sdk/client-sfn": "^3.943.0",
+    "@aws-sdk/client-lambda": "^3.943.0",
+    "@aws-sdk/client-eventbridge": "^3.943.0",
+    "@middy/core": "^6.4.5",
+    "@types/aws-lambda": "^8.10.159",
+    "@types/node": "^24.10.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15",
+    "rimraf": "^6.1.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-aws"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-aws#readme"
+}

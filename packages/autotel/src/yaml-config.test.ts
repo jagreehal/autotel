@@ -3,7 +3,7 @@ import {
   loadYamlConfigFromFile,
   loadYamlConfig,
   hasYamlConfig,
-} from './yaml-config.js';
+} from './yaml-config';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -63,7 +63,7 @@ exporter:
       const config = loadYamlConfigFromFile(filePath);
       expect(config.endpoint).toBe('http://localhost:4318');
       expect(config.protocol).toBe('grpc');
-      expect(config.otlpHeaders).toEqual({
+      expect(config.headers).toEqual({
         'x-api-key': 'secret-key',
         'x-custom': 'value',
       });
@@ -87,33 +87,33 @@ resource:
       });
     });
 
-    it('should parse integrations as array', () => {
+    it('should parse autoInstrumentations as array', () => {
       const yaml = `
-integrations:
+autoInstrumentations:
   - express
   - http
   - pino
 `;
-      const filePath = path.join(testDir, 'integrations.yaml');
+      const filePath = path.join(testDir, 'autoInstrumentations.yaml');
       writeFileSync(filePath, yaml);
 
       const config = loadYamlConfigFromFile(filePath);
-      expect(config.integrations).toEqual(['express', 'http', 'pino']);
+      expect(config.autoInstrumentations).toEqual(['express', 'http', 'pino']);
     });
 
-    it('should parse integrations as object', () => {
+    it('should parse autoInstrumentations as object', () => {
       const yaml = `
-integrations:
+autoInstrumentations:
   express:
     enabled: true
   http:
     enabled: false
 `;
-      const filePath = path.join(testDir, 'integrations-obj.yaml');
+      const filePath = path.join(testDir, 'autoInstrumentations-obj.yaml');
       writeFileSync(filePath, yaml);
 
       const config = loadYamlConfigFromFile(filePath);
-      expect(config.integrations).toEqual({
+      expect(config.autoInstrumentations).toEqual({
         express: { enabled: true },
         http: { enabled: false },
       });
@@ -167,7 +167,7 @@ exporter:
 
       const config = loadYamlConfigFromFile(filePath);
       expect(config.service).toBe('nested-service');
-      expect(config.otlpHeaders).toEqual({
+      expect(config.headers).toEqual({
         'x-api-key': 'fallback-key',
       });
     });

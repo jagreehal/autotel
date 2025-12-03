@@ -12,12 +12,12 @@ export {
   extractOtelContextFromMeta,
   injectOtelContextToMeta,
   activateTraceContext,
-} from './context.js';
+} from './context';
 
-export { instrumentMcpServer } from './server.js';
+export { instrumentMcpServer } from './server';
 
-export { instrumentMcpClient } from './client.js';
+export { instrumentMcpClient } from './client';
 
-export type { McpInstrumentationConfig, McpTraceMeta } from './types.js';
+export type { McpInstrumentationConfig, McpTraceMeta } from './types';
 
-export { DEFAULT_CONFIG } from './types.js';
+export { DEFAULT_CONFIG } from './types';

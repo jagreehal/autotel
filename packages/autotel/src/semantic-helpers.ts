@@ -22,8 +22,8 @@ export interface LLMConfig {
   model: string;
   /** Operation type */
   operation?: 'chat' | 'completion' | 'embedding';
-  /** Model provider (e.g., 'openai', 'anthropic', 'cohere') */
-  system?: string;
+  /** Model provider (e.g., 'openai', 'anthropic', 'cohere') - maps to gen.ai.system */
+  provider?: string;
   /** Additional attributes to add to the span */
   attributes?: Attributes;
 }
@@ -40,7 +40,7 @@ export interface DBConfig {
   /** Operation type (e.g., 'SELECT', 'INSERT', 'find', 'get') */
   operation?: string;
   /** Database name */
-  dbName?: string;
+  database?: string;
   /** Collection/table name */
   collection?: string;
   /** Additional attributes to add to the span */
@@ -106,7 +106,7 @@ export interface MessagingConfig {
  * export const generateResponse = traceLLM({
  *   model: 'gpt-4-turbo',
  *   operation: 'chat',
- *   system: 'openai'
+ *   provider: 'openai'
  * })(ctx => async (prompt: string) => {
  *   const response = await openai.chat.completions.create({
  *     model: 'gpt-4-turbo',
@@ -131,7 +131,7 @@ export interface MessagingConfig {
  * export const streamResponse = traceLLM({
  *   model: 'claude-3-opus-20240229',
  *   operation: 'chat',
- *   system: 'anthropic'
+ *   provider: 'anthropic'
  * })(ctx => async function* (prompt: string) {
  *   const stream = await anthropic.messages.create({
  *     model: 'claude-3-opus-20240229',
@@ -165,7 +165,7 @@ export interface MessagingConfig {
  * export const embed = traceLLM({
  *   model: 'text-embedding-3-small',
  *   operation: 'embedding',
- *   system: 'openai'
+ *   provider: 'openai'
  * })(ctx => async (text: string) => {
  *   const result = await embeddings.embedQuery(text)
  *   ctx.setAttribute('gen.ai.response.embedding_length', result.length)
@@ -183,8 +183,8 @@ export function traceLLM<TArgs extends unknown[], TReturn>(config: LLMConfig) {
       // Set semantic convention attributes
       ctx.setAttribute('gen.ai.request.model', config.model);
       ctx.setAttribute('gen.ai.operation.name', config.operation || 'chat');
-      if (config.system) {
-        ctx.setAttribute('gen.ai.system', config.system);
+      if (config.provider) {
+        ctx.setAttribute('gen.ai.system', config.provider);
       }
       if (config.attributes) {
         for (const [key, value] of Object.entries(config.attributes)) {
@@ -233,7 +233,7 @@ export function traceLLM<TArgs extends unknown[], TReturn>(config: LLMConfig) {
  * export const getUser = traceDB({
  *   system: 'postgresql',
  *   operation: 'SELECT',
- *   dbName: 'app_db',
+ *   database: 'app_db',
  *   collection: 'users'
  * })(ctx => async (userId: string) => {
  *   const query = 'SELECT * FROM users WHERE id = $1'
@@ -254,7 +254,7 @@ export function traceLLM<TArgs extends unknown[], TReturn>(config: LLMConfig) {
  * export const findUsers = traceDB({
  *   system: 'mongodb',
  *   operation: 'find',
- *   dbName: 'app_db',
+ *   database: 'app_db',
  *   collection: 'users'
  * })(ctx => async (filter: object) => {
  *   ctx.setAttribute('db.mongodb.filter', JSON.stringify(filter))
@@ -292,7 +292,7 @@ export function traceLLM<TArgs extends unknown[], TReturn>(config: LLMConfig) {
  * export const createPost = traceDB({
  *   system: 'postgresql',
  *   operation: 'INSERT',
- *   dbName: 'app_db',
+ *   database: 'app_db',
  *   collection: 'posts'
  * })(ctx => async (data: { title: string; content: string; authorId: string }) => {
  *   ctx.setAttribute('db.prisma.model', 'Post')
@@ -317,8 +317,8 @@ export function traceDB<TArgs extends unknown[], TReturn>(config: DBConfig) {
       if (config.operation) {
         ctx.setAttribute('db.operation', config.operation);
       }
-      if (config.dbName) {
-        ctx.setAttribute('db.name', config.dbName);
+      if (config.database) {
+        ctx.setAttribute('db.name', config.database);
       }
       if (config.collection) {
         ctx.setAttribute('db.collection.name', config.collection);

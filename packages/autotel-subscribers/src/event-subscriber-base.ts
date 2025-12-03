@@ -67,6 +67,7 @@
 import type {
   EventSubscriber as IEventSubscriber,
   EventAttributes,
+  EventAttributesInput,
   FunnelStatus,
   OutcomeStatus,
 } from 'autotel/event-subscriber';
@@ -90,8 +91,14 @@ export interface EventPayload {
   /** For funnel events: funnel name */
   funnel?: string;
 
-  /** For funnel events: step status */
-  step?: FunnelStatus;
+  /** For funnel events: step status (from FunnelStatus enum) */
+  step?: FunnelStatus | string;
+
+  /** For funnel events: custom step name (from trackFunnelProgression) */
+  stepName?: string;
+
+  /** For funnel events: numeric position in funnel */
+  stepNumber?: number;
 
   /** For outcome events: operation name */
   operation?: string;
@@ -168,6 +175,41 @@ export abstract class EventSubscriber implements IEventSubscriber {
       error,
       payload,
     );
+  }
+
+  /**
+   * Filter out undefined and null values from attributes
+   *
+   * This improves DX by allowing callers to pass objects with optional properties
+   * without having to manually filter them first.
+   *
+   * @param attributes - Input attributes (may contain undefined/null)
+   * @returns Filtered attributes with only defined values, or undefined if empty
+   *
+   * @example
+   * ```typescript
+   * const filtered = this.filterAttributes({
+   *   userId: user.id,
+   *   email: user.email,      // might be undefined
+   *   plan: null,             // will be filtered out
+   * });
+   * // Result: { userId: 'abc', email: 'test@example.com' } or { userId: 'abc' }
+   * ```
+   */
+  protected filterAttributes(
+    attributes?: EventAttributesInput,
+  ): EventAttributes | undefined {
+    if (!attributes) return undefined;
+
+    const filtered: EventAttributes = {};
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value !== undefined && value !== null) {
+        filtered[key] = value;
+      }
+    }
+
+    // Return undefined if no attributes remain after filtering
+    return Object.keys(filtered).length > 0 ? filtered : undefined;
   }
 
   /**
@@ -252,6 +294,39 @@ export abstract class EventSubscriber implements IEventSubscriber {
   }
 
   /**
+   * Track funnel progression with custom step names
+   *
+   * Unlike trackFunnelStep which uses FunnelStatus enum values,
+   * this method allows any string as the step name for flexible funnel tracking.
+   *
+   * @param funnelName - Name of the funnel (e.g., "checkout", "onboarding")
+   * @param stepName - Custom step name (e.g., "cart_viewed", "payment_entered")
+   * @param stepNumber - Optional numeric position in the funnel
+   * @param attributes - Optional event attributes
+   */
+  async trackFunnelProgression(
+    funnelName: string,
+    stepName: string,
+    stepNumber?: number,
+    attributes?: EventAttributes,
+  ): Promise<void> {
+    if (!this.enabled) return;
+
+    const payload: EventPayload = {
+      type: 'funnel',
+      name: `${funnelName}.${stepName}`,
+      funnel: funnelName,
+      step: stepName,
+      stepName,
+      stepNumber,
+      attributes,
+      timestamp: new Date().toISOString(),
+    };
+
+    await this.send(payload);
+  }
+
+  /**
    * Flush pending requests and clean up
    *
    * CRITICAL: Prevents race condition during shutdown
@@ -322,4 +397,9 @@ export abstract class EventSubscriber implements IEventSubscriber {
   }
 }
 
-export {type EventAttributes, type FunnelStatus, type OutcomeStatus} from 'autotel/event-subscriber';
+export {
+  type EventAttributes,
+  type EventAttributesInput,
+  type FunnelStatus,
+  type OutcomeStatus,
+} from 'autotel/event-subscriber';
