@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-mcp-server",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "private": true,
   "type": "module",
   "description": "Example MCP server with autotel-mcp instrumentation",
