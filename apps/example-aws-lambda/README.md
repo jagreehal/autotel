@@ -1,6 +1,6 @@
 # AWS Lambda Example with autotel-aws
 
-This example demonstrates how to use `autotel-aws` to instrument AWS Lambda functions and AWS SDK v3 clients.
+This example demonstrates how to use `autotel-aws` to instrument AWS Lambda functions and AWS SDK v3 clients. It includes AWS CDK infrastructure for deploying to AWS or testing locally with LocalStack.
 
 ## Features Demonstrated
 

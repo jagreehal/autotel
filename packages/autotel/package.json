@@ -132,6 +132,21 @@
       "types": "./dist/yaml-config.d.ts",
       "import": "./dist/yaml-config.js",
       "require": "./dist/yaml-config.cjs"
+    },
+    "./messaging": {
+      "types": "./dist/messaging.d.ts",
+      "import": "./dist/messaging.js",
+      "require": "./dist/messaging.cjs"
+    },
+    "./business-baggage": {
+      "types": "./dist/business-baggage.d.ts",
+      "import": "./dist/business-baggage.js",
+      "require": "./dist/business-baggage.cjs"
+    },
+    "./workflow": {
+      "types": "./dist/workflow.d.ts",
+      "import": "./dist/workflow.js",
+      "require": "./dist/workflow.cjs"
     }
   },
   "files": [

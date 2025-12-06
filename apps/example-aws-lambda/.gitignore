@@ -4,3 +4,7 @@ dist/
 *.log
 .localstack/
 volume/
+
+# CDK outputs
+cdk.out/
+cdk-exports.json

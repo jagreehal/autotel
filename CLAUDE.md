@@ -24,6 +24,9 @@ The main package providing OpenTelemetry instrumentation with an ergonomic funct
   - `autotel/events` - Events API
   - `autotel/metrics` - Metrics helpers
   - `autotel/testing` - Test utilities
+  - `autotel/messaging` - Producer/consumer helpers for Kafka, SQS, RabbitMQ
+  - `autotel/business-baggage` - Safe baggage propagation with guardrails
+  - `autotel/workflow` - Workflow and saga tracing
   - And more (see package.json exports)
 
 ### `packages/autotel-subscribers`
@@ -722,6 +725,115 @@ export const publishEvent = traceMessaging({
 - `traceDB()` - Database operations (SQL, NoSQL, Redis)
 - `traceHTTP()` - HTTP client requests
 - `traceMessaging()` - Queue/messaging operations (Kafka, RabbitMQ, SQS)
+
+#### Event-Driven Observability (`packages/autotel/src/messaging.ts`)
+
+First-class support for message-based systems with `traceProducer` and `traceConsumer` helpers:
+
+```typescript
+import { traceProducer, traceConsumer } from 'autotel/messaging'
+
+// Producer - auto-sets SpanKind.PRODUCER and semantic attributes
+export const publishEvent = traceProducer({
+  system: 'kafka',           // kafka | sqs | rabbitmq | custom
+  destination: 'user-events',
+  messageIdFrom: (args) => args[0].id,  // Extract message ID
+})(ctx => async (event: Event) => {
+  const headers = ctx.getTraceHeaders()  // W3C traceparent/tracestate
+  await producer.send({ topic: 'user-events', messages: [{ value: event, headers }] })
+})
+
+// Consumer - auto-sets SpanKind.CONSUMER, extracts links from headers
+export const processEvent = traceConsumer({
+  system: 'kafka',
+  destination: 'user-events',
+  consumerGroup: 'event-processor',
+  headersFrom: (msg) => msg.headers,  // Extract trace headers
+  batchMode: true,  // For batch consumers
+})(ctx => async (messages) => {
+  // Links to producer spans automatically created
+  for (const msg of messages) await process(msg)
+})
+```
+
+**Key implementation details:**
+- Uses `SpanKind.PRODUCER` / `SpanKind.CONSUMER` for proper trace visualization
+- `ctx.getTraceHeaders()` returns `{ traceparent, tracestate? }` for header injection
+- `ctx.recordDLQ(dlqName, reason)` for dead-letter queue tracking
+- Supports lag metrics via `lagMetrics.getCurrentOffset` / `getEndOffset`
+- Automatic semantic attributes: `messaging.system`, `messaging.destination.name`, `messaging.operation`, `messaging.consumer.group`
+
+#### Safe Baggage Propagation (`packages/autotel/src/business-baggage.ts`)
+
+Type-safe baggage schemas with built-in guardrails for cross-service context:
+
+```typescript
+import { createSafeBaggageSchema, BusinessBaggage } from 'autotel/business-baggage'
+
+// Pre-built schema for common fields
+BusinessBaggage.set(ctx, { tenantId: 'acme', userId: 'user-123', priority: 'high' })
+const { tenantId, priority } = BusinessBaggage.get(ctx)
+
+// Custom schema with validation and guardrails
+const OrderBaggage = createSafeBaggageSchema({
+  orderId: { type: 'string', maxLength: 36 },
+  customerId: { type: 'string', hash: true },  // Auto-hash for privacy
+  tier: { type: 'enum', values: ['free', 'pro', 'enterprise'] as const },
+}, {
+  prefix: 'order',           // Keys: order.orderId, order.tier
+  redactPII: true,           // Auto-redact email/phone/SSN patterns
+  hashHighCardinality: true, // Hash UUIDs/timestamps
+})
+```
+
+**Guardrails:**
+- **Size limits**: `maxKeyLength` (default 64), `maxValueLength` (default 256)
+- **PII detection**: Regex patterns for email, phone, SSN auto-redacted
+- **High-cardinality hashing**: UUIDs and timestamps hashed via FNV-1a
+- **Enum validation**: Rejects values not in the defined set
+- **Type coercion**: Numbers/booleans properly serialized
+
+#### Workflow & Saga Tracing (`packages/autotel/src/workflow.ts`)
+
+Track distributed workflows with compensation support:
+
+```typescript
+import { traceWorkflow, traceStep } from 'autotel/workflow'
+
+export const orderSaga = traceWorkflow({
+  name: 'OrderSaga',
+  workflowId: (order) => order.id,
+})(ctx => async (order) => {
+
+  await traceStep({
+    name: 'ReserveInventory',
+    compensate: async (ctx, error) => {
+      await inventoryService.release(order.items)  // Rollback
+    },
+  })(ctx => async () => {
+    await inventoryService.reserve(order.items)
+  })()
+
+  await traceStep({
+    name: 'ChargePayment',
+    linkToPrevious: true,  // Link to ReserveInventory span
+    compensate: async (ctx, error) => {
+      await paymentService.refund(order.id)
+    },
+  })(ctx => async () => {
+    await paymentService.charge(order)
+  })()
+})
+// If ChargePayment fails, compensations run in reverse order
+```
+
+**Key features:**
+- `traceWorkflow` creates root span with `workflow.name`, `workflow.id` attributes
+- `traceStep` creates child spans with `workflow.step.name`, `workflow.step.index`
+- `linkToPrevious: true` creates span links for step sequencing
+- Compensations run in reverse order on failure
+- `ctx.getWorkflowId()`, `ctx.getWorkflowName()`, `ctx.getStepIndex()` context methods
+- WeakMap-based state isolation tied to span lifecycle
 
 ### Graceful Shutdown
 All components implement graceful shutdown:
