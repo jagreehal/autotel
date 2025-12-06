@@ -636,7 +636,7 @@ export interface AutotelConfig {
    * - Add endpoint later → console + backend, verify before choosing provider
    * - Remove debug in production → backend only, clean production config
    *
-   * Can be overridden with AUTOLEMETRY_DEBUG environment variable.
+   * Can be overridden with AUTOTEL_DEBUG environment variable.
    *
    * @example Getting started - see spans immediately
    * ```typescript
@@ -666,7 +666,7 @@ export interface AutotelConfig {
    *
    * @example Environment variable
    * ```bash
-   * AUTOLEMETRY_DEBUG=true node server.js
+   * AUTOTEL_DEBUG=true node server.js
    * ```
    */
   debug?: boolean;
@@ -735,7 +735,7 @@ export function resolveMetricsFlag(
  */
 export function resolveDebugFlag(configFlag?: boolean): boolean {
   // 1. Check env var override (highest priority)
-  const envFlag = process.env.AUTOLEMETRY_DEBUG;
+  const envFlag = process.env.AUTOTEL_DEBUG;
   if (envFlag === 'true' || envFlag === '1') return true;
   if (envFlag === 'false' || envFlag === '0') return false;
 

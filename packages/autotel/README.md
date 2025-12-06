@@ -43,6 +43,16 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
     - [Reusable Middleware Helpers](#reusable-middleware-helpers)
     - [Decorators (TypeScript 5+)](#decorators-typescript-5)
     - [Database Instrumentation](#database-instrumentation)
+  - [Event-Driven Architectures](#event-driven-architectures)
+    - [Message Producers (Kafka, SQS, RabbitMQ)](#message-producers-kafka-sqs-rabbitmq)
+    - [Message Consumers](#message-consumers)
+    - [Consumer Lag Metrics](#consumer-lag-metrics)
+  - [Safe Baggage Propagation](#safe-baggage-propagation)
+    - [BusinessBaggage (Pre-built Schema)](#businessbaggage-pre-built-schema)
+    - [Custom Baggage Schemas](#custom-baggage-schemas)
+  - [Workflow \& Saga Tracing](#workflow--saga-tracing)
+    - [Basic Workflows](#basic-workflows)
+    - [Saga Pattern with Compensation](#saga-pattern-with-compensation)
   - [Business Metrics \& Product Events](#business-metrics--product-events)
     - [OpenTelemetry Metrics (Metric class + helpers)](#opentelemetry-metrics-metric-class--helpers)
     - [Product Events (PostHog, Mixpanel, Amplitude, …)](#product-events-posthog-mixpanel-amplitude-)
@@ -577,6 +587,369 @@ instrumentDatabase(db, {
 
 await db.select().from(users); // queries emit spans automatically
 ```
+
+## Event-Driven Architectures
+
+Autotel provides first-class support for tracing message-based systems like Kafka, SQS, and RabbitMQ. The `traceProducer` and `traceConsumer` helpers automatically set semantic attributes, handle context propagation, and create proper span links.
+
+### Message Producers (Kafka, SQS, RabbitMQ)
+
+Use `traceProducer` to wrap message publishing functions with automatic tracing:
+
+```typescript
+import { traceProducer, type ProducerContext } from 'autotel';
+
+// Kafka producer
+export const publishUserEvent = traceProducer({
+  system: 'kafka',
+  destination: 'user-events',
+  messageIdFrom: (args) => args[0].eventId, // Extract message ID from args
+})((ctx) => async (event: UserEvent) => {
+  // Get W3C trace headers to inject into message
+  const headers = ctx.getTraceHeaders();
+
+  await producer.send({
+    topic: 'user-events',
+    messages: [
+      {
+        key: event.userId,
+        value: JSON.stringify(event),
+        headers, // Trace context propagates to consumers
+      },
+    ],
+  });
+});
+
+// SQS producer with custom attributes
+export const publishOrder = traceProducer({
+  system: 'sqs',
+  destination: 'orders-queue',
+  attributes: { 'custom.priority': 'high' },
+})((ctx) => async (order: Order) => {
+  ctx.setAttribute('order.total', order.total);
+
+  await sqs.sendMessage({
+    QueueUrl: QUEUE_URL,
+    MessageBody: JSON.stringify(order),
+    MessageAttributes: {
+      traceparent: {
+        DataType: 'String',
+        StringValue: ctx.getTraceHeaders().traceparent,
+      },
+    },
+  });
+});
+```
+
+**Automatic Span Attributes (OTel Semantic Conventions):**
+
+- `messaging.system` - The messaging system (kafka, sqs, rabbitmq, etc.)
+- `messaging.operation` - Always "publish" for producers
+- `messaging.destination.name` - Topic/queue name
+- `messaging.message.id` - Extracted message ID (if configured)
+- `messaging.kafka.destination.partition` - Partition number (Kafka-specific)
+
+### Message Consumers
+
+Use `traceConsumer` to wrap message handlers with automatic link extraction and DLQ support:
+
+```typescript
+import { traceConsumer, extractLinksFromBatch } from 'autotel';
+
+// Single message consumer
+export const processUserEvent = traceConsumer({
+  system: 'kafka',
+  destination: 'user-events',
+  consumerGroup: 'event-processor',
+  headersFrom: (msg) => msg.headers, // Extract trace headers
+})((ctx) => async (message: KafkaMessage) => {
+  // Links to producer span are automatically created
+  const event = JSON.parse(message.value);
+  await processEvent(event);
+});
+
+// Batch consumer with automatic link extraction
+export const processBatch = traceConsumer({
+  system: 'kafka',
+  destination: 'user-events',
+  consumerGroup: 'batch-processor',
+  batchMode: true, // Extract links from all messages
+  headersFrom: (msg) => msg.headers,
+})((ctx) => async (messages: KafkaMessage[]) => {
+  // ctx.links contains SpanContext from each message's traceparent
+  for (const msg of messages) {
+    await processMessage(msg);
+  }
+});
+
+// Consumer with DLQ handling
+export const processWithDLQ = traceConsumer({
+  system: 'sqs',
+  destination: 'orders-queue',
+  headersFrom: (msg) => msg.MessageAttributes,
+})((ctx) => async (message: SQSMessage) => {
+  try {
+    await processOrder(JSON.parse(message.Body));
+  } catch (error) {
+    if (message.ApproximateReceiveCount > 3) {
+      // Record DLQ routing
+      ctx.recordDLQ('orders-dlq', error.message);
+      throw error; // Let SQS move to DLQ
+    }
+    throw error; // Retry
+  }
+});
+```
+
+**Consumer-Specific Attributes:**
+
+- `messaging.consumer.group` - Consumer group name
+- `messaging.batch.message_count` - Batch size (if batch mode)
+- `messaging.operation` - "receive" or "process"
+
+### Consumer Lag Metrics
+
+Track consumer lag for performance monitoring:
+
+```typescript
+import { traceConsumer } from 'autotel';
+
+export const processWithLag = traceConsumer({
+  system: 'kafka',
+  destination: 'events',
+  consumerGroup: 'processor',
+  lagMetrics: {
+    getCurrentOffset: (msg) => Number(msg.offset),
+    getEndOffset: async () => {
+      const offsets = await admin.fetchTopicOffsets('events');
+      return Number(offsets[0].high);
+    },
+    partition: 0,
+  },
+})((ctx) => async (message) => {
+  // Lag attributes automatically added:
+  // - messaging.kafka.consumer_lag
+  // - messaging.kafka.message_offset
+  await processMessage(message);
+});
+```
+
+## Safe Baggage Propagation
+
+Baggage allows key-value pairs to propagate across service boundaries. Autotel provides safe baggage schemas with built-in guardrails for PII detection, size limits, and high-cardinality value hashing.
+
+### BusinessBaggage (Pre-built Schema)
+
+Use the pre-built `BusinessBaggage` schema for common business context:
+
+```typescript
+import { BusinessBaggage, trace } from 'autotel';
+
+export const processOrder = trace((ctx) => async (order: Order) => {
+  // Set business context (propagates to downstream services)
+  BusinessBaggage.set(ctx, {
+    tenantId: order.tenantId,
+    userId: order.userId, // Auto-hashed for privacy
+    priority: 'high', // Validated against enum
+    correlationId: order.id,
+  });
+
+  // Make downstream call - baggage propagates automatically
+  await fetch('/api/charge', {
+    headers: ctx.getTraceHeaders(), // Includes baggage header
+  });
+});
+
+// In downstream service
+export const chargeOrder = trace((ctx) => async () => {
+  // Read business context
+  const { tenantId, userId, priority } = BusinessBaggage.get(ctx);
+
+  // Use for routing, logging, access control, etc.
+  logger.info({ tenantId, priority }, 'Processing charge');
+});
+```
+
+**Pre-defined Fields:**
+
+- `tenantId` - String, max 64 chars
+- `userId` - String, auto-hashed for privacy
+- `correlationId` - String, for request correlation
+- `workflowId` - String, for saga/workflow tracking
+- `priority` - Enum: 'low', 'normal', 'high', 'critical'
+- `region` - String, deployment region
+- `channel` - String (web, mobile, api, etc.)
+
+### Custom Baggage Schemas
+
+Create type-safe baggage schemas with validation and guardrails:
+
+```typescript
+import { createSafeBaggageSchema } from 'autotel';
+
+// Define custom schema
+const OrderBaggage = createSafeBaggageSchema(
+  {
+    orderId: { type: 'string', maxLength: 36 },
+    customerId: { type: 'string', hash: true }, // Auto-hash for privacy
+    tier: { type: 'enum', values: ['free', 'pro', 'enterprise'] as const },
+    amount: { type: 'number' },
+    isVip: { type: 'boolean' },
+  },
+  {
+    prefix: 'order', // Baggage keys: order.orderId, order.tier, etc.
+    maxKeyLength: 64, // Validate key length
+    maxValueLength: 256, // Validate value length
+    redactPII: true, // Auto-detect and redact PII patterns
+    hashHighCardinality: true, // Hash values that look high-cardinality
+  },
+);
+
+// Use in traced functions
+export const processOrder = trace((ctx) => async (order: Order) => {
+  // Type-safe set (TypeScript validates fields)
+  OrderBaggage.set(ctx, {
+    orderId: order.id,
+    customerId: order.customerId, // Will be hashed
+    tier: order.tier, // Must be 'free' | 'pro' | 'enterprise'
+    amount: order.total,
+    isVip: order.customer.isVip,
+  });
+
+  // Type-safe get
+  const { orderId, tier, isVip } = OrderBaggage.get(ctx);
+
+  // Check if specific field is set
+  if (OrderBaggage.has(ctx, 'customerId')) {
+    // ...
+  }
+
+  // Delete specific field
+  OrderBaggage.delete(ctx, 'amount');
+
+  // Clear all fields
+  OrderBaggage.clear(ctx);
+});
+```
+
+**Guardrails:**
+
+- **Size Limits** - Prevents baggage from growing unbounded
+- **PII Detection** - Auto-redacts email, phone, SSN patterns
+- **High-Cardinality Hashing** - Hashes UUIDs, timestamps to reduce cardinality
+- **Enum Validation** - Rejects invalid enum values
+- **Type Coercion** - Numbers/booleans serialized correctly
+
+## Workflow & Saga Tracing
+
+Track distributed workflows and sagas with compensation support. Each step creates a linked span, and failed steps can trigger automatic compensation.
+
+### Basic Workflows
+
+Use `traceWorkflow` and `traceStep` for multi-step processes:
+
+```typescript
+import { traceWorkflow, traceStep } from 'autotel';
+
+// Define workflow with unique ID
+export const processOrder = traceWorkflow({
+  name: 'OrderFulfillment',
+  workflowId: (order) => order.id, // Generate from first arg
+})((ctx) => async (order: Order) => {
+  // Step 1: Validate order
+  await traceStep({ name: 'ValidateOrder' })((ctx) => async () => {
+    await validateOrder(order);
+  })();
+
+  // Step 2: Reserve inventory (links to previous step)
+  await traceStep({
+    name: 'ReserveInventory',
+    linkToPrevious: true,
+  })((ctx) => async () => {
+    await inventoryService.reserve(order.items);
+  })();
+
+  // Step 3: Process payment
+  await traceStep({
+    name: 'ProcessPayment',
+    linkToPrevious: true,
+  })((ctx) => async () => {
+    await paymentService.charge(order);
+  })();
+
+  return { success: true };
+});
+```
+
+**Workflow Attributes:**
+
+- `workflow.name` - Workflow type name
+- `workflow.id` - Unique instance ID
+- `workflow.version` - Optional version
+- `workflow.step.name` - Current step name
+- `workflow.step.index` - Step sequence number
+- `workflow.step.status` - completed, failed, compensated
+
+### Saga Pattern with Compensation
+
+Define compensating actions for rollback on failure:
+
+```typescript
+import { traceWorkflow, traceStep } from 'autotel';
+
+export const orderSaga = traceWorkflow({
+  name: 'OrderSaga',
+  workflowId: (order) => order.id,
+})((ctx) => async (order: Order) => {
+  // Step 1: Reserve inventory (with compensation)
+  await traceStep({
+    name: 'ReserveInventory',
+    compensate: async (stepCtx, error) => {
+      // Called if later step fails
+      await inventoryService.release(order.items);
+      stepCtx.setAttribute('compensation.reason', error.message);
+    },
+  })((ctx) => async () => {
+    await inventoryService.reserve(order.items);
+  })();
+
+  // Step 2: Charge payment (with compensation)
+  await traceStep({
+    name: 'ChargePayment',
+    linkToPrevious: true,
+    compensate: async (stepCtx, error) => {
+      await paymentService.refund(order.id);
+    },
+  })((ctx) => async () => {
+    await paymentService.charge(order);
+  })();
+
+  // Step 3: Ship order (no compensation - point of no return)
+  await traceStep({
+    name: 'ShipOrder',
+    linkToPrevious: true,
+  })((ctx) => async () => {
+    await shippingService.ship(order);
+  })();
+});
+
+// If ShipOrder fails, compensations run in reverse:
+// 1. ChargePayment.compensate (refund)
+// 2. ReserveInventory.compensate (release)
+```
+
+**WorkflowContext Methods:**
+
+- `ctx.getWorkflowId()` - Get current workflow instance ID
+- `ctx.getWorkflowName()` - Get workflow type name
+- `ctx.getStepIndex()` - Current step number
+- `ctx.getPreviousStepContext()` - SpanContext for linking
+
+**Compensation Attributes:**
+
+- `workflow.step.compensated` - Boolean, true if compensation ran
+- `workflow.compensation.executed` - Number of compensations executed
+- `compensation.reason` - Why compensation was triggered
 
 ## Business Metrics & Product Events
 
@@ -1474,12 +1847,12 @@ init({
 
 ```bash
 # Enable debug mode
-AUTOLEMETRY_DEBUG=true node server.js
+AUTOTEL_DEBUG=true node server.js
 # or
-AUTOLEMETRY_DEBUG=1 node server.js
+AUTOTEL_DEBUG=1 node server.js
 
 # Disable debug mode
-AUTOLEMETRY_DEBUG=false node server.js
+AUTOTEL_DEBUG=false node server.js
 ```
 
 ### Manual Configuration (Advanced)

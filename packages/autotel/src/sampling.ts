@@ -22,6 +22,8 @@
  * ```
  */
 
+import type { Link, Attributes } from '@opentelemetry/api';
+import { TraceFlags } from '@opentelemetry/api';
 import { type Logger } from './logger';
 
 /**
@@ -65,6 +67,8 @@ export interface SamplingContext {
   args: unknown[];
   /** Optional metadata (e.g., feature flags, request headers) */
   metadata?: Record<string, unknown>;
+  /** Optional span links for links-based sampling */
+  links?: Link[];
 }
 
 /**
@@ -158,6 +162,8 @@ export class AdaptiveSampler implements Sampler {
   private slowThresholdMs: number;
   private alwaysSampleErrors: boolean;
   private alwaysSampleSlow: boolean;
+  private linksBased: boolean;
+  private linksRate: number;
   private logger?: Logger;
 
   // Track whether we should sample this request
@@ -171,6 +177,10 @@ export class AdaptiveSampler implements Sampler {
       slowThresholdMs?: number;
       alwaysSampleErrors?: boolean;
       alwaysSampleSlow?: boolean;
+      /** Enable links-based sampling for event-driven architectures */
+      linksBased?: boolean;
+      /** Sampling rate for spans linked to sampled spans (0.0-1.0) */
+      linksRate?: number;
       logger?: Logger;
     } = {},
   ) {
@@ -178,10 +188,15 @@ export class AdaptiveSampler implements Sampler {
     this.slowThresholdMs = options.slowThresholdMs ?? 1000;
     this.alwaysSampleErrors = options.alwaysSampleErrors ?? true;
     this.alwaysSampleSlow = options.alwaysSampleSlow ?? true;
+    this.linksBased = options.linksBased ?? false;
+    this.linksRate = options.linksRate ?? 1;
     this.logger = options.logger;
 
     if (this.baselineSampleRate < 0 || this.baselineSampleRate > 1) {
       throw new Error('Baseline sample rate must be between 0 and 1');
+    }
+    if (this.linksRate < 0 || this.linksRate > 1) {
+      throw new Error('Links rate must be between 0 and 1');
     }
   }
 
@@ -199,6 +214,25 @@ export class AdaptiveSampler implements Sampler {
 
     // Always return true to create the span (tail sampling will decide if we keep it)
     return true;
+  }
+
+  /**
+   * Check if any links point to sampled spans.
+   *
+   * A span is considered linked to a sampled span if any of its links
+   * have trace_flags with the sampled bit set (0x01).
+   *
+   * @param links - Array of span links to check
+   * @returns true if any linked span is sampled, false otherwise
+   */
+  hasSampledLink(links: Link[]): boolean {
+    if (!links || links.length === 0) {
+      return false;
+    }
+    return links.some(
+      (link) =>
+        link.context && (link.context.traceFlags & TraceFlags.SAMPLED) !== 0,
+    );
   }
 
   /**
@@ -234,6 +268,26 @@ export class AdaptiveSampler implements Sampler {
         });
       }
       return true;
+    }
+
+    // Check for sampled links (links-based sampling for event-driven systems)
+    if (
+      this.linksBased &&
+      context.links &&
+      this.hasSampledLink(context.links)
+    ) {
+      // Use linksRate to decide whether to keep the linked span
+      const keepLinked = Math.random() < this.linksRate;
+      if (keepLinked && !baselineDecision) {
+        this.logger?.debug(
+          'Adaptive sampling: Keeping trace due to sampled link',
+          {
+            operation: context.operationName,
+            linkCount: context.links.length,
+          },
+        );
+      }
+      return keepLinked;
     }
 
     // Otherwise, use baseline decision
@@ -425,4 +479,157 @@ export class FeatureFlagSampler implements Sampler {
       this.alwaysSampleFlags.delete(flag);
     }
   }
+}
+
+// ============================================================================
+// Link Helper Functions
+// ============================================================================
+
+/**
+ * Create a Link from W3C trace context headers (e.g., from a message queue).
+ *
+ * This is useful for message consumers that need to link to the producer span.
+ * The headers should contain at least a `traceparent` header in W3C format.
+ *
+ * @param headers - Dictionary containing traceparent/tracestate headers
+ * @param attributes - Optional attributes for the link
+ * @returns Link object if context could be extracted, null otherwise
+ *
+ * @example
+ * ```typescript
+ * // In a Kafka consumer
+ * const headers = { traceparent: '00-abc123...-def456...-01' };
+ * const link = createLinkFromHeaders(headers);
+ * if (link) {
+ *   // Use with tracer.startActiveSpan options or ctx.addLink()
+ *   tracer.startActiveSpan('process.message', { links: [link] }, span => { ... });
+ * }
+ * ```
+ */
+export function createLinkFromHeaders(
+  headers: Record<string, string>,
+  attributes?: Attributes,
+): Link | null {
+  // Parse W3C traceparent header directly for reliability
+  // Format: version-traceId-spanId-traceFlags (e.g., 00-abc123...-def456...-01)
+  const traceparent = headers.traceparent || headers['traceparent'];
+  if (!traceparent) {
+    return null;
+  }
+
+  const spanContext = parseTraceparent(traceparent);
+  if (!spanContext || !isValidSpanContext(spanContext)) {
+    return null;
+  }
+
+  return {
+    context: spanContext,
+    attributes: attributes ?? {},
+  };
+}
+
+/**
+ * Extract Links from a batch of messages for fan-in scenarios.
+ *
+ * Useful for batch processing where multiple producer spans should be linked.
+ * This enables tracing causality in event-driven architectures where a single
+ * consumer processes messages from multiple producers.
+ *
+ * @param messages - List of message objects
+ * @param headersKey - Key in each message containing trace headers (default: 'headers')
+ * @returns List of Link objects for all valid trace contexts
+ *
+ * @example
+ * ```typescript
+ * // Processing a batch of SQS/Kafka messages
+ * const messages = [
+ *   { body: '...', headers: { traceparent: '...' } },
+ *   { body: '...', headers: { traceparent: '...' } },
+ * ];
+ * const links = extractLinksFromBatch(messages);
+ *
+ * tracer.startActiveSpan('process.batch', { links }, span => {
+ *   for (const msg of messages) {
+ *     processMessage(msg);
+ *   }
+ * });
+ * ```
+ */
+export function extractLinksFromBatch(
+  messages: Array<{ [key: string]: unknown }>,
+  headersKey: string = 'headers',
+): Link[] {
+  const links: Link[] = [];
+
+  for (const msg of messages) {
+    const msgHeaders = msg[headersKey];
+    if (msgHeaders && typeof msgHeaders === 'object' && msgHeaders !== null) {
+      const link = createLinkFromHeaders(msgHeaders as Record<string, string>, {
+        'messaging.batch.message_index': links.length,
+      });
+      if (link) {
+        links.push(link);
+      }
+    }
+  }
+
+  return links;
+}
+
+/**
+ * Parse W3C traceparent header into SpanContext
+ * Format: version-traceId-spanId-traceFlags (e.g., 00-abc123...-def456...-01)
+ *
+ * @see https://www.w3.org/TR/trace-context/#traceparent-header
+ */
+function parseTraceparent(
+  traceparent: string,
+): import('@opentelemetry/api').SpanContext | null {
+  // W3C traceparent format: version-traceId-parentId-traceFlags
+  // Example: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+  const TRACEPARENT_REGEX =
+    /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i;
+
+  const match = traceparent.match(TRACEPARENT_REGEX);
+  if (!match || match.length < 5) {
+    return null;
+  }
+
+  const version = match[1];
+  const traceId = match[2];
+  const spanId = match[3];
+  const flags = match[4];
+
+  // Validate all parts are present (TypeScript narrowing)
+  if (!version || !traceId || !spanId || !flags) {
+    return null;
+  }
+
+  // Version 00 is currently the only version, but we should be forward compatible
+  if (version === 'ff') {
+    // Version ff is invalid according to spec
+    return null;
+  }
+
+  return {
+    traceId,
+    spanId,
+    traceFlags: Number.parseInt(flags, 16),
+    isRemote: true,
+  };
+}
+
+/**
+ * Check if a SpanContext is valid (has non-zero trace and span IDs)
+ */
+function isValidSpanContext(
+  spanContext: import('@opentelemetry/api').SpanContext | null,
+): spanContext is import('@opentelemetry/api').SpanContext {
+  if (!spanContext) return false;
+  // TraceId should not be all zeros (00000000000000000000000000000000)
+  // SpanId should not be all zeros (0000000000000000)
+  return (
+    spanContext.traceId !== '00000000000000000000000000000000' &&
+    spanContext.spanId !== '0000000000000000'
+  );
 }

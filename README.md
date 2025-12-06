@@ -147,7 +147,7 @@ const result = await trace(async () => {
 
 Or use environment variable:
 ```bash
-AUTOLEMETRY_DEBUG=true node server.js
+AUTOTEL_DEBUG=true node server.js
 ```
 
 ### Environment Variables
