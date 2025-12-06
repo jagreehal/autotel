@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-datadog",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "private": true,
   "type": "module",
   "description": "Example demonstrating Datadog integration with autotel using OTLP",

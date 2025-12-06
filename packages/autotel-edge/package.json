@@ -1,6 +1,6 @@
 {
   "name": "autotel-edge",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "description": "Vendor-agnostic OpenTelemetry for edge runtimes - foundation for Cloudflare, Vercel, Netlify, Deno",
   "type": "module",
   "main": "./dist/index.js",
