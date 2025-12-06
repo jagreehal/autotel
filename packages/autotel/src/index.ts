@@ -77,6 +77,8 @@ export {
   RandomSampler,
   AdaptiveSampler,
   UserIdSampler,
+  createLinkFromHeaders,
+  extractLinksFromBatch,
 } from './sampling';
 
 // Events API
@@ -156,3 +158,42 @@ export { SpanKind } from '@opentelemetry/api';
 
 // Export typed baggage helper
 export { defineBaggageSchema } from './trace-context';
+
+// Messaging helpers for event-driven architectures
+export {
+  traceProducer,
+  traceConsumer,
+  type ProducerConfig,
+  type ConsumerConfig,
+  type ProducerContext,
+  type ConsumerContext,
+  type MessagingSystem,
+  type MessagingOperation,
+  type LagMetricsConfig,
+} from './messaging';
+
+// Safe baggage propagation with guardrails
+export {
+  createSafeBaggageSchema,
+  BusinessBaggage,
+  type SafeBaggageOptions,
+  type BaggageFieldDefinition,
+  type BaggageFieldType,
+  type BaggageError,
+  type SafeBaggageSchema,
+  type BusinessBaggageValues,
+} from './business-baggage';
+
+// Workflow and saga tracing
+export {
+  traceWorkflow,
+  traceStep,
+  getCurrentWorkflowContext,
+  isInWorkflow,
+  type WorkflowConfig,
+  type StepConfig,
+  type WorkflowContext,
+  type StepContext,
+  type WorkflowStatus,
+  type StepStatus,
+} from './workflow';

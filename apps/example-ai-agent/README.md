@@ -141,7 +141,7 @@ export OTLP_ENDPOINT=http://localhost:4318
 export NODE_ENV=development
 
 # Debug mode - see spans in console
-export AUTOLEMETRY_DEBUG=true  # Enables console output
+export AUTOTEL_DEBUG=true  # Enables console output
 ```
 
 ### Quick Debug Mode

@@ -29,6 +29,6 @@ export default defineConfig({
     'cloudflare:workers',
   ],
   define: {
-    'process.env.AUTOLEMETRY_EDGE_VERSION': JSON.stringify(pkg.version),
+    'process.env.AUTOTEL_EDGE_VERSION': JSON.stringify(pkg.version),
   },
 });

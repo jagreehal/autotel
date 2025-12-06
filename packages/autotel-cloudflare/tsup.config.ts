@@ -34,6 +34,6 @@ export default defineConfig({
     'autotel-edge',
   ],
   define: {
-    'process.env.AUTOLEMETRY_EDGE_VERSION': JSON.stringify(pkg.version),
+    'process.env.AUTOTEL_EDGE_VERSION': JSON.stringify(pkg.version),
   },
 });

@@ -15,7 +15,7 @@ import type { OTLPExporterConfig } from '../types';
 
 // Version is injected at build time via tsup define
 // This avoids runtime filesystem access which isn't available in edge environments
-const PACKAGE_VERSION = process.env.AUTOLEMETRY_EDGE_VERSION || '0.1.1';
+const PACKAGE_VERSION = process.env.AUTOTEL_EDGE_VERSION || '0.1.1';
 
 const defaultHeaders: Record<string, string> = {
   accept: 'application/json',

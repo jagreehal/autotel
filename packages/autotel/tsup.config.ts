@@ -27,6 +27,9 @@ export default defineConfig({
     register: 'src/register.ts',
     auto: 'src/auto.ts',
     'yaml-config': 'src/yaml-config.ts',
+    messaging: 'src/messaging.ts',
+    'business-baggage': 'src/business-baggage.ts',
+    workflow: 'src/workflow.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats
   dts: true,

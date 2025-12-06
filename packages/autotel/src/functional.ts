@@ -361,6 +361,13 @@ export interface TracingOptions<
    * @default true
    */
   flushOnRootSpanEnd?: boolean;
+
+  /**
+   * Span kind for semantic convention compliance
+   * Used for messaging (PRODUCER/CONSUMER), HTTP (CLIENT/SERVER), etc.
+   * @default SpanKind.INTERNAL
+   */
+  spanKind?: import('@opentelemetry/api').SpanKind;
 }
 
 /**
@@ -735,164 +742,169 @@ function wrapWithTracing<TArgs extends unknown[], TReturn>(
       }
     };
 
-    return tracer.startActiveSpan(
-      spanName,
-      options.startNewRoot ? { root: true } : {},
-      async (span) => {
-        // Run within operation context so events can auto-capture operation.name
-        return runInOperationContext(spanName, async () => {
-          let shouldKeepSpan = true;
+    // Build span options including root and kind
+    const spanOptions: import('@opentelemetry/api').SpanOptions = {};
+    if (options.startNewRoot) {
+      spanOptions.root = true;
+    }
+    if (options.spanKind !== undefined) {
+      spanOptions.kind = options.spanKind;
+    }
 
-          setSpanName(span, spanName);
+    return tracer.startActiveSpan(spanName, spanOptions, async (span) => {
+      // Run within operation context so events can auto-capture operation.name
+      return runInOperationContext(spanName, async () => {
+        let shouldKeepSpan = true;
 
-          // Initialize context storage with the active context BEFORE creating trace context
-          const initialContext = context.active();
-          const contextStorage = getContextStorage();
-          if (!contextStorage.getStore()) {
-            contextStorage.enterWith(initialContext);
+        setSpanName(span, spanName);
+
+        // Initialize context storage with the active context BEFORE creating trace context
+        const initialContext = context.active();
+        const contextStorage = getContextStorage();
+        if (!contextStorage.getStore()) {
+          contextStorage.enterWith(initialContext);
+        }
+
+        const ctxValue = createTraceContext(span);
+        const fn = fnFactory(ctxValue);
+        const argsAttributes = options.attributesFromArgs
+          ? options.attributesFromArgs(args)
+          : {};
+
+        const handleTailSampling = (
+          success: boolean,
+          duration: number,
+          error?: unknown,
+        ) => {
+          if (
+            needsTailSampling &&
+            'shouldKeepTrace' in sampler &&
+            typeof sampler.shouldKeepTrace === 'function'
+          ) {
+            shouldKeepSpan = sampler.shouldKeepTrace(samplingContext, {
+              success,
+              duration,
+              error,
+            });
+            span.setAttribute('sampling.tail.keep', shouldKeepSpan);
+            span.setAttribute('sampling.tail.evaluated', true);
           }
+        };
 
-          const ctxValue = createTraceContext(span);
-          const fn = fnFactory(ctxValue);
-          const argsAttributes = options.attributesFromArgs
-            ? options.attributesFromArgs(args)
+        const onSuccess = async (result: TReturn) => {
+          const duration = performance.now() - startTime;
+
+          callCounter?.add(1, {
+            operation: spanName,
+            status: 'success',
+          });
+
+          durationHistogram?.record(duration, {
+            operation: spanName,
+            status: 'success',
+          });
+
+          const resultAttributes = options.attributesFromResult
+            ? options.attributesFromResult(result)
             : {};
 
-          const handleTailSampling = (
-            success: boolean,
-            duration: number,
-            error?: unknown,
-          ) => {
-            if (
-              needsTailSampling &&
-              'shouldKeepTrace' in sampler &&
-              typeof sampler.shouldKeepTrace === 'function'
-            ) {
-              shouldKeepSpan = sampler.shouldKeepTrace(samplingContext, {
-                success,
-                duration,
-                error,
-              });
-              span.setAttribute('sampling.tail.keep', shouldKeepSpan);
-              span.setAttribute('sampling.tail.evaluated', true);
-            }
-          };
+          span.setStatus({ code: SpanStatusCode.OK });
+          span.setAttributes({
+            ...argsAttributes,
+            ...resultAttributes,
+            'operation.name': spanName,
+            'code.function': spanName,
+            'operation.duration': duration,
+            'operation.success': true,
+          });
 
-          const onSuccess = async (result: TReturn) => {
-            const duration = performance.now() - startTime;
+          handleTailSampling(true, duration);
 
-            callCounter?.add(1, {
-              operation: spanName,
-              status: 'success',
-            });
+          span.end();
+          await flushIfNeeded();
+          return result;
+        };
 
-            durationHistogram?.record(duration, {
-              operation: spanName,
-              status: 'success',
-            });
+        const onError = async (error: unknown): Promise<never> => {
+          const duration = performance.now() - startTime;
 
-            const resultAttributes = options.attributesFromResult
-              ? options.attributesFromResult(result)
-              : {};
+          callCounter?.add(1, {
+            operation: spanName,
+            status: 'error',
+          });
 
-            span.setStatus({ code: SpanStatusCode.OK });
-            span.setAttributes({
-              ...argsAttributes,
-              ...resultAttributes,
-              'operation.name': spanName,
-              'code.function': spanName,
-              'operation.duration': duration,
-              'operation.success': true,
-            });
+          durationHistogram?.record(duration, {
+            operation: spanName,
+            status: 'error',
+          });
 
-            handleTailSampling(true, duration);
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          const truncatedMessage = truncateErrorMessage(errorMessage);
 
-            span.end();
-            await flushIfNeeded();
-            return result;
-          };
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: truncatedMessage,
+          });
 
-          const onError = async (error: unknown): Promise<never> => {
-            const duration = performance.now() - startTime;
+          span.setAttributes({
+            ...argsAttributes,
+            'operation.name': spanName,
+            'code.function': spanName,
+            'operation.duration': duration,
+            'operation.success': false,
+            error: true,
+            'exception.type':
+              error instanceof Error ? error.constructor.name : 'Error',
+            'exception.message': truncatedMessage,
+          });
 
-            callCounter?.add(1, {
-              operation: spanName,
-              status: 'error',
-            });
-
-            durationHistogram?.record(duration, {
-              operation: spanName,
-              status: 'error',
-            });
-
-            const errorMessage =
-              error instanceof Error ? error.message : 'Unknown error';
-            const truncatedMessage = truncateErrorMessage(errorMessage);
-
-            span.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: truncatedMessage,
-            });
-
-            span.setAttributes({
-              ...argsAttributes,
-              'operation.name': spanName,
-              'code.function': spanName,
-              'operation.duration': duration,
-              'operation.success': false,
-              error: true,
-              'exception.type':
-                error instanceof Error ? error.constructor.name : 'Error',
-              'exception.message': truncatedMessage,
-            });
-
-            if (error instanceof Error && error.stack) {
-              span.setAttribute(
-                'exception.stack',
-                error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH),
-              );
-            }
-
-            span.recordException(
-              error instanceof Error ? error : new Error(String(error)),
+          if (error instanceof Error && error.stack) {
+            span.setAttribute(
+              'exception.stack',
+              error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH),
             );
-
-            handleTailSampling(false, duration, error);
-
-            span.end();
-            await flushIfNeeded();
-            throw error;
-          };
-
-          try {
-            callCounter?.add(1, {
-              operation: spanName,
-              status: 'started',
-            });
-
-            // Execute the user's function with the updated context
-            // This ensures ctx.setBaggage() changes are visible to OpenTelemetry operations
-            // (like BaggageSpanProcessor, child spans, etc.)
-            // We use getActiveContextWithBaggage() which checks the stored context,
-            // so if baggage is set during execution, it will be picked up
-            const executeWithContext = async () => {
-              // Get the current context (may have been updated by ctx.setBaggage())
-              const currentContext = getActiveContextWithBaggage();
-              // Establish the context in OpenTelemetry's context manager
-              return context.with(currentContext, async () => {
-                return fn.call(this, ...args);
-              });
-            };
-            const result = await executeWithContext();
-
-            return await onSuccess(result);
-          } catch (error) {
-            await onError(error);
-            throw error;
           }
-        });
-      },
-    );
+
+          span.recordException(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+
+          handleTailSampling(false, duration, error);
+
+          span.end();
+          await flushIfNeeded();
+          throw error;
+        };
+
+        try {
+          callCounter?.add(1, {
+            operation: spanName,
+            status: 'started',
+          });
+
+          // Execute the user's function with the updated context
+          // This ensures ctx.setBaggage() changes are visible to OpenTelemetry operations
+          // (like BaggageSpanProcessor, child spans, etc.)
+          // We use getActiveContextWithBaggage() which checks the stored context,
+          // so if baggage is set during execution, it will be picked up
+          const executeWithContext = async () => {
+            // Get the current context (may have been updated by ctx.setBaggage())
+            const currentContext = getActiveContextWithBaggage();
+            // Establish the context in OpenTelemetry's context manager
+            return context.with(currentContext, async () => {
+              return fn.call(this, ...args);
+            });
+          };
+          const result = await executeWithContext();
+
+          return await onSuccess(result);
+        } catch (error) {
+          await onError(error);
+          throw error;
+        }
+      });
+    });
   };
 
   // Mark as instrumented to prevent double-wrapping
@@ -1037,147 +1049,152 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
       }
     };
 
-    return tracer.startActiveSpan(
-      spanName,
-      options.startNewRoot ? { root: true } : {},
-      (span) => {
-        // Run within operation context so events can auto-capture operation.name
-        return runInOperationContext(spanName, () => {
-          let shouldKeepSpan = true;
+    // Build span options including root and kind
+    const spanOptions: import('@opentelemetry/api').SpanOptions = {};
+    if (options.startNewRoot) {
+      spanOptions.root = true;
+    }
+    if (options.spanKind !== undefined) {
+      spanOptions.kind = options.spanKind;
+    }
 
-          // Store span name for trace context helpers
-          setSpanName(span, spanName);
+    return tracer.startActiveSpan(spanName, spanOptions, (span) => {
+      // Run within operation context so events can auto-capture operation.name
+      return runInOperationContext(spanName, () => {
+        let shouldKeepSpan = true;
 
-          // Create trace context for this span using shared utility
-          const ctxValue = createTraceContext(span);
+        // Store span name for trace context helpers
+        setSpanName(span, spanName);
 
-          // Get the actual function from the factory
-          const fn = fnFactory(ctxValue);
+        // Create trace context for this span using shared utility
+        const ctxValue = createTraceContext(span);
 
-          // Extract attributes only when actually tracing
-          // This avoids expensive preprocessing when sampling rejects the trace
-          const argsAttributes = options.attributesFromArgs
-            ? options.attributesFromArgs(args)
+        // Get the actual function from the factory
+        const fn = fnFactory(ctxValue);
+
+        // Extract attributes only when actually tracing
+        // This avoids expensive preprocessing when sampling rejects the trace
+        const argsAttributes = options.attributesFromArgs
+          ? options.attributesFromArgs(args)
+          : {};
+
+        const handleTailSampling = (
+          success: boolean,
+          duration: number,
+          error?: unknown,
+        ) => {
+          if (
+            needsTailSampling &&
+            'shouldKeepTrace' in sampler &&
+            typeof sampler.shouldKeepTrace === 'function'
+          ) {
+            shouldKeepSpan = sampler.shouldKeepTrace(samplingContext, {
+              success,
+              duration,
+              error,
+            });
+            span.setAttribute('sampling.tail.keep', shouldKeepSpan);
+            span.setAttribute('sampling.tail.evaluated', true);
+          }
+        };
+
+        const onSuccess = (result: TReturn) => {
+          const duration = performance.now() - startTime;
+
+          callCounter?.add(1, {
+            operation: spanName,
+            status: 'success',
+          });
+
+          durationHistogram?.record(duration, {
+            operation: spanName,
+            status: 'success',
+          });
+
+          const resultAttributes = options.attributesFromResult
+            ? options.attributesFromResult(result)
             : {};
 
-          const handleTailSampling = (
-            success: boolean,
-            duration: number,
-            error?: unknown,
-          ) => {
-            if (
-              needsTailSampling &&
-              'shouldKeepTrace' in sampler &&
-              typeof sampler.shouldKeepTrace === 'function'
-            ) {
-              shouldKeepSpan = sampler.shouldKeepTrace(samplingContext, {
-                success,
-                duration,
-                error,
-              });
-              span.setAttribute('sampling.tail.keep', shouldKeepSpan);
-              span.setAttribute('sampling.tail.evaluated', true);
-            }
-          };
+          span.setStatus({ code: SpanStatusCode.OK });
+          span.setAttributes({
+            ...argsAttributes,
+            ...resultAttributes,
+            'operation.name': spanName,
+            'code.function': spanName,
+            'operation.duration': duration,
+            'operation.success': true,
+          });
 
-          const onSuccess = (result: TReturn) => {
-            const duration = performance.now() - startTime;
+          handleTailSampling(true, duration);
 
-            callCounter?.add(1, {
-              operation: spanName,
-              status: 'success',
-            });
+          span.end();
+          void flushIfNeeded();
+          return result;
+        };
 
-            durationHistogram?.record(duration, {
-              operation: spanName,
-              status: 'success',
-            });
+        const onError = (error: unknown): never => {
+          const duration = performance.now() - startTime;
 
-            const resultAttributes = options.attributesFromResult
-              ? options.attributesFromResult(result)
-              : {};
+          callCounter?.add(1, {
+            operation: spanName,
+            status: 'error',
+          });
 
-            span.setStatus({ code: SpanStatusCode.OK });
-            span.setAttributes({
-              ...argsAttributes,
-              ...resultAttributes,
-              'operation.name': spanName,
-              'code.function': spanName,
-              'operation.duration': duration,
-              'operation.success': true,
-            });
+          durationHistogram?.record(duration, {
+            operation: spanName,
+            status: 'error',
+          });
 
-            handleTailSampling(true, duration);
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          const truncatedMessage = truncateErrorMessage(errorMessage);
 
-            span.end();
-            void flushIfNeeded();
-            return result;
-          };
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: truncatedMessage,
+          });
 
-          const onError = (error: unknown): never => {
-            const duration = performance.now() - startTime;
+          span.setAttributes({
+            ...argsAttributes,
+            'operation.name': spanName,
+            'code.function': spanName,
+            'operation.duration': duration,
+            'operation.success': false,
+            error: true,
+            'exception.type':
+              error instanceof Error ? error.constructor.name : 'Error',
+            'exception.message': truncatedMessage,
+          });
 
-            callCounter?.add(1, {
-              operation: spanName,
-              status: 'error',
-            });
+          span.recordException(
+            error instanceof Error ? error : new Error(String(error)),
+          );
 
-            durationHistogram?.record(duration, {
-              operation: spanName,
-              status: 'error',
-            });
+          handleTailSampling(false, duration, error);
 
-            const errorMessage =
-              error instanceof Error ? error.message : 'Unknown error';
-            const truncatedMessage = truncateErrorMessage(errorMessage);
+          span.end();
+          void flushIfNeeded();
+          throw error;
+        };
 
-            span.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: truncatedMessage,
-            });
+        try {
+          callCounter?.add(1, {
+            operation: spanName,
+            status: 'started',
+          });
 
-            span.setAttributes({
-              ...argsAttributes,
-              'operation.name': spanName,
-              'code.function': spanName,
-              'operation.duration': duration,
-              'operation.success': false,
-              error: true,
-              'exception.type':
-                error instanceof Error ? error.constructor.name : 'Error',
-              'exception.message': truncatedMessage,
-            });
+          const result = fn.call(this, ...args);
 
-            span.recordException(
-              error instanceof Error ? error : new Error(String(error)),
-            );
-
-            handleTailSampling(false, duration, error);
-
-            span.end();
-            void flushIfNeeded();
-            throw error;
-          };
-
-          try {
-            callCounter?.add(1, {
-              operation: spanName,
-              status: 'started',
-            });
-
-            const result = fn.call(this, ...args);
-
-            if (result instanceof Promise) {
-              return result.then(onSuccess, onError);
-            }
-
-            return onSuccess(result);
-          } catch (error) {
-            return onError(error);
+          if (result instanceof Promise) {
+            return result.then(onSuccess, onError);
           }
-        });
-      },
-    );
+
+          return onSuccess(result);
+        } catch (error) {
+          return onError(error);
+        }
+      });
+    });
   }
 
   // Mark as instrumented to prevent double-wrapping
@@ -1292,219 +1309,224 @@ function executeImmediately<TReturn = unknown>(
     }
   };
 
-  return tracer.startActiveSpan(
-    spanName,
-    options.startNewRoot ? { root: true } : {},
-    (span) => {
-      return runInOperationContext(spanName, () => {
-        let shouldKeepSpan = true;
+  // Build span options including root and kind
+  const spanOptions: import('@opentelemetry/api').SpanOptions = {};
+  if (options.startNewRoot) {
+    spanOptions.root = true;
+  }
+  if (options.spanKind !== undefined) {
+    spanOptions.kind = options.spanKind;
+  }
 
-        setSpanName(span, spanName);
-        const ctxValue = createTraceContext(span);
+  return tracer.startActiveSpan(spanName, spanOptions, (span) => {
+    return runInOperationContext(spanName, () => {
+      let shouldKeepSpan = true;
 
-        const handleTailSampling = (
-          success: boolean,
-          duration: number,
-          error?: unknown,
-        ) => {
-          if (
-            needsTailSampling &&
-            'shouldKeepTrace' in sampler &&
-            typeof sampler.shouldKeepTrace === 'function'
-          ) {
-            shouldKeepSpan = sampler.shouldKeepTrace(samplingContext, {
-              success,
-              duration,
-              error,
-            });
-            span.setAttribute('sampling.tail.keep', shouldKeepSpan);
-            span.setAttribute('sampling.tail.evaluated', true);
-          }
-        };
+      setSpanName(span, spanName);
+      const ctxValue = createTraceContext(span);
 
-        // Sync handlers for synchronous results (can't await)
-        // NOTE: forceFlushOnShutdown will NOT block for synchronous trace() calls
-        // Flush is fire-and-forget, so spans may be dropped if process exits immediately
-        const onSuccessSync = (result: TReturn) => {
-          const duration = performance.now() - startTime;
-
-          callCounter?.add(1, {
-            operation: spanName,
-            status: 'success',
+      const handleTailSampling = (
+        success: boolean,
+        duration: number,
+        error?: unknown,
+      ) => {
+        if (
+          needsTailSampling &&
+          'shouldKeepTrace' in sampler &&
+          typeof sampler.shouldKeepTrace === 'function'
+        ) {
+          shouldKeepSpan = sampler.shouldKeepTrace(samplingContext, {
+            success,
+            duration,
+            error,
           });
-
-          durationHistogram?.record(duration, {
-            operation: spanName,
-            status: 'success',
-          });
-
-          span.setStatus({ code: SpanStatusCode.OK });
-          span.setAttributes({
-            'operation.name': spanName,
-            'code.function': spanName,
-            'operation.duration': duration,
-            'operation.success': true,
-          });
-
-          handleTailSampling(true, duration);
-
-          span.end();
-          void flushIfNeeded();
-          return result;
-        };
-
-        const onErrorSync = (error: unknown): never => {
-          const duration = performance.now() - startTime;
-
-          callCounter?.add(1, {
-            operation: spanName,
-            status: 'error',
-          });
-
-          durationHistogram?.record(duration, {
-            operation: spanName,
-            status: 'error',
-          });
-
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          const truncatedMessage = truncateErrorMessage(errorMessage);
-
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: truncatedMessage,
-          });
-
-          span.setAttributes({
-            'operation.name': spanName,
-            'code.function': spanName,
-            'operation.duration': duration,
-            'operation.success': false,
-            error: true,
-            'exception.type':
-              error instanceof Error ? error.constructor.name : 'Error',
-            'exception.message': truncatedMessage,
-          });
-
-          if (error instanceof Error && error.stack) {
-            span.setAttribute(
-              'exception.stack',
-              error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH),
-            );
-          }
-
-          span.recordException(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-
-          handleTailSampling(false, duration, error);
-
-          span.end();
-          void flushIfNeeded();
-          throw error;
-        };
-
-        // Async handlers for Promise results (await flush)
-        const onSuccessAsync = async (result: TReturn) => {
-          const duration = performance.now() - startTime;
-
-          callCounter?.add(1, {
-            operation: spanName,
-            status: 'success',
-          });
-
-          durationHistogram?.record(duration, {
-            operation: spanName,
-            status: 'success',
-          });
-
-          span.setStatus({ code: SpanStatusCode.OK });
-          span.setAttributes({
-            'operation.name': spanName,
-            'code.function': spanName,
-            'operation.duration': duration,
-            'operation.success': true,
-          });
-
-          handleTailSampling(true, duration);
-
-          span.end();
-          await flushIfNeeded();
-          return result;
-        };
-
-        const onErrorAsync = async (error: unknown): Promise<never> => {
-          const duration = performance.now() - startTime;
-
-          callCounter?.add(1, {
-            operation: spanName,
-            status: 'error',
-          });
-
-          durationHistogram?.record(duration, {
-            operation: spanName,
-            status: 'error',
-          });
-
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          const truncatedMessage = truncateErrorMessage(errorMessage);
-
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: truncatedMessage,
-          });
-
-          span.setAttributes({
-            'operation.name': spanName,
-            'code.function': spanName,
-            'operation.duration': duration,
-            'operation.success': false,
-            error: true,
-            'exception.type':
-              error instanceof Error ? error.constructor.name : 'Error',
-            'exception.message': truncatedMessage,
-          });
-
-          if (error instanceof Error && error.stack) {
-            span.setAttribute(
-              'exception.stack',
-              error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH),
-            );
-          }
-
-          span.recordException(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-
-          handleTailSampling(false, duration, error);
-
-          span.end();
-          await flushIfNeeded();
-          throw error;
-        };
-
-        try {
-          callCounter?.add(1, {
-            operation: spanName,
-            status: 'started',
-          });
-
-          const result = fn(ctxValue);
-
-          // Check if result is a Promise - use async handlers to await flush
-          if (result instanceof Promise) {
-            return result.then(onSuccessAsync, onErrorAsync);
-          }
-
-          // Synchronous result - use sync handlers
-          return onSuccessSync(result);
-        } catch (error) {
-          return onErrorSync(error);
+          span.setAttribute('sampling.tail.keep', shouldKeepSpan);
+          span.setAttribute('sampling.tail.evaluated', true);
         }
-      });
-    },
-  );
+      };
+
+      // Sync handlers for synchronous results (can't await)
+      // NOTE: forceFlushOnShutdown will NOT block for synchronous trace() calls
+      // Flush is fire-and-forget, so spans may be dropped if process exits immediately
+      const onSuccessSync = (result: TReturn) => {
+        const duration = performance.now() - startTime;
+
+        callCounter?.add(1, {
+          operation: spanName,
+          status: 'success',
+        });
+
+        durationHistogram?.record(duration, {
+          operation: spanName,
+          status: 'success',
+        });
+
+        span.setStatus({ code: SpanStatusCode.OK });
+        span.setAttributes({
+          'operation.name': spanName,
+          'code.function': spanName,
+          'operation.duration': duration,
+          'operation.success': true,
+        });
+
+        handleTailSampling(true, duration);
+
+        span.end();
+        void flushIfNeeded();
+        return result;
+      };
+
+      const onErrorSync = (error: unknown): never => {
+        const duration = performance.now() - startTime;
+
+        callCounter?.add(1, {
+          operation: spanName,
+          status: 'error',
+        });
+
+        durationHistogram?.record(duration, {
+          operation: spanName,
+          status: 'error',
+        });
+
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        const truncatedMessage = truncateErrorMessage(errorMessage);
+
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: truncatedMessage,
+        });
+
+        span.setAttributes({
+          'operation.name': spanName,
+          'code.function': spanName,
+          'operation.duration': duration,
+          'operation.success': false,
+          error: true,
+          'exception.type':
+            error instanceof Error ? error.constructor.name : 'Error',
+          'exception.message': truncatedMessage,
+        });
+
+        if (error instanceof Error && error.stack) {
+          span.setAttribute(
+            'exception.stack',
+            error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH),
+          );
+        }
+
+        span.recordException(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+
+        handleTailSampling(false, duration, error);
+
+        span.end();
+        void flushIfNeeded();
+        throw error;
+      };
+
+      // Async handlers for Promise results (await flush)
+      const onSuccessAsync = async (result: TReturn) => {
+        const duration = performance.now() - startTime;
+
+        callCounter?.add(1, {
+          operation: spanName,
+          status: 'success',
+        });
+
+        durationHistogram?.record(duration, {
+          operation: spanName,
+          status: 'success',
+        });
+
+        span.setStatus({ code: SpanStatusCode.OK });
+        span.setAttributes({
+          'operation.name': spanName,
+          'code.function': spanName,
+          'operation.duration': duration,
+          'operation.success': true,
+        });
+
+        handleTailSampling(true, duration);
+
+        span.end();
+        await flushIfNeeded();
+        return result;
+      };
+
+      const onErrorAsync = async (error: unknown): Promise<never> => {
+        const duration = performance.now() - startTime;
+
+        callCounter?.add(1, {
+          operation: spanName,
+          status: 'error',
+        });
+
+        durationHistogram?.record(duration, {
+          operation: spanName,
+          status: 'error',
+        });
+
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        const truncatedMessage = truncateErrorMessage(errorMessage);
+
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: truncatedMessage,
+        });
+
+        span.setAttributes({
+          'operation.name': spanName,
+          'code.function': spanName,
+          'operation.duration': duration,
+          'operation.success': false,
+          error: true,
+          'exception.type':
+            error instanceof Error ? error.constructor.name : 'Error',
+          'exception.message': truncatedMessage,
+        });
+
+        if (error instanceof Error && error.stack) {
+          span.setAttribute(
+            'exception.stack',
+            error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH),
+          );
+        }
+
+        span.recordException(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+
+        handleTailSampling(false, duration, error);
+
+        span.end();
+        await flushIfNeeded();
+        throw error;
+      };
+
+      try {
+        callCounter?.add(1, {
+          operation: spanName,
+          status: 'started',
+        });
+
+        const result = fn(ctxValue);
+
+        // Check if result is a Promise - use async handlers to await flush
+        if (result instanceof Promise) {
+          return result.then(onSuccessAsync, onErrorAsync);
+        }
+
+        // Synchronous result - use sync handlers
+        return onSuccessSync(result);
+      } catch (error) {
+        return onErrorSync(error);
+      }
+    });
+  });
 }
 
 /**

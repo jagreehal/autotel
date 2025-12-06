@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { TraceFlags } from '@opentelemetry/api';
+import type { Link, SpanContext } from '@opentelemetry/api';
 import {
   RandomSampler,
   AlwaysSampler,
@@ -7,6 +9,8 @@ import {
   UserIdSampler,
   CompositeSampler,
   FeatureFlagSampler,
+  createLinkFromHeaders,
+  extractLinksFromBatch,
   type SamplingContext,
 } from './sampling';
 import { type ILogger } from './logger';
@@ -508,6 +512,448 @@ describe('Sampling', () => {
       };
 
       expect(sampler.shouldSample(experimentContext)).toBe(true);
+    });
+  });
+
+  describe('AdaptiveSampler - Links-based sampling', () => {
+    let mockLogger: ILogger;
+
+    beforeEach(() => {
+      mockLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      };
+    });
+
+    // Helper to create a SpanContext
+    const createSpanContext = (sampled: boolean): SpanContext => ({
+      traceId: '0af7651916cd43dd8448eb211c80319c',
+      spanId: 'b7ad6b7169203331',
+      traceFlags: sampled ? TraceFlags.SAMPLED : TraceFlags.NONE,
+      isRemote: true,
+    });
+
+    // Helper to create a Link
+    const createLink = (
+      sampled: boolean,
+      attributes?: Record<string, unknown>,
+    ): Link => ({
+      context: createSpanContext(sampled),
+      attributes: attributes ?? {},
+    });
+
+    it('should have linksBased disabled by default', () => {
+      const sampler = new AdaptiveSampler({
+        baselineSampleRate: 0.1,
+      });
+
+      const context: SamplingContext = {
+        operationName: 'test.operation',
+        args: [],
+        links: [createLink(true)], // Sampled link
+      };
+
+      sampler.shouldSample(context);
+
+      // With linksBased=false (default), sampled links don't affect decision
+      // With baselineSampleRate=0.1 and random chance, we can't deterministically test
+      // So we test with 0% baseline - the link should NOT cause it to be kept
+      const samplerStrict = new AdaptiveSampler({
+        baselineSampleRate: 0,
+        linksBased: false, // Explicitly disabled
+      });
+
+      samplerStrict.shouldSample(context);
+      const shouldKeep = samplerStrict.shouldKeepTrace(context, {
+        success: true,
+        duration: 100,
+      });
+
+      expect(shouldKeep).toBe(false);
+    });
+
+    it('should throw error for invalid linksRate', () => {
+      expect(
+        () =>
+          new AdaptiveSampler({
+            linksRate: -0.1,
+          }),
+      ).toThrow('Links rate must be between 0 and 1');
+
+      expect(
+        () =>
+          new AdaptiveSampler({
+            linksRate: 1.5,
+          }),
+      ).toThrow('Links rate must be between 0 and 1');
+    });
+
+    it('should keep traces with sampled links when linksBased=true', () => {
+      const sampler = new AdaptiveSampler({
+        baselineSampleRate: 0, // 0% baseline
+        linksBased: true,
+        linksRate: 1, // 100% of linked spans kept
+        logger: mockLogger,
+      });
+
+      const context: SamplingContext = {
+        operationName: 'consumer.process',
+        args: [],
+        links: [createLink(true)], // Sampled link
+      };
+
+      sampler.shouldSample(context);
+      const shouldKeep = sampler.shouldKeepTrace(context, {
+        success: true,
+        duration: 100,
+      });
+
+      expect(shouldKeep).toBe(true);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Adaptive sampling: Keeping trace due to sampled link',
+        expect.objectContaining({
+          operation: 'consumer.process',
+          linkCount: 1,
+        }),
+      );
+    });
+
+    it('should drop traces with unsampled links when linksBased=true', () => {
+      const sampler = new AdaptiveSampler({
+        baselineSampleRate: 0,
+        linksBased: true,
+        linksRate: 1,
+      });
+
+      const context: SamplingContext = {
+        operationName: 'consumer.process',
+        args: [],
+        links: [createLink(false)], // NOT sampled
+      };
+
+      sampler.shouldSample(context);
+      const shouldKeep = sampler.shouldKeepTrace(context, {
+        success: true,
+        duration: 100,
+      });
+
+      expect(shouldKeep).toBe(false);
+    });
+
+    it('should keep trace if ANY link is sampled (fan-in)', () => {
+      const sampler = new AdaptiveSampler({
+        baselineSampleRate: 0,
+        linksBased: true,
+        linksRate: 1,
+      });
+
+      const context: SamplingContext = {
+        operationName: 'batch.process',
+        args: [],
+        links: [
+          createLink(false), // Not sampled
+          createLink(true), // Sampled
+          createLink(false), // Not sampled
+        ],
+      };
+
+      sampler.shouldSample(context);
+      const shouldKeep = sampler.shouldKeepTrace(context, {
+        success: true,
+        duration: 100,
+      });
+
+      expect(shouldKeep).toBe(true);
+    });
+
+    it('should respect linksRate for probabilistic link sampling', () => {
+      const sampler = new AdaptiveSampler({
+        baselineSampleRate: 0,
+        linksBased: true,
+        linksRate: 0, // 0% - never keep linked spans
+      });
+
+      const context: SamplingContext = {
+        operationName: 'consumer.process',
+        args: [],
+        links: [createLink(true)],
+      };
+
+      sampler.shouldSample(context);
+      const shouldKeep = sampler.shouldKeepTrace(context, {
+        success: true,
+        duration: 100,
+      });
+
+      expect(shouldKeep).toBe(false);
+    });
+
+    it('should prioritize errors over links-based sampling', () => {
+      const sampler = new AdaptiveSampler({
+        baselineSampleRate: 0,
+        linksBased: true,
+        linksRate: 0, // Would drop linked spans
+        alwaysSampleErrors: true,
+      });
+
+      const context: SamplingContext = {
+        operationName: 'consumer.process',
+        args: [],
+        links: [createLink(false)], // No sampled links
+      };
+
+      sampler.shouldSample(context);
+      const shouldKeep = sampler.shouldKeepTrace(context, {
+        success: false, // Error!
+        duration: 100,
+        error: new Error('Processing failed'),
+      });
+
+      expect(shouldKeep).toBe(true); // Errors always kept
+    });
+
+    it('should handle empty links array', () => {
+      const sampler = new AdaptiveSampler({
+        baselineSampleRate: 0,
+        linksBased: true,
+        linksRate: 1,
+      });
+
+      const context: SamplingContext = {
+        operationName: 'test.operation',
+        args: [],
+        links: [],
+      };
+
+      sampler.shouldSample(context);
+      const shouldKeep = sampler.shouldKeepTrace(context, {
+        success: true,
+        duration: 100,
+      });
+
+      expect(shouldKeep).toBe(false); // No links, baseline=0
+    });
+
+    it('should handle undefined links', () => {
+      const sampler = new AdaptiveSampler({
+        baselineSampleRate: 0,
+        linksBased: true,
+        linksRate: 1,
+      });
+
+      const context: SamplingContext = {
+        operationName: 'test.operation',
+        args: [],
+        // links is undefined
+      };
+
+      sampler.shouldSample(context);
+      const shouldKeep = sampler.shouldKeepTrace(context, {
+        success: true,
+        duration: 100,
+      });
+
+      expect(shouldKeep).toBe(false);
+    });
+
+    describe('hasSampledLink helper', () => {
+      it('should return false for empty links', () => {
+        const sampler = new AdaptiveSampler({ linksBased: true });
+        expect(sampler.hasSampledLink([])).toBe(false);
+      });
+
+      it('should return true if any link is sampled', () => {
+        const sampler = new AdaptiveSampler({ linksBased: true });
+        const links = [createLink(false), createLink(true)];
+        expect(sampler.hasSampledLink(links)).toBe(true);
+      });
+
+      it('should return false if no links are sampled', () => {
+        const sampler = new AdaptiveSampler({ linksBased: true });
+        const links = [createLink(false), createLink(false)];
+        expect(sampler.hasSampledLink(links)).toBe(false);
+      });
+    });
+  });
+
+  describe('Link Helper Functions', () => {
+    describe('createLinkFromHeaders', () => {
+      it('should create link from valid W3C traceparent header', () => {
+        const headers = {
+          traceparent:
+            '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+        };
+
+        const link = createLinkFromHeaders(headers);
+
+        expect(link).not.toBeNull();
+        expect(link?.context.traceId).toBe('0af7651916cd43dd8448eb211c80319c');
+        expect(link?.context.spanId).toBe('b7ad6b7169203331');
+        expect(link?.context.traceFlags).toBe(TraceFlags.SAMPLED);
+      });
+
+      it('should create link from unsampled traceparent', () => {
+        const headers = {
+          traceparent:
+            '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-00',
+        };
+
+        const link = createLinkFromHeaders(headers);
+
+        expect(link).not.toBeNull();
+        expect(link?.context.traceFlags).toBe(TraceFlags.NONE);
+      });
+
+      it('should include custom attributes in link', () => {
+        const headers = {
+          traceparent:
+            '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+        };
+        const attributes = {
+          'messaging.system': 'kafka',
+          'custom.attr': 'value',
+        };
+
+        const link = createLinkFromHeaders(headers, attributes);
+
+        expect(link?.attributes).toEqual(attributes);
+      });
+
+      it('should return null for invalid/missing traceparent', () => {
+        expect(createLinkFromHeaders({})).toBeNull();
+        expect(createLinkFromHeaders({ traceparent: 'invalid' })).toBeNull();
+        expect(createLinkFromHeaders({ traceparent: '' })).toBeNull();
+      });
+
+      it('should return null for all-zero trace IDs', () => {
+        // All zeros is an invalid trace context
+        const headers = {
+          traceparent:
+            '00-00000000000000000000000000000000-0000000000000000-01',
+        };
+
+        const link = createLinkFromHeaders(headers);
+        expect(link).toBeNull();
+      });
+    });
+
+    describe('extractLinksFromBatch', () => {
+      it('should extract links from batch of messages', () => {
+        const messages = [
+          {
+            body: 'message1',
+            headers: {
+              traceparent:
+                '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+            },
+          },
+          {
+            body: 'message2',
+            headers: {
+              traceparent:
+                '00-1af7651916cd43dd8448eb211c80319c-c7ad6b7169203331-01',
+            },
+          },
+        ];
+
+        const links = extractLinksFromBatch(messages);
+
+        expect(links).toHaveLength(2);
+        expect(links[0].context.traceId).toBe(
+          '0af7651916cd43dd8448eb211c80319c',
+        );
+        expect(links[1].context.traceId).toBe(
+          '1af7651916cd43dd8448eb211c80319c',
+        );
+      });
+
+      it('should add message index as link attribute', () => {
+        const messages = [
+          {
+            body: 'message1',
+            headers: {
+              traceparent:
+                '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+            },
+          },
+          {
+            body: 'message2',
+            headers: {
+              traceparent:
+                '00-1af7651916cd43dd8448eb211c80319c-c7ad6b7169203331-01',
+            },
+          },
+        ];
+
+        const links = extractLinksFromBatch(messages);
+
+        expect(links[0].attributes?.['messaging.batch.message_index']).toBe(0);
+        expect(links[1].attributes?.['messaging.batch.message_index']).toBe(1);
+      });
+
+      it('should use custom headers key', () => {
+        const messages = [
+          {
+            body: 'message1',
+            metadata: {
+              traceparent:
+                '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+            },
+          },
+        ];
+
+        const links = extractLinksFromBatch(messages, 'metadata');
+
+        expect(links).toHaveLength(1);
+      });
+
+      it('should skip messages without headers', () => {
+        const messages = [
+          { body: 'message1' }, // No headers
+          {
+            body: 'message2',
+            headers: {
+              traceparent:
+                '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+            },
+          },
+          { body: 'message3', headers: null }, // Null headers
+        ];
+
+        const links = extractLinksFromBatch(messages);
+
+        expect(links).toHaveLength(1);
+      });
+
+      it('should skip messages with invalid trace context', () => {
+        const messages = [
+          {
+            body: 'message1',
+            headers: { traceparent: 'invalid-traceparent' },
+          },
+          {
+            body: 'message2',
+            headers: {
+              traceparent:
+                '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+            },
+          },
+        ];
+
+        const links = extractLinksFromBatch(messages);
+
+        expect(links).toHaveLength(1);
+        expect(links[0].context.traceId).toBe(
+          '0af7651916cd43dd8448eb211c80319c',
+        );
+      });
+
+      it('should return empty array for empty batch', () => {
+        const links = extractLinksFromBatch([]);
+        expect(links).toEqual([]);
+      });
     });
   });
 });

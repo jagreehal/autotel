@@ -19,7 +19,7 @@ import type { TracerProvider } from '@opentelemetry/api';
  * Symbol for storing isolated tracer provider in global scope
  * Using Symbol.for() ensures the same symbol across module boundaries
  */
-const AUTOLEMETRY_GLOBAL_SYMBOL = Symbol.for('autotel');
+const AUTOTEL_GLOBAL_SYMBOL = Symbol.for('autotel');
 
 /**
  * Global state for Autotel
@@ -41,7 +41,7 @@ function createState(): AutotelGlobalState {
  * Extend globalThis to include our symbol
  */
 interface GlobalThis {
-  [AUTOLEMETRY_GLOBAL_SYMBOL]?: AutotelGlobalState;
+  [AUTOTEL_GLOBAL_SYMBOL]?: AutotelGlobalState;
 }
 
 /**
@@ -61,8 +61,8 @@ function getGlobalState(): AutotelGlobalState {
       return initialState;
     }
 
-    if (!g[AUTOLEMETRY_GLOBAL_SYMBOL]) {
-      Object.defineProperty(g, AUTOLEMETRY_GLOBAL_SYMBOL, {
+    if (!g[AUTOTEL_GLOBAL_SYMBOL]) {
+      Object.defineProperty(g, AUTOTEL_GLOBAL_SYMBOL, {
         value: initialState,
         writable: false, // Lock the slot (not the contents)
         configurable: false,
@@ -70,7 +70,7 @@ function getGlobalState(): AutotelGlobalState {
       });
     }
 
-    return g[AUTOLEMETRY_GLOBAL_SYMBOL]!;
+    return g[AUTOTEL_GLOBAL_SYMBOL]!;
   } catch (error) {
     if (error instanceof Error) {
       console.error(

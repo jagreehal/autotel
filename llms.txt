@@ -111,7 +111,7 @@ init({
 });
 
 // Or via environment variable
-// AUTOLEMETRY_DEBUG=true node server.js
+// AUTOTEL_DEBUG=true node server.js
 ```
 
 **Debug options:**

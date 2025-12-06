@@ -4,25 +4,45 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "tsc --noEmit",
     "start": "RUN_TESTS=true tsx src/index.ts",
     "test": "RUN_TESTS=true tsx src/index.ts",
     "setup": "pnpm exec tsx src/setup-localstack.ts",
     "test:localstack": "tsx src/test-with-localstack.ts",
     "localstack:up": "docker-compose up -d",
     "localstack:down": "docker-compose down",
-    "localstack:logs": "docker-compose logs -f localstack"
+    "localstack:logs": "docker-compose logs -f localstack",
+    "cdk": "cdk",
+    "cdk:bootstrap": "dotenv -e .env -- cdk bootstrap",
+    "cdk:deploy": "dotenv -e .env -- cdk deploy -O ./cdk-exports.json --require-approval never",
+    "cdk:destroy": "dotenv -e .env -- cdk destroy --force",
+    "cdk:diff": "dotenv -e .env -- cdk diff",
+    "cdk:synth": "dotenv -e .env -- cdk synth",
+    "cdklocal:bootstrap": "dotenv -e .env.local -- ./cdk-with-localstack.sh bootstrap aws://000000000000/us-east-1 --require-approval never",
+    "cdklocal:deploy": "dotenv -e .env.local -- ./cdk-with-localstack.sh deploy -O ./cdk-exports.json --require-approval never",
+    "cdklocal:destroy": "dotenv -e .env.local -- ./cdk-with-localstack.sh destroy --force",
+    "cdklocal:diff": "dotenv -e .env.local -- ./cdk-with-localstack.sh diff",
+    "cdklocal:synth": "dotenv -e .env.local -- ./cdk-with-localstack.sh synth",
+    "lambda:invoke": "dotenv -e .env.local -- sh -c 'aws --endpoint-url=http://localhost:4566 lambda invoke --function-name ${FUNCTION_NAME:-local-autotel-lambda-upload-handler} --cli-binary-format raw-in-base64-out /tmp/lambda-output.json && cat /tmp/lambda-output.json'",
+    "lambda:list": "dotenv -e .env.local -- sh -c 'aws --endpoint-url=http://localhost:4566 lambda list-functions --query \"Functions[].FunctionName\" --output table'"
   },
   "dependencies": {
     "autotel": "workspace:*",
     "autotel-aws": "workspace:*",
-    "@aws-sdk/client-s3": "^3.943.0",
-    "@aws-sdk/client-dynamodb": "^3.943.0",
-    "@aws-sdk/client-sqs": "^3.943.0",
-    "dotenv": "^17.2.3"
+    "@aws-sdk/client-s3": "^3.946.0",
+    "@aws-sdk/client-dynamodb": "^3.946.0",
+    "@aws-sdk/client-sqs": "^3.946.0",
+    "aws-cdk-lib": "^2.232.1",
+    "constructs": "^10.4.3",
+    "dotenv": "^17.2.3",
+    "source-map-support": "^0.5.21"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.159",
     "@types/node": "^24.10.1",
+    "aws-cdk": "^2.1033.0",
+    "dotenv-cli": "^11.0.0",
+    "esbuild": "^0.27.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
