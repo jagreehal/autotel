@@ -28,8 +28,12 @@ export default defineConfig({
     auto: 'src/auto.ts',
     'yaml-config': 'src/yaml-config.ts',
     messaging: 'src/messaging.ts',
+    'messaging-testing': 'src/messaging-testing.ts',
+    'messaging-adapters': 'src/messaging-adapters.ts',
     'business-baggage': 'src/business-baggage.ts',
     workflow: 'src/workflow.ts',
+    webhook: 'src/webhook.ts',
+    'workflow-distributed': 'src/workflow-distributed.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats
   dts: true,

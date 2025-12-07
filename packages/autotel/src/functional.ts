@@ -181,7 +181,9 @@ function looksLikeTraceFactory(fn: GenericFunction): boolean {
     FACTORY_NAME_HINTS.has(normalized) ||
     normalized.startsWith('ctx') ||
     normalized.startsWith('_ctx') ||
-    normalized.startsWith('trace')
+    normalized.startsWith('trace') ||
+    normalized.endsWith('ctx') || // Match baseCtx, spanCtx, etc.
+    normalized.includes('context') // Match traceContext, spanContext, etc.
   ) {
     return true;
   }

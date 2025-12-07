@@ -138,6 +138,16 @@
       "import": "./dist/messaging.js",
       "require": "./dist/messaging.cjs"
     },
+    "./messaging-testing": {
+      "types": "./dist/messaging-testing.d.ts",
+      "import": "./dist/messaging-testing.js",
+      "require": "./dist/messaging-testing.cjs"
+    },
+    "./messaging/adapters": {
+      "types": "./dist/messaging-adapters.d.ts",
+      "import": "./dist/messaging-adapters.js",
+      "require": "./dist/messaging-adapters.cjs"
+    },
     "./business-baggage": {
       "types": "./dist/business-baggage.d.ts",
       "import": "./dist/business-baggage.js",
@@ -147,6 +157,16 @@
       "types": "./dist/workflow.d.ts",
       "import": "./dist/workflow.js",
       "require": "./dist/workflow.cjs"
+    },
+    "./webhook": {
+      "types": "./dist/webhook.d.ts",
+      "import": "./dist/webhook.js",
+      "require": "./dist/webhook.cjs"
+    },
+    "./workflow-distributed": {
+      "types": "./dist/workflow-distributed.d.ts",
+      "import": "./dist/workflow-distributed.js",
+      "require": "./dist/workflow-distributed.cjs"
     }
   },
   "files": [
