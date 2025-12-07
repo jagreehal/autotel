@@ -47,6 +47,7 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
     - [Message Producers (Kafka, SQS, RabbitMQ)](#message-producers-kafka-sqs-rabbitmq)
     - [Message Consumers](#message-consumers)
     - [Consumer Lag Metrics](#consumer-lag-metrics)
+    - [Custom Messaging System Adapters](#custom-messaging-system-adapters)
   - [Safe Baggage Propagation](#safe-baggage-propagation)
     - [BusinessBaggage (Pre-built Schema)](#businessbaggage-pre-built-schema)
     - [Custom Baggage Schemas](#custom-baggage-schemas)
@@ -733,6 +734,65 @@ export const processWithLag = traceConsumer({
   await processMessage(message);
 });
 ```
+
+### Custom Messaging System Adapters
+
+For messaging systems not directly supported (NATS, Temporal, Cloudflare Queues, etc.), use pre-built adapters or create your own:
+
+```typescript
+import { traceConsumer, traceProducer } from 'autotel/messaging';
+import {
+  natsAdapter,
+  temporalAdapter,
+  cloudflareQueuesAdapter,
+  datadogContextExtractor,
+  b3ContextExtractor,
+} from 'autotel/messaging/adapters';
+
+// NATS JetStream consumer with automatic attribute extraction
+const processNatsMessage = traceConsumer({
+  system: 'nats',
+  destination: 'orders.created',
+  consumerGroup: 'order-processor',
+  ...natsAdapter.consumer, // Adds nats.subject, nats.stream, nats.consumer
+})((ctx) => async (msg) => {
+  await handleOrder(msg.data);
+  msg.ack();
+});
+
+// Temporal activity with workflow context
+const processActivity = traceConsumer({
+  system: 'temporal',
+  destination: 'order-activities',
+  ...temporalAdapter.consumer, // Adds temporal.workflow_id, temporal.run_id, temporal.attempt
+})((ctx) => async (info, input) => {
+  return processOrder(input);
+});
+
+// Consume messages with Datadog trace context (non-W3C format)
+const processFromDatadog = traceConsumer({
+  system: 'kafka',
+  destination: 'events',
+  customContextExtractor: datadogContextExtractor, // Converts Datadog decimal IDs to OTel hex
+})((ctx) => async (msg) => {
+  // Links to parent Datadog span automatically
+});
+```
+
+**Available Adapters:**
+
+| Adapter                   | Captures                                              |
+| ------------------------- | ----------------------------------------------------- |
+| `natsAdapter`             | subject, stream, consumer, pending, redelivery_count  |
+| `temporalAdapter`         | workflow_id, run_id, activity_id, task_queue, attempt |
+| `cloudflareQueuesAdapter` | message_id, timestamp, attempts                       |
+| `datadogContextExtractor` | Converts Datadog decimal trace IDs to OTel hex        |
+| `b3ContextExtractor`      | Parses B3/Zipkin single or multi-header format        |
+| `xrayContextExtractor`    | Parses AWS X-Ray trace header                         |
+
+**Building Custom Adapters:**
+
+See [Bring Your Own System Guide](./docs/messaging-byos-guide.md) for step-by-step instructions on creating adapters for any messaging system.
 
 ## Safe Baggage Propagation
 
