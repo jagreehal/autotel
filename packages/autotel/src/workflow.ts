@@ -53,6 +53,7 @@
  * @module
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Attributes, Link, SpanContext } from '@opentelemetry/api';
 import { trace } from './functional';
 import type { TraceContext } from './trace-context';
@@ -243,8 +244,14 @@ const workflowStates = new WeakMap<
   }
 >();
 
-// Store current workflow context in async local storage-like pattern
-let currentWorkflowContext: WorkflowContext | null = null;
+/**
+ * AsyncLocalStorage for workflow context (async-safe)
+ *
+ * This replaces the previous module-level variable which was NOT safe for
+ * concurrent workflows. AsyncLocalStorage ensures each async execution chain
+ * has its own isolated workflow context.
+ */
+const workflowContextStorage = new AsyncLocalStorage<WorkflowContext>();
 
 // ============================================================================
 // Workflow Helper
@@ -313,47 +320,45 @@ export function traceWorkflow<TArgs extends unknown[], TReturn>(
           }
         }
 
-        // Store as current workflow context
-        const previousContext = currentWorkflowContext;
-        currentWorkflowContext = ctx;
+        // Run workflow in AsyncLocalStorage context for async-safety
+        // This ensures concurrent workflows have isolated contexts
+        return workflowContextStorage.run(ctx, async () => {
+          try {
+            // Execute workflow
+            const userFn = fnFactory(ctx);
+            const result = await userFn(...args);
 
-        try {
-          // Execute workflow
-          const userFn = fnFactory(ctx);
-          const result = await userFn(...args);
+            // Mark as completed
+            ctx.setWorkflowStatus('completed');
+            config.onComplete?.(ctx, result);
 
-          // Mark as completed
-          ctx.setWorkflowStatus('completed');
-          config.onComplete?.(ctx, result);
+            return result;
+          } catch (error) {
+            // Mark as failed
+            ctx.setWorkflowStatus('failed');
+            config.onFailed?.(ctx, error as Error);
 
-          return result;
-        } catch (error) {
-          // Mark as failed
-          ctx.setWorkflowStatus('failed');
-          config.onFailed?.(ctx, error as Error);
+            // Check if we have compensations to run
+            const state = getWorkflowState();
+            if (state && state.compensations.size > 0) {
+              ctx.setWorkflowStatus('compensating');
+              config.onCompensating?.(ctx);
 
-          // Check if we have compensations to run
-          const state = getWorkflowState();
-          if (state && state.compensations.size > 0) {
-            ctx.setWorkflowStatus('compensating');
-            config.onCompensating?.(ctx);
-
-            try {
-              await ctx.compensate(error as Error);
-              ctx.setWorkflowStatus('compensated');
-            } catch (compensationError) {
-              ctx.setWorkflowStatus('compensation_failed');
-              ctx.setAttribute(
-                'workflow.compensation.error',
-                String(compensationError),
-              );
+              try {
+                await ctx.compensate(error as Error);
+                ctx.setWorkflowStatus('compensated');
+              } catch (compensationError) {
+                ctx.setWorkflowStatus('compensation_failed');
+                ctx.setAttribute(
+                  'workflow.compensation.error',
+                  String(compensationError),
+                );
+              }
             }
-          }
 
-          throw error;
-        } finally {
-          currentWorkflowContext = previousContext;
-        }
+            throw error;
+          }
+        });
       };
     });
   };
@@ -391,8 +396,8 @@ export function traceStep<TArgs extends unknown[], TReturn>(
 
     return trace<TArgs, TReturn>(spanName, (baseCtx) => {
       return async (...args: TArgs) => {
-        // Get workflow context
-        const workflowCtx = currentWorkflowContext;
+        // Get workflow context from AsyncLocalStorage (async-safe)
+        const workflowCtx = workflowContextStorage.getStore() ?? null;
 
         // Create step context
         const ctx = createStepContext(baseCtx, config, workflowCtx);
@@ -520,16 +525,25 @@ function createWorkflowContext(
     },
 
     completeStep(stepName: string): void {
-      const step = state.steps.get(stepName);
-      if (step) {
-        step.status = 'completed';
-        step.endTime = Date.now();
+      let step = state.steps.get(stepName);
+      if (!step) {
+        // Auto-create step entry for manually managed steps
+        // (when using registerCompensation without traceStep)
+        step = {
+          name: stepName,
+          index: state.stepCounter++,
+          status: 'pending',
+          startTime: Date.now(),
+        };
+        state.steps.set(stepName, step);
+      }
+      step.status = 'completed';
+      step.endTime = Date.now();
 
-        // Capture span context for linking
-        const currentSpan = getActiveSpan();
-        if (currentSpan) {
-          step.spanContext = currentSpan.spanContext();
-        }
+      // Capture span context for linking
+      const currentSpan = getActiveSpan();
+      if (currentSpan) {
+        step.spanContext = currentSpan.spanContext();
       }
     },
 
@@ -776,14 +790,20 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Get current workflow context (if inside a workflow)
+ *
+ * Uses AsyncLocalStorage to ensure async-safety when multiple
+ * workflows are running concurrently.
  */
 export function getCurrentWorkflowContext(): WorkflowContext | null {
-  return currentWorkflowContext;
+  return workflowContextStorage.getStore() ?? null;
 }
 
 /**
  * Check if currently executing inside a workflow
+ *
+ * Uses AsyncLocalStorage to ensure async-safety when multiple
+ * workflows are running concurrently.
  */
 export function isInWorkflow(): boolean {
-  return currentWorkflowContext !== null;
+  return workflowContextStorage.getStore() !== undefined;
 }
