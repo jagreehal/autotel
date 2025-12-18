@@ -25,10 +25,13 @@ import { SNSPublisher } from '../sns/index';
 import { init, shutdown, flush } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
+import { createLocalStackHelpers } from '../testing/localstack';
 
 const LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+const localstack = createLocalStackHelpers();
+const isLocalStackAvailable = await localstack.isAvailable();
 
-describe('SNS Integration Tests', () => {
+describe.skipIf(!isLocalStackAvailable)('SNS Integration Tests', () => {
   let sns: SNSClient;
   let topicArn: string;
   let exporter: InMemorySpanExporter;
@@ -53,12 +56,8 @@ describe('SNS Integration Tests', () => {
 
     // Create test topic
     const topicName = `test-topic-${Date.now()}`;
-    try {
-      const result = await sns.send(new CreateTopicCommand({ Name: topicName }));
-      topicArn = result.TopicArn || '';
-    } catch {
-      console.warn('LocalStack not available, skipping SNS integration tests');
-    }
+    const result = await sns.send(new CreateTopicCommand({ Name: topicName }));
+    topicArn = result.TopicArn || '';
   });
 
   afterAll(async () => {
@@ -82,11 +81,6 @@ describe('SNS Integration Tests', () => {
 
   describe('SNSPublisher', () => {
     it('should publish a message with trace context', async () => {
-      if (!topicArn) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new SNSPublisher(sns, { topicArn });
 
       const result = await publisher.publish({
@@ -106,11 +100,6 @@ describe('SNS Integration Tests', () => {
     });
 
     it('should publish batch messages', async () => {
-      if (!topicArn) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new SNSPublisher(sns, { topicArn });
 
       const result = await publisher.publishBatch([
@@ -131,11 +120,6 @@ describe('SNS Integration Tests', () => {
     });
 
     it('should set message attributes with trace context', async () => {
-      if (!topicArn) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new SNSPublisher(sns, { topicArn });
 
       const result = await publisher.publish({
@@ -158,11 +142,6 @@ describe('SNS Integration Tests', () => {
 
   describe('Trace Context Injection', () => {
     it('should inject traceparent into message attributes', async () => {
-      if (!topicArn) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       // Create publisher with context injection enabled (default)
       const publisher = new SNSPublisher(sns, { topicArn });
 
@@ -184,11 +163,6 @@ describe('SNS Integration Tests', () => {
     });
 
     it('should not inject context when disabled', async () => {
-      if (!topicArn) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new SNSPublisher(sns, {
         topicArn,
         injectTraceContext: false,

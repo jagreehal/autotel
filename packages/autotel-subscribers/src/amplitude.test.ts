@@ -2,26 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AmplitudeSubscriber } from './amplitude';
 
 // Mock the @amplitude/analytics-node module
+// The SDK exports init(), track(), flush() as separate functions
 const mockTrack = vi.fn();
-const mockTrackEvent = vi.fn();
+const mockInit = vi.fn();
 const mockFlush = vi.fn(() => Promise.resolve());
-
-// Create a mock init function that returns instances with mocked methods
-const mockInit = vi.fn(() => ({
-  track: mockTrack,
-  trackEvent: mockTrackEvent,
-  flush: mockFlush,
-}));
 
 vi.mock('@amplitude/analytics-node', () => ({
   init: mockInit,
+  track: mockTrack,
+  flush: mockFlush,
 }));
 
 describe('AmplitudeSubscriber', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTrack.mockClear();
-    mockTrackEvent.mockClear();
+    mockInit.mockClear();
     mockFlush.mockClear();
   });
 
@@ -139,7 +135,7 @@ describe('AmplitudeSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(mockTrackEvent).toHaveBeenCalledWith({
+      expect(mockTrack).toHaveBeenCalledWith({
         event_type: 'checkout.started',
         user_id: 'user-123',
         event_properties: {
@@ -167,7 +163,7 @@ describe('AmplitudeSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(mockTrackEvent).toHaveBeenCalledWith({
+      expect(mockTrack).toHaveBeenCalledWith({
         event_type: 'payment.processing.success',
         user_id: 'user-123',
         event_properties: {
@@ -195,7 +191,7 @@ describe('AmplitudeSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(mockTrackEvent).toHaveBeenCalledWith({
+      expect(mockTrack).toHaveBeenCalledWith({
         event_type: 'revenue',
         user_id: 'user-123',
         event_properties: {

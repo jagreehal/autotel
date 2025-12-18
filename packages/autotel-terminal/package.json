@@ -1,0 +1,80 @@
+{
+  "name": "autotel-terminal",
+  "version": "1.0.0",
+  "description": "Terminal dashboard for autotel traces using react-ink",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src",
+    "lint:fix": "npx eslint src --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest --passWithNoTests",
+    "quality": "pnpm type-check && pnpm test && pnpm lint && pnpm format:check && pnpm build && pnpm check-exports"
+  },
+  "keywords": [
+    "autotel",
+    "opentelemetry",
+    "terminal",
+    "dashboard",
+    "traces",
+    "spans",
+    "ink",
+    "react",
+    "cli",
+    "observability"
+  ],
+  "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "dependencies": {
+    "ink": "^6.5.1",
+    "react": "^19.2.3"
+  },
+  "peerDependencies": {
+    "autotel": "workspace:*",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/api": "^1.0.0"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@opentelemetry/api": "^1.9.0",
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
+    "@typescript-eslint/eslint-plugin": "^8.50.0",
+    "@typescript-eslint/parser": "^8.50.0",
+    "autotel": "workspace:*",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-unicorn": "^62.0.0",
+    "prettier": "^3.7.4",
+    "rimraf": "^6.1.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.0",
+    "vitest": "^4.0.16"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-terminal"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme"
+}
