@@ -37,6 +37,37 @@ export {
   type BaggageSpanProcessorOptions,
 } from './baggage-span-processor';
 
+// Filtering span processor
+export {
+  FilteringSpanProcessor,
+  type SpanFilterPredicate,
+  type FilteringSpanProcessorOptions,
+} from './filtering-span-processor';
+
+// Span name normalizer
+export {
+  SpanNameNormalizingProcessor,
+  NORMALIZER_PATTERNS,
+  NORMALIZER_PRESETS,
+  type SpanNameNormalizerFn,
+  type SpanNameNormalizerPreset,
+  type SpanNameNormalizerConfig,
+  type SpanNameNormalizingProcessorOptions,
+} from './span-name-normalizer';
+
+// Attribute redacting processor
+export {
+  AttributeRedactingProcessor,
+  REDACTOR_PATTERNS,
+  REDACTOR_PRESETS,
+  createRedactedSpan,
+  type AttributeRedactorFn,
+  type AttributeRedactorPreset,
+  type AttributeRedactorConfig,
+  type AttributeRedactingProcessorOptions,
+  type ValuePatternConfig,
+} from './attribute-redacting-processor';
+
 // Functional API (re-export for convenience)
 export type {
   TraceContext,

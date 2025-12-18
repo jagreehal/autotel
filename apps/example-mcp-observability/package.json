@@ -13,14 +13,14 @@
   },
   "dependencies": {
     "autotel": "workspace:*",
-    "@opentelemetry/auto-instrumentations-node": "^0.67.1",
-    "express": "^5.1.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.3",
+    "express": "^5.2.1",
     "dotenv": "^17.2.3"
   },
   "devDependencies": {
-    "@types/express": "^5.0.5",
-    "@types/node": "^24.10.1",
-    "tsx": "^4.20.6",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.0.3",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }
