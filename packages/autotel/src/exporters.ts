@@ -13,14 +13,39 @@
  * - Example applications (demonstrate tracing)
  * - Testing (capture spans for assertions)
  *
- * @example Console debugging (development)
+ * @example Pretty console debugging (recommended)
+ * ```typescript
+ * import { init } from 'autotel'
+ *
+ * init({
+ *   service: 'my-app',
+ *   debug: 'pretty',  // Colorized, hierarchical output
+ * })
+ * ```
+ *
+ * @example Pretty exporter with custom options
+ * ```typescript
+ * import { init } from 'autotel'
+ * import { PrettyConsoleExporter } from 'autotel/exporters'
+ *
+ * init({
+ *   service: 'my-app',
+ *   spanExporters: [new PrettyConsoleExporter({
+ *     colors: true,
+ *     showAttributes: true,
+ *     hideAttributes: ['http.user_agent'],
+ *   })],
+ * })
+ * ```
+ *
+ * @example Raw console debugging
  * ```typescript
  * import { init } from 'autotel'
  * import { ConsoleSpanExporter } from 'autotel/exporters'
  *
  * init({
  *   service: 'my-app',
- *   spanExporter: new ConsoleSpanExporter(),
+ *   spanExporters: [new ConsoleSpanExporter()],
  * })
  * ```
  *
@@ -53,15 +78,14 @@
 
 export {
   /**
-   * Console exporter - prints spans to stdout.
+   * Console exporter - prints raw JSON spans to stdout.
    *
    * Perfect for:
-   * - Local development (see what's being traced)
+   * - Verbose debugging (see all span details)
    * - Example applications (demonstrate tracing)
    * - Quick debugging (no backend setup required)
-   * - Progressive development (verify spans are created)
    *
-   * Note: Not recommended for production use.
+   * Note: For better DX, use `debug: 'pretty'` or `PrettyConsoleExporter` instead.
    *
    * @example
    * ```typescript
@@ -94,3 +118,48 @@ export {
    */
   InMemorySpanExporter,
 } from '@opentelemetry/sdk-trace-base';
+
+/**
+ * Pretty console exporter - colorized, hierarchical span output.
+ *
+ * Perfect for:
+ * - Local development (beautiful, readable output)
+ * - Debugging (see trace hierarchy at a glance)
+ * - Progressive development (verify spans look correct)
+ *
+ * Features:
+ * - Colorized status (✓ green, ✗ red)
+ * - Duration color coding (fast=green, medium=yellow, slow=red)
+ * - Hierarchical tree view showing parent-child relationships
+ * - Attribute display with truncation
+ * - Error message highlighting
+ *
+ * Note: Not recommended for production use.
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { init } from 'autotel'
+ *
+ * init({
+ *   service: 'my-app',
+ *   debug: 'pretty',  // Uses PrettyConsoleExporter
+ * })
+ * ```
+ *
+ * @example With custom options
+ * ```typescript
+ * import { PrettyConsoleExporter } from 'autotel/exporters'
+ *
+ * const exporter = new PrettyConsoleExporter({
+ *   colors: true,           // Auto-detect TTY by default
+ *   showAttributes: true,   // Show span attributes
+ *   maxValueLength: 50,     // Truncate long values
+ *   hideAttributes: ['http.user_agent'],  // Hide specific attributes
+ *   showTraceId: false,     // Show trace ID header
+ * })
+ * ```
+ */
+export {
+  PrettyConsoleExporter,
+  type PrettyConsoleExporterOptions,
+} from './pretty-console-exporter';

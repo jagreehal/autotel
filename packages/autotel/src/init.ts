@@ -38,6 +38,20 @@ import type { PushMetricExporter } from '@opentelemetry/sdk-metrics';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { BaggageSpanProcessor } from './baggage-span-processor';
+import {
+  FilteringSpanProcessor,
+  type SpanFilterPredicate,
+} from './filtering-span-processor';
+import {
+  SpanNameNormalizingProcessor,
+  type SpanNameNormalizerConfig,
+} from './span-name-normalizer';
+import {
+  AttributeRedactingProcessor,
+  type AttributeRedactorConfig,
+  type AttributeRedactorPreset,
+} from './attribute-redacting-processor';
+import { PrettyConsoleExporter } from './pretty-console-exporter';
 import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config';
 import { requireModule, safeRequire } from './node-require';
@@ -628,48 +642,187 @@ export interface AutotelConfig {
    * Debug mode for local span inspection.
    * Enables console output to help you see spans as they're created.
    *
-   * When true: Outputs spans to console AND sends to backend (if endpoint/exporter configured)
-   * When false/undefined: Sends to backend only (default behavior)
+   * - `true`: Raw JSON output (ConsoleSpanExporter)
+   * - `'pretty'`: Colorized, hierarchical output (PrettyConsoleExporter)
+   * - `false`/undefined: No console output (default)
+   *
+   * When enabled: Outputs spans to console AND sends to backend (if endpoint/exporter configured)
    *
    * Perfect for progressive development:
-   * - Start with debug: true (no endpoint) → console-only, see traces immediately
+   * - Start with debug: 'pretty' (no endpoint) → see traces immediately with nice formatting
    * - Add endpoint later → console + backend, verify before choosing provider
    * - Remove debug in production → backend only, clean production config
    *
    * Can be overridden with AUTOTEL_DEBUG environment variable.
    *
-   * @example Getting started - see spans immediately
+   * @example Pretty debug output (recommended for development)
    * ```typescript
    * init({
    *   service: 'my-app',
-   *   debug: true  // No endpoint yet - console only!
+   *   debug: 'pretty'  // Colorized, hierarchical output
    * })
    * ```
    *
-   * @example Testing with local collector
+   * @example Raw JSON output (verbose)
    * ```typescript
    * init({
    *   service: 'my-app',
-   *   debug: true,
-   *   endpoint: 'http://localhost:4318'  // Console + OTLP
-   * })
-   * ```
-   *
-   * @example Production debugging
-   * ```typescript
-   * init({
-   *   service: 'my-app',
-   *   debug: true,  // See what's being sent
-   *   endpoint: 'https://api.honeycomb.io'
+   *   debug: true  // Raw ConsoleSpanExporter output
    * })
    * ```
    *
    * @example Environment variable
    * ```bash
+   * AUTOTEL_DEBUG=pretty node server.js
    * AUTOTEL_DEBUG=true node server.js
    * ```
    */
-  debug?: boolean;
+  debug?: boolean | 'pretty';
+
+  /**
+   * Filter predicate to drop unwanted spans before processing.
+   *
+   * Useful for filtering out noisy spans from specific instrumentations
+   * (e.g., Next.js internal spans, health check endpoints).
+   *
+   * The filter runs on completed spans (onEnd), so you have access to:
+   * - `span.name` - Span name
+   * - `span.attributes` - All span attributes
+   * - `span.instrumentationScope` - `{ name, version }` of the instrumentation
+   * - `span.status` - Span status code and message
+   * - `span.duration` - Span duration as `[seconds, nanoseconds]`
+   *
+   * Return `true` to keep the span, `false` to drop it.
+   *
+   * @example Filter out Next.js instrumentation spans
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   spanFilter: (span) => span.instrumentationScope.name !== 'next.js'
+   * })
+   * ```
+   *
+   * @example Filter out health check spans
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   spanFilter: (span) => !span.name.includes('/health')
+   * })
+   * ```
+   *
+   * @example Complex filtering (multiple conditions)
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   spanFilter: (span) => {
+   *     // Drop Next.js internal spans
+   *     if (span.instrumentationScope.name === 'next.js') return false;
+   *     // Drop health checks
+   *     if (span.name.includes('/health')) return false;
+   *     // Drop very short spans (less than 1ms)
+   *     const [secs, nanos] = span.duration;
+   *     if (secs === 0 && nanos < 1_000_000) return false;
+   *     return true;
+   *   }
+   * })
+   * ```
+   */
+  spanFilter?: SpanFilterPredicate;
+
+  /**
+   * Normalize span names to reduce cardinality from dynamic path segments.
+   *
+   * High-cardinality span names (e.g., `/users/123/posts/456`) cause issues:
+   * - Cost explosions in observability backends
+   * - Cardinality limits exceeded
+   * - Poor UX when searching/filtering traces
+   *
+   * The normalizer transforms dynamic segments into placeholders:
+   * - `/users/123` → `/users/:id`
+   * - `/items/550e8400-e29b-...` → `/items/:uuid`
+   *
+   * Provide either a custom function or use a built-in preset:
+   * - `'rest-api'` - Numeric IDs, UUIDs, ObjectIds, dates, timestamps, emails
+   * - `'graphql'` - GraphQL operation name normalization
+   * - `'minimal'` - Only numeric IDs and UUIDs
+   *
+   * @example Custom normalizer function
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   spanNameNormalizer: (name) => {
+   *     return name
+   *       .replace(/\/[0-9]+/g, '/:id')
+   *       .replace(/\/[a-f0-9-]{36}/gi, '/:uuid');
+   *   }
+   * })
+   * ```
+   *
+   * @example Using built-in preset
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   spanNameNormalizer: 'rest-api'
+   * })
+   * ```
+   *
+   * @example Combining with spanFilter
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   spanNameNormalizer: 'rest-api',
+   *   spanFilter: (span) => span.instrumentationScope.name !== 'next.js'
+   * })
+   * ```
+   */
+  spanNameNormalizer?: SpanNameNormalizerConfig;
+
+  /**
+   * Automatically redact PII and sensitive data from span attributes before export.
+   * Critical for compliance (GDPR, PCI-DSS, HIPAA) and data security.
+   *
+   * Can be a preset name or custom configuration:
+   * - `'default'`: Emails, phones, SSNs, credit cards, sensitive keys (password, secret, token)
+   * - `'strict'`: Default + Bearer tokens, JWTs, API keys in values
+   * - `'pci-dss'`: Payment card industry focus (credit cards, CVV, card-related keys)
+   *
+   * @example Use default preset
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   attributeRedactor: 'default'
+   * })
+   * ```
+   *
+   * @example Custom patterns
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   attributeRedactor: {
+   *     keyPatterns: [/password/i, /secret/i],
+   *     valuePatterns: [
+   *       { name: 'customerId', pattern: /CUST-\d{8}/g, replacement: 'CUST-***' }
+   *     ]
+   *   }
+   * })
+   * ```
+   *
+   * @example Custom redactor function
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   attributeRedactor: {
+   *     redactor: (key, value) => {
+   *       if (key === 'user.email' && typeof value === 'string') {
+   *         return value.replace(/@.+/, '@[REDACTED]');
+   *       }
+   *       return value;
+   *     }
+   *   }
+   * })
+   * ```
+   */
+  attributeRedactor?: AttributeRedactorConfig | AttributeRedactorPreset;
 
   /**
    * OpenLLMetry integration for LLM observability.
@@ -732,10 +885,18 @@ export function resolveMetricsFlag(
 
 /**
  * Resolve debug flag with env var override support
+ *
+ * Supports:
+ * - `'pretty'`: Colorized, hierarchical output (PrettyConsoleExporter)
+ * - `true` / `'true'` / `'1'`: Raw JSON output (ConsoleSpanExporter)
+ * - `false` / `'false'` / `'0'`: Disabled
  */
-export function resolveDebugFlag(configFlag?: boolean): boolean {
+export function resolveDebugFlag(
+  configFlag?: boolean | 'pretty',
+): boolean | 'pretty' {
   // 1. Check env var override (highest priority)
   const envFlag = process.env.AUTOTEL_DEBUG;
+  if (envFlag === 'pretty') return 'pretty';
   if (envFlag === 'true' || envFlag === '1') return true;
   if (envFlag === 'false' || envFlag === '0') return false;
 
@@ -897,7 +1058,7 @@ export function init(cfg: AutotelConfig): void {
   const protocol = resolveProtocol(mergedConfig.protocol);
 
   // Build array of span processors (supports multiple)
-  const spanProcessors: SpanProcessor[] = [];
+  let spanProcessors: SpanProcessor[] = [];
 
   if (mergedConfig.spanProcessors && mergedConfig.spanProcessors.length > 0) {
     // User provided custom processors (full control)
@@ -940,9 +1101,48 @@ export function init(cfg: AutotelConfig): void {
   // Apply debug mode configuration
   const debugMode = resolveDebugFlag(mergedConfig.debug);
 
-  if (debugMode) {
-    // Debug enabled: add console processor
+  if (debugMode === 'pretty') {
+    // Pretty debug: colorized, hierarchical output
+    spanProcessors.push(new SimpleSpanProcessor(new PrettyConsoleExporter()));
+  } else if (debugMode === true) {
+    // Raw debug: JSON output
     spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+  }
+
+  // Wrap processors in order: redactor (innermost) → normalizer → filter (outermost)
+  // This ensures onEnd() execution order is: filter → normalizer → redactor
+  // So filtering sees original attributes, and redaction happens last before export.
+
+  // Step 1: Wrap with AttributeRedactingProcessor (innermost - executes last in onEnd)
+  if (mergedConfig.attributeRedactor && spanProcessors.length > 0) {
+    spanProcessors = spanProcessors.map(
+      (processor) =>
+        new AttributeRedactingProcessor(processor, {
+          redactor: mergedConfig.attributeRedactor!,
+        }),
+    );
+  }
+
+  // Step 2: Wrap with SpanNameNormalizingProcessor (middle)
+  // Normalizer runs in onStart(), so span names are normalized before any onEnd processing
+  if (mergedConfig.spanNameNormalizer && spanProcessors.length > 0) {
+    spanProcessors = spanProcessors.map(
+      (processor) =>
+        new SpanNameNormalizingProcessor(processor, {
+          normalizer: mergedConfig.spanNameNormalizer!,
+        }),
+    );
+  }
+
+  // Step 3: Wrap with FilteringSpanProcessor (outermost - executes first in onEnd)
+  // Filter sees original (unredacted) attributes, so it can match on sensitive values
+  if (mergedConfig.spanFilter && spanProcessors.length > 0) {
+    spanProcessors = spanProcessors.map(
+      (processor) =>
+        new FilteringSpanProcessor(processor, {
+          filter: mergedConfig.spanFilter!,
+        }),
+    );
   }
 
   // Build array of metric readers (supports multiple)

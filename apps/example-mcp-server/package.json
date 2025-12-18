@@ -9,14 +9,14 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.23.0",
+    "@modelcontextprotocol/sdk": "^1.25.1",
     "autotel": "workspace:*",
     "autotel-mcp": "workspace:*",
-    "zod": "3.25.76"
+    "zod": "4.2.1"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "tsx": "^4.20.6",
+    "@types/node": "^25.0.3",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

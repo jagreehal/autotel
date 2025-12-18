@@ -375,11 +375,19 @@ const emailInstrumentation: HandlerInstrumentation<ForwardableEmailMessage, void
 /**
  * Export spans after request completes
  */
-async function exportSpans(traceId: string, tracker?: PromiseTracker) {
+async function exportSpans(
+  traceId: string,
+  tracker: PromiseTracker | undefined,
+  ctx: ExecutionContext,
+) {
   const tracer = trace.getTracer('autotel-edge');
   if (tracer instanceof WorkerTracer) {
     try {
-      await scheduler.wait(1);
+      // scheduler is available on ExecutionContext at runtime
+      const ctxWithScheduler = ctx as ExecutionContext & { scheduler?: { wait(ms: number): Promise<void> } };
+      if (ctxWithScheduler.scheduler) {
+        await ctxWithScheduler.scheduler.wait(1);
+      }
       await tracker?.wait();
       await tracer.forceFlush(traceId);
     } catch (error) {
@@ -450,7 +458,7 @@ function createHandlerFlow<T extends Trigger, E, R>(
         throw error;
       } finally {
         span.end();
-        context.waitUntil(exportSpans(span.spanContext().traceId, tracker));
+        context.waitUntil(exportSpans(span.spanContext().traceId, tracker, context));
       }
     });
   };

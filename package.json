@@ -22,23 +22,23 @@
     "quality": "turbo run build && turbo run lint && turbo run format && turbo run type-check && turbo run test && turbo run test:integration"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.7",
-    "@eslint/js": "^9.39.1",
-    "@typescript-eslint/eslint-plugin": "^8.48.0",
-    "@typescript-eslint/parser": "^8.48.0",
-    "esbuild": "^0.27.1",
-    "eslint": "^9.39.1",
+    "@changesets/cli": "^2.29.8",
+    "@eslint/js": "^9.39.2",
+    "@typescript-eslint/eslint-plugin": "^8.50.0",
+    "@typescript-eslint/parser": "^8.50.0",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^62.0.0",
-    "prettier": "^3.6.2",
-    "turbo": "^2.6.1",
-    "typescript-eslint": "^8.48.0"
+    "prettier": "^3.7.4",
+    "turbo": "^2.6.3",
+    "typescript-eslint": "^8.50.0"
   },
   "engines": {
     "node": ">=22",
     "pnpm": ">=8"
   },
-  "packageManager": "pnpm@10.23.0",
+  "packageManager": "pnpm@10.26.0",
   "pnpm": {
     "overrides": {
       "vite": ">=7.1.11"

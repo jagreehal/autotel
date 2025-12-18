@@ -25,10 +25,13 @@ import { EventBridgePublisher } from '../eventbridge/index';
 import { init, shutdown, flush } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
+import { createLocalStackHelpers } from '../testing/localstack';
 
 const LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+const localstack = createLocalStackHelpers();
+const isLocalStackAvailable = await localstack.isAvailable();
 
-describe('EventBridge Integration Tests', () => {
+describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
   let eventBridge: EventBridgeClient;
   let eventBusName: string;
   let exporter: InMemorySpanExporter;
@@ -53,11 +56,7 @@ describe('EventBridge Integration Tests', () => {
 
     // Create test event bus
     eventBusName = `test-bus-${Date.now()}`;
-    try {
-      await eventBridge.send(new CreateEventBusCommand({ Name: eventBusName }));
-    } catch {
-      console.warn('LocalStack not available, skipping EventBridge integration tests');
-    }
+    await eventBridge.send(new CreateEventBusCommand({ Name: eventBusName }));
   });
 
   afterAll(async () => {
@@ -81,11 +80,6 @@ describe('EventBridge Integration Tests', () => {
 
   describe('EventBridgePublisher', () => {
     it('should publish a single event with trace context', async () => {
-      if (!eventBusName) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new EventBridgePublisher(eventBridge, {
         eventBusName,
         source: 'com.test.integration',
@@ -111,11 +105,6 @@ describe('EventBridge Integration Tests', () => {
     });
 
     it('should publish batch events', async () => {
-      if (!eventBusName) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new EventBridgePublisher(eventBridge, {
         eventBusName,
         source: 'com.test.batch',
@@ -142,11 +131,6 @@ describe('EventBridge Integration Tests', () => {
     });
 
     it('should allow source override per event', async () => {
-      if (!eventBusName) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new EventBridgePublisher(eventBridge, {
         eventBusName,
         source: 'com.test.default',
@@ -171,11 +155,6 @@ describe('EventBridge Integration Tests', () => {
 
   describe('Trace Context Injection', () => {
     it('should inject trace context into event detail', async () => {
-      if (!eventBusName) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new EventBridgePublisher(eventBridge, {
         eventBusName,
         source: 'com.test.context',
@@ -201,11 +180,6 @@ describe('EventBridge Integration Tests', () => {
     });
 
     it('should not inject context when disabled', async () => {
-      if (!eventBusName) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const publisher = new EventBridgePublisher(eventBridge, {
         eventBusName,
         source: 'com.test.no-context',

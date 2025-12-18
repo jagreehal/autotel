@@ -27,11 +27,14 @@ import { SQSProducer, SQSConsumer } from '../sqs/index';
 import { init, shutdown, flush } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
+import { createLocalStackHelpers } from '../testing/localstack';
 
 // Skip if LocalStack is not available
 const LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+const localstack = createLocalStackHelpers();
+const isLocalStackAvailable = await localstack.isAvailable();
 
-describe('SQS Integration Tests', () => {
+describe.skipIf(!isLocalStackAvailable)('SQS Integration Tests', () => {
   let sqs: SQSClient;
   let queueUrl: string;
   let queueName: string;
@@ -57,14 +60,9 @@ describe('SQS Integration Tests', () => {
 
     // Create test queue
     queueName = `test-queue-${Date.now()}`;
-    try {
-      await sqs.send(new CreateQueueCommand({ QueueName: queueName }));
-      const urlResult = await sqs.send(new GetQueueUrlCommand({ QueueName: queueName }));
-      queueUrl = urlResult.QueueUrl || '';
-    } catch {
-      // If LocalStack is not running, skip tests
-      console.warn('LocalStack not available, skipping SQS integration tests');
-    }
+    await sqs.send(new CreateQueueCommand({ QueueName: queueName }));
+    const urlResult = await sqs.send(new GetQueueUrlCommand({ QueueName: queueName }));
+    queueUrl = urlResult.QueueUrl || '';
   });
 
   afterAll(async () => {
@@ -88,11 +86,6 @@ describe('SQS Integration Tests', () => {
 
   describe('SQSProducer', () => {
     it('should send a message with trace context', async () => {
-      if (!queueUrl) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const producer = new SQSProducer(sqs, { queueUrl });
 
       const result = await producer.send({
@@ -112,11 +105,6 @@ describe('SQS Integration Tests', () => {
     });
 
     it('should send batch messages', async () => {
-      if (!queueUrl) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const producer = new SQSProducer(sqs, { queueUrl });
 
       const result = await producer.sendBatch([
@@ -139,11 +127,6 @@ describe('SQS Integration Tests', () => {
 
   describe('SQSConsumer', () => {
     it('should receive messages and process with trace context', async () => {
-      if (!queueUrl) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const producer = new SQSProducer(sqs, { queueUrl });
       const consumer = new SQSConsumer(sqs, {
         queueUrl,
@@ -194,11 +177,6 @@ describe('SQS Integration Tests', () => {
     });
 
     it('should process messages with callback', async () => {
-      if (!queueUrl) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const producer = new SQSProducer(sqs, { queueUrl });
       const consumer = new SQSConsumer(sqs, {
         queueUrl,
@@ -232,11 +210,6 @@ describe('SQS Integration Tests', () => {
 
   describe('Context Propagation', () => {
     it('should propagate trace context from producer to consumer', async () => {
-      if (!queueUrl) {
-        console.warn('Skipping test: LocalStack not available');
-        return;
-      }
-
       const producer = new SQSProducer(sqs, { queueUrl });
       const consumer = new SQSConsumer(sqs, {
         queueUrl,

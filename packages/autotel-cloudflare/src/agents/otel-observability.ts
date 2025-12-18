@@ -290,11 +290,20 @@ function shouldTraceEvent(
 /**
  * Export spans asynchronously
  */
-async function exportSpans(traceId: string, ctx?: DurableObjectState): Promise<void> {
+async function exportSpans(
+  traceId: string,
+  ctx?: DurableObjectState | ExecutionContext,
+): Promise<void> {
   const tracer = trace.getTracer('autotel-cloudflare/agents');
   if (tracer instanceof WorkerTracer) {
     try {
-      await scheduler.wait(1);
+      // scheduler is only available on ExecutionContext, not DurableObjectState
+      if (ctx && 'scheduler' in ctx) {
+        const ctxWithScheduler = ctx as ExecutionContext & { scheduler?: { wait(ms: number): Promise<void> } };
+        if (ctxWithScheduler.scheduler) {
+          await ctxWithScheduler.scheduler.wait(1);
+        }
+      }
       await tracer.forceFlush(traceId);
     } catch (error) {
       console.error('[autotel-cloudflare/agents] Failed to export spans:', error);

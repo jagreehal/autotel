@@ -38,7 +38,8 @@ export class AmplitudeSubscriber implements EventSubscriber {
   readonly name = 'AmplitudeSubscriber';
   readonly version = '1.0.0';
 
-  private amplitude: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private amplitudeModule: any = null;
   private enabled: boolean;
   private config: AmplitudeConfig;
   private initPromise: Promise<void> | null = null;
@@ -55,12 +56,14 @@ export class AmplitudeSubscriber implements EventSubscriber {
 
   private async initialize(): Promise<void> {
     try {
-      // Dynamic import to avoid adding @amplitude/events-node as a hard dependency
-      const { init } = await import('@amplitude/analytics-node');
-      this.amplitude = init(this.config.apiKey);
+      // Dynamic import to avoid adding @amplitude/analytics-node as a hard dependency
+      // The SDK exports init(), track(), flush() as separate functions
+      const amplitude = await import('@amplitude/analytics-node');
+      amplitude.init(this.config.apiKey);
+      this.amplitudeModule = amplitude;
     } catch (error) {
       console.error(
-        'Amplitude subscriber failed to initialize. Install @amplitude/events-node: pnpm add @amplitude/events-node',
+        'Amplitude subscriber failed to initialize. Install @amplitude/analytics-node: pnpm add @amplitude/analytics-node',
         error,
       );
       this.enabled = false;
@@ -78,7 +81,7 @@ export class AmplitudeSubscriber implements EventSubscriber {
     if (!this.enabled) return;
 
     await this.ensureInitialized();
-    this.amplitude?.track({
+    this.amplitudeModule?.track({
       event_type: name,
       user_id: attributes?.userId || attributes?.user_id || 'anonymous',
       event_properties: attributes,
@@ -93,7 +96,7 @@ export class AmplitudeSubscriber implements EventSubscriber {
     if (!this.enabled) return;
 
     await this.ensureInitialized();
-    this.amplitude?.trackEvent({
+    this.amplitudeModule?.track({
       event_type: `${funnelName}.${step}`,
       user_id: attributes?.userId || attributes?.user_id || 'anonymous',
       event_properties: {
@@ -112,7 +115,7 @@ export class AmplitudeSubscriber implements EventSubscriber {
     if (!this.enabled) return;
 
     await this.ensureInitialized();
-    this.amplitude?.trackEvent({
+    this.amplitudeModule?.track({
       event_type: `${operationName}.${outcome}`,
       user_id: attributes?.userId || attributes?.user_id || 'anonymous',
       event_properties: {
@@ -127,7 +130,7 @@ export class AmplitudeSubscriber implements EventSubscriber {
     if (!this.enabled) return;
 
     await this.ensureInitialized();
-    this.amplitude?.trackEvent({
+    this.amplitudeModule?.track({
       event_type: name,
       user_id: attributes?.userId || attributes?.user_id || 'anonymous',
       event_properties: {
@@ -140,8 +143,8 @@ export class AmplitudeSubscriber implements EventSubscriber {
   /** Flush pending events before shutdown */
   async shutdown(): Promise<void> {
     await this.ensureInitialized();
-    if (this.amplitude) {
-      await this.amplitude.flush();
+    if (this.amplitudeModule) {
+      await this.amplitudeModule.flush();
     }
   }
 }
