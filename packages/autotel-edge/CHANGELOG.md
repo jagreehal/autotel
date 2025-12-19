@@ -1,5 +1,31 @@
 # autotel-edge
 
+## 3.4.0
+
+### Minor Changes
+
+- 86ae1a8: Add new span processors, exporters, and terminal dashboard
+
+  **autotel:**
+  - Add `PrettyConsoleExporter` for colorized, hierarchical trace output in the terminal
+  - Add `FilteringSpanProcessor` for filtering spans by custom criteria
+  - Add `SpanNameNormalizer` for normalizing span names (removing IDs, hashes, etc.)
+  - Add `AttributeRedactingProcessor` for redacting sensitive span attributes
+  - Export new processors via `autotel/processors` and `autotel/exporters`
+
+  **autotel-terminal (new package):**
+  - React-ink powered terminal dashboard for viewing traces in real-time
+  - Live span streaming with pause/resume functionality
+  - Error filtering and statistics display
+  - Auto-wires to existing tracer provider
+
+  **autotel-subscribers:**
+  - Fix `AmplitudeSubscriber` to correctly use Amplitude SDK pattern where `init()`, `track()`, and `flush()` are separate module exports
+
+  **Examples:**
+  - Add Next.js example app
+  - Add TanStack Start example app
+
 ## 3.3.0
 
 ### Minor Changes
