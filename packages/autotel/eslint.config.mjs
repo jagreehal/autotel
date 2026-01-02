@@ -28,6 +28,7 @@ export default defineConfig(
       'unicorn/no-null': 'off',
       'unicorn/prefer-top-level-await': 'off',
       'unicorn/no-nested-ternary': 'off',
+      'unicorn/number-literal-case': 'off', // Conflicts with Prettier (Prettier uses lowercase)
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-exports': 'error',
       'no-restricted-syntax': [

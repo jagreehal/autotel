@@ -589,6 +589,229 @@ instrumentDatabase(db, {
 await db.select().from(users); // queries emit spans automatically
 ```
 
+## Type-Safe Attributes
+
+Autotel provides type-safe attribute builders following OpenTelemetry semantic conventions. These helpers give you autocomplete, compile-time validation, and automatic PII redaction.
+
+### Pattern A: Key Builders
+
+Build individual attributes with full autocomplete:
+
+```typescript
+import { attrs, mergeAttrs } from 'autotel/attributes';
+
+// Single attribute
+ctx.setAttributes(attrs.user.id('user-123'));
+// → { 'user.id': 'user-123' }
+
+ctx.setAttributes(attrs.http.request.method('GET'));
+// → { 'http.request.method': 'GET' }
+
+ctx.setAttributes(attrs.db.client.system('postgresql'));
+// → { 'db.system.name': 'postgresql' }
+
+// Combine multiple attributes
+ctx.setAttributes(
+  mergeAttrs(
+    attrs.user.id('user-123'),
+    attrs.session.id('sess-456'),
+    attrs.http.response.statusCode(200),
+  ),
+);
+```
+
+### Pattern B: Object Builders
+
+Pass an object to set multiple related attributes at once:
+
+```typescript
+import { attrs } from 'autotel/attributes';
+
+// User attributes
+ctx.setAttributes(
+  attrs.user.data({
+    id: 'user-123',
+    email: 'user@example.com',
+    roles: ['admin', 'editor'],
+  }),
+);
+// → { 'user.id': 'user-123', 'user.email': 'user@example.com', 'user.roles': ['admin', 'editor'] }
+
+// HTTP server attributes
+ctx.setAttributes(
+  attrs.http.server({
+    method: 'POST',
+    route: '/api/users/:id',
+    statusCode: 201,
+  }),
+);
+// → { 'http.request.method': 'POST', 'http.route': '/api/users/:id', 'http.response.status_code': 201 }
+
+// Database attributes
+ctx.setAttributes(
+  attrs.db.client.data({
+    system: 'postgresql',
+    name: 'myapp_db', // Maps to db.namespace
+    operation: 'SELECT',
+    collectionName: 'users',
+  }),
+);
+```
+
+### Attachers (Signal Helpers)
+
+Attachers know WHERE to attach attributes - they handle spans, resources, and apply guardrails automatically:
+
+```typescript
+import { setUser, httpServer, identify, dbClient } from 'autotel/attributes';
+
+// Set user attributes with automatic PII redaction
+export const handleRequest = trace((ctx) => async (req) => {
+  setUser(ctx, {
+    id: req.userId,
+    email: req.userEmail, // Automatically redacted by default
+  });
+
+  // HTTP attributes + automatic span name update
+  httpServer(ctx, {
+    method: req.method,
+    route: req.route,
+    statusCode: 200,
+  });
+  // Span name becomes: "HTTP GET /api/users"
+});
+
+// Bundle user, session, and device attributes together
+export const identifyUser = trace((ctx) => async (data) => {
+  identify(ctx, {
+    user: { id: data.userId, name: data.userName },
+    session: { id: data.sessionId },
+    device: { id: data.deviceId, manufacturer: 'Apple' },
+  });
+});
+
+// Database client attributes
+export const queryUsers = trace((ctx) => async () => {
+  dbClient(ctx, {
+    system: 'postgresql',
+    operation: 'SELECT',
+    collectionName: 'users',
+  });
+  return await db.query('SELECT * FROM users');
+});
+```
+
+### PII Guardrails
+
+`safeSetAttributes()` applies automatic PII detection and configurable guardrails:
+
+```typescript
+import { safeSetAttributes, attrs } from 'autotel/attributes';
+
+export const processUser = trace((ctx) => async (user) => {
+  // Default: PII is redacted automatically
+  safeSetAttributes(ctx, attrs.user.data({ email: 'user@example.com' }));
+  // → { 'user.email': '[REDACTED]' }
+
+  // Allow PII (use with caution)
+  safeSetAttributes(ctx, attrs.user.data({ email: 'user@example.com' }), {
+    guardrails: { pii: 'allow' },
+  });
+  // → { 'user.email': 'user@example.com' }
+
+  // Hash PII for correlation without exposing raw values
+  safeSetAttributes(ctx, attrs.user.data({ email: 'user@example.com' }), {
+    guardrails: { pii: 'hash' },
+  });
+  // → { 'user.email': 'hash_a1b2c3d4...' }
+
+  // Truncate long values
+  safeSetAttributes(ctx, attrs.user.data({ id: 'a'.repeat(500) }), {
+    guardrails: { maxLength: 255 },
+  });
+  // → { 'user.id': 'aaaa...aaa...' } (truncated with ellipsis)
+
+  // Warn on deprecated attributes
+  safeSetAttributes(
+    ctx,
+    { 'http.method': 'GET' }, // Deprecated!
+    { guardrails: { warnDeprecated: true } },
+  );
+  // Console: [autotel/attributes] Attribute "http.method" is deprecated. Use "http.request.method" instead.
+});
+```
+
+**Guardrail Options:**
+
+| Option           | Values                                     | Default    | Description                                |
+| ---------------- | ------------------------------------------ | ---------- | ------------------------------------------ |
+| `pii`            | `'allow'`, `'redact'`, `'hash'`, `'block'` | `'redact'` | How to handle PII in attribute values      |
+| `maxLength`      | number                                     | `255`      | Maximum string length before truncation    |
+| `validateEnum`   | boolean                                    | `true`     | Normalize enum values (e.g., HTTP methods) |
+| `warnDeprecated` | boolean                                    | `true`     | Log warnings for deprecated attributes     |
+
+### Domain Helpers
+
+Domain helpers bundle multiple attribute groups for common scenarios:
+
+```typescript
+import { transaction } from 'autotel/attributes';
+
+// Bundle HTTP request with user context
+export const handleRequest = trace((ctx) => async (req) => {
+  transaction(ctx, {
+    user: { id: req.userId },
+    session: { id: req.sessionId },
+    method: req.method,
+    route: req.route,
+    statusCode: 200,
+    clientIp: req.ip,
+  });
+  // Sets: user.id, session.id, http.request.method, http.route,
+  //       http.response.status_code, network.peer.address
+  // Also updates span name to "HTTP GET /api/users"
+});
+```
+
+### Available Attribute Domains
+
+| Domain      | Key Builders                                         | Object Builder                               |
+| ----------- | ---------------------------------------------------- | -------------------------------------------- |
+| `user`      | `id`, `email`, `name`, `fullName`, `hash`, `roles`   | `attrs.user.data()`                          |
+| `session`   | `id`, `previousId`                                   | `attrs.session.data()`                       |
+| `device`    | `id`, `manufacturer`, `modelIdentifier`, `modelName` | `attrs.device.data()`                        |
+| `http`      | `request.*`, `response.*`, `route`                   | `attrs.http.server()`, `attrs.http.client()` |
+| `db`        | `client.system`, `client.operation`, etc.            | `attrs.db.client.data()`                     |
+| `service`   | `name`, `instance`, `version`                        | `attrs.service.data()`                       |
+| `network`   | `peerAddress`, `peerPort`, `transport`, etc.         | `attrs.network.data()`                       |
+| `error`     | `type`, `message`, `stackTrace`, `code`              | `attrs.error.data()`                         |
+| `exception` | `escaped`, `message`, `stackTrace`, `type`           | `attrs.exception.data()`                     |
+| `cloud`     | `provider`, `accountId`, `region`, etc.              | `attrs.cloud.data()`                         |
+| `messaging` | `system`, `destination`, `operation`, etc.           | `attrs.messaging.data()`                     |
+| `genAI`     | `system`, `requestModel`, `responseModel`, etc.      | -                                            |
+| `rpc`       | `system`, `service`, `method`                        | -                                            |
+| `graphql`   | `document`, `operationName`, `operationType`         | -                                            |
+
+### Resource Merging
+
+For enriching OpenTelemetry Resources with service attributes (Resource.attributes is readonly), use `mergeServiceResource`:
+
+```typescript
+import { mergeServiceResource } from 'autotel/attributes';
+import { Resource } from '@opentelemetry/resources';
+
+// Create enriched resource for custom SDK configurations
+const baseResource = Resource.default();
+const enrichedResource = mergeServiceResource(baseResource, {
+  name: 'my-service',
+  version: '1.0.0',
+  instance: 'instance-1',
+});
+
+// Use with custom TracerProvider
+const provider = new NodeTracerProvider({ resource: enrichedResource });
+```
+
 ## Event-Driven Architectures
 
 Autotel provides first-class support for tracing message-based systems like Kafka, SQS, and RabbitMQ. The `traceProducer` and `traceConsumer` helpers automatically set semantic attributes, handle context propagation, and create proper span links.

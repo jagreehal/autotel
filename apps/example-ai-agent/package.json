@@ -9,10 +9,10 @@
     "start:rag": "tsx src/rag-pipeline.ts"
   },
   "dependencies": {
-    "@openai/agents": "^0.3.6",
+    "@openai/agents": "^0.3.7",
     "@opentelemetry/auto-instrumentations-node": "^0.67.3",
     "@traceloop/node-server-sdk": "^0.22.5",
-    "openai": "^6.14.0",
+    "openai": "^6.15.0",
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "dotenv": "^17.2.3",
