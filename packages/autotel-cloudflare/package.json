@@ -1,6 +1,6 @@
 {
   "name": "autotel-cloudflare",
-  "version": "2.6.0",
+  "version": "2.5.0",
   "description": "The #1 OpenTelemetry package for Cloudflare Workers - complete bindings coverage, native CF OTel integration, advanced sampling",
   "type": "module",
   "main": "./dist/index.js",
@@ -86,7 +86,7 @@
     "@cloudflare/workers-types": "^4.0.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251217.0",
+    "@cloudflare/workers-types": "^4.20260101.0",
     "@opentelemetry/context-async-hooks": "^2.2.0",
     "@types/node": "^25.0.3",
     "rimraf": "^6.1.2",
