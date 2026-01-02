@@ -111,4 +111,3 @@ export class StreamingSpanProcessor implements SpanProcessor {
     }
   }
 }
-

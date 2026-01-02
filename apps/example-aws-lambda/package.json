@@ -28,9 +28,9 @@
   "dependencies": {
     "autotel": "workspace:*",
     "autotel-aws": "workspace:*",
-    "@aws-sdk/client-s3": "^3.958.0",
-    "@aws-sdk/client-dynamodb": "^3.958.0",
-    "@aws-sdk/client-sqs": "^3.960.0",
+    "@aws-sdk/client-s3": "^3.962.0",
+    "@aws-sdk/client-dynamodb": "^3.962.0",
+    "@aws-sdk/client-sqs": "^3.962.0",
     "aws-cdk-lib": "^2.233.0",
     "constructs": "^10.4.4",
     "dotenv": "^17.2.3",
