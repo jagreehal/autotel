@@ -183,6 +183,62 @@ export {
 
 // Re-export common OpenTelemetry types and utilities
 // This allows plugins and apps to use OTel without needing separate @opentelemetry/api installation
+
+// Semantic attribute builders and utilities
+// Provides autocomplete-first attribute construction with automatic PII redaction
+// and deprecation warnings
+export {
+  attrs,
+  setUser,
+  setSession,
+  setDevice,
+  httpServer,
+  httpClient,
+  dbClient,
+  mergeServiceResource,
+  identify,
+  request,
+  setError,
+  setException,
+  mergeAttrs,
+  safeSetAttributes,
+  validateAttribute,
+  autoRedactPII,
+  type AttributeGuardrails,
+  type AttributePolicy,
+  type UserAttrs,
+  type SessionAttrs,
+  type DeviceAttrs,
+  type HTTPServerAttrs,
+  type HTTPClientAttrs,
+  type DBAttrs,
+  type ServiceAttrs,
+  type NetworkAttrs,
+  type ErrorAttrs,
+  type ExceptionAttrs,
+  type FeatureFlagAttrs,
+  type MessagingAttrs,
+  type CloudAttrs,
+  type ServerAddressAttrs,
+  type URLAttrs,
+  type PeerAttrs,
+  type ProcessAttrs,
+  type ContainerAttrs,
+  type K8sAttrs,
+  type FaaSAttrs,
+  type ThreadAttrs,
+  type GenAIAttrs,
+  type RPCAttrs,
+  type GraphQLAttrs,
+  type ClientAttrs,
+  type DeploymentAttrs,
+  type OTelAttrs,
+  type CodeAttrs,
+  type TLSAttrs,
+} from './attributes';
+
+// Re-export common OpenTelemetry types and utilities
+// This allows plugins and apps to use OTel without needing separate @opentelemetry/api installation
 export type { Span, SpanContext, Tracer, Context } from '@opentelemetry/api';
 export { SpanKind } from '@opentelemetry/api';
 // Note: trace exported from functional.ts, context/propagation/SpanStatusCode already exported above
