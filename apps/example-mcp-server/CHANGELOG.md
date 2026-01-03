@@ -4,6 +4,14 @@
 
 ### Patch Changes
 
+- Updated dependencies [e5337b0]
+  - autotel-mcp@13.0.0
+  - autotel@2.10.0
+
+## 0.1.13
+
+### Patch Changes
+
 - Updated dependencies [86ae1a8]
   - autotel-mcp@12.0.0
   - autotel@2.10.0
