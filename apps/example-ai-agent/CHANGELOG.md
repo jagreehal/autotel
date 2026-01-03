@@ -4,6 +4,14 @@
 
 ### Patch Changes
 
+- Updated dependencies [e5337b0]
+  - autotel-subscribers@14.0.0
+  - autotel@2.10.0
+
+## 1.0.18
+
+### Patch Changes
+
 - Updated dependencies [86ae1a8]
   - autotel-subscribers@14.0.0
   - autotel@2.10.0
