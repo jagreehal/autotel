@@ -1,0 +1,21 @@
+{
+  "name": "@jagreehal/example-terminal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "NODE_ENV=production tsx src/index.ts",
+    "start:dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-terminal": "workspace:*",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
+
