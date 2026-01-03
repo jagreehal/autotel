@@ -36,7 +36,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { render, Box, Text, useInput } from 'ink';
+import { render, Box, Text, useInput, useStdin } from 'ink';
 import type { TerminalSpanEvent, TerminalSpanStream } from './span-stream';
 import { StreamingSpanProcessor } from './streaming-processor';
 import { createTerminalSpanStream } from './span-stream';
@@ -140,19 +140,25 @@ function Dashboard({
 
   const current = filtered[selected];
 
-  useInput((input, key) => {
-    if (key.upArrow) setSelected((i) => Math.max(0, i - 1));
-    if (key.downArrow)
-      setSelected((i) => Math.min(filtered.length - 1, i + 1));
+  // Check if raw mode is supported (needed for keyboard input)
+  const { isRawModeSupported } = useStdin();
 
-    if (input === 'p') setPaused((p) => !p);
-    if (input === 'e') setFilterErrorsOnly((v) => !v);
+  useInput(
+    (input, key) => {
+      if (key.upArrow) setSelected((i) => Math.max(0, i - 1));
+      if (key.downArrow)
+        setSelected((i) => Math.min(filtered.length - 1, i + 1));
 
-    if (input === 'c') {
-      setSpans([]);
-      setSelected(0);
-    }
-  });
+      if (input === 'p') setPaused((p) => !p);
+      if (input === 'e') setFilterErrorsOnly((v) => !v);
+
+      if (input === 'c') {
+        setSpans([]);
+        setSelected(0);
+      }
+    },
+    { isActive: isRawModeSupported },
+  );
 
   const headerRight = paused ? '[Paused]' : '[Live]';
 
@@ -165,16 +171,16 @@ function Dashboard({
     >
       {/* Header */}
       <Box justifyContent="space-between" marginBottom={1}>
-        <Text bold>🔭 {title}</Text>
-        <Text color={paused ? 'yellow' : 'green'}>{headerRight}</Text>
+        <Text key="title" bold>🔭 {title}</Text>
+        <Text key="status" color={paused ? 'yellow' : 'green'}>{headerRight}</Text>
       </Box>
 
       {/* Help / controls */}
       <Box marginBottom={1} flexDirection="row" justifyContent="space-between">
-        <Text dimColor>
+        <Text key="controls" dimColor>
           ↑/↓ select • p pause • e errors-only • c clear • Ctrl+C exit
         </Text>
-        <Text dimColor>
+        <Text key="count" dimColor>
           showing {filtered.length}/{spans.length}
         </Text>
       </Box>
@@ -191,8 +197,8 @@ function Dashboard({
           paddingY={0}
         >
           <Box marginTop={0} marginBottom={1}>
-            <Text bold>Recent spans</Text>
-            {filterErrorsOnly && <Text color="red"> (errors only)</Text>}
+            <Text key="recent-spans-title" bold>Recent spans</Text>
+            {filterErrorsOnly && <Text key="errors-only-label" color="red"> (errors only)</Text>}
           </Box>
 
           {filtered.length === 0 ? (
@@ -207,8 +213,11 @@ function Dashboard({
                     ? 'yellow'
                     : 'green';
 
+              // Use compound key to ensure uniqueness (spanId + startTime)
+              const uniqueKey = `${s.spanId}-${s.startTime}`;
+
               return (
-                <Box key={s.spanId} flexDirection="row">
+                <Box key={uniqueKey} flexDirection="row">
                   <Text color={isSel ? 'cyan' : undefined}>
                     {isSel ? '› ' : '  '}
                   </Text>
@@ -352,6 +361,10 @@ export function renderTerminal(
   const maxSpans = options.maxSpans ?? 100;
   const colors = options.colors ?? Boolean(process.stdout.isTTY);
 
+  // Check if stdin supports raw mode (needed for keyboard input)
+  // If not, we disable stdin to prevent Ink from throwing an error
+  const stdinOption = process.stdin.isTTY ? process.stdin : undefined;
+
   // If stream provided, use it directly
   if (stream) {
     try {
@@ -363,6 +376,7 @@ export function renderTerminal(
           colors={colors}
           stream={stream}
         />,
+        { stdin: stdinOption },
       );
     } catch (error) {
       console.error('[autotel-terminal] Failed to render dashboard:', error);
@@ -414,6 +428,7 @@ export function renderTerminal(
         colors={colors}
         stream={terminalStream}
       />,
+      { stdin: stdinOption },
     );
   } catch (error) {
     console.error('[autotel-terminal] Failed to render dashboard:', error);

@@ -102,6 +102,31 @@ Then visit:
 - Error tracking
 - Nested spans
 
+### Terminal Dashboard Example
+
+Interactive terminal dashboard for viewing traces in real-time:
+
+```bash
+cd apps/example-terminal
+pnpm install
+pnpm start
+```
+
+**What it does:**
+- Real-time span streaming to terminal dashboard
+- Interactive navigation with keyboard controls
+- Error filtering and live statistics
+- Demonstrates nested spans and error tracking
+
+**Controls:**
+- ↑/↓: Navigate spans
+- `p`: Pause/resume
+- `e`: Toggle error-only filter
+- `c`: Clear spans
+- Ctrl+C: Exit
+
+**See:** [example-terminal/README.md](./example-terminal/README.md) for detailed instructions.
+
 ### AI/LLM Workflow Examples
 
 Demonstrates instrumentation patterns for AI/LLM applications:
