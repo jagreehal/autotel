@@ -23,6 +23,7 @@ export {
   createTracingMiddleware,
   tracingMiddleware,
   functionTracingMiddleware,
+  createTracingServerHandler,
   type MiddlewareHandler,
 } from './middleware';
 export {

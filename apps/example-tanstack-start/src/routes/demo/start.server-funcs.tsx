@@ -1,27 +1,23 @@
+/**
+ * Server Functions Demo - TanStack-Native Tracing
+ *
+ * This demo shows how server functions are automatically traced via
+ * global functionMiddleware configured in start.ts (TanStack-native pattern).
+ *
+ * No per-function middleware needed - tracing just works!
+ */
 import fs from 'node:fs'
 import { useCallback, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { traceLoader } from 'autotel-tanstack/loaders'
-import { traceServerFn } from 'autotel-tanstack/server-functions'
-import { recordTiming, withErrorReporting } from 'autotel-tanstack'
 import { recordSpan } from '../../components/TracesDevtools'
-
-/*
-const loggingMiddleware = createMiddleware().server(
-  async ({ next, request }) => {
-    console.log("Request:", request.url);
-    return next();
-  }
-);
-const loggedServerFunction = createServerFn({ method: "GET" }).middleware([
-  loggingMiddleware,
-]);
-*/
 
 const TODOS_FILE = 'todos.json'
 
-async function readTodos() {
+type Todo = { id: number; name: string }
+
+async function readTodos(): Promise<Array<Todo>> {
   return JSON.parse(
     await fs.promises.readFile(TODOS_FILE, 'utf-8').catch(() =>
       JSON.stringify(
@@ -36,33 +32,22 @@ async function readTodos() {
   )
 }
 
-// Example 1: Using traceServerFn wrapper (alternative to middleware)
-const getTodosBase = createServerFn({
-  method: 'GET',
-}).handler(async () => await readTodos())
+// Server functions are automatically traced via global functionMiddleware in start.ts
+const getTodos = createServerFn({ method: 'GET' }).handler(
+  async () => await readTodos(),
+)
 
-const getTodos = traceServerFn(getTodosBase, { name: 'getTodos' })
-
-// Example 2: Using withErrorReporting + recordTiming for manual instrumentation
-const addTodoBase = createServerFn({ method: 'POST' })
+const addTodo = createServerFn({ method: 'POST' })
   .inputValidator((d: string) => d)
-  .handler(
-    withErrorReporting(
-      recordTiming('serverFn.addTodo', async ({ data }) => {
-        const todos = await readTodos()
-        todos.push({ id: todos.length + 1, name: data })
-        await fs.promises.writeFile(TODOS_FILE, JSON.stringify(todos, null, 2))
-        return todos
-      }),
-      { operation: 'addTodo' },
-    ),
-  )
-
-const addTodo = traceServerFn(addTodoBase, { name: 'addTodo' })
+  .handler(async ({ data }) => {
+    const todos = await readTodos()
+    todos.push({ id: todos.length + 1, name: data })
+    await fs.promises.writeFile(TODOS_FILE, JSON.stringify(todos, null, 2))
+    return todos
+  })
 
 export const Route = createFileRoute('/demo/start/server-funcs')({
   component: Home,
-  // Example: Using traceLoader for route loaders
   loader: traceLoader(async () => await getTodos()),
 })
 
@@ -106,9 +91,29 @@ function Home() {
       }}
     >
       <div className="w-full max-w-2xl p-8 rounded-xl backdrop-blur-md bg-black/50 shadow-xl border-8 border-black/10">
-        <h1 className="text-2xl mb-4">Start Server Functions - Todo Example</h1>
+        <h1 className="text-2xl mb-4">
+          Server Functions - Auto-Traced via Global Middleware
+        </h1>
+
+        <div className="mb-6 p-4 bg-white/5 rounded-lg border border-white/10">
+          <h2 className="text-lg font-semibold mb-2">How it works:</h2>
+          <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside">
+            <li>
+              Global <code className="text-blue-400">functionMiddleware</code>{' '}
+              configured in <code>start.ts</code>
+            </li>
+            <li>
+              All server functions automatically traced - no per-function setup
+            </li>
+            <li>
+              Uses TanStack's native{' '}
+              <code className="text-blue-400">createMiddleware()</code> builder
+            </li>
+          </ul>
+        </div>
+
         <ul className="mb-4 space-y-2">
-          {todos?.map((t) => (
+          {todos.map((t: Todo) => (
             <li
               key={t.id}
               className="bg-white/10 border border-white/20 rounded-lg p-3 backdrop-blur-sm shadow-md"
