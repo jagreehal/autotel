@@ -59,3 +59,19 @@ export function functionTracingMiddleware<TContext = unknown>(
     return opts.next();
   };
 }
+
+/**
+ * Browser stub: Returns pass-through handler for createMiddleware().server()
+ */
+export function createTracingServerHandler<TContext = unknown>(
+  config?: TracingMiddlewareConfig,
+): (opts: {
+  next: (ctx?: Partial<TContext>) => Promise<TContext>;
+  context: TContext;
+  request?: Request;
+}) => Promise<TContext> {
+  void config;
+  return async function noopHandler(opts) {
+    return opts.next();
+  };
+}
