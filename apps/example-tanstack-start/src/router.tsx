@@ -1,8 +1,11 @@
-import './instrumentation'
+/**
+ * TanStack Router Configuration
+ *
+ * Global middleware is configured in start.ts (the TanStack-native way).
+ * This file only handles router configuration.
+ */
 import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
-import { tracingMiddleware } from 'autotel-tanstack/middleware'
-import { debugHeadersMiddleware } from 'autotel-tanstack/debug-headers'
 import * as TanstackQuery from './integrations/tanstack-query/root-provider'
 
 // Import the generated route tree
@@ -16,10 +19,7 @@ export const getRouter = () => {
     routeTree,
     context: { ...rqContext },
     defaultPreload: 'intent',
-    requestMiddleware: [
-      tracingMiddleware(), // Request tracing + metrics collection
-      debugHeadersMiddleware(), // Debug headers in development
-    ],
+    // Global middleware is configured in start.ts (TanStack-native pattern)
     Wrap: (props: { children: React.ReactNode }) => {
       return (
         <TanstackQuery.Provider {...rqContext}>

@@ -398,3 +398,60 @@ export function functionTracingMiddleware<TContext = unknown>(
     type: 'function',
   });
 }
+
+/**
+ * Create a tracing handler for use with TanStack's native createMiddleware()
+ *
+ * This provides the raw tracing logic that you can pass to createMiddleware().server().
+ * Use this when you want full control over the middleware builder pattern.
+ *
+ * The handler accepts TanStack's middleware signature `{ next, context, request }`
+ * and internally adapts it to our more flexible MiddlewareHandler interface.
+ *
+ * @param config - Configuration options
+ * @returns Server handler function compatible with createMiddleware().server()
+ *
+ * @example
+ * ```typescript
+ * import { createStart, createMiddleware } from '@tanstack/react-start';
+ * import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+ *
+ * // TanStack-native middleware creation
+ * const requestTracingMiddleware = createMiddleware().server(
+ *   createTracingServerHandler({ captureHeaders: ['x-request-id'] })
+ * );
+ *
+ * export const start = createStart(() => ({
+ *   requestMiddleware: [requestTracingMiddleware],
+ * }));
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // For server functions - use createMiddleware({ type: 'function' })
+ * import { createStart, createMiddleware } from '@tanstack/react-start';
+ * import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+ *
+ * const functionTracingMiddleware = createMiddleware({ type: 'function' }).server(
+ *   createTracingServerHandler({ type: 'function', captureArgs: true })
+ * );
+ *
+ * export const start = createStart(() => ({
+ *   functionMiddleware: [functionTracingMiddleware],
+ * }));
+ * ```
+ */
+export function createTracingServerHandler<TContext = unknown>(
+  config?: TracingMiddlewareConfig,
+): (opts: {
+  next: (ctx?: Partial<TContext>) => Promise<TContext>;
+  context: TContext;
+  request?: Request;
+}) => Promise<TContext> {
+  const handler = createTracingMiddleware<TContext>(config);
+
+  // Adapt TanStack's signature to our handler
+  return async (opts) => {
+    return handler(opts);
+  };
+}

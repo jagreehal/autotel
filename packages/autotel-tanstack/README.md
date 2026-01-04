@@ -1,11 +1,11 @@
 # autotel-tanstack
 
-OpenTelemetry instrumentation for TanStack Start applications. Automatic tracing for server functions, middleware, and route loaders.
+OpenTelemetry instrumentation for TanStack Start applications. Automatic tracing for server functions, middleware, and route loaders using TanStack's native patterns.
 
 ## Features
 
-- **Zero-Config Option** - Just import `autotel-tanstack/auto` and you're done
-- **Framework-Aligned API** - Uses TanStack's middleware patterns
+- **TanStack-Native** - Uses `createMiddleware().server()` builder pattern
+- **Zero Boilerplate** - Global middleware traces all server functions automatically
 - **Full Coverage** - Server functions, loaders, beforeLoad, HTTP requests
 - **Tree-Shakeable** - Only bundle what you use
 - **Type-Safe** - Full TypeScript support
@@ -17,16 +17,60 @@ OpenTelemetry instrumentation for TanStack Start applications. Automatic tracing
 npm install autotel-tanstack autotel
 # or
 pnpm add autotel-tanstack autotel
-# or
-yarn add autotel-tanstack autotel
 ```
 
 ## Quick Start
 
-### Option 1: Zero-Config (Recommended)
+### TanStack-Native Setup (Recommended)
+
+Configure global middleware in `start.ts` using TanStack's native patterns:
 
 ```typescript
-// app/start.ts (React) or app/start.ts (Solid)
+// src/start.ts
+import { createStart, createMiddleware } from '@tanstack/react-start';
+import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+import './instrumentation'; // Initialize autotel
+
+// Global request tracing middleware
+const requestTracingMiddleware = createMiddleware().server(
+  createTracingServerHandler({
+    captureHeaders: ['x-request-id', 'user-agent'],
+    excludePaths: ['/health', '/metrics'],
+  }),
+);
+
+// Global server function tracing middleware
+const functionTracingMiddleware = createMiddleware({ type: 'function' }).server(
+  createTracingServerHandler({
+    type: 'function',
+    captureArgs: true,
+  }),
+);
+
+export const startInstance = createStart(() => ({
+  requestMiddleware: [requestTracingMiddleware],
+  functionMiddleware: [functionTracingMiddleware],
+}));
+```
+
+```typescript
+// src/instrumentation.ts
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
+```
+
+That's it! All server functions and requests are now automatically traced.
+
+### Zero-Config Alternative
+
+For quick setup using environment variables:
+
+```typescript
+// src/start.ts
 import 'autotel-tanstack/auto';
 import { createStart } from '@tanstack/react-start';
 
@@ -34,74 +78,59 @@ import { createStart } from '@tanstack/react-start';
 export const startInstance = createStart(() => ({}));
 ```
 
-### Option 2: Middleware-Based
-
-```typescript
-// app/start.ts
-import { createStart } from '@tanstack/react-start';
-import { tracingMiddleware } from 'autotel-tanstack/middleware';
-import { init } from 'autotel';
-
-// Initialize autotel
-init({
-  service: 'my-app',
-  endpoint: 'https://api.honeycomb.io',
-  headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY },
-});
-
-export const startInstance = createStart(() => ({
-  requestMiddleware: [tracingMiddleware()],
-}));
-```
-
-### Option 3: Handler Wrapper (Full Control)
-
-```typescript
-// server.ts
-import {
-  createStartHandler,
-  defaultStreamHandler,
-} from '@tanstack/react-start/server';
-import { wrapStartHandler } from 'autotel-tanstack/handlers';
-
-export default wrapStartHandler({
-  service: 'my-app',
-  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-  headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY },
-})(createStartHandler(defaultStreamHandler));
-```
-
 ## Usage
 
-### Tracing Server Functions
+### Server Functions (Auto-Traced)
+
+With global `functionMiddleware` configured in `start.ts`, server functions are automatically traced:
 
 ```typescript
 import { createServerFn } from '@tanstack/react-start';
-import { functionTracingMiddleware } from 'autotel-tanstack/middleware';
 
-// Using middleware (recommended)
-export const getUser = createServerFn({ method: 'GET' })
-  .middleware([functionTracingMiddleware()])
-  .handler(async ({ data: id }) => {
-    return await db.users.findUnique({ where: { id } });
-  });
-
-// Or using explicit wrapper
-import { traceServerFn } from 'autotel-tanstack/server-functions';
-
-const getUserBase = createServerFn({ method: 'GET' }).handler(
+// Automatically traced - no middleware needed per-function!
+export const getUser = createServerFn({ method: 'GET' }).handler(
   async ({ data: id }) => {
     return await db.users.findUnique({ where: { id } });
   },
 );
 
-export const getUser = traceServerFn(getUserBase, { name: 'getUser' });
+export const createUser = createServerFn({ method: 'POST' })
+  .inputValidator((d: UserInput) => d)
+  .handler(async ({ data }) => {
+    return await db.users.create({ data });
+  });
 ```
 
-### Tracing Route Loaders
+### Per-Function Middleware (When Needed)
+
+For function-specific middleware, use TanStack's `.middleware()` chaining:
 
 ```typescript
-import { createFileRoute } from '@tanstack/react-router';
+import { createServerFn, createMiddleware } from '@tanstack/react-start';
+import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+
+// Custom middleware for this function only
+const customTracing = createMiddleware({ type: 'function' }).server(
+  createTracingServerHandler({
+    type: 'function',
+    captureArgs: true,
+    captureResults: true, // Capture results for this specific function
+  }),
+);
+
+export const sensitiveOperation = createServerFn({ method: 'POST' })
+  .middleware([customTracing])
+  .handler(async ({ data }) => {
+    // ...
+  });
+```
+
+### Route Loaders
+
+Use `traceLoader` and `traceBeforeLoad` for route-level tracing:
+
+```typescript
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { traceLoader, traceBeforeLoad } from 'autotel-tanstack/loaders';
 
 export const Route = createFileRoute('/users/$userId')({
@@ -116,32 +145,14 @@ export const Route = createFileRoute('/users/$userId')({
 });
 ```
 
-### Using createTracedRoute Helper
-
-```typescript
-import { createFileRoute } from '@tanstack/react-router';
-import { createTracedRoute } from 'autotel-tanstack/loaders';
-
-const traced = createTracedRoute('/users/$userId');
-
-export const Route = createFileRoute('/users/$userId')({
-  beforeLoad: traced.beforeLoad(async ({ context }) => {
-    // Auth check
-  }),
-  loader: traced.loader(async ({ params }) => {
-    return await getUser(params.userId);
-  }),
-});
-```
-
 ## Configuration
 
-### Middleware Configuration
+### createTracingServerHandler Options
 
 ```typescript
-import { createTracingMiddleware } from 'autotel-tanstack/middleware';
+import { createTracingServerHandler } from 'autotel-tanstack/middleware';
 
-const middleware = createTracingMiddleware({
+const handler = createTracingServerHandler({
   // Type: 'request' for global middleware, 'function' for server functions
   type: 'request',
 
@@ -164,27 +175,6 @@ const middleware = createTracingMiddleware({
   customAttributes: ({ type, name, request }) => ({
     'custom.attribute': 'value',
   }),
-});
-```
-
-### Handler Configuration
-
-```typescript
-import { wrapStartHandler } from 'autotel-tanstack/handlers';
-
-const handler = wrapStartHandler({
-  // Service name (default: OTEL_SERVICE_NAME or 'tanstack-start')
-  service: 'my-app',
-
-  // OTLP endpoint (default: OTEL_EXPORTER_OTLP_ENDPOINT)
-  endpoint: 'https://api.honeycomb.io',
-
-  // OTLP headers (default: parsed from OTEL_EXPORTER_OTLP_HEADERS)
-  headers: { 'x-honeycomb-team': 'YOUR_API_KEY' },
-
-  // All middleware config options also available
-  captureHeaders: ['x-request-id'],
-  excludePaths: ['/health'],
 });
 ```
 
@@ -221,51 +211,6 @@ const handler = wrapStartHandler({
 - `tanstack.loader.type` - "loader" or "beforeLoad"
 - `tanstack.loader.params` - Route params (if enabled)
 
-## Testing
-
-```typescript
-import { describe, it, beforeEach, afterEach } from 'vitest';
-import { createTestHarness } from 'autotel-tanstack/testing';
-
-describe('MyServerFunction', () => {
-  let harness: ReturnType<typeof createTestHarness>;
-
-  beforeEach(() => {
-    harness = createTestHarness();
-  });
-
-  afterEach(() => {
-    harness.reset();
-  });
-
-  it('should trace the server function', async () => {
-    await myServerFunction({ id: '123' });
-
-    harness.assertServerFnTraced('myServerFunction');
-    harness.assertSpanHasAttribute(
-      /tanstack\.serverFn/,
-      'tanstack.server_function.name',
-      'myServerFunction',
-    );
-  });
-});
-```
-
-### Mock Utilities
-
-```typescript
-import {
-  createMockRequest,
-  generateTraceparent,
-} from 'autotel-tanstack/testing';
-
-// Create mock request
-const request = createMockRequest('GET', '/api/users', {
-  headers: { 'x-request-id': 'test-123' },
-  traceparent: generateTraceparent(),
-});
-```
-
 ## Context Propagation
 
 For distributed tracing across services:
@@ -282,6 +227,25 @@ await fetch('https://api.example.com', { headers, method: 'POST', body });
 
 // Incoming requests - extract parent context
 const parentContext = extractContextFromRequest(request);
+```
+
+## Testing
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { createTestCollector } from 'autotel-tanstack/testing';
+
+describe('MyServerFunction', () => {
+  it('should trace the server function', async () => {
+    const collector = createTestCollector();
+
+    await myServerFunction({ id: '123' });
+
+    const spans = collector.getSpans();
+    expect(spans).toHaveLength(1);
+    expect(spans[0].name).toContain('myServerFunction');
+  });
+});
 ```
 
 ## Supported Frameworks
