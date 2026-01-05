@@ -55,6 +55,10 @@ import { PrettyConsoleExporter } from './pretty-console-exporter';
 import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config';
 import { requireModule, safeRequire } from './node-require';
+import {
+  CanonicalLogLineProcessor,
+  type CanonicalLogLineOptions,
+} from './processors/canonical-log-line-processor';
 
 /**
  * Silent logger (no-op) - used as default when user doesn't provide one.
@@ -854,6 +858,75 @@ export interface AutotelConfig {
     enabled: boolean;
     options?: Record<string, unknown>;
   };
+
+  /**
+   * Canonical log lines - automatically emit spans as wide events (canonical log lines)
+   *
+   * When enabled, each span (or root span only) is automatically emitted as a
+   * comprehensive log record with ALL span attributes. This implements the
+   * "canonical log line" pattern: one comprehensive event per request with all context.
+   *
+   * **Benefits:**
+   * - One log line per request with all context (wide event)
+   * - High-cardinality, high-dimensionality data for powerful queries
+   * - Automatic - no manual logging needed
+   * - Queryable as structured data instead of string search
+   *
+   * @example Basic usage (one canonical log line per request)
+   * ```typescript
+   * init({
+   *   service: 'checkout-api',
+   *   canonicalLogLines: {
+   *     enabled: true,
+   *     rootSpansOnly: true, // One canonical log line per request
+   *   },
+   * });
+   * ```
+   *
+   * @example With custom logger
+   * ```typescript
+   * import pino from 'pino';
+   * const logger = pino();
+   * init({
+   *   service: 'my-app',
+   *   logger,
+   *   canonicalLogLines: {
+   *     enabled: true,
+   *     logger, // Use Pino for canonical log lines
+   *     rootSpansOnly: true,
+   *   },
+   * });
+   * ```
+   *
+   * @example Custom message format
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   canonicalLogLines: {
+   *     enabled: true,
+   *     messageFormat: (span) => {
+   *       const status = span.status.code === 2 ? 'ERROR' : 'SUCCESS';
+   *       return `${span.name} [${status}]`;
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  canonicalLogLines?: {
+    enabled: boolean;
+    /** Logger to use for emitting canonical log lines (defaults to OTel Logs API) */
+    logger?: Logger;
+    /** Only emit canonical log lines for root spans (default: false) */
+    rootSpansOnly?: boolean;
+    /** Minimum log level for canonical log lines (default: 'info') */
+    minLevel?: 'debug' | 'info' | 'warn' | 'error';
+    /** Custom message format (default: uses span name) */
+    messageFormat?: (
+      span: import('@opentelemetry/sdk-trace-base').ReadableSpan,
+    ) => string;
+    /** Whether to include resource attributes (default: true) */
+    includeResourceAttributes?: boolean;
+  };
 }
 
 // Internal state
@@ -1107,6 +1180,22 @@ export function init(cfg: AutotelConfig): void {
   } else if (debugMode === true) {
     // Raw debug: JSON output
     spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+  }
+
+  // Add canonical log line processor BEFORE wrapping processors
+  // This ensures it gets wrapped with the same filter/normalizer/redactor as other processors,
+  // so canonical logs respect spanFilter (filtered spans aren't logged), spanNameNormalizer
+  // (normalized names are used), and attributeRedactor (sensitive data is redacted).
+  if (mergedConfig.canonicalLogLines?.enabled) {
+    const canonicalOptions: CanonicalLogLineOptions = {
+      logger: mergedConfig.canonicalLogLines.logger || mergedConfig.logger,
+      rootSpansOnly: mergedConfig.canonicalLogLines.rootSpansOnly,
+      minLevel: mergedConfig.canonicalLogLines.minLevel,
+      messageFormat: mergedConfig.canonicalLogLines.messageFormat,
+      includeResourceAttributes:
+        mergedConfig.canonicalLogLines.includeResourceAttributes,
+    };
+    spanProcessors.push(new CanonicalLogLineProcessor(canonicalOptions));
   }
 
   // Wrap processors in order: redactor (innermost) → normalizer → filter (outermost)

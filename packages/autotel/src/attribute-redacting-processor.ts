@@ -276,6 +276,25 @@ function createRedactedSpan(
 }
 
 /**
+ * Create an attribute redactor function from a config or preset.
+ *
+ * This is useful when you need to apply the same redaction logic
+ * outside of the span processor pipeline (e.g., for canonical log lines).
+ *
+ * @example
+ * ```typescript
+ * const redactor = createAttributeRedactor('default');
+ * const redactedValue = redactor('user.password', 'secret123');
+ * // redactedValue === '[REDACTED]'
+ * ```
+ */
+export function createAttributeRedactor(
+  config: AttributeRedactorConfig | AttributeRedactorPreset,
+): AttributeRedactorFn {
+  return createRedactorFromConfig(resolveConfig(config));
+}
+
+/**
  * Span processor that redacts sensitive data from span attributes.
  *
  * Redaction happens in onEnd() when all attributes are finalized.

@@ -104,3 +104,49 @@ export {
    */
   BatchSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
+
+export {
+  /**
+   * Canonical log line processor - automatically emits spans as wide events
+   *
+   * When a span ends, this processor creates a log record with ALL span attributes.
+   * This implements the "canonical log line" pattern: one comprehensive event
+   * per request with all context, queryable as structured data.
+   *
+   * **Key Benefits:**
+   * - One log line per request with all context (wide event)
+   * - High-cardinality, high-dimensionality data for powerful queries
+   * - Automatic - no manual logging needed
+   * - Works with any logger or OTel Logs API
+   *
+   * @example Basic usage
+   * ```typescript
+   * import { init } from 'autotel';
+   *
+   * init({
+   *   service: 'checkout-api',
+   *   canonicalLogLines: {
+   *     enabled: true,
+   *     rootSpansOnly: true, // One canonical log line per request
+   *   },
+   * });
+   * ```
+   *
+   * @example With custom logger
+   * ```typescript
+   * import pino from 'pino';
+   * const logger = pino();
+   * init({
+   *   service: 'my-app',
+   *   logger,
+   *   canonicalLogLines: {
+   *     enabled: true,
+   *     logger, // Use Pino for canonical log lines
+   *     rootSpansOnly: true,
+   *   },
+   * });
+   * ```
+   */
+  CanonicalLogLineProcessor,
+  type CanonicalLogLineOptions,
+} from './processors/canonical-log-line-processor';
