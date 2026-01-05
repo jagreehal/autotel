@@ -1,6 +1,6 @@
 {
   "name": "autotel-plugins",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "OpenTelemetry instrumentation for libraries without official support (Drizzle ORM)",
   "type": "module",
   "main": "./dist/index.js",

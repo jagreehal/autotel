@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 15.0.0
+
+### Patch Changes
+
+- Updated dependencies [92206af]
+  - autotel@2.11.0
+
 ## 14.1.0
 
 ### Minor Changes
