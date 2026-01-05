@@ -1404,6 +1404,137 @@ init({
 - ✅ Logs export via OTLP to your observability backend (Grafana, Datadog, etc.)
 - ✅ Zero configuration for Pino/Winston - just pass your logger to `init()`
 
+## Canonical Log Lines (Wide Events)
+
+**Canonical log lines** implement the "wide events" pattern: one comprehensive log line per request with ALL context. This makes logs queryable as structured data instead of requiring string search.
+
+**Key Benefits:**
+
+- **One log line per request** with all context (user, cart, payment, errors, etc.)
+- **High-cardinality, high-dimensionality data** for powerful queries
+- **Automatic** - no manual logging needed, just use `trace()` and `ctx.setAttribute()`
+- **Queryable** - `WHERE user.id = 'user-123' AND error.code IS NOT NULL`
+
+### Basic Usage
+
+```typescript
+import { init, trace, setUser, httpServer } from 'autotel';
+import pino from 'pino';
+
+const logger = pino();
+init({
+  service: 'checkout-api',
+  logger,
+  canonicalLogLines: {
+    enabled: true,
+    rootSpansOnly: true, // One canonical log line per request
+    logger, // Use Pino for canonical log lines
+  },
+});
+
+export const processCheckout = trace((ctx) => async (order: Order) => {
+  setUser(ctx, {
+    id: order.userId,
+    subscription: order.plan,
+    accountAgeDays: daysSince(order.userCreatedAt),
+  });
+
+  httpServer(ctx, {
+    method: 'POST',
+    route: '/api/checkout',
+    statusCode: 200,
+  });
+
+  ctx.setAttributes({
+    'cart.total_cents': order.total,
+    'payment.method': order.paymentMethod,
+    'payment.provider': 'stripe',
+  });
+
+  // When this span ends, a canonical log line is automatically emitted
+  // with ALL attributes: user.id, user.subscription, cart.total_cents, etc.
+});
+```
+
+### What You Get
+
+When a span ends, a canonical log line is automatically emitted with:
+
+- **Core fields**: `operation`, `traceId`, `spanId`, `correlationId`, `duration_ms`, `status_code`
+- **ALL span attributes**: Every attribute you set with `ctx.setAttribute()`
+- **Resource attributes**: `service.name`, `service.version`, `deployment.environment`
+- **Timestamp**: ISO 8601 format
+
+**Example canonical log line:**
+
+```json
+{
+  "level": "info",
+  "msg": "[processCheckout] Request completed",
+  "operation": "processCheckout",
+  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "spanId": "00f067aa0ba902b7",
+  "correlationId": "4bf92f3577b34da",
+  "duration_ms": 124.7,
+  "status_code": 1,
+  "user.id": "user-123",
+  "user.subscription": "premium",
+  "user.account_age_days": 847,
+  "cart.total_cents": 15999,
+  "payment.method": "card",
+  "payment.provider": "stripe",
+  "service.name": "checkout-api",
+  "timestamp": "2024-01-15T10:23:45.612Z"
+}
+```
+
+### Query Examples
+
+With canonical log lines, you can run powerful queries:
+
+```sql
+-- Find all checkout failures for premium users
+SELECT * FROM logs
+WHERE user.subscription = 'premium'
+  AND error.code IS NOT NULL;
+
+-- Group errors by code
+SELECT error.code, COUNT(*)
+FROM logs
+WHERE error.code IS NOT NULL
+GROUP BY error.code;
+
+-- Find slow checkouts with coupons
+SELECT * FROM logs
+WHERE duration_ms > 200
+  AND cart.coupon_applied IS NOT NULL;
+```
+
+### Configuration Options
+
+```typescript
+init({
+  service: 'my-app',
+  canonicalLogLines: {
+    enabled: true,
+    rootSpansOnly: true, // Only log root spans (one per request)
+    minLevel: 'info', // Minimum log level ('debug' | 'info' | 'warn' | 'error')
+    logger: pino(), // Custom logger (defaults to OTel Logs API)
+    messageFormat: (span) => {
+      // Custom message format
+      const status = span.status.code === 2 ? 'ERROR' : 'SUCCESS';
+      return `${span.name} [${status}]`;
+    },
+    includeResourceAttributes: true, // Include service.name, service.version, etc.
+  },
+});
+```
+
+### See Also
+
+- [Demo app](../../apps/example-canonical-logs) - See canonical log lines in action
+- [Boris Tane's article on canonical log lines](https://boristane.com/logging) - The philosophy behind wide events
+
 ## Auto Instrumentation & Advanced Configuration
 
 - `autoInstrumentations` – Enable OpenTelemetry auto-instrumentations (HTTP, Express, Fastify, Prisma, Pino…). Requires `@opentelemetry/auto-instrumentations-node`.

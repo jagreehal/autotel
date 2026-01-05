@@ -1,5 +1,16 @@
 # autotel
 
+## [Unreleased]
+
+### Added
+
+- **Canonical Log Lines (Wide Events)** - Automatically emit spans as comprehensive log records with all context. Implements the "canonical log line" pattern: one log line per request with all attributes, making logs queryable as structured data instead of requiring string search.
+  - New `canonicalLogLines` option in `init()` config
+  - `CanonicalLogLineProcessor` for automatic span-to-log conversion
+  - Supports root spans only, custom message format, min level filtering
+  - Works with any logger (Pino, Winston) or OTel Logs API
+  - See [Canonical Log Lines documentation](./README.md#canonical-log-lines-wide-events) and [demo app](../../apps/example-canonical-logs)
+
 ## 2.10.0
 
 ### Minor Changes
