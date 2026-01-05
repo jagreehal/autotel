@@ -32,6 +32,25 @@ Simple working examples demonstrating autotel functionality.
 
 ## Examples
 
+### Canonical Log Lines Demo
+
+**`example-canonical-logs`** - Demonstrates canonical log lines (wide events) vs traditional logging. Shows how one comprehensive log line per request with all context enables powerful queries instead of string search.
+
+```bash
+cd apps/example-canonical-logs
+pnpm install
+pnpm start:regular   # Traditional logging (multiple log lines)
+pnpm start:canonical # Canonical log lines (one wide event per request)
+```
+
+**What it does:**
+- Shows the difference between regular logging and canonical log lines
+- Demonstrates wide events with high-cardinality, high-dimensionality data
+- Shows how canonical log lines enable structured queries instead of string search
+- Real checkout flow example with user context, cart data, payment info
+
+**See:** [example-canonical-logs/README.md](./example-canonical-logs/README.md) for detailed documentation.
+
 ### Browser/Web Examples
 
 #### Vanilla JavaScript Example
