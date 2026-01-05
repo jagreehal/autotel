@@ -148,13 +148,15 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     // Skip if rootSpansOnly and this span has a LOCAL parent (same service)
     // We still emit for spans with REMOTE parents (from distributed tracing)
     // because those are the entry points ("roots") for THIS service.
-    if (this.rootSpansOnly && span.parentSpanContext?.spanId) {
-      // Check if parent is remote (from another service via traceparent/b3 headers)
-      // If isRemote is true, this span is a service entry point and should emit
-      // If isRemote is false/undefined, this is a local child span and should be skipped
-      if (!span.parentSpanContext.isRemote) {
-        return;
-      }
+    // Check if parent is remote (from another service via traceparent/b3 headers)
+    // If isRemote is true, this span is a service entry point and should emit
+    // If isRemote is false/undefined, this is a local child span and should be skipped
+    if (
+      this.rootSpansOnly &&
+      span.parentSpanContext?.spanId &&
+      !span.parentSpanContext.isRemote
+    ) {
+      return;
     }
 
     // Determine log level from span status

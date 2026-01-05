@@ -431,7 +431,7 @@ describe('CanonicalLogLineProcessor', () => {
           spanId: 'malicious-span-id',
           timestamp: 'malicious-timestamp',
           operation: 'malicious-operation',
-          duration_ms: 999999,
+          duration_ms: 999_999,
           status_code: 42,
           correlationId: 'malicious-correlation',
         },
