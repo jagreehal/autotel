@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { LoggedOperation, type Logger } from './logger';
 
 describe('Logger interface', () => {
-  it('should work with custom logger implementations', () => {
+  it('should work with custom logger implementations (Pino signature)', () => {
     const mockLogger: Logger = {
       info: vi.fn(),
       warn: vi.fn(),
@@ -10,13 +10,15 @@ describe('Logger interface', () => {
       debug: vi.fn(),
     };
 
-    mockLogger.info('Test message', { key: 'value' });
-    expect(mockLogger.info).toHaveBeenCalledWith('Test message', {
-      key: 'value',
-    });
+    // Pino-compatible signature: (extra, message?)
+    mockLogger.info({ key: 'value' }, 'Test message');
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      { key: 'value' },
+      'Test message',
+    );
   });
 
-  it('should support error method with optional error parameter', () => {
+  it('should support error method with err in extra object', () => {
     const mockLogger: Logger = {
       info: vi.fn(),
       warn: vi.fn(),
@@ -25,10 +27,12 @@ describe('Logger interface', () => {
     };
 
     const error = new Error('Test error');
-    mockLogger.error('Error occurred', error, { context: 'test' });
-    expect(mockLogger.error).toHaveBeenCalledWith('Error occurred', error, {
-      context: 'test',
-    });
+    // Pino-compatible signature: error goes in extra.err
+    mockLogger.error({ err: error, context: 'test' }, 'Error occurred');
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      { err: error, context: 'test' },
+      'Error occurred',
+    );
   });
 });
 
@@ -54,13 +58,14 @@ describe('@LoggedOperation decorator', () => {
     const result = await service.testMethod();
 
     expect(result).toBe('result');
+    // Pino-native style: (extra, message)
     expect(mockLog.info).toHaveBeenCalledWith(
-      'Operation started',
       expect.objectContaining({ operation: 'test.operation' }),
+      'Operation started',
     );
     expect(mockLog.info).toHaveBeenCalledWith(
-      'Operation completed',
       expect.objectContaining({ operation: 'test.operation' }),
+      'Operation completed',
     );
   });
 
@@ -108,10 +113,13 @@ describe('@LoggedOperation decorator', () => {
     const service = new TestService({ log: mockLog });
 
     await expect(service.failingMethod()).rejects.toThrow('Test error');
+    // Pino-native style: (extra, message)
     expect(mockLog.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'test.failing',
+        err: expect.any(Error),
+      }),
       'Operation failed',
-      expect.any(Error),
-      expect.objectContaining({ operation: 'test.failing' }),
     );
   });
 });

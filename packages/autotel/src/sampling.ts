@@ -251,10 +251,13 @@ export class AdaptiveSampler implements Sampler {
     // Always keep errors
     if (this.alwaysSampleErrors && !result.success) {
       if (!baselineDecision) {
-        this.logger?.debug('Adaptive sampling: Keeping error trace', {
-          operation: context.operationName,
-          error: result.error?.message,
-        });
+        this.logger?.debug(
+          {
+            operation: context.operationName,
+            error: result.error?.message,
+          },
+          'Adaptive sampling: Keeping error trace',
+        );
       }
       return true;
     }
@@ -262,10 +265,13 @@ export class AdaptiveSampler implements Sampler {
     // Always keep slow requests
     if (this.alwaysSampleSlow && result.duration >= this.slowThresholdMs) {
       if (!baselineDecision) {
-        this.logger?.debug('Adaptive sampling: Keeping slow trace', {
-          operation: context.operationName,
-          duration: result.duration,
-        });
+        this.logger?.debug(
+          {
+            operation: context.operationName,
+            duration: result.duration,
+          },
+          'Adaptive sampling: Keeping slow trace',
+        );
       }
       return true;
     }
@@ -280,11 +286,11 @@ export class AdaptiveSampler implements Sampler {
       const keepLinked = Math.random() < this.linksRate;
       if (keepLinked && !baselineDecision) {
         this.logger?.debug(
-          'Adaptive sampling: Keeping trace due to sampled link',
           {
             operation: context.operationName,
             linkCount: context.links.length,
           },
+          'Adaptive sampling: Keeping trace due to sampled link',
         );
       }
       return keepLinked;
@@ -333,10 +339,13 @@ export class UserIdSampler implements Sampler {
 
     // Always sample specific users
     if (userId && this.alwaysSampleUsers.has(userId)) {
-      this.logger?.debug('Sampling user request', {
-        operation: context.operationName,
-        userId,
-      });
+      this.logger?.debug(
+        {
+          operation: context.operationName,
+          userId,
+        },
+        'Sampling user request',
+      );
       return true;
     }
 
@@ -451,10 +460,13 @@ export class FeatureFlagSampler implements Sampler {
 
     // Always sample if any monitored flag is enabled
     if (flags && flags.some((flag) => this.alwaysSampleFlags.has(flag))) {
-      this.logger?.debug('Sampling feature flag request', {
-        operation: context.operationName,
-        flags,
-      });
+      this.logger?.debug(
+        {
+          operation: context.operationName,
+          flags,
+        },
+        'Sampling feature flag request',
+      );
       return true;
     }
 

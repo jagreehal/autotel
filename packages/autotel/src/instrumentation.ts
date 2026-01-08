@@ -144,20 +144,22 @@ let shutdownHandlerRegistered = false;
 export async function shutdownInstrumentation(sdk?: NodeSDK): Promise<void> {
   const sdkToShutdown = sdk || currentSDK;
   if (!sdkToShutdown) {
-    getLogger().warn('No SDK to shutdown');
+    getLogger().warn({}, 'No SDK to shutdown');
     return;
   }
 
   try {
     await sdkToShutdown.shutdown();
-    getLogger().info('OpenTelemetry terminated successfully');
+    getLogger().info({}, 'OpenTelemetry terminated successfully');
     if (sdkToShutdown === currentSDK) {
       currentSDK = null;
     }
   } catch (error) {
     getLogger().error(
+      {
+        err: error instanceof Error ? error : undefined,
+      },
       'Error terminating OpenTelemetry',
-      error instanceof Error ? error : undefined,
     );
     throw error;
   }
@@ -169,6 +171,7 @@ export async function initInstrumentation(
   // Prevents resource leaks on hot-reload or multiple init calls
   if (currentSDK) {
     getLogger().info(
+      {},
       'Shutting down existing OpenTelemetry SDK before reinitializing...',
     );
     await shutdownInstrumentation(currentSDK);
@@ -273,11 +276,13 @@ export async function initInstrumentation(
 
   try {
     await sdk.start();
-    getLogger().info('OpenTelemetry instrumentation started successfully');
+    getLogger().info({}, 'OpenTelemetry instrumentation started successfully');
   } catch (error) {
     getLogger().error(
+      {
+        err: error instanceof Error ? error : undefined,
+      },
       'Failed to start OpenTelemetry SDK',
-      error instanceof Error ? error : undefined,
     );
     throw error;
   }
@@ -296,8 +301,10 @@ export async function initInstrumentation(
         })
         .catch((error) => {
           getLogger().error(
+            {
+              err: error instanceof Error ? error : undefined,
+            },
             'Shutdown error',
-            error instanceof Error ? error : undefined,
           );
           // eslint-disable-next-line unicorn/no-process-exit
           process.exit(1);

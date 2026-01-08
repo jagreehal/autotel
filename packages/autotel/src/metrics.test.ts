@@ -30,10 +30,14 @@ describe('Metrics', () => {
         amount: 99.99,
       });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Metric event tracked', {
-        event: 'order.completed',
-        attributes: { orderId: '123', amount: 99.99 },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          event: 'order.completed',
+          attributes: { orderId: '123', amount: 99.99 },
+        },
+        'Metric event tracked',
+      );
     });
 
     it('should track events without attributes', () => {
@@ -41,10 +45,14 @@ describe('Metrics', () => {
 
       metrics.trackEvent('user.login');
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Metric event tracked', {
-        event: 'user.login',
-        attributes: undefined,
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          event: 'user.login',
+          attributes: undefined,
+        },
+        'Metric event tracked',
+      );
     });
   });
 
@@ -56,11 +64,15 @@ describe('Metrics', () => {
       metrics.trackFunnelStep('checkout', 'completed', { cartValue: 99.99 });
 
       expect(mockLogger.info).toHaveBeenCalledTimes(2);
-      expect(mockLogger.info).toHaveBeenCalledWith('Funnel step tracked', {
-        funnel: 'checkout',
-        status: 'started',
-        attributes: { cartValue: 99.99 },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          funnel: 'checkout',
+          status: 'started',
+          attributes: { cartValue: 99.99 },
+        },
+        'Funnel step tracked',
+      );
     });
 
     it('should track funnel abandonment', () => {
@@ -68,11 +80,15 @@ describe('Metrics', () => {
 
       metrics.trackFunnelStep('checkout', 'abandoned', { reason: 'timeout' });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Funnel step tracked', {
-        funnel: 'checkout',
-        status: 'abandoned',
-        attributes: { reason: 'timeout' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          funnel: 'checkout',
+          status: 'abandoned',
+          attributes: { reason: 'timeout' },
+        },
+        'Funnel step tracked',
+      );
     });
   });
 
@@ -84,11 +100,15 @@ describe('Metrics', () => {
         amount: 99.99,
       });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Outcome tracked', {
-        operation: 'payment.process',
-        status: 'success',
-        attributes: { amount: 99.99 },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          operation: 'payment.process',
+          status: 'success',
+          attributes: { amount: 99.99 },
+        },
+        'Outcome tracked',
+      );
     });
 
     it('should track failed outcomes', () => {
@@ -98,11 +118,15 @@ describe('Metrics', () => {
         error: 'insufficient_funds',
       });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Outcome tracked', {
-        operation: 'payment.process',
-        status: 'failure',
-        attributes: { error: 'insufficient_funds' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          operation: 'payment.process',
+          status: 'failure',
+          attributes: { error: 'insufficient_funds' },
+        },
+        'Outcome tracked',
+      );
     });
 
     it('should track partial outcomes', () => {
@@ -113,11 +137,15 @@ describe('Metrics', () => {
         failureCount: 2,
       });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Outcome tracked', {
-        operation: 'batch.process',
-        status: 'partial',
-        attributes: { successCount: 8, failureCount: 2 },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          operation: 'batch.process',
+          status: 'partial',
+          attributes: { successCount: 8, failureCount: 2 },
+        },
+        'Outcome tracked',
+      );
     });
   });
 
@@ -130,11 +158,15 @@ describe('Metrics', () => {
         productCategory: 'electronics',
       });
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Value metric tracked', {
-        metric: 'order.revenue',
-        value: 149.99,
-        attributes: { currency: 'USD', productCategory: 'electronics' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          metric: 'order.revenue',
+          value: 149.99,
+          attributes: { currency: 'USD', productCategory: 'electronics' },
+        },
+        'Value metric tracked',
+      );
     });
 
     it('should track processing time', () => {
@@ -144,11 +176,15 @@ describe('Metrics', () => {
         unit: 'ms',
       });
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Value metric tracked', {
-        metric: 'application.processing_time',
-        value: 2500,
-        attributes: { unit: 'ms' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          metric: 'application.processing_time',
+          value: 2500,
+          attributes: { unit: 'ms' },
+        },
+        'Value metric tracked',
+      );
     });
   });
 

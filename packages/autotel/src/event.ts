@@ -268,10 +268,13 @@ export class Event {
       validated.attributes,
     );
 
-    this.logger?.info('Event tracked', {
-      event: validated.eventName,
-      attributes: enrichedAttributes,
-    });
+    this.logger?.info(
+      {
+        event: validated.eventName,
+        attributes: enrichedAttributes,
+      },
+      'Event tracked',
+    );
 
     // Record for testing
     this.collector?.recordEvent({
@@ -309,17 +312,22 @@ export class Event {
         // Handle circuit open errors (expected behavior when subscriber is down)
         if (error instanceof CircuitOpenError) {
           // Circuit is open - subscriber is down, log at warn level for visibility (same behavior in all environments)
-          getLogger().warn(`[Events] ${error.message}`, {
-            subscriberName: subscriber.name || 'Unknown',
-          });
+          getLogger().warn(
+            {
+              subscriberName: subscriber.name || 'Unknown',
+            },
+            `[Events] ${error.message}`,
+          );
           return;
         }
 
         // Log other subscriber errors but don't throw - event failures shouldn't break business logic
         getLogger().error(
+          {
+            err: error instanceof Error ? error : undefined,
+            subscriberName: subscriber.name || 'Unknown',
+          },
           `[Events] Subscriber ${subscriber.name || 'Unknown'} failed`,
-          error instanceof Error ? error : undefined,
-          { subscriberName: subscriber.name || 'Unknown' },
         );
       }
     });
@@ -354,11 +362,14 @@ export class Event {
     // Auto-attach all available telemetry context
     const enrichedAttributes = this.enrichWithTelemetryContext(attributes);
 
-    this.logger?.info('Funnel step tracked', {
-      funnel: funnelName,
-      status,
-      attributes: enrichedAttributes,
-    });
+    this.logger?.info(
+      {
+        funnel: funnelName,
+        status,
+        attributes: enrichedAttributes,
+      },
+      'Funnel step tracked',
+    );
 
     // Record for testing
     this.collector?.recordFunnelStep({
@@ -408,11 +419,14 @@ export class Event {
     // Auto-attach all available telemetry context
     const enrichedAttributes = this.enrichWithTelemetryContext(attributes);
 
-    this.logger?.info('Outcome tracked', {
-      operation: operationName,
-      status,
-      attributes: enrichedAttributes,
-    });
+    this.logger?.info(
+      {
+        operation: operationName,
+        status,
+        attributes: enrichedAttributes,
+      },
+      'Outcome tracked',
+    );
 
     // Record for testing
     this.collector?.recordOutcome({
@@ -468,11 +482,14 @@ export class Event {
       ...attributes,
     });
 
-    this.logger?.debug('Value tracked', {
-      metric: metricName,
-      value,
-      attributes: enrichedAttributes,
-    });
+    this.logger?.debug(
+      {
+        metric: metricName,
+        value,
+        attributes: enrichedAttributes,
+      },
+      'Value tracked',
+    );
 
     // Record for testing
     this.collector?.recordValue({
@@ -513,9 +530,11 @@ export class Event {
           await subscriber.shutdown();
         } catch (error) {
           getLogger().error(
+            {
+              err: error instanceof Error ? error : undefined,
+              subscriberName: subscriber.name || 'Unknown',
+            },
             `[Events] Failed to shutdown subscriber ${subscriber.name || 'Unknown'}`,
-            error instanceof Error ? error : undefined,
-            { subscriberName: subscriber.name || 'Unknown' },
           );
         }
       }
@@ -559,9 +578,11 @@ export class Event {
             await subscriber.shutdown();
           } catch (error) {
             getLogger().error(
+              {
+                err: error instanceof Error ? error : undefined,
+                subscriberName: subscriber.name || 'Unknown',
+              },
               `[Events] Failed to shutdown subscriber ${subscriber.name || 'Unknown'}`,
-              error instanceof Error ? error : undefined,
-              { subscriberName: subscriber.name || 'Unknown' },
             );
           }
         }
@@ -601,12 +622,15 @@ export class Event {
     // Auto-attach all available telemetry context
     const enrichedAttributes = this.enrichWithTelemetryContext(attributes);
 
-    this.logger?.info('Funnel progression tracked', {
-      funnel: funnelName,
-      stepName,
-      stepNumber,
-      attributes: enrichedAttributes,
-    });
+    this.logger?.info(
+      {
+        funnel: funnelName,
+        stepName,
+        stepNumber,
+        attributes: enrichedAttributes,
+      },
+      'Funnel progression tracked',
+    );
 
     // Record for testing (as funnel step with custom name)
     this.collector?.recordFunnelStep({

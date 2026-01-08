@@ -117,19 +117,19 @@ async function loadInitWithMocks() {
     },
   );
 
-  // Mock logger to capture log messages
+  // Mock logger to capture log messages (Pino-compatible signature: extra, message)
   const mockLogger = {
-    info: vi.fn((msg: string) => {
-      logMessages.push({ level: 'info', message: msg });
+    info: vi.fn((extra: Record<string, unknown>, msg?: string) => {
+      logMessages.push({ level: 'info', message: msg || '' });
     }),
-    warn: vi.fn((msg: string) => {
-      logMessages.push({ level: 'warn', message: msg });
+    warn: vi.fn((extra: Record<string, unknown>, msg?: string) => {
+      logMessages.push({ level: 'warn', message: msg || '' });
     }),
-    error: vi.fn((msg: string) => {
-      logMessages.push({ level: 'error', message: msg });
+    error: vi.fn((extra: Record<string, unknown>, msg?: string) => {
+      logMessages.push({ level: 'error', message: msg || '' });
     }),
-    debug: vi.fn((msg: string) => {
-      logMessages.push({ level: 'debug', message: msg });
+    debug: vi.fn((extra: Record<string, unknown>, msg?: string) => {
+      logMessages.push({ level: 'debug', message: msg || '' });
     }),
   };
 

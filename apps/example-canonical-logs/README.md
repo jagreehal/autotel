@@ -4,21 +4,69 @@ This demo shows the difference between regular logging and canonical log lines (
 
 ## What are Canonical Log Lines?
 
-Canonical log lines implement Boris Tane's "wide events" pattern:
+Canonical log lines implement "wide events" pattern:
 - **One comprehensive log line per request** with ALL context
 - **High-cardinality, high-dimensionality data** for powerful queries
 - **Queryable as structured data** instead of string search
 - **Automatic** - no manual logging needed
 
-## Running the Demo
+## Running the Demos
+
+### Option 1: CLI Demo
 
 ```bash
 # Show regular logging (traditional approach)
-npm run start:regular
+pnpm start:regular
 
 # Show canonical log lines (wide events)
-npm run start:canonical
+pnpm start:canonical
 ```
+
+### Option 2: HTTP API Demo (Step-Through)
+
+This mirrors Boris Tane's "Wide Event Builder Simulator" - step through a checkout flow and watch the wide event accumulate context.
+
+```bash
+# Terminal 1: Start the server
+pnpm start:server
+
+# Terminal 2: Run the step-through demo
+./demo.sh
+
+# Or simulate a payment failure
+./demo.sh --error
+```
+
+#### Manual curl commands
+
+```bash
+# Step 1: Initialize request
+curl -X POST http://localhost:3000/checkout/start \
+  -H "Content-Type: application/json" \
+  -d '{"request_id": "req_123"}'
+
+# Step 2: Add user context
+curl -X POST http://localhost:3000/checkout/auth \
+  -H "Content-Type: application/json" \
+  -d '{"request_id": "req_123", "user_id": "user_456"}'
+
+# Step 3: Add cart context
+curl -X POST http://localhost:3000/checkout/cart \
+  -H "Content-Type: application/json" \
+  -d '{"request_id": "req_123", "cart_id": "cart_xyz"}'
+
+# Step 4: Process payment
+curl -X POST http://localhost:3000/checkout/payment \
+  -H "Content-Type: application/json" \
+  -d '{"request_id": "req_123"}'
+
+# Step 5-6: Complete + emit canonical log
+curl -X POST http://localhost:3000/checkout/complete \
+  -H "Content-Type: application/json" \
+  -d '{"request_id": "req_123"}'
+```
+
+Watch the server console - when `/checkout/complete` is called, Autotel emits a single canonical log line with ALL context from every step.
 
 ## The Difference
 
@@ -126,4 +174,6 @@ In practice you'll want to redact PII. Autotel supports this via `attributeRedac
 
 - [Boris Tane's article on logging](https://boristane.com/blog/logging-sucks)
 - [Autotel README](../../packages/autotel/README.md)
+
+
 
