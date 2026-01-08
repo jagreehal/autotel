@@ -4,7 +4,7 @@ This demo shows the difference between regular logging and canonical log lines (
 
 ## What are Canonical Log Lines?
 
-Canonical log lines implement Boris Tane's "wide events" pattern:
+Canonical log lines implement "wide events" pattern:
 - **One comprehensive log line per request** with ALL context
 - **High-cardinality, high-dimensionality data** for powerful queries
 - **Queryable as structured data** instead of string search

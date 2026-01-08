@@ -1,5 +1,12 @@
 # autotel-plugins
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [92206af]
+  - autotel@2.11.0
+
 ## 0.8.0
 
 ### Minor Changes
