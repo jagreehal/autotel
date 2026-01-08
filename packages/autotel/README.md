@@ -40,9 +40,18 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
     - [trace()](#trace)
     - [span()](#span)
     - [Trace Context (`ctx`)](#trace-context-ctx)
+      - [Baggage (Context Propagation)](#baggage-context-propagation)
     - [Reusable Middleware Helpers](#reusable-middleware-helpers)
     - [Decorators (TypeScript 5+)](#decorators-typescript-5)
     - [Database Instrumentation](#database-instrumentation)
+  - [Type-Safe Attributes](#type-safe-attributes)
+    - [Pattern A: Key Builders](#pattern-a-key-builders)
+    - [Pattern B: Object Builders](#pattern-b-object-builders)
+    - [Attachers (Signal Helpers)](#attachers-signal-helpers)
+    - [PII Guardrails](#pii-guardrails)
+    - [Domain Helpers](#domain-helpers)
+    - [Available Attribute Domains](#available-attribute-domains)
+    - [Resource Merging](#resource-merging)
   - [Event-Driven Architectures](#event-driven-architectures)
     - [Message Producers (Kafka, SQS, RabbitMQ)](#message-producers-kafka-sqs-rabbitmq)
     - [Message Consumers](#message-consumers)
@@ -62,7 +71,17 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
     - [Using Winston](#using-winston)
     - [Using Bunyan (or other loggers)](#using-bunyan-or-other-loggers)
     - [What you get automatically](#what-you-get-automatically)
+  - [Canonical Log Lines (Wide Events)](#canonical-log-lines-wide-events)
+    - [Basic Usage](#basic-usage)
+    - [What You Get](#what-you-get)
+    - [Query Examples](#query-examples)
+    - [Configuration Options](#configuration-options)
   - [Auto Instrumentation \& Advanced Configuration](#auto-instrumentation--advanced-configuration)
+    - [⚠️ autoInstrumentations vs. Manual Instrumentations](#️-autoinstrumentations-vs-manual-instrumentations)
+      - [Option A: Auto-instrumentations only (all defaults)](#option-a-auto-instrumentations-only-all-defaults)
+      - [Option B: Manual instrumentations with custom configs](#option-b-manual-instrumentations-with-custom-configs)
+      - [Option C: Mix auto + manual (best of both)](#option-c-mix-auto--manual-best-of-both)
+    - [⚠️ Auto-Instrumentation Setup Requirements](#️-auto-instrumentation-setup-requirements)
   - [Operational Safety \& Runtime Controls](#operational-safety--runtime-controls)
   - [Configuration Reference](#configuration-reference)
   - [Building Custom Instrumentation](#building-custom-instrumentation)
@@ -1529,11 +1548,6 @@ init({
   },
 });
 ```
-
-### See Also
-
-- [Demo app](../../apps/example-canonical-logs) - See canonical log lines in action
-- [Boris Tane's article on canonical log lines](https://boristane.com/logging) - The philosophy behind wide events
 
 ## Auto Instrumentation & Advanced Configuration
 
