@@ -1,5 +1,13 @@
 # @jagreehal/example-subscribers
 
+## 1.0.20
+
+### Patch Changes
+
+- Updated dependencies [8831cf8]
+  - autotel-subscribers@16.0.0
+  - autotel@2.12.0
+
 ## 1.0.19
 
 ### Patch Changes

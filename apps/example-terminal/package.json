@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-terminal",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,6 +18,3 @@
     "typescript": "^5.9.3"
   }
 }
-
-
-
