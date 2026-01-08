@@ -27,10 +27,14 @@ describe('Events', () => {
         userId: '456',
       });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Event tracked', {
-        event: 'application.submitted',
-        attributes: { service: 'test-service', jobId: '123', userId: '456' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          event: 'application.submitted',
+          attributes: { service: 'test-service', jobId: '123', userId: '456' },
+        },
+        'Event tracked',
+      );
     });
 
     it('should track events without attributes', () => {
@@ -38,10 +42,14 @@ describe('Events', () => {
 
       event.trackEvent('user.login');
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Event tracked', {
-        event: 'user.login',
-        attributes: { service: 'test-service' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          event: 'user.login',
+          attributes: { service: 'test-service' },
+        },
+        'Event tracked',
+      );
     });
   });
 
@@ -53,11 +61,15 @@ describe('Events', () => {
       event.trackFunnelStep('checkout', 'completed', { cartValue: 99.99 });
 
       expect(mockLogger.info).toHaveBeenCalledTimes(2);
-      expect(mockLogger.info).toHaveBeenCalledWith('Funnel step tracked', {
-        funnel: 'checkout',
-        status: 'started',
-        attributes: { service: 'test-service', cartValue: 99.99 },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          funnel: 'checkout',
+          status: 'started',
+          attributes: { service: 'test-service', cartValue: 99.99 },
+        },
+        'Funnel step tracked',
+      );
     });
 
     it('should track funnel abandonment', () => {
@@ -65,11 +77,15 @@ describe('Events', () => {
 
       event.trackFunnelStep('checkout', 'abandoned', { reason: 'timeout' });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Funnel step tracked', {
-        funnel: 'checkout',
-        status: 'abandoned',
-        attributes: { service: 'test-service', reason: 'timeout' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          funnel: 'checkout',
+          status: 'abandoned',
+          attributes: { service: 'test-service', reason: 'timeout' },
+        },
+        'Funnel step tracked',
+      );
     });
   });
 
@@ -81,11 +97,15 @@ describe('Events', () => {
         recipientType: 'school',
       });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Outcome tracked', {
-        operation: 'email.delivery',
-        status: 'success',
-        attributes: { service: 'test-service', recipientType: 'school' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          operation: 'email.delivery',
+          status: 'success',
+          attributes: { service: 'test-service', recipientType: 'school' },
+        },
+        'Outcome tracked',
+      );
     });
 
     it('should track failed outcomes', () => {
@@ -95,11 +115,15 @@ describe('Events', () => {
         error: 'invalid_email',
       });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Outcome tracked', {
-        operation: 'email.delivery',
-        status: 'failure',
-        attributes: { service: 'test-service', error: 'invalid_email' },
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          operation: 'email.delivery',
+          status: 'failure',
+          attributes: { service: 'test-service', error: 'invalid_email' },
+        },
+        'Outcome tracked',
+      );
     });
 
     it('should track partial outcomes', () => {
@@ -110,15 +134,19 @@ describe('Events', () => {
         failureCount: 2,
       });
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Outcome tracked', {
-        operation: 'batch.process',
-        status: 'partial',
-        attributes: {
-          service: 'test-service',
-          successCount: 8,
-          failureCount: 2,
+      // Pino-native: (extra, message)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          operation: 'batch.process',
+          status: 'partial',
+          attributes: {
+            service: 'test-service',
+            successCount: 8,
+            failureCount: 2,
+          },
         },
-      });
+        'Outcome tracked',
+      );
     });
   });
 
@@ -131,16 +159,20 @@ describe('Events', () => {
         productCategory: 'electronics',
       });
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Value tracked', {
-        metric: 'order.revenue',
-        value: 149.99,
-        attributes: {
-          service: 'test-service',
+      // Pino-native: (extra, message)
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
           metric: 'order.revenue',
-          currency: 'USD',
-          productCategory: 'electronics',
+          value: 149.99,
+          attributes: {
+            service: 'test-service',
+            metric: 'order.revenue',
+            currency: 'USD',
+            productCategory: 'electronics',
+          },
         },
-      });
+        'Value tracked',
+      );
     });
 
     it('should track processing time', () => {
@@ -150,15 +182,19 @@ describe('Events', () => {
         unit: 'ms',
       });
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Value tracked', {
-        metric: 'application.processing_time',
-        value: 2500,
-        attributes: {
-          service: 'test-service',
+      // Pino-native: (extra, message)
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
           metric: 'application.processing_time',
-          unit: 'ms',
+          value: 2500,
+          attributes: {
+            service: 'test-service',
+            metric: 'application.processing_time',
+            unit: 'ms',
+          },
         },
-      });
+        'Value tracked',
+      );
     });
   });
 
@@ -245,14 +281,15 @@ describe('Events', () => {
 
       event.trackEvent('user.login');
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Event tracked',
         expect.objectContaining({
           attributes: {
             service: 'test-service',
             // No version/environment - gracefully omitted
           },
         }),
+        'Event tracked',
       );
     });
 
@@ -268,8 +305,8 @@ describe('Events', () => {
 
       event.trackEvent('user.signup', { userId: '123' });
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Event tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             service: 'test-service',
@@ -278,6 +315,7 @@ describe('Events', () => {
             userId: '123',
           }),
         }),
+        'Event tracked',
       );
     });
 
@@ -292,9 +330,10 @@ describe('Events', () => {
 
       await tracedOperation();
 
+      // Pino-native: first arg is the extra object
       const capturedCall = (mockLogger.info as ReturnType<typeof vi.fn>).mock
         .calls[0];
-      const attributes = capturedCall[1].attributes;
+      const attributes = capturedCall[0].attributes;
 
       expect(attributes).toHaveProperty('traceId');
       expect(attributes).toHaveProperty('spanId');
@@ -321,8 +360,8 @@ describe('Events', () => {
 
       await tracedOperation();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Funnel step tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             service: 'test-service',
@@ -334,6 +373,7 @@ describe('Events', () => {
             correlationId: expect.any(String),
           }),
         }),
+        'Funnel step tracked',
       );
     });
 
@@ -354,8 +394,8 @@ describe('Events', () => {
 
       await tracedOperation();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Outcome tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             service: 'test-service',
@@ -367,6 +407,7 @@ describe('Events', () => {
             correlationId: expect.any(String),
           }),
         }),
+        'Outcome tracked',
       );
     });
 
@@ -385,8 +426,8 @@ describe('Events', () => {
 
       await tracedOperation();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Value tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             service: 'test-service',
@@ -399,6 +440,7 @@ describe('Events', () => {
             correlationId: expect.any(String),
           }),
         }),
+        'Value tracked',
       );
     });
 
@@ -414,8 +456,8 @@ describe('Events', () => {
       // Call outside a trace
       event.trackEvent('background.job.completed', { jobId: 'job-123' });
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Event tracked',
         expect.objectContaining({
           attributes: {
             service: 'test-service',
@@ -425,6 +467,7 @@ describe('Events', () => {
             // No traceId/spanId/correlationId - gracefully omitted
           },
         }),
+        'Event tracked',
       );
     });
   });
@@ -449,14 +492,15 @@ describe('Events', () => {
 
       await operation();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Event tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             'operation.name': 'user.create',
             userId: '123',
           }),
         }),
+        'Event tracked',
       );
     });
 
@@ -471,8 +515,8 @@ describe('Events', () => {
 
       await createUser();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Event tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             // Function name might be inferred with slight variations (e.g., 'createUser2')
@@ -481,6 +525,7 @@ describe('Events', () => {
             userId: '456',
           }),
         }),
+        'Event tracked',
       );
     });
 
@@ -519,16 +564,17 @@ describe('Events', () => {
       await createOrder('order-789');
 
       // Verify all operations captured correct names
+      // Pino-native: first arg is the extra object
       const calls = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls;
 
       // First call: updateUser - should infer from named function declaration
-      expect(calls[0][1].attributes['operation.name']).toMatch(/updateUser/);
+      expect(calls[0][0].attributes['operation.name']).toMatch(/updateUser/);
 
       // Second call: user.delete - explicit name takes precedence
-      expect(calls[1][1].attributes['operation.name']).toBe('user.delete');
+      expect(calls[1][0].attributes['operation.name']).toBe('user.delete');
 
       // Third call: createOrder - should infer from inner named function in factory pattern
-      expect(calls[2][1].attributes['operation.name']).toMatch(/createOrder/);
+      expect(calls[2][0].attributes['operation.name']).toMatch(/createOrder/);
     });
 
     it('should auto-capture operation.name in nested spans', async () => {
@@ -546,14 +592,15 @@ describe('Events', () => {
 
       await operation();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Event tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             'operation.name': 'order.validate',
             orderId: 'ord_123',
           }),
         }),
+        'Event tracked',
       );
     });
 
@@ -570,14 +617,15 @@ describe('Events', () => {
 
       await checkout();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Funnel step tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             'operation.name': 'checkout.flow',
             cartValue: 99.99,
           }),
         }),
+        'Funnel step tracked',
       );
     });
 
@@ -594,14 +642,15 @@ describe('Events', () => {
 
       await sendEmail();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Outcome tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             'operation.name': 'email.send',
             recipientType: 'user',
           }),
         }),
+        'Outcome tracked',
       );
     });
 
@@ -616,14 +665,15 @@ describe('Events', () => {
 
       await processOrder();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Value tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             'operation.name': 'order.process',
             currency: 'USD',
           }),
         }),
+        'Value tracked',
       );
     });
 
@@ -635,8 +685,8 @@ describe('Events', () => {
       // Call outside any trace
       event.trackEvent('background.job', { jobId: 'job-123' });
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Event tracked',
         expect.objectContaining({
           attributes: {
             service: 'test-service',
@@ -646,6 +696,7 @@ describe('Events', () => {
             // No operation.name - gracefully omitted
           },
         }),
+        'Event tracked',
       );
     });
 
@@ -668,27 +719,29 @@ describe('Events', () => {
       await parentOperation();
 
       // Check parent event has parent operation name
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenNthCalledWith(
         1,
-        'Event tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             'operation.name': 'parent.operation',
             step: 1,
           }),
         }),
+        'Event tracked',
       );
 
       // Check child event has child operation name
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenNthCalledWith(
         2,
-        'Event tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             'operation.name': 'child.operation',
             step: 2,
           }),
         }),
+        'Event tracked',
       );
     });
 
@@ -704,14 +757,15 @@ describe('Events', () => {
 
       await operation();
 
+      // Pino-native: (extra, message)
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Event tracked',
         expect.objectContaining({
           attributes: expect.objectContaining({
             'operation.name': 'factory.operation',
             data: 'test',
           }),
         }),
+        'Event tracked',
       );
     });
   });

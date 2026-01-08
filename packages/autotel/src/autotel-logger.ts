@@ -8,7 +8,11 @@
  * - Level support (debug, info, warn, error, none)
  * - Zero additional dependencies (uses @opentelemetry/api, already a dep)
  *
- * Used as the default fallback when users don't provide Pino/Winston.
+ * Uses Pino-compatible signature supporting both patterns:
+ * - `log.info('simple message')` - string-only
+ * - `log.info({ userId: '123' }, 'message')` - object first with optional message
+ *
+ * Used as the default fallback when users don't provide Pino/Bunyan.
  * Can also be used directly: import { createBuiltinLogger } from 'autotel/logger'
  *
  * @example
@@ -16,7 +20,12 @@
  * import { createBuiltinLogger, runWithLogLevel } from 'autotel/logger';
  *
  * const log = createBuiltinLogger('my-service');
- * log.info('User created', { userId: '123' });
+ *
+ * // Simple message (no metadata)
+ * log.info('Server started');
+ *
+ * // With metadata (Pino-style: object first, message second)
+ * log.info({ userId: '123' }, 'User created');
  * // Output: {"level":"info","service":"my-service","msg":"User created","userId":"123","traceId":"..."}
  *
  * // Dynamic log level per-request
@@ -197,37 +206,130 @@ export function createBuiltinLogger(
     }
   };
 
+  // Pino-compatible signature: supports both:
+  // - logger.info('message') - string-only
+  // - logger.info({ extra }, 'message') - Pino style with metadata
+  // Also auto-detects and handles legacy Winston-style: logger.info('message', { extra })
+  const createLogMethod = (level: 'info' | 'warn' | 'debug') => {
+    return (
+      extraOrMessage: Record<string, unknown> | string,
+      message?: string | Record<string, unknown>,
+    ) => {
+      if (typeof extraOrMessage === 'string') {
+        // First arg is string - could be:
+        // 1. String-only: logger.info('message')
+        // 2. Legacy Winston-style: logger.info('message', { extra })
+        if (message !== undefined && typeof message === 'object') {
+          // Legacy Winston-style detected - auto-swap for backward compatibility
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(
+              `[autotel] Legacy logger pattern detected: logger.${level}('message', metadata). ` +
+                `Autotel recommends Pino signature: logger.${level}({ ...metadata }, 'message'). ` +
+                `Auto-swapping arguments for compatibility.`,
+            );
+          }
+          // Swap: treat first arg as message, second as metadata
+          log(level, extraOrMessage, message as Record<string, unknown>);
+        } else {
+          // Pure string-only call: logger.info('message')
+          log(level, extraOrMessage, undefined);
+        }
+      } else {
+        // Pino style: logger.info({ extra }, 'message')
+        log(level, (message as string) || '', extraOrMessage);
+      }
+    };
+  };
+
   return {
-    info: (msg: string, attrs?: Record<string, unknown>) =>
-      log('info', msg, attrs),
+    info: createLogMethod('info'),
+    warn: createLogMethod('warn'),
+    debug: createLogMethod('debug'),
 
     error: (
-      msg: string,
-      error?: Error | unknown,
-      attrs?: Record<string, unknown>,
+      extraOrMessage: Record<string, unknown> | string,
+      message?: string | Record<string, unknown> | Error,
     ) => {
-      let errorAttrs: Record<string, unknown> | undefined;
-      if (error instanceof Error) {
-        errorAttrs = {
-          error: error.message,
-          stack: error.stack,
-          name: error.name,
-          ...attrs,
-        };
-      } else if (error === undefined) {
-        errorAttrs = attrs;
-      } else {
-        errorAttrs = { error: String(error), ...attrs };
+      if (typeof extraOrMessage === 'string') {
+        // First arg is string - could be:
+        // 1. String-only: logger.error('message')
+        // 2. Legacy: logger.error('message', error) - Error as second arg
+        // 3. Legacy: logger.error('message', { extra }) - object as second arg
+
+        // Handle legacy logger.error('message', error) pattern
+        if (message instanceof Error) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(
+              `[autotel] Legacy logger pattern detected: logger.error('message', error). ` +
+                `Autotel recommends Pino signature: logger.error({ err: error }, 'message'). ` +
+                `Auto-swapping arguments for compatibility.`,
+            );
+          }
+          log('error', extraOrMessage, {
+            error: message.message,
+            stack: message.stack,
+            name: message.name,
+          });
+          return;
+        }
+
+        // Handle legacy logger.error('message', { extra }) pattern
+        if (message !== undefined && typeof message === 'object') {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(
+              `[autotel] Legacy logger pattern detected: logger.error('message', metadata). ` +
+                `Autotel recommends Pino signature: logger.error({ ...metadata }, 'message'). ` +
+                `Auto-swapping arguments for compatibility.`,
+            );
+          }
+          // Swap: treat first arg as message, second as metadata (handle err extraction)
+          const extra = message as Record<string, unknown>;
+          const { err, ...rest } = extra as Record<string, unknown> & {
+            err?: unknown;
+          };
+          let errorAttrs: Record<string, unknown> = rest;
+          if (err instanceof Error) {
+            errorAttrs = {
+              error: err.message,
+              stack: err.stack,
+              name: err.name,
+              ...rest,
+            };
+          } else if (err !== undefined) {
+            errorAttrs = { err, ...rest };
+          }
+          log('error', extraOrMessage, errorAttrs);
+          return;
+        }
+
+        // Pure string-only call: logger.error('message')
+        log('error', extraOrMessage, undefined);
+        return;
       }
 
-      log('error', msg, errorAttrs);
+      // Pino style: logger.error({ err, ...extra }, 'message')
+      // Extract err from extra if present (Pino convention)
+      const { err, ...rest } = extraOrMessage as Record<string, unknown> & {
+        err?: unknown;
+      };
+      let errorAttrs: Record<string, unknown> = rest;
+      if (err instanceof Error) {
+        // err is an Error - extract message, stack, name for structured logging
+        errorAttrs = {
+          error: err.message,
+          stack: err.stack,
+          name: err.name,
+          ...rest,
+        };
+      } else if (err !== undefined) {
+        // err is not an Error but exists - preserve it as-is
+        errorAttrs = {
+          err,
+          ...rest,
+        };
+      }
+      log('error', (message as string) || '', errorAttrs);
     },
-
-    warn: (msg: string, attrs?: Record<string, unknown>) =>
-      log('warn', msg, attrs),
-
-    debug: (msg: string, attrs?: Record<string, unknown>) =>
-      log('debug', msg, attrs),
   };
 }
 
@@ -239,10 +341,15 @@ export function createBuiltinLogger(
  * import { autotelLogger } from 'autotel/logger';
  *
  * const log = autotelLogger();
- * log.info('User created', { userId: '123' });
+ *
+ * // Simple message
+ * log.info('Server started');
+ *
+ * // With metadata (Pino-style: object first, message second)
+ * log.info({ userId: '123' }, 'User created');
  *
  * // With options
- * const log = autotelLogger({ service: 'my-app', level: 'debug', pretty: true });
+ * const devLog = autotelLogger({ service: 'my-app', level: 'debug', pretty: true });
  * ```
  */
 export function autotelLogger(options?: {

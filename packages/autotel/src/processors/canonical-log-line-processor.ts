@@ -242,12 +242,8 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     canonicalLogLine: Record<string, unknown>,
   ): void {
     const message = this.messageFormat(span);
-    if (level === 'error') {
-      // Logger.error signature: (message, error?, extra?)
-      this.logger!.error(message, undefined, canonicalLogLine);
-    } else {
-      this.logger![level](message, canonicalLogLine);
-    }
+    // Pino-compatible signature: (extra, message)
+    this.logger![level](canonicalLogLine, message);
   }
 
   private emitViaOTel(

@@ -140,12 +140,13 @@ describe('Sampling', () => {
       });
 
       expect(shouldKeep).toBe(true);
+      // Pino-native: (extra, message)
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Adaptive sampling: Keeping error trace',
         expect.objectContaining({
           operation: 'test.operation',
           error: 'Test error',
         }),
+        'Adaptive sampling: Keeping error trace',
       );
     });
 
@@ -168,12 +169,13 @@ describe('Sampling', () => {
       });
 
       expect(shouldKeep).toBe(true);
+      // Pino-native: (extra, message)
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Adaptive sampling: Keeping slow trace',
         expect.objectContaining({
           operation: 'test.operation',
           duration: 1500,
         }),
+        'Adaptive sampling: Keeping slow trace',
       );
     });
 
@@ -271,10 +273,14 @@ describe('Sampling', () => {
       };
 
       expect(sampler.shouldSample(vipContext)).toBe(true);
-      expect(mockLogger.debug).toHaveBeenCalledWith('Sampling user request', {
-        operation: 'test.operation',
-        userId: 'vip_123',
-      });
+      // Pino-native: (extra, message)
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'test.operation',
+          userId: 'vip_123',
+        },
+        'Sampling user request',
+      );
     });
 
     it('should use consistent per-user sampling', () => {
@@ -380,12 +386,13 @@ describe('Sampling', () => {
       };
 
       expect(sampler.shouldSample(flagContext)).toBe(true);
+      // Pino-native: (extra, message)
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Sampling feature flag request',
         {
           operation: 'test.operation',
           flags: ['new_checkout'],
         },
+        'Sampling feature flag request',
       );
     });
 
@@ -611,12 +618,13 @@ describe('Sampling', () => {
       });
 
       expect(shouldKeep).toBe(true);
+      // Pino-native: (extra, message)
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Adaptive sampling: Keeping trace due to sampled link',
         expect.objectContaining({
           operation: 'consumer.process',
           linkCount: 1,
         }),
+        'Adaptive sampling: Keeping trace due to sampled link',
       );
     });
 

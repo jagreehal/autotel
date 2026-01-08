@@ -379,7 +379,7 @@ Every `trace((ctx) => ...)` factory receives a type-safe helper backed by `Async
 
 ```typescript
 export const createUser = trace((ctx) => async (input: CreateUserData) => {
-  logger.info('Handling request', { traceId: ctx.traceId });
+  logger.info({ traceId: ctx.traceId }, 'Handling request');
   ctx.setAttributes({ 'user.id': input.id, 'user.plan': input.plan });
 
   try {

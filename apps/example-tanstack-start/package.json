@@ -14,14 +14,14 @@
   "dependencies": {
     "@netlify/vite-plugin-tanstack-start": "^1.2.6",
     "@tailwindcss/vite": "^4.1.18",
-    "@tanstack/react-devtools": "^0.9.0",
+    "@tanstack/react-devtools": "^0.9.1",
     "@tanstack/react-query": "^5.90.16",
     "@tanstack/react-query-devtools": "^5.91.2",
-    "@tanstack/react-router": "^1.144.0",
-    "@tanstack/react-router-devtools": "^1.144.0",
-    "@tanstack/react-router-ssr-query": "^1.144.0",
-    "@tanstack/react-start": "^1.145.3",
-    "@tanstack/router-plugin": "^1.145.2",
+    "@tanstack/react-router": "^1.145.11",
+    "@tanstack/react-router-devtools": "^1.145.11",
+    "@tanstack/react-router-ssr-query": "^1.145.11",
+    "@tanstack/react-start": "^1.145.11",
+    "@tanstack/router-plugin": "^1.145.11",
     "autotel": "workspace:*",
     "autotel-tanstack": "workspace:*",
     "lucide-react": "^0.562.0",
@@ -31,7 +31,7 @@
     "vite-tsconfig-paths": "^6.0.3"
   },
   "devDependencies": {
-    "@tanstack/devtools-vite": "^0.4.0",
+    "@tanstack/devtools-vite": "^0.4.1",
     "@tanstack/eslint-config": "^0.3.4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.1",
@@ -42,7 +42,7 @@
     "jsdom": "^27.4.0",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3",
-    "vite": "^7.3.0",
+    "vite": "^7.3.1",
     "vitest": "^4.0.16",
     "web-vitals": "^5.1.0"
   }

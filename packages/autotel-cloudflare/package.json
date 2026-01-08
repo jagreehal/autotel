@@ -83,7 +83,7 @@
     "@opentelemetry/resources": "^2.2.0"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "^4.0.0"
+    "@cloudflare/workers-types": "^4.20260108.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260103.0",

@@ -6,19 +6,24 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "start:regular": "tsx src/index.ts --regular",
-    "start:canonical": "tsx src/index.ts --canonical"
+    "start:canonical": "tsx src/index.ts --canonical",
+    "start:server": "tsx --import ./instrumentation.ts src/server.ts"
   },
   "dependencies": {
     "autotel": "workspace:*",
     "dotenv": "^17.2.3",
+    "express": "^5.2.1",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.3"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^25.0.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }
+
+
 
 

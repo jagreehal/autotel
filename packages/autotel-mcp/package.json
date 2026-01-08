@@ -56,7 +56,7 @@
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "autotel": "*"
   },
   "dependencies": {
