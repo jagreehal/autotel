@@ -4,8 +4,36 @@
  * **Zero-Config Option:** Don't provide a logger to `init()` and autotel uses
  * a built-in structured JSON logger with automatic trace context injection.
  *
- * **BYOL (Bring Your Own Logger):** Pass Pino or Winston to `init()` for
+ * **BYOL (Bring Your Own Logger):** Pass Pino or Bunyan to `init()` for
  * automatic instrumentation with trace context and OTLP log export.
+ *
+ * ## Logger Signature
+ *
+ * Autotel v2.10+ uses **Pino's signature**: `logger.info({ metadata }, 'message')`.
+ *
+ * ### Backward Compatibility
+ *
+ * The built-in logger auto-detects legacy Winston-style calls and swaps arguments:
+ * ```typescript
+ * // Legacy (auto-detected and handled)
+ * logger.info('User created', { userId: '123' });
+ * // → Internally treated as: logger.info({ userId: '123' }, 'User created')
+ * // → Logs warning in development, works silently in production
+ * ```
+ *
+ * ### Recommended Usage
+ *
+ * ```typescript
+ * // ✅ Pino-style (preferred)
+ * logger.info({ userId: '123' }, 'User created');
+ *
+ * // ✅ Simple message (no metadata)
+ * logger.info('Server started');
+ * ```
+ *
+ * **Note:** If you BYOL (bring your own logger), it must use Pino signature.
+ * Winston and other `(message, meta)` loggers are NOT compatible.
+ * For Winston, use `@opentelemetry/instrumentation-winston` instead.
  *
  * @example Zero-config (uses built-in logger)
  * ```typescript
@@ -20,8 +48,13 @@
  * import { createBuiltinLogger, runWithLogLevel } from 'autotel/logger';
  *
  * const log = createBuiltinLogger('my-service');
- * log.info('User created', { userId: '123' });
- * // Output: {"level":"info","service":"my-service","msg":"User created",...,"traceId":"..."}
+ *
+ * // Simple message (no metadata)
+ * log.info('Server started');
+ *
+ * // With metadata (Pino-style: object first, message second)
+ * log.info({ userId: '123' }, 'User created');
+ * // Output: {"level":"info","service":"my-service","msg":"User created","userId":"123","traceId":"..."}
  *
  * // Dynamic log level per-request
  * runWithLogLevel('debug', () => {
@@ -38,23 +71,10 @@
  * init({ service: 'my-app', logger });
  *
  * // Logs automatically include traceId/spanId and export via OTLP!
- * logger.info('User created', { userId: '123' });
+ * logger.info({ userId: '123' }, 'User created');
  * ```
  *
- * @example Using Winston (auto-instrumented)
- * ```typescript
- * import winston from 'winston';  // npm install winston
- * import { init } from 'autotel';
- *
- * const logger = winston.createLogger({
- *   level: 'info',
- *   format: winston.format.json(),
- *   transports: [new winston.transports.Console()]
- * });
- * init({ service: 'my-app', logger });
- * ```
- *
- * @example Using Bunyan (manual instrumentation)
+ * @example Using Bunyan (auto-instrumented, same signature as Pino)
  * ```typescript
  * import bunyan from 'bunyan';  // npm install bunyan @opentelemetry/instrumentation-bunyan
  * import { init } from 'autotel';
@@ -68,13 +88,14 @@
  * });
  * ```
  *
- * @example Custom logger (any logger with 4 methods)
+ * @example Custom logger (MUST use Pino-compatible signature)
  * ```typescript
+ * // ⚠️ Your custom logger MUST accept (object, message?) signature
  * const logger = {
- *   info: (msg, extra) => console.log(msg, extra),
- *   warn: (msg, extra) => console.warn(msg, extra),
- *   error: (msg, err, extra) => console.error(msg, err, extra),
- *   debug: (msg, extra) => console.debug(msg, extra),
+ *   info: (extra, msg) => console.log(msg || '', extra),
+ *   warn: (extra, msg) => console.warn(msg || '', extra),
+ *   error: (extra, msg) => console.error(msg || '', extra),
+ *   debug: (extra, msg) => console.debug(msg || '', extra),
  * };
  * init({ service: 'my-app', logger });
  * ```
@@ -120,33 +141,52 @@ export interface LoggerConfig {
 }
 
 /**
- * Simple logger interface - minimal contract for any logger
+ * Pino-compatible log function signature
  *
- * Bring your own Pino, Winston, or any logger with these 4 methods.
- * Autotel automatically instruments Pino and Winston loggers to:
- * - Inject trace context (traceId, spanId) into log records
- * - Record errors in the active span
- * - Bridge logs to OpenTelemetry Logs API for OTLP export
+ * Matches Pino's actual LogFn type which supports:
+ * - `(msg: string)` - simple string message
+ * - `(obj: object, msg?: string)` - object first with optional message
  *
- * @example Using Pino
+ * @example
+ * ```typescript
+ * logger.info('User logged in');
+ * logger.info({ userId: '123' }, 'User created');
+ * logger.error({ err: error }, 'Operation failed');
+ * ```
+ */
+export interface LogFn {
+  (msg: string): void;
+  (obj: Record<string, unknown>, msg?: string): void;
+}
+
+/**
+ * Simple logger interface - Pino/Bunyan-compatible
+ *
+ * Uses Pino's LogFn signature which supports both:
+ * - `logger.info('message')` - simple string message
+ * - `logger.info({ extra }, 'message')` - object first with optional message
+ *
+ * This is compatible with Pino, Bunyan, and any logger following this pattern.
+ *
+ * @example Using Pino (just works!)
  * ```typescript
  * import pino from 'pino';
  * const logger = pino({ level: 'info' });
  * init({ service: 'my-app', logger });
  * ```
  *
- * @example Using Winston
+ * @example Direct usage
  * ```typescript
- * import winston from 'winston';
- * const logger = winston.createLogger({ level: 'info' });
- * init({ service: 'my-app', logger });
+ * logger.info('Simple message');
+ * logger.info({ userId: '123' }, 'User created');
+ * logger.error({ err: error }, 'Operation failed');
  * ```
  */
 export interface Logger {
-  info(message: string, extra?: Record<string, unknown>): void;
-  warn(message: string, extra?: Record<string, unknown>): void;
-  error(message: string, error?: Error, extra?: Record<string, unknown>): void;
-  debug(message: string, extra?: Record<string, unknown>): void;
+  info: LogFn;
+  warn: LogFn;
+  error: LogFn;
+  debug: LogFn;
 }
 
 /**
@@ -180,13 +220,14 @@ export interface LoggedOperationOptions {
  * For zero-boilerplate solution, see @Instrumented class decorator.
  *
  * @example
- * // Simple usage
+ * // Simple usage (Pino-style: object first, message second)
  * class OrderService {
  *   constructor(private readonly deps: { log: Logger }) {}
  *
  *   @LoggedOperation('order.create')
  *   async createOrder(data: CreateOrderData) {
- *     this.deps.logger.info('Creating order', data)
+ *     // ✅ Correct Pino-style logging
+ *     this.deps.log.info({ orderId: data.id }, 'Creating order');
  *   }
  * }
  *
@@ -221,20 +262,26 @@ export function LoggedOperation(
 
       return tracer.startActiveSpan(operationName, async (span) => {
         try {
-          log?.info('Operation started', {
-            operation: operationName,
-            method: methodName,
-            args,
-          });
+          log?.info(
+            {
+              operation: operationName,
+              method: methodName,
+              args,
+            },
+            'Operation started',
+          );
 
           const result = await originalMethod.apply(this, args);
 
           const duration = performance.now() - startTime;
-          log?.info('Operation completed', {
-            operation: operationName,
-            method: methodName,
-            duration,
-          });
+          log?.info(
+            {
+              operation: operationName,
+              method: methodName,
+              duration,
+            },
+            'Operation completed',
+          );
 
           span.setStatus({ code: SpanStatusCode.OK });
           span.setAttributes({
@@ -248,9 +295,13 @@ export function LoggedOperation(
         } catch (error) {
           const duration = performance.now() - startTime;
           log?.error(
+            {
+              err: error instanceof Error ? error : undefined,
+              operation: operationName,
+              method: methodName,
+              duration,
+            },
             'Operation failed',
-            error instanceof Error ? error : undefined,
-            { operation: operationName, method: methodName, duration },
           );
 
           span.setStatus({

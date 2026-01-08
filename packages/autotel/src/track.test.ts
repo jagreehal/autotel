@@ -53,6 +53,7 @@ describe('track() function', () => {
       track('test.event', { foo: 'bar' });
 
       expect(loggerWarnSpy).toHaveBeenCalledWith(
+        {},
         expect.stringContaining('track() used before init()'),
       );
     });

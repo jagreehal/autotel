@@ -17,24 +17,38 @@ describe('CanonicalLogLineProcessor', () => {
 
   beforeEach(() => {
     logEntries = [];
+    // Pino-native signature: (extra, message)
+    // The processor ONLY calls with this order, so we can cast safely
     mockLogger = {
-      info: vi.fn((msg, attrs) => {
-        logEntries.push({ level: 'info', message: msg, attrs: attrs || {} });
+      info: vi.fn((extra, msg) => {
+        logEntries.push({
+          level: 'info',
+          message: msg || '',
+          attrs: extra || {},
+        });
       }),
-      warn: vi.fn((msg, attrs) => {
-        logEntries.push({ level: 'warn', message: msg, attrs: attrs || {} });
+      warn: vi.fn((extra, msg) => {
+        logEntries.push({
+          level: 'warn',
+          message: msg || '',
+          attrs: extra || {},
+        });
       }),
-      error: vi.fn((msg, err, attrs) => {
-        // Logger.error signature: (message, error?, extra?)
-        // The processor calls: logger.error(message, undefined, canonicalLogLine)
-        // So err is undefined and attrs is the canonical log line
-        const actualAttrs = attrs || {};
-        logEntries.push({ level: 'error', message: msg, attrs: actualAttrs });
+      error: vi.fn((extra, msg) => {
+        logEntries.push({
+          level: 'error',
+          message: msg || '',
+          attrs: extra || {},
+        });
       }),
-      debug: vi.fn((msg, attrs) => {
-        logEntries.push({ level: 'debug', message: msg, attrs: attrs || {} });
+      debug: vi.fn((extra, msg) => {
+        logEntries.push({
+          level: 'debug',
+          message: msg || '',
+          attrs: extra || {},
+        });
       }),
-    };
+    } as unknown as Logger;
 
     mockOTelLogger = {
       emit: vi.fn(),

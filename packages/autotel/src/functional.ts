@@ -735,11 +735,12 @@ function wrapWithTracing<TArgs extends unknown[], TReturn>(
         const initConfig = getInitConfig();
         const logger = initConfig?.logger;
         if (logger?.error) {
-          if (error instanceof Error) {
-            logger.error('[autotel] Auto-flush failed', error);
-          } else {
-            logger.error(`[autotel] Auto-flush failed: ${String(error)}`);
-          }
+          logger.error(
+            {
+              err: error instanceof Error ? error : undefined,
+            },
+            `[autotel] Auto-flush failed${error instanceof Error ? '' : `: ${String(error)}`}`,
+          );
         }
       }
     };
@@ -1006,11 +1007,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
           const initConfig = getInitConfig();
           const logger = initConfig?.logger;
           if (logger?.error) {
-            if (error instanceof Error) {
-              logger.error('[autotel] Auto-flush failed', error);
-            } else {
-              logger.error(`[autotel] Auto-flush failed: ${String(error)}`);
-            }
+            logger.error(
+              {
+                err: error instanceof Error ? error : undefined,
+              },
+              `[autotel] Auto-flush failed${error instanceof Error ? '' : `: ${String(error)}`}`,
+            );
           }
         });
       }
@@ -1033,13 +1035,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                   const initConfig = getInitConfig();
                   const logger = initConfig?.logger;
                   if (logger?.error) {
-                    if (error instanceof Error) {
-                      logger.error('[autotel] Span flush failed', error);
-                    } else {
-                      logger.error(
-                        `[autotel] Span flush failed: ${String(error)}`,
-                      );
-                    }
+                    logger.error(
+                      {
+                        err: error instanceof Error ? error : undefined,
+                      },
+                      `[autotel] Span flush failed${error instanceof Error ? '' : `: ${String(error)}`}`,
+                    );
                   }
                 });
               }
@@ -1302,11 +1303,12 @@ function executeImmediately<TReturn = unknown>(
       const initConfig = getInitConfig();
       const logger = initConfig?.logger;
       if (logger?.error) {
-        if (error instanceof Error) {
-          logger.error('[autotel] Auto-flush failed', error);
-        } else {
-          logger.error(`[autotel] Auto-flush failed: ${String(error)}`);
-        }
+        logger.error(
+          {
+            err: error instanceof Error ? error : undefined,
+          },
+          `[autotel] Auto-flush failed${error instanceof Error ? '' : `: ${String(error)}`}`,
+        );
       }
     }
   };

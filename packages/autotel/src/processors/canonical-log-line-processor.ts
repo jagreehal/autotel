@@ -2,7 +2,7 @@
  * Canonical Log Line Processor
  *
  * Automatically emits spans as canonical log lines (wide events) when they end.
- * Implements Boris Tane's "canonical log line" pattern: one comprehensive
+ * Implements canonical log line" pattern: one comprehensive
  * event per request with all context.
  *
  * When a span ends, this processor creates a log record with ALL span attributes,
@@ -242,12 +242,8 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     canonicalLogLine: Record<string, unknown>,
   ): void {
     const message = this.messageFormat(span);
-    if (level === 'error') {
-      // Logger.error signature: (message, error?, extra?)
-      this.logger!.error(message, undefined, canonicalLogLine);
-    } else {
-      this.logger![level](message, canonicalLogLine);
-    }
+    // Pino-compatible signature: (extra, message)
+    this.logger![level](canonicalLogLine, message);
   }
 
   private emitViaOTel(

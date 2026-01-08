@@ -1080,6 +1080,7 @@ export function init(cfg: AutotelConfig): void {
   // Warn if re-initializing (same behavior in all environments)
   if (initialized) {
     logger.warn(
+      {},
       '[autotel] init() called again - last config wins. This may cause unexpected behavior.',
     );
   }
@@ -1274,6 +1275,7 @@ export function init(cfg: AutotelConfig): void {
     const isESM = isESMMode();
     if (isESM) {
       logger.info(
+        {},
         '[autotel] ESM mode detected. For auto-instrumentation to work:\n' +
           '  1. Install @opentelemetry/auto-instrumentations-node as a direct dependency\n' +
           '  2. Import autotel/register FIRST in your instrumentation file\n' +
@@ -1292,6 +1294,7 @@ export function init(cfg: AutotelConfig): void {
       if (manualInstrumentationNames.size > 0) {
         const manualNames = [...manualInstrumentationNames].join(', ');
         logger.info(
+          {},
           `[autotel] Detected manual instrumentations (${manualNames}). ` +
             'These will take precedence over auto-instrumentations. ' +
             'Tip: Set autoInstrumentations:false if you want full manual control, or remove manual configs to use auto-instrumentations.',
@@ -1311,6 +1314,7 @@ export function init(cfg: AutotelConfig): void {
       }
     } catch (error) {
       logger.warn(
+        {},
         `[autotel] Failed to configure auto-instrumentations: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
@@ -1371,14 +1375,16 @@ export function init(cfg: AutotelConfig): void {
 
       if (typeof traceloop.initialize === 'function') {
         traceloop.initialize(initOptions);
-        logger.info('[autotel] OpenLLMetry initialized successfully');
+        logger.info({}, '[autotel] OpenLLMetry initialized successfully');
       } else {
         logger.warn(
+          {},
           '[autotel] OpenLLMetry initialize function not found. Check @traceloop/node-server-sdk version.',
         );
       }
     } else {
       logger.warn(
+        {},
         '[autotel] OpenLLMetry enabled but @traceloop/node-server-sdk is not installed. ' +
           'Install it as a peer dependency to use OpenLLMetry integration.',
       );
@@ -1620,6 +1626,7 @@ export function getValidationConfig(): Partial<ValidationConfig> | null {
 export function warnIfNotInitialized(context: string): void {
   if (!initialized && !warnedOnce) {
     logger.warn(
+      {},
       `[autotel] ${context} used before init() called. ` +
         'Call init({ service: "..." }) first. See: https://docs.autotel.dev/quickstart',
     );

@@ -230,10 +230,13 @@ export class Metric {
 
     this.eventCounter.add(1, attrs);
 
-    this.logger?.info('Metric event tracked', {
-      event: eventName,
-      attributes,
-    });
+    this.logger?.info(
+      {
+        event: eventName,
+        attributes,
+      },
+      'Metric event tracked',
+    );
 
     // Record for testing
     this.collector?.recordEvent({
@@ -276,11 +279,14 @@ export class Metric {
 
     this.funnelCounter.add(1, attrs);
 
-    this.logger?.info('Funnel step tracked', {
-      funnel: funnelName,
-      status,
-      attributes,
-    });
+    this.logger?.info(
+      {
+        funnel: funnelName,
+        status,
+        attributes,
+      },
+      'Funnel step tracked',
+    );
 
     // Record for testing
     this.collector?.recordFunnelStep({
@@ -329,11 +335,14 @@ export class Metric {
 
     this.outcomeCounter.add(1, attrs);
 
-    this.logger?.info('Outcome tracked', {
-      operation: operationName,
-      status,
-      attributes,
-    });
+    this.logger?.info(
+      {
+        operation: operationName,
+        status,
+        attributes,
+      },
+      'Outcome tracked',
+    );
 
     // Record for testing
     this.collector?.recordOutcome({
@@ -384,11 +393,14 @@ export class Metric {
 
     this.valueHistogram.record(value, attrs);
 
-    this.logger?.debug('Value metric tracked', {
-      metric: metricName,
-      value,
-      attributes,
-    });
+    this.logger?.debug(
+      {
+        metric: metricName,
+        value,
+        attributes,
+      },
+      'Value metric tracked',
+    );
 
     // Record for testing
     this.collector?.recordValue({

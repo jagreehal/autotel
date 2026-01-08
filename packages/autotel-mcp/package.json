@@ -56,14 +56,14 @@
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "autotel": "*"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.1",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/context-async-hooks": "^2.2.0",
     "@opentelemetry/core": "^2.2.0",
     "@opentelemetry/sdk-trace-node": "^2.2.0",

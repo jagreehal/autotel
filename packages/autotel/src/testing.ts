@@ -503,25 +503,60 @@ export interface LogEntry {
 export function createMockLogger(): Logger & LogCollector {
   const logs: LogEntry[] = [];
 
+  // Pino-compatible signature: supports both:
+  // - logger.info('message') - string only
+  // - logger.info({ extra }, 'message') - object first with optional message
+  const createLogMethod = (level: 'info' | 'warn' | 'debug') => {
+    return (objOrMsg: Record<string, unknown> | string, msg?: string): void => {
+      if (typeof objOrMsg === 'string') {
+        // String-only call: logger.info('message')
+        logs.push({
+          level,
+          message: objOrMsg,
+          extra: undefined,
+        });
+      } else {
+        // Pino style: logger.info({ extra }, 'message')
+        logs.push({
+          level,
+          message: msg || '',
+          extra: objOrMsg,
+        });
+      }
+    };
+  };
+
   return {
-    info(message: string, extra?: Record<string, unknown>): void {
-      logs.push({ level: 'info', message, extra });
-    },
+    info: createLogMethod('info'),
+    warn: createLogMethod('warn'),
+    debug: createLogMethod('debug'),
 
-    warn(message: string, extra?: Record<string, unknown>): void {
-      logs.push({ level: 'warn', message, extra });
-    },
+    error(objOrMsg: Record<string, unknown> | string, msg?: string): void {
+      if (typeof objOrMsg === 'string') {
+        // String-only call: logger.error('message')
+        logs.push({
+          level: 'error',
+          message: objOrMsg,
+          extra: undefined,
+          error: undefined,
+        });
+        return;
+      }
 
-    error(
-      message: string,
-      error?: Error,
-      extra?: Record<string, unknown>,
-    ): void {
-      logs.push({ level: 'error', message, error, extra });
-    },
-
-    debug(message: string, extra?: Record<string, unknown>): void {
-      logs.push({ level: 'debug', message, extra });
+      // Pino style: logger.error({ err, ...extra }, 'message')
+      // Extract err from extra if present (Pino convention)
+      const { err, ...rest } = objOrMsg as Record<string, unknown> & {
+        err?: unknown;
+      };
+      logs.push({
+        level: 'error',
+        message: msg || '',
+        error: err instanceof Error ? err : undefined,
+        extra:
+          err !== undefined && !(err instanceof Error)
+            ? { err, ...rest }
+            : rest,
+      });
     },
 
     getLogs(): LogEntry[] {

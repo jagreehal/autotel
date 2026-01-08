@@ -94,8 +94,10 @@ export async function flush(options?: { timeout?: number }): Promise<void> {
     }
     const logger = getLogger();
     logger.error(
-      '[autotel] Flush error:',
-      error instanceof Error ? error : new Error(String(error)),
+      {
+        err: error instanceof Error ? error : new Error(String(error)),
+      },
+      '[autotel] Flush error',
     );
     throw error;
   }
@@ -135,8 +137,10 @@ export async function shutdown(): Promise<void> {
     const err = error instanceof Error ? error : new Error(String(error));
     shutdownError = err;
     logger.error(
+      {
+        err,
+      },
       '[autotel] Flush failed during shutdown, continuing cleanup',
-      err,
     );
   }
 
@@ -163,7 +167,7 @@ export async function shutdown(): Promise<void> {
       if (!shutdownError) {
         shutdownError = err;
       }
-      logger.error('[autotel] SDK shutdown failed', err);
+      logger.error({ err }, '[autotel] SDK shutdown failed');
     }
   } finally {
     // Clean up singleton Maps and queues to prevent memory leaks
@@ -201,15 +205,20 @@ function registerShutdownHooks(): void {
       shuttingDown = true;
 
       if (process.env.NODE_ENV !== 'test') {
-        getLogger().info(`[autotel] Received ${signal}, flushing telemetry...`);
+        getLogger().info(
+          {},
+          `[autotel] Received ${signal}, flushing telemetry...`,
+        );
       }
 
       try {
         await shutdown();
       } catch (error) {
         getLogger().error(
+          {
+            err: error instanceof Error ? error : undefined,
+          },
           '[autotel] Error during shutdown',
-          error instanceof Error ? error : undefined,
         );
       } finally {
         process.exit(0);

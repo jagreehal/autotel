@@ -71,10 +71,12 @@ export class EventQueue {
       // Drop oldest event and log warning (same behavior in all environments)
       const droppedEvent = this.queue.shift();
       getLogger().warn(
+        {
+          droppedEvent: droppedEvent?.name,
+        },
         `[autotel] Events queue full (${this.config.maxSize} events). ` +
           'Dropping oldest event. Events are being produced faster than they can be sent. ' +
           'Check your subscribers or reduce tracking frequency.',
-        { droppedEvent: droppedEvent?.name },
       );
     }
 
@@ -134,9 +136,11 @@ export class EventQueue {
         // Give up after max retries
         // Always log failed retries to maintain visibility (same behavior in all environments)
         getLogger().error(
+          {
+            err: error instanceof Error ? error : undefined,
+            retriesAttempted: this.config.maxRetries,
+          },
           '[autotel] Failed to send events after retries',
-          error instanceof Error ? error : undefined,
-          { retriesAttempted: this.config.maxRetries },
         );
       }
     }
