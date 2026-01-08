@@ -1,5 +1,23 @@
 # autotel-cloudflare
 
+## 2.8.0
+
+### Minor Changes
+
+- 8831cf8: Add canonical log lines (wide events) feature to automatically emit spans as comprehensive log records. Implements the "canonical log line" pattern: one log line per request with all context, making logs queryable as structured data instead of requiring string search.
+
+  **autotel:**
+  - New `canonicalLogLines` option in `init()` config
+  - `CanonicalLogLineProcessor` for automatic span-to-log conversion
+  - Supports root spans only, custom message format, min level filtering
+  - Works with any logger (Pino, Winston) or OTel Logs API
+  - Attribute redaction support for sensitive data
+
+### Patch Changes
+
+- Updated dependencies [8831cf8]
+  - autotel-edge@3.6.0
+
 ## 2.7.0
 
 ### Minor Changes
