@@ -13,12 +13,16 @@
 
 import mongoose from 'mongoose';
 import { instrumentMongoose } from 'autotel-plugins/mongoose';
+import { getMongoConnectionInfo, mongoUrl } from './config';
 
 // Instrument Mongoose - this patches Schema.prototype for automatic hook tracing
+const { dbName, peerName, peerPort } = getMongoConnectionInfo(mongoUrl);
 instrumentMongoose(mongoose, {
-  dbName: 'autotel-example',
-  peerName: 'localhost',
-  peerPort: 27017,
+  dbName,
+  peerName,
+  peerPort,
+  // Enable pre/post hook spans (disabled by default in the plugin)
+  instrumentHooks: true,
 });
 
 console.log('✅ Mongoose instrumented (operations + hooks will be automatically traced)');

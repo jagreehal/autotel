@@ -164,9 +164,10 @@ export function createMetricsHandler() {
  *   }));
  * ```
  */
-export function recordTiming<
-  T extends (...args: unknown[]) => Promise<unknown>,
->(metricName: string, fn: T): T {
+export function recordTiming<T extends (...args: any[]) => any>(
+  metricName: string,
+  fn: T,
+): T {
   return (async (...args: Parameters<T>) => {
     const startTime = Date.now();
     try {

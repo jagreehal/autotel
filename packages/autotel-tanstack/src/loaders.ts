@@ -3,15 +3,17 @@ import { trace, type TraceContext } from 'autotel';
 import { isServerSide } from './env';
 import { type TraceLoaderConfig, SPAN_ATTRIBUTES } from './types';
 
+// Re-export types from @tanstack/react-router for consumers who need them
+export type { LoaderFnContext } from '@tanstack/react-router';
+
 /**
- * Loader context type (compatible with TanStack router loader context)
+ * Internal type for extracting route info from TanStack context.
+ * This is a minimal interface used only for instrumentation - the actual
+ * TanStack types flow through the generic parameter.
  */
-interface LoaderContext {
+interface TanStackContextInternal {
+  route?: { id?: string };
   params?: Record<string, string>;
-  route?: {
-    id?: string;
-  };
-  [key: string]: unknown;
 }
 
 /**
@@ -21,9 +23,12 @@ interface LoaderContext {
  * for each invocation. It captures route ID, params (optionally),
  * and errors.
  *
+ * The generic type TLoaderFn preserves the full TanStack Router type inference,
+ * including typed params, context, and return types.
+ *
  * @param loaderFn - The loader function to wrap
  * @param config - Configuration options
- * @returns Wrapped loader function with tracing
+ * @returns Wrapped loader function with tracing (preserves original types)
  *
  * @example
  * ```typescript
@@ -31,6 +36,7 @@ interface LoaderContext {
  * import { traceLoader } from 'autotel-tanstack/loaders';
  *
  * export const Route = createFileRoute('/users/$userId')({
+ *   // Types are fully preserved - params.userId is typed as string
  *   loader: traceLoader(async ({ params }) => {
  *     return await db.users.findUnique({ where: { id: params.userId } });
  *   }),
@@ -39,30 +45,22 @@ interface LoaderContext {
  *
  * @example
  * ```typescript
- * // With custom name and param capture
- * export const Route = createFileRoute('/products/$category/$productId')({
- *   loader: traceLoader(
- *     async ({ params }) => {
- *       return await db.products.findUnique({
- *         where: { id: params.productId, category: params.category },
- *       });
- *     },
- *     {
- *       name: 'loadProduct',
- *       captureParams: true,
- *       captureResult: false,
- *     }
- *   ),
+ * // Sync loaders are also supported
+ * export const Route = createFileRoute('/static')({
+ *   loader: traceLoader(({ context }) => ({
+ *     message: `Welcome, ${context.userId}!`,
+ *   })),
  * });
  * ```
  */
-export function traceLoader<
-  T extends (context: LoaderContext) => Promise<unknown>,
->(loaderFn: T, config: TraceLoaderConfig = {}): T {
+export function traceLoader<TLoaderFn extends (ctx: any) => any>(
+  loaderFn: TLoaderFn,
+  config: TraceLoaderConfig = {},
+): TLoaderFn {
   const captureParams = config.captureParams ?? true;
   const captureResult = config.captureResult ?? false;
 
-  return (async (context: LoaderContext) => {
+  const wrapped = (context: TanStackContextInternal) => {
     // If we're in the browser, just call the loader without tracing
     // This prevents autotel (which uses Node.js APIs) from being executed in the browser
     if (!isServerSide()) {
@@ -72,6 +70,47 @@ export function traceLoader<
     const routeId = context?.route?.id || 'unknown';
     const spanName = config.name || `tanstack.loader.${routeId}`;
 
+    // Handle both sync and async loaders
+    const result = loaderFn(context);
+    const isPromise = result instanceof Promise;
+
+    if (!isPromise) {
+      // Sync loader - wrap in trace synchronously
+      return trace(spanName, (ctx: TraceContext) => {
+        ctx.setAttributes({
+          [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'loader',
+          [SPAN_ATTRIBUTES.TANSTACK_LOADER_ROUTE_ID]: routeId,
+          [SPAN_ATTRIBUTES.TANSTACK_LOADER_TYPE]: 'loader',
+        });
+
+        if (captureParams && context?.params) {
+          try {
+            ctx.setAttribute(
+              SPAN_ATTRIBUTES.TANSTACK_LOADER_PARAMS,
+              JSON.stringify(context.params),
+            );
+          } catch {
+            ctx.setAttribute(
+              SPAN_ATTRIBUTES.TANSTACK_LOADER_PARAMS,
+              '[non-serializable]',
+            );
+          }
+        }
+
+        if (captureResult && result !== undefined) {
+          try {
+            ctx.setAttribute('tanstack.loader.result', JSON.stringify(result));
+          } catch {
+            ctx.setAttribute('tanstack.loader.result', '[non-serializable]');
+          }
+        }
+
+        ctx.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      });
+    }
+
+    // Async loader
     return trace(spanName, async (ctx: TraceContext) => {
       ctx.setAttributes({
         [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'loader',
@@ -79,7 +118,6 @@ export function traceLoader<
         [SPAN_ATTRIBUTES.TANSTACK_LOADER_TYPE]: 'loader',
       });
 
-      // Capture params if configured
       if (captureParams && context?.params) {
         try {
           ctx.setAttribute(
@@ -95,19 +133,21 @@ export function traceLoader<
       }
 
       try {
-        const result = await loaderFn(context);
+        const asyncResult = await result;
 
-        // Capture result if configured
-        if (captureResult && result !== undefined) {
+        if (captureResult && asyncResult !== undefined) {
           try {
-            ctx.setAttribute('tanstack.loader.result', JSON.stringify(result));
+            ctx.setAttribute(
+              'tanstack.loader.result',
+              JSON.stringify(asyncResult),
+            );
           } catch {
             ctx.setAttribute('tanstack.loader.result', '[non-serializable]');
           }
         }
 
         ctx.setStatus({ code: SpanStatusCode.OK });
-        return result as ReturnType<T>;
+        return asyncResult;
       } catch (error) {
         ctx.recordException(error as Error);
         ctx.setStatus({
@@ -117,7 +157,9 @@ export function traceLoader<
         throw error;
       }
     });
-  }) as T;
+  };
+
+  return wrapped as TLoaderFn;
 }
 
 /**
@@ -127,51 +169,66 @@ export function traceLoader<
  * beforeLoad runs before the route component renders and is typically
  * used for auth checks, redirects, or data prefetching.
  *
+ * The generic type TBeforeLoadFn preserves the full TanStack Router type inference,
+ * including typed params, context, search, and return types.
+ *
  * @param beforeLoadFn - The beforeLoad function to wrap
  * @param config - Configuration options
- * @returns Wrapped beforeLoad function with tracing
+ * @returns Wrapped beforeLoad function with tracing (preserves original types)
  *
  * @example
  * ```typescript
- * import { createFileRoute } from '@tanstack/react-router';
+ * import { createFileRoute, redirect } from '@tanstack/react-router';
  * import { traceBeforeLoad } from 'autotel-tanstack/loaders';
  *
  * export const Route = createFileRoute('/dashboard')({
- *   beforeLoad: traceBeforeLoad(async ({ context }) => {
+ *   // Types are fully preserved - context, params, search are all typed
+ *   beforeLoad: traceBeforeLoad(async ({ context, params }) => {
  *     if (!context.auth.isAuthenticated) {
  *       throw redirect({ to: '/login' });
  *     }
+ *     return { userId: params.userId }; // Return type flows to loader context
  *   }),
- *   loader: async () => {
- *     return await fetchDashboardData();
+ *   loader: ({ context }) => {
+ *     // context.userId is typed from beforeLoad return
+ *     return { user: context.userId };
  *   },
  * });
  * ```
  */
-export function traceBeforeLoad<
-  T extends (context: LoaderContext) => Promise<unknown>,
->(beforeLoadFn: T, config: TraceLoaderConfig = {}): T {
+export function traceBeforeLoad<TBeforeLoadFn extends (opts: any) => any>(
+  beforeLoadFn: TBeforeLoadFn,
+  config: TraceLoaderConfig = {},
+): TBeforeLoadFn {
   const captureParams = config.captureParams ?? true;
 
-  return (async (context: LoaderContext): Promise<Awaited<ReturnType<T>>> => {
-    const routeId = context?.route?.id || 'unknown';
+  const wrapped = (input: TanStackContextInternal) => {
+    // Skip tracing in browser
+    if (!isServerSide()) {
+      return beforeLoadFn(input);
+    }
+
+    const routeId = input?.route?.id || 'unknown';
     const spanName = config.name || `tanstack.beforeLoad.${routeId}`;
 
-    return trace(
-      spanName,
-      async (ctx: TraceContext): Promise<Awaited<ReturnType<T>>> => {
+    // Handle both sync and async beforeLoad
+    const result = beforeLoadFn(input);
+    const isPromise = result instanceof Promise;
+
+    if (!isPromise) {
+      // Sync beforeLoad
+      return trace(spanName, (ctx: TraceContext) => {
         ctx.setAttributes({
           [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'beforeLoad',
           [SPAN_ATTRIBUTES.TANSTACK_LOADER_ROUTE_ID]: routeId,
           [SPAN_ATTRIBUTES.TANSTACK_LOADER_TYPE]: 'beforeLoad',
         });
 
-        // Capture params if configured
-        if (captureParams && context?.params) {
+        if (captureParams && input?.params) {
           try {
             ctx.setAttribute(
               SPAN_ATTRIBUTES.TANSTACK_LOADER_PARAMS,
-              JSON.stringify(context.params),
+              JSON.stringify(input.params),
             );
           } catch {
             ctx.setAttribute(
@@ -181,31 +238,57 @@ export function traceBeforeLoad<
           }
         }
 
+        ctx.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      });
+    }
+
+    // Async beforeLoad
+    return trace(spanName, async (ctx: TraceContext) => {
+      ctx.setAttributes({
+        [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'beforeLoad',
+        [SPAN_ATTRIBUTES.TANSTACK_LOADER_ROUTE_ID]: routeId,
+        [SPAN_ATTRIBUTES.TANSTACK_LOADER_TYPE]: 'beforeLoad',
+      });
+
+      if (captureParams && input?.params) {
         try {
-          const result = (await beforeLoadFn(context)) as Awaited<
-            ReturnType<T>
-          >;
-          ctx.setStatus({ code: SpanStatusCode.OK });
-          return result;
-        } catch (error) {
-          // Check if this is a redirect or notFound (expected control flow)
-          const errorName = (error as Error).name;
-          if (errorName === 'RedirectError' || errorName === 'NotFoundError') {
-            // Mark as OK since these are expected control flow
-            ctx.setAttribute('tanstack.beforeLoad.redirect', true);
-            ctx.setStatus({ code: SpanStatusCode.OK });
-          } else {
-            ctx.recordException(error as Error);
-            ctx.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: (error as Error).message,
-            });
-          }
-          throw error;
+          ctx.setAttribute(
+            SPAN_ATTRIBUTES.TANSTACK_LOADER_PARAMS,
+            JSON.stringify(input.params),
+          );
+        } catch {
+          ctx.setAttribute(
+            SPAN_ATTRIBUTES.TANSTACK_LOADER_PARAMS,
+            '[non-serializable]',
+          );
         }
-      },
-    );
-  }) as T;
+      }
+
+      try {
+        const asyncResult = await result;
+        ctx.setStatus({ code: SpanStatusCode.OK });
+        return asyncResult;
+      } catch (error) {
+        // Check if this is a redirect or notFound (expected control flow)
+        const errorName = (error as Error).name;
+        if (errorName === 'RedirectError' || errorName === 'NotFoundError') {
+          // Mark as OK since these are expected control flow
+          ctx.setAttribute('tanstack.beforeLoad.redirect', true);
+          ctx.setStatus({ code: SpanStatusCode.OK });
+        } else {
+          ctx.recordException(error as Error);
+          ctx.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: (error as Error).message,
+          });
+        }
+        throw error;
+      }
+    });
+  };
+
+  return wrapped as TBeforeLoadFn;
 }
 
 /**
@@ -243,9 +326,9 @@ export function createTracedRoute(
     /**
      * Wrap a loader function with tracing
      */
-    loader<T extends (context: LoaderContext) => Promise<unknown>>(
-      loaderFn: T,
-    ): T {
+    loader<TLoaderFn extends (ctx: any) => any>(
+      loaderFn: TLoaderFn,
+    ): TLoaderFn {
       return traceLoader(loaderFn, {
         ...config,
         name: `tanstack.loader.${routeId}`,
@@ -255,9 +338,9 @@ export function createTracedRoute(
     /**
      * Wrap a beforeLoad function with tracing
      */
-    beforeLoad<T extends (context: LoaderContext) => Promise<unknown>>(
-      beforeLoadFn: T,
-    ): T {
+    beforeLoad<TBeforeLoadFn extends (opts: any) => any>(
+      beforeLoadFn: TBeforeLoadFn,
+    ): TBeforeLoadFn {
       return traceBeforeLoad(beforeLoadFn, {
         ...config,
         name: `tanstack.beforeLoad.${routeId}`,

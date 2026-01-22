@@ -54,7 +54,8 @@ export function createErrorReportingHandler(): () => Response {
 /**
  * Browser stub: Returns function unchanged
  */
-export function withErrorReporting<T extends (...args: unknown[]) => unknown>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Intentional for type passthrough
+export function withErrorReporting<T extends (...args: any[]) => any>(
   fn: T,
   context?: Record<string, unknown>,
 ): T {

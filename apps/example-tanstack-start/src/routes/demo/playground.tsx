@@ -68,16 +68,14 @@ const triggerError = traceServerFn(triggerErrorBase, {
 })
 
 // 4. Distributed trace (shows context propagation)
-const distributedTraceBase = createServerFn({ method: 'POST' }).handler(
-  async () => {
-    const headers = createTracedHeaders()
-    // In a real app, you'd pass these headers to fetch() calls
-    return {
-      message: 'Trace context headers generated',
-      headers: Object.fromEntries(headers.entries()),
-    }
-  },
-)
+const distributedTraceBase = createServerFn({ method: 'POST' }).handler(() => {
+  const headers = createTracedHeaders()
+  // In a real app, you'd pass these headers to fetch() calls
+  return {
+    message: 'Trace context headers generated',
+    headers: Object.fromEntries(headers.entries()),
+  }
+})
 
 const distributedTrace = traceServerFn(distributedTraceBase, {
   name: 'distributedTrace',
