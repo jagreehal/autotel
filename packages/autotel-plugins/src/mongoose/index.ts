@@ -20,6 +20,7 @@ import {
 const DEFAULT_TRACER_NAME = 'autotel-plugins/mongoose';
 const DEFAULT_DB_SYSTEM = 'mongoose';
 const INSTRUMENTED_FLAG = '__autotelMongooseInstrumented' as const;
+const WRAPPED_HOOK_FLAG = '__autotelWrappedHook' as const;
 
 /**
  * Symbol used to store the parent span on Query/Aggregate objects.
@@ -305,7 +306,11 @@ function patchSchemaHooks(
 
 /**
  * Detects if a hook handler is from Mongoose's internal code.
- * Skips private methods (starting with _) and known Mongoose internals.
+ * Skips private methods, known internal patterns, and functions with
+ * Mongoose-internal source code signatures.
+ *
+ * Note: We intentionally allow anonymous functions because user-defined
+ * hooks are often anonymous (e.g., `schema.pre('save', async function() {...})`).
  */
 function isMongooseInternalHook(handler: any): boolean {
   if (typeof handler !== 'function') {
@@ -314,20 +319,49 @@ function isMongooseInternalHook(handler: any): boolean {
 
   const funcName = handler.name || '';
 
-  // Skip private/internal methods (starting with _ or __)
-  if (funcName.startsWith('_')) {
+  // Skip private/internal methods (starting with _ or $)
+  if (funcName.startsWith('_') || funcName.startsWith('$')) {
     return true;
   }
 
-  // Skip other known Mongoose internal hooks
-  const mongooseInternalPatterns = [
+  // Skip known Mongoose internal hook patterns by name
+  const mongooseInternalNamePatterns = [
     'shardingPlugin',
     'mongooseInternalHook',
     'noop',
-    '$__',
+    'wrapped',
+    'bound ',
   ];
 
-  return mongooseInternalPatterns.some((pattern) => funcName.includes(pattern));
+  if (
+    mongooseInternalNamePatterns.some((pattern) => funcName.includes(pattern))
+  ) {
+    return true;
+  }
+
+  // Check function source for Mongoose-internal patterns
+  // These patterns appear in Mongoose's auto-generated validation/transform hooks
+  try {
+    const source = handler.toString();
+    const mongooseInternalSourcePatterns = [
+      'this.$__', // Mongoose internal document methods
+      'this.$isValid', // Mongoose validation
+      'this.$locals', // Mongoose local properties
+      '_this.$__', // Mongoose internal with closure
+      'schema.s.hooks', // Mongoose hooks system
+      'kareem', // Mongoose's hooks library
+    ];
+
+    if (
+      mongooseInternalSourcePatterns.some((pattern) => source.includes(pattern))
+    ) {
+      return true;
+    }
+  } catch {
+    // If we can't get source, allow the hook through
+  }
+
+  return false;
 }
 
 /**
@@ -345,7 +379,12 @@ function wrapHookHandler(
     return handler;
   }
 
-  return function wrappedHook(this: any, ...args: any[]): any {
+  // Skip if already wrapped to prevent duplicate spans
+  if ((handler as any)[WRAPPED_HOOK_FLAG]) {
+    return handler;
+  }
+
+  const wrappedHook = function wrappedHook(this: any, ...args: any[]): any {
     let modelName: string | undefined;
     let collectionName: string | undefined;
 
@@ -410,6 +449,10 @@ function wrapHookHandler(
       }
     });
   };
+
+  // Mark as wrapped to prevent double-wrapping
+  (wrappedHook as any)[WRAPPED_HOOK_FLAG] = true;
+  return wrappedHook;
 }
 
 /**
