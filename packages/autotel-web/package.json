@@ -1,6 +1,6 @@
 {
   "name": "autotel-web",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Ultra-lightweight browser SDK for distributed tracing - propagates W3C traceparent headers to backends using Autotel (~2-5KB gzipped)",
   "type": "module",
   "main": "./dist/index.js",

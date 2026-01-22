@@ -1,5 +1,11 @@
 # autotel-edge
 
+## 3.7.0
+
+### Minor Changes
+
+- 8256dac: Add comprehensive awaitly integration example demonstrating workflow instrumentation with autotel OpenTelemetry. The new `awaitly-example` app showcases successful workflows, error handling, decision tracking, cache behavior, and visualization features. Updated prettier to 3.8.1 across all packages.
+
 ## 3.6.1
 
 ### Patch Changes
