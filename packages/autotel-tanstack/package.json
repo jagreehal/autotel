@@ -147,6 +147,7 @@
   },
   "devDependencies": {
     "@opentelemetry/sdk-trace-base": "^2.4.0",
+    "@tanstack/react-router": "^1.154.1",
     "@types/node": "^25.0.9",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",

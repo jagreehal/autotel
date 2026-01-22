@@ -43,9 +43,10 @@ import { type TraceServerFnConfig, SPAN_ATTRIBUTES } from './types';
  * );
  * ```
  */
-export function traceServerFn<
-  T extends (...args: unknown[]) => Promise<unknown>,
->(serverFn: T, config: TraceServerFnConfig = {}): T {
+export function traceServerFn<T extends (...args: any[]) => any>(
+  serverFn: T,
+  config: TraceServerFnConfig = {},
+): T {
   const fnName = config.name || serverFn.name || 'serverFn';
   const captureArgs = config.captureArgs ?? true;
   const captureResults = config.captureResults ?? false;
@@ -147,7 +148,7 @@ export function traceServerFn<
  * ```
  */
 export function createTracedServerFnFactory<
-  TCreateServerFn extends (...args: unknown[]) => unknown,
+  TCreateServerFn extends (...args: any[]) => any,
 >(
   createServerFnOriginal: TCreateServerFn,
   defaultConfig: Omit<TraceServerFnConfig, 'name'> = {},

@@ -20,6 +20,7 @@ describe('SegmentSubscriber', () => {
   beforeEach(() => {
     mockTrack.mockClear();
     mockCloseAndFlush.mockClear();
+    MockAnalytics.mockClear();
   });
 
   describe('initialization', () => {
