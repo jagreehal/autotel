@@ -15,7 +15,7 @@ The official [@opentelemetry/instrumentation-mongoose](https://github.com/open-t
 
 ## What Gets Automatically Traced
 
-**No manual instrumentation needed!** Just call `instrumentMongoose()` before defining schemas:
+**No manual instrumentation needed!** Just call `instrumentMongoose()` before defining schemas (and enable `instrumentHooks: true`):
 
 ### 1. All Mongoose Operations (Automatic)
 - `create()`, `insertMany()`, `bulkWrite()`
@@ -38,7 +38,10 @@ The official [@opentelemetry/instrumentation-mongoose](https://github.com/open-t
 ## Quick Start
 
 ```bash
-# Install dependencies
+# From the repo root:
+cd apps/example-mongoose
+
+# Install dependencies (workspace)
 pnpm install
 
 # Start MongoDB
@@ -46,6 +49,214 @@ pnpm docker:up
 
 # Run the example
 pnpm start
+
+# Stop MongoDB
+pnpm docker:down
+```
+
+## Debug Output (stdout) + Capturing Logs
+
+This example enables Autotel debug output (spans printed to **stdout**) so you can see traces without configuring an OTLP backend.
+
+- **Capture everything** (recommended for sharing in issues):
+
+```bash
+pnpm start 2>&1 | tee run.log
+```
+
+- **Control debug output** (env var overrides code):
+
+```bash
+# Pretty, hierarchical console output (recommended)
+AUTOTEL_DEBUG=pretty pnpm start
+
+# Raw JSON spans (very verbose)
+AUTOTEL_DEBUG=true pnpm start
+
+# Disable console span output
+AUTOTEL_DEBUG=false pnpm start
+```
+
+- **What you should see**:
+  - `✅ Mongoose instrumented ...`
+  - `✅ Connected to MongoDB: mongodb://localhost:27017/autotel-example`
+  - Span lines including operation spans like `mongoose.users.create`
+  - **Hook span lines** like `mongoose.users.pre.save`, `mongoose.users.post.save`, `mongoose.users.pre.findOneAndUpdate`
+
+Tip: to quickly prove hook spans are present, you can filter stdout for `.pre.` / `.post.` spans:
+
+```bash
+pnpm start 2>&1 | grep -E "mongoose\\.[^.]+\\.(pre|post)\\."
+```
+
+### Full Example Output (Actual Captured Run)
+
+The demo covers: **CRUD operations**, **instance methods (doc.save)**, **bulk operations (insertMany, bulkWrite)**, **transactions**, **error handling with span recording**, and **automatic hook tracing**.
+
+```text
+✅ Mongoose instrumented (operations + hooks will be automatically traced)
+🚀 Starting Mongoose + Autotel Example
+All operations are automatically traced with OpenTelemetry!
+✅ Connected to MongoDB: mongodb://localhost:27017/autotel-example
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BASIC CRUD - Model.create() with automatic hook tracing
+# ═══════════════════════════════════════════════════════════════════════════════
+
+📝 Creating user: Alice_Example-c8ffa410-cf54-49f2-b880-deace04177d4@yahoo.com
+🪝 [user pre-save] normalizing alice_example-c8ffa410-cf54-49f2-b880-deace04177d4@yahoo.com
+✓ mongoose.users.pre.save                27ms [mongoose]
+     hook.type=pre, hook.operation=save, hook.model=User, db.mongodb.collection=users
+
+🪝 [user post-save] persisted alice_example-c8ffa410-cf54-49f2-b880-deace04177d4@yahoo.com
+✓ mongoose.users.post.save               73µs [mongoose]
+     hook.type=post, hook.operation=save, hook.model=User, db.mongodb.collection=users
+
+✓ mongoose.users.create                  35ms [mongoose]
+     db.system=mongoose, db.operation=create, db.mongodb.collection=users
+
+✅ User created with ID: 6970e2e1b200e3eee674d2e4
+📊 Trace ID: 5bc53378d5ac334224e0635506bdf5ef
+✓ createUser                             35ms [app]
+     user.email=Alice_Example-c8ffa410..., user.name=Alice, operation.name=createUser
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# INSTANCE METHOD - doc.save() (vs Model.create())
+# ═══════════════════════════════════════════════════════════════════════════════
+
+📝 Creating user with doc.save(): Charlie.Example-da38dcb9-250c-4179-b767-b7df29232a@hotmail.com
+🪝 [user pre-save] normalizing charlie.example-da38dcb9-250c-4179-b767-b7df29232a@hotmail.com
+✓ mongoose.users.pre.save                25ms [mongoose]
+     hook.type=pre, hook.operation=save, hook.model=User
+
+🪝 [user post-save] persisted charlie.example-da38dcb9-250c-4179-b767-b7df29232a@hotmail.com
+✓ mongoose.users.post.save               48µs [mongoose]
+     hook.type=post, hook.operation=save, hook.model=User
+
+✓ mongoose.users.save                    28ms [mongoose]
+     db.system=mongoose, db.operation=save, db.mongodb.collection=users
+
+✅ User created with doc.save(): 6970e2e1b200e3eee674d2e9
+✓ createUserWithSave                     28ms [app]
+     user.email=Charlie.Example-da38dcb9..., operation.name=createUserWithSave
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FIND & UPDATE with hooks
+# ═══════════════════════════════════════════════════════════════════════════════
+
+✏️  Updating user: 6970e2e1b200e3eee674d2e4
+🪝 [user pre-findOneAndUpdate] criteria: { _id: new ObjectId('6970e2e1b200e3eee674d2e4') }
+✓ mongoose.users.pre.findOneAndUpdate   210µs [mongoose]
+     hook.type=pre, hook.operation=findOneAndUpdate, hook.model=User
+
+🪝 [user post-findOneAndUpdate] updated alice_example-c8ffa410-cf54-49f2-b880-deace04177d4@yahoo.com
+✓ mongoose.users.post.findOneAndUpdate    45µs [mongoose]
+     hook.type=post, hook.operation=findOneAndUpdate, hook.model=User
+
+✓ mongoose.users.findOneAndUpdate         5ms [mongoose]
+     db.system=mongoose, db.operation=findOneAndUpdate, db.mongodb.collection=users
+
+✅ User updated
+✓ updateUser                              5ms [app]
+     user.id=6970e2e1b200e3eee674d2e4, updates={"name":"Alice Smith"}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AGGREGATION PIPELINE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+📊 Getting user statistics
+✓ mongoose.users.aggregate               18ms [mongoose]
+     db.system=mongoose, db.operation=aggregate, db.mongodb.collection=users
+
+✅ Retrieved stats for 31 users
+✓ getUserStats                           18ms [app]
+     operation.name=getUserStats
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BULK OPERATIONS - insertMany & bulkWrite
+# ═══════════════════════════════════════════════════════════════════════════════
+
+📦 Bulk creating 3 posts for user 6970e2e1b200e3eee674d2e9
+✓ mongoose.posts.insertMany               8ms [mongoose]
+     db.system=mongoose, db.operation=insertMany, db.mongodb.collection=posts
+
+✅ Created 3 posts via insertMany
+✓ createPostsBulk                         8ms [app]
+     user.id=6970e2e1b200e3eee674d2e9, posts.count=3, operation.name=createPostsBulk
+
+📦 Bulk updating 3 posts
+✓ mongoose.posts.bulkWrite                7ms [mongoose]
+     db.system=mongoose, db.operation=bulkWrite, db.mongodb.collection=posts
+
+✅ Bulk write: 3 modified
+✓ bulkUpdatePosts                         8ms [app]
+     operations.count=3, operation.name=bulkUpdatePosts
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TRANSACTIONS - with session.withTransaction()
+# (requires replica set - graceful fallback for standalone)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# With replica set (port 27019):
+🔄 Transferring post 6970e353c0f9c386750fb9fc from 6970e352c0f9c386750fb9f5 to 6970e353c0f9c386750fb9f8
+✓ mongoose.posts.findOneAndUpdate         2ms [mongoose]
+     db.system=mongoose, db.operation=findOneAndUpdate, db.mongodb.collection=posts
+
+  📝 Post "Getting Started with Mongoose" transferred
+✅ Transfer completed in transaction
+✓ transferPostOwnership                   6ms [app]
+     post.id=..., from.userId=..., to.userId=..., operation.success=true
+
+# With standalone MongoDB (port 27017 - graceful fallback):
+🔄 Transferring post 6970e2e1b200e3eee674d2eb from 6970e2e1b200e3eee674d2e4 to 6970e2e1b200e3eee674d2e7
+✗ transferPostOwnership                   8ms [app]
+     exception.type=MongoServerError, exception.message=Transaction numbers are only allowed on a replica set...
+
+  ℹ️  Transaction skipped: requires MongoDB replica set (standalone mode detected)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ERROR HANDLING - Errors automatically recorded in spans
+# ═══════════════════════════════════════════════════════════════════════════════
+
+🔍 Finding user (with error handling): nonexistent@example.com
+✓ mongoose.users.findOne                  6ms [mongoose]
+     db.system=mongoose, db.operation=findOne, db.mongodb.collection=users
+
+❌ Error recorded in span: User not found: nonexistent@example.com
+✗ findUserOrFail                          6ms [app]
+     search.email=nonexistent@example.com, operation.name=findUserOrFail
+     operation.success=false, error=true
+     exception.type=Error, exception.message=User not found: nonexistent@example.com
+     Error: User not found: nonexistent@example.com
+
+  ℹ️  Error was captured in span (expected behavior)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DELETE with post hook
+# ═══════════════════════════════════════════════════════════════════════════════
+
+🗑️  Deleting post: 6970e2e1b200e3eee674d2ef
+🪝 [post post-deleteOne] post removed
+✓ mongoose.posts.post.deleteOne          43µs [mongoose]
+     hook.type=post, hook.operation=deleteOne, hook.model=Post
+
+✓ mongoose.posts.deleteOne                1ms [mongoose]
+     db.system=mongoose, db.operation=deleteOne, db.mongodb.collection=posts
+
+✅ Post deleted
+✓ deletePost                              1ms [app]
+     post.id=6970e2e1b200e3eee674d2ef, operation.name=deletePost
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PARENT SPAN - All operations nested under runScenario
+# ═══════════════════════════════════════════════════════════════════════════════
+
+✓ runScenario                           210ms [app]
+     scenario.name=mongoose-demo, scenario.runId=87dc5a3d-c313-48e7-8d68-58265c62b1a0
+
+✅ Example completed successfully!
+📊 Check your observability backend for traces
+👋 Disconnected from MongoDB
 ```
 
 ## How It Works
@@ -63,6 +274,7 @@ instrumentMongoose(mongoose, {
   dbName: 'myapp',
   peerName: 'localhost',
   peerPort: 27017,
+  instrumentHooks: true,
 });
 ```
 
@@ -237,7 +449,7 @@ Use environment variables for configuration:
 OTEL_SERVICE_NAME=my-app
 OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io
 OTEL_EXPORTER_OTLP_HEADERS=x-honeycomb-team=YOUR_API_KEY
-MONGO_URL=mongodb://db.example.com:27017/production
+MONGOOSE_EXAMPLE_MONGO_URL=mongodb://db.example.com:27017/production
 ```
 
 Code stays clean:
@@ -266,7 +478,7 @@ pnpm docker:up
 pnpm docker:down
 ```
 
-MongoDB will be available at `mongodb://localhost:27019`.
+MongoDB will be available at `mongodb://localhost:27017` (default port), and this example uses the database `autotel-example` by default.
 
 ## Key Benefits
 

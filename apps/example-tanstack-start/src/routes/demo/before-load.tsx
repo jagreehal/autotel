@@ -7,6 +7,11 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { traceBeforeLoad, traceLoader } from 'autotel-tanstack/loaders'
 
+// Define search params schema for this route
+type BeforeLoadSearch = {
+  userId?: string
+}
+
 // Simulate auth check
 async function checkAuth(userId?: string) {
   // Simulate async auth check
@@ -15,10 +20,15 @@ async function checkAuth(userId?: string) {
 }
 
 export const Route = createFileRoute('/demo/before-load')({
+  // Validate search params - TanStack Router will type `search` in beforeLoad/loader
+  validateSearch: (search: Record<string, unknown>): BeforeLoadSearch => ({
+    userId: typeof search.userId === 'string' ? search.userId : undefined,
+  }),
+
   // Example: Using traceBeforeLoad for auth/redirect logic
-  beforeLoad: traceBeforeLoad(async ({ context, params }) => {
-    // Simulate auth check
-    const userId = (context as { userId?: string }).userId ?? params.userId
+  // Types are preserved - search, context, params are all typed by TanStack
+  beforeLoad: traceBeforeLoad(async ({ search }) => {
+    const userId = search.userId
     const isAuthenticated = await checkAuth(userId)
 
     if (!isAuthenticated) {
@@ -31,7 +41,7 @@ export const Route = createFileRoute('/demo/before-load')({
       })
     }
 
-    // Return context for loader
+    // Return context for loader - this merges into loader's context
     return {
       userId,
       isAuthenticated,
@@ -39,15 +49,17 @@ export const Route = createFileRoute('/demo/before-load')({
   }),
 
   // Example: Loader that depends on beforeLoad context
-  loader: traceLoader(async ({ context }) => {
-    const authContext = context as {
+  // The context includes what beforeLoad returned (userId, isAuthenticated)
+  loader: traceLoader(({ context }) => {
+    // TanStack merges beforeLoad return into context
+    const { userId, isAuthenticated } = context as {
       userId?: string
-      isAuthenticated?: boolean
+      isAuthenticated: boolean
     }
 
     return {
-      message: `Welcome, ${authContext.userId || 'user'}!`,
-      authenticated: authContext.isAuthenticated || false,
+      message: `Welcome, ${userId || 'user'}!`,
+      authenticated: isAuthenticated,
     }
   }),
 

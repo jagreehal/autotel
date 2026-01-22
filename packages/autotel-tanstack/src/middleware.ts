@@ -443,15 +443,11 @@ export function functionTracingMiddleware<TContext = unknown>(
  */
 export function createTracingServerHandler<TContext = unknown>(
   config?: TracingMiddlewareConfig,
-): (opts: {
-  next: (ctx?: Partial<TContext>) => Promise<TContext>;
-  context: TContext;
-  request?: Request;
-}) => Promise<TContext> {
+): (opts: any) => any {
   const handler = createTracingMiddleware<TContext>(config);
 
   // Adapt TanStack's signature to our handler
-  return async (opts) => {
+  return async (opts: any) => {
     return handler(opts);
   };
 }
