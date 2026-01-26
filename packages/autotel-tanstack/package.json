@@ -134,8 +134,8 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@tanstack/react-start": "^1.154.1",
-    "@tanstack/solid-start": "^1.154.1"
+    "@tanstack/react-start": "^1.157.15",
+    "@tanstack/solid-start": "^1.157.15"
   },
   "peerDependenciesMeta": {
     "@tanstack/react-start": {
@@ -146,13 +146,13 @@
     }
   },
   "devDependencies": {
-    "@opentelemetry/sdk-trace-base": "^2.4.0",
-    "@tanstack/react-router": "^1.154.1",
-    "@types/node": "^25.0.9",
+    "@opentelemetry/sdk-trace-base": "^2.5.0",
+    "@tanstack/react-router": "^1.157.15",
+    "@types/node": "^25.0.10",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.17",
+    "vitest": "^4.0.18",
     "vitest-mock-extended": "^3.1.0"
   },
   "repository": {

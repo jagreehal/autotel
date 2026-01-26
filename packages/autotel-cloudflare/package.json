@@ -80,19 +80,19 @@
   "dependencies": {
     "autotel-edge": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/resources": "^2.4.0"
+    "@opentelemetry/resources": "^2.5.0"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "^4.20260120.0"
+    "@cloudflare/workers-types": "^4.20260124.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260120.0",
-    "@opentelemetry/context-async-hooks": "^2.4.0",
-    "@types/node": "^25.0.9",
+    "@cloudflare/workers-types": "^4.20260124.0",
+    "@opentelemetry/context-async-hooks": "^2.5.0",
+    "@types/node": "^25.0.10",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.17",
+    "vitest": "^4.0.18",
     "vitest-mock-extended": "^3.1.0"
   },
   "repository": {
