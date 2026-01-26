@@ -60,8 +60,8 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@opentelemetry/exporter-logs-otlp-http": ">=0.210.0",
-    "@opentelemetry/sdk-logs": ">=0.210.0"
+    "@opentelemetry/exporter-logs-otlp-http": ">=0.211.0",
+    "@opentelemetry/sdk-logs": ">=0.211.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/exporter-logs-otlp-http": {
@@ -72,14 +72,14 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^25.0.9",
-    "@typescript-eslint/eslint-plugin": "^8.53.1",
-    "@typescript-eslint/parser": "^8.53.1",
+    "@types/node": "^25.0.10",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^62.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.18"
   },
   "repository": {
     "type": "git",
