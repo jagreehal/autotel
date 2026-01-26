@@ -44,29 +44,29 @@
   "license": "MIT",
   "dependencies": {
     "ink": "^6.6.0",
-    "react": "^19.2.3"
+    "react": "^19.2.4"
   },
   "peerDependencies": {
     "autotel": "workspace:*",
-    "@opentelemetry/sdk-trace-base": "^2.4.0",
+    "@opentelemetry/sdk-trace-base": "^2.5.0",
     "@opentelemetry/api": "^1.9.0"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",
     "@opentelemetry/api": "^1.9.0",
-    "@types/node": "^25.0.9",
+    "@types/node": "^25.0.10",
     "@types/react": "^19.2.9",
-    "@typescript-eslint/eslint-plugin": "^8.53.1",
-    "@typescript-eslint/parser": "^8.53.1",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
     "autotel": "workspace:*",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^62.0.0",
-    "prettier": "^3.8.0",
+    "prettier": "^3.8.1",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.53.1",
-    "vitest": "^4.0.17"
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
   },
   "repository": {
     "type": "git",

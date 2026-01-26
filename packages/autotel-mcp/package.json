@@ -64,16 +64,16 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
-    "@opentelemetry/context-async-hooks": "^2.4.0",
-    "@opentelemetry/core": "^2.4.0",
-    "@opentelemetry/sdk-trace-node": "^2.4.0",
-    "@types/node": "^25.0.9",
+    "@opentelemetry/context-async-hooks": "^2.5.0",
+    "@opentelemetry/core": "^2.5.0",
+    "@opentelemetry/sdk-trace-node": "^2.5.0",
+    "@types/node": "^25.0.10",
     "autotel": "workspace:*",
     "autotel-edge": "workspace:*",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.17",
+    "vitest": "^4.0.18",
     "vitest-mock-extended": "^3.1.0"
   },
   "repository": {
