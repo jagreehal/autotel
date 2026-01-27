@@ -1,5 +1,11 @@
 # autotel
 
+## 2.14.1
+
+### Patch Changes
+
+- acfd0de: Add comprehensive test coverage for Datadog backend configuration, including validation, direct cloud ingestion, agent mode, and OTLP logs export functionality.
+
 ## 2.14.0
 
 ### Minor Changes

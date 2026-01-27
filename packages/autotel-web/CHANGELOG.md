@@ -1,5 +1,11 @@
 # autotel-web
 
+## 1.6.1
+
+### Patch Changes
+
+- acfd0de: Add comprehensive test coverage for Datadog backend configuration, including validation, direct cloud ingestion, agent mode, and OTLP logs export functionality.
+
 ## 1.6.0
 
 ### Minor Changes
