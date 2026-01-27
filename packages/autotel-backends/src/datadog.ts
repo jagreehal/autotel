@@ -88,6 +88,23 @@ export interface DatadogPresetConfig {
 
   /**
    * Enable log export to Datadog via OTLP.
+   *
+   * When enabled, this:
+   * 1. Sets up OTel Logs SDK with OTLP exporter (for direct OTel logs API usage)
+   * 2. Auto-configures OTEL_EXPORTER_OTLP_LOGS_* env vars for pino-opentelemetry-transport
+   *
+   * For Pino users: Just add pino-opentelemetry-transport to your logger config:
+   * ```typescript
+   * const logger = pino({
+   *   transport: {
+   *     targets: [
+   *       { target: 'pino-pretty' },
+   *       { target: 'pino-opentelemetry-transport' }, // Auto-configured!
+   *     ],
+   *   },
+   * });
+   * ```
+   *
    * Requires peer dependencies: @opentelemetry/sdk-logs, @opentelemetry/exporter-logs-otlp-http
    *
    * @default false
@@ -207,6 +224,33 @@ export function createDatadogConfig(
   if (useAgent) {
     const agentEndpoint = `http://${agentHost}:${agentPort}`;
 
+    // Auto-configure env vars for pino-opentelemetry-transport in agent mode
+    if (enableLogs) {
+      const logsEndpoint = `http://${agentHost}:${agentPort}/v1/logs`;
+
+      if (!process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+        process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = logsEndpoint;
+      }
+
+      if (!process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL) {
+        process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/protobuf';
+      }
+
+      // No API key header needed for agent mode - Agent handles authentication
+
+      const resourceAttrs = [
+        `service.name=${service}`,
+        environment ? `deployment.environment=${environment}` : null,
+        version ? `service.version=${version}` : null,
+      ]
+        .filter(Boolean)
+        .join(',');
+
+      if (!process.env.OTEL_RESOURCE_ATTRIBUTES) {
+        process.env.OTEL_RESOURCE_ATTRIBUTES = resourceAttrs;
+      }
+    }
+
     return {
       ...baseConfig,
       endpoint: agentEndpoint,
@@ -227,6 +271,39 @@ export function createDatadogConfig(
 
   // Add log export if enabled
   if (enableLogs) {
+    // Auto-configure env vars for pino-opentelemetry-transport and other OTel log transports
+    // These are read by pino-opentelemetry-transport, otlp-logger, and similar libraries
+    const logsEndpoint = useAgent
+      ? `http://${agentHost}:${agentPort}/v1/logs`
+      : `https://otlp.${site}/v1/logs`;
+
+    // Only set if not already configured (allow user override)
+    if (!process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = logsEndpoint;
+    }
+
+    if (!process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL) {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/protobuf';
+    }
+
+    // Only set API key header for direct cloud ingestion (not agent mode)
+    if (!useAgent && apiKey && !process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS) {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = `dd-api-key=${apiKey}`;
+    }
+
+    // Set resource attributes for service identification
+    const resourceAttrs = [
+      `service.name=${service}`,
+      environment ? `deployment.environment=${environment}` : null,
+      version ? `service.version=${version}` : null,
+    ]
+      .filter(Boolean)
+      .join(',');
+
+    if (!process.env.OTEL_RESOURCE_ATTRIBUTES) {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = resourceAttrs;
+    }
+
     if (logRecordProcessors) {
       // Use custom processors if provided
       cloudConfig.logRecordProcessors = logRecordProcessors;

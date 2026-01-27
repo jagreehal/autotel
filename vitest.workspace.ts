@@ -31,6 +31,9 @@ export default defineWorkspace([
   
   // Web package
   'packages/autotel-web/vitest.config.ts',
+
+  // CLI package
+  'packages/autotel-cli/vitest.unit.config.ts',
 ]);
 
 
