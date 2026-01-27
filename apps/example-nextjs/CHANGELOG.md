@@ -1,5 +1,12 @@
 # example-nextjs
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [acfd0de]
+  - autotel@2.14.1
+
 ## 0.2.1
 
 ### Patch Changes
