@@ -154,11 +154,8 @@ function renderImports(imports: Import[]): string {
  * Render code file to string
  */
 export function renderCodeFile(file: CodeFile): string {
-  const lines: string[] = [];
-
   // Header
-  lines.push(CLI_HEADER);
-  lines.push('');
+  const lines: string[] = [CLI_HEADER, ''];
 
   // Main imports (autotel/register first)
   const mainImports = sortImports(file.imports);
