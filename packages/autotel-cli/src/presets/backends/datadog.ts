@@ -1,4 +1,4 @@
-import type { BackendPreset } from '../../types/index.js';
+import type { BackendPreset } from '../../types/index';
 
 /**
  * Datadog Direct preset - send traces directly to Datadog

@@ -1,7 +1,7 @@
 import * as path from 'node:path';
-import type { PackageJson, ProjectContext, WorkspaceInfo } from '../types/index.js';
-import { fileExists, dirExists, readJsonSafe, findUpward } from './fs.js';
-import { detectPackageManager, detectWorkspaceRoot } from './package-manager.js';
+import type { PackageJson, ProjectContext, WorkspaceInfo } from '../types/index';
+import { fileExists, dirExists, readJsonSafe, findUpward } from './fs';
+import { detectPackageManager, detectWorkspaceRoot } from './package-manager';
 
 /**
  * Find package.json starting from cwd, walking up if needed

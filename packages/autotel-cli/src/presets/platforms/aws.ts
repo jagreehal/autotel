@@ -1,4 +1,4 @@
-import type { PlatformPreset } from '../../types/index.js';
+import type { PlatformPreset } from '../../types/index';
 
 /**
  * AWS Lambda platform preset

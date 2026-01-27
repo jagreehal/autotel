@@ -1,4 +1,4 @@
-import type { BackendPreset } from '../../types/index.js';
+import type { BackendPreset } from '../../types/index';
 
 /**
  * Generic OTLP HTTP preset

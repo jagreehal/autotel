@@ -1,0 +1,22 @@
+{
+  "name": "@jagreehal/example-winston",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@opentelemetry/auto-instrumentations-node": "^0.69.0",
+    "@opentelemetry/instrumentation-winston": "^0.55.0",
+    "autotel": "workspace:*",
+    "autotel-subscribers": "workspace:*",
+    "dotenv": "^17.2.3",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

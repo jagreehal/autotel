@@ -1,4 +1,4 @@
-import type { Import } from '../types/index.js';
+import type { Import } from '../types/index';
 
 /**
  * CLI ownership header comment

@@ -6,7 +6,7 @@ import {
   detectPackageManager,
   getInstallCommand,
   detectWorkspaceRoot,
-} from './package-manager.js';
+} from './package-manager';
 
 describe('package-manager', () => {
   let tempDir: string;
