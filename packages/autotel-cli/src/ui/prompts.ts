@@ -1,5 +1,5 @@
 import { select, checkbox, confirm, input } from '@inquirer/prompts';
-import type { Preset, PresetType } from '../types/index.js';
+import type { Preset, PresetType } from '../types/index';
 
 /**
  * Runtime selection

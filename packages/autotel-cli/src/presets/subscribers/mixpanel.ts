@@ -1,4 +1,4 @@
-import type { SubscriberPreset } from '../../types/index.js';
+import type { SubscriberPreset } from '../../types/index';
 
 /**
  * Mixpanel subscriber preset

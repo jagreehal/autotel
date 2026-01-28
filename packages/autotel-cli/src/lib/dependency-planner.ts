@@ -1,4 +1,4 @@
-import type { Preset, PackageRequirements } from '../types/index.js';
+import type { Preset, PackageRequirements } from '../types/index';
 
 /**
  * Dependency plan for installation

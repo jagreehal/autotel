@@ -10,7 +10,7 @@ import {
   hasSectionMarker,
   getSectionMarkers,
   buildMinimalInstrumentation,
-} from './code-builder.js';
+} from './code-builder';
 
 describe('code-builder', () => {
   describe('createCodeFile', () => {

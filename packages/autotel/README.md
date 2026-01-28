@@ -1346,8 +1346,12 @@ Auto-enrichment adds `traceId`, `spanId`, `correlationId`, `operation.name`, `se
 
 ### Using Pino (recommended)
 
+**Note:** While `@opentelemetry/auto-instrumentations-node` includes Pino instrumentation, you may need to install `@opentelemetry/instrumentation-pino` separately for trace context injection to work reliably.
+
 ```bash
 npm install pino
+# Optional but recommended:
+npm install @opentelemetry/instrumentation-pino
 ```
 
 ```typescript
@@ -1358,7 +1362,11 @@ const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
 });
 
-init({ service: 'user-service', logger });
+init({
+  service: 'user-service',
+  logger,
+  autoInstrumentations: ['pino'], // Enable Pino instrumentation for trace context
+});
 
 export const createUser = trace(async (data: UserData) => {
   logger.info({ userId: data.id }, 'Creating user');
@@ -1375,8 +1383,10 @@ export const createUser = trace(async (data: UserData) => {
 
 ### Using Winston
 
+**Note:** While `@opentelemetry/auto-instrumentations-node` includes Winston instrumentation, you must install `@opentelemetry/instrumentation-winston` separately for trace context injection to work.
+
 ```bash
-npm install winston
+npm install winston @opentelemetry/instrumentation-winston
 ```
 
 ```typescript
@@ -1389,12 +1399,16 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-init({ service: 'user-service', logger });
+init({
+  service: 'user-service',
+  logger,
+  autoInstrumentations: ['winston'], // Enable Winston instrumentation for trace context
+});
 ```
 
 ### Using Bunyan (or other loggers)
 
-Autotel auto-detects Pino and Winston. For other loggers like Bunyan, manually add the instrumentation:
+**Note:** While `@opentelemetry/auto-instrumentations-node` includes Bunyan instrumentation, you must install `@opentelemetry/instrumentation-bunyan` separately for trace context injection to work.
 
 ```bash
 npm install bunyan @opentelemetry/instrumentation-bunyan
@@ -1403,14 +1417,25 @@ npm install bunyan @opentelemetry/instrumentation-bunyan
 ```typescript
 import bunyan from 'bunyan';
 import { init } from 'autotel';
-import { BunyanInstrumentation } from '@opentelemetry/instrumentation-bunyan';
 
 const logger = bunyan.createLogger({ name: 'user-service' });
 
 init({
   service: 'user-service',
   logger,
-  instrumentations: [new BunyanInstrumentation()], // Manual instrumentation
+  autoInstrumentations: ['bunyan'], // Enable Bunyan instrumentation for trace context
+});
+```
+
+**Note:** For manual instrumentation configuration, you can also use:
+
+```typescript
+import { BunyanInstrumentation } from '@opentelemetry/instrumentation-bunyan';
+
+init({
+  service: 'user-service',
+  logger,
+  instrumentations: [new BunyanInstrumentation()], // Manual instrumentation with custom config
 });
 ```
 
@@ -1421,7 +1446,7 @@ init({
 - ✅ Logs include `traceId`, `spanId`, `correlationId` for correlation with traces
 - ✅ Errors are automatically recorded in the active span
 - ✅ Logs export via OTLP to your observability backend (Grafana, Datadog, etc.)
-- ✅ Zero configuration for Pino/Winston - just pass your logger to `init()`
+- ✅ Simple setup - install the instrumentation package and enable it in `autoInstrumentations`
 
 ## Canonical Log Lines (Wide Events)
 

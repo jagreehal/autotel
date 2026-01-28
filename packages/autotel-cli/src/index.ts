@@ -1,4 +1,4 @@
-import { run } from './cli.js';
+import { run } from './cli';
 
 // Run the CLI
 run().catch((error) => {

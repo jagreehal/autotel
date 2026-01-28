@@ -13,7 +13,7 @@ export type {
   PlatformPreset,
   QuickPreset,
   PresetRegistry,
-} from './preset.js';
+} from './preset';
 
 // Project types
 export type {
@@ -28,7 +28,7 @@ export type {
   InitOptions,
   DoctorOptions,
   AddOptions,
-} from './project.js';
+} from './project';
 
 // Check types
 export type {
@@ -39,4 +39,4 @@ export type {
   CheckSummary,
   DoctorResult,
   CheckDefinition,
-} from './check.js';
+} from './check';
