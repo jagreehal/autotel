@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import type { InitOptions, DoctorOptions, AddOptions } from './types/index.js';
-import { runInit } from './commands/init.js';
-import { runDoctor } from './commands/doctor.js';
-import { runAdd } from './commands/add.js';
+import type { InitOptions, DoctorOptions, AddOptions } from './types/index';
+import { runInit } from './commands/init';
+import { runDoctor } from './commands/doctor';
+import { runAdd } from './commands/add';
 
 /**
  * Create the CLI program

@@ -1,16 +1,16 @@
 import { execSync } from 'node:child_process';
-import type { AddOptions, Preset, PresetType } from '../types/index.js';
-import { discoverProject } from '../lib/project.js';
-import { detectConfig, isFeatureConfigured } from '../lib/config-detector.js';
-import { getInstallCommand } from '../lib/package-manager.js';
-import { atomicWrite, readFileSafe } from '../lib/fs.js';
+import type { AddOptions, Preset, PresetType } from '../types/index';
+import { discoverProject } from '../lib/project';
+import { detectConfig, isFeatureConfigured } from '../lib/config-detector';
+import { getInstallCommand } from '../lib/package-manager';
+import { atomicWrite, readFileSafe } from '../lib/fs';
 import {
   getPreset,
   getPresetsByType,
   listPresetSlugs,
-} from '../presets/index.js';
-import * as output from '../ui/output.js';
-import { createSpinner } from '../ui/spinner.js';
+} from '../presets/index';
+import * as output from '../ui/output';
+import { createSpinner } from '../ui/spinner';
 
 /**
  * Format preset list for output

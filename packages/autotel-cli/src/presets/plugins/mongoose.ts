@@ -1,4 +1,4 @@
-import type { PluginPreset } from '../../types/index.js';
+import type { PluginPreset } from '../../types/index';
 
 /**
  * Mongoose plugin preset

@@ -1,9 +1,9 @@
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
-import type { InitOptions, Preset, EnvVar } from '../types/index.js';
-import { discoverProject, getInstrumentationPath } from '../lib/project.js';
-import { getInstallCommand } from '../lib/package-manager.js';
-import { detectConfig } from '../lib/config-detector.js';
+import type { InitOptions, Preset, EnvVar } from '../types/index';
+import { discoverProject, getInstrumentationPath } from '../lib/project';
+import { getInstallCommand } from '../lib/package-manager';
+import { detectConfig } from '../lib/config-detector';
 import {
   createCodeFile,
   addImport,
@@ -11,21 +11,21 @@ import {
   addSubscriberConfig,
   addPluginInit,
   renderCodeFile,
-} from '../lib/code-builder.js';
-import { generateEnvExample } from '../lib/env-generator.js';
-import { atomicWrite, fileExists } from '../lib/fs.js';
+} from '../lib/code-builder';
+import { generateEnvExample } from '../lib/env-generator';
+import { atomicWrite, fileExists } from '../lib/fs';
 import {
   buildDependencyPlan,
   getProdPackages,
   getDevPackages,
-} from '../lib/dependency-planner.js';
+} from '../lib/dependency-planner';
 import {
   backends,
   subscribers,
   plugins,
   getQuickPreset,
   getPreset,
-} from '../presets/index.js';
+} from '../presets/index';
 import {
   promptRuntime,
   promptBackend,
@@ -35,9 +35,9 @@ import {
   promptAutoInstrumentation,
   promptStartupStyle,
   promptExistingConfigAction,
-} from '../ui/prompts.js';
-import * as output from '../ui/output.js';
-import { createSpinner, isCI } from '../ui/spinner.js';
+} from '../ui/prompts';
+import * as output from '../ui/output';
+import { createSpinner, isCI } from '../ui/spinner';
 
 /**
  * Run the init command

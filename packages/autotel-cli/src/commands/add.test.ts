@@ -6,10 +6,10 @@ import {
   addPluginInit,
   renderCodeFile,
   setBackendConfig,
-} from '../lib/code-builder.js';
-import { addPresetToFile } from './add.js';
-import { datadogDirect } from '../presets/backends/datadog.js';
-import { posthogSubscriber } from '../presets/subscribers/posthog.js';
+} from '../lib/code-builder';
+import { addPresetToFile } from './add';
+import { datadogDirect } from '../presets/backends/datadog';
+import { posthogSubscriber } from '../presets/subscribers/posthog';
 
 describe('addPresetToFile', () => {
   it('should add backend config block for backend presets', () => {

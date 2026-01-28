@@ -1,6 +1,6 @@
 import * as path from 'node:path';
-import type { PackageManager } from '../types/index.js';
-import { fileExists, findAllUpward, readFileSafe } from './fs.js';
+import type { PackageManager } from '../types/index';
+import { fileExists, findAllUpward, readFileSafe } from './fs';
 
 /**
  * Lockfile to package manager mapping

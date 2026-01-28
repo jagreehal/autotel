@@ -1,5 +1,5 @@
 import * as semver from 'semver';
-import type { PackageJson } from '../types/index.js';
+import type { PackageJson } from '../types/index';
 
 /**
  * Installed package info

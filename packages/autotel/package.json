@@ -243,7 +243,7 @@
     "@opentelemetry/sdk-node": "^0.211.0",
     "@opentelemetry/sdk-trace-base": "^2.5.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
-    "import-in-the-middle": "^2.0.5"
+    "import-in-the-middle": "^2.0.6"
   },
   "peerDependencies": {
     "@opentelemetry/auto-instrumentations-node": "^0.69.0",

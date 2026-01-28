@@ -7,16 +7,16 @@ import type {
   PresetRegistry,
   Preset,
   PresetType,
-} from '../types/index.js';
+} from '../types/index';
 
 // Import all presets
-import { datadogDirect, datadogAgent } from './backends/datadog.js';
-import { honeycomb } from './backends/honeycomb.js';
-import { otlpHttp, otlpGrpc, local } from './backends/otlp.js';
-import { posthog } from './subscribers/posthog.js';
-import { mixpanel, amplitude, segment, slack, webhook } from './subscribers/mixpanel.js';
-import { mongoose, drizzle } from './plugins/mongoose.js';
-import { awsLambda, cloudflare, edge } from './platforms/aws.js';
+import { datadogDirect, datadogAgent } from './backends/datadog';
+import { honeycomb } from './backends/honeycomb';
+import { otlpHttp, otlpGrpc, local } from './backends/otlp';
+import { posthog } from './subscribers/posthog';
+import { mixpanel, amplitude, segment, slack, webhook } from './subscribers/mixpanel';
+import { mongoose, drizzle } from './plugins/mongoose';
+import { awsLambda, cloudflare, edge } from './platforms/aws';
 
 /**
  * Backend presets registry

@@ -1,7 +1,7 @@
 import * as path from 'node:path';
-import type { ProjectContext } from '../types/index.js';
-import { readFileSafe } from './fs.js';
-import { getEntrypointCandidates } from './project.js';
+import type { ProjectContext } from '../types/index';
+import { readFileSafe } from './fs';
+import { getEntrypointCandidates } from './project';
 
 /**
  * ESM hook check result

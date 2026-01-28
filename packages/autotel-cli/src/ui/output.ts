@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { Check, CheckSummary, PackageManager } from '../types/index.js';
+import type { Check, CheckSummary, PackageManager } from '../types/index';
 
 /**
  * Status tokens for consistent output

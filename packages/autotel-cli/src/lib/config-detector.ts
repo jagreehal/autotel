@@ -1,7 +1,7 @@
 import * as path from 'node:path';
-import type { ConfigDetection, InstrumentationFile, InstrumentationSection } from '../types/index.js';
-import { fileExists, readFileSafe } from './fs.js';
-import { hasCliOwnershipHeader, getSectionMarkers } from './code-builder.js';
+import type { ConfigDetection, InstrumentationFile, InstrumentationSection } from '../types/index';
+import { fileExists, readFileSafe } from './fs';
+import { hasCliOwnershipHeader, getSectionMarkers } from './code-builder';
 
 /**
  * Common instrumentation file locations

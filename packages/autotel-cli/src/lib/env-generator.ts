@@ -1,6 +1,6 @@
 import * as path from 'node:path';
-import type { EnvVar } from '../types/index.js';
-import { fileExists, readFileSafe } from './fs.js';
+import type { EnvVar } from '../types/index';
+import { fileExists, readFileSafe } from './fs';
 import { glob } from 'glob';
 
 /**

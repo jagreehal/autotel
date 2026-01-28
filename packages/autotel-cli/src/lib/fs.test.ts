@@ -11,7 +11,7 @@ import {
   atomicWrite,
   createBackup,
   findUpward,
-} from './fs.js';
+} from './fs';
 
 describe('fs utilities', () => {
   let tempDir: string;

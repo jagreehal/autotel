@@ -4,16 +4,17 @@ import type {
   CheckSummary,
   DoctorResult,
   Preset,
-} from '../types/index.js';
-import { discoverProject } from '../lib/project.js';
-import { detectConfig } from '../lib/config-detector.js';
-import { getAutotelInfo, checkAutotelVersions } from '../lib/dependency-auditor.js';
-import { checkEsmHook } from '../lib/esm-checker.js';
-import { checkEnvVarsPresent } from '../lib/env-generator.js';
-import { getInstallCommand } from '../lib/package-manager.js';
-import { getPreset } from '../presets/index.js';
-import * as output from '../ui/output.js';
-import { createSpinner } from '../ui/spinner.js';
+} from '../types/index';
+import { discoverProject } from '../lib/project';
+import { detectConfig } from '../lib/config-detector';
+import { getAutotelInfo, checkAutotelVersions } from '../lib/dependency-auditor';
+import { checkEsmHook } from '../lib/esm-checker';
+import { checkEnvVarsPresent } from '../lib/env-generator';
+import { getInstallCommand } from '../lib/package-manager';
+import { getPreset } from '../presets/index';
+import { checkLoggerInstrumentation } from '../lib/logger-checker';
+import * as output from '../ui/output';
+import { createSpinner } from '../ui/spinner';
 
 /**
  * All available check definitions
@@ -25,6 +26,7 @@ const CHECK_DEFINITIONS = [
   { id: 'env-vars', title: 'Environment variables', description: 'Check if required env vars are present' },
   { id: 'version-compat', title: 'Version compatibility', description: 'Check autotel package versions match' },
   { id: 'config-found', title: 'Configuration found', description: 'Check if instrumentation config exists' },
+  { id: 'logger-instrumentation', title: 'Logger instrumentation', description: 'Check if logger instrumentation packages are installed' },
 ];
 
 /**
@@ -291,6 +293,63 @@ async function runChecks(
     message: esmCheck.message,
     details: esmCheck.details,
   });
+
+  // Check 7: Logger instrumentation
+  const loggerCheck = checkLoggerInstrumentation(project.packageRoot, deps);
+  if (loggerCheck.hasLogger) {
+    if (loggerCheck.configuredInCode && !loggerCheck.hasInstrumentation) {
+      checks.push({
+        id: 'logger-instrumentation',
+        title: 'Logger instrumentation',
+        level: 'warning',
+        status: 'warn',
+        message: `${loggerCheck.logger} is configured but instrumentation package is missing`,
+        details: [
+          `${loggerCheck.logger} is used in autoInstrumentations but ${loggerCheck.instrumentationPackage} is not installed`,
+          `Install it: ${getInstallCommand(project.packageManager, [loggerCheck.instrumentationPackage!])}`,
+        ],
+        fix: {
+          cmd: getInstallCommand(project.packageManager, [loggerCheck.instrumentationPackage!]),
+          description: `Install ${loggerCheck.instrumentationPackage}`,
+        },
+      });
+    } else if (loggerCheck.hasInstrumentation && loggerCheck.configuredInCode) {
+      checks.push({
+        id: 'logger-instrumentation',
+        title: 'Logger instrumentation',
+        level: 'info',
+        status: 'ok',
+        message: `${loggerCheck.logger} instrumentation is properly configured`,
+      });
+    } else if (loggerCheck.hasInstrumentation && !loggerCheck.configuredInCode) {
+      checks.push({
+        id: 'logger-instrumentation',
+        title: 'Logger instrumentation',
+        level: 'info',
+        status: 'ok',
+        message: `${loggerCheck.logger} instrumentation package is installed`,
+        details: [
+          `Add '${loggerCheck.logger}' to autoInstrumentations in your init() call to enable trace context injection`,
+        ],
+      });
+    } else {
+      checks.push({
+        id: 'logger-instrumentation',
+        title: 'Logger instrumentation',
+        level: 'info',
+        status: 'skip',
+        message: `${loggerCheck.logger} is installed but not configured in code`,
+      });
+    }
+  } else {
+    checks.push({
+      id: 'logger-instrumentation',
+      title: 'Logger instrumentation',
+      level: 'info',
+      status: 'skip',
+      message: 'No logger packages detected (winston, bunyan, pino)',
+    });
+  }
 
   return checks;
 }
