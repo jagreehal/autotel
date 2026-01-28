@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 18.0.2
+
+### Patch Changes
+
+- Updated dependencies [78202aa]
+  - autotel@2.14.2
+
 ## 18.0.1
 
 ### Patch Changes
