@@ -1,6 +1,6 @@
 {
   "name": "autotel-backends",
-  "version": "2.7.1",
+  "version": "2.7.2",
   "description": "Vendor backend configurations for Autotel (Honeycomb, Datadog, etc.)",
   "type": "module",
   "main": "./dist/index.js",
