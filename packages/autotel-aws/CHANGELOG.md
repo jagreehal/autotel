@@ -1,5 +1,12 @@
 # autotel-aws
 
+## 0.7.2
+
+### Patch Changes
+
+- Updated dependencies [78202aa]
+  - autotel@2.14.2
+
 ## 0.7.1
 
 ### Patch Changes
