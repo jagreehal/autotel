@@ -187,6 +187,11 @@
       "types": "./dist/workflow-distributed.d.ts",
       "import": "./dist/workflow-distributed.js",
       "require": "./dist/workflow-distributed.cjs"
+    },
+    "./correlation-id": {
+      "types": "./dist/correlation-id.d.ts",
+      "import": "./dist/correlation-id.js",
+      "require": "./dist/correlation-id.cjs"
     }
   },
   "files": [

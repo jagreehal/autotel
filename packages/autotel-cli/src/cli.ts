@@ -1,8 +1,9 @@
 import { Command } from 'commander';
-import type { InitOptions, DoctorOptions, AddOptions } from './types/index';
+import type { InitOptions, DoctorOptions, AddOptions, CodemodTraceOptions } from './types/index';
 import { runInit } from './commands/init';
 import { runDoctor } from './commands/doctor';
 import { runAdd } from './commands/add';
+import { runCodemodTrace } from './commands/codemod-trace';
 
 /**
  * Create the CLI program
@@ -126,6 +127,37 @@ export function createProgram(): Command {
 
   addGlobalOptions(addCmd);
   program.addCommand(addCmd);
+
+  // Codemod command
+  const codemodCmd = new Command('codemod')
+    .description('Codemod commands for adopting autotel');
+  const traceCmd = new Command('trace')
+    .description('Wrap functions in trace() with span name from function/variable/method name')
+    .argument('<path>', 'File path or glob (e.g. src/index.ts, src/**/*.ts)')
+    .option('--dry-run', 'Print changes without writing files')
+    .option('--name-pattern <pattern>', 'Span name template: {name}, {file}, {path}')
+    .option('--skip <regex>...', 'Skip functions whose name matches (repeatable)')
+    .option('--print-files', 'Print per-file summary (wrapped count, skipped)')
+    .action(async (pathArg: string, opts) => {
+      const options: CodemodTraceOptions = {
+        cwd: opts.cwd ?? process.cwd(),
+        dryRun: opts.dryRun ?? false,
+        noInstall: false,
+        printInstallCmd: false,
+        verbose: opts.verbose ?? false,
+        quiet: opts.quiet ?? false,
+        workspaceRoot: false,
+        path: pathArg,
+        namePattern: opts.namePattern,
+        skip: Array.isArray(opts.skip) && opts.skip.length > 0 ? opts.skip : undefined,
+        printFiles: opts.printFiles ?? false,
+      };
+      await runCodemodTrace(options);
+    });
+  addGlobalOptions(traceCmd);
+  codemodCmd.addCommand(traceCmd);
+  addGlobalOptions(codemodCmd);
+  program.addCommand(codemodCmd);
 
   return program;
 }

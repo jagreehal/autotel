@@ -196,11 +196,20 @@ function sanitizeValue(
       const sanitized: Record<string, unknown> = {};
       for (const key in value) {
         if (Object.prototype.hasOwnProperty.call(value, key)) {
-          sanitized[key] = sanitizeValue(
-            (value as Record<string, unknown>)[key],
-            config,
-            depth + 1,
+          // Check for sensitive field in nested objects
+          const isSensitive = config.sensitivePatterns.some((pattern) =>
+            pattern.test(key),
           );
+
+          if (isSensitive) {
+            sanitized[key] = '[REDACTED]';
+          } else {
+            sanitized[key] = sanitizeValue(
+              (value as Record<string, unknown>)[key],
+              config,
+              depth + 1,
+            );
+          }
         }
       }
       return sanitized;

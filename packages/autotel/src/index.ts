@@ -94,7 +94,18 @@ export {
 } from './operation-context';
 
 // Global track function
-export { track } from './track';
+export { track, getEventQueue } from './track';
+
+// Correlation ID utilities
+export {
+  getCorrelationId,
+  getOrCreateCorrelationId,
+  generateCorrelationId,
+  runWithCorrelationId,
+  setCorrelationId,
+  setCorrelationIdInBaggage,
+  CORRELATION_ID_BAGGAGE_KEY,
+} from './correlation-id';
 
 // Graceful shutdown
 export { flush, shutdown } from './shutdown';

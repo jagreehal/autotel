@@ -166,7 +166,7 @@ Integration tests require OpenTelemetry SDK setup, so they're isolated in `*.int
 
 1. Create new file in `packages/autotel-subscribers/src/`
 2. Extend `EventSubscriber` base class
-3. Implement `sendToDestination(payload: EventPayload)` method
+3. Implement `trackEvent(name, attributes?, options?)` (and other track* methods as needed). Accept the optional third argument `options?: EventTrackingOptions`; if present, forward `options.autotel` (e.g. `correlation_id`, `trace_id`, `trace_url`) into your payload so consumers can correlate events with traces.
 4. Add export to `packages/autotel-subscribers/src/index.ts`
 5. Add entry point to `package.json` exports field
 6. Add tests using `SubscriberTestHarness`
@@ -193,4 +193,3 @@ Integration tests require OpenTelemetry SDK setup, so they're isolated in `*.int
 - ✅ **Always do**: Write tests for new features, use test harnesses, follow existing patterns
 - ⚠️ **Ask first**: Changing test infrastructure, modifying CI/CD configs
 - 🚫 **Never do**: Skip tests, modify test configs without understanding impact, remove failing tests
-
