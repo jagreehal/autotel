@@ -125,10 +125,21 @@ const fetchUser = async (id: string): Promise<AsyncResult<User, UserNotFound>> =
 ### Workflow Setup
 
 ```typescript
-import { createWorkflow } from 'awaitly/workflow';
+import { createWorkflow, type WorkflowEvent } from 'awaitly/workflow';
 import { createAutotelAdapter } from 'awaitly/otel';
-import { createVisualizer } from 'awaitly/visualize';
-import { createConsoleLogger } from 'awaitly/devtools';
+import { createVisualizer } from 'awaitly-visualizer';
+
+// Console event logger: define locally (see index.ts for full implementation)
+function createConsoleLogger(opts: { prefix?: string; colors?: boolean } = {}) {
+  const p = opts.prefix ? `${opts.prefix} ` : '';
+  return (event: WorkflowEvent<unknown>) => {
+    if (event.type === 'workflow_start') console.log(`${p}⏵ Workflow started`);
+    else if (event.type === 'workflow_success') console.log(`${p}✓ Workflow completed (${event.durationMs}ms)`);
+    else if (event.type === 'step_start') console.log(`${p}→ ${event.name ?? 'step'}`);
+    else if (event.type === 'step_success') console.log(`${p}✓ ${event.name ?? 'step'} (${event.durationMs}ms)`);
+    else if (event.type === 'step_error') console.log(`${p}✗ ${event.name ?? 'step'}`);
+  };
+}
 
 const deps = {
   fetchUser,
@@ -144,7 +155,7 @@ const autotel = createAutotelAdapter({
 
 const viz = createVisualizer({
   workflowName: 'checkout',
-  showDurations: true,
+  showTimings: true,
 });
 
 const logger = createConsoleLogger({
@@ -309,7 +320,7 @@ Pretty colored console output with workflow events:
 Track conditional logic for visualization:
 
 ```typescript
-import { trackIf } from 'awaitly/visualize';
+import { trackIf } from 'awaitly-visualizer';
 
 const decision = trackIf('check-premium', user.isPremium, {
   condition: 'user.isPremium',

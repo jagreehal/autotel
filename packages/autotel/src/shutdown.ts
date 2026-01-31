@@ -17,6 +17,7 @@ import { resetMetrics } from './metric';
  *
  * @param options - Optional configuration
  * @param options.timeout - Timeout in milliseconds (default: 2000ms)
+ * @param options.forShutdown - If true, permanently disables the events queue after flush (used internally by shutdown())
  *
  * @example Manual flush in serverless
  * ```typescript
@@ -34,14 +35,22 @@ import { resetMetrics } from './metric';
  * await flush({ timeout: 5000 }); // 5 second timeout
  * ```
  */
-export async function flush(options?: { timeout?: number }): Promise<void> {
+export async function flush(options?: {
+  timeout?: number;
+  forShutdown?: boolean;
+}): Promise<void> {
   const timeout = options?.timeout ?? 2000;
+  const forShutdown = options?.forShutdown ?? false;
 
   const doFlush = async () => {
-    // Flush events queue
+    // Flush events queue (or shutdown queue when tearing down)
     const eventsQueue = getEventQueue();
     if (eventsQueue) {
-      await eventsQueue.flush();
+      if (forShutdown) {
+        await eventsQueue.shutdown();
+      } else {
+        await eventsQueue.flush();
+      }
     }
 
     // Flush OpenTelemetry spans
@@ -130,9 +139,9 @@ export async function shutdown(): Promise<void> {
   const logger = getLogger();
   let shutdownError: Error | null = null;
 
-  // Attempt to flush, but continue with cleanup even if it fails
+  // Attempt to flush (with queue shutdown so new events are rejected), but continue with cleanup even if it fails
   try {
-    await flush();
+    await flush({ forShutdown: true });
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     shutdownError = err;
@@ -172,6 +181,10 @@ export async function shutdown(): Promise<void> {
   } finally {
     // Clean up singleton Maps and queues to prevent memory leaks
     // This runs even if SDK shutdown fails
+    const eventsQueue = getEventQueue();
+    if (eventsQueue && typeof eventsQueue.cleanup === 'function') {
+      eventsQueue.cleanup();
+    }
     resetEvents();
     resetMetrics();
     resetEventQueue();

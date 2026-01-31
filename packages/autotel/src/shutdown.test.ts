@@ -251,6 +251,25 @@ describe('shutdown module', () => {
       expect(queueSizeAfter).toBe(0);
     });
 
+    it('should clean up event queue observables on shutdown', async () => {
+      init({
+        service: 'test-service',
+        subscribers: [mockAdapter],
+      });
+
+      track('test.event', { foo: 'bar' });
+
+      const queue = getEventQueue();
+      expect(queue).not.toBeNull();
+      if (!queue) return;
+
+      const cleanupSpy = vi.spyOn(queue, 'cleanup');
+
+      await shutdown();
+
+      expect(cleanupSpy).toHaveBeenCalledOnce();
+    });
+
     it('should handle errors during shutdown gracefully', async () => {
       const failingAdapter: EventSubscriber = {
         name: 'failing-adapter',
