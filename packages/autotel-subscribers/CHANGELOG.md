@@ -1,5 +1,16 @@
 # autotel-subscribers
 
+## 20.0.0
+
+### Minor Changes
+
+- 8a6769a: x
+
+### Patch Changes
+
+- Updated dependencies [8a6769a]
+  - autotel@2.16.0
+
 ## 19.0.0
 
 ### Minor Changes
