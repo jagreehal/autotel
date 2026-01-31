@@ -6,7 +6,7 @@ import { defineConfig } from 'eslint/config';
 
 export default defineConfig(
   {
-    ignores: ['dist/**', 'eslint.config.mjs'],
+    ignores: ['dist/**', 'eslint.config.mjs', 'src/__fixtures__/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

@@ -107,6 +107,47 @@ npx autotel add backend datadog --help
 - `--dry-run` - Skip installation and print what would be done
 - `--force` - Overwrite non-CLI-owned config (creates backup first)
 
+### `autotel codemod trace <path>`
+
+Wrap functions in `trace()` with a span name derived from the function/variable/method name. Use this to adopt autotel on existing code without changing function bodies.
+
+**Supported file types:** `.ts`, `.tsx`, `.js`, `.jsx`
+
+```bash
+# Single file (TypeScript or JavaScript)
+npx autotel codemod trace src/index.ts
+npx autotel codemod trace src/utils.js
+
+# Glob pattern - TypeScript only
+npx autotel codemod trace "src/**/*.ts"
+
+# Glob pattern - all supported files
+npx autotel codemod trace "src/**/*.{ts,tsx,js,jsx}"
+
+# Dry run - print what would change without writing
+npx autotel codemod trace "src/**/*.ts" --dry-run
+
+# Custom span name template: {name}, {file} (basename), {path} (relative)
+npx autotel codemod trace "src/**/*.ts" --name-pattern "{file}.{name}"
+
+# Skip functions whose name matches a regex (repeatable)
+npx autotel codemod trace "src/**/*.ts" --skip "^_" --skip "test|mock"
+
+# Print per-file summary (wrapped count, skipped)
+npx autotel codemod trace "src/**/*.ts" --print-files
+```
+
+**Options:**
+
+- `--dry-run` - Print changes without writing files
+- `--name-pattern <pattern>` - Span name template. Placeholders: `{name}`, `{file}`, `{path}`. Default: `{name}` only.
+- `--skip <regex>...` - Skip functions whose name matches (repeatable; combined as OR).
+- `--print-files` - Print per-file summary (e.g. `✔ path (N wrapped)`, `↷ path (skipped: reason)`).
+
+**Supported patterns:** Function declarations, arrow/function expressions in `const`/`let`/`var`, class and static methods (body wrap), object method shorthand, named default export function. Works with both TypeScript and JavaScript files. Span name defaults to function/variable/method name (or `ClassName.methodName` for methods).
+
+**Exclusions:** Generator functions (`function*`, `async function*`); getters/setters; constructors; CJS (`require('autotel')`); anonymous default export; class/object methods that use `super` in the body; `.d.ts` files; `node_modules/`. The codemod does not modify files when no eligible functions are found (no unused `trace` import added). The `{path}` placeholder uses the relative path from `--cwd` with forward slashes; moving files will change span names.
+
 ## Global Options
 
 All commands support these options:

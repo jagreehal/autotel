@@ -115,3 +115,13 @@ export interface AddOptions extends GlobalOptions {
   force: boolean;
   json: boolean;
 }
+
+/**
+ * Codemod trace command options
+ */
+export interface CodemodTraceOptions extends GlobalOptions {
+  path: string;
+  namePattern?: string;
+  skip?: string[];
+  printFiles?: boolean;
+}
