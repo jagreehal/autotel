@@ -14,8 +14,8 @@
 import 'dotenv/config';
 import { createWorkflow } from 'awaitly/workflow';
 import { createAutotelAdapter, withAutotelTracing } from 'awaitly/otel';
-import { createVisualizer, trackIf } from 'awaitly/visualize';
-import { createConsoleLogger } from 'awaitly/devtools';
+import { createVisualizer, trackIf } from 'awaitly-visualizer';
+import { createConsoleLogger } from 'awaitly-visualizer/devtools';
 import { trace } from 'autotel';
 import pino from 'pino';
 import { ok, err, type Result } from 'awaitly';

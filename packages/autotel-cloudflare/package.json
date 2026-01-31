@@ -83,12 +83,12 @@
     "@opentelemetry/resources": "^2.5.0"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "^4.20260127.0"
+    "@cloudflare/workers-types": "^4.20260131.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260127.0",
+    "@cloudflare/workers-types": "^4.20260131.0",
     "@opentelemetry/context-async-hooks": "^2.5.0",
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.1.0",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",

@@ -39,6 +39,7 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+tsup.config.bundled_*.mjs
 
 # Playwright
 examples/browser/playwright-report

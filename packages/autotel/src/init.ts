@@ -59,6 +59,7 @@ import {
   CanonicalLogLineProcessor,
   type CanonicalLogLineOptions,
 } from './processors/canonical-log-line-processor';
+import type { EventsConfig } from './events-config';
 
 /**
  * Silent logger (no-op) - used as default when user doesn't provide one.
@@ -643,6 +644,55 @@ export interface AutotelConfig {
   validation?: Partial<ValidationConfig>;
 
   /**
+   * Events configuration for trace context, correlation IDs, and enrichment
+   *
+   * Controls how product events integrate with distributed tracing:
+   * - `includeTraceContext`: Automatically include trace context in events
+   * - `includeLinkedTraceIds`: Include full array of linked trace IDs (for batch/fan-in)
+   * - `traceUrl`: Generate clickable trace URLs in events
+   * - `enrichFromBaggage`: Auto-enrich events from baggage with guardrails
+   *
+   * @example Basic trace context
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   events: {
+   *     includeTraceContext: true
+   *   }
+   * });
+   * // Events now include autotel.trace_id, autotel.span_id, autotel.correlation_id
+   * ```
+   *
+   * @example With clickable trace URLs
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   events: {
+   *     includeTraceContext: true,
+   *     traceUrl: (ctx) => `https://grafana.internal/explore?traceId=${ctx.traceId}`
+   *   }
+   * });
+   * ```
+   *
+   * @example With baggage enrichment
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   events: {
+   *     includeTraceContext: true,
+   *     enrichFromBaggage: {
+   *       allow: ['tenant.id', 'user.id'],
+   *       prefix: 'ctx.',
+   *       maxKeys: 10,
+   *       maxBytes: 1024
+   *     }
+   *   }
+   * });
+   * ```
+   */
+  events?: EventsConfig;
+
+  /**
    * Debug mode for local span inspection.
    * Enables console output to help you see spans as they're created.
    *
@@ -936,6 +986,7 @@ let sdk: NodeSDK | null = null;
 let warnedOnce = false;
 let logger: Logger = silentLogger; // Silent by default - no spam
 let validationConfig: Partial<ValidationConfig> | null = null;
+let eventsConfig: EventsConfig | null = null;
 
 /**
  * Resolve metrics flag with env var override support
@@ -1087,6 +1138,7 @@ export function init(cfg: AutotelConfig): void {
 
   config = mergedConfig;
   validationConfig = mergedConfig.validation || null;
+  eventsConfig = mergedConfig.events || null;
 
   // Initialize OpenTelemetry
   // Only use endpoint if explicitly configured (no default fallback)
@@ -1618,6 +1670,13 @@ export function getLogger(): Logger {
  */
 export function getValidationConfig(): Partial<ValidationConfig> | null {
   return validationConfig;
+}
+
+/**
+ * Get events config (internal use)
+ */
+export function getEventsConfig(): EventsConfig | null {
+  return eventsConfig;
 }
 
 /**

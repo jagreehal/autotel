@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@types/bunyan": "^1.8.11",
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

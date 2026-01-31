@@ -70,10 +70,12 @@ import type {
   EventAttributesInput,
   FunnelStatus,
   OutcomeStatus,
+  AutotelEventContext,
+  EventTrackingOptions,
 } from 'autotel/event-subscriber';
 
 // Re-export types for convenience
-
+export type { AutotelEventContext, EventTrackingOptions } from 'autotel/event-subscriber';
 
 /**
  * Payload sent to destination
@@ -111,6 +113,15 @@ export interface EventPayload {
 
   /** Timestamp (ISO 8601) */
   timestamp: string;
+
+  /**
+   * Autotel trace context (present when events.includeTraceContext is enabled)
+   *
+   * Subscribers should map these to platform-specific field names:
+   * - PostHog: autotel.trace_id → $trace_id
+   * - Mixpanel: autotel.trace_id → trace_id
+   */
+  autotel?: AutotelEventContext;
 }
 
 /**
@@ -215,7 +226,11 @@ export abstract class EventSubscriber implements IEventSubscriber {
   /**
    * Track an event
    */
-  async trackEvent(name: string, attributes?: EventAttributes): Promise<void> {
+  async trackEvent(
+    name: string,
+    attributes?: EventAttributes,
+    options?: EventTrackingOptions,
+  ): Promise<void> {
     if (!this.enabled) return;
 
     const payload: EventPayload = {
@@ -223,6 +238,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
       name,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     };
 
     await this.send(payload);
@@ -235,6 +251,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
     funnelName: string,
     step: FunnelStatus,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void> {
     if (!this.enabled) return;
 
@@ -245,6 +262,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
       step,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     };
 
     await this.send(payload);
@@ -257,6 +275,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
     operationName: string,
     outcome: OutcomeStatus,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void> {
     if (!this.enabled) return;
 
@@ -267,6 +286,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
       outcome,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     };
 
     await this.send(payload);
@@ -279,6 +299,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
     name: string,
     value: number,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void> {
     if (!this.enabled) return;
 
@@ -288,6 +309,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
       value,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     };
 
     await this.send(payload);
@@ -303,12 +325,14 @@ export abstract class EventSubscriber implements IEventSubscriber {
    * @param stepName - Custom step name (e.g., "cart_viewed", "payment_entered")
    * @param stepNumber - Optional numeric position in the funnel
    * @param attributes - Optional event attributes
+   * @param options - Optional tracking options including autotel context
    */
   async trackFunnelProgression(
     funnelName: string,
     stepName: string,
     stepNumber?: number,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void> {
     if (!this.enabled) return;
 
@@ -321,6 +345,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
       stepNumber,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     };
 
     await this.send(payload);

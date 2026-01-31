@@ -38,7 +38,6 @@ export class AmplitudeSubscriber implements EventSubscriber {
   readonly name = 'AmplitudeSubscriber';
   readonly version = '1.0.0';
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private amplitudeModule: any = null;
   private enabled: boolean;
   private config: AmplitudeConfig;

@@ -21,7 +21,7 @@
     "logs-packages": "The @opentelemetry/sdk-logs and exporter-logs-otlp-http packages are optional peer dependencies of autotel. They are only needed if you want to export logs via OTLP. For traces and metrics only, you can omit these packages."
   },
   "devDependencies": {
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

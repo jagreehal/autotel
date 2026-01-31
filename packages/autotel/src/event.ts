@@ -44,20 +44,32 @@
  * ```
  */
 
-import { trace } from '@opentelemetry/api';
+import { trace, propagation, context, TraceFlags } from '@opentelemetry/api';
 import { type Logger } from './logger';
-import { getLogger, getValidationConfig, getConfig } from './init';
+import {
+  getLogger,
+  getValidationConfig,
+  getConfig,
+  getEventsConfig,
+} from './init';
 import {
   type EventSubscriber,
   type EventAttributes,
   type EventAttributesInput,
   type FunnelStatus,
   type OutcomeStatus,
+  type AutotelEventContext,
 } from './event-subscriber';
 import { type EventCollector } from './event-testing';
 import { CircuitBreaker, CircuitOpenError } from './circuit-breaker';
 import { validateEvent } from './validation';
 import { getOperationContext } from './operation-context';
+import {
+  type EnrichFromBaggageConfig,
+  hashValue,
+  hashLinkedTraceIds,
+} from './events-config';
+import { getOrCreateCorrelationId } from './correlation-id';
 
 // Re-export types for convenience
 export type {
@@ -230,6 +242,214 @@ export class Event {
   }
 
   /**
+   * Build autotel event context for trace correlation
+   *
+   * Works in 4 contexts:
+   * 1. Inside a span → use current span's trace_id + span_id
+   * 2. Outside span but in AsyncLocalStorage context → use trace_id + correlation_id
+   * 3. Totally standalone → use correlation_id + service/env/version
+   * 4. Batch/fan-in (multiple linked parents) → use count + hash or full array
+   *
+   * @returns AutotelEventContext or undefined if trace context is disabled
+   */
+  private buildAutotelContext(): AutotelEventContext | undefined {
+    const eventsConfig = getEventsConfig();
+
+    // Return undefined if trace context is not enabled
+    if (!eventsConfig?.includeTraceContext) {
+      // Still generate correlation_id even without full trace context
+      // This provides a stable join key across events/logs/spans
+      return {
+        correlation_id: getOrCreateCorrelationId(),
+      };
+    }
+
+    const config = getConfig();
+    const span = trace.getActiveSpan();
+    const spanContext = span?.spanContext();
+
+    // Always generate a correlation_id
+    const correlationId = getOrCreateCorrelationId();
+
+    // Build base context
+    const autotelContext: AutotelEventContext = {
+      correlation_id: correlationId,
+    };
+
+    // Add trace context if inside a span
+    if (spanContext) {
+      autotelContext.trace_id = spanContext.traceId;
+      autotelContext.span_id = spanContext.spanId;
+
+      // Trace flags as 2-char hex string (canonical format)
+      autotelContext.trace_flags = spanContext.traceFlags
+        .toString(16)
+        .padStart(2, '0');
+
+      // Tracestate if present
+      const traceState = spanContext.traceState;
+      if (traceState) {
+        // Convert TraceState to string representation safely
+        let traceStateStr = '';
+        try {
+          if (typeof traceState.serialize === 'function') {
+            traceStateStr = traceState.serialize();
+          }
+        } catch {
+          // Silently ignore serialization errors - traceState is optional metadata
+        }
+        if (traceStateStr) {
+          autotelContext.trace_state = traceStateStr;
+        }
+      }
+
+      // Generate trace URL if configured
+      if (eventsConfig.traceUrl) {
+        const traceUrl = eventsConfig.traceUrl({
+          traceId: spanContext.traceId,
+          spanId: spanContext.spanId,
+          correlationId,
+          serviceName: config?.service || this.serviceName,
+          environment: config?.environment,
+        });
+        if (traceUrl) {
+          autotelContext.trace_url = traceUrl;
+        }
+      }
+
+      // Handle linked spans (batch/fan-in scenarios)
+      // Note: This would require access to span links which are not easily accessible
+      // from the public OpenTelemetry API. For now, we skip this unless we have
+      // explicit linked trace IDs passed in.
+    } else {
+      // Outside span but may still have trace URL generator
+      if (eventsConfig.traceUrl && config) {
+        const traceUrl = eventsConfig.traceUrl({
+          correlationId,
+          serviceName: config.service,
+          environment: config.environment,
+        });
+        if (traceUrl) {
+          autotelContext.trace_url = traceUrl;
+        }
+      }
+    }
+
+    return autotelContext;
+  }
+
+  /**
+   * Enrich event attributes from baggage with guardrails
+   *
+   * @param attributes - Current event attributes
+   * @returns Enriched attributes with baggage values
+   */
+  private enrichFromBaggage(attributes: EventAttributes): EventAttributes {
+    const eventsConfig = getEventsConfig();
+    const enrichConfig = eventsConfig?.enrichFromBaggage;
+
+    if (!enrichConfig) {
+      return attributes;
+    }
+
+    const enriched = { ...attributes };
+    const activeContext = context.active();
+    const baggage = propagation.getBaggage(activeContext);
+
+    if (!baggage) {
+      return enriched;
+    }
+
+    let keyCount = 0;
+    let byteCount = 0;
+    const maxKeys = enrichConfig.maxKeys ?? 10;
+    const maxBytes = enrichConfig.maxBytes ?? 1024;
+    const prefix = enrichConfig.prefix ?? '';
+
+    // Get all baggage entries
+    for (const [key, entry] of baggage.getAllEntries()) {
+      // Check if key is allowed
+      if (!this.isBaggageKeyAllowed(key, enrichConfig)) {
+        continue;
+      }
+
+      // Check limits
+      if (keyCount >= maxKeys) {
+        break;
+      }
+
+      const value = entry.value;
+
+      // Apply transform first so maxBytes is checked against transformed size (e.g. hash output)
+      const transform = enrichConfig.transform?.[key];
+      let transformedValue: string;
+
+      if (transform === 'hash') {
+        transformedValue = hashValue(value);
+      } else if (transform === 'plain' || !transform) {
+        transformedValue = value;
+      } else if (typeof transform === 'function') {
+        transformedValue = transform(value);
+      } else {
+        transformedValue = value;
+      }
+
+      const valueBytes = new TextEncoder().encode(transformedValue).length;
+
+      if (byteCount + valueBytes > maxBytes) {
+        continue; // Skip this entry if transformed value would exceed byte limit
+      }
+
+      // Add to enriched attributes with prefix
+      const enrichedKey = `${prefix}${key}`;
+      enriched[enrichedKey] = transformedValue;
+
+      keyCount++;
+      byteCount += valueBytes;
+    }
+
+    return enriched;
+  }
+
+  /**
+   * Check if a baggage key is allowed based on config
+   */
+  private isBaggageKeyAllowed(
+    key: string,
+    config: EnrichFromBaggageConfig,
+  ): boolean {
+    // Check deny list first (takes precedence)
+    if (config.deny) {
+      for (const pattern of config.deny) {
+        if (this.matchesBaggagePattern(key, pattern)) {
+          return false;
+        }
+      }
+    }
+
+    // Check allow list
+    for (const pattern of config.allow) {
+      if (this.matchesBaggagePattern(key, pattern)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a key matches a baggage pattern
+   * Supports exact matches and wildcard patterns (e.g., 'tenant.*')
+   */
+  private matchesBaggagePattern(key: string, pattern: string): boolean {
+    if (pattern.endsWith('.*')) {
+      const prefix = pattern.slice(0, -2);
+      return key.startsWith(prefix + '.');
+    }
+    return key === pattern;
+  }
+
+  /**
    * Track a business event
    *
    * Use this for tracking user actions, business events, product usage:
@@ -287,8 +507,16 @@ export class Event {
     // Notify subscribers (zero overhead if no subscribers)
     // Run in background - don't block event recording
     if (this.hasSubscribers) {
+      // Build autotel context for trace correlation
+      const autotelContext = this.buildAutotelContext();
+
+      // Enrich from baggage if configured
+      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+
       void this.notifySubscribers((subscriber) =>
-        subscriber.trackEvent(validated.eventName, enrichedAttributes),
+        subscriber.trackEvent(validated.eventName, finalAttributes, {
+          autotel: autotelContext,
+        }),
       );
     }
   }
@@ -382,8 +610,13 @@ export class Event {
 
     // Notify subscribers
     if (this.hasSubscribers) {
+      const autotelContext = this.buildAutotelContext();
+      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+
       void this.notifySubscribers((subscriber) =>
-        subscriber.trackFunnelStep(funnelName, status, enrichedAttributes),
+        subscriber.trackFunnelStep(funnelName, status, finalAttributes, {
+          autotel: autotelContext,
+        }),
       );
     }
   }
@@ -439,8 +672,13 @@ export class Event {
 
     // Notify subscribers
     if (this.hasSubscribers) {
+      const autotelContext = this.buildAutotelContext();
+      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+
       void this.notifySubscribers((subscriber) =>
-        subscriber.trackOutcome(operationName, status, enrichedAttributes),
+        subscriber.trackOutcome(operationName, status, finalAttributes, {
+          autotel: autotelContext,
+        }),
       );
     }
   }
@@ -502,8 +740,13 @@ export class Event {
 
     // Notify subscribers
     if (this.hasSubscribers) {
+      const autotelContext = this.buildAutotelContext();
+      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+
       void this.notifySubscribers((subscriber) =>
-        subscriber.trackValue(metricName, value, enrichedAttributes),
+        subscriber.trackValue(metricName, value, finalAttributes, {
+          autotel: autotelContext,
+        }),
       );
     }
   }
@@ -647,20 +890,31 @@ export class Event {
 
     // Notify subscribers that support trackFunnelProgression
     if (this.hasSubscribers) {
+      const autotelContext = this.buildAutotelContext();
+      const finalAttributes = this.enrichFromBaggage(enrichedAttributes);
+
       void this.notifySubscribers(async (subscriber) => {
         await (subscriber.trackFunnelProgression
           ? subscriber.trackFunnelProgression(
               funnelName,
               stepName,
               stepNumber,
-              enrichedAttributes,
+              finalAttributes,
+              { autotel: autotelContext },
             )
           : // Fall back to trackFunnelStep with step as custom name (cast)
-            subscriber.trackFunnelStep(funnelName, stepName as FunnelStatus, {
-              ...enrichedAttributes,
-              step_name: stepName,
-              ...(stepNumber === undefined ? {} : { step_number: stepNumber }),
-            }));
+            subscriber.trackFunnelStep(
+              funnelName,
+              stepName as FunnelStatus,
+              {
+                ...finalAttributes,
+                step_name: stepName,
+                ...(stepNumber === undefined
+                  ? {}
+                  : { step_number: stepNumber }),
+              },
+              { autotel: autotelContext },
+            ));
       });
     }
   }

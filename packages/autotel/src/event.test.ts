@@ -4,6 +4,7 @@ import { type Logger } from './logger';
 import { init } from './init';
 import { shutdown } from './shutdown';
 import { trace } from './functional';
+import { context, propagation } from '@opentelemetry/api';
 
 describe('Events', () => {
   let mockLogger: Logger;
@@ -767,6 +768,337 @@ describe('Events', () => {
         }),
         'Event tracked',
       );
+    });
+  });
+
+  describe('autotel trace context', () => {
+    beforeEach(() => {
+      resetEvents();
+    });
+
+    afterEach(async () => {
+      await shutdown();
+    });
+
+    it('should always include correlation_id even without includeTraceContext', async () => {
+      init({
+        service: 'test-service',
+        // events.includeTraceContext is false by default
+      });
+
+      const mockSubscriber = {
+        name: 'MockSubscriber',
+        trackEvent: vi.fn().mockResolvedValue(undefined),
+        trackFunnelStep: vi.fn().mockResolvedValue(undefined),
+        trackOutcome: vi.fn().mockResolvedValue(undefined),
+        trackValue: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const event = new Event('test-service', {
+        subscribers: [mockSubscriber],
+      });
+
+      event.trackEvent('test.event', { userId: '123' });
+
+      // Wait for async subscriber notification
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockSubscriber.trackEvent).toHaveBeenCalledWith(
+        'test.event',
+        expect.any(Object),
+        expect.objectContaining({
+          autotel: expect.objectContaining({
+            correlation_id: expect.any(String),
+          }),
+        }),
+      );
+
+      // Correlation ID should be 16 hex chars
+      const call = mockSubscriber.trackEvent.mock.calls[0];
+      const autotelContext = call[2].autotel;
+      expect(autotelContext.correlation_id).toHaveLength(16);
+      expect(/^[0-9a-f]{16}$/.test(autotelContext.correlation_id)).toBe(true);
+    });
+
+    it('should include full trace context when includeTraceContext is enabled', async () => {
+      init({
+        service: 'test-service',
+        events: {
+          includeTraceContext: true,
+        },
+      });
+
+      const mockSubscriber = {
+        name: 'MockSubscriber',
+        trackEvent: vi.fn().mockResolvedValue(undefined),
+        trackFunnelStep: vi.fn().mockResolvedValue(undefined),
+        trackOutcome: vi.fn().mockResolvedValue(undefined),
+        trackValue: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const event = new Event('test-service', {
+        subscribers: [mockSubscriber],
+      });
+
+      // Track event inside a trace
+      const tracedOperation = trace('test.operation', async () => {
+        event.trackEvent('traced.event', { data: 'test' });
+      });
+
+      await tracedOperation();
+
+      // Wait for async subscriber notification
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockSubscriber.trackEvent).toHaveBeenCalledWith(
+        'traced.event',
+        expect.any(Object),
+        expect.objectContaining({
+          autotel: expect.objectContaining({
+            trace_id: expect.any(String),
+            span_id: expect.any(String),
+            trace_flags: expect.any(String),
+            correlation_id: expect.any(String),
+          }),
+        }),
+      );
+
+      // Verify trace_id is 32 hex chars
+      const call = mockSubscriber.trackEvent.mock.calls[0];
+      const autotelContext = call[2].autotel;
+      expect(autotelContext.trace_id).toHaveLength(32);
+      expect(/^[0-9a-f]{32}$/.test(autotelContext.trace_id)).toBe(true);
+
+      // Verify span_id is 16 hex chars
+      expect(autotelContext.span_id).toHaveLength(16);
+      expect(/^[0-9a-f]{16}$/.test(autotelContext.span_id)).toBe(true);
+
+      // Verify trace_flags is 2 hex chars
+      expect(autotelContext.trace_flags).toHaveLength(2);
+    });
+
+    it('should call traceUrl function when configured', async () => {
+      const traceUrlFn = vi
+        .fn()
+        .mockReturnValue('https://traces.example.com/trace/abc123');
+
+      init({
+        service: 'test-service',
+        events: {
+          includeTraceContext: true,
+          traceUrl: traceUrlFn,
+        },
+      });
+
+      const mockSubscriber = {
+        name: 'MockSubscriber',
+        trackEvent: vi.fn().mockResolvedValue(undefined),
+        trackFunnelStep: vi.fn().mockResolvedValue(undefined),
+        trackOutcome: vi.fn().mockResolvedValue(undefined),
+        trackValue: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const event = new Event('test-service', {
+        subscribers: [mockSubscriber],
+      });
+
+      // Track event inside a trace
+      const tracedOperation = trace('test.operation', async () => {
+        event.trackEvent('traced.event', {});
+      });
+
+      await tracedOperation();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(traceUrlFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          traceId: expect.any(String),
+          spanId: expect.any(String),
+          correlationId: expect.any(String),
+          serviceName: 'test-service',
+        }),
+      );
+
+      expect(mockSubscriber.trackEvent).toHaveBeenCalledWith(
+        'traced.event',
+        expect.any(Object),
+        expect.objectContaining({
+          autotel: expect.objectContaining({
+            trace_url: 'https://traces.example.com/trace/abc123',
+          }),
+        }),
+      );
+    });
+
+    it('should include autotel context in trackFunnelStep', async () => {
+      init({
+        service: 'test-service',
+        events: {
+          includeTraceContext: true,
+        },
+      });
+
+      const mockSubscriber = {
+        name: 'MockSubscriber',
+        trackEvent: vi.fn().mockResolvedValue(undefined),
+        trackFunnelStep: vi.fn().mockResolvedValue(undefined),
+        trackOutcome: vi.fn().mockResolvedValue(undefined),
+        trackValue: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const event = new Event('test-service', {
+        subscribers: [mockSubscriber],
+      });
+
+      const tracedOperation = trace('checkout.flow', async () => {
+        event.trackFunnelStep('checkout', 'started', { cartValue: 99.99 });
+      });
+
+      await tracedOperation();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockSubscriber.trackFunnelStep).toHaveBeenCalledWith(
+        'checkout',
+        'started',
+        expect.any(Object),
+        expect.objectContaining({
+          autotel: expect.objectContaining({
+            trace_id: expect.any(String),
+            correlation_id: expect.any(String),
+          }),
+        }),
+      );
+    });
+
+    it('should include autotel context in trackOutcome', async () => {
+      init({
+        service: 'test-service',
+        events: {
+          includeTraceContext: true,
+        },
+      });
+
+      const mockSubscriber = {
+        name: 'MockSubscriber',
+        trackEvent: vi.fn().mockResolvedValue(undefined),
+        trackFunnelStep: vi.fn().mockResolvedValue(undefined),
+        trackOutcome: vi.fn().mockResolvedValue(undefined),
+        trackValue: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const event = new Event('test-service', {
+        subscribers: [mockSubscriber],
+      });
+
+      const tracedOperation = trace('payment.process', async () => {
+        event.trackOutcome('payment', 'success', { amount: 99.99 });
+      });
+
+      await tracedOperation();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockSubscriber.trackOutcome).toHaveBeenCalledWith(
+        'payment',
+        'success',
+        expect.any(Object),
+        expect.objectContaining({
+          autotel: expect.objectContaining({
+            trace_id: expect.any(String),
+            correlation_id: expect.any(String),
+          }),
+        }),
+      );
+    });
+
+    it('should include autotel context in trackValue', async () => {
+      init({
+        service: 'test-service',
+        events: {
+          includeTraceContext: true,
+        },
+      });
+
+      const mockSubscriber = {
+        name: 'MockSubscriber',
+        trackEvent: vi.fn().mockResolvedValue(undefined),
+        trackFunnelStep: vi.fn().mockResolvedValue(undefined),
+        trackOutcome: vi.fn().mockResolvedValue(undefined),
+        trackValue: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const event = new Event('test-service', {
+        subscribers: [mockSubscriber],
+      });
+
+      const tracedOperation = trace('order.process', async () => {
+        event.trackValue('revenue', 149.99, { currency: 'USD' });
+      });
+
+      await tracedOperation();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockSubscriber.trackValue).toHaveBeenCalledWith(
+        'revenue',
+        149.99,
+        expect.any(Object),
+        expect.objectContaining({
+          autotel: expect.objectContaining({
+            trace_id: expect.any(String),
+            correlation_id: expect.any(String),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('baggage enrichment', () => {
+    afterEach(async () => {
+      await shutdown();
+    });
+
+    it('should apply maxBytes after hashing baggage values', async () => {
+      init({
+        service: 'test-service',
+        events: {
+          enrichFromBaggage: {
+            allow: ['user.id'],
+            maxBytes: 16,
+            transform: {
+              'user.id': 'hash',
+            },
+          },
+        },
+      });
+
+      const mockSubscriber = {
+        name: 'MockSubscriber',
+        trackEvent: vi.fn().mockResolvedValue(undefined),
+        trackFunnelStep: vi.fn().mockResolvedValue(undefined),
+        trackOutcome: vi.fn().mockResolvedValue(undefined),
+        trackValue: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const event = new Event('test-service', {
+        subscribers: [mockSubscriber],
+      });
+
+      const largeValue = 'x'.repeat(2048);
+      const baggage = propagation
+        .createBaggage()
+        .setEntry('user.id', { value: largeValue });
+      const ctx = propagation.setBaggage(context.active(), baggage);
+
+      context.with(ctx, () => {
+        event.trackEvent('test.event', { foo: 'bar' });
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const call = mockSubscriber.trackEvent.mock.calls[0];
+      const attributes = call[1] as Record<string, unknown>;
+
+      expect(attributes['user.id']).toBeDefined();
+      expect(String(attributes['user.id'])).toHaveLength(8);
     });
   });
 });
