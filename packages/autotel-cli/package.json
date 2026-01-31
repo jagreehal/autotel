@@ -56,5 +56,14 @@
     "cli",
     "autotel"
   ],
-  "license": "MIT"
+  "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme"
 }

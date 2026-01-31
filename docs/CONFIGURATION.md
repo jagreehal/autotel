@@ -144,3 +144,75 @@ See `packages/autotel/.env.example` for a complete template.
 - Converts YAML structure to `AutotelConfig` type
 
 **Config merging** happens in `init()` with the priority: `explicit > yaml > env > defaults`
+
+## Event Delivery Timing
+
+Events via `track()` are batched and delivered asynchronously. The default flush interval is 10 seconds with a batch size of 100 events.
+
+### Flushing Events
+
+Before assertions in tests or process shutdown, manually flush the event queue:
+
+```typescript
+import { getEventQueue } from 'autotel';
+
+// Flush pending events
+await getEventQueue()?.flush();
+```
+
+### Serverless / Scripts
+
+For serverless functions or CLI scripts, always flush before the process exits:
+
+```typescript
+import { track, getEventQueue } from 'autotel';
+
+// Track events
+track('script.started', { scriptName: 'data-import' });
+// ... do work ...
+track('script.completed', { recordsProcessed: 1000 });
+
+// Flush before exit
+await getEventQueue()?.flush();
+```
+
+Or use a process handler:
+
+```typescript
+process.on('beforeExit', async () => {
+  await getEventQueue()?.flush();
+});
+```
+
+### Testing
+
+When testing event tracking, flush before assertions:
+
+```typescript
+import { track, getEventQueue } from 'autotel';
+import { expect, test } from 'vitest';
+
+test('tracks user signup', async () => {
+  track('user.signup', { userId: '123' });
+
+  // Flush events before assertions
+  await getEventQueue()?.flush();
+
+  // Now verify events were sent to your mock/test subscriber
+  expect(mockSubscriber.events).toContainEqual(
+    expect.objectContaining({ name: 'user.signup' }),
+  );
+});
+```
+
+### Queue Configuration
+
+The event queue can be configured with custom settings:
+
+| Setting        | Default  | Description                              |
+| -------------- | -------- | ---------------------------------------- |
+| `maxSize`      | 50,000   | Maximum events in queue before dropping  |
+| `batchSize`    | 100      | Events per batch                         |
+| `flushInterval`| 10,000ms | Automatic flush interval                 |
+| `maxRetries`   | 3        | Retry attempts for failed deliveries     |
+| `rateLimit`    | 100/sec  | Maximum events per second                |

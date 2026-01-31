@@ -118,6 +118,26 @@ describe('validateAttributes()', () => {
     expect(result?.normalField).toBe('value');
   });
 
+  it('should redact sensitive fields in nested objects', () => {
+    const attrs = {
+      user: {
+        password: 'secret123',
+        apiKey: 'abc123',
+      },
+      session: {
+        authToken: 'token-123',
+      },
+    };
+
+    const result = validateAttributes(attrs) as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+
+    expect(result?.user?.password).toBe('[REDACTED]');
+    expect(result?.user?.apiKey).toBe('[REDACTED]');
+    expect(result?.session?.authToken).toBe('[REDACTED]');
+  });
+
   it('should handle nested objects within depth limit', () => {
     const attrs = {
       user: {
