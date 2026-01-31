@@ -1,5 +1,11 @@
 # autotel
 
+## 2.16.0
+
+### Minor Changes
+
+- 8a6769a: x
+
 ## 2.15.0
 
 ### Minor Changes

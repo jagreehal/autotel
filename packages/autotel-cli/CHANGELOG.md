@@ -1,5 +1,11 @@
 # autotel-cli
 
+## 0.4.0
+
+### Minor Changes
+
+- 8a6769a: x
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # autotel-mcp
 
+## 19.0.0
+
+### Patch Changes
+
+- Updated dependencies [8a6769a]
+  - autotel@2.16.0
+
 ## 18.0.0
 
 ### Minor Changes
