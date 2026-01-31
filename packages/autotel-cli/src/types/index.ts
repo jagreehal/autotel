@@ -28,6 +28,7 @@ export type {
   InitOptions,
   DoctorOptions,
   AddOptions,
+  CodemodTraceOptions,
 } from './project';
 
 // Check types

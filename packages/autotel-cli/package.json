@@ -30,6 +30,7 @@
     "glob": "^13.0.0",
     "ora": "^9.1.0",
     "semver": "^7.7.3",
+    "ts-morph": "^27.0.2",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
@@ -56,5 +57,14 @@
     "cli",
     "autotel"
   ],
-  "license": "MIT"
+  "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme"
 }

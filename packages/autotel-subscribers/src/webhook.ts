@@ -24,6 +24,7 @@
 import type {
   EventSubscriber,
   EventAttributes,
+  EventTrackingOptions,
   FunnelStatus,
   OutcomeStatus,
 } from 'autotel/event-subscriber';
@@ -86,12 +87,17 @@ export class WebhookSubscriber implements EventSubscriber {
     console.error(`Webhook subscriber failed after ${maxRetries} attempts:`, lastError);
   }
 
-  async trackEvent(name: string, attributes?: EventAttributes): Promise<void> {
+  async trackEvent(
+    name: string,
+    attributes?: EventAttributes,
+    options?: EventTrackingOptions,
+  ): Promise<void> {
     const request = this.send({
       type: 'event',
       name,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     });
     this.trackRequest(request);
     await request;
@@ -101,6 +107,7 @@ export class WebhookSubscriber implements EventSubscriber {
     funnelName: string,
     step: FunnelStatus,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void> {
     const request = this.send({
       type: 'funnel',
@@ -108,6 +115,7 @@ export class WebhookSubscriber implements EventSubscriber {
       step,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     });
     this.trackRequest(request);
     await request;
@@ -117,6 +125,7 @@ export class WebhookSubscriber implements EventSubscriber {
     operationName: string,
     outcome: OutcomeStatus,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void> {
     const request = this.send({
       type: 'outcome',
@@ -124,18 +133,25 @@ export class WebhookSubscriber implements EventSubscriber {
       outcome,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     });
     this.trackRequest(request);
     await request;
   }
 
-  async trackValue(name: string, value: number, attributes?: EventAttributes): Promise<void> {
+  async trackValue(
+    name: string,
+    value: number,
+    attributes?: EventAttributes,
+    options?: EventTrackingOptions,
+  ): Promise<void> {
     const request = this.send({
       type: 'value',
       name,
       value,
       attributes,
       timestamp: new Date().toISOString(),
+      autotel: options?.autotel,
     });
     this.trackRequest(request);
     await request;

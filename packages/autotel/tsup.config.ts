@@ -37,6 +37,7 @@ export default defineConfig({
     workflow: 'src/workflow.ts',
     webhook: 'src/webhook.ts',
     'workflow-distributed': 'src/workflow-distributed.ts',
+    'correlation-id': 'src/correlation-id.ts',
     attributes: 'src/attributes/index.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats

@@ -36,8 +36,12 @@
 
 /**
  * Event attributes (supports any JSON-serializable values)
+ *
+ * Allows primitive types for flat attributes and unknown for flexibility
+ * with nested objects when using subscribers that support JSON payloads
+ * (e.g., WebhookSubscriber).
  */
-export type EventAttributes = Record<string, string | number | boolean>;
+export type EventAttributes = Record<string, unknown>;
 
 /**
  * Permissive input type for event attributes

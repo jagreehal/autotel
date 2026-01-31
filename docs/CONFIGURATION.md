@@ -144,3 +144,94 @@ See `packages/autotel/.env.example` for a complete template.
 - Converts YAML structure to `AutotelConfig` type
 
 **Config merging** happens in `init()` with the priority: `explicit > yaml > env > defaults`
+
+## Event Delivery Timing
+
+Events via `track()` are batched and delivered asynchronously. The default flush interval is 10 seconds with a batch size of 100 events.
+
+### Flushing Events
+
+Before assertions in tests or process shutdown, manually flush the event queue:
+
+```typescript
+import { getEventQueue } from 'autotel';
+
+// Flush pending events
+await getEventQueue()?.flush();
+```
+
+### Serverless / Scripts
+
+For serverless functions or CLI scripts, always flush before the process exits:
+
+```typescript
+import { track, getEventQueue } from 'autotel';
+
+// Track events
+track('script.started', { scriptName: 'data-import' });
+// ... do work ...
+track('script.completed', { recordsProcessed: 1000 });
+
+// Flush before exit
+await getEventQueue()?.flush();
+```
+
+Or use a process handler:
+
+```typescript
+process.on('beforeExit', async () => {
+  await getEventQueue()?.flush();
+});
+```
+
+### Testing
+
+When testing event tracking, flush before assertions:
+
+```typescript
+import { track, getEventQueue } from 'autotel';
+import { expect, test } from 'vitest';
+
+test('tracks user signup', async () => {
+  track('user.signup', { userId: '123' });
+
+  // Flush events before assertions
+  await getEventQueue()?.flush();
+
+  // Now verify events were sent to your mock/test subscriber
+  expect(mockSubscriber.events).toContainEqual(
+    expect.objectContaining({ name: 'user.signup' }),
+  );
+});
+```
+
+### Queue Configuration
+
+The event queue can be configured with custom settings:
+
+| Setting        | Default  | Description                              |
+| -------------- | -------- | ---------------------------------------- |
+| `maxSize`      | 50,000   | Maximum events in queue before dropping  |
+| `batchSize`    | 100      | Events per batch                         |
+| `flushInterval`| 10,000ms | Automatic flush interval                 |
+| `maxRetries`   | 3        | Retry attempts for failed deliveries     |
+| `rateLimit`    | 100/sec  | Maximum events per second                |
+
+### Correlation ID
+
+The correlation ID is a stable join key across events, logs, and spans. It is available via `getCorrelationId()` and `getOrCreateCorrelationId()` from `autotel`.
+
+- **Where it's set:** The first use of `getOrCreateCorrelationId()` in an async context creates it; or set it at a boundary (e.g. HTTP handler, message processor) via `runWithCorrelationId(id, fn)` or `setCorrelationId(id)` from `autotel/correlation-id`.
+- **Stability:** The same value is used for the duration of the same AsyncLocalStorage context (the same async chain). A new context (e.g. a new request) gets a new ID unless you propagate it (e.g. via baggage or Kafka headers).
+- **Public API:** `getCorrelationId()` and `getOrCreateCorrelationId()` are exported from `autotel`. For cross-service propagation, use `setCorrelationIdInBaggage()` from `autotel/correlation-id`.
+
+```typescript
+import { getOrCreateCorrelationId } from 'autotel';
+
+// Inside a request or message handler: same ID for the whole async chain
+const correlationId = getOrCreateCorrelationId();
+```
+
+### Event payload and autotel context
+
+When using `track()` or the Event class, subscribers receive an optional **autotel** context (e.g. `correlation_id`, `trace_id`, `span_id`, `trace_url`) when `events.includeTraceContext` is enabled in `init()`. Subscribers that support it (e.g. WebhookSubscriber) receive this via the third parameter to `trackEvent` and include it in the payload (e.g. as a top-level `autotel` field or merged into attributes), so consumers can correlate events with traces.

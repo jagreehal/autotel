@@ -18,7 +18,11 @@ import type {
   Attributes,
 } from '@opentelemetry/api';
 import type { ObservableResult } from '@opentelemetry/api';
-import type { EventSubscriber, EventAttributes } from './event-subscriber';
+import type {
+  EventSubscriber,
+  EventAttributes,
+  AutotelEventContext,
+} from './event-subscriber';
 import { getLogger } from './init';
 import { getConfig as getRuntimeConfig } from './config';
 import { TokenBucketRateLimiter, type RateLimiterConfig } from './rate-limiter';
@@ -32,6 +36,8 @@ export interface EventData {
   _correlationId?: string;
   /** Internal: trace ID for debug breadcrumbs */
   _traceId?: string;
+  /** Autotel context for trace correlation (passed to subscribers) */
+  autotel?: AutotelEventContext;
 }
 
 /**
@@ -583,7 +589,9 @@ export class EventQueue {
         const subscriberName = getSubscriberName(subscriber);
 
         try {
-          await subscriber.trackEvent(event.name, event.attributes);
+          await subscriber.trackEvent(event.name, event.attributes, {
+            autotel: event.autotel,
+          });
           this.recordDelivered(event, subscriberName, startTime);
           return { subscriberName, success: true };
         } catch (error) {

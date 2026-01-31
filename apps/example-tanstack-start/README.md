@@ -9,38 +9,49 @@ pnpm install
 pnpm dev
 # Open http://localhost:3000
 # Click "Try It Live" → Playground
+# Spans appear in the server terminal (pretty-printed in dev when no OTLP endpoint is set)
 ```
+
+Optional: copy `.env.example` to `.env` and set `OTEL_*` or `AUTOTEL_DEBUG` as needed.
 
 ## Quick Start
 
-### Initialize autotel once
+### Initialize autotel and add tracing middleware (TanStack Start entry point)
 
 ```typescript
-// router.tsx
+// start.ts
+import { createMiddleware, createStart } from '@tanstack/react-start'
+import { createTracingServerHandler } from 'autotel-tanstack/middleware'
+
 import './instrumentation'
+
+const requestTracingMiddleware = createMiddleware().server(
+  createTracingServerHandler({
+    captureHeaders: ['x-request-id', 'user-agent'],
+    excludePaths: ['/health', '/healthz', '/ready', '/metrics', '/_ping'],
+  }),
+)
+
+const functionTracingMiddleware = createMiddleware({ type: 'function' }).server(
+  createTracingServerHandler({
+    type: 'function',
+    captureArgs: true,
+  }),
+)
+
+export const startInstance = createStart(() => ({
+  requestMiddleware: [requestTracingMiddleware],
+  functionMiddleware: [functionTracingMiddleware],
+}))
 ```
 
 The `instrumentation.ts` file pulls in `autotel-tanstack/auto`, which in turn
-calls `autotel.init()` using the standard `OTEL_*` env vars. During development,
-set `AUTOTEL_DEBUG=true` (or leave `OTEL_EXPORTER_OTLP_ENDPOINT` empty) to log
-spans directly to the console.
+calls `autotel.init()` using the standard `OTEL_*` env vars. **In development
+with no OTLP endpoint, spans are logged to the server console by default**
+(colorized). Set `AUTOTEL_DEBUG=pretty` or `AUTOTEL_DEBUG=true` to force console
+output; set `AUTOTEL_DEBUG=false` to disable it.
 
-### Add tracing middleware to router
-
-```typescript
-// router.tsx
-import { createRouter } from '@tanstack/react-router'
-import { tracingMiddleware } from 'autotel-tanstack/middleware'
-
-export const getRouter = () => {
-  return createRouter({
-    routeTree,
-    requestMiddleware: [tracingMiddleware()],
-  })
-}
-```
-
-That's it for basic request tracing. The middleware works with autotel-tanstack's browser stubs, so no build issues.
+That's it for basic request and server-function tracing. The middleware works with autotel-tanstack's browser stubs, so no build issues.
 
 ## Copy-Paste Examples
 
