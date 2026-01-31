@@ -216,3 +216,22 @@ The event queue can be configured with custom settings:
 | `flushInterval`| 10,000ms | Automatic flush interval                 |
 | `maxRetries`   | 3        | Retry attempts for failed deliveries     |
 | `rateLimit`    | 100/sec  | Maximum events per second                |
+
+### Correlation ID
+
+The correlation ID is a stable join key across events, logs, and spans. It is available via `getCorrelationId()` and `getOrCreateCorrelationId()` from `autotel`.
+
+- **Where it's set:** The first use of `getOrCreateCorrelationId()` in an async context creates it; or set it at a boundary (e.g. HTTP handler, message processor) via `runWithCorrelationId(id, fn)` or `setCorrelationId(id)` from `autotel/correlation-id`.
+- **Stability:** The same value is used for the duration of the same AsyncLocalStorage context (the same async chain). A new context (e.g. a new request) gets a new ID unless you propagate it (e.g. via baggage or Kafka headers).
+- **Public API:** `getCorrelationId()` and `getOrCreateCorrelationId()` are exported from `autotel`. For cross-service propagation, use `setCorrelationIdInBaggage()` from `autotel/correlation-id`.
+
+```typescript
+import { getOrCreateCorrelationId } from 'autotel';
+
+// Inside a request or message handler: same ID for the whole async chain
+const correlationId = getOrCreateCorrelationId();
+```
+
+### Event payload and autotel context
+
+When using `track()` or the Event class, subscribers receive an optional **autotel** context (e.g. `correlation_id`, `trace_id`, `span_id`, `trace_url`) when `events.includeTraceContext` is enabled in `init()`. Subscribers that support it (e.g. WebhookSubscriber) receive this via the third parameter to `trackEvent` and include it in the payload (e.g. as a top-level `autotel` field or merged into attributes), so consumers can correlate events with traces.
