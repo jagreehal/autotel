@@ -67,7 +67,7 @@
     "@opentelemetry/context-async-hooks": "^2.5.0",
     "@opentelemetry/core": "^2.5.0",
     "@opentelemetry/sdk-trace-node": "^2.5.0",
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.1.0",
     "autotel": "workspace:*",
     "autotel-edge": "workspace:*",
     "rimraf": "^6.1.2",

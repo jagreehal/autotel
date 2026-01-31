@@ -373,6 +373,12 @@ export class PostHogSubscriber extends EventSubscriber {
 
   /**
    * Send payload to PostHog
+   *
+   * Maps autotel context to PostHog-specific field names:
+   * - autotel.trace_id → $trace_id
+   * - autotel.span_id → $span_id
+   * - autotel.correlation_id → $correlation_id
+   * - autotel.trace_url → $trace_url
    */
   protected async sendToDestination(payload: EventPayload): Promise<void> {
     await this.ensureInitialized();
@@ -394,6 +400,38 @@ export class PostHogSubscriber extends EventSubscriber {
     }
     if (payload.stepName !== undefined) {
       properties.step_name = payload.stepName;
+    }
+
+    // Map autotel context to PostHog-specific field names
+    if (payload.autotel) {
+      if (payload.autotel.trace_id) {
+        properties.$trace_id = payload.autotel.trace_id;
+      }
+      if (payload.autotel.span_id) {
+        properties.$span_id = payload.autotel.span_id;
+      }
+      if (payload.autotel.correlation_id) {
+        properties.$correlation_id = payload.autotel.correlation_id;
+      }
+      if (payload.autotel.trace_flags) {
+        properties.$trace_flags = payload.autotel.trace_flags;
+      }
+      if (payload.autotel.trace_state) {
+        properties.$trace_state = payload.autotel.trace_state;
+      }
+      if (payload.autotel.trace_url) {
+        properties.$trace_url = payload.autotel.trace_url;
+      }
+      // Batch/fan-in context
+      if (payload.autotel.linked_trace_id_count !== undefined) {
+        properties.$linked_trace_id_count = payload.autotel.linked_trace_id_count;
+      }
+      if (payload.autotel.linked_trace_id_hash) {
+        properties.$linked_trace_id_hash = payload.autotel.linked_trace_id_hash;
+      }
+      if (payload.autotel.linked_trace_ids) {
+        properties.$linked_trace_ids = payload.autotel.linked_trace_ids;
+      }
     }
 
     const distinctId = this.extractDistinctId(filteredAttributes);

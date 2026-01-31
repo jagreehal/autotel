@@ -71,6 +71,41 @@ export type FunnelStatus = 'started' | 'completed' | 'abandoned' | 'failed';
 export type OutcomeStatus = 'success' | 'failure' | 'partial';
 
 /**
+ * Autotel event context for trace correlation
+ *
+ * This structured object contains trace context and correlation IDs.
+ * Subscribers decide how to map/flatten these for their platform.
+ */
+export interface AutotelEventContext {
+  /** Trace ID (32 hex chars) - present when inside a trace */
+  trace_id?: string;
+  /** Span ID (16 hex chars) - present when inside a span */
+  span_id?: string;
+  /** Trace flags (2 hex chars, e.g., '01' for sampled) */
+  trace_flags?: string;
+  /** Raw tracestate string - present if tracestate exists */
+  trace_state?: string;
+  /** Clickable trace URL - present if traceUrl config is set */
+  trace_url?: string;
+  /** Correlation ID (always present, 16 hex chars) */
+  correlation_id: string;
+  /** Number of linked parent traces (batch/fan-in scenarios) */
+  linked_trace_id_count?: number;
+  /** Stable hash of linked trace IDs (default for batch/fan-in) */
+  linked_trace_id_hash?: string;
+  /** Full array of linked trace IDs (only if includeLinkedTraceIds: true) */
+  linked_trace_ids?: string[];
+}
+
+/**
+ * Options for event tracking methods
+ */
+export interface EventTrackingOptions {
+  /** Autotel trace context to include in the event */
+  autotel?: AutotelEventContext;
+}
+
+/**
  * Event subscriber interface
  *
  * Implement this to send events to any platform.
@@ -86,41 +121,63 @@ export interface EventSubscriber {
   /**
    * Track an event (e.g., "user.registered", "order.created")
    *
+   * @param name - Event name
+   * @param attributes - Optional event attributes
+   * @param options - Optional tracking options including autotel context
    * @returns Promise that resolves when event is sent (or buffered)
    */
-  trackEvent(name: string, attributes?: EventAttributes): Promise<void>;
+  trackEvent(
+    name: string,
+    attributes?: EventAttributes,
+    options?: EventTrackingOptions,
+  ): Promise<void>;
 
   /**
    * Track a funnel step (e.g., checkout: started → completed)
    *
+   * @param funnelName - Funnel name
+   * @param step - Funnel step status
+   * @param attributes - Optional event attributes
+   * @param options - Optional tracking options including autotel context
    * @returns Promise that resolves when event is sent (or buffered)
    */
   trackFunnelStep(
     funnelName: string,
     step: FunnelStatus,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void>;
 
   /**
    * Track an outcome (e.g., "payment.processing" → success/failure)
    *
+   * @param operationName - Operation name
+   * @param outcome - Outcome status
+   * @param attributes - Optional event attributes
+   * @param options - Optional tracking options including autotel context
    * @returns Promise that resolves when event is sent (or buffered)
    */
   trackOutcome(
     operationName: string,
     outcome: OutcomeStatus,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void>;
 
   /**
    * Track a value/metric (e.g., revenue, cart value)
    *
+   * @param name - Metric name
+   * @param value - Numeric value
+   * @param attributes - Optional event attributes
+   * @param options - Optional tracking options including autotel context
    * @returns Promise that resolves when event is sent (or buffered)
    */
   trackValue(
     name: string,
     value: number,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void>;
 
   /**
@@ -133,6 +190,7 @@ export interface EventSubscriber {
    * @param stepName - Custom step name (e.g., "cart_viewed", "payment_entered")
    * @param stepNumber - Optional numeric position in the funnel
    * @param attributes - Optional event attributes
+   * @param options - Optional tracking options including autotel context
    *
    * @example
    * ```typescript
@@ -148,6 +206,7 @@ export interface EventSubscriber {
     stepName: string,
     stepNumber?: number,
     attributes?: EventAttributes,
+    options?: EventTrackingOptions,
   ): Promise<void>;
 
   /**
