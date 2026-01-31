@@ -8,6 +8,7 @@
  * - OTEL_SERVICE_NAME: Service name (default: 'tanstack-start')
  * - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP collector URL
  * - OTEL_EXPORTER_OTLP_HEADERS: Authentication headers (key=value,key=value)
+ * - AUTOTEL_DEBUG: Set to 'true' or 'pretty' to log spans to the server console
  *
  * @example
  * ```typescript
@@ -43,11 +44,23 @@ if (process.env.OTEL_EXPORTER_OTLP_HEADERS) {
   }
 }
 
+// Debug: span output to server console. AUTOTEL_DEBUG=pretty | true, or default
+// to pretty in dev when no OTLP endpoint is set so you see spans immediately.
+function resolveDebug(): boolean | 'pretty' {
+  const env = process.env.AUTOTEL_DEBUG;
+  if (env === 'pretty') return 'pretty';
+  if (env === 'true' || env === '1') return true;
+  if (env === 'false' || env === '0') return false;
+  if (!endpoint && process.env.NODE_ENV === 'development') return 'pretty';
+  return false;
+}
+
 // Initialize autotel
 init({
   service,
   endpoint,
   headers,
+  debug: resolveDebug(),
 });
 
 // Log initialization (only in development)
