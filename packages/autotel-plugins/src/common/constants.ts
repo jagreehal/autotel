@@ -63,3 +63,35 @@ export const SEMATTRS_GCP_BIGQUERY_ROWS_RETURNED =
   'gcp.bigquery.rows.returned' as const;
 export const SEMATTRS_GCP_BIGQUERY_SCHEMA_FIELDS =
   'gcp.bigquery.schema.fields' as const;
+
+// RabbitMQ-specific attributes (aligned with OTel messaging semantic conventions)
+export const SEMATTRS_MESSAGING_RABBITMQ_DESTINATION_ROUTING_KEY =
+  'messaging.rabbitmq.destination.routing_key' as const;
+export const SEMATTRS_MESSAGING_RABBITMQ_DESTINATION_EXCHANGE =
+  'messaging.rabbitmq.destination.exchange' as const;
+export const SEMATTRS_MESSAGING_RABBITMQ_ACK_RESULT =
+  'messaging.rabbitmq.ack_result' as const;
+export const SEMATTRS_MESSAGING_RABBITMQ_REQUEUE =
+  'messaging.rabbitmq.requeue' as const;
+
+// Messaging attributes (shared across messaging systems)
+export const SEMATTRS_MESSAGING_MESSAGE_ID = 'messaging.message.id' as const;
+export const SEMATTRS_MESSAGING_MESSAGE_CONVERSATION_ID =
+  'messaging.message.conversation_id' as const;
+export const SEMATTRS_MESSAGING_CONSUMER_ID = 'messaging.consumer.id' as const;
+export const SEMATTRS_MESSAGING_OPERATION_NAME =
+  'messaging.operation.name' as const;
+
+// Kafka batch consumer attributes
+export const SEMATTRS_MESSAGING_BATCH_MESSAGE_COUNT =
+  'messaging.batch.message_count' as const;
+export const SEMATTRS_MESSAGING_KAFKA_BATCH_FIRST_OFFSET =
+  'messaging.kafka.batch.first_offset' as const;
+export const SEMATTRS_MESSAGING_KAFKA_BATCH_LAST_OFFSET =
+  'messaging.kafka.batch.last_offset' as const;
+export const SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_PROCESSED =
+  'messaging.kafka.batch.messages_processed' as const;
+export const SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_FAILED =
+  'messaging.kafka.batch.messages_failed' as const;
+export const SEMATTRS_MESSAGING_KAFKA_BATCH_PROCESSING_TIME_MS =
+  'messaging.kafka.batch.processing_time_ms' as const;

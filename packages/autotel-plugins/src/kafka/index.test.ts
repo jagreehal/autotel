@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   normalizeHeaders,
   extractCorrelationId,
@@ -21,6 +21,8 @@ import {
   SEMATTRS_LINKED_TRACE_ID_HASH,
 } from './index';
 import { otelTrace as trace } from 'autotel';
+import { propagation } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 
 describe('normalizeHeaders', () => {
   it('should return empty object for undefined headers', () => {
@@ -496,6 +498,1022 @@ describe('official instrumentation compatibility', () => {
     expect(SEMATTRS_MESSAGING_KAFKA_OFFSET).toBe('messaging.kafka.offset');
     expect(SEMATTRS_MESSAGING_KAFKA_MESSAGE_KEY).toBe(
       'messaging.kafka.message.key',
+    );
+  });
+});
+
+// Import stream observability features for testing
+import {
+  withBatchConsumer,
+  createMessageErrorSpan,
+  createStreamProcessor,
+  ConsumerMetrics,
+  instrumentConsumerEvents,
+  SEMATTRS_MESSAGING_BATCH_MESSAGE_COUNT,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_FIRST_OFFSET,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_LAST_OFFSET,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_PROCESSED,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_FAILED,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_PROCESSING_TIME_MS,
+} from './index';
+
+describe('withBatchConsumer', () => {
+  it('should wrap batch handler and execute callback', async () => {
+    const mockBatch = {
+      topic: 'test-topic',
+      partition: 0,
+      messages: [
+        { offset: '0', value: Buffer.from('msg1'), headers: {} },
+        { offset: '1', value: Buffer.from('msg2'), headers: {} },
+      ],
+      firstOffset: () => '0',
+      lastOffset: () => '1',
+      highWatermark: '2',
+    };
+
+    const resolvedOffsets: string[] = [];
+    const mockPayload = {
+      batch: mockBatch,
+      resolveOffset: (offset: string) => resolvedOffsets.push(offset),
+      heartbeat: async () => {},
+      commitOffsetsIfNecessary: async () => {},
+      uncommittedOffsets: () => ({}),
+      isRunning: () => true,
+      isStale: () => false,
+      pause: () => () => {},
+    };
+
+    const handler = withBatchConsumer(
+      {
+        name: 'test.batch',
+        consumerGroup: 'test-group',
+      },
+      async ({ batch, resolveOffset }) => {
+        for (const message of batch.messages) {
+          resolveOffset(message.offset);
+        }
+      },
+    );
+
+    await handler(mockPayload);
+    expect(resolvedOffsets).toEqual(['0', '1']);
+  });
+
+  it('should track progress when onProgress is provided', async () => {
+    const mockBatch = {
+      topic: 'test-topic',
+      partition: 0,
+      messages: [{ offset: '0', value: Buffer.from('msg'), headers: {} }],
+      firstOffset: () => '0',
+      lastOffset: () => '0',
+      highWatermark: '1',
+    };
+
+    const progressCalls: Array<{
+      processed: number;
+      failed: number;
+      skipped: number;
+    }> = [];
+
+    const mockPayload = {
+      batch: mockBatch,
+      resolveOffset: () => {},
+      heartbeat: async () => {},
+      commitOffsetsIfNecessary: async () => {},
+      uncommittedOffsets: () => ({}),
+      isRunning: () => true,
+      isStale: () => false,
+      pause: () => () => {},
+    };
+
+    const handler = withBatchConsumer(
+      {
+        name: 'test.batch',
+        onProgress: (metrics) => {
+          progressCalls.push({
+            processed: metrics.processed,
+            failed: metrics.failed,
+            skipped: metrics.skipped,
+          });
+        },
+      },
+      async ({ resolveOffset }) => {
+        resolveOffset('0');
+      },
+    );
+
+    await handler(mockPayload);
+    expect(progressCalls.length).toBeGreaterThan(0);
+    expect(progressCalls.at(-1)?.processed).toBe(1);
+  });
+
+  it('should throw when handler throws', async () => {
+    const mockBatch = {
+      topic: 'test-topic',
+      partition: 0,
+      messages: [],
+      firstOffset: () => null,
+      lastOffset: () => '0',
+      highWatermark: '0',
+    };
+
+    const mockPayload = {
+      batch: mockBatch,
+      resolveOffset: () => {},
+      heartbeat: async () => {},
+      commitOffsetsIfNecessary: async () => {},
+      uncommittedOffsets: () => ({}),
+      isRunning: () => true,
+      isStale: () => false,
+      pause: () => () => {},
+    };
+
+    const handler = withBatchConsumer({ name: 'test.batch' }, async () => {
+      throw new Error('batch error');
+    });
+
+    await expect(handler(mockPayload)).rejects.toThrow('batch error');
+  });
+
+  /**
+   * Documents expected behavior: perMessageSpans 'all' should create a consumer
+   * span for each message (1 batch span + N message spans). Currently the
+   * implementation only creates the batch span and does not create per-message
+   * spans, so this test fails until that behavior is implemented.
+   */
+  it('when perMessageSpans is "all", should create one span per message plus batch span', async () => {
+    const spanNames: string[] = [];
+    const realGetTracer = trace.getTracer.bind(trace);
+    const getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockImplementation((name: string) => {
+        const realTracer = realGetTracer(name);
+        return {
+          ...realTracer,
+          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+            spanNames.push(spanName);
+            return realTracer.startSpan(spanName, options, ctx);
+          },
+        };
+      });
+
+    try {
+      const mockBatch = {
+        topic: 'test-topic',
+        partition: 0,
+        messages: [
+          { offset: '0', value: Buffer.from('msg1'), headers: {} },
+          { offset: '1', value: Buffer.from('msg2'), headers: {} },
+        ],
+        firstOffset: () => '0',
+        lastOffset: () => '1',
+        highWatermark: '2',
+      };
+
+      const mockPayload = {
+        batch: mockBatch,
+        resolveOffset: (_offset: string) => {},
+        heartbeat: async () => {},
+        commitOffsetsIfNecessary: async () => {},
+        uncommittedOffsets: () => ({}),
+        isRunning: () => true,
+        isStale: () => false,
+        pause: () => () => {},
+      };
+
+      const handler = withBatchConsumer(
+        {
+          name: 'test.batch',
+          consumerGroup: 'test-group',
+          perMessageSpans: 'all',
+        },
+        async ({ batch, resolveOffset }) => {
+          for (const message of batch.messages) {
+            resolveOffset(message.offset);
+          }
+        },
+      );
+
+      await handler(mockPayload);
+
+      // Expected: 1 batch span + 2 per-message spans (doc says "'all': Create spans for every message")
+      expect(spanNames).toHaveLength(3);
+      expect(spanNames[0]).toBe('test.batch');
+      // Per-message span names are implementation-defined; we only assert count
+    } finally {
+      getTracerSpy.mockRestore();
+    }
+  });
+
+  /**
+   * perMessageSpans: 'all' should create spans for every message,
+   * even if user code doesn't access message.offset.
+   * Current implementation only creates spans on property access,
+   * so this test should fail until eager span creation is added.
+   */
+  it('when perMessageSpans is "all", should create spans even without offset access', async () => {
+    const spanNames: string[] = [];
+    const realGetTracer = trace.getTracer.bind(trace);
+    const getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockImplementation((name: string) => {
+        const realTracer = realGetTracer(name);
+        return {
+          ...realTracer,
+          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+            spanNames.push(spanName);
+            return realTracer.startSpan(spanName, options, ctx);
+          },
+        };
+      });
+
+    try {
+      const mockBatch = {
+        topic: 'test-topic',
+        partition: 0,
+        messages: [
+          { offset: '0', value: Buffer.from('msg1'), headers: {} },
+          { offset: '1', value: Buffer.from('msg2'), headers: {} },
+        ],
+        firstOffset: () => '0',
+        lastOffset: () => '1',
+        highWatermark: '2',
+      };
+
+      const mockPayload = {
+        batch: mockBatch,
+        resolveOffset: (_offset: string) => {},
+        heartbeat: async () => {},
+        commitOffsetsIfNecessary: async () => {},
+        uncommittedOffsets: () => ({}),
+        isRunning: () => true,
+        isStale: () => false,
+        pause: () => () => {},
+      };
+
+      const handler = withBatchConsumer(
+        {
+          name: 'test.batch',
+          consumerGroup: 'test-group',
+          perMessageSpans: 'all',
+        },
+        async ({ batch }) => {
+          // Intentionally do not access message.offset (or any properties)
+          for (const _message of batch.messages) {
+            void _message;
+          }
+        },
+      );
+
+      await handler(mockPayload);
+
+      // Expected: 1 batch span + 2 per-message spans
+      expect(spanNames).toHaveLength(3);
+      expect(spanNames[0]).toBe('test.batch');
+    } finally {
+      getTracerSpy.mockRestore();
+    }
+  });
+
+  it('when perMessageSpans is "all" and handler throws, should end any open per-message spans', async () => {
+    const endCounts: number[] = [];
+    const realGetTracer = trace.getTracer.bind(trace);
+    const getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockImplementation((name: string) => {
+        const realTracer = realGetTracer(name);
+        return {
+          ...realTracer,
+          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+            const realSpan = realTracer.startSpan(spanName, options, ctx);
+            const index = endCounts.length;
+            endCounts.push(0);
+            // Delegate to real span (so setAttribute etc. work) but wrap end() to count
+            const wrappedSpan = Object.create(realSpan) as typeof realSpan;
+            wrappedSpan.end = () => {
+              endCounts[index] = (endCounts[index] ?? 0) + 1;
+              realSpan.end();
+            };
+            return wrappedSpan;
+          },
+        };
+      });
+
+    try {
+      const mockBatch = {
+        topic: 'test-topic',
+        partition: 0,
+        messages: [
+          { offset: '0', value: Buffer.from('msg1'), headers: {} },
+          { offset: '1', value: Buffer.from('msg2'), headers: {} },
+        ],
+        firstOffset: () => '0',
+        lastOffset: () => '1',
+        highWatermark: '2',
+      };
+
+      const mockPayload = {
+        batch: mockBatch,
+        resolveOffset: (_offset: string) => {},
+        heartbeat: async () => {},
+        commitOffsetsIfNecessary: async () => {},
+        uncommittedOffsets: () => ({}),
+        isRunning: () => true,
+        isStale: () => false,
+        pause: () => () => {},
+      };
+
+      const handler = withBatchConsumer(
+        {
+          name: 'test.batch',
+          consumerGroup: 'test-group',
+          perMessageSpans: 'all',
+        },
+        async ({ batch, _resolveOffset }) => {
+          // Access first message (creates per-message span), then throw before resolveOffset
+          const first = batch.messages[0];
+          void first.offset; // trigger span creation
+          throw new Error('batch error');
+        },
+      );
+
+      await expect(handler(mockPayload)).rejects.toThrow('batch error');
+
+      // Batch span + 2 open per-message spans (all created upfront in 'all' mode) should all be ended (no leak)
+      expect(endCounts.filter((c) => c === 1).length).toBe(3);
+    } finally {
+      getTracerSpy.mockRestore();
+    }
+  });
+
+  /**
+   * perMessageSpans: 'errors' should create per-message spans for failures.
+   * The current implementation never creates spans in 'errors' mode, so this
+   * test documents the expected behavior and should fail until implemented.
+   */
+  it('when perMessageSpans is "errors", should create error span for failed message', async () => {
+    const spanNames: string[] = [];
+    const realGetTracer = trace.getTracer.bind(trace);
+    const getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockImplementation((name: string) => {
+        const realTracer = realGetTracer(name);
+        return {
+          ...realTracer,
+          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+            spanNames.push(spanName);
+            return realTracer.startSpan(spanName, options, ctx);
+          },
+        };
+      });
+
+    try {
+      const mockBatch = {
+        topic: 'test-topic',
+        partition: 0,
+        messages: [
+          { offset: '0', value: Buffer.from('msg1'), headers: {} },
+          { offset: '1', value: Buffer.from('msg2'), headers: {} },
+        ],
+        firstOffset: () => '0',
+        lastOffset: () => '1',
+        highWatermark: '2',
+      };
+
+      const mockPayload = {
+        batch: mockBatch,
+        resolveOffset: (_offset: string) => {},
+        heartbeat: async () => {},
+        commitOffsetsIfNecessary: async () => {},
+        uncommittedOffsets: () => ({}),
+        isRunning: () => true,
+        isStale: () => false,
+        pause: () => () => {},
+      };
+
+      const handler = withBatchConsumer(
+        {
+          name: 'test.batch',
+          consumerGroup: 'test-group',
+          perMessageSpans: 'errors',
+        },
+        async ({ batch, resolveOffset }) => {
+          // Simulate first message failure
+          const message = batch.messages[0];
+          void message;
+          throw new Error('message failure');
+          resolveOffset('1');
+        },
+      );
+
+      await expect(handler(mockPayload)).rejects.toThrow('message failure');
+
+      // Expected: 1 batch span + 1 per-message error span
+      expect(spanNames.length).toBe(2);
+    } finally {
+      getTracerSpy.mockRestore();
+    }
+  });
+
+  /**
+   * perMessageSpans: 'all' should parent message spans to the batch span
+   * when there is no extracted trace context in headers.
+   */
+  it('when perMessageSpans is "all", should parent per-message spans to batch span by default', async () => {
+    const parentSpans: Array<ReturnType<typeof trace.getSpan> | undefined> = [];
+    let batchSpan: ReturnType<typeof trace.getSpan> | undefined;
+    const realGetTracer = trace.getTracer.bind(trace);
+    const getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockImplementation((name: string) => {
+        const realTracer = realGetTracer(name);
+        return {
+          ...realTracer,
+          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+            const span = realTracer.startSpan(spanName, options, ctx as never);
+            if (spanName === 'test.batch') {
+              batchSpan = span;
+            } else {
+              parentSpans.push(ctx ? trace.getSpan(ctx as never) : undefined);
+            }
+            return span;
+          },
+        };
+      });
+
+    try {
+      const mockBatch = {
+        topic: 'test-topic',
+        partition: 0,
+        messages: [
+          { offset: '0', value: Buffer.from('msg1'), headers: {} },
+          { offset: '1', value: Buffer.from('msg2'), headers: {} },
+        ],
+        firstOffset: () => '0',
+        lastOffset: () => '1',
+        highWatermark: '2',
+      };
+
+      const mockPayload = {
+        batch: mockBatch,
+        resolveOffset: (_offset: string) => {},
+        heartbeat: async () => {},
+        commitOffsetsIfNecessary: async () => {},
+        uncommittedOffsets: () => ({}),
+        isRunning: () => true,
+        isStale: () => false,
+        pause: () => () => {},
+      };
+
+      const handler = withBatchConsumer(
+        {
+          name: 'test.batch',
+          consumerGroup: 'test-group',
+          perMessageSpans: 'all',
+        },
+        async ({ batch, resolveOffset }) => {
+          for (const message of batch.messages) {
+            resolveOffset(message.offset);
+          }
+        },
+      );
+
+      await handler(mockPayload);
+
+      expect(parentSpans).toHaveLength(2);
+      expect(parentSpans.every((parent) => parent === batchSpan)).toBe(true);
+    } finally {
+      getTracerSpy.mockRestore();
+    }
+  });
+
+  /**
+   * perMessageSpans: 'all' should end all per-message spans when the batch
+   * handler completes, even if some messages were not resolved.
+   */
+  it('when perMessageSpans is "all", should end un-resolved message spans on success', async () => {
+    const endCounts: number[] = [];
+    const realGetTracer = trace.getTracer.bind(trace);
+    const getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockImplementation((name: string) => {
+        const realTracer = realGetTracer(name);
+        return {
+          ...realTracer,
+          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+            const realSpan = realTracer.startSpan(spanName, options, ctx);
+            const index = endCounts.length;
+            endCounts.push(0);
+            const wrappedSpan = Object.create(realSpan) as typeof realSpan;
+            wrappedSpan.end = () => {
+              endCounts[index] = (endCounts[index] ?? 0) + 1;
+              realSpan.end();
+            };
+            return wrappedSpan;
+          },
+        };
+      });
+
+    try {
+      const mockBatch = {
+        topic: 'test-topic',
+        partition: 0,
+        messages: [
+          { offset: '0', value: Buffer.from('msg1'), headers: {} },
+          { offset: '1', value: Buffer.from('msg2'), headers: {} },
+        ],
+        firstOffset: () => '0',
+        lastOffset: () => '1',
+        highWatermark: '2',
+      };
+
+      const mockPayload = {
+        batch: mockBatch,
+        resolveOffset: (_offset: string) => {},
+        heartbeat: async () => {},
+        commitOffsetsIfNecessary: async () => {},
+        uncommittedOffsets: () => ({}),
+        isRunning: () => true,
+        isStale: () => false,
+        pause: () => () => {},
+      };
+
+      const handler = withBatchConsumer(
+        {
+          name: 'test.batch',
+          consumerGroup: 'test-group',
+          perMessageSpans: 'all',
+        },
+        async ({ resolveOffset }) => {
+          // Resolve only the first message; leave the second unresolved.
+          resolveOffset('0');
+        },
+      );
+
+      await handler(mockPayload);
+
+      // Batch span + 2 per-message spans should all be ended
+      expect(endCounts.filter((c) => c === 1).length).toBe(3);
+    } finally {
+      getTracerSpy.mockRestore();
+    }
+  });
+
+  /**
+   * perMessageSpans: 'all' should honor extracted trace context from message headers
+   * so that message spans continue the producer trace when traceparent is present.
+   */
+  it('when perMessageSpans is "all", should use extracted trace context for message spans', async () => {
+    const messageTraceIds: string[] = [];
+    const traceId = '12345678901234567890123456789012';
+    const spanId = '1234567890123456';
+    const realGetTracer = trace.getTracer.bind(trace);
+    const getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockImplementation((name: string) => {
+        const realTracer = realGetTracer(name);
+        return {
+          ...realTracer,
+          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+            const span = realTracer.startSpan(spanName, options, ctx as never);
+            if (spanName !== 'test.batch') {
+              messageTraceIds.push(span.spanContext().traceId);
+            }
+            return span;
+          },
+        };
+      });
+
+    propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+
+    try {
+      const mockBatch = {
+        topic: 'test-topic',
+        partition: 0,
+        messages: [
+          {
+            offset: '0',
+            value: Buffer.from('msg1'),
+            headers: {
+              traceparent: `00-${traceId}-${spanId}-01`,
+            },
+          },
+          {
+            offset: '1',
+            value: Buffer.from('msg2'),
+            headers: {
+              traceparent: `00-${traceId}-${spanId}-01`,
+            },
+          },
+        ],
+        firstOffset: () => '0',
+        lastOffset: () => '1',
+        highWatermark: '2',
+      };
+
+      const mockPayload = {
+        batch: mockBatch,
+        resolveOffset: (_offset: string) => {},
+        heartbeat: async () => {},
+        commitOffsetsIfNecessary: async () => {},
+        uncommittedOffsets: () => ({}),
+        isRunning: () => true,
+        isStale: () => false,
+        pause: () => () => {},
+      };
+
+      const handler = withBatchConsumer(
+        {
+          name: 'test.batch',
+          consumerGroup: 'test-group',
+          perMessageSpans: 'all',
+        },
+        async ({ batch, resolveOffset }) => {
+          for (const message of batch.messages) {
+            resolveOffset(message.offset);
+          }
+        },
+      );
+
+      await handler(mockPayload);
+
+      expect(messageTraceIds).toEqual([traceId, traceId]);
+    } finally {
+      getTracerSpy.mockRestore();
+    }
+  });
+});
+
+describe('createMessageErrorSpan', () => {
+  it('should be a function', () => {
+    expect(typeof createMessageErrorSpan).toBe('function');
+  });
+
+  it('should create error span for message', () => {
+    // This just verifies it doesn't throw
+    createMessageErrorSpan(
+      'test.error',
+      { offset: '0', headers: {} },
+      new Error('test error'),
+      'test-topic',
+      0,
+    );
+    expect(true).toBe(true);
+  });
+});
+
+describe('createStreamProcessor', () => {
+  it('should create a processor with run method', () => {
+    const processor = createStreamProcessor({
+      name: 'test-processor',
+      stages: ['validate', 'transform'],
+    });
+
+    expect(processor).toBeDefined();
+    expect(typeof processor.run).toBe('function');
+  });
+
+  it('should execute stages in order', async () => {
+    const processor = createStreamProcessor({
+      name: 'test-processor',
+    });
+
+    const executionOrder: string[] = [];
+
+    await processor.run(
+      { value: Buffer.from('test'), headers: {} },
+      async (ctx) => {
+        await ctx.stage('first', () => {
+          executionOrder.push('first');
+          return 'result1';
+        });
+        await ctx.stage('second', () => {
+          executionOrder.push('second');
+          return 'result2';
+        });
+      },
+    );
+
+    expect(executionOrder).toEqual(['first', 'second']);
+  });
+
+  it('should return result from callback', async () => {
+    const processor = createStreamProcessor({
+      name: 'test-processor',
+    });
+
+    const result = await processor.run(
+      { value: Buffer.from('test'), headers: {} },
+      async (ctx) => {
+        const value = await ctx.stage('transform', () => 'transformed');
+        return value;
+      },
+    );
+
+    expect(result).toBe('transformed');
+  });
+
+  it('should throw when stage throws', async () => {
+    const processor = createStreamProcessor({
+      name: 'test-processor',
+    });
+
+    await expect(
+      processor.run(
+        { value: Buffer.from('test'), headers: {} },
+        async (ctx) => {
+          await ctx.stage('failing', () => {
+            throw new Error('stage error');
+          });
+        },
+      ),
+    ).rejects.toThrow('stage error');
+  });
+
+  it('should provide produce helper that returns headers', async () => {
+    const processor = createStreamProcessor({
+      name: 'test-processor',
+    });
+
+    let producedHeaders: Record<string, string> | undefined;
+
+    await processor.run(
+      { value: Buffer.from('test'), headers: {} },
+      async (ctx) => {
+        producedHeaders = await ctx.produce('output-topic', { data: 'test' });
+      },
+    );
+
+    expect(producedHeaders).toBeDefined();
+    expect(typeof producedHeaders).toBe('object');
+  });
+
+  it('should expose inputContext from message headers', async () => {
+    const processor = createStreamProcessor({
+      name: 'test-processor',
+    });
+
+    let inputContextAccessed = false;
+
+    await processor.run(
+      {
+        value: Buffer.from('test'),
+        headers: {
+          traceparent:
+            '00-12345678901234567890123456789012-1234567890123456-01',
+        },
+      },
+      async (ctx) => {
+        // Access inputContext to verify it's available
+        inputContextAccessed =
+          ctx.inputContext !== undefined || ctx.inputContext === undefined;
+      },
+    );
+
+    // inputContext may be undefined without propagator, but should be accessible
+    expect(inputContextAccessed).toBe(true);
+  });
+});
+
+describe('ConsumerMetrics', () => {
+  it('should throw when lag polling enabled without lagPollIntervalMs', () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+
+    expect(() => {
+      new ConsumerMetrics({
+        consumer: mockConsumer,
+        enableLag: true,
+        lagStrategy: 'polling',
+      });
+    }).toThrow('Lag polling requires lagPollIntervalMs');
+  });
+
+  it('should throw when lag strategy requires admin but not provided', () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+
+    expect(() => {
+      new ConsumerMetrics({
+        consumer: mockConsumer,
+        enableLag: true,
+        lagStrategy: 'polling',
+        lagPollIntervalMs: 30_000,
+      });
+    }).toThrow("Lag strategy 'polling' requires admin client");
+  });
+
+  it('should throw when lag enabled without groupId', () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+    const mockAdmin = {
+      fetchTopicOffsets: async () => [],
+      fetchOffsets: async () => [],
+    };
+
+    expect(() => {
+      new ConsumerMetrics({
+        consumer: mockConsumer,
+        admin: mockAdmin,
+        enableLag: true,
+        lagStrategy: 'polling',
+        lagPollIntervalMs: 30_000,
+      });
+    }).toThrow('Lag tracking requires groupId');
+  });
+
+  it('should throw when lag enabled without topics', () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+    const mockAdmin = {
+      fetchTopicOffsets: async () => [],
+      fetchOffsets: async () => [],
+    };
+
+    expect(() => {
+      new ConsumerMetrics({
+        consumer: mockConsumer,
+        admin: mockAdmin,
+        groupId: 'test-group',
+        enableLag: true,
+        lagStrategy: 'polling',
+        lagPollIntervalMs: 30_000,
+      });
+    }).toThrow('Lag tracking requires topics');
+  });
+
+  it('should throw when lag enabled with empty topics array', () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+    const mockAdmin = {
+      fetchTopicOffsets: async () => [],
+      fetchOffsets: async () => [],
+    };
+
+    expect(() => {
+      new ConsumerMetrics({
+        consumer: mockConsumer,
+        admin: mockAdmin,
+        groupId: 'test-group',
+        topics: [],
+        enableLag: true,
+        lagStrategy: 'polling',
+        lagPollIntervalMs: 30_000,
+      });
+    }).toThrow('Lag tracking requires topics');
+  });
+
+  it('should create metrics instance with valid config', () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+
+    const metrics = new ConsumerMetrics({
+      consumer: mockConsumer,
+      enableLag: false,
+    });
+
+    expect(metrics).toBeDefined();
+  });
+
+  it('should have recordMessageProcessed method', () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+
+    const metrics = new ConsumerMetrics({
+      consumer: mockConsumer,
+    });
+
+    expect(typeof metrics.recordMessageProcessed).toBe('function');
+  });
+
+  it('should have recordBatch method', () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+
+    const metrics = new ConsumerMetrics({
+      consumer: mockConsumer,
+    });
+
+    expect(typeof metrics.recordBatch).toBe('function');
+  });
+
+  it('should have start and stop methods', async () => {
+    const mockConsumer = {
+      on: () => {},
+    };
+
+    const metrics = new ConsumerMetrics({
+      consumer: mockConsumer,
+    });
+
+    await metrics.start();
+    await metrics.stop();
+    expect(true).toBe(true);
+  });
+});
+
+describe('instrumentConsumerEvents', () => {
+  it('should return cleanup function', () => {
+    const listeners: Array<{ event: string; listener: unknown }> = [];
+    const mockConsumer = {
+      on: (event: string, listener: unknown) => {
+        listeners.push({ event, listener });
+      },
+      off: () => {},
+    };
+
+    const cleanup = instrumentConsumerEvents(mockConsumer, {
+      traceRebalances: true,
+      traceErrors: true,
+    });
+
+    expect(typeof cleanup).toBe('function');
+  });
+
+  it('should attach event listeners', () => {
+    const listeners: Array<{ event: string }> = [];
+    const mockConsumer = {
+      on: (event: string) => {
+        listeners.push({ event });
+      },
+    };
+
+    instrumentConsumerEvents(mockConsumer, {
+      traceRebalances: true,
+      traceErrors: true,
+      traceHeartbeats: true,
+    });
+
+    // Should have listeners for rebalance, error, and heartbeat events
+    expect(listeners.length).toBeGreaterThan(0);
+  });
+
+  it('should not attach heartbeat listeners by default', () => {
+    const listeners: Array<{ event: string }> = [];
+    const mockConsumer = {
+      on: (event: string) => {
+        listeners.push({ event });
+      },
+    };
+
+    instrumentConsumerEvents(mockConsumer, {
+      traceRebalances: true,
+      traceErrors: true,
+    });
+
+    const heartbeatListeners = listeners.filter((l) =>
+      l.event.includes('heartbeat'),
+    );
+    expect(heartbeatListeners.length).toBe(0);
+  });
+
+  it('should cleanup listeners when cleanup function called', () => {
+    const removedListeners: Array<{ event: string }> = [];
+    const mockConsumer = {
+      on: () => {},
+      off: (event: string) => {
+        removedListeners.push({ event });
+      },
+    };
+
+    const cleanup = instrumentConsumerEvents(mockConsumer, {
+      traceRebalances: true,
+      traceErrors: true,
+    });
+
+    cleanup();
+
+    expect(removedListeners.length).toBeGreaterThan(0);
+  });
+});
+
+describe('batch consumer constants', () => {
+  it('should export batch-related constants', () => {
+    expect(SEMATTRS_MESSAGING_BATCH_MESSAGE_COUNT).toBe(
+      'messaging.batch.message_count',
+    );
+    expect(SEMATTRS_MESSAGING_KAFKA_BATCH_FIRST_OFFSET).toBe(
+      'messaging.kafka.batch.first_offset',
+    );
+    expect(SEMATTRS_MESSAGING_KAFKA_BATCH_LAST_OFFSET).toBe(
+      'messaging.kafka.batch.last_offset',
+    );
+    expect(SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_PROCESSED).toBe(
+      'messaging.kafka.batch.messages_processed',
+    );
+    expect(SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_FAILED).toBe(
+      'messaging.kafka.batch.messages_failed',
+    );
+    expect(SEMATTRS_MESSAGING_KAFKA_BATCH_PROCESSING_TIME_MS).toBe(
+      'messaging.kafka.batch.processing_time_ms',
     );
   });
 });

@@ -98,6 +98,28 @@
  * });
  * ```
  *
+ * @example Batch consumer (eachBatch) with per-message spans
+ * ```typescript
+ * import { withBatchConsumer } from 'autotel-plugins/kafka';
+ *
+ * await consumer.run({
+ *   eachBatch: withBatchConsumer(
+ *     {
+ *       name: 'orders.batch',
+ *       consumerGroup: 'processor',
+ *       perMessageSpans: 'all',
+ *     },
+ *     async ({ batch, resolveOffset }) => {
+ *       for (const message of batch.messages) {
+ *         await processOrder(message);
+ *         resolveOffset(message.offset);
+ *       }
+ *     },
+ *   ),
+ * });
+ * ```
+ * With perMessageSpans: 'all', one span per message is created; message spans use extracted trace context from headers when valid (trace continuation), otherwise parent to the batch span.
+ *
  * @example With Map headers (e.g., @platformatic/kafka)
  * ```typescript
  * import { normalizeHeaders, withProcessingSpan } from 'autotel-plugins/kafka';
@@ -137,6 +159,46 @@ export { withProducerSpan } from './producer-span';
 // Batch lineage utilities
 export { extractBatchLineage, extractBatchLineageAsync } from './batch-lineage';
 
+// Batch consumer wrapper
+export {
+  withBatchConsumer,
+  createMessageErrorSpan,
+  type EachBatchPayload,
+  type EachBatchHandler,
+  type BatchProgressMetrics,
+  type PerMessageSpanMode,
+  type BatchConsumerConfig,
+} from './batch-consumer';
+
+// Stream processor
+export {
+  createStreamProcessor,
+  type StreamMessage,
+  type StreamProcessorConfig,
+  type ProduceOptions,
+  type ProcessorContext,
+  type ProcessorCallback,
+  type StreamProcessor,
+} from './stream-processor';
+
+// Consumer metrics
+export {
+  ConsumerMetrics,
+  type LagStrategy,
+  type KafkaConsumer,
+  type KafkaAdmin,
+  type ConsumerMetricsConfig,
+} from './consumer-metrics';
+
+// Consumer events instrumentation
+export {
+  instrumentConsumerEvents,
+  type EventMode,
+  type EventConsumer,
+  type ConsumerEventsConfig,
+  type CleanupFunction,
+} from './stream-events';
+
 // Types
 export type {
   RawKafkaHeaders,
@@ -163,4 +225,10 @@ export {
   SEMATTRS_LINKED_TRACE_ID_COUNT,
   SEMATTRS_LINKED_TRACE_ID_HASH,
   CORRELATION_ID_HEADER,
+  SEMATTRS_MESSAGING_BATCH_MESSAGE_COUNT,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_FIRST_OFFSET,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_LAST_OFFSET,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_PROCESSED,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_MESSAGES_FAILED,
+  SEMATTRS_MESSAGING_KAFKA_BATCH_PROCESSING_TIME_MS,
 } from '../common/constants';

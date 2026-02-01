@@ -7,6 +7,7 @@ export default defineConfig({
     mongoose: 'src/mongoose/index.ts',
     bigquery: 'src/bigquery/index.ts',
     kafka: 'src/kafka/index.ts',
+    rabbitmq: 'src/rabbitmq/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
