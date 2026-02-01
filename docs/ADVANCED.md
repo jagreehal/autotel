@@ -196,6 +196,8 @@ export const processEvent = traceConsumer({
 });
 ```
 
+For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-plugins/kafka` for batch-level and optional per-message spans with trace continuation from headers (see [autotel-plugins README](../../packages/autotel-plugins/README.md#kafka)).
+
 **Key implementation details:**
 
 - Uses `SpanKind.PRODUCER` / `SpanKind.CONSUMER` for proper trace visualization

@@ -31,6 +31,11 @@
       "types": "./dist/kafka.d.ts",
       "import": "./dist/kafka.js",
       "require": "./dist/kafka.cjs"
+    },
+    "./rabbitmq": {
+      "types": "./dist/rabbitmq.d.ts",
+      "import": "./dist/rabbitmq.js",
+      "require": "./dist/rabbitmq.cjs"
     }
   },
   "files": [
@@ -71,6 +76,9 @@
     "gcp",
     "kafka",
     "kafkajs",
+    "rabbitmq",
+    "amqp",
+    "amqplib",
     "messaging",
     "event-driven",
     "database",
@@ -85,11 +93,11 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/instrumentation": "^0.211.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
-    "autotel": "workspace:*",
-    "awaitly": "^1.13.0"
+    "autotel": "workspace:*"
   },
   "peerDependencies": {
     "@google-cloud/bigquery": ">=8.1.1",
+    "@opentelemetry/instrumentation-amqplib": ">=0.56.0",
     "@opentelemetry/instrumentation-kafkajs": ">=0.20.0",
     "drizzle-orm": ">=0.45.1",
     "mongoose": ">=9.1.5"
@@ -106,15 +114,21 @@
     },
     "@opentelemetry/instrumentation-kafkajs": {
       "optional": true
+    },
+    "@opentelemetry/instrumentation-amqplib": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@google-cloud/bigquery": "^8.1.1",
+    "@opentelemetry/core": "^2.5.0",
+    "mongoose": "^9.1.5",
     "@types/node": "^25.1.0",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
     "drizzle-orm": "^0.45.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-awaitly": "^0.6.0",
     "eslint-plugin-unicorn": "^62.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",

@@ -1,24 +1,25 @@
 /**
- * Header utilities for Kafka message processing.
+ * Header utilities for RabbitMQ message processing.
  *
  * Uses OpenTelemetry propagators internally for context extraction,
  * ensuring compatibility with W3C Trace Context, B3, and other formats.
  */
 
 import { propagation, ROOT_CONTEXT, type Context } from 'autotel';
-import type { RawKafkaHeaders } from './types';
+import type { RawAmqpHeaders } from './types';
 
 /**
- * Normalize Kafka headers from raw format to string record.
+ * Normalize AMQP headers from raw format to string record.
  *
  * Handles:
  * - undefined/null headers -> empty object
- * - Map headers (e.g., from @platformatic/kafka) -> converts to object
- * - Buffer values -> UTF-8 strings
+ * - Buffer values -> UTF-8 strings (with base64 fallback for invalid UTF-8)
  * - undefined values -> removed from output
  * - string values -> passed through
+ * - number/boolean values -> String() conversion
+ * - object values -> JSON.stringify() (dropped if > 1KB)
  *
- * @param headers - Raw Kafka headers (Record, Map, or undefined)
+ * @param headers - Raw AMQP headers (Record or undefined)
  * @returns Normalized headers as string record
  *
  * @example
@@ -27,40 +28,54 @@ import type { RawKafkaHeaders } from './types';
  *   traceparent: Buffer.from('00-abc...'),
  *   'content-type': 'application/json',
  *   optionalHeader: undefined,
+ *   retryCount: 3,
  * };
  * const normalized = normalizeHeaders(raw);
- * // { traceparent: '00-abc...', 'content-type': 'application/json' }
- * ```
- *
- * @example With Map (e.g., @platformatic/kafka)
- * ```typescript
- * const map = new Map([
- *   ['traceparent', '00-abc...'],
- *   ['content-type', 'application/json'],
- * ]);
- * const normalized = normalizeHeaders(map);
- * // { traceparent: '00-abc...', 'content-type': 'application/json' }
+ * // { traceparent: '00-abc...', 'content-type': 'application/json', retryCount: '3' }
  * ```
  */
 export function normalizeHeaders(
-  headers?: RawKafkaHeaders,
+  headers?: RawAmqpHeaders,
 ): Record<string, string> {
   if (!headers) {
     return {};
   }
 
-  // Convert Map to Record if needed
-  const record: Record<string, string | Buffer | undefined> =
-    headers instanceof Map ? Object.fromEntries(headers) : headers;
-
   const normalized: Record<string, string> = {};
+  const MAX_OBJECT_SIZE = 1024; // 1KB limit for stringified objects
 
-  for (const [key, value] of Object.entries(record)) {
-    if (value === undefined) {
+  for (const [key, value] of Object.entries(headers)) {
+    if (value === undefined || value === null) {
       continue;
     }
 
-    normalized[key] = Buffer.isBuffer(value) ? value.toString('utf8') : value;
+    if (Buffer.isBuffer(value)) {
+      // Try UTF-8 decode, fall back to base64 with prefix
+      try {
+        const decoded = value.toString('utf8');
+        // Check if the string is valid UTF-8 by re-encoding and comparing
+        normalized[key] = Buffer.from(decoded, 'utf8').equals(value)
+          ? decoded
+          : `base64:${value.toString('base64')}`;
+      } catch {
+        normalized[key] = `base64:${value.toString('base64')}`;
+      }
+    } else if (typeof value === 'string') {
+      normalized[key] = value;
+    } else if (typeof value === 'number' || typeof value === 'boolean') {
+      normalized[key] = String(value);
+    } else if (typeof value === 'object') {
+      // Stringify objects, drop if too large
+      try {
+        const json = JSON.stringify(value);
+        if (json.length <= MAX_OBJECT_SIZE) {
+          normalized[key] = json;
+        }
+        // Silently drop objects > 1KB
+      } catch {
+        // Silently drop objects that can't be stringified
+      }
+    }
   }
 
   return normalized;
@@ -69,8 +84,8 @@ export function normalizeHeaders(
 /**
  * TextMapGetter for case-insensitive header lookup.
  *
- * Kafka headers are case-sensitive, but trace context headers
- * (traceparent, tracestate) should be matched case-insensitively
+ * AMQP headers can have varying case, but trace context headers
+ * (traceparent, tracestate, baggage) should be matched case-insensitively
  * for maximum compatibility.
  */
 const caseInsensitiveGetter = {
@@ -103,10 +118,10 @@ const caseInsensitiveGetter = {
  *
  * @example
  * ```typescript
- * import { normalizeHeaders, extractTraceContext } from 'autotel-plugins/kafka';
+ * import { normalizeHeaders, extractTraceContext } from 'autotel-plugins/rabbitmq';
  * import { trace } from '@opentelemetry/api';
  *
- * const headers = normalizeHeaders(message.headers);
+ * const headers = normalizeHeaders(message.properties.headers);
  * const extractedCtx = extractTraceContext(headers);
  *
  * // Get span context from extracted context

@@ -301,6 +301,39 @@ await db.select().from(users).where(eq(users.id, 123));
 - `net.peer.name` - Database host
 - `net.peer.port` - Database port
 
+### Kafka
+
+Composition layer for KafkaJS: processing span wrapper, producer span wrapper, batch lineage for fan-in trace correlation, and batch consumer wrapper. Works alongside optional `@opentelemetry/instrumentation-kafkajs` for producer/consumer spans.
+
+**Batch consumer:** Wrap KafkaJS `eachBatch` with `withBatchConsumer(config, handler)`. Preserves the exact KafkaJS payload signature. Config: `name`, `consumerGroup`, `perMessageSpans` (`'none'` | `'all'` | `'errors'`), `onProgress`.
+
+**Per-message spans:**
+
+- **`'all'`** – One span per message. Message spans are parented to **extracted trace context from message headers when valid** (trace continuation); otherwise to the **batch span**. All per-message spans are ended when the batch completes, including skipped or unresolved messages (no span leak).
+- **`'errors'`** – Per-message span only on failure. When the handler throws, an error span is created for the first message. Use `createMessageErrorSpan` in your catch block for per-message error spans.
+
+```typescript
+import { withBatchConsumer } from 'autotel-plugins/kafka';
+
+await consumer.run({
+  eachBatch: withBatchConsumer(
+    {
+      name: 'orders.batch',
+      consumerGroup: 'processor',
+      perMessageSpans: 'all',
+    },
+    async ({ batch, resolveOffset }) => {
+      for (const message of batch.messages) {
+        await processOrder(message);
+        resolveOffset(message.offset);
+      }
+    },
+  ),
+});
+```
+
+Optional: install `@opentelemetry/instrumentation-kafkajs` for producer/consumer spans.
+
 ## Usage with Autotel
 
 Drizzle instrumentation works seamlessly with [Autotel](../autotel):
