@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-mcp-observability",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "private": true,
   "type": "module",
   "description": "Example demonstrating AI-assisted observability with autotel and OpenTelemetry MCP server",

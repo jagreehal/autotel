@@ -1,5 +1,12 @@
 # autotel-aws
 
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies [e62eb75]
+  - autotel@2.17.0
+
 ## 0.8.1
 
 ### Patch Changes
