@@ -1,5 +1,12 @@
 # autotel-mcp
 
+## 20.0.0
+
+### Patch Changes
+
+- Updated dependencies [e62eb75]
+  - autotel@2.17.0
+
 ## 19.0.0
 
 ### Patch Changes
