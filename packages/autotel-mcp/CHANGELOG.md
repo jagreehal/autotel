@@ -1,5 +1,12 @@
 # autotel-mcp
 
+## 21.0.0
+
+### Patch Changes
+
+- Updated dependencies [23ed022]
+  - autotel@2.18.0
+
 ## 20.0.0
 
 ### Patch Changes
