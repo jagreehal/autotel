@@ -63,8 +63,37 @@ For databases/ORMs with **working** official instrumentation, **use those direct
 
 ## Installation
 
+Install the package and **autotel** (required for all plugins):
+
 ```bash
-npm install autotel-plugins
+npm install autotel autotel-plugins
+```
+
+### What to install per plugin
+
+Each plugin needs the core packages above plus the library (and optional OTel instrumentation) you use:
+
+| Plugin       | Install                                                                                                                    |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| **Mongoose** | `autotel` + `autotel-plugins` + `mongoose`                                                                                 |
+| **Drizzle**  | `autotel` + `autotel-plugins` + `drizzle-orm` + your driver (e.g. `postgres`, `mysql2`, `better-sqlite3`)                  |
+| **BigQuery** | `autotel` + `autotel-plugins` + `@google-cloud/bigquery`                                                                   |
+| **Kafka**    | `autotel` + `autotel-plugins` + `kafkajs`. Optional: `@opentelemetry/instrumentation-kafkajs` for producer/consumer spans. |
+
+Examples:
+
+```bash
+# Mongoose
+npm install autotel autotel-plugins mongoose
+
+# Drizzle (e.g. Postgres)
+npm install autotel autotel-plugins drizzle-orm postgres
+
+# BigQuery
+npm install autotel autotel-plugins @google-cloud/bigquery
+
+# Kafka (with optional official instrumentation)
+npm install autotel autotel-plugins kafkajs @opentelemetry/instrumentation-kafkajs
 ```
 
 ## Currently Supported

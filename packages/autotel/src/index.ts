@@ -250,8 +250,16 @@ export {
 
 // Re-export common OpenTelemetry types and utilities
 // This allows plugins and apps to use OTel without needing separate @opentelemetry/api installation
-export type { Span, SpanContext, Tracer, Context } from '@opentelemetry/api';
-export { SpanKind } from '@opentelemetry/api';
+export type {
+  Span,
+  SpanContext,
+  Tracer,
+  Context,
+  Link as SpanLink,
+  TextMapSetter,
+  TextMapGetter,
+} from '@opentelemetry/api';
+export { SpanKind, ROOT_CONTEXT } from '@opentelemetry/api';
 // Note: trace exported from functional.ts, context/propagation/SpanStatusCode already exported above
 
 // Export typed baggage helper

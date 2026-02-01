@@ -1,6 +1,7 @@
 import eslint from '@eslint/js';
 import eslintConfigPrettier from 'eslint-config-prettier';
 import eslintPluginUnicorn from 'eslint-plugin-unicorn';
+import eslintPluginAwaitly from 'eslint-plugin-awaitly';
 import tseslint from 'typescript-eslint';
 import { defineConfig } from 'eslint/config';
 
@@ -21,6 +22,9 @@ export default defineConfig(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    plugins: {
+      awaitly: eslintPluginAwaitly,
+    },
     rules: {
       'unicorn/prevent-abbreviations': 'off',
       'unicorn/consistent-function-scoping': 'off',
@@ -30,6 +34,15 @@ export default defineConfig(
       'unicorn/no-nested-ternary': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-exports': 'error',
+      // Awaitly plugin rules
+      'awaitly/no-immediate-execution': 'error',
+      'awaitly/require-thunk-for-key': 'error',
+      'awaitly/stable-cache-keys': 'error',
+      'awaitly/no-floating-workflow': 'error',
+      'awaitly/no-floating-result': 'error',
+      'awaitly/require-result-handling': 'error',
+      'awaitly/no-options-on-executor': 'error',
+      'awaitly/no-double-wrap-result': 'error',
       'no-restricted-syntax': [
         'error',
         {

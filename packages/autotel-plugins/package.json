@@ -1,7 +1,7 @@
 {
   "name": "autotel-plugins",
   "version": "0.12.1",
-  "description": "OpenTelemetry instrumentation for libraries without official support (Drizzle ORM)",
+  "description": "OpenTelemetry instrumentation for libraries without official support (Drizzle ORM, Mongoose, BigQuery)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,6 +21,16 @@
       "types": "./dist/mongoose.d.ts",
       "import": "./dist/mongoose.js",
       "require": "./dist/mongoose.cjs"
+    },
+    "./bigquery": {
+      "types": "./dist/bigquery.d.ts",
+      "import": "./dist/bigquery.js",
+      "require": "./dist/bigquery.cjs"
+    },
+    "./kafka": {
+      "types": "./dist/kafka.d.ts",
+      "import": "./dist/kafka.js",
+      "require": "./dist/kafka.cjs"
     }
   },
   "files": [
@@ -56,6 +66,13 @@
     "drizzle-orm",
     "mongoose",
     "mongodb",
+    "bigquery",
+    "google-cloud",
+    "gcp",
+    "kafka",
+    "kafkajs",
+    "messaging",
+    "event-driven",
     "database",
     "orm",
     "observability",
@@ -68,9 +85,12 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/instrumentation": "^0.211.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
-    "autotel": "workspace:*"
+    "autotel": "workspace:*",
+    "awaitly": "^1.13.0"
   },
   "peerDependencies": {
+    "@google-cloud/bigquery": ">=8.1.1",
+    "@opentelemetry/instrumentation-kafkajs": ">=0.20.0",
     "drizzle-orm": ">=0.45.1",
     "mongoose": ">=9.1.5"
   },
@@ -80,6 +100,12 @@
     },
     "mongoose": {
       "optional": true
+    },
+    "@google-cloud/bigquery": {
+      "optional": true
+    },
+    "@opentelemetry/instrumentation-kafkajs": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -88,6 +114,7 @@
     "@typescript-eslint/parser": "^8.54.0",
     "drizzle-orm": "^0.45.1",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-awaitly": "^0.6.0",
     "eslint-plugin-unicorn": "^62.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
