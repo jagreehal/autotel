@@ -1,5 +1,11 @@
 # autotel-cli
 
+## 0.4.1
+
+### Patch Changes
+
+- d3305c4: Fix trace codemod double-editing default export when a file has both `export default function` and other named functions. Step 1 now skips the default-export function so it is only edited in step 2, avoiding "node was removed or forgotten" when applying edits.
+
 ## 0.4.0
 
 ### Minor Changes
