@@ -152,4 +152,29 @@ export default x;
     expect(result.changed).toBe(false);
     expect(result.skipped.some((s) => s.reason === 'anonymous default export')).toBe(true);
   });
+
+  it('wraps default export and other named functions without double-editing default', () => {
+    // When a file has both "export default function createUser()" and "function helper()",
+    // the codemod must not add two edits for the same default-export node (step 1 as
+    // regular fn + step 2 as default). Result must have exactly one export default and
+    // both functions wrapped.
+    const input = `export default function createUser() {
+  return 1;
+}
+function helper() {
+  return 2;
+}
+`;
+    const result = transformFile(input, FIXTURE_PATH, {});
+    expect(result.changed).toBe(true);
+    expect(result.wrappedCount).toBe(2);
+
+    // Must contain exactly one "export default createUser" (no duplicate or missing)
+    const exportDefaultCount = (result.modified.match(/export\s+default\s+createUser/g) ?? []).length;
+    expect(exportDefaultCount).toBe(1);
+
+    expect(result.modified).toContain('const createUser = trace');
+    expect(result.modified).toContain('export default createUser');
+    expect(result.modified).toContain('const helper = trace');
+  });
 });
