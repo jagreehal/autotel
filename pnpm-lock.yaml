@@ -1218,9 +1218,6 @@ importers:
       autotel:
         specifier: workspace:*
         version: link:../autotel
-      awaitly:
-        specifier: ^1.13.0
-        version: 1.13.0
       mongoose:
         specifier: '>=9.1.5'
         version: 9.1.5(@aws-sdk/credential-providers@3.939.0)
@@ -1240,9 +1237,6 @@ importers:
       eslint-config-prettier:
         specifier: ^10.1.8
         version: 10.1.8(eslint@9.39.2(jiti@2.6.1))
-      eslint-plugin-awaitly:
-        specifier: ^0.6.0
-        version: 0.6.0(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-unicorn:
         specifier: ^62.0.0
         version: 62.0.0(eslint@9.39.2(jiti@2.6.1))
@@ -7548,12 +7542,6 @@ packages:
         optional: true
       eslint-import-resolver-webpack:
         optional: true
-
-  eslint-plugin-awaitly@0.6.0:
-    resolution: {integrity: sha512-l2EgGady5n4L49XQwZv81catdkxBH3umrLV+L4bdEpUgUiIcUIhfCaW49xHIGL7TTo7y9CYWgpaoR66nHy805A==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      eslint: '>=9.39.2'
 
   eslint-plugin-es-x@7.8.0:
     resolution: {integrity: sha512-7Ds8+wAAoV3T+LAKeu39Y5BzXCrGKrcISfgKEqTS4BDN8SFEDQd0S43jiQ8vIa3wUKD07qitZdfzlenSi8/0qQ==}
@@ -19386,10 +19374,6 @@ snapshots:
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import-x@4.16.1(@typescript-eslint/utils@8.54.0(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint@9.39.1(jiti@2.6.1)))(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.1(jiti@2.6.1)))(eslint@9.39.1(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
-
-  eslint-plugin-awaitly@0.6.0(eslint@9.39.2(jiti@2.6.1)):
-    dependencies:
-      eslint: 9.39.2(jiti@2.6.1)
 
   eslint-plugin-es-x@7.8.0(eslint@9.39.2(jiti@2.6.1)):
     dependencies:

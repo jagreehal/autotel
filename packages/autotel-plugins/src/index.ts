@@ -99,6 +99,7 @@ export {
 // Re-export Kafka plugin
 export {
   withProcessingSpan,
+  withProducerSpan,
   extractBatchLineage,
   extractBatchLineageAsync,
   injectTraceHeaders,
@@ -108,6 +109,7 @@ export {
   normalizeHeaders,
   SEMATTRS_MESSAGING_SYSTEM,
   SEMATTRS_MESSAGING_DESTINATION_NAME,
+  SEMATTRS_MESSAGING_OPERATION,
   SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP,
   SEMATTRS_MESSAGING_KAFKA_PARTITION,
   SEMATTRS_MESSAGING_KAFKA_OFFSET,
@@ -118,11 +120,11 @@ export {
   type RawKafkaHeaders,
   type ContextMode,
   type ProcessingDescriptor,
+  type ProducerDescriptor,
+  type ProcessingSpanCallback,
+  type ProducerSpanCallback,
   type BatchLineageOptions,
   type BatchLineageResult,
   type InjectOptions,
-  type SpanError,
-  type ProcessingSpanResult,
-  type ProcessingSpanCallback,
   type BatchItem,
 } from './kafka';

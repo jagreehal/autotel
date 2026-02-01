@@ -26,6 +26,7 @@ export const SEMATTRS_NET_PEER_PORT = 'net.peer.port' as const;
 export const SEMATTRS_MESSAGING_SYSTEM = 'messaging.system' as const;
 export const SEMATTRS_MESSAGING_DESTINATION_NAME =
   'messaging.destination.name' as const;
+export const SEMATTRS_MESSAGING_OPERATION = 'messaging.operation' as const;
 export const SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP =
   'messaging.kafka.consumer.group' as const;
 export const SEMATTRS_MESSAGING_KAFKA_PARTITION =

@@ -13,11 +13,12 @@ import type { RawKafkaHeaders } from './types';
  *
  * Handles:
  * - undefined/null headers -> empty object
+ * - Map headers (e.g., from @platformatic/kafka) -> converts to object
  * - Buffer values -> UTF-8 strings
  * - undefined values -> removed from output
  * - string values -> passed through
  *
- * @param headers - Raw Kafka headers (Buffer/string/undefined values)
+ * @param headers - Raw Kafka headers (Record, Map, or undefined)
  * @returns Normalized headers as string record
  *
  * @example
@@ -30,6 +31,16 @@ import type { RawKafkaHeaders } from './types';
  * const normalized = normalizeHeaders(raw);
  * // { traceparent: '00-abc...', 'content-type': 'application/json' }
  * ```
+ *
+ * @example With Map (e.g., @platformatic/kafka)
+ * ```typescript
+ * const map = new Map([
+ *   ['traceparent', '00-abc...'],
+ *   ['content-type', 'application/json'],
+ * ]);
+ * const normalized = normalizeHeaders(map);
+ * // { traceparent: '00-abc...', 'content-type': 'application/json' }
+ * ```
  */
 export function normalizeHeaders(
   headers?: RawKafkaHeaders,
@@ -38,9 +49,13 @@ export function normalizeHeaders(
     return {};
   }
 
+  // Convert Map to Record if needed
+  const record: Record<string, string | Buffer | undefined> =
+    headers instanceof Map ? Object.fromEntries(headers) : headers;
+
   const normalized: Record<string, string> = {};
 
-  for (const [key, value] of Object.entries(headers)) {
+  for (const [key, value] of Object.entries(record)) {
     if (value === undefined) {
       continue;
     }
