@@ -48,6 +48,47 @@ export class MyFirstAdapter implements EventsAdapter {
 
 ---
 
+## Receiving Trace Context (options.autotel)
+
+The `trackEvent` method receives an optional third parameter with trace context:
+
+```typescript
+import type { EventsAdapter, EventAttributes, EventTrackingOptions } from 'autotel-subscribers';
+
+export class MyAdapter implements EventsAdapter {
+  readonly name = 'MyAdapter';
+
+  async trackEvent(
+    name: string,
+    attributes?: EventAttributes,
+    options?: EventTrackingOptions,  // ← Third parameter
+  ): Promise<void> {
+    // options?.autotel contains correlation and trace context:
+    // - correlation_id (always present, 16 hex chars)
+    // - trace_id, span_id (when inside a span)
+    // - trace_url (if events.traceUrl is configured)
+
+    // Merge into your payload for request-event correlation:
+    const payload = {
+      event: name,
+      properties: attributes,
+      ...options?.autotel,  // Include correlation_id, trace_url, etc.
+    };
+    await this.sendToBackend(payload);
+  }
+
+  private async sendToBackend(payload: unknown): Promise<void> {
+    // Your API call here
+  }
+
+  // ... implement other methods
+}
+```
+
+If you implement only `(name, attributes)`, correlation context is silently dropped.
+
+---
+
 ## Using Your Adapter
 
 ```typescript
