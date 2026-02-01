@@ -73,11 +73,11 @@ npm install autotel autotel-plugins
 
 Each plugin needs the core packages above plus the library (and optional OTel instrumentation) you use:
 
-| Plugin    | Install |
-| --------- | ------- |
-| **Mongoose** | `autotel` + `autotel-plugins` + `mongoose` |
-| **Drizzle** | `autotel` + `autotel-plugins` + `drizzle-orm` + your driver (e.g. `postgres`, `mysql2`, `better-sqlite3`) |
-| **BigQuery** | `autotel` + `autotel-plugins` + `@google-cloud/bigquery` |
+| Plugin       | Install                                                                                                                    |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| **Mongoose** | `autotel` + `autotel-plugins` + `mongoose`                                                                                 |
+| **Drizzle**  | `autotel` + `autotel-plugins` + `drizzle-orm` + your driver (e.g. `postgres`, `mysql2`, `better-sqlite3`)                  |
+| **BigQuery** | `autotel` + `autotel-plugins` + `@google-cloud/bigquery`                                                                   |
 | **Kafka**    | `autotel` + `autotel-plugins` + `kafkajs`. Optional: `@opentelemetry/instrumentation-kafkajs` for producer/consumer spans. |
 
 Examples:

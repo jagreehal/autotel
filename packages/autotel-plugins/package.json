@@ -89,8 +89,8 @@
     "awaitly": "^1.13.0"
   },
   "peerDependencies": {
-    "@google-cloud/bigquery": ">=7.0.0",
-    "@opentelemetry/instrumentation-kafkajs": ">=0.15.0",
+    "@google-cloud/bigquery": ">=8.1.1",
+    "@opentelemetry/instrumentation-kafkajs": ">=0.20.0",
     "drizzle-orm": ">=0.45.1",
     "mongoose": ">=9.1.5"
   },
