@@ -135,6 +135,7 @@ export function transformFile(
   // 1. Function declarations (including export function); skip if file has only default export fn
   for (const fn of allFns) {
     if (onlyDefaultExportFn) continue; // handle in step 2 only
+    if (defaultFn && fn === defaultFn) continue; // do not double-edit default export
     if (isInsideTraceCall(fn)) continue; // inside trace() e.g. from prior replacement
     const name = fn.getName();
     if (!name) continue; // anonymous, skip for v1
