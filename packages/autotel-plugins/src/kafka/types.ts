@@ -6,14 +6,15 @@
  */
 
 import type { Span, SpanContext, SpanLink } from 'autotel';
-import type { AsyncResult } from 'awaitly';
 
 /**
  * Raw Kafka headers as provided by KafkaJS.
  * Values can be string, Buffer, or undefined.
+ * Also accepts Map for compatibility with @platformatic/kafka and other clients.
  */
 export type RawKafkaHeaders =
   | Record<string, string | Buffer | undefined>
+  | Map<string, string | Buffer | undefined>
   | undefined;
 
 /**
@@ -83,6 +84,31 @@ export interface ProcessingDescriptor {
 }
 
 /**
+ * Descriptor for creating a producer span.
+ */
+export interface ProducerDescriptor {
+  /**
+   * Name for the producer span (e.g., "order.publish")
+   */
+  name: string;
+
+  /**
+   * Kafka topic name. Sets `messaging.destination.name` attribute.
+   */
+  topic: string;
+
+  /**
+   * Message key. Sets `messaging.kafka.message.key` attribute.
+   */
+  messageKey?: string;
+
+  /**
+   * Messaging system. Defaults to 'kafka'.
+   */
+  system?: string;
+}
+
+/**
  * Options for batch lineage extraction.
  */
 export interface BatchLineageOptions {
@@ -145,21 +171,14 @@ export interface InjectOptions {
 }
 
 /**
- * Error types for processing span operations.
- */
-export type SpanError =
-  | { type: 'SPAN_CREATION_FAILED'; cause: unknown }
-  | { type: 'CALLBACK_ERROR'; cause: unknown };
-
-/**
- * Result type for withProcessingSpan.
- */
-export type ProcessingSpanResult<T> = AsyncResult<T, SpanError>;
-
-/**
  * Type for the processing span callback function.
  */
 export type ProcessingSpanCallback<T> = (span: Span) => Promise<T>;
+
+/**
+ * Type for the producer span callback function.
+ */
+export type ProducerSpanCallback<T> = (span: Span) => Promise<T>;
 
 /**
  * Item with optional headers for batch lineage extraction.

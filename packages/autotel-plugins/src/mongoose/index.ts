@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Note: `any` is only used for dynamic method wrapping on runtime objects.
 // Type-safe interfaces are used for all public APIs.
+// Mongoose is a devDependency so we type-check against the real API; consumers use the peer.
 
+import type { Mongoose } from 'mongoose';
 import { SpanKind, otelTrace as trace, type Span, type Tracer } from 'autotel';
 import {
   SEMATTRS_DB_SYSTEM,
@@ -483,14 +485,15 @@ function wrapHookHandler(
  * ```
  */
 export function instrumentMongoose(
-  mongoose: any,
+  mongoose: Mongoose,
   config?: MongooseInstrumentationConfig,
-): typeof mongoose {
+): Mongoose {
   if (!mongoose?.Model) {
     return mongoose;
   }
 
-  if (mongoose[INSTRUMENTED_FLAG]) {
+  const m = mongoose as any;
+  if (m[INSTRUMENTED_FLAG]) {
     return mongoose;
   }
 
@@ -506,8 +509,8 @@ export function instrumentMongoose(
   const tracer = trace.getTracer(finalConfig.tracerName);
 
   // Patch Schema hooks only if enabled
-  if (mongoose.Schema && finalConfig.instrumentHooks) {
-    patchSchemaHooks(mongoose.Schema, tracer, finalConfig);
+  if (m.Schema && finalConfig.instrumentHooks) {
+    patchSchemaHooks(m.Schema, tracer, finalConfig);
   }
 
   // Helper functions
@@ -537,7 +540,7 @@ export function instrumentMongoose(
 
   for (const { method, operation } of queryMethods) {
     wrapQueryMethod(
-      mongoose.Model,
+      m.Model,
       method,
       operation,
       getModelCollectionName,
@@ -547,17 +550,17 @@ export function instrumentMongoose(
     );
 
     // Also patch chainable Query methods to capture context
-    if (mongoose.Query?.prototype?.[method]) {
-      wrapChainableMethod(mongoose.Query.prototype, method);
+    if (m.Query?.prototype?.[method]) {
+      wrapChainableMethod(m.Query.prototype, method);
     }
   }
 
   // Patch Model instance methods
   const instanceMethods = ['save', 'deleteOne'];
   for (const method of instanceMethods) {
-    if (mongoose.Model.prototype[method]) {
+    if (m.Model.prototype[method]) {
       wrapQueryMethod(
-        mongoose.Model.prototype,
+        m.Model.prototype,
         method,
         method,
         (doc: any) => {
@@ -586,9 +589,9 @@ export function instrumentMongoose(
   // Patch Model static methods
   const staticMethods = ['create', 'insertMany', 'aggregate', 'bulkWrite'];
   for (const method of staticMethods) {
-    if (mongoose.Model[method]) {
+    if (m.Model[method]) {
       wrapQueryMethod(
-        mongoose.Model,
+        m.Model,
         method,
         method,
         (model: any) => {
@@ -616,12 +619,12 @@ export function instrumentMongoose(
     'skip',
   ];
   for (const method of chainableMethods) {
-    if (mongoose.Query?.prototype?.[method]) {
-      wrapChainableMethod(mongoose.Query.prototype, method);
+    if (m.Query?.prototype?.[method]) {
+      wrapChainableMethod(m.Query.prototype, method);
     }
   }
 
-  mongoose[INSTRUMENTED_FLAG] = true;
+  m[INSTRUMENTED_FLAG] = true;
   return mongoose;
 }
 
@@ -632,7 +635,7 @@ export function instrumentMongoose(
 export class MongooseInstrumentation {
   constructor(private config?: MongooseInstrumentationConfig) {}
 
-  enable(mongoose: any): void {
+  enable(mongoose: Mongoose): void {
     instrumentMongoose(mongoose, this.config);
   }
 }

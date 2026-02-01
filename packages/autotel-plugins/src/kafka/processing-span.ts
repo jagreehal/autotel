@@ -16,10 +16,8 @@ import {
   type SpanContext,
   type SpanLink,
 } from 'autotel';
-import { ok, err, type AsyncResult } from 'awaitly';
 import type {
   ProcessingDescriptor,
-  SpanError,
   ContextMode,
   ProcessingSpanCallback,
 } from './types';
@@ -60,9 +58,16 @@ function isValidSpanContext(
  * | `link` | Parent = active span. Link to extracted context. | Parent = root. Link to extracted. |
  * | `none` | Parent = active span. No links. | Parent = root. No links. |
  *
+ * **Feature Flag Pattern:**
+ * Use `contextMode: 'none'` to disable trace propagation via environment variable:
+ * ```typescript
+ * contextMode: process.env.KAFKA_PROPAGATE_TRACE !== 'false' ? 'inherit' : 'none'
+ * ```
+ *
  * @param descriptor - Processing span configuration
  * @param fn - Async callback to execute within the span
- * @returns AsyncResult with callback result or SpanError
+ * @returns Promise resolving to callback result
+ * @throws Error if span creation fails or callback throws
  *
  * @example Basic usage
  * ```typescript
@@ -70,27 +75,29 @@ function isValidSpanContext(
  *
  * await consumer.run({
  *   eachMessage: async ({ topic, partition, message }) => {
- *     const result = await withProcessingSpan({
- *       name: 'order.process',
- *       headers: message.headers,
- *       contextMode: 'inherit',
- *       topic,
- *       consumerGroup: 'payments',
- *       partition,
- *       offset: message.offset,
- *     }, async (span) => {
- *       return await processOrder(message);
- *     });
- *
- *     if (!result.ok) {
- *       logger.error('Processing failed', { error: result.error });
+ *     try {
+ *       await withProcessingSpan({
+ *         name: 'order.process',
+ *         headers: message.headers,
+ *         contextMode: 'inherit',
+ *         topic,
+ *         consumerGroup: 'payments',
+ *         partition,
+ *         offset: message.offset,
+ *       }, async (span) => {
+ *         return await processOrder(message);
+ *       });
+ *     } catch (error) {
+ *       logger.error('Processing failed', { error });
  *     }
  *   },
  * });
  * ```
  *
- * @example With batch lineage links
+ * @example With batch lineage links (using semantic attribute constants)
  * ```typescript
+ * import { extractBatchLineage, withProcessingSpan, SEMATTRS_LINKED_TRACE_ID_COUNT, SEMATTRS_LINKED_TRACE_ID_HASH } from 'autotel-plugins/kafka';
+ *
  * const lineage = extractBatchLineage(batch, { maxLinks: 50 });
  *
  * await withProcessingSpan({
@@ -101,7 +108,8 @@ function isValidSpanContext(
  *   topic: 'settlements',
  *   consumerGroup: 'batcher',
  * }, async (span) => {
- *   span.setAttribute('linked_trace_id_count', lineage.linked_trace_id_count);
+ *   span.setAttribute(SEMATTRS_LINKED_TRACE_ID_COUNT, lineage.linked_trace_id_count);
+ *   span.setAttribute(SEMATTRS_LINKED_TRACE_ID_HASH, lineage.linked_trace_id_hash);
  *   await processSettlement(batch);
  * });
  * ```
@@ -109,7 +117,7 @@ function isValidSpanContext(
 export async function withProcessingSpan<T>(
   descriptor: ProcessingDescriptor,
   fn: ProcessingSpanCallback<T>,
-): AsyncResult<T, SpanError> {
+): Promise<T> {
   const {
     name,
     headers,
@@ -122,63 +130,59 @@ export async function withProcessingSpan<T>(
     key,
   } = descriptor;
 
+  const tracer = trace.getTracer(DEFAULT_TRACER_NAME);
+  const normalizedHeaders = normalizeHeaders(headers);
+  const extractedCtx = extractTraceContext(normalizedHeaders);
+  const extractedSpanContext = trace.getSpanContext(extractedCtx);
+
+  // Determine parent context and links based on context mode
+  const { parentContext, spanLinks } = resolveContextAndLinks(
+    contextMode,
+    extractedSpanContext,
+    links,
+  );
+
+  // Create span with computed parent and links
+  const span = tracer.startSpan(
+    name,
+    {
+      kind: SpanKind.CONSUMER,
+      links: spanLinks,
+    },
+    parentContext,
+  );
+
+  // Set messaging attributes
+  setMessagingAttributes(span, {
+    topic,
+    consumerGroup,
+    partition,
+    offset,
+    key,
+  });
+
+  // Execute callback within span context
+  const spanContext = trace.setSpan(context.active(), span);
+
   try {
-    const tracer = trace.getTracer(DEFAULT_TRACER_NAME);
-    const normalizedHeaders = normalizeHeaders(headers);
-    const extractedCtx = extractTraceContext(normalizedHeaders);
-    const extractedSpanContext = trace.getSpanContext(extractedCtx);
-
-    // Determine parent context and links based on context mode
-    const { parentContext, spanLinks } = resolveContextAndLinks(
-      contextMode,
-      extractedSpanContext,
-      links,
-    );
-
-    // Create span with computed parent and links
-    const span = tracer.startSpan(
-      name,
-      {
-        kind: SpanKind.CONSUMER,
-        links: spanLinks,
-      },
-      parentContext,
-    );
-
-    // Set messaging attributes
-    setMessagingAttributes(span, {
-      topic,
-      consumerGroup,
-      partition,
-      offset,
-      key,
+    const result = await context.with(spanContext, async () => {
+      return await fn(span);
     });
 
-    // Execute callback within span context
-    const spanContext = trace.setSpan(context.active(), span);
+    span.setStatus({ code: SpanStatusCode.OK });
+    span.end();
 
-    try {
-      const result = await context.with(spanContext, async () => {
-        return await fn(span);
-      });
-
-      span.setStatus({ code: SpanStatusCode.OK });
-      span.end();
-
-      return ok(result);
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR });
-      if (error instanceof Error) {
-        span.recordException(error);
-      } else {
-        span.recordException(new Error(String(error)));
-      }
-      span.end();
-
-      return err({ type: 'CALLBACK_ERROR', cause: error });
-    }
+    return result;
   } catch (error) {
-    return err({ type: 'SPAN_CREATION_FAILED', cause: error });
+    span.setStatus({ code: SpanStatusCode.ERROR });
+    if (error instanceof Error) {
+      span.recordException(error);
+    } else {
+      span.recordException(new Error(String(error)));
+    }
+    span.end();
+
+    throw error;
   }
 }
 

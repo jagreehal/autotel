@@ -7,6 +7,7 @@
 - e62eb75: - **autotel-plugins**: Add BigQuery and Kafka plugins.
   - **BigQuery**: OpenTelemetry instrumentation for `@google-cloud/bigquery` (query, insert, load, copy, extract, job tracking; optional query sanitization and GCP semantic attributes). No official OTel support; optional peer dependency.
   - **Kafka**: Composition layer for use with `@opentelemetry/instrumentation-kafkajs`: processing span wrapper with context mode (inherit/link/none), batch lineage for fan-in trace correlation, and correlation ID policy. Re-exports messaging constants and helpers from `common/constants`.
+  - **Kafka batch consumer** (`withBatchConsumer`): Per-message spans in `perMessageSpans: 'all'` use extracted trace context from message headers when valid (trace continuation), otherwise parent to the batch span; all per-message spans are ended on batch success (including unresolved/skipped messages). When `perMessageSpans: 'errors'` and the handler throws, a per-message error span is created for the first message. Use `createMessageErrorSpan` in error handlers for per-message error spans.
   - **autotel**: Version alignment with autotel-plugins.
 
 ### Patch Changes

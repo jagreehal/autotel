@@ -35,13 +35,40 @@
  * @module autotel-terminal
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { render, Box, Text, useInput, useStdin } from 'ink';
 import type { TerminalSpanEvent, TerminalSpanStream } from './span-stream';
 import { StreamingSpanProcessor } from './streaming-processor';
 import { createTerminalSpanStream } from './span-stream';
 import { getAutotelTracerProvider } from 'autotel/tracer-provider';
 import type { TracerProvider } from '@opentelemetry/api';
+import {
+  buildTraceMap,
+  buildTraceSummaries,
+  buildTraceTree,
+  flattenTraceTree,
+  filterBySearch,
+  filterTraceSummaries,
+  computeStats,
+  computePerSpanNameStats,
+  sortSpansForWaterfall,
+} from './lib/trace-model';
+import { formatDurationMs, formatRelative, truncate } from './lib/format';
+import type { SpanTreeNode } from './lib/trace-model';
+
+/** Key attribute keys to show first (autotel / OTel conventions) */
+const KEY_ATTR_KEYS = new Set([
+  'http.route',
+  'http.method',
+  'db.operation',
+  'db.statement',
+  'db.system',
+  'code.function',
+  'code.filepath',
+  'code.lineno',
+  'user.id',
+  'order.id',
+]);
 
 /**
  * Terminal dashboard options
@@ -72,17 +99,9 @@ export interface TerminalOptions {
   colors?: boolean;
 }
 
-// Helper for rendering duration
-function ms(n: number): string {
-  if (n < 1000) return `${n.toFixed(0)}ms`;
-  return `${(n / 1000).toFixed(2)}s`;
-}
-
-// Helper for truncating strings
-function truncate(s: string, width: number): string {
-  if (s.length <= width) return s;
-  return s.slice(0, Math.max(0, width - 1)) + '…';
-}
+const THROTTLE_MS = 50;
+const MAX_TRACES = 50;
+const NEW_ERROR_DISPLAY_MS = 2000;
 
 interface DashboardProps {
   title: string;
@@ -103,64 +122,230 @@ function Dashboard({
   const [spans, setSpans] = useState<TerminalSpanEvent[]>([]);
   const [selected, setSelected] = useState(0);
   const [filterErrorsOnly, setFilterErrorsOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
+  const [viewMode, setViewMode] = useState<'trace' | 'span'>('trace');
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [selectedSpanIndex, setSelectedSpanIndex] = useState(0);
+  const [newErrorCount, setNewErrorCount] = useState(0);
+  const [searchMode, setSearchMode] = useState(false);
+  const throttleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSpansRef = useRef<TerminalSpanEvent[]>([]);
 
   useEffect(() => {
-    const unsubscribe = stream.onSpanEnd((span) => {
-      if (paused) return;
+    const flush = () => {
+      const batch = pendingSpansRef.current;
+      pendingSpansRef.current = [];
+      if (batch.length === 0) return;
       setSpans((prev) => {
-        const next = [span, ...prev];
+        const next = [...batch, ...prev];
         return next.slice(0, maxSpans);
       });
       setSelected(0);
+      setSelectedTraceId(null);
+    };
+    const unsubscribe = stream.onSpanEnd((span) => {
+      if (paused) return;
+      if (span.status === 'ERROR') {
+        setNewErrorCount((n) => n + 1);
+        setTimeout(() => setNewErrorCount((n) => Math.max(0, n - 1)), NEW_ERROR_DISPLAY_MS);
+      }
+      pendingSpansRef.current = [span, ...pendingSpansRef.current];
+      if (throttleRef.current) return;
+      throttleRef.current = setTimeout(() => {
+        throttleRef.current = null;
+        flush();
+      }, THROTTLE_MS);
     });
-    return unsubscribe;
+    return () => {
+      if (throttleRef.current) clearTimeout(throttleRef.current);
+      unsubscribe();
+    };
   }, [stream, paused, maxSpans]);
 
-  const filtered = useMemo(() => {
-    const list = filterErrorsOnly
-      ? spans.filter((s) => s.status === 'ERROR')
-      : spans;
-    return list;
-  }, [spans, filterErrorsOnly]);
+  const traceMap = useMemo(
+    () => buildTraceMap(spans, MAX_TRACES),
+    [spans],
+  );
+  const traceSummaries = useMemo(
+    () => buildTraceSummaries(traceMap),
+    [traceMap],
+  );
+  const filteredSummaries = useMemo(
+    () => filterTraceSummaries(traceSummaries, searchQuery, filterErrorsOnly),
+    [traceSummaries, searchQuery, filterErrorsOnly],
+  );
+  const filteredSpans = useMemo(
+    () => filterBySearch(spans, searchQuery, filterErrorsOnly),
+    [spans, searchQuery, filterErrorsOnly],
+  );
 
-  const stats = useMemo(() => {
-    const total = spans.length;
-    const errors = spans.filter((s) => s.status === 'ERROR').length;
-    const avg = total
-      ? spans.reduce((a, s) => a + s.durationMs, 0) / total
-      : 0;
-    const p95 = total
-      ? (() => {
-          const sorted = spans.map((s) => s.durationMs).toSorted((a, b) => a - b);
-          return sorted[Math.floor(sorted.length * 0.95)] ?? 0;
-        })()
-      : 0;
-    return { total, errors, avg, p95 };
-  }, [spans]);
+  const stats = useMemo(() => computeStats(spans), [spans]);
+  const perSpanNameStats = useMemo(() => computePerSpanNameStats(spans), [spans]);
 
-  const current = filtered[selected];
+  const selectedTraceSummary =
+    selectedTraceId == null
+      ? filteredSummaries[selected] ?? null
+      : filteredSummaries.find((t) => t.traceId === selectedTraceId) ?? null;
+  const traceTree =
+    selectedTraceSummary == null
+      ? []
+      : flattenTraceTree(buildTraceTree(selectedTraceSummary.spans));
+  const waterfallSpans =
+    selectedTraceSummary == null
+      ? []
+      : sortSpansForWaterfall(selectedTraceSummary.spans);
 
-  // Check if raw mode is supported (needed for keyboard input)
+  const currentSpanInTrace =
+    traceTree[selectedSpanIndex] ?? null;
+  const currentSpanInFlat =
+    filteredSpans[selected] ?? null;
+  const selectedTraceSummaryForDetails =
+    viewMode === 'trace' && selectedTraceId == null && filteredSummaries[selected]
+      ? filteredSummaries[selected]!
+      : null;
+  const rootSpanOfSelectedTrace =
+    selectedTraceSummaryForDetails != null && selectedTraceSummaryForDetails.spans.length > 0
+      ? selectedTraceSummaryForDetails.spans.find(
+          (s) =>
+            !selectedTraceSummaryForDetails.spans.some(
+              (p) => p.spanId === s.parentSpanId,
+            ),
+        ) ?? selectedTraceSummaryForDetails.spans[0]
+      : null;
+  const currentSpan =
+    viewMode === 'trace'
+      ? selectedTraceId == null
+        ? rootSpanOfSelectedTrace ?? null
+        : currentSpanInTrace?.span ?? null
+      : currentSpanInFlat;
+
   const { isRawModeSupported } = useStdin();
 
   useInput(
     (input, key) => {
-      if (key.upArrow) setSelected((i) => Math.max(0, i - 1));
-      if (key.downArrow)
-        setSelected((i) => Math.min(filtered.length - 1, i + 1));
-
+      if (showHelp && input !== '?') {
+        if (input === '?') setShowHelp(false);
+        return;
+      }
+      if (input === '?') {
+        setShowHelp((h) => !h);
+        return;
+      }
+      if (input === '/') {
+        setSearchMode((m) => !m);
+        if (searchMode) setSearchQuery('');
+        return;
+      }
+      if (searchMode) {
+        if (key.backspace || key.delete) {
+          setSearchQuery((q) => q.slice(0, -1));
+        } else if (key.return) {
+          setSearchMode(false);
+        } else if (input && input.length === 1 && !key.ctrl && !key.meta) {
+          setSearchQuery((q) => q + input);
+        }
+        return;
+      }
+      if (key.escape) {
+        if (viewMode === 'trace' && selectedTraceId != null) {
+          setSelectedTraceId(null);
+          setSelectedSpanIndex(0);
+        } else {
+          setSearchMode(false);
+        }
+        return;
+      }
+      if (key.return && viewMode === 'trace' && selectedTraceId == null && filteredSummaries[selected]) {
+        setSelectedTraceId(filteredSummaries[selected]!.traceId);
+        setSelectedSpanIndex(0);
+        return;
+      }
+      if (key.upArrow) {
+        if (viewMode === 'trace') {
+          if (selectedTraceId != null && traceTree.length > 0) {
+            setSelectedSpanIndex((i) => Math.max(0, i - 1));
+          } else {
+            setSelected((i) => Math.max(0, i - 1));
+            setSelectedSpanIndex(0);
+          }
+        } else {
+          setSelected((i) => Math.max(0, i - 1));
+        }
+      }
+      if (key.downArrow) {
+        if (viewMode === 'trace') {
+          if (selectedTraceId != null && selectedSpanIndex < traceTree.length - 1) {
+            setSelectedSpanIndex((i) => Math.min(traceTree.length - 1, i + 1));
+          } else if (selectedTraceId != null && traceTree.length > 0 && selectedSpanIndex >= traceTree.length - 1) {
+            const nextIdx = filteredSummaries.findIndex((t) => t.traceId === selectedTraceId) + 1;
+            if (nextIdx < filteredSummaries.length) {
+              setSelected(nextIdx);
+              setSelectedTraceId(filteredSummaries[nextIdx]!.traceId);
+              setSelectedSpanIndex(0);
+            }
+          } else if (selectedTraceId == null) {
+            setSelected((i) => Math.min(filteredSummaries.length - 1, i + 1));
+            setSelectedSpanIndex(0);
+          }
+        } else {
+          setSelected((i) => Math.min(filteredSpans.length - 1, i + 1));
+        }
+      }
       if (input === 'p') setPaused((p) => !p);
       if (input === 'e') setFilterErrorsOnly((v) => !v);
-
+      if (input === 't') {
+        setViewMode((m) => (m === 'trace' ? 'span' : 'trace'));
+        setSelected(0);
+        setSelectedTraceId(null);
+        setSelectedSpanIndex(0);
+      }
       if (input === 'c') {
         setSpans([]);
         setSelected(0);
+        setSelectedTraceId(null);
+        setSelectedSpanIndex(0);
+        setNewErrorCount(0);
       }
     },
     { isActive: isRawModeSupported },
   );
 
   const headerRight = paused ? '[Paused]' : '[Live]';
+  const showNewError = newErrorCount > 0;
+
+  function renderTreeRow(node: SpanTreeNode, index: number): React.ReactElement {
+    const isSel = viewMode === 'trace' && selectedTraceId != null && index === selectedSpanIndex;
+    const prefix =
+      node.depth === 0 ? '' : '  '.repeat(node.depth) + (node.children.length > 0 ? '├── ' : '└── ');
+    const statusColor =
+      node.span.status === 'ERROR' ? 'red' : node.span.durationMs > 500 ? 'yellow' : 'green';
+    return (
+      <Box key={`${node.span.spanId}-${node.span.startTime}`} flexDirection="row">
+        <Text color={isSel ? 'cyan' : undefined}>{isSel ? '› ' : '  '}</Text>
+        <Text dimColor>{prefix}</Text>
+        <Text color={colors ? statusColor : undefined}>
+          {truncate(node.span.name, 24)}
+        </Text>
+        <Text dimColor> {formatDurationMs(node.span.durationMs)}</Text>
+      </Box>
+    );
+  }
+
+  function keyAttrsAndRest(attrs: Record<string, unknown> | undefined) {
+    if (!attrs || Object.keys(attrs).length === 0)
+      return { key: [] as [string, unknown][], rest: [] as [string, unknown][] };
+    const entries = Object.entries(attrs);
+    const key = entries.filter(([k]) => KEY_ATTR_KEYS.has(k));
+    const rest = entries.filter(([k]) => !KEY_ATTR_KEYS.has(k));
+    return { key, rest };
+  }
+
+  const waterfallMaxMs =
+    waterfallSpans.length > 0
+      ? Math.max(...waterfallSpans.map((w) => w.span.durationMs))
+      : 1;
+  const barWidth = 30;
 
   return (
     <Box
@@ -169,25 +354,46 @@ function Dashboard({
       padding={1}
       borderColor={colors ? 'cyan' : undefined}
     >
-      {/* Header */}
       <Box justifyContent="space-between" marginBottom={1}>
         <Text key="title" bold>🔭 {title}</Text>
-        <Text key="status" color={paused ? 'yellow' : 'green'}>{headerRight}</Text>
+        <Box flexDirection="row" gap={1}>
+          {showNewError && (
+            <Text key="newError" color="red">1 new error</Text>
+          )}
+          <Text key="status" color={paused ? 'yellow' : 'green'}>{headerRight}</Text>
+        </Box>
       </Box>
 
-      {/* Help / controls */}
-      <Box marginBottom={1} flexDirection="row" justifyContent="space-between">
-        <Text key="controls" dimColor>
-          ↑/↓ select • p pause • e errors-only • c clear • Ctrl+C exit
-        </Text>
-        <Text key="count" dimColor>
-          showing {filtered.length}/{spans.length}
-        </Text>
-      </Box>
+      {showHelp ? (
+        <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginBottom={1}>
+          <Text bold>Shortcuts</Text>
+          <Text dimColor>↑/↓   Select trace or span</Text>
+          <Text dimColor>Enter  Open trace (trace view)</Text>
+          <Text dimColor>Esc    Back to trace list / exit search</Text>
+          <Text dimColor>t      Toggle trace view / span list</Text>
+          <Text dimColor>/      Search by name</Text>
+          <Text dimColor>p      Pause / resume</Text>
+          <Text dimColor>e      Errors only</Text>
+          <Text dimColor>c      Clear all</Text>
+          <Text dimColor>?      This help</Text>
+          <Text dimColor>Ctrl+C Exit</Text>
+        </Box>
+      ) : (
+        <Box marginBottom={1} flexDirection="row" justifyContent="space-between">
+          {searchMode ? (
+            <Text key="search" color="cyan">Search: {searchQuery || '(type to filter)'}</Text>
+          ) : (
+            <Text key="controls" dimColor>
+              ↑/↓ select • Enter open • Esc back • t view • / search • p pause • e errors • c clear • ? help
+            </Text>
+          )}
+          <Text key="count" dimColor>
+            {viewMode === 'trace' ? `traces ${filteredSummaries.length}/${traceSummaries.length}` : `spans ${filteredSpans.length}/${spans.length}`}
+          </Text>
+        </Box>
+      )}
 
-      {/* Main content: list + details */}
       <Box flexDirection="row" gap={2}>
-        {/* List */}
         <Box
           flexDirection="column"
           width="55%"
@@ -197,42 +403,63 @@ function Dashboard({
           paddingY={0}
         >
           <Box marginTop={0} marginBottom={1}>
-            <Text key="recent-spans-title" bold>Recent spans</Text>
+            <Text key="list-title" bold>
+              {viewMode === 'trace' ? 'Recent traces' : 'Recent spans'}
+            </Text>
             {filterErrorsOnly && <Text key="errors-only-label" color="red"> (errors only)</Text>}
+            {searchQuery && <Text key="search-label" dimColor> /{searchQuery}</Text>}
           </Box>
 
-          {filtered.length === 0 ? (
-            <Text dimColor>No spans yet. Generate some traffic…</Text>
+          {viewMode === 'trace' ? (
+            filteredSummaries.length === 0 ? (
+              <Box flexDirection="column">
+                <Text dimColor>No traces yet. Call a traced function or hit an endpoint to see them here.</Text>
+                <Text dimColor>Tip: trace() your handlers with autotel to get spans.</Text>
+              </Box>
+            ) : (
+              <>
+                {selectedTraceId == null
+                  ? filteredSummaries.slice(0, 20).map((t, i) => {
+                      const isSel = i === selected;
+                      return (
+                        <Box key={t.traceId} flexDirection="row">
+                          <Text color={isSel ? 'cyan' : undefined}>{isSel ? '› ' : '  '}</Text>
+                          <Text color={t.hasError ? 'red' : undefined}>
+                            {truncate(t.rootName, 20)}
+                          </Text>
+                          <Text dimColor> {formatDurationMs(t.durationMs)}</Text>
+                          <Text dimColor> {truncate(t.traceId, 8)}</Text>
+                          <Text dimColor> {formatRelative(t.lastEndTime)}</Text>
+                        </Box>
+                      );
+                    })
+                  : traceTree.slice(0, 20).map((node, i) => renderTreeRow(node, i))}
+              </>
+            )
+          ) : filteredSpans.length === 0 ? (
+            <Box flexDirection="column">
+              <Text dimColor>No spans yet. Call a traced function or hit an endpoint to see them here.</Text>
+              <Text dimColor>Tip: trace() your handlers with autotel to get spans.</Text>
+            </Box>
           ) : (
-            filtered.slice(0, 20).map((s, i) => {
+            filteredSpans.slice(0, 20).map((s, i) => {
               const isSel = i === selected;
               const statusColor =
-                s.status === 'ERROR'
-                  ? 'red'
-                  : s.durationMs > 500
-                    ? 'yellow'
-                    : 'green';
-
-              // Use compound key to ensure uniqueness (spanId + startTime)
-              const uniqueKey = `${s.spanId}-${s.startTime}`;
-
+                s.status === 'ERROR' ? 'red' : s.durationMs > 500 ? 'yellow' : 'green';
               return (
-                <Box key={uniqueKey} flexDirection="row">
-                  <Text color={isSel ? 'cyan' : undefined}>
-                    {isSel ? '› ' : '  '}
-                  </Text>
+                <Box key={`${s.spanId}-${s.startTime}`} flexDirection="row">
+                  <Text color={isSel ? 'cyan' : undefined}>{isSel ? '› ' : '  '}</Text>
                   <Text color={colors ? statusColor : undefined}>
                     {truncate(s.name, 26)}
                   </Text>
-                  <Text dimColor> {ms(s.durationMs)}</Text>
-                  <Text dimColor> {truncate(s.traceId, 10)}</Text>
+                  <Text dimColor> {formatDurationMs(s.durationMs)}</Text>
+                  <Text dimColor> {formatRelative(s.endTime)}</Text>
                 </Box>
               );
             })
           )}
         </Box>
 
-        {/* Details */}
         <Box
           flexDirection="column"
           width="45%"
@@ -245,57 +472,97 @@ function Dashboard({
             <Text bold>Details</Text>
           </Box>
 
-          {current ? (
+          {currentSpan ? (
             <>
               <Text>
                 <Text dimColor>Name: </Text>
-                <Text>{current.name}</Text>
+                <Text>{currentSpan.name}</Text>
               </Text>
               <Text>
                 <Text dimColor>Status: </Text>
-                <Text color={current.status === 'ERROR' ? 'red' : 'green'}>
-                  {current.status}
+                <Text color={currentSpan.status === 'ERROR' ? 'red' : 'green'}>
+                  {currentSpan.status}
                 </Text>
               </Text>
               <Text>
                 <Text dimColor>Duration: </Text>
-                <Text>{ms(current.durationMs)}</Text>
+                <Text>
+                  {formatDurationMs(currentSpan.durationMs)}
+                  {perSpanNameStats.byName.has(currentSpan.name) && (() => {
+                    const p = perSpanNameStats.byName.get(currentSpan.name)!;
+                    const ratio = p.avgMs > 0 ? currentSpan.durationMs / p.avgMs : 1;
+                    if (ratio >= 1.5) return ` (${ratio.toFixed(1)}x avg)`;
+                    return '';
+                  })()}
+                </Text>
               </Text>
-              <Text dimColor>Trace: {current.traceId}</Text>
-              <Text dimColor>Span: {current.spanId}</Text>
-              {current.parentSpanId && (
-                <Text dimColor>Parent: {current.parentSpanId}</Text>
+              <Text dimColor>Trace: {currentSpan.traceId}</Text>
+              <Text dimColor>Span: {currentSpan.spanId}</Text>
+              {currentSpan.parentSpanId && (
+                <Text dimColor>Parent: {currentSpan.parentSpanId}</Text>
               )}
-              {current.kind && <Text dimColor>Kind: {current.kind}</Text>}
+              {currentSpan.kind && <Text dimColor>Kind: {currentSpan.kind}</Text>}
 
-              <Box marginTop={1} flexDirection="column">
-                <Text bold>Attributes</Text>
-                {current.attributes &&
-                Object.keys(current.attributes).length > 0 ? (
-                  Object.entries(current.attributes)
-                    .slice(0, 12)
-                    .map(([k, v]) => (
-                      <Text key={k} dimColor>
-                        {truncate(k, 22)}: {truncate(String(v), 34)}
-                      </Text>
-                    ))
-                ) : (
-                  <Text dimColor>(none)</Text>
-                )}
-              </Box>
+              {(() => {
+                const { key: keyAttrs, rest: restAttrs } = keyAttrsAndRest(currentSpan.attributes);
+                return (
+                  <>
+                    {keyAttrs.length > 0 && (
+                      <Box marginTop={1} flexDirection="column">
+                        <Text bold>Key attributes</Text>
+                        {keyAttrs.slice(0, 6).map(([k, v]) => (
+                          <Text key={k} dimColor>
+                            {truncate(k, 18)}: {truncate(String(v), 28)}
+                          </Text>
+                        ))}
+                      </Box>
+                    )}
+                    {restAttrs.length > 0 && (
+                      <Box marginTop={1} flexDirection="column">
+                        <Text bold>Attributes</Text>
+                        {restAttrs.slice(0, 8).map(([k, v]) => (
+                          <Text key={k} dimColor>
+                            {truncate(k, 18)}: {truncate(String(v), 28)}
+                          </Text>
+                        ))}
+                      </Box>
+                    )}
+                    {keyAttrs.length === 0 && restAttrs.length === 0 && (
+                      <Text dimColor>(no attributes)</Text>
+                    )}
+                  </>
+                );
+              })()}
+
+              {waterfallSpans.length > 0 && selectedTraceId != null && (
+                <Box marginTop={1} flexDirection="column">
+                  <Text bold>Waterfall</Text>
+                  {waterfallSpans.slice(0, 10).map((w) => {
+                    const barLen = Math.round((w.span.durationMs / waterfallMaxMs) * barWidth) || 1;
+                    const bar = '█'.repeat(barLen);
+                    const indent = '  '.repeat(w.depth);
+                    return (
+                      <Box key={w.span.spanId} flexDirection="row">
+                        <Text dimColor>{indent}</Text>
+                        <Text>{truncate(w.span.name, 12)}</Text>
+                        <Text dimColor> {bar}</Text>
+                        <Text dimColor> {formatDurationMs(w.span.durationMs)}</Text>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
             </>
           ) : (
-            <Text dimColor>Select a span to view details.</Text>
+            <Text dimColor>Select a trace or span to view details.</Text>
           )}
         </Box>
       </Box>
 
-      {/* Stats bar */}
       {showStats && (
         <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
           <Text dimColor>
-            Spans: {stats.total} | Errors: {stats.errors} | Avg: {ms(stats.avg)}{' '}
-            | P95: {ms(stats.p95)}
+            Spans: {stats.total} | Errors: {stats.errors} | Avg: {formatDurationMs(stats.avg)} | P95: {formatDurationMs(stats.p95)}
           </Text>
         </Box>
       )}

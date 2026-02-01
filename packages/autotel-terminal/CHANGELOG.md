@@ -2,6 +2,17 @@
 
 ## 9.0.0
 
+### Minor Changes
+
+- **Trace-first UI** — Group spans by trace; "Recent traces" list with root span name, duration, short trace ID, relative time; error badge when any span in the trace failed. Enter opens a trace to show its span tree (ASCII parent/child); Esc goes back. Toggle with `t` between trace view and flat span list.
+- **Search and filter** — Press `/` to filter by span name; type to narrow. Combines with existing error-only filter (`e`).
+- **Empty state and help** — Friendly empty message when no traces yet; `?` toggles help overlay with all shortcuts.
+- **Relative time and error prominence** — "just now" / "2s ago" / "1m ago" next to traces/spans; "new error" indicator when a failed span appears.
+- **Waterfall** — For the selected trace, details panel shows a simple duration waterfall (one row per span, horizontal bar by duration, indented by depth).
+- **autotel attribute hints** — In span details, key attributes (`http.route`, `db.operation`, `code.function`, etc.) are shown first, then the rest.
+- **Performance** — Throttled span updates to avoid UI jank when many spans arrive quickly.
+- **Testing** — Pure logic in `src/lib/trace-model.ts` and `src/lib/format.ts` with unit tests; trace map, tree, filter, stats, relative time, waterfall sort.
+
 ### Patch Changes
 
 - Updated dependencies [e62eb75]

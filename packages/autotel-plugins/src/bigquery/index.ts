@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Note: `any` is only used for dynamic method wrapping on runtime objects.
 // Type-safe interfaces are used for all public APIs.
+// BigQuery is a devDependency so we type-check against the real API; consumers use the peer.
 
+import type { BigQuery, BigQueryOptions } from '@google-cloud/bigquery';
 import { SpanKind, otelTrace as trace, type Span, type Tracer } from 'autotel';
 import {
   SEMATTRS_DB_SYSTEM_NAME,
@@ -79,19 +81,9 @@ function getInstanceTracer(instance: any): Tracer | undefined {
 }
 
 /**
- * Configuration options for BigQuery instrumentation.
+ * Plugin-only options for BigQuery instrumentation (not part of official BigQueryOptions).
  */
-export interface BigQueryInstrumentationConfig {
-  /**
-   * GCP Project ID. If not provided, will be extracted from the BigQuery instance.
-   */
-  projectId?: string;
-
-  /**
-   * Default location (e.g., 'US', 'EU'). If not provided, will use instance default.
-   */
-  location?: string;
-
+export interface BigQueryInstrumentationPluginOptions {
   /**
    * Custom tracer name (default: "autotel-plugins/bigquery").
    */
@@ -137,6 +129,17 @@ export interface BigQueryInstrumentationConfig {
    */
   instrumentRoutineOps?: boolean;
 }
+
+/**
+ * Configuration options for BigQuery instrumentation.
+ * Uses official BigQueryOptions for projectId and location (same semantics as the BigQuery constructor).
+ * All other fields are plugin-only options.
+ */
+export type BigQueryInstrumentationConfig = Pick<
+  BigQueryOptions,
+  'projectId' | 'location'
+> &
+  BigQueryInstrumentationPluginOptions;
 
 /**
  * Creates a simple hash of a string for query identification without exposing text.
@@ -1440,15 +1443,18 @@ function instrumentTableDelete(Table: any): void {
  * ```
  */
 export function instrumentBigQuery(
-  bigquery: any,
+  bigquery: BigQuery,
   config?: BigQueryInstrumentationConfig,
-): typeof bigquery {
+): BigQuery {
   if (!bigquery) {
     return bigquery;
   }
 
+  // Use any for internal storage and prototype patching; public API remains BigQuery-typed
+  const bq = bigquery as any;
+
   // Check if already instrumented
-  if (bigquery[INSTRUMENTED_FLAG]) {
+  if (bq[INSTRUMENTED_FLAG]) {
     return bigquery;
   }
 
@@ -1467,11 +1473,11 @@ export function instrumentBigQuery(
   const tracer = trace.getTracer(finalConfig.tracerName);
 
   // Store config and tracer on this instance for per-instance customization
-  bigquery[CONFIG_STORAGE_KEY] = finalConfig;
-  bigquery[TRACER_STORAGE_KEY] = tracer;
+  bq[CONFIG_STORAGE_KEY] = finalConfig;
+  bq[TRACER_STORAGE_KEY] = tracer;
 
   // Get the BigQuery class constructor
-  const BigQuery = bigquery.constructor;
+  const BigQuery = bq.constructor;
 
   // Only patch prototypes once globally (prevent double-wrapping)
   if (!BigQuery[PROTOTYPE_INSTRUMENTED_FLAG]) {
@@ -1481,10 +1487,10 @@ export function instrumentBigQuery(
     instrumentBigQueryCreateDataset(BigQuery);
 
     // Instrument Dataset operations (always patch, check config at runtime)
-    if (bigquery.dataset) {
+    if (bq.dataset) {
       try {
         // Get Dataset class from a temporary instance
-        const tempDataset = bigquery.dataset('__temp__');
+        const tempDataset = bq.dataset('__temp__');
         const Dataset = tempDataset.constructor;
 
         instrumentDatasetCreate(Dataset);
@@ -1498,9 +1504,9 @@ export function instrumentBigQuery(
     }
 
     // Instrument Table operations
-    if (bigquery.dataset) {
+    if (bq.dataset) {
       try {
-        const tempDataset = bigquery.dataset('__temp__');
+        const tempDataset = bq.dataset('__temp__');
         const tempTable = tempDataset.table('__temp__');
         const Table = tempTable.constructor;
 
@@ -1524,9 +1530,9 @@ export function instrumentBigQuery(
     }
 
     // Instrument Job operations
-    if (bigquery.job) {
+    if (bq.job) {
       try {
-        const tempJob = bigquery.job('__temp__');
+        const tempJob = bq.job('__temp__');
         const Job = tempJob.constructor;
 
         instrumentJobGetQueryResults(Job);
@@ -1543,7 +1549,7 @@ export function instrumentBigQuery(
   }
 
   // Mark this instance as instrumented
-  bigquery[INSTRUMENTED_FLAG] = true;
+  bq[INSTRUMENTED_FLAG] = true;
 
   return bigquery;
 }
@@ -1555,7 +1561,7 @@ export function instrumentBigQuery(
 export class BigQueryInstrumentation {
   constructor(private config?: BigQueryInstrumentationConfig) {}
 
-  enable(bigquery: any): void {
+  enable(bigquery: BigQuery): void {
     instrumentBigQuery(bigquery, this.config);
   }
 }

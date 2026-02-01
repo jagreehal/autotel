@@ -1,22 +1,23 @@
 # autotel-terminal
 
-**Terminal dashboard for viewing OpenTelemetry traces in real-time** - Beautiful react-ink powered dashboard for live trace inspection during development.
+**Terminal trace viewer for autotel** — React Ink–powered dashboard for live trace inspection during development. Zero setup, trace-first, autotel-only.
 
 [![npm version](https://badge.fury.io/js/autotel-terminal.svg)](https://www.npmjs.com/package/autotel-terminal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-`autotel-terminal` provides a beautiful, interactive terminal dashboard for viewing OpenTelemetry traces in real-time. Perfect for development and debugging, it displays spans as they're created with live statistics, filtering, and detailed span inspection.
+`autotel-terminal` is a terminal-native trace viewer for **autotel**. It streams OpenTelemetry spans from your app and shows them as traces: recent traces list, span tree per trace, search, and a simple waterfall. Built for local development—no browser, no extra backends.
 
 ### Features
 
-- ✅ **Real-time span streaming** - See traces as they happen
-- ✅ **Interactive dashboard** - Navigate spans with keyboard controls
-- ✅ **Error filtering** - Focus on failed operations
-- ✅ **Live statistics** - Span count, error rate, P95 latency
-- ✅ **Span details** - View attributes, trace IDs, parent relationships
-- ✅ **Simple setup** - Just add a streaming processor to your config
+- ✅ **Trace-first UI** — Recent traces list; open a trace to see its span tree (parent/child)
+- ✅ **Real-time streaming** — Spans appear as they complete; optional pause/resume
+- ✅ **Search** — Filter by span name (`/`); combine with error-only filter (`e`)
+- ✅ **Span details** — Key attributes first (e.g. `http.route`, `db.operation`); full list + waterfall for selected trace
+- ✅ **Relative time & errors** — "2s ago" labels; error badge and new-error indicator
+- ✅ **Help overlay** — `?` shows all shortcuts
+- ✅ **Simple setup** — Add `StreamingSpanProcessor` to autotel and call `renderTerminal()`
 
 ## Installation
 
@@ -116,29 +117,47 @@ renderTerminal(
 
 Once the dashboard is running, use these keyboard controls:
 
-- **↑/↓** - Navigate through spans
+- **↑/↓** - Navigate traces or spans
+- **Enter** - Open selected trace (trace view) to see span tree
+- **Esc** - Back to trace list or exit search
+- **`t`** - Toggle trace view / span list
+- **`/`** - Search by span name (type to filter)
 - **`p`** - Pause/resume live updates
 - **`e`** - Toggle error-only filter
 - **`c`** - Clear all spans
+- **`?`** - Show help overlay
 - **Ctrl+C** - Exit dashboard
 
 ## Dashboard Features
 
-### Span List
+### Trace View (default)
 
-The left panel shows recent spans with:
-- Span name (truncated to fit)
-- Duration (color-coded: green < 500ms, yellow > 500ms, red = error)
-- Trace ID (first 10 characters)
+The left panel shows **recent traces** (grouped by trace ID):
+- Root span name, duration, trace ID (short), relative time ("2s ago")
+- Error badge when any span in the trace failed
+- **Enter** to open a trace and see its **span tree** (ASCII parent-child: ├──, └──)
+- **Esc** to go back to the trace list
+
+### Span List (toggle with `t`)
+
+Flat list of recent spans with:
+- Span name (truncated), duration (color-coded: green < 500ms, yellow > 500ms, red = error)
+- Relative time
 - Selection indicator (cyan `›`)
+
+### Search
+
+Press **`/`** to filter by span name. Type to narrow; **Esc** to clear.
 
 ### Span Details
 
 The right panel shows detailed information for the selected span:
-- Name, status, duration
+- Name, status, duration (with "Nx avg" when slower than average for that span name)
 - Trace ID, Span ID, Parent Span ID
 - Span kind (INTERNAL, SERVER, CLIENT, etc.)
-- Attributes (first 12 attributes)
+- **Key attributes** (http.route, db.operation, code.function, etc.) first
+- Remaining attributes
+- **Waterfall** for the selected trace (when a trace is open): horizontal bars by duration
 
 ### Statistics Bar
 
@@ -334,7 +353,7 @@ stream.onSpanEnd((event) => {
 
 ## Integration with autotel
 
-`autotel-terminal` works seamlessly with `autotel`. Just include the `StreamingSpanProcessor` in your `spanProcessors` array:
+`autotel-terminal` is built for **autotel**. It auto-wires to the global tracer provider and expects `StreamingSpanProcessor` in your `spanProcessors` array:
 
 ```typescript
 import { init } from 'autotel';
@@ -370,10 +389,22 @@ renderTerminal({}, stream);
 
 ## Limitations
 
-- **Development only** - Not designed for production use
-- **TTY required** - Colors and interactivity require a terminal
-- **Memory** - Keeps spans in memory (limited by `maxSpans` option)
-- **Single instance** - Only one dashboard can run at a time
+- **Development only** — Not designed for production use
+- **TTY required** — Colors and interactivity require a terminal
+- **Memory** — Keeps spans in memory (limited by `maxSpans` option)
+- **Single instance** — Only one dashboard can run at a time
+
+## Manual verification
+
+When testing the dashboard (e.g. with `example-terminal` or your app), you can verify:
+
+- **Trace list** — Trigger some traced work; recent traces appear with root span name, duration, relative time
+- **Trace tree** — Select a trace and press Enter; span tree shows with indented children
+- **Search** — Press `/`, type a span name; list filters; Esc clears
+- **Errors** — Press `e` for error-only filter; traces with failed spans show an error badge
+- **Help** — Press `?` to see all shortcuts
+- **Waterfall** — With a trace open, the details panel shows a simple duration waterfall
+- **Key attributes** — In span details, `http.route`, `db.operation`, `code.function`, etc. appear first
 
 ## Examples
 
