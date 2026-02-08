@@ -1,5 +1,12 @@
 # @jagreehal/example-example-pg
 
+## 1.0.24
+
+### Patch Changes
+
+- Updated dependencies [ecf920e]
+  - autotel@2.18.1
+
 ## 1.0.23
 
 ### Patch Changes
