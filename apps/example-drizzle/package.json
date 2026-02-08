@@ -14,11 +14,11 @@
     "@libsql/client": "^0.17.0",
     "autotel": "workspace:*",
     "autotel-plugins": "workspace:*",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.2.4",
     "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {
-    "@types/node": "^25.1.0",
+    "@types/node": "^25.2.2",
     "drizzle-kit": "^0.31.8",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

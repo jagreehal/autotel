@@ -77,8 +77,40 @@ describe('Integration: MCP Distributed Tracing', () => {
   it('should merge config with defaults', async () => {
     const { DEFAULT_CONFIG } = await import('./types.js');
 
-    expect(DEFAULT_CONFIG.captureArgs).toBe(true);
-    expect(DEFAULT_CONFIG.captureResults).toBe(false);
+    expect(DEFAULT_CONFIG.captureToolArgs).toBe(false);
+    expect(DEFAULT_CONFIG.captureToolResults).toBe(false);
     expect(DEFAULT_CONFIG.captureErrors).toBe(true);
+    expect(DEFAULT_CONFIG.enableMetrics).toBe(true);
+    expect(DEFAULT_CONFIG.captureDiscoveryOperations).toBe(true);
+  });
+
+  it('should export semantic convention constants', async () => {
+    const { MCP_SEMCONV, MCP_METHODS, MCP_METRICS } =
+      await import('./semantic-conventions.js');
+
+    // Verify key attribute names
+    expect(MCP_SEMCONV.METHOD_NAME).toBe('mcp.method.name');
+    expect(MCP_SEMCONV.TOOL_NAME).toBe('gen_ai.tool.name');
+    expect(MCP_SEMCONV.ERROR_TYPE).toBe('error.type');
+    expect(MCP_SEMCONV.OPERATION_NAME).toBe('gen_ai.operation.name');
+    expect(MCP_SEMCONV.NETWORK_TRANSPORT).toBe('network.transport');
+    expect(MCP_SEMCONV.SESSION_ID).toBe('mcp.session.id');
+
+    // Verify method names
+    expect(MCP_METHODS.TOOLS_CALL).toBe('tools/call');
+    expect(MCP_METHODS.TOOLS_LIST).toBe('tools/list');
+    expect(MCP_METHODS.RESOURCES_READ).toBe('resources/read');
+    expect(MCP_METHODS.RESOURCES_LIST).toBe('resources/list');
+    expect(MCP_METHODS.PROMPTS_GET).toBe('prompts/get');
+    expect(MCP_METHODS.PROMPTS_LIST).toBe('prompts/list');
+    expect(MCP_METHODS.PING).toBe('ping');
+
+    // Verify metric names
+    expect(MCP_METRICS.CLIENT_OPERATION_DURATION).toBe(
+      'mcp.client.operation.duration',
+    );
+    expect(MCP_METRICS.SERVER_OPERATION_DURATION).toBe(
+      'mcp.server.operation.duration',
+    );
   });
 });

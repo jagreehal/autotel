@@ -12,11 +12,11 @@
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "bunyan": "^1.8.15",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.4"
   },
   "devDependencies": {
     "@types/bunyan": "^1.8.11",
-    "@types/node": "^25.1.0",
+    "@types/node": "^25.2.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

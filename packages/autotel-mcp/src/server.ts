@@ -1,55 +1,51 @@
-import { context, type Attributes, SpanStatusCode } from '@opentelemetry/api';
-import { trace, type TraceContext } from 'autotel';
+import { context, SpanStatusCode } from '@opentelemetry/api';
+import { trace, SpanKind, type TraceContext } from 'autotel';
 import { extractOtelContextFromMeta } from './context';
-import { type McpInstrumentationConfig, DEFAULT_CONFIG } from './types';
+import { type McpInstrumentationConfig, resolveConfig } from './types';
+import { MCP_SEMCONV, MCP_METHODS } from './semantic-conventions';
+import { recordServerOperationDuration } from './metrics';
 
-/**
- * Build span attributes for MCP operations
- */
-function buildSpanAttributes(
+type ResolvedConfig = ReturnType<typeof resolveConfig>;
+
+/** Map operation type to MCP method name */
+function getMethodName(type: 'tool' | 'resource' | 'prompt'): string {
+  switch (type) {
+    case 'tool': {
+      return MCP_METHODS.TOOLS_CALL;
+    }
+    case 'resource': {
+      return MCP_METHODS.RESOURCES_READ;
+    }
+    case 'prompt': {
+      return MCP_METHODS.PROMPTS_GET;
+    }
+  }
+}
+
+/** Build spec-compliant span name. Resources use method only (cardinality risk). */
+function getSpanName(
   type: 'tool' | 'resource' | 'prompt',
   name: string,
-  args?: unknown,
-  result?: unknown,
-  config?: McpInstrumentationConfig,
-): Attributes {
-  const attrs: Attributes = {
-    'mcp.type': type,
-    [`mcp.${type}.name`]: name,
-  };
-
-  // Add arguments if configured
-  if (config?.captureArgs && args !== undefined) {
-    try {
-      attrs[`mcp.${type}.args`] = JSON.stringify(args);
-    } catch {
-      attrs[`mcp.${type}.args`] = '[Circular or non-serializable]';
-    }
+): string {
+  if (type === 'resource') {
+    return getMethodName(type);
   }
-
-  // Add results if configured
-  if (config?.captureResults && result !== undefined) {
-    try {
-      attrs[`mcp.${type}.result`] = JSON.stringify(result);
-    } catch {
-      attrs[`mcp.${type}.result`] = '[Circular or non-serializable]';
-    }
-  }
-
-  return attrs;
+  return `${getMethodName(type)} ${name}`;
 }
 
 /**
- * Wrap a handler function with OpenTelemetry tracing
+ * Wrap a handler function with spec-compliant OpenTelemetry tracing
  */
 function wrapHandler<T extends (...args: any[]) => any>(
   type: 'tool' | 'resource' | 'prompt',
   name: string,
   handler: T,
-  config: Required<Omit<McpInstrumentationConfig, 'customAttributes'>> & {
-    customAttributes?: McpInstrumentationConfig['customAttributes'];
-  },
+  config: ResolvedConfig,
+  resourceUri?: string,
 ): T {
+  const methodName = getMethodName(type);
+  const spanName = getSpanName(type, name);
+
   return (async (...args: any[]) => {
     // Extract _meta from arguments (typically last argument or in args object)
     const meta = args[args.length - 1]?._meta ?? args[0]?._meta;
@@ -59,71 +55,185 @@ function wrapHandler<T extends (...args: any[]) => any>(
 
     // Run handler in parent context
     return context.with(parentContext, async () => {
-      return trace(`mcp.server.${type}.${name}`, async (ctx: TraceContext) => {
-        // Build and set attributes
-        const attrs = buildSpanAttributes(
-          type,
-          name,
-          args[0],
-          undefined,
-          config,
-        );
-        ctx.setAttributes(attrs as Record<string, string | number | boolean>);
+      return trace(
+        { name: spanName, spanKind: SpanKind.SERVER },
+        async (ctx: TraceContext) => {
+          const startTime = performance.now();
 
-        // Add custom attributes if provided
-        if (config.customAttributes) {
-          const customAttrs = config.customAttributes({
-            type,
-            name,
-            args: args[0],
-          });
-          ctx.setAttributes(
-            customAttrs as Record<string, string | number | boolean>,
-          );
-        }
+          // Required: mcp.method.name
+          ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
 
-        try {
-          const result = await handler(...args);
+          // Conditionally required: type-specific name attribute
+          switch (type) {
+            case 'tool': {
+              ctx.setAttribute(MCP_SEMCONV.TOOL_NAME, name);
+              ctx.setAttribute(MCP_SEMCONV.OPERATION_NAME, 'execute_tool');
+              break;
+            }
+            case 'resource': {
+              ctx.setAttribute(MCP_SEMCONV.RESOURCE_URI, resourceUri ?? name);
+              break;
+            }
+            case 'prompt': {
+              ctx.setAttribute(MCP_SEMCONV.PROMPT_NAME, name);
+              break;
+            }
+          }
 
-          // Capture result if configured
-          if (config.captureResults && result !== undefined) {
+          // Recommended: network transport and session
+          if (config.networkTransport) {
+            ctx.setAttribute(
+              MCP_SEMCONV.NETWORK_TRANSPORT,
+              config.networkTransport,
+            );
+          }
+          if (config.sessionId) {
+            ctx.setAttribute(MCP_SEMCONV.SESSION_ID, config.sessionId);
+          }
+
+          // Opt-in: tool arguments
+          if (
+            type === 'tool' &&
+            config.captureToolArgs &&
+            args[0] !== undefined
+          ) {
             try {
-              ctx.setAttribute(`mcp.${type}.result`, JSON.stringify(result));
+              ctx.setAttribute(
+                MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+                JSON.stringify(args[0]),
+              );
             } catch {
               ctx.setAttribute(
-                `mcp.${type}.result`,
+                MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
                 '[Circular or non-serializable]',
               );
             }
           }
 
-          // Add custom attributes with result
+          // Custom attributes (pre-call)
           if (config.customAttributes) {
             const customAttrs = config.customAttributes({
               type,
               name,
               args: args[0],
-              result,
             });
             ctx.setAttributes(
               customAttrs as Record<string, string | number | boolean>,
             );
           }
 
-          ctx.setStatus({ code: SpanStatusCode.OK });
-          return result;
-        } catch (error) {
-          // Record exception if configured
-          if (config.captureErrors) {
-            ctx.recordException(error as Error);
-            ctx.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: (error as Error).message,
-            });
+          try {
+            const result = await handler(...args);
+
+            // Opt-in: tool results
+            if (
+              type === 'tool' &&
+              config.captureToolResults &&
+              result !== undefined
+            ) {
+              try {
+                ctx.setAttribute(
+                  MCP_SEMCONV.TOOL_CALL_RESULT,
+                  JSON.stringify(result),
+                );
+              } catch {
+                ctx.setAttribute(
+                  MCP_SEMCONV.TOOL_CALL_RESULT,
+                  '[Circular or non-serializable]',
+                );
+              }
+            }
+
+            // Error handling: tool error via isError
+            if (result?.isError) {
+              ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, 'tool_error');
+              ctx.setStatus({ code: SpanStatusCode.ERROR });
+            } else {
+              ctx.setStatus({ code: SpanStatusCode.OK });
+            }
+
+            // Custom attributes (post-call with result)
+            if (config.customAttributes) {
+              const customAttrs = config.customAttributes({
+                type,
+                name,
+                args: args[0],
+                result,
+              });
+              ctx.setAttributes(
+                customAttrs as Record<string, string | number | boolean>,
+              );
+            }
+
+            // Record metric
+            if (config.enableMetrics) {
+              const durationS = (performance.now() - startTime) / 1000;
+              const metricAttrs: Record<string, string> = {
+                [MCP_SEMCONV.METHOD_NAME]: methodName,
+              };
+              switch (type) {
+                case 'tool': {
+                  metricAttrs[MCP_SEMCONV.TOOL_NAME] = name;
+                  break;
+                }
+                case 'resource': {
+                  metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
+                  break;
+                }
+                case 'prompt': {
+                  metricAttrs[MCP_SEMCONV.PROMPT_NAME] = name;
+                  break;
+                }
+              }
+              if (result?.isError) {
+                metricAttrs[MCP_SEMCONV.ERROR_TYPE] = 'tool_error';
+              }
+              recordServerOperationDuration(durationS, metricAttrs);
+            }
+
+            return result;
+          } catch (error) {
+            // Record exception if configured
+            if (config.captureErrors) {
+              ctx.recordException(error as Error);
+              ctx.setAttribute(
+                MCP_SEMCONV.ERROR_TYPE,
+                (error as Error).name || 'Error',
+              );
+              ctx.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: (error as Error).message,
+              });
+            }
+
+            // Record metric on error
+            if (config.enableMetrics) {
+              const durationS = (performance.now() - startTime) / 1000;
+              const metricAttrs: Record<string, string> = {
+                [MCP_SEMCONV.METHOD_NAME]: methodName,
+                [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+              };
+              switch (type) {
+                case 'tool': {
+                  metricAttrs[MCP_SEMCONV.TOOL_NAME] = name;
+                  break;
+                }
+                case 'resource': {
+                  metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
+                  break;
+                }
+                case 'prompt': {
+                  metricAttrs[MCP_SEMCONV.PROMPT_NAME] = name;
+                  break;
+                }
+              }
+              recordServerOperationDuration(durationS, metricAttrs);
+            }
+
+            throw error;
           }
-          throw error;
-        }
-      });
+        },
+      );
     });
   }) as T;
 }
@@ -131,10 +241,10 @@ function wrapHandler<T extends (...args: any[]) => any>(
 /**
  * Instrument an MCP server with automatic OpenTelemetry tracing
  *
- * This function wraps an MCP server to automatically create spans for all
- * registered tools, resources, and prompts. It extracts parent trace context
- * from the `_meta` field in requests, enabling distributed tracing across
- * MCP client-server boundaries.
+ * Creates spans following the OTel MCP semantic conventions:
+ * - Span names: `tools/call get_weather`, `resources/read config://app`
+ * - Span kind: SERVER
+ * - Attributes: `mcp.method.name`, `gen_ai.tool.name`, `error.type`, etc.
  *
  * @param server - The MCP server instance to instrument
  * @param config - Instrumentation configuration options
@@ -142,7 +252,7 @@ function wrapHandler<T extends (...args: any[]) => any>(
  *
  * @example
  * ```typescript
- * import { McpServer } from '@modelcontextprotocol/sdk/server/index';
+ * import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
  * import { instrumentMcpServer } from 'autotel-mcp/server';
  * import { init } from 'autotel';
  *
@@ -150,20 +260,12 @@ function wrapHandler<T extends (...args: any[]) => any>(
  *
  * const server = new McpServer({ name: 'weather', version: '1.0.0' });
  * const instrumented = instrumentMcpServer(server, {
- *   captureArgs: true,
- *   captureResults: false, // PII concerns
+ *   networkTransport: 'pipe',
+ *   captureToolArgs: true,
  * });
  *
- * // Tools registered on instrumented server are automatically traced
- * instrumented.registerTool({
- *   name: 'get_weather',
- *   description: 'Get current weather',
- *   inputSchema: { type: 'object', properties: { location: { type: 'string' } } },
- *   handler: async (args) => {
- *     // This handler is automatically traced with parent context from _meta
- *     const weather = await fetchWeather(args.location);
- *     return { content: [{ type: 'text', text: `Temp: ${weather.temp}` }] };
- *   },
+ * instrumented.registerTool('get_weather', { ... }, async (args) => {
+ *   // Automatically traced with spec-compliant attributes
  * });
  * ```
  */
@@ -171,7 +273,7 @@ export function instrumentMcpServer<T extends Record<string, any>>(
   server: T,
   config?: McpInstrumentationConfig,
 ): T {
-  const mergedConfig = { ...DEFAULT_CONFIG, ...config };
+  const mergedConfig = resolveConfig(config);
 
   return new Proxy(server, {
     get(target, prop, receiver) {
@@ -182,7 +284,7 @@ export function instrumentMcpServer<T extends Record<string, any>>(
         return function wrappedRegisterTool(
           this: any,
           name: string,
-          config: any,
+          toolConfig: any,
           handler: any,
         ) {
           const wrappedHandler = wrapHandler(
@@ -192,7 +294,11 @@ export function instrumentMcpServer<T extends Record<string, any>>(
             mergedConfig,
           );
 
-          return Reflect.apply(value, target, [name, config, wrappedHandler]);
+          return Reflect.apply(value, target, [
+            name,
+            toolConfig,
+            wrappedHandler,
+          ]);
         };
       }
 
@@ -202,20 +308,22 @@ export function instrumentMcpServer<T extends Record<string, any>>(
           this: any,
           name: string,
           uriOrTemplate: any,
-          config: any,
+          resourceConfig: any,
           readCallback: any,
         ) {
+          const uri = typeof uriOrTemplate === 'string' ? uriOrTemplate : name;
           const wrappedCallback = wrapHandler(
             'resource',
             name,
             readCallback,
             mergedConfig,
+            uri,
           );
 
           return Reflect.apply(value, target, [
             name,
             uriOrTemplate,
-            config,
+            resourceConfig,
             wrappedCallback,
           ]);
         };
@@ -226,12 +334,16 @@ export function instrumentMcpServer<T extends Record<string, any>>(
         return function wrappedRegisterPrompt(
           this: any,
           name: string,
-          config: any,
+          promptConfig: any,
           cb: any,
         ) {
           const wrappedCallback = wrapHandler('prompt', name, cb, mergedConfig);
 
-          return Reflect.apply(value, target, [name, config, wrappedCallback]);
+          return Reflect.apply(value, target, [
+            name,
+            promptConfig,
+            wrappedCallback,
+          ]);
         };
       }
 

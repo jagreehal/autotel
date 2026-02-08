@@ -10,11 +10,11 @@
   "dependencies": {
     "@opentelemetry/instrumentation-pg": "^0.63.0",
     "autotel": "workspace:*",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.2.4",
     "pg": "^8.18.0"
   },
   "devDependencies": {
-    "@types/node": "^25.1.0",
+    "@types/node": "^25.2.2",
     "@types/pg": "^8.16.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
