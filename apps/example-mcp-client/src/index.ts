@@ -26,10 +26,11 @@ const client = new Client(
   }
 )
 
-// Instrument the client with autotel-mcp
+// Instrument the client with autotel-mcp (OTel MCP semantic conventions)
 const instrumented = instrumentMcpClient(client, {
-  captureArgs: true,
-  captureResults: true, // Enabled for demo
+  networkTransport: 'pipe',
+  captureToolArgs: true,
+  captureToolResults: true, // Enabled for demo
   captureErrors: true,
 })
 
@@ -52,8 +53,18 @@ console.log('Connected to MCP Weather Server!\n')
 
 // Wrap all examples in a root trace to demonstrate distributed tracing
 const runExamples = trace((ctx) => async () => {
-  // Example 1: Simple tool call with automatic tracing
-  console.log('--- Example 1: Get Weather for New York ---')
+  // Example 1: Discovery - list available tools
+  // Span: "tools/list" with mcp.method.name: "tools/list"
+  console.log('--- Example 1: Discover Available Tools ---')
+  const tools = await instrumented.listTools()
+  console.log(
+    '\nAvailable tools:',
+    tools.tools.map((t: any) => t.name).join(', ')
+  )
+
+  // Example 2: Tool call with automatic tracing
+  // Span: "tools/call get_weather" with gen_ai.tool.name, gen_ai.operation.name
+  console.log('\n--- Example 2: Get Weather for New York ---')
   const result1 = await instrumented.callTool({
     name: 'get_weather',
     arguments: { location: 'New York' },
@@ -61,8 +72,8 @@ const runExamples = trace((ctx) => async () => {
 
   console.log('\nResult:', JSON.stringify(result1, null, 2))
 
-  // Example 2: Multiple tool calls (both traced automatically)
-  console.log('\n--- Example 2: Get Forecast for London ---')
+  // Example 3: Multiple tool calls (both traced automatically)
+  console.log('\n--- Example 3: Get Forecast for London ---')
   const weather = await instrumented.callTool({
     name: 'get_weather',
     arguments: { location: 'London' },
@@ -76,8 +87,9 @@ const runExamples = trace((ctx) => async () => {
   console.log('\nWeather:', JSON.stringify(weather, null, 2))
   console.log('\nForecast:', JSON.stringify(forecast, null, 2))
 
-  // Example 3: Error handling
-  console.log('\n--- Example 3: Error Handling ---')
+  // Example 4: Error handling
+  // Span will have error.type: 'tool_error' on the server side
+  console.log('\n--- Example 4: Error Handling ---')
   const errorResult = await instrumented.callTool({
     name: 'get_weather',
     arguments: { location: 'Atlantis' },
@@ -89,11 +101,11 @@ const runExamples = trace((ctx) => async () => {
   }
 
   console.log('\n=== Distributed Tracing Demo Complete ===')
-  console.log('\nKey Points:')
-  console.log('- All examples run in a root trace context (runExamples)')
-  console.log('- Client spans automatically inject W3C trace context into _meta field')
-  console.log('- Server spans extract parent context and create child spans')
-  console.log('- Complete distributed traces across client-server boundary')
+  console.log('\nSpec-Compliant Spans:')
+  console.log('- Span names: "tools/list", "tools/call get_weather"')
+  console.log('- Attributes: mcp.method.name, gen_ai.tool.name, network.transport')
+  console.log('- Span kinds: CLIENT (client) / SERVER (server)')
+  console.log('- Metrics: mcp.client.operation.duration, mcp.server.operation.duration')
   console.log(
     '- All traces visible in OTLP backend (Honeycomb, Datadog, etc.)\n'
   )

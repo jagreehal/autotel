@@ -6,6 +6,8 @@ export default defineConfig({
     server: 'src/server.ts',
     client: 'src/client.ts',
     context: 'src/context.ts',
+    metrics: 'src/metrics.ts',
+    'semantic-conventions': 'src/semantic-conventions.ts',
   },
   format: ['esm'],
   dts: true,

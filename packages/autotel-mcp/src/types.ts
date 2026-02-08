@@ -5,17 +5,17 @@ import type { Attributes } from '@opentelemetry/api';
  */
 export interface McpInstrumentationConfig {
   /**
-   * Whether to capture tool/resource arguments as span attributes
-   * @default true
-   */
-  captureArgs?: boolean;
-
-  /**
-   * Whether to capture tool/resource results as span attributes
-   * Warning: May contain PII, disable in production
+   * Capture tool arguments as gen_ai.tool.call.arguments (opt-in per spec).
    * @default false
    */
-  captureResults?: boolean;
+  captureToolArgs?: boolean;
+
+  /**
+   * Capture tool results as gen_ai.tool.call.result (opt-in per spec).
+   * Warning: May contain PII, disable in production.
+   * @default false
+   */
+  captureToolResults?: boolean;
 
   /**
    * Whether to capture errors and exceptions
@@ -32,6 +32,41 @@ export interface McpInstrumentationConfig {
     args?: unknown;
     result?: unknown;
   }) => Attributes;
+
+  /**
+   * Network transport: 'pipe' (stdio), 'tcp' (HTTP/SSE).
+   * Maps to network.transport attribute.
+   */
+  networkTransport?: 'pipe' | 'tcp' | string;
+
+  /**
+   * MCP session ID. Maps to mcp.session.id attribute.
+   */
+  sessionId?: string;
+
+  /**
+   * Enable metrics (operation duration histograms).
+   * @default true
+   */
+  enableMetrics?: boolean;
+
+  /**
+   * Instrument discovery operations (tools/list, resources/list, etc.).
+   * @default true
+   */
+  captureDiscoveryOperations?: boolean;
+
+  // === Deprecated aliases (backward compatibility) ===
+
+  /**
+   * @deprecated Use `captureToolArgs` instead. Will be removed in next major version.
+   */
+  captureArgs?: boolean;
+
+  /**
+   * @deprecated Use `captureToolResults` instead. Will be removed in next major version.
+   */
+  captureResults?: boolean;
 }
 
 /**
@@ -58,12 +93,50 @@ export interface McpTraceMeta {
 }
 
 /**
+ * Resolve deprecated config aliases into canonical form.
+ * New names take precedence over deprecated names.
+ */
+export function resolveConfig(config?: McpInstrumentationConfig): Required<
+  Omit<
+    McpInstrumentationConfig,
+    | 'customAttributes'
+    | 'networkTransport'
+    | 'sessionId'
+    | 'captureArgs'
+    | 'captureResults'
+  >
+> & {
+  customAttributes?: McpInstrumentationConfig['customAttributes'];
+  networkTransport?: string;
+  sessionId?: string;
+} {
+  return {
+    captureToolArgs:
+      config?.captureToolArgs ??
+      config?.captureArgs ??
+      DEFAULT_CONFIG.captureToolArgs,
+    captureToolResults:
+      config?.captureToolResults ??
+      config?.captureResults ??
+      DEFAULT_CONFIG.captureToolResults,
+    captureErrors: config?.captureErrors ?? DEFAULT_CONFIG.captureErrors,
+    enableMetrics: config?.enableMetrics ?? DEFAULT_CONFIG.enableMetrics,
+    captureDiscoveryOperations:
+      config?.captureDiscoveryOperations ??
+      DEFAULT_CONFIG.captureDiscoveryOperations,
+    customAttributes: config?.customAttributes,
+    networkTransport: config?.networkTransport,
+    sessionId: config?.sessionId,
+  };
+}
+
+/**
  * Default configuration values
  */
-export const DEFAULT_CONFIG: Required<
-  Omit<McpInstrumentationConfig, 'customAttributes'>
-> = {
-  captureArgs: true,
-  captureResults: false,
+export const DEFAULT_CONFIG = {
+  captureToolArgs: false,
+  captureToolResults: false,
   captureErrors: true,
-};
+  enableMetrics: true,
+  captureDiscoveryOperations: true,
+} as const;

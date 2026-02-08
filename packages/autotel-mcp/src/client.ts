@@ -1,40 +1,95 @@
-import { type Attributes, SpanStatusCode } from '@opentelemetry/api';
-import { trace, type TraceContext } from 'autotel';
+import { SpanStatusCode } from '@opentelemetry/api';
+import { trace, SpanKind, type TraceContext } from 'autotel';
 import { injectOtelContextToMeta } from './context';
-import { type McpInstrumentationConfig, DEFAULT_CONFIG } from './types';
+import { type McpInstrumentationConfig, resolveConfig } from './types';
+import { MCP_SEMCONV, MCP_METHODS } from './semantic-conventions';
+import { recordClientOperationDuration } from './metrics';
+
+type ResolvedConfig = ReturnType<typeof resolveConfig>;
 
 /**
- * Build span attributes for MCP client operations
+ * Create a traced wrapper for a discovery operation (listTools, listResources, etc.)
  */
-function buildClientSpanAttributes(
-  operation: string,
-  name: string,
-  args?: unknown,
-  config?: McpInstrumentationConfig,
-): Attributes {
-  const attrs: Attributes = {
-    'mcp.client.operation': operation,
-    'mcp.client.name': name,
+function wrapDiscoveryMethod(
+  methodName: string,
+  spanName: string,
+  originalFn: Function,
+  target: any,
+  config: ResolvedConfig,
+) {
+  return async function wrappedDiscovery(
+    this: any,
+    params?: any,
+    options?: any,
+  ) {
+    return await trace(
+      { name: spanName, spanKind: SpanKind.CLIENT },
+      async (ctx: TraceContext) => {
+        const startTime = performance.now();
+
+        ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+
+        if (config.networkTransport) {
+          ctx.setAttribute(
+            MCP_SEMCONV.NETWORK_TRANSPORT,
+            config.networkTransport,
+          );
+        }
+        if (config.sessionId) {
+          ctx.setAttribute(MCP_SEMCONV.SESSION_ID, config.sessionId);
+        }
+
+        try {
+          const result = await Reflect.apply(originalFn, target, [
+            params,
+            options,
+          ]);
+          ctx.setStatus({ code: SpanStatusCode.OK });
+
+          if (config.enableMetrics) {
+            const durationS = (performance.now() - startTime) / 1000;
+            recordClientOperationDuration(durationS, {
+              [MCP_SEMCONV.METHOD_NAME]: methodName,
+            });
+          }
+
+          return result;
+        } catch (error) {
+          if (config.captureErrors) {
+            ctx.recordException(error as Error);
+            ctx.setAttribute(
+              MCP_SEMCONV.ERROR_TYPE,
+              (error as Error).name || 'Error',
+            );
+            ctx.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: (error as Error).message,
+            });
+          }
+
+          if (config.enableMetrics) {
+            const durationS = (performance.now() - startTime) / 1000;
+            recordClientOperationDuration(durationS, {
+              [MCP_SEMCONV.METHOD_NAME]: methodName,
+              [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+            });
+          }
+
+          throw error;
+        }
+      },
+    );
   };
-
-  // Add arguments if configured
-  if (config?.captureArgs && args !== undefined) {
-    try {
-      attrs['mcp.client.args'] = JSON.stringify(args);
-    } catch {
-      attrs['mcp.client.args'] = '[Circular or non-serializable]';
-    }
-  }
-
-  return attrs;
 }
 
 /**
  * Instrument an MCP client with automatic OpenTelemetry tracing
  *
- * This function wraps an MCP client to automatically create spans for all
- * outgoing requests and inject trace context into the `_meta` field.
- * This enables distributed tracing across MCP client-server boundaries.
+ * Creates spans following the OTel MCP semantic conventions:
+ * - Span names: `tools/call get_weather`, `tools/list`, `resources/read weather://config`
+ * - Span kind: CLIENT
+ * - Attributes: `mcp.method.name`, `gen_ai.tool.name`, `error.type`, etc.
+ * - Discovery operations: `listTools`, `listResources`, `listPrompts`, `ping`
  *
  * @param client - The MCP client instance to instrument
  * @param config - Instrumentation configuration options
@@ -42,8 +97,7 @@ function buildClientSpanAttributes(
  *
  * @example
  * ```typescript
- * import { Client } from '@modelcontextprotocol/sdk/client/index';
- * import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio';
+ * import { Client } from '@modelcontextprotocol/sdk/client/index.js';
  * import { instrumentMcpClient } from 'autotel-mcp/client';
  * import { init } from 'autotel';
  *
@@ -51,15 +105,17 @@ function buildClientSpanAttributes(
  *
  * const client = new Client({ name: 'weather-client', version: '1.0.0' });
  * const instrumented = instrumentMcpClient(client, {
- *   captureArgs: true,
- *   captureResults: false,
+ *   networkTransport: 'pipe',
+ *   captureToolArgs: true,
  * });
  *
- * // Tool calls automatically create spans and inject trace context
+ * // Discovery operations are automatically traced
+ * const tools = await instrumented.listTools();
+ *
+ * // Tool calls create spec-compliant spans
  * const result = await instrumented.callTool({
  *   name: 'get_weather',
  *   arguments: { location: 'New York' },
- *   // _meta field is automatically injected with traceparent/tracestate
  * });
  * ```
  */
@@ -67,7 +123,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
   client: T,
   config?: McpInstrumentationConfig,
 ): T {
-  const mergedConfig = { ...DEFAULT_CONFIG, ...config };
+  const mergedConfig = resolveConfig(config);
 
   return new Proxy(client, {
     get(target, prop, receiver) {
@@ -82,22 +138,50 @@ export function instrumentMcpClient<T extends Record<string, any>>(
           options?: any,
         ) {
           const { name, arguments: args } = params;
+          const methodName = MCP_METHODS.TOOLS_CALL;
 
           return await trace(
-            `mcp.client.callTool.${name}`,
+            { name: `${methodName} ${name}`, spanKind: SpanKind.CLIENT },
             async (ctx: TraceContext) => {
-              // Build and set attributes
-              const attrs = buildClientSpanAttributes(
-                'callTool',
-                name,
-                args,
-                mergedConfig,
-              );
-              ctx.setAttributes(
-                attrs as Record<string, string | number | boolean>,
-              );
+              const startTime = performance.now();
 
-              // Add custom attributes if provided
+              // Required
+              ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+
+              // Conditionally required
+              ctx.setAttribute(MCP_SEMCONV.TOOL_NAME, name);
+
+              // Recommended
+              ctx.setAttribute(MCP_SEMCONV.OPERATION_NAME, 'execute_tool');
+              if (mergedConfig.networkTransport) {
+                ctx.setAttribute(
+                  MCP_SEMCONV.NETWORK_TRANSPORT,
+                  mergedConfig.networkTransport,
+                );
+              }
+              if (mergedConfig.sessionId) {
+                ctx.setAttribute(
+                  MCP_SEMCONV.SESSION_ID,
+                  mergedConfig.sessionId,
+                );
+              }
+
+              // Opt-in: tool arguments
+              if (mergedConfig.captureToolArgs && args !== undefined) {
+                try {
+                  ctx.setAttribute(
+                    MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+                    JSON.stringify(args),
+                  );
+                } catch {
+                  ctx.setAttribute(
+                    MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+                    '[Circular or non-serializable]',
+                  );
+                }
+              }
+
+              // Custom attributes (pre-call)
               if (mergedConfig.customAttributes) {
                 const customAttrs = mergedConfig.customAttributes({
                   type: 'tool',
@@ -112,35 +196,33 @@ export function instrumentMcpClient<T extends Record<string, any>>(
               try {
                 // Inject trace context into _meta field
                 const meta = injectOtelContextToMeta();
-                // Spread original params to preserve all fields
                 const paramsWithMeta = {
                   ...params,
                   _meta: { ...params._meta, ...meta },
                 };
 
-                // Preserve all parameters (params, resultSchema, options)
                 const result = await Reflect.apply(value, target, [
                   paramsWithMeta,
                   resultSchema,
                   options,
                 ]);
 
-                // Capture result if configured
-                if (mergedConfig.captureResults && result !== undefined) {
+                // Opt-in: tool results
+                if (mergedConfig.captureToolResults && result !== undefined) {
                   try {
                     ctx.setAttribute(
-                      'mcp.client.result',
+                      MCP_SEMCONV.TOOL_CALL_RESULT,
                       JSON.stringify(result),
                     );
                   } catch {
                     ctx.setAttribute(
-                      'mcp.client.result',
+                      MCP_SEMCONV.TOOL_CALL_RESULT,
                       '[Circular or non-serializable]',
                     );
                   }
                 }
 
-                // Add custom attributes with result
+                // Custom attributes (post-call with result)
                 if (mergedConfig.customAttributes) {
                   const customAttrs = mergedConfig.customAttributes({
                     type: 'tool',
@@ -154,15 +236,38 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 }
 
                 ctx.setStatus({ code: SpanStatusCode.OK });
+
+                if (mergedConfig.enableMetrics) {
+                  const durationS = (performance.now() - startTime) / 1000;
+                  recordClientOperationDuration(durationS, {
+                    [MCP_SEMCONV.METHOD_NAME]: methodName,
+                    [MCP_SEMCONV.TOOL_NAME]: name,
+                  });
+                }
+
                 return result;
               } catch (error) {
                 if (mergedConfig.captureErrors) {
                   ctx.recordException(error as Error);
+                  ctx.setAttribute(
+                    MCP_SEMCONV.ERROR_TYPE,
+                    (error as Error).name || 'Error',
+                  );
                   ctx.setStatus({
                     code: SpanStatusCode.ERROR,
                     message: (error as Error).message,
                   });
                 }
+
+                if (mergedConfig.enableMetrics) {
+                  const durationS = (performance.now() - startTime) / 1000;
+                  recordClientOperationDuration(durationS, {
+                    [MCP_SEMCONV.METHOD_NAME]: methodName,
+                    [MCP_SEMCONV.TOOL_NAME]: name,
+                    [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                  });
+                }
+
                 throw error;
               }
             },
@@ -178,19 +283,28 @@ export function instrumentMcpClient<T extends Record<string, any>>(
           options?: any,
         ) {
           const uri = params.uri;
+          const methodName = MCP_METHODS.RESOURCES_READ;
 
           return await trace(
-            `mcp.client.readResource.${uri}`,
+            { name: methodName, spanKind: SpanKind.CLIENT },
             async (ctx: TraceContext) => {
-              const attrs = buildClientSpanAttributes(
-                'readResource',
-                uri,
-                undefined,
-                mergedConfig,
-              );
-              ctx.setAttributes(
-                attrs as Record<string, string | number | boolean>,
-              );
+              const startTime = performance.now();
+
+              ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+              ctx.setAttribute(MCP_SEMCONV.RESOURCE_URI, uri);
+
+              if (mergedConfig.networkTransport) {
+                ctx.setAttribute(
+                  MCP_SEMCONV.NETWORK_TRANSPORT,
+                  mergedConfig.networkTransport,
+                );
+              }
+              if (mergedConfig.sessionId) {
+                ctx.setAttribute(
+                  MCP_SEMCONV.SESSION_ID,
+                  mergedConfig.sessionId,
+                );
+              }
 
               if (mergedConfig.customAttributes) {
                 const customAttrs = mergedConfig.customAttributes({
@@ -210,36 +324,44 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                   _meta: { ...params._meta, ...meta },
                 };
 
-                // Preserve options parameter
                 const result = await Reflect.apply(value, target, [
                   paramsWithMeta,
                   options,
                 ]);
 
-                if (mergedConfig.captureResults && result !== undefined) {
-                  try {
-                    ctx.setAttribute(
-                      'mcp.client.result',
-                      JSON.stringify(result),
-                    );
-                  } catch {
-                    ctx.setAttribute(
-                      'mcp.client.result',
-                      '[Circular or non-serializable]',
-                    );
-                  }
+                ctx.setStatus({ code: SpanStatusCode.OK });
+
+                if (mergedConfig.enableMetrics) {
+                  const durationS = (performance.now() - startTime) / 1000;
+                  recordClientOperationDuration(durationS, {
+                    [MCP_SEMCONV.METHOD_NAME]: methodName,
+                    [MCP_SEMCONV.RESOURCE_URI]: uri,
+                  });
                 }
 
-                ctx.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
                 if (mergedConfig.captureErrors) {
                   ctx.recordException(error as Error);
+                  ctx.setAttribute(
+                    MCP_SEMCONV.ERROR_TYPE,
+                    (error as Error).name || 'Error',
+                  );
                   ctx.setStatus({
                     code: SpanStatusCode.ERROR,
                     message: (error as Error).message,
                   });
                 }
+
+                if (mergedConfig.enableMetrics) {
+                  const durationS = (performance.now() - startTime) / 1000;
+                  recordClientOperationDuration(durationS, {
+                    [MCP_SEMCONV.METHOD_NAME]: methodName,
+                    [MCP_SEMCONV.RESOURCE_URI]: uri,
+                    [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                  });
+                }
+
                 throw error;
               }
             },
@@ -255,19 +377,28 @@ export function instrumentMcpClient<T extends Record<string, any>>(
           options?: any,
         ) {
           const { name, arguments: args } = params;
+          const methodName = MCP_METHODS.PROMPTS_GET;
 
           return await trace(
-            `mcp.client.getPrompt.${name}`,
+            { name: `${methodName} ${name}`, spanKind: SpanKind.CLIENT },
             async (ctx: TraceContext) => {
-              const attrs = buildClientSpanAttributes(
-                'getPrompt',
-                name,
-                args,
-                mergedConfig,
-              );
-              ctx.setAttributes(
-                attrs as Record<string, string | number | boolean>,
-              );
+              const startTime = performance.now();
+
+              ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+              ctx.setAttribute(MCP_SEMCONV.PROMPT_NAME, name);
+
+              if (mergedConfig.networkTransport) {
+                ctx.setAttribute(
+                  MCP_SEMCONV.NETWORK_TRANSPORT,
+                  mergedConfig.networkTransport,
+                );
+              }
+              if (mergedConfig.sessionId) {
+                ctx.setAttribute(
+                  MCP_SEMCONV.SESSION_ID,
+                  mergedConfig.sessionId,
+                );
+              }
 
               if (mergedConfig.customAttributes) {
                 const customAttrs = mergedConfig.customAttributes({
@@ -283,47 +414,97 @@ export function instrumentMcpClient<T extends Record<string, any>>(
               try {
                 // Inject trace context
                 const meta = injectOtelContextToMeta();
-                // Spread original params to preserve all fields
                 const paramsWithMeta = {
                   ...params,
                   _meta: { ...params._meta, ...meta },
                 };
 
-                // Preserve options parameter
                 const result = await Reflect.apply(value, target, [
                   paramsWithMeta,
                   options,
                 ]);
 
-                if (mergedConfig.captureResults && result !== undefined) {
-                  try {
-                    ctx.setAttribute(
-                      'mcp.client.result',
-                      JSON.stringify(result),
-                    );
-                  } catch {
-                    ctx.setAttribute(
-                      'mcp.client.result',
-                      '[Circular or non-serializable]',
-                    );
-                  }
+                ctx.setStatus({ code: SpanStatusCode.OK });
+
+                if (mergedConfig.enableMetrics) {
+                  const durationS = (performance.now() - startTime) / 1000;
+                  recordClientOperationDuration(durationS, {
+                    [MCP_SEMCONV.METHOD_NAME]: methodName,
+                    [MCP_SEMCONV.PROMPT_NAME]: name,
+                  });
                 }
 
-                ctx.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
                 if (mergedConfig.captureErrors) {
                   ctx.recordException(error as Error);
+                  ctx.setAttribute(
+                    MCP_SEMCONV.ERROR_TYPE,
+                    (error as Error).name || 'Error',
+                  );
                   ctx.setStatus({
                     code: SpanStatusCode.ERROR,
                     message: (error as Error).message,
                   });
                 }
+
+                if (mergedConfig.enableMetrics) {
+                  const durationS = (performance.now() - startTime) / 1000;
+                  recordClientOperationDuration(durationS, {
+                    [MCP_SEMCONV.METHOD_NAME]: methodName,
+                    [MCP_SEMCONV.PROMPT_NAME]: name,
+                    [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                  });
+                }
+
                 throw error;
               }
             },
           );
         };
+      }
+
+      // Discovery operations (when enabled)
+      if (mergedConfig.captureDiscoveryOperations) {
+        if (prop === 'listTools' && typeof value === 'function') {
+          return wrapDiscoveryMethod(
+            MCP_METHODS.TOOLS_LIST,
+            MCP_METHODS.TOOLS_LIST,
+            value,
+            target,
+            mergedConfig,
+          );
+        }
+
+        if (prop === 'listResources' && typeof value === 'function') {
+          return wrapDiscoveryMethod(
+            MCP_METHODS.RESOURCES_LIST,
+            MCP_METHODS.RESOURCES_LIST,
+            value,
+            target,
+            mergedConfig,
+          );
+        }
+
+        if (prop === 'listPrompts' && typeof value === 'function') {
+          return wrapDiscoveryMethod(
+            MCP_METHODS.PROMPTS_LIST,
+            MCP_METHODS.PROMPTS_LIST,
+            value,
+            target,
+            mergedConfig,
+          );
+        }
+
+        if (prop === 'ping' && typeof value === 'function') {
+          return wrapDiscoveryMethod(
+            MCP_METHODS.PING,
+            MCP_METHODS.PING,
+            value,
+            target,
+            mergedConfig,
+          );
+        }
       }
 
       return value;
