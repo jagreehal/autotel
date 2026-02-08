@@ -1,5 +1,12 @@
 # @jagreehal/awaitly-example
 
+## 1.0.10
+
+### Patch Changes
+
+- Updated dependencies [ecf920e]
+  - autotel@2.18.1
+
 ## 1.0.9
 
 ### Patch Changes

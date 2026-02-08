@@ -1,5 +1,13 @@
 # @jagreehal/example-winston
 
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [ecf920e]
+  - autotel@2.18.1
+  - autotel-subscribers@22.0.1
+
 ## 1.0.5
 
 ### Patch Changes
