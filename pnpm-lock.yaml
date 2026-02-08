@@ -51,11 +51,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/autotel
       awaitly:
-        specifier: ^1.13.0
-        version: 1.13.0
+        specifier: ^1.19.0
+        version: 1.19.0
       awaitly-visualizer:
-        specifier: ^2.0.1
-        version: 2.0.1(awaitly@1.13.0)
+        specifier: ^8.0.0
+        version: 8.0.0(awaitly@1.19.0)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -6435,14 +6435,14 @@ packages:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
     engines: {node: '>= 0.4'}
 
-  awaitly-visualizer@2.0.1:
-    resolution: {integrity: sha512-v9PWW6HtobrNBGODl8g4AGkilb5fiatOu9/ibqfwcU5rmbiApubUJbNZWSQKpj+D3d/R0Gmmrr8jg9e9GWm4FQ==}
+  awaitly-visualizer@8.0.0:
+    resolution: {integrity: sha512-NUYcb7IGCm+yhmiDvuWLqp1Wq30WcygBnuUDKuPUcVlhcXwVoN9024ZqHCIB97R/6zsYmxPEr/WxzTUQ4d0FWA==}
     engines: {node: '>=22'}
     peerDependencies:
-      awaitly: ^1.13.0
+      awaitly: ^1.19.0
 
-  awaitly@1.13.0:
-    resolution: {integrity: sha512-9/6hoLvh1oSpGUPz17F1Uy0vjDVcSwdGcENcMgbo92NiMcPPN8N6rv+o4aMVrfPUg6+ZEek4m6BYry/zyB0FmA==}
+  awaitly@1.19.0:
+    resolution: {integrity: sha512-7Ur7s18hkYWAk8qoLUY79EnXzR9RKPkQKYgaLFHpabJVVVJO98KkDv+ZYM+jA/Y6LC/5V6UEJ3IXH+1d8Sv0kw==}
     engines: {node: '>=22'}
 
   aws-cdk-lib@2.236.0:
@@ -18212,16 +18212,16 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
-  awaitly-visualizer@2.0.1(awaitly@1.13.0):
+  awaitly-visualizer@8.0.0(awaitly@1.19.0):
     dependencies:
-      awaitly: 1.13.0
+      awaitly: 1.19.0
       pako: 2.1.0
     optionalDependencies:
       '@slack/web-api': 7.13.0
     transitivePeerDependencies:
       - debug
 
-  awaitly@1.13.0: {}
+  awaitly@1.19.0: {}
 
   aws-cdk-lib@2.236.0(constructs@10.4.5):
     dependencies:

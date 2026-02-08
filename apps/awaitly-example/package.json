@@ -8,8 +8,8 @@
   },
   "dependencies": {
     "autotel": "workspace:*",
-    "awaitly": "^1.13.0",
-    "awaitly-visualizer": "^2.0.1",
+    "awaitly": "^1.19.0",
+    "awaitly-visualizer": "^8.0.0",
     "dotenv": "^17.2.3",
     "pino": "^10.3.0",
     "pino-pretty": "^13.1.3"

@@ -2,7 +2,6 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js'
 import { instrumentMcpServer } from 'autotel-mcp/server'
 import { init } from 'autotel'
 import { ConsoleSpanExporter } from 'autotel/exporters'
@@ -26,14 +25,17 @@ const server = new McpServer(
   {
     capabilities: {
       tools: {},
+      resources: {},
+      prompts: {},
     },
   }
 )
 
-// Instrument the server with autotel-mcp
+// Instrument the server with autotel-mcp (OTel MCP semantic conventions)
 const instrumented = instrumentMcpServer(server, {
-  captureArgs: true,
-  captureResults: true, // Enabled for demo purposes
+  networkTransport: 'pipe',
+  captureToolArgs: true,
+  captureToolResults: true, // Enabled for demo purposes
   captureErrors: true,
 })
 
@@ -47,6 +49,7 @@ const weatherData: Record<string, { temp: number; condition: string }> = {
 }
 
 // Register get_weather tool - automatically traced!
+// Span: "tools/call get_weather" with mcp.method.name, gen_ai.tool.name
 instrumented.registerTool(
   'get_weather',
   {
@@ -64,7 +67,7 @@ instrumented.registerTool(
     const weather = weatherData[location]
 
     if (!weather) {
-      // Return error response instead of throwing - prevents server crash
+      // Return error response - traced with error.type: 'tool_error'
       return {
         content: [
           {
@@ -115,6 +118,47 @@ instrumented.registerTool(
         {
           type: 'text',
           text: `${days}-day forecast for ${location}:\n${forecast}`,
+        },
+      ],
+    }
+  }
+)
+
+// Register a resource - traced with "resources/read weather_config"
+instrumented.registerResource(
+  'weather_config',
+  'weather://config',
+  { description: 'Weather service configuration' },
+  async () => {
+    return {
+      contents: [
+        {
+          uri: 'weather://config',
+          text: JSON.stringify({
+            availableLocations: Object.keys(weatherData),
+            units: 'fahrenheit',
+            updateFrequency: '5min',
+          }),
+        },
+      ],
+    }
+  }
+)
+
+// Register a prompt - traced with "prompts/get weather_report"
+instrumented.registerPrompt(
+  'weather_report',
+  { description: 'Generate a weather report for a location' },
+  async (args) => {
+    const location = (args?.location as string) ?? 'New York'
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `Please generate a detailed weather report for ${location} including current conditions and recommendations.`,
+          },
         },
       ],
     }

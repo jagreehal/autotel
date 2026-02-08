@@ -22,6 +22,14 @@
     "./context": {
       "types": "./dist/context.d.ts",
       "import": "./dist/context.js"
+    },
+    "./metrics": {
+      "types": "./dist/metrics.d.ts",
+      "import": "./dist/metrics.js"
+    },
+    "./semantic-conventions": {
+      "types": "./dist/semantic-conventions.d.ts",
+      "import": "./dist/semantic-conventions.js"
     }
   },
   "files": [
