@@ -5,6 +5,7 @@ export default defineConfig({
     index: 'src/index.ts',
     honeycomb: 'src/honeycomb.ts',
     datadog: 'src/datadog.ts',
+    'google-cloud': 'src/google-cloud.ts',
   },
   format: ['esm'],
   dts: true,

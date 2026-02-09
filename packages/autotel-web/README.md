@@ -22,7 +22,7 @@ Ultra-lightweight browser SDK for distributed tracing (**1.6KB gzipped**)
 ✅ **W3C trace propagation** - Automatic `traceparent` header injection on fetch/XHR
 ✅ **SSR-safe** - Works with Next.js, Remix, and other SSR frameworks
 ✅ **Framework-agnostic** - Works with React, Vue, Svelte, Angular, vanilla JS
-✅ **No real spans** - Browser just propagates context, backend does real tracing
+✅ **No Zone.js** - [Context propagation without global patching](#context-propagation-without-zonejs)
 
 ## Installation
 
@@ -34,7 +34,14 @@ pnpm add autotel-web
 yarn add autotel-web
 ```
 
-**Important:** You do NOT need to install any `@opentelemetry/*` packages. This package has **zero dependencies**.
+**Important:** You do NOT need to install any `@opentelemetry/*` packages yourself. One install gives you both modes below.
+
+### Lean vs Full mode
+
+- **Lean (default)** – `import { init } from 'autotel-web'`. Zero dependencies, ~1.6KB gzipped. Only injects W3C `traceparent` on fetch/XHR; no real spans in the browser. Backend does the real tracing.
+- **Full** – `import { initFull } from 'autotel-web/full'`. Real spans (navigation, fetch/XHR, optional user interaction), optional `http.client.network_timing` events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB), **unhandled error capture**, optional long-task capture, sampling, and OTLP export. No Zone.js; bundle size is larger (~40–50KB gzipped). Use when you need client-side spans and export from the browser.
+
+Use lean mode by default; use full mode when you need real browser spans and network timing. You can use dynamic import to load full mode only when needed: `import('autotel-web/full').then(({ initFull }) => initFull(config))`.
 
 ## Quick Start
 
@@ -77,6 +84,37 @@ app.get('/api/users', async (req, res) => {
 ### 3. View Distributed Trace
 
 Open your observability platform (Honeycomb, Datadog, Jaeger, etc.) and see the complete trace from browser → backend → database!
+
+## Full mode (real spans)
+
+When you need real browser spans, network timing events, and optional export from the client, use full mode. Same install: `autotel-web`. No Zone.js.
+
+```typescript
+import { initFull } from 'autotel-web/full'
+
+initFull({
+  service: 'my-app',
+  endpoint: 'https://your-collector.example.com/v1/traces',  // OTLP HTTP
+  sampleRate: 0.1,                    // e.g. 10% in production
+  captureNavigation: true,            // document load spans (default: true)
+  captureFetch: true,
+  captureXHR: true,
+  captureNetworkTiming: true,         // http.client.network_timing events (semantic-conventions#3385)
+  captureErrors: true,                // unhandled errors → span.recordException (default: true)
+  captureWebVitals: true,             // LCP, INP, CLS, FCP, TTFB as web_vitals span (default: true)
+  webVitals: { reportAllChanges: false },  // pass through to web-vitals (default: false)
+  captureLongTasks: false,            // long-task spans (main thread >= 50ms); opt-in, can be noisy
+  copyHttpSpanAttributesToEvent: false,
+  userInteraction: {
+    enabled: true,
+    selectors: ['button', 'a', '[data-track]'],
+  },
+  privacy: { allowedOrigins: ['api.myapp.com'], respectDoNotTrack: true },
+  debug: false,
+})
+```
+
+With sensible defaults, **one `initFull()`** gives you: **navigation spans**, **fetch/XHR spans** with W3C propagation, **http.client.network_timing** events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB) as a single `web_vitals` span per page, and **unhandled error capture** (window errors and unhandled promise rejections). Optional: **user interaction** spans (clicks on configurable selectors), **long-task** spans (opt-in via `captureLongTasks: true`), **sampling** (`sampleRate` or custom `sampler`), and **setAttribute** / **addEvent** / **span()** on the active span. Async context propagation is best-effort (no Zone.js).
 
 ## Framework Integration
 
@@ -348,6 +386,32 @@ init({
 })
 ```
 
+### `initFull(config)` (full mode)
+
+Initialize full browser tracing. Import from `autotel-web/full`. Call once, client-side only.
+
+```typescript
+interface AutotelWebFullConfig {
+  service: string
+  endpoint?: string                    // OTLP traces URL (e.g. https://api.example.com/v1/traces)
+  spanProcessor?: SpanProcessor        // Custom processor instead of endpoint
+  sampleRate?: number                  // 0–1, e.g. 0.1 in production
+  sampler?: Sampler                    // Custom sampler (overrides sampleRate)
+  captureNavigation?: boolean          // default true
+  captureFetch?: boolean               // default true
+  captureXHR?: boolean                 // default true
+  captureNetworkTiming?: boolean       // http.client.network_timing events (default true)
+  captureErrors?: boolean              // unhandled errors → span.recordException (default true)
+  captureWebVitals?: boolean          // LCP, INP, CLS, FCP, TTFB as web_vitals span (default true)
+  webVitals?: { reportAllChanges?: boolean }  // pass through to web-vitals (default false)
+  captureLongTasks?: boolean          // long-task spans (main thread >= 50ms); opt-in (default false)
+  copyHttpSpanAttributesToEvent?: boolean
+  userInteraction?: { enabled: boolean; selectors?: string[] }
+  privacy?: PrivacyConfig
+  debug?: boolean
+}
+```
+
 ### `trace(fn)` and `trace(ctx => fn)`
 
 Wrap functions with automatic tracing.
@@ -370,31 +434,35 @@ const user = await fetchUser('123')
 
 ```typescript
 export const fetchUser = trace(ctx => async (id: string) => {
-  ctx.setAttribute('user.id', id)
-
+  // ctx.traceId, ctx.spanId available (lean mode)
   const response = await fetch(`/api/users/${id}`)
-  const user = await response.json()
-
-  ctx.setAttribute('user.email', user.email)
-  return user
+  return response.json()
 })
 
 // Usage
 const user = await fetchUser('123')
 ```
 
-### `span(name, fn)`
+For **custom attributes and real spans** in the browser, use **full mode** (`autotel-web/full`): `setAttribute`, `addEvent`, and `span()` operate on the active OTel span.
 
-Create a manual span for a block of code:
+### `span(name, fn)` (full mode only)
+
+Create a manual span. Import from `autotel-web/full`:
 
 ```typescript
-import { span } from 'autotel-web'
+import { span } from 'autotel-web/full'
 
-const result = await span('processData', async (ctx) => {
-  ctx.setAttribute('data.size', data.length)
-  return await processData(data)
+const result = await span('processData', (s) => {
+  s.setAttribute('data.size', data.length)
+  const out = processData(data)
+  s.end()
+  return out
 })
 ```
+
+### `setAttribute(key, value)` / `addEvent(name, attributes)` (full mode only)
+
+Set attributes or add events on the active span. Import from `autotel-web/full`.
 
 ### `getActiveContext()`
 
@@ -769,11 +837,8 @@ export default function MyComponent() { ... }
 
 ## Bundle Size
 
-- **Unminified:** 5.05KB
-- **Gzipped:** **1.6KB** 🎉
-- **Brotli:** ~1.4KB (typical)
-
-**Zero dependencies.** No `@opentelemetry/*` packages. Just pure JavaScript using native `crypto.getRandomValues()`.
+- **Lean mode** (`autotel-web`): **~1.6KB gzipped**. Zero dependencies. Pure JavaScript using native `crypto.getRandomValues()`.
+- **Full mode** (`autotel-web/full`): ~40–50KB gzipped (includes OpenTelemetry SDK and instrumentations). No Zone.js. Use when you need real spans and export from the browser.
 
 ## Architecture: Header-Only Approach
 
@@ -820,13 +885,14 @@ The official OpenTelemetry browser SDK (`@opentelemetry/sdk-trace-web`) is a **f
 
 ### When to Use autotel-web (This Package)
 
-✅ You only need **trace correlation** between frontend and backend
+✅ You only need **trace correlation** between frontend and backend → use **lean mode** (`init` from `autotel-web`)
+✅ You want **real browser spans and network timing** but **one install and no Zone.js** → use **full mode** (`initFull` from `autotel-web/full`)
 ✅ Your backend **already exports to a collector** (OTLP, Datadog, etc.)
-✅ You want **minimal bundle size impact** (~1.6KB vs ~55KB)
+✅ You want **minimal bundle size impact** (~1.6KB for lean vs ~55KB for full OTel with Zone)
 ✅ You want to **avoid Zone.js** (conflicts with Angular, adds complexity)
 ✅ You prefer **zero dependencies** and simpler maintenance
 
-**Bottom Line:** If your backend already does tracing, you don't need full OpenTelemetry in the browser. Just propagate the trace context with autotel-web.
+**Bottom Line:** For trace correlation only, use lean mode. For real browser spans and network timing with a single install and no Zone.js, use full mode (`autotel-web/full`).
 
 ## Performance Impact
 
@@ -849,6 +915,101 @@ autotel-web has **effectively zero performance overhead**:
 - Memory: ~2KB for the SDK code
 
 **Real-world impact:** Imperceptible. The network request itself takes orders of magnitude longer than the header injection.
+
+## Context Propagation Without Zone.js
+
+Browser tracing with OpenTelemetry typically needs **context propagation**: when you start a span (e.g., "user clicked button"), any async work that follows—fetch, setTimeout, Promise chains—should run in that same trace context so the backend sees one continuous trace. In Node.js, OpenTelemetry uses AsyncLocalStorage to keep context across async boundaries. In the browser, there is no built-in "async context" that follows every boundary. **Zone.js** is the usual way to get that: it patches globals (setTimeout, Promise, fetch, etc.) so that any code that runs "later" still runs inside the same zone—and thus the same trace context.
+
+This section explains when you might need Zone.js, its pitfalls, and how autotel-web gets you reliable tracing without it.
+
+### When You Might Think You Need Zone.js
+
+You might think you need **async context that survives every boundary** when:
+
+- You start a span in one place (e.g., click handler) and want **all** follow-up work—nested setTimeout, microtasks, fetch callbacks, requestAnimationFrame—to stay under that span without you wrapping each boundary
+- You have deep or framework-driven async (e.g., React state updates → effects → fetch → more effects) and you can't or don't want to wrap every step
+- You rely on "current span" or "current trace ID" in code that runs in callbacks you don't control (e.g., third-party lib that calls your callback after a delay)
+
+In those cases, Zone.js gives you one execution context that follows the entire async tree. OpenTelemetry can attach the active span to that zone, and every callback runs in the same context.
+
+### Pitfalls of Zone.js
+
+**1. Bundle size and cost**
+Zone.js is on the order of ~12–15 KB minified/gzipped. For a browser SDK that aims to be small (autotel-web lean is ~1.6 KB), adding Zone significantly increases size for every user.
+
+**2. Global patching**
+Zone.js patches `setTimeout`, `setInterval`, `Promise`, `fetch`, `XHR`, `addEventListener`, and more. That can:
+
+- Conflict with other libraries that also patch or depend on "vanilla" behavior
+- Cause hard-to-debug issues in frameworks (e.g., Angular uses Zone; other frameworks don't and sometimes assume no patching)
+- Break or confuse code that relies on exact timing or microtask ordering
+
+**3. Framework and tooling friction**
+Some bundlers, test runners, and frameworks have had issues with Zone (e.g., Next.js, Vite, or Jest in the past). You can end up debugging "why is my context wrong only in tests" or "why does this break in production build."
+
+**4. Implicit behavior**
+Context "just following" everywhere is convenient but implicit. When something goes wrong (wrong span, wrong trace), the cause is not obvious: it's "whatever Zone did." Explicit propagation (e.g., "this span covers this function") is easier to reason about and debug.
+
+**5. Maintenance**
+Zone.js is not part of the web platform. New APIs (e.g., new promise helpers, scheduler APIs) may need new patches. You depend on the Zone maintainers and the OpenTelemetry Zone plugin to keep up.
+
+### How autotel-web Works Without Zone.js
+
+autotel-web is designed so you can get **useful, reliable browser → backend tracing** without Zone.js. It does that in three ways: lean mode, full mode with targeted instrumentation, and an explicit `trace()` API.
+
+#### 1. Lean Mode: No Real Browser Spans
+
+In **lean mode** (`init()` from `autotel-web`), the browser does **not** create real OpenTelemetry spans. It only:
+
+- Injects the W3C `traceparent` header on every `fetch` and XHR request
+
+So the "context" that matters is on the **request**: the backend receives `traceparent`, continues the trace, and does all span creation and export. There is no "current span" in the browser to lose across async boundaries. You don't need Zone for this.
+
+**Use lean mode when:** You care about distributed traces (browser → API → services) and are fine with the backend owning the spans.
+
+#### 2. Full Mode: Instrumentation That Propagates on the Wire
+
+In **full mode** (`initFull()` from `autotel-web/full`), the browser **does** create real spans (navigation, fetch/XHR, Web Vitals, etc.). Context can be lost across arbitrary async boundaries (e.g., `setTimeout`), but autotel-web focuses on the boundaries that matter for tracing:
+
+- **Fetch / XHR**: The OpenTelemetry fetch and XHR instrumentations wrap the real `fetch` and `XMLHttpRequest`. When your code calls `fetch()`, the instrumentation starts a span and injects `traceparent` into the request. When the response comes back, the callback runs in the same invocation chain as the one that called `fetch`, so the span is still active and can be ended. You don't cross a "lost" boundary in the common case.
+- **Document load / navigation**: Handled by the document-load instrumentation; the span covers the load and its natural async work.
+
+So for "user did something → app called fetch → backend continued the trace," context is preserved **along the path that the instrumentation controls**. You don't need Zone for that.
+
+**Use full mode when:** You want real browser spans (and optional Web Vitals, errors, etc.) and your critical paths are "start → fetch/XHR → done" or "navigation."
+
+#### 3. Explicit `trace()` for Critical Paths
+
+When you have a flow that **does** cross boundaries where context would be lost (e.g., "click → setTimeout → fetch → update UI"), you can wrap the whole logical operation in **one** `trace()`:
+
+```typescript
+import { trace } from 'autotel-web'
+
+const handleConvert = trace(ctx => async () => {
+  setLoading(true)
+  await new Promise(r => setTimeout(r, 0))  // context still inside this trace()
+  const res = await fetch('/api/convert', { ... })
+  const data = await res.json()
+  setResult(data)
+  setLoading(false)
+})
+```
+
+Because the entire flow is inside a single `trace()` call, the fetch call runs "under" that logical span; the fetch instrumentation will see the active context (in full mode) or at least the header injection (in lean mode) keeps the same trace ID on the request. You don't need Zone to keep context inside that one async function.
+
+**Use explicit `trace()` when:** You have a clear "one user action → one chain of async work" and you're okay wrapping that chain once.
+
+### Summary: Zone.js vs autotel-web
+
+| Need | Zone.js | autotel-web approach |
+|------|--------|------------------------|
+| Trace from browser to backend | Not required | Lean mode: inject `traceparent`; backend continues trace. |
+| Real browser spans (navigation, fetch, Web Vitals) | Not required for the common path | Full mode: instrument fetch/XHR and document load so context is preserved on the wire and in the main async chain. |
+| Context across arbitrary async (setTimeout, third‑party callbacks) | Helps | Explicit `trace()` around the whole flow; or accept best-effort. |
+| Small bundle, no global patching | N/A | Lean mode is ~1.6 KB; full mode avoids Zone. |
+| Fewer framework/tooling issues | N/A | No Zone dependency. |
+
+**Bottom line:** You might need Zone.js if you want "current span" to follow **every** async boundary with no explicit wrapping. autotel-web avoids Zone by: (1) not creating real browser spans in lean mode, (2) in full mode, instrumenting the boundaries that matter for tracing (fetch, XHR, load), and (3) offering an explicit `trace()` so you can wrap critical paths once. That covers most real-world needs without Zone's pitfalls.
 
 ## Examples
 

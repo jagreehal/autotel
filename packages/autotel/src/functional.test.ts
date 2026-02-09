@@ -1025,12 +1025,7 @@ describe('Functional API', () => {
       expect(collector.getSpans()).toHaveLength(1);
     });
 
-    // TODO: Fix baggage propagation to nested trace() calls
-    // The inner trace creates a new span that doesn't properly inherit baggage
-    // from withBaggage() due to context storage synchronization issues.
-    // This was a false-positive before - the inner function wasn't being called
-    // because childCtx wasn't detected as a factory parameter.
-    it.skip('withBaggage should set baggage for child spans', async () => {
+    it('withBaggage should set baggage for child spans', async () => {
       const collector = createTraceCollector();
 
       await trace((ctx) => async () => {
@@ -1105,6 +1100,29 @@ describe('Functional API', () => {
 
       // Only 1 span created (the outer trace)
       expect(collector.getSpans()).toHaveLength(1);
+    });
+
+    it('withBaggage should not leak baggage after callback completes', async () => {
+      const collector = createTraceCollector();
+
+      await trace((ctx) => async () => {
+        expect(ctx.getBaggage('tenant.id')).toBeUndefined();
+
+        await withBaggage({
+          baggage: { 'tenant.id': 'tenant-456' },
+          fn: async () => {
+            expect(ctx.getBaggage('tenant.id')).toBe('tenant-456');
+          },
+        });
+
+        // Child spans created after withBaggage must not inherit scoped baggage.
+        // (Same-ctx after await may still see baggage due to async context propagation.)
+        await trace((childCtx) => async () => {
+          expect(childCtx.getBaggage('tenant.id')).toBeUndefined();
+        })();
+      })();
+
+      expect(collector.getSpans()).toHaveLength(2);
     });
 
     it('ctx.getAllBaggage should return all baggage entries', async () => {

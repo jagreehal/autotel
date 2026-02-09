@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SegmentSubscriber } from './segment';
 
-// Mock the @segment/analytics-node module
-const mockTrack = vi.fn();
-const mockCloseAndFlush = vi.fn(() => Promise.resolve());
-
-// Create a mock Analytics class that returns instances with mocked methods
-const MockAnalytics = vi.fn(function(this: any) {
-  this.track = mockTrack;
-  this.closeAndFlush = mockCloseAndFlush;
-  return this;
-});
+// Hoist mocks so they exist when vi.mock factory runs (factory is hoisted before other code)
+const mockTrack = vi.hoisted(() => vi.fn());
+const mockCloseAndFlush = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const MockAnalytics = vi.hoisted(() =>
+  vi.fn(function (this: { track: ReturnType<typeof vi.fn>; closeAndFlush: ReturnType<typeof vi.fn> }) {
+    this.track = mockTrack;
+    this.closeAndFlush = mockCloseAndFlush;
+    return this;
+  }),
+);
 
 vi.mock('@segment/analytics-node', () => ({
   Analytics: MockAnalytics,

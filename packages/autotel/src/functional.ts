@@ -2338,6 +2338,41 @@ export function withBaggage<T = unknown>(
   // Create new context with updated baggage
   const newContext = propagation.setBaggage(currentContext, updatedBaggage);
 
-  // Run the function within the new context
-  return context.with(newContext, fn);
+  // Sync contextStorage so nested traces (via getActiveContextWithBaggage) see the baggage.
+  // Use run() instead of enterWith() to properly scope the context changes.
+  const ctxStorage = getContextStorage();
+  const previousStored = ctxStorage.getStore();
+  const baggageEnrichedStored = previousStored
+    ? propagation.setBaggage(previousStored, updatedBaggage)
+    : newContext;
+
+  // Run the function within the new context, scoped properly
+  const result = previousStored
+    ? ctxStorage.run(baggageEnrichedStored, () => context.with(newContext, fn))
+    : context.with(newContext, fn);
+
+  if (result instanceof Promise) {
+    // For async operations, ensure context is restored after the promise settles
+    return result.then(
+      (value) => {
+        // Restore original context before resolving
+        if (previousStored) {
+          return ctxStorage.run(previousStored, () => value);
+        }
+        return value;
+      },
+      (err) => {
+        // Restore original context before rejecting
+        if (previousStored) {
+          return ctxStorage.run(previousStored, () => {
+            throw err;
+          });
+        }
+        throw err;
+      },
+    );
+  }
+
+  // Sync function - context automatically restored when scope exits
+  return result;
 }

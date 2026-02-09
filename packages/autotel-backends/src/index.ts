@@ -34,3 +34,8 @@ export {
   type DatadogPresetConfig,
   type DatadogSite,
 } from './datadog';
+
+export {
+  createGoogleCloudConfig,
+  type GoogleCloudPresetConfig,
+} from './google-cloud';

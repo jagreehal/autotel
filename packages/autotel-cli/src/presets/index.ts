@@ -11,6 +11,7 @@ import type {
 
 // Import all presets
 import { datadogDirect, datadogAgent } from './backends/datadog';
+import { googleCloud } from './backends/google-cloud';
 import { honeycomb } from './backends/honeycomb';
 import { otlpHttp, otlpGrpc, local } from './backends/otlp';
 import { posthog } from './subscribers/posthog';
@@ -24,6 +25,7 @@ import { awsLambda, cloudflare, edge } from './platforms/aws';
 export const backends = new Map<string, BackendPreset>([
   ['datadog', datadogDirect],
   ['datadog-agent', datadogAgent],
+  ['google-cloud', googleCloud],
   ['honeycomb', honeycomb],
   ['otlp-http', otlpHttp],
   ['otlp-grpc', otlpGrpc],
@@ -105,6 +107,16 @@ export const quickPresets = new Map<string, QuickPreset>([
       autoInstrumentations: 'all',
     },
   ],
+  [
+    'node-google-cloud',
+    {
+      name: 'Node.js + Google Cloud',
+      slug: 'node-google-cloud',
+      description: 'Node.js with Google Cloud Observability (Telemetry API)',
+      backend: 'google-cloud',
+      autoInstrumentations: 'all',
+    },
+  ],
 ]);
 
 /**
@@ -177,6 +189,7 @@ export function presetExists(type: PresetType, slug: string): boolean {
 export {
   datadogDirect,
   datadogAgent,
+  googleCloud,
   honeycomb,
   otlpHttp,
   otlpGrpc,

@@ -1,0 +1,46 @@
+{
+  "name": "autotel-hono",
+  "version": "0.1.0",
+  "description": "OpenTelemetry Hono middleware powered by autotel",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "autotel": "workspace:*"
+  },
+  "peerDependencies": {
+    "hono": ">=4.11.9"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "hono": "^4.11.9",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

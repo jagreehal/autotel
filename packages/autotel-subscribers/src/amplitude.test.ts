@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AmplitudeSubscriber } from './amplitude';
 
-// Mock the @amplitude/analytics-node module
-// The SDK exports init(), track(), flush() as separate functions
-const mockTrack = vi.fn();
-const mockInit = vi.fn();
-const mockFlush = vi.fn(() => Promise.resolve());
+// Hoist mocks so they exist when vi.mock factory runs (factory is hoisted before other code)
+const mockTrack = vi.hoisted(() => vi.fn());
+const mockInit = vi.hoisted(() => vi.fn());
+const mockFlush = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 
 vi.mock('@amplitude/analytics-node', () => ({
   init: mockInit,

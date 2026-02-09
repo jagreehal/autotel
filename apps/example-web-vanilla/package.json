@@ -1,0 +1,11 @@
+{
+  "name": "@jagreehal/example-web-vanilla",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vanilla JS example for autotel-web (lean mode: traceparent injection)",
+  "scripts": {
+    "start": "npx --yes http-server -p 8000 -c-1 ../../",
+    "start:local": "npx --yes http-server -p 8000 -c-1",
+    "build:autotel": "pnpm --filter autotel-web build"
+  }
+}
