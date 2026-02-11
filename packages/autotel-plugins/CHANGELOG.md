@@ -1,5 +1,17 @@
 # autotel-plugins
 
+## 0.15.0
+
+### Minor Changes
+
+- d1bd8cd: - **autotel-sentry**: README updates — clarify Sentry SDK + OTel scenario, link to Sentry OTLP docs, note that Sentry ingestion request spans are not sent, fix `SentrySpanProcessor` backtick typo, add spec-volatility note.
+  - **autotel-backends**: Preserve caught error in Google Cloud config — attach original error as `cause` when throwing the user-facing error so the `preserve-caught-error` lint rule is satisfied.
+
+### Patch Changes
+
+- Updated dependencies [d1bd8cd]
+  - autotel@2.19.0
+
 ## 0.14.1
 
 ### Patch Changes
