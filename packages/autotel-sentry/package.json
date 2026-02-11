@@ -1,6 +1,6 @@
 {
   "name": "autotel-sentry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Bridge OpenTelemetry (Autotel) traces to Sentry via SpanProcessor and Propagator",
   "type": "module",
   "main": "./dist/index.js",
@@ -13,7 +13,11 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "src", "README.md"],
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
