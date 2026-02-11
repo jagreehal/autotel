@@ -1,0 +1,21 @@
+{
+  "name": "@jagreehal/example-sentry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: Autotel + Sentry OpenTelemetry bridge",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@sentry/node": "^10.38.0",
+    "autotel": "workspace:*",
+    "autotel-sentry": "workspace:*",
+    "dotenv": "^17.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

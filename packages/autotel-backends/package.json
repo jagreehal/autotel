@@ -18,6 +18,10 @@
     "./datadog": {
       "types": "./dist/datadog.d.ts",
       "import": "./dist/datadog.js"
+    },
+    "./google-cloud": {
+      "types": "./dist/google-cloud.d.ts",
+      "import": "./dist/google-cloud.js"
     }
   },
   "files": [
@@ -48,6 +52,8 @@
     "backend",
     "honeycomb",
     "datadog",
+    "google-cloud",
+    "gcp",
     "configuration",
     "observability",
     "tracing",
@@ -61,22 +67,38 @@
   },
   "peerDependencies": {
     "@opentelemetry/exporter-logs-otlp-http": ">=0.211.0",
-    "@opentelemetry/sdk-logs": ">=0.211.0"
+    "@opentelemetry/exporter-metrics-otlp-http": ">=0.211.0",
+    "@opentelemetry/exporter-trace-otlp-http": ">=0.211.0",
+    "@opentelemetry/sdk-logs": ">=0.211.0",
+    "@opentelemetry/sdk-metrics": ">=2.5.0",
+    "google-auth-library": ">=10.5.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/exporter-logs-otlp-http": {
       "optional": true
     },
+    "@opentelemetry/exporter-metrics-otlp-http": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-trace-otlp-http": {
+      "optional": true
+    },
     "@opentelemetry/sdk-logs": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-metrics": {
+      "optional": true
+    },
+    "google-auth-library": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@types/node": "^25.2.2",
-    "@typescript-eslint/eslint-plugin": "^8.54.0",
-    "@typescript-eslint/parser": "^8.54.0",
+    "@types/node": "^25.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.55.0",
+    "@typescript-eslint/parser": "^8.55.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-unicorn": "^62.0.0",
+    "eslint-plugin-unicorn": "^63.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

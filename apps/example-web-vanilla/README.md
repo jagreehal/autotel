@@ -4,38 +4,54 @@ Ultra-lightweight example demonstrating browser-to-backend distributed tracing w
 
 ## What This Demonstrates
 
-- ✅ Browser SDK initialization with `init()`
+- ✅ **Lean mode**: Browser SDK initialization with `init()` (no OpenTelemetry deps, ~1.6KB)
 - ✅ Automatic `traceparent` header injection on fetch requests
 - ✅ Distributed tracing from browser → backend (using mock API)
-- ✅ Accessing trace context (trace ID, span ID)
+- ✅ Accessing trace context in `trace(ctx => ...)` (traceId, spanId, correlationId)
 - ✅ Using the `trace()` wrapper for DX
+
+For **full mode** (real spans, `setAttribute`, network timing, user interaction), use `initFull` from `autotel-web/full` — see [autotel-web README](../../packages/autotel-web/README.md#full-mode-real-spans).
 
 ## Running the Example
 
 ### Prerequisites
 
-1. Build the autotel-web package:
+Build the autotel-web package (from repo root or this app):
+
 ```bash
-cd ../../packages/autotel-web
-pnpm build
+# From repo root
+pnpm --filter autotel-web build
+
+# Or from this directory
+pnpm run build:autotel
 ```
 
-### Option 1: Simple HTTP Server
+### Option 1: pnpm start (recommended)
 
 ```bash
 # From this directory (apps/example-web-vanilla)
+pnpm start
+```
+
+Then open: **http://localhost:8000/apps/example-web-vanilla/**  
+(The server runs from the repo root so the script can load `packages/autotel-web/dist/index.js`.)
+
+To serve only this folder (e.g. for testing without loading autotel-web from repo), run `pnpm run start:local` and open http://localhost:8000 — but the autotel-web import will 404 unless you copy the built package into this app.
+
+### Option 2: Other HTTP servers
+
+```bash
+# From this directory
 python3 -m http.server 8000
-
-# Or using Node.js
+# or
 npx http-server -p 8000
-
-# Or using PHP
+# or
 php -S localhost:8000
 ```
 
 Then open: http://localhost:8000
 
-### Option 2: VS Code Live Server
+### Option 3: VS Code Live Server
 
 1. Install "Live Server" extension in VS Code
 2. Right-click `index.html`
@@ -66,11 +82,18 @@ traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
 ```typescript
 import { init, trace } from 'autotel-web'
 
-// Initialize SDK - patches fetch/XHR globally
-init({ service: 'vanilla-js-example' })
+// Initialize SDK (lean mode) - patches fetch/XHR globally
+init({ service: 'vanilla-js-example', debug: true })
 
-// traceparent header is automatically injected on all fetch calls!
+// traceparent header is automatically injected on all fetch calls
 fetch('https://jsonplaceholder.typicode.com/posts/1')
+
+// trace(ctx => ...) gives you traceId, spanId, correlationId
+const doFetch = trace(ctx => async () => {
+  const res = await fetch('/api/users/1')
+  console.log('Trace ID:', ctx.traceId)
+  return res.json()
+})
 ```
 
 ### 2. Backend Side (Your API)

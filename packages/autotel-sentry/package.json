@@ -1,0 +1,55 @@
+{
+  "name": "autotel-sentry",
+  "version": "0.1.0",
+  "description": "Bridge OpenTelemetry (Autotel) traces to Sentry via SpanProcessor and Propagator",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.5.0",
+    "@opentelemetry/semantic-conventions": "^1.39.0",
+    "autotel": "workspace:*"
+  },
+  "peerDependencies": {
+    "@sentry/node": ">=10.38.0"
+  },
+  "peerDependenciesMeta": {
+    "@sentry/node": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "sentry",
+    "tracing",
+    "observability",
+    "autotel"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT"
+}
