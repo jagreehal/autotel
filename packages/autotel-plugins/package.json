@@ -100,7 +100,7 @@
     "@opentelemetry/instrumentation-amqplib": ">=0.58.0",
     "@opentelemetry/instrumentation-kafkajs": ">=0.20.0",
     "drizzle-orm": ">=0.45.1",
-    "mongoose": ">=9.1.6"
+    "mongoose": ">=9.2.1"
   },
   "peerDependenciesMeta": {
     "drizzle-orm": {
@@ -123,13 +123,13 @@
     "@arethetypeswrong/cli": "^0.18.2",
     "@google-cloud/bigquery": "^8.1.1",
     "@opentelemetry/core": "^2.5.0",
-    "mongoose": "^9.1.5",
-    "@types/node": "^25.2.2",
-    "@typescript-eslint/eslint-plugin": "^8.54.0",
-    "@typescript-eslint/parser": "^8.54.0",
+    "mongoose": "^9.2.0",
+    "@types/node": "^25.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.55.0",
+    "@typescript-eslint/parser": "^8.55.0",
     "drizzle-orm": "^0.45.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-unicorn": "^62.0.0",
+    "eslint-plugin-unicorn": "^63.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

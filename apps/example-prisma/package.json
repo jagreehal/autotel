@@ -11,14 +11,14 @@
   },
   "dependencies": {
     "@opentelemetry/auto-instrumentations-node": "^0.69.0",
-    "@prisma/client": "^7.3.0",
-    "@prisma/instrumentation": "^7.3.0",
+    "@prisma/client": "^7.4.0",
+    "@prisma/instrumentation": "^7.4.0",
     "autotel": "workspace:*",
     "dotenv": "^17.2.4"
   },
   "devDependencies": {
-    "@types/node": "^25.2.2",
-    "prisma": "^7.3.0",
+    "@types/node": "^25.2.3",
+    "prisma": "^7.4.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

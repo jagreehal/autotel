@@ -192,6 +192,15 @@ export {
   trace as otelTrace,
 } from '@opentelemetry/api';
 
+// Re-export common semantic-convention keys/builders for library instrumentation
+export {
+  HTTPAttributes,
+  ServiceAttributes,
+  URLAttributes,
+  httpRequestHeaderAttribute,
+  httpResponseHeaderAttribute,
+} from './semantic-conventions';
+
 // Re-export common OpenTelemetry types and utilities
 // This allows plugins and apps to use OTel without needing separate @opentelemetry/api installation
 
