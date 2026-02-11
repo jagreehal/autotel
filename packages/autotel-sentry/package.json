@@ -55,5 +55,10 @@
     "autotel"
   ],
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-sentry"
+  }
 }
