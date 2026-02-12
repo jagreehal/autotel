@@ -1,6 +1,6 @@
 {
   "name": "autotel-subscribers",
-  "version": "23.0.0",
+  "version": "23.0.1",
   "description": "Write Once, Observe Anywhere - Event subscribers for autotel (PostHog, Mixpanel, Amplitude, Segment)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
