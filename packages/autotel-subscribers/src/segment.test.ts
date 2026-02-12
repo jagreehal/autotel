@@ -1,16 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SegmentSubscriber } from './segment';
 
-// Hoist mocks so they exist when vi.mock factory runs (factory is hoisted before other code)
-const mockTrack = vi.hoisted(() => vi.fn());
-const mockCloseAndFlush = vi.hoisted(() => vi.fn(() => Promise.resolve()));
-const MockAnalytics = vi.hoisted(() =>
-  vi.fn(function (this: { track: ReturnType<typeof vi.fn>; closeAndFlush: ReturnType<typeof vi.fn> }) {
-    this.track = mockTrack;
-    this.closeAndFlush = mockCloseAndFlush;
-    return this;
-  }),
-);
+// Mock the segment analytics module
+const mockTrack = vi.fn();
+const mockCloseAndFlush = vi.fn(() => Promise.resolve());
+
+const MockAnalytics = vi.fn(function (this: any) {
+  this.track = mockTrack;
+  this.closeAndFlush = mockCloseAndFlush;
+});
 
 vi.mock('@segment/analytics-node', () => ({
   Analytics: MockAnalytics,
@@ -29,6 +27,7 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
+      // Wait for initialization to complete before test ends
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(adapter).toBeDefined();
@@ -50,14 +49,10 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
       await adapter.trackEvent('order.completed', {
         userId: 'user-123',
         amount: 99.99,
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockTrack).toHaveBeenCalledWith({
         userId: 'user-123',
@@ -74,13 +69,9 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
       await adapter.trackEvent('order.completed', {
         user_id: 'user-456',
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockTrack).toHaveBeenCalledWith({
         userId: 'user-456',
@@ -96,11 +87,7 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
       await adapter.trackEvent('page.viewed');
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockTrack).toHaveBeenCalledWith({
         userId: 'anonymous',
@@ -128,14 +115,10 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
       await adapter.trackFunnelStep('checkout', 'started', {
         userId: 'user-123',
         cartValue: 150,
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockTrack).toHaveBeenCalledWith({
         userId: 'user-123',
@@ -156,14 +139,10 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
       await adapter.trackOutcome('payment.processing', 'success', {
         userId: 'user-123',
         transactionId: 'txn-789',
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockTrack).toHaveBeenCalledWith({
         userId: 'user-123',
@@ -184,14 +163,10 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
       await adapter.trackValue('revenue', 99.99, {
         userId: 'user-123',
         currency: 'USD',
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockTrack).toHaveBeenCalledWith({
         userId: 'user-123',
@@ -211,7 +186,6 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
       await adapter.shutdown();
 
       expect(mockCloseAndFlush).toHaveBeenCalled();
