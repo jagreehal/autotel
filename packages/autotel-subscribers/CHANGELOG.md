@@ -1,5 +1,11 @@
 # autotel-subscribers
 
+## 23.0.1
+
+### Patch Changes
+
+- f6fe506: Fix flaky Segment subscriber test by awaiting Segment initialization in the init test and ensuring assertions run after async setup.
+
 ## 23.0.0
 
 ### Minor Changes
