@@ -1,5 +1,12 @@
 # @jagreehal/example-winston
 
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [f6fe506]
+  - autotel-subscribers@23.0.1
+
 ## 1.0.7
 
 ### Patch Changes
