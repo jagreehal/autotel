@@ -5,6 +5,7 @@ import {
   getActiveContext,
   runWithSpan,
   getTraceContext,
+  resolveTraceUrl,
 } from './trace-helpers';
 import { init } from './init';
 import { createTraceCollector } from './testing';
@@ -217,6 +218,53 @@ describe('Trace Helpers', () => {
 
       expect(child).toBeDefined();
       expect(parent).toBeDefined();
+    });
+  });
+
+  describe('resolveTraceUrl()', () => {
+    it('should return undefined when no template and no env var', () => {
+      delete process.env.OTEL_TRACE_URL_TEMPLATE;
+      expect(resolveTraceUrl(undefined, 'abc123')).toBeUndefined();
+    });
+
+    it('should replace {traceId} placeholder in template', () => {
+      const url = resolveTraceUrl(
+        'https://grafana.example.com/explore?traceId={traceId}',
+        'abc123',
+      );
+      expect(url).toBe('https://grafana.example.com/explore?traceId=abc123');
+    });
+
+    it('should replace multiple occurrences of {traceId}', () => {
+      const url = resolveTraceUrl(
+        'https://example.com/{traceId}/details?id={traceId}',
+        'abc123',
+      );
+      expect(url).toBe('https://example.com/abc123/details?id=abc123');
+    });
+
+    it('should fall back to OTEL_TRACE_URL_TEMPLATE env var when template is undefined', () => {
+      process.env.OTEL_TRACE_URL_TEMPLATE =
+        'https://tempo.example.com/trace/{traceId}';
+      try {
+        const url = resolveTraceUrl(undefined, 'def456');
+        expect(url).toBe('https://tempo.example.com/trace/def456');
+      } finally {
+        delete process.env.OTEL_TRACE_URL_TEMPLATE;
+      }
+    });
+
+    it('should prefer template parameter over env var', () => {
+      process.env.OTEL_TRACE_URL_TEMPLATE = 'https://env.example.com/{traceId}';
+      try {
+        const url = resolveTraceUrl(
+          'https://param.example.com/{traceId}',
+          'ghi789',
+        );
+        expect(url).toBe('https://param.example.com/ghi789');
+      } finally {
+        delete process.env.OTEL_TRACE_URL_TEMPLATE;
+      }
     });
   });
 

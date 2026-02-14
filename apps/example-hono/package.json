@@ -1,0 +1,21 @@
+{
+  "name": "@jagreehal/example-hono",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx --import ./instrumentation.ts src/index.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "autotel": "workspace:*",
+    "autotel-hono": "workspace:*",
+    "dotenv": "^17.2.4",
+    "hono": "^4.11.9"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
