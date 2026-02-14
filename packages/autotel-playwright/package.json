@@ -1,6 +1,6 @@
 {
   "name": "autotel-playwright",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Playwright fixture for OpenTelemetry: one span per test and trace context injected into API requests",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,11 @@
       "require": "./dist/reporter.cjs"
     }
   },
-  "files": ["dist", "src", "README.md"],
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

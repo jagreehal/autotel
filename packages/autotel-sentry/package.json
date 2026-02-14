@@ -1,6 +1,6 @@
 {
   "name": "autotel-sentry",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Bridge OpenTelemetry (Autotel) traces to Sentry via SpanProcessor and Propagator",
   "type": "module",
   "main": "./dist/index.js",

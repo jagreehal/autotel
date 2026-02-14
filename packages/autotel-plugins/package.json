@@ -1,6 +1,6 @@
 {
   "name": "autotel-plugins",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "OpenTelemetry instrumentation for libraries without official support (Drizzle ORM, Mongoose, BigQuery)",
   "type": "module",
   "main": "./dist/index.js",
