@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 12.0.0
+
+### Patch Changes
+
+- Updated dependencies [6b67787]
+  - autotel@2.20.0
+
 ## 11.0.0
 
 ### Minor Changes

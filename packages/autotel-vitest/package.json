@@ -1,6 +1,6 @@
 {
   "name": "autotel-vitest",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Vitest fixture for OpenTelemetry: one span per test so all instrumented code is filterable by test run",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,11 @@
       "require": "./dist/reporter.cjs"
     }
   },
-  "files": ["dist", "src", "README.md"],
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
