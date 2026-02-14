@@ -38,12 +38,18 @@ const TRACER_VERSION = '0.1.0';
 
 let collector: TestSpanCollector | null = null;
 
+interface TracerProviderWithProcessor {
+  addSpanProcessor(processor: unknown): void;
+}
+
 function ensureCollector(): TestSpanCollector {
   if (!collector) {
     collector = new TestSpanCollector();
     const provider = getAutotelTracerProvider();
     if ('addSpanProcessor' in provider) {
-      (provider as any).addSpanProcessor(new SimpleSpanProcessor(collector));
+      (provider as TracerProviderWithProcessor).addSpanProcessor(
+        new SimpleSpanProcessor(collector),
+      );
     }
   }
   return collector;
