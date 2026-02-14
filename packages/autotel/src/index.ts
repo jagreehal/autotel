@@ -152,7 +152,13 @@ export {
   finalizeSpan,
   createDeterministicTraceId,
   flattenMetadata,
+  getTraceContext,
+  isTracing,
+  enrichWithTraceContext,
+  resolveTraceUrl,
 } from './trace-helpers';
+
+export type { TraceContext as OtelTraceContext } from './trace-helpers';
 
 // Isolated tracer provider support (advanced - for library authors)
 export {

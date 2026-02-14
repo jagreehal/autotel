@@ -5,7 +5,8 @@
   "description": "Write Once, Observe Anywhere - Zero-boilerplate OpenTelemetry for JavaScript/TypeScript",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "examples/*"
   ],
   "scripts": {
     "build": "turbo build",
@@ -14,6 +15,7 @@
     "format": "turbo format",
     "test": "turbo test",
     "test:integration": "turbo test:integration",
+    "test:playwright-e2e": "pnpm --filter @jagreehal/example-playwright-e2e test",
     "clean": "turbo clean",
     "type-check": "turbo type-check",
     "changeset": "changeset",
@@ -39,11 +41,6 @@
     "pnpm": ">=8"
   },
   "packageManager": "pnpm@10.27.0",
-  "pnpm": {
-    "overrides": {
-      "vite": ">=7.1.11"
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jagreehal/autotel.git"
@@ -54,5 +51,8 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel#readme"
+  "homepage": "https://github.com/jagreehal/autotel#readme",
+  "overrides": {
+    "vite": ">=7.1.11"
+  }
 }

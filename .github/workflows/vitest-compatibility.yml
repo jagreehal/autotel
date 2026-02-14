@@ -1,0 +1,61 @@
+name: Vitest Compatibility
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/autotel/**'
+      - 'packages/autotel-vitest/**'
+      - '.github/workflows/vitest-compatibility.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'packages/autotel/**'
+      - 'packages/autotel-vitest/**'
+      - '.github/workflows/vitest-compatibility.yml'
+
+jobs:
+  vitest-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        vitest-version: ['2.1.9', '3.2.4', '4.0.18']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install pnpm
+        run: corepack prepare pnpm@10.27.0 --activate
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build autotel packages used by integration test
+        run: |
+          pnpm --filter autotel build
+          pnpm --filter autotel-vitest build
+
+      - name: Run autotel-vitest integration tests on Vitest ${{ matrix.vitest-version }}
+        run: |
+          cd packages/autotel-vitest
+          pnpm dlx vitest@${{ matrix.vitest-version }} run --config integration/vitest.config.ts
+        env:
+          NODE_ENV: test

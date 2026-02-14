@@ -197,6 +197,11 @@
       "types": "./dist/correlation-id.d.ts",
       "import": "./dist/correlation-id.js",
       "require": "./dist/correlation-id.cjs"
+    },
+    "./test-span-collector": {
+      "types": "./dist/test-span-collector.d.ts",
+      "import": "./dist/test-span-collector.js",
+      "require": "./dist/test-span-collector.cjs"
     }
   },
   "files": [

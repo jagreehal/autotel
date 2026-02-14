@@ -1,0 +1,27 @@
+{
+  "name": "@jagreehal/example-nestjs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prestart": "pnpm run build",
+    "start": "node --import ./dist/instrumentation.js dist/src/main.js",
+    "start:dev": "tsx --import ./instrumentation.ts src/main.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.69.0",
+    "autotel": "workspace:*",
+    "dotenv": "^17.2.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
