@@ -635,6 +635,24 @@ export async function createDeterministicTraceId(
  *
  * @public
  */
+/**
+ * Resolve a trace URL from a template string and trace ID.
+ *
+ * Templates use `{traceId}` as placeholder. Falls back to `OTEL_TRACE_URL_TEMPLATE` env var.
+ *
+ * @example
+ * resolveTraceUrl('https://grafana.example.com/explore?traceId={traceId}', 'abc123')
+ * // => 'https://grafana.example.com/explore?traceId=abc123'
+ */
+export function resolveTraceUrl(
+  template: string | undefined,
+  traceId: string,
+): string | undefined {
+  const t = template ?? process.env.OTEL_TRACE_URL_TEMPLATE;
+  if (!t) return undefined;
+  return t.replace(/\{traceId\}/g, traceId);
+}
+
 export function flattenMetadata(
   metadata: Record<string, unknown>,
   prefix = 'metadata',

@@ -1,0 +1,13 @@
+=== STDOUT ===
+
+=== STDERR ===
+Error: playwright.config.ts: config.globalSetup must be a string
+    at errorWithFile (/Users/jreehal/dev/node-examples/autotel/node_modules/.pnpm/playwright@1.58.2/node_modules/playwright/lib/util.js:198:10)
+    at validateConfig (/Users/jreehal/dev/node-examples/autotel/node_modules/.pnpm/playwright@1.58.2/node_modules/playwright/lib/common/configLoader.js:152:43)
+    at loadConfig (/Users/jreehal/dev/node-examples/autotel/node_modules/.pnpm/playwright@1.58.2/node_modules/playwright/lib/common/configLoader.js:120:3)
+    at loadConfigFromFile (/Users/jreehal/dev/node-examples/autotel/node_modules/.pnpm/playwright@1.58.2/node_modules/playwright/lib/common/configLoader.js:331:10)
+    at runTests (/Users/jreehal/dev/node-examples/autotel/node_modules/.pnpm/playwright@1.58.2/node_modules/playwright/lib/program.js:197:18)
+    at i.<anonymous> (/Users/jreehal/dev/node-examples/autotel/node_modules/.pnpm/playwright@1.58.2/node_modules/playwright/lib/program.js:70:7)
+
+=== EXIT ===
+code=1 signal=null
