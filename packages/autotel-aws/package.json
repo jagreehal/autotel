@@ -1,6 +1,6 @@
 {
   "name": "autotel-aws",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "OpenTelemetry instrumentation for AWS",
   "type": "module",
   "sideEffects": false,
