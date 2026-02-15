@@ -190,9 +190,15 @@ export const test = base.extend<{
       setAttributesFromAnnotations(span, testInfo);
       const ctx = otelTrace.setSpan(otelContext.active(), span);
       const carrier: Record<string, string> = {};
-      propagation.inject(ctx, carrier);
+      otelContext.with(ctx, () => {
+        propagation.inject(otelContext.active(), carrier);
+      });
       try {
-        await use({ carrier, apiBaseUrls, testInfo });
+        await otelContext.with(ctx, () => use({ carrier, apiBaseUrls, testInfo }));
+      } catch (error) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error instanceof Error ? error.message : 'Unknown error' });
+        span.recordException(error instanceof Error ? error : new Error(String(error)));
+        throw error;
       } finally {
         span.end();
         const traceId = span.spanContext().traceId;

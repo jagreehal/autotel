@@ -23,6 +23,7 @@ type TestSpanFixtureFn = (
 const state: { fixtures?: Fixtures } = {};
 let spanIdCounter = 0;
 let mockDrainResult: unknown[] = [];
+const contextWithSpy = vi.fn((_ctx: unknown, fn: () => Promise<unknown>) => fn());
 const createdSpans: Array<{
   end: ReturnType<typeof vi.fn>;
   recordException: ReturnType<typeof vi.fn>;
@@ -45,7 +46,7 @@ vi.mock('autotel', () => ({
   SpanStatusCode: { UNSET: 0, OK: 1, ERROR: 2 },
   context: {
     active: () => ({}),
-    with: (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
+    with: contextWithSpy,
   },
   getTracer: () => ({
     startSpan: () => {
@@ -99,6 +100,7 @@ describe('autotel-playwright requestWithTrace.fetch', () => {
     createdSpans.length = 0;
     spanIdCounter = 0;
     mockDrainResult = [];
+    contextWithSpy.mockClear();
     vi.resetModules();
   });
 
@@ -189,6 +191,7 @@ describe('autotel-playwright annotations', () => {
     createdSpans.length = 0;
     spanIdCounter = 0;
     mockDrainResult = [];
+    contextWithSpy.mockClear();
     vi.resetModules();
   });
 
@@ -246,6 +249,55 @@ describe('autotel-playwright annotations', () => {
     expect(JSON.parse(spansAnnotation!.description!)).toEqual([
       { spanId: 's1', name: 'e2e:test', startTimeMs: 1000, durationMs: 100, status: 'ok' },
     ]);
+  });
+
+  it('marks the test span as error and records exception when test body throws', async () => {
+    await import('./index');
+
+    const spanFixture = state.fixtures?._otelTestSpan;
+    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    expect(spanFixtureFn).toBeTypeOf('function');
+
+    const testError = new Error('fixture blew up');
+    await expect(
+      spanFixtureFn?.(
+        {},
+        async () => {
+          throw testError;
+        },
+        {
+          annotations: [],
+          project: { name: 'chromium' },
+          title: 'failing fixture test',
+        },
+      ),
+    ).rejects.toThrow('fixture blew up');
+
+    const span = createdSpans[0];
+    expect(span).toBeDefined();
+    expect(span.setStatus).toHaveBeenCalled();
+    expect(span.recordException).toHaveBeenCalledWith(testError);
+  });
+
+  it('runs test body inside the test span context', async () => {
+    await import('./index');
+
+    const spanFixture = state.fixtures?._otelTestSpan;
+    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    expect(spanFixtureFn).toBeTypeOf('function');
+
+    await spanFixtureFn?.(
+      {},
+      async () => {},
+      {
+        annotations: [],
+        project: { name: 'chromium' },
+        title: 'context propagation test',
+      },
+    );
+
+    // Once to build carrier, once to run the test body under the span context.
+    expect(contextWithSpy).toHaveBeenCalledTimes(2);
   });
 });
 
