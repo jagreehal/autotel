@@ -1,6 +1,6 @@
 {
   "name": "autotel-playwright",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Playwright fixture for OpenTelemetry: one span per test and trace context injected into API requests",
   "type": "module",
   "main": "./dist/index.js",
