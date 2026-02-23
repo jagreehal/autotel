@@ -1,5 +1,16 @@
 # autotel-cloudflare
 
+## 2.12.0
+
+### Minor Changes
+
+- c710c71: Add option to hide free/busy times (or selected attributes) in console export and related exporters.
+
+### Patch Changes
+
+- Updated dependencies [c710c71]
+  - autotel-edge@3.11.0
+
 ## 2.11.0
 
 ### Minor Changes
