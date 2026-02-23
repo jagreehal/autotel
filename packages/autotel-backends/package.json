@@ -66,11 +66,11 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@opentelemetry/exporter-logs-otlp-http": ">=0.211.0",
-    "@opentelemetry/exporter-metrics-otlp-http": ">=0.211.0",
-    "@opentelemetry/exporter-trace-otlp-http": ">=0.211.0",
-    "@opentelemetry/sdk-logs": ">=0.211.0",
-    "@opentelemetry/sdk-metrics": ">=2.5.0",
+    "@opentelemetry/exporter-logs-otlp-http": ">=0.212.0",
+    "@opentelemetry/exporter-metrics-otlp-http": ">=0.212.0",
+    "@opentelemetry/exporter-trace-otlp-http": ">=0.212.0",
+    "@opentelemetry/sdk-logs": ">=0.212.0",
+    "@opentelemetry/sdk-metrics": ">=2.5.1",
     "google-auth-library": ">=10.5.0"
   },
   "peerDependenciesMeta": {
@@ -94,9 +94,9 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^25.2.3",
-    "@typescript-eslint/eslint-plugin": "^8.55.0",
-    "@typescript-eslint/parser": "^8.55.0",
+    "@types/node": "^25.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^63.0.0",
     "tsup": "^8.5.1",
