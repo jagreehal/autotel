@@ -36,7 +36,7 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@playwright/test": ">=1.40.0"
+    "@playwright/test": ">=1.58.2"
   },
   "peerDependenciesMeta": {
     "@playwright/test": {
