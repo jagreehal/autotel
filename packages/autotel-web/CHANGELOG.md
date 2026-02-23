@@ -1,5 +1,11 @@
 # autotel-web
 
+## 1.9.0
+
+### Minor Changes
+
+- c710c71: Add option to hide free/busy times (or selected attributes) in console export and related exporters.
+
 ## 1.8.0
 
 ### Minor Changes

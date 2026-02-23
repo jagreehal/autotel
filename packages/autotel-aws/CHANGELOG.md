@@ -1,5 +1,16 @@
 # autotel-aws
 
+## 0.10.0
+
+### Minor Changes
+
+- c710c71: Add option to hide free/busy times (or selected attributes) in console export and related exporters.
+
+### Patch Changes
+
+- Updated dependencies [c710c71]
+  - autotel@2.21.0
+
 ## 0.9.1
 
 ### Patch Changes

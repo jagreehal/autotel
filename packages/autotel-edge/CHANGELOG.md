@@ -1,5 +1,11 @@
 # autotel-edge
 
+## 3.11.0
+
+### Minor Changes
+
+- c710c71: Add option to hide free/busy times (or selected attributes) in console export and related exporters.
+
 ## 3.10.0
 
 ### Minor Changes

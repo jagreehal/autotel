@@ -1,5 +1,11 @@
 # autotel-cli
 
+## 0.6.0
+
+### Minor Changes
+
+- c710c71: Add option to hide free/busy times (or selected attributes) in console export and related exporters.
+
 ## 0.5.0
 
 ### Minor Changes
