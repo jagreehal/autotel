@@ -51,6 +51,14 @@ export {
   instrumentD1,
   instrumentServiceBinding,
   instrumentBindings,
+  instrumentAI,
+  instrumentVectorize,
+  instrumentHyperdrive,
+  instrumentQueueProducer,
+  instrumentAnalyticsEngine,
+  instrumentImages,
+  instrumentRateLimiter,
+  instrumentBrowserRendering,
 } from './bindings';
 
 // Global instrumentations

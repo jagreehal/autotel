@@ -23,7 +23,13 @@ import {
   SpanStatusCode,
 } from '@opentelemetry/api';
 import { WorkerTracer } from 'autotel-edge';
-import { wrap } from './common';
+import { wrap, isWrapped } from './common';
+import { instrumentAI } from './ai';
+import { instrumentVectorize } from './vectorize';
+import { instrumentHyperdrive } from './hyperdrive';
+import { instrumentQueueProducer } from './queue-producer';
+import { instrumentAnalyticsEngine } from './analytics-engine';
+import { instrumentImages } from './images';
 
 /**
  * Instrument KV namespace
@@ -555,67 +561,112 @@ export function instrumentServiceBinding<F extends Fetcher>(fetcher: F, serviceN
 }
 
 /**
+ * Detection helpers
+ */
+const hasMethod = (obj: any, m: string): boolean =>
+  typeof obj?.[m] === 'function';
+
+const hasExactMethods = (obj: any, methods: string[]): boolean =>
+  methods.every(m => hasMethod(obj, m));
+
+/**
  * Auto-instrument all Cloudflare bindings in the environment
+ *
+ * Detection order (most specific first):
+ * 1. R2 — get, put, delete, list, head
+ * 2. KV — get, put, delete, list (not head)
+ * 3. D1 — prepare, exec
+ * 4. Vectorize — query, insert, upsert, describe
+ * 5. AI — run + (gateway or models discriminator)
+ * 6. Hyperdrive — connect + connectionString + host
+ * 7. Queue Producer — send, sendBatch (not get)
+ * 8. Analytics Engine — writeDataPoint
+ * 9. Images — info, input
+ * 10. Service Binding — fetch (broadest, must be last)
+ *
+ * Not auto-detected (manual only):
+ * - Rate Limiter — limit() alone too generic
+ * - Browser Rendering — indistinguishable from Service Binding
  */
 export function instrumentBindings(env: Record<string, any>): Record<string, any> {
   const instrumented: Record<string, any> = {};
-  
+
   for (const [key, value] of Object.entries(env)) {
     if (!value || typeof value !== 'object') {
       instrumented[key] = value;
       continue;
     }
-    
-    // Check for KV namespace
-    if ('get' in value && 'put' in value && 'delete' in value && 'list' in value) {
-      // Likely KV namespace
-      try {
-        instrumented[key] = instrumentKV(value as KVNamespace, key);
-        continue;
-      } catch {
-        // Not KV, continue checking
-      }
+
+    // Skip already-instrumented bindings
+    if (isWrapped(value)) {
+      instrumented[key] = value;
+      continue;
     }
-    
-    // Check for R2 bucket
-    if ('get' in value && 'put' in value && 'delete' in value && 'list' in value && 'head' in value) {
-      // Likely R2 bucket
-      try {
-        instrumented[key] = instrumentR2(value as R2Bucket, key);
-        continue;
-      } catch {
-        // Not R2, continue checking
-      }
+
+    // 1. R2 — most specific (has head)
+    if (hasExactMethods(value, ['get', 'put', 'delete', 'list', 'head'])) {
+      instrumented[key] = instrumentR2(value as R2Bucket, key);
+      continue;
     }
-    
-    // Check for D1 database
-    if ('prepare' in value && 'exec' in value && typeof value.prepare === 'function') {
-      // Likely D1 database
-      try {
-        instrumented[key] = instrumentD1(value as D1Database, key);
-        continue;
-      } catch {
-        // Not D1, continue checking
-      }
+
+    // 2. KV — like R2 but without head
+    if (hasExactMethods(value, ['get', 'put', 'delete', 'list']) && !('head' in value)) {
+      instrumented[key] = instrumentKV(value as KVNamespace, key);
+      continue;
     }
-    
-    // Check for Service Binding (Fetcher)
-    if ('fetch' in value && typeof value.fetch === 'function') {
-      // Likely service binding
-      try {
-        instrumented[key] = instrumentServiceBinding(value as Fetcher, key);
-        continue;
-      } catch {
-        // Not a service binding, continue checking
-      }
+
+    // 3. D1
+    if (hasExactMethods(value, ['prepare', 'exec'])) {
+      instrumented[key] = instrumentD1(value as D1Database, key);
+      continue;
     }
-    
-    // For other bindings (Events Engine, Workers AI, Vectorize, Hyperdrive),
-    // they don't have standard interfaces we can detect, so we pass them through
-    // Users can manually instrument them if needed
+
+    // 4. Vectorize
+    if (hasExactMethods(value, ['query', 'insert', 'upsert', 'describe'])) {
+      instrumented[key] = instrumentVectorize(value as VectorizeIndex, key);
+      continue;
+    }
+
+    // 5. AI — has run() + discriminator properties
+    if (hasMethod(value, 'run') && ('gateway' in value || 'models' in value)) {
+      instrumented[key] = instrumentAI(value as Ai, key);
+      continue;
+    }
+
+    // 6. Hyperdrive — connect + connection properties
+    if (hasMethod(value, 'connect') && 'connectionString' in value && 'host' in value) {
+      instrumented[key] = instrumentHyperdrive(value as Hyperdrive, key);
+      continue;
+    }
+
+    // 7. Queue Producer — send + sendBatch (not get, to avoid KV collision)
+    if (hasExactMethods(value, ['send', 'sendBatch']) && !('get' in value)) {
+      instrumented[key] = instrumentQueueProducer(value as Queue, key);
+      continue;
+    }
+
+    // 8. Analytics Engine
+    if (hasMethod(value, 'writeDataPoint')) {
+      instrumented[key] = instrumentAnalyticsEngine(value as AnalyticsEngineDataset, key);
+      continue;
+    }
+
+    // 9. Images
+    if (hasExactMethods(value, ['info', 'input'])) {
+      instrumented[key] = instrumentImages(value as any, key);
+      continue;
+    }
+
+    // 10. Service Binding (broadest — must be last)
+    if (hasMethod(value, 'fetch')) {
+      instrumented[key] = instrumentServiceBinding(value as Fetcher, key);
+      continue;
+    }
+
+    // Unknown binding type — pass through
     instrumented[key] = value;
   }
-  
+
   return instrumented;
 }
 

@@ -75,12 +75,49 @@ type EmailHandler = (
 /**
  * Create fetch handler instrumentation with config support for postProcess
  */
+/**
+ * Extract Cloudflare-specific attributes from a request
+ */
+function extractCfAttributes(request: Request): Record<string, string | number | boolean> {
+  const cf = (request as any).cf;
+  if (!cf) return {};
+
+  const attrs: Record<string, string | number | boolean> = {};
+  const set = (key: string, value: unknown) => {
+    if (value !== undefined && value !== null) {
+      attrs[key] = value as string | number | boolean;
+    }
+  };
+
+  set('cloudflare.colo', cf.colo);
+  const ray = request.headers.get('cf-ray');
+  if (ray) attrs['cloudflare.ray_id'] = ray;
+  set('cloudflare.country', cf.country);
+  set('cloudflare.city', cf.city);
+  set('cloudflare.region', cf.region);
+  set('cloudflare.continent', cf.continent);
+  set('cloudflare.timezone', cf.timezone);
+  set('cloudflare.latitude', cf.latitude);
+  set('cloudflare.longitude', cf.longitude);
+  set('cloudflare.asn', cf.asn);
+  set('cloudflare.as_organization', cf.asOrganization);
+  set('cloudflare.http_protocol', cf.httpProtocol);
+  set('cloudflare.tls_version', cf.tlsVersion);
+  set('cloudflare.client_tcp_rtt', cf.clientTcpRtt);
+
+  return attrs;
+}
+
 function createFetchInstrumentation(
   config: ResolvedEdgeConfig,
 ): HandlerInstrumentation<Request, Response> {
   return {
     getInitialSpanInfo: (request: Request): InitialSpanInfo => {
       const url = new URL(request.url);
+
+      const cfAttrs = (config as any).extractCfAttributes === false
+        ? {}
+        : extractCfAttributes(request);
 
       return {
         name: `${request.method} ${url.pathname}`,
@@ -89,6 +126,7 @@ function createFetchInstrumentation(
           attributes: {
             'http.request.method': request.method,
             'url.full': request.url,
+            ...cfAttrs,
           },
         },
         context: propagation.extract(api_context.active(), request.headers),
