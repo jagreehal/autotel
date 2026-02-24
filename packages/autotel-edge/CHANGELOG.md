@@ -1,5 +1,13 @@
 # autotel-edge
 
+## 3.12.0
+
+### Minor Changes
+
+- 32e3cd9: Add first-class Cloudflare Workflows instrumentation.
+  - `autotel-edge` now exports `WorkflowTrigger` and includes it in the `Trigger` union.
+  - `autotel-cloudflare` `instrumentWorkflow()` now passes a workflow trigger into config resolution and emits spans for `run`, `step.do`, and `step.sleep` with `workflow.instance_id` and cold start attributes.
+
 ## 3.11.0
 
 ### Minor Changes
