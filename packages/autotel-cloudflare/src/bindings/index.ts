@@ -10,3 +10,11 @@ export {
   instrumentServiceBinding,
   instrumentBindings,
 } from './bindings';
+export { instrumentAI } from './ai';
+export { instrumentVectorize } from './vectorize';
+export { instrumentHyperdrive } from './hyperdrive';
+export { instrumentQueueProducer } from './queue-producer';
+export { instrumentAnalyticsEngine } from './analytics-engine';
+export { instrumentImages } from './images';
+export { instrumentRateLimiter } from './rate-limiter';
+export { instrumentBrowserRendering } from './browser-rendering';

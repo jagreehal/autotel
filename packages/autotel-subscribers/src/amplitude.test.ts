@@ -12,6 +12,9 @@ vi.mock('@amplitude/analytics-node', () => ({
   flush: mockFlush,
 }));
 
+// Prime the mocked module so the first dynamic import in AmplitudeSubscriber gets the mock (avoids CI race)
+import '@amplitude/analytics-node';
+
 describe('AmplitudeSubscriber', () => {
   beforeEach(() => {
     vi.clearAllMocks();
