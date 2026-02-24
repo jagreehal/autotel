@@ -3,6 +3,8 @@ import {
   instrument,
   trace,
   span,
+  instrumentRateLimiter,
+  instrumentBrowserRendering,
 } from 'autotel-cloudflare';
 import { createEdgeLogger, runWithLogLevel } from 'autotel-cloudflare/logger';
 import { getEdgeSubscribers } from 'autotel-cloudflare/events';
@@ -79,6 +81,83 @@ const queryUsers = trace({
     .prepare('SELECT * FROM users LIMIT 10')
     .all(); // Creates span: "D1 {database}: all"
   return result;
+});
+
+// Example: Workers AI with auto-traced model call
+const generateText = trace({
+  name: 'ai.generate',
+  attributesFromArgs: ([prompt]) => ({ 'ai.prompt_length': prompt.length }),
+  attributesFromResult: (result) => ({ 'ai.has_response': !!result }),
+}, async function generateText(prompt: string, ai: Ai) {
+  const result = await ai.run('@cf/meta/llama-2-7b-chat-int8', {
+    messages: [{ role: 'user', content: prompt }],
+  });
+  return result;
+});
+
+// Example: Vectorize with auto-traced vector search
+const searchVectors = trace({
+  name: 'vectorize.search',
+  attributesFromArgs: ([_vector, topK]) => ({ 'vectorize.top_k': topK }),
+  attributesFromResult: (result) => ({
+    'vectorize.matches': result?.matches?.length || 0,
+  }),
+}, async function searchVectors(
+  vector: number[],
+  topK: number,
+  index: VectorizeIndex,
+) {
+  const result = await index.query(vector, { topK });
+  return result;
+});
+
+// Example: Queue producer with auto-traced message send
+const enqueueMessage = trace({
+  name: 'queue.enqueue',
+  attributesFromArgs: ([data]) => ({ 'queue.message_type': typeof data }),
+}, async function enqueueMessage(data: unknown, queue: Queue) {
+  await queue.send(data);
+});
+
+// Example: Analytics Engine with auto-traced write
+const trackAnalytics = trace({
+  name: 'analytics.track',
+  attributesFromArgs: ([event]) => ({ 'analytics.event': event }),
+}, function trackAnalytics(
+  event: string,
+  ae: AnalyticsEngineDataset,
+) {
+  ae.writeDataPoint({
+    indexes: [event],
+    doubles: [Date.now()],
+    blobs: [event],
+  });
+});
+
+// Example: Combined AI → Vectorize → Queue pipeline (trace context propagation)
+const aiSearchPipeline = trace({
+  name: 'pipeline.ai-search',
+  attributesFromArgs: ([query]) => ({ 'pipeline.query': query }),
+  attributesFromResult: (result) => ({
+    'pipeline.matches_found': result.matches?.length || 0,
+  }),
+}, async function aiSearchPipeline(
+  query: string,
+  ai: Ai,
+  index: VectorizeIndex,
+  queue: Queue,
+) {
+  // Step 1: Generate embeddings with AI
+  const embedding = await ai.run('@cf/baai/bge-base-en-v1.5', { text: query }) as any;
+  const vector: number[] = embedding?.data?.[0] || [];
+
+  // Step 2: Search Vectorize for similar vectors
+  const searchResult = await index.query(vector, { topK: 5 });
+
+  // Step 3: Queue the results for async processing
+  await queue.send({ query, matches: searchResult.matches });
+
+  return searchResult;
 });
 
 // Example with proper error handling and span status codes
@@ -193,6 +272,39 @@ const handler: ExportedHandler<typeof worker.Env> = {
       // Service binding is automatically instrumented
       const response = await env.MY_SERVICE.fetch(request); // Creates span: "Service MY_SERVICE: GET"
       return response;
+    }
+
+    // AI binding - automatically instrumented via instrumentBindings()
+    if (url.pathname === '/ai' && env.AI) {
+      const prompt = url.searchParams.get('prompt') || 'Tell me a joke';
+      const result = await generateText(prompt, env.AI);
+      return Response.json(result);
+    }
+
+    // Vectorize binding - automatically instrumented
+    if (url.pathname === '/vectorize' && env.VECTORIZE) {
+      const vector = Array.from({ length: 768 }, () => Math.random());
+      const result = await searchVectors(vector, 5, env.VECTORIZE);
+      return Response.json(result);
+    }
+
+    // Queue producer - automatically instrumented
+    if (url.pathname === '/queue' && env.MY_QUEUE) {
+      await enqueueMessage({ event: 'test', timestamp: Date.now() }, env.MY_QUEUE);
+      return Response.json({ sent: true });
+    }
+
+    // Analytics Engine - automatically instrumented
+    if (url.pathname === '/analytics' && env.AE) {
+      trackAnalytics('page_view', env.AE);
+      return Response.json({ tracked: true });
+    }
+
+    // Combined pipeline: AI → Vectorize → Queue (shows trace context propagation)
+    if (url.pathname === '/ai-search' && env.AI && env.VECTORIZE && env.MY_QUEUE) {
+      const query = url.searchParams.get('q') || 'example search';
+      const result = await aiSearchPipeline(query, env.AI, env.VECTORIZE, env.MY_QUEUE);
+      return Response.json(result);
     }
 
     // Cache instrumentation example - using span() for code blocks

@@ -60,6 +60,15 @@ export function unwrap<T extends object>(item: T): T {
   }
 }
 
+/**
+ * Set attribute only if value is defined and non-null
+ */
+export function setAttr(span: { setAttribute: (key: string, value: any) => void }, key: string, value: unknown): void {
+  if (value !== undefined && value !== null) {
+    span.setAttribute(key, value);
+  }
+}
+
 export function wrap<T extends object>(
   item: T,
   handler: ProxyHandler<T>,
