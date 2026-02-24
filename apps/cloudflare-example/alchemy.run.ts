@@ -1,5 +1,5 @@
 import alchemy from 'alchemy';
-import { Worker, DurableObjectNamespace } from 'alchemy/cloudflare';
+import { Worker, DurableObjectNamespace, Workflow } from 'alchemy/cloudflare';
 
 const app = await alchemy('cloudflare-example');
 
@@ -41,7 +41,22 @@ export const agentWorker = await Worker('task-agent-worker', {
   },
 });
 
+// Workflow binding for the OrderWorkflow
+const orderWorkflow = Workflow('order-workflow', {
+  className: 'OrderWorkflow',
+});
+
+// Workflow worker with Workflow binding
+export const workflowWorker = await Worker('order-workflow-worker', {
+  entrypoint: './src/workflow-worker.ts',
+  compatibilityFlags: ['nodejs_compat'],
+  bindings: {
+    ORDER_WORKFLOW: orderWorkflow,
+  },
+});
+
 console.log(`Main worker deployed at: ${worker.url}`);
 console.log(`Actor worker deployed at: ${actorWorker.url}`);
 console.log(`Agent worker deployed at: ${agentWorker.url}`);
+console.log(`Workflow worker deployed at: ${workflowWorker.url}`);
 await app.finalize();
