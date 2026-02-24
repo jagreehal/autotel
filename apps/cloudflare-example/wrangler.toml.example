@@ -96,6 +96,13 @@ compatibility_flags = ["nodejs_compat"]
 # class_name = "MyDurableObject"
 # script_name = "cloudflare-example"
 
+# Workflows (see src/workflow-worker.ts and src/workflow.ts)
+# [[workflows]]
+# name = "order-workflow"
+# binding = "ORDER_WORKFLOW"
+# class_name = "OrderWorkflow"
+# script_name = "cloudflare-example"
+
 # Cloudflare Actors Example (see src/actor-worker.ts)
 # [[durable_objects.bindings]]
 # name = "CounterActor"

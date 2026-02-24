@@ -50,6 +50,8 @@ export {
 // Types
 export type {
   Trigger,
+  DOConstructorTrigger,
+  WorkflowTrigger,
   EdgeConfig,
   ResolvedEdgeConfig,
   ServiceConfig,

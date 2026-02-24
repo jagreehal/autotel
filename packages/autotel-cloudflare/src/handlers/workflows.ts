@@ -14,25 +14,48 @@ import {
   SpanStatusCode,
   SpanKind,
 } from '@opentelemetry/api';
-import type { ConfigurationOption } from 'autotel-edge';
+import type { ConfigurationOption, WorkflowTrigger } from 'autotel-edge';
 import { createInitialiser, setConfig, WorkerTracer } from 'autotel-edge';
 import { wrap } from '../bindings/common';
 
-// Workflow types (these would come from @cloudflare/workers-types when available)
-type WorkflowEvent = any;
-type WorkflowStep = any;
+/**
+ * Workflow types matching the Cloudflare Workers Workflows API.
+ * @see https://developers.cloudflare.com/workflows/
+ */
+
+interface WorkflowEvent<T = unknown> {
+  payload: Readonly<T>;
+  timestamp: Date;
+  instanceId: string;
+}
+
+interface WorkflowStepConfig {
+  retries?: {
+    limit: number;
+    delay?: string | number;
+    backoff?: 'constant' | 'linear' | 'exponential';
+  };
+  timeout?: string | number;
+}
+
+interface WorkflowStep {
+  do<T>(name: string, callback: () => Promise<T>): Promise<T>;
+  do<T>(name: string, config: WorkflowStepConfig, callback: () => Promise<T>): Promise<T>;
+  sleep(name: string, duration: string | number): Promise<void>;
+  sleepUntil(name: string, timestamp: Date | number): Promise<void>;
+}
 
 type WorkflowRunFn = (
-  event: WorkflowEvent,
+  event: Readonly<WorkflowEvent>,
   step: WorkflowStep,
-) => Promise<void> | void;
+) => Promise<unknown> | void;
 
 /**
  * Track cold starts per Workflow class
  */
-const coldStarts = new WeakMap<any, boolean>();
+const coldStarts = new WeakMap<object, boolean>();
 
-function isColdStart(workflowClass: any): boolean {
+function isColdStart(workflowClass: object): boolean {
   if (!coldStarts.has(workflowClass)) {
     coldStarts.set(workflowClass, true);
     return true;
@@ -41,7 +64,7 @@ function isColdStart(workflowClass: any): boolean {
 }
 
 /**
- * Proxy the step object to instrument step.do() calls
+ * Proxy the step object to instrument step.do() and step.sleep() calls
  */
 function instrumentWorkflowStep(
   step: WorkflowStep,
@@ -55,7 +78,7 @@ function instrumentWorkflowStep(
       if (prop === 'do' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, thisArg, args) => {
-            const [stepName] = args as [string, () => Promise<any>];
+            const [stepName] = args as [string, ...unknown[]];
 
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
@@ -148,13 +171,13 @@ function instrumentWorkflowStep(
 function instrumentWorkflowRun(
   runFn: WorkflowRunFn,
   workflowName: string,
-  workflowClass: any,
+  workflowClass: object,
 ): WorkflowRunFn {
   return async function instrumentedRun(
-    this: any,
-    event: WorkflowEvent,
+    this: unknown,
+    event: Readonly<WorkflowEvent>,
     step: WorkflowStep,
-  ): Promise<void> {
+  ): Promise<unknown> {
     const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
     // Instrument the step object to track individual operations
@@ -168,17 +191,16 @@ function instrumentWorkflowRun(
         kind: SpanKind.INTERNAL,
         attributes: {
           'workflow.name': workflowName,
+          'workflow.instance_id': event.instanceId,
           'faas.trigger': 'workflow',
           'faas.coldstart': isColdStart(workflowClass),
-          // Add workflow event attributes if available
-          ...(event?.workflowId && { 'workflow.id': event.workflowId }),
-          ...(event?.runId && { 'workflow.run_id': event.runId }),
         },
       },
       async (span) => {
         try {
-          await runFn.call(this, event, instrumentedStep);
+          const result = await runFn.call(this, event, instrumentedStep);
           span.setStatus({ code: SpanStatusCode.OK });
+          return result;
         } catch (error) {
           span.recordException(error as Error);
           span.setStatus({
@@ -198,17 +220,17 @@ function instrumentWorkflowRun(
  * Instrument a Workflow instance
  */
 function instrumentWorkflowInstance(
-  workflowInstance: any,
+  workflowInstance: Record<string, unknown>,
   workflowName: string,
-  workflowClass: any,
-): any {
-  const instanceHandler: ProxyHandler<any> = {
+  workflowClass: object,
+): Record<string, unknown> {
+  const instanceHandler: ProxyHandler<Record<string, unknown>> = {
     get(target, prop) {
       const value = Reflect.get(target, prop);
 
       if (prop === 'run' && typeof value === 'function') {
         return instrumentWorkflowRun(
-          value.bind(target),
+          value.bind(target) as WorkflowRunFn,
           workflowName,
           workflowClass,
         );
@@ -235,12 +257,12 @@ function instrumentWorkflowInstance(
  * **Usage:**
  * ```typescript
  * import { WorkflowEntrypoint } from 'cloudflare:workers'
- * import { instrumentWorkflow } from 'autotel-edge'
+ * import { instrumentWorkflow } from 'autotel-cloudflare/handlers'
  *
- * export class CheckoutWorkflow extends WorkflowEntrypoint {
+ * class MyWorkflow extends WorkflowEntrypoint {
  *   async run(event, step) {
  *     await step.do('submit payment', async () => {
- *       return await submitToPaymentProcessor(event.params.payment)
+ *       return await submitToPaymentProcessor(event.payload.payment)
  *     })
  *
  *     await step.sleep('wait for feedback', '2 days')
@@ -249,9 +271,8 @@ function instrumentWorkflowInstance(
  *   }
  * }
  *
- * // Wrap the class before exporting
- * export const CheckoutWorkflowInstrumented = instrumentWorkflow(
- *   CheckoutWorkflow,
+ * export const CheckoutWorkflow = instrumentWorkflow(
+ *   MyWorkflow,
  *   'checkout-workflow',
  *   (env: Env) => ({
  *     exporter: {
@@ -265,14 +286,6 @@ function instrumentWorkflowInstance(
  *   })
  * )
  * ```
- *
- * **What you get:**
- * - 🎯 Automatic spans for workflow.run() execution
- * - 📋 Automatic spans for each step.do() operation
- * - ⏸️ Automatic spans for step.sleep() operations
- * - 🔄 Automatic retry tracking (via step.do retries)
- * - 🥶 Cold start tracking
- * - ⚡ Automatic span lifecycle management
  *
  * @param workflowClass - The WorkflowEntrypoint class to instrument
  * @param workflowName - The name of the workflow (used in span names)
@@ -293,9 +306,7 @@ export function instrumentWorkflow<
       // Extract env from constructor args (typically last arg)
       const env = args[args.length - 1] || {};
 
-      // Initialize config for this workflow instance
-      // Use Request as trigger type since workflows don't have a standard Trigger type yet
-      const trigger = new Request('https://workflow.local/run');
+      const trigger: WorkflowTrigger = { type: 'workflow', name: workflowName };
       const workflowConfig = initialiser(env, trigger);
       const context = setConfig(workflowConfig);
 
@@ -315,4 +326,3 @@ export function instrumentWorkflow<
 
   return wrap(workflowClass, classHandler);
 }
-

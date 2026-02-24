@@ -33,12 +33,18 @@ export interface ExtendedSpanOptions extends SpanOptions {
 export type Trigger =
   | Request
   | DOConstructorTrigger
+  | WorkflowTrigger
   | 'do-alarm'
   | unknown;
 
 export interface DOConstructorTrigger {
   id: string;
   name?: string;
+}
+
+export interface WorkflowTrigger {
+  type: 'workflow';
+  name: string;
 }
 
 /**
