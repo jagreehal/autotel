@@ -10,7 +10,7 @@ Ultra-lightweight example demonstrating browser-to-backend distributed tracing w
 - ✅ Accessing trace context in `trace(ctx => ...)` (traceId, spanId, correlationId)
 - ✅ Using the `trace()` wrapper for DX
 
-For **full mode** (real spans, `setAttribute`, network timing, user interaction), use `initFull` from `autotel-web/full` — see [autotel-web README](../../packages/autotel-web/README.md#full-mode-real-spans).
+For **full mode** (real spans, `setAttribute`, network timing, user interaction), use `initFull` from `autotel-web/full` :  see [autotel-web README](../../packages/autotel-web/README.md#full-mode-real-spans).
 
 ## Running the Example
 
@@ -36,7 +36,7 @@ pnpm start
 Then open: **http://localhost:8000/apps/example-web-vanilla/**  
 (The server runs from the repo root so the script can load `packages/autotel-web/dist/index.js`.)
 
-To serve only this folder (e.g. for testing without loading autotel-web from repo), run `pnpm run start:local` and open http://localhost:8000 — but the autotel-web import will 404 unless you copy the built package into this app.
+To serve only this folder (e.g. for testing without loading autotel-web from repo), run `pnpm run start:local` and open http://localhost:8000 :  but the autotel-web import will 404 unless you copy the built package into this app.
 
 ### Option 2: Other HTTP servers
 

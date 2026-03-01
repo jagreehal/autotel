@@ -14,7 +14,7 @@ This example shows how to use [NestJS](https://nestjs.com) with autotel for HTTP
 1. From repo root: `pnpm install`
 2. Optional: set `OTLP_ENDPOINT` or `PORT` in `.env`
 3. Run: `pnpm start` (builds then runs; or from root: `pnpm --filter @jagreehal/example-nestjs start`)
-4. For dev with tsx (no decorator metadata): `pnpm start:dev` — routes work but DI may fail; use `pnpm start` for full behavior.
+4. For dev with tsx (no decorator metadata): `pnpm start:dev` :  routes work but DI may fail; use `pnpm start` for full behavior.
 
 ## How It Works
 

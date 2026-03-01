@@ -4,7 +4,7 @@ Ultra-lightweight browser SDK for distributed tracing (**1.6KB gzipped**)
 
 **Purpose:** Enable distributed tracing between browser and backend applications. The browser propagates W3C `traceparent` headers, and your backend (using [Autotel](../autotel)) automatically continues the trace.
 
-**Core Philosophy:** The backend does all the real tracing — timing, spans, errors, export — while the browser only propagates the trace context via headers.
+**Core Philosophy:** The backend does all the real tracing :  timing, spans, errors, export :  while the browser only propagates the trace context via headers.
 
 **No OpenTelemetry dependencies. No exporters. No collectors. No CORS. Just header injection.**
 
@@ -38,8 +38,8 @@ yarn add autotel-web
 
 ### Lean vs Full mode
 
-- **Lean (default)** – `import { init } from 'autotel-web'`. Zero dependencies, ~1.6KB gzipped. Only injects W3C `traceparent` on fetch/XHR; no real spans in the browser. Backend does the real tracing.
-- **Full** – `import { initFull } from 'autotel-web/full'`. Real spans (navigation, fetch/XHR, optional user interaction), optional `http.client.network_timing` events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB), **unhandled error capture**, optional long-task capture, sampling, and OTLP export. No Zone.js; bundle size is larger (~40–50KB gzipped). Use when you need client-side spans and export from the browser.
+- **Lean (default)** :  `import { init } from 'autotel-web'`. Zero dependencies, ~1.6KB gzipped. Only injects W3C `traceparent` on fetch/XHR; no real spans in the browser. Backend does the real tracing.
+- **Full**: `import { initFull } from 'autotel-web/full'`. Real spans (navigation, fetch/XHR, optional user interaction), optional `http.client.network_timing` events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB), **unhandled error capture**, optional long-task capture, sampling, and OTLP export. No Zone.js; bundle size is larger (~40-50KB gzipped). Use when you need client-side spans and export from the browser.
 
 Use lean mode by default; use full mode when you need real browser spans and network timing. You can use dynamic import to load full mode only when needed: `import('autotel-web/full').then(({ initFull }) => initFull(config))`.
 
@@ -395,7 +395,7 @@ interface AutotelWebFullConfig {
   service: string
   endpoint?: string                    // OTLP traces URL (e.g. https://api.example.com/v1/traces)
   spanProcessor?: SpanProcessor        // Custom processor instead of endpoint
-  sampleRate?: number                  // 0–1, e.g. 0.1 in production
+  sampleRate?: number                  // 0-1, e.g. 0.1 in production
   sampler?: Sampler                    // Custom sampler (overrides sampleRate)
   captureNavigation?: boolean          // default true
   captureFetch?: boolean               // default true
@@ -838,7 +838,7 @@ export default function MyComponent() { ... }
 ## Bundle Size
 
 - **Lean mode** (`autotel-web`): **~1.6KB gzipped**. Zero dependencies. Pure JavaScript using native `crypto.getRandomValues()`.
-- **Full mode** (`autotel-web/full`): ~40–50KB gzipped (includes OpenTelemetry SDK and instrumentations). No Zone.js. Use when you need real spans and export from the browser.
+- **Full mode** (`autotel-web/full`): ~40-50KB gzipped (includes OpenTelemetry SDK and instrumentations). No Zone.js. Use when you need real spans and export from the browser.
 
 ## Architecture: Header-Only Approach
 
@@ -918,7 +918,7 @@ autotel-web has **effectively zero performance overhead**:
 
 ## Context Propagation Without Zone.js
 
-Browser tracing with OpenTelemetry typically needs **context propagation**: when you start a span (e.g., "user clicked button"), any async work that follows—fetch, setTimeout, Promise chains—should run in that same trace context so the backend sees one continuous trace. In Node.js, OpenTelemetry uses AsyncLocalStorage to keep context across async boundaries. In the browser, there is no built-in "async context" that follows every boundary. **Zone.js** is the usual way to get that: it patches globals (setTimeout, Promise, fetch, etc.) so that any code that runs "later" still runs inside the same zone—and thus the same trace context.
+Browser tracing with OpenTelemetry typically needs **context propagation**: when you start a span (e.g., "user clicked button"), any async work that follows: fetch, setTimeout, Promise chains: should run in that same trace context so the backend sees one continuous trace. In Node.js, OpenTelemetry uses AsyncLocalStorage to keep context across async boundaries. In the browser, there is no built-in "async context" that follows every boundary. **Zone.js** is the usual way to get that: it patches globals (setTimeout, Promise, fetch, etc.) so that any code that runs "later" still runs inside the same zone: and thus the same trace context.
 
 This section explains when you might need Zone.js, its pitfalls, and how autotel-web gets you reliable tracing without it.
 
@@ -926,7 +926,7 @@ This section explains when you might need Zone.js, its pitfalls, and how autotel
 
 You might think you need **async context that survives every boundary** when:
 
-- You start a span in one place (e.g., click handler) and want **all** follow-up work—nested setTimeout, microtasks, fetch callbacks, requestAnimationFrame—to stay under that span without you wrapping each boundary
+- You start a span in one place (e.g., click handler) and want **all** follow-up work: nested setTimeout, microtasks, fetch callbacks, requestAnimationFrame: to stay under that span without you wrapping each boundary
 - You have deep or framework-driven async (e.g., React state updates → effects → fetch → more effects) and you can't or don't want to wrap every step
 - You rely on "current span" or "current trace ID" in code that runs in callbacks you don't control (e.g., third-party lib that calls your callback after a delay)
 
@@ -935,7 +935,7 @@ In those cases, Zone.js gives you one execution context that follows the entire 
 ### Pitfalls of Zone.js
 
 **1. Bundle size and cost**
-Zone.js is on the order of ~12–15 KB minified/gzipped. For a browser SDK that aims to be small (autotel-web lean is ~1.6 KB), adding Zone significantly increases size for every user.
+Zone.js is on the order of ~12-15 KB minified/gzipped. For a browser SDK that aims to be small (autotel-web lean is ~1.6 KB), adding Zone significantly increases size for every user.
 
 **2. Global patching**
 Zone.js patches `setTimeout`, `setInterval`, `Promise`, `fetch`, `XHR`, `addEventListener`, and more. That can:

@@ -6,6 +6,7 @@ export default defineConfig({
     honeycomb: 'src/honeycomb.ts',
     datadog: 'src/datadog.ts',
     'google-cloud': 'src/google-cloud.ts',
+    grafana: 'src/grafana.ts',
   },
   format: ['esm'],
   dts: true,

@@ -57,8 +57,8 @@ When you integrate autotel with Datadog, you get:
 # Core package
 npm install autotel
 
-# Optional: For log export via OTLP
-npm install @opentelemetry/sdk-logs @opentelemetry/exporter-logs-otlp-http
+# Backends (includes log export - no separate log packages needed)
+npm install autotel-backends
 ```
 
 ### 2. Get Datadog API Key
@@ -84,39 +84,11 @@ init({
 });
 ```
 
-**Full Configuration** (Traces + Logs + Metrics):
+**Recommended: Use the Datadog Preset** (Traces + Logs + Metrics):
 
 ```typescript
 import { init } from 'autotel';
-import { createLogger } from 'autotel/logger';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
-
-const logger = createLogger('my-app');
-
-init({
-  service: 'my-app',
-  environment: 'production',
-  version: '1.0.0',
-  endpoint: 'https://otlp.datadoghq.com',
-  otlpHeaders: `dd-api-key=${process.env.DATADOG_API_KEY}`,
-  logger,
-  logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({
-        url: 'https://otlp.datadoghq.com/v1/logs',
-        headers: { 'dd-api-key': process.env.DATADOG_API_KEY },
-      })
-    ),
-  ],
-});
-```
-
-**Recommended: Use the Datadog Preset**:
-
-```typescript
-import { init } from 'autotel';
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
 init(createDatadogConfig({
   apiKey: process.env.DATADOG_API_KEY!,
@@ -128,13 +100,15 @@ init(createDatadogConfig({
 }));
 ```
 
+Log libs are bundled in `autotel-backends`; no app-level install of `@opentelemetry/sdk-logs` or `@opentelemetry/exporter-logs-otlp-http` needed.
+
 ### 4. Instrument Your Code
 
 ```typescript
 import { trace } from 'autotel';
-import { createLogger } from 'autotel/logger';
+import { createBuiltinLogger } from 'autotel/logger';
 
-const logger = createLogger('my-app');
+const logger = createBuiltinLogger('my-app');
 
 const processOrder = trace((ctx) => async (orderId: string) => {
   logger.info('Processing order', { orderId });
@@ -199,7 +173,7 @@ Datadog supports two ingestion architectures. Choose based on your deployment ty
 
 **Configuration**:
 ```typescript
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
 init(createDatadogConfig({
   apiKey: process.env.DATADOG_API_KEY!,
@@ -265,7 +239,7 @@ init(createDatadogConfig({
 
 **Configuration**:
 ```typescript
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
 init(createDatadogConfig({
   service: 'my-api',
@@ -310,7 +284,7 @@ init(createDatadogConfig({
 npm install autotel
 
 # Optional: for log export
-npm install @opentelemetry/sdk-logs @opentelemetry/exporter-logs-otlp-http
+npm install autotel-backends
 ```
 
 #### 2. Set Environment Variables
@@ -324,7 +298,7 @@ export DATADOG_SITE="datadoghq.com"  # or datadoghq.eu, us3.datadoghq.com, etc.
 
 ```typescript
 import { init } from 'autotel';
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
 init(createDatadogConfig({
   apiKey: process.env.DATADOG_API_KEY!,
@@ -417,7 +391,7 @@ DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT=0.0.0.0:4317
 
 ```typescript
 import { init } from 'autotel';
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
 init(createDatadogConfig({
   service: 'my-app',
@@ -469,7 +443,7 @@ The `createDatadogConfig()` preset helper simplifies configuration for both arch
 
 ```typescript
 import { init } from 'autotel';
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
 // Direct cloud ingestion
 init(createDatadogConfig({
@@ -662,10 +636,10 @@ logger.info({ userId: '123' }, 'User created');
 **After**:
 ```typescript
 import { init, trace } from 'autotel';
-import { createLogger } from 'autotel/logger';
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createBuiltinLogger } from 'autotel/logger';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
-const logger = createLogger('my-app');
+const logger = createBuiltinLogger('my-app');
 
 init(createDatadogConfig({
   apiKey: process.env.DATADOG_API_KEY!,
@@ -689,8 +663,8 @@ const createUser = trace((ctx) => async (userId: string) => {
 - ✅ Simpler configuration
 
 **Migration Steps**:
-1. Install: `npm install @opentelemetry/sdk-logs @opentelemetry/exporter-logs-otlp-http`
-2. Replace `pino` setup with `createLogger()`
+1. Install: `npm install autotel-backends`
+2. Replace `pino` setup with `createBuiltinLogger()`
 3. Update `init()` to include `logRecordProcessors`
 4. Test in development
 5. Deploy to staging, validate logs appear in Datadog
@@ -796,7 +770,7 @@ logger.info(`Order ${orderId} processed for customer ${customerId}`);
 Logs automatically include trace IDs for correlation:
 
 ```typescript
-const logger = createLogger('my-app');
+const logger = createBuiltinLogger('my-app');
 
 const processOrder = trace((ctx) => async (orderId) => {
   // This log automatically includes:
@@ -858,7 +832,7 @@ For production workloads on Kubernetes/VMs, use the Datadog Agent:
 
 ```typescript
 import { init } from 'autotel';
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
 // Initialize once (outside handler for warm starts)
 init(createDatadogConfig({
@@ -1012,9 +986,9 @@ Verify the site matches your Datadog region:
 Enable debug logging:
 ```typescript
 import { init } from 'autotel';
-import { createLogger } from 'autotel/logger';
+import { createBuiltinLogger } from 'autotel/logger';
 
-const logger = createLogger('my-app', { level: 'debug' });
+const logger = createBuiltinLogger('my-app', { level: 'debug' });
 
 init({
   service: 'my-app',
@@ -1086,12 +1060,12 @@ sudo netstat -tulpn | grep 4318
 
 **Symptom**: Logs appear in Datadog but don't show linked traces
 
-**Solution**: Ensure you're using `createLogger()` from autotel:
+**Solution**: Ensure you're using `createBuiltinLogger()` from autotel:
 
 ```typescript
 // Correct - includes trace correlation
-import { createLogger } from 'autotel/logger';
-const logger = createLogger('my-app');
+import { createBuiltinLogger } from 'autotel/logger';
+const logger = createBuiltinLogger('my-app');
 
 // Wrong - no trace correlation
 import pino from 'pino';
@@ -1263,7 +1237,7 @@ See [High Costs](#high-costs) troubleshooting.
 2. Use autotel for traces/metrics only
 3. Set `enableLogs: false` in config
 
-Traces will still correlate with logs if you use `createLogger()` (it adds trace IDs to logs).
+Traces will still correlate with logs if you use `createBuiltinLogger()` (it adds trace IDs to logs).
 
 ### Q: Does this work with Cloudflare Workers / Vercel Edge?
 

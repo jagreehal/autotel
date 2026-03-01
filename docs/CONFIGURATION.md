@@ -236,7 +236,7 @@ const correlationId = getOrCreateCorrelationId();
 
 ### Event payload and autotel context
 
-With `events.includeTraceContext` and `events.traceUrl` configured in `init()`, every `track(name, props)` call automatically includes `correlation_id` and `trace_url`—no wrappers needed.
+With `events.includeTraceContext` and `events.traceUrl` configured in `init()`, every `track(name, props)` call automatically includes `correlation_id` and `trace_url`: no wrappers needed.
 
 When using `track()` or the Event class, subscribers receive an optional **autotel** context (e.g. `correlation_id`, `trace_id`, `span_id`, `trace_url`) when `events.includeTraceContext` is enabled in `init()`. Subscribers that support it (e.g. WebhookSubscriber) receive this via the third parameter to `trackEvent` and include it in the payload (e.g. as a top-level `autotel` field or merged into attributes), so consumers can correlate events with traces.
 
