@@ -1,5 +1,17 @@
 # autotel-sentry
 
+## 0.3.0
+
+### Minor Changes
+
+- 1155c72: - **autotel-backends**: Add Grafana backend; export and type updates.
+  - **autotel, autotel-\***: Dependency bumps, docs/comment updates, and version alignment across the monorepo.
+
+### Patch Changes
+
+- Updated dependencies [1155c72]
+  - autotel@2.22.0
+
 ## 0.2.0
 
 ### Minor Changes
