@@ -30,7 +30,7 @@ All configuration is done via environment variables (`DATADOG_API_KEY` and `DATA
 pnpm install
 ```
 
-> **Note**: This example installs `@opentelemetry/sdk-logs` and `@opentelemetry/exporter-logs-otlp-http` because they are **optional peer dependencies** of autotel. They are only needed for log export via OTLP. If you only want **traces and metrics** (not logs), you can omit these packages and remove the `logRecordProcessors` configuration from `init()`.
+> **Note**: Log export uses `autotel-backends`, which bundles the OTLP log libraries. No app-level install of `@opentelemetry/sdk-logs` or `@opentelemetry/exporter-logs-otlp-http` is needed. For traces and metrics only, set `enableLogs: false` in `createDatadogConfig()`.
 
 ### Step 2: Configure Environment Variables
 
@@ -125,28 +125,20 @@ This example uses the **OpenTelemetry Protocol (OTLP)** to send all observabilit
 
 ### Configuration Explained
 
-The key setup happens in `src/index.ts:55-75`:
+The key setup happens in `src/index.ts`:
 
 ```typescript
-init({
-  // Service identification
-  service: 'example-datadog',
-  environment: 'development',
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
-  // Datadog OTLP endpoint for traces and metrics
-  endpoint: `https://otlp.${DATADOG_SITE}`,
-  otlpHeaders: `dd-api-key=${DATADOG_API_KEY}`,
-
-  // Configure log export to Datadog
-  logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({
-        url: `https://otlp.${DATADOG_SITE}/v1/logs`,
-        headers: { 'dd-api-key': DATADOG_API_KEY }
-      })
-    )
-  ]
-});
+init(
+  createDatadogConfig({
+    apiKey: DATADOG_API_KEY,
+    site: DATADOG_SITE,
+    service: 'example-datadog',
+    environment: 'development',
+    enableLogs: true,
+  })
+);
 ```
 
 #### What Gets Configured
@@ -166,7 +158,7 @@ If you don't need log export, you can use a simpler configuration without instal
 ```typescript
 import { init, trace } from 'autotel';
 
-// No need to install @opentelemetry/sdk-logs or exporter-logs-otlp-http!
+// No need for log packages; autotel-backends bundles them when enableLogs: true
 init({
   service: 'my-app',
   endpoint: `https://otlp.${DATADOG_SITE}`,
@@ -191,7 +183,7 @@ const processOrder = trace(ctx => async (orderId: string) => {
 {
   "dependencies": {
     "autotel": "^0.1.3"
-    // No need for @opentelemetry/sdk-logs or exporter-logs-otlp-http
+    // Log libs come from autotel-backends when enableLogs: true
   }
 }
 ```
@@ -435,7 +427,7 @@ For even simpler configuration, use the Datadog preset helper that automatically
 
 ```typescript
 import { init } from 'autotel';
-import { createDatadogConfig } from 'autotel/presets/datadog';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
 // Direct cloud ingestion
 init(createDatadogConfig({
@@ -510,7 +502,7 @@ const processOrder = trace(ctx => async (orderId: string, amount: number) => {
 ### 2. Logs with Automatic Trace Correlation
 
 ```typescript
-const logger = createLogger('datadog-example');
+const logger = createBuiltinLogger('datadog-example');
 
 const processOrder = trace(ctx => async (orderId: string) => {
   // This log automatically includes trace_id and span_id
@@ -595,29 +587,23 @@ const logger = pino(
 
 ```typescript
 import { init } from 'autotel';
-import { createLogger } from 'autotel/logger';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import { createBuiltinLogger } from 'autotel/logger';
+import { createDatadogConfig } from 'autotel-backends/datadog';
 
-const logger = createLogger('my-app');
+const logger = createBuiltinLogger('my-app');
 
 init({
-  service: 'my-app',
-  endpoint: `https://otlp.${process.env.DATADOG_SITE}`,
-  otlpHeaders: `dd-api-key=${process.env.DATADOG_API_KEY}`,
+  ...createDatadogConfig({
+    apiKey: process.env.DATADOG_API_KEY!,
+    site: process.env.DATADOG_SITE || 'datadoghq.com',
+    service: 'my-app',
+    enableLogs: true,
+  }),
   logger,
-  logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({
-        url: `https://otlp.${process.env.DATADOG_SITE}/v1/logs`,
-        headers: { 'dd-api-key': process.env.DATADOG_API_KEY }
-      })
-    )
-  ]
 });
 ```
 
-**Provides**: Traces + Logs + Metrics with automatic correlation
+**Provides**: Traces + Logs + Metrics with automatic correlation. Log libs are bundled in `autotel-backends`; no app-level install needed.
 
 ### Migration Benefits
 
@@ -628,7 +614,7 @@ init({
 | **Metrics** | ❌ No | ✅ Built-in |
 | **Trace Correlation** | ❌ Manual | ✅ Automatic |
 | **Vendor Lock-in** | ⚠️ Datadog-specific | ✅ OTLP standard |
-| **Additional Dependencies** | pino-datadog-transport | Only autotel<br/>(+optional log packages if needed) |
+| **Additional Dependencies** | pino-datadog-transport | autotel + autotel-backends (log libs bundled) |
 | **Unified Observability** | ❌ Logs only | ✅ All signals |
 
 ### Incremental Migration Strategy
@@ -672,9 +658,9 @@ init({
 
 **Option 2: Full Migration**
 Replace everything with autotel OTLP (this example app):
-- Install log packages: `@opentelemetry/sdk-logs`, `@opentelemetry/exporter-logs-otlp-http`
-- Configure `logRecordProcessors` in `init()`
-- Use `createLogger()` from autotel
+- Install `autotel` and `autotel-backends` (log libs are bundled)
+- Use `createDatadogConfig()` with `enableLogs: true`
+- Use `createBuiltinLogger()` from autotel
 - Remove `pino-datadog-transport`
 
 ### Key Differences
@@ -750,7 +736,7 @@ If you get a `403 Forbidden` response, your API key is invalid.
 
 If logs appear in Datadog but don't show trace correlation:
 
-1. Ensure you're using `createLogger()` from autotel, not raw Pino
+1. Ensure you're using `createBuiltinLogger()` from autotel, not raw Pino
 2. Verify logs are created within a `trace()` function
 3. Check that the log processor is configured correctly in `init()`
 

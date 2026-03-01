@@ -11,17 +11,13 @@
     "start:debug": "tsx src/index-debug.ts"
   },
   "dependencies": {
-    "@opentelemetry/exporter-logs-otlp-http": "^0.212.0",
-    "@opentelemetry/sdk-logs": "^0.212.0",
     "autotel": "workspace:*",
     "dotenv": "^17.3.1",
-    "pino": "^10.3.1"
-  },
-  "comments": {
-    "logs-packages": "The @opentelemetry/sdk-logs and exporter-logs-otlp-http packages are optional peer dependencies of autotel. They are only needed if you want to export logs via OTLP. For traces and metrics only, you can omit these packages."
+    "pino": "^10.3.1",
+    "autotel-backends": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

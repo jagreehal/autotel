@@ -39,3 +39,5 @@ export {
   createGoogleCloudConfig,
   type GoogleCloudPresetConfig,
 } from './google-cloud';
+
+export { createGrafanaConfig, type GrafanaPresetConfig } from './grafana';

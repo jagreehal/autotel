@@ -257,11 +257,11 @@
     "@opentelemetry/sdk-metrics": "^2.5.1",
     "@opentelemetry/sdk-node": "^0.212.0",
     "@opentelemetry/sdk-trace-base": "^2.5.1",
-    "@opentelemetry/semantic-conventions": "^1.39.0",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
     "import-in-the-middle": "^3.0.0"
   },
   "peerDependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.70.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.70.1",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.212.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.212.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.212.0",
@@ -323,7 +323,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",
     "@edge-runtime/vm": "^5.0.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.70.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.70.1",
     "@opentelemetry/context-async-hooks": "^2.5.1",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.212.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.212.0",
@@ -337,7 +337,7 @@
     "@total-typescript/ts-reset": "^0.6.1",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/eslint-config-prettier": "^6.11.3",
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "eslint-config-prettier": "^10.1.8",

@@ -309,8 +309,8 @@ Composition layer for KafkaJS: processing span wrapper, producer span wrapper, b
 
 **Per-message spans:**
 
-- **`'all'`** – One span per message. Message spans are parented to **extracted trace context from message headers when valid** (trace continuation); otherwise to the **batch span**. All per-message spans are ended when the batch completes, including skipped or unresolved messages (no span leak).
-- **`'errors'`** – Per-message span only on failure. When the handler throws, an error span is created for the first message. Use `createMessageErrorSpan` in your catch block for per-message error spans.
+- **`'all'`** : One span per message. Message spans are parented to **extracted trace context from message headers when valid** (trace continuation); otherwise to the **batch span**. All per-message spans are ended when the batch completes, including skipped or unresolved messages (no span leak).
+- **`'errors'`** : Per-message span only on failure. When the handler throws, an error span is created for the first message. Use `createMessageErrorSpan` in your catch block for per-message error spans.
 
 ```typescript
 import { withBatchConsumer } from 'autotel-plugins/kafka';

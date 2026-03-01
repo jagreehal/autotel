@@ -5,7 +5,7 @@ This example shows how to use **Pino** with autotel as the recommended, first-cl
 ## What This Example Shows
 
 - One Pino instance passed to `init({ logger })` and used everywhere (autotel + app)
-- Pino-style signature: `logger.info({ metadata }, 'message')` — object first, message second (autotel's native logger contract)
+- Pino-style signature: `logger.info({ metadata }, 'message')` :  object first, message second (autotel's native logger contract)
 - No `@opentelemetry/auto-instrumentations-node` or `autoInstrumentations` required; Pino works with autotel out of the box. Optional: add `autoInstrumentations: ['pino']` (and the auto-instrumentations package) if you want traceId/spanId injected into every log record for log-to-trace correlation.
 
 ## Setup

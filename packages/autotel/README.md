@@ -6,10 +6,10 @@
 
 **Write once, observe everywhere.** Instrument your Node.js code a single time, keep the DX you love, and stream traces, metrics, logs, and product events to **any** observability stack without vendor lock-in.
 
-- **Drop-in DX** – one `init()` and ergonomic helpers like `trace()`, `span()`, `withTracing()`, decorators, and batch instrumentation.
-- **Platform freedom** – OTLP-first design plus subscribers for PostHog, Mixpanel, Amplitude, and anything else via custom exporters/readers.
-- **Production hardening** – adaptive sampling (10% baseline, 100% errors/slow paths), rate limiting, circuit breakers, payload validation, and automatic sensitive-field redaction.
-- **Auto enrichment** – service metadata, deployment info, and AsyncLocalStorage-powered correlation IDs automatically flow into spans, metrics, logs, and events.
+- **Drop-in DX** : one `init()` and ergonomic helpers like `trace()`, `span()`, `withTracing()`, decorators, and batch instrumentation.
+- **Platform freedom** : OTLP-first design plus subscribers for PostHog, Mixpanel, Amplitude, and anything else via custom exporters/readers.
+- **Production hardening** : adaptive sampling (10% baseline, 100% errors/slow paths), rate limiting, circuit breakers, payload validation, and automatic sensitive-field redaction.
+- **Auto enrichment** : service metadata, deployment info, and AsyncLocalStorage-powered correlation IDs automatically flow into spans, metrics, logs, and events.
 
 > Raw OpenTelemetry is verbose, and vendor SDKs create lock-in. Autotel gives you the best parts of both: clean ergonomics **and** total ownership of your telemetry.
 
@@ -358,8 +358,8 @@ function timed<T>(operation: string, fn: () => Promise<T>): Promise<T> {
 
 **Two patterns supported:**
 
-1. **Factory pattern** `trace(ctx => (...args) => result)` – Returns a wrapped function for reuse
-2. **Immediate execution** `trace(ctx => result)` – Executes once immediately, returns the result directly
+1. **Factory pattern** `trace(ctx => (...args) => result)` : Returns a wrapped function for reuse
+2. **Immediate execution** `trace(ctx => result)` : Executes once immediately, returns the result directly
 
 - Automatic span lifecycle (`start`, `end`, status, and error recording).
 - Function names feed `operation.name`, `code.function`, and events enrichment.
@@ -530,8 +530,8 @@ app.use((req, res, next) => {
 
 ### Reusable Middleware Helpers
 
-- `withTracing(options)` – create a preconfigured wrapper (service name, default attributes, skip rules).
-- `instrument(object, options)` – batch-wrap entire modules while skipping helpers or private functions.
+- `withTracing(options)` : create a preconfigured wrapper (service name, default attributes, skip rules).
+- `instrument(object, options)` : batch-wrap entire modules while skipping helpers or private functions.
 
 ```typescript
 import { withTracing, instrument } from 'autotel';
@@ -1576,12 +1576,12 @@ init({
 
 ## Auto Instrumentation & Advanced Configuration
 
-- `autoInstrumentations` – Enable OpenTelemetry auto-instrumentations (HTTP, Express, Fastify, Prisma, Pino…). Requires `@opentelemetry/auto-instrumentations-node`.
-- `instrumentations` – Provide manual instrumentation instances, e.g., `new HttpInstrumentation()`.
-- `resource` / `resourceAttributes` – Declare cluster/region/tenant metadata once and it flows everywhere.
-- `spanProcessor`, `metricReader`, `logRecordProcessors` – Plug in any OpenTelemetry exporter or your in-house pipeline.
-- `headers` – Attach vendor auth headers when using the built-in OTLP HTTP exporters.
-- `sdkFactory` – Receive the Autotel defaults and return a fully customized `NodeSDK` for the rare cases you need complete control.
+- `autoInstrumentations` : Enable OpenTelemetry auto-instrumentations (HTTP, Express, Fastify, Prisma, Pino…). Requires `@opentelemetry/auto-instrumentations-node`.
+- `instrumentations` : Provide manual instrumentation instances, e.g., `new HttpInstrumentation()`.
+- `resource` / `resourceAttributes` : Declare cluster/region/tenant metadata once and it flows everywhere.
+- `spanProcessor`, `metricReader`, `logRecordProcessors` : Plug in any OpenTelemetry exporter or your in-house pipeline.
+- `headers` : Attach vendor auth headers when using the built-in OTLP HTTP exporters.
+- `sdkFactory` : Receive the Autotel defaults and return a fully customized `NodeSDK` for the rare cases you need complete control.
 
 ```typescript
 import { init } from 'autotel';
@@ -1721,12 +1721,12 @@ NODE_OPTIONS="--experimental-loader=@opentelemetry/instrumentation/hook.mjs --im
 
 ## Operational Safety & Runtime Controls
 
-- **Adaptive sampling** – 10% baseline, 100% for errors/slow spans by default (override via `sampler`).
-- **Rate limiting & circuit breakers** – Prevent telemetry storms when backends misbehave.
-- **Validation** – Configurable attribute/event name lengths, maximum counts, and nesting depth.
-- **Sensitive data redaction** – Passwords, tokens, API keys, and any custom regex you provide are automatically masked before export.
-- **Auto-flush** – Events buffers drain when root spans end (disable with `flushOnRootSpanEnd: false`).
-- **Runtime flags** – Toggle metrics or swap endpoints via env vars without code edits.
+- **Adaptive sampling** : 10% baseline, 100% for errors/slow spans by default (override via `sampler`).
+- **Rate limiting & circuit breakers** : Prevent telemetry storms when backends misbehave.
+- **Validation** : Configurable attribute/event name lengths, maximum counts, and nesting depth.
+- **Sensitive data redaction** : Passwords, tokens, API keys, and any custom regex you provide are automatically masked before export.
+- **Auto-flush** : Events buffers drain when root spans end (disable with `flushOnRootSpanEnd: false`).
+- **Runtime flags** : Toggle metrics or swap endpoints via env vars without code edits.
 
 ```bash
 # Disable metrics without touching code (metrics are ON by default)
@@ -2231,17 +2231,17 @@ The `autotel-edge` package is optimized for edge runtimes with automatic flush b
 
 ## API Reference
 
-- `init(config)` – Bootstraps the SDK (call once).
-- `trace(fn | name, fn)` – Wraps functions with spans and optional context access.
-- `span(options, fn)` – Creates nested spans for ad-hoc blocks.
-- `withTracing(options)` – Produces reusable wrappers with shared configuration.
-- `instrument(target, options)` – Batch-wraps an object of functions.
-- `Trace` decorator – Adds tracing to class methods (TypeScript 5+).
-- `instrumentDatabase(db, options)` – Adds automatic DB spans (Drizzle, etc.).
-- `Metric` class & helpers (`createHistogram`, etc.) – Emit OpenTelemetry metrics.
-- `Event` class & `track()` helper – Send product events/funnels/outcomes/values via subscribers.
-- `Logger` interface – Bring your own Pino/Winston logger; autotel auto-instruments it for trace context and OTLP export.
-- `PostHogSubscriber`, `MixpanelSubscriber`, … – Provided in `autotel-subscribers`; create your own by implementing the `EventSubscriber` interface.
+- `init(config)` : Bootstraps the SDK (call once).
+- `trace(fn | name, fn)` : Wraps functions with spans and optional context access.
+- `span(options, fn)` : Creates nested spans for ad-hoc blocks.
+- `withTracing(options)` : Produces reusable wrappers with shared configuration.
+- `instrument(target, options)` : Batch-wraps an object of functions.
+- `Trace` decorator : Adds tracing to class methods (TypeScript 5+).
+- `instrumentDatabase(db, options)` : Adds automatic DB spans (Drizzle, etc.).
+- `Metric` class & helpers (`createHistogram`, etc.) : Emit OpenTelemetry metrics.
+- `Event` class & `track()` helper : Send product events/funnels/outcomes/values via subscribers.
+- `Logger` interface : Bring your own Pino/Winston logger; autotel auto-instruments it for trace context and OTLP export.
+- `PostHogSubscriber`, `MixpanelSubscriber`, … : Provided in `autotel-subscribers`; create your own by implementing the `EventSubscriber` interface.
 
 Each API is type-safe, works in both ESM and CJS, and is designed to minimize boilerplate while staying close to OpenTelemetry primitives.
 
