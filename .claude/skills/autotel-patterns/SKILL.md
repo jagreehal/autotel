@@ -7,7 +7,7 @@ user-invocable: true
 
 # Autotel Core Patterns
 
-Philosophy: "Write once, observe everywhere" — instrument once, stream to any OTLP-compatible backend.
+Philosophy: "Write once, observe everywhere" :  instrument once, stream to any OTLP-compatible backend.
 
 ---
 

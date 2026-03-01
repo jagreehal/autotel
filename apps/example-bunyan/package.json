@@ -7,7 +7,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.70.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.70.1",
     "@opentelemetry/instrumentation-bunyan": "^0.57.0",
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@types/bunyan": "^1.8.11",
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

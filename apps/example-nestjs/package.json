@@ -13,14 +13,14 @@
     "@nestjs/common": "^11.1.14",
     "@nestjs/core": "^11.1.14",
     "@nestjs/platform-express": "^11.1.14",
-    "@opentelemetry/auto-instrumentations-node": "^0.70.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.70.1",
     "autotel": "workspace:*",
     "dotenv": "^17.3.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

@@ -105,8 +105,6 @@ export interface DatadogPresetConfig {
    * });
    * ```
    *
-   * Requires peer dependencies: @opentelemetry/sdk-logs, @opentelemetry/exporter-logs-otlp-http
-   *
    * @default false
    */
   enableLogs?: boolean;
@@ -310,21 +308,17 @@ export function createDatadogConfig(
     } else {
       // Create default OTLP log exporter
       try {
-        // Lazy-load to preserve optional peer dependencies
-        // Use createRequire to resolve from user's project directory
-        const userRequire = createRequire(process.cwd() + '/package.json');
-
-        const { BatchLogRecordProcessor } = userRequire(
+        const pkgRequire = createRequire(import.meta.url);
+        const { BatchLogRecordProcessor } = pkgRequire(
           '@opentelemetry/sdk-logs',
         );
-        const { OTLPLogExporter } = userRequire(
+        const { OTLPLogExporter } = pkgRequire(
           '@opentelemetry/exporter-logs-otlp-http',
         );
 
         cloudConfig.logRecordProcessors = [
           new BatchLogRecordProcessor(
             new OTLPLogExporter({
-              // Logs use /v1/logs path (SDK appends this to endpoint)
               url: `${otlpEndpoint}/v1/logs`,
               headers: {
                 'dd-api-key': apiKey,
@@ -334,8 +328,8 @@ export function createDatadogConfig(
         ];
       } catch {
         throw new Error(
-          'Log export requires peer dependencies: @opentelemetry/sdk-logs and @opentelemetry/exporter-logs-otlp-http. ' +
-            'Install them with: npm install @opentelemetry/sdk-logs @opentelemetry/exporter-logs-otlp-http',
+          'Log export requires @opentelemetry/sdk-logs and @opentelemetry/exporter-logs-otlp-http. ' +
+            'Install them or set enableLogs: false.',
         );
       }
     }

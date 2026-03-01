@@ -93,13 +93,13 @@ init({
 
 ## API
 
-- **`createSentrySpanProcessor(sentry)`** – Returns a `SentrySpanProcessor` instance. Pass the `@sentry/node` module (or any object implementing the minimal hub/transaction/span interface).
-- **`SentrySpanProcessor`** – Class implementing OpenTelemetry's `SpanProcessor`. Converts OTel spans to Sentry transactions/spans and turns OTel exception events into Sentry errors.
-- **`SentryPropagator`** – Class implementing OpenTelemetry's `TextMapPropagator` for `sentry-trace` and `baggage` headers.
-- **`SENTRY_PROPAGATION_KEY`** – Context key under which extracted Sentry propagation data is stored (for advanced use).
+- **`createSentrySpanProcessor(sentry)`** :  Returns a `SentrySpanProcessor` instance. Pass the `@sentry/node` module (or any object implementing the minimal hub/transaction/span interface).
+- **`SentrySpanProcessor`** :  Class implementing OpenTelemetry's `SpanProcessor`. Converts OTel spans to Sentry transactions/spans and turns OTel exception events into Sentry errors.
+- **`SentryPropagator`** :  Class implementing OpenTelemetry's `TextMapPropagator` for `sentry-trace` and `baggage` headers.
+- **`SENTRY_PROPAGATION_KEY`** :  Context key under which extracted Sentry propagation data is stored (for advanced use).
 
 ## References
 
-- [Sentry: OpenTelemetry traces](https://develop.sentry.dev/sdk/telemetry/traces/opentelemetry/) – spec this implementation follows
-- [Sentry OTLP](https://docs.sentry.io/concepts/otlp/) – when to use OTLP direct vs SDK + OTel
-- [Autotel init](https://github.com/jagreehal/autotel) – `spanProcessors` and configuration
+- [Sentry: OpenTelemetry traces](https://develop.sentry.dev/sdk/telemetry/traces/opentelemetry/) :  spec this implementation follows
+- [Sentry OTLP](https://docs.sentry.io/concepts/otlp/) :  when to use OTLP direct vs SDK + OTel
+- [Autotel init](https://github.com/jagreehal/autotel) :  `spanProcessors` and configuration

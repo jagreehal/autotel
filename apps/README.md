@@ -99,6 +99,19 @@ pnpm start
 - Shows nested traces
 - Demonstrates error tracking
 
+### Grafana Cloud Example
+
+**`example-grafana`**: Sends traces (Tempo), metrics (Mimir), and logs (OTLP → Loki) to Grafana Cloud. Configure via `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` from the Cloud Portal (Connections → OpenTelemetry → Configure).
+
+```bash
+cd apps/example-grafana
+pnpm install
+cp .env.example .env   # Add your Grafana Cloud OTLP endpoint and headers
+pnpm start
+```
+
+**See:** [example-grafana/README.md](./example-grafana/README.md) for credentials and where to view data in Grafana.
+
 ### HTTP Server Example
 
 Runs an Express server with automatic HTTP instrumentation:

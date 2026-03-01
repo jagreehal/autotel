@@ -12,8 +12,8 @@
 
 import 'dotenv/config';
 import { init, trace, shutdown, Metric, type TraceContext } from 'autotel';
-import { createLogger, LOG_LEVEL, type LogLevel } from 'autotel/logger';
-import { type DatadogSite } from 'autotel/presets/datadog';
+import { createBuiltinLogger, LOG_LEVEL, type LogLevel } from 'autotel/logger';
+import { type DatadogSite } from 'autotel-backends/datadog';
 
 // ============================================================================
 // Constants
@@ -92,7 +92,7 @@ const shouldSimulateFailure = (probability: number): boolean =>
 // ============================================================================
 
 // Create logger first
-const logger = createLogger('datadog-debug', {
+const logger = createBuiltinLogger('datadog-debug', {
   level: config.logLevel,
   pretty: config.environment !== 'production',
 });

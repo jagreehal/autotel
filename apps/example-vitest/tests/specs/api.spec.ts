@@ -8,7 +8,11 @@ import {
 } from 'autotel-vitest';
 import { injectTraceContext } from 'autotel/http';
 
-const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3000';
+// Use a random port when not set to avoid EADDRINUSE when 3000 is in use (e.g. other apps or parallel runs).
+const defaultPort =
+  Number(process.env.PORT) ||
+  30000 + Math.floor(Math.random() * 1000);
+const apiBase = process.env.API_BASE_URL ?? `http://localhost:${defaultPort}`;
 
 let serverProcess: ChildProcess | undefined;
 
@@ -29,9 +33,16 @@ async function waitForServer(url: string, timeoutMs = 15_000): Promise<void> {
 }
 
 beforeAll(async () => {
+  const port = process.env.API_BASE_URL
+    ? undefined
+    : String(defaultPort);
+  const env = port
+    ? { ...process.env, PORT: port }
+    : process.env;
+
   serverProcess = spawn('node', ['server.mjs'], {
     cwd: new URL('../../', import.meta.url),
-    env: process.env,
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 

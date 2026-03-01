@@ -18,8 +18,8 @@
 
 ### Minor Changes
 
-- d1bd8cd: - **autotel-sentry**: README updates — clarify Sentry SDK + OTel scenario, link to Sentry OTLP docs, note that Sentry ingestion request spans are not sent, fix `SentrySpanProcessor` backtick typo, add spec-volatility note.
-  - **autotel-backends**: Preserve caught error in Google Cloud config — attach original error as `cause` when throwing the user-facing error so the `preserve-caught-error` lint rule is satisfied.
+- d1bd8cd: - **autotel-sentry**: README updates : clarify Sentry SDK + OTel scenario, link to Sentry OTLP docs, note that Sentry ingestion request spans are not sent, fix `SentrySpanProcessor` backtick typo, add spec-volatility note.
+  - **autotel-backends**: Preserve caught error in Google Cloud config : attach original error as `cause` when throwing the user-facing error so the `preserve-caught-error` lint rule is satisfied.
 
 ## 2.18.1
 
@@ -48,9 +48,9 @@
 - 23ed022: - **autotel-plugins**: Add BigQuery and Kafka plugins.
   - **BigQuery**: OpenTelemetry instrumentation for `@google-cloud/bigquery` (query, insert, load, copy, extract, job tracking; optional query sanitization and GCP semantic attributes). No official OTel support; optional peer dependency.
   - **Kafka**: Composition layer for use with `@opentelemetry/instrumentation-kafkajs`: processing span wrapper with context mode (inherit/link/none), batch lineage for fan-in trace correlation, and correlation ID policy. Re-exports messaging constants and helpers from `common/constants`.
-    Kafka plugin EDA enhancements — add `withProducerSpan` and `injectTraceHeaders` for PRODUCER semantics, processing-span context mode, batch lineage attributes, and correlation ID header support.
+    Kafka plugin EDA enhancements : add `withProducerSpan` and `injectTraceHeaders` for PRODUCER semantics, processing-span context mode, batch lineage attributes, and correlation ID header support.
   - **autotel**: Version alignment with autotel-plugins.
-  - **autotel-terminal**: Terminal trace viewer updates — README and setup docs, internal refactor (lib/), and CHANGELOG.
+  - **autotel-terminal**: Terminal trace viewer updates : README and setup docs, internal refactor (lib/), and CHANGELOG.
 
 ## 2.17.0
 

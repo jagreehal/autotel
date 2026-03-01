@@ -1,23 +1,23 @@
 # autotel-terminal
 
-**Terminal trace viewer for autotel** — React Ink–powered dashboard for live trace inspection during development. Zero setup, trace-first, autotel-only.
+**Terminal trace viewer for autotel** :  React Ink: powered dashboard for live trace inspection during development. Zero setup, trace-first, autotel-only.
 
 [![npm version](https://badge.fury.io/js/autotel-terminal.svg)](https://www.npmjs.com/package/autotel-terminal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-`autotel-terminal` is a terminal-native trace viewer for **autotel**. It streams OpenTelemetry spans from your app and shows them as traces: recent traces list, span tree per trace, search, and a simple waterfall. Built for local development—no browser, no extra backends.
+`autotel-terminal` is a terminal-native trace viewer for **autotel**. It streams OpenTelemetry spans from your app and shows them as traces: recent traces list, span tree per trace, search, and a simple waterfall. Built for local development: no browser, no extra backends.
 
 ### Features
 
-- ✅ **Trace-first UI** — Recent traces list; open a trace to see its span tree (parent/child)
-- ✅ **Real-time streaming** — Spans appear as they complete; optional pause/resume
-- ✅ **Search** — Filter by span name (`/`); combine with error-only filter (`e`)
-- ✅ **Span details** — Key attributes first (e.g. `http.route`, `db.operation`); full list + waterfall for selected trace
-- ✅ **Relative time & errors** — "2s ago" labels; error badge and new-error indicator
-- ✅ **Help overlay** — `?` shows all shortcuts
-- ✅ **Simple setup** — Add `StreamingSpanProcessor` to autotel and call `renderTerminal()`
+- ✅ **Trace-first UI** :  Recent traces list; open a trace to see its span tree (parent/child)
+- ✅ **Real-time streaming** :  Spans appear as they complete; optional pause/resume
+- ✅ **Search** :  Filter by span name (`/`); combine with error-only filter (`e`)
+- ✅ **Span details** :  Key attributes first (e.g. `http.route`, `db.operation`); full list + waterfall for selected trace
+- ✅ **Relative time & errors** :  "2s ago" labels; error badge and new-error indicator
+- ✅ **Help overlay** :  `?` shows all shortcuts
+- ✅ **Simple setup** :  Add `StreamingSpanProcessor` to autotel and call `renderTerminal()`
 
 ## Installation
 
@@ -389,22 +389,22 @@ renderTerminal({}, stream);
 
 ## Limitations
 
-- **Development only** — Not designed for production use
-- **TTY required** — Colors and interactivity require a terminal
-- **Memory** — Keeps spans in memory (limited by `maxSpans` option)
-- **Single instance** — Only one dashboard can run at a time
+- **Development only** :  Not designed for production use
+- **TTY required** :  Colors and interactivity require a terminal
+- **Memory** :  Keeps spans in memory (limited by `maxSpans` option)
+- **Single instance** :  Only one dashboard can run at a time
 
 ## Manual verification
 
 When testing the dashboard (e.g. with `example-terminal` or your app), you can verify:
 
-- **Trace list** — Trigger some traced work; recent traces appear with root span name, duration, relative time
-- **Trace tree** — Select a trace and press Enter; span tree shows with indented children
-- **Search** — Press `/`, type a span name; list filters; Esc clears
-- **Errors** — Press `e` for error-only filter; traces with failed spans show an error badge
-- **Help** — Press `?` to see all shortcuts
-- **Waterfall** — With a trace open, the details panel shows a simple duration waterfall
-- **Key attributes** — In span details, `http.route`, `db.operation`, `code.function`, etc. appear first
+- **Trace list** :  Trigger some traced work; recent traces appear with root span name, duration, relative time
+- **Trace tree** :  Select a trace and press Enter; span tree shows with indented children
+- **Search** :  Press `/`, type a span name; list filters; Esc clears
+- **Errors** :  Press `e` for error-only filter; traces with failed spans show an error badge
+- **Help** :  Press `?` to see all shortcuts
+- **Waterfall** :  With a trace open, the details panel shows a simple duration waterfall
+- **Key attributes** :  In span details, `http.route`, `db.operation`, `code.function`, etc. appear first
 
 ## Examples
 

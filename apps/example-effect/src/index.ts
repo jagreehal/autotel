@@ -1,11 +1,12 @@
 /**
  * Autotel + Effect example
  *
- * Run: pnpm start
+ * Run: pnpm start  (do not run tsx src/index.ts directly — init runs in instrumentation.ts via --import)
  *
- * Autotel is initialized in instrumentation.ts (loaded via --import).
- * This program uses Effect's Tracer backed by the global OTel provider (autotel),
- * so all Effect.withSpan spans are recorded and exported by autotel.
+ * Autotel is initialized in instrumentation.ts (loaded via --import). That file calls
+ * init({ service: 'example-effect', ... }), so the global OTel provider is set before
+ * this file runs. Effect's Tracer.layerGlobal uses that provider; all Effect.withSpan
+ * spans are recorded and exported by autotel.
  */
 
 import 'dotenv/config';

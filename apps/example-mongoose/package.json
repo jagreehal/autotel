@@ -14,10 +14,10 @@
     "autotel": "workspace:*",
     "autotel-plugins": "workspace:*",
     "dotenv": "^17.3.1",
-    "mongoose": "^9.2.1"
+    "mongoose": "^9.2.3"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

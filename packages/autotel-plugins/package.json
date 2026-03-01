@@ -92,7 +92,7 @@
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/instrumentation": "^0.212.0",
-    "@opentelemetry/semantic-conventions": "^1.39.0",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
     "autotel": "workspace:*"
   },
   "peerDependencies": {
@@ -100,7 +100,7 @@
     "@opentelemetry/instrumentation-amqplib": ">=0.59.0",
     "@opentelemetry/instrumentation-kafkajs": ">=0.21.0",
     "drizzle-orm": ">=0.45.1",
-    "mongoose": ">=9.2.1"
+    "mongoose": ">=9.2.3"
   },
   "peerDependenciesMeta": {
     "drizzle-orm": {
@@ -124,7 +124,7 @@
     "@google-cloud/bigquery": "^8.1.1",
     "@opentelemetry/core": "^2.5.1",
     "mongoose": "^9.2.1",
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "drizzle-orm": "^0.45.1",
