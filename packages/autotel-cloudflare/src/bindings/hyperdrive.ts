@@ -22,7 +22,7 @@ export function instrumentHyperdrive<T extends Hyperdrive>(hyperdrive: T, bindin
 
       if (prop === 'connect' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
             const attributes: Record<string, string | number> = {
@@ -47,7 +47,7 @@ export function instrumentHyperdrive<T extends Hyperdrive>(hyperdrive: T, bindin
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await Reflect.apply(fnTarget, target, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {

@@ -179,6 +179,38 @@ describe('Queue Producer Binding Instrumentation', () => {
     });
   });
 
+  describe('this-binding', () => {
+    it('should invoke send() with original object as this, not the proxy', async () => {
+      let receivedThis: any;
+      const mockQueue = {
+        send: vi.fn(async function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return { messageId: 'msg-123' };
+        }),
+        sendBatch: vi.fn(async () => ({})),
+      } as unknown as Queue;
+      const instrumented = instrumentQueueProducer(mockQueue, 'test');
+      await instrumented.send({ data: 'test' });
+      expect(receivedThis).toBe(mockQueue);
+    });
+
+    it('should invoke sendBatch() with original object as this, not the proxy', async () => {
+      let receivedThis: any;
+      const mockQueue = {
+        send: vi.fn(async () => ({ messageId: 'msg-123' })),
+        sendBatch: vi.fn(async function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return {};
+        }),
+      } as unknown as Queue;
+      const instrumented = instrumentQueueProducer(mockQueue, 'test');
+      await instrumented.sendBatch([{ body: { data: 'test' } }]);
+      expect(receivedThis).toBe(mockQueue);
+    });
+  });
+
   describe('non-instrumented methods', () => {
     it('should pass through non-instrumented properties', () => {
       const mockQueue = createMockQueue();

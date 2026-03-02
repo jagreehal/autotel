@@ -15,6 +15,11 @@ import { instrument } from 'autotel-cloudflare';
 import { SamplingPresets } from 'autotel-cloudflare/sampling';
 import { OrderWorkflow } from './workflow';
 
+function parseHeaders(raw?: string): Record<string, string> {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return {}; }
+}
+
 // Export the Workflow class for binding configuration
 export { OrderWorkflow };
 
@@ -112,7 +117,7 @@ const handler: ExportedHandler<Env> = {
 export default instrument(handler, (env: Env) => ({
   exporter: {
     url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
-    headers: env.OTLP_HEADERS ? JSON.parse(env.OTLP_HEADERS) : {},
+    headers: parseHeaders(env.OTLP_HEADERS),
   },
   service: {
     name: 'order-workflow-worker',

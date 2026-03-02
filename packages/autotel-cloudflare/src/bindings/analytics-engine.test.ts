@@ -145,6 +145,21 @@ describe('Analytics Engine Instrumentation', () => {
     });
   });
 
+  describe('this-binding', () => {
+    it('should invoke writeDataPoint() with original object as this, not the proxy', () => {
+      let receivedThis: any;
+      const mockAEObj = {
+        writeDataPoint: vi.fn(function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+        }),
+      };
+      const instrumented = instrumentAnalyticsEngine(mockAEObj as any, 'test');
+      instrumented.writeDataPoint({ indexes: ['idx1'] });
+      expect(receivedThis).toBe(mockAEObj);
+    });
+  });
+
   describe('Non-instrumented methods', () => {
     it('should pass through non-instrumented methods unchanged', () => {
       const instrumented = instrumentAnalyticsEngine(mockAE, 'my-dataset');

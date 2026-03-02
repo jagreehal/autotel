@@ -22,7 +22,7 @@ export function instrumentAI<T extends Ai>(ai: T, bindingName?: string): T {
 
       if (prop === 'run' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const [model] = args as [string, unknown, unknown];
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
@@ -38,7 +38,7 @@ export function instrumentAI<T extends Ai>(ai: T, bindingName?: string): T {
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await Reflect.apply(fnTarget, target, args);
                   if (result?.usage?.prompt_tokens !== undefined) {
                     setAttr(span, 'gen_ai.usage.input_tokens', Number(result.usage.prompt_tokens));
                   }

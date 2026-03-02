@@ -22,7 +22,7 @@ export function instrumentAnalyticsEngine<T extends AnalyticsEngineDataset>(ae: 
 
       if (prop === 'writeDataPoint' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const [dataPoint] = args as [AnalyticsEngineDataPoint | undefined];
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
@@ -52,7 +52,7 @@ export function instrumentAnalyticsEngine<T extends AnalyticsEngineDataset>(ae: 
               (span) => {
                 try {
                   // writeDataPoint is synchronous/void
-                  Reflect.apply(fnTarget, thisArg, args);
+                  Reflect.apply(fnTarget, target, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                 } catch (error) {
                   span.recordException(error as Error);

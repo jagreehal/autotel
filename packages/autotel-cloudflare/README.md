@@ -44,8 +44,8 @@ head_sampling_rate = 1.0      # Let autotel handle sampling
 import { wrapModule, trace } from 'autotel-cloudflare'
 
 // Zero-boilerplate function tracing
-const processOrder = trace(async (orderId: string) => {
-  const order = await env.ORDERS_KV.get(orderId)  // Auto-instrumented!
+const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
+  const order = await kv.get(orderId)  // Auto-instrumented!
   return order
 })
 
@@ -57,7 +57,7 @@ export default wrapModule(
   },
   {
     async fetch(req, env, ctx) {
-      return Response.json(await processOrder('123'))
+      return Response.json(await processOrder('123', env.ORDERS_KV))
     }
   }
 )

@@ -37,6 +37,7 @@ import type {
 import {
   createInitialiser,
   setConfig,
+  getActiveConfig,
   type Initialiser,
   WorkerTracerProvider,
   WorkerTracer,
@@ -136,6 +137,11 @@ function createFetchInstrumentation(
       'http.response.status_code': response.status,
     }),
     executionSucces: (span: Span, trigger: Request, result: Response) => {
+      // Override span status for server errors (5xx)
+      if (result.status >= 500) {
+        span.setStatus({ code: SpanStatusCode.ERROR });
+      }
+
       // Call postProcess callback if configured
       if (config.handlers.fetch.postProcess) {
         const readableSpan = span as unknown as ReadableSpan;
@@ -367,12 +373,18 @@ class QueueInstrumentation implements HandlerInstrumentation<MessageBatch, void>
 }
 
 /**
- * Converts email headers into OpenTelemetry attributes
+ * Converts email headers into OpenTelemetry attributes.
+ * When dataSafety.emailHeaderAllowlist is configured, only allowed headers are captured.
  */
 function headerAttributes(message: { headers: Headers }): Record<string, string> {
   const attrs: Record<string, string> = {};
   if (message.headers instanceof Headers) {
+    const config = getActiveConfig();
+    const allowlist: string[] | undefined = config?.dataSafety?.emailHeaderAllowlist;
     for (const [key, value] of message.headers.entries()) {
+      if (allowlist && !allowlist.includes(key.toLowerCase())) {
+        continue;
+      }
       attrs[`email.header.${key}`] = value;
     }
   }
@@ -478,11 +490,12 @@ function createHandlerFlow<T extends Trigger, E, R>(
           span.setAttributes(attributes);
         }
 
+        // Set default OK status; executionSucces may override (e.g. HTTP 5xx)
+        span.setStatus({ code: SpanStatusCode.OK });
+
         if (instrumentation.executionSucces) {
           instrumentation.executionSucces(span, trigger, result);
         }
-
-        span.setStatus({ code: SpanStatusCode.OK });
         return result;
       } catch (error) {
         span.recordException(error as Error);
