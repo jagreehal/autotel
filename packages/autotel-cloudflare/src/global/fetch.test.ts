@@ -341,4 +341,59 @@ describe('Global Fetch Instrumentation', () => {
       });
     });
   });
+
+  describe('dataSafety.redactQueryParams', () => {
+    it('should capture full URL and query string by default', async () => {
+      const config = parseConfig({
+        service: { name: 'test-service' },
+      });
+      const ctx = setConfig(config);
+
+      instrumentGlobalFetch();
+
+      await api_context.with(ctx, async () => {
+        await fetch('https://api.example.com/users?token=secret&page=1');
+
+        const options = mockTracer.startActiveSpan.mock.calls[0][1];
+        expect(options.attributes['url.full']).toBe('https://api.example.com/users?token=secret&page=1');
+        expect(options.attributes['url.query']).toBe('?token=secret&page=1');
+      });
+    });
+
+    it('should redact query params when redactQueryParams is true', async () => {
+      const config = parseConfig({
+        service: { name: 'test-service' },
+        dataSafety: { redactQueryParams: true },
+      });
+      const ctx = setConfig(config);
+
+      instrumentGlobalFetch();
+
+      await api_context.with(ctx, async () => {
+        await fetch('https://api.example.com/users?token=secret&page=1');
+
+        const options = mockTracer.startActiveSpan.mock.calls[0][1];
+        expect(options.attributes['url.full']).toBe('https://api.example.com/users');
+        expect(options.attributes['url.query']).toBe('[REDACTED]');
+      });
+    });
+
+    it('should handle URLs without query string when redactQueryParams is true', async () => {
+      const config = parseConfig({
+        service: { name: 'test-service' },
+        dataSafety: { redactQueryParams: true },
+      });
+      const ctx = setConfig(config);
+
+      instrumentGlobalFetch();
+
+      await api_context.with(ctx, async () => {
+        await fetch('https://api.example.com/users');
+
+        const options = mockTracer.startActiveSpan.mock.calls[0][1];
+        expect(options.attributes['url.full']).toBe('https://api.example.com/users');
+        expect(options.attributes['url.query']).toBe('');
+      });
+    });
+  });
 });

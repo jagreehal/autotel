@@ -69,6 +69,7 @@ export type {
   HandlerInstrumentation,
   EdgeSubscriber,
   ReadableSpan,
+  DataSafetyConfig,
 } from './types';
 
 // Re-export OpenTelemetry APIs for convenience

@@ -11,6 +11,11 @@ import { getEdgeSubscribers } from 'autotel-cloudflare/events';
 import { SamplingPresets } from 'autotel-cloudflare/sampling';
 import { SpanStatusCode } from '@opentelemetry/api';
 
+function parseHeaders(raw?: string): Record<string, string> {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return {}; }
+}
+
 const log = createEdgeLogger('cloudflare-example');
 
 // Example: Dynamic log level control per-request
@@ -337,10 +342,8 @@ const handler: ExportedHandler<typeof worker.Env> = {
 
     // Distributed tracing example - trace context automatically propagated
     if (url.pathname === '/external') {
-      // Trace context is automatically propagated via headers
-      const response = await fetch('https://api.example.com/data', {
-        headers: request.headers, // Trace context in headers
-      });
+      // Trace context is automatically injected by global fetch instrumentation
+      const response = await fetch('https://api.example.com/data');
       return response;
     }
 
@@ -425,7 +428,7 @@ async function processMessage(message: Message) {
 export default instrument(handler, (env: typeof worker.Env) => ({
   exporter: {
     url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
-    headers: env.OTLP_HEADERS ? JSON.parse(env.OTLP_HEADERS) : {},
+    headers: parseHeaders(env.OTLP_HEADERS),
   },
   service: {
     name: 'cloudflare-example',
@@ -460,9 +463,10 @@ export default instrument(handler, (env: typeof worker.Env) => ({
           span.setAttribute('error.severity', 'high');
         }
         // Access readable span for advanced use cases
-        const duration =
-          (readable.endTime[0] - readable.startTime[0]) / 1_000_000; // Convert to ms
-        if (duration > 1000) {
+        const durationMs =
+          (readable.endTime[0] - readable.startTime[0]) * 1000 +
+          (readable.endTime[1] - readable.startTime[1]) / 1_000_000;
+        if (durationMs > 1000) {
           span.setAttribute('performance.slow', true);
         }
       },

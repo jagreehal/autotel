@@ -113,6 +113,28 @@ describe('Hyperdrive Binding Instrumentation', () => {
     });
   });
 
+  describe('this-binding', () => {
+    it('should invoke connect() with original object as this, not the proxy', async () => {
+      let receivedThis: any;
+      const mockHyperdrive = {
+        connect: vi.fn(async function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return {} as Socket;
+        }),
+        connectionString: 'postgresql://user:pass@host:5432/db',
+        host: 'host',
+        port: 5432,
+        user: 'user',
+        password: 'pass',
+        database: 'db',
+      } as unknown as Hyperdrive;
+      const instrumented = instrumentHyperdrive(mockHyperdrive, 'test');
+      await instrumented.connect();
+      expect(receivedThis).toBe(mockHyperdrive);
+    });
+  });
+
   describe('non-instrumented properties', () => {
     it('should pass through non-instrumented properties', () => {
       const mockHyperdrive = createMockHyperdrive();

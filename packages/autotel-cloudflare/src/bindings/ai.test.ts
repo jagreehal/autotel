@@ -136,6 +136,20 @@ describe('AI Binding Instrumentation', () => {
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
+    it('should invoke run() with original object as this, not the proxy', async () => {
+      let receivedThis: any;
+      const mockAIObj = {
+        run: vi.fn(async function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return { response: 'Hello' };
+        }),
+      };
+      const instrumented = instrumentAI(mockAIObj as any, 'test');
+      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', { prompt: 'Hello' });
+      expect(receivedThis).toBe(mockAIObj);
+    });
+
     it('should pass through non-instrumented methods unchanged', () => {
       const instrumented = instrumentAI(mockAI);
 

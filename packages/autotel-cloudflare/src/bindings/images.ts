@@ -128,7 +128,7 @@ export function instrumentImages<T extends ImagesLike>(images: T, bindingName?: 
 
       if (prop === 'info' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
             return tracer.startActiveSpan(
@@ -142,7 +142,7 @@ export function instrumentImages<T extends ImagesLike>(images: T, bindingName?: 
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await Reflect.apply(fnTarget, target, args);
                   setAttr(span, 'images.width', result?.width);
                   setAttr(span, 'images.height', result?.height);
                   setAttr(span, 'images.format', result?.format);
@@ -166,8 +166,8 @@ export function instrumentImages<T extends ImagesLike>(images: T, bindingName?: 
 
       if (prop === 'input' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
-            const transformer = Reflect.apply(fnTarget, thisArg, args) as ImageTransformerLike;
+          apply: (fnTarget, _thisArg, args) => {
+            const transformer = Reflect.apply(fnTarget, target, args) as ImageTransformerLike;
             const meta: PipelineMeta = { operationCount: 0 };
             return proxyTransformer(transformer, meta, name);
           },
