@@ -426,6 +426,109 @@ describe('Handler Instrumentation - Integration Tests', () => {
     });
   });
 
+  describe('Fetch handler span status based on HTTP status code', () => {
+    it('should set OK status for 2xx responses', async () => {
+      const handler: ExportedHandler<Env> = {
+        async fetch(request, env, ctx) {
+          return new Response('OK', { status: 200 });
+        },
+      };
+
+      const instrumented = instrument(handler, {
+        service: { name: 'test-worker' },
+      });
+
+      const request = new Request('http://example.com/test');
+      const env = {} as Env;
+      const ctx = {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as any;
+
+      const response = await instrumented.fetch(request, env, ctx);
+      expect(response.status).toBe(200);
+    });
+
+    it('should set OK status for 404 responses (client error, not server fault)', async () => {
+      const handler: ExportedHandler<Env> = {
+        async fetch(request, env, ctx) {
+          return new Response('Not Found', { status: 404 });
+        },
+      };
+
+      const instrumented = instrument(handler, {
+        service: { name: 'test-worker' },
+      });
+
+      const request = new Request('http://example.com/missing');
+      const env = {} as Env;
+      const ctx = {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as any;
+
+      const response = await instrumented.fetch(request, env, ctx);
+      expect(response.status).toBe(404);
+    });
+
+    it('should return 500 responses correctly (span ERROR status applied internally)', async () => {
+      const handler: ExportedHandler<Env> = {
+        async fetch(request, env, ctx) {
+          return new Response('Internal Server Error', { status: 500 });
+        },
+      };
+
+      const instrumented = instrument(handler, {
+        service: { name: 'test-worker' },
+      });
+
+      const request = new Request('http://example.com/fail');
+      const env = {} as Env;
+      const ctx = {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as any;
+
+      const response = await instrumented.fetch(request, env, ctx);
+      expect(response.status).toBe(500);
+    });
+
+    it('should still call postProcess after setting span status', async () => {
+      let postProcessCalled = false;
+      let postProcessResponse: Response | undefined;
+
+      const handler: ExportedHandler<Env> = {
+        async fetch(request, env, ctx) {
+          return new Response('Server Error', { status: 503 });
+        },
+      };
+
+      const instrumented = instrument(handler, (env: Env) => ({
+        service: { name: 'test-worker' },
+        handlers: {
+          fetch: {
+            postProcess(span, { response }) {
+              postProcessCalled = true;
+              postProcessResponse = response;
+            },
+          },
+        },
+      }));
+
+      const request = new Request('http://example.com/fail');
+      const env = {} as Env;
+      const ctx = {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as any;
+
+      const response = await instrumented.fetch(request, env, ctx);
+      expect(response.status).toBe(503);
+      expect(postProcessCalled).toBe(true);
+      expect(postProcessResponse?.status).toBe(503);
+    });
+  });
+
   describe('Multiple Handlers', () => {
     it('should instrument multiple handlers independently', async () => {
       const handler1: ExportedHandler<Env> = {

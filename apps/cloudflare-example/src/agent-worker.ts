@@ -9,8 +9,14 @@
  */
 
 import { TaskAgent } from './agent';
+import { instrument } from 'autotel-cloudflare';
 import { routeAgentRequest } from 'agents';
 import type { agentWorker } from '../alchemy.run.ts';
+
+function parseHeaders(raw?: string): Record<string, string> {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return {}; }
+}
 
 // Export the Agent class for Durable Object binding
 export { TaskAgent };
@@ -37,8 +43,8 @@ function getAgentStub(namespace: DurableObjectNamespace, roomName: string): Task
   return stub as unknown as TaskAgentStub;
 }
 
-// Default export is the fetch handler
-export default {
+// Default export is the fetch handler wrapped with instrument()
+export default instrument({
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
@@ -106,4 +112,10 @@ export default {
 
     return new Response('Not Found', { status: 404 });
   },
-} satisfies ExportedHandler<Env>;
+}, (env: Env & Record<string, string | undefined>) => ({
+  service: { name: 'agent-worker' },
+  exporter: {
+    url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
+    headers: parseHeaders(env.OTLP_HEADERS),
+  },
+}));

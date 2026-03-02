@@ -26,7 +26,7 @@ export function instrumentBrowserRendering<T extends BrowserRenderingLike>(brows
 
       if (prop === 'fetch' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const [input] = args as [RequestInfo | URL, RequestInit | undefined];
             const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
@@ -42,7 +42,7 @@ export function instrumentBrowserRendering<T extends BrowserRenderingLike>(brows
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await Reflect.apply(fnTarget, target, args);
                   setAttr(span, 'http.response.status_code', result?.status);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;

@@ -22,14 +22,16 @@ import { getActiveConfig, WorkerTracer } from 'autotel-edge';
  */
 function gatherRequestAttributes(request: Request): Record<string, any> {
   const url = new URL(request.url);
+  const config = getActiveConfig();
+  const redactQuery = config?.dataSafety?.redactQueryParams === true;
 
   return {
     'http.request.method': request.method.toUpperCase(),
-    'url.full': request.url,
+    'url.full': redactQuery ? `${url.origin}${url.pathname}` : request.url,
     'url.scheme': url.protocol.replace(':', ''),
     'server.address': url.host,
     'url.path': url.pathname,
-    'url.query': url.search,
+    'url.query': redactQuery ? (url.search ? '[REDACTED]' : '') : url.search,
     'network.protocol.name': 'http',
     'user_agent.original': request.headers.get('user-agent') || undefined,
   };

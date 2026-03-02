@@ -185,6 +185,15 @@ export interface HandlerConfig {
   fetch?: FetchHandlerConfig;
 }
 
+export interface DataSafetyConfig {
+  /** Redact query parameters from URL attributes (default: false) */
+  redactQueryParams?: boolean;
+  /** Control D1 SQL statement capture: 'full' (default), 'obfuscated', or 'off' */
+  captureDbStatement?: 'off' | 'obfuscated' | 'full';
+  /** Only capture these email headers (lowercase). When set, other headers are excluded. */
+  emailHeaderAllowlist?: string[];
+}
+
 interface EdgeConfigBase {
   service: ServiceConfig;
   handlers?: HandlerConfig;
@@ -194,6 +203,8 @@ interface EdgeConfigBase {
   propagator?: TextMapPropagator;
   instrumentation?: InstrumentationOptions;
   subscribers?: EdgeSubscriber[];
+  /** Opt-in data safety controls for sensitive attribute capture */
+  dataSafety?: DataSafetyConfig;
 }
 
 interface EdgeConfigExporter extends EdgeConfigBase {

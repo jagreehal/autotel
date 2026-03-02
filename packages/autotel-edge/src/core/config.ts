@@ -124,6 +124,7 @@ export function parseConfig(config: EdgeConfig): ResolvedEdgeConfig {
       disabled: config.instrumentation?.disabled ?? false,
     },
     subscribers: config.subscribers ?? [],
+    dataSafety: config.dataSafety,
   };
 
   return resolved;

@@ -206,6 +206,39 @@ describe('Images Binding Instrumentation', () => {
     });
   });
 
+  describe('this-binding', () => {
+    it('should invoke info() with original object as this, not the proxy', async () => {
+      let receivedThis: any;
+      const mockImagesObj = {
+        info: vi.fn(async function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return { width: 800, height: 600, format: 'png' };
+        }),
+        input: vi.fn(() => ({ transform: vi.fn(), draw: vi.fn(), output: vi.fn() })),
+      };
+      const instrumented = instrumentImages(mockImagesObj as any, 'test');
+      await instrumented.info(new ArrayBuffer(8));
+      expect(receivedThis).toBe(mockImagesObj);
+    });
+
+    it('should invoke input() with original object as this, not the proxy', () => {
+      let receivedThis: any;
+      const mockTransformer = { transform: vi.fn(), draw: vi.fn(), output: vi.fn(async () => ({})) };
+      const mockImagesObj = {
+        info: vi.fn(async () => ({ width: 800, height: 600, format: 'png' })),
+        input: vi.fn(function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return mockTransformer;
+        }),
+      };
+      const instrumented = instrumentImages(mockImagesObj as any, 'test');
+      instrumented.input(new ArrayBuffer(8));
+      expect(receivedThis).toBe(mockImagesObj);
+    });
+  });
+
   describe('non-instrumented methods', () => {
     it('should pass through non-instrumented methods unchanged', () => {
       const { images } = createMockImages();

@@ -12,6 +12,11 @@ import { createOtelObservability } from 'autotel-cloudflare/agents';
 import { SamplingPresets } from 'autotel-cloudflare/sampling';
 import type { worker } from '../alchemy.run.ts';
 
+function parseHeaders(raw?: string): Record<string, string> {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return {}; }
+}
+
 /**
  * Example Agent that demonstrates:
  * - RPC method tracing (via @callable decorator)
@@ -35,7 +40,7 @@ class TaskAgent extends Agent<typeof worker.Env> {
     this.observability = createOtelObservability({
       exporter: {
         url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
-        headers: env.OTLP_HEADERS ? JSON.parse(env.OTLP_HEADERS) : {},
+        headers: parseHeaders(env.OTLP_HEADERS),
       },
       service: {
         name: 'task-agent-service',

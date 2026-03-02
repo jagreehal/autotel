@@ -205,6 +205,28 @@ describe('Vectorize Binding Instrumentation', () => {
     });
   });
 
+  describe('this-binding', () => {
+    it('should invoke methods with original object as this, not the proxy', async () => {
+      let receivedThis: any;
+      const mockVec = {
+        query: vi.fn(async function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return { matches: [], count: 0 };
+        }),
+        insert: vi.fn(async () => ({ mutationId: 'mut-1', count: 0 })),
+        upsert: vi.fn(async () => ({ mutationId: 'mut-2', count: 0 })),
+        deleteByIds: vi.fn(async () => ({ mutationId: 'mut-3', count: 0 })),
+        getByIds: vi.fn(async () => []),
+        describe: vi.fn(async () => ({ dimensions: 128, vectorCount: 0, processedUpTo: '' })),
+      } as unknown as VectorizeIndex;
+
+      const instrumented = instrumentVectorize(mockVec, 'test');
+      await instrumented.query([0.1, 0.2] as any, {} as any);
+      expect(receivedThis).toBe(mockVec);
+    });
+  });
+
   describe('Error handling', () => {
     it('should record exception and set error status on query() failure', async () => {
       mockVectorize.query = vi.fn(async () => {

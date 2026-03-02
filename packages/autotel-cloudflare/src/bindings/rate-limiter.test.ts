@@ -109,6 +109,22 @@ describe('Rate Limiter Instrumentation', () => {
     });
   });
 
+  describe('this-binding', () => {
+    it('should invoke limit() with original object as this, not the proxy', async () => {
+      let receivedThis: any;
+      const mockLim = {
+        limit: vi.fn(async function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return { success: true };
+        }),
+      };
+      const instrumented = instrumentRateLimiter(mockLim, 'test');
+      await instrumented.limit({ key: 'user-123' });
+      expect(receivedThis).toBe(mockLim);
+    });
+  });
+
   describe('Non-instrumented methods', () => {
     it('should pass through non-instrumented methods unchanged', () => {
       const instrumented = instrumentRateLimiter(mockLimiter, 'my-limiter');

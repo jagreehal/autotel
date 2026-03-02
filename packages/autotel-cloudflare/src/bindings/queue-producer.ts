@@ -22,7 +22,7 @@ export function instrumentQueueProducer<T extends Queue>(queue: T, queueName?: s
 
       if (prop === 'send' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
             return tracer.startActiveSpan(
@@ -38,7 +38,7 @@ export function instrumentQueueProducer<T extends Queue>(queue: T, queueName?: s
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await Reflect.apply(fnTarget, target, args);
                   setAttr(span, 'messaging.message.id', (result as any)?.messageId);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
@@ -60,7 +60,7 @@ export function instrumentQueueProducer<T extends Queue>(queue: T, queueName?: s
 
       if (prop === 'sendBatch' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const [messages] = args as [{ body: unknown }[]];
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
@@ -78,7 +78,7 @@ export function instrumentQueueProducer<T extends Queue>(queue: T, queueName?: s
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await Reflect.apply(fnTarget, target, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {

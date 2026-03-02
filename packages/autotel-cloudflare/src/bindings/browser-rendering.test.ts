@@ -129,6 +129,22 @@ describe('Browser Rendering Instrumentation', () => {
     });
   });
 
+  describe('this-binding', () => {
+    it('should invoke fetch() with original object as this, not the proxy', async () => {
+      let receivedThis: any;
+      const mockBrowserObj = {
+        fetch: vi.fn(async function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return new Response('ok', { status: 200 });
+        }),
+      };
+      const instrumented = instrumentBrowserRendering(mockBrowserObj, 'test');
+      await instrumented.fetch('https://example.com');
+      expect(receivedThis).toBe(mockBrowserObj);
+    });
+  });
+
   describe('Non-instrumented methods', () => {
     it('should pass through non-instrumented methods unchanged', () => {
       const instrumented = instrumentBrowserRendering(mockBrowser, 'my-browser');

@@ -26,7 +26,7 @@ export function instrumentRateLimiter<T extends RateLimiterLike>(limiter: T, bin
 
       if (prop === 'limit' && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const [options] = args as [{ key: string }];
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
@@ -41,7 +41,7 @@ export function instrumentRateLimiter<T extends RateLimiterLike>(limiter: T, bin
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await Reflect.apply(fnTarget, target, args);
                   setAttr(span, 'rate_limiter.success', result?.success);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;

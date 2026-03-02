@@ -24,7 +24,7 @@ export function instrumentVectorize<T extends VectorizeIndex>(vectorize: T, inde
 
       if (typeof prop === 'string' && TRACED_METHODS.includes(prop as any) && typeof value === 'function') {
         return new Proxy(value, {
-          apply: (fnTarget, thisArg, args) => {
+          apply: (fnTarget, _thisArg, args) => {
             const operation = prop as string;
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
@@ -54,7 +54,7 @@ export function instrumentVectorize<T extends VectorizeIndex>(vectorize: T, inde
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await Reflect.apply(fnTarget, target, args);
 
                   if (operation === 'query' && result?.matches) {
                     setAttr(span, 'db.vectorize.matches_count', result.matches.length);
