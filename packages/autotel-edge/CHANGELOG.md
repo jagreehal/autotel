@@ -1,5 +1,18 @@
 # autotel-edge
 
+## 3.14.0
+
+### Minor Changes
+
+- 37190fd: **autotel-cloudflare**
+  - Bindings instrumentation: add caching and fix `this` binding for wrapped proxies
+  - Improve bindings coverage for AI, Vectorize, Hyperdrive, Queue Producer, Analytics Engine, Images, Rate Limiter, and Browser Rendering
+  - Enhance instrument wrapper and fetch instrumentation
+  - Add bindings cache and this-binding tests
+
+  **autotel-edge**
+  - Add `DataSafetyConfig` for sensitive attribute control: `redactQueryParams`, `captureDbStatement` (D1 SQL: full/obfuscated/off), `emailHeaderAllowlist`
+
 ## 3.13.0
 
 ### Minor Changes
