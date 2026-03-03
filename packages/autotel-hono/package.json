@@ -27,10 +27,11 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "autotel": "workspace:*"
+    "autotel": "workspace:*",
+    "autotel-adapters": "workspace:*"
   },
   "peerDependencies": {
-    "hono": ">=4.12.2"
+    "hono": ">=4.12.3"
   },
   "peerDependenciesMeta": {
     "hono": {

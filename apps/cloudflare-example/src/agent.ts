@@ -8,6 +8,7 @@
  */
 
 import { Agent, callable } from 'agents';
+import type { Observability } from 'agents/observability';
 import { createOtelObservability } from 'autotel-cloudflare/agents';
 import { SamplingPresets } from 'autotel-cloudflare/sampling';
 import type { worker } from '../alchemy.run.ts';
@@ -26,17 +27,13 @@ function parseHeaders(raw?: string): Record<string, string> {
  * - Message event tracing
  */
 class TaskAgent extends Agent<typeof worker.Env> {
-  // Override observability with OpenTelemetry implementation
-  // This replaces the default observability with full OpenTelemetry tracing
-  // Initialize in constructor to access env
-  observability;
+  declare observability: Observability;
 
   private taskCount = 0;
 
   constructor(state: DurableObjectState, env: typeof worker.Env) {
     super(state, env);
-    
-    // Initialize OpenTelemetry observability
+
     this.observability = createOtelObservability({
       exporter: {
         url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
@@ -62,7 +59,7 @@ class TaskAgent extends Agent<typeof worker.Env> {
         traceMessages: true, // Trace message events (default: true)
         traceLifecycle: true, // Trace connect/destroy (default: true)
       },
-    });
+    }) as Observability;
   }
 
   /**

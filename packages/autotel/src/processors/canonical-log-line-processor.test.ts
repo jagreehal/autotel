@@ -17,8 +17,6 @@ describe('CanonicalLogLineProcessor', () => {
 
   beforeEach(() => {
     logEntries = [];
-    // Pino-native signature: (extra, message)
-    // The processor ONLY calls with this order, so we can cast safely
     mockLogger = {
       info: vi.fn((extra, msg) => {
         logEntries.push({
@@ -63,7 +61,7 @@ describe('CanonicalLogLineProcessor', () => {
         spanId: '00f067aa0ba902b7',
         traceFlags: 1,
       }),
-      parentSpanContext: undefined, // No parent by default (root span)
+      parentSpanContext: undefined,
       attributes: {
         'user.id': 'user-123',
         'cart.total_cents': 15_999,
@@ -73,7 +71,7 @@ describe('CanonicalLogLineProcessor', () => {
       duration: [0, 1_247_000_000], // 1.247 seconds in nanoseconds
       startTime: [1_703_044_800, 0], // Unix timestamp in nanoseconds
       endTime: [1_703_044_800, 1_247_000_000],
-      kind: SpanKind.SERVER, // Default to SERVER (service entry point)
+      kind: SpanKind.SERVER,
       resource: resourceFromAttributes({
         'service.name': 'test-service',
         'service.version': '1.0.0',
@@ -100,7 +98,7 @@ describe('CanonicalLogLineProcessor', () => {
         operation: 'test.operation',
         traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
         spanId: '00f067aa0ba902b7',
-        correlationId: '4bf92f3577b34da6', // First 16 chars of traceId
+        correlationId: '4bf92f3577b34da6',
         'user.id': 'user-123',
         'cart.total_cents': 15_999,
         'http.method': 'POST',
@@ -181,14 +179,12 @@ describe('CanonicalLogLineProcessor', () => {
         logger: mockLogger,
         rootSpansOnly: true,
       });
-      // Create a span with a LOCAL parent (isRemote: false)
-      // This is a child span within the same service and should be skipped
       const span = createMockSpan({
         parentSpanContext: {
           traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
           spanId: 'local-parent-span-id',
           traceFlags: 1,
-          isRemote: false, // Local parent (same service)
+          isRemote: false,
         },
       });
 
@@ -202,20 +198,17 @@ describe('CanonicalLogLineProcessor', () => {
         logger: mockLogger,
         rootSpansOnly: true,
       });
-      // Create a span with a REMOTE parent (isRemote: true)
-      // This is a service entry point from distributed tracing
       const span = createMockSpan({
         parentSpanContext: {
           traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
           spanId: 'remote-parent-span-id',
           traceFlags: 1,
-          isRemote: true, // Remote parent (from upstream service)
+          isRemote: true,
         },
       });
 
       processor.onEnd(span);
 
-      // Should emit because this is a service entry point (remote parent)
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
     });
 
@@ -224,13 +217,12 @@ describe('CanonicalLogLineProcessor', () => {
         logger: mockLogger,
         rootSpansOnly: false,
       });
-      // Even a local child span should emit when rootSpansOnly is false
       const span = createMockSpan({
         parentSpanContext: {
           traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
           spanId: 'parent-span-id',
           traceFlags: 1,
-          isRemote: false, // Local parent
+          isRemote: false,
         },
       });
 
@@ -255,10 +247,7 @@ describe('CanonicalLogLineProcessor', () => {
       expect(mockLogger.error).toHaveBeenCalledTimes(1);
       expect(logEntries[0].level).toBe('error');
       expect(logEntries[0].attrs.status_code).toBe(SpanStatusCode.ERROR);
-      // status_message might be undefined if not set
-      if (logEntries[0].attrs.status_message) {
-        expect(logEntries[0].attrs.status_message).toBe('Something went wrong');
-      }
+      expect(logEntries[0].attrs.status_message).toBe('Something went wrong');
     });
 
     it('should use info level for successful spans', () => {
@@ -272,6 +261,20 @@ describe('CanonicalLogLineProcessor', () => {
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
       expect(logEntries[0].level).toBe('info');
     });
+
+    it('should use explicit autotel.log.level attribute when provided', () => {
+      const processor = new CanonicalLogLineProcessor({ logger: mockLogger });
+      const span = createMockSpan({
+        attributes: {
+          'autotel.log.level': 'warn',
+        },
+      });
+
+      processor.onEnd(span);
+
+      expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+      expect(logEntries[0].level).toBe('warn');
+    });
   });
 
   describe('minLevel option', () => {
@@ -280,12 +283,10 @@ describe('CanonicalLogLineProcessor', () => {
         logger: mockLogger,
         minLevel: 'info',
       });
-      // Would need to force debug level, but for now just test the filter
       const span = createMockSpan();
 
       processor.onEnd(span);
 
-      // Should still log info level
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
     });
 
@@ -295,12 +296,11 @@ describe('CanonicalLogLineProcessor', () => {
         minLevel: 'warn',
       });
       const span = createMockSpan({
-        status: { code: SpanStatusCode.OK }, // Would be info level
+        status: { code: SpanStatusCode.OK },
       });
 
       processor.onEnd(span);
 
-      // Info is below warn, so should be skipped
       expect(mockLogger.info).not.toHaveBeenCalled();
     });
   });
@@ -319,6 +319,65 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       expect(logEntries[0].message).toBe('[SUCCESS] test.operation');
+    });
+  });
+
+  describe('emit control hooks', () => {
+    it('should skip emit when shouldEmit returns false', () => {
+      const shouldEmit = vi.fn(() => false);
+      const processor = new CanonicalLogLineProcessor({
+        logger: mockLogger,
+        shouldEmit,
+      });
+      const span = createMockSpan();
+
+      processor.onEnd(span);
+
+      expect(shouldEmit).toHaveBeenCalledTimes(1);
+      expect(mockLogger.info).not.toHaveBeenCalled();
+    });
+
+    it('should call drain after emit with canonical event context', async () => {
+      const drain = vi.fn(async () => {});
+      const processor = new CanonicalLogLineProcessor({
+        logger: mockLogger,
+        drain,
+      });
+      const span = createMockSpan();
+
+      processor.onEnd(span);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockLogger.info).toHaveBeenCalledTimes(1);
+      expect(drain).toHaveBeenCalledTimes(1);
+      expect(drain.mock.calls[0][0]).toMatchObject({
+        level: 'info',
+        message: expect.stringContaining('test.operation'),
+        event: expect.objectContaining({
+          operation: 'test.operation',
+          traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+        }),
+      });
+    });
+
+    it('should not keep below-threshold HTTP status when keep.status is configured', () => {
+      const processor = new CanonicalLogLineProcessor({
+        logger: mockLogger,
+        keep: [{ status: 500 }],
+      });
+      const span = createMockSpan({
+        status: { code: SpanStatusCode.ERROR },
+        attributes: {
+          'http.response.status_code': 404,
+        },
+      });
+
+      processor.onEnd(span);
+
+      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(mockLogger.info).not.toHaveBeenCalled();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.debug).not.toHaveBeenCalled();
     });
   });
 
@@ -373,7 +432,6 @@ describe('CanonicalLogLineProcessor', () => {
 
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
       const call = logEntries[0];
-      // Should include all 100 attributes plus core fields
       expect(Object.keys(call.attrs).length).toBeGreaterThan(100);
     });
 
@@ -438,7 +496,6 @@ describe('CanonicalLogLineProcessor', () => {
   describe('attribute collision prevention', () => {
     it('should not allow span attributes to overwrite core metadata', () => {
       const processor = new CanonicalLogLineProcessor({ logger: mockLogger });
-      // Create a span with attributes that match core metadata field names
       const span = createMockSpan({
         attributes: {
           traceId: 'malicious-trace-id',
@@ -454,7 +511,6 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       const call = logEntries[0];
-      // Core metadata should NOT be overwritten by span attributes
       expect(call.attrs.traceId).toBe('4bf92f3577b34da6a3ce929d0e0e4736');
       expect(call.attrs.spanId).toBe('00f067aa0ba902b7');
       expect(call.attrs.operation).toBe('test.operation');
