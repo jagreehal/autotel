@@ -5,7 +5,7 @@ This example shows how to use [Hono](https://hono.dev) with [autotel-hono](https
 ## What This Example Shows
 
 - Hono app on Node.js via `@hono/node-server`
-- `otel()` middleware from autotel-hono for automatic HTTP server spans and metrics
+- `otel()` from `autotel-hono` and `useLogger()` from `autotel-adapters/hono` for request-scoped DX
 - Manual tracing in route handlers with `trace()` from autotel
 - Optional capture of request/response headers
 
@@ -23,9 +23,15 @@ Autotel is initialized in `instrumentation.ts` (loaded via `--import`). The Hono
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { otel } from 'autotel-hono';
+import { useLogger } from 'autotel-adapters/hono';
 
 const app = new Hono();
 app.use('*', otel({ serviceName: 'my-service' }));
+app.get('/users/:id', (c) => {
+  const log = useLogger(c)
+  log.set({ userId: c.req.param('id') })
+  return c.json({ ok: true })
+})
 
 app.get('/users/:id', async (c) => {
   const user = await fetchUser(c.req.param('id'));

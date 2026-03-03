@@ -42,6 +42,10 @@
     "./agents": {
       "types": "./dist/agents.d.ts",
       "import": "./dist/agents.js"
+    },
+    "./parse-error": {
+      "types": "./dist/parse-error.d.ts",
+      "import": "./dist/parse-error.js"
     }
   },
   "files": [

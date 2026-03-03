@@ -33,7 +33,7 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@sentry/node": ">=10.40.0"
+    "@sentry/node": ">=10.41.0"
   },
   "peerDependenciesMeta": {
     "@sentry/node": {

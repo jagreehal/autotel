@@ -29,6 +29,7 @@ import type {
 import type { Attributes, AttributeValue } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import type { Logger } from '../logger';
+import { formatPrettyLogLine, formatDuration } from '../pretty-log-formatter';
 
 /**
  * Function to redact sensitive attribute values
@@ -37,6 +38,22 @@ export type AttributeRedactorFn = (
   key: string,
   value: AttributeValue,
 ) => AttributeValue;
+
+export interface CanonicalLogLineEvent {
+  span: ReadableSpan;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  event: Record<string, unknown>;
+}
+
+export interface KeepCondition {
+  /** Keep events where HTTP status >= this value. */
+  status?: number;
+  /** Keep events where duration_ms >= this value. */
+  durationMs?: number;
+  /** Keep events matching this path pattern (simple prefix match). */
+  path?: string;
+}
 
 export interface CanonicalLogLineOptions {
   /** Logger to use for emitting canonical log lines (defaults to OTel Logs API) */
@@ -55,6 +72,25 @@ export interface CanonicalLogLineOptions {
    * matching the behavior of attributeRedactor in init().
    */
   attributeRedactor?: AttributeRedactorFn;
+  /** Predicate to decide whether to emit (runs after event is built). */
+  shouldEmit?: (ctx: CanonicalLogLineEvent) => boolean;
+  /**
+   * Declarative tail sampling conditions (OR logic). If any condition matches,
+   * the event is kept. Ignored when `shouldEmit` is provided.
+   *
+   * @example
+   * keep: [{ status: 500 }, { durationMs: 1000 }]
+   */
+  keep?: KeepCondition[];
+  /** Callback invoked after emit for custom fan-out. */
+  drain?: (ctx: CanonicalLogLineEvent) => void | Promise<void>;
+  /** Handler for drain failures. */
+  onDrainError?: (error: unknown, ctx: CanonicalLogLineEvent) => void;
+  /**
+   * Pretty-print canonical log lines to console in a tree format.
+   * Defaults to true when NODE_ENV is 'development'.
+   */
+  pretty?: boolean;
 }
 
 /**
@@ -121,6 +157,10 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
   private messageFormat: (span: ReadableSpan) => string;
   private includeResourceAttributes: boolean;
   private attributeRedactor?: AttributeRedactorFn;
+  private shouldEmit?: (ctx: CanonicalLogLineEvent) => boolean;
+  private drain?: (ctx: CanonicalLogLineEvent) => void | Promise<void>;
+  private onDrainError?: (error: unknown, ctx: CanonicalLogLineEvent) => void;
+  private pretty: boolean;
   private getOTelLogger: (() => ReturnType<typeof logs.getLogger>) | null =
     null;
 
@@ -132,25 +172,55 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
       options.messageFormat ?? ((span) => `[${span.name}] Request completed`);
     this.includeResourceAttributes = options.includeResourceAttributes ?? true;
     this.attributeRedactor = options.attributeRedactor;
+    this.shouldEmit =
+      options.shouldEmit ?? this.buildKeepPredicate(options.keep);
+    this.drain = options.drain;
+    this.onDrainError = options.onDrainError;
+    this.pretty =
+      options.pretty ??
+      (typeof process !== 'undefined' &&
+        process.env.NODE_ENV === 'development');
 
-    // Lazy-load OTel logger if no custom logger provided
-    // We can't initialize it here because logs API might not be ready
     if (!this.logger) {
       this.getOTelLogger = () => logs.getLogger('autotel.canonical-log-line');
     }
   }
 
+  private buildKeepPredicate(
+    keep?: KeepCondition[],
+  ): ((ctx: CanonicalLogLineEvent) => boolean) | undefined {
+    if (!keep || keep.length === 0) return undefined;
+
+    return (ctx: CanonicalLogLineEvent) => {
+      return keep.some((condition) => {
+        if (condition.status !== undefined) {
+          const httpStatus = Number(
+            ctx.event['http.response.status_code'] ?? 0,
+          );
+          if (httpStatus >= condition.status) return true;
+        }
+        if (
+          condition.durationMs !== undefined &&
+          Number(ctx.event.duration_ms ?? 0) >= condition.durationMs
+        ) {
+          return true;
+        }
+        if (condition.path !== undefined) {
+          const route = String(
+            ctx.event['http.route'] ?? ctx.event['url.path'] ?? '',
+          );
+          if (route.startsWith(condition.path)) return true;
+        }
+        return false;
+      });
+    };
+  }
+
   onStart(): void {
-    // No-op - we only care about span end
+    // No-op
   }
 
   onEnd(span: ReadableSpan): void {
-    // Skip if rootSpansOnly and this span has a LOCAL parent (same service)
-    // We still emit for spans with REMOTE parents (from distributed tracing)
-    // because those are the entry points ("roots") for THIS service.
-    // Check if parent is remote (from another service via traceparent/b3 headers)
-    // If isRemote is true, this span is a service entry point and should emit
-    // If isRemote is false/undefined, this is a local child span and should be skipped
     if (
       this.rootSpansOnly &&
       span.parentSpanContext?.spanId &&
@@ -159,44 +229,55 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
       return;
     }
 
-    // Determine log level from span status
     const level = this.getLogLevel(span);
     if (!this.shouldLog(level)) {
       return;
     }
 
-    // Build canonical log line with ALL span attributes
     const canonicalLogLine = this.buildCanonicalLogLine(span);
+    const message = this.messageFormat(span);
+    const eventContext: CanonicalLogLineEvent = {
+      span,
+      level,
+      message,
+      event: canonicalLogLine,
+    };
 
-    // Emit via logger or OTel Logs API
+    if (this.shouldEmit && !this.shouldEmit(eventContext)) return;
+
+    if (this.pretty) {
+      console.log(formatPrettyLogLine(eventContext));
+    }
+
     if (this.logger) {
-      this.emitViaLogger(level, span, canonicalLogLine);
+      this.emitViaLogger(level, message, canonicalLogLine);
     } else if (this.getOTelLogger) {
       const otelLogger = this.getOTelLogger();
-      this.emitViaOTel(level, span, canonicalLogLine, otelLogger);
+      this.emitViaOTel(level, message, canonicalLogLine, otelLogger);
+    }
+
+    if (this.drain) {
+      Promise.resolve(this.drain(eventContext)).catch((error) => {
+        if (this.onDrainError) {
+          this.onDrainError(error, eventContext);
+          return;
+        }
+        this.reportInternalWarning('canonicalLogLines.drain failed', error);
+      });
     }
   }
 
   private buildCanonicalLogLine(span: ReadableSpan): Record<string, unknown> {
-    // Convert duration from [seconds, nanoseconds] to milliseconds
-    // duration[0] is seconds, duration[1] is nanoseconds (fractional part)
     const durationMs = span.duration[0] * 1000 + span.duration[1] / 1_000_000;
-
-    // Convert start time from [seconds, nanoseconds] to ISO string
-    // startTime[0] is seconds, startTime[1] is nanoseconds (fractional part)
     const timestamp = new Date(
       span.startTime[0] * 1000 + span.startTime[1] / 1_000_000,
     ).toISOString();
 
-    // Start with span attributes (potentially redacted)
-    // We add these FIRST so core metadata fields below can't be overwritten
+    // Span attributes first so core metadata fields below take precedence
     const canonicalLogLine: Record<string, unknown> = {};
-
-    // Apply redaction to span attributes if redactor is configured
     const attributes = this.redactAttributes(span.attributes);
     Object.assign(canonicalLogLine, attributes);
 
-    // Include resource attributes (service-level context), also redacted
     if (this.includeResourceAttributes) {
       const resourceAttrs = this.redactAttributes(
         span.resource.attributes as Attributes,
@@ -204,13 +285,12 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
       Object.assign(canonicalLogLine, resourceAttrs);
     }
 
-    // Set core metadata fields LAST to prevent span attributes from overwriting them
-    // (e.g., if a span has an attribute named "traceId" or "timestamp")
     canonicalLogLine.operation = span.name;
     canonicalLogLine.traceId = span.spanContext().traceId;
     canonicalLogLine.spanId = span.spanContext().spanId;
     canonicalLogLine.correlationId = span.spanContext().traceId.slice(0, 16);
     canonicalLogLine.duration_ms = Math.round(durationMs * 100) / 100;
+    canonicalLogLine.duration = formatDuration(durationMs);
     canonicalLogLine.status_code = span.status.code;
     canonicalLogLine.status_message = span.status.message || undefined;
     canonicalLogLine.timestamp = timestamp;
@@ -218,12 +298,8 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     return canonicalLogLine;
   }
 
-  /**
-   * Apply attribute redaction if a redactor is configured
-   */
   private redactAttributes(attributes: Attributes): Record<string, unknown> {
     if (!this.attributeRedactor) {
-      // No redaction configured, return as-is
       return { ...attributes };
     }
 
@@ -238,22 +314,18 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
 
   private emitViaLogger(
     level: 'debug' | 'info' | 'warn' | 'error',
-    span: ReadableSpan,
+    message: string,
     canonicalLogLine: Record<string, unknown>,
   ): void {
-    const message = this.messageFormat(span);
-    // Pino-compatible signature: (extra, message)
     this.logger![level](canonicalLogLine, message);
   }
 
   private emitViaOTel(
     level: 'debug' | 'info' | 'warn' | 'error',
-    span: ReadableSpan,
+    message: string,
     canonicalLogLine: Record<string, unknown>,
     otelLogger: ReturnType<typeof logs.getLogger>,
   ): void {
-    const message = this.messageFormat(span);
-    // Convert unknown values to strings for OTel Logs API compatibility
     const otelAttributes: Record<string, string | number | boolean> = {};
     for (const [key, value] of Object.entries(canonicalLogLine)) {
       if (
@@ -275,11 +347,17 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
   }
 
   private getLogLevel(span: ReadableSpan): 'debug' | 'info' | 'warn' | 'error' {
-    // ERROR status code is 2
-    if (span.status.code === 2) return 'error';
+    const explicitLevel = span.attributes['autotel.log.level'];
+    if (
+      explicitLevel === 'debug' ||
+      explicitLevel === 'info' ||
+      explicitLevel === 'warn' ||
+      explicitLevel === 'error'
+    ) {
+      return explicitLevel;
+    }
 
-    // Could check for slow spans, etc. in the future
-    // For now, default to info
+    if (span.status.code === 2) return 'error';
     return 'info';
   }
 
@@ -298,11 +376,21 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     return mapping[level] ?? SeverityNumber.INFO;
   }
 
+  private reportInternalWarning(message: string, error: unknown): void {
+    const err =
+      error instanceof Error ? error.message : String(error ?? 'unknown error');
+    if (this.logger) {
+      this.logger.warn({ error: err }, `[autotel] ${message}`);
+      return;
+    }
+    console.warn(`[autotel] ${message}: ${err}`);
+  }
+
   async forceFlush(): Promise<void> {
-    // No-op - logging is fire-and-forget
+    // No-op
   }
 
   async shutdown(): Promise<void> {
-    // No-op - logging is fire-and-forget
+    // No-op
   }
 }

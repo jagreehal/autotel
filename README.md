@@ -94,6 +94,17 @@ Edge runtime support for:
 
 **[→ View edge documentation](./packages/autotel-edge/README.md)**
 
+### [autotel-adapters](./packages/autotel-adapters)
+
+Composable framework DX adapters on top of `autotel` core:
+
+- `useLogger(...)` style ergonomics for framework handlers
+- `withAutotel(...)` wrappers for Next/Nitro-style handler DX
+- `parseError()` and drain pipeline composition
+- Extensible toolkit for custom framework adapters
+
+**[→ View adapters documentation](./packages/autotel-adapters/README.md)**
+
 ## Migrating from OpenTelemetry?
 
 **[Migration Guide](./docs/MIGRATION.md)** - Migrate from vanilla OpenTelemetry to autotel:

@@ -976,6 +976,23 @@ export interface AutotelConfig {
     ) => string;
     /** Whether to include resource attributes (default: true) */
     includeResourceAttributes?: boolean;
+    /** Predicate to decide whether to emit (runs after event is built). */
+    shouldEmit?: CanonicalLogLineOptions['shouldEmit'];
+    /**
+     * Declarative tail sampling conditions (OR logic).
+     * Ignored when `shouldEmit` is provided.
+     * @example keep: [{ status: 500 }, { durationMs: 1000 }]
+     */
+    keep?: CanonicalLogLineOptions['keep'];
+    /** Callback invoked after emit for custom fan-out. */
+    drain?: CanonicalLogLineOptions['drain'];
+    /** Handler for drain failures. */
+    onDrainError?: CanonicalLogLineOptions['onDrainError'];
+    /**
+     * Pretty-print canonical log lines to console.
+     * Defaults to true when NODE_ENV is 'development'.
+     */
+    pretty?: boolean;
   };
 }
 
@@ -1247,6 +1264,11 @@ export function init(cfg: AutotelConfig): void {
       messageFormat: mergedConfig.canonicalLogLines.messageFormat,
       includeResourceAttributes:
         mergedConfig.canonicalLogLines.includeResourceAttributes,
+      shouldEmit: mergedConfig.canonicalLogLines.shouldEmit,
+      keep: mergedConfig.canonicalLogLines.keep,
+      drain: mergedConfig.canonicalLogLines.drain,
+      onDrainError: mergedConfig.canonicalLogLines.onDrainError,
+      pretty: mergedConfig.canonicalLogLines.pretty,
     };
     spanProcessors.push(new CanonicalLogLineProcessor(canonicalOptions));
   }

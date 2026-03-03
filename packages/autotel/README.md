@@ -76,6 +76,9 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
     - [What You Get](#what-you-get)
     - [Query Examples](#query-examples)
     - [Configuration Options](#configuration-options)
+    - [Request Logger DX](#request-logger-dx)
+    - [Drain Pipeline (Batch + Retry + Flush)](#drain-pipeline-batch--retry--flush)
+    - [parseError (Frontend/API Consumers)](#parseerror-frontendapi-consumers)
   - [Auto Instrumentation \& Advanced Configuration](#auto-instrumentation--advanced-configuration)
     - [⚠️ autoInstrumentations vs. Manual Instrumentations](#️-autoinstrumentations-vs-manual-instrumentations)
       - [Option A: Auto-instrumentations only (all defaults)](#option-a-auto-instrumentations-only-all-defaults)
@@ -1504,7 +1507,7 @@ export const processCheckout = trace((ctx) => async (order: Order) => {
 
 When a span ends, a canonical log line is automatically emitted with:
 
-- **Core fields**: `operation`, `traceId`, `spanId`, `correlationId`, `duration_ms`, `status_code`
+- **Core fields**: `operation`, `traceId`, `spanId`, `correlationId`, `duration_ms`, `duration`, `status_code`
 - **ALL span attributes**: Every attribute you set with `ctx.setAttribute()`
 - **Resource attributes**: `service.name`, `service.version`, `deployment.environment`
 - **Timestamp**: ISO 8601 format
@@ -1520,6 +1523,7 @@ When a span ends, a canonical log line is automatically emitted with:
   "spanId": "00f067aa0ba902b7",
   "correlationId": "4bf92f3577b34da",
   "duration_ms": 124.7,
+  "duration": "125ms",
   "status_code": 1,
   "user.id": "user-123",
   "user.subscription": "premium",
@@ -1561,17 +1565,118 @@ init({
   service: 'my-app',
   canonicalLogLines: {
     enabled: true,
-    rootSpansOnly: true, // Only log root spans (one per request)
-    minLevel: 'info', // Minimum log level ('debug' | 'info' | 'warn' | 'error')
-    logger: pino(), // Custom logger (defaults to OTel Logs API)
+    rootSpansOnly: true,
+    minLevel: 'info',
+    logger: pino(),
+    pretty: true, // tree-formatted console output (defaults to NODE_ENV=development)
+    keep: [{ status: 500 }, { durationMs: 1000 }], // declarative tail sampling
+    shouldEmit: ({ event }) => { // or use a custom predicate (overrides keep)
+      const isError = Number(event.status_code) === 2;
+      const isSlow = Number(event.duration_ms ?? 0) >= 1000;
+      return isError || isSlow || Math.random() < 0.1;
+    },
+    drain: async ({ event }) => {
+      await fetch('https://logs.example.com/ingest', {
+        method: 'POST',
+        body: JSON.stringify(event),
+      });
+    },
     messageFormat: (span) => {
-      // Custom message format
       const status = span.status.code === 2 ? 'ERROR' : 'SUCCESS';
       return `${span.name} [${status}]`;
     },
-    includeResourceAttributes: true, // Include service.name, service.version, etc.
+    includeResourceAttributes: true,
   },
 });
+```
+
+### Request Logger DX
+
+For teams that prefer `log.set({...})` ergonomics, you can use `getRequestLogger()`.
+It writes directly to span attributes/events, so canonical log lines still emit one
+wide event per request.
+
+```typescript
+import { trace, getRequestLogger, createStructuredError } from 'autotel';
+
+export const checkout = trace((ctx) => async (order: Order) => {
+  const log = getRequestLogger(ctx);
+
+  log.set({ user: { id: order.userId, plan: order.plan } });
+  log.set({
+    cart: { total_cents: order.totalCents, item_count: order.items.length },
+  });
+
+  try {
+    await processPayment(order);
+  } catch (cause) {
+    log.error(
+      createStructuredError({
+        message: 'Payment failed',
+        why: 'Card declined by issuer',
+        fix: 'Try another payment method',
+        link: 'https://docs.example.com/errors/payment-declined',
+        cause,
+      }),
+      { step: 'payment' },
+    );
+    throw cause;
+  }
+});
+```
+
+You also get:
+
+- `log.getContext()` to inspect the accumulated request context.
+- `log.emitNow(overrides?)` to capture an immediate snapshot (adds a span event
+  and returns `{ timestamp, traceId, spanId, correlationId, context }`).
+
+### Drain Pipeline (Batch + Retry + Flush)
+
+If you want batching/retry behavior for canonical drains, wrap `drain`
+with `createDrainPipeline()` style logging:
+
+```typescript
+import { createDrainPipeline, init } from 'autotel';
+
+const pipeline = createDrainPipeline({
+  batch: { size: 50, intervalMs: 2000 },
+  retry: { maxAttempts: 3, backoff: 'exponential' },
+  maxBufferSize: 1000,
+});
+
+const drain = pipeline(async (batch) => {
+  await fetch('https://logs.example.com/ingest', {
+    method: 'POST',
+    body: JSON.stringify(batch.map((ctx) => ctx.event)),
+  });
+});
+
+init({
+  service: 'my-app',
+  canonicalLogLines: {
+    enabled: true,
+    rootSpansOnly: true,
+    drain,
+  },
+});
+
+await drain.flush();
+```
+
+### parseError (Frontend/API Consumers)
+
+Use `parseError()` to normalize unknown caught errors into a stable shape:
+
+```typescript
+import { parseError } from 'autotel';
+
+try {
+  await api.checkout(order);
+} catch (error) {
+  const parsed = parseError(error);
+  showError(parsed.message, parsed.why, parsed.fix);
+}
 ```
 
 ## Auto Instrumentation & Advanced Configuration

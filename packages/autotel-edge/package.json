@@ -26,6 +26,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"
+    },
+    "./parse-error": {
+      "types": "./dist/parse-error.d.ts",
+      "import": "./dist/parse-error.js"
     }
   },
   "files": [
