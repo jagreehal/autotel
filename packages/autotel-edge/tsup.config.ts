@@ -12,6 +12,7 @@ export default defineConfig({
     events: 'src/events.ts',
     logger: 'src/logger.ts',
     testing: 'src/testing.ts',
+    'parse-error': 'src/parse-error.ts',
   },
   format: ['esm'], // ESM-only for edge runtimes
   dts: true,

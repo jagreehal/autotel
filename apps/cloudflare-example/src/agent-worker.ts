@@ -10,6 +10,7 @@
 
 import { TaskAgent } from './agent';
 import { instrument } from 'autotel-cloudflare';
+import { parseError, useLogger, withAutotelFetch } from 'autotel-adapters/cloudflare';
 import { routeAgentRequest } from 'agents';
 import type { agentWorker } from '../alchemy.run.ts';
 
@@ -45,8 +46,10 @@ function getAgentStub(namespace: DurableObjectNamespace, roomName: string): Task
 
 // Default export is the fetch handler wrapped with instrument()
 export default instrument({
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  fetch: withAutotelFetch(async (request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> => {
+    const log = useLogger(request);
     const url = new URL(request.url);
+    log.set({ route: url.pathname, method: request.method, worker: 'agent-worker' });
 
     // API info
     if (url.pathname === '/') {
@@ -84,11 +87,18 @@ export default instrument({
         // Get the agent stub and call the method directly
         const agent = getAgentStub(env.TaskAgent, roomName);
         const result = await agent.processTask(taskName, priority);
+        log.info('Processed task', { roomName, taskName, priority });
         return Response.json(result);
       } catch (error) {
+        const parsed = parseError(error);
+        log.error(error instanceof Error ? error : parsed.message, {
+          endpoint: '/process-task',
+          errorStatus: parsed.status,
+          errorCode: parsed.code,
+        });
         return Response.json(
-          { error: error instanceof Error ? error.message : 'Unknown error' },
-          { status: 500 },
+          { error: parsed.message, code: parsed.code },
+          { status: parsed.status },
         );
       }
     }
@@ -101,17 +111,27 @@ export default instrument({
         // Get the agent stub and call the method directly
         const agent = getAgentStub(env.TaskAgent, roomName);
         const result = await agent.getStats();
+        log.info('Fetched stats', { roomName });
         return Response.json(result);
       } catch (error) {
+        const parsed = parseError(error);
+        log.error(error instanceof Error ? error : parsed.message, {
+          endpoint: '/stats',
+          errorStatus: parsed.status,
+          errorCode: parsed.code,
+        });
         return Response.json(
-          { error: error instanceof Error ? error.message : 'Unknown error' },
-          { status: 500 },
+          { error: parsed.message, code: parsed.code },
+          { status: parsed.status },
         );
       }
     }
 
+    log.warn('Route not found', { route: url.pathname });
     return new Response('Not Found', { status: 404 });
-  },
+  }, {
+    spanName: (request) => `cloudflare.agent.${request.method?.toLowerCase() ?? 'request'}`,
+  }),
 }, (env: Env & Record<string, string | undefined>) => ({
   service: { name: 'agent-worker' },
   exporter: {

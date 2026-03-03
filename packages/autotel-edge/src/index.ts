@@ -82,3 +82,6 @@ export type {
   Tracer,
   Context,
 } from '@opentelemetry/api';
+
+// Error parsing helper for frontend/API consumers in edge runtimes
+export { parseError, type ParsedError } from './parse-error';

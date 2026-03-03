@@ -202,6 +202,16 @@
       "types": "./dist/test-span-collector.d.ts",
       "import": "./dist/test-span-collector.js",
       "require": "./dist/test-span-collector.cjs"
+    },
+    "./parse-error": {
+      "types": "./dist/parse-error.d.ts",
+      "import": "./dist/parse-error.js",
+      "require": "./dist/parse-error.cjs"
+    },
+    "./drain-pipeline": {
+      "types": "./dist/drain-pipeline.d.ts",
+      "import": "./dist/drain-pipeline.js",
+      "require": "./dist/drain-pipeline.cjs"
     }
   },
   "files": [

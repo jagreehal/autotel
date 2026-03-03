@@ -110,6 +110,39 @@ export {
 // Graceful shutdown
 export { flush, shutdown } from './shutdown';
 
+// Request logger
+export {
+  getRequestLogger,
+  type RequestLogger,
+  type RequestLogSnapshot,
+  type RequestLoggerOptions,
+} from './request-logger';
+
+// Structured errors
+export {
+  createStructuredError,
+  getStructuredErrorAttributes,
+  recordStructuredError,
+  type StructuredError,
+  type StructuredErrorInput,
+} from './structured-error';
+
+// parseError
+export { parseError, type ParsedError } from './parse-error';
+
+// Attribute flattening
+export { toAttributeValue, flattenToAttributes } from './flatten-attributes';
+
+// Drain pipeline
+export {
+  createDrainPipeline,
+  type DrainPipelineOptions,
+  type PipelineDrainFn,
+} from './drain-pipeline';
+
+// Pretty log formatting
+export { formatDuration } from './pretty-log-formatter';
+
 // Re-export sampling strategies
 export {
   type Sampler,
