@@ -2,8 +2,6 @@
 'autotel': minor
 'autotel-cloudflare': minor
 'autotel-edge': minor
-'autotel': minor
-'autotel-edge': minor
 'autotel-plugins': minor
 'autotel-sentry': minor
 'autotel-subscribers': minor
