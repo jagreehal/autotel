@@ -1,5 +1,13 @@
 # autotel-terminal
 
+## 15.0.0
+
+### Patch Changes
+
+- Updated dependencies [eb28f60]
+- Updated dependencies [f772504]
+  - autotel@2.23.0
+
 ## 14.0.0
 
 ### Minor Changes

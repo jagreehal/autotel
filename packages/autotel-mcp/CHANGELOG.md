@@ -1,5 +1,13 @@
 # autotel-mcp
 
+## 26.0.0
+
+### Patch Changes
+
+- Updated dependencies [eb28f60]
+- Updated dependencies [f772504]
+  - autotel@2.23.0
+
 ## 25.0.0
 
 ### Minor Changes
