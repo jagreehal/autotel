@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [eb28f60]
+- Updated dependencies [f772504]
+  - autotel@2.23.0
+
 ## 0.4.0
 
 ### Minor Changes
