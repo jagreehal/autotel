@@ -168,6 +168,14 @@ function looksLikeTraceFactory(fn: GenericFunction): boolean {
   }
 
   if (fn.length === 0) {
+    if (!isAsyncFunction(fn)) {
+      try {
+        const result = fn();
+        return typeof result === 'function';
+      } catch {
+        return false;
+      }
+    }
     return false;
   }
 
@@ -2361,14 +2369,14 @@ export function withBaggage<T = unknown>(
         }
         return value;
       },
-      (err) => {
+      (error) => {
         // Restore original context before rejecting
         if (previousStored) {
           return ctxStorage.run(previousStored, () => {
-            throw err;
+            throw error;
           });
         }
-        throw err;
+        throw error;
       },
     );
   }
