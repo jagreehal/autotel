@@ -1570,7 +1570,8 @@ init({
     logger: pino(),
     pretty: true, // tree-formatted console output (defaults to NODE_ENV=development)
     keep: [{ status: 500 }, { durationMs: 1000 }], // declarative tail sampling
-    shouldEmit: ({ event }) => { // or use a custom predicate (overrides keep)
+    shouldEmit: ({ event }) => {
+      // or use a custom predicate (overrides keep)
       const isError = Number(event.status_code) === 2;
       const isSlow = Number(event.duration_ms ?? 0) >= 1000;
       return isError || isSlow || Math.random() < 0.1;

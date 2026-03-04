@@ -173,6 +173,69 @@ describe('Functional API', () => {
       });
     });
 
+    describe('zero-arg factory pattern (no ctx parameter)', () => {
+      it('should detect zero-arg sync factory and execute inner function', () => {
+        const collector = createTraceCollector();
+
+        const addOne = trace(() => (i: number) => {
+          return i + 1;
+        });
+
+        const result = addOne(1);
+
+        expect(result).toBe(2);
+        expect(result).not.toBeInstanceOf(Promise);
+
+        const spans = collector.getSpans();
+        expect(spans).toHaveLength(1);
+      });
+
+      it('should detect zero-arg async factory and execute inner function', async () => {
+        const collector = createTraceCollector();
+
+        const fetchData = trace(() => async (query: string) => {
+          return query.toUpperCase();
+        });
+
+        const result = await fetchData('test');
+
+        expect(result).toBe('TEST');
+
+        const spans = collector.getSpans();
+        expect(spans).toHaveLength(1);
+      });
+
+      it('should work with named zero-arg factory', () => {
+        const collector = createTraceCollector();
+
+        const addOne = trace('addOne', () => (i: number) => {
+          return i + 1;
+        });
+
+        const result = addOne(1);
+
+        expect(result).toBe(2);
+
+        const spans = collector.getSpans();
+        expect(spans).toHaveLength(1);
+        expect(spans[0]!.name).toBe('addOne');
+      });
+
+      it('should handle multiple zero-arg factories combined', () => {
+        const collector = createTraceCollector();
+
+        const addOne = trace('addOne', () => (i: number) => i + 1);
+        const addTwo = trace('addTwo', () => (i: number) => i + 2);
+
+        const result = addOne(1) + addTwo(1);
+
+        expect(result).toBe(5);
+
+        const spans = collector.getSpans();
+        expect(spans).toHaveLength(2);
+      });
+    });
+
     describe('overload 2: trace(name, fn)', () => {
       it('should use custom name', async () => {
         const collector = createTraceCollector();
