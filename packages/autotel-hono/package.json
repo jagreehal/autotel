@@ -16,7 +16,10 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "skills",
+    "!skills/_artifacts",
+    "bin"
   ],
   "scripts": {
     "build": "tsup",
@@ -27,6 +30,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@tanstack/intent": "^0.0.13",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*"
   },
@@ -48,5 +52,8 @@
     "type": "git",
     "url": "https://github.com/jagreehal/autotel",
     "directory": "packages/autotel-hono"
+  },
+  "bin": {
+    "intent": "./bin/intent.js"
   }
 }

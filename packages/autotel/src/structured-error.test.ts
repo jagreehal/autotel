@@ -27,6 +27,36 @@ describe('structured-error helpers', () => {
     expect(err.details).toEqual({ retryable: false, provider: 'stripe' });
   });
 
+  it('toString() renders a human-readable diagnostic summary', () => {
+    const err = createStructuredError({
+      message: 'Payment failed',
+      why: 'Card declined by issuer',
+      fix: 'Use a different card',
+      link: 'https://docs.example.com/errors/card-declined',
+      code: 'PAYMENT_DECLINED',
+      status: 402,
+      cause: new Error('upstream timeout'),
+    });
+
+    const output = err.toString();
+    expect(output).toBe(
+      [
+        'StructuredError: Payment failed',
+        '  Why: Card declined by issuer',
+        '  Fix: Use a different card',
+        '  Link: https://docs.example.com/errors/card-declined',
+        '  Code: PAYMENT_DECLINED',
+        '  Status: 402',
+        '  Caused by: Error: upstream timeout',
+      ].join('\n'),
+    );
+  });
+
+  it('toString() omits undefined fields', () => {
+    const err = createStructuredError({ message: 'Something broke' });
+    expect(err.toString()).toBe('StructuredError: Something broke');
+  });
+
   it('extracts canonical attributes for span logging', () => {
     const err = createStructuredError({
       message: 'Export failed',

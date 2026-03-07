@@ -212,12 +212,20 @@
       "types": "./dist/drain-pipeline.d.ts",
       "import": "./dist/drain-pipeline.js",
       "require": "./dist/drain-pipeline.cjs"
+    },
+    "./enrichers": {
+      "types": "./dist/enrichers.d.ts",
+      "import": "./dist/enrichers.js",
+      "require": "./dist/enrichers.cjs"
     }
   },
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "skills",
+    "!skills/_artifacts",
+    "bin"
   ],
   "scripts": {
     "build": "tsup",
@@ -259,6 +267,7 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
+    "@tanstack/intent": "^0.0.13",
     "@opentelemetry/api-logs": "^0.212.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.212.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.212.0",
@@ -372,5 +381,8 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel#readme"
+  "homepage": "https://github.com/jagreehal/autotel#readme",
+  "bin": {
+    "intent": "./bin/intent.js"
+  }
 }

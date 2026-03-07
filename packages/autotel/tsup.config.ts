@@ -43,6 +43,7 @@ export default defineConfig({
     'test-span-collector': 'src/test-span-collector.ts',
     'parse-error': 'src/parse-error.ts',
     'drain-pipeline': 'src/drain-pipeline.ts',
+    enrichers: 'src/enrichers.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats
   dts: true,

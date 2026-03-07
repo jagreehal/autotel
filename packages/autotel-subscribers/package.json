@@ -62,7 +62,9 @@
     "dist",
     "src",
     "examples",
-    "README.md"
+    "README.md",
+    "skills",
+    "bin"
   ],
   "scripts": {
     "build": "tsup",
@@ -90,6 +92,9 @@
   ],
   "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
+  "dependencies": {
+    "@tanstack/intent": "^0.0.13"
+  },
   "peerDependencies": {
     "autotel": "workspace:*"
   },
@@ -137,5 +142,8 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel#readme"
+  "homepage": "https://github.com/jagreehal/autotel#readme",
+  "bin": {
+    "intent": "./bin/intent.js"
+  }
 }

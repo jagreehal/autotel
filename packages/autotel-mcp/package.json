@@ -35,7 +35,9 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "skills",
+    "bin"
   ],
   "scripts": {
     "build": "tsup",
@@ -68,7 +70,8 @@
     "autotel": "*"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.0"
+    "@opentelemetry/api": "^1.9.0",
+    "@tanstack/intent": "^0.0.13"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
@@ -92,5 +95,8 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-mcp#readme"
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-mcp#readme",
+  "bin": {
+    "intent": "./bin/intent.js"
+  }
 }
