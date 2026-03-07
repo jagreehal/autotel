@@ -38,6 +38,17 @@ export function createStructuredError(
   if (input.status !== undefined) error.status = input.status;
   if (input.details !== undefined) error.details = input.details;
 
+  error.toString = () => {
+    const lines = [`${error.name}: ${error.message}`];
+    if (error.why) lines.push(`  Why: ${error.why}`);
+    if (error.fix) lines.push(`  Fix: ${error.fix}`);
+    if (error.link) lines.push(`  Link: ${error.link}`);
+    if (error.code !== undefined) lines.push(`  Code: ${error.code}`);
+    if (error.status !== undefined) lines.push(`  Status: ${error.status}`);
+    if (error.cause) lines.push(`  Caused by: ${error.cause}`);
+    return lines.join('\n');
+  };
+
   return error;
 }
 

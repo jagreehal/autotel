@@ -1,18 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SegmentSubscriber } from './segment';
 
-// Mock the segment analytics module
-const mockTrack = vi.fn();
-const mockCloseAndFlush = vi.fn(() => Promise.resolve());
+// Hoist mocks so they exist when vi.mock factory runs (factory is hoisted before other code)
+const mockTrack = vi.hoisted(() => vi.fn());
+const mockCloseAndFlush = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 
-const MockAnalytics = vi.fn(function (this: any) {
-  this.track = mockTrack;
-  this.closeAndFlush = mockCloseAndFlush;
-});
+const MockAnalytics = vi.hoisted(() =>
+  vi.fn(function (this: any) {
+    this.track = mockTrack;
+    this.closeAndFlush = mockCloseAndFlush;
+  }),
+);
 
 vi.mock('@segment/analytics-node', () => ({
   Analytics: MockAnalytics,
 }));
+
+// Prime the mocked module so the first dynamic import in SegmentSubscriber gets the mock (avoids CI race)
+import '@segment/analytics-node';
 
 describe('SegmentSubscriber', () => {
   beforeEach(() => {
@@ -49,6 +54,9 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
+      // Wait for initialization (dynamic import) to complete before tracking
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       await adapter.trackEvent('order.completed', {
         userId: 'user-123',
         amount: 99.99,
@@ -69,6 +77,8 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       await adapter.trackEvent('order.completed', {
         user_id: 'user-456',
       });
@@ -86,6 +96,8 @@ describe('SegmentSubscriber', () => {
       const adapter = new SegmentSubscriber({
         writeKey: 'test_write_key',
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       await adapter.trackEvent('page.viewed');
 
@@ -115,6 +127,8 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       await adapter.trackFunnelStep('checkout', 'started', {
         userId: 'user-123',
         cartValue: 150,
@@ -138,6 +152,8 @@ describe('SegmentSubscriber', () => {
       const adapter = new SegmentSubscriber({
         writeKey: 'test_write_key',
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       await adapter.trackOutcome('payment.processing', 'success', {
         userId: 'user-123',
@@ -163,6 +179,8 @@ describe('SegmentSubscriber', () => {
         writeKey: 'test_write_key',
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       await adapter.trackValue('revenue', 99.99, {
         userId: 'user-123',
         currency: 'USD',
@@ -185,6 +203,8 @@ describe('SegmentSubscriber', () => {
       const adapter = new SegmentSubscriber({
         writeKey: 'test_write_key',
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       await adapter.shutdown();
 

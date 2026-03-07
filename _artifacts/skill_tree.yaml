@@ -1,0 +1,89 @@
+# skill_tree.yaml for autotel (monorepo)
+# Generated from _artifacts/domain_map.yaml and _artifacts/skill_spec.md
+library:
+  name: autotel
+  version: "2.23.0"
+  repository: https://github.com/jagreehal/autotel
+  description: Ergonomic OpenTelemetry for Node.js and edge. Trace, span, request logger, structured errors, events.
+
+generated_from:
+  domain_map: _artifacts/domain_map.yaml
+  skill_spec: _artifacts/skill_spec.md
+generated_at: "2025-03-07"
+
+skills:
+  - name: Autotel core
+    slug: autotel-core
+    type: core
+    domain: instrumentation
+    path: skills/autotel-core/SKILL.md
+    package: packages/autotel
+    description: When to use trace vs span vs request logger vs events; init and package exports.
+    requires: []
+    sources:
+      - jagreehal/autotel:AGENTS.md
+      - jagreehal/autotel:docs/AGENT-GUIDE.md
+      - jagreehal/autotel:packages/autotel/CLAUDE.md
+
+  - name: Instrumentation (trace, span, init)
+    slug: autotel-instrumentation
+    type: core
+    domain: instrumentation
+    path: skills/autotel-instrumentation/SKILL.md
+    package: packages/autotel
+    description: trace(), span(), instrument(), init(); factory vs direct pattern; sync init.
+    requires: []
+    sources:
+      - jagreehal/autotel:docs/ARCHITECTURE.md
+      - jagreehal/autotel:packages/autotel/src/functional.ts
+
+  - name: Request logging
+    slug: autotel-request-logging
+    type: core
+    domain: request-context
+    path: skills/autotel-request-logging/SKILL.md
+    package: packages/autotel
+    description: getRequestLogger(), set(), info/warn/error, emitNow(); one snapshot per request.
+    requires:
+      - autotel-instrumentation
+    sources:
+      - jagreehal/autotel:packages/autotel/src/request-logger.ts
+      - jagreehal/autotel:docs/AGENT-GUIDE.md
+
+  - name: Structured errors
+    slug: autotel-structured-errors
+    type: core
+    domain: errors
+    path: skills/autotel-structured-errors/SKILL.md
+    package: packages/autotel
+    description: createStructuredError, parseError; message, why, fix, link for API and client.
+    requires: []
+    sources:
+      - jagreehal/autotel:packages/autotel/src/structured-error.ts
+      - jagreehal/autotel:packages/autotel/src/parse-error.ts
+      - jagreehal/autotel:docs/AGENT-GUIDE.md
+
+  - name: Events (track, subscribers)
+    slug: autotel-events
+    type: core
+    domain: events
+    path: skills/autotel-events/SKILL.md
+    package: packages/autotel
+    description: track(), Event API, subscribers (e.g. PostHog); init with subscribers.
+    requires: []
+    sources:
+      - jagreehal/autotel:packages/autotel/src/event.ts
+      - jagreehal/autotel:packages/autotel/src/event-subscriber.ts
+
+  - name: Framework integration
+    slug: autotel-frameworks
+    type: framework
+    domain: framework-integration
+    path: skills/autotel-frameworks/SKILL.md
+    package: packages/autotel
+    description: Hono, Fastify, TanStack Start, Cloudflare Workers; middleware and getRequestLogger.
+    requires:
+      - autotel-instrumentation
+    sources:
+      - jagreehal/autotel:packages/autotel-hono/src/index.ts
+      - jagreehal/autotel:docs/AGENT-GUIDE.md

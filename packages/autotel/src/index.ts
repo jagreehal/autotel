@@ -113,6 +113,7 @@ export { flush, shutdown } from './shutdown';
 // Request logger
 export {
   getRequestLogger,
+  runWithRequestContext,
   type RequestLogger,
   type RequestLogSnapshot,
   type RequestLoggerOptions,

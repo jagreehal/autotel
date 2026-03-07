@@ -1,0 +1,299 @@
+# domain_map.yaml
+# Generated for @tanstack/intent — draft without full maintainer interview.
+# Library: autotel (monorepo)
+# Run full domain-discovery with npx @tanstack/intent scaffold for interview-driven refinement.
+# Date: 2025-03-07
+# Status: draft
+
+library:
+  name: autotel
+  version: "2.23.0"
+  repository: https://github.com/jagreehal/autotel
+  description: Ergonomic OpenTelemetry instrumentation for Node.js and edge runtimes. Trace, span, request logger, structured errors, events.
+  primary_framework: framework-agnostic
+
+domains:
+  - name: Instrumentation
+    slug: instrumentation
+    description: Wrapping code with traces and spans, init, and configuration
+  - name: Request context
+    slug: request-context
+    description: One snapshot per request via getRequestLogger and emitNow
+  - name: Errors
+    slug: errors
+    description: Structured errors and parseError for API and client
+  - name: Events
+    slug: events
+    description: Product/analytics events via track and subscribers
+  - name: Framework integration
+    slug: framework-integration
+    description: Hono, Fastify, TanStack Start, Cloudflare Workers setup
+
+skills:
+  - name: Autotel core
+    slug: autotel-core
+    domain: instrumentation
+    description: When to use trace vs span vs request logger vs events; init and package layout
+    type: core
+    packages:
+      - autotel
+    covers:
+      - trace
+      - span
+      - instrument
+      - init
+      - getRequestLogger
+      - createStructuredError
+      - parseError
+      - track
+    tasks:
+      - Set up Autotel in a new project
+      - Decide which API to use for a task
+      - Find the right export path (autotel vs autotel/event)
+    failure_modes:
+      - mistake: Use await import() for init-time optional deps
+        mechanism: init() must stay synchronous; dynamic imports break SDK setup
+        wrong_pattern: |
+          const pkg = await import('optional-dep');
+        correct_pattern: |
+          import { safeRequire } from 'autotel';
+          const pkg = safeRequire('optional-dep');
+        source: packages/autotel/CLAUDE.md, docs/ARCHITECTURE.md
+        priority: HIGH
+        status: active
+      - mistake: Call getRequestLogger() without active span
+        mechanism: getRequestLogger() requires an active span or explicit TraceContext; otherwise throws
+        wrong_pattern: |
+          app.get('/api/x', () => {
+            const log = getRequestLogger();
+          });
+        correct_pattern: |
+          app.use(autotelMiddleware()); // or wrap with trace()
+          app.get('/api/x', () => {
+            const log = getRequestLogger();
+          });
+        source: packages/autotel/src/request-logger.ts
+        priority: HIGH
+        status: active
+      - mistake: Use trace() without wrapping handler that needs ctx
+        mechanism: Factory pattern (ctx) => async (...) is needed when you need to set attributes or get request logger
+        wrong_pattern: |
+          const handler = trace(async (req) => { ... });
+        correct_pattern: |
+          const handler = trace((ctx) => async (req) => {
+            const log = getRequestLogger(ctx);
+            log.set({ route: 'x' });
+            ...
+          });
+        source: docs/AGENT-GUIDE.md
+        priority: MEDIUM
+        status: active
+
+  - name: Instrumentation (trace, span, init)
+    slug: autotel-instrumentation
+    domain: instrumentation
+    description: trace(), span(), instrument(), init(); factory vs direct pattern; name inference
+    type: core
+    packages:
+      - autotel
+    covers:
+      - trace
+      - span
+      - instrument
+      - init
+      - instrumentation
+    tasks:
+      - Wrap an HTTP handler or function with a span
+      - Set attributes on the current span
+      - Initialize OpenTelemetry once at startup
+    failure_modes:
+      - mistake: Forget to call init() before using trace/span
+        mechanism: SDK must be initialized; trace()/span() rely on global tracer
+        wrong_pattern: |
+          import { trace } from 'autotel';
+          export const fn = trace(async () => { ... });
+        correct_pattern: |
+          import { init, trace } from 'autotel';
+          init({ service: 'my-app' });
+          export const fn = trace(async () => { ... });
+        source: packages/autotel/CLAUDE.md
+        priority: HIGH
+        status: active
+      - mistake: Use wrong export path for submodules
+        mechanism: Tree-shaking uses explicit exports; use autotel/event, autotel/testing, etc. from package.json exports
+        wrong_pattern: |
+          import { track } from 'autotel';
+        correct_pattern: |
+          import { track } from 'autotel';
+          import { Event } from 'autotel/event';
+          import { createTraceCollector } from 'autotel/testing';
+        source: packages/autotel/package.json exports
+        priority: MEDIUM
+        status: active
+
+  - name: Request logging (one snapshot per request)
+    slug: autotel-request-logging
+    domain: request-context
+    description: getRequestLogger(), set(), info/warn/error, emitNow(); RequestLogSnapshot
+    type: core
+    packages:
+      - autotel
+    covers:
+      - getRequestLogger
+      - RequestLogger
+      - emitNow
+      - RequestLogSnapshot
+    tasks:
+      - Add request-scoped context to a handler
+      - Emit one coherent snapshot per request
+      - Replace scattered console.log with structured context
+    failure_modes:
+      - mistake: Call getRequestLogger() outside a span
+        mechanism: Request logger requires active span to attach attributes and events
+        wrong_pattern: |
+          function helper() {
+            const log = getRequestLogger();
+          }
+        correct_pattern: |
+          // Ensure helper is called inside trace() or middleware-created span
+          function helper(ctx?: TraceContext) {
+            const log = getRequestLogger(ctx);
+          }
+        source: packages/autotel/src/request-logger.ts
+        priority: HIGH
+        status: active
+
+  - name: Structured errors
+    slug: autotel-structured-errors
+    domain: errors
+    description: createStructuredError, parseError, recordStructuredError; message, why, fix, link
+    type: core
+    packages:
+      - autotel
+    covers:
+      - createStructuredError
+      - parseError
+      - recordStructuredError
+      - getStructuredErrorAttributes
+    tasks:
+      - Throw API errors with why/fix/link for clients
+      - Parse API errors on the client for UI (toast, banner)
+      - Record errors on the current span
+    failure_modes:
+      - mistake: Throw new Error() instead of createStructuredError in API routes
+        mechanism: Clients and agents need structured fields (why, fix, link) for actionable errors
+        wrong_pattern: |
+          throw new Error('Payment failed');
+        correct_pattern: |
+          throw createStructuredError({
+            message: 'Payment failed',
+            status: 402,
+            why: 'Card declined by issuer',
+            fix: 'Try a different payment method',
+            link: 'https://docs.example.com/payments',
+          });
+        source: docs/AGENT-GUIDE.md, AGENTS.md
+        priority: HIGH
+        status: active
+      - mistake: Client ignores parseError and only shows error.message
+        mechanism: parseError() extracts status, why, fix, link from API responses and FetchError
+        wrong_pattern: |
+          catch (err) {
+            toast.error(err.message);
+          }
+        correct_pattern: |
+          import { parseError } from 'autotel';
+          catch (err) {
+            const e = parseError(err);
+            toast.error(e.message, { description: e.why });
+            if (e.fix) showFix(e.fix);
+            if (e.link) setDocLink(e.link);
+          }
+        source: docs/AGENT-GUIDE.md
+        priority: MEDIUM
+        status: active
+
+  - name: Events (track, subscribers)
+    slug: autotel-events
+    domain: events
+    description: track(), Event API, subscribers (PostHog etc.), init subscribers
+    type: core
+    packages:
+      - autotel
+    covers:
+      - track
+      - Event
+      - event-subscriber
+      - init subscribers
+    tasks:
+      - Send product/analytics events
+      - Configure event subscribers (e.g. PostHog)
+    failure_modes:
+      - mistake: Call track() before init() with subscribers
+        mechanism: Subscribers are configured in init(); track() uses them
+        wrong_pattern: |
+          track('signup', { plan: 'pro' });
+        correct_pattern: |
+          init({ service: 'my-app', subscribers: [new PostHogSubscriber({ apiKey: '...' })] });
+          track('signup', { plan: 'pro' });
+        source: packages/autotel/src/event.ts
+        priority: MEDIUM
+        status: active
+
+  - name: Framework integration
+    slug: autotel-frameworks
+    domain: framework-integration
+    description: Hono, Fastify, TanStack Start, Cloudflare Workers; middleware and init
+    type: framework
+    packages:
+      - autotel
+      - autotel-hono
+      - autotel-tanstack
+      - autotel-cloudflare
+    covers:
+      - autotelMiddleware (Hono)
+      - TanStack Start middleware
+      - Cloudflare init and wrap
+    tasks:
+      - Add Autotel to a Hono, Fastify, TanStack, or Cloudflare app
+      - Get request logger inside framework handlers
+    failure_modes:
+      - mistake: Use getRequestLogger() in Hono without registering middleware first
+        mechanism: Middleware creates the span; getRequestLogger() needs that active span
+        wrong_pattern: |
+          const app = new Hono();
+          app.get('/api/x', (c) => {
+            const log = getRequestLogger();
+          });
+        correct_pattern: |
+          const app = new Hono();
+          app.use('*', autotelMiddleware());
+          app.get('/api/x', (c) => {
+            const log = getRequestLogger();
+          });
+        source: packages/autotel-hono, docs/AGENT-GUIDE.md
+        priority: HIGH
+        status: active
+
+tensions:
+  - name: Init sync vs optional dependencies
+    skills: [autotel-instrumentation, autotel-core]
+    description: init() must be synchronous but optional adapters (e.g. PostHog) are loaded dynamically
+    implication: Agent may use await import() for optional deps; must use node-require helpers instead
+  - name: Request logger vs raw span attributes
+    skills: [autotel-request-logging, autotel-instrumentation]
+    description: Request logger gives one snapshot per request; raw setAttribute is per-span
+    implication: Agent may scatter setAttribute calls instead of using getRequestLogger().set() for request-scoped context
+
+cross_references:
+  - from: autotel-frameworks
+    to: autotel-instrumentation
+    reason: Framework setup requires init() and span creation; load instrumentation first
+  - from: autotel-request-logging
+    to: autotel-instrumentation
+    reason: Request logger requires an active span; wrap handlers with trace() or middleware
+  - from: autotel-structured-errors
+    to: autotel-request-logging
+    reason: Use request logger .error() to record errors in request snapshot; use parseError on client
+
+gaps: []
