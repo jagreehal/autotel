@@ -1,8 +1,15 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { trace as otelTrace } from '@opentelemetry/api';
 import type { TraceContext } from './trace-context';
 import { createTraceContext } from './trace-context';
 import { recordStructuredError } from './structured-error';
 import { flattenToAttributes } from './flatten-attributes';
+
+const requestContextStore = new AsyncLocalStorage<TraceContext>();
+
+export function runWithRequestContext<T>(ctx: TraceContext, fn: () => T): T {
+  return requestContextStore.run(ctx, fn);
+}
 
 export interface RequestLogger {
   set(fields: Record<string, unknown>): void;
@@ -29,10 +36,13 @@ export interface RequestLoggerOptions {
 function resolveContext(ctx?: TraceContext): TraceContext {
   if (ctx) return ctx;
 
+  const stored = requestContextStore.getStore();
+  if (stored) return stored;
+
   const span = otelTrace.getActiveSpan();
   if (!span) {
     throw new Error(
-      '[autotel] getRequestLogger() requires an active span. Wrap your handler with trace().',
+      '[autotel] getRequestLogger() requires an active span or runWithRequestContext(). Wrap your handler with trace() or use runWithRequestContext().',
     );
   }
   return createTraceContext(span);

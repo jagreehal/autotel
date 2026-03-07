@@ -51,7 +51,10 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "skills",
+    "!skills/_artifacts",
+    "bin"
   ],
   "scripts": {
     "build": "tsup",
@@ -82,17 +85,18 @@
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "dependencies": {
-    "autotel-edge": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/resources": "^2.5.1"
+    "@opentelemetry/resources": "^2.6.0",
+    "@tanstack/intent": "^0.0.13",
+    "autotel-edge": "workspace:*"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "^4.20260302.0"
+    "@cloudflare/workers-types": "^4.20260307.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260302.0",
-    "@opentelemetry/context-async-hooks": "^2.5.1",
-    "@types/node": "^25.3.3",
+    "@cloudflare/workers-types": "^4.20260307.1",
+    "@opentelemetry/context-async-hooks": "^2.6.0",
+    "@types/node": "^25.3.5",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
@@ -107,5 +111,8 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-cloudflare#readme"
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-cloudflare#readme",
+  "bin": {
+    "intent": "./bin/intent.js"
+  }
 }

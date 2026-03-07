@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { instrumentMcpServer } from 'autotel-mcp/server'
-import { init } from 'autotel'
-import { ConsoleSpanExporter } from 'autotel/exporters'
-import { SimpleSpanProcessor } from 'autotel/processors'
-import { z } from 'zod'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { instrumentMcpServer } from 'autotel-mcp/server';
+import { init } from 'autotel';
+import { ConsoleSpanExporter } from 'autotel/exporters';
+import { SimpleSpanProcessor } from 'autotel/processors';
+import { z } from 'zod';
 
 // Initialize OpenTelemetry with console exporter for demo
 init({
   service: 'mcp-weather-server',
-  spanProcessor: new SimpleSpanProcessor(new ConsoleSpanExporter()),
-})
+  spanProcessors: [new SimpleSpanProcessor(new ConsoleSpanExporter())],
+});
 
-console.error('Starting MCP Weather Server...')
+console.error('Starting MCP Weather Server...');
 
 // Create MCP server (using McpServer for high-level registerTool API)
 const server = new McpServer(
@@ -28,8 +28,8 @@ const server = new McpServer(
       resources: {},
       prompts: {},
     },
-  }
-)
+  },
+);
 
 // Instrument the server with autotel-mcp (OTel MCP semantic conventions)
 const instrumented = instrumentMcpServer(server, {
@@ -37,7 +37,7 @@ const instrumented = instrumentMcpServer(server, {
   captureToolArgs: true,
   captureToolResults: true, // Enabled for demo purposes
   captureErrors: true,
-})
+});
 
 // Simulated weather data
 const weatherData: Record<string, { temp: number; condition: string }> = {
@@ -46,7 +46,7 @@ const weatherData: Record<string, { temp: number; condition: string }> = {
   tokyo: { temp: 68, condition: 'Rainy' },
   paris: { temp: 65, condition: 'Partly Cloudy' },
   sydney: { temp: 75, condition: 'Clear' },
-}
+};
 
 // Register get_weather tool - automatically traced!
 // Span: "tools/call get_weather" with mcp.method.name, gen_ai.tool.name
@@ -59,12 +59,12 @@ instrumented.registerTool(
     }),
   },
   async (args) => {
-    const location = (args.location as string).toLowerCase()
+    const location = (args.location as string).toLowerCase();
 
     // Simulate some async work
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const weather = weatherData[location]
+    const weather = weatherData[location];
 
     if (!weather) {
       // Return error response - traced with error.type: 'tool_error'
@@ -76,7 +76,7 @@ instrumented.registerTool(
           },
         ],
         isError: true,
-      }
+      };
     }
 
     return {
@@ -86,9 +86,9 @@ instrumented.registerTool(
           text: `Weather in ${args.location}:\nTemperature: ${weather.temp}°F\nCondition: ${weather.condition}`,
         },
       ],
-    }
-  }
-)
+    };
+  },
+);
 
 // Register get_forecast tool - automatically traced!
 instrumented.registerTool(
@@ -101,17 +101,17 @@ instrumented.registerTool(
     }),
   },
   async (args) => {
-    const location = args.location as string
-    const days = args.days as number
+    const location = args.location as string;
+    const days = args.days as number;
 
     // Simulate async work
-    await new Promise((resolve) => setTimeout(resolve, 150))
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     const forecast = Array.from({ length: days }, (_, i) => {
-      const baseTemp = weatherData[location.toLowerCase()]?.temp ?? 70
-      const temp = baseTemp + Math.floor(Math.random() * 10 - 5)
-      return `Day ${i + 1}: ${temp}°F`
-    }).join('\n')
+      const baseTemp = weatherData[location.toLowerCase()]?.temp ?? 70;
+      const temp = baseTemp + Math.floor(Math.random() * 10 - 5);
+      return `Day ${i + 1}: ${temp}°F`;
+    }).join('\n');
 
     return {
       content: [
@@ -120,9 +120,9 @@ instrumented.registerTool(
           text: `${days}-day forecast for ${location}:\n${forecast}`,
         },
       ],
-    }
-  }
-)
+    };
+  },
+);
 
 // Register a resource - traced with "resources/read weather_config"
 instrumented.registerResource(
@@ -141,16 +141,16 @@ instrumented.registerResource(
           }),
         },
       ],
-    }
-  }
-)
+    };
+  },
+);
 
 // Register a prompt - traced with "prompts/get weather_report"
 instrumented.registerPrompt(
   'weather_report',
   { description: 'Generate a weather report for a location' },
   async (args) => {
-    const location = (args?.location as string) ?? 'New York'
+    const location = (args?.location as string) ?? 'New York';
     return {
       messages: [
         {
@@ -161,12 +161,12 @@ instrumented.registerPrompt(
           },
         },
       ],
-    }
-  }
-)
+    };
+  },
+);
 
 // Connect via stdio
-const transport = new StdioServerTransport()
-await server.connect(transport)
+const transport = new StdioServerTransport();
+await server.connect(transport);
 
-console.error('MCP Weather Server ready!')
+console.error('MCP Weather Server ready!');

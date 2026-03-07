@@ -62,7 +62,9 @@
     "dist",
     "src",
     "examples",
-    "README.md"
+    "README.md",
+    "skills",
+    "bin"
   ],
   "scripts": {
     "build": "tsup",
@@ -90,6 +92,9 @@
   ],
   "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
+  "dependencies": {
+    "@tanstack/intent": "^0.0.13"
+  },
   "peerDependencies": {
     "autotel": "workspace:*"
   },
@@ -108,12 +113,12 @@
     }
   },
   "devDependencies": {
-    "@amplitude/analytics-node": "^1.5.39",
+    "@amplitude/analytics-node": "^1.5.42",
     "@arethetypeswrong/cli": "^0.18.2",
-    "@cloudflare/workers-types": "^4.20260302.0",
+    "@cloudflare/workers-types": "^4.20260307.1",
     "@prisma/client": "^7.4.2",
-    "@segment/analytics-node": "^2.3.0",
-    "@types/node": "^25.3.3",
+    "@segment/analytics-node": "^3.0.0",
+    "@types/node": "^25.3.5",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "autotel": "workspace:*",
@@ -121,8 +126,8 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^63.0.0",
     "mixpanel": "^0.20.0",
-    "mongoose": "^9.2.3",
-    "posthog-node": "^5.26.2",
+    "mongoose": "^9.2.4",
+    "posthog-node": "^5.28.0",
     "prettier": "^3.8.1",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",
@@ -137,5 +142,8 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel#readme"
+  "homepage": "https://github.com/jagreehal/autotel#readme",
+  "bin": {
+    "intent": "./bin/intent.js"
+  }
 }

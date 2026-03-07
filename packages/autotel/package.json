@@ -212,12 +212,20 @@
       "types": "./dist/drain-pipeline.d.ts",
       "import": "./dist/drain-pipeline.js",
       "require": "./dist/drain-pipeline.cjs"
+    },
+    "./enrichers": {
+      "types": "./dist/enrichers.d.ts",
+      "import": "./dist/enrichers.js",
+      "require": "./dist/enrichers.cjs"
     }
   },
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "skills",
+    "!skills/_artifacts",
+    "bin"
   ],
   "scripts": {
     "build": "tsup",
@@ -259,29 +267,30 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/api-logs": "^0.212.0",
-    "@opentelemetry/exporter-metrics-otlp-http": "^0.212.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.212.0",
-    "@opentelemetry/instrumentation": "^0.212.0",
-    "@opentelemetry/resources": "^2.5.1",
-    "@opentelemetry/sdk-metrics": "^2.5.1",
-    "@opentelemetry/sdk-node": "^0.212.0",
-    "@opentelemetry/sdk-trace-base": "^2.5.1",
+    "@tanstack/intent": "^0.0.13",
+    "@opentelemetry/api-logs": "^0.213.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
+    "@opentelemetry/instrumentation": "^0.213.0",
+    "@opentelemetry/resources": "^2.6.0",
+    "@opentelemetry/sdk-metrics": "^2.6.0",
+    "@opentelemetry/sdk-node": "^0.213.0",
+    "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "import-in-the-middle": "^3.0.0"
   },
   "peerDependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.70.1",
-    "@opentelemetry/exporter-logs-otlp-grpc": "^0.212.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.212.0",
-    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.212.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.212.0",
-    "@opentelemetry/resource-detector-aws": "^2.12.0",
-    "@opentelemetry/resource-detector-container": "^0.8.3",
-    "@opentelemetry/resource-detector-gcp": "^0.47.0",
-    "@opentelemetry/sdk-logs": "^0.212.0",
-    "@opentelemetry/sdk-trace-node": "^2.5.1",
-    "@traceloop/node-server-sdk": "^0.22.7",
+    "@opentelemetry/auto-instrumentations-node": "^0.71.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.213.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.213.0",
+    "@opentelemetry/resource-detector-aws": "^2.13.0",
+    "@opentelemetry/resource-detector-container": "^0.8.4",
+    "@opentelemetry/resource-detector-gcp": "^0.48.0",
+    "@opentelemetry/sdk-logs": "^0.213.0",
+    "@opentelemetry/sdk-trace-node": "^2.6.0",
+    "@traceloop/node-server-sdk": "^0.22.8",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
     "yaml": "^2.8.2"
@@ -333,21 +342,21 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",
     "@edge-runtime/vm": "^5.0.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.70.1",
-    "@opentelemetry/context-async-hooks": "^2.5.1",
-    "@opentelemetry/exporter-logs-otlp-grpc": "^0.212.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.212.0",
-    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.212.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.212.0",
-    "@opentelemetry/resource-detector-aws": "^2.12.0",
-    "@opentelemetry/resource-detector-container": "^0.8.3",
-    "@opentelemetry/resource-detector-gcp": "^0.47.0",
-    "@opentelemetry/sdk-logs": "^0.212.0",
-    "@opentelemetry/sdk-trace-node": "^2.5.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.71.0",
+    "@opentelemetry/context-async-hooks": "^2.6.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.213.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.213.0",
+    "@opentelemetry/resource-detector-aws": "^2.13.0",
+    "@opentelemetry/resource-detector-container": "^0.8.4",
+    "@opentelemetry/resource-detector-gcp": "^0.48.0",
+    "@opentelemetry/sdk-logs": "^0.213.0",
+    "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@total-typescript/ts-reset": "^0.6.1",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/eslint-config-prettier": "^6.11.3",
-    "@types/node": "^25.3.3",
+    "@types/node": "^25.3.5",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "eslint-config-prettier": "^10.1.8",
@@ -372,5 +381,8 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel#readme"
+  "homepage": "https://github.com/jagreehal/autotel#readme",
+  "bin": {
+    "intent": "./bin/intent.js"
+  }
 }

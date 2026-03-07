@@ -21,19 +21,21 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish",
-    "quality": "turbo run build && turbo run lint && turbo run format && turbo run type-check && turbo run test && turbo run test:integration"
+    "quality": "turbo run build && turbo run lint && turbo run format && turbo run type-check && turbo run test && turbo run test:integration",
+    "intent:validate": "intent validate packages/autotel/skills && intent validate packages/autotel-hono/skills && intent validate packages/autotel-tanstack/skills && intent validate packages/autotel-cloudflare/skills && intent validate packages/autotel-subscribers/skills && intent validate packages/autotel-edge/skills && intent validate packages/autotel-mcp/skills"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.8",
+    "@changesets/cli": "^2.30.0",
     "@eslint/js": "^10.0.1",
+    "@tanstack/intent": "^0.0.13",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "esbuild": "^0.27.3",
-    "eslint": "^10.0.2",
+    "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^63.0.0",
     "prettier": "^3.8.1",
-    "turbo": "^2.8.12",
+    "turbo": "^2.8.14",
     "typescript-eslint": "^8.56.1"
   },
   "engines": {

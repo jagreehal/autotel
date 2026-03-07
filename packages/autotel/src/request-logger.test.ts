@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getRequestLogger } from './request-logger';
+import { getRequestLogger, runWithRequestContext } from './request-logger';
 import type { TraceContext } from './trace-context';
 
 function createMockContext(): TraceContext {
@@ -120,5 +120,18 @@ describe('getRequestLogger', () => {
 
     await new Promise((resolve) => setImmediate(resolve));
     expect(onEmit).toHaveBeenCalledWith(snapshot);
+  });
+
+  it('resolves context from AsyncLocalStorage when no args given', () => {
+    const ctx = createMockContext();
+
+    runWithRequestContext(ctx, () => {
+      const log = getRequestLogger();
+      log.set({ user: { id: 'als-user' } });
+
+      expect(ctx.setAttributes).toHaveBeenCalledWith({
+        'user.id': 'als-user',
+      });
+    });
   });
 });

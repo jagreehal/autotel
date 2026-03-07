@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import {
   HeadContent,
   Scripts,
@@ -5,6 +6,7 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { init as initAutotelWeb } from 'autotel-web'
 
 import Header from '../components/Header'
 import { TracesDevtools } from '../components/TracesDevtools'
@@ -45,6 +47,10 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    initAutotelWeb({ service: 'example-tanstack-start' })
+  }, [])
+
   return (
     <html lang="en">
       <head>

@@ -36,9 +36,9 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/eslint-config-prettier": "^6.11.3",
-    "@types/node": "^25.3.3",
+    "@types/node": "^25.3.5",
     "@types/semver": "^7.7.1",
-    "eslint": "^10.0.2",
+    "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^63.0.0",
     "tsup": "^8.5.1",

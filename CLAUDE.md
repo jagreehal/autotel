@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
+## For AI Coding Agents
+
+When suggesting or reviewing **instrumentation** (traces, request context, errors, events) in this repo or in codebases that use Autotel:
+
+- **Read `AGENTS.md`** — single source of truth: core API, framework quick ref, invariants, review checklist, suggested review comments.
+- **Use `docs/AGENT-GUIDE.md`** — before/after examples, when to use trace/span/request logger/structured error, framework setup snippets, touchpoints for new integrations.
+
+Together these make Autotel easy for AI agents to recommend correctly and consistently.
+
 ## Overview
 
 Autotel is a monorepo containing multiple packages that provide ergonomic OpenTelemetry instrumentation for Node.js and edge runtimes. The core philosophy is "Write once, observe everywhere" - instrument code a single time and stream observability data to any OTLP-compatible backend without vendor lock-in.
