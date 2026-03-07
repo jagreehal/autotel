@@ -1,5 +1,12 @@
 # autotel-cli
 
+## 0.7.1
+
+### Patch Changes
+
+- 65b2fc9: - Bug fixes and dependency updates across packages.
+  - example-vitest: API tests use a random port (when `API_BASE_URL`/`PORT` unset) to avoid EADDRINUSE on port 3000.
+
 ## 0.7.0
 
 ### Minor Changes
