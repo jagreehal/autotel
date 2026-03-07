@@ -35,7 +35,7 @@
     "autotel-adapters": "workspace:*"
   },
   "peerDependencies": {
-    "hono": ">=4.12.3"
+    "hono": ">=4.12.5"
   },
   "peerDependenciesMeta": {
     "hono": {
