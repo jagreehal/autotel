@@ -36,6 +36,7 @@ import { OTLPMetricExporter as OTLPMetricExporterHTTP } from '@opentelemetry/exp
 import { OTLPTraceExporter as OTLPTraceExporterHTTP } from '@opentelemetry/exporter-trace-otlp-http';
 import type { PushMetricExporter } from '@opentelemetry/sdk-metrics';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { buildPostHogLogProcessors } from './posthog-logs';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import {
@@ -51,6 +52,7 @@ import {
   type AttributeRedactorConfig,
   type AttributeRedactorPreset,
 } from './attribute-redacting-processor';
+import { createStringRedactor, type StringRedactor } from './redact-values';
 import { PrettyConsoleExporter } from './pretty-console-exporter';
 import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config';
@@ -408,6 +410,21 @@ export interface AutotelConfig {
    * Custom log record processors. When omitted, logs are not configured.
    */
   logRecordProcessors?: LogRecordProcessor[];
+
+  /**
+   * PostHog integration - auto-configures OTLP log exporter.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   posthog: { url: 'https://us.i.posthog.com/i/v1/logs?token=phc_xxx' }
+   * });
+   * ```
+   *
+   * Also reads from POSTHOG_LOGS_URL environment variable as fallback.
+   */
+  posthog?: { url: string };
 
   /** Additional resource attributes to merge with defaults. */
   resourceAttributes?: Attributes;
@@ -1004,6 +1021,7 @@ let warnedOnce = false;
 let logger: Logger = silentLogger; // Silent by default - no spam
 let validationConfig: Partial<ValidationConfig> | null = null;
 let eventsConfig: EventsConfig | null = null;
+let _stringRedactor: StringRedactor | null = null;
 
 /**
  * Resolve metrics flag with env var override support
@@ -1287,6 +1305,23 @@ export function init(cfg: AutotelConfig): void {
     );
   }
 
+  // Store string redactor for use by PostHog log/subscriber paths
+  if (mergedConfig.attributeRedactor) {
+    _stringRedactor = createStringRedactor(mergedConfig.attributeRedactor);
+  }
+
+  // Wire string redactor to subscribers that support it (e.g., PostHogSubscriber)
+  if (_stringRedactor && mergedConfig.subscribers) {
+    for (const subscriber of mergedConfig.subscribers) {
+      if (
+        'setStringRedactor' in subscriber &&
+        typeof (subscriber as any).setStringRedactor === 'function'
+      ) {
+        (subscriber as any).setStringRedactor(_stringRedactor);
+      }
+    }
+  }
+
   // Step 2: Wrap with SpanNameNormalizingProcessor (middle)
   // Normalizer runs in onStart(), so span names are normalized before any onEnd processing
   if (mergedConfig.spanNameNormalizer && spanProcessors.length > 0) {
@@ -1335,6 +1370,19 @@ export function init(cfg: AutotelConfig): void {
     mergedConfig.logRecordProcessors.length > 0
   ) {
     logRecordProcessors = [...mergedConfig.logRecordProcessors];
+  }
+
+  // PostHog OTLP logs integration
+  const posthogProcessors = buildPostHogLogProcessors(
+    mergedConfig.posthog,
+    _stringRedactor,
+  );
+  if (posthogProcessors.length > 0) {
+    if (!logRecordProcessors) {
+      logRecordProcessors = [];
+    }
+    logRecordProcessors.push(...posthogProcessors);
+    logger.info({}, '[autotel] PostHog OTLP logs configured');
   }
 
   // Handle instrumentations: merge manual instrumentations with auto-instrumentations
@@ -1775,6 +1823,14 @@ function detectHostname(): string | undefined {
     // os module not available (edge runtime, browser, etc.)
     return undefined;
   }
+}
+
+/**
+ * Get the string redactor configured via init({ attributeRedactor }).
+ * Returns null if no redactor was configured.
+ */
+export function getStringRedactor(): StringRedactor | null {
+  return _stringRedactor;
 }
 
 /**
