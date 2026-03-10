@@ -7,6 +7,7 @@ import {
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { init as initAutotelWeb } from 'autotel-web'
+import { initFull } from 'autotel-web/full'
 
 import Header from '../components/Header'
 import { TracesDevtools } from '../components/TracesDevtools'
@@ -49,6 +50,16 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 function RootDocument({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     initAutotelWeb({ service: 'example-tanstack-start' })
+    initFull({
+      service: 'example-tanstack-start',
+      captureErrors: true,
+      debug: true,
+      errorTracking: {
+        suppressionRules: [
+          { key: 'value', operator: 'contains', value: 'Script error' },
+        ],
+      },
+    })
   }, [])
 
   return (

@@ -401,6 +401,13 @@ function PlaygroundPage() {
             <Play className="w-4 h-4" />
             SSR Demos
           </Link>
+          <Link
+            to="/demo/error-tracking"
+            className="flex items-center gap-2 px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-gray-300 transition-colors"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Error Tracking
+          </Link>
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
 import { Route as DemoPlaygroundRouteImport } from './routes/demo/playground'
+import { Route as DemoErrorTrackingRouteImport } from './routes/demo/error-tracking'
 import { Route as DemoBeforeLoadRouteImport } from './routes/demo/before-load'
 import { Route as DemoStartServerFuncsRouteImport } from './routes/demo/start.server-funcs'
 import { Route as DemoStartApiRequestRouteImport } from './routes/demo/start.api-request'
@@ -35,6 +36,11 @@ const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
 const DemoPlaygroundRoute = DemoPlaygroundRouteImport.update({
   id: '/demo/playground',
   path: '/demo/playground',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoErrorTrackingRoute = DemoErrorTrackingRouteImport.update({
+  id: '/demo/error-tracking',
+  path: '/demo/error-tracking',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoBeforeLoadRoute = DemoBeforeLoadRouteImport.update({
@@ -86,6 +92,7 @@ const DemoStartSsrDataOnlyRoute = DemoStartSsrDataOnlyRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/demo/before-load': typeof DemoBeforeLoadRoute
+  '/demo/error-tracking': typeof DemoErrorTrackingRoute
   '/demo/playground': typeof DemoPlaygroundRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -100,6 +107,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/demo/before-load': typeof DemoBeforeLoadRoute
+  '/demo/error-tracking': typeof DemoErrorTrackingRoute
   '/demo/playground': typeof DemoPlaygroundRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -115,6 +123,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/demo/before-load': typeof DemoBeforeLoadRoute
+  '/demo/error-tracking': typeof DemoErrorTrackingRoute
   '/demo/playground': typeof DemoPlaygroundRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -131,6 +140,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/demo/before-load'
+    | '/demo/error-tracking'
     | '/demo/playground'
     | '/demo/tanstack-query'
     | '/demo/api/names'
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/demo/before-load'
+    | '/demo/error-tracking'
     | '/demo/playground'
     | '/demo/tanstack-query'
     | '/demo/api/names'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/demo/before-load'
+    | '/demo/error-tracking'
     | '/demo/playground'
     | '/demo/tanstack-query'
     | '/demo/api/names'
@@ -174,6 +186,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DemoBeforeLoadRoute: typeof DemoBeforeLoadRoute
+  DemoErrorTrackingRoute: typeof DemoErrorTrackingRoute
   DemoPlaygroundRoute: typeof DemoPlaygroundRoute
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
   DemoApiNamesRoute: typeof DemoApiNamesRoute
@@ -207,6 +220,13 @@ declare module '@tanstack/react-router' {
       path: '/demo/playground'
       fullPath: '/demo/playground'
       preLoaderRoute: typeof DemoPlaygroundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/error-tracking': {
+      id: '/demo/error-tracking'
+      path: '/demo/error-tracking'
+      fullPath: '/demo/error-tracking'
+      preLoaderRoute: typeof DemoErrorTrackingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/before-load': {
@@ -278,6 +298,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DemoBeforeLoadRoute: DemoBeforeLoadRoute,
+  DemoErrorTrackingRoute: DemoErrorTrackingRoute,
   DemoPlaygroundRoute: DemoPlaygroundRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   DemoApiNamesRoute: DemoApiNamesRoute,

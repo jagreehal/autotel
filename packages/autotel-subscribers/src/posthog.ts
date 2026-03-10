@@ -88,6 +88,8 @@
 
 import type { EventAttributes, EventAttributesInput } from 'autotel/event-subscriber';
 import { EventSubscriber, type EventPayload } from './event-subscriber-base';
+import { formatExceptionForPostHog, errorToExceptionList } from './posthog-error-formatter';
+import slowRedact from 'slow-redact';
 
 // Type-only import to avoid runtime dependency
 import type { PostHog } from 'posthog-node';
@@ -113,6 +115,8 @@ export interface ErrorContext {
   /** Subscriber name */
   subscriberName: string;
 }
+
+type StringRedactor = (value: string) => string;
 
 export interface PostHogConfig {
   /** PostHog API key (starts with phc_) - required if not providing custom client */
@@ -222,6 +226,12 @@ export interface PostHogConfig {
    */
   onErrorWithContext?: (context: ErrorContext) => void;
 
+  /** Known attribute paths to redact using slow-redact (path-based, immutable). */
+  redactPaths?: string[];
+
+  /** String redactor for value-based PII scanning. Applied after path-based redaction. */
+  stringRedactor?: StringRedactor;
+
   /** Enable debug logging (default: false) */
   debug?: boolean;
 }
@@ -269,6 +279,8 @@ export class PostHogSubscriber extends EventSubscriber {
   private initPromise: Promise<void> | null = null;
   /** True when using browser's window.posthog (different API signature) */
   private isBrowserClient = false;
+  private pathRedactor: ((obj: Record<string, unknown>) => Record<string, unknown>) | null = null;
+  private stringRedactor: StringRedactor | null = null;
 
   constructor(config: PostHogConfig) {
     super();
@@ -296,6 +308,16 @@ export class PostHogSubscriber extends EventSubscriber {
       filterUndefinedValues: true,
       ...config,
     };
+
+    if (this.config.redactPaths && this.config.redactPaths.length > 0) {
+      this.pathRedactor = slowRedact({
+        paths: this.config.redactPaths,
+        serialize: false,
+      }) as any;
+    }
+    if (this.config.stringRedactor) {
+      this.stringRedactor = this.config.stringRedactor;
+    }
 
     if (this.enabled) {
       // Start initialization immediately but don't block constructor
@@ -371,6 +393,54 @@ export class PostHogSubscriber extends EventSubscriber {
     return (attributes?.userId || attributes?.user_id || 'anonymous') as string;
   }
 
+  private redactProperties(properties: Record<string, unknown>): Record<string, unknown> {
+    let result = properties;
+    if (this.pathRedactor) {
+      result = this.pathRedactor(properties) as Record<string, unknown>;
+    }
+    if (this.stringRedactor) {
+      result = this.redactStringValues(result);
+    }
+    return result;
+  }
+
+  private redactStringValues(obj: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === 'string') {
+        result[key] = this.stringRedactor!(value);
+      } else if (Array.isArray(value)) {
+        result[key] = this.redactArray(value);
+      } else if (value !== null && typeof value === 'object') {
+        result[key] = this.redactStringValues(value as Record<string, unknown>);
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  private redactArray(arr: unknown[]): unknown[] {
+    return arr.map((item) => {
+      if (typeof item === 'string') {
+        return this.stringRedactor!(item);
+      } else if (Array.isArray(item)) {
+        return this.redactArray(item);
+      } else if (item !== null && typeof item === 'object') {
+        return this.redactStringValues(item as Record<string, unknown>);
+      }
+      return item;
+    });
+  }
+
+  /**
+   * Set the string redactor. Called by autotel init() when attributeRedactor is configured.
+   * Can also be called manually.
+   */
+  setStringRedactor(redactor: StringRedactor): void {
+    this.stringRedactor = redactor;
+  }
+
   /**
    * Send payload to PostHog
    *
@@ -434,18 +504,47 @@ export class PostHogSubscriber extends EventSubscriber {
       }
     }
 
+    const redactedProperties = this.redactProperties(properties);
+
+    if (payload.attributes?.['exception.list']) {
+      try {
+        const exceptionList = JSON.parse(payload.attributes['exception.list'] as string);
+        const formatted = formatExceptionForPostHog(
+          exceptionList,
+          undefined,
+          this.stringRedactor ?? undefined,
+        );
+        const exceptionProperties = {
+          ...redactedProperties,
+          ...formatted,
+        };
+
+        if (this.isBrowserClient) {
+          (this.posthog as any)?.capture('$exception', exceptionProperties);
+        } else {
+          this.posthog?.capture({
+            distinctId: this.extractDistinctId(filteredAttributes),
+            event: '$exception',
+            properties: exceptionProperties,
+          });
+        }
+      } catch {
+        // exception.list parsing failed, continue with normal event
+      }
+    }
+
     const distinctId = this.extractDistinctId(filteredAttributes);
 
     // Browser client has different API signature
     if (this.isBrowserClient) {
       // Browser API: capture(eventName, properties)
-      (this.posthog as any)?.capture(payload.name, properties);
+      (this.posthog as any)?.capture(payload.name, redactedProperties);
     } else {
       // Server API: capture({ distinctId, event, properties, groups })
       const capturePayload: any = {
         distinctId,
         event: payload.name,
-        properties,
+        properties: redactedProperties,
       };
 
       // Add groups if present in attributes
@@ -691,6 +790,49 @@ export class PostHogSubscriber extends EventSubscriber {
     }
 
     await this.trackEvent(name, eventAttributes);
+  }
+
+  /**
+   * Capture an exception and send to PostHog error tracking.
+   *
+   * If using browser client (window.posthog), delegates to its captureException.
+   * Otherwise, formats and sends via posthog-node capture API.
+   */
+  async captureException(
+    error: unknown,
+    options?: {
+      distinctId?: string;
+      additionalProperties?: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    if (!this.enabled) return;
+    await this.ensureInitialized();
+
+    try {
+      if (this.isBrowserClient) {
+        const browserProps = options?.additionalProperties
+          ? this.redactProperties(options.additionalProperties)
+          : undefined;
+        (this.posthog as any)?.captureException?.(error, browserProps);
+        return;
+      }
+
+      const exceptionList = errorToExceptionList(error, this.stringRedactor ?? undefined);
+      const formatted = formatExceptionForPostHog(exceptionList, 'node:javascript', this.stringRedactor ?? undefined);
+
+      const properties = {
+        ...formatted,
+        ...options?.additionalProperties,
+      };
+
+      this.posthog?.capture({
+        distinctId: options?.distinctId || 'anonymous',
+        event: '$exception',
+        properties: this.redactProperties(properties),
+      });
+    } catch (error_) {
+      this.config.onError?.(error_ as Error);
+    }
   }
 
   /**

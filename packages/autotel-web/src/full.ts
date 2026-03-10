@@ -24,7 +24,8 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import type { PrivacyConfig } from './privacy';
 import { setupNetworkTimingObserver } from './network-timing';
 import { setupUserInteractionInstrumentation } from './user-interaction';
-import { setupErrorCapture } from './errors';
+import { setupErrorTracking, type ErrorTrackingConfig } from './error-tracking';
+import { createStringRedactor } from './error-tracking/redact-values';
 import { setupWebVitals } from './web-vitals';
 import { setupLongTaskObserver } from './long-tasks';
 
@@ -102,6 +103,18 @@ export interface AutotelWebFullConfig {
    * @default false
    */
   captureLongTasks?: boolean;
+
+  /**
+   * Advanced error tracking configuration.
+   * When captureErrors is true (default), this configures rate limiting, suppression, etc.
+   */
+  errorTracking?: Omit<ErrorTrackingConfig, 'debug'>;
+
+  /** Redact PII from error messages and stack traces before export. Preset or custom config. */
+  attributeRedactor?: 'default' | 'strict' | 'pci-dss' | {
+    valuePatterns?: Array<{ name: string; pattern: RegExp; replacement?: string }>;
+    replacement?: string;
+  };
 
   /** Privacy controls (origin filtering, DNT, GPC). Applied to which requests get traced. */
   privacy?: PrivacyConfig;
@@ -222,8 +235,16 @@ export function initFull(config: AutotelWebFullConfig): void {
     });
   }
 
+  const stringRedactor = config.attributeRedactor
+    ? createStringRedactor(config.attributeRedactor)
+    : undefined;
+
   if (config.captureErrors !== false) {
-    setupErrorCapture({ debug: config.debug ?? false });
+    setupErrorTracking({
+      debug: config.debug ?? false,
+      ...config.errorTracking,
+      ...(stringRedactor && { redactor: stringRedactor }),
+    });
   }
 
   if (config.captureWebVitals !== false) {
@@ -337,6 +358,7 @@ export function runWithContext<T>(ctx: ReturnType<typeof context.active>, fn: ()
 /** Re-export for full mode API */
 export { trace, getActiveContext, getTraceparent, extractContext } from './functional';
 export type { TraceContext } from './functional';
+export { captureException } from './error-tracking';
 
 /**
  * Reset full initialization state (for testing).
