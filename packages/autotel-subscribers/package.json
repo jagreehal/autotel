@@ -93,7 +93,8 @@
   "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "dependencies": {
-    "@tanstack/intent": "^0.0.13"
+    "@tanstack/intent": "^0.0.13",
+    "slow-redact": "^0.3.2"
   },
   "peerDependencies": {
     "autotel": "workspace:*"
