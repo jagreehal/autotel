@@ -1,5 +1,30 @@
 # autotel-subscribers
 
+## 28.0.0
+
+### Minor Changes
+
+- 88b4eab: Add error tracking with PostHog integration
+  - **autotel-web**: Rich error capture in full mode - stack trace parsing (Chrome/Firefox/Safari), exception chains via error.cause, per-type rate limiting, configurable suppression rules, manual `captureException()` API, and automatic PostHog detection to avoid double-capture
+  - **autotel**: New `posthog: { url }` init option and `POSTHOG_LOGS_URL` env var for zero-config OTLP log export to PostHog
+  - **autotel-subscribers**: `captureException()` on PostHogSubscriber for sending errors via PostHog capture API, auto-detection of error spans in the event pipeline, and PostHog `$exception_list` formatting
+
+- 88b4eab: Add PII redaction to all PostHog export paths. Two-layer approach: regex value scanning
+  for emails, phones, credit cards, JWTs in error messages and stack traces, plus slow-redact
+  path-based redaction for known sensitive fields in structured event attributes.
+  - Extract `createStringRedactor()` utility from core `AttributeRedactingProcessor`
+  - Add `RedactingLogRecordProcessor` wrapper for PostHog OTLP logs
+  - Add redactor support to `posthog-error-formatter` (exception.value, abs_path)
+  - Add `redactPaths` and `stringRedactor` options to `PostHogSubscriber`
+  - Duplicate string redactor in `autotel-web` for browser error tracking
+  - Wire `attributeRedactor` from `init()` through to all PostHog paths automatically
+
+### Patch Changes
+
+- Updated dependencies [88b4eab]
+- Updated dependencies [88b4eab]
+  - autotel@2.24.0
+
 ## 27.0.1
 
 ### Patch Changes
