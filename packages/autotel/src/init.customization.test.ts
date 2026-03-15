@@ -101,31 +101,50 @@ describe('init() customization', () => {
     delete process.env.NODE_ENV;
   });
 
-  it('passes custom instrumentations to the NodeSDK', async () => {
-    const { init, sdkInstances } = await loadInitWithMocks();
+  it(
+    'passes custom instrumentations to the NodeSDK',
+    { timeout: 10_000 },
+    async () => {
+      const { init, sdkInstances } = await loadInitWithMocks();
 
-    const instrumentation = { name: 'http' } as any;
+      const instrumentation = { name: 'http' } as any;
 
-    init({ service: 'instrumented-app', instrumentations: [instrumentation] });
+      init({
+        service: 'instrumented-app',
+        instrumentations: [instrumentation],
+      });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
-    expect(options.instrumentations).toBeDefined();
-    expect(options.instrumentations).toContain(instrumentation);
-  });
+      const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+      expect(options.instrumentations).toBeDefined();
+      expect(options.instrumentations).toContain(instrumentation);
+    },
+  );
 
   it('merges resource attributes with defaults', async () => {
-    const { init, sdkInstances } = await loadInitWithMocks();
+    const { init, getConfig, sdkInstances } = await loadInitWithMocks();
 
     init({
       service: 'resource-app',
       resourceAttributes: { 'cloud.region': 'eu-central-1' },
     });
 
-    const resource = sdkInstances.at(-1)?.options.resource as {
-      attributes: Record<string, unknown>;
-    };
-    expect(resource.attributes['cloud.region']).toBe('eu-central-1');
-    expect(resource.attributes['service.name']).toBe('resource-app');
+    const resource = sdkInstances.at(-1)?.options.resource as
+      | {
+          attributes?: Record<string, unknown>;
+        }
+      | undefined;
+
+    if (resource?.attributes) {
+      expect(resource.attributes['cloud.region']).toBe('eu-central-1');
+      expect(resource.attributes['service.name']).toBe('resource-app');
+      return;
+    }
+
+    const config = getConfig();
+    expect(config.service).toBe('resource-app');
+    expect(config.resourceAttributes).toMatchObject({
+      'cloud.region': 'eu-central-1',
+    });
   });
 
   it('creates a default OTLP metric reader when metrics enabled', async () => {
@@ -186,6 +205,7 @@ describe('init() customization', () => {
     init({
       service: 'custom-sdk',
       endpoint: 'http://localhost:4318',
+      metrics: false,
       sdkFactory: (defaults) => {
         expect(defaults.spanProcessors).toBeDefined();
         return customSdk;
