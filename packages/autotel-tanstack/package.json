@@ -134,13 +134,13 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@tanstack/intent": "^0.0.13",
+    "@tanstack/intent": "^0.0.19",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*"
   },
   "peerDependencies": {
-    "@tanstack/react-start": "^1.166.2",
-    "@tanstack/solid-start": "^1.166.2"
+    "@tanstack/react-start": "^1.166.11",
+    "@tanstack/solid-start": "^1.166.11"
   },
   "peerDependenciesMeta": {
     "@tanstack/react-start": {
@@ -152,12 +152,12 @@
   },
   "devDependencies": {
     "@opentelemetry/sdk-trace-base": "^2.6.0",
-    "@tanstack/react-router": "^1.166.2",
-    "@types/node": "^25.3.5",
+    "@tanstack/react-router": "^1.167.0",
+    "@types/node": "^25.5.0",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18",
+    "vitest": "^4.1.0",
     "vitest-mock-extended": "^3.1.0"
   },
   "repository": {

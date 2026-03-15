@@ -7,6 +7,7 @@ import { init, getTracer, context as otelContext, trace } from 'autotel';
 import { extractTraceContext } from 'autotel/http';
 
 const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 
 init({ service: 'vitest-e2e-server', debug: true, endpoint: process.env.OTLP_ENDPOINT });
 
@@ -90,6 +91,6 @@ createServer(async (req, res) => {
   } finally {
     span.end();
   }
-}).listen(PORT, () => {
-  console.log(`Server http://localhost:${PORT} (health, users, error)`);
+}).listen(PORT, HOST, () => {
+  console.log(`Server http://${HOST}:${PORT} (health, users, error)`);
 });

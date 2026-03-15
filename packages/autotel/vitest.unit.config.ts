@@ -1,8 +1,25 @@
 import { defineConfig } from 'vitest/config';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import swc from 'unplugin-swc';
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
+  plugins: [
+    tsconfigPaths(),
+    // SWC transforms decorators (esbuild does not); needed for decorators.test.ts, http.test.ts, logger.test.ts
+    swc.vite({
+      tsconfigFile: false,
+      jsc: {
+        parser: {
+          syntax: 'typescript',
+          decorators: true,
+        },
+        transform: {
+          decoratorVersion: '2022-03',
+        },
+        target: 'es2022',
+      },
+    }),
+  ],
   test: {
     globals: true,
     environment: 'node',
@@ -10,12 +27,7 @@ export default defineConfig({
     exclude: ['src/**/*.integration.test.ts', 'node_modules/**'],
     setupFiles: ['./vitest.setup.ts'],
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        // Use tsx to run tests (supports TypeScript 5 decorators)
-        execArgv: ['-r', 'tsx/cjs/register'],
-      },
-    },
+    // No execArgv: decorators are transformed by unplugin-swc; tsx/cjs/register is not exported in newer tsx
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

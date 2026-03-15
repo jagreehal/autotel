@@ -36,7 +36,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/eslint-config-prettier": "^6.11.3",
-    "@types/node": "^25.3.5",
+    "@types/node": "^25.5.0",
     "@types/semver": "^7.7.1",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
@@ -44,8 +44,8 @@
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1",
-    "vitest": "^4.0.18"
+    "typescript-eslint": "^8.57.0",
+    "vitest": "^4.1.0"
   },
   "engines": {
     "node": ">=18.0.0"

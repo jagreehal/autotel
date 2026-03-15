@@ -13,6 +13,7 @@ const mockedModules = [
   '@opentelemetry/exporter-metrics-otlp-http',
   '@opentelemetry/sdk-metrics',
   './node-require',
+  './node-require.ts',
 ];
 
 // Track traceloop initialize calls globally
@@ -76,7 +77,7 @@ async function loadInitWithMocks() {
   // Mock node-require to intercept safeRequire('@traceloop/node-server-sdk').
   // vi.doMock on the traceloop module itself doesn't work because safeRequire
   // uses native require() which bypasses vitest's module interception.
-  vi.doMock('./node-require', () => ({
+  const nodeRequireMock = () => ({
     safeRequire: vi.fn((id: string) => {
       if (id === '@traceloop/node-server-sdk') {
         return mockTraceloop;
@@ -89,7 +90,10 @@ async function loadInitWithMocks() {
       throw err;
     }),
     nodeRequire: vi.fn(),
-  }));
+  });
+
+  vi.doMock('./node-require', nodeRequireMock);
+  vi.doMock('./node-require.ts', nodeRequireMock);
 
   vi.doMock('@opentelemetry/sdk-node', () => ({
     NodeSDK: MockNodeSDK,
@@ -214,7 +218,7 @@ describe('init() OpenLLMetry integration', () => {
     vi.resetModules();
 
     // Mock node-require to return undefined for traceloop (simulating not installed)
-    vi.doMock('./node-require', () => ({
+    const nodeRequireMock = () => ({
       safeRequire: vi.fn(() => undefined),
       requireModule: vi.fn((id: string) => {
         const err = new Error(`Cannot find module '${id}'`);
@@ -222,7 +226,10 @@ describe('init() OpenLLMetry integration', () => {
         throw err;
       }),
       nodeRequire: vi.fn(),
-    }));
+    });
+
+    vi.doMock('./node-require', nodeRequireMock);
+    vi.doMock('./node-require.ts', nodeRequireMock);
 
     vi.doMock('@opentelemetry/sdk-node', () => ({
       NodeSDK: class {
