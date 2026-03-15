@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:http';
 import {
   test,
   expect,
@@ -15,6 +16,34 @@ const defaultPort =
 const apiBase = process.env.API_BASE_URL ?? `http://localhost:${defaultPort}`;
 
 let serverProcess: ChildProcess | undefined;
+
+async function canListenOnLoopback(): Promise<boolean> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.once('error', (error) => {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'EPERM') {
+        resolve(false);
+        return;
+      }
+
+      reject(error);
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      server.close((closeError) => {
+        if (closeError) {
+          reject(closeError);
+          return;
+        }
+
+        resolve(true);
+      });
+    });
+  });
+}
+
+const supportsLocalServer = await canListenOnLoopback();
 
 async function waitForServer(url: string, timeoutMs = 15_000): Promise<void> {
   const startedAt = Date.now();
@@ -33,6 +62,10 @@ async function waitForServer(url: string, timeoutMs = 15_000): Promise<void> {
 }
 
 beforeAll(async () => {
+  if (!supportsLocalServer) {
+    return;
+  }
+
   const port = process.env.API_BASE_URL
     ? undefined
     : String(defaultPort);
@@ -70,6 +103,11 @@ afterAll(async () => {
 });
 
 describe('vitest e2e api coverage', () => {
+  if (!supportsLocalServer) {
+    test.skip('skips API coverage tests when the environment cannot open local TCP ports', () => {});
+    return;
+  }
+
   test('GET /health returns 200', async () => {
     const res = await fetch(`${apiBase}/health`);
     expect(res.status).toBe(200);

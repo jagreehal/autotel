@@ -3,6 +3,7 @@ import { init, getTracer, context as otelContext, trace } from 'autotel';
 import { extractTraceContext } from 'autotel/http';
 
 const PORT = Number(process.env.PORT) || 3399;
+const HOST = process.env.HOST || '127.0.0.1';
 
 init({
   service: 'autotel-vitest-compat-server',
@@ -85,4 +86,4 @@ createServer(async (req, res) => {
   } finally {
     span.end();
   }
-}).listen(PORT);
+}).listen(PORT, HOST);

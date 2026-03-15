@@ -93,7 +93,7 @@
   "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "dependencies": {
-    "@tanstack/intent": "^0.0.13",
+    "@tanstack/intent": "^0.0.19",
     "slow-redact": "^0.3.2"
   },
   "peerDependencies": {
@@ -114,27 +114,27 @@
     }
   },
   "devDependencies": {
-    "@amplitude/analytics-node": "^1.5.42",
+    "@amplitude/analytics-node": "^1.5.45",
     "@arethetypeswrong/cli": "^0.18.2",
-    "@cloudflare/workers-types": "^4.20260307.1",
-    "@prisma/client": "^7.4.2",
+    "@cloudflare/workers-types": "^4.20260313.1",
+    "@prisma/client": "^7.5.0",
     "@segment/analytics-node": "^3.0.0",
-    "@types/node": "^25.3.5",
-    "@typescript-eslint/eslint-plugin": "^8.56.1",
-    "@typescript-eslint/parser": "^8.56.1",
+    "@types/node": "^25.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
     "autotel": "workspace:*",
     "drizzle-orm": "^0.45.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^63.0.0",
     "mixpanel": "^0.20.0",
-    "mongoose": "^9.2.4",
-    "posthog-node": "^5.28.0",
+    "mongoose": "^9.3.0",
+    "posthog-node": "^5.28.2",
     "prettier": "^3.8.1",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1",
-    "vitest": "^4.0.18"
+    "typescript-eslint": "^8.57.0",
+    "vitest": "^4.1.0"
   },
   "repository": {
     "type": "git",

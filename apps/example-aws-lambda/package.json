@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "RUN_TESTS=true tsx src/index.ts",
-    "test": "RUN_TESTS=true tsx src/index.ts",
+    "start": "RUN_TESTS=true node --import tsx src/index.ts",
+    "test": "RUN_TESTS=true node --import tsx src/index.ts",
     "setup": "pnpm exec tsx src/setup-localstack.ts",
     "test:localstack": "tsx src/test-with-localstack.ts",
     "localstack:up": "docker-compose up -d",
@@ -28,20 +28,20 @@
   "dependencies": {
     "autotel": "workspace:*",
     "autotel-aws": "workspace:*",
-    "@aws-sdk/client-s3": "^3.1004.0",
-    "@aws-sdk/client-dynamodb": "^3.1004.0",
-    "@aws-sdk/client-sqs": "^3.1004.0",
-    "aws-cdk-lib": "^2.241.0",
+    "@aws-sdk/client-s3": "^3.1009.0",
+    "@aws-sdk/client-dynamodb": "^3.1009.0",
+    "@aws-sdk/client-sqs": "^3.1009.0",
+    "aws-cdk-lib": "^2.243.0",
     "constructs": "^10.5.1",
     "dotenv": "^17.3.1",
     "source-map-support": "^0.5.21"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.161",
-    "@types/node": "^25.3.5",
-    "aws-cdk": "^2.1109.0",
+    "@types/node": "^25.5.0",
+    "aws-cdk": "^2.1111.0",
     "dotenv-cli": "^11.0.0",
-    "esbuild": "^0.27.3",
+    "esbuild": "^0.27.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
