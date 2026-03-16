@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
 import type { NodeSDK } from '@opentelemetry/sdk-node';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -8,13 +8,6 @@ type SdkRecord = {
   options: Record<string, unknown>;
   instance: DeepMockProxy<NodeSDK>;
 };
-
-const mockedModules = [
-  '@opentelemetry/sdk-node',
-  '@opentelemetry/exporter-trace-otlp-http',
-  '@opentelemetry/exporter-metrics-otlp-http',
-  '@opentelemetry/sdk-metrics',
-];
 
 async function loadInitWithMocks() {
   const sdkInstances: SdkRecord[] = [];
@@ -59,6 +52,9 @@ async function loadInitWithMocks() {
     }
   }
 
+  // Reset modules immediately before mocking to ensure clean state
+  vi.resetModules();
+
   vi.doMock('@opentelemetry/sdk-node', () => ({
     NodeSDK: MockNodeSDK,
   }));
@@ -88,15 +84,8 @@ async function loadInitWithMocks() {
 }
 
 describe('init() customization', () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-
   afterEach(() => {
-    for (const mod of mockedModules) {
-      vi.doUnmock(mod);
-    }
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
     delete process.env.AUTOTEL_METRICS;
     delete process.env.NODE_ENV;
   });
@@ -172,7 +161,8 @@ describe('init() customization', () => {
 
     init({ service: 'custom-metrics', metricReaders: [customMetricReader] });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(sdkInstances).toHaveLength(1);
+    const options = sdkInstances.at(-1)!.options as Record<string, unknown>;
     expect(options.metricReaders).toEqual([customMetricReader]);
     expect(metricReaderOptions).toHaveLength(0);
   });
