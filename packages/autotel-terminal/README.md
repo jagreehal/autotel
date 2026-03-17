@@ -1,13 +1,15 @@
 # autotel-terminal
 
-**Terminal trace viewer for autotel** :  React Ink: powered dashboard for live trace inspection during development. Zero setup, trace-first, autotel-only.
+**Terminal trace viewer for autotel** :  Ink (React-for-CLI) powered dashboard for live trace inspection during development. Zero setup, trace-first, autotel-only.
 
 [![npm version](https://badge.fury.io/js/autotel-terminal.svg)](https://www.npmjs.com/package/autotel-terminal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-`autotel-terminal` is a terminal-native trace viewer for **autotel**. It streams OpenTelemetry spans from your app and shows them as traces: recent traces list, span tree per trace, search, and a simple waterfall. Built for local development: no browser, no extra backends.
+`autotel-terminal` is a terminal-native trace viewer for **autotel**, built with [Ink](https://github.com/vadimdemedes/ink) (React for CLIs). It runs **in the same Node.js process as your app**, wiring directly to the Autotel tracer provider. It streams OpenTelemetry spans from your app and shows them as traces: recent traces list, span tree per trace, search, and a simple waterfall. Built for local development: no browser, no extra backends.
+
+If you need a **standalone, multi-signal TUI** that receives OTLP/Zipkin/Prometheus/Datadog traffic over the network (traces, metrics, logs), see tools like `otel-tui`. `autotel-terminal` stays Autotel-native and process-local: you call `renderTerminal()` from your Node app and get an Ink dashboard for that process.
 
 ### Features
 
@@ -117,12 +119,21 @@ renderTerminal(
 
 Once the dashboard is running, use these keyboard controls:
 
-- **↑/↓** - Navigate traces or spans
+- **↑/↓** - Navigate traces, spans, or logs
 - **Enter** - Open selected trace (trace view) to see span tree
 - **Esc** - Back to trace list or exit search
 - **`t`** - Toggle trace view / span list
-- **`/`** - Search by span name (type to filter)
+- **`l`** - Toggle logs view (when a log stream is hooked up)
+- **`v`** - Toggle service summary view
+- **`E`** - Toggle errors view
+- **`S`** - Filter spans to selected service (from `service.name`)
+- **`R`** - Filter spans to selected route (from `http.route`)
+- **`H`** - Cycle status filter (all → 2xx → 4xx → 5xx)
+- **`x`** - Clear filters
+- **`J`** - Export selected trace as JSON (printed to stdout)
+- **`/`** - Search by span name or log message (type to filter)
 - **`p`** - Pause/resume live updates
+- **`r`** - Record snapshot (clears buffers and records until a limit, then pauses)
 - **`e`** - Toggle error-only filter
 - **`c`** - Clear all spans
 - **`?`** - Show help overlay
@@ -374,6 +385,33 @@ init({
 const stream = createTerminalSpanStream(streamingProcessor);
 renderTerminal({}, stream);
 ```
+
+## Wiring logs into the dashboard
+
+The terminal dashboard can show logs in the **Logs** view (`l`) if you emit `TerminalLogEvent`s into the global log stream.
+
+In your app (or adapter), call `getTerminalLogStream().emit(...)` and include `traceId` / `spanId` when possible for correlation:
+
+```typescript
+import { getTerminalLogStream } from 'autotel-terminal';
+
+const logStream = getTerminalLogStream();
+
+logStream.emit({
+  time: Date.now(),
+  level: 'info',
+  message: 'request completed',
+  traceId: '...', // optional but recommended
+  spanId: '...',  // optional but recommended
+  attributes: {
+    'service.name': 'my-service',
+    'http.route': '/users/:id',
+    'http.status_code': 200,
+  },
+});
+```
+
+This is intentionally Autotel-native: you can wire this from request logger/canonical log lines, producing one coherent log snapshot per request.
 
 ## Requirements
 

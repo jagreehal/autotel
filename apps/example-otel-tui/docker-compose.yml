@@ -1,0 +1,9 @@
+services:
+  oteltui:
+    image: ymtdzzz/otel-tui:latest
+    container_name: otel-tui
+    stdin_open: true
+    tty: true
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
