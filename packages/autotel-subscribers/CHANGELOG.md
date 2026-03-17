@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 28.0.1
+
+### Patch Changes
+
+- Updated dependencies [3438fe4]
+  - autotel@2.24.1
+
 ## 28.0.0
 
 ### Minor Changes
