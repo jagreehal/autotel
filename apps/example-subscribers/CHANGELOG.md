@@ -1,5 +1,13 @@
 # @jagreehal/example-subscribers
 
+## 1.0.39
+
+### Patch Changes
+
+- Updated dependencies [3438fe4]
+  - autotel@2.24.1
+  - autotel-subscribers@28.0.1
+
 ## 1.0.38
 
 ### Patch Changes

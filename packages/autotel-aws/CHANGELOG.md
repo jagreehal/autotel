@@ -1,5 +1,12 @@
 # autotel-aws
 
+## 0.11.4
+
+### Patch Changes
+
+- Updated dependencies [3438fe4]
+  - autotel@2.24.1
+
 ## 0.11.3
 
 ### Patch Changes
