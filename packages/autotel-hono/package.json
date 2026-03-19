@@ -30,12 +30,12 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@tanstack/intent": "^0.0.19",
+    "@tanstack/intent": "^0.0.23",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*"
   },
   "peerDependencies": {
-    "hono": ">=4.12.5"
+    "hono": ">=4.12.8"
   },
   "peerDependenciesMeta": {
     "hono": {

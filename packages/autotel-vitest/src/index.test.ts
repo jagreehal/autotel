@@ -1,15 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-type FixtureFn = (
-  args: { task: { name: string; file?: { name: string }; suite?: { name: string }; meta: Record<string, unknown> } },
-  use: (span: unknown) => Promise<void>,
-) => Promise<void>;
-
-type Fixtures = {
-  _otelTestSpan?: FixtureFn | [FixtureFn, { auto: true }];
-};
-
-const state: { fixtures?: Fixtures } = {};
 let spanIdCounter = 0;
 const createdSpans: Array<{
   end: ReturnType<typeof vi.fn>;
@@ -17,20 +7,6 @@ const createdSpans: Array<{
   setStatus: ReturnType<typeof vi.fn>;
   spanContext: () => { traceId: string; spanId: string };
 }> = [];
-
-vi.mock('vitest', async () => {
-  const actual = await vi.importActual<typeof import('vitest')>('vitest');
-  return {
-    ...actual,
-    test: {
-      ...actual.test,
-      extend: (fixtures: Fixtures) => {
-        state.fixtures = fixtures;
-        return fixtures;
-      },
-    },
-  };
-});
 
 vi.mock('autotel', () => ({
   SpanStatusCode: { UNSET: 0, OK: 1, ERROR: 2 },
@@ -79,21 +55,23 @@ vi.mock('autotel/processors', () => ({
 
 describe('autotel-vitest fixture', () => {
   afterEach(() => {
-    state.fixtures = undefined;
     createdSpans.length = 0;
     spanIdCounter = 0;
     mockDrainResult = [];
     vi.resetModules();
   });
 
+  async function getFixture() {
+    const { otelTestSpanFixture } = await import('./fixture');
+    const [fixtureFn, options] = otelTestSpanFixture;
+    return { fixtureFn, options, fixture: otelTestSpanFixture };
+  }
+
   it('creates a span for each test via the _otelTestSpan fixture', async () => {
-    await import('./index');
+    const { fixtureFn } = await getFixture();
+    expect(fixtureFn).toBeTypeOf('function');
 
-    const spanFixture = state.fixtures?._otelTestSpan;
-    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
-    expect(spanFixtureFn).toBeTypeOf('function');
-
-    await spanFixtureFn?.(
+    await fixtureFn(
       {
         task: {
           name: 'creates user',
@@ -110,14 +88,11 @@ describe('autotel-vitest fixture', () => {
   });
 
   it('ends the span after the test completes', async () => {
-    await import('./index');
-
-    const spanFixture = state.fixtures?._otelTestSpan;
-    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    const { fixtureFn } = await getFixture();
 
     let spanDuringTest: unknown;
 
-    await spanFixtureFn?.(
+    await fixtureFn(
       {
         task: {
           name: 'test end timing',
@@ -139,15 +114,12 @@ describe('autotel-vitest fixture', () => {
   });
 
   it('sets error status when the test throws', async () => {
-    await import('./index');
-
-    const spanFixture = state.fixtures?._otelTestSpan;
-    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    const { fixtureFn } = await getFixture();
 
     const err = new Error('test failure');
 
     await expect(
-      spanFixtureFn?.(
+      fixtureFn(
         {
           task: {
             name: 'failing test',
@@ -173,13 +145,10 @@ describe('autotel-vitest fixture', () => {
       { spanId: 'span-1', name: 'test:my-test', startTimeMs: 1000, durationMs: 100, status: 'ok' },
     ];
 
-    await import('./index');
-
-    const spanFixture = state.fixtures?._otelTestSpan;
-    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    const { fixtureFn } = await getFixture();
 
     const meta: Record<string, unknown> = {};
-    await spanFixtureFn?.(
+    await fixtureFn(
       {
         task: {
           name: 'my-test',
@@ -197,12 +166,10 @@ describe('autotel-vitest fixture', () => {
   });
 
   it('uses auto: true to activate for every test', async () => {
-    await import('./index');
-
-    const spanFixture = state.fixtures?._otelTestSpan;
-    expect(Array.isArray(spanFixture)).toBe(true);
-    if (Array.isArray(spanFixture)) {
-      expect(spanFixture[1]).toEqual({ auto: true });
+    const { fixture } = await getFixture();
+    expect(Array.isArray(fixture)).toBe(true);
+    if (Array.isArray(fixture)) {
+      expect(fixture[1]).toEqual({ auto: true });
     }
   });
 });

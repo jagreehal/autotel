@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-const apiBaseUrl = process.env.API_BASE_URL ?? 'http://localhost:3000';
+const apiBaseUrl = process.env.API_BASE_URL ?? 'http://127.0.0.1:3310';
 
 export default defineConfig({
   testDir: './tests',
@@ -15,10 +15,10 @@ export default defineConfig({
     trace: 'off',
   },
   webServer: {
-    command: 'pnpm run start',
+    command: 'PORT=3310 HOST=127.0.0.1 pnpm run start',
     url: apiBaseUrl + '/health',
     timeout: 15_000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     stdout: 'ignore',
     stderr: 'pipe',
   },

@@ -1022,6 +1022,7 @@ let logger: Logger = silentLogger; // Silent by default - no spam
 let validationConfig: Partial<ValidationConfig> | null = null;
 let eventsConfig: EventsConfig | null = null;
 let _stringRedactor: StringRedactor | null = null;
+let _optionalRequire: typeof safeRequire = safeRequire;
 
 /**
  * Resolve metrics flag with env var override support
@@ -1471,7 +1472,7 @@ export function init(cfg: AutotelConfig): void {
 
   // Initialize OpenLLMetry if enabled (after SDK starts to reuse tracer provider)
   if (mergedConfig.openllmetry?.enabled) {
-    const traceloop = safeRequire<{
+    const traceloop = _optionalRequire<{
       initialize?: (options?: Record<string, unknown>) => void;
     }>('@traceloop/node-server-sdk');
 
@@ -1831,6 +1832,22 @@ function detectHostname(): string | undefined {
  */
 export function getStringRedactor(): StringRedactor | null {
   return _stringRedactor;
+}
+
+/**
+ * @internal Override optional require for deterministic tests.
+ */
+export function _setOptionalRequireForTesting(
+  loader: typeof safeRequire,
+): void {
+  _optionalRequire = loader;
+}
+
+/**
+ * @internal Reset optional require override.
+ */
+export function _resetOptionalRequireForTesting(): void {
+  _optionalRequire = safeRequire;
 }
 
 /**

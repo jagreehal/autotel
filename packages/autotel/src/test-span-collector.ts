@@ -124,7 +124,7 @@ function isSerializable(v: unknown): v is SerializableValue {
   return false;
 }
 
-function serializeSpan(span: ReadableSpan): SerializedSpan {
+export function serializeSpan(span: ReadableSpan): SerializedSpan {
   const attrs: Record<string, SerializableValue> = {};
   for (const [k, v] of Object.entries(span.attributes)) {
     if (isSerializable(v)) attrs[k] = v;

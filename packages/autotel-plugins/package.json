@@ -100,7 +100,7 @@
     "@opentelemetry/instrumentation-amqplib": ">=0.60.0",
     "@opentelemetry/instrumentation-kafkajs": ">=0.22.0",
     "drizzle-orm": ">=0.45.1",
-    "mongoose": ">=9.2.4"
+    "mongoose": ">=9.3.1"
   },
   "peerDependenciesMeta": {
     "drizzle-orm": {
@@ -125,8 +125,8 @@
     "@opentelemetry/core": "^2.6.0",
     "mongoose": "^9.3.0",
     "@types/node": "^25.5.0",
-    "@typescript-eslint/eslint-plugin": "^8.57.0",
-    "@typescript-eslint/parser": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
     "drizzle-orm": "^0.45.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^63.0.0",
