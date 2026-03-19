@@ -26,6 +26,7 @@ import {
   renderTerminal,
   StreamingSpanProcessor,
   createTerminalSpanStream,
+  getTerminalLogStream,
 } from 'autotel-terminal';
 
 // Create the streaming processor for the terminal dashboard
@@ -50,6 +51,12 @@ console.log('📊 Dashboard will show traces in real-time\n');
 console.log('Controls:');
 console.log('  ↑/↓ - Navigate spans');
 console.log('  p   - Pause/resume');
+console.log('  r   - Record snapshot');
+console.log('  l   - Logs view');
+console.log('  v   - Service summary');
+console.log('  E   - Errors view');
+console.log('  S/R/H/x - Filters');
+console.log('  J   - Export trace JSON');
 console.log('  e   - Toggle error-only filter');
 console.log('  c   - Clear spans');
 console.log('  Ctrl+C - Exit\n');
@@ -63,6 +70,8 @@ renderTerminal(
   terminalStream,
 );
 
+const logStream = getTerminalLogStream();
+
 // Give the dashboard a moment to initialize
 await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -71,9 +80,21 @@ const fetchUser = trace({ name: 'fetchUser' }, (ctx) => async (userId: string) =
   ctx.setAttribute('user.id', userId);
   ctx.setAttribute('http.method', 'GET');
   ctx.setAttribute('http.route', '/api/users/:id');
+  ctx.setAttribute('service.name', 'example-terminal');
 
   // Simulate API call
   await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+
+  logStream.emit({
+    time: Date.now(),
+    level: 'info',
+    message: `fetchUser(${userId})`,
+    attributes: {
+      'service.name': 'example-terminal',
+      'http.route': '/api/users/:id',
+      kind: 'fetchUser',
+    },
+  });
 
   return {
     id: userId,
@@ -85,6 +106,7 @@ const fetchUser = trace({ name: 'fetchUser' }, (ctx) => async (userId: string) =
 const processOrder = trace({ name: 'processOrder' }, (ctx) => async (orderId: string, items: string[]) => {
   ctx.setAttribute('order.id', orderId);
   ctx.setAttribute('order.itemCount', items.length);
+  ctx.setAttribute('service.name', 'example-terminal');
 
   // Nested span: validate inventory
   await span({ name: 'validate.inventory' }, async () => {
@@ -102,6 +124,19 @@ const processOrder = trace({ name: 'processOrder' }, (ctx) => async (orderId: st
   // Simulate processing
   await new Promise((resolve) => setTimeout(resolve, 100 + Math.random() * 200));
 
+  logStream.emit({
+    time: Date.now(),
+    level: 'info',
+    message: `processOrder(${orderId})`,
+    attributes: {
+      'service.name': 'example-terminal',
+      'http.route': '/orders/:id',
+      orderId,
+      itemCount: items.length,
+      total,
+    },
+  });
+
   return { orderId, items, total };
 });
 
@@ -109,6 +144,8 @@ const processPayment = trace({ name: 'processPayment' }, (ctx) => async (amount:
   ctx.setAttribute('payment.amount', amount);
   ctx.setAttribute('payment.userId', userId);
   ctx.setAttribute('payment.currency', 'USD');
+  ctx.setAttribute('http.route', '/payments');
+  ctx.setAttribute('service.name', 'example-terminal');
 
   // Simulate payment processing
   await new Promise((resolve) => setTimeout(resolve, 80 + Math.random() * 120));
@@ -117,10 +154,36 @@ const processPayment = trace({ name: 'processPayment' }, (ctx) => async (amount:
   if (Math.random() > 0.75) {
     ctx.setStatus({ code: 2, message: 'Payment failed' });
     ctx.recordException(new Error('Insufficient funds'));
+    ctx.setAttribute('http.status_code', 500);
+    logStream.emit({
+      time: Date.now(),
+      level: 'error',
+      message: `processPayment(${userId}) failed`,
+      attributes: {
+        'service.name': 'example-terminal',
+        'http.route': '/payments',
+        'http.status_code': 500,
+        amount,
+        userId,
+      },
+    });
     throw new Error('Payment processing failed');
   }
 
+  ctx.setAttribute('http.status_code', 200);
   ctx.setStatus({ code: 1 }); // OK
+  logStream.emit({
+    time: Date.now(),
+    level: 'info',
+    message: `processPayment(${userId}) ok`,
+    attributes: {
+      'service.name': 'example-terminal',
+      'http.route': '/payments',
+      'http.status_code': 200,
+      amount,
+      userId,
+    },
+  });
   return { transactionId: `tx-${Date.now()}`, amount, userId };
 });
 

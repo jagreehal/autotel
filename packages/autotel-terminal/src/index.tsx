@@ -55,6 +55,13 @@ import {
 } from './lib/trace-model';
 import { formatDurationMs, formatRelative, truncate } from './lib/format';
 import type { SpanTreeNode } from './lib/trace-model';
+import type { TerminalLogEvent, LogStats } from './lib/log-model';
+import { filterLogsBySearch, computeLogStats, buildTraceTimeline } from './lib/log-model';
+import { getTerminalLogStream, type TerminalLogStream } from './log-stream';
+import { computeServiceStats, computeRouteStats, findHotSpanNames } from './lib/stats-model';
+import { applySpanFilters, type SpanFilterState } from './lib/filters';
+import { buildErrorSummaries } from './lib/error-model';
+import { exportTraceToJson } from './lib/export-model';
 
 /** Key attribute keys to show first (autotel / OTel conventions) */
 const KEY_ATTR_KEYS = new Set([
@@ -102,6 +109,7 @@ export interface TerminalOptions {
 const THROTTLE_MS = 50;
 const MAX_TRACES = 50;
 const NEW_ERROR_DISPLAY_MS = 2000;
+const RECORD_LIMIT_DEFAULT = 200;
 
 interface DashboardProps {
   title: string;
@@ -109,6 +117,7 @@ interface DashboardProps {
   maxSpans: number;
   colors: boolean;
   stream: TerminalSpanStream;
+  logStream?: TerminalLogStream | null;
 }
 
 function Dashboard({
@@ -117,20 +126,51 @@ function Dashboard({
   maxSpans,
   colors,
   stream,
+  logStream,
 }: DashboardProps): React.ReactElement {
   const [paused, setPaused] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [spans, setSpans] = useState<TerminalSpanEvent[]>([]);
   const [selected, setSelected] = useState(0);
   const [filterErrorsOnly, setFilterErrorsOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHelp, setShowHelp] = useState(false);
-  const [viewMode, setViewMode] = useState<'trace' | 'span'>('trace');
+  const [viewMode, setViewMode] = useState<
+    'trace' | 'span' | 'log' | 'service-summary' | 'errors'
+  >('trace');
+  const [spanFilters, setSpanFilters] = useState<SpanFilterState>({
+    statusGroup: 'all',
+  });
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [selectedSpanIndex, setSelectedSpanIndex] = useState(0);
   const [newErrorCount, setNewErrorCount] = useState(0);
   const [searchMode, setSearchMode] = useState(false);
   const throttleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSpansRef = useRef<TerminalSpanEvent[]>([]);
+  const [logs, setLogs] = useState<TerminalLogEvent[]>([]);
+
+  // Subscribe to log stream if provided
+  useEffect(() => {
+    if (!logStream) return;
+    const unsubscribe = logStream.onLog((event) => {
+      if (paused) return;
+      if (recording) {
+        setLogs((prev) => {
+          const next = [event, ...prev];
+          if (next.length >= RECORD_LIMIT_DEFAULT) {
+            setRecording(false);
+            setPaused(true);
+          }
+          return next.slice(0, RECORD_LIMIT_DEFAULT);
+        });
+        return;
+      }
+      setLogs((prev) => [event, ...prev].slice(0, maxSpans));
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [logStream, paused, maxSpans, recording]);
 
   useEffect(() => {
     const flush = () => {
@@ -150,6 +190,19 @@ function Dashboard({
         setNewErrorCount((n) => n + 1);
         setTimeout(() => setNewErrorCount((n) => Math.max(0, n - 1)), NEW_ERROR_DISPLAY_MS);
       }
+      if (recording) {
+        setSpans((prev) => {
+          const next = [span, ...prev];
+          if (next.length >= RECORD_LIMIT_DEFAULT) {
+            setRecording(false);
+            setPaused(true);
+          }
+          return next.slice(0, RECORD_LIMIT_DEFAULT);
+        });
+        setSelected(0);
+        setSelectedTraceId(null);
+        return;
+      }
       pendingSpansRef.current = [span, ...pendingSpansRef.current];
       if (throttleRef.current) return;
       throttleRef.current = setTimeout(() => {
@@ -161,32 +214,70 @@ function Dashboard({
       if (throttleRef.current) clearTimeout(throttleRef.current);
       unsubscribe();
     };
-  }, [stream, paused, maxSpans]);
+  }, [stream, paused, maxSpans, recording]);
+
+  const filteredSpanBuffer = useMemo(
+    () =>
+      applySpanFilters(spans, {
+        ...spanFilters,
+        errorsOnly: filterErrorsOnly,
+        searchQuery,
+      }),
+    [spans, spanFilters, filterErrorsOnly, searchQuery],
+  );
 
   const traceMap = useMemo(
-    () => buildTraceMap(spans, MAX_TRACES),
-    [spans],
+    () => buildTraceMap(filteredSpanBuffer, MAX_TRACES),
+    [filteredSpanBuffer],
   );
   const traceSummaries = useMemo(
     () => buildTraceSummaries(traceMap),
     [traceMap],
   );
   const filteredSummaries = useMemo(
-    () => filterTraceSummaries(traceSummaries, searchQuery, filterErrorsOnly),
-    [traceSummaries, searchQuery, filterErrorsOnly],
+    () => filterTraceSummaries(traceSummaries, '', false),
+    [traceSummaries],
   );
   const filteredSpans = useMemo(
-    () => filterBySearch(spans, searchQuery, filterErrorsOnly),
-    [spans, searchQuery, filterErrorsOnly],
+    () => filterBySearch(filteredSpanBuffer, '', false),
+    [filteredSpanBuffer],
   );
 
   const stats = useMemo(() => computeStats(spans), [spans]);
   const perSpanNameStats = useMemo(() => computePerSpanNameStats(spans), [spans]);
+  const logStats: LogStats = useMemo(() => computeLogStats(logs), [logs]);
+  const filteredLogs = useMemo(
+    () => filterLogsBySearch(logs, searchQuery, null),
+    [logs, searchQuery],
+  );
+
+  const serviceStats = useMemo(() => computeServiceStats(spans), [spans]);
+  const selectedServiceName = serviceStats[selected]?.serviceName ?? null;
+  const spansForSelectedService = useMemo(() => {
+    if (!selectedServiceName) return spans;
+    return spans.filter(
+      (s) =>
+        (s.attributes?.['service.name'] as string | undefined) ===
+        selectedServiceName,
+    );
+  }, [spans, selectedServiceName]);
+  const selectedServiceRouteStats = useMemo(
+    () => computeRouteStats(spansForSelectedService).slice(0, 8),
+    [spansForSelectedService],
+  );
+  const selectedServiceHotSpans = useMemo(
+    () => findHotSpanNames(spansForSelectedService, 8),
+    [spansForSelectedService],
+  );
 
   const selectedTraceSummary =
     selectedTraceId == null
       ? filteredSummaries[selected] ?? null
       : filteredSummaries.find((t) => t.traceId === selectedTraceId) ?? null;
+  const errorSummaries = useMemo(
+    () => buildErrorSummaries(traceSummaries),
+    [traceSummaries],
+  );
   const traceTree =
     selectedTraceSummary == null
       ? []
@@ -218,7 +309,19 @@ function Dashboard({
       ? selectedTraceId == null
         ? rootSpanOfSelectedTrace ?? null
         : currentSpanInTrace?.span ?? null
-      : currentSpanInFlat;
+      : viewMode === 'span'
+      ? currentSpanInFlat
+      : null;
+
+  const selectedTraceLogs =
+    selectedTraceSummary?.traceId && logs.length > 0
+      ? logs.filter((l) => l.traceId === selectedTraceSummary.traceId)
+      : [];
+
+  const timelineItems =
+    selectedTraceSummary && (selectedTraceSummary.spans.length > 0 || selectedTraceLogs.length > 0)
+      ? buildTraceTimeline(selectedTraceSummary.spans, selectedTraceLogs)
+      : [];
 
   const { isRawModeSupported } = useStdin();
 
@@ -261,35 +364,66 @@ function Dashboard({
         setSelectedSpanIndex(0);
         return;
       }
-      if (key.upArrow) {
-        if (viewMode === 'trace') {
-          if (selectedTraceId != null && traceTree.length > 0) {
-            setSelectedSpanIndex((i) => Math.max(0, i - 1));
-          } else {
-            setSelected((i) => Math.max(0, i - 1));
-            setSelectedSpanIndex(0);
-          }
-        } else {
-          setSelected((i) => Math.max(0, i - 1));
-        }
-      }
-      if (key.downArrow) {
-        if (viewMode === 'trace') {
-          if (selectedTraceId != null && selectedSpanIndex < traceTree.length - 1) {
-            setSelectedSpanIndex((i) => Math.min(traceTree.length - 1, i + 1));
-          } else if (selectedTraceId != null && traceTree.length > 0 && selectedSpanIndex >= traceTree.length - 1) {
-            const nextIdx = filteredSummaries.findIndex((t) => t.traceId === selectedTraceId) + 1;
-            if (nextIdx < filteredSummaries.length) {
-              setSelected(nextIdx);
-              setSelectedTraceId(filteredSummaries[nextIdx]!.traceId);
-              setSelectedSpanIndex(0);
+      if (key.upArrow || key.downArrow) {
+        switch (viewMode) {
+          case 'trace': {
+            if (key.upArrow) {
+              if (selectedTraceId != null && traceTree.length > 0) {
+                setSelectedSpanIndex((i) => Math.max(0, i - 1));
+              } else {
+                setSelected((i) => Math.max(0, i - 1));
+                setSelectedSpanIndex(0);
+              }
+            } else if (key.downArrow) {
+              if (selectedTraceId != null && selectedSpanIndex < traceTree.length - 1) {
+                setSelectedSpanIndex((i) => Math.min(traceTree.length - 1, i + 1));
+              } else if (selectedTraceId != null && traceTree.length > 0 && selectedSpanIndex >= traceTree.length - 1) {
+                const nextIdx =
+                  filteredSummaries.findIndex((t) => t.traceId === selectedTraceId) + 1;
+                if (nextIdx < filteredSummaries.length) {
+                  setSelected(nextIdx);
+                  setSelectedTraceId(filteredSummaries[nextIdx]!.traceId);
+                  setSelectedSpanIndex(0);
+                }
+              } else if (selectedTraceId == null) {
+                setSelected((i) => Math.min(filteredSummaries.length - 1, i + 1));
+                setSelectedSpanIndex(0);
+              }
             }
-          } else if (selectedTraceId == null) {
-            setSelected((i) => Math.min(filteredSummaries.length - 1, i + 1));
-            setSelectedSpanIndex(0);
+            break;
           }
-        } else {
-          setSelected((i) => Math.min(filteredSpans.length - 1, i + 1));
+          case 'span': {
+            if (key.upArrow) {
+              setSelected((i) => Math.max(0, i - 1));
+            } else if (key.downArrow) {
+              setSelected((i) => Math.min(filteredSpans.length - 1, i + 1));
+            }
+            break;
+          }
+          case 'log': {
+            if (key.upArrow) {
+              setSelected((i) => Math.max(0, i - 1));
+            } else if (key.downArrow) {
+              setSelected((i) => Math.min(filteredLogs.length - 1, i + 1));
+            }
+            break;
+          }
+          case 'service-summary': {
+            if (key.upArrow) {
+              setSelected((i) => Math.max(0, i - 1));
+            } else if (key.downArrow) {
+              setSelected((i) => Math.min(serviceStats.length - 1, i + 1));
+            }
+            break;
+          }
+          case 'errors': {
+            if (key.upArrow) {
+              setSelected((i) => Math.max(0, i - 1));
+            } else if (key.downArrow) {
+              setSelected((i) => Math.min(errorSummaries.length - 1, i + 1));
+            }
+            break;
+          }
         }
       }
       if (input === 'p') setPaused((p) => !p);
@@ -300,18 +434,109 @@ function Dashboard({
         setSelectedTraceId(null);
         setSelectedSpanIndex(0);
       }
+      if (input === 'l') {
+        setViewMode((m) => (m === 'log' ? 'trace' : 'log'));
+        setSelected(0);
+        setSelectedTraceId(null);
+        setSelectedSpanIndex(0);
+      }
+      if (input === 'v') {
+        setViewMode((m) =>
+          m === 'service-summary' ? 'trace' : 'service-summary',
+        );
+        setSelected(0);
+        setSelectedTraceId(null);
+        setSelectedSpanIndex(0);
+      }
+      if (input === 'E') {
+        setViewMode((m) => (m === 'errors' ? 'trace' : 'errors'));
+        setSelected(0);
+        setSelectedTraceId(null);
+        setSelectedSpanIndex(0);
+      }
       if (input === 'c') {
         setSpans([]);
+        setLogs([]);
         setSelected(0);
         setSelectedTraceId(null);
         setSelectedSpanIndex(0);
         setNewErrorCount(0);
+        setSpanFilters({ statusGroup: 'all' });
+        setRecording(false);
+        setPaused(false);
+      }
+      if (input === 'r') {
+        setSpans([]);
+        setLogs([]);
+        setSelected(0);
+        setSelectedTraceId(null);
+        setSelectedSpanIndex(0);
+        setNewErrorCount(0);
+        setSpanFilters({ statusGroup: 'all' });
+        setPaused(false);
+        setRecording(true);
+      }
+      if (input === 'x') {
+        setSpanFilters({ statusGroup: 'all' });
+        setSelected(0);
+        setSelectedTraceId(null);
+        setSelectedSpanIndex(0);
+      }
+      if (input === 'H') {
+        setSpanFilters((prev) => {
+          const next =
+            prev.statusGroup === 'all'
+              ? '2xx'
+              : prev.statusGroup === '2xx'
+              ? '4xx'
+              : prev.statusGroup === '4xx'
+              ? '5xx'
+              : 'all';
+          return { ...prev, statusGroup: next };
+        });
+        setSelected(0);
+        setSelectedTraceId(null);
+        setSelectedSpanIndex(0);
+      }
+      if (input === 'S') {
+        const svc = currentSpan?.attributes?.['service.name'];
+        if (typeof svc === 'string' && svc.trim()) {
+          setSpanFilters((prev) => ({ ...prev, serviceName: svc }));
+          setSelected(0);
+          setSelectedTraceId(null);
+          setSelectedSpanIndex(0);
+        }
+      }
+      if (input === 'R') {
+        const route = currentSpan?.attributes?.['http.route'];
+        if (typeof route === 'string' && route.trim()) {
+          setSpanFilters((prev) => ({ ...prev, route }));
+          setSelected(0);
+          setSelectedTraceId(null);
+          setSelectedSpanIndex(0);
+        }
+      }
+      if (input === 'J') {
+        const t = selectedTraceSummary;
+        if (!t) return;
+        const json = exportTraceToJson(t, selectedTraceLogs);
+        process.stdout.write(`\n[autotel-terminal] trace export\n${json}\n`);
       }
     },
     { isActive: isRawModeSupported },
   );
 
-  const headerRight = paused ? '[Paused]' : '[Live]';
+  const headerRight = recording ? '[Recording]' : paused ? '[Paused]' : '[Live]';
+  const headerModeLabel =
+    viewMode === 'trace'
+      ? 'traces'
+      : viewMode === 'span'
+      ? 'spans'
+      : viewMode === 'log'
+      ? 'logs'
+      : viewMode === 'service-summary'
+      ? 'services'
+      : 'errors';
   const showNewError = newErrorCount > 0;
 
   function renderTreeRow(node: SpanTreeNode, index: number): React.ReactElement {
@@ -355,7 +580,9 @@ function Dashboard({
       borderColor={colors ? 'cyan' : undefined}
     >
       <Box justifyContent="space-between" marginBottom={1}>
-        <Text key="title" bold>🔭 {title}</Text>
+        <Text key="title" bold>
+          🔭 {title} — {headerModeLabel}
+        </Text>
         <Box flexDirection="row" gap={1}>
           {showNewError && (
             <Text key="newError" color="red">1 new error</Text>
@@ -365,18 +592,20 @@ function Dashboard({
       </Box>
 
       {showHelp ? (
-        <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginBottom={1}>
+        <Box
+          flexDirection="column"
+          borderStyle="single"
+          borderColor="gray"
+          paddingX={1}
+          marginBottom={1}
+        >
           <Text bold>Shortcuts</Text>
-          <Text dimColor>↑/↓   Select trace or span</Text>
-          <Text dimColor>Enter  Open trace (trace view)</Text>
-          <Text dimColor>Esc    Back to trace list / exit search</Text>
-          <Text dimColor>t      Toggle trace view / span list</Text>
-          <Text dimColor>/      Search by name</Text>
-          <Text dimColor>p      Pause / resume</Text>
-          <Text dimColor>e      Errors only</Text>
-          <Text dimColor>c      Clear all</Text>
-          <Text dimColor>?      This help</Text>
-          <Text dimColor>Ctrl+C Exit</Text>
+          <Text dimColor>Navigation: ↑/↓, Enter, Esc</Text>
+          <Text dimColor>Views: t (trace/spans), l (logs), v (services), E (errors)</Text>
+          <Text dimColor>Search: /</Text>
+          <Text dimColor>Filters: e (errors-only), S (service), R (route), H (status), x (clear)</Text>
+          <Text dimColor>Capture: p (pause), r (record snapshot), J (export trace JSON)</Text>
+          <Text dimColor>Other: c (clear), ? (help), Ctrl+C (exit)</Text>
         </Box>
       ) : (
         <Box marginBottom={1} flexDirection="row" justifyContent="space-between">
@@ -384,11 +613,32 @@ function Dashboard({
             <Text key="search" color="cyan">Search: {searchQuery || '(type to filter)'}</Text>
           ) : (
             <Text key="controls" dimColor>
-              ↑/↓ select • Enter open • Esc back • t view • / search • p pause • e errors • c clear • ? help
+              ↑/↓ select • Enter open • Esc back • t spans • l logs • v svc • E errors • / search • p pause • r record • e errors • c clear • ? help
             </Text>
           )}
           <Text key="count" dimColor>
-            {viewMode === 'trace' ? `traces ${filteredSummaries.length}/${traceSummaries.length}` : `spans ${filteredSpans.length}/${spans.length}`}
+            {viewMode === 'trace'
+              ? `traces ${filteredSummaries.length}/${traceSummaries.length}`
+              : viewMode === 'span'
+              ? `spans ${filteredSpans.length}/${spans.length}`
+              : viewMode === 'service-summary'
+              ? `services ${serviceStats.length}/${serviceStats.length}`
+              : viewMode === 'errors'
+              ? `errors ${errorSummaries.length}/${errorSummaries.length}`
+              : `logs ${filteredLogs.length}/${logs.length}`}
+          </Text>
+        </Box>
+      )}
+
+      {(spanFilters.serviceName || spanFilters.route || spanFilters.statusGroup !== 'all') && (
+        <Box marginBottom={1}>
+          <Text dimColor>
+            filters:
+            {spanFilters.serviceName ? ` service=${spanFilters.serviceName}` : ''}
+            {spanFilters.route ? ` route=${spanFilters.route}` : ''}
+            {spanFilters.statusGroup && spanFilters.statusGroup !== 'all'
+              ? ` status=${spanFilters.statusGroup}`
+              : ''}
           </Text>
         </Box>
       )}
@@ -404,7 +654,15 @@ function Dashboard({
         >
           <Box marginTop={0} marginBottom={1}>
             <Text key="list-title" bold>
-              {viewMode === 'trace' ? 'Recent traces' : 'Recent spans'}
+              {viewMode === 'trace'
+                ? 'Recent traces'
+                : viewMode === 'span'
+                ? 'Recent spans'
+                : viewMode === 'service-summary'
+                ? 'Service summary'
+                : viewMode === 'errors'
+                ? 'Recent errors'
+                : 'Recent logs'}
             </Text>
             {filterErrorsOnly && <Text key="errors-only-label" color="red"> (errors only)</Text>}
             {searchQuery && <Text key="search-label" dimColor> /{searchQuery}</Text>}
@@ -436,24 +694,93 @@ function Dashboard({
                   : traceTree.slice(0, 20).map((node, i) => renderTreeRow(node, i))}
               </>
             )
-          ) : filteredSpans.length === 0 ? (
+          ) : viewMode === 'span' ? (
+            filteredSpans.length === 0 ? (
+              <Box flexDirection="column">
+                <Text dimColor>No spans yet. Call a traced function or hit an endpoint to see them here.</Text>
+                <Text dimColor>Tip: trace() your handlers with autotel to get spans.</Text>
+              </Box>
+            ) : (
+              filteredSpans.slice(0, 20).map((s, i) => {
+                const isSel = i === selected;
+                const statusColor =
+                  s.status === 'ERROR' ? 'red' : s.durationMs > 500 ? 'yellow' : 'green';
+                return (
+                  <Box key={`${s.spanId}-${s.startTime}`} flexDirection="row">
+                    <Text color={isSel ? 'cyan' : undefined}>{isSel ? '› ' : '  '}</Text>
+                    <Text color={colors ? statusColor : undefined}>
+                      {truncate(s.name, 26)}
+                    </Text>
+                    <Text dimColor> {formatDurationMs(s.durationMs)}</Text>
+                    <Text dimColor> {formatRelative(s.endTime)}</Text>
+                  </Box>
+                );
+              })
+            )
+          ) : viewMode === 'service-summary' ? (
+            serviceStats.length === 0 ? (
+              <Box flexDirection="column">
+                <Text dimColor>No service stats yet. Add `service.name` attributes to spans.</Text>
+              </Box>
+            ) : (
+              serviceStats.slice(0, 20).map((svc, i) => {
+                const isSel = i === selected;
+                const errorRate = svc.total ? (svc.errors / svc.total) * 100 : 0;
+                return (
+                  <Box key={svc.serviceName} flexDirection="row">
+                    <Text color={isSel ? 'cyan' : undefined}>{isSel ? '› ' : '  '}</Text>
+                    <Text>{truncate(svc.serviceName, 16)}</Text>
+                    <Text dimColor> {svc.errors}/{svc.total}</Text>
+                    <Text dimColor> {errorRate.toFixed(0)}%</Text>
+                    <Text dimColor> p95 {formatDurationMs(svc.p95Ms)}</Text>
+                  </Box>
+                );
+              })
+            )
+          ) : viewMode === 'errors' ? (
+            errorSummaries.length === 0 ? (
+              <Box flexDirection="column">
+                <Text dimColor>No errors yet.</Text>
+              </Box>
+            ) : (
+              errorSummaries.slice(0, 20).map((e, i) => {
+                const isSel = i === selected;
+                return (
+                  <Box key={e.traceId} flexDirection="row">
+                    <Text color={isSel ? 'cyan' : undefined}>{isSel ? '› ' : '  '}</Text>
+                    <Text color="red">{truncate(e.rootName, 16)}</Text>
+                    <Text dimColor> {truncate(e.serviceName, 10)}</Text>
+                    {e.route && <Text dimColor> {truncate(e.route, 14)}</Text>}
+                    {typeof e.statusCode === 'number' && <Text dimColor> {e.statusCode}</Text>}
+                    <Text dimColor> ({e.errorCount})</Text>
+                  </Box>
+                );
+              })
+            )
+          ) : filteredLogs.length === 0 ? (
             <Box flexDirection="column">
-              <Text dimColor>No spans yet. Call a traced function or hit an endpoint to see them here.</Text>
-              <Text dimColor>Tip: trace() your handlers with autotel to get spans.</Text>
+              <Text dimColor>No logs yet. Emit request logs or canonical log lines to see them here.</Text>
+              <Text dimColor>Tip: hook getTerminalLogStream() into your canonical log line drain.</Text>
             </Box>
           ) : (
-            filteredSpans.slice(0, 20).map((s, i) => {
+            filteredLogs.slice(0, 20).map((log, i) => {
               const isSel = i === selected;
-              const statusColor =
-                s.status === 'ERROR' ? 'red' : s.durationMs > 500 ? 'yellow' : 'green';
+              const levelColor =
+                log.level === 'error'
+                  ? 'red'
+                  : log.level === 'warn'
+                  ? 'yellow'
+                  : log.level === 'debug'
+                  ? 'gray'
+                  : 'green';
               return (
-                <Box key={`${s.spanId}-${s.startTime}`} flexDirection="row">
+                <Box key={`${log.time}-${i}`} flexDirection="row">
                   <Text color={isSel ? 'cyan' : undefined}>{isSel ? '› ' : '  '}</Text>
-                  <Text color={colors ? statusColor : undefined}>
-                    {truncate(s.name, 26)}
+                  <Text color={colors ? levelColor : undefined}>
+                    {truncate(log.level.toUpperCase(), 5)}
                   </Text>
-                  <Text dimColor> {formatDurationMs(s.durationMs)}</Text>
-                  <Text dimColor> {formatRelative(s.endTime)}</Text>
+                  <Text> </Text>
+                  <Text>{truncate(log.message, 32)}</Text>
                 </Box>
               );
             })
@@ -472,7 +799,137 @@ function Dashboard({
             <Text bold>Details</Text>
           </Box>
 
-          {currentSpan ? (
+          {viewMode === 'errors' ? (
+            (() => {
+              const e = errorSummaries[selected] ?? null;
+              if (!e) return <Text dimColor>Select an error to view details.</Text>;
+              return (
+                <>
+                  <Text>
+                    <Text dimColor>Trace: </Text>
+                    <Text>{e.traceId}</Text>
+                  </Text>
+                  <Text dimColor>
+                    Service: {e.serviceName}
+                    {e.route ? ` • Route: ${e.route}` : ''}
+                    {typeof e.statusCode === 'number' ? ` • Status: ${e.statusCode}` : ''}
+                  </Text>
+                  <Text dimColor>Errors: {e.errorCount}</Text>
+                  <Text dimColor>Tip: switch to trace view and search for this trace ID.</Text>
+                </>
+              );
+            })()
+          ) : viewMode === 'service-summary' ? (
+            (() => {
+              const svc = serviceStats[selected] ?? null;
+              if (!svc) return <Text dimColor>Select a service to view details.</Text>;
+              return (
+                <>
+                  <Text>
+                    <Text dimColor>Service: </Text>
+                    <Text>{svc.serviceName}</Text>
+                  </Text>
+                  <Text dimColor>
+                    Spans: {svc.total} | Errors: {svc.errors} | Avg:{' '}
+                    {formatDurationMs(svc.avgMs)} | P95: {formatDurationMs(svc.p95Ms)}
+                  </Text>
+
+                  <Box marginTop={1} flexDirection="column">
+                    <Text bold>Top routes</Text>
+                    {selectedServiceRouteStats.length === 0 ? (
+                      <Text dimColor>(no http.route)</Text>
+                    ) : (
+                      selectedServiceRouteStats.map((r) => (
+                        <Text key={r.route} dimColor>
+                          {truncate(r.route, 20)} {r.errors}/{r.total} p95{' '}
+                          {formatDurationMs(r.p95Ms)}
+                        </Text>
+                      ))
+                    )}
+                  </Box>
+
+                  <Box marginTop={1} flexDirection="column">
+                    <Text bold>Hot spans</Text>
+                    {selectedServiceHotSpans.length === 0 ? (
+                      <Text dimColor>(no spans)</Text>
+                    ) : (
+                      selectedServiceHotSpans.map((h) => (
+                        <Text key={h.name} dimColor>
+                          {truncate(h.name, 20)} p95 {formatDurationMs(h.p95Ms)} ({h.count}x)
+                        </Text>
+                      ))
+                    )}
+                  </Box>
+                </>
+              );
+            })()
+          ) : viewMode === 'log' ? (
+            (() => {
+              const log = filteredLogs[selected] ?? null;
+              if (!log) {
+                return <Text dimColor>Select a log to view details.</Text>;
+              }
+              return (
+                <>
+                  <Text>
+                    <Text dimColor>Level: </Text>
+                    <Text>{log.level.toUpperCase()}</Text>
+                  </Text>
+                  <Text>
+                    <Text dimColor>Time: </Text>
+                    <Text>{new Date(log.time).toISOString()}</Text>
+                  </Text>
+                  <Text>
+                    <Text dimColor>Message: </Text>
+                    <Text>{log.message}</Text>
+                  </Text>
+                  {log.traceId && (
+                    <Text dimColor>Trace: {log.traceId}</Text>
+                  )}
+                  {log.spanId && (
+                    <Text dimColor>Span: {log.spanId}</Text>
+                  )}
+                  {log.attributes && Object.keys(log.attributes).length > 0 && (
+                    <Box marginTop={1} flexDirection="column">
+                      <Text bold>Attributes</Text>
+                      {Object.entries(log.attributes)
+                        .slice(0, 10)
+                        .map(([k, v]) => (
+                          <Text key={k} dimColor>
+                            {truncate(k, 18)}: {truncate(String(v), 40)}
+                          </Text>
+                        ))}
+                    </Box>
+                  )}
+                  {timelineItems.length > 0 && (
+                    <Box marginTop={1} flexDirection="column">
+                      <Text bold>Timeline (trace)</Text>
+                      {timelineItems.slice(0, 10).map((item, idx) => {
+                        const relMs =
+                          item.time -
+                          (selectedTraceSummary?.spans[0]?.startTime ?? item.time);
+                        if (item.type === 'span' && item.span) {
+                          return (
+                            <Text key={`span-${idx}`} dimColor>
+                              +{relMs}ms span {truncate(item.span.name, 20)}
+                            </Text>
+                          );
+                        }
+                        if (item.type === 'log' && item.log) {
+                          return (
+                            <Text key={`log-${idx}`}>
+                              +{relMs}ms log {truncate(item.log.message, 24)}
+                            </Text>
+                          );
+                        }
+                        return null;
+                      })}
+                    </Box>
+                  )}
+                </>
+              );
+            })()
+          ) : currentSpan ? (
             <>
               <Text>
                 <Text dimColor>Name: </Text>
@@ -562,7 +1019,7 @@ function Dashboard({
       {showStats && (
         <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
           <Text dimColor>
-            Spans: {stats.total} | Errors: {stats.errors} | Avg: {formatDurationMs(stats.avg)} | P95: {formatDurationMs(stats.p95)}
+            Spans: {stats.total} | Span errors: {stats.errors} | Logs: {logStats.total} | Log errors: {logStats.errors} | Avg: {formatDurationMs(stats.avg)} | P95: {formatDurationMs(stats.p95)}
           </Text>
         </Box>
       )}
@@ -642,6 +1099,7 @@ export function renderTerminal(
           maxSpans={maxSpans}
           colors={colors}
           stream={stream}
+          logStream={getTerminalLogStream()}
         />,
         { stdin: stdinOption },
       );
@@ -694,6 +1152,7 @@ export function renderTerminal(
         maxSpans={maxSpans}
         colors={colors}
         stream={terminalStream}
+        logStream={getTerminalLogStream()}
       />,
       { stdin: stdinOption },
     );
@@ -706,6 +1165,9 @@ export function renderTerminal(
 export type { TerminalSpanEvent, TerminalSpanStream } from './span-stream';
 export { StreamingSpanProcessor } from './streaming-processor';
 export { createTerminalSpanStream } from './span-stream';
+export { getTerminalLogStream } from './log-stream';
+export type { TerminalLogStream } from './log-stream';
+export type { TerminalLogEvent } from './lib/log-model';
 
 // Re-export OpenTelemetry types for advanced users
 export type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
