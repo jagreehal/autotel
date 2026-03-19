@@ -1,5 +1,12 @@
 # @jagreehal/example-mcp-observability
 
+## 1.0.36
+
+### Patch Changes
+
+- Updated dependencies [04c370a]
+  - autotel@2.25.0
+
 ## 1.0.35
 
 ### Patch Changes

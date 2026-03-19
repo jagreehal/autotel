@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5
+
+### Patch Changes
+
+- Updated dependencies [04c370a]
+  - autotel@2.25.0
+
 ## 0.4.4
 
 ### Patch Changes

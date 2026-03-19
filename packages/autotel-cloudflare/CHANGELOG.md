@@ -1,5 +1,21 @@
 # autotel-cloudflare
 
+## 2.18.0
+
+### Minor Changes
+
+- 04c370a: This release rolls out a monorepo-wide refresh across the Autotel package family with coordinated minor updates.
+
+  Highlights:
+  - Align package internals and workspace metadata for the next release wave.
+  - Improve reliability of test and quality workflows used across packages.
+  - Keep package behavior and public APIs consistent while shipping incremental enhancements across the ecosystem.
+
+### Patch Changes
+
+- Updated dependencies [04c370a]
+  - autotel-edge@3.16.0
+
 ## 2.17.1
 
 ### Patch Changes
