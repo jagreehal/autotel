@@ -9,7 +9,7 @@
  */
 import { test, expect, step } from 'autotel-playwright';
 
-const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3000';
+const apiBase = process.env.API_BASE_URL ?? 'http://127.0.0.1:3310';
 
 // ── 1. page.goto: trace context injected via page.route ──────────────
 

@@ -71,7 +71,7 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@tanstack/intent": "^0.0.19"
+    "@tanstack/intent": "^0.0.23"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
