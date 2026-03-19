@@ -1,6 +1,6 @@
 {
   "name": "autotel-adapters",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Framework adapters and composable DX helpers for autotel",
   "type": "module",
   "main": "./dist/index.js",

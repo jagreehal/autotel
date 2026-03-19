@@ -1,5 +1,22 @@
 # autotel-tanstack
 
+## 1.13.0
+
+### Minor Changes
+
+- 04c370a: This release rolls out a monorepo-wide refresh across the Autotel package family with coordinated minor updates.
+
+  Highlights:
+  - Align package internals and workspace metadata for the next release wave.
+  - Improve reliability of test and quality workflows used across packages.
+  - Keep package behavior and public APIs consistent while shipping incremental enhancements across the ecosystem.
+
+### Patch Changes
+
+- Updated dependencies [04c370a]
+  - autotel-adapters@0.2.0
+  - autotel@2.25.0
+
 ## 1.12.3
 
 ### Patch Changes

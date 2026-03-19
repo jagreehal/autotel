@@ -1,5 +1,16 @@
 # autotel-cli
 
+## 0.8.0
+
+### Minor Changes
+
+- 04c370a: This release rolls out a monorepo-wide refresh across the Autotel package family with coordinated minor updates.
+
+  Highlights:
+  - Align package internals and workspace metadata for the next release wave.
+  - Improve reliability of test and quality workflows used across packages.
+  - Keep package behavior and public APIs consistent while shipping incremental enhancements across the ecosystem.
+
 ## 0.7.1
 
 ### Patch Changes
