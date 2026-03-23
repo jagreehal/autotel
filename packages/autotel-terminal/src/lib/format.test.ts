@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatDurationMs, formatRelative, truncate } from './format';
+import { formatDurationMs, formatRelative, truncate, buildWaterfallBar } from './format';
 
 describe('formatDurationMs', () => {
   it('formats ms when under 1000', () => {
@@ -52,5 +52,37 @@ describe('truncate', () => {
   it('truncates with ellipsis when over width', () => {
     expect(truncate('hello world', 8)).toBe('hello w…');
     expect(truncate('hello world', 6)).toBe('hello…');
+  });
+});
+
+describe('buildWaterfallBar', () => {
+  it('full-width bar for root span', () => {
+    const result = buildWaterfallBar(0, 100, 0, 100, 20);
+    expect(result.length).toBe(20);
+    expect(result.trim().length).toBeGreaterThan(0);
+    expect(result).not.toMatch(/^ +$/);
+  });
+
+  it('half-width bar offset to middle', () => {
+    const result = buildWaterfallBar(50, 50, 0, 100, 20);
+    expect(result.length).toBe(20);
+    expect(result.slice(0, 10)).toMatch(/^ +$/);
+    expect(result.slice(10).trim().length).toBeGreaterThan(0);
+  });
+
+  it('minimum 1-char bar for tiny spans', () => {
+    const result = buildWaterfallBar(0, 1, 0, 10_000, 20);
+    expect(result.length).toBe(20);
+    expect(result.replaceAll(' ', '').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('returns an empty string for non-positive widths', () => {
+    expect(buildWaterfallBar(0, 100, 0, 100, 0)).toBe('');
+    expect(buildWaterfallBar(0, 100, 0, 100, -1)).toBe('');
+  });
+
+  it('clamps spans that start before the trace window', () => {
+    expect(() => buildWaterfallBar(90, 20, 100, 100, 20)).not.toThrow();
+    expect(buildWaterfallBar(90, 20, 100, 100, 20)).toHaveLength(20);
   });
 });
