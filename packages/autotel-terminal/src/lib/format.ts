@@ -31,3 +31,31 @@ export function truncate(s: string, width: number): string {
   if (s.length <= width) return s;
   return s.slice(0, Math.max(0, width - 1)) + '…';
 }
+
+/**
+ * Build a fixed-width waterfall bar string.
+ * The bar is positioned proportionally within the total width
+ * based on the span's start offset and duration relative to the trace.
+ */
+export function buildWaterfallBar(
+  spanStart: number,
+  spanDuration: number,
+  traceStart: number,
+  traceDuration: number,
+  width: number,
+): string {
+  if (width <= 0) return '';
+  if (traceDuration <= 0) return ' '.repeat(width);
+  const offsetRatio = (spanStart - traceStart) / traceDuration;
+  const widthRatio = spanDuration / traceDuration;
+  const barStart = Math.max(0, Math.floor(offsetRatio * width));
+  const barLen = Math.max(1, Math.round(widthRatio * width));
+  const clampedStart = Math.min(barStart, width - 1);
+  const clampedLen = Math.min(barLen, width - clampedStart);
+  const trailing = Math.max(0, width - clampedStart - clampedLen);
+  return (
+    ' '.repeat(clampedStart) +
+    '█'.repeat(clampedLen) +
+    ' '.repeat(trailing)
+  );
+}

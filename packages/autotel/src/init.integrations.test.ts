@@ -182,13 +182,18 @@ describe('init() integrations vs instrumentations', () => {
     _resetAutoInstrumentationsLoader();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const mod of mockedModules) {
       vi.doUnmock(mod);
     }
     vi.clearAllMocks();
     _resetAutoInstrumentationsLoader();
     delete process.env.AUTOTEL_METRICS;
+    // Reset global OTel state that can leak between forked test files
+    const { trace, context, propagation } = await import('@opentelemetry/api');
+    trace.disable();
+    context.disable();
+    propagation.disable();
   });
 
   it('excludes manual instrumentations from auto-instrumentations when autoInstrumentations: true', async () => {
