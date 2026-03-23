@@ -29,11 +29,13 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "format:check": "prettier --check src/**/*.ts",
     "lint": "npx eslint src",
     "lint:fix": "npx eslint src --fix",
     "type-check": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest --passWithNoTests",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-exports": "attw --pack . --ignore-rules false-esm no-resolution cjs-resolves-to-esm",
     "quality": "pnpm type-check && pnpm test && pnpm lint && pnpm format:check && pnpm build && pnpm check-exports"
   },
   "keywords": [
@@ -51,13 +53,18 @@
   "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.47",
+    "@ai-sdk/openai-compatible": "^2.0.37",
+    "ai": "^6.0.134",
+    "ai-sdk-ollama": "^3.8.1",
     "ink": "^6.8.0",
-    "react": "^19.2.4"
+    "react": "^19.2.4",
+    "zod": "4.3.6"
   },
   "peerDependencies": {
-    "autotel": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
-    "@opentelemetry/api": "^1.9.0"
+    "autotel": "workspace:*"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",

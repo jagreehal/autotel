@@ -2,7 +2,7 @@ import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { safeRequire } from './node-require';
 import type { StringRedactor } from './redact-values';
 
-class RedactingLogRecordProcessor implements LogRecordProcessor {
+export class RedactingLogRecordProcessor implements LogRecordProcessor {
   constructor(
     private wrapped: LogRecordProcessor,
     private redact: StringRedactor,

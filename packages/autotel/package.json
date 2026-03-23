@@ -270,10 +270,12 @@
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.213.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.213.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
     "@opentelemetry/instrumentation": "^0.213.0",
     "@opentelemetry/resources": "^2.6.0",
+    "@opentelemetry/sdk-logs": "^0.213.0",
     "@opentelemetry/sdk-metrics": "^2.6.0",
     "@opentelemetry/sdk-node": "^0.213.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
@@ -284,13 +286,11 @@
   "peerDependencies": {
     "@opentelemetry/auto-instrumentations-node": "^0.71.0",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.213.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.213.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.213.0",
     "@opentelemetry/resource-detector-aws": "^2.13.0",
     "@opentelemetry/resource-detector-container": "^0.8.4",
     "@opentelemetry/resource-detector-gcp": "^0.48.0",
-    "@opentelemetry/sdk-logs": "^0.213.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@traceloop/node-server-sdk": "^0.22.8",
     "pino": "^10.3.1",
@@ -304,16 +304,10 @@
     "@opentelemetry/exporter-logs-otlp-grpc": {
       "optional": true
     },
-    "@opentelemetry/exporter-logs-otlp-http": {
-      "optional": true
-    },
     "@opentelemetry/exporter-metrics-otlp-grpc": {
       "optional": true
     },
     "@opentelemetry/exporter-trace-otlp-grpc": {
-      "optional": true
-    },
-    "@opentelemetry/sdk-logs": {
       "optional": true
     },
     "@opentelemetry/sdk-trace-node": {
@@ -347,13 +341,11 @@
     "@opentelemetry/auto-instrumentations-node": "^0.71.0",
     "@opentelemetry/context-async-hooks": "^2.6.0",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.213.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.213.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.213.0",
     "@opentelemetry/resource-detector-aws": "^2.13.0",
     "@opentelemetry/resource-detector-container": "^0.8.4",
     "@opentelemetry/resource-detector-gcp": "^0.48.0",
-    "@opentelemetry/sdk-logs": "^0.213.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@swc/core": "^1.15.21",
     "@total-typescript/ts-reset": "^0.6.1",

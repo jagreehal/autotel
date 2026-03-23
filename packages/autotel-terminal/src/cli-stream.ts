@@ -21,4 +21,3 @@ export class CliTerminalSpanStream implements TerminalSpanStream {
     }
   }
 }
-

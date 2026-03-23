@@ -49,4 +49,3 @@ describe('exportTraceToJson', () => {
     expect(parsed.logs[0]!.message).toBe('hello');
   });
 });
-

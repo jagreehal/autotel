@@ -12,6 +12,7 @@ export interface SpanFilterState {
   statusGroup?: 'all' | '2xx' | '4xx' | '5xx';
   errorsOnly?: boolean;
   searchQuery?: string;
+  traceId?: string;
 }
 
 function getServiceName(span: TerminalSpanEvent): string | undefined {
@@ -62,11 +63,14 @@ export function applySpanFilters(
   spans: TerminalSpanEvent[],
   state: SpanFilterState,
 ): TerminalSpanEvent[] {
-  const { serviceName, route, statusGroup, errorsOnly, searchQuery } = state;
+  const { serviceName, route, statusGroup, errorsOnly, searchQuery, traceId } =
+    state;
   const q = searchQuery?.trim().toLowerCase() ?? '';
 
   return spans.filter((span) => {
     const attrs = span.attributes ?? {};
+
+    if (traceId && span.traceId !== traceId) return false;
 
     if (errorsOnly && span.status !== 'ERROR') return false;
 
@@ -99,4 +103,3 @@ export function applySpanFilters(
     return true;
   });
 }
-

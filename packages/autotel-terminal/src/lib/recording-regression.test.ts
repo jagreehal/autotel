@@ -8,8 +8,12 @@ const dashboardSource = readFileSync(
 
 describe('recording mode wiring', () => {
   it('re-subscribes span and log listeners when recording state changes', () => {
-    expect(dashboardSource).toContain('}, [logStream, paused, maxSpans, recording]);');
-    expect(dashboardSource).toContain('}, [stream, paused, maxSpans, recording]);');
+    expect(dashboardSource).toContain(
+      '}, [logStream, paused, maxSpans, recording]);',
+    );
+    expect(dashboardSource).toContain(
+      '}, [stream, paused, maxSpans, recording]);',
+    );
   });
 
   it('checks the recording limit before truncating to maxSpans', () => {

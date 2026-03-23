@@ -126,7 +126,77 @@ app.get('/orders/:id', (c) => {
 | Manual `console.log` at start/end of function | `trace()` wrapper handles lifecycle |
 | Separate request ID generation | `ctx.correlationId` provides automatic correlation |
 
-## Canonical Log Line Config
+## init() Configuration
+
+### Signals: Traces, Metrics, Logs
+
+When `endpoint` is set, traces and metrics are auto-configured by default. Logs are opt-in to avoid unexpected export and preserve OTel SDK `OTEL_LOGS_EXPORTER` handling:
+
+```typescript
+init({
+  service: 'my-app',
+  endpoint: 'http://localhost:4318',
+  // traces: always on when endpoint is set
+  // metrics: true by default (AUTOTEL_METRICS env var override)
+  // logs: false by default — opt-in with logs: true (AUTOTEL_LOGS env var override)
+  logs: true,  // enable auto OTLP log export
+});
+```
+
+Disable any signal explicitly:
+
+```typescript
+init({
+  service: 'my-app',
+  endpoint: 'http://localhost:4318',
+  metrics: false,  // disable auto OTLP metrics
+  logs: false,     // disable auto OTLP logs (already the default)
+});
+```
+
+Custom `logRecordProcessors` are additive — they work alongside the auto-configured exporter:
+
+```typescript
+init({
+  service: 'my-app',
+  endpoint: 'http://localhost:4318',
+  logRecordProcessors: [customProcessor], // added alongside auto-configured OTLP exporter
+});
+```
+
+Protocol selection (`http` default, `grpc` optional) applies to all signals. gRPC exporters are optional peer deps.
+
+### Sampling
+
+Default: `AdaptiveSampler` with 10% baseline, 100% for errors and slow requests (>1s). Tail sampling via `TailSamplingSpanProcessor` defers the decision until span ends.
+
+```typescript
+import { AdaptiveSampler } from 'autotel';
+
+init({
+  service: 'my-app',
+  endpoint: 'http://localhost:4318',
+  sampler: new AdaptiveSampler({
+    baselineSampleRate: 0.1,    // 10% of normal requests (default)
+    slowThresholdMs: 1000,       // Requests > 1s are "slow" (default)
+    alwaysSampleErrors: true,    // Always trace errors (default)
+    alwaysSampleSlow: true,      // Always trace slow requests (default)
+    linksBased: false,           // Enable for event-driven architectures
+  }),
+});
+```
+
+The `Sampler` interface is simple — return `true` to trace, `false` to skip:
+
+```typescript
+const sampler: Sampler = {
+  shouldSample({ operationName, args, links }) {
+    return operationName.startsWith('critical.');
+  },
+};
+```
+
+### Canonical Log Lines
 
 ```typescript
 init({

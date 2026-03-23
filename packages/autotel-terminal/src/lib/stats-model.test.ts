@@ -1,8 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import type { TerminalSpanEvent } from '../span-stream';
-import { computeServiceStats, computeRouteStats, findHotSpanNames } from './stats-model';
+import {
+  computeServiceStats,
+  computeRouteStats,
+  findHotSpanNames,
+} from './stats-model';
 
-const span = (overrides: Partial<TerminalSpanEvent> = {}): TerminalSpanEvent => ({
+const span = (
+  overrides: Partial<TerminalSpanEvent> = {},
+): TerminalSpanEvent => ({
   name: 'op',
   spanId: 's',
   traceId: 't',
@@ -19,7 +25,11 @@ describe('stats-model', () => {
   it('computes per-service stats', () => {
     const spans: TerminalSpanEvent[] = [
       span({ durationMs: 10, attributes: { 'service.name': 'api' } }),
-      span({ durationMs: 30, attributes: { 'service.name': 'api' }, status: 'ERROR' }),
+      span({
+        durationMs: 30,
+        attributes: { 'service.name': 'api' },
+        status: 'ERROR',
+      }),
       span({ durationMs: 5, attributes: { 'service.name': 'worker' } }),
     ];
 
@@ -82,4 +92,3 @@ describe('stats-model', () => {
     expect(health.errors).toBe(0);
   });
 });
-

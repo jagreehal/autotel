@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type Server,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import {
   countOtlpMetrics,
   parseOtlpEvents,
@@ -19,9 +24,7 @@ import type { TerminalLogEvent } from './lib/log-model';
 
 const OTLP_ROUTES = new Set(['/v1/traces', '/v1/logs', '/v1/metrics']);
 
-function createTestServer(
-  spanStream: CliTerminalSpanStream,
-): Server {
+function createTestServer(spanStream: CliTerminalSpanStream): Server {
   const logStream = getTerminalLogStream();
 
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -150,9 +153,7 @@ describe('CLI HTTP server integration', () => {
                   endTimeUnixNano: '1700000000100000000',
                   status: { code: 1 },
                   kind: 2,
-                  attributes: [
-                    { key: 'test', value: { stringValue: 'true' } },
-                  ],
+                  attributes: [{ key: 'test', value: { stringValue: 'true' } }],
                 },
               ],
             },
@@ -165,9 +166,7 @@ describe('CLI HTTP server integration', () => {
     expect(res.status).toBe(200);
     expect(res.body.acceptedSpans).toBe(1);
     expect(collectedSpans.length).toBe(before + 1);
-    expect(collectedSpans.at(-1)?.name).toBe(
-      'integration-test-span',
-    );
+    expect(collectedSpans.at(-1)?.name).toBe('integration-test-span');
   });
 
   it('POST /v1/traces returns 400 for invalid JSON', async () => {
@@ -204,9 +203,7 @@ describe('CLI HTTP server integration', () => {
                   body: { stringValue: 'integration-test-log' },
                   traceId: 'aaaa0000000000000000000000000002',
                   spanId: 'bbbb000000000002',
-                  attributes: [
-                    { key: 'env', value: { stringValue: 'test' } },
-                  ],
+                  attributes: [{ key: 'env', value: { stringValue: 'test' } }],
                 },
               ],
             },
@@ -219,9 +216,7 @@ describe('CLI HTTP server integration', () => {
     expect(res.status).toBe(200);
     expect(res.body.acceptedLogs).toBe(1);
     expect(collectedLogs.length).toBe(before + 1);
-    expect(collectedLogs.at(-1)?.message).toBe(
-      'integration-test-log',
-    );
+    expect(collectedLogs.at(-1)?.message).toBe('integration-test-log');
     expect(collectedLogs.at(-1)?.level).toBe('info');
   });
 
