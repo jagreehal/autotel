@@ -88,6 +88,137 @@ describe('parseOtlpEvents', () => {
     expect(events[0].status).toBe('UNSET');
     expect(events[0].kind).toBe('INTERNAL');
   });
+
+  it('extracts service.name from resource attributes', () => {
+    const payload = {
+      resourceSpans: [
+        {
+          resource: {
+            attributes: [
+              { key: 'service.name', value: { stringValue: 'my-api' } },
+              { key: 'service.version', value: { stringValue: '1.0.0' } },
+            ],
+          },
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: 'abcdef1234567890abcdef1234567890',
+                  spanId: '1234567890abcdef',
+                  name: 'GET /users',
+                  startTimeUnixNano: '1700000000000000000',
+                  endTimeUnixNano: '1700000000050000000',
+                  status: { code: 1 },
+                  kind: 2,
+                  attributes: [
+                    { key: 'http.method', value: { stringValue: 'GET' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const events = parseOtlpEvents(payload);
+    expect(events).toHaveLength(1);
+    expect(events[0].attributes?.['service.name']).toBe('my-api');
+    expect(events[0].attributes?.['service.version']).toBe('1.0.0');
+    expect(events[0].attributes?.['http.method']).toBe('GET');
+  });
+
+  it('parses span events from OTLP payload', () => {
+    const payload = {
+      resourceSpans: [{
+        scopeSpans: [{
+          spans: [{
+            traceId: 'abcdef1234567890abcdef1234567890',
+            spanId: '1234567890abcdef',
+            name: 'GET /users',
+            startTimeUnixNano: '1700000000000000000',
+            endTimeUnixNano: '1700000000050000000',
+            events: [
+              {
+                timeUnixNano: '1700000000025000000',
+                name: 'exception',
+                attributes: [
+                  { key: 'exception.message', value: { stringValue: 'not found' } },
+                ],
+              },
+            ],
+          }],
+        }],
+      }],
+    };
+
+    const events = parseOtlpEvents(payload);
+    expect(events[0].events).toHaveLength(1);
+    expect(events[0].events![0].name).toBe('exception');
+    expect(events[0].events![0].timeMs).toBeCloseTo(1_700_000_000_025, 0);
+    expect(events[0].events![0].attributes).toEqual({ 'exception.message': 'not found' });
+  });
+
+  it('parses span links from OTLP payload', () => {
+    const payload = {
+      resourceSpans: [{
+        scopeSpans: [{
+          spans: [{
+            name: 'consumer',
+            links: [
+              {
+                traceId: 'aaaa0000000000000000000000000001',
+                spanId: 'bbbb000000000001',
+                attributes: [
+                  { key: 'link.type', value: { stringValue: 'parent' } },
+                ],
+              },
+            ],
+          }],
+        }],
+      }],
+    };
+
+    const events = parseOtlpEvents(payload);
+    expect(events[0].links).toHaveLength(1);
+    expect(events[0].links![0].traceId).toBe('aaaa0000000000000000000000000001');
+    expect(events[0].links![0].spanId).toBe('bbbb000000000001');
+    expect(events[0].links![0].attributes).toEqual({ 'link.type': 'parent' });
+  });
+
+  it('span attributes take precedence over resource attributes', () => {
+    const payload = {
+      resourceSpans: [
+        {
+          resource: {
+            attributes: [
+              { key: 'service.name', value: { stringValue: 'from-resource' } },
+              { key: 'shared.key', value: { stringValue: 'resource-value' } },
+            ],
+          },
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  name: 'test',
+                  attributes: [
+                    {
+                      key: 'shared.key',
+                      value: { stringValue: 'span-value' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const events = parseOtlpEvents(payload);
+    expect(events[0].attributes?.['service.name']).toBe('from-resource');
+    expect(events[0].attributes?.['shared.key']).toBe('span-value');
+  });
 });
 
 describe('otlpSpanToTerminalEvent', () => {

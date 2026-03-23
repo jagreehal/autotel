@@ -71,6 +71,8 @@ import {
 } from './lib/stats-model';
 import { applySpanFilters, type SpanFilterState } from './lib/filters';
 import { buildErrorSummaries } from './lib/error-model';
+import { buildServiceGraph } from './lib/topology-model';
+import { renderTopologyAscii } from './lib/topology-render';
 import { exportTraceToJson } from './lib/export-model';
 import type { AIConfig, ChatMessage, AIState } from './ai/types';
 import {
@@ -163,7 +165,7 @@ function Dashboard({
   const [searchQuery, setSearchQuery] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const [viewMode, setViewMode] = useState<
-    'trace' | 'span' | 'log' | 'service-summary' | 'errors'
+    'trace' | 'span' | 'log' | 'service-summary' | 'errors' | 'topology'
   >('trace');
   const [spanFilters, setSpanFilters] = useState<SpanFilterState>({
     statusGroup: 'all',
@@ -347,6 +349,8 @@ function Dashboard({
     drilldownTraceId == null
       ? (filteredSummaries[selected] ?? null)
       : (filteredSummaries.find((t) => t.traceId === drilldownTraceId) ?? null);
+  const serviceGraph = useMemo(() => buildServiceGraph(spans), [spans]);
+  const topologyLines = useMemo(() => renderTopologyAscii(serviceGraph), [serviceGraph]);
   const errorSummaries = useMemo(
     () => buildErrorSummaries(traceSummaries),
     [traceSummaries],
@@ -852,6 +856,13 @@ function Dashboard({
         setDrilldownSelectedIndex(0);
         setDrilldownScrollOffset(0);
       }
+      if (input === 'G') {
+        setViewMode((m) => (m === 'topology' ? 'trace' : 'topology'));
+        setSelected(0);
+        setDrilldownTraceId(null);
+        setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
+      }
       if (input === 'c') {
         setSpans([]);
         setLogs([]);
@@ -1013,7 +1024,9 @@ function Dashboard({
           ? 'logs'
           : viewMode === 'service-summary'
             ? 'services'
-            : 'errors';
+            : viewMode === 'topology'
+              ? 'topology'
+              : 'errors';
   const showNewError = newErrorCount > 0;
 
   function renderTreeRow(
@@ -1040,9 +1053,10 @@ function Dashboard({
         flexDirection="row"
       >
         <Text backgroundColor={isSel ? 'blue' : undefined} color={isSel ? 'white' : undefined}>{isSel ? '▸ ' : '  '}</Text>
+        <Text color={node.span.status === 'ERROR' ? 'red' : undefined}>{node.span.status === 'ERROR' ? '✗' : ' '}</Text>
         <Text dimColor>{prefix}</Text>
         <Text color={colors ? statusColor : undefined}>
-          {truncate(node.span.name, 24)}
+          {truncate(node.span.name, 23)}
         </Text>
         <Text color={svcColor}> {truncate(svcName, 10)}</Text>
         <Text dimColor> {node.span.kind ?? ''}</Text>
@@ -1127,13 +1141,15 @@ function Dashboard({
                     ? `services ${serviceStats.length}`
                     : viewMode === 'errors'
                       ? `errors ${filteredErrorSummaries.length}/${errorSummaries.length}`
-                      : `logs ${filteredLogs.length}/${logs.length}`}
+                      : viewMode === 'topology'
+                        ? `services ${serviceGraph.services.length} · edges ${serviceGraph.edges.length}`
+                        : `logs ${filteredLogs.length}/${logs.length}`}
             </Text>
           </Box>
         )}
         {showHelp && (
           <Text dimColor>
-            Views: t/l/v/E • Search: / • Filters: e/S/R/H/f/x • Capture: p/r/J • AI: a • Clear: c
+            Views: t/l/v/E/G • Search: / • Filters: e/S/R/H/f/x • Capture: p/r/J • AI: a • Clear: c
           </Text>
         )}
       </Box>
@@ -1146,8 +1162,25 @@ function Dashboard({
         </Text>
       </Box>
 
+      {viewMode === 'topology' && (
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+          <Text bold>Service Topology</Text>
+          <Text dimColor>Press G to toggle · Shows service dependencies from span data</Text>
+          <Box flexDirection="column" marginTop={1}>
+            {topologyLines.map((line, i) => {
+              const hasErr = line.includes(' err');
+              return (
+                <Text key={`topo-${i}`} color={hasErr ? 'red' : undefined}>
+                  {line}
+                </Text>
+              );
+            })}
+          </Box>
+        </Box>
+      )}
+
       {/* eslint-disable-next-line unicorn/no-negated-condition */}
-      {drilldownTraceId != null ? (
+      {viewMode !== 'topology' && (drilldownTraceId != null ? (
         <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>
           {/* Trace header — otel-gui style */}
           <Box marginBottom={0} flexDirection="column">
@@ -1229,7 +1262,8 @@ function Dashboard({
                       const svcColor = getServiceColor(svcName);
                       const kindStr = (s.kind ?? '').padEnd(KIND_COL);
                       const svcStr = truncate(svcName, SERVICE_COL - 2).padEnd(SERVICE_COL);
-                      const namePart = `${indent}${truncate(s.name, nameWidth)}`.padEnd(NAME_COL);
+                      const errorMark = s.status === 'ERROR' ? '✗' : ' ';
+                      const namePart = `${indent}${truncate(s.name, nameWidth - 1)}`.padEnd(NAME_COL - 1);
                       const bar = buildWaterfallBar(
                         s.startTime, s.durationMs,
                         traceStartMs, traceDurMs,
@@ -1238,7 +1272,7 @@ function Dashboard({
                       return (
                         <Box key={`${s.spanId}-${i}`} flexDirection="row">
                           <Text backgroundColor={isSel ? 'blue' : undefined} color={isSel ? 'white' : undefined}>
-                            {isSel ? '▸' : ' '}{namePart}
+                            {isSel ? '▸' : ' '}<Text color={s.status === 'ERROR' ? 'red' : undefined}>{errorMark}</Text>{namePart}
                           </Text>
                           <Text color={svcColor}> {svcStr}</Text>
                           <Text dimColor>{kindStr}</Text>
@@ -1356,6 +1390,45 @@ function Dashboard({
                         <Text key={k} dimColor>
                           {truncate(k, 18)}: {truncate(String(v), 28)}
                         </Text>
+                      ))}
+                    </Box>
+                  )}
+                  {/* Span Events */}
+                  {span.events && span.events.length > 0 && (
+                    <Box flexDirection="column" marginTop={0}>
+                      <Text bold dimColor>Events ({span.events.length})</Text>
+                      {span.events.slice(0, 5).map((ev, i) => (
+                        <Box key={`ev-${i}`} flexDirection="row">
+                          <Text color={ev.name === 'exception' ? 'red' : 'yellow'}>
+                            {'  '}{'\u25C6'} {truncate(ev.name, 20)}
+                          </Text>
+                          <Text dimColor>
+                            {' '}+{formatDurationMs(ev.timeMs - span.startTime)}
+                          </Text>
+                          {ev.attributes && Object.keys(ev.attributes).length > 0 && (
+                            <Text dimColor>
+                              {' '}{Object.entries(ev.attributes).slice(0, 2).map(([k, v]) => `${k}=${String(v)}`).join(' ')}
+                            </Text>
+                          )}
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                  {/* Span Links */}
+                  {span.links && span.links.length > 0 && (
+                    <Box flexDirection="column" marginTop={0}>
+                      <Text bold dimColor>Links ({span.links.length})</Text>
+                      {span.links.slice(0, 5).map((lnk, i) => (
+                        <Box key={`lnk-${i}`} flexDirection="row">
+                          <Text color="cyan">
+                            {'  '}{'\u2192'} trace:{lnk.traceId.slice(0, 8)}{'\u2026'} span:{lnk.spanId.slice(0, 8)}{'\u2026'}
+                          </Text>
+                          {lnk.attributes && Object.keys(lnk.attributes).length > 0 && (
+                            <Text dimColor>
+                              {' '}{Object.entries(lnk.attributes).slice(0, 2).map(([k, v]) => `${k}=${String(v)}`).join(' ')}
+                            </Text>
+                          )}
+                        </Box>
                       ))}
                     </Box>
                   )}
@@ -1984,7 +2057,7 @@ function Dashboard({
           )}
         </Box>
       </Box>
-      )}
+      ))}
 
       {showStats && (
         <Box marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
@@ -2136,7 +2209,7 @@ export function renderTerminal(
 }
 
 // Re-export types and utilities
-export type { TerminalSpanEvent, TerminalSpanStream } from './span-stream';
+export type { TerminalSpanEvent, TerminalSpanStream, SpanEvent, SpanLink } from './span-stream';
 export { StreamingSpanProcessor } from './streaming-processor';
 export { createTerminalSpanStream } from './span-stream';
 export { getTerminalLogStream } from './log-stream';

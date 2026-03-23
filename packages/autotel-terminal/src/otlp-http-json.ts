@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { TerminalSpanEvent } from './span-stream';
+import type { TerminalSpanEvent, SpanEvent, SpanLink } from './span-stream';
 import type { TerminalLogEvent, LogLevel } from './lib/log-model';
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -29,6 +29,16 @@ type OtlpSpan = {
   status?: {
     code?: number | string;
   };
+  events?: {
+    timeUnixNano?: string;
+    name?: string;
+    attributes?: OtlpKeyValue[];
+  }[];
+  links?: {
+    traceId?: string;
+    spanId?: string;
+    attributes?: OtlpKeyValue[];
+  }[];
 };
 
 function anyValueToPrimitive(value: OtlpAnyValue | undefined): unknown {
@@ -132,13 +142,17 @@ function mapKind(kind: number | string | undefined): string {
   }
 }
 
-function* extractSpans(payload: unknown): Generator<OtlpSpan> {
+function* extractSpans(
+  payload: unknown,
+): Generator<{ span: OtlpSpan; resourceAttrs: Record<string, unknown> }> {
   if (!payload || typeof payload !== 'object') return;
   const resourceSpans = (payload as { resourceSpans?: unknown[] })
     .resourceSpans;
   if (!Array.isArray(resourceSpans)) return;
   for (const resourceSpan of resourceSpans) {
     if (!resourceSpan || typeof resourceSpan !== 'object') continue;
+    const resource = (resourceSpan as { resource?: { attributes?: OtlpKeyValue[] } }).resource;
+    const resourceAttrs = attrsToRecord(resource?.attributes);
     const scopeSpans = (resourceSpan as { scopeSpans?: unknown[] }).scopeSpans;
     if (!Array.isArray(scopeSpans)) continue;
     for (const scopeSpan of scopeSpans) {
@@ -147,16 +161,45 @@ function* extractSpans(payload: unknown): Generator<OtlpSpan> {
       if (!Array.isArray(spans)) continue;
       for (const span of spans) {
         if (span && typeof span === 'object') {
-          yield span as OtlpSpan;
+          yield { span: span as OtlpSpan, resourceAttrs };
         }
       }
     }
   }
 }
 
-export function otlpSpanToTerminalEvent(span: OtlpSpan): TerminalSpanEvent {
+export function otlpSpanToTerminalEvent(
+  span: OtlpSpan,
+  resourceAttrs: Record<string, unknown> = {},
+): TerminalSpanEvent {
   const startTime = toMs(span.startTimeUnixNano);
   const endTime = toMs(span.endTimeUnixNano);
+  const spanAttrs = attrsToRecord(span.attributes);
+  // Merge resource attributes (e.g. service.name) under span attributes,
+  // with span-level attributes taking precedence
+  const mergedAttrs: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(resourceAttrs)) {
+    mergedAttrs[k] = v;
+  }
+  for (const [k, v] of Object.entries(spanAttrs)) {
+    mergedAttrs[k] = v;
+  }
+  const parsedEvents: SpanEvent[] | undefined = span.events?.length
+    ? span.events.map((e) => ({
+        name: e.name || '',
+        timeMs: toMs(e.timeUnixNano),
+        attributes: attrsToRecord(e.attributes),
+      }))
+    : undefined;
+
+  const parsedLinks: SpanLink[] | undefined = span.links?.length
+    ? span.links.map((l) => ({
+        traceId: normalizeHexId(l.traceId, 32),
+        spanId: normalizeHexId(l.spanId, 16),
+        attributes: attrsToRecord(l.attributes),
+      }))
+    : undefined;
+
   return {
     name: span.name || 'unnamed',
     spanId: normalizeHexId(span.spanId, 16),
@@ -169,7 +212,9 @@ export function otlpSpanToTerminalEvent(span: OtlpSpan): TerminalSpanEvent {
     durationMs: Math.max(0, endTime - startTime),
     status: mapStatus(span.status?.code),
     kind: mapKind(span.kind),
-    attributes: attrsToRecord(span.attributes),
+    attributes: mergedAttrs,
+    ...(parsedEvents ? { events: parsedEvents } : {}),
+    ...(parsedLinks ? { links: parsedLinks } : {}),
   };
 }
 
@@ -201,8 +246,8 @@ export function sendJson(
 
 export function parseOtlpEvents(payload: unknown): TerminalSpanEvent[] {
   const events: TerminalSpanEvent[] = [];
-  for (const span of extractSpans(payload)) {
-    events.push(otlpSpanToTerminalEvent(span));
+  for (const { span, resourceAttrs } of extractSpans(payload)) {
+    events.push(otlpSpanToTerminalEvent(span, resourceAttrs));
   }
   return events;
 }
