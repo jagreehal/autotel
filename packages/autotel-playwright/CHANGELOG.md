@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.6
+
+### Patch Changes
+
+- Updated dependencies [c6010e1]
+  - autotel@2.25.1
+
 ## 0.4.5
 
 ### Patch Changes

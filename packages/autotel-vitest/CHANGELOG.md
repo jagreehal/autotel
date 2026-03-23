@@ -1,5 +1,12 @@
 # autotel-vitest
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [c6010e1]
+  - autotel@2.25.1
+
 ## 0.4.0
 
 ### Minor Changes

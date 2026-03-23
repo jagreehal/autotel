@@ -1,5 +1,12 @@
 # autotel-sentry
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [c6010e1]
+  - autotel@2.25.1
+
 ## 0.5.0
 
 ### Minor Changes
