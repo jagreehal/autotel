@@ -114,7 +114,7 @@
     }
   },
   "devDependencies": {
-    "@amplitude/analytics-node": "^1.5.48",
+    "@amplitude/analytics-node": "^1.5.49",
     "@arethetypeswrong/cli": "^0.18.2",
     "@cloudflare/workers-types": "^4.20260317.1",
     "@prisma/client": "^7.5.0",
@@ -128,7 +128,7 @@
     "eslint-plugin-unicorn": "^63.0.0",
     "mixpanel": "^0.20.0",
     "mongoose": "^9.3.1",
-    "posthog-node": "^5.28.4",
+    "posthog-node": "^5.28.5",
     "prettier": "^3.8.1",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",

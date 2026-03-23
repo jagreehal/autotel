@@ -8,7 +8,7 @@ export default defineConfig({
     'google-cloud': 'src/google-cloud.ts',
     grafana: 'src/grafana.ts',
   },
-  format: ['esm'],
+  format: ['esm', 'cjs'],
   dts: true,
   sourcemap: true,
   clean: true,
