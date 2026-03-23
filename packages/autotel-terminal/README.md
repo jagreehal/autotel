@@ -31,6 +31,43 @@ pnpm add autotel-terminal autotel
 yarn add autotel-terminal autotel
 ```
 
+## Standalone CLI (second terminal)
+
+You can run the dashboard as a standalone OTLP receiver that accepts traces, logs, and metrics:
+
+```bash
+npx autotel-terminal
+```
+
+Then run your app in another terminal with OTLP JSON pointed at the dashboard:
+
+```bash
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4319 \
+node app.js
+```
+
+Port 4319 is used by default to avoid clashing with the standard OTLP port (4318).
+
+### CLI Options
+
+```
+-p, --port <port>    Port to listen on (default: 4319, env: AUTOTEL_TERMINAL_PORT)
+-H, --host <host>    Host to bind to (default: 127.0.0.1, env: AUTOTEL_TERMINAL_HOST)
+-t, --title <title>  Dashboard title (env: AUTOTEL_TERMINAL_TITLE)
+-h, --help           Show help message
+-v, --version        Show version number
+```
+
+### OTLP Endpoints
+
+| Endpoint | Signal | Description |
+|----------|--------|-------------|
+| `POST /v1/traces` | Traces | Receives OTLP JSON spans, streamed into the TUI |
+| `POST /v1/logs` | Logs | Receives OTLP JSON logs, shown in the Logs view (`l`) |
+| `POST /v1/metrics` | Metrics | Accepts OTLP JSON metrics (acknowledged and counted) |
+| `GET /healthz` | — | Health check |
+
 ## Quick Start
 
 ### Recommended Usage

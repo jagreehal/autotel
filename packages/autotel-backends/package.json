@@ -9,23 +9,28 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     },
     "./honeycomb": {
       "types": "./dist/honeycomb.d.ts",
-      "import": "./dist/honeycomb.js"
+      "import": "./dist/honeycomb.js",
+      "require": "./dist/honeycomb.cjs"
     },
     "./datadog": {
       "types": "./dist/datadog.d.ts",
-      "import": "./dist/datadog.js"
+      "import": "./dist/datadog.js",
+      "require": "./dist/datadog.cjs"
     },
     "./google-cloud": {
       "types": "./dist/google-cloud.d.ts",
-      "import": "./dist/google-cloud.js"
+      "import": "./dist/google-cloud.js",
+      "require": "./dist/google-cloud.cjs"
     },
     "./grafana": {
       "types": "./dist/grafana.d.ts",
-      "import": "./dist/grafana.js"
+      "import": "./dist/grafana.js",
+      "require": "./dist/grafana.cjs"
     }
   },
   "files": [

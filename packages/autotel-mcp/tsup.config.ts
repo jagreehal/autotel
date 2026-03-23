@@ -9,7 +9,7 @@ export default defineConfig({
     metrics: 'src/metrics.ts',
     'semantic-conventions': 'src/semantic-conventions.ts',
   },
-  format: ['esm'],
+  format: ['esm', 'cjs'],
   dts: true,
   sourcemap: true,
   clean: true,

@@ -10,7 +10,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.71.0",
     "autotel": "workspace:*",
     "dotenv": "^17.3.1",
-    "fastify": "^5.8.2"
+    "fastify": "^5.8.4"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

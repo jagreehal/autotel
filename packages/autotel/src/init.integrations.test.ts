@@ -20,18 +20,24 @@ const mockedModules = [
   '@opentelemetry/sdk-metrics',
 ];
 
-// Mock instrumentation classes with exact names from OpenTelemetry
-class MongoDBInstrumentation {
+// Mock instrumentation classes with exact names from OpenTelemetry.
+// NodeSDK.start() calls lifecycle hooks on each instrumentation instance.
+class MockInstrumentationBase {
   constructor(public config?: Record<string, unknown>) {}
+
+  setConfig(_config: Record<string, unknown>) {}
+  setTracerProvider(_provider: unknown) {}
+  setMeterProvider(_provider: unknown) {}
+  setLoggerProvider(_provider: unknown) {}
+  enable() {}
+  disable() {}
 }
 
-class MongooseInstrumentation {
-  constructor(public config?: Record<string, unknown>) {}
-}
+class MongoDBInstrumentation extends MockInstrumentationBase {}
 
-class HttpInstrumentation {
-  constructor(public config?: Record<string, unknown>) {}
-}
+class MongooseInstrumentation extends MockInstrumentationBase {}
+
+class HttpInstrumentation extends MockInstrumentationBase {}
 
 async function loadInitWithMocks() {
   const sdkInstances: SdkRecord[] = [];
