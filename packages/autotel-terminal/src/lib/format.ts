@@ -54,8 +54,31 @@ export function buildWaterfallBar(
   const clampedLen = Math.min(barLen, width - clampedStart);
   const trailing = Math.max(0, width - clampedStart - clampedLen);
   return (
-    ' '.repeat(clampedStart) +
-    '█'.repeat(clampedLen) +
-    ' '.repeat(trailing)
+    ' '.repeat(clampedStart) + '█'.repeat(clampedLen) + ' '.repeat(trailing)
   );
+}
+
+/**
+ * Build a fixed-width time ruler string.
+ * Format: "0ms          500ms          1000ms"
+ */
+export function buildTimeRuler(totalMs: number, width: number): string {
+  if (width <= 0) return '';
+  if (width < 10) return ' '.repeat(width);
+  const left = '0ms';
+  const right = formatDurationMs(totalMs);
+  const mid = formatDurationMs(totalMs / 2);
+  const midPos = Math.floor(width / 2) - Math.floor(mid.length / 2);
+  const rightPos = width - right.length;
+
+  const chars = Array.from<string>({ length: width }).fill(' ');
+  // place left
+  for (let i = 0; i < left.length && i < width; i++) chars[i] = left[i];
+  // place mid (if room)
+  if (midPos > left.length + 1 && midPos + mid.length < rightPos - 1) {
+    for (let i = 0; i < mid.length; i++) chars[midPos + i] = mid[i];
+  }
+  // place right
+  for (let i = 0; i < right.length; i++) chars[rightPos + i] = right[i];
+  return chars.join('');
 }
