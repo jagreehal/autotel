@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatDurationMs, formatRelative, truncate, buildWaterfallBar } from './format';
+import {
+  formatDurationMs,
+  formatRelative,
+  truncate,
+  buildWaterfallBar,
+  buildTimeRuler,
+} from './format';
 
 describe('formatDurationMs', () => {
   it('formats ms when under 1000', () => {
@@ -84,5 +90,29 @@ describe('buildWaterfallBar', () => {
   it('clamps spans that start before the trace window', () => {
     expect(() => buildWaterfallBar(90, 20, 100, 100, 20)).not.toThrow();
     expect(buildWaterfallBar(90, 20, 100, 100, 20)).toHaveLength(20);
+  });
+});
+
+describe('buildTimeRuler', () => {
+  it('creates a ruler with 0ms and total at edges', () => {
+    const ruler = buildTimeRuler(1000, 40);
+    expect(ruler).toContain('0ms');
+    expect(ruler).toContain('1.00s');
+    expect(ruler.length).toBe(40);
+  });
+
+  it('uses seconds for large durations', () => {
+    const ruler = buildTimeRuler(2500, 40);
+    expect(ruler).toContain('2.50s');
+  });
+
+  it('returns spaces for tiny width', () => {
+    const ruler = buildTimeRuler(100, 5);
+    expect(ruler).toBe('     ');
+  });
+
+  it('returns an empty string for non-positive widths', () => {
+    expect(buildTimeRuler(100, 0)).toBe('');
+    expect(buildTimeRuler(100, -1)).toBe('');
   });
 });

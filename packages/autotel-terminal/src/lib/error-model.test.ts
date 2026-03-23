@@ -10,6 +10,7 @@ const trace = (overrides: Partial<TraceSummary> = {}): TraceSummary => ({
   spanCount: 1,
   lastEndTime: 1000,
   spans: [],
+  services: [],
   ...overrides,
 });
 
