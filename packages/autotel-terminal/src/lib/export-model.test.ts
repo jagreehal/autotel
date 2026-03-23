@@ -12,6 +12,7 @@ describe('exportTraceToJson', () => {
       hasError: false,
       spanCount: 1,
       lastEndTime: 123,
+      services: ['api'],
       spans: [
         {
           name: 'root',

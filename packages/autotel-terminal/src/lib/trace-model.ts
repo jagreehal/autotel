@@ -5,6 +5,12 @@
 
 import type { TerminalSpanEvent } from '../span-stream';
 
+/** Extract service name from span attributes */
+export function spanServiceName(span: TerminalSpanEvent): string {
+  const svc = span.attributes?.['service.name'];
+  return typeof svc === 'string' ? svc : 'unknown';
+}
+
 /** Trace summary for the "Recent traces" list */
 export interface TraceSummary {
   traceId: string;
@@ -14,6 +20,7 @@ export interface TraceSummary {
   spanCount: number;
   lastEndTime: number;
   spans: TerminalSpanEvent[];
+  services: string[];
 }
 
 /** Tree node for indented span tree (parent/child) */
@@ -82,6 +89,7 @@ export function buildTraceSummaries(
     const durationMs = root ? root.durationMs : 0;
     const hasError = traceSpans.some((s) => s.status === 'ERROR');
     const lastEndTime = Math.max(...traceSpans.map((s) => s.endTime));
+    const services = [...new Set(traceSpans.map((s) => spanServiceName(s)))];
     summaries.push({
       traceId,
       rootName: root?.name ?? 'unknown',
@@ -90,6 +98,7 @@ export function buildTraceSummaries(
       spanCount: traceSpans.length,
       lastEndTime,
       spans: traceSpans,
+      services,
     });
   }
   return summaries;

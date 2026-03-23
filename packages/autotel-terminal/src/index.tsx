@@ -52,8 +52,10 @@ import {
   computeStats,
   computePerSpanNameStats,
   sortSpansForWaterfall,
+  spanServiceName,
 } from './lib/trace-model';
-import { formatDurationMs, formatRelative, truncate, buildWaterfallBar } from './lib/format';
+import { formatDurationMs, formatRelative, truncate, buildWaterfallBar, buildTimeRuler } from './lib/format';
+import { getServiceColor } from './lib/service-colors';
 import type { SpanTreeNode } from './lib/trace-model';
 import type { TerminalLogEvent, LogStats } from './lib/log-model';
 import {
@@ -1024,6 +1026,8 @@ function Dashboard({
         ? ''
         : '  '.repeat(node.depth) +
           (node.children.length > 0 ? '├── ' : '└── ');
+    const svcName = spanServiceName(node.span);
+    const svcColor = getServiceColor(svcName);
     const statusColor =
       node.span.status === 'ERROR'
         ? 'red'
@@ -1035,11 +1039,13 @@ function Dashboard({
         key={`${node.span.spanId}-${node.span.startTime}`}
         flexDirection="row"
       >
-        <Text color={isSel ? 'cyan' : undefined}>{isSel ? '› ' : '  '}</Text>
+        <Text backgroundColor={isSel ? 'blue' : undefined} color={isSel ? 'white' : undefined}>{isSel ? '▸ ' : '  '}</Text>
         <Text dimColor>{prefix}</Text>
         <Text color={colors ? statusColor : undefined}>
           {truncate(node.span.name, 24)}
         </Text>
+        <Text color={svcColor}> {truncate(svcName, 10)}</Text>
+        <Text dimColor> {node.span.kind ?? ''}</Text>
         <Text dimColor> {formatDurationMs(node.span.durationMs)}</Text>
       </Box>
     );
@@ -1140,11 +1146,260 @@ function Dashboard({
         </Text>
       </Box>
 
+      {/* eslint-disable-next-line unicorn/no-negated-condition */}
+      {drilldownTraceId != null ? (
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>
+          {/* Trace header — otel-gui style */}
+          <Box marginBottom={0} flexDirection="column">
+            <Text bold>Trace {drilldownTraceId.slice(0, 16)}…</Text>
+            <Box flexDirection="row" gap={1}>
+              {drilldownSummary?.services?.map((svc) => (
+                <Text key={svc} color={getServiceColor(svc)}>{svc}</Text>
+              ))}
+              <Text dimColor>·</Text>
+              <Text>{drilldownSummary?.rootName ?? 'unknown'}</Text>
+              <Text dimColor>·</Text>
+              <Text dimColor>{drilldownSpans.length} spans</Text>
+              <Text dimColor>·</Text>
+              <Text dimColor>{drilldownSummary?.services?.length ?? 0} services</Text>
+              {drilldownSummary?.hasError && <Text color="red">{' '}ERROR</Text>}
+            </Box>
+            <Box flexDirection="row" gap={2}>
+              <Text dimColor>Duration: </Text>
+              <Text color="green">{formatDurationMs(drilldownSummary?.durationMs ?? 0)}</Text>
+            </Box>
+          </Box>
+          {/* Tabs — blue active */}
+          <Box marginBottom={0} flexDirection="row" gap={2}>
+            <Text
+              color={drilldownTab === 'timeline' ? 'blue' : undefined}
+              dimColor={drilldownTab !== 'timeline'}
+              bold={drilldownTab === 'timeline'}
+            >
+              Timeline
+            </Text>
+            <Text
+              color={drilldownTab === 'spans' ? 'blue' : undefined}
+              dimColor={drilldownTab !== 'spans'}
+              bold={drilldownTab === 'spans'}
+            >
+              Spans ({drilldownSpans.length})
+            </Text>
+            <Text
+              color={drilldownTab === 'logs' ? 'blue' : undefined}
+              dimColor={drilldownTab !== 'logs'}
+              bold={drilldownTab === 'logs'}
+            >
+              Logs ({drilldownLogs.length})
+            </Text>
+          </Box>
+
+          {drilldownTab === 'timeline' &&
+            (() => {
+              const NAME_COL = 28;
+              const SERVICE_COL = 12;
+              const KIND_COL = 10;
+              let traceStartMs = Infinity;
+              for (const s of drilldownSummary?.spans ?? []) {
+                if (s.startTime < traceStartMs) traceStartMs = s.startTime;
+              }
+              if (traceStartMs === Infinity) traceStartMs = 0;
+              const traceDurMs = drilldownSummary?.durationMs ?? 1;
+              const WATERFALL_WIDTH = 44;
+              const items = drilldownTimeline.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT);
+
+              return (
+                <>
+                  {/* Time ruler */}
+                  <Box flexDirection="row">
+                    <Text dimColor>{''.padEnd(NAME_COL + SERVICE_COL + KIND_COL + 2)}</Text>
+                    <Text dimColor>{buildTimeRuler(traceDurMs, WATERFALL_WIDTH)}</Text>
+                  </Box>
+                  {items.map((item, i) => {
+                    const isSel = i + drilldownScrollOffset === drilldownSelectedIndex;
+                    if (item.type === 'span' && item.span) {
+                      const s = item.span;
+                      const node = drilldownTree.find(
+                        (n) => n.span.spanId === s.spanId,
+                      );
+                      const depth = node?.depth ?? 0;
+                      const indent = '  '.repeat(Math.min(depth, 4));
+                      const nameWidth = NAME_COL - Math.min(depth, 4) * 2 - 1;
+                      const svcName = spanServiceName(s);
+                      const svcColor = getServiceColor(svcName);
+                      const kindStr = (s.kind ?? '').padEnd(KIND_COL);
+                      const svcStr = truncate(svcName, SERVICE_COL - 2).padEnd(SERVICE_COL);
+                      const namePart = `${indent}${truncate(s.name, nameWidth)}`.padEnd(NAME_COL);
+                      const bar = buildWaterfallBar(
+                        s.startTime, s.durationMs,
+                        traceStartMs, traceDurMs,
+                        WATERFALL_WIDTH,
+                      );
+                      return (
+                        <Box key={`${s.spanId}-${i}`} flexDirection="row">
+                          <Text backgroundColor={isSel ? 'blue' : undefined} color={isSel ? 'white' : undefined}>
+                            {isSel ? '▸' : ' '}{namePart}
+                          </Text>
+                          <Text color={svcColor}> {svcStr}</Text>
+                          <Text dimColor>{kindStr}</Text>
+                          <Text color={s.status === 'ERROR' ? 'red' : svcColor}>{bar}</Text>
+                          <Text color={s.status === 'ERROR' ? 'red' : svcColor}>
+                            {' '}{formatDurationMs(s.durationMs)}
+                          </Text>
+                        </Box>
+                      );
+                    } else if (item.type === 'log' && item.log) {
+                      const l = item.log;
+                      const levelColor =
+                        l.level === 'error' ? 'red' : l.level === 'warn' ? 'yellow' : 'blue';
+                      const relTime = drilldownSummary
+                        ? `+${formatDurationMs(l.time - traceStartMs)}`
+                        : '';
+                      const logName = `  ${l.level.toUpperCase()} ${truncate(l.message, NAME_COL - 8)}`.padEnd(NAME_COL);
+                      const logOffset = drilldownSummary
+                        ? Math.floor(((l.time - traceStartMs) / traceDurMs) * WATERFALL_WIDTH)
+                        : 0;
+                      const clampedOffset = Math.max(0, Math.min(logOffset, WATERFALL_WIDTH - 1));
+                      const logBar = ' '.repeat(clampedOffset) + '·' + ' '.repeat(WATERFALL_WIDTH - clampedOffset - 1);
+                      return (
+                        <Box key={`log-${i}`} flexDirection="row">
+                          <Text backgroundColor={isSel ? 'blue' : undefined} color={isSel ? 'white' : undefined}>
+                            {isSel ? '▸' : ' '}<Text color={levelColor}>{logName}</Text>
+                          </Text>
+                          <Text dimColor>{' '.padEnd(SERVICE_COL + KIND_COL + 1)}</Text>
+                          <Text dimColor>{logBar}</Text>
+                          <Text dimColor> {relTime}</Text>
+                        </Box>
+                      );
+                    }
+                    return null;
+                  })}
+                  {Array.from({ length: Math.max(0, LIST_HEIGHT - items.length) }).map((_, i) => (
+                    <Box key={`pad-${i}`}><Text> </Text></Box>
+                  ))}
+                </>
+              );
+            })()}
+
+          {drilldownTab === 'spans' &&
+            drilldownTree.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT).map((node, i) => renderTreeRow(node, i + drilldownScrollOffset))}
+          {drilldownTab === 'spans' &&
+            Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(drilldownTree.length, LIST_HEIGHT)) }).map((_, i) => (
+              <Box key={`pad-${i}`}><Text> </Text></Box>
+            ))}
+
+          {drilldownTab === 'logs' &&
+            drilldownLogs.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT).map((log, i) => {
+              const isSel = i + drilldownScrollOffset === drilldownSelectedIndex;
+              const levelColor =
+                log.level === 'error'
+                  ? 'red'
+                  : log.level === 'warn'
+                    ? 'yellow'
+                    : log.level === 'info'
+                      ? 'green'
+                      : undefined;
+              return (
+                <Box key={`log-${i}`}>
+                  <Text
+                    backgroundColor={isSel ? 'blue' : undefined}
+                    color={isSel ? 'white' : undefined}
+                  >
+                    {isSel ? '▸' : ' '}
+                    <Text color={levelColor}>
+                      {' '}
+                      {log.level.toUpperCase()}
+                    </Text>{' '}
+                    <Text dimColor>[{truncate(log.message, 50)}]</Text>
+                  </Text>
+                </Box>
+              );
+            })}
+          {drilldownTab === 'logs' &&
+            Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(drilldownLogs.length, LIST_HEIGHT)) }).map((_, i) => (
+              <Box key={`pad-${i}`}><Text> </Text></Box>
+            ))}
+
+          {/* Inline detail for selected span */}
+          {drilldownSelectedItem?.type === 'span' && drilldownSelectedItem.span && (
+            (() => {
+              const span = drilldownSelectedItem.span;
+              const { key: keyAttrs, rest: restAttrs } = keyAttrsAndRest(span.attributes);
+              return (
+                <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
+                  <Box flexDirection="row" gap={2}>
+                    <Text bold>{span.name}</Text>
+                    <Text color={getServiceColor(spanServiceName(span))}>{spanServiceName(span)}</Text>
+                    <Text dimColor>{span.kind ?? ''}</Text>
+                    <Text color={span.status === 'ERROR' ? 'red' : 'green'}>{span.status}</Text>
+                    <Text>{formatDurationMs(span.durationMs)}</Text>
+                  </Box>
+                  <Box flexDirection="row" gap={2}>
+                    <Text dimColor>Trace: {span.traceId}</Text>
+                    <Text dimColor>Span: {span.spanId}</Text>
+                    {span.parentSpanId && <Text dimColor>Parent: {span.parentSpanId}</Text>}
+                  </Box>
+                  {keyAttrs.length > 0 && (
+                    <Box marginTop={1} flexDirection="column">
+                      <Text bold>Key attributes</Text>
+                      {keyAttrs.slice(0, 6).map(([k, v]) => (
+                        <Text key={k} dimColor>
+                          {truncate(k, 18)}: {truncate(String(v), 28)}
+                        </Text>
+                      ))}
+                    </Box>
+                  )}
+                  {restAttrs.length > 0 && (
+                    <Box marginTop={1} flexDirection="column">
+                      <Text bold>Attributes</Text>
+                      {restAttrs.slice(0, 8).map(([k, v]) => (
+                        <Text key={k} dimColor>
+                          {truncate(k, 18)}: {truncate(String(v), 28)}
+                        </Text>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              );
+            })()
+          )}
+          {/* Inline detail for selected log */}
+          {drilldownSelectedItem?.type === 'log' && drilldownSelectedItem.log && (
+            (() => {
+              const log = drilldownSelectedItem.log;
+              return (
+                <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
+                  <Box flexDirection="row" gap={2}>
+                    <Text bold>{log.level.toUpperCase()}</Text>
+                    <Text>{log.message}</Text>
+                  </Box>
+                  <Text>
+                    <Text dimColor>Time: </Text>
+                    <Text>{new Date(log.time).toISOString()}</Text>
+                  </Text>
+                  {log.traceId && <Text dimColor>Trace: {log.traceId}</Text>}
+                  {log.spanId && <Text dimColor>Span: {log.spanId}</Text>}
+                  {log.attributes && Object.keys(log.attributes).length > 0 && (
+                    <Box marginTop={1} flexDirection="column">
+                      <Text bold>Attributes</Text>
+                      {Object.entries(log.attributes).slice(0, 10).map(([k, v]) => (
+                        <Text key={k} dimColor>
+                          {truncate(k, 18)}: {truncate(String(v), 40)}
+                        </Text>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              );
+            })()
+          )}
+        </Box>
+      ) : (
       <Box flexDirection="row" gap={2}>
         <Box
           flexDirection="column"
           width="55%"
-          borderStyle="single"
+          borderStyle="round"
           borderColor="gray"
           paddingX={1}
           paddingY={0}
@@ -1175,171 +1430,6 @@ function Dashboard({
             )}
           </Box>
 
-          {drilldownTraceId != null && (
-            <>
-              {/* Trace header */}
-              <Box marginBottom={0} flexDirection="row" gap={2}>
-                <Text color="yellow">
-                  {drilldownSummary?.rootName ?? 'unknown'}
-                </Text>
-                <Text dimColor>{drilldownTraceId.slice(0, 16)}…</Text>
-                <Text color="green">
-                  {drilldownSummary
-                    ? formatDurationMs(drilldownSummary.durationMs)
-                    : '?'}
-                </Text>
-                <Text dimColor>
-                  {drilldownSpans.length} spans • {drilldownLogs.length} logs
-                </Text>
-              </Box>
-              {/* Tabs */}
-              <Box marginBottom={0} flexDirection="row" gap={2}>
-                <Text
-                  color={drilldownTab === 'timeline' ? 'yellow' : undefined}
-                  dimColor={drilldownTab !== 'timeline'}
-                  underline={drilldownTab === 'timeline'}
-                >
-                  Timeline
-                </Text>
-                <Text
-                  color={drilldownTab === 'spans' ? 'yellow' : undefined}
-                  dimColor={drilldownTab !== 'spans'}
-                  underline={drilldownTab === 'spans'}
-                >
-                  Spans ({drilldownSpans.length})
-                </Text>
-                <Text
-                  color={drilldownTab === 'logs' ? 'yellow' : undefined}
-                  dimColor={drilldownTab !== 'logs'}
-                  underline={drilldownTab === 'logs'}
-                >
-                  Logs ({drilldownLogs.length})
-                </Text>
-              </Box>
-            </>
-          )}
-
-          {drilldownTraceId != null &&
-            drilldownTab === 'timeline' &&
-            (() => {
-              let traceStartMs = Infinity;
-              for (const s of drilldownSummary?.spans ?? []) {
-                if (s.startTime < traceStartMs) traceStartMs = s.startTime;
-              }
-              if (traceStartMs === Infinity) traceStartMs = 0;
-              const traceDurMs = drilldownSummary?.durationMs ?? 1;
-              const WATERFALL_WIDTH = 24;
-              const items = drilldownTimeline.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT);
-
-              return (
-                <>
-                  {items.map((item, i) => {
-                    const isSel = i + drilldownScrollOffset === drilldownSelectedIndex;
-                    if (item.type === 'span' && item.span) {
-                      const s = item.span;
-                      const node = drilldownTree.find(
-                        (n) => n.span.spanId === s.spanId,
-                      );
-                      const depth = node?.depth ?? 0;
-                      const indent = '  '.repeat(Math.min(depth, 4));
-                      const nameWidth = 24 - Math.min(depth, 4) * 2;
-                      const bar = buildWaterfallBar(
-                        s.startTime, s.durationMs,
-                        traceStartMs, traceDurMs,
-                        WATERFALL_WIDTH,
-                      );
-                      return (
-                        <Box key={`${s.spanId}-${i}`} flexDirection="row">
-                          <Text backgroundColor={isSel ? 'gray' : undefined} color={isSel ? 'white' : undefined}>
-                            {isSel ? '▸' : ' '}{indent}
-                            {truncate(s.name, nameWidth)}
-                          </Text>
-                          <Text>{'  '}</Text>
-                          <Text color={s.status === 'ERROR' ? 'red' : 'green'}>{bar}</Text>
-                          <Text dimColor>
-                            {'  '}{formatDurationMs(s.durationMs)}
-                            {s.kind ? ` ${s.kind}` : ''}
-                          </Text>
-                        </Box>
-                      );
-                    } else if (item.type === 'log' && item.log) {
-                      const l = item.log;
-                      const levelColor =
-                        l.level === 'error' ? 'red' : l.level === 'warn' ? 'yellow' : 'blue';
-                      const relTime = drilldownSummary
-                        ? `+${formatDurationMs(l.time - traceStartMs)}`
-                        : '';
-                      const logOffset = drilldownSummary
-                        ? Math.floor(((l.time - traceStartMs) / traceDurMs) * WATERFALL_WIDTH)
-                        : 0;
-                      const clampedOffset = Math.max(0, Math.min(logOffset, WATERFALL_WIDTH - 1));
-                      const logBar = ' '.repeat(clampedOffset) + '·' + ' '.repeat(WATERFALL_WIDTH - clampedOffset - 1);
-                      return (
-                        <Box key={`log-${i}`} flexDirection="row">
-                          <Text backgroundColor={isSel ? 'gray' : undefined} color={isSel ? 'white' : undefined}>
-                            {isSel ? '▸' : ' '}{'  '}
-                            <Text color={levelColor}>{l.level.toUpperCase()}</Text>
-                            {' '}{truncate(l.message, 18)}
-                          </Text>
-                          <Text>{'  '}</Text>
-                          <Text dimColor>{logBar}</Text>
-                          <Text dimColor>{'  '}{relTime}</Text>
-                        </Box>
-                      );
-                    }
-                    return null;
-                  })}
-                  {Array.from({ length: Math.max(0, LIST_HEIGHT - items.length) }).map((_, i) => (
-                    <Box key={`pad-${i}`}><Text> </Text></Box>
-                  ))}
-                </>
-              );
-            })()}
-
-          {drilldownTraceId != null &&
-            drilldownTab === 'spans' &&
-            drilldownTree.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT).map((node, i) => renderTreeRow(node, i + drilldownScrollOffset))}
-          {drilldownTraceId != null &&
-            drilldownTab === 'spans' &&
-            Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(drilldownTree.length, LIST_HEIGHT)) }).map((_, i) => (
-              <Box key={`pad-${i}`}><Text> </Text></Box>
-            ))}
-
-          {drilldownTraceId != null &&
-            drilldownTab === 'logs' &&
-            drilldownLogs.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT).map((log, i) => {
-              const isSel = i + drilldownScrollOffset === drilldownSelectedIndex;
-              const levelColor =
-                log.level === 'error'
-                  ? 'red'
-                  : log.level === 'warn'
-                    ? 'yellow'
-                    : log.level === 'info'
-                      ? 'green'
-                      : undefined;
-              return (
-                <Box key={`log-${i}`}>
-                  <Text
-                    backgroundColor={isSel ? 'gray' : undefined}
-                    color={isSel ? 'white' : undefined}
-                  >
-                    {isSel ? '▸' : ' '}
-                    <Text color={levelColor}>
-                      {' '}
-                      {log.level.toUpperCase()}
-                    </Text>{' '}
-                    <Text dimColor>[{truncate(log.message, 50)}]</Text>
-                  </Text>
-                </Box>
-              );
-            })}
-          {drilldownTraceId != null &&
-            drilldownTab === 'logs' &&
-            Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(drilldownLogs.length, LIST_HEIGHT)) }).map((_, i) => (
-              <Box key={`pad-${i}`}><Text> </Text></Box>
-            ))}
-
-          {drilldownTraceId == null && (
             <>
               {viewMode === 'trace' ? (
                 filteredSummaries.length === 0 ? (
@@ -1378,6 +1468,7 @@ function Dashboard({
                           <Text dimColor>
                             {'  '}{formatRelative(t.lastEndTime)}
                           </Text>
+                          <Text dimColor>{'  '}{t.traceId.slice(0, 12)}…</Text>
                           {t.hasError && <Text color="red"> ●</Text>}
                         </Box>
                       );
@@ -1407,6 +1498,8 @@ function Dashboard({
                   <>
                     {filteredSpans.slice(0, 20).map((s, i) => {
                       const isSel = i === selected;
+                      const svcName = spanServiceName(s);
+                      const svcColor = getServiceColor(svcName);
                       const statusColor =
                         s.status === 'ERROR'
                           ? 'red'
@@ -1424,6 +1517,7 @@ function Dashboard({
                           <Text color={colors ? statusColor : undefined}>
                             {truncate(s.name, 26)}
                           </Text>
+                          <Text color={svcColor}> {truncate(svcName, 10)}</Text>
                           <Text dimColor> {formatDurationMs(s.durationMs)}</Text>
                           <Text dimColor> {formatRelative(s.endTime)}</Text>
                         </Box>
@@ -1557,13 +1651,12 @@ function Dashboard({
                 </>
               )}
             </>
-          )}
         </Box>
 
         <Box
           flexDirection="column"
           width="45%"
-          borderStyle="single"
+          borderStyle="round"
           borderColor="gray"
           paddingX={1}
           paddingY={0}
@@ -1639,107 +1732,7 @@ function Dashboard({
                 <Text bold>Details</Text>
               </Box>
 
-              {drilldownTraceId != null &&
-              drilldownSelectedItem?.type === 'span' &&
-              drilldownSelectedItem.span ? (
-                (() => {
-                  const span = drilldownSelectedItem.span;
-                  const { key: keyAttrs, rest: restAttrs } = keyAttrsAndRest(
-                    span.attributes,
-                  );
-                  return (
-                    <>
-                      <Text>
-                        <Text dimColor>Name: </Text>
-                        <Text>{span.name}</Text>
-                      </Text>
-                      <Text>
-                        <Text dimColor>Status: </Text>
-                        <Text color={span.status === 'ERROR' ? 'red' : 'green'}>
-                          {span.status}
-                        </Text>
-                      </Text>
-                      <Text>
-                        <Text dimColor>Duration: </Text>
-                        <Text>{formatDurationMs(span.durationMs)}</Text>
-                      </Text>
-                      <Text dimColor>Trace: {span.traceId}</Text>
-                      <Text dimColor>Span: {span.spanId}</Text>
-                      {span.parentSpanId && (
-                        <Text dimColor>Parent: {span.parentSpanId}</Text>
-                      )}
-                      {span.kind && <Text dimColor>Kind: {span.kind}</Text>}
-                      {keyAttrs.length > 0 && (
-                        <Box marginTop={1} flexDirection="column">
-                          <Text bold>Key attributes</Text>
-                          {keyAttrs.slice(0, 6).map(([k, v]) => (
-                            <Text key={k} dimColor>
-                              {truncate(k, 18)}: {truncate(String(v), 28)}
-                            </Text>
-                          ))}
-                        </Box>
-                      )}
-                      {restAttrs.length > 0 && (
-                        <Box marginTop={1} flexDirection="column">
-                          <Text bold>Attributes</Text>
-                          {restAttrs.slice(0, 8).map(([k, v]) => (
-                            <Text key={k} dimColor>
-                              {truncate(k, 18)}: {truncate(String(v), 28)}
-                            </Text>
-                          ))}
-                        </Box>
-                      )}
-                      {keyAttrs.length === 0 && restAttrs.length === 0 && (
-                        <Text dimColor>(no attributes)</Text>
-                      )}
-                    </>
-                  );
-                })()
-              ) : drilldownTraceId != null &&
-                drilldownSelectedItem?.type === 'log' &&
-                drilldownSelectedItem.log ? (
-                (() => {
-                  const log = drilldownSelectedItem.log;
-                  return (
-                    <>
-                      <Text>
-                        <Text dimColor>Level: </Text>
-                        <Text>{log.level.toUpperCase()}</Text>
-                      </Text>
-                      <Text>
-                        <Text dimColor>Time: </Text>
-                        <Text>{new Date(log.time).toISOString()}</Text>
-                      </Text>
-                      <Text>
-                        <Text dimColor>Message: </Text>
-                        <Text>{log.message}</Text>
-                      </Text>
-                      {log.traceId && (
-                        <Text dimColor>Trace: {log.traceId}</Text>
-                      )}
-                      {log.spanId && <Text dimColor>Span: {log.spanId}</Text>}
-                      {log.attributes &&
-                        Object.keys(log.attributes).length > 0 && (
-                          <Box marginTop={1} flexDirection="column">
-                            <Text bold>Attributes</Text>
-                            {Object.entries(log.attributes)
-                              .slice(0, 10)
-                              .map(([k, v]) => (
-                                <Text key={k} dimColor>
-                                  {truncate(k, 18)}: {truncate(String(v), 40)}
-                                </Text>
-                              ))}
-                          </Box>
-                        )}
-                    </>
-                  );
-                })()
-              ) : drilldownTraceId == null ? null : (
-                <Text dimColor>Select an item to view details.</Text>
-              )}
-
-              {drilldownTraceId == null &&
-                (viewMode === 'errors' ? (
+              {viewMode === 'errors' ? (
                   (() => {
                     const e = filteredErrorSummaries[selected] ?? null;
                     if (!e)
@@ -1986,14 +1979,15 @@ function Dashboard({
                   </>
                 ) : (
                   <Text dimColor>Select a trace or span to view details.</Text>
-                ))}
+                )}
             </>
           )}
         </Box>
       </Box>
+      )}
 
       {showStats && (
-        <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
+        <Box marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
           <Text dimColor>
             Spans: {stats.total} | Span errors: {stats.errors} | Logs:{' '}
             {logStats.total} | Log errors: {logStats.errors} | Avg:{' '}
