@@ -53,7 +53,7 @@ import {
   computePerSpanNameStats,
   sortSpansForWaterfall,
 } from './lib/trace-model';
-import { formatDurationMs, formatRelative, truncate } from './lib/format';
+import { formatDurationMs, formatRelative, truncate, buildWaterfallBar } from './lib/format';
 import type { SpanTreeNode } from './lib/trace-model';
 import type { TerminalLogEvent, LogStats } from './lib/log-model';
 import {
@@ -132,6 +132,7 @@ const THROTTLE_MS = 50;
 const MAX_TRACES = 50;
 const NEW_ERROR_DISPLAY_MS = 2000;
 const RECORD_LIMIT_DEFAULT = 200;
+const LIST_HEIGHT = 20;
 
 interface DashboardProps {
   title: string;
@@ -167,6 +168,7 @@ function Dashboard({
   });
   const [drilldownTraceId, setDrilldownTraceId] = useState<string | null>(null);
   const [drilldownSelectedIndex, setDrilldownSelectedIndex] = useState(0);
+  const [drilldownScrollOffset, setDrilldownScrollOffset] = useState(0);
   const [drilldownTab, setDrilldownTab] = useState<
     'timeline' | 'spans' | 'logs'
   >('timeline');
@@ -688,6 +690,7 @@ function Dashboard({
         } else {
           setDrilldownTraceId(null);
           setDrilldownSelectedIndex(0);
+          setDrilldownScrollOffset(0);
           setDrilldownTab('timeline');
         }
         return;
@@ -704,6 +707,7 @@ function Dashboard({
           : (currentIdx + 1) % tabs.length;
         setDrilldownTab(tabs[nextIdx]!);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
         return;
       }
       if (key.return && drilldownTraceId == null) {
@@ -736,6 +740,7 @@ function Dashboard({
         if (targetTraceId) {
           setDrilldownTraceId(targetTraceId);
           setDrilldownSelectedIndex(preSelectIndex);
+          setDrilldownScrollOffset(Math.max(0, preSelectIndex - LIST_HEIGHT + 1));
           setDrilldownTab('timeline');
           return;
         }
@@ -750,9 +755,19 @@ function Dashboard({
                 ? drilldownTree.length
                 : drilldownLogs.length;
           if (key.upArrow) {
-            setDrilldownSelectedIndex((i) => Math.max(0, i - 1));
+            setDrilldownSelectedIndex((prev) => {
+              const next = Math.max(0, prev - 1);
+              setDrilldownScrollOffset((off) => Math.min(next, off));
+              return next;
+            });
           } else {
-            setDrilldownSelectedIndex((i) => Math.min(listLength - 1, i + 1));
+            setDrilldownSelectedIndex((prev) => {
+              const next = Math.min(listLength - 1, prev + 1);
+              setDrilldownScrollOffset((off) =>
+                next >= off + LIST_HEIGHT ? next - LIST_HEIGHT + 1 : off,
+              );
+              return next;
+            });
           }
           return;
         }
@@ -810,12 +825,14 @@ function Dashboard({
         setSelected(0);
         setDrilldownTraceId(null);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
       }
       if (input === 'l') {
         setViewMode((m) => (m === 'log' ? 'trace' : 'log'));
         setSelected(0);
         setDrilldownTraceId(null);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
       }
       if (input === 'v') {
         setViewMode((m) =>
@@ -824,12 +841,14 @@ function Dashboard({
         setSelected(0);
         setDrilldownTraceId(null);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
       }
       if (input === 'E') {
         setViewMode((m) => (m === 'errors' ? 'trace' : 'errors'));
         setSelected(0);
         setDrilldownTraceId(null);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
       }
       if (input === 'c') {
         setSpans([]);
@@ -837,6 +856,7 @@ function Dashboard({
         setSelected(0);
         setDrilldownTraceId(null);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
         setNewErrorCount(0);
         setSpanFilters({ statusGroup: 'all' });
         setRecording(false);
@@ -848,6 +868,7 @@ function Dashboard({
         setSelected(0);
         setDrilldownTraceId(null);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
         setNewErrorCount(0);
         setSpanFilters({ statusGroup: 'all' });
         setPaused(false);
@@ -858,6 +879,7 @@ function Dashboard({
         setSelected(0);
         setDrilldownTraceId(null);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
       }
       if (input === 'f') {
         setTraceIdMode(true);
@@ -879,6 +901,7 @@ function Dashboard({
         setSelected(0);
         setDrilldownTraceId(null);
         setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
       }
       if (input === 'S') {
         const svc = currentSpan?.attributes?.['service.name'];
@@ -887,6 +910,7 @@ function Dashboard({
           setSelected(0);
           setDrilldownTraceId(null);
           setDrilldownSelectedIndex(0);
+          setDrilldownScrollOffset(0);
         }
       }
       if (input === 'R') {
@@ -896,6 +920,7 @@ function Dashboard({
           setSelected(0);
           setDrilldownTraceId(null);
           setDrilldownSelectedIndex(0);
+          setDrilldownScrollOffset(0);
         }
       }
       if (input === 'T') {
@@ -925,6 +950,7 @@ function Dashboard({
           setSelected(0);
           setDrilldownTraceId(null);
           setDrilldownSelectedIndex(0);
+          setDrilldownScrollOffset(0);
           setDrilldownTab('timeline');
         }
         return;
@@ -956,6 +982,7 @@ function Dashboard({
           setSelected(0);
           setDrilldownTraceId(null);
           setDrilldownSelectedIndex(0);
+          setDrilldownScrollOffset(0);
           setDrilldownTab('timeline');
         }
         return;
@@ -1039,9 +1066,7 @@ function Dashboard({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
-      padding={1}
-      borderColor={colors ? 'cyan' : undefined}
+      paddingX={1}
     >
       <Box justifyContent="space-between" marginBottom={1}>
         <Text key="title" bold>
@@ -1059,109 +1084,61 @@ function Dashboard({
         </Box>
       </Box>
 
-      {showHelp ? (
-        <Box
-          flexDirection="column"
-          borderStyle="single"
-          borderColor="gray"
-          paddingX={1}
-          marginBottom={1}
-        >
-          <Text bold>Shortcuts</Text>
-          <Text dimColor>Navigation: ↑/↓, Enter, Esc</Text>
-          <Text dimColor>
-            Views: t (trace/spans), l (logs), v (services), E (errors)
+      {/* Controls bar — always exactly 2 lines */}
+      <Box marginBottom={0} flexDirection="column">
+        {searchMode ? (
+          <Text color="cyan">
+            Search: {searchQuery || '(type to filter)'}
+            <Text dimColor> (Tab: match traceId, Esc: cancel)</Text>
           </Text>
-          <Text dimColor>Search: / (Tab autocompletes traceId)</Text>
-          <Text dimColor>
-            Filters: e (errors-only), S (service), R (route), H (status), f
-            (traceId), x (clear)
+        ) : traceIdMode ? (
+          <Text color="yellow">
+            TraceId: {traceIdInput || '(type prefix, Tab to complete)'}
+            {traceIdInput.length >= 2 && (
+              <Text dimColor>
+                {' → '}
+                {traceSummaries
+                  .find((t) =>
+                    t.traceId.toLowerCase().startsWith(traceIdInput.toLowerCase()),
+                  )
+                  ?.traceId.slice(0, 16) ?? 'no match'}…
+              </Text>
+            )}
           </Text>
-          <Text dimColor>
-            Capture: p (pause), r (record snapshot), J (export trace JSON)
-          </Text>
-          <Text dimColor>AI: a (toggle AI panel)</Text>
-          <Text dimColor>Jump: T (trace for item), L (logs for item)</Text>
-          <Text dimColor>
-            Drill-down: Enter (open trace), Tab (cycle tabs), Esc (back)
-          </Text>
-          <Text dimColor>Other: c (clear), ? (help), Ctrl+C (exit)</Text>
-        </Box>
-      ) : (
-        <Box
-          marginBottom={1}
-          flexDirection="row"
-          justifyContent="space-between"
-        >
-          {searchMode ? (
-            <Text key="search" color="cyan">
-              Search: {searchQuery || '(type to filter)'}
-              <Text dimColor> (Tab: match traceId, Esc: cancel)</Text>
+        ) : (
+          <Box flexDirection="row" justifyContent="space-between">
+            <Text dimColor>
+              {drilldownTraceId == null
+                ? '↑/↓ select • Enter open • Tab cycle tabs • Esc back • T trace • L logs • a AI • ? help'
+                : '↑/↓ select • Tab cycle tabs • Esc back • T trace • L logs • a AI • ? help'}
             </Text>
-          ) : traceIdMode ? (
-            <Text key="traceid-input" color="yellow">
-              TraceId: {traceIdInput || '(type prefix, Tab to complete)'}
-              {traceIdInput.length >= 2 && (
-                <Text dimColor>
-                  {' '}
-                  →{' '}
-                  {traceSummaries
-                    .find((t) =>
-                      t.traceId
-                        .toLowerCase()
-                        .startsWith(traceIdInput.toLowerCase()),
-                    )
-                    ?.traceId.slice(0, 16) ?? 'no match'}
-                  …
-                </Text>
-              )}
+            <Text dimColor>
+              {viewMode === 'trace'
+                ? `traces ${filteredSummaries.length}/${traceSummaries.length}`
+                : viewMode === 'span'
+                  ? `spans ${filteredSpans.length}/${spans.length}`
+                  : viewMode === 'service-summary'
+                    ? `services ${serviceStats.length}`
+                    : viewMode === 'errors'
+                      ? `errors ${filteredErrorSummaries.length}/${errorSummaries.length}`
+                      : `logs ${filteredLogs.length}/${logs.length}`}
             </Text>
-          ) : drilldownTraceId == null ? (
-            <Text key="controls" dimColor>
-              ↑/↓ select • Enter open • Esc back • t spans • l logs • v svc • E
-              errors • T trace • L logs • / search • f traceId • p pause • r
-              record • e errors • c clear • ? help
-            </Text>
-          ) : (
-            <Text key="controls" dimColor>
-              ↑/↓ select • Tab cycle tabs • Esc back • T trace • L logs • a AI •
-              ? help
-            </Text>
-          )}
-          <Text key="count" dimColor>
-            {viewMode === 'trace'
-              ? `traces ${filteredSummaries.length}/${traceSummaries.length}`
-              : viewMode === 'span'
-                ? `spans ${filteredSpans.length}/${spans.length}`
-                : viewMode === 'service-summary'
-                  ? `services ${serviceStats.length}/${serviceStats.length}`
-                  : viewMode === 'errors'
-                    ? `errors ${filteredErrorSummaries.length}/${errorSummaries.length}`
-                    : `logs ${filteredLogs.length}/${logs.length}`}
+          </Box>
+        )}
+        {showHelp && (
+          <Text dimColor>
+            Views: t/l/v/E • Search: / • Filters: e/S/R/H/f/x • Capture: p/r/J • AI: a • Clear: c
           </Text>
-        </Box>
-      )}
+        )}
+      </Box>
 
-      {(spanFilters.serviceName ||
-        spanFilters.route ||
-        spanFilters.statusGroup !== 'all' ||
-        spanFilters.traceId) && (
-        <Box marginBottom={1}>
-          <Text dimColor>
-            filters:
-            {spanFilters.serviceName
-              ? ` service=${spanFilters.serviceName}`
-              : ''}
-            {spanFilters.route ? ` route=${spanFilters.route}` : ''}
-            {spanFilters.statusGroup && spanFilters.statusGroup !== 'all'
-              ? ` status=${spanFilters.statusGroup}`
-              : ''}
-            {spanFilters.traceId
-              ? ` trace=${spanFilters.traceId.slice(0, 8)}…`
-              : ''}
-          </Text>
-        </Box>
-      )}
+      <Box marginBottom={0}>
+        <Text dimColor>
+          {spanFilters.serviceName || spanFilters.route || spanFilters.statusGroup !== 'all' || spanFilters.traceId
+            ? `filters:${spanFilters.serviceName ? ` service=${spanFilters.serviceName}` : ''}${spanFilters.route ? ` route=${spanFilters.route}` : ''}${spanFilters.statusGroup && spanFilters.statusGroup !== 'all' ? ` status=${spanFilters.statusGroup}` : ''}${spanFilters.traceId ? ` trace=${spanFilters.traceId.slice(0, 8)}…` : ''}`
+            : 'filters: none'}
+        </Text>
+      </Box>
 
       <Box flexDirection="row" gap={2}>
         <Box
@@ -1244,78 +1221,94 @@ function Dashboard({
 
           {drilldownTraceId != null &&
             drilldownTab === 'timeline' &&
-            drilldownTimeline.map((item, i) => {
-              const isSel = i === drilldownSelectedIndex;
-              if (item.type === 'span' && item.span) {
-                const s = item.span;
-                const node = drilldownTree.find(
-                  (n) => n.span.spanId === s.spanId,
-                );
-                const depth = node?.depth ?? 0;
-                const indent = '  '.repeat(depth);
-                const barLen = Math.max(
-                  1,
-                  Math.round(
-                    (s.durationMs /
-                      Math.max(1, drilldownSummary?.durationMs ?? 1)) *
-                      10,
-                  ),
-                );
-                const bar = '█'.repeat(barLen);
-                return (
-                  <Box key={`${s.spanId}-${i}`}>
-                    <Text
-                      backgroundColor={isSel ? 'gray' : undefined}
-                      color={isSel ? 'white' : undefined}
-                    >
-                      {isSel ? '▸' : ' '} {indent}
-                      <Text color="green">{bar}</Text> {s.name}{' '}
-                      <Text dimColor>
-                        {formatDurationMs(s.durationMs)}
-                        {s.kind ? ` ${s.kind}` : ''}
-                      </Text>
-                    </Text>
-                  </Box>
-                );
-              } else if (item.type === 'log' && item.log) {
-                const l = item.log;
-                const levelColor =
-                  l.level === 'error'
-                    ? 'red'
-                    : l.level === 'warn'
-                      ? 'yellow'
-                      : 'blue';
-                const relTime = drilldownSummary
-                  ? `+${formatDurationMs(l.time - (drilldownSummary.spans[0]?.startTime ?? l.time))}`
-                  : '';
-                return (
-                  <Box key={`log-${i}`}>
-                    <Text
-                      backgroundColor={isSel ? 'gray' : undefined}
-                      color={isSel ? 'white' : undefined}
-                    >
-                      {isSel ? '▸' : ' '}
-                      {'  '}
-                      <Text color={levelColor}>
-                        ℹ {l.level.toUpperCase()}
-                      </Text>{' '}
-                      <Text dimColor>{truncate(l.message, 40)}</Text>{' '}
-                      <Text dimColor>{relTime}</Text>
-                    </Text>
-                  </Box>
-                );
+            (() => {
+              let traceStartMs = Infinity;
+              for (const s of drilldownSummary?.spans ?? []) {
+                if (s.startTime < traceStartMs) traceStartMs = s.startTime;
               }
-              return null;
-            })}
+              if (traceStartMs === Infinity) traceStartMs = 0;
+              const traceDurMs = drilldownSummary?.durationMs ?? 1;
+              const WATERFALL_WIDTH = 24;
+              const items = drilldownTimeline.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT);
+
+              return (
+                <>
+                  {items.map((item, i) => {
+                    const isSel = i + drilldownScrollOffset === drilldownSelectedIndex;
+                    if (item.type === 'span' && item.span) {
+                      const s = item.span;
+                      const node = drilldownTree.find(
+                        (n) => n.span.spanId === s.spanId,
+                      );
+                      const depth = node?.depth ?? 0;
+                      const indent = '  '.repeat(Math.min(depth, 4));
+                      const nameWidth = 24 - Math.min(depth, 4) * 2;
+                      const bar = buildWaterfallBar(
+                        s.startTime, s.durationMs,
+                        traceStartMs, traceDurMs,
+                        WATERFALL_WIDTH,
+                      );
+                      return (
+                        <Box key={`${s.spanId}-${i}`} flexDirection="row">
+                          <Text backgroundColor={isSel ? 'gray' : undefined} color={isSel ? 'white' : undefined}>
+                            {isSel ? '▸' : ' '}{indent}
+                            {truncate(s.name, nameWidth)}
+                          </Text>
+                          <Text>{'  '}</Text>
+                          <Text color={s.status === 'ERROR' ? 'red' : 'green'}>{bar}</Text>
+                          <Text dimColor>
+                            {'  '}{formatDurationMs(s.durationMs)}
+                            {s.kind ? ` ${s.kind}` : ''}
+                          </Text>
+                        </Box>
+                      );
+                    } else if (item.type === 'log' && item.log) {
+                      const l = item.log;
+                      const levelColor =
+                        l.level === 'error' ? 'red' : l.level === 'warn' ? 'yellow' : 'blue';
+                      const relTime = drilldownSummary
+                        ? `+${formatDurationMs(l.time - traceStartMs)}`
+                        : '';
+                      const logOffset = drilldownSummary
+                        ? Math.floor(((l.time - traceStartMs) / traceDurMs) * WATERFALL_WIDTH)
+                        : 0;
+                      const clampedOffset = Math.max(0, Math.min(logOffset, WATERFALL_WIDTH - 1));
+                      const logBar = ' '.repeat(clampedOffset) + '·' + ' '.repeat(WATERFALL_WIDTH - clampedOffset - 1);
+                      return (
+                        <Box key={`log-${i}`} flexDirection="row">
+                          <Text backgroundColor={isSel ? 'gray' : undefined} color={isSel ? 'white' : undefined}>
+                            {isSel ? '▸' : ' '}{'  '}
+                            <Text color={levelColor}>{l.level.toUpperCase()}</Text>
+                            {' '}{truncate(l.message, 18)}
+                          </Text>
+                          <Text>{'  '}</Text>
+                          <Text dimColor>{logBar}</Text>
+                          <Text dimColor>{'  '}{relTime}</Text>
+                        </Box>
+                      );
+                    }
+                    return null;
+                  })}
+                  {Array.from({ length: Math.max(0, LIST_HEIGHT - items.length) }).map((_, i) => (
+                    <Box key={`pad-${i}`}><Text> </Text></Box>
+                  ))}
+                </>
+              );
+            })()}
 
           {drilldownTraceId != null &&
             drilldownTab === 'spans' &&
-            drilldownTree.map((node, i) => renderTreeRow(node, i))}
+            drilldownTree.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT).map((node, i) => renderTreeRow(node, i + drilldownScrollOffset))}
+          {drilldownTraceId != null &&
+            drilldownTab === 'spans' &&
+            Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(drilldownTree.length, LIST_HEIGHT)) }).map((_, i) => (
+              <Box key={`pad-${i}`}><Text> </Text></Box>
+            ))}
 
           {drilldownTraceId != null &&
             drilldownTab === 'logs' &&
-            drilldownLogs.map((log, i) => {
-              const isSel = i === drilldownSelectedIndex;
+            drilldownLogs.slice(drilldownScrollOffset, drilldownScrollOffset + LIST_HEIGHT).map((log, i) => {
+              const isSel = i + drilldownScrollOffset === drilldownSelectedIndex;
               const levelColor =
                 log.level === 'error'
                   ? 'red'
@@ -1340,178 +1333,228 @@ function Dashboard({
                 </Box>
               );
             })}
+          {drilldownTraceId != null &&
+            drilldownTab === 'logs' &&
+            Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(drilldownLogs.length, LIST_HEIGHT)) }).map((_, i) => (
+              <Box key={`pad-${i}`}><Text> </Text></Box>
+            ))}
 
           {drilldownTraceId == null && (
             <>
               {viewMode === 'trace' ? (
                 filteredSummaries.length === 0 ? (
-                  <Box flexDirection="column">
-                    <Text dimColor>
-                      No traces yet. Call a traced function or hit an endpoint
-                      to see them here.
-                    </Text>
-                    <Text dimColor>
-                      Tip: trace() your handlers with autotel to get spans.
-                    </Text>
-                  </Box>
+                  <>
+                    <Box flexDirection="column">
+                      <Text dimColor>
+                        No traces yet. Call a traced function or hit an endpoint
+                        to see them here.
+                      </Text>
+                      <Text dimColor>
+                        Tip: trace() your handlers with autotel to get spans.
+                      </Text>
+                    </Box>
+                    {Array.from({ length: Math.max(0, LIST_HEIGHT - 2) }).map((_, i) => (
+                      <Box key={`pad-${i}`}><Text> </Text></Box>
+                    ))}
+                  </>
                 ) : (
                   <>
-                    {drilldownTraceId == null
-                      ? filteredSummaries.slice(0, 20).map((t, i) => {
-                          const isSel = i === selected;
-                          return (
-                            <Box key={t.traceId} flexDirection="row">
-                              <Text color={isSel ? 'cyan' : undefined}>
-                                {isSel ? '› ' : '  '}
-                              </Text>
-                              <Text color={t.hasError ? 'red' : undefined}>
-                                {truncate(t.rootName, 20)}
-                              </Text>
-                              <Text dimColor>
-                                {' '}
-                                {formatDurationMs(t.durationMs)}
-                              </Text>
-                              <Text dimColor> {truncate(t.traceId, 8)}</Text>
-                              <Text dimColor>
-                                {' '}
-                                {formatRelative(t.lastEndTime)}
-                              </Text>
-                            </Box>
-                          );
-                        })
-                      : traceTree
-                          .slice(0, 20)
-                          .map((node, i) => renderTreeRow(node, i))}
+                    {filteredSummaries.slice(0, 20).map((t, i) => {
+                      const isSel = i === selected;
+                      return (
+                        <Box key={t.traceId} flexDirection="row">
+                          <Text color={isSel ? 'cyan' : undefined}>
+                            {isSel ? '▸ ' : '  '}
+                          </Text>
+                          <Text color={t.hasError ? 'red' : 'yellow'} bold={isSel}>
+                            {truncate(t.rootName, 28)}
+                          </Text>
+                          <Text dimColor>
+                            {'  '}{t.spans.length} spans
+                          </Text>
+                          <Text color="green">
+                            {'  '}{formatDurationMs(t.durationMs)}
+                          </Text>
+                          <Text dimColor>
+                            {'  '}{formatRelative(t.lastEndTime)}
+                          </Text>
+                          {t.hasError && <Text color="red"> ●</Text>}
+                        </Box>
+                      );
+                    })}
+                    {Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(filteredSummaries.length, 20)) }).map((_, i) => (
+                      <Box key={`pad-${i}`}><Text> </Text></Box>
+                    ))}
                   </>
                 )
               ) : viewMode === 'span' ? (
                 filteredSpans.length === 0 ? (
-                  <Box flexDirection="column">
-                    <Text dimColor>
-                      No spans yet. Call a traced function or hit an endpoint to
-                      see them here.
-                    </Text>
-                    <Text dimColor>
-                      Tip: trace() your handlers with autotel to get spans.
-                    </Text>
-                  </Box>
+                  <>
+                    <Box flexDirection="column">
+                      <Text dimColor>
+                        No spans yet. Call a traced function or hit an endpoint to
+                        see them here.
+                      </Text>
+                      <Text dimColor>
+                        Tip: trace() your handlers with autotel to get spans.
+                      </Text>
+                    </Box>
+                    {Array.from({ length: Math.max(0, LIST_HEIGHT - 2) }).map((_, i) => (
+                      <Box key={`pad-${i}`}><Text> </Text></Box>
+                    ))}
+                  </>
                 ) : (
-                  filteredSpans.slice(0, 20).map((s, i) => {
-                    const isSel = i === selected;
-                    const statusColor =
-                      s.status === 'ERROR'
-                        ? 'red'
-                        : s.durationMs > 500
-                          ? 'yellow'
-                          : 'green';
-                    return (
-                      <Box
-                        key={`${s.spanId}-${s.startTime}`}
-                        flexDirection="row"
-                      >
-                        <Text color={isSel ? 'cyan' : undefined}>
-                          {isSel ? '› ' : '  '}
-                        </Text>
-                        <Text color={colors ? statusColor : undefined}>
-                          {truncate(s.name, 26)}
-                        </Text>
-                        <Text dimColor> {formatDurationMs(s.durationMs)}</Text>
-                        <Text dimColor> {formatRelative(s.endTime)}</Text>
-                      </Box>
-                    );
-                  })
+                  <>
+                    {filteredSpans.slice(0, 20).map((s, i) => {
+                      const isSel = i === selected;
+                      const statusColor =
+                        s.status === 'ERROR'
+                          ? 'red'
+                          : s.durationMs > 500
+                            ? 'yellow'
+                            : 'green';
+                      return (
+                        <Box
+                          key={`${s.spanId}-${s.startTime}`}
+                          flexDirection="row"
+                        >
+                          <Text color={isSel ? 'cyan' : undefined}>
+                            {isSel ? '› ' : '  '}
+                          </Text>
+                          <Text color={colors ? statusColor : undefined}>
+                            {truncate(s.name, 26)}
+                          </Text>
+                          <Text dimColor> {formatDurationMs(s.durationMs)}</Text>
+                          <Text dimColor> {formatRelative(s.endTime)}</Text>
+                        </Box>
+                      );
+                    })}
+                    {Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(filteredSpans.length, 20)) }).map((_, i) => (
+                      <Box key={`pad-${i}`}><Text> </Text></Box>
+                    ))}
+                  </>
                 )
               ) : viewMode === 'service-summary' ? (
                 serviceStats.length === 0 ? (
-                  <Box flexDirection="column">
-                    <Text dimColor>
-                      No service stats yet. Add `service.name` attributes to
-                      spans.
-                    </Text>
-                  </Box>
+                  <>
+                    <Box flexDirection="column">
+                      <Text dimColor>
+                        No service stats yet. Add `service.name` attributes to
+                        spans.
+                      </Text>
+                    </Box>
+                    {Array.from({ length: Math.max(0, LIST_HEIGHT - 1) }).map((_, i) => (
+                      <Box key={`pad-${i}`}><Text> </Text></Box>
+                    ))}
+                  </>
                 ) : (
-                  serviceStats.slice(0, 20).map((svc, i) => {
-                    const isSel = i === selected;
-                    const errorRate = svc.total
-                      ? (svc.errors / svc.total) * 100
-                      : 0;
-                    return (
-                      <Box key={svc.serviceName} flexDirection="row">
-                        <Text color={isSel ? 'cyan' : undefined}>
-                          {isSel ? '› ' : '  '}
-                        </Text>
-                        <Text>{truncate(svc.serviceName, 16)}</Text>
-                        <Text dimColor>
-                          {' '}
-                          {svc.errors}/{svc.total}
-                        </Text>
-                        <Text dimColor> {errorRate.toFixed(0)}%</Text>
-                        <Text dimColor> p95 {formatDurationMs(svc.p95Ms)}</Text>
-                      </Box>
-                    );
-                  })
+                  <>
+                    {serviceStats.slice(0, 20).map((svc, i) => {
+                      const isSel = i === selected;
+                      const errorRate = svc.total
+                        ? (svc.errors / svc.total) * 100
+                        : 0;
+                      return (
+                        <Box key={svc.serviceName} flexDirection="row">
+                          <Text color={isSel ? 'cyan' : undefined}>
+                            {isSel ? '› ' : '  '}
+                          </Text>
+                          <Text>{truncate(svc.serviceName, 16)}</Text>
+                          <Text dimColor>
+                            {' '}
+                            {svc.errors}/{svc.total}
+                          </Text>
+                          <Text dimColor> {errorRate.toFixed(0)}%</Text>
+                          <Text dimColor> p95 {formatDurationMs(svc.p95Ms)}</Text>
+                        </Box>
+                      );
+                    })}
+                    {Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(serviceStats.length, 20)) }).map((_, i) => (
+                      <Box key={`pad-${i}`}><Text> </Text></Box>
+                    ))}
+                  </>
                 )
               ) : viewMode === 'errors' ? (
                 filteredErrorSummaries.length === 0 ? (
-                  <Box flexDirection="column">
-                    <Text dimColor>No errors yet.</Text>
-                  </Box>
+                  <>
+                    <Box flexDirection="column">
+                      <Text dimColor>No errors yet.</Text>
+                    </Box>
+                    {Array.from({ length: Math.max(0, LIST_HEIGHT - 1) }).map((_, i) => (
+                      <Box key={`pad-${i}`}><Text> </Text></Box>
+                    ))}
+                  </>
                 ) : (
-                  filteredErrorSummaries.slice(0, 20).map((e, i) => {
+                  <>
+                    {filteredErrorSummaries.slice(0, 20).map((e, i) => {
+                      const isSel = i === selected;
+                      return (
+                        <Box key={e.traceId} flexDirection="row">
+                          <Text color={isSel ? 'cyan' : undefined}>
+                            {isSel ? '› ' : '  '}
+                          </Text>
+                          <Text color="red">{truncate(e.rootName, 16)}</Text>
+                          <Text dimColor> {truncate(e.serviceName, 10)}</Text>
+                          {e.route && (
+                            <Text dimColor> {truncate(e.route, 14)}</Text>
+                          )}
+                          {typeof e.statusCode === 'number' && (
+                            <Text dimColor> {e.statusCode}</Text>
+                          )}
+                          <Text dimColor> ({e.errorCount})</Text>
+                        </Box>
+                      );
+                    })}
+                    {Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(filteredErrorSummaries.length, 20)) }).map((_, i) => (
+                      <Box key={`pad-${i}`}><Text> </Text></Box>
+                    ))}
+                  </>
+                )
+              ) : filteredLogs.length === 0 ? (
+                <>
+                  <Box flexDirection="column">
+                    <Text dimColor>
+                      No logs yet. Emit request logs or canonical log lines to see
+                      them here.
+                    </Text>
+                    <Text dimColor>
+                      Tip: hook getTerminalLogStream() into your canonical log
+                      line drain.
+                    </Text>
+                  </Box>
+                  {Array.from({ length: Math.max(0, LIST_HEIGHT - 2) }).map((_, i) => (
+                    <Box key={`pad-${i}`}><Text> </Text></Box>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {filteredLogs.slice(0, 20).map((log, i) => {
                     const isSel = i === selected;
+                    const levelColor =
+                      log.level === 'error'
+                        ? 'red'
+                        : log.level === 'warn'
+                          ? 'yellow'
+                          : log.level === 'debug'
+                            ? 'gray'
+                            : 'green';
                     return (
-                      <Box key={e.traceId} flexDirection="row">
+                      <Box key={`${log.time}-${i}`} flexDirection="row">
                         <Text color={isSel ? 'cyan' : undefined}>
                           {isSel ? '› ' : '  '}
                         </Text>
-                        <Text color="red">{truncate(e.rootName, 16)}</Text>
-                        <Text dimColor> {truncate(e.serviceName, 10)}</Text>
-                        {e.route && (
-                          <Text dimColor> {truncate(e.route, 14)}</Text>
-                        )}
-                        {typeof e.statusCode === 'number' && (
-                          <Text dimColor> {e.statusCode}</Text>
-                        )}
-                        <Text dimColor> ({e.errorCount})</Text>
+                        <Text color={colors ? levelColor : undefined}>
+                          {truncate(log.level.toUpperCase(), 5)}
+                        </Text>
+                        <Text> </Text>
+                        <Text>{truncate(log.message, 32)}</Text>
                       </Box>
                     );
-                  })
-                )
-              ) : filteredLogs.length === 0 ? (
-                <Box flexDirection="column">
-                  <Text dimColor>
-                    No logs yet. Emit request logs or canonical log lines to see
-                    them here.
-                  </Text>
-                  <Text dimColor>
-                    Tip: hook getTerminalLogStream() into your canonical log
-                    line drain.
-                  </Text>
-                </Box>
-              ) : (
-                filteredLogs.slice(0, 20).map((log, i) => {
-                  const isSel = i === selected;
-                  const levelColor =
-                    log.level === 'error'
-                      ? 'red'
-                      : log.level === 'warn'
-                        ? 'yellow'
-                        : log.level === 'debug'
-                          ? 'gray'
-                          : 'green';
-                  return (
-                    <Box key={`${log.time}-${i}`} flexDirection="row">
-                      <Text color={isSel ? 'cyan' : undefined}>
-                        {isSel ? '› ' : '  '}
-                      </Text>
-                      <Text color={colors ? levelColor : undefined}>
-                        {truncate(log.level.toUpperCase(), 5)}
-                      </Text>
-                      <Text> </Text>
-                      <Text>{truncate(log.message, 32)}</Text>
-                    </Box>
-                  );
-                })
+                  })}
+                  {Array.from({ length: Math.max(0, LIST_HEIGHT - Math.min(filteredLogs.length, 20)) }).map((_, i) => (
+                    <Box key={`pad-${i}`}><Text> </Text></Box>
+                  ))}
+                </>
               )}
             </>
           )}
