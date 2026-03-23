@@ -1,5 +1,11 @@
 # autotel-terminal
 
+## 17.0.4
+
+### Patch Changes
+
+- 4dd52c4: UI Enhancements
+
 ## 17.0.3
 
 ### Patch Changes
