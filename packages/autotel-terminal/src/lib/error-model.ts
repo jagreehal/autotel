@@ -27,7 +27,9 @@ function getRouteFromSpans(spans: TerminalSpanEvent[]): string | undefined {
   return undefined;
 }
 
-function getStatusCodeFromSpans(spans: TerminalSpanEvent[]): number | undefined {
+function getStatusCodeFromSpans(
+  spans: TerminalSpanEvent[],
+): number | undefined {
   for (const span of spans) {
     const code = span.attributes?.['http.status_code'];
     if (typeof code === 'number') return code;
@@ -62,4 +64,3 @@ export function buildErrorSummaries(
   out.sort((a, b) => b.lastEndTime - a.lastEndTime);
   return out;
 }
-

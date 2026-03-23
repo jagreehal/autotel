@@ -138,7 +138,9 @@ export function flattenTraceTree(nodes: SpanTreeNode[]): SpanTreeNode[] {
 /**
  * Sort spans for waterfall: by startTime, then by depth (parent before children at same time).
  */
-export function sortSpansForWaterfall(spans: TerminalSpanEvent[]): SpanWithDepth[] {
+export function sortSpansForWaterfall(
+  spans: TerminalSpanEvent[],
+): SpanWithDepth[] {
   const byId = new Map<string, TerminalSpanEvent>();
   for (const s of spans) byId.set(s.spanId, s);
 
@@ -150,7 +152,8 @@ export function sortSpansForWaterfall(spans: TerminalSpanEvent[]): SpanWithDepth
 
   const withDepth = spans.map((s) => ({ span: s, depth: depth(s) }));
   withDepth.sort((a, b) => {
-    if (a.span.startTime !== b.span.startTime) return a.span.startTime - b.span.startTime;
+    if (a.span.startTime !== b.span.startTime)
+      return a.span.startTime - b.span.startTime;
     return a.depth - b.depth;
   });
   return withDepth;
@@ -183,7 +186,9 @@ export function filterTraceSummaries(
   if (errorsOnly) list = list.filter((s) => s.hasError);
   if (searchQuery.trim() === '') return list;
   const q = searchQuery.toLowerCase();
-  return list.filter((s) => s.spans.some((sp) => sp.name.toLowerCase().includes(q)));
+  return list.filter((s) =>
+    s.spans.some((sp) => sp.name.toLowerCase().includes(q)),
+  );
 }
 
 /**
@@ -193,13 +198,12 @@ export function computeStats(spans: TerminalSpanEvent[]): SpanStats {
   const total = spans.length;
   const errors = spans.filter((s) => s.status === 'ERROR').length;
   const avg = total ? spans.reduce((a, s) => a + s.durationMs, 0) / total : 0;
-  const p95 =
-    total
-      ? (() => {
-          const sorted = spans.map((s) => s.durationMs).toSorted((a, b) => a - b);
-          return sorted[Math.floor(sorted.length * 0.95)] ?? 0;
-        })()
-      : 0;
+  const p95 = total
+    ? (() => {
+        const sorted = spans.map((s) => s.durationMs).toSorted((a, b) => a - b);
+        return sorted[Math.floor(sorted.length * 0.95)] ?? 0;
+      })()
+    : 0;
   return { total, errors, avg, p95 };
 }
 
@@ -216,7 +220,10 @@ export function computePerSpanNameStats(
     cur.totalMs += s.durationMs;
     byName.set(s.name, cur);
   }
-  const result = new Map<string, { count: number; totalMs: number; avgMs: number }>();
+  const result = new Map<
+    string,
+    { count: number; totalMs: number; avgMs: number }
+  >();
   for (const [name, { count, totalMs }] of byName) {
     result.set(name, { count, totalMs, avgMs: totalMs / count });
   }

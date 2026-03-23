@@ -59,4 +59,3 @@ export function exportTraceToJson(
 
   return JSON.stringify(exported, null, 2);
 }
-

@@ -33,7 +33,8 @@ export function computeServiceStats(
 
   for (const span of spans) {
     const attrs = span.attributes ?? {};
-    const serviceName = (attrs['service.name'] as string | undefined) ?? 'unknown';
+    const serviceName =
+      (attrs['service.name'] as string | undefined) ?? 'unknown';
     const entry = byService.get(serviceName) ?? {
       durations: [],
       total: 0,
@@ -59,9 +60,7 @@ export function computeServiceStats(
   return stats;
 }
 
-export function computeRouteStats(
-  spans: TerminalSpanEvent[],
-): RouteStats[] {
+export function computeRouteStats(spans: TerminalSpanEvent[]): RouteStats[] {
   const byRoute = new Map<
     string,
     { durations: number[]; total: number; errors: number }
@@ -121,4 +120,3 @@ export function findHotSpanNames(
   hot.sort((a, b) => b.p95Ms - a.p95Ms);
   return hot.slice(0, topN);
 }
-

@@ -13,40 +13,49 @@ import {
   sendJson,
 } from './otlp-http-json';
 
+import type { AIConfig, AIProviderType } from './ai/types';
+
 type CliOptions = {
   port: number;
   host: string;
   title?: string;
+  ai: Partial<AIConfig>;
 };
 
 function printHelp(): void {
-  process.stdout.write(String.raw`autotel-terminal - Standalone OTLP receiver with terminal dashboard
+  process.stdout.write(
+    String.raw`autotel-terminal - Standalone OTLP receiver with terminal dashboard
 
 Usage: autotel-terminal [options]
 
 Options:
-  -p, --port <port>    Port to listen on (default: 4319, env: AUTOTEL_TERMINAL_PORT)
-  -H, --host <host>    Host to bind to (default: 127.0.0.1, env: AUTOTEL_TERMINAL_HOST)
-  -t, --title <title>  Dashboard title (env: AUTOTEL_TERMINAL_TITLE)
-  -h, --help           Show this help message
-  -v, --version        Show version number
+  -p, --port <port>          Port to listen on (default: 4319, env: AUTOTEL_TERMINAL_PORT)
+  -H, --host <host>          Host to bind to (default: 127.0.0.1, env: AUTOTEL_TERMINAL_HOST)
+  -t, --title <title>        Dashboard title (env: AUTOTEL_TERMINAL_TITLE)
+  -h, --help                 Show this help message
+  -v, --version              Show version number
+
+AI Options:
+  --ai-provider <provider>   AI provider: ollama, openai, openai-compatible (env: AI_PROVIDER)
+  --ai-model <model>         AI model name (env: AI_MODEL)
+  --ai-api-key <key>         API key for cloud providers (env: AI_API_KEY)
+  --ai-base-url <url>        Custom AI endpoint URL (env: AI_BASE_URL)
+
+  Auto-detection: if Ollama is running locally, it is used automatically.
+  If OPENAI_API_KEY is set, OpenAI is used. Press 'a' in the dashboard to toggle AI.
 
 Endpoints:
-  POST /v1/traces      Receive OTLP JSON trace data
-  POST /v1/logs        Receive OTLP JSON log data
-  POST /v1/metrics     Receive OTLP JSON metric data (accepted and counted)
-  GET  /healthz        Health check
+  POST /v1/traces            Receive OTLP JSON trace data
+  POST /v1/logs              Receive OTLP JSON log data
+  POST /v1/metrics           Receive OTLP JSON metric data (accepted and counted)
+  GET  /healthz              Health check
 
 Examples:
   npx autotel-terminal
-  npx autotel-terminal --port 4319
-  npx autotel-terminal -p 4319 -H 0.0.0.0
-
-Then in another terminal:
-  OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
-  OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4319 \
-  node app.js
-` + '\n');
+  npx autotel-terminal --ai-provider ollama --ai-model granite4
+  AI_API_KEY=sk-... npx autotel-terminal --ai-provider openai --ai-model gpt-4o
+` + '\n',
+  );
 }
 
 function printVersion(): void {
@@ -65,6 +74,7 @@ function parseArgs(argv: string[]): CliOptions | null {
     port: Number(process.env.AUTOTEL_TERMINAL_PORT || 4319),
     host: process.env.AUTOTEL_TERMINAL_HOST || '127.0.0.1',
     title: process.env.AUTOTEL_TERMINAL_TITLE,
+    ai: {},
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -92,6 +102,26 @@ function parseArgs(argv: string[]): CliOptions | null {
     if ((arg === '--title' || arg === '-t') && next) {
       options.title = next;
       i++;
+      continue;
+    }
+    if (arg === '--ai-provider' && next) {
+      options.ai.provider = next as AIProviderType;
+      i++;
+      continue;
+    }
+    if (arg === '--ai-model' && next) {
+      options.ai.model = next;
+      i++;
+      continue;
+    }
+    if (arg === '--ai-api-key' && next) {
+      options.ai.apiKey = next;
+      i++;
+      continue;
+    }
+    if (arg === '--ai-base-url' && next) {
+      options.ai.baseUrl = next;
+      i++;
     }
   }
 
@@ -111,7 +141,9 @@ async function main(): Promise<void> {
 
   renderTerminal(
     {
-      title: options.title || `Autotel Terminal (${options.host}:${options.port})`,
+      title:
+        options.title || `Autotel Terminal (${options.host}:${options.port})`,
+      ai: options.ai,
     },
     spanStream,
   );

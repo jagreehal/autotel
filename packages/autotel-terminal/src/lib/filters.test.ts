@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import type { TerminalSpanEvent } from '../span-stream';
 import { deriveAvailableFilters, applySpanFilters } from './filters';
 
-const span = (overrides: Partial<TerminalSpanEvent> = {}): TerminalSpanEvent => ({
+const span = (
+  overrides: Partial<TerminalSpanEvent> = {},
+): TerminalSpanEvent => ({
   name: 'op',
   spanId: 's',
   traceId: 't',
@@ -77,5 +79,29 @@ describe('filters', () => {
     expect(byAttr).toHaveLength(1);
     expect(byAttr[0]!.attributes!['db.system']).toBe('postgresql');
   });
-});
 
+  it('filters spans by traceId', () => {
+    const spansWithTraces = [
+      span({ name: 'op-a', traceId: 'trace-1' }),
+      span({ name: 'op-b', traceId: 'trace-2' }),
+      span({ name: 'op-c', traceId: 'trace-1' }),
+    ];
+    const result = applySpanFilters(spansWithTraces, { traceId: 'trace-1' });
+    expect(result).toHaveLength(2);
+    expect(result.every((s) => s.traceId === 'trace-1')).toBe(true);
+  });
+
+  it('composes traceId filter with other filters', () => {
+    const spansWithTraces = [
+      span({ name: 'op-a', traceId: 'trace-1', status: 'OK' }),
+      span({ name: 'op-b', traceId: 'trace-1', status: 'ERROR' }),
+      span({ name: 'op-c', traceId: 'trace-2', status: 'ERROR' }),
+    ];
+    const result = applySpanFilters(spansWithTraces, {
+      traceId: 'trace-1',
+      errorsOnly: true,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.name).toBe('op-b');
+  });
+});

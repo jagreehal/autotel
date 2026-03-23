@@ -12,8 +12,11 @@ import {
   type SpanProcessor,
   SimpleSpanProcessor,
   ConsoleSpanExporter,
+  SamplingDecision,
+  type SpanExporter,
+  type Sampler as OtelSampler,
+  type SamplingResult,
 } from '@opentelemetry/sdk-trace-base';
-import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
 import {
   resourceFromAttributes,
   type Resource,
@@ -26,7 +29,7 @@ import type { Sampler } from './sampling';
 import { AdaptiveSampler } from './sampling';
 import type { EventSubscriber } from './event-subscriber';
 import type { Logger } from './logger';
-import type { Attributes } from '@opentelemetry/api';
+import type { Attributes, Context, SpanKind, Link } from '@opentelemetry/api';
 import type { ValidationConfig } from './validation';
 import {
   PeriodicExportingMetricReader,
@@ -34,9 +37,17 @@ import {
 } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter as OTLPMetricExporterHTTP } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter as OTLPTraceExporterHTTP } from '@opentelemetry/exporter-trace-otlp-http';
+import { OTLPLogExporter as OTLPLogExporterHTTP } from '@opentelemetry/exporter-logs-otlp-http';
 import type { PushMetricExporter } from '@opentelemetry/sdk-metrics';
-import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { buildPostHogLogProcessors } from './posthog-logs';
+import {
+  BatchLogRecordProcessor,
+  type LogRecordExporter,
+  type LogRecordProcessor,
+} from '@opentelemetry/sdk-logs';
+import {
+  buildPostHogLogProcessors,
+  RedactingLogRecordProcessor,
+} from './posthog-logs';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import {
@@ -75,6 +86,36 @@ const silentLogger: Logger = {
   debug: () => {},
 };
 
+/**
+ * Adapts an Autotel Sampler to the OTel SDK Sampler interface.
+ */
+function toOtelSampler(sampler: Sampler): OtelSampler {
+  return {
+    shouldSample(
+      _context: Context,
+      _traceId: string,
+      spanName: string,
+      _spanKind: SpanKind,
+      _attributes: Attributes,
+      links: Link[],
+    ): SamplingResult {
+      const shouldTrace = sampler.shouldSample({
+        operationName: spanName,
+        args: [],
+        links,
+      });
+      return {
+        decision: shouldTrace
+          ? SamplingDecision.RECORD_AND_SAMPLED
+          : SamplingDecision.NOT_RECORD,
+      };
+    },
+    toString(): string {
+      return `AutotelSamplerAdapter`;
+    },
+  };
+}
+
 // Type imports for exporters
 type OTLPExporterConfig = {
   url?: string;
@@ -89,6 +130,9 @@ let OTLPTraceExporterGRPC:
   | undefined;
 let OTLPMetricExporterGRPC:
   | (new (config: OTLPExporterConfig) => PushMetricExporter)
+  | undefined;
+let OTLPLogExporterGRPC:
+  | (new (config: OTLPExporterConfig) => LogRecordExporter)
   | undefined;
 
 /**
@@ -170,6 +214,43 @@ function createMetricExporter(
 }
 
 /**
+ * Helper: Lazy-load gRPC log exporter
+ */
+function loadGRPCLogExporter(): new (
+  config: OTLPExporterConfig,
+) => LogRecordExporter {
+  if (OTLPLogExporterGRPC) return OTLPLogExporterGRPC;
+
+  try {
+    const grpcModule = requireModule<{
+      OTLPLogExporter: new (config: OTLPExporterConfig) => LogRecordExporter;
+    }>('@opentelemetry/exporter-logs-otlp-grpc');
+    OTLPLogExporterGRPC = grpcModule.OTLPLogExporter;
+    return OTLPLogExporterGRPC;
+  } catch {
+    throw new Error(
+      'gRPC log exporter not found. Install @opentelemetry/exporter-logs-otlp-grpc',
+    );
+  }
+}
+
+/**
+ * Helper: Create log exporter based on protocol
+ */
+function createLogExporter(
+  protocol: 'http' | 'grpc',
+  config: OTLPExporterConfig,
+): LogRecordExporter {
+  if (protocol === 'grpc') {
+    const Exporter = loadGRPCLogExporter();
+    return new Exporter(config);
+  }
+
+  // Default: HTTP
+  return new OTLPLogExporterHTTP(config);
+}
+
+/**
  * Helper: Resolve protocol from config and environment
  */
 function resolveProtocol(configProtocol?: 'http' | 'grpc'): 'http' | 'grpc' {
@@ -194,7 +275,7 @@ function resolveProtocol(configProtocol?: 'http' | 'grpc'): 'http' | 'grpc' {
  */
 function formatEndpointUrl(
   endpoint: string,
-  signal: 'traces' | 'metrics',
+  signal: 'traces' | 'metrics' | 'logs',
   protocol: 'http' | 'grpc',
 ): string {
   if (protocol === 'grpc') {
@@ -495,6 +576,32 @@ export interface AutotelConfig {
    * Can be overridden with AUTOTEL_METRICS=on|off env var
    */
   metrics?: boolean | 'auto';
+
+  /**
+   * OTLP logs configuration
+   * - true: auto-configure OTLP log exporter from endpoint
+   * - false: disabled (default)
+   * - 'auto': same as false (opt-in only)
+   *
+   * When enabled and an endpoint is configured, autotel will automatically
+   * create a BatchLogRecordProcessor with an OTLPLogExporter - no manual
+   * imports needed. Works alongside logRecordProcessors (additive).
+   *
+   * Requires @opentelemetry/sdk-logs and @opentelemetry/exporter-logs-otlp-http
+   * (or -grpc) as peer dependencies.
+   *
+   * Can be overridden with AUTOTEL_LOGS=on|off env var.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   endpoint: 'http://localhost:4318',
+   *   logs: true,
+   * });
+   * ```
+   */
+  logs?: boolean | 'auto';
 
   /** Sampling strategy (default: AdaptiveSampler with 10% baseline) */
   sampler?: Sampler;
@@ -1044,6 +1151,27 @@ export function resolveMetricsFlag(
 }
 
 /**
+ * Resolve logs flag with env var override support.
+ * Defaults to disabled (opt-in only) to avoid unexpected log export
+ * and to preserve the upstream SDK's OTEL_LOGS_EXPORTER handling.
+ */
+export function resolveLogsFlag(
+  configFlag: boolean | 'auto' = 'auto',
+): boolean {
+  // 1. Check env var override (highest priority)
+  const envFlag = process.env.AUTOTEL_LOGS;
+  if (envFlag === 'on' || envFlag === 'true') return true;
+  if (envFlag === 'off' || envFlag === 'false') return false;
+
+  // 2. Check config flag
+  if (configFlag === true) return true;
+  if (configFlag === false) return false;
+
+  // 3. Default: disabled (opt-in only)
+  return false;
+}
+
+/**
  * Resolve debug flag with env var override support
  *
  * Supports:
@@ -1184,6 +1312,7 @@ export function init(cfg: AutotelConfig): void {
   const environment =
     mergedConfig.environment || process.env.NODE_ENV || 'development';
   const metricsEnabled = resolveMetricsFlag(mergedConfig.metrics);
+  const logsEnabled = resolveLogsFlag(mergedConfig.logs);
 
   // Detect hostname for proper Datadog correlation and Service Catalog discovery
   const hostname = detectHostname();
@@ -1373,6 +1502,26 @@ export function init(cfg: AutotelConfig): void {
     logRecordProcessors = [...mergedConfig.logRecordProcessors];
   }
 
+  // Auto-configure OTLP log exporter when logs are enabled and endpoint is set
+  if (logsEnabled && endpoint) {
+    const logExporter = createLogExporter(protocol, {
+      url: formatEndpointUrl(endpoint, 'logs', protocol),
+      headers: otlpHeaders,
+    });
+
+    let processor: LogRecordProcessor = new BatchLogRecordProcessor(
+      logExporter,
+    );
+    if (_stringRedactor) {
+      processor = new RedactingLogRecordProcessor(processor, _stringRedactor);
+    }
+    if (!logRecordProcessors) {
+      logRecordProcessors = [];
+    }
+    logRecordProcessors.push(processor);
+    logger.info({}, '[autotel] OTLP log exporter configured');
+  }
+
   // PostHog OTLP logs integration
   const posthogProcessors = buildPostHogLogProcessors(
     mergedConfig.posthog,
@@ -1443,8 +1592,12 @@ export function init(cfg: AutotelConfig): void {
     }
   }
 
+  const autotelSampler = mergedConfig.sampler || getDefaultSampler();
+  const sampler: OtelSampler = toOtelSampler(autotelSampler);
+
   const sdkOptions: Partial<NodeSDKConfiguration> = {
     resource,
+    sampler,
     instrumentations: finalInstrumentations,
   };
 

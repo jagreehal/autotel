@@ -87,10 +87,9 @@ export function computeLogStats(logs: TerminalLogEvent[]): LogStats {
  * Build a combined span/log timeline for a single trace.
  * Spans must include { startTime, endTime }; logs are positioned by time.
  */
-export function buildTraceTimeline<TSpan extends { startTime: number; endTime: number }>(
-  spans: TSpan[],
-  logs: TerminalLogEvent[],
-): TimelineItem<TSpan>[] {
+export function buildTraceTimeline<
+  TSpan extends { startTime: number; endTime: number },
+>(spans: TSpan[], logs: TerminalLogEvent[]): TimelineItem<TSpan>[] {
   const items: TimelineItem<TSpan>[] = [];
 
   for (const span of spans) {
@@ -112,4 +111,3 @@ export function buildTraceTimeline<TSpan extends { startTime: number; endTime: n
   items.sort((a, b) => a.time - b.time);
   return items;
 }
-

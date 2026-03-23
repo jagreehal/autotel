@@ -74,10 +74,7 @@ export function buildServiceGraph(spans: TerminalSpanEvent[]): ServiceGraph {
     });
   }
 
-  const byEdge = new Map<
-    string,
-    { spanCount: number; errorCount: number }
-  >();
+  const byEdge = new Map<string, { spanCount: number; errorCount: number }>();
 
   for (const span of spans) {
     const to = getPeerService(span);
@@ -101,4 +98,3 @@ export function buildServiceGraph(spans: TerminalSpanEvent[]): ServiceGraph {
 
   return { services, edges };
 }
-

@@ -188,7 +188,11 @@ describe('parseOtlpLogEvents', () => {
   it('maps severity numbers to log levels', () => {
     const make = (severityNumber: number) => ({
       resourceLogs: [
-        { scopeLogs: [{ logRecords: [{ severityNumber, body: { stringValue: 'msg' } }] }] },
+        {
+          scopeLogs: [
+            { logRecords: [{ severityNumber, body: { stringValue: 'msg' } }] },
+          ],
+        },
       ],
     });
 
@@ -203,7 +207,11 @@ describe('parseOtlpLogEvents', () => {
   it('maps severity text to log levels', () => {
     const make = (severityText: string) => ({
       resourceLogs: [
-        { scopeLogs: [{ logRecords: [{ severityText, body: { stringValue: 'msg' } }] }] },
+        {
+          scopeLogs: [
+            { logRecords: [{ severityText, body: { stringValue: 'msg' } }] },
+          ],
+        },
       ],
     });
 
@@ -230,9 +238,7 @@ describe('parseOtlpLogEvents', () => {
           ],
         },
         {
-          scopeLogs: [
-            { logRecords: [{ body: { stringValue: 'log-3' } }] },
-          ],
+          scopeLogs: [{ logRecords: [{ body: { stringValue: 'log-3' } }] }],
         },
       ],
     };

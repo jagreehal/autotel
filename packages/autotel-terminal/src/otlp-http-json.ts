@@ -44,7 +44,9 @@ function anyValueToPrimitive(value: OtlpAnyValue | undefined): unknown {
   return undefined;
 }
 
-function attrsToRecord(attributes: OtlpKeyValue[] | undefined): Record<string, unknown> {
+function attrsToRecord(
+  attributes: OtlpKeyValue[] | undefined,
+): Record<string, unknown> {
   if (!attributes || attributes.length === 0) return {};
   const out: Record<string, unknown> = {};
   for (const attribute of attributes) {
@@ -53,16 +55,25 @@ function attrsToRecord(attributes: OtlpKeyValue[] | undefined): Record<string, u
   return out;
 }
 
-function normalizeHexId(id: string | undefined, expectedHexLength: number): string {
+function normalizeHexId(
+  id: string | undefined,
+  expectedHexLength: number,
+): string {
   if (!id) return ''.padStart(expectedHexLength, '0');
   const trimmed = id.trim();
   if (/^[a-fA-F0-9]+$/.test(trimmed)) {
-    return trimmed.toLowerCase().padStart(expectedHexLength, '0').slice(-expectedHexLength);
+    return trimmed
+      .toLowerCase()
+      .padStart(expectedHexLength, '0')
+      .slice(-expectedHexLength);
   }
   try {
     const decoded = Buffer.from(trimmed, 'base64').toString('hex');
     if (decoded.length > 0) {
-      return decoded.toLowerCase().padStart(expectedHexLength, '0').slice(-expectedHexLength);
+      return decoded
+        .toLowerCase()
+        .padStart(expectedHexLength, '0')
+        .slice(-expectedHexLength);
     }
   } catch {
     // ignore and fall through
@@ -77,10 +88,21 @@ function toMs(unixNano: string | undefined): number {
   return parsed / 1_000_000;
 }
 
-function mapStatus(code: number | string | undefined): 'OK' | 'ERROR' | 'UNSET' {
+function mapStatus(
+  code: number | string | undefined,
+): 'OK' | 'ERROR' | 'UNSET' {
   const normalized = typeof code === 'string' ? code.toUpperCase() : code;
-  if (normalized === 1 || normalized === 'STATUS_CODE_OK' || normalized === 'OK') return 'OK';
-  if (normalized === 2 || normalized === 'STATUS_CODE_ERROR' || normalized === 'ERROR') {
+  if (
+    normalized === 1 ||
+    normalized === 'STATUS_CODE_OK' ||
+    normalized === 'OK'
+  )
+    return 'OK';
+  if (
+    normalized === 2 ||
+    normalized === 'STATUS_CODE_ERROR' ||
+    normalized === 'ERROR'
+  ) {
     return 'ERROR';
   }
   return 'UNSET';
@@ -112,7 +134,8 @@ function mapKind(kind: number | string | undefined): string {
 
 function* extractSpans(payload: unknown): Generator<OtlpSpan> {
   if (!payload || typeof payload !== 'object') return;
-  const resourceSpans = (payload as { resourceSpans?: unknown[] }).resourceSpans;
+  const resourceSpans = (payload as { resourceSpans?: unknown[] })
+    .resourceSpans;
   if (!Array.isArray(resourceSpans)) return;
   for (const resourceSpan of resourceSpans) {
     if (!resourceSpan || typeof resourceSpan !== 'object') continue;
@@ -197,7 +220,10 @@ type OtlpLogRecord = {
   spanId?: string;
 };
 
-function mapSeverityToLevel(severityNumber?: number, severityText?: string): LogLevel {
+function mapSeverityToLevel(
+  severityNumber?: number,
+  severityText?: string,
+): LogLevel {
   if (severityText) {
     const lower = severityText.toLowerCase();
     if (lower.startsWith('debug') || lower === 'trace') return 'debug';
@@ -263,11 +289,13 @@ export function parseOtlpLogEvents(payload: unknown): TerminalLogEvent[] {
 export function countOtlpMetrics(payload: unknown): number {
   if (!payload || typeof payload !== 'object') return 0;
   let count = 0;
-  const resourceMetrics = (payload as { resourceMetrics?: unknown[] }).resourceMetrics;
+  const resourceMetrics = (payload as { resourceMetrics?: unknown[] })
+    .resourceMetrics;
   if (!Array.isArray(resourceMetrics)) return 0;
   for (const resourceMetric of resourceMetrics) {
     if (!resourceMetric || typeof resourceMetric !== 'object') continue;
-    const scopeMetrics = (resourceMetric as { scopeMetrics?: unknown[] }).scopeMetrics;
+    const scopeMetrics = (resourceMetric as { scopeMetrics?: unknown[] })
+      .scopeMetrics;
     if (!Array.isArray(scopeMetrics)) continue;
     for (const scopeMetric of scopeMetrics) {
       if (!scopeMetric || typeof scopeMetric !== 'object') continue;
@@ -279,4 +307,3 @@ export function countOtlpMetrics(payload: unknown): number {
   }
   return count;
 }
-

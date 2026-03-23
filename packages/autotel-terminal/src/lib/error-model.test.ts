@@ -119,4 +119,3 @@ describe('buildErrorSummaries', () => {
     expect(errors.map((e) => e.traceId)).toEqual(['b', 'a']);
   });
 });
-

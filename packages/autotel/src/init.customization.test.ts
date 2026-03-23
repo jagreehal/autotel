@@ -14,6 +14,8 @@ async function loadInitWithMocks() {
   const traceExporterOptions: Record<string, unknown>[] = [];
   const metricExporterOptions: Record<string, unknown>[] = [];
   const metricReaderOptions: Record<string, unknown>[] = [];
+  const logExporterOptions: Record<string, unknown>[] = [];
+  const logProcessorOptions: Record<string, unknown>[] = [];
 
   class MockNodeSDK {
     constructor(options: Record<string, unknown>) {
@@ -71,15 +73,52 @@ async function loadInitWithMocks() {
     PeriodicExportingMetricReader: MockPeriodicExportingMetricReader,
   }));
 
+  class MockOTLPLogExporter {
+    options: Record<string, unknown>;
+
+    constructor(options: Record<string, unknown>) {
+      this.options = options;
+      logExporterOptions.push(options);
+    }
+  }
+
+  class MockBatchLogRecordProcessor {
+    exporter: unknown;
+
+    constructor(exporter: unknown) {
+      this.exporter = exporter;
+      logProcessorOptions.push({ exporter });
+    }
+
+    onEmit() {}
+    shutdown() {
+      return Promise.resolve();
+    }
+    forceFlush() {
+      return Promise.resolve();
+    }
+  }
+
+  vi.doMock('@opentelemetry/exporter-logs-otlp-http', () => ({
+    OTLPLogExporter: MockOTLPLogExporter,
+  }));
+
+  vi.doMock('@opentelemetry/sdk-logs', () => ({
+    BatchLogRecordProcessor: MockBatchLogRecordProcessor,
+  }));
+
   const mod = await import('./init');
 
   return {
     init: mod.init,
     getConfig: mod.getConfig,
+    resolveLogsFlag: mod.resolveLogsFlag,
     sdkInstances,
     traceExporterOptions,
     metricExporterOptions,
     metricReaderOptions,
+    logExporterOptions,
+    logProcessorOptions,
   };
 }
 
@@ -87,6 +126,8 @@ describe('init() customization', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     delete process.env.AUTOTEL_METRICS;
+    delete process.env.AUTOTEL_LOGS;
+    delete process.env.OTEL_LOGS_EXPORTER;
     delete process.env.NODE_ENV;
   });
 
@@ -216,5 +257,116 @@ describe('init() customization', () => {
 
     const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
     expect(options.spanProcessors).toEqual([customProcessor]);
+  });
+
+  it('auto-configures OTLP log exporter when logs enabled with endpoint', async () => {
+    const { init, sdkInstances, logExporterOptions } =
+      await loadInitWithMocks();
+
+    init({
+      service: 'log-app',
+      endpoint: 'http://localhost:4318',
+      logs: true,
+    });
+
+    expect(logExporterOptions).toHaveLength(1);
+    expect(logExporterOptions[0]!.url).toBe('http://localhost:4318/v1/logs');
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.logRecordProcessors).toBeDefined();
+    expect(
+      (options.logRecordProcessors as unknown[]).length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not auto-configure logs when logRecordProcessors are omitted', async () => {
+    const { init, sdkInstances, logExporterOptions } =
+      await loadInitWithMocks();
+
+    init({
+      service: 'default-logs',
+      endpoint: 'http://localhost:4318',
+    });
+
+    expect(logExporterOptions).toHaveLength(0);
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.logRecordProcessors).toBeUndefined();
+  });
+
+  it('does not override OTEL_LOGS_EXPORTER env configuration by default', async () => {
+    const { init, sdkInstances, logExporterOptions } =
+      await loadInitWithMocks();
+
+    process.env.OTEL_LOGS_EXPORTER = 'none';
+
+    init({
+      service: 'env-logs',
+      endpoint: 'http://localhost:4318',
+    });
+
+    expect(logExporterOptions).toHaveLength(0);
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.logRecordProcessors).toBeUndefined();
+  });
+
+  it('auto-configures logs when logs: true is set', async () => {
+    const { init, logExporterOptions } = await loadInitWithMocks();
+
+    init({
+      service: 'default-logs',
+      endpoint: 'http://localhost:4318',
+      logs: true,
+    });
+
+    expect(logExporterOptions).toHaveLength(1);
+  });
+
+  it('skips log exporter when logs: false', async () => {
+    const { init, logExporterOptions } = await loadInitWithMocks();
+
+    init({
+      service: 'no-logs',
+      endpoint: 'http://localhost:4318',
+      logs: false,
+    });
+
+    expect(logExporterOptions).toHaveLength(0);
+  });
+
+  it('skips log exporter when no endpoint', async () => {
+    const { init, logExporterOptions } = await loadInitWithMocks();
+
+    init({ service: 'no-endpoint', logs: true });
+
+    expect(logExporterOptions).toHaveLength(0);
+  });
+
+  it('respects AUTOTEL_LOGS env var override', async () => {
+    const { resolveLogsFlag } = await loadInitWithMocks();
+
+    process.env.AUTOTEL_LOGS = 'off';
+    expect(resolveLogsFlag(true)).toBe(false);
+
+    process.env.AUTOTEL_LOGS = 'on';
+    expect(resolveLogsFlag(false)).toBe(true);
+
+    delete process.env.AUTOTEL_LOGS;
+    expect(resolveLogsFlag(true)).toBe(true);
+    expect(resolveLogsFlag(false)).toBe(false);
+  });
+
+  it('passes OTLP headers to log exporter', async () => {
+    const { init, logExporterOptions } = await loadInitWithMocks();
+
+    init({
+      service: 'headers-logs',
+      endpoint: 'http://localhost:4318',
+      logs: true,
+      headers: { Authorization: 'Bearer token' },
+    });
+
+    expect(logExporterOptions).toHaveLength(1);
+    expect(logExporterOptions[0]!.headers).toEqual({
+      Authorization: 'Bearer token',
+    });
   });
 });
