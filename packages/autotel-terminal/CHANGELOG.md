@@ -1,5 +1,11 @@
 # autotel-terminal
 
+## 17.0.5
+
+### Patch Changes
+
+- 23113bc: Updated terminal UI
+
 ## 17.0.4
 
 ### Patch Changes
