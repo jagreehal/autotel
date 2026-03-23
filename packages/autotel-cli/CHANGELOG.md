@@ -1,5 +1,13 @@
 # autotel-cli
 
+## 0.8.1
+
+### Patch Changes
+
+- c6010e1: Improve package compatibility and tooling consistency across the monorepo.
+  - Add CommonJS build output/exports where missing (including `autotel` entrypoints and backend/MCP package builds) to improve `require()` interoperability.
+  - Roll forward shared dependency versions across affected packages/apps to keep examples and libraries aligned on the same toolchain.
+
 ## 0.8.0
 
 ### Minor Changes

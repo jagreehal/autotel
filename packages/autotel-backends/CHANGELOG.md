@@ -1,5 +1,16 @@
 # autotel-backends
 
+## 2.12.1
+
+### Patch Changes
+
+- c6010e1: Improve package compatibility and tooling consistency across the monorepo.
+  - Add CommonJS build output/exports where missing (including `autotel` entrypoints and backend/MCP package builds) to improve `require()` interoperability.
+  - Roll forward shared dependency versions across affected packages/apps to keep examples and libraries aligned on the same toolchain.
+
+- Updated dependencies [c6010e1]
+  - autotel@2.25.1
+
 ## 2.12.0
 
 ### Minor Changes
