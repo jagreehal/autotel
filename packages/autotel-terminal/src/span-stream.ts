@@ -9,6 +9,26 @@ import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import { SpanStatusCode, SpanKind } from 'autotel';
 import type { StreamingSpanProcessor } from './streaming-processor';
 
+/** Span event (e.g. exception, log annotation) */
+export interface SpanEvent {
+  /** Event name */
+  name: string;
+  /** Time in milliseconds since epoch */
+  timeMs: number;
+  /** Event attributes */
+  attributes?: Record<string, unknown>;
+}
+
+/** Span link (cross-trace reference) */
+export interface SpanLink {
+  /** Linked trace ID */
+  traceId: string;
+  /** Linked span ID */
+  spanId: string;
+  /** Link attributes */
+  attributes?: Record<string, unknown>;
+}
+
 /**
  * Span event format for terminal dashboard consumption
  */
@@ -33,6 +53,10 @@ export interface TerminalSpanEvent {
   kind?: string;
   /** Span attributes */
   attributes?: Record<string, unknown>;
+  /** Span events (exceptions, annotations) */
+  events?: SpanEvent[];
+  /** Span links (cross-trace references) */
+  links?: SpanLink[];
 }
 
 /**
@@ -120,6 +144,36 @@ export function createTerminalSpanStream(
         const endTime = timeToMs(span.endTime);
         const durationMs = endTime - startTime;
 
+        // Merge resource attributes (e.g. service.name) with span attributes
+        const resourceAttrs = (span.resource?.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const spanAttrs = span.attributes as Record<string, unknown>;
+        const mergedAttrs: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(resourceAttrs)) {
+          mergedAttrs[k] = v;
+        }
+        for (const [k, v] of Object.entries(spanAttrs)) {
+          mergedAttrs[k] = v;
+        }
+
+        const spanEvents: SpanEvent[] | undefined = span.events?.length
+          ? span.events.map((e) => ({
+              name: e.name,
+              timeMs: timeToMs(e.time),
+              attributes: e.attributes as Record<string, unknown> | undefined,
+            }))
+          : undefined;
+
+        const spanLinks: SpanLink[] | undefined = span.links?.length
+          ? span.links.map((l) => ({
+              traceId: l.context.traceId,
+              spanId: l.context.spanId,
+              attributes: l.attributes as Record<string, unknown> | undefined,
+            }))
+          : undefined;
+
         // Create terminal event
         const event: TerminalSpanEvent = {
           name: span.name,
@@ -131,7 +185,9 @@ export function createTerminalSpanStream(
           durationMs,
           status: mapStatus(span.status.code),
           kind: mapKind(span.kind),
-          attributes: span.attributes as Record<string, unknown>,
+          attributes: mergedAttrs,
+          ...(spanEvents ? { events: spanEvents } : {}),
+          ...(spanLinks ? { links: spanLinks } : {}),
         };
 
         callback(event);

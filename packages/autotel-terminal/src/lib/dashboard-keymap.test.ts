@@ -70,6 +70,24 @@ describe('handleKey', () => {
     expect(res.actions.some((a) => a.type === 'clearBuffers')).toBe(true);
   });
 
+  it('toggles topology view on G', () => {
+    const state: DashboardState = {
+      viewMode: 'trace',
+      paused: false,
+      recording: false,
+      spanFilters: { statusGroup: 'all' },
+    };
+    const result = handleKey(state, 'G');
+    expect(result.next.viewMode).toBe('topology');
+    expect(result.actions).toContainEqual({
+      type: 'toggleViewMode',
+      viewMode: 'topology',
+    });
+
+    const result2 = handleKey(result.next, 'G');
+    expect(result2.next.viewMode).toBe('trace');
+  });
+
   it('x clears traceId filter', () => {
     const state: DashboardState = {
       ...baseState,
