@@ -1,11 +1,6 @@
 import type { SpanFilterState } from './filters';
 
-export type ViewMode =
-  | 'trace'
-  | 'span'
-  | 'log'
-  | 'service-summary'
-  | 'errors';
+export type ViewMode = 'trace' | 'span' | 'log' | 'service-summary' | 'errors';
 
 export interface DashboardState {
   viewMode: ViewMode;
@@ -105,4 +100,3 @@ export function handleKey(
 
   return { next, actions };
 }
-

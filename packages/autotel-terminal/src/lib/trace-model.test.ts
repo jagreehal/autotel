@@ -67,7 +67,13 @@ describe('buildTraceSummaries', () => {
         't1',
         [
           span({ spanId: 'a', traceId: 't1', name: 'root', durationMs: 50 }),
-          span({ spanId: 'b', traceId: 't1', parentSpanId: 'a', name: 'child', durationMs: 20 }),
+          span({
+            spanId: 'b',
+            traceId: 't1',
+            parentSpanId: 'a',
+            name: 'child',
+            durationMs: 20,
+          }),
         ],
       ],
     ]);
@@ -85,7 +91,13 @@ describe('buildTraceSummaries', () => {
         't1',
         [
           span({ spanId: 'a', traceId: 't1', name: 'root', status: 'OK' }),
-          span({ spanId: 'b', traceId: 't1', parentSpanId: 'a', name: 'child', status: 'ERROR' }),
+          span({
+            spanId: 'b',
+            traceId: 't1',
+            parentSpanId: 'a',
+            name: 'child',
+            status: 'ERROR',
+          }),
         ],
       ],
     ]);
@@ -105,14 +117,22 @@ describe('buildTraceTree', () => {
     expect(tree).toHaveLength(1);
     expect(tree[0]!.span.name).toBe('root');
     expect(tree[0]!.children).toHaveLength(2);
-    expect(tree[0]!.children.map((n) => n.span.name).toSorted()).toEqual(['child1', 'child2']);
+    expect(tree[0]!.children.map((n) => n.span.name).toSorted()).toEqual([
+      'child1',
+      'child2',
+    ]);
   });
 
   it('assigns depth', () => {
     const spans = [
       span({ spanId: 'a', traceId: 't1', name: 'root' }),
       span({ spanId: 'b', traceId: 't1', parentSpanId: 'a', name: 'child' }),
-      span({ spanId: 'c', traceId: 't1', parentSpanId: 'b', name: 'grandchild' }),
+      span({
+        spanId: 'c',
+        traceId: 't1',
+        parentSpanId: 'b',
+        name: 'grandchild',
+      }),
     ];
     const flat = flattenTraceTree(buildTraceTree(spans));
     expect(flat[0]!.depth).toBe(0);
@@ -124,9 +144,29 @@ describe('buildTraceTree', () => {
 describe('sortSpansForWaterfall', () => {
   it('sorts by startTime then depth', () => {
     const spans = [
-      span({ spanId: 'a', traceId: 't1', name: 'root', startTime: 0, endTime: 100 }),
-      span({ spanId: 'b', traceId: 't1', parentSpanId: 'a', name: 'c1', startTime: 10, endTime: 50 }),
-      span({ spanId: 'c', traceId: 't1', parentSpanId: 'a', name: 'c2', startTime: 60, endTime: 90 }),
+      span({
+        spanId: 'a',
+        traceId: 't1',
+        name: 'root',
+        startTime: 0,
+        endTime: 100,
+      }),
+      span({
+        spanId: 'b',
+        traceId: 't1',
+        parentSpanId: 'a',
+        name: 'c1',
+        startTime: 10,
+        endTime: 50,
+      }),
+      span({
+        spanId: 'c',
+        traceId: 't1',
+        parentSpanId: 'a',
+        name: 'c2',
+        startTime: 60,
+        endTime: 90,
+      }),
     ];
     const sorted = sortSpansForWaterfall(spans);
     expect(sorted.map((s) => s.span.name)).toEqual(['root', 'c1', 'c2']);
@@ -165,7 +205,12 @@ describe('filterTraceSummaries', () => {
           't1',
           [
             span({ spanId: 'a', traceId: 't1', name: 'fetchUser' }),
-            span({ spanId: 'b', traceId: 't1', parentSpanId: 'a', name: 'dbQuery' }),
+            span({
+              spanId: 'b',
+              traceId: 't1',
+              parentSpanId: 'a',
+              name: 'dbQuery',
+            }),
           ],
         ],
       ]),
@@ -179,9 +224,27 @@ describe('filterTraceSummaries', () => {
 describe('computeStats', () => {
   it('computes total, errors, avg, p95', () => {
     const spans = [
-      span({ spanId: 'a', traceId: 't1', name: 'a', durationMs: 100, status: 'OK' }),
-      span({ spanId: 'b', traceId: 't1', name: 'b', durationMs: 200, status: 'OK' }),
-      span({ spanId: 'c', traceId: 't1', name: 'c', durationMs: 300, status: 'ERROR' }),
+      span({
+        spanId: 'a',
+        traceId: 't1',
+        name: 'a',
+        durationMs: 100,
+        status: 'OK',
+      }),
+      span({
+        spanId: 'b',
+        traceId: 't1',
+        name: 'b',
+        durationMs: 200,
+        status: 'OK',
+      }),
+      span({
+        spanId: 'c',
+        traceId: 't1',
+        name: 'c',
+        durationMs: 300,
+        status: 'ERROR',
+      }),
     ];
     const st = computeStats(spans);
     expect(st.total).toBe(3);
@@ -199,7 +262,15 @@ describe('computePerSpanNameStats', () => {
       span({ spanId: 'c', traceId: 't1', name: 'createOrder', durationMs: 50 }),
     ];
     const per = computePerSpanNameStats(spans);
-    expect(per.byName.get('fetchUser')).toEqual({ count: 2, totalMs: 300, avgMs: 150 });
-    expect(per.byName.get('createOrder')).toEqual({ count: 1, totalMs: 50, avgMs: 50 });
+    expect(per.byName.get('fetchUser')).toEqual({
+      count: 2,
+      totalMs: 300,
+      avgMs: 150,
+    });
+    expect(per.byName.get('createOrder')).toEqual({
+      count: 1,
+      totalMs: 50,
+      avgMs: 50,
+    });
   });
 });

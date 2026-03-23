@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import type { TerminalSpanEvent } from '../span-stream';
 import { buildServiceGraph } from './topology-model';
 
-const baseSpan = (overrides: Partial<TerminalSpanEvent> = {}): TerminalSpanEvent => ({
+const baseSpan = (
+  overrides: Partial<TerminalSpanEvent> = {},
+): TerminalSpanEvent => ({
   name: 'span',
   spanId: 'span-id',
   traceId: 'trace-id',
@@ -68,9 +70,9 @@ describe('buildServiceGraph', () => {
     ];
 
     const graph = buildServiceGraph(spans);
-    expect(graph.services.map((service) => service.serviceName).toSorted()).toEqual(
-      ['api'],
-    );
+    expect(
+      graph.services.map((service) => service.serviceName).toSorted(),
+    ).toEqual(['api']);
 
     // Edges: api -> postgresql, api -> kafka
     expect(graph.edges).toHaveLength(2);
@@ -97,4 +99,3 @@ describe('buildServiceGraph', () => {
     expect(graph.services[0]!.serviceName).toBe('unknown');
   });
 });
-

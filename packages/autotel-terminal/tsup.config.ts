@@ -12,5 +12,5 @@ export default defineConfig({
   splitting: false,
   treeshake: true,
   minify: false,
-  external: ['autotel'],
+  external: ['autotel', 'ai', 'ai-sdk-ollama', '@ai-sdk/openai', '@ai-sdk/openai-compatible'],
 });
