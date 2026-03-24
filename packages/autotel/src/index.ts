@@ -60,6 +60,7 @@ export {
   AttributeRedactingProcessor,
   REDACTOR_PATTERNS,
   REDACTOR_PRESETS,
+  createAttributeRedactor,
   createRedactedSpan,
   type AttributeRedactorFn,
   type AttributeRedactorPreset,
@@ -151,6 +152,7 @@ export { formatDuration } from './pretty-log-formatter';
 export {
   type Sampler,
   type SamplingContext,
+  type SamplingPreset,
   AlwaysSampler,
   NeverSampler,
   RandomSampler,
@@ -158,6 +160,10 @@ export {
   UserIdSampler,
   createLinkFromHeaders,
   extractLinksFromBatch,
+  samplingPresets,
+  resolveSamplingPreset,
+  AUTOTEL_SAMPLING_TAIL_KEEP,
+  AUTOTEL_SAMPLING_TAIL_EVALUATED,
 } from './sampling';
 
 // Events API

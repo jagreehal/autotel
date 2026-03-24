@@ -3,9 +3,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    bigquery: 'src/bigquery/index.ts',
-    kafka: 'src/kafka/index.ts',
-    rabbitmq: 'src/rabbitmq/index.ts',
+    drizzle: 'src/drizzle/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

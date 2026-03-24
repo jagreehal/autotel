@@ -12,7 +12,7 @@
  */
 
 import mongoose from 'mongoose';
-import { instrumentMongoose } from 'autotel-plugins/mongoose';
+import { instrumentMongoose } from 'autotel-mongoose';
 import { getMongoConnectionInfo, mongoUrl } from './config';
 
 // Instrument Mongoose - this patches Schema.prototype for automatic hook tracing

@@ -4,6 +4,10 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
+import {
+  AUTOTEL_SAMPLING_TAIL_KEEP,
+  AUTOTEL_SAMPLING_TAIL_EVALUATED,
+} from './sampling';
 import type {
   SpanProcessor,
   ReadableSpan,
@@ -86,8 +90,8 @@ describe('TailSamplingSpanProcessor', () => {
 
     it('should forward spans marked to keep (sampling.tail.keep = true)', () => {
       const span = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': true,
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: true,
       });
 
       tailSamplingProcessor.onEnd(span);
@@ -100,8 +104,8 @@ describe('TailSamplingSpanProcessor', () => {
   describe('Span dropping', () => {
     it('should drop spans marked to drop (sampling.tail.keep = false)', () => {
       const span = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': false,
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
       });
 
       tailSamplingProcessor.onEnd(span);
@@ -112,13 +116,13 @@ describe('TailSamplingSpanProcessor', () => {
 
     it('should drop multiple spans marked as false', () => {
       const span1 = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': false,
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
       });
 
       const span2 = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': false,
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
       });
 
       tailSamplingProcessor.onEnd(span1);
@@ -131,8 +135,8 @@ describe('TailSamplingSpanProcessor', () => {
   describe('Edge cases', () => {
     it('should forward spans when only evaluated but no keep attribute', () => {
       const span = createMockSpan({
-        'sampling.tail.evaluated': true,
-        // Missing 'sampling.tail.keep'
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        // Missing AUTOTEL_SAMPLING_TAIL_KEEP
       });
 
       tailSamplingProcessor.onEnd(span);
@@ -143,8 +147,8 @@ describe('TailSamplingSpanProcessor', () => {
 
     it('should forward spans when only keep but not evaluated', () => {
       const span = createMockSpan({
-        // Missing 'sampling.tail.evaluated'
-        'sampling.tail.keep': false,
+        // Missing AUTOTEL_SAMPLING_TAIL_EVALUATED
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
       });
 
       tailSamplingProcessor.onEnd(span);
@@ -156,12 +160,12 @@ describe('TailSamplingSpanProcessor', () => {
     it('should handle mixed spans (some kept, some dropped)', () => {
       const keptSpan1 = createMockSpan({ foo: 'bar' });
       const droppedSpan = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': false,
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: false,
       });
       const keptSpan2 = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': true,
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: true,
       });
 
       tailSamplingProcessor.onEnd(keptSpan1);
@@ -196,20 +200,20 @@ describe('TailSamplingSpanProcessor', () => {
       // 3. Error request (keep)
 
       const fastSpan = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': false, // Fast, no errors
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: false, // Fast, no errors
         duration: 50,
       });
 
       const slowSpan = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': true, // Slow request
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: true, // Slow request
         duration: 1000,
       });
 
       const errorSpan = createMockSpan({
-        'sampling.tail.evaluated': true,
-        'sampling.tail.keep': true, // Had error
+        [AUTOTEL_SAMPLING_TAIL_EVALUATED]: true,
+        [AUTOTEL_SAMPLING_TAIL_KEEP]: true, // Had error
         error: true,
       });
 

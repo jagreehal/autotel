@@ -29,6 +29,7 @@ import {
   AlwaysSampler,
   NeverSampler,
   RandomSampler,
+  type SamplingPreset,
 } from './sampling';
 
 /**
@@ -63,6 +64,7 @@ export interface YamlConfig {
   };
   resource?: Record<string, string | number | boolean>;
   sampling?: {
+    preset?: SamplingPreset;
     type?: 'adaptive' | 'always_on' | 'always_off' | 'ratio';
     ratio?: number;
     baseline_rate?: number;
@@ -189,8 +191,13 @@ function yamlToAutotelConfig(yaml: YamlConfig): Partial<AutotelConfig> {
   if (yaml.debug !== undefined) config.debug = yaml.debug;
 
   // Sampling configuration
-  const sampler = createSamplerFromYaml(yaml.sampling);
-  if (sampler) config.sampler = sampler;
+  if (yaml.sampling?.preset) {
+    warnOnIgnoredPresetOverrides(yaml.sampling);
+    config.sampling = yaml.sampling.preset;
+  } else {
+    const sampler = createSamplerFromYaml(yaml.sampling);
+    if (sampler) config.sampler = sampler;
+  }
 
   return config;
 }
@@ -199,6 +206,7 @@ function createSamplerFromYaml(
   sampling?: YamlConfig['sampling'],
 ): AutotelConfig['sampler'] {
   if (!sampling) return undefined;
+  if (sampling.preset) return undefined;
 
   const type = sampling.type ?? 'adaptive';
 
@@ -240,6 +248,28 @@ function createSamplerFromYaml(
     );
     return undefined;
   }
+}
+
+function warnOnIgnoredPresetOverrides(
+  sampling: NonNullable<YamlConfig['sampling']>,
+): void {
+  const ignoredFields = [
+    'type',
+    'ratio',
+    'baseline_rate',
+    'always_sample_errors',
+    'always_sample_slow',
+    'slow_threshold_ms',
+  ].filter((field) => sampling[field as keyof typeof sampling] !== undefined);
+
+  if (ignoredFields.length === 0) {
+    return;
+  }
+
+  console.warn(
+    `[autotel] sampling.preset="${sampling.preset}" ignores these YAML fields: ${ignoredFields.join(', ')}. ` +
+      'Use the programmatic API with sampler or samplingPresets.*(...) for tuned presets.',
+  );
 }
 
 /**

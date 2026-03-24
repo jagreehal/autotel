@@ -12,7 +12,7 @@
   "dependencies": {
     "@faker-js/faker": "^10.3.0",
     "autotel": "workspace:*",
-    "autotel-plugins": "workspace:*",
+    "autotel-mongoose": "workspace:*",
     "dotenv": "^17.3.1",
     "mongoose": "^9.3.1"
   },
