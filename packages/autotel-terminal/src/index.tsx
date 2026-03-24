@@ -70,6 +70,7 @@ import {
   findHotSpanNames,
 } from './lib/stats-model';
 import { applySpanFilters, type SpanFilterState } from './lib/filters';
+import type { ViewMode } from './lib/dashboard-keymap';
 import { buildErrorSummaries } from './lib/error-model';
 import { buildServiceGraph } from './lib/topology-model';
 import { renderTopologyAscii } from './lib/topology-render';
@@ -166,9 +167,7 @@ function Dashboard({
   const [filterErrorsOnly, setFilterErrorsOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHelp, setShowHelp] = useState(false);
-  const [viewMode, setViewMode] = useState<
-    'trace' | 'span' | 'log' | 'service-summary' | 'errors' | 'topology'
-  >('trace');
+  const [viewMode, setViewMode] = useState<ViewMode>('trace');
   const [spanFilters, setSpanFilters] = useState<SpanFilterState>({
     statusGroup: 'all',
   });
