@@ -1,6 +1,6 @@
 {
   "name": "autotel-plugins",
-  "version": "0.19.2",
+  "version": "0.19.3",
   "description": "OpenTelemetry instrumentation for libraries without official support (BigQuery)",
   "type": "module",
   "main": "./dist/index.js",

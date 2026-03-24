@@ -1,5 +1,11 @@
 # autotel
 
+## 2.25.3
+
+### Patch Changes
+
+- 3a5b723: Added sampling options
+
 ## 2.25.2
 
 ### Patch Changes

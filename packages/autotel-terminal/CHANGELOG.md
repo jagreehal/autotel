@@ -1,5 +1,13 @@
 # autotel-terminal
 
+## 17.0.7
+
+### Patch Changes
+
+- 3a5b723: Added sampling options
+- Updated dependencies [3a5b723]
+  - autotel@2.25.3
+
 ## 17.0.6
 
 ### Patch Changes

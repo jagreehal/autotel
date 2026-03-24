@@ -1,5 +1,13 @@
 # autotel-plugins
 
+## 0.19.3
+
+### Patch Changes
+
+- 3a5b723: Added sampling options
+- Updated dependencies [3a5b723]
+  - autotel@2.25.3
+
 ## 0.19.2
 
 ### Patch Changes

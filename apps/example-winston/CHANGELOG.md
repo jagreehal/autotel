@@ -1,5 +1,13 @@
 # @jagreehal/example-winston
 
+## 1.0.19
+
+### Patch Changes
+
+- Updated dependencies [3a5b723]
+  - autotel@2.25.3
+  - autotel-subscribers@29.0.3
+
 ## 1.0.18
 
 ### Patch Changes

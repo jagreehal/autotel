@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 29.0.3
+
+### Patch Changes
+
+- Updated dependencies [3a5b723]
+  - autotel@2.25.3
+
 ## 29.0.2
 
 ### Patch Changes
