@@ -5,6 +5,9 @@ import {
   truncate,
   buildWaterfallBar,
   buildTimeRuler,
+  computeMarkerPositions,
+  buildWaterfallBarWithMarkers,
+  adjustPanelSplit,
 } from './format';
 
 describe('formatDurationMs', () => {
@@ -114,5 +117,72 @@ describe('buildTimeRuler', () => {
   it('returns an empty string for non-positive widths', () => {
     expect(buildTimeRuler(100, 0)).toBe('');
     expect(buildTimeRuler(100, -1)).toBe('');
+  });
+});
+
+describe('computeMarkerPositions', () => {
+  it('maps event times to bar column offsets', () => {
+    const positions = computeMarkerPositions([150], 100, 200, 0, 1000, 10);
+    expect(positions).toHaveLength(1);
+    expect(positions[0]).toBe(1);
+  });
+
+  it('handles multiple markers', () => {
+    const positions = computeMarkerPositions(
+      [50, 100, 150],
+      0,
+      200,
+      0,
+      200,
+      20,
+    );
+    expect(positions).toHaveLength(3);
+    expect(positions[0]).toBe(5);
+    expect(positions[1]).toBe(10);
+    expect(positions[2]).toBe(15);
+  });
+
+  it('clamps markers to bar width', () => {
+    const positions = computeMarkerPositions([-100, 5000], 0, 100, 0, 100, 10);
+    expect(positions[0]).toBe(0);
+    expect(positions[1]).toBe(9);
+  });
+
+  it('returns empty for no markers', () => {
+    expect(computeMarkerPositions([], 0, 100, 0, 100, 10)).toEqual([]);
+  });
+});
+
+describe('buildWaterfallBarWithMarkers', () => {
+  it('overlays event markers on the bar', () => {
+    const result = buildWaterfallBarWithMarkers([50], 0, 100, 0, 100, 10);
+    expect(result).toHaveLength(10);
+    expect(result).toContain('◆');
+  });
+
+  it('preserves bar when no markers', () => {
+    const plainBar = buildWaterfallBar(0, 100, 0, 100, 10);
+    const withMarkers = buildWaterfallBarWithMarkers([], 0, 100, 0, 100, 10);
+    expect(withMarkers).toBe(plainBar);
+  });
+});
+
+describe('adjustPanelSplit', () => {
+  it('adjusts by delta', () => {
+    expect(adjustPanelSplit(50, 5)).toBe(55);
+    expect(adjustPanelSplit(50, -5)).toBe(45);
+  });
+
+  it('clamps to min', () => {
+    expect(adjustPanelSplit(25, -10)).toBe(20);
+  });
+
+  it('clamps to max', () => {
+    expect(adjustPanelSplit(75, 10)).toBe(80);
+  });
+
+  it('respects custom bounds', () => {
+    expect(adjustPanelSplit(50, -40, 30, 70)).toBe(30);
+    expect(adjustPanelSplit(50, 40, 30, 70)).toBe(70);
   });
 });

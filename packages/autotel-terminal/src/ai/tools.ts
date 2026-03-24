@@ -5,6 +5,15 @@ import type { TerminalLogEvent } from '../lib/log-model';
 import type { TraceSummary, SpanStats } from '../lib/trace-model';
 import type { ServiceStats } from '../lib/stats-model';
 import type { ErrorSummary } from '../lib/error-model';
+import type { InkSpec } from './types';
+import { validateSpec } from '@json-render/core';
+import { standardComponentDefinitions } from '@json-render/ink/catalog';
+
+/** Valid component names from the Ink catalog */
+const COMPONENT_NAMES = Object.keys(standardComponentDefinitions) as [
+  string,
+  ...string[],
+];
 
 // Helper: zod v4 schemas need to be cast for ai SDK v6's tool() which expects zod v3 types
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,7 +32,10 @@ export type ToolContext = {
   errorSummaries: ErrorSummary[];
 };
 
-export function createTelemetryTools(ctx: ToolContext) {
+export function createTelemetryTools(
+  ctx: ToolContext,
+  onRenderUI?: (spec: InkSpec) => void,
+) {
   return {
     getOverviewStats: t({
       description:
@@ -227,6 +239,39 @@ export function createTelemetryTools(ctx: ToolContext) {
           traceId: l.traceId?.slice(0, 8),
           attrs: l.attributes,
         }));
+      },
+    }),
+
+    renderUI: t({
+      description:
+        'Render rich terminal UI (tables, charts, badges) to display structured data. Use this when showing tabular data, comparisons, or metrics — not for short text answers. Available components: Table (columns + rows), KeyValue (key-value pairs), Badge (status labels: default/info/success/warning/error), BarChart (horizontal bars with labels), Card (grouped content with title), Heading (section title), Divider (separator), Text (styled text), Box (layout container).',
+      parameters: z.object({
+        spec: z
+          .object({
+            root: z.string().describe('ID of the root element'),
+            elements: z
+              .record(
+                z.string(),
+                z.object({
+                  type: z.enum(COMPONENT_NAMES).describe('Component name'),
+                  props: z.record(z.string(), z.unknown()).optional(),
+                  children: z.array(z.string()).describe('Child element keys'),
+                }),
+              )
+              .describe('Map of element ID to component definition'),
+          })
+          .describe('json-render spec defining the UI to display'),
+      }),
+      execute: async ({ spec }: { spec: InkSpec }) => {
+        const validation = validateSpec(spec);
+        if (!validation.valid) {
+          return {
+            rendered: false,
+            error: validation.issues.map((i) => i.message).join('; '),
+          };
+        }
+        onRenderUI?.(spec);
+        return { rendered: true };
       },
     }),
   };
