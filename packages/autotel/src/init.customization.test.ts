@@ -3,6 +3,7 @@ import type { MetricReader } from '@opentelemetry/sdk-metrics';
 import type { NodeSDK } from '@opentelemetry/sdk-node';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { mock, mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
+import { AlwaysSampler, NeverSampler } from './sampling';
 
 type SdkRecord = {
   options: Record<string, unknown>;
@@ -112,6 +113,7 @@ async function loadInitWithMocks() {
   return {
     init: mod.init,
     getConfig: mod.getConfig,
+    getDefaultSampler: mod.getDefaultSampler,
     resolveLogsFlag: mod.resolveLogsFlag,
     sdkInstances,
     traceExporterOptions,
@@ -128,6 +130,8 @@ describe('init() customization', () => {
     delete process.env.AUTOTEL_METRICS;
     delete process.env.AUTOTEL_LOGS;
     delete process.env.OTEL_LOGS_EXPORTER;
+    delete process.env.OTEL_TRACES_SAMPLER;
+    delete process.env.OTEL_TRACES_SAMPLER_ARG;
     delete process.env.NODE_ENV;
   });
 
@@ -225,6 +229,63 @@ describe('init() customization', () => {
     expect(metricExporterOptions[0]).toMatchObject({
       headers: { Authorization: 'Basic abc123' },
     });
+  });
+
+  it('resolves sampling preset shorthand to a sampler instance', async () => {
+    const { init, getDefaultSampler } = await loadInitWithMocks();
+
+    init({
+      service: 'sampling-preset-app',
+      sampling: 'development',
+    });
+
+    const sampler = getDefaultSampler();
+    expect(sampler.constructor.name).toBe('AlwaysSampler');
+    expect(sampler.shouldSample({ operationName: 'test', args: [] })).toBe(
+      true,
+    );
+  });
+
+  it('prefers explicit sampler over sampling preset shorthand', async () => {
+    const { init, getDefaultSampler } = await loadInitWithMocks();
+    const explicitSampler = new NeverSampler();
+
+    init({
+      service: 'sampling-precedence-app',
+      sampler: explicitSampler,
+      sampling: 'development',
+    });
+
+    expect(getDefaultSampler()).toBe(explicitSampler);
+  });
+
+  it('uses OTEL_TRACES_SAMPLER when no explicit sampling config is provided', async () => {
+    process.env.OTEL_TRACES_SAMPLER = 'always_off';
+    const { init, sdkInstances } = await loadInitWithMocks();
+
+    init({
+      service: 'env-sampler-app',
+    });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect((options.sampler as { toString(): string }).toString()).toContain(
+      'AlwaysOffSampler',
+    );
+  });
+
+  it('prefers explicit sampling config over OTEL_TRACES_SAMPLER', async () => {
+    process.env.OTEL_TRACES_SAMPLER = 'always_off';
+    const { init, sdkInstances } = await loadInitWithMocks();
+
+    init({
+      service: 'explicit-over-env-sampler-app',
+      sampling: 'development',
+    });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect((options.sampler as { toString(): string }).toString()).toBe(
+      'AutotelSamplerAdapter',
+    );
   });
 
   it('supports sdkFactory overrides', async () => {

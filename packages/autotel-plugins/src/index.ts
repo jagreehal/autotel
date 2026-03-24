@@ -5,8 +5,6 @@
  * OR where the official support is fundamentally broken.
  *
  * Currently supported:
- * - Drizzle ORM (no official instrumentation available)
- * - Mongoose (official package broken in ESM+tsx - see mongoose/index.ts for details)
  * - BigQuery (no official instrumentation available)
  * - Kafka (composition layer for use with @opentelemetry/instrumentation-kafkajs):
  *   - Processing span wrapper with context mode control (inherit/link/none)
@@ -15,8 +13,8 @@
  *
  * Philosophy:
  * Only include plugins for libraries that either:
- * 1. Have NO official instrumentation (e.g., Drizzle ORM)
- * 2. Have BROKEN official instrumentation (e.g., Mongoose in ESM+tsx)
+ * 1. Have NO official instrumentation (e.g., BigQuery)
+ * 2. Have BROKEN official instrumentation
  * 3. Add SIGNIFICANT value beyond official packages (e.g., Kafka processing spans)
  *
  * For databases/ORMs with working official instrumentation, use those directly with the --import pattern:
@@ -27,24 +25,6 @@
  * - Kafka: @opentelemetry/instrumentation-kafkajs (use with autotel-plugins/kafka for processing spans)
  *
  * See: https://github.com/open-telemetry/opentelemetry-js-contrib
- *
- * @example
- * ```typescript
- * // Drizzle manual instrumentation
- * import { instrumentDrizzleClient } from 'autotel-plugins/drizzle';
- * import { drizzle } from 'drizzle-orm/node-postgres';
- *
- * const db = instrumentDrizzleClient(drizzle(pool));
- * ```
- *
- * @example
- * ```typescript
- * // Mongoose runtime patching (works in ESM+tsx)
- * import mongoose from 'mongoose';
- * import { instrumentMongoose } from 'autotel-plugins/mongoose';
- *
- * instrumentMongoose(mongoose, { dbName: 'myapp' });
- * ```
  *
  * @packageDocumentation
  */
@@ -74,20 +54,6 @@ export {
   SEMATTRS_GCP_BIGQUERY_ROWS_RETURNED,
   SEMATTRS_GCP_BIGQUERY_SCHEMA_FIELDS,
 } from './common/constants';
-
-// Re-export Drizzle plugin
-export {
-  instrumentDrizzle,
-  instrumentDrizzleClient,
-  type InstrumentDrizzleConfig,
-} from './drizzle';
-
-// Re-export Mongoose plugin
-export {
-  instrumentMongoose,
-  MongooseInstrumentation,
-  type MongooseInstrumentationConfig,
-} from './mongoose';
 
 // Re-export BigQuery plugin
 export {

@@ -1,31 +1,16 @@
 {
-  "name": "autotel-plugins",
-  "version": "0.19.2",
-  "description": "OpenTelemetry instrumentation for libraries without official support (BigQuery)",
+  "name": "autotel-drizzle",
+  "version": "0.0.1",
+  "description": "OpenTelemetry instrumentation for Drizzle ORM",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/drizzle.js",
+  "types": "./dist/drizzle.d.ts",
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    },
-    "./bigquery": {
-      "types": "./dist/bigquery.d.ts",
-      "import": "./dist/bigquery.js",
-      "require": "./dist/bigquery.cjs"
-    },
-    "./kafka": {
-      "types": "./dist/kafka.d.ts",
-      "import": "./dist/kafka.js",
-      "require": "./dist/kafka.cjs"
-    },
-    "./rabbitmq": {
-      "types": "./dist/rabbitmq.d.ts",
-      "import": "./dist/rabbitmq.js",
-      "require": "./dist/rabbitmq.cjs"
+      "types": "./dist/drizzle.d.ts",
+      "import": "./dist/drizzle.js",
+      "require": "./dist/drizzle.cjs"
     }
   },
   "files": [
@@ -57,18 +42,9 @@
     "otel",
     "instrumentation",
     "plugins",
-    "bigquery",
-    "google-cloud",
-    "gcp",
-    "kafka",
-    "kafkajs",
-    "rabbitmq",
-    "amqp",
-    "amqplib",
-    "messaging",
-    "event-driven",
+    "drizzle",
+    "drizzle-orm",
     "database",
-    "orm",
     "observability",
     "tracing",
     "telemetry"
@@ -82,28 +58,15 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@google-cloud/bigquery": ">=8.1.1",
-    "@opentelemetry/instrumentation-amqplib": ">=0.60.0",
-    "@opentelemetry/instrumentation-kafkajs": ">=0.22.0"
-  },
-  "peerDependenciesMeta": {
-    "@google-cloud/bigquery": {
-      "optional": true
-    },
-    "@opentelemetry/instrumentation-kafkajs": {
-      "optional": true
-    },
-    "@opentelemetry/instrumentation-amqplib": {
-      "optional": true
-    }
+    "drizzle-orm": ">=0.45.1"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",
-    "@google-cloud/bigquery": "^8.1.1",
     "@opentelemetry/core": "^2.6.0",
     "@types/node": "^25.5.0",
     "@typescript-eslint/eslint-plugin": "^8.57.1",
     "@typescript-eslint/parser": "^8.57.1",
+    "drizzle-orm": "^0.45.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^63.0.0",
     "tsup": "^8.5.1",
@@ -113,7 +76,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/jagreehal/autotel",
-    "directory": "packages/autotel-plugins"
+    "directory": "packages/autotel-drizzle"
   },
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"

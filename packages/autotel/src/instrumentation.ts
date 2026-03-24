@@ -249,7 +249,7 @@ export async function initInstrumentation(
     headers: otlpHeaders,
   });
 
-  // Enables tail sampling via sampling.tail.keep attribute
+  // Enables tail sampling via autotel.sampling.tail.keep attribute
   const spanProcessor = new TailSamplingSpanProcessor(
     new BatchSpanProcessor(traceExporter),
   );

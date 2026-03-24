@@ -36,6 +36,12 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
   - [LLM Observability with OpenLLMetry](#llm-observability-with-openllmetry)
     - [Installation](#installation)
     - [Usage](#usage)
+  - [Sampling](#sampling)
+    - [Preset Shorthand](#preset-shorthand)
+    - [Tuned Presets](#tuned-presets)
+    - [YAML Configuration](#yaml-configuration)
+    - [Precedence Rules](#precedence-rules)
+    - [Tail-Sampling Attributes](#tail-sampling-attributes)
   - [Core Building Blocks](#core-building-blocks)
     - [trace()](#trace)
     - [span()](#span)
@@ -162,6 +168,14 @@ Defaults:
 - Sampler: adaptive (10% baseline, 100% for errors/slow spans)
 - Version: auto-detected from `package.json`
 - Events auto-flush when the root span finishes
+
+Sampling presets:
+
+- Simple path: `sampling: 'development' | 'errors-only' | 'production' | 'off'`
+- Advanced path: `samplingPresets.development()`, `samplingPresets.errorsOnly()`, `samplingPresets.production({...})`, `samplingPresets.off()`
+- Precedence is always `sampler > sampling > default`
+- If you use YAML `sampling.preset`, extra tuning fields in that same block are ignored. Use the programmatic API with `sampler` or `samplingPresets.production({...})` when you need overrides.
+- Tail-sampling hint attributes use the `autotel.*` namespace, for example `autotel.sampling.tail.keep`. This is intentional: OpenTelemetry does not define an official semantic-convention key for these internal hints, so autotel uses library-prefixed custom attributes rather than inventing fake `otel.*` semconv keys.
 
 ### 3. Instrument code with `trace()`
 
@@ -321,6 +335,122 @@ All LLM spans will appear alongside your application traces in your observabilit
 - Streaming responses
 - Evaluation loops
 - Working examples in `apps/example-ai-agent`
+
+## Sampling
+
+Autotel defaults to production-ready adaptive sampling: a 10% baseline, with errors and slow requests kept automatically.
+
+### Preset Shorthand
+
+Use the `sampling` field on `init()` when you want the shortest path:
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'checkout-api',
+  sampling: 'production',
+});
+```
+
+Available string presets:
+
+- `'development'`: keep everything
+- `'errors-only'`: drop healthy baseline traffic, keep errors
+- `'production'`: 10% baseline plus errors and slow traces
+- `'off'`: disable sampling entirely
+
+String presets intentionally use kebab-case. For example, the string form is `sampling: 'errors-only'`.
+
+### Tuned Presets
+
+Use `samplingPresets` when you want preset behavior with tuned thresholds or rates:
+
+```typescript
+import { init, samplingPresets } from 'autotel';
+
+init({
+  service: 'checkout-api',
+  sampler: samplingPresets.production({
+    baselineSampleRate: 0.05,
+    slowThresholdMs: 500,
+  }),
+});
+```
+
+Factory names intentionally use JavaScript-style camelCase. For example, the factory form is `samplingPresets.errorsOnly()`.
+
+### YAML Configuration
+
+Use `sampling.preset` for the simple YAML path:
+
+```yaml
+sampling:
+  preset: production
+```
+
+If you need tuned sampling in YAML today, prefer the explicit sampler config block:
+
+```yaml
+sampling:
+  type: adaptive
+  baseline_rate: 0.05
+  always_sample_errors: true
+  always_sample_slow: true
+  slow_threshold_ms: 500
+```
+
+When `sampling.preset` is set, other keys in the same YAML sampling block are ignored and autotel will warn. Use the programmatic API with `sampler` or `samplingPresets.production({...})` for tuned presets.
+
+### Precedence Rules
+
+Sampling always resolves in this order:
+
+```text
+sampler > sampling > default
+```
+
+That means:
+
+- `sampler` always wins if you provide both
+- `sampling` is the simple preset shorthand
+- OpenTelemetry env vars such as `OTEL_TRACES_SAMPLER` are used after explicit config and YAML
+- default behavior is `samplingPresets.production()`
+
+Example:
+
+```typescript
+import { init, NeverSampler } from 'autotel';
+
+init({
+  service: 'checkout-api',
+  sampler: new NeverSampler(),
+  sampling: 'development', // ignored because sampler wins
+});
+```
+
+For OpenTelemetry SDK compatibility, autotel also reads `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`.
+
+Supported values:
+
+- `always_on`
+- `always_off`
+- `traceidratio`
+- `parentbased_always_on`
+- `parentbased_always_off`
+- `parentbased_traceidratio`
+
+Currently unsupported and ignored with an error log:
+
+- `jaeger_remote`
+- `parentbased_jaeger_remote`
+- `xray`
+
+### Tail-Sampling Attributes
+
+Autotel uses internal span attributes such as `autotel.sampling.tail.keep` and `autotel.sampling.tail.evaluated` to communicate tail-sampling decisions.
+
+These use the `autotel.*` namespace intentionally. OpenTelemetry does not define an official semantic-convention key for these internal hints, so autotel uses library-prefixed custom attributes rather than inventing fake `otel.*` semantic convention keys.
 
 ## Core Building Blocks
 
@@ -1851,7 +1981,8 @@ init({
   endpoint?: string;
   protocol?: 'http' | 'grpc'; // OTLP protocol (default: 'http')
   metrics?: boolean | 'auto';
-  sampler?: Sampler;
+  sampler?: Sampler; // explicit sampler, highest precedence
+  sampling?: 'development' | 'errors-only' | 'production' | 'off'; // preset shorthand
   version?: string;
   environment?: string;
   baggage?: boolean | string; // Auto-copy baggage to span attributes
@@ -1874,6 +2005,26 @@ init({
   };
 });
 ```
+
+**Sampling Configuration:**
+
+```typescript
+import { init, samplingPresets } from 'autotel';
+
+init({
+  service: 'my-app',
+  sampling: 'production',
+});
+
+init({
+  service: 'my-app',
+  sampler: samplingPresets.production({ baselineSampleRate: 0.05 }),
+});
+```
+
+- Use `sampling` for the simple preset path.
+- Use `sampler` for advanced customization.
+- Precedence is always `sampler > sampling > default`.
 
 **Event Subscribers:**
 

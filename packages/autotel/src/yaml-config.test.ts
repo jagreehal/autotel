@@ -7,6 +7,7 @@ import {
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { AdaptiveSampler } from './sampling';
 
 describe('yaml-config', () => {
   const testDir = path.join(tmpdir(), `autotel-yaml-test-${Date.now()}`);
@@ -206,6 +207,76 @@ service:
 
     it('should throw on non-existent file', () => {
       expect(() => loadYamlConfigFromFile('/non/existent/path.yaml')).toThrow();
+    });
+
+    it('should map sampling preset to config.sampling shorthand', () => {
+      const yaml = `
+sampling:
+  preset: production
+`;
+      const filePath = path.join(testDir, 'sampling-preset.yaml');
+      writeFileSync(filePath, yaml);
+
+      const config = loadYamlConfigFromFile(filePath);
+      expect(config.sampling).toBe('production');
+      expect(config.sampler).toBeUndefined();
+    });
+
+    it('should prefer sampling preset over typed sampler config', () => {
+      const yaml = `
+sampling:
+  preset: off
+  type: adaptive
+  baseline_rate: 0.5
+`;
+      const filePath = path.join(testDir, 'sampling-preset-precedence.yaml');
+      writeFileSync(filePath, yaml);
+
+      const config = loadYamlConfigFromFile(filePath);
+      expect(config.sampling).toBe('off');
+      expect(config.sampler).toBeUndefined();
+    });
+
+    it('should warn when preset is combined with ignored override fields', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const yaml = `
+sampling:
+  preset: production
+  type: adaptive
+  baseline_rate: 0.5
+  slow_threshold_ms: 250
+`;
+      const filePath = path.join(testDir, 'sampling-preset-warning.yaml');
+      writeFileSync(filePath, yaml);
+
+      const config = loadYamlConfigFromFile(filePath);
+
+      expect(config.sampling).toBe('production');
+      expect(config.sampler).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'sampling.preset="production" ignores these YAML fields',
+        ),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('type, baseline_rate, slow_threshold_ms'),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('should still build sampler from typed YAML config without preset', () => {
+      const yaml = `
+sampling:
+  type: adaptive
+  baseline_rate: 0.25
+`;
+      const filePath = path.join(testDir, 'sampling-adaptive.yaml');
+      writeFileSync(filePath, yaml);
+
+      const config = loadYamlConfigFromFile(filePath);
+      expect(config.sampler).toBeInstanceOf(AdaptiveSampler);
+      expect(config.sampling).toBeUndefined();
     });
   });
 

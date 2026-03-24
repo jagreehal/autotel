@@ -17,7 +17,7 @@
 
 import 'dotenv/config';
 import { init, trace, type TraceContext } from 'autotel';
-import { instrumentDrizzleClient } from 'autotel-plugins/drizzle';
+import { instrumentDrizzleClient } from 'autotel-drizzle';
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
 import { eq } from 'drizzle-orm';

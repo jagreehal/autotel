@@ -1,14 +1,14 @@
 /**
  * Tail Sampling Span Processor
  *
- * Filters spans based on the `sampling.tail.keep` attribute set during execution.
+ * Filters spans based on the `autotel.sampling.tail.keep` attribute set during execution.
  * This enables adaptive sampling where we decide whether to keep a span AFTER
  * the operation completes, based on criteria like errors, duration, etc.
  *
  * How it works:
  * 1. Decorator creates span optimistically (head sampling returns true)
  * 2. Operation executes and completes
- * 3. Decorator calls shouldKeepTrace() and sets sampling.tail.keep attribute
+ * 3. Decorator calls shouldKeepTrace() and sets autotel.sampling.tail.keep attribute
  * 4. This processor checks the attribute and drops spans marked as false
  */
 
@@ -18,6 +18,10 @@ import type {
 } from '@opentelemetry/sdk-trace-base';
 import type { Context } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/sdk-trace-base';
+import {
+  AUTOTEL_SAMPLING_TAIL_KEEP,
+  AUTOTEL_SAMPLING_TAIL_EVALUATED,
+} from './sampling';
 
 export class TailSamplingSpanProcessor implements SpanProcessor {
   private wrappedProcessor: SpanProcessor;
@@ -31,8 +35,8 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
   }
 
   onEnd(span: ReadableSpan): void {
-    const tailEvaluated = span.attributes['sampling.tail.evaluated'];
-    const shouldKeep = span.attributes['sampling.tail.keep'];
+    const tailEvaluated = span.attributes[AUTOTEL_SAMPLING_TAIL_EVALUATED];
+    const shouldKeep = span.attributes[AUTOTEL_SAMPLING_TAIL_KEEP];
 
     if (tailEvaluated === true && shouldKeep === false) {
       return;

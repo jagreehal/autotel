@@ -27,6 +27,13 @@ import { TraceFlags } from '@opentelemetry/api';
 import { type Logger } from './logger';
 
 /**
+ * Tail sampling attribute keys (autotel-internal, not OTel semconv)
+ */
+export const AUTOTEL_SAMPLING_TAIL_KEEP = 'autotel.sampling.tail.keep';
+export const AUTOTEL_SAMPLING_TAIL_EVALUATED =
+  'autotel.sampling.tail.evaluated';
+
+/**
  * Sampler interface - return true to trace, false to skip
  */
 export interface Sampler {
@@ -490,6 +497,89 @@ export class FeatureFlagSampler implements Sampler {
     for (const flag of flags) {
       this.alwaysSampleFlags.delete(flag);
     }
+  }
+}
+
+// ============================================================================
+// Sampling Presets
+// ============================================================================
+
+/**
+ * Named sampling presets for common environments.
+ * Use with `init({ sampling: 'production' })` or directly via factories.
+ */
+export type SamplingPreset =
+  | 'development'
+  | 'errors-only'
+  | 'production'
+  | 'off';
+
+/**
+ * Sampling preset factories.
+ *
+ * For most users, the string shorthand on `init()` is simpler:
+ * ```typescript
+ * init({ service: 'my-app', sampling: 'production' })
+ * ```
+ *
+ * Use factories when you need to customize:
+ * ```typescript
+ * init({ service: 'my-app', sampler: samplingPresets.production({ baselineSampleRate: 0.05 }) })
+ * ```
+ */
+export const samplingPresets = {
+  /** Capture everything — best for local development and debugging */
+  development: () => new AlwaysSampler(),
+
+  /** Only bad outcomes — zero baseline, errors always kept */
+  errorsOnly: () =>
+    new AdaptiveSampler({
+      baselineSampleRate: 0,
+      alwaysSampleErrors: true,
+    }),
+
+  /**
+   * Balanced production defaults — 10% baseline + errors + slow traces.
+   * Pass overrides to tune (uses the same option names as AdaptiveSampler).
+   */
+  production: (overrides?: {
+    baselineSampleRate?: number;
+    slowThresholdMs?: number;
+    alwaysSampleErrors?: boolean;
+    alwaysSampleSlow?: boolean;
+  }) =>
+    new AdaptiveSampler({
+      baselineSampleRate: 0.1,
+      alwaysSampleErrors: true,
+      alwaysSampleSlow: true,
+      slowThresholdMs: 1000,
+      ...overrides,
+    }),
+
+  /** Disable sampling entirely */
+  off: () => new NeverSampler(),
+};
+
+/**
+ * Resolve a preset string to a Sampler instance.
+ * Used internally by `init()` when `sampling` string is provided.
+ *
+ * @throws Error if preset is not recognized
+ */
+export function resolveSamplingPreset(preset: SamplingPreset): Sampler {
+  switch (preset) {
+    case 'development':
+      return samplingPresets.development();
+    case 'errors-only':
+      return samplingPresets.errorsOnly();
+    case 'production':
+      return samplingPresets.production();
+    case 'off':
+      return samplingPresets.off();
+    default:
+      throw new Error(
+        `Unknown sampling preset: "${preset}". Valid presets: development, errors-only, production, off`,
+      );
   }
 }
 

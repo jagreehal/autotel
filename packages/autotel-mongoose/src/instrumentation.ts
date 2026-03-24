@@ -1,26 +1,38 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // Note: `any` is only used for dynamic method wrapping on runtime objects.
 // Type-safe interfaces are used for all public APIs.
 // Mongoose is a devDependency so we type-check against the real API; consumers use the peer.
 
 import type { Mongoose } from 'mongoose';
-import { SpanKind, otelTrace as trace, type Span, type Tracer } from 'autotel';
-import {
-  SEMATTRS_DB_SYSTEM,
-  SEMATTRS_DB_OPERATION,
-  SEMATTRS_DB_MONGODB_COLLECTION,
-  SEMATTRS_DB_NAME,
-  SEMATTRS_NET_PEER_NAME,
-  SEMATTRS_NET_PEER_PORT,
-} from '../common/constants';
+import { otelTrace as trace, SpanKind } from 'autotel';
+import type { Span, Tracer } from 'autotel';
 import {
   runWithSpan,
   finalizeSpan,
   getActiveSpan,
 } from 'autotel/trace-helpers';
 
-const DEFAULT_TRACER_NAME = 'autotel-plugins/mongoose';
-const DEFAULT_DB_SYSTEM = 'mongoose';
+import {
+  ATTR_DB_SYSTEM_NAME,
+  ATTR_DB_OPERATION_NAME,
+  ATTR_DB_COLLECTION_NAME,
+  ATTR_DB_NAMESPACE,
+  ATTR_DB_QUERY_TEXT,
+  ATTR_SERVER_ADDRESS,
+  ATTR_SERVER_PORT,
+  DB_SYSTEM_NAME_VALUE_MONGODB,
+} from './constants';
+import type {
+  InstrumentMongooseConfig,
+  ResolvedConfig,
+  SerializerPayload,
+} from './types';
+import { DEFAULT_TRACER_NAME } from './types';
+import {
+  createStatementCapture,
+  defaultSerializer,
+  type StatementCaptureFn,
+} from './statement';
+
 const INSTRUMENTED_FLAG = '__autotelMongooseInstrumented' as const;
 const WRAPPED_HOOK_FLAG = '__autotelWrappedHook' as const;
 
@@ -30,97 +42,69 @@ const WRAPPED_HOOK_FLAG = '__autotelWrappedHook' as const;
  */
 export const _STORED_PARENT_SPAN: unique symbol = Symbol('stored-parent-span');
 
-/**
- * Configuration options for Mongoose instrumentation.
- * Focused on Mongoose 8+ with promise-based API only.
- */
-export interface MongooseInstrumentationConfig {
-  /**
-   * Database name to include in spans.
-   */
-  dbName?: string;
-
-  /**
-   * Remote hostname or IP address of the MongoDB server.
-   */
-  peerName?: string;
-
-  /**
-   * Remote port number of the MongoDB server (default: 27017).
-   */
-  peerPort?: number;
-
-  /**
-   * Custom tracer name (default: "autotel-plugins/mongoose").
-   */
-  tracerName?: string;
-
-  /**
-   * Whether to capture collection names in spans (default: true).
-   */
-  captureCollectionName?: boolean;
-
-  /**
-   * Whether to instrument Schema hooks (pre/post save, validate, etc).
-   * Disabled by default because hooks interact with Mongoose plugins.
-   * Enable only if you have user-defined hooks you want to trace.
-   * (default: false)
-   */
-  instrumentHooks?: boolean;
-}
+// ---------------------------------------------------------------------------
+// Span creation
+// ---------------------------------------------------------------------------
 
 /**
  * Creates a span for a Mongoose operation.
+ * Note: db.query.text is NOT set here — callers set it after payload extraction.
  */
 function createSpan(
   tracer: Tracer,
   operation: string,
   modelName: string | undefined,
   collectionName: string | undefined,
-  config: Required<MongooseInstrumentationConfig>,
+  config: ResolvedConfig,
 ): Span {
   const spanName = collectionName
-    ? `mongoose.${collectionName}.${operation}`
+    ? `${operation} ${collectionName}`
     : modelName
-      ? `mongoose.${modelName}.${operation}`
+      ? `${operation} ${modelName}`
       : `mongoose.${operation}`;
 
   const attributes: Record<string, any> = {
-    [SEMATTRS_DB_SYSTEM]: DEFAULT_DB_SYSTEM,
-    [SEMATTRS_DB_OPERATION]: operation,
+    [ATTR_DB_SYSTEM_NAME]: DB_SYSTEM_NAME_VALUE_MONGODB,
+    [ATTR_DB_OPERATION_NAME]: operation,
   };
 
   if (collectionName && config.captureCollectionName) {
-    attributes[SEMATTRS_DB_MONGODB_COLLECTION] = collectionName;
+    attributes[ATTR_DB_COLLECTION_NAME] = collectionName;
   }
-
   if (config.dbName) {
-    attributes[SEMATTRS_DB_NAME] = config.dbName;
+    attributes[ATTR_DB_NAMESPACE] = config.dbName;
   }
-
   if (config.peerName) {
-    attributes[SEMATTRS_NET_PEER_NAME] = config.peerName;
+    attributes[ATTR_SERVER_ADDRESS] = config.peerName;
   }
-
   if (config.peerPort) {
-    attributes[SEMATTRS_NET_PEER_PORT] = config.peerPort;
+    attributes[ATTR_SERVER_PORT] = config.peerPort;
   }
 
   return tracer.startSpan(spanName, { kind: SpanKind.CLIENT, attributes });
 }
 
+// ---------------------------------------------------------------------------
+// Wrapper helpers
+// ---------------------------------------------------------------------------
+
 /**
- * Wraps a method to trace Query/Aggregate execution with proper span lifecycle.
- * Returns the Query/Aggregate object with wrapped exec() to finalize span.
+ * Wraps Model methods that return Query objects (find, findOne, findById,
+ * findOneAndUpdate, findOneAndDelete, findOneAndReplace, deleteOne, deleteMany,
+ * updateOne, updateMany, countDocuments, estimatedDocumentCount).
+ *
+ * Creates span FIRST, calls original, extracts payload from the returned Query,
+ * sets db.query.text AFTER extraction, then wraps exec() to finalize span.
  */
-function wrapQueryMethod(
+function wrapQueryReturningMethod(
   target: any,
   methodName: string,
   operation: string,
   getCollectionName: (obj: any) => string | undefined,
   getModelName: (obj: any) => string | undefined,
   tracer: Tracer,
-  config: Required<MongooseInstrumentationConfig>,
+  config: ResolvedConfig,
+  captureStatement: StatementCaptureFn,
 ): void {
   const original = target[methodName];
   if (typeof original !== 'function') {
@@ -142,16 +126,37 @@ function wrapQueryMethod(
       try {
         const result = original.apply(this, args);
 
-        // If result is a Query/Aggregate, wrap exec() and preserve it
+        // Extract payload from the returned Query object
         if (result && typeof result.exec === 'function') {
-          const originalExec = result.exec.bind(result);
+          try {
+            const payload: SerializerPayload = {};
+            if (typeof result.getFilter === 'function') {
+              payload.condition = result.getFilter();
+            }
+            if (result._update !== undefined) {
+              payload.updates = result._update;
+            }
+            if (typeof result.getOptions === 'function') {
+              payload.options = result.getOptions();
+            }
+            if (result._fields !== undefined) {
+              payload.fields = result._fields;
+            }
+            const statementText = captureStatement(operation, payload);
+            if (statementText) {
+              span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
+            }
+          } catch {
+            // Ignore errors in payload extraction
+          }
 
+          // Wrap exec() to finalize span
+          const originalExec = result.exec.bind(result);
           result.exec = function wrappedExec(): Promise<any> {
             try {
               const execPromise = originalExec();
-
               return Promise.resolve(execPromise)
-                .then((value) => {
+                .then((value: any) => {
                   finalizeSpan(span);
                   return value;
                 })
@@ -171,7 +176,125 @@ function wrapQueryMethod(
             }
           };
 
-          return result; // Return Query/Aggregate, not Promise
+          return result; // Return Query, not Promise
+        }
+
+        // Fallback for unexpected non-query results
+        finalizeSpan(span);
+        return result;
+      } catch (error) {
+        finalizeSpan(
+          span,
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        throw error;
+      }
+    });
+  };
+}
+
+/**
+ * Wraps Model static methods (create, insertMany, aggregate, bulkWrite).
+ *
+ * Builds payload from args BEFORE calling original (args are available
+ * immediately), creates span, sets db.query.text, calls original, then wraps
+ * exec() or promise for span finalization.
+ */
+function wrapStaticMethod(
+  target: any,
+  methodName: string,
+  operation: string,
+  getCollectionName: (obj: any) => string | undefined,
+  getModelName: (obj: any) => string | undefined,
+  tracer: Tracer,
+  config: ResolvedConfig,
+  captureStatement: StatementCaptureFn,
+): void {
+  const original = target[methodName];
+  if (typeof original !== 'function') {
+    return;
+  }
+
+  target[methodName] = function instrumented(this: any, ...args: any[]): any {
+    const collectionName = getCollectionName(this);
+    const modelName = getModelName(this);
+
+    // Build payload from args before calling original
+    const payload: SerializerPayload = {};
+    try {
+      switch (operation) {
+        case 'create': {
+          payload.document = args[0];
+          break;
+        }
+        case 'insertMany': {
+          payload.documents = args[0];
+          break;
+        }
+        case 'aggregate': {
+          payload.aggregatePipeline = args[0];
+          break;
+        }
+        case 'bulkWrite': {
+          payload.operations = args[0];
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    } catch {
+      // Ignore errors in payload extraction
+    }
+
+    const span = createSpan(
+      tracer,
+      operation,
+      modelName,
+      collectionName,
+      config,
+    );
+
+    try {
+      const statementText = captureStatement(operation, payload);
+      if (statementText) {
+        span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
+      }
+    } catch {
+      // Ignore serialization errors
+    }
+
+    return runWithSpan(span, () => {
+      try {
+        const result = original.apply(this, args);
+
+        // If result has exec() (e.g., aggregate), wrap it
+        if (result && typeof result.exec === 'function') {
+          const originalExec = result.exec.bind(result);
+          result.exec = function wrappedExec(): Promise<any> {
+            try {
+              const execPromise = originalExec();
+              return Promise.resolve(execPromise)
+                .then((value: any) => {
+                  finalizeSpan(span);
+                  return value;
+                })
+                .catch((error: unknown) => {
+                  finalizeSpan(
+                    span,
+                    error instanceof Error ? error : new Error(String(error)),
+                  );
+                  throw error;
+                });
+            } catch (error) {
+              finalizeSpan(
+                span,
+                error instanceof Error ? error : new Error(String(error)),
+              );
+              throw error;
+            }
+          };
+          return result;
         }
 
         // For direct promise results (e.g., create, insertMany)
@@ -204,7 +327,97 @@ function wrapQueryMethod(
 }
 
 /**
- * Wraps chainable Query methods (find, findOne, etc.) to capture span context.
+ * Wraps Model instance methods (save, deleteOne on prototype).
+ *
+ * Extracts document via `this.toObject()` BEFORE calling original,
+ * creates span, sets db.query.text, calls original, wraps promise
+ * for span finalization.
+ */
+function wrapInstanceMethod(
+  target: any,
+  methodName: string,
+  operation: string,
+  getCollectionName: (obj: any) => string | undefined,
+  getModelName: (obj: any) => string | undefined,
+  tracer: Tracer,
+  config: ResolvedConfig,
+  captureStatement: StatementCaptureFn,
+): void {
+  const original = target[methodName];
+  if (typeof original !== 'function') {
+    return;
+  }
+
+  target[methodName] = function instrumented(this: any, ...args: any[]): any {
+    const collectionName = getCollectionName(this);
+    const modelName = getModelName(this);
+
+    // Extract document before calling original
+    const payload: SerializerPayload = {};
+    try {
+      if (typeof this.toObject === 'function') {
+        payload.document = this.toObject();
+      }
+    } catch {
+      // Ignore errors in document extraction
+    }
+
+    const span = createSpan(
+      tracer,
+      operation,
+      modelName,
+      collectionName,
+      config,
+    );
+
+    try {
+      const statementText = captureStatement(operation, payload);
+      if (statementText) {
+        span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
+      }
+    } catch {
+      // Ignore serialization errors
+    }
+
+    return runWithSpan(span, () => {
+      try {
+        const result = original.apply(this, args);
+
+        // Instance methods return promises
+        if (result && typeof result.then === 'function') {
+          return Promise.resolve(result as Promise<any>)
+            .then((value) => {
+              finalizeSpan(span);
+              return value;
+            })
+            .catch((error: unknown) => {
+              finalizeSpan(
+                span,
+                error instanceof Error ? error : new Error(String(error)),
+              );
+              throw error;
+            });
+        }
+
+        finalizeSpan(span);
+        return result;
+      } catch (error) {
+        finalizeSpan(
+          span,
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        throw error;
+      }
+    });
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Chainable method wrapping (copied from original)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps chainable Query methods (populate, select, lean, etc.) to capture span context.
  */
 function wrapChainableMethod(target: any, methodName: string): void {
   const original = target[methodName];
@@ -225,6 +438,10 @@ function wrapChainableMethod(target: any, methodName: string): void {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Schema hook instrumentation (copied from original, updated semconv)
+// ---------------------------------------------------------------------------
+
 /**
  * Patches Mongoose Schema hooks (pre/post) to automatically trace them.
  * Only wraps user-defined hooks, skipping Mongoose's internal hooks.
@@ -232,7 +449,7 @@ function wrapChainableMethod(target: any, methodName: string): void {
 function patchSchemaHooks(
   Schema: any,
   tracer: Tracer,
-  config: Required<MongooseInstrumentationConfig>,
+  config: ResolvedConfig,
 ): void {
   if (!Schema?.prototype) {
     return;
@@ -375,7 +592,7 @@ function wrapHookHandler(
   hookName: string,
   hookType: 'pre' | 'post',
   tracer: Tracer,
-  config: Required<MongooseInstrumentationConfig>,
+  config: ResolvedConfig,
 ): any {
   if (typeof handler !== 'function') {
     return handler;
@@ -414,11 +631,11 @@ function wrapHookHandler(
       span.setAttribute('hook.model', modelName);
     }
     if (collectionName && config.captureCollectionName) {
-      span.setAttribute(SEMATTRS_DB_MONGODB_COLLECTION, collectionName);
+      span.setAttribute(ATTR_DB_COLLECTION_NAME, collectionName);
     }
-    span.setAttribute(SEMATTRS_DB_SYSTEM, DEFAULT_DB_SYSTEM);
+    span.setAttribute(ATTR_DB_SYSTEM_NAME, DB_SYSTEM_NAME_VALUE_MONGODB);
     if (config.dbName) {
-      span.setAttribute(SEMATTRS_DB_NAME, config.dbName);
+      span.setAttribute(ATTR_DB_NAMESPACE, config.dbName);
     }
 
     return runWithSpan(span, () => {
@@ -457,6 +674,10 @@ function wrapHookHandler(
   return wrappedHook;
 }
 
+// ---------------------------------------------------------------------------
+// Main instrumentation function
+// ---------------------------------------------------------------------------
+
 /**
  * Instruments Mongoose with OpenTelemetry tracing.
  *
@@ -470,7 +691,7 @@ function wrapHookHandler(
  * ```typescript
  * import mongoose from 'mongoose';
  * import { init } from 'autotel';
- * import { instrumentMongoose } from 'autotel-plugins/mongoose';
+ * import { instrumentMongoose } from 'autotel-mongoose';
  *
  * init({ service: 'my-app' });
  *
@@ -486,7 +707,7 @@ function wrapHookHandler(
  */
 export function instrumentMongoose(
   mongoose: Mongoose,
-  config?: MongooseInstrumentationConfig,
+  config?: InstrumentMongooseConfig,
 ): Mongoose {
   if (!mongoose?.Model) {
     return mongoose;
@@ -497,16 +718,31 @@ export function instrumentMongoose(
     return mongoose;
   }
 
-  const finalConfig: Required<MongooseInstrumentationConfig> = {
+  // Resolve statement-related config separately (they accept undefined)
+  const resolvedSerializer = config?.dbStatementSerializer;
+  const resolvedRedactor = config?.statementRedactor ?? 'default';
+
+  const finalConfig: ResolvedConfig = {
     dbName: config?.dbName || '',
     peerName: config?.peerName || '',
     peerPort: config?.peerPort || 27_017,
     tracerName: config?.tracerName || DEFAULT_TRACER_NAME,
     captureCollectionName: config?.captureCollectionName ?? true,
     instrumentHooks: config?.instrumentHooks ?? false,
+    dbStatementSerializer:
+      resolvedSerializer === false
+        ? false
+        : (resolvedSerializer ?? defaultSerializer),
+    statementRedactor: resolvedRedactor,
   };
 
   const tracer = trace.getTracer(finalConfig.tracerName);
+
+  // Create statement capture function
+  const captureStatement = createStatementCapture({
+    dbStatementSerializer: resolvedSerializer,
+    statementRedactor: resolvedRedactor,
+  });
 
   // Patch Schema hooks only if enabled
   if (m.Schema && finalConfig.instrumentHooks) {
@@ -522,7 +758,7 @@ export function instrumentMongoose(
     }
   };
 
-  // Patch Query methods
+  // Patch Query-returning methods on Model
   const queryMethods: Array<{ method: string; operation: string }> = [
     { method: 'find', operation: 'find' },
     { method: 'findOne', operation: 'findOne' },
@@ -539,7 +775,7 @@ export function instrumentMongoose(
   ];
 
   for (const { method, operation } of queryMethods) {
-    wrapQueryMethod(
+    wrapQueryReturningMethod(
       m.Model,
       method,
       operation,
@@ -547,6 +783,7 @@ export function instrumentMongoose(
       (model: any) => model.modelName,
       tracer,
       finalConfig,
+      captureStatement,
     );
 
     // Also patch chainable Query methods to capture context
@@ -559,7 +796,7 @@ export function instrumentMongoose(
   const instanceMethods = ['save', 'deleteOne'];
   for (const method of instanceMethods) {
     if (m.Model.prototype[method]) {
-      wrapQueryMethod(
+      wrapInstanceMethod(
         m.Model.prototype,
         method,
         method,
@@ -582,6 +819,7 @@ export function instrumentMongoose(
         },
         tracer,
         finalConfig,
+        captureStatement,
       );
     }
   }
@@ -590,7 +828,7 @@ export function instrumentMongoose(
   const staticMethods = ['create', 'insertMany', 'aggregate', 'bulkWrite'];
   for (const method of staticMethods) {
     if (m.Model[method]) {
-      wrapQueryMethod(
+      wrapStaticMethod(
         m.Model,
         method,
         method,
@@ -604,6 +842,7 @@ export function instrumentMongoose(
         (model: any) => model.modelName,
         tracer,
         finalConfig,
+        captureStatement,
       );
     }
   }
@@ -633,7 +872,7 @@ export function instrumentMongoose(
  * @deprecated Use `instrumentMongoose` instead.
  */
 export class MongooseInstrumentation {
-  constructor(private config?: MongooseInstrumentationConfig) {}
+  constructor(private config?: InstrumentMongooseConfig) {}
 
   enable(mongoose: Mongoose): void {
     instrumentMongoose(mongoose, this.config);

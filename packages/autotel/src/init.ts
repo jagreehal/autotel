@@ -25,8 +25,8 @@ import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions';
-import type { Sampler } from './sampling';
-import { AdaptiveSampler } from './sampling';
+import type { Sampler, SamplingPreset } from './sampling';
+import { samplingPresets, resolveSamplingPreset } from './sampling';
 import type { EventSubscriber } from './event-subscriber';
 import type { Logger } from './logger';
 import type { Attributes, Context, SpanKind, Link } from '@opentelemetry/api';
@@ -603,8 +603,16 @@ export interface AutotelConfig {
    */
   logs?: boolean | 'auto';
 
-  /** Sampling strategy (default: AdaptiveSampler with 10% baseline) */
+  /** Sampling strategy - takes precedence over `sampling` preset */
   sampler?: Sampler;
+
+  /**
+   * Sampling preset shorthand — resolves to a pre-configured sampler.
+   * If both `sampler` and `sampling` are provided, `sampler` takes precedence.
+   *
+   * @default 'production'
+   */
+  sampling?: SamplingPreset;
 
   /** Service version (default: auto-detect from package.json or '1.0.0') */
   version?: string;
@@ -1592,8 +1600,17 @@ export function init(cfg: AutotelConfig): void {
     }
   }
 
-  const autotelSampler = mergedConfig.sampler || getDefaultSampler();
-  const sampler: OtelSampler = toOtelSampler(autotelSampler);
+  const autotelSampler =
+    mergedConfig.sampler ??
+    (mergedConfig.sampling
+      ? resolveSamplingPreset(mergedConfig.sampling)
+      : undefined);
+  if (autotelSampler) {
+    mergedConfig.sampler = autotelSampler;
+  }
+  const sampler: OtelSampler = autotelSampler
+    ? toOtelSampler(autotelSampler)
+    : (envConfig.otelSampler ?? toOtelSampler(samplingPresets.production()));
 
   const sdkOptions: Partial<NodeSDKConfiguration> = {
     resource,
@@ -1921,14 +1938,7 @@ export function warnIfNotInitialized(context: string): void {
  * Get default sampler
  */
 export function getDefaultSampler(): Sampler {
-  return (
-    config?.sampler ||
-    new AdaptiveSampler({
-      baselineSampleRate: 0.1,
-      alwaysSampleErrors: true,
-      alwaysSampleSlow: true,
-    })
-  );
+  return config?.sampler || samplingPresets.production();
 }
 
 /**

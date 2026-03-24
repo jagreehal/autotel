@@ -42,7 +42,13 @@ import {
 } from '@opentelemetry/api';
 import { getConfig } from './config';
 import { getConfig as getInitConfig, getSdk } from './init';
-import { type Sampler, type SamplingContext, AlwaysSampler } from './sampling';
+import {
+  type Sampler,
+  type SamplingContext,
+  AlwaysSampler,
+  AUTOTEL_SAMPLING_TAIL_KEEP,
+  AUTOTEL_SAMPLING_TAIL_EVALUATED,
+} from './sampling';
 import { getEventQueue } from './track';
 import type { TraceContext } from './trace-context';
 import {
@@ -797,8 +803,8 @@ function wrapWithTracing<TArgs extends unknown[], TReturn>(
               duration,
               error,
             });
-            span.setAttribute('sampling.tail.keep', shouldKeepSpan);
-            span.setAttribute('sampling.tail.evaluated', true);
+            span.setAttribute(AUTOTEL_SAMPLING_TAIL_KEEP, shouldKeepSpan);
+            span.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
           }
         };
 
@@ -1104,8 +1110,8 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
               duration,
               error,
             });
-            span.setAttribute('sampling.tail.keep', shouldKeepSpan);
-            span.setAttribute('sampling.tail.evaluated', true);
+            span.setAttribute(AUTOTEL_SAMPLING_TAIL_KEEP, shouldKeepSpan);
+            span.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
           }
         };
 
@@ -1352,8 +1358,8 @@ function executeImmediately<TReturn = unknown>(
             duration,
             error,
           });
-          span.setAttribute('sampling.tail.keep', shouldKeepSpan);
-          span.setAttribute('sampling.tail.evaluated', true);
+          span.setAttribute(AUTOTEL_SAMPLING_TAIL_KEEP, shouldKeepSpan);
+          span.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
         }
       };
 

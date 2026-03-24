@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
+  AlwaysOffSampler,
+  AlwaysOnSampler,
+  ParentBasedSampler,
+  TraceIdRatioBasedSampler,
+} from '@opentelemetry/sdk-trace-base';
+import {
   resolveOtelEnv,
   parseResourceAttributes,
   parseOtlpHeaders,
+  createSamplerFromEnv,
   envToConfig,
   resolveConfigFromEnv,
 } from './env-config';
@@ -44,6 +51,16 @@ describe('env-config', () => {
       process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc';
       const env = resolveOtelEnv();
       expect(env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe('grpc');
+    });
+
+    it('should resolve trace sampler env vars', () => {
+      process.env.OTEL_TRACES_SAMPLER = 'traceidratio';
+      process.env.OTEL_TRACES_SAMPLER_ARG = '0.5';
+
+      const env = resolveOtelEnv();
+
+      expect(env.OTEL_TRACES_SAMPLER).toBe('traceidratio');
+      expect(env.OTEL_TRACES_SAMPLER_ARG).toBe('0.5');
     });
   });
 
@@ -198,6 +215,58 @@ describe('env-config', () => {
       const config = envToConfig({});
       expect(config).toEqual({});
     });
+
+    it('should map OTEL_TRACES_SAMPLER to an SDK sampler', () => {
+      const config = envToConfig({
+        OTEL_TRACES_SAMPLER: 'always_on',
+      });
+
+      expect(config.otelSampler).toBeInstanceOf(AlwaysOnSampler);
+    });
+  });
+
+  describe('createSamplerFromEnv', () => {
+    it('supports always_on', () => {
+      const sampler = createSamplerFromEnv({
+        OTEL_TRACES_SAMPLER: 'always_on',
+      });
+
+      expect(sampler).toBeInstanceOf(AlwaysOnSampler);
+    });
+
+    it('supports always_off', () => {
+      const sampler = createSamplerFromEnv({
+        OTEL_TRACES_SAMPLER: 'always_off',
+      });
+
+      expect(sampler).toBeInstanceOf(AlwaysOffSampler);
+    });
+
+    it('supports traceidratio', () => {
+      const sampler = createSamplerFromEnv({
+        OTEL_TRACES_SAMPLER: 'traceidratio',
+        OTEL_TRACES_SAMPLER_ARG: '0.25',
+      });
+
+      expect(sampler).toBeInstanceOf(TraceIdRatioBasedSampler);
+    });
+
+    it('supports parentbased_traceidratio', () => {
+      const sampler = createSamplerFromEnv({
+        OTEL_TRACES_SAMPLER: 'parentbased_traceidratio',
+        OTEL_TRACES_SAMPLER_ARG: '0.25',
+      });
+
+      expect(sampler).toBeInstanceOf(ParentBasedSampler);
+    });
+
+    it('returns undefined for unsupported remote samplers', () => {
+      const sampler = createSamplerFromEnv({
+        OTEL_TRACES_SAMPLER: 'jaeger_remote',
+      });
+
+      expect(sampler).toBeUndefined();
+    });
   });
 
   describe('resolveConfigFromEnv', () => {
@@ -241,6 +310,14 @@ describe('env-config', () => {
           team: 'backend',
         },
       });
+    });
+
+    it('should include otelSampler when OTEL_TRACES_SAMPLER is set', () => {
+      process.env.OTEL_TRACES_SAMPLER = 'parentbased_always_off';
+
+      const config = resolveConfigFromEnv();
+
+      expect(config.otelSampler).toBeInstanceOf(ParentBasedSampler);
     });
   });
 });
