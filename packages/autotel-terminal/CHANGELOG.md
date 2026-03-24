@@ -1,5 +1,11 @@
 # autotel-terminal
 
+## 17.0.6
+
+### Patch Changes
+
+- ca63151: Add JSON Render
+
 ## 17.0.5
 
 ### Patch Changes
