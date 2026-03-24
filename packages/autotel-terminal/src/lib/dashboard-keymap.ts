@@ -6,7 +6,8 @@ export type ViewMode =
   | 'log'
   | 'service-summary'
   | 'errors'
-  | 'topology';
+  | 'topology'
+  | 'ai';
 
 export interface DashboardState {
   viewMode: ViewMode;
@@ -67,6 +68,13 @@ export function handleKey(
 
   if (input === 'G') {
     const viewMode = state.viewMode === 'topology' ? 'trace' : 'topology';
+    next = { ...state, viewMode };
+    actions.push({ type: 'toggleViewMode', viewMode });
+    return { next, actions };
+  }
+
+  if (input === 'a') {
+    const viewMode = state.viewMode === 'ai' ? 'trace' : 'ai';
     next = { ...state, viewMode };
     actions.push({ type: 'toggleViewMode', viewMode });
     return { next, actions };

@@ -55,8 +55,10 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.47",
     "@ai-sdk/openai-compatible": "^2.0.37",
+    "@json-render/core": "^0.15.0",
+    "@json-render/ink": "^0.15.0",
     "ai": "^6.0.134",
-    "ai-sdk-ollama": "^3.8.1",
+    "ai-sdk-ollama": "^3.8.2",
     "ink": "^6.8.0",
     "react": "^19.2.4",
     "zod": "4.3.6"

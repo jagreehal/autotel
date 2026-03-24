@@ -17,3 +17,6 @@ export type AIState =
   | { status: 'idle' }
   | { status: 'streaming'; abortController: AbortController }
   | { status: 'error'; message: string };
+
+/** json-render spec for rich AI output — re-export from @json-render/ink */
+export type { InkSpec } from '@json-render/ink';

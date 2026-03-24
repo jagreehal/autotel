@@ -70,6 +70,7 @@ import {
   findHotSpanNames,
 } from './lib/stats-model';
 import { applySpanFilters, type SpanFilterState } from './lib/filters';
+import type { ViewMode } from './lib/dashboard-keymap';
 import { buildErrorSummaries } from './lib/error-model';
 import { buildServiceGraph } from './lib/topology-model';
 import { renderTopologyAscii } from './lib/topology-render';
@@ -83,6 +84,8 @@ import {
 import { buildSystemPrompt } from './ai/system-prompt';
 import { createTelemetryTools, type ToolContext } from './ai/tools';
 import { providerStreamText } from './ai/stream';
+import { Renderer as InkRenderer } from '@json-render/ink';
+import type { InkSpec } from './ai/types';
 
 /** Key attribute keys to show first (autotel / OTel conventions) */
 const KEY_ATTR_KEYS = new Set([
@@ -164,9 +167,7 @@ function Dashboard({
   const [filterErrorsOnly, setFilterErrorsOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHelp, setShowHelp] = useState(false);
-  const [viewMode, setViewMode] = useState<
-    'trace' | 'span' | 'log' | 'service-summary' | 'errors' | 'topology'
-  >('trace');
+  const [viewMode, setViewMode] = useState<ViewMode>('trace');
   const [spanFilters, setSpanFilters] = useState<SpanFilterState>({
     statusGroup: 'all',
   });
@@ -185,11 +186,11 @@ function Dashboard({
   const [logs, setLogs] = useState<TerminalLogEvent[]>([]);
 
   // AI state
-  const [aiActive, setAiActive] = useState(false);
   const [aiMessages, setAiMessages] = useState<ChatMessage[]>([]);
   const [aiInput, setAiInput] = useState('');
   const [aiState, setAiState] = useState<AIState>({ status: 'unconfigured' });
   const [aiInputMode, setAiInputMode] = useState(false);
+  const [aiSpec, setAiSpec] = useState<InkSpec | null>(null);
   const aiModelRef = useRef<AIModelResult | null>(null);
   const aiAbortRef = useRef<AbortController | null>(null);
 
@@ -492,6 +493,7 @@ function Dashboard({
 
     const abort = new AbortController();
     aiAbortRef.current = abort;
+    setAiSpec(null);
     setAiState({ status: 'streaming', abortController: abort });
 
     // Build tool context from current dashboard state
@@ -503,7 +505,7 @@ function Dashboard({
       serviceStats,
       errorSummaries,
     };
-    const tools = createTelemetryTools(toolCtx);
+    const tools = createTelemetryTools(toolCtx, (spec) => setAiSpec(spec));
 
     // Compact stats for system prompt (tools provide the detailed data)
     const statsContext = JSON.stringify({
@@ -558,15 +560,33 @@ function Dashboard({
         });
       }
 
+      // If model returned no text (common with small models after tool calls),
+      // show a fallback message
+      if (!fullText.trim()) {
+        setAiMessages((prev) => {
+          const updated = [...prev];
+          const lastMsg = updated.at(-1);
+          if (lastMsg?.role === 'assistant' && !lastMsg.content.trim()) {
+            updated[updated.length - 1] = {
+              role: 'assistant',
+              content: '(No response from model — try a simpler question or a larger model)',
+            };
+          }
+          return updated;
+        });
+      }
+
       setAiState({ status: 'idle' });
     } catch (error: unknown) {
       if (abort.signal.aborted) {
         setAiState({ status: 'idle' });
         return;
       }
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`[autotel-terminal] AI error: ${errorMsg}\n`);
       setAiState({
         status: 'error',
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMsg,
       });
     } finally {
       aiAbortRef.current = null;
@@ -659,7 +679,7 @@ function Dashboard({
             aiAbortRef.current?.abort();
           } else {
             setAiInputMode(false);
-            setAiActive(false);
+            setViewMode('trace');
           }
           return;
         }
@@ -679,15 +699,19 @@ function Dashboard({
         return;
       }
       if (input === 'a') {
-        setAiActive((v) => !v);
-        if (aiActive) {
+        if (viewMode === 'ai') {
+          setViewMode('trace');
           setAiInputMode(false);
         } else {
-          // Only enter input mode if a provider is configured
+          setViewMode('ai');
           if (aiState.status !== 'unconfigured') {
             setAiInputMode(true);
           }
         }
+        setSelected(0);
+        setDrilldownTraceId(null);
+        setDrilldownSelectedIndex(0);
+        setDrilldownScrollOffset(0);
         return;
       }
       if (key.escape) {
@@ -1026,6 +1050,8 @@ function Dashboard({
             ? 'services'
             : viewMode === 'topology'
               ? 'topology'
+            : viewMode === 'ai'
+              ? 'AI'
               : 'errors';
   const showNewError = newErrorCount > 0;
 
@@ -1129,8 +1155,8 @@ function Dashboard({
           <Box flexDirection="row" justifyContent="space-between">
             <Text dimColor>
               {drilldownTraceId == null
-                ? '↑/↓ select • Enter open • Tab cycle tabs • Esc back • T trace • L logs • a AI • ? help'
-                : '↑/↓ select • Tab cycle tabs • Esc back • T trace • L logs • a AI • ? help'}
+                ? '↑/↓ select • Enter open • Tab cycle tabs • Esc back • t trace • l logs • a AI • ? help'
+                : '↑/↓ select • Tab cycle tabs • Esc back • t trace • l logs • a AI • ? help'}
             </Text>
             <Text dimColor>
               {viewMode === 'trace'
@@ -1143,13 +1169,15 @@ function Dashboard({
                       ? `errors ${filteredErrorSummaries.length}/${errorSummaries.length}`
                       : viewMode === 'topology'
                         ? `services ${serviceGraph.services.length} · edges ${serviceGraph.edges.length}`
+                      : viewMode === 'ai'
+                        ? `messages ${aiMessages.length}`
                         : `logs ${filteredLogs.length}/${logs.length}`}
             </Text>
           </Box>
         )}
         {showHelp && (
           <Text dimColor>
-            Views: t/l/v/E/G • Search: / • Filters: e/S/R/H/f/x • Capture: p/r/J • AI: a • Clear: c
+            Views: t/l/v/E/G/a • Search: / • Filters: e/S/R/H/f/x • Capture: p/r/J • Clear: c
           </Text>
         )}
       </Box>
@@ -1179,8 +1207,62 @@ function Dashboard({
         </Box>
       )}
 
-      {/* eslint-disable-next-line unicorn/no-negated-condition */}
-      {viewMode !== 'topology' && (drilldownTraceId != null ? (
+      {viewMode === 'ai' && (
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>
+          <Box marginBottom={1} justifyContent="space-between">
+            <Text bold>AI Assistant</Text>
+            <Text dimColor>
+              {aiState.status === 'streaming'
+                ? '(streaming...)'
+                : aiState.status === 'unconfigured'
+                  ? '(no provider)'
+                  : aiState.status === 'error'
+                    ? '(error)'
+                    : ''}
+            </Text>
+          </Box>
+
+          {aiState.status === 'unconfigured' ? (
+            <Box flexDirection="column">
+              <Text dimColor>No AI provider configured.</Text>
+              <Text dimColor>Set AI_PROVIDER and AI_MODEL env vars, or start Ollama locally.</Text>
+              <Text dimColor>Press a to close this view.</Text>
+            </Box>
+          ) : (
+            <>
+              {aiMessages.length === 0 && aiState.status !== 'error' && (
+                <Text dimColor>Ask a question about your telemetry data. Press Enter to send.</Text>
+              )}
+              {aiMessages.slice(-10).map((msg, i) => (
+                <Box key={`ai-msg-${i}`} flexDirection="column" marginBottom={msg.role === 'assistant' ? 1 : 0}>
+                  <Text color={msg.role === 'user' ? 'cyan' : undefined}>
+                    {msg.role === 'user' ? '> ' : ''}
+                    {msg.content.slice(0, 1000)}
+                    {msg.content.length > 1000 ? '...' : ''}
+                  </Text>
+                </Box>
+              ))}
+              {aiSpec && (
+                <Box flexDirection="column" marginBottom={1} borderStyle="single" borderColor="gray" paddingX={1}>
+                  <InkRenderer spec={aiSpec} />
+                </Box>
+              )}
+              {aiState.status === 'error' && (
+                <Text color="red">Error: {aiState.message}</Text>
+              )}
+              <Box marginTop={1} borderStyle="single" borderColor="cyan" paddingX={1}>
+                <Text color="cyan">&gt; </Text>
+                <Text>
+                  {aiInput || (aiInputMode ? '(type your question)' : '(press a to focus)')}
+                </Text>
+              </Box>
+            </>
+          )}
+        </Box>
+      )}
+
+      {/* eslint-disable unicorn/no-negated-condition */}
+      {viewMode !== 'topology' && viewMode !== 'ai' && (drilldownTraceId != null ? (
         <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>
           {/* Trace header — otel-gui style */}
           <Box marginBottom={0} flexDirection="column">
@@ -1734,72 +1816,6 @@ function Dashboard({
           paddingX={1}
           paddingY={0}
         >
-          {aiActive ? (
-            <>
-              <Box marginBottom={1} justifyContent="space-between">
-                <Text bold>AI Assistant</Text>
-                <Text dimColor>
-                  {aiState.status === 'streaming'
-                    ? '(streaming...)'
-                    : aiState.status === 'unconfigured'
-                      ? '(no provider)'
-                      : aiState.status === 'error'
-                        ? '(error)'
-                        : ''}
-                </Text>
-              </Box>
-
-              {aiState.status === 'unconfigured' ? (
-                <Box flexDirection="column">
-                  <Text dimColor>No AI provider configured.</Text>
-                  <Text dimColor>
-                    Set AI_PROVIDER and AI_MODEL env vars, or start Ollama
-                    locally.
-                  </Text>
-                  <Text dimColor>Press 'a' to close this panel.</Text>
-                </Box>
-              ) : (
-                <>
-                  {aiMessages.length === 0 && aiState.status !== 'error' && (
-                    <Text dimColor>
-                      Ask a question about your telemetry data. Press Enter to
-                      send.
-                    </Text>
-                  )}
-                  {aiMessages.slice(-10).map((msg, i) => (
-                    <Box
-                      key={i}
-                      flexDirection="column"
-                      marginBottom={msg.role === 'assistant' ? 1 : 0}
-                    >
-                      <Text color={msg.role === 'user' ? 'cyan' : undefined}>
-                        {msg.role === 'user' ? '> ' : ''}
-                        {msg.content.slice(0, 500)}
-                        {msg.content.length > 500 ? '...' : ''}
-                      </Text>
-                    </Box>
-                  ))}
-                  {aiState.status === 'error' && (
-                    <Text color="red">Error: {aiState.message}</Text>
-                  )}
-                  <Box
-                    marginTop={1}
-                    borderStyle="single"
-                    borderColor="cyan"
-                    paddingX={1}
-                  >
-                    <Text color="cyan">&gt; </Text>
-                    <Text>
-                      {aiInput ||
-                        (aiInputMode
-                          ? '(type your question)'
-                          : '(press a to focus)')}
-                    </Text>
-                  </Box>
-                </>
-              )}
-            </>
-          ) : (
             <>
               <Box marginBottom={1}>
                 <Text bold>Details</Text>
@@ -2054,7 +2070,6 @@ function Dashboard({
                   <Text dimColor>Select a trace or span to view details.</Text>
                 )}
             </>
-          )}
         </Box>
       </Box>
       ))}

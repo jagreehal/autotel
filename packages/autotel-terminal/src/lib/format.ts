@@ -82,3 +82,68 @@ export function buildTimeRuler(totalMs: number, width: number): string {
   for (let i = 0; i < right.length; i++) chars[rightPos + i] = right[i];
   return chars.join('');
 }
+
+/**
+ * Compute marker column positions for event times on a waterfall bar.
+ */
+export function computeMarkerPositions(
+  markerTimesMs: number[],
+  spanStart: number,
+  spanEnd: number,
+  traceStart: number,
+  traceDuration: number,
+  width: number,
+): number[] {
+  if (width <= 0 || traceDuration <= 0 || markerTimesMs.length === 0) return [];
+  return markerTimesMs.map((t) => {
+    const ratio = (t - traceStart) / traceDuration;
+    const col = Math.floor(ratio * width);
+    return Math.max(0, Math.min(col, width - 1));
+  });
+}
+
+/**
+ * Build a waterfall bar string with event markers overlaid as ◆.
+ */
+export function buildWaterfallBarWithMarkers(
+  markerTimesMs: number[],
+  spanStart: number,
+  spanDuration: number,
+  traceStart: number,
+  traceDuration: number,
+  width: number,
+): string {
+  const bar = buildWaterfallBar(
+    spanStart,
+    spanDuration,
+    traceStart,
+    traceDuration,
+    width,
+  );
+  if (markerTimesMs.length === 0 || width <= 0) return bar;
+  const positions = computeMarkerPositions(
+    markerTimesMs,
+    spanStart,
+    spanStart + spanDuration,
+    traceStart,
+    traceDuration,
+    width,
+  );
+  const chars = [...bar];
+  for (const pos of positions) {
+    chars[pos] = '◆';
+  }
+  return chars.join('');
+}
+
+/**
+ * Adjust a panel split percentage by a delta, clamped to [20, 80].
+ */
+export function adjustPanelSplit(
+  current: number,
+  delta: number,
+  min = 20,
+  max = 80,
+): number {
+  return Math.max(min, Math.min(max, current + delta));
+}

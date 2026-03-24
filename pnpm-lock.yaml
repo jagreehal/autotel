@@ -1814,6 +1814,12 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.37
         version: 2.0.37(zod@4.3.6)
+      '@json-render/core':
+        specifier: ^0.15.0
+        version: 0.15.0(zod@4.3.6)
+      '@json-render/ink':
+        specifier: ^0.15.0
+        version: 0.15.0(ink@6.8.0(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(zod@4.3.6)
       '@opentelemetry/sdk-trace-base':
         specifier: ^2.6.0
         version: 2.6.0(@opentelemetry/api@1.9.0)
@@ -1821,8 +1827,8 @@ importers:
         specifier: ^6.0.134
         version: 6.0.134(zod@4.3.6)
       ai-sdk-ollama:
-        specifier: ^3.8.1
-        version: 3.8.1(ai@6.0.134(zod@4.3.6))(zod@4.3.6)
+        specifier: ^3.8.2
+        version: 3.8.2(ai@6.0.134(zod@4.3.6))(zod@4.3.6)
       ink:
         specifier: ^6.8.0
         version: 6.8.0(@types/react@19.2.14)(react@19.2.4)
@@ -4114,6 +4120,17 @@ packages:
 
   '@jsdevtools/ono@7.1.3':
     resolution: {integrity: sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg==}
+
+  '@json-render/core@0.15.0':
+    resolution: {integrity: sha512-ej5fx6C2Gp5iSit+HyyFh6QenKRIAO9xvFlxal6uzQQTpOJzJlXPsNROL2JT5QjY/iLgLaf4RJohdP1mWSYDNQ==}
+    peerDependencies:
+      zod: ^4.0.0
+
+  '@json-render/ink@0.15.0':
+    resolution: {integrity: sha512-amA0C2T2gKPz/BaWzwcgs47JrBqvFoJONQJ7RebTtMpCDBALEJDXOiXIlhmKnuYDpAJd1MokEi7pYR1QN70jTQ==}
+    peerDependencies:
+      ink: ^6.0.0
+      react: ^19.0.0
 
   '@langchain/core@0.3.80':
     resolution: {integrity: sha512-vcJDV2vk1AlCwSh3aBm/urQ1ZrlXFFBocv11bz/NBUfLWD5/UDNMzwPdaAd2dKvNmTWa9FM2lirLU3+JCf4cRA==}
@@ -7513,11 +7530,11 @@ packages:
       viem:
         optional: true
 
-  ai-sdk-ollama@3.8.1:
-    resolution: {integrity: sha512-DeNG88t3Knsu0AFNU8qe20tp82W+9yczgjduSltIEFWvo2mKuR3MeUNjg5/iGz2IBOkYKnni8pDoI19OxOCN/Q==}
+  ai-sdk-ollama@3.8.2:
+    resolution: {integrity: sha512-0k9tLeXLhGahsjNOOBZ07KccffeZNx4gIeutuccjRT8YxxEtnIoVF/ECdgoyaPm8be6WCLDkVnmtSJmkdWHHZA==}
     engines: {node: '>=22'}
     peerDependencies:
-      ai: ^6.0.116
+      ai: ^6.0.137
 
   ai@6.0.134:
     resolution: {integrity: sha512-YalNEaavld/kE444gOcsMKXdVVRGEe0SK77fAFcWYcqLg+a7xKnEet8bdfrEAJTfnMjj01rhgrIL10903w1a5Q==}
@@ -10587,6 +10604,11 @@ packages:
     engines: {node: '>=16.0.0'}
     peerDependencies:
       marked: '>=1 <16'
+
+  marked@17.0.5:
+    resolution: {integrity: sha512-6hLvc0/JEbRjRgzI6wnT2P1XuM1/RrrDEX0kPt0N7jGm1133g6X7DlxFasUIx+72aKAr904GTxhSLDrd5DIlZg==}
+    engines: {node: '>= 20'}
+    hasBin: true
 
   marked@9.1.6:
     resolution: {integrity: sha512-jcByLnIFkd5gSXZmjNvS1TlmRhCXZjIzHYlaGkPlLIekG55JDR2Z4va9tZwCiP+/RDERiNhMOFu01xd6O5ct1Q==}
@@ -15923,6 +15945,19 @@ snapshots:
 
   '@jsdevtools/ono@7.1.3': {}
 
+  '@json-render/core@0.15.0(zod@4.3.6)':
+    dependencies:
+      zod: 4.3.6
+
+  '@json-render/ink@0.15.0(ink@6.8.0(@types/react@19.2.14)(react@19.2.4))(react@19.2.4)(zod@4.3.6)':
+    dependencies:
+      '@json-render/core': 0.15.0(zod@4.3.6)
+      ink: 6.8.0(@types/react@19.2.14)(react@19.2.4)
+      marked: 17.0.5
+      react: 19.2.4
+    transitivePeerDependencies:
+      - zod
+
   '@langchain/core@0.3.80(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.32.0(ws@8.18.3)(zod@4.3.6))':
     dependencies:
       '@cfworker/json-schema': 4.1.1
@@ -20275,7 +20310,7 @@ snapshots:
       - '@cloudflare/workers-types'
       - supports-color
 
-  ai-sdk-ollama@3.8.1(ai@6.0.134(zod@4.3.6))(zod@4.3.6):
+  ai-sdk-ollama@3.8.2(ai@6.0.134(zod@4.3.6))(zod@4.3.6):
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.21(zod@4.3.6)
@@ -23784,6 +23819,8 @@ snapshots:
       marked: 9.1.6
       node-emoji: 2.2.0
       supports-hyperlinks: 3.2.0
+
+  marked@17.0.5: {}
 
   marked@9.1.6: {}
 

@@ -32,6 +32,24 @@ describe('handleKey', () => {
     ).toBe('trace');
   });
 
+  it('toggles AI view on A', () => {
+    const state: DashboardState = {
+      viewMode: 'trace',
+      paused: false,
+      recording: false,
+      spanFilters: { statusGroup: 'all' },
+    };
+    const result = handleKey(state, 'a');
+    expect(result.next.viewMode).toBe('ai');
+    expect(result.actions).toContainEqual({
+      type: 'toggleViewMode',
+      viewMode: 'ai',
+    });
+
+    const result2 = handleKey(result.next, 'a');
+    expect(result2.next.viewMode).toBe('trace');
+  });
+
   it('cycles status group with H', () => {
     const s1 = handleKey(baseState, 'H').next.spanFilters.statusGroup;
     const s2 = handleKey(
