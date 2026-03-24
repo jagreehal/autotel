@@ -11,6 +11,8 @@ import {
   FeatureFlagSampler,
   createLinkFromHeaders,
   extractLinksFromBatch,
+  samplingPresets,
+  resolveSamplingPreset,
   type SamplingContext,
 } from './sampling';
 import { type ILogger } from './logger';
@@ -962,6 +964,97 @@ describe('Sampling', () => {
         const links = extractLinksFromBatch([]);
         expect(links).toEqual([]);
       });
+    });
+  });
+
+  describe('samplingPresets', () => {
+    it('development() returns AlwaysSampler', () => {
+      const sampler = samplingPresets.development();
+      expect(sampler).toBeInstanceOf(AlwaysSampler);
+      expect(sampler.shouldSample(context)).toBe(true);
+    });
+
+    it('errorsOnly() returns AdaptiveSampler that drops healthy baseline', () => {
+      const sampler = samplingPresets.errorsOnly();
+      expect(sampler).toBeInstanceOf(AdaptiveSampler);
+      sampler.shouldSample(context); // prime the WeakMap baseline decision
+      // Baseline is 0, so shouldKeepTrace for successful fast requests = false
+      expect(
+        sampler.shouldKeepTrace!(context, { success: true, duration: 50 }),
+      ).toBe(false);
+    });
+
+    it('errorsOnly() keeps errors', () => {
+      const sampler = samplingPresets.errorsOnly();
+      sampler.shouldSample(context); // prime the baseline decision
+      expect(
+        sampler.shouldKeepTrace!(context, {
+          success: false,
+          duration: 50,
+          error: new Error('fail'),
+        }),
+      ).toBe(true);
+    });
+
+    it('production() returns AdaptiveSampler with 10% baseline', () => {
+      const sampler = samplingPresets.production();
+      expect(sampler).toBeInstanceOf(AdaptiveSampler);
+      expect(sampler.needsTailSampling!()).toBe(true);
+    });
+
+    it('production() keeps errors', () => {
+      const sampler = samplingPresets.production();
+      sampler.shouldSample(context);
+      expect(
+        sampler.shouldKeepTrace!(context, {
+          success: false,
+          duration: 50,
+          error: new Error('fail'),
+        }),
+      ).toBe(true);
+    });
+
+    it('production() accepts overrides', () => {
+      const sampler = samplingPresets.production({ baselineSampleRate: 1.0 });
+      sampler.shouldSample(context);
+      // With 100% baseline, all healthy traffic is kept
+      expect(
+        sampler.shouldKeepTrace!(context, { success: true, duration: 50 }),
+      ).toBe(true);
+    });
+
+    it('off() returns NeverSampler', () => {
+      const sampler = samplingPresets.off();
+      expect(sampler).toBeInstanceOf(NeverSampler);
+      expect(sampler.shouldSample(context)).toBe(false);
+    });
+  });
+
+  describe('resolveSamplingPreset', () => {
+    it('resolves development', () => {
+      const sampler = resolveSamplingPreset('development');
+      expect(sampler).toBeInstanceOf(AlwaysSampler);
+    });
+
+    it('resolves errors-only', () => {
+      const sampler = resolveSamplingPreset('errors-only');
+      expect(sampler).toBeInstanceOf(AdaptiveSampler);
+    });
+
+    it('resolves production', () => {
+      const sampler = resolveSamplingPreset('production');
+      expect(sampler).toBeInstanceOf(AdaptiveSampler);
+    });
+
+    it('resolves off', () => {
+      const sampler = resolveSamplingPreset('off');
+      expect(sampler).toBeInstanceOf(NeverSampler);
+    });
+
+    it('throws on invalid preset with helpful message', () => {
+      expect(() => resolveSamplingPreset('banana' as any)).toThrow(
+        /Unknown sampling preset: "banana".*Valid presets: development, errors-only, production, off/,
+      );
     });
   });
 });

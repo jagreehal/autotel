@@ -1,12 +1,22 @@
 /**
  * Standard OpenTelemetry environment variables
  */
+import type { Sampler as OtelSampler } from '@opentelemetry/sdk-trace-base';
+import {
+  AlwaysOffSampler,
+  AlwaysOnSampler,
+  ParentBasedSampler,
+  TraceIdRatioBasedSampler,
+} from '@opentelemetry/sdk-trace-base';
+
 export interface OtelEnvVars {
   OTEL_SERVICE_NAME?: string;
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
   OTEL_EXPORTER_OTLP_HEADERS?: string;
   OTEL_RESOURCE_ATTRIBUTES?: string;
   OTEL_EXPORTER_OTLP_PROTOCOL?: 'http' | 'grpc';
+  OTEL_TRACES_SAMPLER?: string;
+  OTEL_TRACES_SAMPLER_ARG?: string;
 }
 
 /**
@@ -33,6 +43,7 @@ export interface EnvConfig {
   protocol?: 'http' | 'grpc';
   headers?: Record<string, string>;
   resourceAttributes?: Record<string, string>;
+  otelSampler?: OtelSampler;
 }
 
 /**
@@ -93,7 +104,97 @@ export function resolveOtelEnv(): OtelEnvVars {
     }
   }
 
+  if (process.env.OTEL_TRACES_SAMPLER) {
+    const value = process.env.OTEL_TRACES_SAMPLER.trim();
+    if (value) {
+      env.OTEL_TRACES_SAMPLER = value;
+    }
+  }
+
+  if (process.env.OTEL_TRACES_SAMPLER_ARG) {
+    const value = process.env.OTEL_TRACES_SAMPLER_ARG.trim();
+    if (value) {
+      env.OTEL_TRACES_SAMPLER_ARG = value;
+    }
+  }
+
   return env;
+}
+
+function parseRatioSamplerArg(
+  samplerName: string,
+  samplerArg: string | undefined,
+): number {
+  if (samplerArg === undefined) {
+    return 1.0;
+  }
+
+  const ratio = Number(samplerArg);
+  if (!Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
+    console.error(
+      `[autotel] Invalid OTEL_TRACES_SAMPLER_ARG="${samplerArg}" for ${samplerName}. Expected a number in [0..1]. Falling back to 1.0.`,
+    );
+    return 1.0;
+  }
+
+  return ratio;
+}
+
+function warnOnUnusedSamplerArg(
+  samplerName: string,
+  samplerArg: string | undefined,
+): void {
+  if (samplerArg !== undefined) {
+    console.error(
+      `[autotel] OTEL_TRACES_SAMPLER_ARG is not used by OTEL_TRACES_SAMPLER="${samplerName}". Ignoring value "${samplerArg}".`,
+    );
+  }
+}
+
+export function createSamplerFromEnv(
+  env: Pick<OtelEnvVars, 'OTEL_TRACES_SAMPLER' | 'OTEL_TRACES_SAMPLER_ARG'>,
+): OtelSampler | undefined {
+  const samplerName = env.OTEL_TRACES_SAMPLER;
+  if (!samplerName) {
+    return undefined;
+  }
+
+  switch (samplerName) {
+    case 'always_on':
+      warnOnUnusedSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG);
+      return new AlwaysOnSampler();
+    case 'always_off':
+      warnOnUnusedSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG);
+      return new AlwaysOffSampler();
+    case 'traceidratio':
+      return new TraceIdRatioBasedSampler(
+        parseRatioSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG),
+      );
+    case 'parentbased_always_on':
+      warnOnUnusedSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG);
+      return new ParentBasedSampler({ root: new AlwaysOnSampler() });
+    case 'parentbased_always_off':
+      warnOnUnusedSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG);
+      return new ParentBasedSampler({ root: new AlwaysOffSampler() });
+    case 'parentbased_traceidratio':
+      return new ParentBasedSampler({
+        root: new TraceIdRatioBasedSampler(
+          parseRatioSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG),
+        ),
+      });
+    case 'jaeger_remote':
+    case 'parentbased_jaeger_remote':
+    case 'xray':
+      console.error(
+        `[autotel] OTEL_TRACES_SAMPLER="${samplerName}" is not supported yet by autotel. Falling back to the next sampler source.`,
+      );
+      return undefined;
+    default:
+      console.error(
+        `[autotel] Unknown OTEL_TRACES_SAMPLER="${samplerName}". Falling back to the next sampler source.`,
+      );
+      return undefined;
+  }
 }
 
 /**
@@ -189,6 +290,11 @@ export function envToConfig(env: OtelEnvVars): EnvConfig {
   const resourceAttrs = parseResourceAttributes(env.OTEL_RESOURCE_ATTRIBUTES);
   if (Object.keys(resourceAttrs).length > 0) {
     config.resourceAttributes = resourceAttrs;
+  }
+
+  const sampler = createSamplerFromEnv(env);
+  if (sampler) {
+    config.otelSampler = sampler;
   }
 
   return config;

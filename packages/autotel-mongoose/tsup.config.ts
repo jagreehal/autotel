@@ -3,9 +3,6 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    bigquery: 'src/bigquery/index.ts',
-    kafka: 'src/kafka/index.ts',
-    rabbitmq: 'src/rabbitmq/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
@@ -13,4 +10,6 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   splitting: false,
+  minify: false,
+  external: ['mongoose', 'autotel', '@opentelemetry/api'],
 });
