@@ -13,16 +13,20 @@ import type {
 import { context, propagation } from '@opentelemetry/api';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+type AsyncLocalBox<T> = {
+  value: T;
+};
+
 /**
  * AsyncLocalStorage for storing the active context with baggage
  * This allows setters to update the context and have it persist
  */
-const contextStorage = new AsyncLocalStorage<Context>();
+const contextStorage = new AsyncLocalStorage<AsyncLocalBox<Context>>();
 
 /**
  * Get the context storage instance (for initialization in functional.ts)
  */
-export function getContextStorage(): AsyncLocalStorage<Context> {
+export function getContextStorage(): AsyncLocalStorage<AsyncLocalBox<Context>> {
   return contextStorage;
 }
 
@@ -33,8 +37,36 @@ export function getContextStorage(): AsyncLocalStorage<Context> {
 export function getActiveContextWithBaggage(): Context {
   // Check stored context first (from setters), then fall back to active context
   // This ensures ctx.setBaggage() changes are visible to OpenTelemetry operations
-  const stored = contextStorage.getStore();
+  const stored = contextStorage.getStore()?.value;
   return stored ?? context.active();
+}
+
+/**
+ * Set a value in AsyncLocalStorage, preferring enterWith() when available
+ * (Node.js) and falling back to run() for environments that only support
+ * run() (e.g. Cloudflare Workers).
+ *
+ * On runtimes without enterWith() we mutate the existing run() scope when one
+ * exists. This is what allows baggage/correlation updates to remain visible
+ * for the rest of the traced callback in Workers.
+ */
+export function enterOrRun<T>(
+  storage: AsyncLocalStorage<AsyncLocalBox<T>>,
+  value: T,
+): void {
+  const existingStore = storage.getStore();
+  if (existingStore) {
+    existingStore.value = value;
+    return;
+  }
+
+  const boxedValue = { value };
+  try {
+    storage.enterWith(boxedValue);
+  } catch {
+    // Cloudflare Workers define enterWith but throw at runtime
+    storage.run(boxedValue, () => {});
+  }
 }
 
 /**
@@ -47,7 +79,7 @@ type ContextManagerLike = {
 
 function updateActiveContext(newContext: Context): void {
   // Update our storage first so any helper reads see the new context
-  contextStorage.enterWith(newContext);
+  enterOrRun(contextStorage, newContext);
 
   const contextWithManager = context as unknown as {
     _getContextManager?: () => ContextManagerLike;
@@ -240,10 +272,10 @@ export function createTraceContext<
   // Store the current active context in AsyncLocalStorage so baggage setters can update it
   // This ensures ctx.setBaggage() changes persist and are visible to OpenTelemetry operations
   // IMPORTANT: Only initialize if not already set (preserve baggage updates from parent spans)
-  const existingStored = contextStorage.getStore();
+  const existingStored = contextStorage.getStore()?.value;
   if (!existingStored) {
     const activeContext = context.active();
-    contextStorage.enterWith(activeContext);
+    enterOrRun(contextStorage, activeContext);
   }
 
   // Baggage helpers that always use the current active context
@@ -256,7 +288,7 @@ export function createTraceContext<
       const activeCtx = context.active();
       let baggage = propagation.getBaggage(activeCtx);
       if (!baggage) {
-        const storedContext = contextStorage.getStore();
+        const storedContext = contextStorage.getStore()?.value;
         if (storedContext) {
           baggage = propagation.getBaggage(storedContext);
         }
@@ -268,7 +300,7 @@ export function createTraceContext<
       // OpenTelemetry contexts are immutable, so we create a new context with updated baggage
       // Check active context first (may have baggage from withBaggage), then stored context
       const activeCtx = context.active();
-      const storedContext = contextStorage.getStore();
+      const storedContext = contextStorage.getStore()?.value;
       const currentContext = storedContext ?? activeCtx;
       const baggage =
         propagation.getBaggage(currentContext) ?? propagation.createBaggage();
@@ -283,7 +315,7 @@ export function createTraceContext<
     deleteBaggage(key: string): void {
       // Check active context first, then stored context
       const activeCtx = context.active();
-      const storedContext = contextStorage.getStore();
+      const storedContext = contextStorage.getStore()?.value;
       const currentContext = storedContext ?? activeCtx;
       const baggage = propagation.getBaggage(currentContext);
       if (baggage) {
@@ -299,7 +331,7 @@ export function createTraceContext<
       const activeCtx = context.active();
       let baggage = propagation.getBaggage(activeCtx);
       if (!baggage) {
-        const storedContext = contextStorage.getStore();
+        const storedContext = contextStorage.getStore()?.value;
         if (storedContext) {
           baggage = propagation.getBaggage(storedContext);
         }
@@ -324,7 +356,7 @@ export function createTraceContext<
       const activeCtx = context.active();
       let baggage = propagation.getBaggage(activeCtx);
       if (!baggage) {
-        const storedContext = contextStorage.getStore();
+        const storedContext = contextStorage.getStore()?.value;
         if (storedContext) {
           baggage = propagation.getBaggage(storedContext);
         }
@@ -356,7 +388,7 @@ export function createTraceContext<
     ) => {
       // Check active context first, then stored context
       const activeCtx = context.active();
-      const storedContext = contextStorage.getStore();
+      const storedContext = contextStorage.getStore()?.value;
       const currentContext = storedContext ?? activeCtx;
       let baggage =
         propagation.getBaggage(currentContext) ?? propagation.createBaggage();

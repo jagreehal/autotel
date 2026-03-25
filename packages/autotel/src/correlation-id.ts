@@ -24,12 +24,17 @@
 
 import { trace, propagation, context } from '@opentelemetry/api';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { enterOrRun } from './trace-context';
+
+type CorrelationStore = {
+  value: string;
+};
 
 /**
  * AsyncLocalStorage for storing correlation ID
  * This allows correlation IDs to persist across async boundaries
  */
-const correlationStorage = new AsyncLocalStorage<string>();
+const correlationStorage = new AsyncLocalStorage<CorrelationStore>();
 
 /**
  * Baggage key for correlation ID propagation
@@ -79,7 +84,7 @@ export function generateCorrelationId(): string {
  */
 export function getCorrelationId(): string | undefined {
   // 1. Check AsyncLocalStorage first (explicit correlation ID)
-  const storedId = correlationStorage.getStore();
+  const storedId = correlationStorage.getStore()?.value;
   if (storedId) {
     return storedId;
   }
@@ -140,7 +145,7 @@ export function getOrCreateCorrelationId(): string {
  * ```
  */
 export function runWithCorrelationId<T>(correlationId: string, fn: () => T): T {
-  return correlationStorage.run(correlationId, fn);
+  return correlationStorage.run({ value: correlationId }, fn);
 }
 
 /**
@@ -158,7 +163,7 @@ export function runWithCorrelationId<T>(correlationId: string, fn: () => T): T {
  * ```
  */
 export function setCorrelationId(correlationId: string): void {
-  correlationStorage.enterWith(correlationId);
+  enterOrRun(correlationStorage, correlationId);
 }
 
 /**
@@ -196,6 +201,6 @@ export function setCorrelationIdInBaggage(
 /**
  * Get the correlation storage instance (for internal use in init/shutdown)
  */
-export function getCorrelationStorage(): AsyncLocalStorage<string> {
+export function getCorrelationStorage(): AsyncLocalStorage<CorrelationStore> {
   return correlationStorage;
 }
