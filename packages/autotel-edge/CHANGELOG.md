@@ -1,5 +1,11 @@
 # autotel-edge
 
+## 3.16.1
+
+### Patch Changes
+
+- 99a8d84: Added child-logger
+
 ## 3.16.0
 
 ### Minor Changes
