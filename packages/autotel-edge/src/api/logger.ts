@@ -11,7 +11,11 @@
  * Unlike Pino/Winston (~500KB), this is <1KB minified!
  */
 
-import { trace, context as api_context, createContextKey } from '@opentelemetry/api';
+import {
+  trace,
+  context as api_context,
+  createContextKey,
+} from '@opentelemetry/api';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';
 
@@ -22,9 +26,19 @@ const LOG_LEVEL_KEY = createContextKey('autotel-edge-log-level');
 
 export interface EdgeLogger {
   info(msg: string, attrs?: Record<string, any>): void;
-  error(msg: string, error?: Error | unknown, attrs?: Record<string, any>): void;
+  error(
+    msg: string,
+    error?: Error | unknown,
+    attrs?: Record<string, any>,
+  ): void;
   warn(msg: string, attrs?: Record<string, any>): void;
   debug(msg: string, attrs?: Record<string, any>): void;
+  /**
+   * Create a child logger with merged bindings.
+   * Like pino's child() — every log call from the child
+   * includes the parent's attrs plus the child's bindings.
+   */
+  child(bindings: Record<string, any>): EdgeLogger;
 }
 
 /**
@@ -63,9 +77,11 @@ export function runWithLogLevel<T>(level: LogLevel, callback: () => T): T {
 /**
  * Get current trace context from active span
  */
-function getTraceContext():
-  | { traceId: string; spanId: string; correlationId: string }
-  | null {
+function getTraceContext(): {
+  traceId: string;
+  spanId: string;
+  correlationId: string;
+} | null {
   const span = trace.getActiveSpan();
   if (!span) return null;
 
@@ -102,10 +118,12 @@ export function createEdgeLogger(
   options?: {
     level?: LogLevel;
     pretty?: boolean; // For development
+    bindings?: Record<string, any>; // Default attributes merged into every log (used by child())
   },
 ): EdgeLogger {
   const defaultLevel = options?.level || 'info';
   const pretty = options?.pretty || false;
+  const defaultBindings = options?.bindings || {};
 
   const levelPriority: Record<LogLevel, number> = {
     none: -1,
@@ -137,6 +155,7 @@ export function createEdgeLogger(
       level,
       service,
       msg,
+      ...defaultBindings,
       ...attrs,
       ...ctx, // Auto-inject traceId, spanId, correlationId
       timestamp: new Date().toISOString(),
@@ -147,9 +166,13 @@ export function createEdgeLogger(
       const traceInfo = ctx
         ? ` [${ctx.traceId.slice(0, 8)}.../${ctx.spanId.slice(0, 8)}...]`
         : '';
+      const prettyAttrs = {
+        ...defaultBindings,
+        ...attrs,
+      };
       console.log(
         `[${level.toUpperCase()}]${traceInfo} ${service}: ${msg}`,
-        attrs || '',
+        Object.keys(prettyAttrs).length > 0 ? prettyAttrs : '',
       );
     } else {
       // Structured JSON for production
@@ -157,26 +180,41 @@ export function createEdgeLogger(
     }
   };
 
-  return {
+  const logger: EdgeLogger = {
     info: (msg: string, attrs?: Record<string, any>) => log('info', msg, attrs),
 
-    error: (msg: string, error?: Error | unknown, attrs?: Record<string, any>) => {
-      const errorAttrs = error instanceof Error
-        ? {
-            error: error.message,
-            stack: error.stack,
-            name: error.name,
-            ...attrs,
-          }
-        : { error: String(error), ...attrs };
+    error: (
+      msg: string,
+      error?: Error | unknown,
+      attrs?: Record<string, any>,
+    ) => {
+      const errorAttrs =
+        error instanceof Error
+          ? {
+              error: error.message,
+              stack: error.stack,
+              name: error.name,
+              ...attrs,
+            }
+          : { error: String(error), ...attrs };
 
       log('error', msg, errorAttrs);
     },
 
     warn: (msg: string, attrs?: Record<string, any>) => log('warn', msg, attrs),
 
-    debug: (msg: string, attrs?: Record<string, any>) => log('debug', msg, attrs),
+    debug: (msg: string, attrs?: Record<string, any>) =>
+      log('debug', msg, attrs),
+
+    child: (bindings: Record<string, any>) =>
+      createEdgeLogger(service, {
+        level: defaultLevel,
+        pretty,
+        bindings: { ...defaultBindings, ...bindings },
+      }),
   };
+
+  return logger;
 }
 
 /**

@@ -123,7 +123,9 @@ describe('Edge Logger', () => {
       };
 
       // Mock trace.getActiveSpan to return our span
-      const getActiveSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(mockSpan as any);
+      const getActiveSpanSpy = vi
+        .spyOn(trace, 'getActiveSpan')
+        .mockReturnValue(mockSpan as any);
 
       logger.info('message with trace');
 
@@ -195,7 +197,9 @@ describe('Edge Logger', () => {
       expect(consoleLogSpy).toHaveBeenCalledOnce();
       const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
 
-      expect(logOutput.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(logOutput.timestamp).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      );
     });
   });
 
@@ -261,6 +265,104 @@ describe('Edge Logger', () => {
       expect(consoleLogSpy).toHaveBeenCalledOnce();
       const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
       expect(logOutput.msg).toBe(specialMessage);
+    });
+  });
+
+  describe('child()', () => {
+    it('should create a child logger with merged bindings', () => {
+      const logger = createEdgeLogger('test-service');
+      const child = logger.child({ requestId: 'req-123' });
+
+      child.info('child message', { extra: 'data' });
+
+      expect(consoleLogSpy).toHaveBeenCalledOnce();
+      const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
+
+      expect(logOutput).toMatchObject({
+        level: 'info',
+        service: 'test-service',
+        msg: 'child message',
+        requestId: 'req-123',
+        extra: 'data',
+      });
+    });
+
+    it('should merge parent bindings with child bindings', () => {
+      const logger = createEdgeLogger('test-service');
+      const child = logger.child({ requestId: 'req-123' });
+      const grandchild = child.child({ userId: 'user-456' });
+
+      grandchild.info('deep message');
+
+      expect(consoleLogSpy).toHaveBeenCalledOnce();
+      const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
+
+      expect(logOutput).toMatchObject({
+        msg: 'deep message',
+        requestId: 'req-123',
+        userId: 'user-456',
+      });
+    });
+
+    it('should allow child attrs to override bindings', () => {
+      const logger = createEdgeLogger('test-service');
+      const child = logger.child({ env: 'staging' });
+
+      child.info('override', { env: 'production' });
+
+      expect(consoleLogSpy).toHaveBeenCalledOnce();
+      const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
+
+      // Call-time attrs override bindings
+      expect(logOutput.env).toBe('production');
+    });
+
+    it('should return an EdgeLogger from child()', () => {
+      const logger = createEdgeLogger('test-service');
+      const child = logger.child({ key: 'val' });
+
+      expect(child.info).toBeDefined();
+      expect(child.error).toBeDefined();
+      expect(child.warn).toBeDefined();
+      expect(child.debug).toBeDefined();
+      expect(child.child).toBeDefined();
+    });
+
+    it('should chain child() calls', () => {
+      const logger = createEdgeLogger('test-service');
+      const child = logger.child({ a: 1 }).child({ b: 2 }).child({ c: 3 });
+
+      child.info('chained');
+
+      expect(consoleLogSpy).toHaveBeenCalledOnce();
+      const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
+
+      expect(logOutput).toMatchObject({ a: 1, b: 2, c: 3 });
+    });
+
+    it('should not affect parent logger', () => {
+      const logger = createEdgeLogger('test-service');
+      const child = logger.child({ childOnly: 'yes' });
+
+      logger.info('parent message');
+
+      expect(consoleLogSpy).toHaveBeenCalledOnce();
+      const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
+
+      expect(logOutput.childOnly).toBeUndefined();
+    });
+
+    it('should include child bindings in pretty mode', () => {
+      const logger = createEdgeLogger('test-service', { pretty: true });
+      const child = logger.child({ requestId: 'req-123' });
+
+      child.info('pretty child', { extra: 'data' });
+
+      expect(consoleLogSpy).toHaveBeenCalledOnce();
+      expect(consoleLogSpy.mock.calls[0][1]).toMatchObject({
+        requestId: 'req-123',
+        extra: 'data',
+      });
     });
   });
 
