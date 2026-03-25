@@ -1,5 +1,11 @@
 # autotel
 
+## 2.25.4
+
+### Patch Changes
+
+- 32e088f: Use boxed values in AsyncLocalStorage so `enterOrRun()` can mutate the existing store on runtimes without `enterWith()` (Cloudflare Workers). This keeps baggage and context updates visible within the same traced callback. `startActiveSpan` calls now also explicitly pass the parent context.
+
 ## 2.25.3
 
 ### Patch Changes
