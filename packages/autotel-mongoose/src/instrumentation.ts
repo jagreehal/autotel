@@ -550,6 +550,9 @@ function isMongooseInternalHook(handler: any): boolean {
     'noop',
     'wrapped',
     'bound ',
+    'timestampsPreSave',
+    'timestampsPreUpdate',
+    'handleTimestampOption',
   ];
 
   if (
@@ -603,6 +606,12 @@ function wrapHookHandler(
     return handler;
   }
 
+  // Check if the original handler uses callback-style (expects `next` param).
+  // Kareem (Mongoose's hook library) checks fn.length to decide whether to
+  // pass a `next` callback. Rest params (...args) give length=0, so we must
+  // preserve the original arity.
+  const expectsCallback = handler.length > 0;
+
   const wrappedHook = function wrappedHook(this: any, ...args: any[]): any {
     let modelName: string | undefined;
     let collectionName: string | undefined;
@@ -638,6 +647,25 @@ function wrapHookHandler(
       span.setAttribute(ATTR_DB_NAMESPACE, config.dbName);
     }
 
+    // For callback-style hooks, wrap the `next` callback to finalize the span
+    // when the hook signals completion (instead of on synchronous return).
+    // Kareem passes `next` as the first argument for callback-style hooks.
+    if (expectsCallback && args.length > 0 && typeof args[0] === 'function') {
+      const originalNext = args[0];
+      args[0] = function wrappedNext(this: any, ...nextArgs: any[]) {
+        const err = nextArgs[0];
+        if (err) {
+          finalizeSpan(
+            span,
+            err instanceof Error ? err : new Error(String(err)),
+          );
+        } else {
+          finalizeSpan(span);
+        }
+        return originalNext.apply(this, nextArgs);
+      };
+    }
+
     return runWithSpan(span, () => {
       try {
         const result = handler.apply(this, args);
@@ -657,7 +685,11 @@ function wrapHookHandler(
             });
         }
 
-        finalizeSpan(span);
+        // Only finalize synchronously for non-callback hooks.
+        // Callback-style hooks finalize in the wrappedNext above.
+        if (!expectsCallback) {
+          finalizeSpan(span);
+        }
         return result;
       } catch (error) {
         finalizeSpan(
@@ -668,6 +700,10 @@ function wrapHookHandler(
       }
     });
   };
+
+  // Preserve function arity so kareem passes `next` for callback-style hooks.
+  // Rest params (...args) give length=0; we must match the original handler.
+  Object.defineProperty(wrappedHook, 'length', { value: handler.length });
 
   // Mark as wrapped to prevent double-wrapping
   (wrappedHook as any)[WRAPPED_HOOK_FLAG] = true;
