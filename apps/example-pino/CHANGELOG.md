@@ -1,5 +1,12 @@
 # @jagreehal/example-pino
 
+## 1.0.12
+
+### Patch Changes
+
+- Updated dependencies [32e088f]
+  - autotel@2.25.4
+
 ## 1.0.11
 
 ### Patch Changes

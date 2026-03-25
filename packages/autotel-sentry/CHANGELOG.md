@@ -1,5 +1,12 @@
 # autotel-sentry
 
+## 0.5.4
+
+### Patch Changes
+
+- Updated dependencies [32e088f]
+  - autotel@2.25.4
+
 ## 0.5.3
 
 ### Patch Changes
