@@ -13,20 +13,6 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "alchemy.run.ts"],
+  "include": ["src/**/*", "worker-configuration.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
