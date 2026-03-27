@@ -1,5 +1,11 @@
 # autotel-edge
 
+## 3.16.2
+
+### Patch Changes
+
+- e6ef4e6: Updated logger
+
 ## 3.16.1
 
 ### Patch Changes
