@@ -40,7 +40,10 @@ class OrderWorkflowBase extends WorkflowEntrypoint<WorkflowEnv, OrderPayload> {
   async run(event: WorkflowEvent<OrderPayload>, step: WorkflowStep): Promise<void> {
     const { orderId, customerId, items, total } = event.payload;
 
-    log.info('workflow.started', { orderId, customerId, total, instanceId: event.instanceId });
+    log.info(
+      { orderId, customerId, total, instanceId: event.instanceId },
+      'workflow.started',
+    );
 
     // Step 1: Validate the order
     const validation = await step.do('validate order', async () => {
@@ -48,7 +51,7 @@ class OrderWorkflowBase extends WorkflowEntrypoint<WorkflowEnv, OrderPayload> {
       if (!items || items.length === 0) throw new Error('Order has no items');
       if (total <= 0) throw new Error('Invalid order total');
 
-      log.info('order.validated', { orderId, itemCount: items.length });
+      log.info({ orderId, itemCount: items.length }, 'order.validated');
       return { valid: true, itemCount: items.length };
     });
 
@@ -62,7 +65,7 @@ class OrderWorkflowBase extends WorkflowEntrypoint<WorkflowEnv, OrderPayload> {
       async () => {
         // Simulate inventory check
         const reservationId = `res-${Date.now()}`;
-        log.info('inventory.reserved', { orderId, reservationId });
+        log.info({ orderId, reservationId }, 'inventory.reserved');
         return { reservationId, itemsReserved: items.length };
       },
     );
@@ -77,7 +80,7 @@ class OrderWorkflowBase extends WorkflowEntrypoint<WorkflowEnv, OrderPayload> {
       async () => {
         // Simulate payment processing
         const transactionId = `txn-${Date.now()}`;
-        log.info('payment.processed', { orderId, transactionId, total });
+        log.info({ orderId, transactionId, total }, 'payment.processed');
         return { transactionId, amount: total, status: 'completed' };
       },
     );
@@ -88,32 +91,41 @@ class OrderWorkflowBase extends WorkflowEntrypoint<WorkflowEnv, OrderPayload> {
     // Step 5: Fulfill order
     const fulfillment = await step.do('fulfill order', async () => {
       const trackingNumber = `TRK-${Date.now()}`;
-      log.info('order.fulfilled', {
-        orderId,
-        trackingNumber,
-        transactionId: payment.transactionId,
-      });
+      log.info(
+        {
+          orderId,
+          trackingNumber,
+          transactionId: payment.transactionId,
+        },
+        'order.fulfilled',
+      );
       return { trackingNumber, status: 'shipped' };
     });
 
     // Step 6: Send confirmation
     await step.do('send confirmation', async () => {
-      log.info('confirmation.sent', {
-        orderId,
-        customerId,
-        trackingNumber: fulfillment.trackingNumber,
-      });
+      log.info(
+        {
+          orderId,
+          customerId,
+          trackingNumber: fulfillment.trackingNumber,
+        },
+        'confirmation.sent',
+      );
       return { notified: true };
     });
 
-    log.info('workflow.completed', {
-      orderId,
-      customerId,
-      instanceId: event.instanceId,
-      reservationId: reservation.reservationId,
-      transactionId: payment.transactionId,
-      trackingNumber: fulfillment.trackingNumber,
-    });
+    log.info(
+      {
+        orderId,
+        customerId,
+        instanceId: event.instanceId,
+        reservationId: reservation.reservationId,
+        transactionId: payment.transactionId,
+        trackingNumber: fulfillment.trackingNumber,
+      },
+      'workflow.completed',
+    );
   }
 }
 

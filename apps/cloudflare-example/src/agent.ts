@@ -11,11 +11,15 @@ import { Agent, callable } from 'agents';
 import type { Observability } from 'agents/observability';
 import { createOtelObservability } from 'autotel-cloudflare/agents';
 import { SamplingPresets } from 'autotel-cloudflare/sampling';
-import type { worker } from '../alchemy.run.ts';
+import type { WorkerEnv } from './types';
 
 function parseHeaders(raw?: string): Record<string, string> {
   if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -26,12 +30,16 @@ function parseHeaders(raw?: string): Record<string, string> {
  * - Lifecycle event tracing (connect, destroy)
  * - Message event tracing
  */
-class TaskAgent extends Agent<typeof worker.Env> {
+interface AgentEnv extends WorkerEnv {
+  TaskAgent: DurableObjectNamespace;
+}
+
+class TaskAgent extends Agent<AgentEnv> {
   declare observability: Observability;
 
   private taskCount = 0;
 
-  constructor(state: DurableObjectState, env: typeof worker.Env) {
+  constructor(state: DurableObjectState, env: AgentEnv) {
     super(state, env);
 
     this.observability = createOtelObservability({
@@ -67,7 +75,10 @@ class TaskAgent extends Agent<typeof worker.Env> {
    * The @callable() decorator makes this method callable via RPC
    */
   @callable()
-  async processTask(taskName: string, priority: number = 1): Promise<{ result: string; taskId: string }> {
+  async processTask(
+    taskName: string,
+    priority: number = 1,
+  ): Promise<{ result: string; taskId: string }> {
     this.taskCount++;
     const taskId = `task-${Date.now()}-${this.taskCount}`;
 
@@ -112,7 +123,11 @@ class TaskAgent extends Agent<typeof worker.Env> {
    * MCP operations are automatically traced
    */
   @callable()
-  async callMcpServer(serverId: string, method: string, params?: Record<string, unknown>): Promise<unknown> {
+  async callMcpServer(
+    serverId: string,
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<unknown> {
     // MCP client operations are automatically traced
     // This is a simplified example - actual MCP usage would involve
     // connecting to MCP servers and making requests
@@ -129,7 +144,10 @@ class TaskAgent extends Agent<typeof worker.Env> {
    * Message events are automatically traced
    */
   @callable()
-  async sendMessage(recipient: string, message: string): Promise<{ messageId: string }> {
+  async sendMessage(
+    recipient: string,
+    message: string,
+  ): Promise<{ messageId: string }> {
     // Message sending is automatically traced
     const messageId = `msg-${Date.now()}`;
     return { messageId };
@@ -164,4 +182,3 @@ export { TaskAgent };
  * Export the Agent class as default for Durable Object binding
  */
 export default TaskAgent;
-

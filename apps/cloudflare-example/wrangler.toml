@@ -1,0 +1,59 @@
+name = "cloudflare-example"
+main = "src/worker.ts"
+compatibility_date = "2024-10-11"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+OTLP_ENDPOINT = "http://localhost:4318/v1/traces"
+# ENVIRONMENT = "production"
+# DISABLE_INSTRUMENTATION = "true"
+
+# KV Namespace — uncomment to enable KV demo endpoints
+# [[kv_namespaces]]
+# binding = "MY_KV"
+# id = "your-kv-namespace-id"
+
+# R2 Bucket — uncomment to enable R2 demo endpoints
+# [[r2_buckets]]
+# binding = "MY_R2"
+# bucket_name = "my-bucket"
+
+# D1 Database — uncomment to enable D1 demo endpoints
+# [[d1_databases]]
+# binding = "MY_D1"
+# database_name = "my-database"
+# database_id = "00000000-0000-0000-0000-000000000000"
+
+# Workers AI — uncomment to enable AI demo endpoints
+# [ai]
+# binding = "AI"
+
+# Vectorize — uncomment to enable vector search demo
+# [[vectorize]]
+# binding = "VECTORIZE"
+# index_name = "my-index"
+
+# Queue Producer — uncomment to enable queue demo
+# [[queues.producers]]
+# binding = "MY_QUEUE"
+# queue = "my-queue"
+
+# Analytics Engine — uncomment to enable analytics demo
+# [[analytics_engine_datasets]]
+# binding = "AE"
+
+# Service Binding — uncomment to route to another worker
+# [[services]]
+# binding = "MY_SERVICE"
+# service = "my-other-worker"
+# environment = "production"
+
+# Scheduled trigger (cron)
+# [[triggers.crons]]
+# cron = "*/5 * * * *"
+
+# Queue Consumer
+# [[queues.consumers]]
+# queue = "my-queue"
+# max_batch_size = 10
+# max_batch_timeout = 30

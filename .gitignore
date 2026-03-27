@@ -48,3 +48,5 @@ examples/browser/test-results
 
 # Changesets release artifacts
 .changeset/release.json
+.alchemy
+apps/cloudflare-example/.alchemy
