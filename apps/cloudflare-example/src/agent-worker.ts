@@ -10,13 +10,12 @@
 
 import { TaskAgent } from './agent';
 import { instrument } from 'autotel-cloudflare';
-import {
-  parseError,
-  useLogger,
-  withAutotelFetch,
-} from 'autotel-adapters/cloudflare';
+import { parseError, withAutotelFetch } from 'autotel-adapters/cloudflare';
+import { createEdgeLogger } from 'autotel-edge/logger';
 import { routeAgentRequest } from 'agents';
 import type { WorkerEnv } from './types';
+
+const baseLogger = createEdgeLogger('agent-worker');
 
 function parseHeaders(raw?: string): Record<string, string> {
   if (!raw) return {};
@@ -76,12 +75,10 @@ export default instrument(
         env: Env,
         _ctx: ExecutionContext,
       ): Promise<Response> => {
-        const log = useLogger(request);
         const url = new URL(request.url);
-        log.set({
+        const log = baseLogger.child({
           route: url.pathname,
           method: request.method,
-          worker: 'agent-worker',
         });
 
         // API info
@@ -137,10 +134,6 @@ export default instrument(
                 endpoint: '/process-task',
                 errorStatus: parsed.status,
                 errorCode: parsed.code,
-                err:
-                  error instanceof Error
-                    ? error
-                    : new Error(parsed.message),
               },
               parsed.message,
             );
@@ -168,10 +161,6 @@ export default instrument(
                 endpoint: '/stats',
                 errorStatus: parsed.status,
                 errorCode: parsed.code,
-                err:
-                  error instanceof Error
-                    ? error
-                    : new Error(parsed.message),
               },
               parsed.message,
             );
@@ -182,7 +171,7 @@ export default instrument(
           }
         }
 
-        log.warn({ route: url.pathname }, 'Route not found');
+        log.warn('Route not found');
         return new Response('Not Found', { status: 404 });
       },
       {

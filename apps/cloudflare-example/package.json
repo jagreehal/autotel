@@ -21,7 +21,8 @@
     "agents": "^0.8.0",
     "alchemy": "^0.90.0",
     "autotel-adapters": "workspace:*",
-    "autotel-cloudflare": "workspace:*"
+    "autotel-cloudflare": "workspace:*",
+    "autotel-edge": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260317.1",
