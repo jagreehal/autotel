@@ -1,0 +1,117 @@
+---
+title: Logging
+description: Integrate Pino, Bunyan, or Winston with autotel for automatic trace context injection.
+---
+
+Pino is the recommended first-class logger for autotel. Bunyan and Winston also work via OpenTelemetry auto-instrumentation.
+
+## Pino (Recommended)
+
+Pino is first-class: pass a single instance to `init()` for both autotel internal logs and app logs.
+
+```typescript
+import pino from 'pino';
+import { init, trace } from 'autotel';
+
+const logger = pino({
+  name: 'my-app',
+  level: 'info',
+  transport: {
+    target: 'pino-pretty',
+    options: { colorize: true },
+  },
+});
+
+// One logger for autotel + app logs
+init({
+  service: 'my-app',
+  logger,
+  endpoint: process.env.OTLP_ENDPOINT,
+});
+
+const createUser = trace((ctx) => async (name: string) => {
+  logger.info({ name }, 'Creating user');
+  // trace_id, span_id automatically injected into log output
+  const user = await db.users.create({ name });
+  logger.info({ userId: user.id }, 'User created');
+  return user;
+});
+```
+
+### Log Output
+
+```json
+{
+  "level": 30,
+  "time": 1700000000000,
+  "msg": "Creating user",
+  "name": "Alice",
+  "trace_id": "a1b2c3d4e5f6",
+  "span_id": "1234567890ab"
+}
+```
+
+## Bunyan
+
+Use auto-instrumentation for trace context injection:
+
+```typescript
+// instrumentation.ts
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  autoInstrumentations: ['bunyan'],
+});
+```
+
+```typescript
+import bunyan from 'bunyan';
+
+const logger = bunyan.createLogger({ name: 'my-app' });
+
+// trace_id, span_id automatically added to every log record
+logger.info({ userId: '123' }, 'Processing request');
+```
+
+## Winston
+
+```typescript
+// instrumentation.ts
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  autoInstrumentations: ['winston'],
+});
+```
+
+```typescript
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  transports: [new winston.transports.Console()],
+});
+
+// trace_id, span_id automatically added
+logger.info('Processing request');
+```
+
+## Request Logger vs Pino
+
+They serve different purposes:
+
+| Feature  | `getRequestLogger()`              | Pino/Bunyan/Winston           |
+| -------- | --------------------------------- | ----------------------------- |
+| Purpose  | One wide event per request        | Continuous structured logging |
+| Output   | Attributes on the span            | Log stream (stdout/files)     |
+| When     | `.emitNow()` at end of request    | Throughout request            |
+| Use case | Canonical log lines / wide events | Debugging, audit trails       |
+
+Use **both together**: Pino for continuous logging + `getRequestLogger()` for the one snapshot at the end of each request.
+
+## Examples
+
+- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino) — Pino as first-class logger with `init({ logger })` and trace context injection.
+- [`example-bunyan`](https://github.com/jagreehal/autotel/tree/main/apps/example-bunyan) — Bunyan with auto-instrumentation.
+- [`example-winston`](https://github.com/jagreehal/autotel/tree/main/apps/example-winston) — Winston with auto-instrumentation.

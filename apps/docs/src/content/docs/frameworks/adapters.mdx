@@ -1,0 +1,81 @@
+---
+title: Adapters
+description: Composable framework adapters and DX helpers for autotel.
+---
+
+`autotel-adapters` provides easy-to-use ergonomics (`withAutotel()`, `useLogger()`, `parseError()`) while keeping one trace-native stack.
+
+## Available Adapters
+
+| Adapter    | Import                        |
+| ---------- | ----------------------------- |
+| Hono       | `autotel-adapters/hono`       |
+| TanStack   | `autotel-tanstack`            |
+| Next.js    | `autotel-adapters/next`       |
+| Nitro      | `autotel-adapters/nitro`      |
+| Cloudflare | `autotel-adapters/cloudflare` |
+| Custom     | `autotel-adapters/core`       |
+
+## withAutotel vs useLogger
+
+**`withAutotel()`** — use when you have NO existing autotel middleware. Creates a span and injects a request logger:
+
+```typescript
+import { withAutotel, useLogger } from 'autotel-adapters/next';
+
+export const POST = withAutotel(async (request) => {
+  const log = useLogger(request);
+  log.set({ feature: 'checkout' });
+  return Response.json({ ok: true });
+});
+```
+
+**`useLogger()` alone** — use when middleware already creates the span (avoids duplicate spans):
+
+```typescript
+import { otel } from 'autotel-hono';
+import { useLogger } from 'autotel-adapters/hono';
+
+app.use('*', otel());
+app.get('/orders/:id', (c) => {
+  const log = useLogger(c);
+  log.set({ route: c.req.path });
+  return c.json({ ok: true });
+});
+```
+
+## Next.js
+
+```typescript
+import { withAutotel, useLogger, parseError } from 'autotel-adapters/next';
+
+export const POST = withAutotel(async (request: Request) => {
+  const log = useLogger(request);
+  log.set({ feature: 'checkout' });
+
+  try {
+    return Response.json({ ok: true });
+  } catch (error) {
+    const parsed = parseError(error);
+    log.set({ error_status: parsed.status, error_why: parsed.why });
+    throw error;
+  }
+});
+```
+
+## Build Your Own
+
+```typescript
+import { createUseLogger } from 'autotel-adapters/core';
+
+const useLogger = createUseLogger<{ requestId?: string }>({
+  adapterName: 'custom-framework',
+  enrich: (ctx) => ({ request_id: ctx.requestId }),
+});
+```
+
+## Examples
+
+- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs) — Next.js with `autotel-adapters/next` and `parseError()` for client-side error handling.
+- [`example-nestjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nestjs) — NestJS with auto-instrumentation and manual `trace()` in services.
+- [`example-fastify`](https://github.com/jagreehal/autotel/tree/main/apps/example-fastify) — Fastify with HTTP and Fastify auto-instrumentation.

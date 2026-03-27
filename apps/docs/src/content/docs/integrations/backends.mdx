@@ -1,0 +1,72 @@
+---
+title: Backends
+description: Simplified setup helpers for Honeycomb, Datadog, Google Cloud, and Grafana.
+---
+
+`autotel-backends` provides vendor-specific configuration helpers that simplify `init()` for popular observability platforms.
+
+## Installation
+
+```bash
+npm install autotel autotel-backends
+```
+
+## Honeycomb
+
+```typescript
+import { init } from 'autotel';
+import { createHoneycombConfig } from 'autotel-backends/honeycomb';
+
+init(
+  createHoneycombConfig({
+    apiKey: process.env.HONEYCOMB_API_KEY!,
+    service: 'my-app',
+  }),
+);
+```
+
+## Datadog
+
+For the full Datadog integration guide -- including architecture choices, Agent vs. direct ingestion setup, migration from pino-datadog-transport, deployment patterns, troubleshooting, and advanced configuration -- see the dedicated [Datadog Integration](/integrations/datadog/) page.
+
+```typescript
+import { init } from 'autotel';
+import { createDatadogConfig } from 'autotel-backends/datadog';
+
+// Direct cloud ingestion (serverless, edge)
+init(
+  createDatadogConfig({
+    apiKey: process.env.DATADOG_API_KEY!,
+    service: 'my-lambda',
+  }),
+);
+
+// Or local Datadog Agent (Kubernetes, long-running services)
+init(
+  createDatadogConfig({
+    service: 'my-api',
+    useAgent: true,
+  }),
+);
+```
+
+## Available Backends
+
+| Backend      | Import                          |
+| ------------ | ------------------------------- |
+| Honeycomb    | `autotel-backends/honeycomb`    |
+| Datadog      | `autotel-backends/datadog`      |
+| Google Cloud | `autotel-backends/google-cloud` |
+| Grafana      | `autotel-backends/grafana`      |
+
+## Examples
+
+- [`example-datadog`](https://github.com/jagreehal/autotel/tree/main/apps/example-datadog) — Datadog with `createDatadogConfig()`, direct cloud ingestion and local agent modes.
+- [`example-grafana`](https://github.com/jagreehal/autotel/tree/main/apps/example-grafana) — Grafana Cloud (Tempo + Mimir + Loki) via OTLP with canonical log lines.
+
+## Backends vs Plugins
+
+| Package            | Purpose                                               |
+| ------------------ | ----------------------------------------------------- |
+| `autotel-backends` | Configure **where** telemetry goes (outputs)          |
+| `autotel-plugins`  | Instrument **libraries** to create telemetry (inputs) |

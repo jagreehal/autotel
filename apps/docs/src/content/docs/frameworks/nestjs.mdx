@@ -1,0 +1,75 @@
+---
+title: NestJS
+description: Trace NestJS applications with autotel.
+---
+
+## Setup
+
+```typescript
+// instrumentation.ts
+import { init } from 'autotel';
+
+init({
+  service: 'my-nestjs-api',
+  autoInstrumentations: ['http', 'nestjs-core'],
+  endpoint: process.env.OTLP_ENDPOINT,
+});
+```
+
+Run with:
+
+```bash
+tsx --import ./instrumentation.ts src/main.ts
+```
+
+## Tracing Services
+
+Use `trace()` inside NestJS services for business logic spans:
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { trace, type TraceContext } from 'autotel';
+
+@Injectable()
+export class UserService {
+  private readonly tracedFetchUser = trace(
+    (ctx: TraceContext) => async (userId: string) => {
+      ctx.setAttribute('db.query', 'SELECT * FROM users WHERE id = ?');
+      ctx.setAttribute('db.userId', userId);
+      return await this.prisma.user.findUnique({ where: { id: userId } });
+    },
+  );
+
+  async getUser(userId: string) {
+    return this.tracedFetchUser(userId);
+  }
+}
+```
+
+## Bootstrap
+
+```typescript
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  await app.listen(3000);
+}
+
+bootstrap();
+```
+
+## What Gets Traced
+
+With `autoInstrumentations: ['http', 'nestjs-core']`:
+
+- **HTTP server spans** — automatic per-request spans
+- **NestJS controllers/services** — handler execution time
+- **Guards, interceptors, pipes** — lifecycle timing
+- **Your `trace()` calls** — business logic spans as children
+
+## Examples
+
+- [`example-nestjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nestjs) — NestJS with HTTP/NestJS auto-instrumentation and manual `trace()` in services.

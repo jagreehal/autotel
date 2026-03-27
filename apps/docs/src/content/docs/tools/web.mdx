@@ -1,0 +1,111 @@
+---
+title: Web SDK
+description: Ultra-lightweight browser SDK for distributed tracing (1.6KB gzipped).
+---
+
+`autotel-web` propagates W3C `traceparent` headers from the browser to your backend. The backend does all the real tracing; the browser only injects headers.
+
+## Installation
+
+```bash
+npm install autotel-web
+```
+
+## Lean Mode (Default)
+
+~1.6KB gzipped. Only injects `traceparent` on fetch/XHR:
+
+```typescript
+import { init } from 'autotel-web';
+
+init({ service: 'my-frontend-app' });
+
+// All fetch/XHR calls now include traceparent header
+fetch('/api/users'); // ← traceparent automatically injected!
+```
+
+## Full Mode
+
+~40-50KB gzipped. Real browser spans, Web Vitals, error capture, network timing:
+
+```typescript
+import { initFull } from 'autotel-web/full';
+
+initFull({
+  service: 'my-frontend-app',
+  endpoint: 'https://collector.example.com/v1/traces',
+  sampleRate: 0.5,
+  captureNavigation: true,
+  captureFetch: true,
+  captureWebVitals: true,
+  captureErrors: true,
+});
+```
+
+### Full Mode Features
+
+- Navigation spans
+- Fetch/XHR spans with timing
+- Web Vitals (LCP, INP, CLS, FCP, TTFB)
+- Unhandled error capture
+- Long task detection
+- User interaction spans
+- Network timing events
+- OTLP export
+
+## Privacy Controls
+
+```typescript
+import { init } from 'autotel-web';
+
+init({
+  service: 'my-app',
+  privacy: {
+    allowedOrigins: ['https://api.example.com'],
+    respectDoNotTrack: true,
+    respectGPC: true,
+  },
+});
+```
+
+## Framework Integration
+
+### Next.js
+
+```typescript
+// app/layout.tsx (client component)
+'use client';
+import { init } from 'autotel-web';
+init({ service: 'my-nextjs-app' });
+```
+
+### React
+
+```typescript
+// App.tsx
+import { useEffect } from 'react';
+import { init } from 'autotel-web';
+
+function App() {
+  useEffect(() => { init({ service: 'my-react-app' }); }, []);
+  return <div>...</div>;
+}
+```
+
+## Examples
+
+- [`example-web-vanilla`](https://github.com/jagreehal/autotel/tree/main/apps/example-web-vanilla) — Vanilla JS with `autotel-web` lean mode showing automatic `traceparent` injection.
+- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs) — Next.js with `autotel-web` for browser-to-backend distributed tracing.
+- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start) — TanStack Start with `autotel-web` for client-side trace propagation.
+
+## Why Not Full OTel in the Browser?
+
+- Full `@opentelemetry/sdk-trace-web` is ~700KB
+- `autotel-web` lean mode is **1.6KB** (440x smaller)
+- The browser only needs to propagate context — the backend does the tracing
+
+## Entry Points
+
+- `autotel-web` — Lean mode (default, ~1.6KB)
+- `autotel-web/full` — Full mode (~40-50KB)
+- `autotel-web/privacy` — Privacy manager

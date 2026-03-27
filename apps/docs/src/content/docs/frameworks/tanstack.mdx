@@ -1,0 +1,122 @@
+---
+title: TanStack Start
+description: Automatic tracing for TanStack Start server functions, middleware, and loaders.
+---
+
+`autotel-tanstack` provides automatic OpenTelemetry instrumentation for TanStack Start applications using the framework's native middleware patterns.
+
+## Installation
+
+```bash
+npm install autotel-tanstack autotel
+```
+
+## Quick Start
+
+Configure global middleware in `start.ts`:
+
+```typescript
+// src/start.ts
+import { createStart, createMiddleware } from '@tanstack/react-start';
+import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+import './instrumentation';
+
+const requestTracingMiddleware = createMiddleware().server(
+  createTracingServerHandler({
+    captureHeaders: ['x-request-id', 'user-agent'],
+    excludePaths: ['/health', '/metrics'],
+  }),
+);
+
+const functionTracingMiddleware = createMiddleware({ type: 'function' }).server(
+  createTracingServerHandler({ type: 'function', captureArgs: true }),
+);
+
+export const startInstance = createStart(() => ({
+  requestMiddleware: [requestTracingMiddleware],
+  functionMiddleware: [functionTracingMiddleware],
+}));
+```
+
+```typescript
+// src/instrumentation.ts
+import 'autotel-tanstack/auto';
+export {};
+```
+
+`autotel-tanstack/auto` reads `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT` from env vars. For custom config, call `init()` from `autotel` directly instead.
+
+## Server Functions (Auto-Traced)
+
+With global middleware, server functions are automatically traced:
+
+```typescript
+import { createServerFn } from '@tanstack/react-start';
+
+export const getUser = createServerFn({ method: 'GET' }).handler(
+  async ({ data: id }) => {
+    return await db.users.findUnique({ where: { id } });
+  },
+);
+```
+
+## Route Loaders
+
+```typescript
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import { traceLoader, traceBeforeLoad } from 'autotel-tanstack/loaders';
+
+export const Route = createFileRoute('/users/$userId')({
+  beforeLoad: traceBeforeLoad(async ({ context }) => {
+    if (!context.auth.isAuthenticated) throw redirect({ to: '/login' });
+  }),
+  loader: traceLoader(async ({ params }) => {
+    return await getUser(params.userId);
+  }),
+});
+```
+
+## E2E Testing
+
+When running Playwright E2E tests against a TanStack Start server, set `E2E=1` in the `webServer` command. `autotel-tanstack/auto` detects this and switches to an in-memory exporter so spans are available for assertion instead of being exported to OTLP.
+
+```bash
+# playwright.config.ts webServer command
+E2E=1 OTEL_SERVICE_NAME=my-app vite preview --port 3100
+```
+
+Add a route to expose the spans over HTTP:
+
+```typescript
+// src/routes/api/test-spans.ts
+import { createFileRoute } from '@tanstack/react-router';
+import { createTestSpansHandlers } from 'autotel-tanstack/testing';
+
+const { GET, DELETE } = createTestSpansHandlers();
+
+export const Route = createFileRoute('/api/test-spans')({
+  server: { handlers: { GET, DELETE } },
+});
+```
+
+Then use [`createTestSpansClient`](/testing/playwright#server-side-span-inspection) from `autotel-playwright` to fetch and assert on spans in your tests.
+
+## Entry Points
+
+- `autotel-tanstack` — Everything
+- `autotel-tanstack/auto` — Zero-config auto-instrumentation
+- `autotel-tanstack/middleware` — Middleware integration
+- `autotel-tanstack/server-functions` — Server function wrappers
+- `autotel-tanstack/loaders` — Route loader instrumentation
+- `autotel-tanstack/handlers` — Handler wrappers
+- `autotel-tanstack/context` — Context propagation
+- `autotel-tanstack/testing` — Test utilities (`createTestHarness`, `createTestSpansHandlers`, `SerializedSpan`)
+
+## Examples
+
+- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start) — Full-stack TanStack Start with request/server-function middleware, route loaders, and `autotel-web` for browser trace propagation.
+
+## Supported Frameworks
+
+- `@tanstack/react-start` ^1.139.14
+- `@tanstack/solid-start` ^1.139.14

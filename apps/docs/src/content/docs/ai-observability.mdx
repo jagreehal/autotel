@@ -1,0 +1,332 @@
+---
+title: AI-Assisted Observability
+description: Let AI assistants query and analyze your OpenTelemetry traces via MCP.
+---
+
+Instead of manually searching through trace dashboards, you can ask Claude (or any MCP-compatible AI) natural language questions about your application's traces. The AI uses the OpenTelemetry MCP server to query your observability backend and returns insights.
+
+## How It Works
+
+```
+┌─────────────────────┐
+│  Your Application   │
+│  (instrumented with │──┐
+│   autotel)          │  │ OTLP
+└─────────────────────┘  │
+                         ▼
+                    ┌──────────┐
+                    │ Jaeger / │
+                    │ Tempo /  │◄─────┐
+                    │ Honeycomb│      │ HTTP API
+                    └──────────┘      │
+                         ▲            │
+                    ┌─────────────────────────┐
+                    │ OpenTelemetry MCP Server│
+                    │  (queries your backend) │
+                    └─────────────────────────┘
+                              │
+                         MCP Protocol
+                              │
+                    ┌─────────────────┐
+                    │ Claude Desktop  │
+                    │  (AI Assistant) │
+                    └─────────────────┘
+```
+
+**Your app** exports traces via OTLP → **Observability backend** stores them → **MCP server** provides query tools → **Claude** uses those tools to answer your questions.
+
+## Setup
+
+### 1. Start an Observability Backend
+
+For local development, Jaeger is the simplest option:
+
+```yaml
+# docker-compose.yml
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - '16686:16686' # Jaeger UI
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
+```
+
+```bash
+docker compose up -d
+```
+
+### 2. Instrument Your App
+
+```typescript
+import { init, trace, span, type TraceContext } from 'autotel';
+
+init({
+  service: 'my-api',
+  endpoint: 'http://localhost:4318', // Jaeger OTLP endpoint
+  autoInstrumentations: ['express', 'http'],
+});
+```
+
+### 3. Add Semantic Attributes
+
+The AI can only query what you capture. Add attributes that matter for debugging:
+
+```typescript
+const queryOrders = trace((ctx: TraceContext) => async (userId: string) => {
+  // Database attributes
+  ctx.setAttribute('db.system', 'postgresql');
+  ctx.setAttribute('db.operation', 'SELECT');
+  ctx.setAttribute('db.table', 'orders');
+  ctx.setAttribute('db.user_id', userId);
+
+  const queryTime = Math.random() * 150;
+  const orders = await db.query('SELECT * FROM orders WHERE user_id = $1', [
+    userId,
+  ]);
+
+  ctx.setAttribute('db.query_time_ms', queryTime);
+  ctx.setAttribute('db.rows_returned', orders.length);
+  ctx.setAttribute('db.slow_query', queryTime > 100);
+
+  return orders;
+});
+
+const processPayment = trace((ctx: TraceContext) => async (amount: number) => {
+  ctx.setAttribute('payment.gateway', 'stripe');
+  ctx.setAttribute('payment.amount', amount);
+  ctx.setAttribute('payment.currency', 'USD');
+
+  try {
+    const result = await stripe.charges.create({ amount });
+    ctx.setAttribute('payment.status', 'success');
+    ctx.setAttribute('payment.transaction_id', result.id);
+    return result;
+  } catch (err) {
+    ctx.setAttribute('payment.status', 'failed');
+    ctx.setAttribute('payment.error', err.message);
+    throw err;
+  }
+});
+
+const processOrder = trace(
+  (ctx: TraceContext) =>
+    async (userId: string, items: unknown[], total: number) => {
+      ctx.setAttribute('order.user_id', userId);
+      ctx.setAttribute('order.item_count', items.length);
+      ctx.setAttribute('order.total', total);
+
+      await span({ name: 'validate-user' }, async (validateCtx) => {
+        validateCtx.setAttribute('validation.type', 'user');
+        // ...
+      });
+
+      await span({ name: 'process-payment' }, async () => {
+        await processPayment(total);
+      });
+
+      await span({ name: 'create-order-record' }, async (recordCtx) => {
+        recordCtx.setAttribute('db.operation', 'INSERT');
+        recordCtx.setAttribute('db.table', 'orders');
+        // ...
+      });
+
+      ctx.setAttribute('order.status', 'completed');
+      return { orderId: `order-${Date.now()}`, status: 'completed' };
+    },
+);
+```
+
+### 4. Install the MCP Server
+
+```bash
+# macOS
+brew install pipx
+pipx ensurepath
+
+# Or use uv (faster)
+brew install uv
+```
+
+### 5. Configure Claude Desktop
+
+Add the MCP server to your Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "opentelemetry": {
+      "command": "uvx",
+      "args": [
+        "opentelemetry-mcp",
+        "--backend",
+        "jaeger",
+        "--url",
+        "http://localhost:16686"
+      ]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Look for the 🔌 icon to verify the connection.
+
+## MCP Server Tools
+
+The OpenTelemetry MCP server provides 9 tools that Claude uses automatically:
+
+| Tool                       | What It Does                                                |
+| -------------------------- | ----------------------------------------------------------- |
+| `search_traces`            | Query traces with filters (service, time range, attributes) |
+| `search_spans`             | Find specific spans by name or attributes                   |
+| `get_trace`                | Retrieve a complete trace with all spans and attributes     |
+| `find_errors`              | Locate traces containing errors                             |
+| `list_services`            | Show all instrumented services                              |
+| `get_llm_usage`            | Aggregate token usage (for LLM traces)                      |
+| `list_llm_models`          | Identify LLM models in use                                  |
+| `get_llm_model_stats`      | Compare model performance                                   |
+| `get_llm_expensive_traces` | Find high-token requests                                    |
+
+Claude decides which tool to use based on your question.
+
+## Query Examples
+
+### Error Analysis
+
+> "Show me all traces with errors from the last 10 minutes"
+
+Claude calls `find_errors`, then analyzes common patterns across returned traces.
+
+> "Find all traces where payment.status is 'failed'"
+
+Claude uses `search_spans` with attribute filters.
+
+> "What's the failure rate for payments?"
+
+Claude queries all payment spans, counts successes vs failures, calculates percentage.
+
+### Performance Analysis
+
+> "What are the slowest endpoints?"
+
+Claude uses `search_traces` sorted by duration.
+
+> "Find database queries that took longer than 100ms"
+
+Claude searches spans where `db.query_time_ms > 100`.
+
+> "Show me the span breakdown for the slowest request to /api/events/report"
+
+Claude gets the full trace and walks the span tree.
+
+### Business Logic
+
+> "Show me all orders with more than 5 items"
+
+Claude searches spans where `order.item_count > 5`.
+
+> "Find traces where validation failed"
+
+Claude searches for spans named `validate-user` with error status.
+
+> "Which endpoints have the highest error rate?"
+
+Claude compares error counts per endpoint across all traces.
+
+### Root Cause Analysis
+
+> "Show me the full trace for the most recent payment failure including all child spans"
+
+Claude calls `find_errors` → filters to payment failures → calls `get_trace` → walks the span tree.
+
+> "For the /api/orders endpoint, show me the span breakdown to identify bottlenecks"
+
+Claude gets a trace for that endpoint and analyzes duration of each child span.
+
+## Drilling Down
+
+Claude maintains context across messages, so you can drill down:
+
+```
+You: "Show me traces with errors"
+Claude: [Shows 3 error traces]
+
+You: "What do these errors have in common?"
+Claude: [Analyzes common attributes across traces]
+
+You: "Show me the full trace for the first error"
+Claude: [Displays complete span tree]
+
+You: "What was the value of payment.status in that trace?"
+Claude: [Shows payment.status = 'failed']
+
+You: "Find all traces where payment.status is 'failed' in the last hour"
+Claude: [Shows all payment failures]
+
+You: "What's the failure rate?"
+Claude: [Calculates percentage]
+```
+
+## What to Instrument for AI Querying
+
+The more semantic attributes you set, the more useful the AI becomes. Focus on:
+
+**Database operations:**
+
+- `db.system`, `db.operation`, `db.table`
+- `db.query_time_ms`, `db.rows_returned`
+- `db.slow_query` (boolean flag)
+
+**External API calls:**
+
+- `payment.gateway`, `payment.amount`, `payment.status`
+- `http.method`, `http.route`, `http.status_code`
+
+**Business logic:**
+
+- `order.user_id`, `order.item_count`, `order.total`, `order.status`
+- `validation.type`, `validation.passed`
+
+**Flags for filtering:**
+
+- `db.slow_query` — boolean for slow queries
+- `notification.sent` — boolean for delivery status
+- `report.expensive` — boolean for heavy operations
+
+## Supported Backends
+
+The MCP server works with any OpenTelemetry-compatible backend:
+
+| Backend         | MCP Flag                                        |
+| --------------- | ----------------------------------------------- |
+| Jaeger          | `--backend jaeger --url http://localhost:16686` |
+| Grafana Tempo   | `--backend tempo --url http://localhost:3200`   |
+| Traceloop Cloud | `--backend traceloop --api-key YOUR_KEY`        |
+| Honeycomb       | `--backend honeycomb --api-key YOUR_KEY`        |
+
+## Production Use
+
+For production, replace Jaeger with a managed backend:
+
+```json
+{
+  "mcpServers": {
+    "opentelemetry": {
+      "command": "uvx",
+      "args": [
+        "opentelemetry-mcp",
+        "--backend",
+        "tempo",
+        "--url",
+        "https://tempo-prod.example.com"
+      ]
+    }
+  }
+}
+```
+
+## Examples
+
+- [`example-mcp-observability`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability) — Complete working demo: Express app → Jaeger → MCP server → Claude Desktop. Includes `generate-traffic.sh` script and 50+ example queries in `EXAMPLE_QUERIES.md`.

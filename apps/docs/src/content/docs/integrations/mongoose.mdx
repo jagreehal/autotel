@@ -1,0 +1,70 @@
+---
+title: Mongoose
+description: OpenTelemetry instrumentation for Mongoose with db.query.text capture and PII redaction.
+---
+
+`autotel-mongoose` instruments Mongoose 8+ with stable semantic conventions, query text capture, and default PII redaction.
+
+## Installation
+
+```bash
+npm install autotel autotel-mongoose mongoose
+```
+
+## Basic Usage
+
+```typescript
+import mongoose from 'mongoose';
+import { init } from 'autotel';
+import { instrumentMongoose } from 'autotel-mongoose';
+
+init({ service: 'my-app', endpoint: 'http://localhost:4318' });
+
+instrumentMongoose(mongoose, { dbName: 'myapp' });
+
+const User = mongoose.model(
+  'User',
+  new mongoose.Schema({ name: String, email: String }),
+);
+
+await User.findOne({ email: 'alice@example.com' }).exec();
+// Span: "find users" with db.query.text (PII redacted)
+```
+
+## Hook Instrumentation
+
+```typescript
+instrumentMongoose(mongoose, { instrumentHooks: true });
+
+userSchema.pre('save', async function () {
+  this.set('name', this.get('name')?.trim());
+  // Pre/post hooks get their own spans
+});
+```
+
+## Configuration
+
+| Option                  | Default     | Description                |
+| ----------------------- | ----------- | -------------------------- |
+| `dbName`                | —           | Database name              |
+| `peerName`              | —           | MongoDB host               |
+| `peerPort`              | —           | MongoDB port               |
+| `captureCollectionName` | `true`      | Include collection in span |
+| `instrumentHooks`       | `false`     | Wrap pre/post hooks        |
+| `dbStatementSerializer` | built-in    | Custom query serializer    |
+| `statementRedactor`     | `'default'` | PII redaction preset       |
+
+## Examples
+
+- [`example-mongoose`](https://github.com/jagreehal/autotel/tree/main/apps/example-mongoose) — Mongoose with query text capture, PII redaction, and hook instrumentation.
+
+## Semantic Conventions
+
+Uses stable OTel conventions only:
+
+- `db.system.name`
+- `db.operation.name`
+- `db.collection.name`
+- `db.namespace`
+- `db.query.text`
+- `server.address` / `server.port`
