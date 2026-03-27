@@ -10,7 +10,7 @@
 import { Actor } from '@cloudflare/actors';
 import { tracedHandler } from 'autotel-cloudflare/actors';
 import { SamplingPresets } from 'autotel-cloudflare/sampling';
-import type { worker } from '../alchemy.run.ts';
+import type { WorkerEnv } from './types';
 
 /**
  * Example Actor that demonstrates:
@@ -19,7 +19,11 @@ import type { worker } from '../alchemy.run.ts';
  * - Persistent properties
  * - Alarm scheduling
  */
-class CounterActor extends Actor<typeof worker.Env> {
+interface ActorEnv extends WorkerEnv {
+  CounterActor: DurableObjectNamespace;
+}
+
+class CounterActor extends Actor<ActorEnv> {
   // Persistent property - automatically persisted between requests
   // Note: The exact API may vary - this is a simplified example
   private countValue = 0;
@@ -29,7 +33,7 @@ class CounterActor extends Actor<typeof worker.Env> {
    */
   protected async onInit(): Promise<void> {
     console.log('CounterActor initialized');
-    
+
     // Example: Set up an alarm to run every minute
     // This will be automatically traced when triggered
     // Note: Alarm API may vary - check @cloudflare/actors docs
@@ -64,11 +68,13 @@ class CounterActor extends Actor<typeof worker.Env> {
 
     // POST /increment - Increment count
     if (method === 'POST' && url.pathname === '/increment') {
-      const body = await request.json().catch(() => ({})) as { amount?: number };
+      const body = (await request.json().catch(() => ({}))) as {
+        amount?: number;
+      };
       const amount = body.amount ?? 1;
-      
+
       this.countValue += amount;
-      
+
       return Response.json({
         count: this.countValue,
         incremented: amount,
@@ -78,7 +84,7 @@ class CounterActor extends Actor<typeof worker.Env> {
     // POST /reset - Reset count
     if (method === 'POST' && url.pathname === '/reset') {
       this.countValue = 0;
-      
+
       return Response.json({
         count: 0,
         message: 'Counter reset',
@@ -102,15 +108,13 @@ class CounterActor extends Actor<typeof worker.Env> {
           `);
 
           // @ts-expect-error
-          await this.storage.exec(
-            `INSERT INTO visits (timestamp) VALUES (?)`,
-            [new Date().toISOString()],
-          );
+          await this.storage.exec(`INSERT INTO visits (timestamp) VALUES (?)`, [
+            new Date().toISOString(),
+          ]);
 
-          // @ts-expect-error
-          const visits = await this.storage.prepare(
-            'SELECT * FROM visits ORDER BY timestamp DESC LIMIT 10',
-          ).all();
+          const visits = await (this.storage as any)
+            .prepare('SELECT * FROM visits ORDER BY timestamp DESC LIMIT 10')
+            .all();
 
           return Response.json({
             visits: visits.results || [],
@@ -118,10 +122,13 @@ class CounterActor extends Actor<typeof worker.Env> {
           });
         }
       } catch (error) {
-        return Response.json({
-          error: 'Storage not available',
-          message: error instanceof Error ? error.message : String(error),
-        }, { status: 500 });
+        return Response.json(
+          {
+            error: 'Storage not available',
+            message: error instanceof Error ? error.message : String(error),
+          },
+          { status: 500 },
+        );
       }
     }
 
@@ -142,10 +149,13 @@ class CounterActor extends Actor<typeof worker.Env> {
           });
         }
       } catch (error) {
-        return Response.json({
-          error: 'Alarms not available',
-          message: error instanceof Error ? error.message : String(error),
-        }, { status: 500 });
+        return Response.json(
+          {
+            error: 'Alarms not available',
+            message: error instanceof Error ? error.message : String(error),
+          },
+          { status: 500 },
+        );
       }
     }
 
@@ -158,10 +168,10 @@ class CounterActor extends Actor<typeof worker.Env> {
    */
   protected async onAlarm(alarmInfo?: unknown): Promise<void> {
     console.log('Alarm triggered', { alarmInfo, count: this.countValue });
-    
+
     // Example: Increment count on alarm
     this.countValue += 1;
-    
+
     // Example: Schedule next alarm
     try {
       // @ts-expect-error - API may vary in beta version
@@ -197,7 +207,7 @@ export { CounterActor };
  * This wraps the Actor with full OpenTelemetry instrumentation
  */
 // @ts-expect-error - Type compatibility issue with @cloudflare/actors beta API
-export default tracedHandler(CounterActor, (env: typeof worker.Env) => ({
+export default tracedHandler(CounterActor, (env: ActorEnv) => ({
   exporter: {
     url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
     headers: env.OTLP_HEADERS ? JSON.parse(env.OTLP_HEADERS) : {},
@@ -221,4 +231,3 @@ export default tracedHandler(CounterActor, (env: typeof worker.Env) => ({
     capturePersistEvents: true, // Trace property persistence
   },
 }));
-
