@@ -1,0 +1,74 @@
+---
+title: CLI
+description: Setup wizard, diagnostics, and codemods for autotel.
+---
+
+`autotel-cli` provides an interactive setup wizard, diagnostics, and incremental feature additions.
+
+## Installation
+
+```bash
+npm install -g autotel-cli
+# or
+npx autotel <command>
+```
+
+## Commands
+
+### `autotel init`
+
+Interactive setup wizard:
+
+```bash
+# Interactive mode
+npx autotel init
+
+# Use defaults
+npx autotel init --yes
+
+# Use a quick preset
+npx autotel init --preset node-datadog-pino
+
+# Dry run
+npx autotel init --dry-run
+```
+
+**Quick presets:**
+
+- `node-datadog-pino` — Node.js + Datadog + Pino logging
+- `node-datadog-agent` — Node.js + Datadog Agent (local dev)
+- `node-honeycomb` — Node.js + Honeycomb
+- `node-otlp` — Node.js + Generic OTLP endpoint
+
+### `autotel doctor`
+
+Run diagnostics on your setup:
+
+```bash
+npx autotel doctor          # Run all checks
+npx autotel doctor --json   # Machine-readable output
+npx autotel doctor --fix    # Auto-fix resolvable issues
+```
+
+### `autotel add <type> <name>`
+
+Add components incrementally:
+
+```bash
+npx autotel add backend datadog
+npx autotel add subscriber posthog
+npx autotel add plugin bigquery
+npx autotel add platform cloudflare
+```
+
+## Examples
+
+See any example app — `autotel init` generates the `instrumentation.ts` file used across all examples.
+
+### `autotel codemod trace <path>`
+
+Wrap functions with `trace()`:
+
+```bash
+npx autotel codemod trace ./src
+```

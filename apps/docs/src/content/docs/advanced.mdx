@@ -1,6 +1,7 @@
-# Advanced Features (v2.25.4+)
-
-Advanced features and capabilities for power users.
+---
+title: Advanced Features
+description: Advanced features and capabilities for power users.
+---
 
 ## Deterministic Trace IDs
 
@@ -9,11 +10,8 @@ Generate consistent trace IDs from seeds for correlation with external systems:
 ```typescript
 import { createDeterministicTraceId } from 'autotel/trace-helpers';
 
-// Generate trace ID from external request ID
 const requestId = req.headers['x-request-id'];
 const traceId = await createDeterministicTraceId(requestId);
-
-// Use for correlation in support tickets, external systems, etc.
 console.log(`View traces: https://your-backend.com/traces/${traceId}`);
 ```
 
@@ -158,10 +156,10 @@ export const publishEvent = traceMessaging({
 
 **Available helpers:**
 
-- `traceLLM()` - Gen AI operations (chat, completion, embedding)
-- `traceDB()` - Database operations (SQL, NoSQL, Redis)
-- `traceHTTP()` - HTTP client requests
-- `traceMessaging()` - Queue/messaging operations (Kafka, RabbitMQ, SQS)
+- `traceLLM()` — Gen AI operations (chat, completion, embedding)
+- `traceDB()` — Database operations (SQL, NoSQL, Redis)
+- `traceHTTP()` — HTTP client requests
+- `traceMessaging()` — Queue/messaging operations (Kafka, RabbitMQ, SQS)
 
 ## Event-Driven Observability
 
@@ -196,7 +194,7 @@ export const processEvent = traceConsumer({
 });
 ```
 
-For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-plugins/kafka` for batch-level and optional per-message spans with trace continuation from headers (see [autotel-plugins README](../../packages/autotel-plugins/README.md#kafka)).
+For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-plugins/kafka` for batch-level and optional per-message spans with trace continuation from headers.
 
 **Key implementation details:**
 
@@ -208,7 +206,7 @@ For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-plugins/kafka
 
 ## Safe Baggage Propagation
 
-Type-safe baggage schemas with built-in guardrails for cross-service context:
+Type-safe baggage schemas with built-in guardrails:
 
 ```typescript
 import {
@@ -228,7 +226,7 @@ const { tenantId, priority } = BusinessBaggage.get(ctx);
 const OrderBaggage = createSafeBaggageSchema(
   {
     orderId: { type: 'string', maxLength: 36 },
-    customerId: { type: 'string', hash: true }, // Auto-hash for privacy
+    customerId: { type: 'string', hash: true },
     tier: { type: 'enum', values: ['free', 'pro', 'enterprise'] as const },
   },
   {

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" fill="none">
+  <!-- Telescope body (red) -->
+  <rect x="6" y="8" width="22" height="8" rx="1.5" fill="#dc2626" transform="rotate(-35 17 12)"/>
+  <rect x="2" y="12" width="10" height="6" rx="1" fill="#b91c1c" transform="rotate(-35 7 15)"/>
+  <!-- Lens cap -->
+  <circle cx="26" cy="6" r="3" fill="#9ca3af"/>
+  <!-- Mount -->
+  <circle cx="16" cy="17" r="3" fill="#9ca3af"/>
+  <!-- Tripod -->
+  <line x1="16" y1="20" x2="10" y2="34" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="16" y1="20" x2="22" y2="34" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="16" y1="20" x2="16" y2="35" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Text -->
+  <text x="38" y="27" fill="#eceef2" font-family="Inter, sans-serif" font-size="22" font-weight="700">autotel</text>
+</svg>

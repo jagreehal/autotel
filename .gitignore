@@ -50,3 +50,4 @@ examples/browser/test-results
 .changeset/release.json
 .alchemy
 apps/cloudflare-example/.alchemy
+.claude-work

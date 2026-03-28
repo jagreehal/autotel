@@ -1,0 +1,64 @@
+---
+title: Drizzle ORM
+description: OpenTelemetry instrumentation for Drizzle ORM.
+---
+
+Drizzle ORM has no official OpenTelemetry instrumentation. `autotel-drizzle` fills the gap.
+
+## Installation
+
+```bash
+npm install autotel autotel-drizzle
+```
+
+## Usage
+
+```typescript
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import { instrumentDrizzleClient } from 'autotel-drizzle';
+
+const queryClient = postgres(process.env.DATABASE_URL!);
+const db = drizzle({ client: queryClient });
+
+instrumentDrizzleClient(db, {
+  dbSystem: 'postgresql',
+  dbName: 'myapp',
+  peerName: 'db.example.com',
+  peerPort: 5432,
+  captureQueryText: true,
+});
+
+// All queries are now traced
+await db.select().from(users).where(eq(users.id, 123));
+```
+
+## Supported Databases
+
+- PostgreSQL (`dbSystem: 'postgresql'`)
+- MySQL (`dbSystem: 'mysql'`)
+- SQLite / LibSQL (`dbSystem: 'sqlite'`)
+
+## Configuration
+
+| Option               | Default  | Description                               |
+| -------------------- | -------- | ----------------------------------------- |
+| `dbSystem`           | required | `'postgresql'` \| `'mysql'` \| `'sqlite'` |
+| `dbName`             | —        | Database name                             |
+| `captureQueryText`   | `false`  | Capture SQL text (may contain PII)        |
+| `maxQueryTextLength` | `2048`   | Max captured query length                 |
+| `peerName`           | —        | Database hostname                         |
+| `peerPort`           | —        | Database port                             |
+
+## Examples
+
+- [`example-drizzle`](https://github.com/jagreehal/autotel/tree/main/apps/example-drizzle) — Drizzle ORM with PostgreSQL, MySQL, and SQLite tracing.
+
+## Use Official Packages When Available
+
+For databases with working official instrumentation, use those directly:
+
+- **PostgreSQL** → `@opentelemetry/instrumentation-pg`
+- **MySQL** → `@opentelemetry/instrumentation-mysql2`
+
+Drizzle itself has no official package, so use `autotel-drizzle` for the ORM layer.

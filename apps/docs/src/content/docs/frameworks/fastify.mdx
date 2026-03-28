@@ -1,0 +1,66 @@
+---
+title: Fastify
+description: Trace Fastify applications with autotel.
+---
+
+## Setup
+
+```typescript
+// instrumentation.ts
+import { init } from 'autotel';
+
+init({
+  service: 'my-fastify-api',
+  autoInstrumentations: ['http', 'fastify'],
+  endpoint: process.env.OTLP_ENDPOINT,
+});
+```
+
+Run with:
+
+```bash
+tsx --import ./instrumentation.ts src/index.ts
+```
+
+## Tracing Route Handlers
+
+```typescript
+import Fastify from 'fastify';
+import { trace, type TraceContext } from 'autotel';
+
+const app = Fastify({ logger: true });
+
+const fetchUser = trace((ctx: TraceContext) => async (userId: string) => {
+  ctx.setAttribute('db.userId', userId);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return { id: userId, name: `User ${userId}` };
+});
+
+app.get('/users/:userId', async (request, reply) => {
+  const { userId } = request.params;
+  try {
+    return await fetchUser(userId);
+  } catch {
+    reply.code(500);
+    return { error: 'Failed to fetch user' };
+  }
+});
+
+app.get('/error', async () => {
+  throw new Error('Test error');
+});
+
+await app.listen({ port: 3000 });
+```
+
+## What Gets Traced
+
+With `autoInstrumentations: ['http', 'fastify']`:
+
+- **HTTP server spans** — automatic per-request spans
+- **Fastify lifecycle** — hook and handler execution time
+- **Your `trace()` calls** — business logic spans as children
+
+## Examples
+
+- [`example-fastify`](https://github.com/jagreehal/autotel/tree/main/apps/example-fastify) — Fastify with HTTP/Fastify auto-instrumentation and manual `trace()`.

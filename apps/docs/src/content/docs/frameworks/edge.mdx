@@ -1,0 +1,125 @@
+---
+title: Edge Runtimes
+description: Vendor-agnostic OpenTelemetry for edge runtimes (~20KB).
+---
+
+`autotel-edge` is a lightweight (~20KB), vendor-agnostic OpenTelemetry implementation for edge runtimes: Cloudflare Workers, Vercel Edge, Netlify Edge, Deno Deploy, and more.
+
+> For Cloudflare Workers, use [autotel-cloudflare](/autotel/frameworks/cloudflare/) which includes complete bindings instrumentation.
+
+## Installation
+
+```bash
+npm install autotel-edge
+```
+
+## Quick Start
+
+```typescript
+import { trace, init } from 'autotel-edge';
+
+init({
+  service: { name: 'my-edge-function' },
+  exporter: {
+    url: process.env.OTEL_ENDPOINT || 'http://localhost:4318/v1/traces',
+  },
+});
+
+export const handler = trace(async (request: Request) => {
+  return new Response('Hello World');
+});
+```
+
+## Entry Points
+
+```typescript
+// Core API
+import { trace, span, init } from 'autotel-edge';
+
+// Sampling strategies
+import { createAdaptiveSampler, SamplingPresets } from 'autotel-edge/sampling';
+
+// Events system
+import { createEdgeSubscribers, publishEvent } from 'autotel-edge/events';
+
+// Logger
+import { createEdgeLogger } from 'autotel-edge/logger';
+
+// Testing utilities
+import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
+```
+
+## Sampling
+
+```typescript
+import { SamplingPresets } from 'autotel-edge/sampling';
+
+init({
+  service: { name: 'my-app' },
+  exporter: { url: '...' },
+  sampling: {
+    tailSampler: SamplingPresets.production(),
+    // 10% baseline, 100% errors, 100% slow requests (>1s)
+  },
+});
+```
+
+**Presets:**
+
+- `SamplingPresets.development()` — 100% sampling
+- `SamplingPresets.production()` — 10% baseline, all errors, slow >1s
+- `SamplingPresets.highTraffic()` — 1% baseline, all errors, slow >1s
+- `SamplingPresets.debugging()` — Errors only
+
+## Custom Sampling
+
+```typescript
+import { createCustomTailSampler } from 'autotel-edge/sampling';
+
+const customSampler = createCustomTailSampler((trace) => {
+  const span = trace.localRootSpan;
+  if (span.attributes['http.route']?.toString().startsWith('/api/'))
+    return true;
+  if (span.status.code === SpanStatusCode.ERROR) return true;
+  return false;
+});
+```
+
+## Events
+
+```typescript
+import { publishEvent } from 'autotel-edge/events';
+
+await publishEvent({
+  name: 'order.completed',
+  userId: '123',
+  properties: { orderId: 'abc', amount: 99.99 },
+});
+```
+
+## Logger
+
+```typescript
+import { createEdgeLogger } from 'autotel-edge/logger';
+
+const log = createEdgeLogger('my-service');
+log.info('Processing request', { userId: '123' });
+```
+
+## Supported Runtimes
+
+- Cloudflare Workers (use autotel-cloudflare)
+- Vercel Edge Functions
+- Netlify Edge Functions
+- Deno Deploy
+- AWS Lambda@Edge
+- Any runtime with `fetch()` and `AsyncLocalStorage` support
+
+## Examples
+
+- [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example) — Cloudflare Workers built on autotel-edge.
+
+## Bundle Size
+
+- **Core:** ~20KB minified (~8KB gzipped)
+- **With all entry points:** ~25KB minified (~10KB gzipped)

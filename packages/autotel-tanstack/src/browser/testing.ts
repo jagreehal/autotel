@@ -65,3 +65,44 @@ export function assertSpanHasAttribute(
   void value;
   // No-op in browser
 }
+
+/**
+ * Serialized span interface (browser stub - mirrors server SerializedSpan).
+ */
+export interface SerializedSpan {
+  name: string;
+  spanId: string;
+  traceId: string;
+  parentSpanId?: string;
+  attributes?: Record<string, unknown>;
+  status: { code: number; message?: string };
+  durationMs: number;
+}
+
+/**
+ * Browser stub: test-spans handlers are server-only.
+ * Returns no-op handlers that always return 404.
+ */
+export function createTestSpansHandlers(): {
+  GET: (request: Request) => Response;
+  DELETE: (request: Request) => Response;
+} {
+  return {
+    GET(_request: Request): Response {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      void _request;
+      return Response.json(
+        { error: 'createTestSpansHandlers is server-only' },
+        { status: 404 },
+      );
+    },
+    DELETE(_request: Request): Response {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      void _request;
+      return Response.json(
+        { error: 'createTestSpansHandlers is server-only' },
+        { status: 404 },
+      );
+    },
+  };
+}

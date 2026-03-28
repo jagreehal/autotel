@@ -1,0 +1,122 @@
+---
+title: Quick Start
+description: Get up and running with Autotel in under 5 minutes.
+---
+
+## 1. Install
+
+```bash
+npm install autotel
+```
+
+## 2. Initialize
+
+Create an `instrumentation.ts` file (or add to your entry point):
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  endpoint: 'http://localhost:4318',
+});
+```
+
+Import it **first** in your entry point:
+
+```typescript
+import './instrumentation'; // Must be first!
+
+import express from 'express';
+// ... rest of your app
+```
+
+## 3. Trace Functions
+
+```typescript
+import { trace } from 'autotel';
+
+// Factory pattern (receives ctx)
+export const createUser = trace((ctx) => async (data: UserData) => {
+  ctx.setAttribute('user.email', data.email);
+  const user = await db.users.create(data);
+  return user;
+});
+
+// Direct pattern (no ctx needed)
+export const getUser = trace(async (id: string) => {
+  return await db.users.findById(id);
+});
+```
+
+## 4. Request-Scoped Logging
+
+```typescript
+import { trace, getRequestLogger } from 'autotel';
+
+export const postCheckout = trace((ctx) => async (req, res) => {
+  const log = getRequestLogger(ctx);
+  const user = await getAuth(req);
+  log.set({ user: { id: user.id } });
+
+  const result = await processCheckout(user.id, req.body);
+  log.set({ orderId: result.id });
+  log.emitNow();
+
+  return res.json(result);
+});
+```
+
+## 5. Structured Errors
+
+```typescript
+import { createStructuredError } from 'autotel';
+
+if (!user) {
+  throw createStructuredError({
+    message: 'User not found',
+    status: 404,
+    why: `No user with ID "${userId}"`,
+    fix: 'Check the user ID and try again',
+    link: 'https://docs.example.com/errors/user-not-found',
+  });
+}
+```
+
+On the client, parse errors with:
+
+```typescript
+import { parseError } from 'autotel';
+
+try {
+  await fetch('/api/checkout', { method: 'POST', body: JSON.stringify(data) });
+} catch (err) {
+  const error = parseError(err);
+  toast.error(error.message, {
+    description: error.why,
+    action: error.fix
+      ? { label: 'Fix', onClick: () => showHelp(error.fix) }
+      : undefined,
+  });
+}
+```
+
+## 6. Product Events
+
+```typescript
+import { track } from 'autotel';
+
+track('user.signup', { userId: '123', plan: 'pro' });
+```
+
+## Examples
+
+- [`example-basic`](https://github.com/jagreehal/autotel/tree/main/apps/example-basic) — Core features: `trace()`, nested spans, metrics, `track()`, Pino integration, error handling.
+- [`example-http`](https://github.com/jagreehal/autotel/tree/main/apps/example-http) — Express server with manual `trace()` in route handlers and `--import` flag.
+- [`example-bun-fullstack`](https://github.com/jagreehal/autotel/tree/main/apps/example-bun-fullstack) — Bun runtime with `Bun.serve` and `trace()`.
+
+## Next Steps
+
+- [Configuration](/autotel/configuration/) — env vars, YAML config, and precedence
+- [Architecture](/autotel/architecture/) — patterns and conventions
+- [Agent Guide](/autotel/agent-guide/) — before/after examples for instrumentation

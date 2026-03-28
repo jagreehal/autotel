@@ -341,3 +341,86 @@ describe('trace context helper re-exports', () => {
     expect(mod.enrichWithTraceContext).toBeTypeOf('function');
   });
 });
+
+// Minimal APIRequestContext mock for createTestSpansClient tests
+function makeRequest(responseBody: unknown, status = 200) {
+  const mockResponse = {
+    ok: () => status >= 200 && status < 300,
+    status: () => status,
+    json: async () => responseBody,
+  };
+  return {
+    get: vi.fn().mockResolvedValue(mockResponse),
+    delete: vi.fn().mockResolvedValue(mockResponse),
+  };
+}
+
+describe('createTestSpansClient', () => {
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  it('getSpans calls GET /api/test-spans', async () => {
+    const { createTestSpansClient } = await import('./index');
+    const mockSpan = {
+      name: 'sendMoney.handler',
+      spanId: 'abc',
+      traceId: 'trace',
+      attributes: {},
+      status: { code: 0 },
+      durationMs: 100,
+    };
+    const req = makeRequest({ spans: [mockSpan] });
+    const client = createTestSpansClient('http://localhost:3100');
+    const spans = await client.getSpans(req as any);
+    expect(req.get).toHaveBeenCalledWith('http://localhost:3100/api/test-spans');
+    expect(spans).toHaveLength(1);
+    expect(spans[0].name).toBe('sendMoney.handler');
+  });
+
+  it('getSpans uses custom path when provided', async () => {
+    const { createTestSpansClient } = await import('./index');
+    const req = makeRequest({ spans: [] });
+    const client = createTestSpansClient('http://localhost:3100', { path: '/custom/spans' });
+    await client.getSpans(req as any);
+    expect(req.get).toHaveBeenCalledWith('http://localhost:3100/custom/spans');
+  });
+
+  it('getSpans throws when response not ok', async () => {
+    const { createTestSpansClient } = await import('./index');
+    const req = makeRequest({ error: 'not found' }, 404);
+    const client = createTestSpansClient('http://localhost:3100');
+    await expect(client.getSpans(req as any)).rejects.toThrow('GET /api/test-spans failed: 404');
+  });
+
+  it('clearSpans calls DELETE /api/test-spans', async () => {
+    const { createTestSpansClient } = await import('./index');
+    const req = makeRequest({ ok: true });
+    const client = createTestSpansClient('http://localhost:3100');
+    await client.clearSpans(req as any);
+    expect(req.delete).toHaveBeenCalledWith('http://localhost:3100/api/test-spans');
+  });
+
+  it('clearSpans uses custom path when provided', async () => {
+    const { createTestSpansClient } = await import('./index');
+    const req = makeRequest({ ok: true });
+    const client = createTestSpansClient('http://localhost:3100', { path: '/custom/spans' });
+    await client.clearSpans(req as any);
+    expect(req.delete).toHaveBeenCalledWith('http://localhost:3100/custom/spans');
+  });
+
+  it('clearSpans throws when response not ok', async () => {
+    const { createTestSpansClient } = await import('./index');
+    const req = makeRequest({ error: 'not found' }, 404);
+    const client = createTestSpansClient('http://localhost:3100');
+    await expect(client.clearSpans(req as any)).rejects.toThrow('DELETE /api/test-spans failed: 404');
+  });
+
+  it('strips trailing slash from baseUrl', async () => {
+    const { createTestSpansClient } = await import('./index');
+    const req = makeRequest({ spans: [] });
+    const client = createTestSpansClient('http://localhost:3100/');
+    await client.getSpans(req as any);
+    expect(req.get).toHaveBeenCalledWith('http://localhost:3100/api/test-spans');
+  });
+});

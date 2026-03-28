@@ -1,0 +1,87 @@
+---
+title: Plugins
+description: Instrumentation for libraries without official OpenTelemetry support (BigQuery, Kafka, RabbitMQ).
+---
+
+`autotel-plugins` instruments libraries that have **no official** OpenTelemetry package or where official support is broken.
+
+## Philosophy
+
+Only includes instrumentation that:
+
+1. Has NO official OpenTelemetry package
+2. Has BROKEN official instrumentation
+3. Adds significant value beyond official packages
+
+## Installation
+
+```bash
+npm install autotel autotel-plugins
+```
+
+## BigQuery
+
+```typescript
+import { BigQuery } from '@google-cloud/bigquery';
+import { instrumentBigQueryClient } from 'autotel-plugins/bigquery';
+
+const client = instrumentBigQueryClient(new BigQuery());
+
+// All queries are now traced with SQL text, dataset, and job metadata
+const [rows] = await client.query('SELECT * FROM mydataset.mytable');
+```
+
+## Kafka (Batch Consumer)
+
+For KafkaJS `eachBatch` consumers with per-message spans:
+
+```typescript
+import {
+  withBatchConsumer,
+  createMessageErrorSpan,
+} from 'autotel-plugins/kafka';
+
+consumer.run({
+  eachBatch: withBatchConsumer({
+    destination: 'user-events',
+    consumerGroup: 'event-processor',
+  })(async ({ batch, heartbeat }) => {
+    for (const message of batch.messages) {
+      // Each message gets its own span linked to producer trace
+      await processMessage(message);
+    }
+  }),
+});
+```
+
+## RabbitMQ
+
+```typescript
+import { instrumentRabbitMQ } from 'autotel-plugins/rabbitmq';
+
+// Instrument channel for publish/consume tracing
+const instrumentedChannel = instrumentRabbitMQ(channel);
+```
+
+## Examples
+
+- [`example-pg`](https://github.com/jagreehal/autotel/tree/main/apps/example-pg) — PostgreSQL with official `@opentelemetry/instrumentation-pg` and autotel.
+- [`example-prisma`](https://github.com/jagreehal/autotel/tree/main/apps/example-prisma) — Prisma ORM with `PrismaInstrumentation` showing detailed span trees.
+
+## Use Official Packages When Available
+
+For libraries with working official instrumentation, use those directly:
+
+| Library    | Official Package                         |
+| ---------- | ---------------------------------------- |
+| MongoDB    | `@opentelemetry/instrumentation-mongodb` |
+| PostgreSQL | `@opentelemetry/instrumentation-pg`      |
+| MySQL      | `@opentelemetry/instrumentation-mysql2`  |
+| Redis      | `@opentelemetry/instrumentation-redis`   |
+| Express    | `@opentelemetry/instrumentation-express` |
+
+## Entry Points
+
+- `autotel-plugins/bigquery` — BigQuery instrumentation
+- `autotel-plugins/kafka` — Kafka batch consumer
+- `autotel-plugins/rabbitmq` — RabbitMQ instrumentation

@@ -1,0 +1,94 @@
+---
+title: MCP
+description: OpenTelemetry instrumentation for Model Context Protocol with automatic distributed tracing.
+---
+
+`autotel-mcp` automatically instruments MCP servers and clients with OpenTelemetry tracing. Uses W3C Trace Context propagation via the `_meta` field.
+
+## Installation
+
+```bash
+npm install autotel-mcp @modelcontextprotocol/sdk autotel
+```
+
+## Server Instrumentation
+
+```typescript
+import { Server } from '@modelcontextprotocol/sdk/server/index';
+import { instrumentMcpServer } from 'autotel-mcp/server';
+import { init } from 'autotel';
+
+init({ service: 'mcp-weather-server', endpoint: 'http://localhost:4318' });
+
+const server = new Server({ name: 'weather', version: '1.0.0' });
+
+const instrumented = instrumentMcpServer(server, {
+  captureArgs: true,
+  captureResults: false, // PII concern
+});
+
+// Register tools normally — they're automatically traced
+instrumented.registerTool({
+  name: 'get_weather',
+  handler: async (args) => {
+    // Automatically traced with parent context from _meta
+    return { content: [{ type: 'text', text: `Temp: ${weather.temp}°F` }] };
+  },
+});
+```
+
+## Client Instrumentation
+
+```typescript
+import { Client } from '@modelcontextprotocol/sdk/client/index';
+import { instrumentMcpClient } from 'autotel-mcp/client';
+
+const client = new Client({ name: 'weather-client', version: '1.0.0' });
+
+const instrumented = instrumentMcpClient(client, {
+  captureArgs: true,
+  captureResults: false,
+});
+
+// All tool calls automatically have trace context injected into _meta
+const result = await instrumented.callTool({
+  name: 'get_weather',
+  arguments: { location: 'NYC' },
+});
+```
+
+## Distributed Tracing
+
+W3C Trace Context propagates through the `_meta` field (not headers), making it transport-agnostic:
+
+```typescript
+import {
+  extractOtelContextFromMeta,
+  injectOtelContextToMeta,
+} from 'autotel-mcp/context';
+
+// Client injects context
+const request = {
+  method: 'tools/call',
+  params: { name: 'my-tool', arguments: {} },
+  _meta: injectOtelContextToMeta({}),
+};
+
+// Server extracts context
+const parentContext = extractOtelContextFromMeta(request._meta);
+```
+
+## Examples
+
+- [`example-mcp-server`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-server) — MCP server with `instrumentMcpServer()` and automatic tool tracing.
+- [`example-mcp-client`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-client) — MCP client with `instrumentMcpClient()` and distributed tracing across client-server boundaries.
+- [`example-mcp-observability`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability) — AI-assisted observability: autotel instruments a Node app, Claude queries traces via MCP.
+
+## Entry Points
+
+- `autotel-mcp` — Everything (~7KB)
+- `autotel-mcp/server` — Server instrumentation (~5KB)
+- `autotel-mcp/client` — Client instrumentation (~4KB)
+- `autotel-mcp/context` — Context utilities (~2KB)
+- `autotel-mcp/metrics` — MCP-specific metrics
+- `autotel-mcp/semantic-conventions` — MCP semantic conventions
