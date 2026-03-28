@@ -24,6 +24,8 @@
  */
 
 import { init } from 'autotel';
+import { InMemorySpanExporter } from 'autotel/exporters';
+import { SimpleSpanProcessor } from 'autotel/processors';
 
 // Parse service name
 const service = process.env.OTEL_SERVICE_NAME || 'tanstack-start';
@@ -55,19 +57,37 @@ function resolveDebug(): boolean | 'pretty' {
   return false;
 }
 
-// Initialize autotel
-init({
-  service,
-  endpoint,
-  headers,
-  debug: resolveDebug(),
-});
+// E2E mode: use InMemorySpanExporter so tests can capture and assert on spans.
+// When E2E=1, skip the normal OTLP path and use in-memory storage instead.
+// Note: combined E2E + OTLP (two processors) is handled at integration level
+// because constructing an OTLP processor requires deps not available here.
+if (process.env.E2E === '1') {
+  const e2eExporter = new InMemorySpanExporter();
+  const e2eProcessor = new SimpleSpanProcessor(e2eExporter);
+  (globalThis as Record<string, unknown>).__testSpanExporter = e2eExporter;
+
+  init({
+    service,
+    spanProcessors: [e2eProcessor],
+  });
+} else {
+  // Initialize autotel (production path — unchanged)
+  init({
+    service,
+    endpoint,
+    headers,
+    debug: resolveDebug(),
+  });
+}
 
 // Log initialization (only in development)
 if (process.env.NODE_ENV === 'development' || process.env.AUTOTEL_DEBUG) {
   console.log('[autotel-tanstack] Auto-initialized with:', {
     service,
-    endpoint: endpoint || '(not configured)',
+    endpoint:
+      process.env.E2E === '1'
+        ? '(E2E: in-memory)'
+        : endpoint || '(not configured)',
     hasHeaders: !!headers,
   });
 }

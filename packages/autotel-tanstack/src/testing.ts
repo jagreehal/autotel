@@ -274,3 +274,111 @@ function generateHex(length: number): string {
   }
   return result;
 }
+
+/**
+ * Serialized span shape returned by the test-spans HTTP endpoint.
+ * Mirrors the fields the Playwright side needs for assertions.
+ */
+export interface SerializedSpan {
+  name: string;
+  spanId: string;
+  traceId: string;
+  parentSpanId?: string;
+  attributes?: Record<string, unknown>;
+  status: { code: number; message?: string };
+  durationMs: number;
+}
+
+interface TestSpanExporter {
+  getFinishedSpans(): Array<{
+    name: string;
+    spanContext(): { spanId: string; traceId: string };
+    parentSpanContext?: { spanId: string };
+    attributes: Record<string, unknown>;
+    status: { code: number; message?: string };
+    duration: [number, number];
+  }>;
+  reset(): void;
+}
+
+function getExporter(): TestSpanExporter | undefined {
+  return (globalThis as Record<string, unknown>).__testSpanExporter as
+    | TestSpanExporter
+    | undefined;
+}
+
+function e2eGuard(): Response | null {
+  if (process.env.E2E !== '1') {
+    return Response.json(
+      { error: 'test-spans endpoint only available in E2E mode' },
+      { status: 404 },
+    );
+  }
+  return null;
+}
+
+function exporterGuard(): Response | null {
+  if (!getExporter()) {
+    return Response.json(
+      { error: 'in-memory span exporter not initialized' },
+      { status: 500 },
+    );
+  }
+  return null;
+}
+
+/**
+ * Creates GET and DELETE handlers for a test-spans HTTP endpoint.
+ *
+ * Use in a TanStack Start route to expose in-memory spans for Playwright assertions.
+ * Only works when E2E=1 (set in webServer command).
+ *
+ * @example
+ * ```typescript
+ * // src/routes/api/test-spans.ts
+ * import { createFileRoute } from "@tanstack/react-router";
+ * import { createTestSpansHandlers } from 'autotel-tanstack/testing';
+ * const { GET, DELETE } = createTestSpansHandlers();
+ * export const Route = createFileRoute('/api/test-spans')({
+ *   server: { handlers: { GET, DELETE } },
+ * });
+ * ```
+ */
+export function createTestSpansHandlers(): {
+  GET: (request: Request) => Response;
+  DELETE: (request: Request) => Response;
+} {
+  return {
+    GET(_request: Request): Response {
+      const guard = e2eGuard() ?? exporterGuard();
+      if (guard) return guard;
+
+      const spans: SerializedSpan[] = getExporter()!
+        .getFinishedSpans()
+        .map((span) => {
+          const { spanId, traceId } = span.spanContext();
+          const serialized: SerializedSpan = {
+            name: span.name,
+            spanId,
+            traceId,
+            attributes: span.attributes,
+            status: span.status,
+            durationMs: span.duration[0] * 1000 + span.duration[1] / 1_000_000,
+          };
+          if (span.parentSpanContext?.spanId) {
+            serialized.parentSpanId = span.parentSpanContext.spanId;
+          }
+          return serialized;
+        });
+
+      return Response.json({ spans });
+    },
+
+    DELETE(_request: Request): Response {
+      const guard = e2eGuard() ?? exporterGuard();
+      if (guard) return guard;
+      getExporter()!.reset();
+      return Response.json({ ok: true });
+    },
+  };
+}

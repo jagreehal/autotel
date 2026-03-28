@@ -1,0 +1,133 @@
+---
+title: Playwright
+description: Give each Playwright test a span and inject W3C trace context into API requests.
+---
+
+`autotel-playwright` gives each test a span and injects `traceparent` headers into HTTP requests to your API, so **test and server appear as one trace** in your OTLP backend.
+
+## Installation
+
+```bash
+npm install autotel autotel-playwright
+```
+
+Peer dependency: `@playwright/test`.
+
+## Setup
+
+### 1. globalSetup
+
+```typescript
+// playwright.config.ts
+import { defineConfig } from '@playwright/test';
+import { createGlobalSetup } from 'autotel-playwright';
+
+export default defineConfig({
+  globalSetup: createGlobalSetup({
+    service: 'e2e-tests',
+    debug: true,
+    endpoint: process.env.OTLP_ENDPOINT,
+  }),
+});
+```
+
+### 2. API Base URL
+
+Set env var so trace headers are injected only into API requests:
+
+```bash
+API_BASE_URL=http://localhost:3000
+```
+
+### 3. Use the Fixture
+
+**Browser tests** — page requests to your API get trace context:
+
+```typescript
+import { test, expect } from 'autotel-playwright';
+
+test('health check', async ({ page }) => {
+  await page.goto(process.env.API_BASE_URL + '/health');
+  // Request to API_BASE_URL includes traceparent header
+});
+```
+
+**API tests** — use `requestWithTrace` for Node-side API calls:
+
+```typescript
+import { test, expect } from 'autotel-playwright';
+
+test('create user via API', async ({ requestWithTrace }) => {
+  const response = await requestWithTrace.post('/api/users', {
+    data: { email: 'test@example.com' },
+  });
+  expect(response.ok()).toBeTruthy();
+});
+```
+
+## Examples
+
+- [`example-playwright-e2e`](https://github.com/jagreehal/autotel/tree/main/apps/example-playwright-e2e) — Kitchen-sink Playwright project with `page` + `requestWithTrace` fixtures, `step()` helper, and `OtelReporter`.
+
+## How It Works
+
+```
+Test (trace X)  →  traceparent header  →  Server (trace X)
+       ↓                                           ↓
+    OTLP export                                OTLP export
+       ↓                                           ↓
+              One trace = test + API spans
+```
+
+## Server-Side Span Inspection
+
+When your app runs server-side code during E2E tests, you can capture and assert on those spans using `createTestSpansClient`. It pairs with `createTestSpansHandlers()` from `autotel-tanstack/testing` (see [TanStack E2E setup](/frameworks/tanstack#e2e-testing)).
+
+```typescript
+import { test, expect, createTestSpansClient } from 'autotel-playwright';
+
+const spansClient = createTestSpansClient('http://localhost:3100');
+
+test('server function is traced', async ({ page, request }) => {
+  await spansClient.clearSpans(request);
+
+  await page.goto('/');
+  await page.getByTestId('send-button').click();
+
+  const spans = await spansClient.getSpans(request);
+  const handler = spans.find(s => s.name === 'sendMoney.handler');
+  expect(handler).toBeDefined();
+  expect(handler?.attributes?.['transfer.amount']).toBe(100);
+});
+```
+
+`createTestSpansClient(baseUrl, options?)` options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `path` | `/api/test-spans` | Path of the test-spans endpoint |
+
+Each span in the returned array is a `SerializedSpan`:
+
+```typescript
+interface SerializedSpan {
+  name: string;
+  spanId: string;
+  traceId: string;
+  parentSpanId?: string;
+  attributes?: Record<string, unknown>;
+  status: { code: number; message?: string };
+  durationMs: number;
+}
+```
+
+## Reporter
+
+Optional reporter creates test/suite spans:
+
+```typescript
+// playwright.config.ts
+export default defineConfig({
+  reporter: [['autotel-playwright/reporter']],
+});
+```

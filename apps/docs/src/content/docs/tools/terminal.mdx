@@ -1,0 +1,86 @@
+---
+title: Terminal Viewer
+description: Ink-powered terminal dashboard for live trace inspection during development.
+---
+
+`autotel-terminal` is a terminal-native trace viewer built with [Ink](https://github.com/vadimdemedes/ink) (React for CLIs). It streams OpenTelemetry spans and shows them as traces with a span tree, search, and waterfall view.
+
+## Installation
+
+```bash
+npm install autotel-terminal autotel
+```
+
+## Standalone CLI
+
+Run as a standalone OTLP receiver:
+
+```bash
+npx autotel-terminal
+```
+
+Then point your app at it:
+
+```bash
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4319 \
+node app.js
+```
+
+**CLI Options:**
+
+- `-p, --port <port>` — Port (default: 4319)
+- `-H, --host <host>` — Host (default: 127.0.0.1)
+- `-t, --title <title>` — Dashboard title
+
+## In-Process Usage
+
+Wire `StreamingSpanProcessor` directly to your app:
+
+```typescript
+import { init, trace } from 'autotel';
+import { renderTerminal, StreamingSpanProcessor } from 'autotel-terminal';
+
+const stream = renderTerminal({ title: 'my-app' });
+
+init({
+  service: 'my-app',
+  spanProcessors: [new StreamingSpanProcessor(stream)],
+});
+
+// Spans appear in the terminal as they complete
+```
+
+## Dashboard Controls
+
+| Key     | Action                   |
+| ------- | ------------------------ |
+| `/`     | Search by span name      |
+| `e`     | Toggle error-only filter |
+| `↑/↓`   | Navigate traces/spans    |
+| `Enter` | Expand selected trace    |
+| `l`     | Toggle logs view         |
+| `?`     | Help overlay             |
+| `q`     | Quit                     |
+
+## Features
+
+- Real-time span streaming
+- Parent/child span tree per trace
+- Search and error filtering
+- Span detail view with attributes
+- Waterfall visualization
+- Relative time labels
+
+## Examples
+
+- [`example-terminal`](https://github.com/jagreehal/autotel/tree/main/apps/example-terminal) — Interactive terminal dashboard with live span streaming, error filtering, and P95 latency.
+
+## OTLP Endpoints (Standalone)
+
+| Endpoint           | Signal       |
+| ------------------ | ------------ |
+| `POST /v1/traces`  | Traces       |
+| `POST /v1/logs`    | Logs         |
+| `POST /v1/metrics` | Metrics      |
+| `GET /healthz`     | Health check |

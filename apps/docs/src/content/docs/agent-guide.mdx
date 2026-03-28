@@ -1,0 +1,288 @@
+---
+title: Agent Guide
+description: Before/after examples, when-to-use-what rules, and framework setup snippets for Autotel.
+---
+
+## When to Use What
+
+| Scenario                           | Use                                                                         | Example                                |
+| ---------------------------------- | --------------------------------------------------------------------------- | -------------------------------------- |
+| Wrap an async function with a span | `trace(fn)` or `span('Name', fn)`                                           | Handlers, use-case functions, workers  |
+| Wrap with explicit name/key        | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })`            | When name inference isn't reliable     |
+| Need span context (set attributes) | Factory: `trace((ctx) => async (args) => { ctx.setAttribute(...); ... })`   | Attach attributes inside the function  |
+| One snapshot per request           | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs |
+| Throw an error with why/fix/link   | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`    | API routes, services, validation       |
+| Show API error in UI (client)      | `parseError(caught)` → use `message`, `why`, `fix`, `link`                  | Toasts, error banners, forms           |
+| Product/analytics events           | `track('event.name', attributes)` or `Event` from `autotel/event`           | Clicks, signups, conversions           |
+| Record error on current span       | `recordStructuredError(ctx, error)` or request logger `.error()`            | Inside catch blocks when you have a span |
+
+**Rule of thumb**: If there's an HTTP request or a "job", create a span (via `trace()` or framework middleware) and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents.
+
+---
+
+## Before/After Examples
+
+### 1. Uninstrumented handler → trace + request logger
+
+**Before:**
+
+```typescript
+export async function postCheckout(req: Request, res: Response) {
+  const user = await getAuth(req);
+  const body = await readBody(req);
+  const result = await processCheckout(user.id, body);
+  return res.json(result);
+}
+```
+
+**After:**
+
+```typescript
+import { trace, getRequestLogger } from 'autotel';
+
+export const postCheckout = trace(
+  (ctx) => async (req: Request, res: Response) => {
+    const log = getRequestLogger(ctx);
+    const user = await getAuth(req);
+    log.set({ user: { id: user.id } });
+
+    const body = await readBody(req);
+    log.set({ cart: { items: body.items?.length } });
+
+    const result = await processCheckout(user.id, body);
+    log.set({ result: { orderId: result.id } });
+    log.emitNow();
+    return res.json(result);
+  },
+);
+```
+
+If the framework already creates a span per request (e.g. Autotel Hono middleware), you can call `getRequestLogger()` with no args inside the handler instead of passing `ctx`.
+
+### 2. Generic error → structured error
+
+**Before:**
+
+```typescript
+if (!user) throw new Error('User not found');
+// or
+catch (e) {
+  throw new Error('Payment failed');
+}
+```
+
+**After:**
+
+```typescript
+import { createStructuredError } from 'autotel';
+
+if (!user) {
+  throw createStructuredError({
+    message: 'User not found',
+    status: 404,
+    why: `No user with ID "${userId}"`,
+    fix: 'Check the user ID and try again',
+    link: 'https://docs.example.com/errors/user-not-found',
+  });
+}
+
+try {
+  await processPayment(data);
+} catch (e) {
+  throw createStructuredError({
+    message: 'Payment failed',
+    status: 402,
+    why: e instanceof Error ? e.message : 'Unknown error',
+    fix: 'Try a different payment method or contact support',
+    link: 'https://docs.example.com/payments',
+    cause: e,
+  });
+}
+```
+
+### 3. Client: raw catch → parseError and UI
+
+**Before:**
+
+```typescript
+try {
+  await fetch('/api/checkout', { method: 'POST', body: JSON.stringify(data) });
+} catch (err) {
+  toast.error('Something went wrong');
+}
+```
+
+**After:**
+
+```typescript
+import { parseError } from 'autotel';
+
+try {
+  await fetch('/api/checkout', { method: 'POST', body: JSON.stringify(data) });
+} catch (err) {
+  const error = parseError(err);
+  toast.error(error.message, {
+    description: error.why,
+    action: error.fix
+      ? { label: 'Fix', onClick: () => showHelp(error.fix) }
+      : undefined,
+  });
+  if (error.link) setDocLink(error.link);
+}
+```
+
+### 4. Scattered console.log → request logger
+
+**Before:**
+
+```typescript
+export default defineEventHandler(async (event) => {
+  console.log('Checkout started');
+  const user = await requireAuth(event);
+  console.log('User:', user.id);
+  const cart = await getCart(user.id);
+  console.log('Cart items:', cart.items.length);
+  const result = await processCheckout(cart);
+  console.log('Order:', result.id);
+  return result;
+});
+```
+
+**After:**
+
+```typescript
+import { trace, getRequestLogger } from 'autotel';
+
+export default trace((ctx) => async (event) => {
+  const log = getRequestLogger(ctx);
+  const user = await requireAuth(event);
+  log.set({ user: { id: user.id } });
+
+  const cart = await getCart(user.id);
+  log.set({ cart: { items: cart.items.length } });
+
+  const result = await processCheckout(cart);
+  log.set({ order: { id: result.id } });
+  log.emitNow();
+  return result;
+});
+```
+
+(If the framework attaches the event to an existing span, use `getRequestLogger()` with no args and omit the outer `trace` if the framework already creates the span.)
+
+---
+
+## Framework Setup Snippets
+
+### Hono
+
+```typescript
+import { Hono } from 'hono';
+import { init, getRequestLogger } from 'autotel';
+import { autotelMiddleware } from 'autotel-hono';
+
+init({ service: 'my-api' });
+
+const app = new Hono();
+app.use('*', autotelMiddleware());
+
+app.post('/api/checkout', async (c) => {
+  const log = getRequestLogger();
+  log.set({ route: 'checkout' });
+  log.emitNow();
+  return c.json({ ok: true });
+});
+```
+
+### Fastify (conceptual)
+
+```typescript
+import Fastify from 'fastify';
+import { init, trace, getRequestLogger } from 'autotel';
+
+init({ service: 'my-api' });
+
+// Register middleware that creates a span per request (see example app).
+// In route handler:
+app.post('/api/checkout', async (request, reply) => {
+  return trace((ctx) => async () => {
+    const log = getRequestLogger(ctx);
+    log.set({ route: 'checkout' });
+    const result = await handleCheckout(request);
+    log.emitNow();
+    return result;
+  })();
+});
+```
+
+### TanStack Start
+
+See `packages/autotel-tanstack` and `apps/example-tanstack-start`: middleware and env config. Use `getRequestLogger()` inside server handlers when a span is active.
+
+### Cloudflare Workers
+
+See `packages/autotel-cloudflare`: init at top level, wrap `fetch` handler so each request gets a span; use `getRequestLogger()` or trace context inside the handler.
+
+### Generic Node HTTP
+
+```typescript
+import { init, trace, getRequestLogger } from 'autotel';
+
+init({ service: 'my-api' });
+
+server.on('request', (req, res) => {
+  trace((ctx) => async () => {
+    const log = getRequestLogger(ctx);
+    log.set({ method: req.method, path: req.url });
+    try {
+      const result = await handleRequest(req, res);
+      log.emitNow();
+      return result;
+    } catch (e) {
+      log.error(e);
+      log.emitNow();
+      throw e;
+    }
+  })();
+});
+```
+
+---
+
+## Adding a New Framework Integration (touchpoints)
+
+When adding Autotel support for a new framework (e.g. a new web framework):
+
+1. **New package or entry in existing package**
+   Create middleware/plugin that: (a) creates a span per request, (b) optionally runs in AsyncLocalStorage so `getRequestLogger()` can be called with no args.
+
+2. **Touchpoints to update**
+   - New source: e.g. `packages/autotel-<name>/src/index.ts` (or new package).
+   - Build: add entry in `tsup.config.ts` / package build.
+   - Exports: add in `package.json` exports and typesVersions.
+   - Tests: add `*.test.ts` for middleware (span created, request logger available).
+   - Example app: add under `apps/example-<name>` and wire init + middleware.
+   - Docs: update `AGENTS.md` framework table and this guide with a short snippet.
+   - Root: add workspace package and any scripts (e.g. `pnpm --filter example-<name> start`).
+
+3. **Shared behavior**
+   Reuse existing patterns: one span per request, safe headers (no secrets), and optional integration with `getRequestLogger()` and `createStructuredError` in route handlers.
+
+4. **Do not**
+   Use `await import()` for init; keep init synchronous. Do not add barrel re-exports that break tree-shaking.
+
+---
+
+## Checklist Summary
+
+- [ ] Handlers wrapped with `trace()` or framework middleware that creates a span
+- [ ] Request-scoped context via `getRequestLogger()` and `.emitNow()` where needed
+- [ ] Thrown errors use `createStructuredError({ message, why?, fix?, link?, status?, cause? })`
+- [ ] Client uses `parseError(err)` and shows message/why/fix
+- [ ] No raw `console.log` for request/context when request logger is available
+- [ ] No `await import()` at init; use `node-require` helpers if needed
+- [ ] No secrets or full PII in attributes or logs
+
+## Claude Code Skill
+
+Autotel ships a Claude Code skill at `.claude/skills/autotel/` with detailed reference guides for wide events, structured errors, request loggers, and code review anti-patterns. See the [Claude Code Skill](/autotel/tools/claude-code-skill/) page for full details.

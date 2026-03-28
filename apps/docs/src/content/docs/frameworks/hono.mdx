@@ -1,0 +1,85 @@
+---
+title: Hono
+description: OpenTelemetry middleware for Hono applications.
+---
+
+The `autotel-hono` package provides an `otel()` middleware for automatic request tracing and HTTP metrics in Hono applications.
+
+## Installation
+
+```bash
+npm install autotel-hono autotel
+```
+
+## Quick Start
+
+```typescript
+import { Hono } from 'hono';
+import { init, getRequestLogger } from 'autotel';
+import { otel } from 'autotel-hono';
+
+init({ service: 'my-api' });
+
+const app = new Hono();
+app.use('*', otel());
+
+app.get('/api/users', async (c) => {
+  const log = getRequestLogger();
+  log.set({ route: '/api/users' });
+  const users = await db.users.findAll();
+  log.emitNow();
+  return c.json(users);
+});
+```
+
+## With Adapters
+
+Use `useLogger()` from `autotel-adapters/hono` when the `otel()` middleware already creates a span (avoids duplicate spans):
+
+```typescript
+import { otel } from 'autotel-hono';
+import { useLogger } from 'autotel-adapters/hono';
+
+app.use('*', otel());
+app.get('/orders/:id', (c) => {
+  const log = useLogger(c);
+  log.set({ route: c.req.path });
+  return c.json({ ok: true });
+});
+```
+
+## Options
+
+The `otel()` middleware accepts options for customizing tracing behavior:
+
+| Option                   | Description                           |
+| ------------------------ | ------------------------------------- |
+| `tracer`                 | Custom tracer instance                |
+| `tracerProvider`         | Custom tracer provider                |
+| `meter`                  | Custom meter instance                 |
+| `spanNameFactory`        | Custom span name from request         |
+| `captureRequestHeaders`  | Headers to capture as span attributes |
+| `captureResponseHeaders` | Response headers to capture           |
+| `captureActiveRequests`  | Track active request gauge            |
+| `captureRequestDuration` | Track request duration histogram      |
+| `serviceName`            | Override service name                 |
+| `serviceVersion`         | Override service version              |
+| `disableTracing`         | Disable span creation (metrics only)  |
+
+## Span Attributes
+
+HTTP request spans include:
+
+- `http.request.method` — GET, POST, etc.
+- `url.path` — Request path
+- `http.response.status_code` — Response status
+- `http.request.duration_ms` — Request duration
+
+## Examples
+
+- [`example-hono`](https://github.com/jagreehal/autotel/tree/main/apps/example-hono) — Hono with `otel()` middleware, `useLogger()` request-scoped logging, and manual `trace()` in handlers.
+
+## Related
+
+- [autotel-adapters](/autotel/frameworks/adapters/) — DX helpers (`useLogger`, `withAutotel`)
+- [Agent Guide](/autotel/agent-guide/) — Framework setup snippets

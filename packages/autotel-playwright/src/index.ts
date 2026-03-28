@@ -303,3 +303,67 @@ export function createGlobalSetup(initOptions?: AutotelConfig): () => Promise<vo
     });
   };
 }
+
+/**
+ * Serialized span returned by the test-spans endpoint (matches autotel-tanstack/testing SerializedSpan).
+ */
+export interface SerializedSpan {
+  name: string;
+  spanId: string;
+  traceId: string;
+  parentSpanId?: string;
+  attributes?: Record<string, unknown>;
+  status: { code: number; message?: string };
+  durationMs: number;
+}
+
+/**
+ * Creates a typed client for the test-spans HTTP endpoint.
+ *
+ * Pairs with `createTestSpansHandlers()` from `autotel-tanstack/testing`.
+ *
+ * @param baseUrl - Base URL of the app under test (e.g. 'http://localhost:3100')
+ * @param options.path - Path of the test-spans endpoint (default: '/api/test-spans')
+ *
+ * @example
+ * ```typescript
+ * const spansClient = createTestSpansClient('http://localhost:3100');
+ *
+ * test('server function is traced', async ({ request }) => {
+ *   await spansClient.clearSpans(request);
+ *   await page.goto('/');
+ *   // ... trigger action ...
+ *   const spans = await spansClient.getSpans(request);
+ *   expect(spans.find(s => s.name === 'sendMoney.handler')).toBeDefined();
+ * });
+ * ```
+ */
+export function createTestSpansClient(
+  baseUrl: string,
+  options?: { path?: string },
+): {
+  getSpans(request: APIRequestContext): Promise<SerializedSpan[]>;
+  clearSpans(request: APIRequestContext): Promise<void>;
+} {
+  const base = baseUrl.replace(/\/$/, '');
+  const path = options?.path ?? '/api/test-spans';
+  const url = `${base}${path}`;
+
+  return {
+    async getSpans(request: APIRequestContext): Promise<SerializedSpan[]> {
+      const res = await request.get(url);
+      if (!res.ok()) {
+        throw new Error(`GET ${path} failed: ${res.status()}`);
+      }
+      const body = await res.json() as { spans: SerializedSpan[] };
+      return body.spans;
+    },
+
+    async clearSpans(request: APIRequestContext): Promise<void> {
+      const res = await request.delete(url);
+      if (!res.ok()) {
+        throw new Error(`DELETE ${path} failed: ${res.status()}`);
+      }
+    },
+  };
+}

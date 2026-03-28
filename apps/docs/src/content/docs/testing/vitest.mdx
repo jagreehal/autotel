@@ -1,0 +1,89 @@
+---
+title: Vitest
+description: Give each Vitest test a parent OpenTelemetry span.
+---
+
+`autotel-vitest` gives each Vitest test a parent span, so all instrumented calls become child spans filterable by test.
+
+## Installation
+
+```bash
+npm install autotel autotel-vitest
+npm install --save-dev vitest
+```
+
+## Setup
+
+### 1. globalSetup
+
+```typescript
+// globalSetup.ts
+import { init } from 'autotel';
+
+export default function globalSetup() {
+  init({ service: 'unit-tests' });
+}
+```
+
+### 2. Vitest Config
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globalSetup: './globalSetup.ts',
+  },
+});
+```
+
+### 3. Use the Fixture
+
+```typescript
+import { test, expect } from 'autotel-vitest';
+
+test('creates user', async () => {
+  await userService.createUser({ email: 'test@example.com' });
+});
+```
+
+The fixture is `auto: true`, so every test gets a parent span automatically.
+
+## What You Get
+
+- One span per test with attributes: `test.name`, `test.file`, `test.suite`
+- All `autotel` calls during the test become child spans
+- Test spans and server spans appear as one trace in your OTLP backend
+
+## Reporter
+
+Add the optional reporter for runner-level test/suite spans:
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globalSetup: './globalSetup.ts',
+    reporters: [['autotel-vitest/reporter', {}]],
+  },
+});
+```
+
+## Examples
+
+- [`example-vitest`](https://github.com/jagreehal/autotel/tree/main/apps/example-vitest) — Vitest with per-test spans, runner reporter, and HTTP trace-context propagation to a self-contained server.
+
+## Testing Utilities
+
+Re-exported from `autotel/testing`:
+
+```typescript
+import {
+  createTraceCollector,
+  assertTraceCreated,
+  assertTraceSucceeded,
+} from 'autotel-vitest';
+```

@@ -1,0 +1,99 @@
+---
+title: Event Subscribers
+description: Send product events to PostHog, Mixpanel, Amplitude, Segment, webhooks, and Slack.
+---
+
+`autotel-subscribers` sends events to multiple product analytics platforms simultaneously.
+
+**Track once, send everywhere:**
+
+- Primary metrics → **OpenTelemetry**
+- Product events → **PostHog / Mixpanel / Amplitude**
+- Customer data → **Segment**
+- Custom integrations → **Webhooks**
+
+## Installation
+
+```bash
+npm install autotel autotel-subscribers
+npm install posthog-node    # For PostHog
+npm install mixpanel        # For Mixpanel
+```
+
+## Quick Start
+
+```typescript
+import { init, track } from 'autotel';
+import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+
+init({
+  service: 'my-app',
+  events: {
+    subscribers: [new PostHogSubscriber({ apiKey: process.env.POSTHOG_KEY! })],
+  },
+});
+
+track('user.signup', { userId: '123', plan: 'pro' });
+```
+
+## Built-in Subscribers
+
+| Subscriber | Import                          |
+| ---------- | ------------------------------- |
+| PostHog    | `autotel-subscribers/posthog`   |
+| Mixpanel   | `autotel-subscribers/mixpanel`  |
+| Segment    | `autotel-subscribers/segment`   |
+| Amplitude  | `autotel-subscribers/amplitude` |
+| Webhook    | `autotel-subscribers/webhook`   |
+| Slack      | `autotel-subscribers/slack`     |
+
+## Custom Subscriber
+
+```typescript
+import { EventSubscriber, EventPayload } from 'autotel-subscribers';
+
+class MySubscriber extends EventSubscriber {
+  readonly name = 'MySubscriber';
+
+  protected async sendToDestination(payload: EventPayload): Promise<void> {
+    await fetch('https://api.example.com/events', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+}
+```
+
+## Middleware
+
+```typescript
+import {
+  applyMiddleware,
+  retryMiddleware,
+  samplingMiddleware,
+  enrichmentMiddleware,
+} from 'autotel-subscribers/middleware';
+
+const subscriber = applyMiddleware(
+  new MySubscriber(),
+  retryMiddleware({ maxRetries: 3 }),
+  samplingMiddleware({ rate: 0.5 }),
+  enrichmentMiddleware({ region: 'us-east-1' }),
+);
+```
+
+## Examples
+
+- [`example-subscribers`](https://github.com/jagreehal/autotel/tree/main/apps/example-subscribers) — PostHog, Slack, and webhook subscribers with event filtering and funnel tracking.
+
+## Entry Points
+
+- `autotel-subscribers` — Base class + re-exports
+- `autotel-subscribers/posthog` — PostHog
+- `autotel-subscribers/mixpanel` — Mixpanel
+- `autotel-subscribers/segment` — Segment
+- `autotel-subscribers/amplitude` — Amplitude
+- `autotel-subscribers/webhook` — Webhook
+- `autotel-subscribers/slack` — Slack
+- `autotel-subscribers/middleware` — Middleware composition
+- `autotel-subscribers/testing` — Test harnesses

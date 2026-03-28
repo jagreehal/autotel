@@ -1,0 +1,87 @@
+---
+title: Express
+description: Trace Express applications with autotel.
+---
+
+## Setup
+
+Create an `instrumentation.ts` file:
+
+```typescript
+// instrumentation.ts
+import 'autotel/register'; // Must be first for ESM
+
+import { init } from 'autotel';
+import pino from 'pino';
+
+const logger = pino({ name: 'my-api' });
+
+init({
+  service: 'my-api',
+  logger,
+  autoInstrumentations: ['express', 'http', 'pino'],
+  endpoint: process.env.OTLP_ENDPOINT,
+});
+```
+
+Run with the `--import` flag:
+
+```bash
+tsx --import ./instrumentation.ts src/index.ts
+```
+
+## Tracing Route Handlers
+
+```typescript
+import express from 'express';
+import { trace, type TraceContext } from 'autotel';
+
+const app = express();
+
+// Auto-traced: HTTP spans created by auto-instrumentation
+// Manual trace: business logic spans
+const fetchUser = trace((ctx: TraceContext) => async (userId: string) => {
+  ctx.setAttribute('db.userId', userId);
+  return await db.users.findById(userId);
+});
+
+app.get('/users/:userId', async (req, res) => {
+  const user = await fetchUser(req.params.userId);
+  res.json(user);
+});
+
+app.get('/error', async () => {
+  throw new Error('Test error'); // Automatically captured
+});
+```
+
+## Request-Scoped Logging
+
+```typescript
+import { trace, getRequestLogger } from 'autotel';
+
+app.get('/checkout', async (req, res) => {
+  // If using autotel-hono or middleware that creates a span,
+  // getRequestLogger() works without ctx
+  const log = getRequestLogger();
+
+  log.set({ userId: req.body.userId });
+  const result = await processCheckout(req.body);
+  log.set({ orderId: result.id });
+  log.emitNow(); // One wide event per request
+
+  res.json(result);
+});
+```
+
+## What Gets Traced
+
+With `autoInstrumentations: ['express', 'http']`:
+
+- **HTTP server spans** — automatic per-request spans with method, path, status
+- **Express middleware** — middleware execution time
+- **Your `trace()` calls** — business logic spans as children
+
+## Examples
+
+- [`example-http`](https://github.com/jagreehal/autotel/tree/main/apps/example-http) — Express with Pino logger, manual `trace()` in routes, error tracking.

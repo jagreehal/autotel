@@ -1,0 +1,116 @@
+---
+title: Cloudflare Workers
+description: Complete OpenTelemetry for Cloudflare Workers with full bindings coverage.
+---
+
+`autotel-cloudflare` provides complete Cloudflare Workers instrumentation: KV, R2, D1, Durable Objects, AI, Vectorize, Hyperdrive, and more.
+
+## Installation
+
+```bash
+npm install autotel-cloudflare
+```
+
+## Quick Start
+
+```typescript
+import { wrapModule, trace } from 'autotel-cloudflare';
+
+const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
+  const order = await kv.get(orderId); // Auto-instrumented!
+  return order;
+});
+
+export default wrapModule(
+  {
+    service: { name: 'my-worker' },
+    instrumentBindings: true, // Auto-instrument KV, R2, D1, etc.
+    sampling: 'adaptive', // 10% baseline, 100% errors/slow
+  },
+  {
+    async fetch(req, env, ctx) {
+      return Response.json(await processOrder('123', env.ORDERS_KV));
+    },
+  },
+);
+```
+
+## API Styles
+
+### wrapModule (Recommended)
+
+```typescript
+import { wrapModule } from 'autotel-cloudflare';
+
+export default wrapModule(
+  { service: { name: 'my-worker' } },
+  {
+    async fetch(req, env, ctx) {
+      return new Response('Hello');
+    },
+  },
+);
+```
+
+### instrument
+
+```typescript
+import { instrument } from 'autotel-cloudflare';
+
+export default instrument(
+  {
+    async fetch(req, env, ctx) {
+      return new Response('Hello');
+    },
+  },
+  { service: { name: 'my-worker' } },
+);
+```
+
+### Functional API
+
+```typescript
+import { trace } from 'autotel-cloudflare';
+
+export default trace(async (request) => {
+  return new Response('OK');
+});
+```
+
+## Bindings Coverage
+
+| Binding          | Auto-Instrumented |
+| ---------------- | :---------------: |
+| KV               |        ✅         |
+| R2               |        ✅         |
+| D1               |        ✅         |
+| Durable Objects  |        ✅         |
+| Workers AI       |        ✅         |
+| Vectorize        |        ✅         |
+| Hyperdrive       |        ✅         |
+| Service Bindings |        ✅         |
+| Queue            |        ✅         |
+| Analytics Engine |        ✅         |
+| Email            |        ✅         |
+
+## Entry Points
+
+- `autotel-cloudflare` — Everything
+- `autotel-cloudflare/bindings` — Bindings instrumentation only
+- `autotel-cloudflare/handlers` — Handler wrappers only
+- `autotel-cloudflare/sampling` — Sampling from autotel-edge
+- `autotel-cloudflare/events` — Events from autotel-edge
+- `autotel-cloudflare/logger` — Logger from autotel-edge
+- `autotel-cloudflare/testing` — Testing from autotel-edge
+
+## Bundle Size
+
+~45KB total (autotel-edge 20KB + CF-specific 25KB)
+
+## Examples
+
+- [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example) — Cloudflare Workers with KV, R2, D1, AI, Queues auto-instrumentation and edge logger.
+
+## Related
+
+- [Edge Runtimes](/autotel/frameworks/edge/) — Foundation package

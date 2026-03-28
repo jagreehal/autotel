@@ -1,0 +1,80 @@
+---
+title: Sentry
+description: Bridge OpenTelemetry (Autotel) traces to Sentry for performance monitoring and error linking.
+---
+
+`autotel-sentry` bridges Autotel traces to Sentry via a `SpanProcessor` and optional `SentryPropagator`.
+
+## Prerequisites
+
+- Sentry must be initialized **before** Autotel `init()`
+- Set `instrumenter: 'otel'` in `Sentry.init()`
+
+## Installation
+
+```bash
+npm install autotel autotel-sentry @sentry/node
+```
+
+## Minimal Setup
+
+```typescript
+import * as Sentry from '@sentry/node';
+import { init } from 'autotel';
+import { createSentrySpanProcessor } from 'autotel-sentry';
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  instrumenter: 'otel', // Required
+});
+
+init({
+  service: 'my-app',
+  spanProcessors: [createSentrySpanProcessor(Sentry)],
+});
+```
+
+## With sentry-trace and Baggage Propagation
+
+For cross-service trace continuity:
+
+```typescript
+import * as Sentry from '@sentry/node';
+import { init } from 'autotel';
+import { createSentrySpanProcessor, SentryPropagator } from 'autotel-sentry';
+import { CompositePropagator } from '@opentelemetry/core';
+import {
+  W3CTraceContextPropagator,
+  W3CBaggagePropagator,
+} from '@opentelemetry/core';
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  instrumenter: 'otel',
+});
+
+init({
+  service: 'my-app',
+  spanProcessors: [createSentrySpanProcessor(Sentry)],
+  propagator: new CompositePropagator({
+    propagators: [
+      new W3CTraceContextPropagator(),
+      new W3CBaggagePropagator(),
+      new SentryPropagator(),
+    ],
+  }),
+});
+```
+
+## Examples
+
+- [`example-sentry`](https://github.com/jagreehal/autotel/tree/main/apps/example-sentry) — Autotel + Sentry bridge with `createSentrySpanProcessor()` for linked traces and errors.
+
+## How It Works
+
+- Root OTel spans → Sentry transactions
+- Child OTel spans → Sentry child spans
+- OTel exception events → Sentry errors
+- Spans for Sentry ingestion are filtered out (no infinite loops)

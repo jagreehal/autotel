@@ -1,0 +1,121 @@
+---
+title: Auto-Instrumentation
+description: Use official OpenTelemetry instrumentations with autotel.
+---
+
+Autotel supports all official `@opentelemetry/instrumentation-*` packages. Use the `autoInstrumentations` array in `init()` to enable them by name.
+
+## Quick Start
+
+```typescript
+// instrumentation.ts
+import 'autotel/register'; // Must be first for ESM
+
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  autoInstrumentations: ['express', 'http', 'pino'],
+  endpoint: process.env.OTLP_ENDPOINT,
+});
+```
+
+```bash
+tsx --import ./instrumentation.ts src/index.ts
+```
+
+## Available Instrumentations
+
+Pass short names to `autoInstrumentations`:
+
+| Short Name             | Instruments        |
+| ---------------------- | ------------------ |
+| `'http'`               | Node.js HTTP/HTTPS |
+| `'express'`            | Express            |
+| `'fastify'`            | Fastify            |
+| `'nestjs-core'`        | NestJS core        |
+| `'pino'`               | Pino logger        |
+| `'bunyan'`             | Bunyan logger      |
+| `'winston'`            | Winston logger     |
+| `'pg'`                 | PostgreSQL         |
+| `'mysql'` / `'mysql2'` | MySQL              |
+| `'redis'`              | Redis              |
+| `'mongodb'`            | MongoDB            |
+| `'graphql'`            | GraphQL            |
+| `'grpc'`               | gRPC               |
+| `'koa'`                | Koa                |
+| `'hapi'`               | Hapi               |
+| `'kafka'`              | KafkaJS            |
+
+## Using Official Packages Directly
+
+For more control, pass instrumentations directly:
+
+```typescript
+import 'autotel/register';
+import { init } from 'autotel';
+import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
+import { RedisInstrumentation } from '@opentelemetry/instrumentation-redis';
+
+init({
+  service: 'my-app',
+  instrumentations: [new PgInstrumentation(), new RedisInstrumentation()],
+});
+```
+
+Or use `getNodeAutoInstrumentations()` for everything:
+
+```typescript
+import 'autotel/register';
+import { init } from 'autotel';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+
+init({
+  service: 'my-app',
+  instrumentations: getNodeAutoInstrumentations({
+    '@opentelemetry/instrumentation-pino': { enabled: true },
+    '@opentelemetry/instrumentation-http': { enabled: true },
+  }),
+});
+```
+
+## YAML Configuration
+
+```yaml
+# autotel.yaml
+autoInstrumentations:
+  - express
+  - http
+  - pino
+```
+
+## When to Use What
+
+| Scenario                       | Approach                                                  |
+| ------------------------------ | --------------------------------------------------------- |
+| Quick setup, common frameworks | `autoInstrumentations: ['express', 'http']`               |
+| Specific packages only         | `instrumentations: [new PgInstrumentation()]`             |
+| Everything (heavy)             | `instrumentations: getNodeAutoInstrumentations()`         |
+| YAML-driven config             | `autoInstrumentations: [express, http]` in `autotel.yaml` |
+
+## ESM Requirements
+
+For ESM apps (Node 18.19+), you must:
+
+1. Import `autotel/register` **first**
+2. Pass instrumentations directly to `init()`
+3. Run with `--import` flag: `tsx --import ./instrumentation.ts src/index.ts`
+
+## autotel-plugins vs Official Packages
+
+| Package                            | When to Use                                           |
+| ---------------------------------- | ----------------------------------------------------- |
+| `@opentelemetry/instrumentation-*` | Official package exists and works                     |
+| `autotel-plugins`                  | No official package (BigQuery, Kafka batch) or broken |
+| `autotel-drizzle`                  | Drizzle ORM (no official package)                     |
+| `autotel-mongoose`                 | Mongoose (stable semconv, PII redaction)              |
+
+## Examples
+
+- [`example-basic`](https://github.com/jagreehal/autotel/tree/main/apps/example-basic) — ESM and CJS instrumentation setup patterns.
+- [`example-pg`](https://github.com/jagreehal/autotel/tree/main/apps/example-pg) — PostgreSQL with official `@opentelemetry/instrumentation-pg`.

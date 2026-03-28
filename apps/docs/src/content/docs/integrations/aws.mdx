@@ -1,0 +1,115 @@
+---
+title: AWS
+description: OpenTelemetry instrumentation for AWS Lambda, SDK v3, SQS, SNS, Kinesis, Step Functions, and EventBridge.
+---
+
+`autotel-aws` provides ergonomic, vendor-agnostic OpenTelemetry instrumentation for AWS services.
+
+## Installation
+
+```bash
+npm install autotel-aws autotel
+```
+
+## Lambda Handler
+
+```typescript
+import { init } from 'autotel';
+import { wrapHandler } from 'autotel-aws/lambda';
+
+init({
+  service: 'my-lambda',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
+
+export const handler = wrapHandler(async (event, context) => {
+  return { statusCode: 200 };
+});
+```
+
+### Zero-Config
+
+```typescript
+import 'autotel-aws/lambda/auto'; // Must be FIRST import
+
+export const handler = async (event, context) => {
+  return { statusCode: 200 };
+};
+```
+
+## AWS SDK Auto-Instrumentation
+
+```typescript
+import { autoInstrumentAWS } from 'autotel-aws/sdk';
+
+autoInstrumentAWS(); // All SDK clients are automatically traced
+
+const s3 = new S3Client({ region: 'us-east-1' });
+const dynamodb = new DynamoDBClient({ region: 'us-east-1' });
+```
+
+### Per-Client
+
+```typescript
+import { instrumentSDK, createTracedClient } from 'autotel-aws/sdk';
+import { S3Client } from '@aws-sdk/client-s3';
+
+// Wrap existing client
+const s3 = instrumentSDK(new S3Client({ region: 'us-east-1' }));
+
+// Or create pre-instrumented
+const s3 = createTracedClient(S3Client, { region: 'us-east-1' });
+```
+
+## SQS Producer/Consumer
+
+```typescript
+import { SQSProducer, SQSConsumer } from 'autotel-aws/sqs';
+
+const producer = new SQSProducer(sqs, {
+  queueUrl: 'https://sqs.us-east-1.amazonaws.com/123456/events',
+});
+
+await producer.send({
+  body: JSON.stringify({ type: 'order.created', orderId: '123' }),
+});
+
+const consumer = new SQSConsumer(sqs, {
+  queueUrl: 'https://sqs.us-east-1.amazonaws.com/123456/events',
+  handleMessage: async (message) => {
+    // Trace context automatically extracted from message
+    console.log('Received:', message.body);
+  },
+});
+```
+
+## Semantic Helpers
+
+```typescript
+import { traceS3, traceDynamoDB } from 'autotel-aws';
+
+// S3 with automatic semantic attributes
+export const uploadFile = traceS3({
+  bucket: 'my-bucket',
+  operation: 'PutObject',
+})((ctx) => async (key: string, body: Buffer) => {
+  return s3.putObject({ Bucket: 'my-bucket', Key: key, Body: body });
+});
+```
+
+## Examples
+
+- [`example-aws-lambda`](https://github.com/jagreehal/autotel/tree/main/apps/example-aws-lambda) — Lambda with `wrapHandler()`, AWS SDK v3 auto-instrumentation, S3/DynamoDB/SQS helpers, and LocalStack support.
+
+## Entry Points
+
+- `autotel-aws/lambda` — Lambda handler wrapping
+- `autotel-aws/lambda/auto` — Zero-config Lambda
+- `autotel-aws/sdk` — AWS SDK instrumentation
+- `autotel-aws/sqs` — SQS producer/consumer
+- `autotel-aws/sns` — SNS publisher
+- `autotel-aws/kinesis` — Kinesis producer/consumer
+- `autotel-aws/step-functions` — Step Functions
+- `autotel-aws/eventbridge` — EventBridge publisher
+- `autotel-aws/xray` — X-Ray compatibility
+- `autotel-aws/testing` — Test utilities

@@ -1,0 +1,151 @@
+---
+title: Claude Code Skill
+description: Autotel ships a Claude Code skill that teaches AI agents how to instrument code with traces, structured errors, request loggers, and wide events.
+---
+
+Autotel includes a [Claude Code skill](https://github.com/jagreehal/autotel/tree/main/.claude/skills/autotel) that gives AI coding agents deep knowledge of the instrumentation API. When the skill is active, Claude Code can:
+
+- Wrap functions with `trace()` and set semantic attributes
+- Convert `console.log` calls to `getRequestLogger()` wide events
+- Add `createStructuredError()` with `why`, `fix`, and `link` fields
+- Set up `init()` with the correct configuration
+- Review code for observability anti-patterns
+
+## Installation
+
+The skill lives at `.claude/skills/autotel/` in the repository root. Claude Code discovers it automatically when you work inside the repo. No extra configuration needed.
+
+For other projects that use Autotel, copy the `.claude/skills/autotel/` directory into your repo's `.claude/skills/` folder.
+
+## Skill Structure
+
+```
+.claude/skills/autotel/
+├── SKILL.md                          # Main skill entry point
+└── references/
+    ├── wide-events.md                # Canonical log lines guide
+    ├── structured-errors.md          # Error handling patterns
+    ├── request-logger.md             # Request-scoped logging
+    └── code-review.md                # Anti-pattern detection checklist
+```
+
+## Reference Guides
+
+### Wide Events (Canonical Log Lines)
+
+**File:** [`.claude/skills/autotel/references/wide-events.md`](https://github.com/jagreehal/autotel/blob/main/.claude/skills/autotel/references/wide-events.md)
+
+A wide event is a single structured record per request containing all context accumulated during processing. Instead of 10 scattered log lines, you get one queryable event with 25+ fields.
+
+Covers:
+- Anatomy of a canonical log line (core fields, trace identifiers, duration)
+- Context grouping with dot-prefixed keys
+- Configuration options (`keep`, `shouldEmit`, `pretty`, `drain`, `attributeRedactor`)
+- Drain pipeline for production fan-out with batching and retry
+- SQL query examples for analyzing wide events
+
+```typescript
+init({
+  service: 'my-app',
+  canonicalLogLines: {
+    enabled: true,
+    rootSpansOnly: true,
+    keep: [
+      { status: 500 },
+      { durationMs: 1000 },
+    ],
+    pretty: true,
+    drain: (event) => sendToAnalytics(event),
+  },
+});
+```
+
+### Structured Errors
+
+**File:** [`.claude/skills/autotel/references/structured-errors.md`](https://github.com/jagreehal/autotel/blob/main/.claude/skills/autotel/references/structured-errors.md)
+
+Covers three APIs:
+
+| API | Purpose |
+|-----|---------|
+| `createStructuredError()` | Create errors with `message`, `why`, `fix`, `link`, `code`, `status`, `details` |
+| `recordStructuredError()` | Record a structured error onto a trace context (sets status + exception + attributes) |
+| `parseError()` | Normalize any thrown value to a consistent shape for API responses |
+
+Common patterns:
+- API endpoint error responses
+- Wrapping third-party errors (Stripe, etc.)
+- Domain validation errors
+- Span attribute mapping (`error.type`, `error.why`, `error.fix`, etc.)
+
+```typescript
+throw createStructuredError({
+  message: 'Payment declined',
+  why: 'Card has insufficient funds for the requested amount',
+  fix: 'Prompt the user to update their payment method',
+  code: 'CARD_DECLINED',
+  status: 402,
+  link: 'https://docs.stripe.com/declines/codes#insufficient-funds',
+});
+```
+
+### Request Logger
+
+**File:** [`.claude/skills/autotel/references/request-logger.md`](https://github.com/jagreehal/autotel/blob/main/.claude/skills/autotel/references/request-logger.md)
+
+Covers the `getRequestLogger()` API and framework adapters:
+
+- **`log.set(fields)`** — merge fields onto the span (nested objects flatten automatically)
+- **`log.info(message, fields?)`** — span event at info level
+- **`log.warn(message, fields?)`** — span event at warn level, promotes canonical log line
+- **`log.error(error, fields?)`** — record structured error on span
+- **`log.getContext()`** — snapshot of all accumulated fields
+- **`log.emitNow(overrides?)`** — emit snapshot immediately with `onEmit` fan-out
+
+Framework adapters:
+- `useLogger()` with `withAutotel()` (Next.js, Nitro, Cloudflare Workers)
+- `useLogger()` alone when middleware already creates the span (Hono)
+- Custom adapters via `createUseLogger()`
+
+```typescript
+const log = getRequestLogger(ctx);
+log.set({ feature: 'checkout', tier: req.user.tier });
+
+const cart = await loadCart(req.cartId);
+log.set({ cart_items: cart.items.length, cart_total: cart.total });
+```
+
+### Code Review Checklist
+
+**File:** [`.claude/skills/autotel/references/code-review.md`](https://github.com/jagreehal/autotel/blob/main/.claude/skills/autotel/references/code-review.md)
+
+Anti-pattern detection table with severity levels and fixes:
+
+| Anti-Pattern | Severity | Fix |
+|---|---|---|
+| `console.log` for request context | High | `getRequestLogger(ctx)` with `log.set()` |
+| `console.error` in catch blocks | High | `log.error(err)` or `recordStructuredError()` |
+| `throw new Error('...')` without context | Medium | `createStructuredError({ message, why, fix })` |
+| `catch (e) { throw e }` without recording | Medium | Add `log.error(e)` before rethrowing |
+| `JSON.stringify` for log output | High | `log.set()` — attributes flatten automatically |
+| Manual request ID generation | Low | `ctx.correlationId` from trace context |
+
+Also includes a 4-step migration path from `console.log` to fully instrumented Autotel code.
+
+## How the Skill Works
+
+When you ask Claude Code to instrument code, review for observability, or work with errors/logging, the skill activates and loads the relevant reference guides. Claude Code then applies the patterns directly — wrapping functions with `trace()`, replacing `console.log` with request loggers, and adding structured error context.
+
+### Example Prompts
+
+- "Add tracing to this handler"
+- "Convert the console.logs in this file to use request logger"
+- "Add structured errors to the catch blocks"
+- "Review this file for observability anti-patterns"
+- "Set up canonical log lines for this service"
+
+## See Also
+
+- [Agent Guide](/autotel/agent-guide/) — when-to-use-what rules and before/after examples
+- [AI / LLM Workflows](/autotel/ai-workflows/) — tracing AI agents, RAG pipelines, and streaming
+- [AI-Assisted Observability](/autotel/ai-observability/) — querying traces with Claude via MCP

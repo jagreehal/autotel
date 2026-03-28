@@ -1,0 +1,39 @@
+---
+title: Introduction
+description: What Autotel is and how it differs from vanilla OpenTelemetry.
+---
+
+Autotel is a zero-boilerplate OpenTelemetry wrapper for TypeScript. It replaces 30+ lines of SDK setup with a single `init()` call and replaces manual span lifecycle with functional `trace()` wrappers.
+
+## Core Philosophy
+
+- **Write once, observe everywhere**: One instrumentation surface; many backends via OTLP.
+- **Functional API**: Wrap handlers and functions with `trace()`, `span()`, `instrument()`; avoid manual span lifecycle.
+- **Structured errors**: Errors carry `message`, `why`, `fix`, `link` so agents and users can diagnose and act.
+- **Request context**: Use `getRequestLogger()` when you need one coherent snapshot per request.
+
+## Core API
+
+| Need                        | API / entry point                                                               |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| Wrap a function with a span | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                        |
+| Request-scoped attributes   | `getRequestLogger(ctx?)`                                                        |
+| Structured throw            | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })` |
+| Parse API errors (client)   | `parseError(err)`                                                               |
+| Product/analytics events    | `track(name, attributes)`                                                       |
+| Init (once at startup)      | `init({ service, ... })`                                                        |
+| Testing                     | `createTraceCollector()` from `autotel/testing`                                 |
+
+## Installation
+
+```bash
+npm install autotel
+# or
+pnpm add autotel
+```
+
+For auto-instrumentation (HTTP, databases, etc.), also install:
+
+```bash
+npm install @opentelemetry/auto-instrumentations-node
+```
