@@ -1,0 +1,10 @@
+{
+  "name": "autotel-observability",
+  "version": "1.0.0",
+  "description": "Instrument code with autotel's functional tracing API — trace(), span(), getRequestLogger(), createStructuredError(), track() — across Hono, Fastify, TanStack Start, Cloudflare Workers, Next.js, and more",
+  "author": {
+    "name": "Jag Reehal",
+    "email": "jag@major7apps.com"
+  },
+  "license": "MIT"
+}
