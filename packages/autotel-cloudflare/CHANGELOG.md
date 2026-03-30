@@ -1,5 +1,11 @@
 # autotel-cloudflare
 
+## 2.18.3
+
+### Patch Changes
+
+- 91f6468: Modified module wrapper
+
 ## 2.18.2
 
 ### Patch Changes
