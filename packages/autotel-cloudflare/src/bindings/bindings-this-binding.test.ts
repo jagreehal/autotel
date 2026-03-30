@@ -254,5 +254,41 @@ describe('Bindings this-binding tests', () => {
       await instrumented.fetch('https://example.com');
       expect(receivedThis).toBe(mockFetcher);
     });
+
+    it('should not throw "Illegal invocation" for native-like bindings that check this', async () => {
+      // Simulate a native Cloudflare Fetcher that throws when `this` is wrong.
+      // Native bindings use C++ checks that reject proxied `this` references.
+      class NativeFetcher {
+        async fetch(input: RequestInfo | URL, _init?: RequestInit): Promise<Response> {
+          // Native bindings validate `this` — throw if it's not the exact instance
+          if (!(this instanceof NativeFetcher)) {
+            throw new TypeError('Illegal invocation: function called with incorrect `this` reference');
+          }
+          return new Response('ok', { status: 200 });
+        }
+      }
+
+      const nativeFetcher = new NativeFetcher() as unknown as Fetcher;
+      const instrumented = instrumentServiceBinding(nativeFetcher, 'native-service');
+
+      // This should NOT throw — the fix ensures fetch() is called on the
+      // original target, preserving the native `this` binding
+      await expect(instrumented.fetch('https://example.com')).resolves.toBeInstanceOf(Response);
+    });
+
+    it('should bind non-fetch methods to the original target', () => {
+      let receivedThis: any;
+      const mockFetcher = {
+        fetch: vi.fn(async () => new Response('ok', { status: 200 })),
+        connect: vi.fn(function(this: any) {
+          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
+          receivedThis = this;
+          return {};
+        }),
+      } as unknown as Fetcher;
+      const instrumented = instrumentServiceBinding(mockFetcher, 'test');
+      (instrumented as any).connect('https://example.com');
+      expect(receivedThis).toBe(mockFetcher);
+    });
   });
 });

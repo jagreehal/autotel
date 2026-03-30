@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createOtelObservability,
   createOtelObservabilityFromEnv,
@@ -58,6 +58,13 @@ function createMcpConnectEvent(
 describe('OtelObservability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Prevent real fetch calls during span export — avoids floating promise rejections
+    // that cause EnvironmentTeardownError when vitest tears down the worker environment.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('createOtelObservability', () => {
