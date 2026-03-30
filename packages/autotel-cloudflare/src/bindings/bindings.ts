@@ -531,58 +531,74 @@ export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string)
 
 /**
  * Instrument service binding (Fetcher)
+ *
+ * Unlike other bindings, Fetcher objects are native Cloudflare C++ bindings
+ * whose methods throw "Illegal invocation" when called through a Proxy with
+ * a different `this` reference. We work around this by calling `target.fetch()`
+ * directly on the original binding instead of using `Reflect.apply` on a
+ * detached function reference.
  */
 export function instrumentServiceBinding<F extends Fetcher>(fetcher: F, serviceName?: string): F {
   const name = serviceName || 'service';
-  
+
   const fetcherHandler: ProxyHandler<F> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
-      
-      if (prop === 'fetch' && typeof value === 'function') {
-        return new Proxy(value, {
-          apply: (fnTarget, _thisArg, args) => {
-            const [input, init] = args as [RequestInfo | URL, RequestInit | undefined];
-            const request = new Request(input, init);
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+      if (prop === 'fetch' && typeof target.fetch === 'function') {
+        // Return a plain function wrapper instead of proxying the native method.
+        // This avoids detaching the native method from its binding, which would
+        // cause "Illegal invocation" on Cloudflare's native Fetcher objects.
+        const tracedFetch = (...args: any[]) => {
+          const [input, init] = args as [RequestInfo | URL, RequestInit | undefined];
+          const request = new Request(input, init);
+          const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
-            return tracer.startActiveSpan(
-              `Service ${name}: ${request.method}`,
-              {
-                kind: SpanKind.CLIENT,
-                attributes: {
-                  'rpc.system': 'cloudflare-service-binding',
-                  'rpc.service': name,
-                  'http.request.method': request.method,
-                  'url.full': request.url,
-                },
+          return tracer.startActiveSpan(
+            `Service ${name}: ${request.method}`,
+            {
+              kind: SpanKind.CLIENT,
+              attributes: {
+                'rpc.system': 'cloudflare-service-binding',
+                'rpc.service': name,
+                'http.request.method': request.method,
+                'url.full': request.url,
               },
-              async (span) => {
-                try {
-                  const response = await Reflect.apply(fnTarget, target, args);
-                  span.setAttribute('http.response.status_code', response.status);
-                  span.setStatus({ code: SpanStatusCode.OK });
-                  return response;
-                } catch (error) {
-                  span.recordException(error as Error);
-                  span.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
-                  });
-                  throw error;
-                } finally {
-                  span.end();
-                }
-              },
-            );
-          },
-        });
+            },
+            async (span) => {
+              try {
+                // Call fetch directly on the original target to preserve
+                // the native `this` binding that Cloudflare requires
+                const response = await target.fetch(input, init as RequestInit);
+                span.setAttribute('http.response.status_code', response.status);
+                span.setStatus({ code: SpanStatusCode.OK });
+                return response;
+              } catch (error) {
+                span.recordException(error as Error);
+                span.setStatus({
+                  code: SpanStatusCode.ERROR,
+                  message: error instanceof Error ? error.message : String(error),
+                });
+                throw error;
+              } finally {
+                span.end();
+              }
+            },
+          );
+        };
+        return tracedFetch;
       }
-      
+
+      // For non-fetch properties, access the original target directly
+      // to avoid Proxy-related issues with native bindings
+      const value = Reflect.get(target, prop);
+      if (typeof value === 'function') {
+        // Bind native methods to the original target to prevent
+        // "Illegal invocation" errors
+        return value.bind(target);
+      }
       return value;
     },
   };
-  
+
   return wrap(fetcher, fetcherHandler);
 }
 
