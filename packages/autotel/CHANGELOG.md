@@ -1,5 +1,11 @@
 # autotel
 
+## 2.25.5
+
+### Patch Changes
+
+- f4ac1c3: Tanstack span collector
+
 ## 2.25.4
 
 ### Patch Changes
