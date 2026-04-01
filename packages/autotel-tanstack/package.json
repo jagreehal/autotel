@@ -141,8 +141,8 @@
     "autotel-adapters": "workspace:*"
   },
   "peerDependencies": {
-    "@tanstack/react-start": "^1.167.3",
-    "@tanstack/solid-start": "^1.167.3"
+    "@tanstack/react-start": "^1.167.16",
+    "@tanstack/solid-start": "^1.167.15"
   },
   "peerDependenciesMeta": {
     "@tanstack/react-start": {

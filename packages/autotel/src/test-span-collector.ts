@@ -36,8 +36,11 @@ type SerializableValue =
 /**
  * Portable serialized span for embedding in test metadata.
  * `startTimeMs` is derived from OTel HrTime — epoch-based wall-clock ms in the current SDK.
+ *
+ * Defined as a `type` (not `interface`) so it is assignable to
+ * `Record<string, unknown>` in TypeScript 6+ strict mode.
  */
-export interface SerializedSpan {
+export type SerializedSpan = {
   spanId: string;
   parentSpanId?: string;
   name: string;
@@ -46,7 +49,7 @@ export interface SerializedSpan {
   status: 'ok' | 'error' | 'unset';
   statusMessage?: string;
   attributes?: Record<string, SerializableValue>;
-}
+};
 
 export class TestSpanCollector implements SpanExporter {
   private traces = new Map<string, ReadableSpan[]>();

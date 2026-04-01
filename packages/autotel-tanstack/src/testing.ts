@@ -278,8 +278,11 @@ function generateHex(length: number): string {
 /**
  * Serialized span shape returned by the test-spans HTTP endpoint.
  * Mirrors the fields the Playwright side needs for assertions.
+ *
+ * Defined as a `type` (not `interface`) so it is assignable to
+ * `Record<string, unknown>` in TypeScript 6+ strict mode.
  */
-export interface SerializedSpan {
+export type SerializedSpan = {
   name: string;
   spanId: string;
   traceId: string;
@@ -287,7 +290,7 @@ export interface SerializedSpan {
   attributes?: Record<string, unknown>;
   status: { code: number; message?: string };
   durationMs: number;
-}
+};
 
 interface TestSpanExporter {
   getFinishedSpans(): Array<{
@@ -328,10 +331,23 @@ function exporterGuard(): Response | null {
 }
 
 /**
+ * Accepts either a raw `Request` (legacy) or a TanStack Router context
+ * object containing `{ request: Request }` (Router 1.168+).
+ */
+type HandlerInput = Request | { request: Request };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CreateFileRoute = (path: string) => (options: any) => any;
+
+/**
  * Creates GET and DELETE handlers for a test-spans HTTP endpoint.
  *
  * Use in a TanStack Start route to expose in-memory spans for Playwright assertions.
  * Only works when E2E=1 (set in webServer command).
+ *
+ * Handlers accept either a raw `Request` or a TanStack Router context
+ * object `{ request: Request }`, so they work with both Router < 1.168
+ * and Router >= 1.168.
  *
  * @example
  * ```typescript
@@ -344,12 +360,42 @@ function exporterGuard(): Response | null {
  * });
  * ```
  */
+/**
+ * Creates a pre-built TanStack Start route for the test-spans endpoint.
+ *
+ * Reduces E2E boilerplate to three lines. The handlers accept both
+ * `Request` and `{ request: Request }` so they work with any Router version.
+ *
+ * @param createFileRoute - Pass `createFileRoute` from `@tanstack/react-router`
+ * @param path - Route path (default: `/api/test-spans`)
+ *
+ * @example
+ * ```typescript
+ * // src/routes/api/test-spans.ts
+ * import { createFileRoute } from "@tanstack/react-router";
+ * import { createTestSpansRoute } from "autotel-tanstack/testing";
+ *
+ * export const Route = createTestSpansRoute(createFileRoute);
+ * ```
+ */
+export function createTestSpansRoute(
+  createFileRoute: CreateFileRoute,
+  path = '/api/test-spans',
+) {
+  const { GET, DELETE } = createTestSpansHandlers();
+  return createFileRoute(path)({
+    server: {
+      handlers: { GET, DELETE },
+    },
+  });
+}
+
 export function createTestSpansHandlers(): {
-  GET: (request: Request) => Response;
-  DELETE: (request: Request) => Response;
+  GET: (input: HandlerInput) => Response;
+  DELETE: (input: HandlerInput) => Response;
 } {
   return {
-    GET(_request: Request): Response {
+    GET(_input: HandlerInput): Response {
       const guard = e2eGuard() ?? exporterGuard();
       if (guard) return guard;
 
@@ -374,7 +420,7 @@ export function createTestSpansHandlers(): {
       return Response.json({ spans });
     },
 
-    DELETE(_request: Request): Response {
+    DELETE(_input: HandlerInput): Response {
       const guard = e2eGuard() ?? exporterGuard();
       if (guard) return guard;
       getExporter()!.reset();
