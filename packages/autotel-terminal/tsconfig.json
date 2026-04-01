@@ -5,7 +5,6 @@
     "lib": ["ES2023"],
     "moduleResolution": "Bundler",
     "outDir": "./dist",
-    "baseUrl": ".",
     "paths": {
       "autotel": ["../autotel/src"]
     },

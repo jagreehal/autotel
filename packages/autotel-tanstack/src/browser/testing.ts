@@ -67,9 +67,12 @@ export function assertSpanHasAttribute(
 }
 
 /**
- * Serialized span interface (browser stub - mirrors server SerializedSpan).
+ * Serialized span type (browser stub - mirrors server SerializedSpan).
+ *
+ * Defined as a `type` (not `interface`) so it is assignable to
+ * `Record<string, unknown>` in TypeScript 6+ strict mode.
  */
-export interface SerializedSpan {
+export type SerializedSpan = {
   name: string;
   spanId: string;
   traceId: string;
@@ -77,6 +80,27 @@ export interface SerializedSpan {
   attributes?: Record<string, unknown>;
   status: { code: number; message?: string };
   durationMs: number;
+};
+
+/**
+ * Accepts either a raw `Request` (legacy) or a TanStack Router context
+ * object containing `{ request: Request }` (Router 1.168+).
+ */
+type HandlerInput = Request | { request: Request };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CreateFileRoute = (path: string) => (options: any) => any;
+
+/**
+ * Browser stub: createTestSpansRoute is server-only.
+ */
+export function createTestSpansRoute(
+  createFileRoute: CreateFileRoute,
+  path?: string,
+): unknown {
+  void createFileRoute;
+  void path;
+  throw new Error('createTestSpansRoute is server-only');
 }
 
 /**
@@ -84,21 +108,19 @@ export interface SerializedSpan {
  * Returns no-op handlers that always return 404.
  */
 export function createTestSpansHandlers(): {
-  GET: (request: Request) => Response;
-  DELETE: (request: Request) => Response;
+  GET: (input: HandlerInput) => Response;
+  DELETE: (input: HandlerInput) => Response;
 } {
   return {
-    GET(_request: Request): Response {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      void _request;
+    GET(input: HandlerInput): Response {
+      void input;
       return Response.json(
         { error: 'createTestSpansHandlers is server-only' },
         { status: 404 },
       );
     },
-    DELETE(_request: Request): Response {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      void _request;
+    DELETE(input: HandlerInput): Response {
+      void input;
       return Response.json(
         { error: 'createTestSpansHandlers is server-only' },
         { status: 404 },

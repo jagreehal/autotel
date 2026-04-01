@@ -87,9 +87,17 @@ describe('createTestSpansHandlers', () => {
     delete process.env.E2E;
   });
 
-  it('GET returns 404 when not in E2E mode', async () => {
+  it('GET returns 404 when not in E2E mode (raw Request)', async () => {
     const { GET } = createTestSpansHandlers();
     const res = GET(new Request('http://localhost/api/test-spans'));
+    expect(res.status).toBe(404);
+  });
+
+  it('GET returns 404 when not in E2E mode (context object)', async () => {
+    const { GET } = createTestSpansHandlers();
+    const res = GET({
+      request: new Request('http://localhost/api/test-spans'),
+    });
     expect(res.status).toBe(404);
   });
 
@@ -150,11 +158,21 @@ describe('createTestSpansHandlers', () => {
     expect(body.spans[0].parentSpanId).toBeUndefined();
   });
 
-  it('DELETE returns 404 when not in E2E mode', async () => {
+  it('DELETE returns 404 when not in E2E mode (raw Request)', async () => {
     const { DELETE } = createTestSpansHandlers();
     const res = DELETE(
       new Request('http://localhost/api/test-spans', { method: 'DELETE' }),
     );
+    expect(res.status).toBe(404);
+  });
+
+  it('DELETE returns 404 when not in E2E mode (context object)', async () => {
+    const { DELETE } = createTestSpansHandlers();
+    const res = DELETE({
+      request: new Request('http://localhost/api/test-spans', {
+        method: 'DELETE',
+      }),
+    });
     expect(res.status).toBe(404);
   });
 
