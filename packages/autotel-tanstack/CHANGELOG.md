@@ -1,5 +1,14 @@
 # autotel-tanstack
 
+## 1.13.6
+
+### Patch Changes
+
+- f4ac1c3: Tanstack span collector
+- Updated dependencies [f4ac1c3]
+  - autotel@2.25.5
+  - autotel-adapters@0.2.5
+
 ## 1.13.5
 
 ### Patch Changes
