@@ -7,8 +7,9 @@
  * Bundle size: ~2-5KB gzipped
  */
 
-import { createTraceparent } from './traceparent';
+import { createTraceparent, parseTraceparent } from './traceparent';
 import { PrivacyManager, PrivacyConfig, getDenialReason } from './privacy';
+import { configureExporter, setRawFetch, recordSpan, flushSpans, isConfigured, resetForTesting as resetExporter } from './span-exporter';
 
 export interface AutotelWebConfig {
   /**
@@ -34,6 +35,14 @@ export interface AutotelWebConfig {
    * @default true
    */
   instrumentXHR?: boolean;
+
+  /**
+   * OTLP endpoint for exporting browser spans.
+   * When set, browser spans are sent via sendBeacon so the traceparent
+   * spanId exists as a real span in the collector.
+   * Use '' (empty string) for same-origin (requires /v1/traces proxy).
+   */
+  endpoint?: string;
 
   /**
    * Privacy controls for traceparent header injection
@@ -125,6 +134,12 @@ export function init(userConfig: AutotelWebConfig): void {
     privacyManager = new PrivacyManager(config.privacy);
   }
 
+  // Capture unpatched fetch for the exporter before we patch it
+  if (config.endpoint !== undefined) {
+    setRawFetch(window.fetch.bind(window));
+    configureExporter(config.service, config.endpoint, config.debug);
+  }
+
   // Patch fetch
   if (config.instrumentFetch !== false) {
     patchFetch();
@@ -133,6 +148,12 @@ export function init(userConfig: AutotelWebConfig): void {
   // Patch XHR
   if (config.instrumentXHR !== false) {
     patchXMLHttpRequest();
+  }
+
+  if (config.endpoint !== undefined) {
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushSpans();
+    });
   }
 
   isInitialized = true;
@@ -179,6 +200,7 @@ function patchFetch(): void {
     const headers = new Headers(init?.headers);
 
     // Only inject if traceparent doesn't already exist
+    let injectedTraceparent: string | undefined;
     if (!headers.has('traceparent')) {
       // Check privacy controls
       if (privacyManager && !privacyManager.shouldInjectTraceparent(url)) {
@@ -191,22 +213,60 @@ function patchFetch(): void {
           );
         }
       } else {
-        // Inject traceparent header
-        headers.set('traceparent', createTraceparent());
+        injectedTraceparent = createTraceparent();
+        headers.set('traceparent', injectedTraceparent);
 
         if (config?.debug) {
           console.log(
             '[autotel-web] Injected traceparent on fetch:',
             url,
-            headers.get('traceparent')
+            injectedTraceparent
           );
         }
       }
     }
 
+    // Resolve HTTP method: prefer init override, then Request.method, then default GET
+    const method = init?.method
+      ?? (input instanceof Request ? input.method : undefined)
+      ?? 'GET';
+
     // Call original fetch with updated headers
-    // originalFetch is always defined here because patchFetch() sets it before patching
-    return originalFetch!(input, { ...init, headers });
+    const startTime = performance.timeOrigin + performance.now();
+    const fetchPromise = originalFetch!(input, { ...init, headers });
+
+    // Export browser span if exporter is configured
+    if (injectedTraceparent && isConfigured()) {
+      fetchPromise.then(
+        (response) => {
+          const endTime = performance.timeOrigin + performance.now();
+          const parsed = parseTraceparent(injectedTraceparent!);
+          if (parsed) {
+            let pathname: string;
+            try { pathname = new URL(url, window.location.origin).pathname; } catch { pathname = url; }
+            recordSpan(parsed.traceId, parsed.spanId, `browser ${pathname}`, startTime, endTime, {
+              'http.method': method,
+              'http.url': url,
+              'http.status_code': response.status,
+            });
+          }
+        },
+        () => {
+          const endTime = performance.timeOrigin + performance.now();
+          const parsed = parseTraceparent(injectedTraceparent!);
+          if (parsed) {
+            let pathname: string;
+            try { pathname = new URL(url, window.location.origin).pathname; } catch { pathname = url; }
+            recordSpan(parsed.traceId, parsed.spanId, `browser ${pathname}`, startTime, endTime, {
+              'http.method': method,
+              'http.url': url,
+            });
+          }
+        },
+      );
+    }
+
+    return fetchPromise;
   };
 }
 
@@ -379,6 +439,7 @@ export function resetForTesting(): void {
   isInitialized = false;
   config = undefined;
   privacyManager = undefined;
+  resetExporter();
 
   // Restore original fetch/XHR if they were patched
   // Then clear the stored originals so next test can set up fresh mocks
