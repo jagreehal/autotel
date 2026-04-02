@@ -8,6 +8,7 @@ const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
 export default defineConfig([
   // Server build (Node.js) - full OpenTelemetry implementation
   {
+    tsconfig: 'tsconfig.build.json',
     entry: {
       index: 'src/index.ts',
       auto: 'src/auto.ts',
@@ -37,6 +38,7 @@ export default defineConfig([
   },
   // Browser build - no-op stubs (no OpenTelemetry dependencies)
   {
+    tsconfig: 'tsconfig.build.json',
     entry: {
       'browser/index': 'src/browser/index.ts',
       'browser/middleware': 'src/browser/middleware.ts',

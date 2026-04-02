@@ -17,6 +17,13 @@ export {
 } from './api/logger';
 
 export {
+  getExecutionLogger,
+  type ExecutionLogger,
+  type ExecutionLoggerOptions,
+  type ExecutionLogSnapshot,
+} from './execution-logger';
+
+export {
   createRedactor,
   REDACT_PRESETS,
   type Censor,

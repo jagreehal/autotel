@@ -76,15 +76,15 @@
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "dependencies": {
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/instrumentation": "^0.213.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/instrumentation": "^0.214.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "autotel": "workspace:*"
   },
   "peerDependencies": {
     "@google-cloud/bigquery": ">=8.1.1",
-    "@opentelemetry/instrumentation-amqplib": ">=0.60.0",
-    "@opentelemetry/instrumentation-kafkajs": ">=0.22.0"
+    "@opentelemetry/instrumentation-amqplib": ">=0.61.0",
+    "@opentelemetry/instrumentation-kafkajs": ">=0.23.0"
   },
   "peerDependenciesMeta": {
     "@google-cloud/bigquery": {
@@ -100,15 +100,15 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",
     "@google-cloud/bigquery": "^8.1.1",
-    "@opentelemetry/core": "^2.6.0",
-    "@types/node": "^25.5.0",
-    "@typescript-eslint/eslint-plugin": "^8.57.1",
-    "@typescript-eslint/parser": "^8.57.1",
+    "@opentelemetry/core": "^2.6.1",
+    "@types/node": "^25.5.2",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-unicorn": "^63.0.0",
+    "eslint-plugin-unicorn": "^64.0.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.3"
   },
   "repository": {
     "type": "git",

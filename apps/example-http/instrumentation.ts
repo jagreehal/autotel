@@ -27,7 +27,13 @@ const logger = pino({
 
 init({
   service: 'example-http-server',
-  debug: true,
+  devtools:
+    process.env.AUTOTEL_DEVTOOLS === 'embedded'
+      ? { embedded: true }
+      : process.env.AUTOTEL_DEVTOOLS === 'off'
+        ? false
+        : true,
+  debug: 'pretty',
   logger,
   autoInstrumentations: ['express', 'http', 'pino'],
 });

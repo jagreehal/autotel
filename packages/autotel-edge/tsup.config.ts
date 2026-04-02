@@ -6,6 +6,7 @@ import { join } from 'path';
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
 
 export default defineConfig({
+  tsconfig: 'tsconfig.build.json',
   entry: {
     index: 'src/index.ts',
     sampling: 'src/sampling.ts',

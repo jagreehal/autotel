@@ -17,7 +17,7 @@ import { PostHogSubscriber, SlackSubscriber } from 'autotel-subscribers';
 // Initialize once at startup
 init({
   service: 'checkout-api',
-  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT, // Grafana, Datadog, Tempo, etc.
+  devtools: true, // Local traces + metrics + logs in autotel-devtools
   subscribers: [
     new PostHogSubscriber({ apiKey: process.env.POSTHOG_KEY! }),
     new SlackSubscriber({ webhookUrl: process.env.SLACK_WEBHOOK! }),
@@ -123,10 +123,44 @@ Typical migration: Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with 
 npm install autotel
 # Optional: Add event subscribers (PostHog, Slack, Mixpanel, etc.)
 npm install autotel-subscribers
+# Optional but recommended for local DX
+npm install -D autotel-devtools
 # or
 pnpm add autotel
 pnpm add autotel-subscribers  # Optional
+pnpm add -D autotel-devtools  # Optional but recommended
 ```
+
+### Quick Local Observability
+
+For the fastest feedback loop, run local devtools and point autotel at it:
+
+```typescript
+import { init, trace } from 'autotel';
+
+init({
+  service: 'my-app',
+  devtools: true,
+});
+
+const result = await trace(async () => 'success')();
+```
+
+That gives you:
+- traces, metrics, and logs in one local UI
+- no manual OTLP URL wiring for day-to-day development
+- the same `init()` surface you can later point at Grafana, Datadog, or any OTLP backend
+
+If you want autotel to boot the local devtools server for you:
+
+```typescript
+init({
+  service: 'my-app',
+  devtools: { embedded: true },
+});
+```
+
+This requires `autotel-devtools` to be installed. If it is not installed, autotel falls back to `http://127.0.0.1:4318`.
 
 ### Quick Debug Mode
 
@@ -171,6 +205,8 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_EXPORTER_OTLP_HEADERS=x-honeycomb-team=YOUR_API_KEY
 export OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production
 ```
+
+For local development, `devtools: true` is usually a better default than setting `OTEL_EXPORTER_OTLP_ENDPOINT` manually.
 
 Then call `init()` without any config - it picks up env vars automatically:
 

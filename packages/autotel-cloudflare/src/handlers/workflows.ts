@@ -14,39 +14,13 @@ import {
   SpanStatusCode,
   SpanKind,
 } from '@opentelemetry/api';
+import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 import type { ConfigurationOption, WorkflowTrigger } from 'autotel-edge';
 import { createInitialiser, setConfig, WorkerTracer } from 'autotel-edge';
 import { wrap } from '../bindings/common';
 
-/**
- * Workflow types matching the Cloudflare Workers Workflows API.
- * @see https://developers.cloudflare.com/workflows/
- */
-
-interface WorkflowEvent<T = unknown> {
-  payload: Readonly<T>;
-  timestamp: Date;
-  instanceId: string;
-}
-
-interface WorkflowStepConfig {
-  retries?: {
-    limit: number;
-    delay?: string | number;
-    backoff?: 'constant' | 'linear' | 'exponential';
-  };
-  timeout?: string | number;
-}
-
-interface WorkflowStep {
-  do<T>(name: string, callback: () => Promise<T>): Promise<T>;
-  do<T>(name: string, config: WorkflowStepConfig, callback: () => Promise<T>): Promise<T>;
-  sleep(name: string, duration: string | number): Promise<void>;
-  sleepUntil(name: string, timestamp: Date | number): Promise<void>;
-}
-
 type WorkflowRunFn = (
-  event: Readonly<WorkflowEvent>,
+  event: Readonly<WorkflowEvent<unknown>>,
   step: WorkflowStep,
 ) => Promise<unknown> | void;
 
@@ -64,7 +38,7 @@ function isColdStart(workflowClass: object): boolean {
 }
 
 /**
- * Proxy the step object to instrument step.do() and step.sleep() calls
+ * Proxy the step object to instrument step.do(), step.sleep(), and step.sleepUntil() calls
  */
 function instrumentWorkflowStep(
   step: WorkflowStep,
@@ -153,6 +127,49 @@ function instrumentWorkflowStep(
         });
       }
 
+      if (prop === 'sleepUntil' && typeof value === 'function') {
+        return new Proxy(value, {
+          apply: (fnTarget, thisArg, args) => {
+            const [sleepName, timestamp] = args as [string, Date | number];
+
+            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const wakeAt =
+              timestamp instanceof Date
+                ? timestamp.toISOString()
+                : new Date(timestamp).toISOString();
+
+            return tracer.startActiveSpan(
+              `Workflow ${workflowName}: sleepUntil ${sleepName}`,
+              {
+                kind: SpanKind.INTERNAL,
+                attributes: {
+                  'workflow.sleep.name': sleepName,
+                  'workflow.sleep.until': wakeAt,
+                  'workflow.name': workflowName,
+                },
+              },
+              async (span) => {
+                try {
+                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  span.setStatus({ code: SpanStatusCode.OK });
+                  return result;
+                } catch (error) {
+                  span.recordException(error as Error);
+                  span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message:
+                      error instanceof Error ? error.message : String(error),
+                  });
+                  throw error;
+                } finally {
+                  span.end();
+                }
+              },
+            );
+          },
+        });
+      }
+
       // Pass through other step methods
       if (typeof value === 'function') {
         return value.bind(target);
@@ -175,7 +192,7 @@ function instrumentWorkflowRun(
 ): WorkflowRunFn {
   return async function instrumentedRun(
     this: unknown,
-    event: Readonly<WorkflowEvent>,
+    event: Readonly<WorkflowEvent<unknown>>,
     step: WorkflowStep,
   ): Promise<unknown> {
     const tracer = trace.getTracer('autotel-edge') as WorkerTracer;

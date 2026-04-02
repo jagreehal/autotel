@@ -1,6 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
+  tsconfig: 'tsconfig.build.json',
   entry: { index: 'src/index.ts', reporter: 'src/reporter.ts' },
   format: ['esm', 'cjs'],
   dts: true,

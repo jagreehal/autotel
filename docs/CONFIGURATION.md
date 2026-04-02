@@ -40,9 +40,12 @@ Configuration is resolved in the following priority order (highest to lowest):
 // Explicit config takes precedence over YAML and env vars
 init({
   service: 'my-service', // Overrides YAML and OTEL_SERVICE_NAME
-  endpoint: 'http://localhost:4318', // Overrides YAML and OTEL_EXPORTER_OTLP_ENDPOINT
+  devtools: true, // Best local DX
+  // endpoint: 'https://your-otlp-backend.example.com', // Use for hosted backends
 });
 ```
+
+For local development, prefer `devtools: true` over manually hardcoding `http://localhost:4318`. It enables the local `autotel-devtools` workflow while keeping the same `init()` surface you use for remote OTLP backends.
 
 ### YAML Configuration
 
@@ -106,6 +109,15 @@ See `packages/autotel/autotel.yaml.example` for a complete template.
 ```bash
 export OTEL_SERVICE_NAME=my-app
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+Or in code:
+
+```typescript
+init({
+  service: 'my-app',
+  devtools: true,
+});
 ```
 
 **Production (Honeycomb):**
