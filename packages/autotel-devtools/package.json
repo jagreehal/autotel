@@ -1,6 +1,6 @@
 {
   "name": "autotel-devtools",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Standalone OTLP receiver with web UI for local development",
   "type": "module",
   "sideEffects": false,
@@ -87,7 +87,7 @@
       "optional": true
     }
   },
-    "repository": {
+  "repository": {
     "type": "git",
     "url": "https://github.com/jagreehal/autotel",
     "directory": "packages/autotel-devtools"
