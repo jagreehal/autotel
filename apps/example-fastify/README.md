@@ -12,12 +12,13 @@ This example shows how to use [Fastify](https://fastify.dev) with autotel for HT
 ## Setup
 
 1. From repo root: `pnpm install`
-2. Optional: set `OTLP_ENDPOINT` or `PORT` in `.env`
+2. Recommended: run `autotel-devtools` locally, or set `AUTOTEL_DEVTOOLS=embedded` if you have `autotel-devtools` installed
+3. Optional: set `OTLP_ENDPOINT` or `PORT` in `.env` when you want to bypass local devtools
 3. Run: `pnpm start` (or from root: `pnpm --filter @jagreehal/example-fastify start`)
 
 ## How It Works
 
-Autotel is initialized in `instrumentation.ts` (loaded via `--import`) with Fastify and HTTP auto-instrumentation. Each request is traced automatically; use `trace()` from autotel in handlers for additional spans.
+Autotel is initialized in `instrumentation.ts` (loaded via `--import`) with Fastify and HTTP auto-instrumentation. By default it uses `devtools: true`, so traces, metrics, and logs go to local `autotel-devtools`. Set `AUTOTEL_DEVTOOLS=off` to fall back to the explicit `OTLP_ENDPOINT` environment variables. Use `trace()` from autotel in handlers for additional spans.
 
 ```typescript
 import Fastify from 'fastify';

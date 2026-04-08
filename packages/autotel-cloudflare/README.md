@@ -17,6 +17,16 @@
 - ✅ **Tree-shakeable** - Import only what you need
 - ✅ **TypeScript native** - Full type safety
 
+## DX Direction
+
+The package direction is to make Cloudflare observability feel the same across Workers, Queues, Durable Objects, alarms, and Workflows:
+
+- use Cloudflare-native wrappers to create the root span
+- use the `trace(..., (ctx) => ...)` factory form for business logic
+- prefer span attributes and one execution snapshot over scattered info logs
+
+See [docs/CLOUDFLARE-DX.md](../../docs/CLOUDFLARE-DX.md) for the design target and review rules.
+
 ## Installation
 
 ```bash

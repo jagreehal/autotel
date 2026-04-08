@@ -2,7 +2,7 @@
  * Graceful shutdown with flush and cleanup
  */
 
-import { getSdk, getLogger } from './init';
+import { getSdk, getLogger, _closeEmbeddedDevtools } from './init';
 import { getEventQueue, resetEventQueue } from './track';
 import { resetEvents } from './event';
 import { resetMetrics } from './metric';
@@ -179,6 +179,8 @@ export async function shutdown(): Promise<void> {
       logger.error({ err }, '[autotel] SDK shutdown failed');
     }
   } finally {
+    await _closeEmbeddedDevtools();
+
     // Clean up singleton Maps and queues to prevent memory leaks
     // This runs even if SDK shutdown fails
     const eventsQueue = getEventQueue();

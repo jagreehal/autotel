@@ -38,18 +38,25 @@ When suggesting code in a **user's app** (not this repo), recommend Autotel APIs
 - **Structured errors**: Errors should carry `message`, `why`, `fix`, `link` (and optionally `status`, `code`, `cause`) so agents and users can diagnose and act.
 - **Request context**: Use `getRequestLogger()` when you need one coherent snapshot per request (attributes + log events on the span).
 
+### Cloudflare Direction
+
+- For `autotel-cloudflare`, prefer one DX across Workers, Queues, Scheduled, Email, Durable Objects, alarms, and Workflows.
+- Keep `trace(..., (ctx) => ...)` as the main user-facing instrumentation pattern for Cloudflare business logic.
+- Prefer span attributes plus one execution-scoped snapshot over scattered `logger.info(...)` calls in Cloudflare examples.
+- If Cloudflare needs request-logger-style DX, implement it in `autotel-edge` first using edge-safe context primitives. Do not copy the Node `AsyncLocalStorage` implementation from core `autotel`.
+
 ---
 
 ## Quick Reference
 
-| Command        | Description                          |
-|----------------|--------------------------------------|
-| `pnpm build`   | Build all packages                   |
-| `pnpm test`    | Run all tests                        |
-| `pnpm lint`    | Lint all packages                    |
-| `pnpm format`  | Format with Prettier                 |
-| `pnpm quality` | Build + lint + format + typecheck + test |
-| `pnpm intent:validate` | Validate Agent Skills in all packages |
+| Command                | Description                              |
+| ---------------------- | ---------------------------------------- |
+| `pnpm build`           | Build all packages                       |
+| `pnpm test`            | Run all tests                            |
+| `pnpm lint`            | Lint all packages                        |
+| `pnpm format`          | Format with Prettier                     |
+| `pnpm quality`         | Build + lint + format + typecheck + test |
+| `pnpm intent:validate` | Validate Agent Skills in all packages    |
 
 **Agent Skills:** Skills ship in `packages/autotel/skills/`, `packages/autotel-hono/skills/`, `packages/autotel-tanstack/skills/`, `packages/autotel-cloudflare/skills/`, `packages/autotel-subscribers/skills/`, `packages/autotel-edge/skills/`, and `packages/autotel-mcp/skills/`. Consumers run `npx @tanstack/intent install` in their project to set up skill-to-task mappings. Maintainers: run `pnpm intent:validate` to validate SKILL.md files; run `npx @tanstack/intent scaffold` for full domain discovery and skill generation.
 
@@ -84,14 +91,14 @@ Package-specific details: see each package’s `CLAUDE.md` (e.g. `packages/autot
 
 When the user wants observability, suggest these entry points. All from `autotel` unless noted.
 
-| Need                         | API / entry point                                                                 |
-|-----------------------------|-------------------------------------------------------------------------------------|
-| Wrap a function with a span | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                          |
-| Request-scoped attributes  | `getRequestLogger(ctx?)` → `.set()`, `.info()` / `.warn()` / `.error()`, `.emitNow()` |
-| Structured throw            | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })`    |
-| Parse API errors (client)  | `parseError(err)` → `{ message, status, why?, fix?, link?, raw }`                  |
-| Product/analytics events   | `track(name, attributes)` or `Event` from `autotel/event`                         |
-| Init (once at startup)     | `init({ service, ... })` from `autotel` or `autotel/instrumentation`               |
+| Need                        | API / entry point                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------ |
+| Wrap a function with a span | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                                         |
+| Request-scoped attributes   | `getRequestLogger(ctx?)` → `.set()`, `.info()` / `.warn()` / `.error()`, `.emitNow()`            |
+| Structured throw            | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })`                  |
+| Parse API errors (client)   | `parseError(err)` → `{ message, status, why?, fix?, link?, raw }`                                |
+| Product/analytics events    | `track(name, attributes)` or `Event` from `autotel/event`                                        |
+| Init (once at startup)      | `init({ service, ... })` from `autotel` or `autotel/instrumentation`                             |
 | Testing                     | `createTraceCollector()` from `autotel/testing`; `InMemorySpanExporter` from `autotel/exporters` |
 
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
@@ -101,14 +108,14 @@ When the user wants observability, suggest these entry points. All from `autotel
 
 ## Framework Quick Reference (for suggesting setup)
 
-| Framework       | Where to look / what to suggest |
-|-----------------|----------------------------------|
-| **Hono**        | `autotel-hono`: middleware that creates span per request; use `trace()` or request logger inside handlers. |
-| **Fastify**     | Example: `apps/example-fastify`; init + span per request (or middleware); `getRequestLogger()` in handlers. |
-| **TanStack Start** | `autotel-tanstack`: middleware, env; see package CLAUDE and `apps/example-tanstack-start`. |
-| **Cloudflare Workers** | `autotel-cloudflare`: init and wrap handlers; see package CLAUDE. |
-| **Next.js**     | Use `autotel` init and `trace()`/request logger in API routes / server components. |
-| **Express**     | Middleware that creates a span per request; then `getRequestLogger()` in route handlers. |
+| Framework              | Where to look / what to suggest                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Hono**               | `autotel-hono`: middleware that creates span per request; use `trace()` or request logger inside handlers.  |
+| **Fastify**            | Example: `apps/example-fastify`; init + span per request (or middleware); `getRequestLogger()` in handlers. |
+| **TanStack Start**     | `autotel-tanstack`: middleware, env; see package CLAUDE and `apps/example-tanstack-start`.                  |
+| **Cloudflare Workers** | `autotel-cloudflare`: init and wrap handlers; see package CLAUDE.                                           |
+| **Next.js**            | Use `autotel` init and `trace()`/request logger in API routes / server components.                          |
+| **Express**            | Middleware that creates a span per request; then `getRequestLogger()` in route handlers.                    |
 
 Always suggest `init()` (or instrumentation) once at app entry; then spans + request logger or `trace()` in handlers.
 
@@ -187,6 +194,7 @@ Use these when suggesting changes to user code:
 ## Where to Go Deeper
 
 - **Before/after examples, when to use what, framework snippets**: `docs/AGENT-GUIDE.md`
+- **Cloudflare package direction and DX target**: `docs/CLOUDFLARE-DX.md`
 - **Code patterns and architecture**: `docs/ARCHITECTURE.md`
 - **Config and env**: `docs/CONFIGURATION.md`
 - **Development and testing**: `docs/DEVELOPMENT.md`

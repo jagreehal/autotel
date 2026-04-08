@@ -7,17 +7,17 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.71.0",
-    "@opentelemetry/instrumentation-bunyan": "^0.58.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.72.0",
+    "@opentelemetry/instrumentation-bunyan": "^0.59.0",
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "bunyan": "^1.8.15",
-    "dotenv": "^17.3.1"
+    "dotenv": "^17.4.1"
   },
   "devDependencies": {
     "@types/bunyan": "^1.8.11",
-    "@types/node": "^25.5.0",
+    "@types/node": "^25.5.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2"
   }
 }

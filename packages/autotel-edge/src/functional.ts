@@ -20,30 +20,37 @@ export type { TraceContext } from './core/trace-context';
 
 type AnyFn = (...args: any[]) => any;
 
-const TRACE_FACTORY_SYMBOL = Symbol.for('autotel.edge.functional.factory');
-const FACTORY_NAME_HINTS = new Set(['ctx', '_ctx', 'context', 'tracecontext', 'tracectx']);
+const TRACE_FACTORY_MARK = '__autotelEdgeTraceFactory';
+const INSTRUMENTED_MARK = '__autotelEdgeInstrumented';
+const FACTORY_NAME_HINTS: Record<string, true> = {
+  ctx: true,
+  _ctx: true,
+  context: true,
+  tracecontext: true,
+  tracectx: true,
+};
 
 const SINGLE_LINE_COMMENT_REGEX = /\/\/.*$/gm;
 const MULTI_LINE_COMMENT_REGEX = /\/\*[\s\S]*?\*\//gm;
 const PARAM_TOKEN_SANITIZE_REGEX = new RegExp(String.raw`[{}\[\]\s]`, 'g');
 
 interface TraceFactoryMarked {
-  [TRACE_FACTORY_SYMBOL]?: true;
+  [TRACE_FACTORY_MARK]?: true;
 }
 
 function markAsTraceFactory(fn: AnyFn): void {
   try {
-    Object.defineProperty(fn, TRACE_FACTORY_SYMBOL, {
+    Object.defineProperty(fn, TRACE_FACTORY_MARK, {
       value: true,
       configurable: true,
     });
   } catch {
-    (fn as TraceFactoryMarked)[TRACE_FACTORY_SYMBOL] = true;
+    (fn as TraceFactoryMarked)[TRACE_FACTORY_MARK] = true;
   }
 }
 
 function hasFactoryMark(fn: AnyFn): boolean {
-  return Boolean((fn as TraceFactoryMarked)[TRACE_FACTORY_SYMBOL]);
+  return Boolean((fn as TraceFactoryMarked)[TRACE_FACTORY_MARK]);
 }
 
 function sanitizeParameterToken(token: string): string {
@@ -96,7 +103,7 @@ function looksLikeTraceFactory(fn: AnyFn): boolean {
 
   const normalized = firstParam.toLowerCase();
   if (
-    FACTORY_NAME_HINTS.has(normalized) ||
+    Object.hasOwn(FACTORY_NAME_HINTS, normalized) ||
     normalized.startsWith('ctx') ||
     normalized.startsWith('_ctx') ||
     normalized.startsWith('trace')
@@ -264,8 +271,6 @@ function isAsyncFunction(fn: unknown): boolean {
   return typeof fn === 'function' && fn.constructor?.name === 'AsyncFunction';
 }
 
-const INSTRUMENTED_SYMBOL = Symbol.for('autotel.edge.functional.instrumented');
-
 function wrapWithTracingAsync<TArgs extends any[], TReturn>(
   fnFactory: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   options: traceOptions<TArgs, TReturn>,
@@ -322,7 +327,7 @@ function wrapWithTracingAsync<TArgs extends any[], TReturn>(
     configurable: true,
   });
 
-  (wrappedFunction as any)[INSTRUMENTED_SYMBOL] = true;
+  (wrappedFunction as any)[INSTRUMENTED_MARK] = true;
 
   return wrappedFunction;
 }
@@ -383,7 +388,7 @@ function wrapWithTracingSync<TArgs extends any[], TReturn>(
     configurable: true,
   });
 
-  (wrappedFunction as any)[INSTRUMENTED_SYMBOL] = true;
+  (wrappedFunction as any)[INSTRUMENTED_MARK] = true;
 
   return wrappedFunction;
 }
@@ -848,4 +853,3 @@ export function span<T = unknown>(
 
   return result as T;
 }
-

@@ -25,6 +25,7 @@ You are working on the Cloudflare Workers package. You understand Cloudflare Wor
   - Functional API via re-exports from autotel-edge
 - **Handler Instrumentation**: Automatic tracing for fetch, scheduled, queue, email handlers
 - **Global Instrumentations**: Auto-instrument global fetch() and cache API
+- **Preferred DX direction**: converge on one traced-factory pattern across Workers, Queues, Durable Objects, alarms, and Workflows. See `docs/CLOUDFLARE-DX.md`.
 
 ## Entry Points
 
@@ -93,6 +94,9 @@ export default trace(async (request) => {
 ## Boundaries
 
 - ✅ **Always do**: Use Proxy pattern for bindings, maintain API compatibility, check bundle size
+- ✅ **Prefer**: `trace(..., (ctx) => ...)` for Cloudflare business logic and examples
+- ✅ **Prefer**: span attributes plus one execution-scoped snapshot over repeated raw info logs
+- ✅ **Prefer**: implementing shared execution logger primitives in `autotel-edge` before adding Cloudflare-only logger variants
 - ⚠️ **Ask first**: Adding new bindings, changing API styles, increasing bundle size
 - 🚫 **Never do**: Modify Cloudflare SDK, break API compatibility, exceed bundle size limits
 
@@ -109,4 +113,3 @@ export default trace(async (request) => {
 - Vendor-agnostic unlike workers-honeycomb-logger (works with any OTLP backend)
 - Multiple API styles for maximum flexibility
 - Advanced sampling strategies
-

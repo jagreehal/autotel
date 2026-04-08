@@ -4,7 +4,12 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { flush, shutdown } from './shutdown';
-import { init } from './init';
+import {
+  init,
+  _getEmbeddedDevtoolsCloseForTesting,
+  _resetOptionalRequireForTesting,
+  _setOptionalRequireForTesting,
+} from './init';
 import { track, getEventQueue } from './track';
 import { EventSubscriber } from './event-subscriber';
 
@@ -37,6 +42,7 @@ describe('shutdown module', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAdapter = new MockAdapter();
+    _resetOptionalRequireForTesting();
   });
 
   afterEach(async () => {
@@ -45,6 +51,7 @@ describe('shutdown module', () => {
     if (queue) {
       await queue.flush();
     }
+    _resetOptionalRequireForTesting();
   });
 
   describe('flush()', () => {
@@ -287,6 +294,33 @@ describe('shutdown module', () => {
 
       // Should not throw even if adapter shutdown fails
       await expect(shutdown()).resolves.toBeUndefined();
+    });
+
+    it('should close embedded devtools during shutdown', async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      _setOptionalRequireForTesting((id: string) => {
+        if (id === 'autotel-devtools') {
+          return {
+            createDevtools: () => ({
+              port: 4318,
+              close,
+            }),
+          } as any;
+        }
+        return undefined;
+      });
+
+      init({
+        service: 'test-service',
+        devtools: { embedded: true },
+      });
+
+      expect(_getEmbeddedDevtoolsCloseForTesting()).not.toBeNull();
+
+      await shutdown();
+
+      expect(close).toHaveBeenCalledOnce();
+      expect(_getEmbeddedDevtoolsCloseForTesting()).toBeNull();
     });
   });
 

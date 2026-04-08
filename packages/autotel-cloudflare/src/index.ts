@@ -37,6 +37,15 @@
 
 // Re-export EVERYTHING from autotel-edge (vendor-agnostic foundation)
 export * from 'autotel-edge';
+export {
+  getRequestLogger,
+  getQueueLogger,
+  getWorkflowLogger,
+  getActorLogger,
+  type ExecutionLogger,
+  type ExecutionLoggerOptions,
+  type ExecutionLogSnapshot,
+} from './execution-logger';
 
 // Cloudflare-specific wrappers
 export { instrument, wrapModule, wrapDurableObject } from './wrappers';

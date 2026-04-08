@@ -46,6 +46,7 @@ export default defineConfig({
     enrichers: 'src/enrichers.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats
+  tsconfig: 'tsconfig.build.json',
   dts: true,
   sourcemap: true,
   outDir: 'dist',
