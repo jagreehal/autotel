@@ -8,7 +8,7 @@ You are working on the core Node.js package that provides OpenTelemetry instrume
 
 ## Tech Stack
 
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js 22+
 - **Language**: TypeScript 5.0+ (ESM-first, CJS fallback)
 - **Build**: tsup
 - **Testing**: vitest (unit + integration)
