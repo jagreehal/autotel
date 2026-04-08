@@ -8,7 +8,7 @@ You are working on the Sentry integration package. You understand OpenTelemetry 
 
 ## Tech Stack
 
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js 22+
 - **Language**: TypeScript 5.0+ (ESM-first, CJS fallback)
 - **Build**: tsup
 - **Testing**: vitest

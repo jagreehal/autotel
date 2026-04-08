@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Autotel! This guide will help you
 
 ### Prerequisites
 
-- Node.js 18+ (22+ recommended)
+- Node.js 22+
 - pnpm 8+
 - Git
 
