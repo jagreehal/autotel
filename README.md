@@ -222,7 +222,7 @@ init({ service: 'my-app' }); // Minimal config, env vars fill the rest
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - pnpm 8+
 
 ### Setup

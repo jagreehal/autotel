@@ -8,7 +8,7 @@ You are working on the event subscribers package. You understand product analyti
 
 ## Tech Stack
 
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js 22+
 - **Language**: TypeScript 5.0+ (ESM-first, CJS fallback)
 - **Build**: tsup
 - **Testing**: vitest
@@ -115,4 +115,3 @@ Base class provides retry logic and error handling:
 7. Create changeset with `pnpm changeset`
 
 See `docs/DEVELOPMENT.md` for detailed workflow.
-

@@ -21,7 +21,7 @@ Autotel is a monorepo containing multiple packages that provide ergonomic OpenTe
 - **Language**: TypeScript 5.0+ (ESM-first, CJS fallback)
 - **Build**: tsup (bundling), vitest (testing)
 - **Package Manager**: pnpm
-- **Key Dependencies**: OpenTelemetry SDK, Node.js 18+, Edge runtimes (fetch, AsyncLocalStorage)
+- **Key Dependencies**: OpenTelemetry SDK, Node.js 22+, Edge runtimes (fetch, AsyncLocalStorage)
 
 ## Quick Commands
 

@@ -378,7 +378,7 @@ pnpm --filter autotel-aws build:layer
 aws lambda publish-layer-version \
   --layer-name autotel-aws \
   --zip-file fileb://dist/layer/autotel-aws-layer.zip \
-  --compatible-runtimes nodejs18.x nodejs20.x nodejs22.x \
+  --compatible-runtimes nodejs22.x \
   --compatible-architectures x86_64 arm64
 ```
 
