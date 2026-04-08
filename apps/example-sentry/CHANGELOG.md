@@ -1,5 +1,13 @@
 # @jagreehal/example-sentry
 
+## 0.1.15
+
+### Patch Changes
+
+- Updated dependencies [8003fad]
+  - autotel@2.26.0
+  - autotel-sentry@0.5.6
+
 ## 0.1.14
 
 ### Patch Changes
