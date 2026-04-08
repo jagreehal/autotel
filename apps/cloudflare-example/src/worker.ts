@@ -90,7 +90,7 @@ const getObject = trace(
 const queryUsers = trace(
   {
     name: 'd1.query',
-    attributesFromResult: (result) => ({
+    attributesFromResult: (result: D1Result<Record<string, unknown>>) => ({
       'db.rows_count': result.results?.length || 0,
     }),
   },
@@ -120,7 +120,7 @@ const searchVectors = trace(
   {
     name: 'vectorize.search',
     attributesFromArgs: ([_vector, topK]) => ({ 'vectorize.top_k': topK }),
-    attributesFromResult: (result) => ({
+    attributesFromResult: (result: VectorizeMatches) => ({
       'vectorize.matches': result?.matches?.length || 0,
     }),
   },
@@ -165,7 +165,7 @@ const aiSearchPipeline = trace(
   {
     name: 'pipeline.ai-search',
     attributesFromArgs: ([query]) => ({ 'pipeline.query': query }),
-    attributesFromResult: (result) => ({
+    attributesFromResult: (result: VectorizeMatches) => ({
       'pipeline.matches_found': result.matches?.length || 0,
     }),
   },
@@ -270,7 +270,7 @@ const insertUser = trace(
   {
     name: 'db.insertUser',
     attributesFromArgs: ([user]) => ({ 'user.email': user.email }),
-    attributesFromResult: (user) => ({ 'user.id': user.id }),
+    attributesFromResult: (user: { id: string; email: string; name: string }) => ({ 'user.id': user.id }),
   },
   async function insertUser(
     user: { email: string; name: string },
@@ -289,7 +289,7 @@ const validateAndCreate = trace(
   {
     name: 'user.create',
     attributesFromArgs: ([data]) => ({ 'user.email': data.email }),
-    attributesFromResult: (user) => ({ 'user.id': user.id }),
+    attributesFromResult: (user: { id: string; email: string; name: string }) => ({ 'user.id': user.id }),
   },
   async function validateAndCreate(
     data: { email: string; name: string },
@@ -452,7 +452,7 @@ const handler: ExportedHandler<WorkerEnv> = {
     // Nested spans example - create user with validation
     if (url.pathname === '/users' && request.method === 'POST') {
       try {
-        const data = await request.json();
+        const data = (await request.json()) as { email: string; name: string };
         if (!env.MY_D1) {
           return Response.json(
             { error: 'D1 database not configured' },

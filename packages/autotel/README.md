@@ -146,8 +146,10 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
 
 ```bash
 npm install autotel
+npm install -D autotel-devtools # optional but recommended for local DX
 # or
 pnpm add autotel
+pnpm add -D autotel-devtools
 ```
 
 ### 2. Initialize once at startup
@@ -157,7 +159,7 @@ import { init } from 'autotel';
 
 init({
   service: 'checkout-api',
-  environment: process.env.NODE_ENV,
+  devtools: true,
 });
 ```
 
@@ -168,6 +170,29 @@ Defaults:
 - Sampler: adaptive (10% baseline, 100% for errors/slow spans)
 - Version: auto-detected from `package.json`
 - Events auto-flush when the root span finishes
+
+Recommended local workflow:
+
+```typescript
+init({
+  service: 'checkout-api',
+  devtools: true,
+});
+```
+
+- `devtools: true` points traces, metrics, and logs at local `autotel-devtools`
+- `devtools: { embedded: true }` tries to start `autotel-devtools` for you
+- when you switch to a hosted backend, replace `devtools` with `endpoint` and optional `headers`
+
+Example remote backend config:
+
+```typescript
+init({
+  service: 'checkout-api',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+});
+```
 
 Sampling presets:
 
@@ -1978,6 +2003,14 @@ OTLP_ENDPOINT=https://otel.mycompany.com node server.js
 init({
   service: string; // required
   subscribers?: EventSubscriber[];
+  devtools?: boolean | {
+    enabled?: boolean;
+    endpoint?: string;
+    embedded?: boolean;
+    host?: string;
+    port?: number;
+    verbose?: boolean;
+  };
   endpoint?: string;
   protocol?: 'http' | 'grpc'; // OTLP protocol (default: 'http')
   metrics?: boolean | 'auto';
@@ -2005,6 +2038,19 @@ init({
   };
 });
 ```
+
+Local-first recommendation:
+
+```typescript
+init({
+  service: 'my-app',
+  devtools: true,
+});
+```
+
+- `devtools: true` routes traces, metrics, and logs to local `autotel-devtools`
+- `devtools: { embedded: true }` attempts to start `autotel-devtools` automatically
+- use `endpoint` and `headers` when you are ready to ship telemetry to a hosted backend
 
 **Sampling Configuration:**
 

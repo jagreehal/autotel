@@ -9,7 +9,16 @@ import { init } from 'autotel';
 
 init({
   service: 'example-fastify-service',
-  debug: true,
+  devtools:
+    process.env.AUTOTEL_DEVTOOLS === 'embedded'
+      ? { embedded: true }
+      : process.env.AUTOTEL_DEVTOOLS === 'off'
+        ? false
+        : true,
+  debug: 'pretty',
   autoInstrumentations: ['http', 'fastify'],
-  endpoint: process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  endpoint:
+    process.env.AUTOTEL_DEVTOOLS === 'off'
+      ? process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+      : undefined,
 });

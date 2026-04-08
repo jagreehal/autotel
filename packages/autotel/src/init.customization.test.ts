@@ -115,6 +115,9 @@ async function loadInitWithMocks() {
     getConfig: mod.getConfig,
     getDefaultSampler: mod.getDefaultSampler,
     resolveLogsFlag: mod.resolveLogsFlag,
+    setOptionalRequireForTesting: mod._setOptionalRequireForTesting,
+    resetOptionalRequireForTesting: mod._resetOptionalRequireForTesting,
+    getEmbeddedDevtoolsCloseForTesting: mod._getEmbeddedDevtoolsCloseForTesting,
     sdkInstances,
     traceExporterOptions,
     metricExporterOptions,
@@ -133,6 +136,84 @@ describe('init() customization', () => {
     delete process.env.OTEL_TRACES_SAMPLER;
     delete process.env.OTEL_TRACES_SAMPLER_ARG;
     delete process.env.NODE_ENV;
+  });
+
+  it('auto-configures local devtools endpoint and logs when devtools is enabled', async () => {
+    const {
+      init,
+      sdkInstances,
+      traceExporterOptions,
+      metricExporterOptions,
+      logExporterOptions,
+    } = await loadInitWithMocks();
+
+    init({ service: 'devtools-app', devtools: true });
+
+    expect(traceExporterOptions[0]).toMatchObject({
+      url: 'http://127.0.0.1:4318/v1/traces',
+    });
+    expect(metricExporterOptions[0]).toMatchObject({
+      url: 'http://127.0.0.1:4318/v1/metrics',
+    });
+    expect(logExporterOptions[0]).toMatchObject({
+      url: 'http://127.0.0.1:4318/v1/logs',
+    });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.logRecordProcessors).toBeDefined();
+  });
+
+  it('starts embedded autotel-devtools when requested and installed', async () => {
+    const {
+      init,
+      setOptionalRequireForTesting,
+      getEmbeddedDevtoolsCloseForTesting,
+      traceExporterOptions,
+      logExporterOptions,
+    } = await loadInitWithMocks();
+
+    const close = vi.fn();
+
+    setOptionalRequireForTesting((id: string) => {
+      if (id === 'autotel-devtools') {
+        return {
+          createDevtools: () => ({
+            port: 9876,
+            close,
+          }),
+        } as any;
+      }
+      return undefined;
+    });
+
+    init({
+      service: 'embedded-devtools-app',
+      devtools: { embedded: true, host: '127.0.0.1', port: 0 },
+    });
+
+    expect(traceExporterOptions[0]).toMatchObject({
+      url: 'http://127.0.0.1:9876/v1/traces',
+    });
+    expect(logExporterOptions[0]).toMatchObject({
+      url: 'http://127.0.0.1:9876/v1/logs',
+    });
+    expect(getEmbeddedDevtoolsCloseForTesting()).toBe(close);
+  });
+
+  it('falls back cleanly when embedded devtools is requested but unavailable', async () => {
+    const { init, setOptionalRequireForTesting, traceExporterOptions } =
+      await loadInitWithMocks();
+
+    setOptionalRequireForTesting(() => undefined);
+
+    init({
+      service: 'embedded-devtools-fallback-app',
+      devtools: { embedded: true },
+    });
+
+    expect(traceExporterOptions[0]).toMatchObject({
+      url: 'http://127.0.0.1:4318/v1/traces',
+    });
   });
 
   it(

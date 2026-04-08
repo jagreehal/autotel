@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentWorkflow } from './workflows';
+import { getWorkflowLogger } from '../execution-logger';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 
 describe('Workflow Instrumentation', () => {
@@ -22,6 +23,8 @@ describe('Workflow Instrumentation', () => {
       isRecording: () => true,
       updateName: vi.fn(),
       addEvent: vi.fn(),
+      addLink: vi.fn(),
+      addLinks: vi.fn(),
     };
 
     mockTracer = {
@@ -203,6 +206,50 @@ describe('Workflow Instrumentation', () => {
       });
       expect(mockSpan.end).toHaveBeenCalled();
     });
+
+    it('should make getWorkflowLogger() available inside run()', async () => {
+      const getActiveSpanSpy = vi
+        .spyOn(trace, 'getActiveSpan')
+        .mockReturnValue(mockSpan as any);
+
+      class TestWorkflow {
+        constructor(public ctx: any, public env: any) {}
+        async run() {
+          const log = getWorkflowLogger();
+          log.set({ workflow: { id: 'wf-logger' } });
+          log.info('workflow started', { provider: { name: 'curvepay' } });
+          return log.emitNow({ outcome: 'running' });
+        }
+      }
+
+      const Instrumented = instrumentWorkflow(TestWorkflow, 'logger-test', {
+        service: { name: 'test' },
+      });
+
+      const instance = new Instrumented({}, {});
+      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-logger' };
+      const step = { do: vi.fn(), sleep: vi.fn(), sleepUntil: vi.fn() };
+
+      const snapshot = await instance.run(event, step);
+
+      expect(snapshot).toMatchObject({
+        traceId: 'test-trace-id',
+        spanId: 'test-span-id',
+        context: {
+          workflow: { id: 'wf-logger' },
+          outcome: 'running',
+        },
+      });
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'workflow.id': 'wf-logger',
+      });
+      expect(mockSpan.addEvent).toHaveBeenCalledWith('log.info', {
+        message: 'workflow started',
+        'provider.name': 'curvepay',
+      });
+
+      getActiveSpanSpy.mockRestore();
+    });
   });
 
   describe('step.do() instrumentation', () => {
@@ -297,6 +344,45 @@ describe('Workflow Instrumentation', () => {
       expect(sleepSpanCall[1].attributes['workflow.sleep.name']).toBe('wait for settlement');
       expect(sleepSpanCall[1].attributes['workflow.sleep.duration']).toBe('2 hours');
       expect(sleepSpanCall[1].attributes['workflow.name']).toBe('sleep-test');
+    });
+
+    it('should create span for step.sleepUntil() calls', async () => {
+      const wakeAt = new Date('2026-04-09T10:00:00.000Z');
+
+      class TestWorkflow {
+        constructor(public ctx: any, public env: any) {}
+        async run(event: any, step: any) {
+          await step.sleepUntil('wait until tomorrow', wakeAt);
+        }
+      }
+
+      const Instrumented = instrumentWorkflow(TestWorkflow, 'sleep-until-test', {
+        service: { name: 'test' },
+      });
+
+      const instance = new Instrumented({}, {});
+      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-sleep-until' };
+      const step = {
+        do: vi.fn(),
+        sleep: vi.fn(),
+        sleepUntil: vi.fn().mockResolvedValue(undefined),
+      };
+
+      await instance.run(event, step);
+
+      const sleepUntilSpanCall = mockTracer.startActiveSpan.mock.calls[1];
+      expect(sleepUntilSpanCall[0]).toBe(
+        'Workflow sleep-until-test: sleepUntil wait until tomorrow',
+      );
+      expect(sleepUntilSpanCall[1].attributes['workflow.sleep.name']).toBe(
+        'wait until tomorrow',
+      );
+      expect(sleepUntilSpanCall[1].attributes['workflow.sleep.until']).toBe(
+        '2026-04-09T10:00:00.000Z',
+      );
+      expect(sleepUntilSpanCall[1].attributes['workflow.name']).toBe(
+        'sleep-until-test',
+      );
     });
   });
 

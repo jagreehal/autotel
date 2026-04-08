@@ -49,6 +49,9 @@
 // Core initialization
 export { init, type AutotelWebConfig } from './init';
 
+// Span exporter
+export { flushSpans } from './span-exporter';
+
 // Privacy types (re-exported from init.ts which imports from privacy.ts)
 export type { PrivacyConfig } from './privacy';
 

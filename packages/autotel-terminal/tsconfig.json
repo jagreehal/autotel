@@ -4,10 +4,8 @@
     "module": "ESNext",
     "lib": ["ES2023"],
     "moduleResolution": "Bundler",
+    "rootDir": "./src",
     "outDir": "./dist",
-    "paths": {
-      "autotel": ["../autotel/src"]
-    },
     "jsx": "react-jsx",
     "declaration": true,
     "declarationMap": true,
@@ -18,8 +16,9 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "../autotel"]
+  "exclude": ["node_modules", "dist"]
 }

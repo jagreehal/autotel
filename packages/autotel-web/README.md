@@ -85,6 +85,120 @@ app.get('/api/users', async (req, res) => {
 
 Open your observability platform (Honeycomb, Datadog, Jaeger, etc.) and see the complete trace from browser → backend → database!
 
+## Browser Span Export (lean mode)
+
+By default, lean mode only injects `traceparent` headers — no spans are exported from the browser. This means trace UIs like Jaeger may show "missing parent span" because the browser's spanId doesn't exist in the collector.
+
+To fix this, set the `endpoint` option. autotel-web will export a lightweight span via `navigator.sendBeacon` for each fetch, so the browser span appears in your collector as the trace root:
+
+```typescript
+init({
+  service: 'my-frontend',
+  endpoint: '', // same-origin — requires /v1/traces proxy (see below)
+})
+```
+
+### Collector Proxy
+
+Browsers can't send directly to most collectors (CORS). Add a simple proxy route to your API:
+
+**Hono:**
+
+```typescript
+app.post('/v1/traces', async (c) => {
+  const body = await c.req.arrayBuffer()
+  await fetch(`${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  })
+  return c.json({ ok: true })
+})
+```
+
+**Express:**
+
+```typescript
+app.post('/v1/traces', express.raw({ type: 'application/json' }), async (req, res) => {
+  await fetch(`${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: req.body,
+  })
+  res.json({ ok: true })
+})
+```
+
+If using Vite in dev, proxy `/v1/traces` to your API:
+
+```typescript
+// vite.config.ts
+server: {
+  proxy: {
+    '/v1/traces': { target: 'http://localhost:8787', changeOrigin: true },
+  },
+},
+```
+
+### PostHog Reverse Proxy
+
+If you use PostHog for analytics, route events through the same API to bypass ad blockers (typically increases event capture by 10-30%):
+
+**Hono:**
+
+```typescript
+const POSTHOG_HOST = process.env.POSTHOG_HOST || 'https://eu.i.posthog.com'
+
+app.post('/ingest/*', async (c) => {
+  const path = c.req.path.replace('/ingest', '')
+  const body = await c.req.arrayBuffer()
+  const resp = await fetch(`${POSTHOG_HOST}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': c.req.header('content-type') || 'application/json' },
+    body,
+  })
+  return new Response(resp.body, { status: resp.status, headers: resp.headers })
+})
+
+app.get('/ingest/decide*', async (c) => {
+  const url = new URL(c.req.url)
+  const resp = await fetch(`${POSTHOG_HOST}/decide${url.search}`)
+  return new Response(resp.body, { status: resp.status, headers: resp.headers })
+})
+```
+
+**Browser (posthog-js):**
+
+```typescript
+import posthog from 'posthog-js'
+
+posthog.init('phc_your_key', {
+  api_host: '/ingest',                  // same-origin proxy
+  ui_host: 'https://eu.i.posthog.com',  // keep toolbar working
+})
+```
+
+**Vite proxy (dev):**
+
+```typescript
+proxy: {
+  '/ingest': { target: 'http://localhost:8787', changeOrigin: true },
+}
+```
+
+See [PostHog reverse proxy docs](https://posthog.com/docs/advanced/proxy) for production setups (managed proxy, Cloudflare Workers, etc.).
+
+The resulting trace tree:
+
+```
+browser /api/transfer (CLIENT, root)        ← autotel-web
+  └─ POST /api/transfer (SERVER)            ← autotel / autotel-hono
+       └─ sendMoney (INTERNAL)              ← your app
+            ├─ validate
+            ├─ fetchRate
+            └─ ...
+```
+
 ## Full mode (real spans)
 
 When you need real browser spans, network timing events, and optional export from the client, use full mode. Same install: `autotel-web`. No Zone.js.
@@ -353,6 +467,14 @@ interface AutotelWebConfig {
 
   /** Enable debug logging (default: false) */
   debug?: boolean
+
+  /**
+   * OTLP endpoint for exporting browser spans.
+   * When set, a real span is sent via sendBeacon for each fetch,
+   * so the traceparent spanId exists in the collector.
+   * Use '' for same-origin (requires /v1/traces proxy).
+   */
+  endpoint?: string
 
   /** Privacy controls for traceparent header injection */
   privacy?: PrivacyConfig
@@ -1058,6 +1180,26 @@ app.use(cors({
 ```
 
 3. For custom frameworks, manually extract context (see "Backend Integration" above)
+
+### Browser spans not appearing in collector
+
+If you've set `endpoint` but spans don't appear:
+
+1. Check the proxy is working: `curl -X POST http://localhost:8787/v1/traces -H 'Content-Type: application/json' -d '{}'`
+2. Verify Vite proxy config includes `/v1/traces`
+3. Enable `debug: true` — you should see `[autotel-web] flushSpans: sending N span(s)` in the console
+
+### Vite dev server caching stale autotel-web
+
+When using `file:` linked autotel packages in development, Vite caches pre-bundled dependencies in `node_modules/.vite/`. After rebuilding autotel-web, clear this cache:
+
+```bash
+rm -rf node_modules/.vite
+# or for monorepos
+rm -rf apps/web/node_modules/.vite
+```
+
+Then restart the Vite dev server. Without this, the browser may run an old version of autotel-web even after rebuilding.
 
 ### TypeScript errors
 

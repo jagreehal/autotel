@@ -47,6 +47,13 @@ export {
   type InstrumentOptions,
 } from './functional';
 
+export {
+  getExecutionLogger,
+  type ExecutionLogger,
+  type ExecutionLoggerOptions,
+  type ExecutionLogSnapshot,
+} from './execution-logger';
+
 // Types
 export type {
   Trigger,

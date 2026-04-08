@@ -1,0 +1,96 @@
+{
+  "name": "autotel-devtools",
+  "version": "0.1.0",
+  "description": "Standalone OTLP receiver with web UI for local development",
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "autotel-devtools": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js",
+      "require": "./dist/server/index.cjs"
+    },
+    "./exporter": {
+      "types": "./dist/server/exporter.d.ts",
+      "import": "./dist/server/exporter.js",
+      "require": "./dist/server/exporter.cjs"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && vite build --config vite.widget.config.ts",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.9.0",
+    "clsx": "^2.1.1",
+    "lucide-preact": "^1.7.0",
+    "markdown-to-jsx": "^9.7.15",
+    "preact": "^10.29.1",
+    "react-json-view-lite": "^2.5.0",
+    "tailwind-merge": "^3.5.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@chromatic-com/storybook": "^5.1.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/core": "^2.6.1",
+    "@opentelemetry/sdk-logs": "^0.214.0",
+    "@opentelemetry/sdk-trace-base": "^2.6.1",
+    "@preact/preset-vite": "^2.10.5",
+    "@storybook/addon-a11y": "^10.3.5",
+    "@storybook/addon-docs": "^10.3.5",
+    "@storybook/addon-vitest": "^10.3.5",
+    "@storybook/preact-vite": "^10.3.5",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/preact": "^3.2.4",
+    "@types/node": "^25.5.2",
+    "@types/ws": "^8.18.1",
+    "@vitest/browser-playwright": "4.1.3",
+    "@vitest/coverage-v8": "4.1.3",
+    "eslint-plugin-storybook": "^10.3.5",
+    "playwright": "^1.59.1",
+    "postcss": "^8.5.9",
+    "storybook": "^10.3.5",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.7",
+    "tsup": "^8.5.1",
+    "vitest": "^4.1.3",
+    "vitest-mock-extended": "^4.0.0"
+  },
+  "peerDependencies": {
+    "autotel": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "autotel": {
+      "optional": true
+    }
+  },
+    "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-devtools"
+  },
+  "license": "MIT"
+}

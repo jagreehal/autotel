@@ -73,6 +73,7 @@ import {
   type CanonicalLogLineOptions,
 } from './processors/canonical-log-line-processor';
 import type { EventsConfig } from './events-config';
+import { resolveDevtoolsConfig, type AutotelDevtoolsConfig } from './devtools';
 
 /**
  * Silent logger (no-op) - used as default when user doesn't provide one.
@@ -296,6 +297,21 @@ function formatEndpointUrl(
 export interface AutotelConfig {
   /** Service name (required) */
   service: string;
+
+  /**
+   * Local developer UX for autotel-devtools.
+   *
+   * - `true`: send traces, metrics, and logs to `http://127.0.0.1:4318`
+   * - `{ embedded: true }`: attempt to start `autotel-devtools` automatically
+   *
+   * When enabled:
+   * - `endpoint` defaults to the local devtools URL
+   * - `logs` default to `true` unless explicitly set
+   *
+   * This keeps production config unchanged while making local debugging
+   * effectively zero-config.
+   */
+  devtools?: boolean | AutotelDevtoolsConfig;
 
   /** Event subscribers - bring your own (PostHog, Mixpanel, etc.) */
   subscribers?: EventSubscriber[];
@@ -1138,6 +1154,7 @@ let validationConfig: Partial<ValidationConfig> | null = null;
 let eventsConfig: EventsConfig | null = null;
 let _stringRedactor: StringRedactor | null = null;
 let _optionalRequire: typeof safeRequire = safeRequire;
+let _devtoolsClose: (() => Promise<void> | void) | null = null;
 
 /**
  * Resolve metrics flag with env var override support
@@ -1297,6 +1314,11 @@ export function init(cfg: AutotelConfig): void {
     headers: cfg.headers ?? yamlConfig.headers ?? envConfig.headers,
   } as AutotelConfig;
 
+  const devtoolsConfig = resolveDevtoolsConfig(mergedConfig.devtools);
+  if (devtoolsConfig.enabled && mergedConfig.logs === undefined) {
+    mergedConfig.logs = true;
+  }
+
   // Set logger (use provided or default to silent - no spam)
   logger = mergedConfig.logger || silentLogger;
 
@@ -1314,13 +1336,42 @@ export function init(cfg: AutotelConfig): void {
 
   // Initialize OpenTelemetry
   // Only use endpoint if explicitly configured (no default fallback)
-  const endpoint = mergedConfig.endpoint;
+  let endpoint = mergedConfig.endpoint ?? devtoolsConfig.endpoint;
   const otlpHeaders = normalizeOtlpHeaders(mergedConfig.headers);
   const version = mergedConfig.version || detectVersion();
   const environment =
     mergedConfig.environment || process.env.NODE_ENV || 'development';
   const metricsEnabled = resolveMetricsFlag(mergedConfig.metrics);
   const logsEnabled = resolveLogsFlag(mergedConfig.logs);
+
+  if (devtoolsConfig.enabled && devtoolsConfig.embedded) {
+    const devtoolsModule = _optionalRequire<{
+      createDevtools?: (options?: {
+        port?: number;
+        host?: string;
+        verbose?: boolean;
+      }) => { port: number; close: () => Promise<void> | void };
+    }>('autotel-devtools');
+
+    if (devtoolsModule?.createDevtools) {
+      const devtoolsInstance = devtoolsModule.createDevtools({
+        port: devtoolsConfig.port,
+        host: devtoolsConfig.host,
+        verbose: devtoolsConfig.verbose,
+      });
+      _devtoolsClose = devtoolsInstance.close;
+      endpoint = `http://${devtoolsConfig.host}:${devtoolsInstance.port}`;
+      logger.info(
+        {},
+        `[autotel] autotel-devtools embedded server started at ${endpoint}`,
+      );
+    } else {
+      logger.warn(
+        {},
+        '[autotel] devtools.embedded requested but autotel-devtools is not installed. Falling back to endpoint-only mode.',
+      );
+    }
+  }
 
   // Detect hostname for proper Datadog correlation and Service Catalog discovery
   const hostname = detectHostname();
@@ -2011,6 +2062,25 @@ export function _setOptionalRequireForTesting(
  */
 export function _resetOptionalRequireForTesting(): void {
   _optionalRequire = safeRequire;
+}
+
+/**
+ * @internal Close embedded devtools if running.
+ */
+export async function _closeEmbeddedDevtools(): Promise<void> {
+  if (_devtoolsClose) {
+    await _devtoolsClose();
+    _devtoolsClose = null;
+  }
+}
+
+/**
+ * @internal Get embedded devtools close handle.
+ */
+export function _getEmbeddedDevtoolsCloseForTesting():
+  | (() => Promise<void> | void)
+  | null {
+  return _devtoolsClose;
 }
 
 /**
