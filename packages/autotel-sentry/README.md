@@ -1,16 +1,12 @@
 # autotel-sentry
 
-Bridge **OpenTelemetry (Autotel)** traces to **Sentry** so you can keep instrumenting with Autotel and send the same traces to Sentry for performance monitoring and error linking.
-
-This package is for the **Sentry SDK + OpenTelemetry in the same service** scenario. For OTel-only backends (no Sentry SDK), see [Sentry OTLP](https://docs.sentry.io/concepts/otlp/).
-
-This package implements Sentry's [OpenTelemetry traces integration](https://develop.sentry.dev/sdk/telemetry/traces/opentelemetry/) via a `SpanProcessor` and optional `SentryPropagator` for `sentry-trace` and `baggage` headers. The implementation follows that spec and may be updated if Sentry changes it.
+Convenience helpers for sending Autotel (OpenTelemetry) traces to Sentry via OTLP. The package parses a Sentry DSN into the OTLP endpoint and auth headers that Autotel's `init()` expects, and installs a global Sentry event processor that attaches the active OTel `trace_id` and `span_id` to every Sentry error event so errors and traces are linked in the Sentry UI.
 
 ## Prerequisites
 
-- **Sentry must be initialized before** the OpenTelemetry SDK (and before `init()` from Autotel).
-- Set **`instrumenter: 'otel'`** in `Sentry.init()` so Sentry does not double-instrument. All span/transaction creation is driven by OpenTelemetry; Sentry only consumes them.
-- For linking errors to the active trace, the Sentry SDK should expose `addGlobalEventProcessor`. If it does not (e.g. some SDK versions), the processor still sends spans/transactions; error events may not get trace context attached.
+- Node.js 22+
+- `@sentry/node` >= 10.47.0 (exposes `getGlobalScope`)
+- `autotel` (peer dependency)
 
 ## Installation
 
@@ -18,88 +14,76 @@ This package implements Sentry's [OpenTelemetry traces integration](https://deve
 pnpm add autotel autotel-sentry @sentry/node
 ```
 
-## Minimal setup
-
-1. Initialize Sentry first (with `instrumenter: 'otel'`).
-2. Call Autotel `init()` and pass `SentrySpanProcessor` in `spanProcessors`.
+## Quick start
 
 ```typescript
 import * as Sentry from '@sentry/node';
-import { init } from 'autotel';
-import { createSentrySpanProcessor } from 'autotel-sentry';
+import { init, shutdown, trace } from 'autotel';
+import { linkSentryErrors, sentryOtlpConfig } from 'autotel-sentry';
 
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  tracesSampleRate: 1.0,
-  instrumenter: 'otel',
-});
+const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
-init({
-  service: 'my-app',
-  spanProcessors: [createSentrySpanProcessor(Sentry)],
-});
+// 1. Initialize Sentry — tell it not to register its own OTel SDK
+Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+
+// 2. Initialize Autotel — it owns OTel and exports traces to Sentry's OTLP endpoint
+init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
+
+// 3. Link Sentry errors to the active OTel trace
+linkSentryErrors(Sentry);
 ```
 
-Errors captured by Sentry will be linked to the active OpenTelemetry span (trace/span IDs). Spans created by Autotel (e.g. via `autotel-hono`, `autotel-plugins/drizzle`) are sent to Sentry as transactions and child spans. Spans for requests to Sentry's ingestion endpoint are not sent to Sentry.
+`skipOpenTelemetrySetup: true` is required because Sentry SDK v8+ registers its own OTel SDK internally. Autotel owns OTel setup; without this flag you get duplicate span processors and broken traces.
 
-## Optional: sentry-trace and baggage propagation
+## API reference
 
-For cross-service trace continuity and dynamic sampling, register the **SentryPropagator** so `sentry-trace` and `baggage` headers are injected and extracted. Combine it with your existing propagators (e.g. W3C Trace Context and Baggage) using a composite propagator from your OpenTelemetry setup so that outbound requests carry Sentry headers and incoming requests restore them into context.
+### `sentryOtlpConfig(dsn: string): SentryOtlpConfig`
 
-### Example: Using SentryPropagator with Composite Propagator
+Parses a Sentry DSN and returns the three values needed to wire Autotel to Sentry's OTLP ingestion endpoint.
 
 ```typescript
-import * as Sentry from '@sentry/node';
-import { init } from 'autotel';
-import { createSentrySpanProcessor, SentryPropagator } from 'autotel-sentry';
-import { CompositePropagator } from '@opentelemetry/core';
-import { W3CTraceContextPropagator, W3CBaggagePropagator } from '@opentelemetry/core';
-
-// 1. Initialize Sentry first
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  tracesSampleRate: 1.0,
-  instrumenter: 'otel',
-});
-
-// 2. Initialize Autotel with Sentry processor AND propagator
-init({
-  service: 'my-app',
-  spanProcessors: [createSentrySpanProcessor(Sentry)],
-
-  // Register SentryPropagator alongside W3C propagators
-  propagator: new CompositePropagator({
-    propagators: [
-      new W3CTraceContextPropagator(),  // traceparent header
-      new W3CBaggagePropagator(),       // W3C baggage header
-      new SentryPropagator(),           // sentry-trace + baggage headers
-    ],
-  }),
-});
+const config = sentryOtlpConfig('https://<key>@o<org>.ingest.sentry.io/<project>');
+// config.dsn      — normalized DSN string (pass to Sentry.init)
+// config.endpoint — OTLP base URL (pass to Autotel init as `endpoint`)
+// config.headers  — auth headers (pass to Autotel init as `headers`)
 ```
 
-**What this does:**
+Throws if the DSN is missing or cannot be parsed.
 
-- **Outbound requests** (fetch, http.request, etc.) get `traceparent`, `baggage`, and `sentry-trace` headers injected automatically
-- **Incoming requests** restore trace context from all three header types
-- Sentry's dynamic sampling decisions propagate across services via `baggage` header
-- Full distributed tracing works across services using different backends (OTel collector + Sentry)
+### `linkSentryErrors(sentry: SentryLinkable): void`
 
-**When to use:**
+Installs a global Sentry event processor that reads the active OTel span from `@opentelemetry/api` and merges `trace_id` and `span_id` into every outgoing Sentry event's `contexts.trace`. Call this once, after both `Sentry.init()` and `init()`.
 
-- Multi-service architecture where some services send to Sentry, others to OTel collectors
-- You want Sentry's dynamic sampling to work across service boundaries
-- You need both W3C Trace Context (for OTel) and Sentry-specific headers
+### Type: `SentryOtlpConfig`
 
-## API
+```typescript
+interface SentryOtlpConfig {
+  dsn: string;                       // Normalized DSN for Sentry.init
+  endpoint: string;                  // OTLP base endpoint (Autotel appends /v1/traces)
+  headers: Record<string, string>;   // Auth headers for OTLP requests
+}
+```
 
-- **`createSentrySpanProcessor(sentry)`** :  Returns a `SentrySpanProcessor` instance. Pass the `@sentry/node` module (or any object implementing the minimal hub/transaction/span interface).
-- **`SentrySpanProcessor`** :  Class implementing OpenTelemetry's `SpanProcessor`. Converts OTel spans to Sentry transactions/spans and turns OTel exception events into Sentry errors.
-- **`SentryPropagator`** :  Class implementing OpenTelemetry's `TextMapPropagator` for `sentry-trace` and `baggage` headers.
-- **`SENTRY_PROPAGATION_KEY`** :  Context key under which extracted Sentry propagation data is stored (for advanced use).
+### Type: `SentryLinkable`
+
+Minimal interface required by `linkSentryErrors()`. `@sentry/node` >= 10.47.0 satisfies it automatically.
+
+```typescript
+interface SentryLinkable {
+  getGlobalScope(): {
+    addEventProcessor(fn: (event: Record<string, unknown>) => Record<string, unknown>): void;
+  };
+}
+```
+
+## Migration from SpanProcessor approach
+
+Earlier versions of this package used a `SentrySpanProcessor` / `SentryPropagator` bridge that relied on deprecated Sentry Hub APIs. That approach is removed.
+
+Sentry SDK v8+ ships with its own OTel SDK internally. The recommended path is now to let Autotel own OTel and export traces directly to Sentry's OTLP endpoint — no custom span processor needed. Remove any references to `createSentrySpanProcessor`, `SentrySpanProcessor`, `SentryPropagator`, and `instrumenter: 'otel'` from your setup and replace them with the quick start above.
 
 ## References
 
-- [Sentry: OpenTelemetry traces](https://develop.sentry.dev/sdk/telemetry/traces/opentelemetry/) :  spec this implementation follows
-- [Sentry OTLP](https://docs.sentry.io/concepts/otlp/) :  when to use OTLP direct vs SDK + OTel
-- [Autotel init](https://github.com/jagreehal/autotel) :  `spanProcessors` and configuration
+- [Sentry OTLP Integration spec](https://develop.sentry.dev/sdk/telemetry/traces/otlp/) — protocol this package targets
+- [Sentry OTLP docs](https://docs.sentry.io/concepts/otlp/) — Sentry-side OTLP configuration
+- [Autotel](https://github.com/jagreehal/autotel) — `init()` and `endpoint`/`headers` options

@@ -1,7 +1,14 @@
 /**
- * autotel-sentry: Bridge OpenTelemetry (Autotel) traces to Sentry.
+ * autotel-sentry: Convenience helpers for Sentry OTLP integration with Autotel.
+ *
+ * Usage:
+ *   import { sentryOtlpConfig, linkSentryErrors } from 'autotel-sentry';
+ *
+ *   const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
+ *   Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
+ *   init({ service: 'my-app', endpoint: config.endpoint, headers: config.headers });
+ *   linkSentryErrors(Sentry);
  */
-export { SentrySpanProcessor, createSentrySpanProcessor } from './processor';
-export type { SentryLike } from './processor';
-export { SentryPropagator, SENTRY_PROPAGATION_KEY } from './propagator';
-export type { SentryPropagationData } from './propagator';
+export { sentryOtlpConfig } from './config';
+export { linkSentryErrors } from './link';
+export type { SentryOtlpConfig, SentryLinkable } from './types';
