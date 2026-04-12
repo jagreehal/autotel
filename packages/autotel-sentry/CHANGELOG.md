@@ -1,5 +1,11 @@
 # autotel-sentry
 
+## 0.5.7
+
+### Patch Changes
+
+- 06cb835: Updated Sentry
+
 ## 0.5.6
 
 ### Patch Changes
