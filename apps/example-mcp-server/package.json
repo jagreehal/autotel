@@ -3,7 +3,7 @@
   "version": "0.1.40",
   "private": true,
   "type": "module",
-  "description": "Example MCP server with autotel-mcp instrumentation",
+  "description": "Example MCP server with autotel-mcp-instrumentation",
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts"
@@ -11,7 +11,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "autotel": "workspace:*",
-    "autotel-mcp": "workspace:*",
+    "autotel-mcp-instrumentation": "workspace:*",
     "zod": "4.3.6"
   },
   "devDependencies": {

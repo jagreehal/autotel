@@ -1,0 +1,108 @@
+{
+  "name": "autotel-mcp-instrumentation",
+  "version": "29.0.0",
+  "description": "OpenTelemetry instrumentation for Model Context Protocol (MCP) with distributed tracing support",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.cjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "require": "./dist/client.cjs"
+    },
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js",
+      "require": "./dist/context.cjs"
+    },
+    "./metrics": {
+      "types": "./dist/metrics.d.ts",
+      "import": "./dist/metrics.js",
+      "require": "./dist/metrics.cjs"
+    },
+    "./semantic-conventions": {
+      "types": "./dist/semantic-conventions.d.ts",
+      "import": "./dist/semantic-conventions.js",
+      "require": "./dist/semantic-conventions.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "skills",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "npx eslint src/**/*.ts",
+    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts",
+    "clean": "rimraf dist",
+    "format": "prettier --write .",
+    "format:check": "prettier --check src/**/*.ts"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "mcp",
+    "model-context-protocol",
+    "distributed-tracing",
+    "observability",
+    "instrumentation",
+    "w3c-trace-context"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "autotel": "*"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@tanstack/intent": "^0.0.29"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@opentelemetry/context-async-hooks": "^2.6.1",
+    "@opentelemetry/core": "^2.6.1",
+    "@opentelemetry/sdk-trace-node": "^2.6.1",
+    "@types/node": "^25.5.2",
+    "autotel": "workspace:*",
+    "autotel-edge": "workspace:*",
+    "rimraf": "^6.1.3",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.3",
+    "vitest-mock-extended": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-mcp-instrumentation"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-mcp-instrumentation#readme",
+  "bin": {
+    "intent": "./bin/intent.js"
+  }
+}

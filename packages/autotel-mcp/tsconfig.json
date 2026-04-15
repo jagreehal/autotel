@@ -5,20 +5,16 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2022"],
     "types": ["node"],
-
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-
     "outDir": "./dist",
     "rootDir": "./src",
-
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,

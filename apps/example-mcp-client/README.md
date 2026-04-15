@@ -1,6 +1,6 @@
 # MCP Weather Client Example
 
-Example MCP client with automatic OpenTelemetry instrumentation using `autotel-mcp`. Demonstrates distributed tracing across MCP client-server boundaries.
+Example MCP client with automatic OpenTelemetry instrumentation using `autotel-mcp-instrumentation`. Demonstrates distributed tracing across MCP client-server boundaries.
 
 ## Features
 
