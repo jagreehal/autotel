@@ -282,10 +282,10 @@ Only import from these public entry points:
 | `autotel-tanstack/auto` | Zero-config TanStack Start |
 | `autotel-cloudflare` | Cloudflare Workers wrappers |
 | `autotel-cloudflare/bindings` | Bindings instrumentation |
-| `autotel-mcp` | MCP instrumentation |
-| `autotel-mcp/server` | instrumentMCPServer() |
-| `autotel-mcp/client` | Client instrumentation |
-| `autotel-mcp/context` | MCP context propagation |
+| `autotel-mcp-instrumentation` | MCP instrumentation |
+| `autotel-mcp-instrumentation/server` | instrumentMCPServer() |
+| `autotel-mcp-instrumentation/client` | Client instrumentation |
+| `autotel-mcp-instrumentation/context` | MCP context propagation |
 | `autotel-edge` | Edge runtime core |
 | `autotel-edge/sampling` | Sampling strategies |
 | `autotel-edge/events` | Edge events system |

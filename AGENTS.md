@@ -58,7 +58,7 @@ When suggesting code in a **user's app** (not this repo), recommend Autotel APIs
 | `pnpm quality`         | Build + lint + format + typecheck + test |
 | `pnpm intent:validate` | Validate Agent Skills in all packages    |
 
-**Agent Skills:** Skills ship in `packages/autotel/skills/`, `packages/autotel-hono/skills/`, `packages/autotel-tanstack/skills/`, `packages/autotel-cloudflare/skills/`, `packages/autotel-subscribers/skills/`, `packages/autotel-edge/skills/`, and `packages/autotel-mcp/skills/`. Consumers run `npx @tanstack/intent install` in their project to set up skill-to-task mappings. Maintainers: run `pnpm intent:validate` to validate SKILL.md files; run `npx @tanstack/intent scaffold` for full domain discovery and skill generation.
+**Agent Skills:** Skills ship in `packages/autotel/skills/`, `packages/autotel-hono/skills/`, `packages/autotel-tanstack/skills/`, `packages/autotel-cloudflare/skills/`, `packages/autotel-subscribers/skills/`, `packages/autotel-edge/skills/`, and `packages/autotel-mcp-instrumentation/skills/`. Consumers run `npx @tanstack/intent install` in their project to set up skill-to-task mappings. Maintainers: run `pnpm intent:validate` to validate SKILL.md files; run `npx @tanstack/intent scaffold` for full domain discovery and skill generation.
 
 ---
 
@@ -72,7 +72,7 @@ autotel/
 │   ├── autotel-cloudflare/   # Cloudflare Workers
 │   ├── autotel-tanstack/      # TanStack Start
 │   ├── autotel-hono/         # Hono middleware
-│   ├── autotel-mcp/          # MCP instrumentation
+│   ├── autotel-mcp-instrumentation/          # MCP instrumentation
 │   ├── autotel-subscribers/   # Event subscribers (PostHog, etc.)
 │   └── ...
 ├── docs/

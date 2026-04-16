@@ -2,7 +2,7 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { instrumentMcpClient } from 'autotel-mcp/client'
+import { instrumentMcpClient } from 'autotel-mcp-instrumentation/client'
 import { init, trace, shutdown } from 'autotel'
 import { ConsoleSpanExporter } from 'autotel/exporters'
 import { SimpleSpanProcessor } from 'autotel/processors'
@@ -26,7 +26,7 @@ const client = new Client(
   }
 )
 
-// Instrument the client with autotel-mcp (OTel MCP semantic conventions)
+// Instrument the client with autotel-mcp-instrumentation (OTel MCP semantic conventions)
 const instrumented = instrumentMcpClient(client, {
   networkTransport: 'pipe',
   captureToolArgs: true,

@@ -1,0 +1,152 @@
+{
+  "traces": [
+    {
+      "traceId": "fixture-trace-1",
+      "serviceName": "checkout",
+      "startTimeUnixMs": 1000,
+      "durationMs": 350,
+      "statusCode": "ERROR",
+      "spans": [
+        {
+          "traceId": "fixture-trace-1",
+          "spanId": "root",
+          "operationName": "checkout.request",
+          "serviceName": "checkout",
+          "startTimeUnixMs": 1000,
+          "durationMs": 350,
+          "tags": {
+            "http.method": "POST",
+            "http.route": "/checkout",
+            "status.code": "ERROR",
+            "trace.id": "fixture-trace-1"
+          },
+          "hasError": true,
+          "statusCode": "ERROR"
+        },
+        {
+          "traceId": "fixture-trace-1",
+          "spanId": "payment",
+          "parentSpanId": "root",
+          "operationName": "checkout.payment",
+          "serviceName": "payments",
+          "startTimeUnixMs": 1015,
+          "durationMs": 120,
+          "tags": {
+            "db.system": "postgresql",
+            "db.operation": "SELECT",
+            "trace.id": "fixture-trace-1",
+            "status.code": "OK"
+          },
+          "hasError": false,
+          "statusCode": "OK"
+        }
+      ]
+    },
+    {
+      "traceId": "fixture-trace-llm-1",
+      "serviceName": "assistant",
+      "startTimeUnixMs": 5000,
+      "durationMs": 1250,
+      "statusCode": "ERROR",
+      "spans": [
+        {
+          "traceId": "fixture-trace-llm-1",
+          "spanId": "root",
+          "operationName": "assistant.request",
+          "serviceName": "assistant",
+          "startTimeUnixMs": 5000,
+          "durationMs": 1250,
+          "tags": {
+            "gen_ai.system": "openai",
+            "gen_ai.request.model": "gpt-4",
+            "gen_ai.response.model": "gpt-4-0613",
+            "gen_ai.operation.name": "response",
+            "gen_ai.usage.prompt_tokens": 120,
+            "gen_ai.usage.completion_tokens": 80,
+            "gen_ai.usage.total_tokens": 200,
+            "gen_ai.response.finish_reasons": "stop",
+            "status.code": "ERROR",
+            "error.message": "model timeout",
+            "trace.id": "fixture-trace-llm-1"
+          },
+          "hasError": true,
+          "statusCode": "ERROR"
+        },
+        {
+          "traceId": "fixture-trace-llm-1",
+          "spanId": "tool",
+          "parentSpanId": "root",
+          "operationName": "search_destinations",
+          "serviceName": "assistant",
+          "startTimeUnixMs": 5200,
+          "durationMs": 180,
+          "tags": {
+            "traceloop.span.kind": "tool",
+            "gen_ai.tool.name": "search_destinations",
+            "gen_ai.system": "openai",
+            "trace.id": "fixture-trace-llm-1",
+            "status.code": "OK"
+          },
+          "hasError": false,
+          "statusCode": "OK"
+        }
+      ]
+    },
+    {
+      "traceId": "fixture-trace-llm-2",
+      "serviceName": "assistant",
+      "startTimeUnixMs": 9000,
+      "durationMs": 2200,
+      "statusCode": "OK",
+      "spans": [
+        {
+          "traceId": "fixture-trace-llm-2",
+          "spanId": "root",
+          "operationName": "assistant.request",
+          "serviceName": "assistant",
+          "startTimeUnixMs": 9000,
+          "durationMs": 2200,
+          "tags": {
+            "gen_ai.system": "anthropic",
+            "gen_ai.request.model": "claude-3-opus",
+            "gen_ai.usage.input_tokens": 300,
+            "gen_ai.usage.output_tokens": 150,
+            "gen_ai.usage.total_tokens": 450,
+            "status.code": "OK",
+            "trace.id": "fixture-trace-llm-2"
+          },
+          "hasError": false,
+          "statusCode": "OK"
+        }
+      ]
+    }
+  ],
+  "metrics": [
+    {
+      "metricName": "http.server.duration",
+      "unit": "ms",
+      "points": [
+        { "timestampUnixMs": 1000, "value": 350 },
+        { "timestampUnixMs": 2000, "value": 280 }
+      ],
+      "attributes": {
+        "service.name": "checkout",
+        "http.route": "/checkout"
+      }
+    }
+  ],
+  "logs": [
+    {
+      "timestampUnixMs": 1020,
+      "severityText": "ERROR",
+      "body": "checkout request failed during payment call",
+      "serviceName": "checkout",
+      "traceId": "fixture-trace-1",
+      "spanId": "root",
+      "attributes": {
+        "trace.id": "fixture-trace-1",
+        "service.name": "checkout"
+      }
+    }
+  ]
+}

@@ -294,7 +294,7 @@ app.post('/api/checkout', async (c) => {
 });
 ```
 
-**Why:** Framework-specific packages (autotel-hono, autotel-tanstack, autotel-cloudflare, autotel-mcp) provide middleware that creates spans correctly for that framework, with proper attribute naming and context propagation. Using generic `trace()` misses these features.
+**Why:** Framework-specific packages (autotel-hono, autotel-tanstack, autotel-cloudflare, autotel-mcp-instrumentation) provide middleware that creates spans correctly for that framework, with proper attribute naming and context propagation. Using generic `trace()` misses these features.
 
 ---
 

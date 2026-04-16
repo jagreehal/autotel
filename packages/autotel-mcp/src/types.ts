@@ -1,142 +1,214 @@
-import type { Attributes } from '@opentelemetry/api';
+// Signal support
+export type SignalSupport = 'available' | 'unsupported';
 
-/**
- * Configuration options for MCP instrumentation
- */
-export interface McpInstrumentationConfig {
-  /**
-   * Capture tool arguments as gen_ai.tool.call.arguments (opt-in per spec).
-   * @default false
-   */
-  captureToolArgs?: boolean;
+export type SpanStatusCode = 'OK' | 'ERROR' | 'UNSET';
 
-  /**
-   * Capture tool results as gen_ai.tool.call.result (opt-in per spec).
-   * Warning: May contain PII, disable in production.
-   * @default false
-   */
-  captureToolResults?: boolean;
+export type TagValue = string | number | boolean;
 
-  /**
-   * Whether to capture errors and exceptions
-   * @default true
-   */
-  captureErrors?: boolean;
+// Filter system
+export type FilterOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'in'
+  | 'not_in'
+  | 'gt'
+  | 'lt'
+  | 'gte'
+  | 'lte'
+  | 'between'
+  | 'exists'
+  | 'not_exists';
 
-  /**
-   * Custom function to extract additional span attributes
-   */
-  customAttributes?: (context: {
-    type: 'tool' | 'resource' | 'prompt';
-    name: string;
-    args?: unknown;
-    result?: unknown;
-  }) => Attributes;
+export type FilterValueType = 'string' | 'number' | 'boolean';
 
-  /**
-   * Network transport: 'pipe' (stdio), 'tcp' (HTTP/SSE).
-   * Maps to network.transport attribute.
-   */
-  networkTransport?: 'pipe' | 'tcp' | string;
-
-  /**
-   * MCP session ID. Maps to mcp.session.id attribute.
-   */
-  sessionId?: string;
-
-  /**
-   * Enable metrics (operation duration histograms).
-   * @default true
-   */
-  enableMetrics?: boolean;
-
-  /**
-   * Instrument discovery operations (tools/list, resources/list, etc.).
-   * @default true
-   */
-  captureDiscoveryOperations?: boolean;
-
-  // === Deprecated aliases (backward compatibility) ===
-
-  /**
-   * @deprecated Use `captureToolArgs` instead. Will be removed in next major version.
-   */
-  captureArgs?: boolean;
-
-  /**
-   * @deprecated Use `captureToolResults` instead. Will be removed in next major version.
-   */
-  captureResults?: boolean;
+export interface QueryFilter {
+  field: string;
+  operator: FilterOperator;
+  value?: TagValue | TagValue[];
+  valueType?: FilterValueType;
 }
 
-/**
- * Metadata field for W3C Trace Context propagation
- */
-export interface McpTraceMeta {
-  /**
-   * W3C Trace Context traceparent header
-   * Format: version-trace-id-parent-id-trace-flags
-   */
-  traceparent?: string;
-
-  /**
-   * W3C Trace Context tracestate header
-   * Vendor-specific trace data
-   */
-  tracestate?: string;
-
-  /**
-   * W3C Baggage header
-   * Cross-cutting concerns (user ID, request ID, etc.)
-   */
-  baggage?: string;
+// Span and trace records
+export interface SpanRecord {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  operationName: string;
+  serviceName: string;
+  startTimeUnixMs: number;
+  durationMs: number;
+  statusCode: SpanStatusCode;
+  tags: Record<string, TagValue>;
+  hasError: boolean;
 }
 
-/**
- * Resolve deprecated config aliases into canonical form.
- * New names take precedence over deprecated names.
- */
-export function resolveConfig(config?: McpInstrumentationConfig): Required<
-  Omit<
-    McpInstrumentationConfig,
-    | 'customAttributes'
-    | 'networkTransport'
-    | 'sessionId'
-    | 'captureArgs'
-    | 'captureResults'
-  >
-> & {
-  customAttributes?: McpInstrumentationConfig['customAttributes'];
-  networkTransport?: string;
-  sessionId?: string;
-} {
-  return {
-    captureToolArgs:
-      config?.captureToolArgs ??
-      config?.captureArgs ??
-      DEFAULT_CONFIG.captureToolArgs,
-    captureToolResults:
-      config?.captureToolResults ??
-      config?.captureResults ??
-      DEFAULT_CONFIG.captureToolResults,
-    captureErrors: config?.captureErrors ?? DEFAULT_CONFIG.captureErrors,
-    enableMetrics: config?.enableMetrics ?? DEFAULT_CONFIG.enableMetrics,
-    captureDiscoveryOperations:
-      config?.captureDiscoveryOperations ??
-      DEFAULT_CONFIG.captureDiscoveryOperations,
-    customAttributes: config?.customAttributes,
-    networkTransport: config?.networkTransport,
-    sessionId: config?.sessionId,
-  };
+export interface TraceRecord {
+  traceId: string;
+  spans: SpanRecord[];
 }
 
-/**
- * Default configuration values
- */
-export const DEFAULT_CONFIG = {
-  captureToolArgs: false,
-  captureToolResults: false,
-  captureErrors: true,
-  enableMetrics: true,
-  captureDiscoveryOperations: true,
-} as const;
+// Search queries
+export interface TraceSearchQuery {
+  service?: string;
+  operation?: string;
+  tags?: Record<string, TagValue>;
+  minDurationMs?: number;
+  maxDurationMs?: number;
+  startTimeUnixMs?: number;
+  endTimeUnixMs?: number;
+  limit?: number;
+  statusCode?: SpanStatusCode;
+  hasError?: boolean;
+  filters?: QueryFilter[];
+}
+
+export interface SpanSearchQuery extends TraceSearchQuery {
+  spanMinDurationMs?: number;
+  spanMaxDurationMs?: number;
+}
+
+export interface MetricSearchQuery {
+  metricName?: string;
+  serviceName?: string;
+  lookbackMinutes?: number;
+  limit?: number;
+}
+
+export interface MetricSeriesQuery {
+  startTimeUnixMs?: number;
+  endTimeUnixMs?: number;
+  serviceName?: string;
+  limit?: number;
+}
+
+export interface LogSearchQuery {
+  serviceName?: string;
+  traceId?: string;
+  spanId?: string;
+  severityText?: string;
+  text?: string;
+  attributes?: Record<string, TagValue>;
+  startTimeUnixMs?: number;
+  endTimeUnixMs?: number;
+  limit?: number;
+}
+
+// Data structures
+export interface MetricPoint {
+  timestampUnixMs: number;
+  value: number;
+}
+
+export interface MetricSeries {
+  metricName: string;
+  unit?: string;
+  points: MetricPoint[];
+  attributes?: Record<string, TagValue>;
+}
+
+export interface LogRecord {
+  timestampUnixMs: number;
+  severityText: string;
+  body: string;
+  serviceName?: string;
+  traceId?: string;
+  spanId?: string;
+  attributes?: Record<string, TagValue>;
+}
+
+// Search results (paginated)
+export interface SearchResult<T> {
+  items: T[];
+  cursor?: string;
+  totalCount: number;
+  unsupported?: boolean;
+  detail?: string;
+}
+
+export type TraceSearchResult = SearchResult<TraceRecord>;
+export type SpanSearchResult = SearchResult<SpanRecord>;
+export type MetricSearchResult = SearchResult<MetricSeries>;
+export type LogSearchResult = SearchResult<LogRecord>;
+
+// Backend health and capabilities
+export interface BackendHealth {
+  healthy: boolean;
+  message?: string;
+}
+
+export interface BackendCapabilities {
+  traces: SignalSupport;
+  metrics: SignalSupport;
+  logs: SignalSupport;
+}
+
+export interface ServiceListResult {
+  services: string[];
+}
+
+export interface OperationListResult {
+  operations: string[];
+}
+
+export interface ServiceQuery {
+  limit?: number;
+}
+
+// Cross-signal correlation
+export interface CorrelatedSignals {
+  trace: TraceRecord | null;
+  metrics: MetricSeries[];
+  logs: LogRecord[];
+}
+
+// Service map
+export interface ServiceMapNode {
+  service: string;
+  traces: number;
+  spans: number;
+  errors: number;
+  inboundCalls: number;
+  outboundCalls: number;
+  avgDurationMs: number;
+  errorRate: number;
+}
+
+export interface ServiceMapEdge {
+  source: string;
+  target: string;
+  calls: number;
+  errors: number;
+  avgDurationMs: number;
+  p95DurationMs: number;
+}
+
+export interface ServiceMap {
+  nodes: ServiceMapNode[];
+  edges: ServiceMapEdge[];
+}
+
+// Trace summary
+export interface TraceSummary {
+  traceId: string;
+  serviceName: string;
+  durationMs: number;
+  statusCode: SpanStatusCode;
+  spanCount: number;
+  llmSpanCount: number;
+  errorSpanCount: number;
+  totalTokens: number;
+  modelsUsed: string[];
+  serviceCount: number;
+  topOperations: Array<{ operation: string; count: number }>;
+}
+
+// Instrumentation
+export interface InstrumentationScore {
+  score: number;
+  grade: string;
+  suggestions: string[];
+}

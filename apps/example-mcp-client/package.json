@@ -3,7 +3,7 @@
   "version": "0.1.41",
   "private": true,
   "type": "module",
-  "description": "Example MCP client with autotel-mcp instrumentation and distributed tracing",
+  "description": "Example MCP client with autotel-mcp-instrumentation and distributed tracing",
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts"
@@ -11,7 +11,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "autotel": "workspace:*",
-    "autotel-mcp": "workspace:*"
+    "autotel-mcp-instrumentation": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

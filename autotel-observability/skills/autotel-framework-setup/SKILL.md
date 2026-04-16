@@ -183,17 +183,17 @@ Cloudflare bindings (KV, R2, D1, Durable Objects, Workers AI, Vectorize, etc.) a
 
 ## MCP (Model Context Protocol)
 
-**Package:** `autotel-mcp`
+**Package:** `autotel-mcp-instrumentation`
 
 **Install:**
 ```bash
-pnpm add autotel-mcp
+pnpm add autotel-mcp-instrumentation
 ```
 
 **Server setup:**
 ```typescript
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { instrumentMCPServer } from 'autotel-mcp/server';
+import { instrumentMCPServer } from 'autotel-mcp-instrumentation/server';
 import { init } from 'autotel';
 
 init({ service: 'my-mcp-server' });
@@ -213,7 +213,7 @@ server.registerTool('my-tool', async (params) => {
 
 **Client setup:**
 ```typescript
-import { instrumentMCPClient } from 'autotel-mcp/client';
+import { instrumentMCPClient } from 'autotel-mcp-instrumentation/client';
 
 const client = new Client({ name: 'my-client', version: '1.0.0' });
 instrumentMCPClient(client);

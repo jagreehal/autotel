@@ -95,7 +95,7 @@ When instrumenting code, detect the framework and use the right package:
 | **Hono** | `autotel-hono` | `app.use(otel({ serviceName: 'my-api' }))` |
 | **TanStack Start** | `autotel-tanstack` | `tracingMiddleware()` in request middleware |
 | **Cloudflare Workers** | `autotel-cloudflare` | `instrument(handler, config)` or `wrapModule(config, handler)` |
-| **MCP** | `autotel-mcp` | `instrumentMCPServer(server, config)` |
+| **MCP** | `autotel-mcp-instrumentation` | `instrumentMCPServer(server, config)` |
 | **Edge runtimes** | `autotel-edge` | `trace()` from `autotel-edge` |
 | **Express/Fastify/Next.js** | `autotel` | Wrap handlers with `trace()` + call `init()` at entry |
 
@@ -131,7 +131,7 @@ Only import from these public entry points:
 - `autotel-hono` — Hono middleware
 - `autotel-tanstack` — TanStack Start middleware and wrappers
 - `autotel-cloudflare` — Cloudflare Workers wrappers
-- `autotel-mcp` — MCP instrumentation
+- `autotel-mcp-instrumentation` — MCP instrumentation
 - `autotel-edge` — Edge runtime core
 
 Never import from `autotel/src/...` or internal paths.
