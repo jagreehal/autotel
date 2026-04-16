@@ -247,7 +247,7 @@ init({
 | `autotel-edge` | Edge runtime foundation |
 | `autotel-cloudflare` | Cloudflare Workers |
 | `autotel-adapters` | Framework adapters (Next.js, Hono, Nitro, Cloudflare) |
-| `autotel-mcp` | MCP instrumentation |
+| `autotel-mcp-instrumentation` | MCP instrumentation |
 | `autotel-tanstack` | TanStack Start |
 | `autotel-subscribers` | Event subscribers (PostHog, Mixpanel, Webhook) |
 

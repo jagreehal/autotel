@@ -39,7 +39,7 @@ pnpm changeset          # Create a changeset
 - `packages/autotel` - Node.js core package (see `packages/autotel/CLAUDE.md`)
 - `packages/autotel-edge` - Edge runtime foundation (see `packages/autotel-edge/CLAUDE.md`)
 - `packages/autotel-cloudflare` - Cloudflare Workers (see `packages/autotel-cloudflare/CLAUDE.md`)
-- `packages/autotel-mcp` - MCP instrumentation (see `packages/autotel-mcp/CLAUDE.md`)
+- `packages/autotel-mcp-instrumentation` - MCP instrumentation (see `packages/autotel-mcp-instrumentation/CLAUDE.md`)
 - `packages/autotel-tanstack` - TanStack Start (see `packages/autotel-tanstack/CLAUDE.md`)
 - `packages/autotel-subscribers` - Event subscribers (see `packages/autotel-subscribers/CLAUDE.md`)
 

@@ -38,7 +38,7 @@ Check imports and dependencies for framework-specific packages:
 | `import { Hono }` or `hono` in deps | Hono | `autotel-hono` — use `otel()` middleware |
 | `createServerFn`, `createFileRoute` from TanStack | TanStack Start | `autotel-tanstack` — use `tracingMiddleware()` |
 | `env.MY_KV`, `wrangler.toml`, Cloudflare bindings | Cloudflare Workers | `autotel-cloudflare` — use `instrument()` or `wrapModule()` |
-| `McpServer`, `@modelcontextprotocol/sdk` | MCP | `autotel-mcp` — use `instrumentMCPServer()` |
+| `McpServer`, `@modelcontextprotocol/sdk` | MCP | `autotel-mcp-instrumentation` — use `instrumentMCPServer()` |
 | Edge runtime (Vercel Edge, Netlify Edge, Deno) | Edge | `autotel-edge` — use `trace()` from edge package |
 | Express, Fastify, Next.js, generic Node.js | Node.js | `autotel` — use `trace()` directly |
 

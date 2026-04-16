@@ -2,7 +2,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { instrumentMcpServer } from 'autotel-mcp/server';
+import { instrumentMcpServer } from 'autotel-mcp-instrumentation/server';
 import { init } from 'autotel';
 import { ConsoleSpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
@@ -31,7 +31,7 @@ const server = new McpServer(
   },
 );
 
-// Instrument the server with autotel-mcp (OTel MCP semantic conventions)
+// Instrument the server with autotel-mcp-instrumentation (OTel MCP semantic conventions)
 const instrumented = instrumentMcpServer(server, {
   networkTransport: 'pipe',
   captureToolArgs: true,

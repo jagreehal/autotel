@@ -38,6 +38,20 @@ export default defineConfig(
       'unicorn/prefer-string-slice': 'off',
       'unicorn/no-empty-file': 'off',
       'unicorn/require-module-specifiers': 'off',
+      'unicorn/no-array-sort': 'off',
+      'unicorn/no-array-callback-reference': 'off',
+      'unicorn/prefer-spread': 'off',
+      'unicorn/no-useless-fallback-in-spread': 'off',
+      'unicorn/no-negated-condition': 'off',
+      'unicorn/no-useless-switch-case': 'off',
+      'unicorn/prefer-native-coercion-functions': 'off',
+      'unicorn/switch-case-braces': 'off',
+      'unicorn/no-lonely-if': 'off',
+      'unicorn/prefer-ternary': 'off',
+      'unicorn/prefer-number-properties': 'off',
+      'unicorn/prefer-math-min-max': 'off',
+      'unicorn/no-negation-in-equality-check': 'off',
+      'unicorn/prefer-string-replace-all': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/consistent-type-exports': 'error',
       '@typescript-eslint/no-this-alias': 'off',
@@ -46,20 +60,6 @@ export default defineConfig(
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-unnecessary-type-constraint': 'off',
       'prefer-rest-params': 'off',
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'TSEnumDeclaration',
-          message:
-            'Enums are not allowed. Use union types or const assertions instead.',
-        },
-      ],
-    },
-  },
-  {
-    // Allow barrel exports in entry point files
-    files: ['src/index.ts', 'src/server.ts', 'src/client.ts', 'src/context.ts'],
-    rules: {
       'no-restricted-syntax': [
         'error',
         {
@@ -89,11 +89,6 @@ export default defineConfig(
       '@typescript-eslint/no-unused-vars': 'off',
       'no-restricted-syntax': [
         'error',
-        {
-          selector: 'ExportAllDeclaration',
-          message:
-            'Barrel exports (export * from) are not allowed. Use explicit named exports instead.',
-        },
         {
           selector: 'TSEnumDeclaration',
           message:

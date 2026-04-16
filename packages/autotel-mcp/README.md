@@ -1,387 +1,402 @@
 # autotel-mcp
 
-OpenTelemetry instrumentation for [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) with automatic distributed tracing.
+An MCP server that gives AI agents the ability to investigate OpenTelemetry traces, metrics, and logs. Ships with a built-in OTLP collector so any instrumented app can send data directly — no Jaeger, Grafana, or vendor setup required.
 
-Automatically instrument MCP servers and clients with OpenTelemetry tracing. Uses W3C Trace Context propagation via the `_meta` field to enable distributed tracing across MCP boundaries.
+### Key Features
 
-## Features
+- **Backend-agnostic.** Built-in OTLP collector on port 4318 accepts data from any OTel-instrumented app.
+- **All three signals.** Traces, metrics, and logs — with cross-signal correlation.
+- **Agent-optimized.** 33 tools designed for progressive investigation: discover → diagnose → correlate → root cause.
+- **Zero infrastructure.** In-memory by default, persistent with `--persist`.
 
-- **Automatic instrumentation** - One function call to instrument all tools, resources, and prompts
-- **Distributed tracing** - W3C Trace Context propagation via `_meta` field
-- **Transport-agnostic** - Works with stdio, HTTP, SSE, or any MCP transport
-- **Node.js runtime** - Full support for Node.js applications with `autotel`
-- **Tree-shakeable** - Import only what you need (~7KB total, 2-5KB per module)
-- **Zero MCP modifications** - Uses Proxy pattern, no changes to MCP SDK required
+### Requirements
 
-## Installation
+- Node.js 20 or newer
+- An MCP client: Claude Code, Claude Desktop, VS Code, Cursor, Windsurf, Goose, or any other MCP client
 
-```bash
-npm install autotel-mcp @modelcontextprotocol/sdk autotel
-```
+## Getting started
 
-## Quick Start
+Install the autotel-mcp server with your client.
 
-### Server-Side Instrumentation
+**Standard config** works in most tools:
 
-```typescript
-import { Server } from '@modelcontextprotocol/sdk/server/index';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
-import { instrumentMcpServer } from 'autotel-mcp/server';
-import { init } from 'autotel';
-
-// Initialize OpenTelemetry
-init({
-  service: 'mcp-weather-server',
-  endpoint: 'http://localhost:4318',
-});
-
-const server = new Server({
-  name: 'weather',
-  version: '1.0.0',
-});
-
-// Instrument the server (automatic tracing for all tools/resources/prompts)
-const instrumented = instrumentMcpServer(server, {
-  captureArgs: true, // Log tool arguments
-  captureResults: false, // Don't log results (PII concerns)
-});
-
-// Register tools normally - they're automatically traced!
-instrumented.registerTool({
-  name: 'get_weather',
-  description: 'Get current weather for a location',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      location: { type: 'string' },
-    },
-    required: ['location'],
-  },
-  handler: async (args) => {
-    // This handler is automatically traced with parent context from _meta
-    const weather = await fetchWeather(args.location);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Temperature in ${args.location}: ${weather.temp}°F`,
-        },
-      ],
-    };
-  },
-});
-
-await server.connect(new StdioServerTransport());
-```
-
-### Client-Side Instrumentation
-
-```typescript
-import { Client } from '@modelcontextprotocol/sdk/client/index';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio';
-import { instrumentMcpClient } from 'autotel-mcp/client';
-import { init } from 'autotel';
-
-// Initialize OpenTelemetry
-init({
-  service: 'mcp-weather-client',
-  endpoint: 'http://localhost:4318',
-});
-
-const client = new Client({
-  name: 'weather-client',
-  version: '1.0.0',
-});
-
-// Instrument the client (automatic trace context injection)
-const instrumented = instrumentMcpClient(client, {
-  captureArgs: true,
-  captureResults: false,
-});
-
-await client.connect(new StdioClientTransport(/* ... */));
-
-// Tool calls automatically create spans and inject _meta with trace context
-const result = await instrumented.callTool('get_weather', {
-  location: 'New York',
-  // _meta field is automatically injected with traceparent/tracestate/baggage
-});
-```
-
-## API Reference
-
-### Server Instrumentation
-
-#### `instrumentMcpServer(server, config?)`
-
-Wraps an MCP server to automatically trace all registered tools, resources, and prompts.
-
-**Parameters:**
-
-- `server` - MCP Server instance
-- `config` - Optional instrumentation configuration
-
-**Returns:** Instrumented server (Proxy)
-
-**Configuration Options:**
-
-```typescript
-interface McpInstrumentationConfig {
-  captureArgs?: boolean; // Capture tool/resource arguments (default: true)
-  captureResults?: boolean; // Capture results - may contain PII (default: false)
-  captureErrors?: boolean; // Capture errors and exceptions (default: true)
-  customAttributes?: (context) => Attributes; // Custom span attributes
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp"]
+    }
+  }
 }
 ```
 
-**Span Attributes Set:**
+<details>
+<summary>Claude Code</summary>
 
-- `mcp.type` - Operation type ('tool', 'resource', 'prompt')
-- `mcp.tool.name` / `mcp.resource.name` / `mcp.prompt.name` - Name
-- `mcp.tool.args` - Arguments (if `captureArgs: true`)
-- `mcp.tool.result` - Result (if `captureResults: true`)
+Use the Claude Code CLI to add the server:
 
-### Client Instrumentation
-
-#### `instrumentMcpClient(client, config?)`
-
-Wraps an MCP client to automatically create spans and inject trace context for all requests.
-
-**Parameters:**
-
-- `client` - MCP Client instance
-- `config` - Optional instrumentation configuration
-
-**Returns:** Instrumented client (Proxy)
-
-**Span Attributes Set:**
-
-- `mcp.client.operation` - Operation type ('callTool', 'getResource', 'getPrompt')
-- `mcp.client.name` - Tool/resource/prompt name
-- `mcp.client.args` - Arguments (if `captureArgs: true`)
-- `mcp.client.result` - Result (if `captureResults: true`)
-
-### Context Utilities
-
-#### `extractOtelContextFromMeta(meta?)`
-
-Extract OpenTelemetry context from MCP `_meta` field.
-
-```typescript
-import { extractOtelContextFromMeta } from 'autotel-mcp/context';
-import { context } from '@opentelemetry/api';
-
-const handler = async (args, _meta) => {
-  const parentContext = extractOtelContextFromMeta(_meta);
-  return context.with(parentContext, async () => {
-    // Your traced code with parent context
-  });
-};
+```bash
+claude mcp add autotel npx autotel-mcp
 ```
 
-#### `injectOtelContextToMeta(ctx?)`
+</details>
 
-Inject OpenTelemetry context into MCP `_meta` field.
+<details>
+<summary>Claude Desktop</summary>
 
-```typescript
-import { injectOtelContextToMeta } from 'autotel-mcp/context';
+Follow the MCP install [guide](https://modelcontextprotocol.io/quickstart/user). Add to your config:
 
-const meta = injectOtelContextToMeta();
-// Returns: { traceparent, tracestate, baggage }
-
-await client.callTool('my_tool', { arg1: 'value', _meta: meta });
-```
-
-#### `activateTraceContext(meta?)`
-
-Extract and immediately activate trace context from `_meta` field.
-
-```typescript
-import { activateTraceContext } from 'autotel-mcp/context';
-import { context } from '@opentelemetry/api';
-
-const ctx = activateTraceContext(_meta);
-return context.with(ctx, () => {
-  // Traced code with parent context active
-});
-```
-
-## How It Works
-
-### W3C Trace Context Propagation
-
-MCP requests can include a `_meta` field for metadata. `autotel-mcp` uses this field to propagate W3C Trace Context headers across client-server boundaries:
-
-```
-┌─────────────┐                    ┌─────────────┐
-│ MCP Client  │                    │ MCP Server  │
-│             │                    │             │
-│  Span A     │──── callTool ────▶│  Span B     │
-│             │    { args,         │             │
-│             │      _meta: {      │ (parent: A) │
-│             │        traceparent │             │
-│             │        tracestate  │             │
-│             │        baggage }}  │             │
-└─────────────┘                    └─────────────┘
-
-Distributed Trace:
-  Span A (client) → Span B (server, child of A)
-```
-
-**Client Side:**
-
-1. Creates span for tool call
-2. Injects W3C trace context into `_meta` field
-3. Sends request with `_meta`
-
-**Server Side:**
-
-1. Receives request with `_meta` field
-2. Extracts parent trace context
-3. Creates child span with parent context
-4. Executes tool handler
-
-### Transport Agnostic
-
-Because context is in the JSON payload itself (not HTTP headers), this works with **any** MCP transport:
-
-- stdio (standard input/output)
-- HTTP/SSE (server-sent events)
-- WebSocket
-- Custom transports
-
-## Runtime Support
-
-```typescript
-import { instrumentMcpServer } from 'autotel-mcp/server';
-import { init } from 'autotel';
-
-init({ service: 'my-mcp-server', endpoint: 'http://localhost:4318' });
-const instrumented = instrumentMcpServer(server);
-```
-
-## Bundle Size
-
-- **Core context utilities**: ~2KB
-- **Server instrumentation**: ~3KB
-- **Client instrumentation**: ~2KB
-- **Total (all modules)**: ~7KB
-
-Tree-shakeable - import only what you need:
-
-```typescript
-// Import just server instrumentation (~5KB)
-import { instrumentMcpServer } from 'autotel-mcp/server';
-
-// Import just client instrumentation (~4KB)
-import { instrumentMcpClient } from 'autotel-mcp/client';
-
-// Import just context utilities (~2KB)
-import {
-  extractOtelContextFromMeta,
-  injectOtelContextToMeta,
-} from 'autotel-mcp/context';
-```
-
-## Custom Attributes
-
-Add custom span attributes based on your application logic:
-
-```typescript
-const instrumented = instrumentMcpServer(server, {
-  customAttributes: ({ type, name, args, result }) => {
-    const attrs: Attributes = {};
-
-    // Add tenant ID from arguments
-    if (args?.tenantId) {
-      attrs['tenant.id'] = args.tenantId;
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp"]
     }
+  }
+}
+```
 
-    // Add result metadata
-    if (result?.metadata) {
-      attrs['result.metadata'] = JSON.stringify(result.metadata);
+</details>
+
+<details>
+<summary>VS Code</summary>
+
+Follow the MCP install [guide](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_add-an-mcp-server), use the standard config above. Or use the CLI:
+
+```bash
+code --add-mcp '{"name":"autotel","command":"npx","args":["autotel-mcp"]}'
+```
+
+</details>
+
+<details>
+<summary>Cursor</summary>
+
+Go to `Cursor Settings` -> `MCP` -> `Add new MCP Server`. Use `command` type with the command `npx autotel-mcp`.
+
+</details>
+
+<details>
+<summary>Windsurf</summary>
+
+Follow Windsurf MCP [documentation](https://docs.windsurf.com/windsurf/cascade/mcp). Use the standard config above.
+
+</details>
+
+<details>
+<summary>Cline</summary>
+
+Add to your `cline_mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["autotel-mcp"],
+      "disabled": false
     }
+  }
+}
+```
 
-    // Add operation-specific attributes
-    if (type === 'tool' && name === 'search') {
-      attrs['search.query'] = args?.query;
-      attrs['search.results.count'] = result?.items?.length ?? 0;
+</details>
+
+<details>
+<summary>Codex</summary>
+
+```bash
+codex mcp add autotel npx "autotel-mcp"
+```
+
+Or add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.autotel]
+command = "npx"
+args = ["autotel-mcp"]
+```
+
+</details>
+
+<details>
+<summary>Copilot CLI</summary>
+
+```bash
+/mcp add
+```
+
+Or add to `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "type": "local",
+      "command": "npx",
+      "tools": ["*"],
+      "args": ["autotel-mcp"]
     }
-
-    return attrs;
-  },
-});
+  }
+}
 ```
 
-## Security Considerations
+</details>
 
-### PII in Arguments/Results
+<details>
+<summary>Gemini CLI</summary>
 
-By default, `captureResults` is disabled to prevent PII leakage:
+Follow the MCP install [guide](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md#configure-the-mcp-server-in-settingsjson), use the standard config above.
 
-```typescript
-const instrumented = instrumentMcpServer(server, {
-  captureArgs: true, // May contain PII
-  captureResults: false, // DISABLED by default - may contain sensitive data
-});
+</details>
+
+<details>
+<summary>Goose</summary>
+
+Go to `Advanced settings` -> `Extensions` -> `Add custom extension`. Use type `STDIO`, set command to `npx autotel-mcp`.
+
+</details>
+
+<details>
+<summary>Amp</summary>
+
+```bash
+amp mcp add autotel -- npx autotel-mcp
 ```
 
-For production:
+Or add to VS Code settings:
 
-- Review what data is in tool arguments
-- Disable `captureArgs` if arguments contain PII
-- Never enable `captureResults` in production unless you control the data
-
-### Custom PII Redaction
-
-Use `customAttributes` to redact PII:
-
-```typescript
-const instrumented = instrumentMcpServer(server, {
-  captureArgs: false, // Disable default arg capture
-  customAttributes: ({ args }) => {
-    // Manually redact PII before logging
-    return {
-      'tool.location': args?.location, // Safe to log
-      // Omit args.email, args.userId, etc.
-    };
-  },
-});
+```json
+"amp.mcpServers": {
+  "autotel": {
+    "command": "npx",
+    "args": ["autotel-mcp"]
+  }
+}
 ```
 
-## Examples
+</details>
 
-See the `apps/` directory for complete working examples:
+<details>
+<summary>Warp</summary>
 
-- `apps/example-mcp-server` - Instrumented MCP server with stdio transport
-- `apps/example-mcp-client` - Instrumented MCP client calling the server
+Go to `Settings` -> `AI` -> `Manage MCP Servers` -> `+ Add`. Use the standard config above.
 
-## Integration with Observability Backends
+</details>
 
-Works with any OTLP-compatible backend:
+### With Jaeger backend
 
-```typescript
-import { init } from 'autotel';
+To query an existing Jaeger instance instead of the built-in collector:
 
-// Honeycomb
-init({
-  service: 'mcp-server',
-  endpoint: 'https://api.honeycomb.io',
-  headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY },
-});
-
-// Datadog
-init({
-  service: 'mcp-server',
-  endpoint: 'https://http-intake.logs.datadoghq.com',
-  headers: { 'DD-API-KEY': process.env.DD_API_KEY },
-});
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp"],
+      "env": {
+        "AUTOTEL_BACKEND": "jaeger",
+        "JAEGER_BASE_URL": "http://localhost:16686"
+      }
+    }
+  }
+}
 ```
+
+### With persistent storage
+
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp", "--persist", "./autotel.db"]
+    }
+  }
+}
+```
+
+## How it works
+
+```
+Your App ──OTLP──> autotel-mcp (port 4318) ──libsql──> in-memory store
+                        │
+AI Agent ──MCP──────────┘
+                   (stdio or HTTP)
+```
+
+1. Your instrumented app sends traces/metrics/logs via OTLP to `http://localhost:4318`
+2. autotel-mcp stores the data in libsql (in-memory by default)
+3. Your AI agent connects via MCP and investigates using 33 tools
+
+## Backends
+
+### Collector (default)
+
+Built-in OTLP collector with libsql storage. Accepts all three signals on port 4318. No external dependencies.
+
+```bash
+# In-memory (default) — data lost on restart
+npx autotel-mcp
+
+# Persistent storage — survives restarts
+npx autotel-mcp --persist ./autotel.db
+```
+
+Point your app's OTLP exporter at the collector:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node your-app.js
+```
+
+### Jaeger
+
+Query an existing Jaeger instance. Traces only (metrics and logs unsupported by Jaeger API).
+
+```bash
+AUTOTEL_BACKEND=jaeger JAEGER_BASE_URL=http://localhost:16686 npx autotel-mcp
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUTOTEL_BACKEND` | `collector` | Backend: `collector`, `jaeger` |
+| `AUTOTEL_TRANSPORT` | `stdio` | MCP transport: `stdio`, `http` |
+| `AUTOTEL_PORT` | `3000` | MCP HTTP port |
+| `AUTOTEL_HOST` | `127.0.0.1` | MCP HTTP bind address |
+| `AUTOTEL_COLLECTOR_PORT` | `4318` | OTLP receiver port |
+| `AUTOTEL_PERSIST` | — | libsql file path (omit for in-memory) |
+| `AUTOTEL_RETENTION_MS` | `3600000` (1h mem) / `86400000` (24h persist) | Data retention |
+| `AUTOTEL_MAX_TRACES` | `10000` | Max traces before eviction |
+| `JAEGER_BASE_URL` | `http://localhost:16686` | Jaeger API URL |
+
+### HTTP mode
+
+Run as a standalone HTTP server (for remote clients or environments without stdio):
+
+```bash
+npx autotel-mcp --transport http --port 3000
+```
+
+Then configure your MCP client with:
+
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+## Tools
+
+33 tools organized by investigation workflow.
+
+<details>
+<summary><b>Discovery (5)</b></summary>
+
+- **list_services** — Services with span counts and error rates
+- **list_operations** — Operations for a service, ranked by traffic
+- **backend_health** — Backend reachability and ingestion status
+- **backend_capabilities** — Signal support and query features
+- **list_capabilities** — Full server manifest
+
+</details>
+
+<details>
+<summary><b>Trace Investigation (4)</b></summary>
+
+- **search_traces** — Find traces by service, operation, status, duration, tags, time window
+- **search_spans** — Span-level search across traces
+- **get_trace** — Full trace detail by ID
+- **summarize_trace** — Compact summary: span tree, errors, critical path, duration breakdown
+
+</details>
+
+<details>
+<summary><b>Diagnosis (4)</b></summary>
+
+- **find_anomalies** — Scan for statistical outliers: latency spikes, error rate jumps
+- **find_root_cause** — Walk a trace span tree to identify the bottleneck span
+- **find_errors** — Aggregate error spans grouped by service and operation
+- **check_slos** — Report SLO violations given p99 latency and error rate targets
+
+</details>
+
+<details>
+<summary><b>Topology (2)</b></summary>
+
+- **service_map** — Dependency graph with call counts, error rates, latency percentiles
+- **list_services** / **list_operations** — Service and operation discovery
+
+</details>
+
+<details>
+<summary><b>LLM Analytics (6)</b></summary>
+
+- **get_llm_usage** — Token usage by model and service
+- **list_llm_models** — Models in use with request counts
+- **get_llm_model_stats** — Latency/token/error percentiles per model
+- **get_llm_expensive_traces** — Top traces by token count
+- **get_llm_slow_traces** — Slowest LLM traces
+- **list_llm_tools** — Tool/function call usage by name
+
+</details>
+
+<details>
+<summary><b>Signals (3)</b></summary>
+
+- **list_metrics** — Available metric series
+- **get_metric_series** — Time-series data for a metric
+- **search_logs** — Log search by severity, service, trace ID, text
+
+</details>
+
+<details>
+<summary><b>Cross-Signal Correlation (2)</b></summary>
+
+- **correlate** — Given a trace ID: return trace + metrics from involved services + correlated logs
+- **explain_slowdown** — Combines anomaly detection with cross-signal correlation
+
+</details>
+
+<details>
+<summary><b>Collector Config (3)</b></summary>
+
+- **validate_collector_config** — Validate OTLP receiver config fragment
+- **explain_collector_config** — Explain config shape and defaults
+- **suggest_collector_config** — Generate minimal config
+
+</details>
+
+<details>
+<summary><b>Instrumentation Quality (2)</b></summary>
+
+- **score_span_instrumentation** — Quality score 0-100 with A-F grade
+- **explain_instrumentation_score** — Scoring rubric details
+
+</details>
+
+## Resources
+
+MCP resources give agents context without burning tool calls:
+
+| URI | Content |
+|---|---|
+| `otel://capabilities` | Server manifest: transports, tool groups, signals |
+| `otel://tool-catalog` | All tools with descriptions and workflow hints |
+| `otel://backend/capabilities` | Active backend's signal support |
+| `otel://collector/config` | OTLP receiver config guidance |
+| `otel://instrumentation/scoring` | Scoring rubric explanation |
 
 ## License
 
 MIT
-
-## Contributing
-
-Issues and PRs welcome at [github.com/jagreehal/autotel](https://github.com/jagreehal/autotel)

@@ -1,6 +1,6 @@
 # MCP Weather Server Example
 
-Example MCP server with automatic OpenTelemetry instrumentation using `autotel-mcp`.
+Example MCP server with automatic OpenTelemetry instrumentation using `autotel-mcp-instrumentation`.
 
 ## Features
 

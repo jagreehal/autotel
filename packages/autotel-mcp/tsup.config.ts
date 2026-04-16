@@ -5,10 +5,6 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     server: 'src/server.ts',
-    client: 'src/client.ts',
-    context: 'src/context.ts',
-    metrics: 'src/metrics.ts',
-    'semantic-conventions': 'src/semantic-conventions.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
@@ -19,8 +15,8 @@ export default defineConfig({
   minify: false,
   external: [
     '@opentelemetry/api',
-    '@modelcontextprotocol/sdk',
-    'autotel',
-    'autotel-edge',
+    '@opentelemetry/otlp-transformer',
+    '@opentelemetry/semantic-conventions',
+    '@libsql/client',
   ],
 });
