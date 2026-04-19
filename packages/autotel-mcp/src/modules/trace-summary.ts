@@ -1,4 +1,4 @@
-import type { TraceRecord } from '../types.js';
+import type { TraceRecord } from '../types';
 
 export interface TraceSummary {
   traceId: string;

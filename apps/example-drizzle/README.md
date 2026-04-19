@@ -2,6 +2,35 @@
 
 Autotel provides a simplified approach to setting up OpenTelemetry tracing for Drizzle ORM. This page shows you how to use autotel to reduce OpenTelemetry setup code while maintaining full control over instrumentation.
 
+## Run the slow-query demo
+
+This app ships a long-running driver loop that interleaves fast Drizzle CRUD with a **genuinely slow** recursive-CTE query (~200–700 ms against SQLite). The mix is shaped so `autotel-mcp` anomaly and duration tools have something real to investigate.
+
+```bash
+pnpm db:push            # once, to create the schema
+pnpm start              # runs until Ctrl-C
+```
+
+Point an observability backend at `http://localhost:4318` (the default OTLP endpoint — override with `OTLP_ENDPOINT`). Any OTLP receiver works: Jaeger, Tempo, or `autotel-mcp`'s built-in collector.
+
+Once traces are flowing, investigate through `autotel-mcp`:
+
+```text
+find_anomalies service=drizzle-example
+# → latency_spike: baseline ~0.7 ms, peak >600 ms, severity=high
+
+search_spans serviceName=drizzle-example minDurationMs=200
+# → returns the drizzle.with spans with full SQL in db.statement
+
+find_root_cause traceId=<one of the anomaly trace IDs>
+# → points to the slow CTE span
+```
+
+The slow path is in `src/index.ts` as `slowSearch` — a real `WITH RECURSIVE` CTE that SQLite executes, so span duration and `db.statement` reflect actual work, not `setTimeout` fakery.
+
+---
+
+
 > **Note**: Autotel is a third-party package that wraps the standard OpenTelemetry SDK. It simplifies the setup process and produces the same trace output as manual OpenTelemetry setup.
 
 ## About autotel

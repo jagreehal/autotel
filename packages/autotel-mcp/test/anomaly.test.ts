@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { detectAnomalies } from '../src/modules/anomaly.js';
-import type { TraceRecord, SpanRecord } from '../src/types.js';
+import { detectAnomalies } from '../src/modules/anomaly';
+import type { TraceRecord, SpanRecord } from '../src/types';
 
 function makeSpan(overrides: Partial<SpanRecord>): SpanRecord {
   return {

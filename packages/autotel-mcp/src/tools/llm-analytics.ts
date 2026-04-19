@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { TelemetryBackend } from '../backends/telemetry.js';
-import type { TraceRecord } from '../types.js';
+import type { TelemetryBackend } from '../backends/telemetry';
+import type { TraceRecord } from '../types';
 import {
   collectUsage,
   listModels,
@@ -9,8 +9,8 @@ import {
   rankExpensiveTraces,
   rankSlowTraces,
   listToolUsage,
-} from '../modules/llm-analytics.js';
-import { respondJSON, toTraceSearchQuery } from './shared.js';
+} from '../modules/llm-analytics';
+import { respondJSON, toTraceSearchQuery } from './shared';
 
 type AnalyticsInput = {
   startTime?: string;
@@ -73,7 +73,7 @@ export function registerLlmAnalyticsTools(
         genAiSystem: z.string().min(1).optional(),
         genAiRequestModel: z.string().min(1).optional(),
         genAiResponseModel: z.string().min(1).optional(),
-        limit: z.number().int().positive().max(1000).optional(),
+        limit: z.coerce.number().int().positive().max(1000).optional(),
       }),
     },
     async (input: {
@@ -103,6 +103,8 @@ export function registerLlmAnalyticsTools(
           totalPromptTokens: report.totalPromptTokens,
           totalCompletionTokens: report.totalCompletionTokens,
           totalTokens: report.totalTokens,
+          totalCostUsd: report.totalCostUsd,
+          unpricedRequests: report.unpricedRequests,
         },
         byModel: report.byModel,
         byService: report.byService,
@@ -119,7 +121,7 @@ export function registerLlmAnalyticsTools(
         endTime: z.string().optional(),
         serviceName: z.string().min(1).optional(),
         genAiSystem: z.string().min(1).optional(),
-        limit: z.number().int().positive().max(1000).optional(),
+        limit: z.coerce.number().int().positive().max(1000).optional(),
       }),
     },
     async (input: {
@@ -174,8 +176,8 @@ export function registerLlmAnalyticsTools(
         serviceName: z.string().min(1).optional(),
         genAiRequestModel: z.string().min(1).optional(),
         genAiResponseModel: z.string().min(1).optional(),
-        minTokens: z.number().int().nonnegative().optional(),
-        limit: z.number().int().positive().max(100).optional(),
+        minTokens: z.coerce.number().int().nonnegative().optional(),
+        limit: z.coerce.number().int().positive().max(100).optional(),
       }),
     },
     async (input: {
@@ -209,8 +211,8 @@ export function registerLlmAnalyticsTools(
         serviceName: z.string().min(1).optional(),
         genAiRequestModel: z.string().min(1).optional(),
         genAiResponseModel: z.string().min(1).optional(),
-        minDurationMs: z.number().int().nonnegative().optional(),
-        limit: z.number().int().positive().max(100).optional(),
+        minDurationMs: z.coerce.number().int().nonnegative().optional(),
+        limit: z.coerce.number().int().positive().max(100).optional(),
       }),
     },
     async (input: {
@@ -243,7 +245,7 @@ export function registerLlmAnalyticsTools(
         endTime: z.string().optional(),
         serviceName: z.string().min(1).optional(),
         genAiSystem: z.string().min(1).optional(),
-        limit: z.number().int().positive().max(1000).optional(),
+        limit: z.coerce.number().int().positive().max(1000).optional(),
       }),
     },
     async (input: {

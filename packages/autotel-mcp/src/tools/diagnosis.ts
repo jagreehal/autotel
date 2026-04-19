@@ -1,9 +1,34 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { TelemetryBackend } from '../backends/telemetry.js';
-import { detectAnomalies } from '../modules/anomaly.js';
-import { findRootCause } from '../modules/correlator.js';
-import { respondJSON } from './shared.js';
+import type { TelemetryBackend } from '../backends/telemetry';
+import { detectAnomalies } from '../modules/anomaly';
+import { findRootCause } from '../modules/correlator';
+import { respondJSON } from './shared';
+
+/**
+ * Extract the most informative error message from span tags. OTel
+ * semantic conventions prefer `exception.message`, but real-world spans
+ * carry errors under `error.message`, `otel.status_description`, or
+ * domain-specific keys like `validation.error`. Exported so tests can
+ * pin the precedence without spinning up an MCP server.
+ */
+export function pickErrorMessage(
+  tags: Record<string, string | number | boolean>,
+): string | undefined {
+  const ordered = [
+    'exception.message',
+    'error.message',
+    'validation.error',
+    'otel.status_description',
+    'error.description',
+    'rpc.grpc.status_message',
+  ];
+  for (const key of ordered) {
+    const value = tags[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
+}
 
 export function registerDiagnosisTools(
   server: McpServer,
@@ -17,7 +42,7 @@ export function registerDiagnosisTools(
       inputSchema: z.object({
         service: z.string().min(1).optional(),
         operation: z.string().min(1).optional(),
-        lookbackMinutes: z
+        lookbackMinutes: z.coerce
           .number()
           .int()
           .positive()
@@ -72,13 +97,13 @@ export function registerDiagnosisTools(
         'Aggregate error spans grouped by service and operation. Use to get an overview of what is failing.',
       inputSchema: z.object({
         service: z.string().min(1).optional(),
-        lookbackMinutes: z
+        lookbackMinutes: z.coerce
           .number()
           .int()
           .positive()
           .max(24 * 60)
           .default(60),
-        limit: z.number().int().positive().max(100).default(20),
+        limit: z.coerce.number().int().positive().max(100).default(20),
       }),
     },
     async ({
@@ -129,14 +154,13 @@ export function registerDiagnosisTools(
           const group = groups.get(key)!;
           group.count++;
 
-          const msg =
-            span.tags['error.message'] ?? span.tags['exception.message'];
-          if (
-            msg &&
-            typeof msg === 'string' &&
-            !group.errorMessages.includes(msg)
-          ) {
-            group.errorMessages.push(msg);
+          // Pull the most informative error message we can find. OTel
+          // semantic conventions prefer `exception.message`, but real-world
+          // spans also use `error.message`, `otel.status_description`, and
+          // domain-specific keys like `validation.error`.
+          const msgCandidate = pickErrorMessage(span.tags);
+          if (msgCandidate && !group.errorMessages.includes(msgCandidate)) {
+            group.errorMessages.push(msgCandidate);
           }
           if (!group.traceIds.includes(trace.traceId)) {
             group.traceIds.push(trace.traceId);
@@ -159,9 +183,9 @@ export function registerDiagnosisTools(
         'Report SLO violations. Provide p99 latency and error rate targets.',
       inputSchema: z.object({
         service: z.string().min(1),
-        p99LatencyMs: z.number().positive().optional(),
-        maxErrorRate: z.number().min(0).max(1).optional(),
-        lookbackMinutes: z
+        p99LatencyMs: z.coerce.number().positive().optional(),
+        maxErrorRate: z.coerce.number().min(0).max(1).optional(),
+        lookbackMinutes: z.coerce
           .number()
           .int()
           .positive()

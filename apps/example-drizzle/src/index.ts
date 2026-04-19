@@ -1,18 +1,21 @@
 /**
- * Drizzle ORM + Autotel Example
+ * Drizzle ORM + Autotel — slow-query demo
  *
- * This example demonstrates how to use autotel with Drizzle ORM.
+ * Long-running driver that interleaves fast Drizzle CRUD with an
+ * occasional **genuinely-slow** SQL query (a recursive CTE that SQLite
+ * actually executes — no setTimeout fakery). Shapes the trace stream so
+ * autotel-mcp's anomaly + span-duration tools have something real to
+ * investigate.
  *
- * Key features:
- * - Automatic OpenTelemetry tracing for Drizzle operations
- * - Minimal setup (just 3 lines!)
- * - Functional API with trace() wrapper
- * - Works with SQLite, PostgreSQL, MySQL, and more
+ * Run it:
+ *   pnpm db:push          # once, to create tables
+ *   pnpm start            # runs until Ctrl-C
  *
- * Setup:
- * 1. pnpm install
- * 2. pnpm db:push
- * 3. pnpm start
+ * Point autotel-mcp at the same OTLP receiver (Jaeger, Tempo, or
+ * autotel-mcp's built-in collector on :4318) and try:
+ *   find_anomalies service=drizzle-example
+ *   search_spans serviceName=drizzle-example minDurationMs=300
+ *   find_errors service=drizzle-example        (validation mistakes also surface)
  */
 
 import 'dotenv/config';
@@ -20,241 +23,184 @@ import { init, trace, type TraceContext } from 'autotel';
 import { instrumentDrizzleClient } from 'autotel-drizzle';
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as schema from './schema';
 
-// Initialize autotel
 init({
   service: 'drizzle-example',
   endpoint: process.env.OTLP_ENDPOINT || 'http://localhost:4318',
 });
 
-// Create LibSQL client for SQLite
 const client = createClient({
-  url: 'file:./drizzle/dev.db',
+  url: process.env.DATABASE_URL || 'file:./drizzle/dev.db',
 });
 
-// Create Drizzle instance and instrument it (this is all you need!)
-const db = instrumentDrizzleClient(
-  drizzle({ client, schema }),
-  { dbSystem: 'sqlite' }
-);
+const db = instrumentDrizzleClient(drizzle({ client, schema }), {
+  dbSystem: 'sqlite',
+});
 
 const { users, posts } = schema;
 
-// Example: Create a user with autotel tracing
-export const createUser = trace(ctx => async (email: string, name?: string) => {
-  console.log(`Creating user: ${email}`);
+// ---- Traced operations ---------------------------------------------------
 
-  // Set custom attributes for better observability
-  ctx.setAttribute('user.email', email);
-  if (name) {
-    ctx.setAttribute('user.name', name);
-  }
+export const createUser = trace(
+  'createUser',
+  (ctx) => async (email: string, name?: string) => {
+    ctx.setAttribute('user.email', email);
+    if (name) ctx.setAttribute('user.name', name);
+    const [user] = await db.insert(users).values({ email, name }).returning();
+    return user!;
+  },
+);
 
-  const [user] = await db
-    .insert(users)
-    .values({ email, name })
-    .returning();
+export const createPost = trace(
+  'createPost',
+  (ctx) => async (userId: number, title: string, content?: string) => {
+    ctx.setAttribute('post.userId', userId);
+    ctx.setAttribute('post.title', title);
+    const [post] = await db
+      .insert(posts)
+      .values({ title, content, authorId: userId })
+      .returning();
+    return post!;
+  },
+);
 
-  console.log(`✅ User created with ID: ${user.id}`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
+export const getUserWithPosts = trace(
+  'getUserWithPosts',
+  (ctx) => async (userId: number) => {
+    ctx.setAttribute('user.id', userId);
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      with: { posts: true },
+    });
+    if (user) ctx.setAttribute('user.postCount', user.posts.length);
+    return user;
+  },
+);
 
-  return user;
-});
+export const publishPost = trace(
+  'publishPost',
+  (ctx) => async (postId: number) => {
+    ctx.setAttribute('post.id', postId);
+    const [post] = await db
+      .update(posts)
+      .set({ published: true })
+      .where(eq(posts.id, postId))
+      .returning();
+    return post;
+  },
+);
 
-// Example: Create a post for a user
-export const createPost = trace(ctx => async (
-  userId: number,
-  title: string,
-  content?: string
-) => {
-  console.log(`Creating post for user ${userId}: ${title}`);
+/**
+ * Deliberately slow read. Runs a recursive CTE that SQLite *actually*
+ * executes — the span's duration and `db.statement` both reflect real
+ * work, so latency-based MCP tools can pick it up.
+ */
+export const slowSearch = trace(
+  'slowSearch',
+  (ctx: TraceContext) => async (iterations: number) => {
+    ctx.setAttribute('db.query.iterations', iterations);
+    ctx.setAttribute('workload', 'slow-cte');
+    // Recursive CTE: count from 1 to N. Scales linearly; tune `iterations`
+    // at the call site for the desired latency.
+    const rows = await db.all(sql`
+      WITH RECURSIVE c(n) AS (
+        SELECT 1
+        UNION ALL
+        SELECT n + 1 FROM c WHERE n < ${iterations}
+      )
+      SELECT count(*) as total FROM c
+    `);
+    return rows;
+  },
+);
 
-  ctx.setAttribute('post.userId', userId);
-  ctx.setAttribute('post.title', title);
+// ---- Driver loop ---------------------------------------------------------
 
-  const [post] = await db
-    .insert(posts)
-    .values({
-      title,
-      content,
-      authorId: userId,
-    })
-    .returning();
-
-  console.log(`✅ Post created with ID: ${post.id}`);
-
-  return post;
-});
-
-// Example: Get user with posts (demonstrates nested queries)
-export const getUserWithPosts = trace(ctx => async (userId: number) => {
-  console.log(`Fetching user ${userId} with posts`);
-
-  ctx.setAttribute('user.id', userId);
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    with: {
-      posts: true,
-    },
+async function ensureSeeded(): Promise<number> {
+  const existing = await db.query.users.findFirst({
+    where: eq(users.email, 'demo@example.com'),
   });
+  if (existing) return existing.id;
+  const user = await createUser('demo@example.com', 'Demo User');
+  await createPost(user.id, 'Seed post 1', 'Welcome to the demo.');
+  await createPost(user.id, 'Seed post 2', 'Another post.');
+  return user.id;
+}
 
-  if (user) {
-    ctx.setAttribute('user.postCount', user.posts.length);
-    console.log(`✅ Found user with ${user.posts.length} posts`);
-  } else {
-    console.log(`❌ User not found`);
-  }
+const delay = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-  return user;
-});
+function pickFastOp(userId: number): () => Promise<unknown> {
+  const ops: Array<() => Promise<unknown>> = [
+    () => getUserWithPosts(userId),
+    () =>
+      createPost(
+        userId,
+        `Post ${Date.now()}`,
+        'Generated by the driver loop.',
+      ),
+    () => publishPost(Math.max(1, Math.floor(Math.random() * 10))),
+  ];
+  return ops[Math.floor(Math.random() * ops.length)]!;
+}
 
-// Example: Update post status
-export const publishPost = trace(ctx => async (postId: number) => {
-  console.log(`Publishing post ${postId}`);
-
-  ctx.setAttribute('post.id', postId);
-
-  const [post] = await db
-    .update(posts)
-    .set({ published: true })
-    .where(eq(posts.id, postId))
-    .returning();
-
-  console.log(`✅ Post published`);
-
-  return post;
-});
-
-// Example: Complex operation with multiple database calls
-export const createUserWithPosts = trace((ctx: TraceContext) => async (
-  email: string,
-  name: string,
-  postTitles: string[]
-) => {
-  console.log(`Creating user ${email} with ${postTitles.length} posts`);
-
-  ctx.setAttribute('user.email', email);
-  ctx.setAttribute('user.postCount', postTitles.length);
-
-  // Create user (traced automatically as child span)
-  const user = await createUser(email, name);
-
-  // Create posts (each traced automatically as child span)
-  const createdPosts = await Promise.all(
-    postTitles.map(title => createPost(user.id, title))
+async function driverLoop(): Promise<void> {
+  const userId = await ensureSeeded();
+  console.log(
+    `🔁 Driver loop running against ${process.env.OTLP_ENDPOINT || 'http://localhost:4318'}. Ctrl-C to stop.`,
   );
 
-  console.log(`✅ Created user with ${createdPosts.length} posts`);
+  // Slow every Nth op; N=6 gives ~17% slow in the mix, enough for the
+  // anomaly detector to treat them as outliers against fast baseline.
+  const SLOW_EVERY = 6;
+  let iteration = 0;
 
-  return { user, posts: createdPosts };
-});
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    iteration++;
+    const isSlow = iteration % SLOW_EVERY === 0;
 
-// Example: Transaction with multiple operations
-export const createUserAndPostInTransaction = trace(ctx => async (
-  email: string,
-  name: string,
-  postTitle: string
-) => {
-  console.log(`Creating user and post in transaction: ${email}`);
+    try {
+      const start = Date.now();
+      if (isSlow) {
+        // Vary the slow-query cost so anomaly evidence is interesting.
+        // SQLite recursion at this scale lands around 300-700ms on typical
+        // dev hardware — dramatic enough for the demo without being tedious.
+        const iters = 1_500_000 + Math.floor(Math.random() * 2_500_000);
+        await slowSearch(iters);
+        console.log(
+          `🐢 [${iteration}] slowSearch(${iters}) took ${Date.now() - start}ms`,
+        );
+      } else {
+        await pickFastOp(userId)();
+        console.log(`⚡ [${iteration}] fast op took ${Date.now() - start}ms`);
+      }
+    } catch (err) {
+      console.error(`💥 [${iteration}] op failed:`, err);
+    }
 
-  ctx.setAttribute('user.email', email);
-  ctx.setAttribute('post.title', postTitle);
-
-  const result = await db.transaction(async (tx) => {
-    // Create user in transaction
-    const [user] = await tx
-      .insert(users)
-      .values({ email, name })
-      .returning();
-
-    // Create post for that user in same transaction
-    const [post] = await tx
-      .insert(posts)
-      .values({
-        title: postTitle,
-        authorId: user.id,
-      })
-      .returning();
-
-    return { user, post };
-  });
-
-  console.log(`✅ Transaction completed - User ${result.user.id}, Post ${result.post.id}`);
-
-  return result;
-});
-
-// Main function
-async function main() {
-  console.log('🚀 Starting Drizzle + Autotel example...\n');
-
-  try {
-    // Example 1: Create a single user
-    console.log('📝 Example 1: Creating a user');
-    const user = await createUser('alice@example.com', 'Alice');
-    console.log('');
-
-    // Example 2: Create a post
-    console.log('📄 Example 2: Creating a post');
-    const post = await createPost(user.id, 'My First Post', 'Hello, World!');
-    console.log('');
-
-    // Example 3: Publish the post
-    console.log('🚀 Example 3: Publishing the post');
-    await publishPost(post.id);
-    console.log('');
-
-    // Example 4: Get user with posts
-    console.log('👤 Example 4: Fetching user with posts');
-    const userWithPosts = await getUserWithPosts(user.id);
-    console.log('User:', userWithPosts);
-    console.log('');
-
-    // Example 5: Complex operation - create user with multiple posts
-    console.log('🎯 Example 5: Creating user with multiple posts (nested traces)');
-    const result = await createUserWithPosts(
-      'bob@example.com',
-      'Bob',
-      ['First Post', 'Second Post', 'Third Post']
-    );
-    console.log('Result:', {
-      userId: result.user.id,
-      postCount: result.posts.length,
-    });
-    console.log('');
-
-    // Example 6: Transaction
-    console.log('💾 Example 6: Creating user and post in a transaction');
-    const txResult = await createUserAndPostInTransaction(
-      'charlie@example.com',
-      'Charlie',
-      'Transaction Test Post'
-    );
-    console.log('Transaction result:', {
-      userId: txResult.user.id,
-      postId: txResult.post.id,
-    });
-    console.log('');
-
-    // Wait for traces to be exported
-    console.log('⏳ Waiting 2 seconds for traces to be exported...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    console.log('✅ Examples completed!');
-    console.log('📊 Check your observability backend to see the traces.');
-    console.log('\n💡 Tip: Each Drizzle operation is automatically traced with SQL query details.');
-
-  } catch (error) {
-    console.error('❌ Error:', error);
-  } finally {
-    await client.close();
+    await delay(100 + Math.random() * 250);
   }
+}
 
+async function shutdown(): Promise<void> {
+  console.log('\n⏳ Flushing traces…');
+  // Give the BatchSpanProcessor time to export the tail.
+  await delay(2000);
+  try {
+    client.close();
+  } catch {
+    /* already closed */
+  }
   process.exit(0);
 }
 
-// Run if executed directly
-main().catch(console.error);
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
+driverLoop().catch((err) => {
+  console.error('fatal:', err);
+  process.exit(1);
+});

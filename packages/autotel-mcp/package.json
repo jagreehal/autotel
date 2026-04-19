@@ -54,11 +54,13 @@
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "dependencies": {
+    "ajv": "^8.17.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/otlp-transformer": "^0.214.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@libsql/client": "^0.15.0",
+    "yaml": "^2.8.1",
     "zod": "^3.25.48"
   },
   "devDependencies": {

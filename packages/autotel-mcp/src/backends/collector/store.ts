@@ -1,5 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
-import { SCHEMA_SQL } from './schema.js';
+import { SCHEMA_SQL } from './schema';
 import type {
   SpanRecord,
   TraceRecord,
@@ -16,11 +16,11 @@ import type {
   TraceSearchResult,
   SpanSearchQuery,
   SpanSearchResult,
-} from '../../types.js';
+} from '../../types';
 import {
   traceMatchesQuery,
   spanMatchesQuery,
-} from '../../modules/query-filters.js';
+} from '../../modules/query-filters';
 
 export interface CollectorStoreOptions {
   maxTraces: number;
