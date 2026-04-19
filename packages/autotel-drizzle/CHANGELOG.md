@@ -1,5 +1,12 @@
 # autotel-drizzle
 
+## 0.0.6
+
+### Patch Changes
+
+- Updated dependencies [dc471ef]
+  - autotel@2.26.1
+
 ## 0.0.5
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @jagreehal/example-bun-fullstack
 
+## 1.0.15
+
+### Patch Changes
+
+- Updated dependencies [dc471ef]
+  - autotel@2.26.1
+
 ## 1.0.14
 
 ### Patch Changes
