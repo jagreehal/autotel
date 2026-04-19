@@ -14,6 +14,7 @@ import {
 import { probeAll, type ProbeResult } from './backends/autodetect';
 import { registerTools } from './tools/index';
 import { probeSignalAvailability } from './modules/signal-availability';
+import { VERSION } from './version';
 
 export interface App {
   config: AppConfig;
@@ -76,7 +77,7 @@ export async function createApp(): Promise<App> {
 
   const server = new McpServer({
     name: 'autotel-mcp',
-    version: '0.1.1',
+    version: VERSION,
   });
 
   let toolsRegistered = false;

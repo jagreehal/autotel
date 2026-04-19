@@ -7,6 +7,7 @@ import {
   type ServerResponse,
 } from 'node:http';
 import { createApp, type App } from './app';
+import { VERSION } from './version';
 
 async function main() {
   const app = await createApp();
@@ -91,7 +92,7 @@ async function handleHealth(app: App, res: ServerResponse): Promise<void> {
     transport: app.config.transport,
     signals: capabilities,
     detail: health.message ?? null,
-    version: '0.1.1',
+    version: VERSION,
   };
   res.writeHead(health.healthy ? 200 : 503, {
     'Content-Type': 'application/json',
