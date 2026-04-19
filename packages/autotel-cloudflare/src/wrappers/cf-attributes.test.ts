@@ -272,4 +272,63 @@ describe('CF Attributes extraction via instrument()', () => {
     expect(attrs['cloudflare.asn']).toBe(0);
     expect(attrs['cloudflare.client_tcp_rtt']).toBe(0);
   });
+
+  it('should skip fetch instrumentation when route does not match include patterns', async () => {
+    const handler = {
+      async fetch(_request: Request) {
+        return new Response('OK', { status: 200 });
+      },
+    };
+
+    const instrumented = instrument(handler, {
+      service: { name: 'test-worker' },
+      handlers: {
+        fetch: {
+          include: ['/api/**'],
+          exclude: ['/api/internal/**'],
+        },
+      },
+    });
+
+    const request = new Request('http://example.com/health');
+    const env = {} as any;
+    const ctx = createMockCtx();
+
+    const response = await instrumented.fetch!(request, env, ctx);
+
+    expect(response.status).toBe(200);
+    expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
+    expect(capturedSpanOptions).toBeNull();
+  });
+
+  it('should apply per-route service mapping to fetch span attributes', async () => {
+    const handler = {
+      async fetch(_request: Request) {
+        return new Response('OK', { status: 200 });
+      },
+    };
+
+    const instrumented = instrument(handler, {
+      service: { name: 'default-worker' },
+      handlers: {
+        fetch: {
+          routes: {
+            '/api/auth/**': { service: 'auth-service' },
+            '/api/**': { service: 'api-service' },
+          },
+        },
+      },
+    });
+
+    const request = new Request('http://example.com/api/auth/login');
+    const env = {} as any;
+    const ctx = createMockCtx();
+
+    await instrumented.fetch!(request, env, ctx);
+
+    expect(capturedSpanOptions).toBeDefined();
+    const attrs = capturedSpanOptions.attributes;
+    expect(attrs['service.name']).toBe('auth-service');
+    expect(attrs['autotel.route.service']).toBe('auth-service');
+  });
 });

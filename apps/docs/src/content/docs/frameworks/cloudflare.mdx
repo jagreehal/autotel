@@ -35,6 +35,29 @@ export default wrapModule(
 );
 ```
 
+## Execution Logger
+
+Pre-populated request logger for Cloudflare Workers:
+
+```typescript
+import { createWorkersLogger, trace } from 'autotel-cloudflare';
+
+export default trace(async (request, env, ctx) => {
+  const log = createWorkersLogger(request, {
+    headers: ['authorization'], // Include specific headers
+    requestId: 'custom-id',     // Or use CF-Ray
+  }, ctx);
+
+  log.set({ feature: 'checkout' });
+  // Already has: request.method, request.path, cf-ray, traceparent, cf context
+
+  log.info('Processing order', { orderId: '123' });
+  log.emitNow();
+
+  return Response.json({ ok: true });
+});
+```
+
 ## API Styles
 
 ### wrapModule (Recommended)

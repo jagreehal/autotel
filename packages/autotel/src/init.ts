@@ -60,6 +60,7 @@ import {
 } from './span-name-normalizer';
 import {
   AttributeRedactingProcessor,
+  normalizeAttributeRedactorConfig,
   type AttributeRedactorConfig,
   type AttributeRedactorPreset,
 } from './attribute-redacting-processor';
@@ -1142,10 +1143,28 @@ export interface AutotelConfig {
      */
     pretty?: boolean;
   };
+
+  /**
+   * Suppress console output while keeping OTel exporters running.
+   * Useful for platforms like GCP Cloud Run / AWS Lambda where stdout
+   * is managed externally by the platform's log collector.
+   *
+   * @default false
+   */
+  silent?: boolean;
+
+  /**
+   * Minimum log level for internal autotel diagnostic messages.
+   * Messages below this level are dropped before processing.
+   *
+   * @default 'info'
+   */
+  minLevel?: 'debug' | 'info' | 'warn' | 'error';
 }
 
 // Internal state
 let initialized = false;
+let locked = false;
 let config: AutotelConfig | null = null;
 let sdk: NodeSDK | null = null;
 let warnedOnce = false;
@@ -1155,6 +1174,85 @@ let eventsConfig: EventsConfig | null = null;
 let _stringRedactor: StringRedactor | null = null;
 let _optionalRequire: typeof safeRequire = safeRequire;
 let _devtoolsClose: (() => Promise<void> | void) | null = null;
+
+const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
+type LogLevelKey = keyof typeof LOG_LEVELS;
+
+/**
+ * Lock the logger to prevent further `init()` calls.
+ * Use this when framework plugins set up instrumentation and you want
+ * to prevent accidental re-initialization from user code.
+ */
+export function lockLogger(): void {
+  locked = true;
+}
+
+/**
+ * Check if the logger has been locked.
+ */
+export function isLoggerLocked(): boolean {
+  return locked;
+}
+
+function createSilentLogger(): Logger {
+  return {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+  };
+}
+
+function wrapLogger(
+  base: Logger,
+  silent: boolean,
+  minLevel: LogLevelKey,
+): Logger {
+  if (silent) return createSilentLogger();
+  const threshold = LOG_LEVELS[minLevel];
+  const wrap = (fn: Logger['info'], level: LogLevelKey): Logger['info'] => {
+    if (LOG_LEVELS[level] < threshold) {
+      return (() => {}) as Logger['info'];
+    }
+    return ((...args: Parameters<Logger['info']>) =>
+      fn(...args)) as Logger['info'];
+  };
+  return {
+    debug: wrap(base.debug, 'debug'),
+    info: wrap(base.info, 'info'),
+    warn: wrap(base.warn, 'warn'),
+    error: wrap(base.error, 'error'),
+  };
+}
+
+function detectEnvironmentAttributes(): Record<string, string> {
+  const attrs: Record<string, string> = {};
+
+  const commitSha =
+    process.env.COMMIT_SHA ||
+    process.env.GITHUB_SHA ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.CF_PAGES_COMMIT_SHA ||
+    process.env.AWS_CODEPIPELINE_EXECUTION_ID;
+  if (commitSha) attrs['service.commit.sha'] = commitSha;
+
+  const region =
+    process.env.VERCEL_REGION ||
+    process.env.AWS_REGION ||
+    process.env.AWS_DEFAULT_REGION ||
+    process.env.FLY_REGION ||
+    process.env.CF_REGION ||
+    process.env.GOOGLE_CLOUD_REGION;
+  if (region) attrs['service.region'] = region;
+
+  const version =
+    process.env.APP_VERSION ||
+    process.env.HEROKU_RELEASE_VERSION ||
+    process.env.VERCEL_GIT_COMMIT_REF;
+  if (version) attrs['service.deploy.version'] = version;
+
+  return attrs;
+}
 
 /**
  * Resolve metrics flag with env var override support
@@ -1295,6 +1393,10 @@ function normalizeOtlpHeaders(
  */
 
 export function init(cfg: AutotelConfig): void {
+  if (locked) {
+    return;
+  }
+
   // Resolve configs in priority order: explicit > yaml > env > defaults
   const envConfig = resolveConfigFromEnv();
   const yamlConfig = loadYamlConfig() ?? {};
@@ -1308,19 +1410,32 @@ export function init(cfg: AutotelConfig): void {
     resourceAttributes: {
       ...envConfig.resourceAttributes,
       ...yamlConfig.resourceAttributes,
+      ...detectEnvironmentAttributes(),
       ...cfg.resourceAttributes,
     },
     // Handle headers merge (can be string or object)
     headers: cfg.headers ?? yamlConfig.headers ?? envConfig.headers,
   } as AutotelConfig;
 
+  if (mergedConfig.attributeRedactor !== undefined) {
+    const normalizedRedactor = normalizeAttributeRedactorConfig(
+      mergedConfig.attributeRedactor,
+    );
+    if (!normalizedRedactor) {
+      throw new Error('Invalid attributeRedactor config');
+    }
+    mergedConfig.attributeRedactor = normalizedRedactor;
+  }
+
   const devtoolsConfig = resolveDevtoolsConfig(mergedConfig.devtools);
   if (devtoolsConfig.enabled && mergedConfig.logs === undefined) {
     mergedConfig.logs = true;
   }
 
-  // Set logger (use provided or default to silent - no spam)
-  logger = mergedConfig.logger || silentLogger;
+  const silent = mergedConfig.silent ?? false;
+  const minLevel = mergedConfig.minLevel ?? 'info';
+  const baseLogger = mergedConfig.logger || silentLogger;
+  logger = wrapLogger(baseLogger, silent, minLevel);
 
   // Warn if re-initializing (same behavior in all environments)
   if (initialized) {

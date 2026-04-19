@@ -264,17 +264,17 @@ AUTOTEL_BACKEND=jaeger JAEGER_BASE_URL=http://localhost:16686 npx autotel-mcp
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `AUTOTEL_BACKEND` | `collector` | Backend: `collector`, `jaeger` |
-| `AUTOTEL_TRANSPORT` | `stdio` | MCP transport: `stdio`, `http` |
-| `AUTOTEL_PORT` | `3000` | MCP HTTP port |
-| `AUTOTEL_HOST` | `127.0.0.1` | MCP HTTP bind address |
-| `AUTOTEL_COLLECTOR_PORT` | `4318` | OTLP receiver port |
-| `AUTOTEL_PERSIST` | — | libsql file path (omit for in-memory) |
-| `AUTOTEL_RETENTION_MS` | `3600000` (1h mem) / `86400000` (24h persist) | Data retention |
-| `AUTOTEL_MAX_TRACES` | `10000` | Max traces before eviction |
-| `JAEGER_BASE_URL` | `http://localhost:16686` | Jaeger API URL |
+| Variable                 | Default                                       | Description                           |
+| ------------------------ | --------------------------------------------- | ------------------------------------- |
+| `AUTOTEL_BACKEND`        | `collector`                                   | Backend: `collector`, `jaeger`        |
+| `AUTOTEL_TRANSPORT`      | `stdio`                                       | MCP transport: `stdio`, `http`        |
+| `AUTOTEL_PORT`           | `3000`                                        | MCP HTTP port                         |
+| `AUTOTEL_HOST`           | `127.0.0.1`                                   | MCP HTTP bind address                 |
+| `AUTOTEL_COLLECTOR_PORT` | `4318`                                        | OTLP receiver port                    |
+| `AUTOTEL_PERSIST`        | —                                             | libsql file path (omit for in-memory) |
+| `AUTOTEL_RETENTION_MS`   | `3600000` (1h mem) / `86400000` (24h persist) | Data retention                        |
+| `AUTOTEL_MAX_TRACES`     | `10000`                                       | Max traces before eviction            |
+| `JAEGER_BASE_URL`        | `http://localhost:16686`                      | Jaeger API URL                        |
 
 ### HTTP mode
 
@@ -389,13 +389,13 @@ Then configure your MCP client with:
 
 MCP resources give agents context without burning tool calls:
 
-| URI | Content |
-|---|---|
-| `otel://capabilities` | Server manifest: transports, tool groups, signals |
-| `otel://tool-catalog` | All tools with descriptions and workflow hints |
-| `otel://backend/capabilities` | Active backend's signal support |
-| `otel://collector/config` | OTLP receiver config guidance |
-| `otel://instrumentation/scoring` | Scoring rubric explanation |
+| URI                              | Content                                           |
+| -------------------------------- | ------------------------------------------------- |
+| `otel://capabilities`            | Server manifest: transports, tool groups, signals |
+| `otel://tool-catalog`            | All tools with descriptions and workflow hints    |
+| `otel://backend/capabilities`    | Active backend's signal support                   |
+| `otel://collector/config`        | OTLP receiver config guidance                     |
+| `otel://instrumentation/scoring` | Scoring rubric explanation                        |
 
 ## License
 

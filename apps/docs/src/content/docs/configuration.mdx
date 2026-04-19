@@ -35,6 +35,70 @@ init({
 });
 ```
 
+## Init Locking
+
+Framework plugins can lock `init()` to prevent accidental re-initialization from user code:
+
+```typescript
+import { init, lockLogger, isLoggerLocked } from 'autotel';
+
+// Framework plugin calls this after setting up instrumentation
+lockLogger();
+
+// Subsequent init() calls are ignored
+isLoggerLocked(); // true
+```
+
+## Silent Mode
+
+Suppress internal autotel diagnostic output while keeping exporters running:
+
+```typescript
+init({
+  service: 'my-app',
+  endpoint: 'http://localhost:4318',
+  silent: true, // Suppress console output (default: false)
+  minLevel: 'warn', // Only log warnings and errors (default: 'info')
+});
+```
+
+Useful for platforms like GCP Cloud Run or AWS Lambda where stdout is managed externally.
+
+## Attribute Redaction
+
+Automatically redact PII and sensitive data from span attributes for compliance:
+
+```typescript
+init({
+  service: 'my-app',
+  attributeRedactor: 'default', // 'default' | 'strict' | 'pci-dss'
+});
+```
+
+**Presets:**
+- `default` — Emails, phone numbers, SSNs, credit cards (last 4), sensitive keys (password, token, etc.)
+- `strict` — All of default plus JWTs, Bearer tokens, IBANs, API keys in values
+- `pci-dss` — Focused on payment card data
+
+**Custom configuration:**
+
+```typescript
+init({
+  service: 'my-app',
+  attributeRedactor: {
+    keyPatterns: [/password/i, /secret/i], // Keys to redact entirely
+    valuePatterns: [
+      // Custom patterns with smart masking
+      { name: 'customerId', pattern: /CUST-\d{8}/g, replacement: 'CUST-***' }
+    ],
+    builtins: ['email', 'creditCard'], // Enable specific built-in patterns
+    replacement: '[REDACTED]', // Default replacement (default)
+  },
+});
+```
+
+**Built-in patterns:** `email`, `phone`, `creditCard`, `ipv4`, `jwt`, `bearer`, `iban`
+
 ## YAML Configuration
 
 Create an `autotel.yaml` file in your project root:

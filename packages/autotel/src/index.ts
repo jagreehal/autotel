@@ -29,7 +29,7 @@
  */
 
 // Core initialization
-export { init, type AutotelConfig } from './init';
+export { init, lockLogger, isLoggerLocked, type AutotelConfig } from './init';
 
 // Baggage span processor
 export {
@@ -126,6 +126,7 @@ export {
 // Structured errors
 export {
   createStructuredError,
+  structuredErrorToJSON,
   getStructuredErrorAttributes,
   recordStructuredError,
   type StructuredError,

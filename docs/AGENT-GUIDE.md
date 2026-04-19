@@ -227,7 +227,11 @@ See `packages/autotel-tanstack` and `apps/example-tanstack-start`: middleware an
 
 ### Cloudflare Workers
 
-See `packages/autotel-cloudflare`: init at top level, wrap `fetch` handler so each request gets a span; use `getRequestLogger()` or trace context inside the handler.
+See `packages/autotel-cloudflare`: init at top level, wrap `fetch` handler so each request gets a span.
+
+- Use `handlers.fetch.include` / `exclude` to control which paths are instrumented.
+- Use `handlers.fetch.routes` to map route patterns to service names.
+- Use `createWorkersLogger(request, options?)` for a pre-populated execution snapshot (method/path, cf-ray, traceparent, CF context).
 
 ### Generic Node HTTP
 

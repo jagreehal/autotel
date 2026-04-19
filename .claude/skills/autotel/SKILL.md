@@ -26,6 +26,8 @@ Philosophy: "Write once, observe everywhere" - instrument once, stream to any OT
 | Add structured errors | [structured-errors.md](references/structured-errors.md) |
 | Accumulate request context | [request-logger.md](references/request-logger.md) |
 | Review code for anti-patterns | [code-review.md](references/code-review.md) |
+| Add attribute redaction | (use `init({ attributeRedactor: 'default' | 'strict' | 'pci-dss' })` or custom config) |
+| Lock init from re-initialization | (use `lockLogger()` in framework plugins) | |
 
 ## Tracing API
 
@@ -165,6 +167,56 @@ init({
 ```
 
 Protocol selection (`http` default, `grpc` optional) applies to all signals. gRPC exporters are optional peer deps.
+
+### Logger Locking
+
+Framework plugins can lock `init()` to prevent re-initialization:
+
+```typescript
+import { lockLogger, isLoggerLocked } from 'autotel';
+
+lockLogger(); // After framework sets up instrumentation
+isLoggerLocked(); // true
+```
+
+### Silent Mode
+
+Suppress internal autotel logs while keeping exporters running:
+
+```typescript
+init({
+  service: 'my-app',
+  silent: true,        // Suppress console output
+  minLevel: 'warn',    // Only log warnings/errors
+});
+```
+
+### Attribute Redaction
+
+Automatically redact PII from span attributes:
+
+```typescript
+init({
+  service: 'my-app',
+  attributeRedactor: 'default', // 'default' | 'strict' | 'pci-dss'
+});
+```
+
+- `default` — Emails, phones, SSNs, credit cards (last 4), sensitive keys
+- `strict` — Plus JWTs, Bearer tokens, IBANs, API keys
+- `pci-dss` — Focused on payment card data
+
+Custom:
+
+```typescript
+init({
+  attributeRedactor: {
+    keyPatterns: [/password/i, /secret/i],
+    valuePatterns: [{ name: 'customerId', pattern: /CUST-\d{8}/g, replacement: 'CUST-***' }],
+    builtins: ['email', 'creditCard'],
+  },
+});
+```
 
 ### Sampling
 

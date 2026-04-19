@@ -223,6 +223,31 @@ describe('Config System', () => {
 
       expect(parsed.fetch.includeTraceContext).toBe(customFn);
     });
+
+    it('should preserve fetch handler route filtering and service mappings', () => {
+      const config: EdgeConfig = {
+        service: { name: 'test-service' },
+        handlers: {
+          fetch: {
+            include: ['/api/**'],
+            exclude: ['/api/internal/**'],
+            routes: {
+              '/api/auth/**': { service: 'auth-service' },
+              '/api/**': { service: 'api-service' },
+            },
+          },
+        },
+      };
+
+      const parsed = parseConfig(config);
+
+      expect(parsed.handlers.fetch.include).toEqual(['/api/**']);
+      expect(parsed.handlers.fetch.exclude).toEqual(['/api/internal/**']);
+      expect(parsed.handlers.fetch.routes).toEqual({
+        '/api/auth/**': { service: 'auth-service' },
+        '/api/**': { service: 'api-service' },
+      });
+    });
   });
 
   describe('createInitialiser()', () => {

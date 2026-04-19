@@ -42,9 +42,11 @@ export {
   getQueueLogger,
   getWorkflowLogger,
   getActorLogger,
+  createWorkersLogger,
   type ExecutionLogger,
   type ExecutionLoggerOptions,
   type ExecutionLogSnapshot,
+  type WorkersLoggerOptions,
 } from './execution-logger';
 
 // Cloudflare-specific wrappers

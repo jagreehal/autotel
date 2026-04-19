@@ -252,6 +252,27 @@ init((env) => ({
 }))
 ```
 
+### Fetch Route Controls
+
+Use fetch handler route controls to include/exclude paths and set per-route service names.
+
+```typescript
+init({
+  service: { name: 'edge-app' },
+  exporter: { url: 'https://otlp.example.com/v1/traces' },
+  handlers: {
+    fetch: {
+      include: ['/api/**'],
+      exclude: ['/api/internal/**', '/health'],
+      routes: {
+        '/api/auth/**': { service: 'auth-service' },
+        '/api/**': { service: 'api-service' },
+      },
+    },
+  },
+})
+```
+
 ## API Reference
 
 ### Core Functions

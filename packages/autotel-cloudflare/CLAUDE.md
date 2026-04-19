@@ -24,6 +24,7 @@ You are working on the Cloudflare Workers package. You understand Cloudflare Wor
   - `wrapDurableObject(config, DOClass)` - Durable Objects instrumentation
   - Functional API via re-exports from autotel-edge
 - **Handler Instrumentation**: Automatic tracing for fetch, scheduled, queue, email handlers
+- **Fetch Route Controls**: `handlers.fetch.include` / `exclude` / `routes` to control instrumentation scope and route-level service naming
 - **Global Instrumentations**: Auto-instrument global fetch() and cache API
 - **Preferred DX direction**: converge on one traced-factory pattern across Workers, Queues, Durable Objects, alarms, and Workflows. See `docs/CLOUDFLARE-DX.md`.
 
@@ -90,6 +91,10 @@ export default trace(async (request) => {
   return new Response('OK');
 });
 ```
+
+### Request Logger Bootstrap
+
+Use `createWorkersLogger(request, options?)` to pre-populate method/path, `cf-ray`, `traceparent`, and CF context in one execution snapshot.
 
 ## Boundaries
 

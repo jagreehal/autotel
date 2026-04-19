@@ -232,7 +232,7 @@ export function createBuiltinLogger(
           log(level, extraOrMessage, message as Record<string, unknown>);
         } else {
           // Pure string-only call: logger.info('message')
-          log(level, extraOrMessage, undefined);
+          log(level, extraOrMessage);
         }
       } else {
         // Pino style: logger.info({ extra }, 'message')
@@ -303,7 +303,7 @@ export function createBuiltinLogger(
         }
 
         // Pure string-only call: logger.error('message')
-        log('error', extraOrMessage, undefined);
+        log('error', extraOrMessage);
         return;
       }
 

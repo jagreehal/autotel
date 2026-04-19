@@ -67,6 +67,14 @@ export const postCheckout = trace((ctx) => async (req, res) => {
 });
 ```
 
+**Fork for async background work:**
+
+```typescript
+log.fork('send-email', async () => {
+  await sendOrderEmail(orderId);
+});
+```
+
 ## 5. Structured Errors
 
 ```typescript
@@ -79,6 +87,8 @@ if (!user) {
     why: `No user with ID "${userId}"`,
     fix: 'Check the user ID and try again',
     link: 'https://docs.example.com/errors/user-not-found',
+    // Backend-only context (never serialized to clients)
+    internal: { lookupKey: `users:${userId}`, attempt: 2 },
   });
 }
 ```

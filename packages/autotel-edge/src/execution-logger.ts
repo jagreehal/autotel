@@ -3,6 +3,54 @@ import type { AttributeValue } from '@opentelemetry/api';
 import type { TraceContext } from './functional';
 import { createTraceContext } from './core/trace-context';
 
+const POST_EMIT_FORK_HINT =
+  "For intentional background work tied to this execution, use log.fork('label', fn) when available.";
+
+function warnPostEmit(method: string, detail: string): void {
+  console.warn(
+    `[autotel-edge] ${method} called after the execution event was emitted - ${detail} This data will not appear in observability. ${POST_EMIT_FORK_HINT}`,
+  );
+}
+
+function mergeInto(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): void {
+  for (const key in source) {
+    const sourceVal = source[key];
+    if (sourceVal === undefined) continue;
+    const targetVal = target[key];
+    if (
+      sourceVal !== null &&
+      typeof sourceVal === 'object' &&
+      !Array.isArray(sourceVal) &&
+      targetVal !== null &&
+      typeof targetVal === 'object' &&
+      !Array.isArray(targetVal)
+    ) {
+      mergeInto(
+        targetVal as Record<string, unknown>,
+        sourceVal as Record<string, unknown>,
+      );
+    } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
+      target[key] = [...targetVal, ...sourceVal];
+    } else {
+      target[key] = sourceVal;
+    }
+  }
+}
+
+function generateCorrelationId(): string {
+  if (
+    typeof globalThis.crypto !== 'undefined' &&
+    typeof globalThis.crypto.randomUUID === 'function'
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `exec-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export interface ExecutionLogger {
   set(fields: Record<string, unknown>): void;
   info(message: string, fields?: Record<string, unknown>): void;
@@ -10,6 +58,7 @@ export interface ExecutionLogger {
   error(error: Error | string, fields?: Record<string, unknown>): void;
   getContext(): Record<string, unknown>;
   emitNow(overrides?: Record<string, unknown>): ExecutionLogSnapshot;
+  fork(label: string, fn: () => void | Promise<void>): void;
 }
 
 export interface ExecutionLogSnapshot {
@@ -162,6 +211,8 @@ export function getExecutionLogger(
 ): ExecutionLogger {
   const activeContext = resolveContext(ctx);
   let contextState: Record<string, unknown> = {};
+  let emitted = false;
+  let lastSnapshot: ExecutionLogSnapshot | null = null;
 
   const addLogEvent = (
     level: 'info' | 'warn' | 'error',
@@ -175,39 +226,54 @@ export function getExecutionLogger(
     });
   };
 
+  const sealCheck = (method: string, keys: string[]): void => {
+    if (emitted) {
+      warnPostEmit(
+        method,
+        `Keys dropped: ${keys.length ? keys.join(', ') : '(empty)'}.`,
+      );
+    }
+  };
+
   return {
     set(fields: Record<string, unknown>) {
-      contextState = {
-        ...contextState,
-        ...fields,
-      };
+      sealCheck('log.set()', Object.keys(fields));
+      if (emitted) return;
+      mergeInto(contextState, fields);
       activeContext.setAttributes(flattenToAttributes(fields));
     },
 
     info(message: string, fields?: Record<string, unknown>) {
+      const keys = fields
+        ? ['message', ...Object.keys(fields).filter((k) => k !== 'requestLogs')]
+        : ['message'];
+      sealCheck('log.info()', keys);
+      if (emitted) return;
       addLogEvent('info', message, fields);
       if (fields) {
-        contextState = {
-          ...contextState,
-          ...fields,
-        };
+        mergeInto(contextState, fields);
         activeContext.setAttributes(flattenToAttributes(fields));
       }
     },
 
     warn(message: string, fields?: Record<string, unknown>) {
+      const keys = fields
+        ? ['message', ...Object.keys(fields).filter((k) => k !== 'requestLogs')]
+        : ['message'];
+      sealCheck('log.warn()', keys);
+      if (emitted) return;
       addLogEvent('warn', message, fields);
       activeContext.setAttribute('autotel.log.level', 'warn');
       if (fields) {
-        contextState = {
-          ...contextState,
-          ...fields,
-        };
+        mergeInto(contextState, fields);
         activeContext.setAttributes(flattenToAttributes(fields));
       }
     },
 
     error(error: Error | string, fields?: Record<string, unknown>) {
+      const keys = fields ? [...Object.keys(fields), 'error'] : ['error'];
+      sealCheck('log.error()', keys);
+      if (emitted) return;
       const err = typeof error === 'string' ? new Error(error) : error;
 
       activeContext.recordException(err);
@@ -219,10 +285,7 @@ export function getExecutionLogger(
       addLogEvent('error', err.message, fields);
 
       if (fields) {
-        contextState = {
-          ...contextState,
-          ...fields,
-        };
+        mergeInto(contextState, fields);
         activeContext.setAttributes(flattenToAttributes(fields));
       }
 
@@ -234,6 +297,11 @@ export function getExecutionLogger(
     },
 
     emitNow(overrides?: Record<string, unknown>): ExecutionLogSnapshot {
+      if (emitted) {
+        warnPostEmit('log.emitNow()', 'Ignoring duplicate emit.');
+        return lastSnapshot as ExecutionLogSnapshot;
+      }
+
       const mergedContext = {
         ...contextState,
         ...(overrides ?? {}),
@@ -259,7 +327,50 @@ export function getExecutionLogger(
         });
       }
 
+      emitted = true;
+      lastSnapshot = snapshot;
       return snapshot;
+    },
+
+    fork(label: string, fn: () => void | Promise<void>): void {
+      const parentCorrelationId = activeContext.correlationId;
+      if (
+        typeof parentCorrelationId !== 'string' ||
+        parentCorrelationId.length === 0
+      ) {
+        throw new Error(
+          '[autotel-edge] log.fork() requires the parent logger to have a correlationId. ' +
+            'Ensure execution context was created by autotel trace instrumentation.',
+        );
+      }
+
+      const tracer = otelTrace.getTracer('autotel-edge.execution-logger');
+      void tracer.startActiveSpan(`execution.fork:${label}`, (childSpan) => {
+        const childContext: TraceContext = {
+          ...createTraceContext(childSpan),
+          correlationId: generateCorrelationId(),
+        };
+
+        const childLog = getExecutionLogger(childContext);
+        childLog.set({
+          operation: label,
+          _parentCorrelationId: parentCorrelationId,
+        });
+
+        return Promise.resolve()
+          .then(() => fn())
+          .then(() => {
+            childLog.emitNow();
+          })
+          .catch((err: unknown) => {
+            const error = err instanceof Error ? err : new Error(String(err));
+            childLog.error(error);
+            childLog.emitNow();
+          })
+          .finally(() => {
+            childSpan.end();
+          });
+      });
     },
   };
 }

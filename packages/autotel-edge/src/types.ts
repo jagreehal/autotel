@@ -153,6 +153,10 @@ export interface FetcherConfig {
   includeTraceContext?: boolean | ((request: Request) => boolean);
 }
 
+export interface RouteServiceConfig {
+  service: string;
+}
+
 export interface PostProcessParams {
   /**
    * The request object that was passed to the fetch handler.
@@ -179,6 +183,23 @@ export interface FetchHandlerConfig {
    * Allows further customization of the generated span, based on the request/response data.
    */
   postProcess?: (span: Span, ctx: PostProcessParams) => void;
+  /**
+   * Route patterns to include for fetch handler instrumentation.
+   * Supports glob patterns like '/api/**'.
+   * If not set, all routes are included.
+   */
+  include?: string[];
+  /**
+   * Route patterns to exclude from fetch handler instrumentation.
+   * Supports glob patterns like '/health' and '/_internal/**'.
+   * Exclusions take precedence over inclusions.
+   */
+  exclude?: string[];
+  /**
+   * Route-specific service mapping.
+   * The first matching pattern wins based on object iteration order.
+   */
+  routes?: Record<string, RouteServiceConfig>;
 }
 
 export interface HandlerConfig {
