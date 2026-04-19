@@ -103,6 +103,22 @@ describe('getExecutionLogger', () => {
     });
   });
 
+  it('deep merges objects and concatenates arrays in set()', () => {
+    const ctx = createMockContext();
+    const log = getExecutionLogger(ctx);
+
+    log.set({ job: { id: 'j1', tags: ['initial'] } });
+    log.set({ job: { status: 'done', tags: ['final'] } });
+
+    expect(log.getContext()).toEqual({
+      job: {
+        id: 'j1',
+        status: 'done',
+        tags: ['initial', 'final'],
+      },
+    });
+  });
+
   it('emitNow records a manual event and returns a snapshot', async () => {
     const ctx = createMockContext();
     const onEmit = vi.fn(async () => {});
@@ -131,6 +147,39 @@ describe('getExecutionLogger', () => {
 
     await new Promise((resolve) => setImmediate(resolve));
     expect(onEmit).toHaveBeenCalledWith(snapshot);
+  });
+
+  it('warns and returns the first snapshot on duplicate emitNow()', () => {
+    const ctx = createMockContext();
+    const log = getExecutionLogger(ctx);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    log.set({ workflow: { id: 'wf-1' } });
+    const first = log.emitNow();
+    const second = log.emitNow();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '[autotel-edge] log.emitNow() called after the execution event was emitted',
+      ),
+    );
+    expect(second).toBe(first);
+  });
+
+  it('drops writes after emitNow and warns', () => {
+    const ctx = createMockContext();
+    const log = getExecutionLogger(ctx);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    log.emitNow();
+    log.set({ dropped: true });
+
+    expect(log.getContext()).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '[autotel-edge] log.set() called after the execution event was emitted',
+      ),
+    );
   });
 
   it('resolves context from the active span when no ctx is passed', () => {
@@ -167,5 +216,58 @@ describe('getExecutionLogger', () => {
     expect(() => getExecutionLogger()).toThrow(
       '[autotel-edge] getExecutionLogger() requires an active span or explicit TraceContext. Wrap your handler with trace() or pass ctx directly.',
     );
+  });
+
+  it('fork runs in a child span and keeps parent context isolated', async () => {
+    const parent = createMockContext();
+    const log = getExecutionLogger(parent);
+
+    const childSpan = {
+      spanContext: () => ({
+        traceId: 'a'.repeat(32),
+        spanId: 'b'.repeat(16),
+        traceFlags: 1,
+      }),
+      setAttribute: vi.fn(),
+      setAttributes: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      addEvent: vi.fn(),
+      addLink: vi.fn(),
+      addLinks: vi.fn(),
+      updateName: vi.fn(),
+      isRecording: vi.fn(() => true),
+      end: vi.fn(),
+    };
+
+    const tracer = {
+      startActiveSpan: (_name: string, cb: (span: typeof childSpan) => Promise<void>) =>
+        cb(childSpan),
+    };
+
+    vi.spyOn(otelTrace, 'getTracer').mockReturnValue(
+      tracer as unknown as ReturnType<typeof otelTrace.getTracer>,
+    );
+
+    log.fork('queue-retry', async () => {
+      const childLog = getExecutionLogger();
+      childLog.info('retrying', { attempt: 2 });
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(childSpan.setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'queue-retry',
+        _parentCorrelationId: 'corr-id',
+      }),
+    );
+    expect(childSpan.addEvent).toHaveBeenCalledWith(
+      'log.emit.manual',
+      expect.any(Object),
+    );
+    expect(parent.setAttributes).not.toHaveBeenCalled();
+    expect(childSpan.end).toHaveBeenCalledTimes(1);
   });
 });

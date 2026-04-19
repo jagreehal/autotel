@@ -106,6 +106,29 @@ const log = createEdgeLogger('my-service');
 log.info('Processing request', { userId: '123' });
 ```
 
+### Execution Logger (Advanced)
+
+Full execution logger with fork support for edge runtimes:
+
+```typescript
+import { getExecutionLogger, trace } from 'autotel-edge';
+
+export const handler = trace(async (request) => {
+  const log = getExecutionLogger();
+
+  log.set({ feature: 'checkout' });
+  log.info('Processing order', { orderId: '123' });
+
+  // Fork for background work
+  log.fork('send-email', async () => {
+    await sendEmail(orderId);
+  });
+
+  log.emitNow();
+  return Response.json({ ok: true });
+});
+```
+
 ## Supported Runtimes
 
 - Cloudflare Workers (use autotel-cloudflare)

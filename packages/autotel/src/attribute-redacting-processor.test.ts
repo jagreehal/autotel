@@ -8,6 +8,7 @@ import {
   REDACTOR_PATTERNS,
   REDACTOR_PRESETS,
   createRedactedSpan,
+  normalizeAttributeRedactorConfig,
   type AttributeRedactorFn,
   type AttributeRedactorConfig,
 } from './attribute-redacting-processor';
@@ -143,7 +144,7 @@ describe('AttributeRedactingProcessor', () => {
 
   describe('built-in presets', () => {
     describe('default preset', () => {
-      it('should redact email addresses', () => {
+      it('should redact email addresses with smart masking', () => {
         const processor = new AttributeRedactingProcessor(mockProcessor, {
           redactor: 'default',
         });
@@ -154,11 +155,11 @@ describe('AttributeRedactingProcessor', () => {
         processor.onEnd(span);
 
         expect(mockProcessor.endedSpans[0]!.attributes['user.email']).toBe(
-          '[REDACTED]',
+          'j***@***.com',
         );
       });
 
-      it('should redact phone numbers', () => {
+      it('should redact phone numbers with smart masking', () => {
         const processor = new AttributeRedactingProcessor(mockProcessor, {
           redactor: 'default',
         });
@@ -169,7 +170,7 @@ describe('AttributeRedactingProcessor', () => {
         processor.onEnd(span);
 
         expect(mockProcessor.endedSpans[0]!.attributes['user.phone']).toBe(
-          '[REDACTED]',
+          '********67',
         );
       });
 
@@ -184,11 +185,11 @@ describe('AttributeRedactingProcessor', () => {
         processor.onEnd(span);
 
         expect(mockProcessor.endedSpans[0]!.attributes['user.ssn']).toBe(
-          '[REDACTED]',
+          '*******89',
         );
       });
 
-      it('should redact credit card numbers', () => {
+      it('should redact credit card numbers with smart masking', () => {
         const processor = new AttributeRedactingProcessor(mockProcessor, {
           redactor: 'default',
         });
@@ -199,7 +200,7 @@ describe('AttributeRedactingProcessor', () => {
         processor.onEnd(span);
 
         expect(mockProcessor.endedSpans[0]!.attributes['payment.card']).toBe(
-          '[REDACTED]',
+          '**************11',
         );
       });
 
@@ -260,7 +261,7 @@ describe('AttributeRedactingProcessor', () => {
     });
 
     describe('strict preset', () => {
-      it('should redact Bearer tokens', () => {
+      it('should redact Bearer tokens with smart masking', () => {
         const processor = new AttributeRedactingProcessor(mockProcessor, {
           redactor: 'strict',
         });
@@ -273,10 +274,10 @@ describe('AttributeRedactingProcessor', () => {
 
         expect(
           mockProcessor.endedSpans[0]!.attributes['http.header.authorization'],
-        ).toBe('[REDACTED]');
+        ).toBe('Bearer ***');
       });
 
-      it('should redact JWTs', () => {
+      it('should redact JWTs with smart masking', () => {
         const processor = new AttributeRedactingProcessor(mockProcessor, {
           redactor: 'strict',
         });
@@ -288,7 +289,7 @@ describe('AttributeRedactingProcessor', () => {
         processor.onEnd(span);
 
         expect(mockProcessor.endedSpans[0]!.attributes['auth.token']).toBe(
-          '[REDACTED]',
+          'eyJ***.***',
         );
       });
 
@@ -369,6 +370,7 @@ describe('AttributeRedactingProcessor', () => {
 
     it('should use custom value patterns', () => {
       const config: AttributeRedactorConfig = {
+        builtins: false,
         valuePatterns: [
           {
             name: 'customerId',
@@ -407,10 +409,33 @@ describe('AttributeRedactingProcessor', () => {
 
       expect(mockProcessor.endedSpans[0]!.attributes.secret).toBe('<<HIDDEN>>');
     });
+
+    it('should redact exact dot-path matches from paths config', () => {
+      const config: AttributeRedactorConfig = {
+        builtins: false,
+        paths: ['user.password'],
+      };
+      const processor = new AttributeRedactingProcessor(mockProcessor, {
+        redactor: config,
+      });
+
+      const span = createMockReadableSpan({
+        'user.password': 'super-secret',
+        'billing.password': 'keep-this',
+      });
+      processor.onEnd(span);
+
+      expect(mockProcessor.endedSpans[0]!.attributes['user.password']).toBe(
+        '[REDACTED]',
+      );
+      expect(mockProcessor.endedSpans[0]!.attributes['billing.password']).toBe(
+        'keep-this',
+      );
+    });
   });
 
   describe('array handling', () => {
-    it('should redact PII in string arrays', () => {
+    it('should redact PII in string arrays with smart masking', () => {
       const processor = new AttributeRedactingProcessor(mockProcessor, {
         redactor: 'default',
       });
@@ -423,8 +448,8 @@ describe('AttributeRedactingProcessor', () => {
       const redactedEmails = mockProcessor.endedSpans[0]!.attributes[
         'user.emails'
       ] as string[];
-      expect(redactedEmails[0]).toBe('[REDACTED]');
-      expect(redactedEmails[1]).toBe('[REDACTED]');
+      expect(redactedEmails[0]).toBe('j***@***.com');
+      expect(redactedEmails[1]).toBe('j***@***.org');
     });
 
     it('should preserve non-string array elements', () => {
@@ -675,7 +700,7 @@ describe('edge cases', () => {
     processor.onEnd(span);
 
     expect(mockProcessor.endedSpans[0]!.attributes.message).toBe(
-      'User [REDACTED] signed up',
+      'User j***@***.com signed up',
     );
   });
 
@@ -690,7 +715,47 @@ describe('edge cases', () => {
     processor.onEnd(span);
 
     expect(mockProcessor.endedSpans[0]!.attributes.contacts).toBe(
-      'Email: [REDACTED], Phone: [REDACTED]',
+      'Email: j***@***.com, Phone: ********67',
     );
+  });
+});
+
+describe('normalizeAttributeRedactorConfig', () => {
+  it('should preserve preset strings', () => {
+    expect(normalizeAttributeRedactorConfig('default')).toBe('default');
+  });
+
+  it('should normalize regex-like values from serialized config', () => {
+    const normalized = normalizeAttributeRedactorConfig({
+      keyPatterns: ['password'],
+      patterns: [{ source: 'Bearer\\s+\\w+', flags: 'gi' }],
+      valuePatterns: [
+        {
+          name: 'customerId',
+          pattern: { source: 'CUST-\\d{4}', flags: 'g' },
+          replacement: 'CUST-***',
+        },
+      ],
+      paths: ['user.token'],
+      builtins: ['email', 'jwt'],
+      replacement: '[MASKED]',
+    });
+
+    expect(typeof normalized).toBe('object');
+    if (!normalized || typeof normalized === 'string') {
+      throw new Error('Expected object config');
+    }
+
+    expect(normalized.keyPatterns?.[0]).toBeInstanceOf(RegExp);
+    expect(normalized.patterns?.[0]).toBeInstanceOf(RegExp);
+    expect(normalized.valuePatterns?.[0]?.pattern).toBeInstanceOf(RegExp);
+    expect(normalized.paths).toEqual(['user.token']);
+    expect(normalized.builtins).toEqual(['email', 'jwt']);
+    expect(normalized.replacement).toBe('[MASKED]');
+  });
+
+  it('should return undefined for unsupported raw values', () => {
+    expect(normalizeAttributeRedactorConfig(42)).toBeUndefined();
+    expect(normalizeAttributeRedactorConfig(null)).toBeUndefined();
   });
 });

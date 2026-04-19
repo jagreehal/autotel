@@ -30,6 +30,7 @@ throw createStructuredError({
 | `status` | `number` | HTTP status code |
 | `cause` | `unknown` | Original error (Error.cause) |
 | `details` | `Record<string, unknown>` | Additional context (flattened to `error.details.*`) |
+| `internal` | `Record<string, unknown>` | Backend-only context (never serialized to clients) |
 
 ### Span Attributes
 
