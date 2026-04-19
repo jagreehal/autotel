@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 18.0.1
+
+### Patch Changes
+
+- Updated dependencies [dc471ef]
+  - autotel@2.26.1
+
 ## 18.0.0
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.13
+
+### Patch Changes
+
+- Updated dependencies [dc471ef]
+  - autotel@2.26.1
+
 ## 0.4.12
 
 ### Patch Changes

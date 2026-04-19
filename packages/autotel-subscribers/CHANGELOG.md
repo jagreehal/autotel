@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 30.0.1
+
+### Patch Changes
+
+- Updated dependencies [dc471ef]
+  - autotel@2.26.1
+
 ## 30.0.0
 
 ### Patch Changes
