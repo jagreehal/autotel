@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 18.0.2
+
+### Patch Changes
+
+- Updated dependencies [abe7674]
+  - autotel@2.26.2
+
 ## 18.0.1
 
 ### Patch Changes
