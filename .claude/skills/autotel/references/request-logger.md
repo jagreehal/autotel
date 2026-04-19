@@ -94,6 +94,29 @@ const log = getRequestLogger(ctx, {
 log.emitNow({ step: 'cart_loaded' });
 ```
 
+### `log.fork(label, fn)`
+
+Creates a child request logger for intentional background work tied to this request. Automatically creates a new correlationId for the child:
+
+```typescript
+log.fork('async-email', async () => {
+  await sendWelcomeEmail(user);
+  // This fork has its own correlationId but links to parent
+});
+```
+
+**Key behavior:**
+- Creates a new child span with a new correlationId
+- Inherits the parent's traceId for distributed tracing links
+- Waits for `fn()` to complete before ending the child span
+- Automatically calls `childLog.emitNow()` at the end
+- Handles errors and calls `childLog.error(error)` before emit
+
+**Use for:**
+- Async work that outlives the request (webhooks, emails, background jobs)
+- Fire-and-forget operations that need observability
+- Operations that might fail after the main request completes
+
 ## Framework Adapters
 
 ### useLogger() with withAutotel()

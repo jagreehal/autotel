@@ -18,6 +18,7 @@ You are working on the edge runtime foundation package. You understand edge runt
 
 - **Core Functionality**: TracerProvider, OTLP exporter, context management
 - **Functional API**: Same `trace()`, `span()`, `instrument()` API as Node.js version
+- **Fetch Route Controls**: `handlers.fetch.include` / `exclude` / `routes` for path filtering and route-level service mapping in edge handler wrappers
 - **Sampling Strategies**: Adaptive, error-only, slow-only, custom samplers
 - **Events System**: Product analytics with trace correlation
 - **Zero-Dependency Logger**: Trace-aware logging
@@ -90,4 +91,3 @@ export const handler = trace(async (request) => {
 - Tests run in Node.js but must be compatible with edge runtimes
 - Mock edge runtime APIs (fetch, AsyncLocalStorage)
 - Verify bundle size after builds
-

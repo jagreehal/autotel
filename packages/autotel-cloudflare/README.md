@@ -109,6 +109,35 @@ export default instrument(
 )
 ```
 
+### Fetch Route Controls
+
+Filter which fetch routes are instrumented and map route patterns to service names:
+
+```typescript
+import { wrapModule } from 'autotel-cloudflare'
+
+export default wrapModule(
+  {
+    service: { name: 'edge-gateway' },
+    handlers: {
+      fetch: {
+        include: ['/api/**'],
+        exclude: ['/api/internal/**', '/health'],
+        routes: {
+          '/api/auth/**': { service: 'auth-service' },
+          '/api/**': { service: 'api-service' },
+        },
+      },
+    },
+  },
+  {
+    async fetch(req) {
+      return new Response('ok')
+    },
+  },
+)
+```
+
 ### Style 3: Functional API (Unique)
 
 Zero-boilerplate function tracing:
@@ -130,6 +159,31 @@ export const processPayment = trace(ctx => async (amount: number) => {
 
   return { success: true }
 })
+```
+
+## Request Logger Bootstrap
+
+Use `createWorkersLogger()` for request-scoped snapshots with Cloudflare context pre-filled.
+
+```typescript
+import { wrapModule, createWorkersLogger } from 'autotel-cloudflare'
+
+export default wrapModule(
+  { service: { name: 'checkout-worker' } },
+  {
+    async fetch(request) {
+      const log = createWorkersLogger(request, {
+        headers: ['x-request-id'],
+      })
+
+      log.info('checkout.started')
+      log.set({ checkout: { stage: 'validated' } })
+      log.emitNow({ status: 200 })
+
+      return new Response('ok')
+    },
+  },
+)
 ```
 
 ## Complete Bindings Coverage

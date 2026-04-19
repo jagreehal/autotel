@@ -72,6 +72,46 @@ type EmailHandler = (
   ctx: ExecutionContext,
 ) => void | Promise<void>;
 
+type RouteServiceConfig = { service: string };
+
+function matchesPattern(path: string, pattern: string): boolean {
+  const regexPattern = pattern
+    .replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`)
+    .replaceAll('**', '{{GLOBSTAR}}')
+    .replaceAll('*', '[^/]*')
+    .replaceAll('{{GLOBSTAR}}', '.*')
+    .replaceAll('?', '[^/]');
+  return new RegExp(`^${regexPattern}$`).test(path);
+}
+
+function shouldInstrumentPath(
+  path: string,
+  include?: string[],
+  exclude?: string[],
+): boolean {
+  if (exclude && exclude.some((pattern) => matchesPattern(path, pattern))) {
+    return false;
+  }
+
+  if (!include || include.length === 0) {
+    return true;
+  }
+
+  return include.some((pattern) => matchesPattern(path, pattern));
+}
+
+function getServiceForPath(
+  path: string,
+  routes?: Record<string, RouteServiceConfig>,
+): string | undefined {
+  if (!routes) return undefined;
+  for (const [pattern, config] of Object.entries(routes)) {
+    if (matchesPattern(path, pattern)) {
+      return config.service;
+    }
+  }
+  return undefined;
+}
 
 /**
  * Create fetch handler instrumentation with config support for postProcess
@@ -115,6 +155,10 @@ function createFetchInstrumentation(
   return {
     getInitialSpanInfo: (request: Request): InitialSpanInfo => {
       const url = new URL(request.url);
+      const routeService = getServiceForPath(
+        url.pathname,
+        config.handlers.fetch.routes as Record<string, RouteServiceConfig> | undefined,
+      );
 
       const cfAttrs = (config as any).extractCfAttributes === false
         ? {}
@@ -127,6 +171,7 @@ function createFetchInstrumentation(
           attributes: {
             'http.request.method': request.method,
             'url.full': request.url,
+            ...(routeService ? { 'service.name': routeService, 'autotel.route.service': routeService } : {}),
             ...cfAttrs,
           },
         },
@@ -566,6 +611,16 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
     if (config.instrumentation.disabled) {
       // Return handler as-is without instrumentation
       return handlerFn(trigger, env, ctx);
+    }
+
+    if (trigger instanceof Request) {
+      const pathname = new URL(trigger.url).pathname;
+      const fetchCfg = config.handlers.fetch;
+      if (
+        !shouldInstrumentPath(pathname, fetchCfg.include, fetchCfg.exclude)
+      ) {
+        return handlerFn(trigger, env, ctx) as ReturnType<typeof handlerFn>;
+      }
     }
     
     // Auto-instrument Cloudflare bindings in the environment

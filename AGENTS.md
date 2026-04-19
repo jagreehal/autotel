@@ -13,29 +13,11 @@ Update this file proactively when:
 
 When updating, be specific and actionable. Prefer short, targeted notes.
 
----
-
-## What Autotel Is (vs evlog-style logging)
-
-**evlog** (for comparison): One log per request ("wide events"), structured errors, request-scoped logger, drain/enrich pipeline. Agent skills teach: review logging, replace `console.log` with wide events, use `createError`/`parseError`.
-
-**Autotel**: OpenTelemetry-first. Traces, spans, and metrics flow to any OTLP backend. Agent guidance should focus on:
-
-- **Traces and spans**: `trace()`, `span()`, `instrument()` for business logic and frameworks.
-- **Request-scoped context**: `getRequestLogger()` for one snapshot per request (attributes + events on the active span).
-- **Structured errors**: `createStructuredError()` and `parseError()` for errors that explain why and how to fix.
-- **Product events**: `track()` and Event API for product/analytics events via subscribers.
-- **No vendor lock-in**: Instrument once; backends (Grafana, Datadog, Honeycomb, etc.) consume OTLP.
-
-When suggesting code in a **user's app** (not this repo), recommend Autotel APIs above. When working **inside this repo**, follow the boundaries and touchpoints in this file and in `docs/AGENT-GUIDE.md`.
-
----
-
 ## Philosophy
 
 - **Write once, observe everywhere**: One instrumentation surface; many backends via OTLP.
 - **Functional API**: Wrap handlers and functions with `trace()`, `span()`, `instrument()`; avoid manual span lifecycle where possible.
-- **Structured errors**: Errors should carry `message`, `why`, `fix`, `link` (and optionally `status`, `code`, `cause`) so agents and users can diagnose and act.
+- **Structured errors**: Errors should carry `message`, `why`, `fix`, `link`, `status`, `code`, `cause`, `internal` (backend-only) so agents and users can diagnose and act.
 - **Request context**: Use `getRequestLogger()` when you need one coherent snapshot per request (attributes + log events on the span).
 
 ### Cloudflare Direction
@@ -68,7 +50,7 @@ When suggesting code in a **user's app** (not this repo), recommend Autotel APIs
 autotel/
 ├── packages/
 │   ├── autotel/              # Core: trace, span, init, events, request logger, structured error
-│   ├── autotel-edge/         # Edge runtimes (fetch, AsyncLocalStorage)
+│   ├── autotel-edge/         # Edge runtimes (fetch, AsyncLocalStorage, execution logger)
 │   ├── autotel-cloudflare/   # Cloudflare Workers
 │   ├── autotel-tanstack/      # TanStack Start
 │   ├── autotel-hono/         # Hono middleware
@@ -94,11 +76,13 @@ When the user wants observability, suggest these entry points. All from `autotel
 | Need                        | API / entry point                                                                                |
 | --------------------------- | ------------------------------------------------------------------------------------------------ |
 | Wrap a function with a span | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                                         |
-| Request-scoped attributes   | `getRequestLogger(ctx?)` → `.set()`, `.info()` / `.warn()` / `.error()`, `.emitNow()`            |
+| Request-scoped attributes   | `getRequestLogger(ctx?)` → `.set()`, `.info()` / `.warn()` / `.error()`, `.emitNow()`, `.fork()` |
 | Structured throw            | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })`                  |
 | Parse API errors (client)   | `parseError(err)` → `{ message, status, why?, fix?, link?, raw }`                                |
+| Lock init (framework)       | `lockLogger()`, `isLoggerLocked()`                                                               |
 | Product/analytics events    | `track(name, attributes)` or `Event` from `autotel/event`                                        |
 | Init (once at startup)      | `init({ service, ... })` from `autotel` or `autotel/instrumentation`                             |
+| PII redaction               | `init({ attributeRedactor: 'default' | 'strict' | 'pci-dss' | { keyPatterns, valuePatterns } })`       |
 | Testing                     | `createTraceCollector()` from `autotel/testing`; `InMemorySpanExporter` from `autotel/exporters` |
 
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
