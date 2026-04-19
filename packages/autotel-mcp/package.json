@@ -21,6 +21,8 @@
     "src",
     "bin",
     "fixtures",
+    "skills",
+    "!skills/_artifacts",
     "README.md"
   ],
   "scripts": {
@@ -49,7 +51,8 @@
     "metrics",
     "logs",
     "otlp",
-    "collector"
+    "collector",
+    "tanstack-intent"
   ],
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
@@ -64,6 +67,7 @@
     "zod": "^3.25.48"
   },
   "devDependencies": {
+    "@tanstack/intent": "^0.0.29",
     "@types/node": "^25.5.2",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",

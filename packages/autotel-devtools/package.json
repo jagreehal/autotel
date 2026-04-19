@@ -27,7 +27,22 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "skills",
+    "!skills/_artifacts"
+  ],
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "devtools",
+    "observability",
+    "traces",
+    "logs",
+    "metrics",
+    "otlp",
+    "dashboard",
+    "widget",
+    "tanstack-intent"
   ],
   "scripts": {
     "build": "tsup && vite build --config vite.widget.config.ts",
@@ -50,6 +65,7 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
+    "@tanstack/intent": "^0.0.29",
     "@chromatic-com/storybook": "^5.1.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/core": "^2.6.1",

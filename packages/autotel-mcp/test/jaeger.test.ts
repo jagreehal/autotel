@@ -109,6 +109,11 @@ describe('JaegerBackend', () => {
 
   it('serviceMap respects the requested limit', async () => {
     const backend = new JaegerBackend('http://localhost:16686');
+    // serviceMap fans out per-service — stub both listServices (to bound
+    // the walk) and searchTraces (to return the shared trace each svc sees).
+    (backend as any).listServices = async () => ({
+      services: ['checkout', 'payments'],
+    });
     (backend as any).searchTraces = async () => ({
       items: [
         {
