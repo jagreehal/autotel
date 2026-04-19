@@ -16,7 +16,7 @@ export function buildCapabilitiesDocument(
 ): ServerCapabilitiesDocument {
   return {
     serverName,
-    transportModes: ['stdio', 'http'],
+    transportModes: ['stdio', 'http', 'sse'],
     groups: [
       {
         name: 'investigation',
@@ -25,6 +25,7 @@ export function buildCapabilitiesDocument(
         tools: [
           'backend_health',
           'backend_capabilities',
+          'discover_services',
           'list_services',
           'list_operations',
           'search_traces',
@@ -45,13 +46,19 @@ export function buildCapabilitiesDocument(
           'otel://verification',
           'otel://capabilities',
           'otel://backend/capabilities',
+          'otel://semconv/namespaces',
         ],
       },
       {
         name: 'signals',
         description:
           'Probe metrics and logs through the same backend abstraction, with fixture-backed support for local development.',
-        tools: ['list_metrics', 'search_logs'],
+        tools: [
+          'list_metrics',
+          'search_logs',
+          'discover_trace_fields',
+          'discover_log_fields',
+        ],
         resources: ['otel://backend/capabilities'],
       },
       {
@@ -62,14 +69,30 @@ export function buildCapabilitiesDocument(
           'validate_collector_config',
           'suggest_collector_config',
           'explain_collector_config',
+          'collector_get_versions',
+          'collector_list_components',
+          'collector_component_schema',
+          'collector_component_readme',
+          'collector_validate_component_config',
+          'collector_refresh_catalog',
         ],
-        resources: ['otel://collector/config'],
+        resources: [
+          'otel://collector/config',
+          'otel://collector/versions',
+          'otel://collector/components',
+        ],
       },
       {
         name: 'instrumentation',
         description:
           'Score instrumentation quality and suggest semantic-convention improvements.',
-        tools: ['score_span_instrumentation', 'explain_instrumentation_score'],
+        tools: [
+          'score_span_instrumentation',
+          'explain_instrumentation_score',
+          'semconv_list_namespaces',
+          'semconv_get_namespace',
+          'semconv_refresh_cache',
+        ],
         resources: ['otel://instrumentation/scoring'],
       },
     ],

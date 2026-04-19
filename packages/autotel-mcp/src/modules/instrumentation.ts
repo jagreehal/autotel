@@ -1,4 +1,4 @@
-import type { SpanRecord } from '../types.js';
+import type { SpanRecord } from '../types';
 
 export interface InstrumentationScore {
   score: number;

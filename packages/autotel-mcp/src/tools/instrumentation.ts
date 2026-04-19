@@ -3,8 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   scoreSpan,
   suggestInstrumentationFixes,
-} from '../modules/instrumentation.js';
-import { buildInstrumentationGuide } from '../modules/docs.js';
+} from '../modules/instrumentation';
+import { buildInstrumentationGuide } from '../modules/docs';
 
 export function registerInstrumentationTools(server: McpServer): void {
   server.registerTool(

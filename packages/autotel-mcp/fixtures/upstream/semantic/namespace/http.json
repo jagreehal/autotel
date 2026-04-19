@@ -1,0 +1,14 @@
+{
+  "namespace": "http",
+  "version": "main",
+  "conventions": [
+    {
+      "id": "http.server.request",
+      "brief": "Server-side HTTP request attributes"
+    },
+    {
+      "id": "http.client.request",
+      "brief": "Client-side HTTP request attributes"
+    }
+  ]
+}

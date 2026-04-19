@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JaegerBackend } from '../src/backends/jaeger/index.js';
+import { JaegerBackend } from '../src/backends/jaeger/index';
 
 describe('JaegerBackend', () => {
   it('normalizes trace records from Jaeger payloads', () => {
@@ -109,6 +109,11 @@ describe('JaegerBackend', () => {
 
   it('serviceMap respects the requested limit', async () => {
     const backend = new JaegerBackend('http://localhost:16686');
+    // serviceMap fans out per-service — stub both listServices (to bound
+    // the walk) and searchTraces (to return the shared trace each svc sees).
+    (backend as any).listServices = async () => ({
+      services: ['checkout', 'payments'],
+    });
     (backend as any).searchTraces = async () => ({
       items: [
         {
@@ -203,5 +208,209 @@ describe('JaegerBackend', () => {
   it('kind is jaeger', () => {
     const backend = new JaegerBackend('http://localhost:16686');
     expect(backend.kind).toBe('jaeger');
+  });
+
+  it('searchTraces with hasError over-fetches without sending tags (Jaeger cannot index bool error tag)', async () => {
+    const requests: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      requests.push(url);
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const backend = new JaegerBackend('http://localhost:16686');
+      await backend.searchTraces({ service: 'api', hasError: true, limit: 5 });
+      expect(requests).toHaveLength(1);
+      const url = new URL(requests[0]!);
+      // No `tags` param — bool error tags aren't searchable in Jaeger.
+      expect(url.searchParams.get('tags')).toBeNull();
+      // Over-fetch: client asked for 5, server should be asked for 50.
+      expect(url.searchParams.get('limit')).toBe('50');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('searchTraces forwards explicit time window as Jaeger start/end (μs)', async () => {
+    const requests: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requests.push(typeof input === 'string' ? input : input.toString());
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const backend = new JaegerBackend('http://localhost:16686');
+      await backend.searchTraces({
+        service: 'api',
+        startTimeUnixMs: 1_700_000_000_000,
+        endTimeUnixMs: 1_700_000_300_000,
+      });
+      const url = new URL(requests[0]!);
+      expect(url.searchParams.get('lookback')).toBeNull();
+      expect(url.searchParams.get('start')).toBe('1700000000000000');
+      expect(url.searchParams.get('end')).toBe('1700000300000000');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('searchTraces defaults to 60m lookback when no time window is given', async () => {
+    const requests: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requests.push(typeof input === 'string' ? input : input.toString());
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const backend = new JaegerBackend('http://localhost:16686');
+      await backend.searchTraces({ service: 'api' });
+      const url = new URL(requests[0]!);
+      expect(url.searchParams.get('lookback')).toBe('60m');
+      expect(url.searchParams.get('start')).toBeNull();
+      expect(url.searchParams.get('end')).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('searchTraces forwards min/max duration as Jaeger ms strings', async () => {
+    const requests: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requests.push(typeof input === 'string' ? input : input.toString());
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const backend = new JaegerBackend('http://localhost:16686');
+      await backend.searchTraces({
+        service: 'api',
+        minDurationMs: 100,
+        maxDurationMs: 2000,
+      });
+      const url = new URL(requests[0]!);
+      expect(url.searchParams.get('minDuration')).toBe('100ms');
+      expect(url.searchParams.get('maxDuration')).toBe('2000ms');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('searchTraces filters hasError client-side from inferred error spans', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              traceID: 'ok-trace',
+              processes: { p1: { serviceName: 'api' } },
+              spans: [
+                {
+                  traceID: 'ok-trace',
+                  spanID: 's1',
+                  operationName: 'GET /',
+                  processID: 'p1',
+                  startTime: 1_000_000,
+                  duration: 1_000,
+                  tags: [{ key: 'http.status_code', type: 'int', value: 200 }],
+                },
+              ],
+            },
+            {
+              traceID: 'err-trace',
+              processes: { p1: { serviceName: 'api' } },
+              spans: [
+                {
+                  traceID: 'err-trace',
+                  spanID: 's2',
+                  operationName: 'POST /x',
+                  processID: 'p1',
+                  startTime: 1_000_000,
+                  duration: 2_000,
+                  tags: [{ key: 'error', type: 'bool', value: true }],
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+
+    try {
+      const backend = new JaegerBackend('http://localhost:16686');
+      const result = await backend.searchTraces({
+        service: 'api',
+        hasError: true,
+      });
+      expect(result.items.map((t) => t.traceId)).toEqual(['err-trace']);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('serviceMap fans out per-service so every service contributes traces', async () => {
+    const backend = new JaegerBackend('http://localhost:16686');
+    (backend as any).listServices = async () => ({
+      services: ['chatty', 'quiet'],
+    });
+    (backend as any).searchTraces = async ({
+      service,
+    }: {
+      service: string;
+    }) => {
+      if (service === 'chatty') {
+        return {
+          items: Array.from({ length: 25 }, (_, i) => ({
+            traceId: `chatty-${i}`,
+            spans: [
+              {
+                traceId: `chatty-${i}`,
+                spanId: `cs-${i}`,
+                parentSpanId: null,
+                operationName: 'op',
+                serviceName: 'chatty',
+                startTimeUnixMs: 1,
+                durationMs: 1,
+                statusCode: 'OK' as const,
+                tags: {},
+                hasError: false,
+              },
+            ],
+          })),
+          totalCount: 25,
+        };
+      }
+      return {
+        items: [
+          {
+            traceId: 'quiet-1',
+            spans: [
+              {
+                traceId: 'quiet-1',
+                spanId: 'qs-1',
+                parentSpanId: null,
+                operationName: 'op',
+                serviceName: 'quiet',
+                startTimeUnixMs: 1,
+                durationMs: 1,
+                statusCode: 'OK' as const,
+                tags: {},
+                hasError: false,
+              },
+            ],
+          },
+        ],
+        totalCount: 1,
+      };
+    };
+
+    const map = await backend.serviceMap(60, 20);
+    const services = map.nodes.map((n) => n.service).sort();
+    expect(services).toEqual(['chatty', 'quiet']);
   });
 });

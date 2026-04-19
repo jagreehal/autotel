@@ -1,28 +1,62 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { TelemetryBackend } from '../backends/telemetry.js';
-import { registerHealthTools } from './health.js';
-import { registerInvestigationTools } from './investigation.js';
-import { registerTopologyTools } from './topology.js';
-import { registerLlmAnalyticsTools } from './llm-analytics.js';
-import { registerSignalTools } from './signals.js';
-import { registerCollectorConfigTools } from './collector-config.js';
-import { registerInstrumentationTools } from './instrumentation.js';
-import { registerDiagnosisTools } from './diagnosis.js';
-import { registerCorrelationTools } from './correlation.js';
-import { registerResources } from '../resources/index.js';
+import type { TelemetryBackend } from '../backends/telemetry';
+import { registerHealthTools } from './health';
+import { registerInvestigationTools } from './investigation';
+import { registerTopologyTools } from './topology';
+import { registerDiscoveryTools } from './discovery';
+import { registerLlmAnalyticsTools } from './llm-analytics';
+import { registerSignalTools } from './signals';
+import { registerCollectorConfigTools } from './collector-config';
+import { registerCollectorSchemaTools } from './collector-schema';
+import { registerInstrumentationTools } from './instrumentation';
+import { registerDiagnosisTools } from './diagnosis';
+import { registerCorrelationTools } from './correlation';
+import { registerSemanticConventionTools } from './semantic-conventions';
+import { registerResources } from '../resources/index';
+import type { RuntimeSignalAvailability } from '../modules/signal-availability';
 
 export function registerTools(
   server: McpServer,
   backend: TelemetryBackend,
+  runtimeAvailability?: RuntimeSignalAvailability,
 ): void {
+  const caps = backend.capabilities();
+
+  // Always-on: health, collector config, and instrumentation scoring rubric
+  // don't depend on live signal availability.
   registerHealthTools(server, backend);
-  registerInvestigationTools(server, backend);
-  registerTopologyTools(server, backend);
-  registerLlmAnalyticsTools(server, backend);
-  registerSignalTools(server, backend);
   registerCollectorConfigTools(server);
+  registerCollectorSchemaTools(server);
   registerInstrumentationTools(server);
-  registerDiagnosisTools(server, backend);
-  registerCorrelationTools(server, backend);
-  registerResources(server, backend);
+  registerSemanticConventionTools(server);
+
+  const tracesEnabled =
+    runtimeAvailability?.traces.enabled ?? caps.traces === 'available';
+  const metricsEnabled =
+    runtimeAvailability?.metrics.enabled ?? caps.metrics === 'available';
+  const logsEnabled =
+    runtimeAvailability?.logs.enabled ?? caps.logs === 'available';
+
+  // Trace-dependent tools: skip if the backend doesn't carry traces.
+  if (tracesEnabled) {
+    registerInvestigationTools(server, backend);
+    registerTopologyTools(server, backend);
+    registerLlmAnalyticsTools(server, backend);
+    registerDiagnosisTools(server, backend);
+    registerCorrelationTools(server, backend);
+  }
+
+  // Metric + log tools gate themselves inside registerSignalTools.
+  registerSignalTools(server, backend, {
+    metrics: metricsEnabled,
+    logs: logsEnabled,
+  });
+
+  registerDiscoveryTools(server, backend, {
+    traces: tracesEnabled,
+    logs: logsEnabled,
+    metrics: metricsEnabled,
+  });
+
+  registerResources(server, backend, runtimeAvailability);
 }

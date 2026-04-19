@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CollectorStore } from '../src/backends/collector/store.js';
+import { CollectorStore } from '../src/backends/collector/store';
 
 describe('CollectorStore', () => {
   let store: CollectorStore;

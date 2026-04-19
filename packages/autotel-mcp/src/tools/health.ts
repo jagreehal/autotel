@@ -1,13 +1,8 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { TelemetryBackend } from '../backends/telemetry.js';
-import { buildCapabilitiesText } from '../modules/docs.js';
-
-function respondJSON(data: unknown) {
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
-  };
-}
+import type { TelemetryBackend } from '../backends/telemetry';
+import { buildCapabilitiesText } from '../modules/docs';
+import { respondSafe } from './shared';
 
 export function registerHealthTools(
   server: McpServer,
@@ -19,7 +14,7 @@ export function registerHealthTools(
       description: 'Check backend health and readiness.',
       inputSchema: z.object({}),
     },
-    async () => respondJSON(await backend.healthCheck()),
+    async () => respondSafe(() => backend.healthCheck(), 'backend_health'),
   );
 
   server.registerTool(
@@ -29,7 +24,8 @@ export function registerHealthTools(
         'Describe which telemetry signals the active backend can serve.',
       inputSchema: z.object({}),
     },
-    async () => respondJSON(backend.capabilities()),
+    async () =>
+      respondSafe(() => backend.capabilities(), 'backend_capabilities'),
   );
 
   server.registerTool(
@@ -39,10 +35,10 @@ export function registerHealthTools(
         'List the server capabilities, transports, tools, resources, and backend signals.',
       inputSchema: z.object({}),
     },
-    async () => ({
-      content: [
-        { type: 'text' as const, text: buildCapabilitiesText('autotel-mcp') },
-      ],
-    }),
+    async () =>
+      respondSafe(
+        () => JSON.parse(buildCapabilitiesText('autotel-mcp')),
+        'list_capabilities',
+      ),
   );
 }

@@ -22,7 +22,7 @@
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish",
     "quality": "turbo run build && turbo run lint && turbo run format && turbo run type-check && turbo run test && turbo run test:integration",
-    "intent:validate": "intent validate packages/autotel/skills && intent validate packages/autotel-hono/skills && intent validate packages/autotel-tanstack/skills && intent validate packages/autotel-cloudflare/skills && intent validate packages/autotel-subscribers/skills && intent validate packages/autotel-edge/skills && intent validate packages/autotel-mcp-instrumentation/skills"
+    "intent:validate": "intent validate packages/autotel/skills && intent validate packages/autotel-hono/skills && intent validate packages/autotel-tanstack/skills && intent validate packages/autotel-cloudflare/skills && intent validate packages/autotel-subscribers/skills && intent validate packages/autotel-edge/skills && intent validate packages/autotel-mcp-instrumentation/skills && intent validate packages/autotel-mcp/skills && intent validate packages/autotel-devtools/skills"
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",
