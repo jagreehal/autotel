@@ -1,5 +1,12 @@
 # autotel-plugins
 
+## 0.19.7
+
+### Patch Changes
+
+- Updated dependencies [dc471ef]
+  - autotel@2.26.1
+
 ## 0.19.6
 
 ### Patch Changes

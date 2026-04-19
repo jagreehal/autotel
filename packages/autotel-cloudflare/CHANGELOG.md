@@ -1,5 +1,13 @@
 # autotel-cloudflare
 
+## 2.18.5
+
+### Patch Changes
+
+- dc471ef: Enhanced request logger with fork support for async background work, execution logger for edge runtimes, structured errors with internal context, init locking for framework plugins, silent/minLevel logging, and attribute redaction for PII compliance.
+- Updated dependencies [dc471ef]
+  - autotel-edge@3.16.4
+
 ## 2.18.4
 
 ### Patch Changes
