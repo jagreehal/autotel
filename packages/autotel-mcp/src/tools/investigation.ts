@@ -1,14 +1,14 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { TelemetryBackend } from '../backends/telemetry.js';
+import type { TelemetryBackend } from '../backends/telemetry';
 import {
-  respondJSON,
+  respondSafe,
   traceQuerySchema,
   toTraceSearchQuery,
   toSpanSearchQuery,
   type TraceQueryInput,
   type SpanQueryInput,
-} from './shared.js';
+} from './shared';
 
 export function registerInvestigationTools(
   server: McpServer,
@@ -22,7 +22,10 @@ export function registerInvestigationTools(
       inputSchema: traceQuerySchema,
     },
     async (input: TraceQueryInput) =>
-      respondJSON(await backend.searchTraces(toTraceSearchQuery(input))),
+      respondSafe(
+        () => backend.searchTraces(toTraceSearchQuery(input)),
+        'search_traces',
+      ),
   );
 
   server.registerTool(
@@ -31,12 +34,15 @@ export function registerInvestigationTools(
       description:
         'Search spans by service, operation, status, tags, time window, duration, and error flag.',
       inputSchema: traceQuerySchema.extend({
-        minDurationMs: z.number().int().nonnegative().optional(),
-        maxDurationMs: z.number().int().nonnegative().optional(),
+        minDurationMs: z.coerce.number().int().nonnegative().optional(),
+        maxDurationMs: z.coerce.number().int().nonnegative().optional(),
       }),
     },
     async (input: SpanQueryInput) =>
-      respondJSON(await backend.searchSpans(toSpanSearchQuery(input))),
+      respondSafe(
+        () => backend.searchSpans(toSpanSearchQuery(input)),
+        'search_spans',
+      ),
   );
 
   server.registerTool(
@@ -46,7 +52,7 @@ export function registerInvestigationTools(
       inputSchema: z.object({ traceId: z.string().min(1) }),
     },
     async ({ traceId }: { traceId: string }) =>
-      respondJSON(await backend.getTrace(traceId)),
+      respondSafe(() => backend.getTrace(traceId), 'get_trace'),
   );
 
   server.registerTool(
@@ -56,6 +62,6 @@ export function registerInvestigationTools(
       inputSchema: z.object({ traceId: z.string().min(1) }),
     },
     async ({ traceId }: { traceId: string }) =>
-      respondJSON(await backend.summarizeTrace(traceId)),
+      respondSafe(() => backend.summarizeTrace(traceId), 'summarize_trace'),
   );
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { loadConfig } from '../src/config.js';
+import { loadConfig } from '../src/config';
 
 describe('loadConfig', () => {
   beforeEach(() => {

@@ -1,8 +1,19 @@
 import { z } from 'zod';
 
 const configSchema = z.object({
-  backend: z.enum(['collector', 'jaeger']).default('collector'),
-  transport: z.enum(['stdio', 'http']).default('stdio'),
+  backend: z
+    .enum([
+      'collector',
+      'jaeger',
+      'tempo',
+      'prometheus',
+      'loki',
+      'stack',
+      'auto',
+      'fixture',
+    ])
+    .default('collector'),
+  transport: z.enum(['stdio', 'http', 'sse']).default('stdio'),
   port: z.coerce.number().default(3000),
   host: z.string().default('127.0.0.1'),
   collectorPort: z.coerce.number().default(4318),
@@ -10,6 +21,9 @@ const configSchema = z.object({
   retentionMs: z.coerce.number().optional(),
   maxTraces: z.coerce.number().default(10_000),
   jaegerBaseUrl: z.string().default('http://localhost:16686'),
+  tempoBaseUrl: z.string().default('http://localhost:3200'),
+  prometheusBaseUrl: z.string().default('http://localhost:9090'),
+  lokiBaseUrl: z.string().default('http://localhost:3100'),
   fixturePath: z.string().default('./fixtures/telemetry.json'),
 });
 
@@ -26,6 +40,9 @@ export function loadConfig(): AppConfig {
     retentionMs: process.env.AUTOTEL_RETENTION_MS,
     maxTraces: process.env.AUTOTEL_MAX_TRACES,
     jaegerBaseUrl: process.env.JAEGER_BASE_URL,
+    tempoBaseUrl: process.env.TEMPO_BASE_URL,
+    prometheusBaseUrl: process.env.PROMETHEUS_BASE_URL,
+    lokiBaseUrl: process.env.LOKI_BASE_URL,
     fixturePath: process.env.AUTOTEL_FIXTURE_PATH,
   };
 

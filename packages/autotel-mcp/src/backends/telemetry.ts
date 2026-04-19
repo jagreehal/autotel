@@ -18,7 +18,7 @@ import type {
   CorrelatedSignals,
   ServiceMap,
   TraceSummary,
-} from '../types.js';
+} from '../types';
 
 export interface TelemetryBackend {
   readonly kind: string;

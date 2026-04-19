@@ -4,12 +4,54 @@ import type {
   SpanSearchQuery,
   MetricSearchQuery,
   LogSearchQuery,
-} from '../types.js';
+} from '../types';
+import {
+  errorEnvelope,
+  okEnvelope,
+  toErrorMessage,
+} from '../modules/error-envelope';
+import { resolveTimeRange, timeWindowSchema } from '../modules/time-range';
 
 export function respondJSON(data: unknown) {
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify(okEnvelope(data), null, 2),
+      },
+    ],
   };
+}
+
+export function respondError(params: {
+  message: string;
+  code?: string;
+  status?: number;
+  details?: Record<string, unknown>;
+}) {
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify(errorEnvelope(params), null, 2),
+      },
+    ],
+  };
+}
+
+export async function respondSafe(
+  fn: () => Promise<unknown> | unknown,
+  context?: string,
+) {
+  try {
+    const data = await fn();
+    return respondJSON(data);
+  } catch (error) {
+    const message = context
+      ? `[${context}] ${toErrorMessage(error)}`
+      : toErrorMessage(error);
+    return respondError({ message });
+  }
 }
 
 export const tagValueSchema = z.union([z.string(), z.number(), z.boolean()]);
@@ -38,26 +80,28 @@ export const filterSchema = z.object({
   values: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
-export const traceQuerySchema = z.object({
-  serviceName: z.string().min(1).optional(),
-  operationName: z.string().min(1).optional(),
-  lookbackMinutes: z
-    .number()
-    .int()
-    .positive()
-    .max(24 * 60)
-    .optional(),
-  limit: z.number().int().positive().max(100).optional(),
-  errorOnly: z.boolean().optional(),
-  statusCode: z.enum(['OK', 'ERROR', 'UNSET']).optional(),
-  minDurationMs: z.number().int().nonnegative().optional(),
-  maxDurationMs: z.number().int().nonnegative().optional(),
-  genAiSystem: z.string().min(1).optional(),
-  genAiRequestModel: z.string().min(1).optional(),
-  genAiResponseModel: z.string().min(1).optional(),
-  tags: z.record(tagValueSchema).optional(),
-  filters: z.array(filterSchema).optional(),
-});
+export const traceQuerySchema = z
+  .object({
+    serviceName: z.string().min(1).optional(),
+    operationName: z.string().min(1).optional(),
+    lookbackMinutes: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(24 * 60)
+      .optional(),
+    limit: z.coerce.number().int().positive().max(100).optional(),
+    errorOnly: z.boolean().optional(),
+    statusCode: z.enum(['OK', 'ERROR', 'UNSET']).optional(),
+    minDurationMs: z.coerce.number().int().nonnegative().optional(),
+    maxDurationMs: z.coerce.number().int().nonnegative().optional(),
+    genAiSystem: z.string().min(1).optional(),
+    genAiRequestModel: z.string().min(1).optional(),
+    genAiResponseModel: z.string().min(1).optional(),
+    tags: z.record(tagValueSchema).optional(),
+    filters: z.array(filterSchema).optional(),
+  })
+  .merge(timeWindowSchema);
 
 export type TraceQueryInput = z.infer<typeof traceQuerySchema>;
 export type SpanQueryInput = TraceQueryInput & {
@@ -68,6 +112,8 @@ export type MetricsQueryInput = {
   metricName?: string;
   serviceName?: string;
   lookbackMinutes?: number;
+  from?: string;
+  to?: string;
   limit?: number;
 };
 export type LogsQueryInput = {
@@ -77,6 +123,8 @@ export type LogsQueryInput = {
   severityText?: string;
   text?: string;
   lookbackMinutes?: number;
+  from?: string;
+  to?: string;
   limit?: number;
   attributes?: Record<string, string | number | boolean>;
 };
@@ -85,11 +133,21 @@ export function toTraceSearchQuery(input: TraceQueryInput): TraceSearchQuery {
   const query: TraceSearchQuery = {};
   if (input.serviceName !== undefined) query.service = input.serviceName;
   if (input.operationName !== undefined) query.operation = input.operationName;
-  if (input.lookbackMinutes !== undefined) {
-    const nowMs = Date.now();
-    query.startTimeUnixMs = nowMs - input.lookbackMinutes * 60 * 1000;
-    query.endTimeUnixMs = nowMs;
+
+  const timeRange = resolveTimeRange({
+    from: input.from,
+    to: input.to,
+    lookbackMinutes: input.lookbackMinutes,
+    defaultLookbackMinutes: 60,
+  });
+
+  if (timeRange.startTimeUnixMs !== undefined) {
+    query.startTimeUnixMs = timeRange.startTimeUnixMs;
   }
+  if (timeRange.endTimeUnixMs !== undefined) {
+    query.endTimeUnixMs = timeRange.endTimeUnixMs;
+  }
+
   if (input.limit !== undefined) query.limit = input.limit;
   if (input.errorOnly !== undefined) query.hasError = input.errorOnly;
   if (input.statusCode !== undefined) query.statusCode = input.statusCode;
@@ -137,8 +195,25 @@ export function toMetricSearchQuery(
   const query: MetricSearchQuery = {};
   if (input.metricName !== undefined) query.metricName = input.metricName;
   if (input.serviceName !== undefined) query.serviceName = input.serviceName;
-  if (input.lookbackMinutes !== undefined)
+  if (input.lookbackMinutes !== undefined) {
     query.lookbackMinutes = input.lookbackMinutes;
+  } else {
+    const timeRange = resolveTimeRange({
+      from: input.from,
+      to: input.to,
+      defaultLookbackMinutes: 60,
+    });
+    if (
+      timeRange.startTimeUnixMs !== undefined &&
+      timeRange.endTimeUnixMs !== undefined
+    ) {
+      const diffMs = Math.max(
+        60_000,
+        timeRange.endTimeUnixMs - timeRange.startTimeUnixMs,
+      );
+      query.lookbackMinutes = Math.ceil(diffMs / 60_000);
+    }
+  }
   if (input.limit !== undefined) query.limit = input.limit;
   return query;
 }
@@ -150,11 +225,20 @@ export function toLogSearchQuery(input: LogsQueryInput): LogSearchQuery {
   if (input.spanId !== undefined) query.spanId = input.spanId;
   if (input.severityText !== undefined) query.severityText = input.severityText;
   if (input.text !== undefined) query.text = input.text;
-  if (input.lookbackMinutes !== undefined) {
-    const nowMs = Date.now();
-    query.startTimeUnixMs = nowMs - input.lookbackMinutes * 60 * 1000;
-    query.endTimeUnixMs = nowMs;
+
+  const timeRange = resolveTimeRange({
+    from: input.from,
+    to: input.to,
+    lookbackMinutes: input.lookbackMinutes,
+    defaultLookbackMinutes: 60,
+  });
+  if (timeRange.startTimeUnixMs !== undefined) {
+    query.startTimeUnixMs = timeRange.startTimeUnixMs;
   }
+  if (timeRange.endTimeUnixMs !== undefined) {
+    query.endTimeUnixMs = timeRange.endTimeUnixMs;
+  }
+
   if (input.limit !== undefined) query.limit = input.limit;
   if (input.attributes !== undefined) query.attributes = input.attributes;
   return query;

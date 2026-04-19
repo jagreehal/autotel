@@ -1,16 +1,25 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { TelemetryBackend } from '../backends/telemetry.js';
+import type { TelemetryBackend } from '../backends/telemetry';
 import {
-  respondJSON,
+  respondSafe,
   tagValueSchema,
   toMetricSearchQuery,
   toLogSearchQuery,
   type MetricsQueryInput,
   type LogsQueryInput,
-} from './shared.js';
+} from './shared';
 
 export function registerSignalTools(
+  server: McpServer,
+  backend: TelemetryBackend,
+  enabled: { metrics: boolean; logs: boolean },
+): void {
+  if (enabled.metrics) registerMetricTools(server, backend);
+  if (enabled.logs) registerLogTools(server, backend);
+}
+
+function registerMetricTools(
   server: McpServer,
   backend: TelemetryBackend,
 ): void {
@@ -21,19 +30,26 @@ export function registerSignalTools(
       inputSchema: z.object({
         metricName: z.string().min(1).optional(),
         serviceName: z.string().min(1).optional(),
-        lookbackMinutes: z
+        lookbackMinutes: z.coerce
           .number()
           .int()
           .positive()
           .max(24 * 60)
           .optional(),
-        limit: z.number().int().positive().max(100).optional(),
+        from: z.string().min(1).optional(),
+        to: z.string().min(1).optional(),
+        limit: z.coerce.number().int().positive().max(100).optional(),
       }),
     },
     async (input: MetricsQueryInput) =>
-      respondJSON(await backend.listMetrics(toMetricSearchQuery(input))),
+      respondSafe(
+        () => backend.listMetrics(toMetricSearchQuery(input)),
+        'list_metrics',
+      ),
   );
+}
 
+function registerLogTools(server: McpServer, backend: TelemetryBackend): void {
   server.registerTool(
     'search_logs',
     {
@@ -44,17 +60,22 @@ export function registerSignalTools(
         spanId: z.string().min(1).optional(),
         severityText: z.string().min(1).optional(),
         text: z.string().min(1).optional(),
-        lookbackMinutes: z
+        lookbackMinutes: z.coerce
           .number()
           .int()
           .positive()
           .max(24 * 60)
           .optional(),
-        limit: z.number().int().positive().max(100).optional(),
+        from: z.string().min(1).optional(),
+        to: z.string().min(1).optional(),
+        limit: z.coerce.number().int().positive().max(100).optional(),
         attributes: z.record(tagValueSchema).optional(),
       }),
     },
     async (input: LogsQueryInput) =>
-      respondJSON(await backend.searchLogs(toLogSearchQuery(input))),
+      respondSafe(
+        () => backend.searchLogs(toLogSearchQuery(input)),
+        'search_logs',
+      ),
   );
 }

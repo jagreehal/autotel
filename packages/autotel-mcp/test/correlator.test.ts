@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { findRootCause } from '../src/modules/correlator.js';
-import type { TraceRecord } from '../src/types.js';
+import { findRootCause } from '../src/modules/correlator';
+import type { TraceRecord } from '../src/types';
 
 describe('findRootCause', () => {
   it('identifies the slowest leaf span as bottleneck', () => {

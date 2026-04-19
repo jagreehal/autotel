@@ -4,7 +4,7 @@ import type {
   TraceRecord,
   QueryFilter,
   BackendCapabilities,
-} from '../src/types.js';
+} from '../src/types';
 
 describe('types', () => {
   it('SpanRecord has required fields', () => {

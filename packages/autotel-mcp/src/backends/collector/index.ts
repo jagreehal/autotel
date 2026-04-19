@@ -1,6 +1,6 @@
-import type { TelemetryBackend } from '../telemetry.js';
-import { CollectorStore } from './store.js';
-import { OtlpReceiver } from './receiver.js';
+import type { TelemetryBackend } from '../telemetry';
+import { CollectorStore } from './store';
+import { OtlpReceiver } from './receiver';
 import type {
   BackendHealth,
   BackendCapabilities,
@@ -21,13 +21,13 @@ import type {
   CorrelatedSignals,
   ServiceMap,
   TraceSummary,
-} from '../../types.js';
+} from '../../types';
 
 // Import module functions for service map and trace summary
 // These modules use local types that may differ slightly from types.ts
 // Use the modules' own return types and cast as needed
-import { buildServiceMap } from '../../modules/service-map.js';
-import { summarizeTrace as buildTraceSummary } from '../../modules/trace-summary.js';
+import { buildServiceMap } from '../../modules/service-map';
+import { summarizeTrace as buildTraceSummary } from '../../modules/trace-summary';
 
 export interface CollectorBackendOptions {
   port: number;

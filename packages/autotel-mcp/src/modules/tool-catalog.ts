@@ -102,6 +102,23 @@ export function buildToolCatalog(): ToolCatalogEntry[] {
       intent: 'inspect logs',
     },
     {
+      name: 'discover_services',
+      description:
+        'Discover services with cross-signal metadata and usage shape.',
+      intent: 'discover service metadata',
+    },
+    {
+      name: 'discover_trace_fields',
+      description:
+        'Discover trace/span field names, inferred types, and examples.',
+      intent: 'discover trace fields',
+    },
+    {
+      name: 'discover_log_fields',
+      description: 'Discover log field names, inferred types, and examples.',
+      intent: 'discover log fields',
+    },
+    {
       name: 'validate_collector_config',
       description: 'Validate an OTLP receiver collector config fragment.',
       intent: 'check collector config',
@@ -116,6 +133,55 @@ export function buildToolCatalog(): ToolCatalogEntry[] {
       name: 'suggest_collector_config',
       description: 'Suggest a minimal OTLP receiver collector config.',
       intent: 'generate collector config',
+    },
+    {
+      name: 'collector_get_versions',
+      description:
+        'List available OpenTelemetry Collector schema versions supported by the upstream catalog.',
+      intent: 'discover collector versions',
+    },
+    {
+      name: 'collector_list_components',
+      description:
+        'List collector components for a given schema version and kind.',
+      intent: 'discover collector components',
+    },
+    {
+      name: 'collector_component_schema',
+      description: 'Get JSON Schema for a collector component configuration.',
+      intent: 'inspect collector schema',
+    },
+    {
+      name: 'collector_component_readme',
+      description: 'Get README/reference text for a collector component.',
+      intent: 'inspect collector docs',
+    },
+    {
+      name: 'collector_validate_component_config',
+      description:
+        'Validate collector component config against a versioned schema.',
+      intent: 'validate collector component config',
+    },
+    {
+      name: 'collector_refresh_catalog',
+      description:
+        'Refresh in-memory collector metadata cache from upstream sources.',
+      intent: 'refresh collector metadata',
+    },
+    {
+      name: 'semconv_list_namespaces',
+      description: 'List OpenTelemetry semantic-convention namespaces.',
+      intent: 'discover semantic conventions',
+    },
+    {
+      name: 'semconv_get_namespace',
+      description: 'Get semantic-convention groups for one namespace.',
+      intent: 'inspect semantic conventions',
+    },
+    {
+      name: 'semconv_refresh_cache',
+      description: 'Clear semantic-convention cache.',
+      intent: 'refresh semantic conventions',
     },
     {
       name: 'score_span_instrumentation',

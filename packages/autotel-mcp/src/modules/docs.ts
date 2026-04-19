@@ -1,6 +1,6 @@
-import { buildToolCatalog } from './tool-catalog.js';
-import { buildCapabilitiesDocument } from './capabilities.js';
-import type { BackendCapabilities } from '../types.js';
+import { buildToolCatalog } from './tool-catalog';
+import { buildCapabilitiesDocument } from './capabilities';
+import type { BackendCapabilities } from '../types';
 
 export function buildVerificationGuide(): string {
   return [

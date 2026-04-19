@@ -187,6 +187,32 @@ export {
   createObservableGauge,
 } from './metric-helpers';
 
+// LLM-tuned histogram buckets — pass genAiMetricViews() to your
+// MeterProvider so gen_ai.* histograms have useful resolution.
+export {
+  GEN_AI_DURATION_BUCKETS_SECONDS,
+  GEN_AI_TOKEN_USAGE_BUCKETS,
+  GEN_AI_COST_USD_BUCKETS,
+  genAiMetricViews,
+  llmHistogramAdvice,
+} from './gen-ai-metrics';
+
+// OTel GenAI span event helpers — record prompt-sent / response-received
+// / retry / tool-call / stream-first-token as timestamped events aligned
+// with the published GenAI semantic conventions.
+export {
+  recordPromptSent,
+  recordResponseReceived,
+  recordRetry,
+  recordToolCall,
+  recordStreamFirstToken,
+  type PromptSentEvent,
+  type ResponseReceivedEvent,
+  type RetryEvent,
+  type ToolCallEvent,
+  type StreamFirstTokenEvent,
+} from './gen-ai-events';
+
 // Tracer helpers for custom spans
 export {
   getTracer,

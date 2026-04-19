@@ -1,4 +1,4 @@
-import { jsonGet } from '../../lib/http.js';
+import { jsonGet } from '../../lib/http';
 import type {
   BackendCapabilities,
   BackendHealth,
@@ -19,15 +19,15 @@ import type {
   TraceRecord,
   TraceSearchQuery,
   TraceSearchResult,
-} from '../../types.js';
-import type { TelemetryBackend } from '../telemetry.js';
+} from '../../types';
+import type { TelemetryBackend } from '../telemetry';
 import {
   spanMatchesQuery,
   traceMatchesQuery,
-} from '../../modules/query-filters.js';
-import { buildServiceMap } from '../../modules/service-map.js';
-import { summarizeTrace } from '../../modules/trace-summary.js';
-import type { ServiceMap, TraceSummary } from '../../types.js';
+} from '../../modules/query-filters';
+import { buildServiceMap } from '../../modules/service-map';
+import { summarizeTrace } from '../../modules/trace-summary';
+import type { ServiceMap, TraceSummary } from '../../types';
 
 type JaegerServiceResponse = { data: string[] };
 type JaegerTraceData = {
@@ -115,19 +115,46 @@ export class JaegerBackend implements TelemetryBackend {
       return { items, totalCount: items.length };
     }
 
+    // Over-fetch when the query needs post-filtering (hasError), since
+    // Jaeger's `tags` search can't match bool tags or inferred errors.
+    // traceMatchesQuery below applies the full hasError inference.
+    const clientLimit = query.limit ?? 20;
+    const serverLimit = query.hasError
+      ? Math.min(200, clientLimit * 10)
+      : clientLimit;
+
     const params = new URLSearchParams();
-    params.set('lookback', `${60}m`);
-    params.set('limit', `${query.limit ?? 20}`);
+    params.set('limit', `${serverLimit}`);
     params.set('service', service);
     if (query.operation) params.set('operation', query.operation);
-    if (query.hasError) params.set('tags', 'error=true');
+    // Jaeger accepts `start` and `end` in microseconds, or a `lookback`
+    // window. Prefer explicit time bounds when the caller provides them;
+    // otherwise default to the last 60 minutes.
+    if (
+      query.startTimeUnixMs !== undefined ||
+      query.endTimeUnixMs !== undefined
+    ) {
+      const endMs = query.endTimeUnixMs ?? Date.now();
+      const startMs = query.startTimeUnixMs ?? endMs - 60 * 60 * 1000;
+      params.set('start', `${Math.floor(startMs * 1000)}`);
+      params.set('end', `${Math.floor(endMs * 1000)}`);
+    } else {
+      params.set('lookback', '60m');
+    }
+    if (query.minDurationMs !== undefined) {
+      params.set('minDuration', `${query.minDurationMs}ms`);
+    }
+    if (query.maxDurationMs !== undefined) {
+      params.set('maxDuration', `${query.maxDurationMs}ms`);
+    }
 
     const data = await jsonGet<JaegerTraceSearchResponse>(
       `${this.baseUrl}/api/traces?${params}`,
     );
     const items = data.data
       .map((trace) => this.toTraceRecord(trace))
-      .filter((trace) => traceMatchesQuery(trace, query));
+      .filter((trace) => traceMatchesQuery(trace, query))
+      .slice(0, clientLimit);
     return { items, totalCount: items.length };
   }
 
@@ -150,8 +177,27 @@ export class JaegerBackend implements TelemetryBackend {
   }
 
   async serviceMap(_lookbackMinutes = 60, limit = 20): Promise<ServiceMap> {
-    const result = await this.searchTraces({ limit, service: undefined });
-    return buildServiceMap(result.items, limit) as unknown as ServiceMap;
+    // Fan out per-service so every service contributes traces. Going through
+    // searchTraces with service=undefined truncates the merged result to
+    // `limit`, which can evict services that produced fewer traces than the
+    // chatty ones (e.g. Jaeger's own /api/* spans).
+    const services = await this.listServices();
+    const perServiceLimit = Math.max(limit, 20);
+    const results = await Promise.all(
+      services.services.map((svc) =>
+        this.searchTraces({ service: svc, limit: perServiceLimit }),
+      ),
+    );
+    const deduped = new Map<string, TraceRecord>();
+    for (const result of results) {
+      for (const trace of result.items) {
+        deduped.set(trace.traceId, trace);
+      }
+    }
+    return buildServiceMap(
+      Array.from(deduped.values()),
+      limit,
+    ) as unknown as ServiceMap;
   }
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
@@ -210,7 +256,10 @@ export class JaegerBackend implements TelemetryBackend {
         operationName: span.operationName,
         serviceName,
         startTimeUnixMs: Math.floor(span.startTime / 1000),
-        durationMs: Math.floor(span.duration / 1000),
+        // Preserve sub-ms precision — Jaeger reports duration in microseconds.
+        // Flooring rounds small spans to 0, which breaks median/MAD anomaly
+        // detection and p95 edge calculations.
+        durationMs: span.duration / 1000,
         tags,
         hasError:
           tags['error'] === true ||

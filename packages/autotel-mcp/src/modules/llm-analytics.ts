@@ -1,10 +1,19 @@
-import type { SpanRecord, TagValue, TraceRecord } from '../types.js';
+import type { SpanRecord, TagValue, TraceRecord } from '../types';
+import { estimateCostUsd, priceFor } from './llm-pricing';
 
 export interface UsageReport {
   totalRequests: number;
   totalPromptTokens: number;
   totalCompletionTokens: number;
   totalTokens: number;
+  /**
+   * Sum of priced requests only. Requests using a model absent from the
+   * pricing catalog don't contribute; check `unpricedRequests` to spot
+   * coverage gaps (typical cause: a new model name — add it to
+   * AUTOTEL_LLM_PRICES_JSON).
+   */
+  totalCostUsd: number;
+  unpricedRequests: number;
   byModel: Record<
     string,
     {
@@ -12,6 +21,10 @@ export interface UsageReport {
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      costUsd: number;
+      /** `null` when the model isn't in the pricing catalog. */
+      inputPricePerMtok: number | null;
+      outputPricePerMtok: number | null;
     }
   >;
   byService: Record<
@@ -21,6 +34,7 @@ export interface UsageReport {
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      costUsd: number;
     }
   >;
 }
@@ -46,6 +60,11 @@ export interface LlmModelStats {
     completion: PercentileStats;
     total: PercentileStats;
   };
+  /** Total USD spend across priced requests. Zero if model is unpriced. */
+  costUsd: number;
+  /** Published list prices per million tokens, or null if uncatalogued. */
+  inputPricePerMtok: number | null;
+  outputPricePerMtok: number | null;
   finishReasons: Record<string, number> | null;
 }
 
@@ -102,6 +121,10 @@ export interface RankedTraceSummary {
     completion: number;
     total: number;
   };
+  /** Priced spans only — unpriced spans don't contribute. */
+  costUsd: number;
+  /** True if any LLM span in the trace couldn't be priced. */
+  hasUnpricedSpans: boolean;
   status: string;
   hasErrors: boolean;
   llmSpanCount: number;
@@ -113,6 +136,8 @@ export function collectUsage(traces: TraceRecord[]): UsageReport {
     totalPromptTokens: 0,
     totalCompletionTokens: 0,
     totalTokens: 0,
+    totalCostUsd: 0,
+    unpricedRequests: 0,
     byModel: {},
     byService: {},
   };
@@ -127,16 +152,30 @@ export function collectUsage(traces: TraceRecord[]): UsageReport {
       report.totalTokens += llm.totalTokens;
 
       const model = llm.model ?? 'unknown';
+      const price = priceFor(llm.model);
+      const cost =
+        estimateCostUsd(llm.model, llm.promptTokens, llm.completionTokens) ??
+        null;
+      if (cost === null) {
+        report.unpricedRequests += 1;
+      } else {
+        report.totalCostUsd += cost;
+      }
+
       const modelBucket = report.byModel[model] ?? {
         requests: 0,
         promptTokens: 0,
         completionTokens: 0,
         totalTokens: 0,
+        costUsd: 0,
+        inputPricePerMtok: price?.inputPerMtok ?? null,
+        outputPricePerMtok: price?.outputPerMtok ?? null,
       };
       modelBucket.requests += 1;
       modelBucket.promptTokens += llm.promptTokens;
       modelBucket.completionTokens += llm.completionTokens;
       modelBucket.totalTokens += llm.totalTokens;
+      if (cost !== null) modelBucket.costUsd += cost;
       report.byModel[model] = modelBucket;
 
       const service = span.serviceName;
@@ -145,11 +184,13 @@ export function collectUsage(traces: TraceRecord[]): UsageReport {
         promptTokens: 0,
         completionTokens: 0,
         totalTokens: 0,
+        costUsd: 0,
       };
       serviceBucket.requests += 1;
       serviceBucket.promptTokens += llm.promptTokens;
       serviceBucket.completionTokens += llm.completionTokens;
       serviceBucket.totalTokens += llm.totalTokens;
+      if (cost !== null) serviceBucket.costUsd += cost;
       report.byService[service] = serviceBucket;
     }
   }
@@ -204,6 +245,7 @@ export function getModelStats(
   let requestCount = 0;
   let successCount = 0;
   let errorCount = 0;
+  let costUsd = 0;
 
   for (const trace of traces) {
     for (const span of trace.spans) {
@@ -214,6 +256,12 @@ export function getModelStats(
       if (llm.promptTokens > 0) promptTokens.push(llm.promptTokens);
       if (llm.completionTokens > 0) completionTokens.push(llm.completionTokens);
       if (llm.totalTokens > 0) totalTokens.push(llm.totalTokens);
+      const cost = estimateCostUsd(
+        llm.model,
+        llm.promptTokens,
+        llm.completionTokens,
+      );
+      if (cost !== null) costUsd += cost;
       for (const reason of llm.finishReasons) {
         finishReasons.set(reason, (finishReasons.get(reason) ?? 0) + 1);
       }
@@ -224,6 +272,7 @@ export function getModelStats(
 
   if (requestCount === 0) return null;
 
+  const price = priceFor(modelName);
   return {
     model: modelName,
     requestCount,
@@ -237,6 +286,9 @@ export function getModelStats(
       completion: calculatePercentiles(completionTokens),
       total: calculatePercentiles(totalTokens),
     },
+    costUsd,
+    inputPricePerMtok: price?.inputPerMtok ?? null,
+    outputPricePerMtok: price?.outputPerMtok ?? null,
     finishReasons: finishReasons.size
       ? Object.fromEntries(finishReasons)
       : null,
@@ -311,68 +363,57 @@ export function rankExpensiveTraces(
   traces: TraceRecord[],
 ): RankedTraceSummary[] {
   return traces
-    .map((trace) => {
-      const ltm = summarizeTraceTokens(trace);
-      const llmSpans = trace.spans.filter(isLlmSpan);
-      const models = Array.from(
-        new Set(
-          llmSpans.flatMap((span) => {
-            const llm = getLlmSpan(span);
-            return llm?.model ? [llm.model] : [];
-          }),
-        ),
-      );
-      const durationMs = deriveTraceDurationMs(trace);
-      return {
-        traceId: trace.traceId,
-        serviceName: deriveTraceServiceName(trace),
-        operationName: trace.spans[0]?.operationName ?? 'unknown',
-        startTimeUnixMs: deriveTraceStartTimeUnixMs(trace),
-        durationMs,
-        models,
-        tokens: ltm,
-        status: deriveTraceStatusCode(trace),
-        hasErrors: trace.spans.some((span) => span.hasError),
-        llmSpanCount: llmSpans.length,
-      };
-    })
+    .map((trace) => summarizeRankedTrace(trace))
     .filter((trace) => trace.tokens.total > 0)
     .sort(
-      (a, b) => b.tokens.total - a.tokens.total || b.durationMs - a.durationMs,
+      // Sort by USD cost when we have it; fall back to tokens when every
+      // trace is unpriced so the tool still returns something useful.
+      (a, b) =>
+        b.costUsd - a.costUsd ||
+        b.tokens.total - a.tokens.total ||
+        b.durationMs - a.durationMs,
     );
 }
 
 export function rankSlowTraces(traces: TraceRecord[]): RankedTraceSummary[] {
   return traces
-    .map((trace) => {
-      const ltm = summarizeTraceTokens(trace);
-      const llmSpans = trace.spans.filter(isLlmSpan);
-      const models = Array.from(
-        new Set(
-          llmSpans.flatMap((span) => {
-            const llm = getLlmSpan(span);
-            return llm?.model ? [llm.model] : [];
-          }),
-        ),
-      );
-      const durationMs = deriveTraceDurationMs(trace);
-      return {
-        traceId: trace.traceId,
-        serviceName: deriveTraceServiceName(trace),
-        operationName: trace.spans[0]?.operationName ?? 'unknown',
-        startTimeUnixMs: deriveTraceStartTimeUnixMs(trace),
-        durationMs,
-        models,
-        tokens: ltm,
-        status: deriveTraceStatusCode(trace),
-        hasErrors: trace.spans.some((span) => span.hasError),
-        llmSpanCount: llmSpans.length,
-      };
-    })
+    .map((trace) => summarizeRankedTrace(trace))
     .filter((trace) => trace.llmSpanCount > 0)
     .sort(
       (a, b) => b.durationMs - a.durationMs || b.tokens.total - a.tokens.total,
     );
+}
+
+function summarizeRankedTrace(trace: TraceRecord): RankedTraceSummary {
+  const ltm = summarizeTraceTokens(trace);
+  const llmSpans = trace.spans.filter(isLlmSpan);
+  const models = Array.from(
+    new Set(
+      llmSpans.flatMap((span) => {
+        const llm = getLlmSpan(span);
+        return llm?.model ? [llm.model] : [];
+      }),
+    ),
+  );
+  const durationMs = deriveTraceDurationMs(trace);
+  return {
+    traceId: trace.traceId,
+    serviceName: deriveTraceServiceName(trace),
+    operationName: trace.spans[0]?.operationName ?? 'unknown',
+    startTimeUnixMs: deriveTraceStartTimeUnixMs(trace),
+    durationMs,
+    models,
+    tokens: {
+      prompt: ltm.prompt,
+      completion: ltm.completion,
+      total: ltm.total,
+    },
+    costUsd: ltm.costUsd,
+    hasUnpricedSpans: ltm.hasUnpricedSpans,
+    status: deriveTraceStatusCode(trace),
+    hasErrors: trace.spans.some((span) => span.hasError),
+    llmSpanCount: llmSpans.length,
+  };
 }
 
 export function listToolUsage(traces: TraceRecord[]): LlmToolUsage[] {
@@ -439,18 +480,29 @@ function summarizeTraceTokens(trace: TraceRecord): {
   prompt: number;
   completion: number;
   total: number;
+  costUsd: number;
+  hasUnpricedSpans: boolean;
 } {
   let prompt = 0;
   let completion = 0;
   let total = 0;
+  let costUsd = 0;
+  let hasUnpricedSpans = false;
   for (const span of trace.spans) {
     const llm = getLlmSpan(span);
     if (!llm) continue;
     prompt += llm.promptTokens;
     completion += llm.completionTokens;
     total += llm.totalTokens;
+    const cost = estimateCostUsd(
+      llm.model,
+      llm.promptTokens,
+      llm.completionTokens,
+    );
+    if (cost === null) hasUnpricedSpans = true;
+    else costUsd += cost;
   }
-  return { prompt, completion, total };
+  return { prompt, completion, total, costUsd, hasUnpricedSpans };
 }
 
 function getLlmSpan(span: SpanRecord) {

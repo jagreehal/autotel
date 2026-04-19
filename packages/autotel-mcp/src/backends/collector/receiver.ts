@@ -1,11 +1,11 @@
 import * as http from 'node:http';
-import type { CollectorStore } from './store.js';
+import type { CollectorStore } from './store';
 import type {
   SpanRecord,
   MetricSeries,
   LogRecord,
   TagValue,
-} from '../../types.js';
+} from '../../types';
 
 // ---------------------------------------------------------------------------
 // OTLP attribute helpers

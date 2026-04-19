@@ -19,14 +19,14 @@ import type {
   TraceSearchQuery,
   TraceSearchResult,
   TraceSummary,
-} from '../../types.js';
-import type { TelemetryBackend } from '../telemetry.js';
+} from '../../types';
+import type { TelemetryBackend } from '../telemetry';
 import {
   spanMatchesQuery,
   traceMatchesQuery,
-} from '../../modules/query-filters.js';
-import { buildServiceMap } from '../../modules/service-map.js';
-import { summarizeTrace } from '../../modules/trace-summary.js';
+} from '../../modules/query-filters';
+import { buildServiceMap } from '../../modules/service-map';
+import { summarizeTrace } from '../../modules/trace-summary';
 
 type FixtureData = {
   traces?: TraceRecord[];

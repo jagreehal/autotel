@@ -258,6 +258,17 @@ Query an existing Jaeger instance. Traces only (metrics and logs unsupported by 
 
 ```bash
 AUTOTEL_BACKEND=jaeger JAEGER_BASE_URL=http://localhost:16686 npx autotel-mcp
+
+## Offline cache and snapshots
+
+Collector schema and semantic-convention tools can run in CI or air-gapped environments using local cache/snapshots.
+
+- `AUTOTEL_OFFLINE_MODE=true`
+  Disable network fetches and use local cache + bundled snapshots only.
+- `AUTOTEL_UPSTREAM_CACHE_DIR=/path/to/cache`
+  Override cache directory (default: `.autotel-cache` in current working directory).
+
+Bundled snapshots ship under `fixtures/upstream/` and include a baseline collector version/component catalog plus semantic-convention namespace data.
 ```
 
 ## Configuration

@@ -3,9 +3,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   validateOtlpReceiverConfig,
   suggestCollectorConfig,
-} from '../modules/collector-config.js';
-import { buildCollectorGuide } from '../modules/docs.js';
-import { respondJSON } from './shared.js';
+} from '../modules/collector-config';
+import { buildCollectorGuide } from '../modules/docs';
+import { respondSafe } from './shared';
 
 export function registerCollectorConfigTools(server: McpServer): void {
   server.registerTool(
@@ -14,7 +14,11 @@ export function registerCollectorConfigTools(server: McpServer): void {
       description: 'Validate an OTLP receiver collector config fragment.',
       inputSchema: z.object({ config: z.any() }),
     },
-    async (args) => respondJSON(validateOtlpReceiverConfig(args.config)),
+    async (args) =>
+      respondSafe(
+        () => validateOtlpReceiverConfig(args.config),
+        'validate_collector_config',
+      ),
   );
 
   server.registerTool(
@@ -23,9 +27,11 @@ export function registerCollectorConfigTools(server: McpServer): void {
       description: 'Suggest a minimal OTLP receiver collector config.',
       inputSchema: z.object({}),
     },
-    async () => ({
-      content: [{ type: 'text' as const, text: suggestCollectorConfig() }],
-    }),
+    async () =>
+      respondSafe(
+        () => ({ suggestion: suggestCollectorConfig() }),
+        'suggest_collector_config',
+      ),
   );
 
   server.registerTool(
@@ -35,8 +41,10 @@ export function registerCollectorConfigTools(server: McpServer): void {
         'Explain the OTLP receiver collector config shape and defaults.',
       inputSchema: z.object({}),
     },
-    async () => ({
-      content: [{ type: 'text' as const, text: buildCollectorGuide() }],
-    }),
+    async () =>
+      respondSafe(
+        () => ({ guide: buildCollectorGuide() }),
+        'explain_collector_config',
+      ),
   );
 }

@@ -1,4 +1,4 @@
-import type { TraceRecord } from '../types.js';
+import type { TraceRecord } from '../types';
 
 export interface AnomalyQuery {
   service?: string;
@@ -68,9 +68,16 @@ export function detectAnomalies(
     const med = median(durations);
     const madValue = mad(durations, med);
 
-    // Threshold is median + 3*MAD, with a minimum of 10% above median
+    // Threshold is median + 3*MAD, with a minimum of 10% above median.
+    // Also clamp to MIN_LATENCY_FLOOR_MS so sub-millisecond spans don't
+    // trigger spurious "spike" alerts when the baseline is effectively 0.
+    const MIN_LATENCY_FLOOR_MS = 10;
     const minThreshold = med * 1.1;
-    const threshold = Math.max(med + 3 * madValue, minThreshold);
+    const threshold = Math.max(
+      med + 3 * madValue,
+      minThreshold,
+      MIN_LATENCY_FLOOR_MS,
+    );
 
     const spikeSpans = spans.filter((s) => s.durationMs > threshold);
     if (spikeSpans.length > 0) {

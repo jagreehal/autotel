@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FixtureBackend } from '../src/backends/fixture/index.js';
+import { FixtureBackend } from '../src/backends/fixture/index';
 
 const FIXTURE_PATH = new URL('../fixtures/telemetry.json', import.meta.url)
   .pathname;

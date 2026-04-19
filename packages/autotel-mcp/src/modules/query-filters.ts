@@ -6,7 +6,7 @@ import type {
   TagValue,
   TraceRecord,
   TraceSearchQuery,
-} from '../types.js';
+} from '../types';
 
 function matchesTagValue(
   actual: TagValue | undefined,

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { OtlpReceiver } from '../src/backends/collector/receiver.js';
-import { CollectorStore } from '../src/backends/collector/store.js';
+import { OtlpReceiver } from '../src/backends/collector/receiver';
+import { CollectorStore } from '../src/backends/collector/store';
 
 describe('OtlpReceiver', () => {
   let store: CollectorStore;

@@ -1,0 +1,7 @@
+{
+  "receiver": ["otlp", "jaeger", "zipkin"],
+  "processor": ["batch", "attributes", "filter"],
+  "exporter": ["otlp", "debug", "prometheus"],
+  "connector": ["count"],
+  "extension": ["health_check", "zpages"]
+}

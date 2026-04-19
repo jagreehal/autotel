@@ -1,4 +1,4 @@
-import type { SpanRecord, TraceRecord } from '../types.js';
+import type { SpanRecord, TraceRecord } from '../types';
 
 export interface RootCauseResult {
   bottleneck: SpanRecord;

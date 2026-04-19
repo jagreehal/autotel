@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { buildCapabilitiesDocument } from '../src/modules/capabilities.js';
-import { validateOtlpReceiverConfig } from '../src/modules/collector-config.js';
+import { buildCapabilitiesDocument } from '../src/modules/capabilities';
+import { validateOtlpReceiverConfig } from '../src/modules/collector-config';
 import {
   rankExpensiveTraces,
   rankSlowTraces,
-} from '../src/modules/llm-analytics.js';
+} from '../src/modules/llm-analytics';
 import {
   scoreSpan,
   suggestInstrumentationFixes,
-} from '../src/modules/instrumentation.js';
+} from '../src/modules/instrumentation';
 import {
   spanMatchesQuery,
   traceMatchesQuery,
-} from '../src/modules/query-filters.js';
-import { buildServiceMap } from '../src/modules/service-map.js';
-import { summarizeTrace } from '../src/modules/trace-summary.js';
+} from '../src/modules/query-filters';
+import { buildServiceMap } from '../src/modules/service-map';
+import { summarizeTrace } from '../src/modules/trace-summary';
 
 describe('collector validation', () => {
   it('accepts a minimal OTLP receiver config', () => {
@@ -31,7 +31,7 @@ describe('collector validation', () => {
 describe('capabilities', () => {
   it('lists the expected transport modes and core groups', () => {
     const doc = buildCapabilitiesDocument('best-otel-mcp');
-    expect(doc.transportModes).toEqual(['stdio', 'http']);
+    expect(doc.transportModes).toEqual(['stdio', 'http', 'sse']);
     expect(doc.groups.map((group) => group.name)).toEqual([
       'investigation',
       'signals',
