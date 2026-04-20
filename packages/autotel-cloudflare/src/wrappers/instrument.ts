@@ -46,7 +46,13 @@ import { proxyExecutionContext, unwrap, wrap, type PromiseTracker } from '../bin
 import { instrumentGlobalFetch } from '../global/fetch';
 import { instrumentGlobalCache } from '../global/cache';
 import { instrumentBindings } from '../bindings/bindings';
-import type { Attributes, Span } from '@opentelemetry/api';
+import type { Attributes, Span, TextMapGetter } from '@opentelemetry/api';
+
+// Web API Headers objects require .get() — property access via defaultTextMapGetter won't work
+const headersGetter: TextMapGetter<Headers> = {
+  get: (carrier, key) => carrier.get(key) ?? undefined,
+  keys: (carrier) => [...carrier.keys()],
+};
 
 type FetchHandler = (
   request: Request,
@@ -175,7 +181,7 @@ function createFetchInstrumentation(
             ...cfAttrs,
           },
         },
-        context: propagation.extract(api_context.active(), request.headers),
+        context: propagation.extract(api_context.active(), request.headers, headersGetter),
       };
     },
     getAttributesFromResult: (response: Response) => ({

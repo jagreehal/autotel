@@ -394,13 +394,17 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
   describe('Context Propagation', () => {
     it('should propagate trace context from request headers', async () => {
-      let receivedContext = false;
+      const incomingTraceId = '0af7651916cd43dd8448eb211c80319c';
+      const incomingSpanId = 'b7ad6b7169203331';
+      let capturedTraceId: string | undefined;
+      let capturedParentSpanId: string | undefined;
 
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
-          // If context is propagated, we should have trace info
-          const traceparent = request.headers.get('traceparent');
-          receivedContext = !!traceparent;
+        async fetch(_request, _env, _ctx) {
+          const { trace: traceApi, context: contextApi } = await import('@opentelemetry/api');
+          const span = traceApi.getActiveSpan();
+          capturedTraceId = span?.spanContext().traceId;
+          capturedParentSpanId = (span as any)?.parentSpanId;
           return new Response('OK', { status: 200 });
         },
       };
@@ -411,7 +415,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
       const request = new Request('http://example.com/test', {
         headers: {
-          'traceparent': '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+          'traceparent': `00-${incomingTraceId}-${incomingSpanId}-01`,
         },
       });
       const env = {} as Env;
@@ -422,7 +426,10 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
       await instrumented.fetch(request, env, ctx);
 
-      expect(receivedContext).toBe(true);
+      // The server span must inherit the traceId from the incoming traceparent header
+      expect(capturedTraceId).toBe(incomingTraceId);
+      // The server span's parent must be the incoming spanId
+      expect(capturedParentSpanId).toBe(incomingSpanId);
     });
   });
 
