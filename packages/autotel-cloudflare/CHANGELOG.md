@@ -1,5 +1,11 @@
 # autotel-cloudflare
 
+## 2.18.6
+
+### Patch Changes
+
+- b764a97: Added web api headers get
+
 ## 2.18.5
 
 ### Patch Changes
