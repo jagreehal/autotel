@@ -77,45 +77,45 @@ Probes well-known endpoints and picks what responds. Falls back to fixture data 
 
 Tools are registered per backend capability — agents only see tools the backend can actually serve.
 
-| Group | Tools |
-| --- | --- |
-| Trace investigation | `search_traces`, `search_spans`, `get_trace`, `summarize_trace` |
-| Topology / discovery | `list_services`, `list_operations`, `service_map`, `discover_services`, `discover_trace_fields`, `discover_log_fields` |
-| Diagnosis | `find_errors`, `find_anomalies`, `find_root_cause`, `check_slos`, `explain_slowdown` |
-| Cross-signal | `correlate` (trace + metrics + logs for a traceId) |
-| LLM analytics | `get_llm_usage` (with USD cost), `get_llm_expensive_traces` (ranked by USD), `get_llm_slow_traces`, `get_llm_model_stats`, `list_llm_models`, `list_llm_tools` |
-| Metrics / logs | `list_metrics`, `search_logs` |
-| OTel semantic conventions | `semconv_list_namespaces`, `semconv_get_namespace`, `semconv_refresh_cache` |
-| Collector schema | `collector_list_components`, `collector_component_schema`, `collector_component_readme`, `collector_validate_component_config`, `collector_get_versions`, `collector_refresh_catalog` |
-| Health | `backend_health`, `backend_capabilities`, `list_capabilities` |
+| Group                     | Tools                                                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trace investigation       | `search_traces`, `search_spans`, `get_trace`, `summarize_trace`                                                                                                                       |
+| Topology / discovery      | `list_services`, `list_operations`, `service_map`, `discover_services`, `discover_trace_fields`, `discover_log_fields`                                                                |
+| Diagnosis                 | `find_errors`, `find_anomalies`, `find_root_cause`, `check_slos`, `explain_slowdown`                                                                                                  |
+| Cross-signal              | `correlate` (trace + metrics + logs for a traceId)                                                                                                                                    |
+| LLM analytics             | `get_llm_usage` (with USD cost), `get_llm_expensive_traces` (ranked by USD), `get_llm_slow_traces`, `get_llm_model_stats`, `list_llm_models`, `list_llm_tools`                        |
+| Metrics / logs            | `list_metrics`, `search_logs`                                                                                                                                                         |
+| OTel semantic conventions | `semconv_list_namespaces`, `semconv_get_namespace`, `semconv_refresh_cache`                                                                                                           |
+| Collector schema          | `collector_list_components`, `collector_component_schema`, `collector_component_readme`, `collector_validate_component_config`, `collector_get_versions`, `collector_refresh_catalog` |
+| Health                    | `backend_health`, `backend_capabilities`, `list_capabilities`                                                                                                                         |
 
 ## Resources
 
-| URI | Content |
-| --- | --- |
-| `otel://capabilities` | Server manifest |
-| `otel://tool-catalog` | All tools with workflow hints |
-| `otel://backend/capabilities` | Backend declared + runtime-probed signal availability |
-| `otel://dashboards` | Index of prebuilt dashboards |
-| `otel://dashboards/grafana-llm` | Grafana dashboard JSON for LLM workloads (import directly) |
-| `otel://semconv/namespaces` | OTel semantic-convention namespaces |
-| `otel://collector/versions` / `otel://collector/components` | OTel collector schema catalog |
+| URI                                                         | Content                                                    |
+| ----------------------------------------------------------- | ---------------------------------------------------------- |
+| `otel://capabilities`                                       | Server manifest                                            |
+| `otel://tool-catalog`                                       | All tools with workflow hints                              |
+| `otel://backend/capabilities`                               | Backend declared + runtime-probed signal availability      |
+| `otel://dashboards`                                         | Index of prebuilt dashboards                               |
+| `otel://dashboards/grafana-llm`                             | Grafana dashboard JSON for LLM workloads (import directly) |
+| `otel://semconv/namespaces`                                 | OTel semantic-convention namespaces                        |
+| `otel://collector/versions` / `otel://collector/components` | OTel collector schema catalog                              |
 
 ## Environment Variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `AUTOTEL_BACKEND` | `collector` | `collector` / `jaeger` / `tempo` / `prometheus` / `loki` / `stack` / `auto` / `fixture` |
-| `AUTOTEL_TRANSPORT` | `stdio` | `stdio` / `http` / `sse` |
-| `AUTOTEL_PORT` / `AUTOTEL_HOST` | `3000` / `127.0.0.1` | HTTP/SSE bind |
-| `AUTOTEL_COLLECTOR_PORT` | `4318` | OTLP receiver port (collector backend) |
-| `AUTOTEL_PERSIST` | — | libsql file path (persistent collector storage) |
-| `AUTOTEL_RETENTION_MS` | `3600000` / `86400000` | Data retention (in-memory / persistent) |
-| `JAEGER_BASE_URL` | `http://localhost:16686` | Jaeger backend |
-| `TEMPO_BASE_URL` | `http://localhost:3200` | Tempo backend |
-| `PROMETHEUS_BASE_URL` | `http://localhost:9090` | Prometheus backend |
-| `LOKI_BASE_URL` | `http://localhost:3100` | Loki backend |
-| `AUTOTEL_LLM_PRICES_JSON` | — | Path to custom model pricing JSON |
+| Variable                        | Default                  | Purpose                                                                                 |
+| ------------------------------- | ------------------------ | --------------------------------------------------------------------------------------- |
+| `AUTOTEL_BACKEND`               | `collector`              | `collector` / `jaeger` / `tempo` / `prometheus` / `loki` / `stack` / `auto` / `fixture` |
+| `AUTOTEL_TRANSPORT`             | `stdio`                  | `stdio` / `http` / `sse`                                                                |
+| `AUTOTEL_PORT` / `AUTOTEL_HOST` | `3000` / `127.0.0.1`     | HTTP/SSE bind                                                                           |
+| `AUTOTEL_COLLECTOR_PORT`        | `4318`                   | OTLP receiver port (collector backend)                                                  |
+| `AUTOTEL_PERSIST`               | —                        | libsql file path (persistent collector storage)                                         |
+| `AUTOTEL_RETENTION_MS`          | `3600000` / `86400000`   | Data retention (in-memory / persistent)                                                 |
+| `JAEGER_BASE_URL`               | `http://localhost:16686` | Jaeger backend                                                                          |
+| `TEMPO_BASE_URL`                | `http://localhost:3200`  | Tempo backend                                                                           |
+| `PROMETHEUS_BASE_URL`           | `http://localhost:9090`  | Prometheus backend                                                                      |
+| `LOKI_BASE_URL`                 | `http://localhost:3100`  | Loki backend                                                                            |
+| `AUTOTEL_LLM_PRICES_JSON`       | —                        | Path to custom model pricing JSON                                                       |
 
 ## LLM Cost Attribution
 
@@ -133,11 +133,11 @@ Where `prices.json` is `{ "model-name": { "inputPerMtok": N, "outputPerMtok": N 
 
 ## Transports
 
-| Transport | Endpoint | Use |
-| --- | --- | --- |
-| `stdio` | — | Default. Claude Code, Cursor, Codex, Copilot CLI |
-| `http` | `POST /mcp` | Streamable HTTP MCP clients |
-| `sse` | `GET /sse`, `POST /messages?sessionId=…` | Legacy SSE MCP clients |
+| Transport | Endpoint                                 | Use                                              |
+| --------- | ---------------------------------------- | ------------------------------------------------ |
+| `stdio`   | —                                        | Default. Claude Code, Cursor, Codex, Copilot CLI |
+| `http`    | `POST /mcp`                              | Streamable HTTP MCP clients                      |
+| `sse`     | `GET /sse`, `POST /messages?sessionId=…` | Legacy SSE MCP clients                           |
 
 `GET /health` is always exposed when HTTP/SSE is active — returns `{ status, backend, transport, signals, detail, version }` for k8s readiness probes.
 
