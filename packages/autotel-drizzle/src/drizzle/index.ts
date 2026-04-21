@@ -520,10 +520,11 @@ export function instrumentDrizzleClient<TDb extends DrizzleDbLike>(
     instrumented = instrumentSession(db._.session, state) || instrumented;
   }
 
-  if (isObject(db.$client)) {
-    instrumentDrizzle(db.$client, config);
-    instrumented = Boolean(db.$client[INSTRUMENTED_FLAG]) || instrumented;
-  }
+  // Intentionally do NOT instrument db.$client here. The raw client (e.g.
+  // pg.Pool) is the same object that drizzle's session invokes internally from
+  // its prepared query's execute(). Wrapping both layers produces nested
+  // duplicate spans for every query. Users who need to trace a standalone
+  // client without a drizzle wrapper should call `instrumentDrizzle` directly.
 
   if (instrumented) {
     db[INSTRUMENTED_FLAG] = true;
