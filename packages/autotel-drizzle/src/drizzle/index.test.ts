@@ -248,24 +248,58 @@ describe('instrumentDrizzleClient', () => {
     expect(getSpan(1).attributes['db.operation']).toBe('SELECT');
   });
 
-  it('instruments multiple surfaces on the same db instance', async () => {
+  it('instruments the session but leaves $client untouched', async () => {
+    const originalClientQuery = vi.fn(async () => ({ rows: ['client'] }));
     const db = {
       session: {
         execute: vi.fn(async () => ({ rows: ['session'] })),
       },
       $client: {
-        query: vi.fn(async () => ({ rows: ['client'] })),
+        query: originalClientQuery,
       },
     };
 
     instrumentDrizzleClient(db);
 
     await db.session.execute('INSERT INTO users VALUES (1)');
-    await db.$client.query('SELECT 1');
-
-    expect(spans).toHaveLength(2);
+    expect(spans).toHaveLength(1);
     expect(getSpan(0).name).toBe('drizzle.insert');
-    expect(getSpan(1).name).toBe('drizzle.select');
+
+    // $client.query must remain the original reference. Instrumenting it here
+    // would produce duplicate spans because drizzle's session internally calls
+    // $client.query from within its own already-traced execute path.
+    expect(db.$client.query).toBe(originalClientQuery);
+
+    await db.$client.query('SELECT 1');
+    expect(spans).toHaveLength(1);
+  });
+
+  it('produces one span when drizzle session.prepareQuery routes through the shared $client', async () => {
+    // Simulates the real drizzle-orm/node-postgres flow where
+    // prepared.execute() internally dispatches to db.$client.query().
+    const client = {
+      query: vi.fn(async () => ({ rows: [{ id: 1 }] })),
+    };
+    const db = {
+      $client: client,
+      session: {
+        prepareQuery: vi.fn((query: { sql: string }) => ({
+          execute: vi.fn(async () => client.query(query.sql)),
+        })),
+      },
+    };
+
+    instrumentDrizzleClient(db);
+
+    const prepared = db.session.prepareQuery({ sql: 'SELECT 1' });
+    await prepared.execute();
+
+    // Exactly one autotel span should be created — the one from
+    // instrumented prepared.execute. The inner $client.query call must
+    // NOT create its own span.
+    expect(spans).toHaveLength(1);
+    expect(getSpan(0).name).toBe('drizzle.select');
+    expect(client.query).toHaveBeenCalledTimes(1);
   });
 
   it('instruments transaction execute and nested transaction session queries', async () => {
@@ -317,22 +351,23 @@ describe('instrumentDrizzleClient', () => {
   });
 
   it('is idempotent when called repeatedly', () => {
+    const originalClientExecute = vi.fn(async () => ({ rows: [] }));
     const db = {
       session: {
         query: vi.fn(async () => ({ rows: [] })),
       },
       $client: {
-        execute: vi.fn(async () => ({ rows: [] })),
+        execute: originalClientExecute,
       },
     };
 
     instrumentDrizzleClient(db);
     const firstSessionQuery = db.session.query;
-    const firstClientExecute = db.$client.execute;
 
     instrumentDrizzleClient(db);
 
     expect(db.session.query).toBe(firstSessionQuery);
-    expect(db.$client.execute).toBe(firstClientExecute);
+    // $client.execute is intentionally not wrapped by instrumentDrizzleClient.
+    expect(db.$client.execute).toBe(originalClientExecute);
   });
 });
