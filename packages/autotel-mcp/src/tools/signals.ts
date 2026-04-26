@@ -69,7 +69,7 @@ function registerLogTools(server: McpServer, backend: TelemetryBackend): void {
         from: z.string().min(1).optional(),
         to: z.string().min(1).optional(),
         limit: z.coerce.number().int().positive().max(100).optional(),
-        attributes: z.record(tagValueSchema).optional(),
+        attributes: z.record(z.string(), tagValueSchema).optional(),
       }),
     },
     async (input: LogsQueryInput) =>

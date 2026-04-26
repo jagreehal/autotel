@@ -10,16 +10,16 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.72.0",
-    "@prisma/client": "^7.7.0",
-    "@prisma/instrumentation": "^7.7.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.73.0",
+    "@prisma/client": "^7.8.0",
+    "@prisma/instrumentation": "^7.8.0",
     "autotel": "workspace:*",
-    "dotenv": "^17.4.1"
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
-    "@types/node": "^25.5.2",
-    "prisma": "^7.7.0",
+    "@types/node": "^25.6.0",
+    "prisma": "^7.8.0",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   }
 }

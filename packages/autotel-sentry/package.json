@@ -30,7 +30,7 @@
     "@opentelemetry/api": "^1.9.1"
   },
   "peerDependencies": {
-    "@sentry/node": ">=10.47.0"
+    "@sentry/node": ">=10.50.0"
   },
   "peerDependenciesMeta": {
     "@sentry/node": {
@@ -40,8 +40,8 @@
   "devDependencies": {
     "@types/node": "^25.6.0",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.4"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   },
   "keywords": [
     "opentelemetry",

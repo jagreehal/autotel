@@ -143,4 +143,8 @@ export class DevtoolsLogExporter implements LogRecordExporter {
     this.isShutdown = true;
     return Promise.resolve();
   }
+
+  forceFlush(): Promise<void> {
+    return Promise.resolve();
+  }
 }
