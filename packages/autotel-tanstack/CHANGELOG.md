@@ -1,5 +1,14 @@
 # autotel-tanstack
 
+## 1.13.10
+
+### Patch Changes
+
+- dc4908d: Updated deps
+- Updated dependencies [dc4908d]
+  - autotel-adapters@0.2.9
+  - autotel@2.26.3
+
 ## 1.13.9
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # autotel-sentry
 
+## 0.5.8
+
+### Patch Changes
+
+- dc4908d: Updated deps
+
 ## 0.5.7
 
 ### Patch Changes

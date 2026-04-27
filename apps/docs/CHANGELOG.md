@@ -1,5 +1,11 @@
 # autotel-docs
 
+## 0.0.3
+
+### Patch Changes
+
+- dc4908d: Updated deps
+
 ## 0.0.2
 
 ### Patch Changes

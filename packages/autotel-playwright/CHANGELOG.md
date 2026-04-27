@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.15
+
+### Patch Changes
+
+- dc4908d: Updated deps
+- Updated dependencies [dc4908d]
+  - autotel@2.26.3
+
 ## 0.4.14
 
 ### Patch Changes

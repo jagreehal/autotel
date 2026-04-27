@@ -1,6 +1,6 @@
 {
   "name": "autotel-terminal",
-  "version": "18.0.2",
+  "version": "18.0.3",
   "description": "Terminal dashboard for autotel traces using react-ink",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

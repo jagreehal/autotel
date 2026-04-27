@@ -1,5 +1,11 @@
 # autotel-cli
 
+## 0.8.4
+
+### Patch Changes
+
+- dc4908d: Updated deps
+
 ## 0.8.3
 
 ### Patch Changes

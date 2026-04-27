@@ -1,5 +1,13 @@
 # autotel-backends
 
+## 2.12.9
+
+### Patch Changes
+
+- dc4908d: Updated deps
+- Updated dependencies [dc4908d]
+  - autotel@2.26.3
+
 ## 2.12.8
 
 ### Patch Changes
