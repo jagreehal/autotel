@@ -1,5 +1,13 @@
 # autotel-cloudflare
 
+## 2.18.7
+
+### Patch Changes
+
+- dc4908d: Updated deps
+- Updated dependencies [dc4908d]
+  - autotel-edge@3.16.5
+
 ## 2.18.6
 
 ### Patch Changes

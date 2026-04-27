@@ -1,5 +1,11 @@
 # autotel
 
+## 2.26.3
+
+### Patch Changes
+
+- dc4908d: Updated deps
+
 ## 2.26.2
 
 ### Patch Changes

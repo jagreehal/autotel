@@ -1,5 +1,11 @@
 # autotel-mcp
 
+## 0.1.3
+
+### Patch Changes
+
+- dc4908d: Updated deps
+
 ## 0.1.2
 
 ### Patch Changes

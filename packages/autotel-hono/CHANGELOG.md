@@ -1,5 +1,14 @@
 # autotel-hono
 
+## 0.4.9
+
+### Patch Changes
+
+- dc4908d: Updated deps
+- Updated dependencies [dc4908d]
+  - autotel-adapters@0.2.9
+  - autotel@2.26.3
+
 ## 0.4.8
 
 ### Patch Changes

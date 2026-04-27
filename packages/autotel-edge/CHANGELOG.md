@@ -1,5 +1,11 @@
 # autotel-edge
 
+## 3.16.5
+
+### Patch Changes
+
+- dc4908d: Updated deps
+
 ## 3.16.4
 
 ### Patch Changes
