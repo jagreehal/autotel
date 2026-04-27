@@ -1,5 +1,13 @@
 # autotel-subscribers
 
+## 30.0.3
+
+### Patch Changes
+
+- dc4908d: Updated deps
+- Updated dependencies [dc4908d]
+  - autotel@2.26.3
+
 ## 30.0.2
 
 ### Patch Changes

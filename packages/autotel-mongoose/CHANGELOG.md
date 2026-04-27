@@ -1,5 +1,13 @@
 # autotel-mongoose
 
+## 1.0.1
+
+### Patch Changes
+
+- dc4908d: Updated deps
+- Updated dependencies [dc4908d]
+  - autotel@2.26.3
+
 ## 1.0.0
 
 ### Patch Changes

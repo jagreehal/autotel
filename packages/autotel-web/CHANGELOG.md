@@ -1,5 +1,11 @@
 # autotel-web
 
+## 1.11.2
+
+### Patch Changes
+
+- dc4908d: Updated deps
+
 ## 1.11.1
 
 ### Patch Changes
