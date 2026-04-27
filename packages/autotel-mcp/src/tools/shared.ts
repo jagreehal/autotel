@@ -98,7 +98,7 @@ export const traceQuerySchema = z
     genAiSystem: z.string().min(1).optional(),
     genAiRequestModel: z.string().min(1).optional(),
     genAiResponseModel: z.string().min(1).optional(),
-    tags: z.record(tagValueSchema).optional(),
+    tags: z.record(z.string(), tagValueSchema).optional(),
     filters: z.array(filterSchema).optional(),
   })
   .merge(timeWindowSchema);

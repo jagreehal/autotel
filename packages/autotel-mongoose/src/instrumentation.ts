@@ -612,18 +612,18 @@ function wrapHookHandler(
   // preserve the original arity.
   const expectsCallback = handler.length > 0;
 
-  const wrappedHook = function wrappedHook(this: any, ...args: any[]): any {
+  const startHookSpan = (self: any) => {
     let modelName: string | undefined;
     let collectionName: string | undefined;
 
     try {
-      if (this.constructor?.modelName) {
-        modelName = this.constructor.modelName;
+      if (self.constructor?.modelName) {
+        modelName = self.constructor.modelName;
         collectionName =
-          this.constructor.collection?.collectionName || modelName;
-      } else if (this.model?.modelName) {
-        modelName = this.model.modelName;
-        collectionName = this.model.collection?.collectionName || modelName;
+          self.constructor.collection?.collectionName || modelName;
+      } else if (self.model?.modelName) {
+        modelName = self.model.modelName;
+        collectionName = self.model.collection?.collectionName || modelName;
       }
     } catch {
       // Ignore errors in extracting context
@@ -647,28 +647,18 @@ function wrapHookHandler(
       span.setAttribute(ATTR_DB_NAMESPACE, config.dbName);
     }
 
-    // For callback-style hooks, wrap the `next` callback to finalize the span
-    // when the hook signals completion (instead of on synchronous return).
-    // Kareem passes `next` as the first argument for callback-style hooks.
-    if (expectsCallback && args.length > 0 && typeof args[0] === 'function') {
-      const originalNext = args[0];
-      args[0] = function wrappedNext(this: any, ...nextArgs: any[]) {
-        const err = nextArgs[0];
-        if (err) {
-          finalizeSpan(
-            span,
-            err instanceof Error ? err : new Error(String(err)),
-          );
-        } else {
-          finalizeSpan(span);
-        }
-        return originalNext.apply(this, nextArgs);
-      };
-    }
+    return span;
+  };
 
-    return runWithSpan(span, () => {
+  const invokeHook = (
+    self: any,
+    span: Span,
+    args: any[],
+    callbackStyle: boolean,
+  ) =>
+    runWithSpan(span, () => {
       try {
-        const result = handler.apply(this, args);
+        const result = handler.apply(self, args);
 
         if (result && typeof result.then === 'function') {
           return Promise.resolve(result as Promise<any>)
@@ -687,7 +677,7 @@ function wrapHookHandler(
 
         // Only finalize synchronously for non-callback hooks.
         // Callback-style hooks finalize in the wrappedNext above.
-        if (!expectsCallback) {
+        if (!callbackStyle) {
           finalizeSpan(span);
         }
         return result;
@@ -699,11 +689,49 @@ function wrapHookHandler(
         throw error;
       }
     });
-  };
 
-  // Preserve function arity so kareem passes `next` for callback-style hooks.
-  // Rest params (...args) give length=0; we must match the original handler.
-  Object.defineProperty(wrappedHook, 'length', { value: handler.length });
+  const wrappedHook = expectsCallback
+    ? function wrappedHookCallback(this: any, arg0: any, ...args: any[]): any {
+        const span = startHookSpan(this);
+        const runtimeArgs = [arg0, ...args];
+        const callbackIndex = runtimeArgs.findIndex(
+          (arg) => typeof arg === 'function',
+        );
+        const originalNext =
+          callbackIndex === -1
+            ? undefined
+            : (runtimeArgs[callbackIndex] as (...args: any[]) => void);
+
+        const callArgs =
+          callbackIndex === -1
+            ? runtimeArgs
+            : runtimeArgs.filter((_, index) => index !== callbackIndex);
+
+        const wrappedNext = function wrappedNext(
+          this: any,
+          ...nextArgs: any[]
+        ) {
+          const err = nextArgs[0];
+          if (err) {
+            finalizeSpan(
+              span,
+              err instanceof Error ? err : new Error(String(err)),
+            );
+          } else {
+            finalizeSpan(span);
+          }
+          if (typeof originalNext === 'function') {
+            return originalNext.apply(this, nextArgs);
+          }
+          return;
+        };
+
+        return invokeHook(this, span, [wrappedNext, ...callArgs], true);
+      }
+    : function wrappedHookPromise(this: any, ...args: any[]): any {
+        const span = startHookSpan(this);
+        return invokeHook(this, span, args, false);
+      };
 
   // Mark as wrapped to prevent double-wrapping
   (wrappedHook as any)[WRAPPED_HOOK_FLAG] = true;
