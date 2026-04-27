@@ -16,7 +16,10 @@ export function registerInstrumentationTools(server: McpServer): void {
         span: z.object({
           operationName: z.string(),
           serviceName: z.string(),
-          tags: z.record(z.union([z.string(), z.number(), z.boolean()])),
+          tags: z.record(
+            z.string(),
+            z.union([z.string(), z.number(), z.boolean()]),
+          ),
           hasError: z.boolean(),
         }),
       }),
