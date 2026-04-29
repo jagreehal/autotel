@@ -14,6 +14,8 @@ export default new Map([
 ["src/content/docs/frameworks/fastify.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fframeworks%2Ffastify.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/frameworks/hono.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fframeworks%2Fhono.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/frameworks/nestjs.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fframeworks%2Fnestjs.mdx&astroContentModuleFlag=true")],
+["src/content/docs/frameworks/next.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fframeworks%2Fnext.mdx&astroContentModuleFlag=true")],
+["src/content/docs/frameworks/nitro.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fframeworks%2Fnitro.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/frameworks/tanstack.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fframeworks%2Ftanstack.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/index.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Findex.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/integrations/auto-instrumentation.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fintegrations%2Fauto-instrumentation.mdx&astroContentModuleFlag=true")],
@@ -35,6 +37,7 @@ export default new Map([
 ["src/content/docs/testing/vitest.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftesting%2Fvitest.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/tools/claude-code-skill.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fclaude-code-skill.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/tools/cli.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fcli.mdx&astroContentModuleFlag=true")],
+["src/content/docs/tools/devtools.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fdevtools.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/tools/terminal.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fterminal.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/tools/web.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fweb.mdx&astroContentModuleFlag=true")]]);
 		

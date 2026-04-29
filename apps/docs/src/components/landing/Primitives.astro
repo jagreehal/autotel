@@ -1,0 +1,168 @@
+---
+const items = [
+  {
+    label: '01 / trace',
+    title: 'Trace any function',
+    blurb:
+      'Wrap a handler. Spans, error recording, and request context come automatically.',
+    code: `import { trace } from 'autotel';
+
+export const checkout = trace((ctx) =>
+  async (req, res) => {
+    const result = await charge(req.body);
+    return res.json(result);
+  },
+);`,
+  },
+  {
+    label: '02 / track',
+    title: 'Emit product events',
+    blurb:
+      'Fan out to PostHog, webhooks, or any subscriber. Same call, every backend.',
+    code: `import { track } from 'autotel';
+
+track('order.created', {
+  userId: req.user.id,
+  amount: result.total,
+  currency: 'GBP',
+});`,
+  },
+  {
+    label: '03 / log',
+    title: 'One canonical log line',
+    blurb:
+      'Build context across the request, then emit one structured event at the end.',
+    code: `import { getRequestLogger } from 'autotel';
+
+const log = getRequestLogger(ctx);
+log.set({ userId, plan, source });
+log.emitNow();`,
+  },
+];
+---
+
+<section class="primitives" aria-labelledby="primitives-title">
+  <div class="primitives__inner">
+    <header class="primitives__head">
+      <p class="primitives__eyebrow">Three primitives</p>
+      <h2 id="primitives-title" class="primitives__title">
+        Everything you need from a single import.
+      </h2>
+    </header>
+
+    <div class="primitives__grid">
+      {items.map((it) => (
+        <article class="card">
+          <p class="card__label">{it.label}</p>
+          <h3 class="card__title">{it.title}</h3>
+          <pre class="card__code"><code set:html={it.code}></code></pre>
+          <p class="card__blurb">{it.blurb}</p>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .primitives {
+    border-top: 1px solid var(--sl-color-gray-6);
+    padding-block: clamp(3rem, 6vw, 5rem);
+  }
+
+  .primitives__inner {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 4vw, 2rem);
+  }
+
+  .primitives__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 2.25rem;
+    max-width: 48rem;
+  }
+
+  .primitives__eyebrow {
+    margin: 0;
+    font-family: var(--sl-font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--sl-color-accent);
+  }
+
+  .primitives__title {
+    margin: 0;
+    font-family: var(--sl-font);
+    font-size: clamp(1.6rem, 3.2vw, 2.25rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--sl-color-white);
+    border: 0;
+  }
+
+  .primitives__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    gap: 1px;
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-6);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .card {
+    background: var(--sl-color-bg);
+    padding: 1.5rem 1.5rem 1.75rem;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .card__label {
+    font-family: var(--sl-font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--sl-color-gray-3);
+    margin: 0 0 0.65rem;
+  }
+
+  .card__title {
+    margin: 0 0 1rem;
+    font-family: var(--sl-font);
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--sl-color-text);
+    border: 0;
+  }
+
+  .card__code {
+    margin: 0 0 1rem;
+    padding: 0.85rem 0.95rem;
+    background: var(--sl-color-bg-inline-code);
+    border: 1px solid var(--sl-color-gray-6);
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: var(--sl-font-mono);
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: var(--sl-color-gray-2);
+  }
+
+  .card__code code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    color: inherit;
+  }
+
+  .card__blurb {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--sl-color-gray-3);
+  }
+</style>

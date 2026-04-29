@@ -1,21 +1,40 @@
 ---
 title: MCP
-description: OpenTelemetry instrumentation for Model Context Protocol with automatic distributed tracing.
+description: Instrument MCP servers and clients, and let AI agents query your traces.
 ---
 
-`autotel-mcp` automatically instruments MCP servers and clients with OpenTelemetry tracing. Uses W3C Trace Context propagation via the `_meta` field.
+The autotel monorepo ships **two** Model Context Protocol packages with
+different jobs. Pick the one you need:
 
-## Installation
+| Package                          | Purpose                                                                |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| `autotel-mcp-instrumentation`    | Instrument **your own** MCP servers and clients with OpenTelemetry.    |
+| `autotel-mcp`                    | A standalone MCP **server** that lets AI agents query your traces, metrics, and logs. |
+
+If you're building an MCP-based product → use `autotel-mcp-instrumentation`.
+If you want Claude / Cursor / Windsurf to investigate observability data
+→ install `autotel-mcp`.
+
+---
+
+## autotel-mcp-instrumentation
+
+Automatic instrumentation for MCP servers and clients. W3C Trace Context
+propagates through the `_meta` field, which works across stdio, HTTP, SSE, or
+any custom transport. Bundle ~7KB total.
+
+### Installation
 
 ```bash
-npm install autotel-mcp @modelcontextprotocol/sdk autotel
+npm install autotel-mcp-instrumentation @modelcontextprotocol/sdk autotel
 ```
 
-## Server Instrumentation
+### Server-side
 
 ```typescript
 import { Server } from '@modelcontextprotocol/sdk/server/index';
-import { instrumentMcpServer } from 'autotel-mcp/server';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
+import { instrumentMcpServer } from 'autotel-mcp-instrumentation/server';
 import { init } from 'autotel';
 
 init({ service: 'mcp-weather-server', endpoint: 'http://localhost:4318' });
@@ -24,24 +43,35 @@ const server = new Server({ name: 'weather', version: '1.0.0' });
 
 const instrumented = instrumentMcpServer(server, {
   captureArgs: true,
-  captureResults: false, // PII concern
+  captureResults: false, // off by default; PII concern
 });
 
-// Register tools normally — they're automatically traced
 instrumented.registerTool({
   name: 'get_weather',
+  description: 'Get current weather for a location',
+  inputSchema: {
+    type: 'object',
+    properties: { location: { type: 'string' } },
+    required: ['location'],
+  },
   handler: async (args) => {
-    // Automatically traced with parent context from _meta
+    // Auto-traced; parent context extracted from _meta
+    const weather = await fetchWeather(args.location);
     return { content: [{ type: 'text', text: `Temp: ${weather.temp}°F` }] };
   },
 });
+
+await server.connect(new StdioServerTransport());
 ```
 
-## Client Instrumentation
+### Client-side
 
 ```typescript
 import { Client } from '@modelcontextprotocol/sdk/client/index';
-import { instrumentMcpClient } from 'autotel-mcp/client';
+import { instrumentMcpClient } from 'autotel-mcp-instrumentation/client';
+import { init } from 'autotel';
+
+init({ service: 'mcp-weather-client', endpoint: 'http://localhost:4318' });
 
 const client = new Client({ name: 'weather-client', version: '1.0.0' });
 
@@ -50,45 +80,141 @@ const instrumented = instrumentMcpClient(client, {
   captureResults: false,
 });
 
-// All tool calls automatically have trace context injected into _meta
-const result = await instrumented.callTool({
-  name: 'get_weather',
-  arguments: { location: 'NYC' },
-});
+// _meta is injected with traceparent/tracestate/baggage automatically
+const result = await instrumented.callTool('get_weather', { location: 'NYC' });
 ```
 
-## Distributed Tracing
+### Configuration
 
-W3C Trace Context propagates through the `_meta` field (not headers), making it transport-agnostic:
+```typescript
+interface McpInstrumentationConfig {
+  captureArgs?: boolean;       // default true
+  captureResults?: boolean;    // default false (PII risk)
+  captureErrors?: boolean;     // default true
+  customAttributes?: (ctx: { type, name, args, result }) => Attributes;
+}
+```
+
+### Span attributes
+
+**Server spans:**
+
+- `mcp.type` — `tool`, `resource`, `prompt`
+- `mcp.tool.name` / `mcp.resource.name` / `mcp.prompt.name`
+- `mcp.tool.args` (when `captureArgs: true`)
+- `mcp.tool.result` (when `captureResults: true`)
+
+**Client spans:**
+
+- `mcp.client.operation` — `callTool`, `getResource`, `getPrompt`
+- `mcp.client.name`, `mcp.client.args`, `mcp.client.result`
+
+### Distributed tracing via `_meta`
+
+Because trace context lives in the JSON payload's `_meta` field, the same
+propagation works across stdio, HTTP, SSE, WebSocket, or any custom transport
+without any header plumbing:
 
 ```typescript
 import {
-  extractOtelContextFromMeta,
   injectOtelContextToMeta,
-} from 'autotel-mcp/context';
+  extractOtelContextFromMeta,
+  activateTraceContext,
+} from 'autotel-mcp-instrumentation/context';
+import { context } from '@opentelemetry/api';
 
-// Client injects context
+// Client side: inject
 const request = {
   method: 'tools/call',
   params: { name: 'my-tool', arguments: {} },
   _meta: injectOtelContextToMeta({}),
 };
 
-// Server extracts context
-const parentContext = extractOtelContextFromMeta(request._meta);
+// Server side: extract and activate
+const ctx = activateTraceContext(request._meta);
+return context.with(ctx, () => runHandler(request));
 ```
 
-## Examples
+### Custom attributes & PII redaction
 
-- [`example-mcp-server`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-server) — MCP server with `instrumentMcpServer()` and automatic tool tracing.
-- [`example-mcp-client`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-client) — MCP client with `instrumentMcpClient()` and distributed tracing across client-server boundaries.
-- [`example-mcp-observability`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability) — AI-assisted observability: autotel instruments a Node app, Claude queries traces via MCP.
+`customAttributes` runs per span. Use it to redact PII or attach
+business-specific tags:
 
-## Entry Points
+```typescript
+const instrumented = instrumentMcpServer(server, {
+  captureArgs: false, // disable raw arg capture
+  customAttributes: ({ type, name, args, result }) => ({
+    'tool.location': args?.location, // safe to log
+    'tenant.id': args?.tenantId,
+    ...(type === 'tool' && name === 'search'
+      ? { 'search.results.count': result?.items?.length ?? 0 }
+      : {}),
+  }),
+});
+```
 
-- `autotel-mcp` — Everything (~7KB)
-- `autotel-mcp/server` — Server instrumentation (~5KB)
-- `autotel-mcp/client` — Client instrumentation (~4KB)
-- `autotel-mcp/context` — Context utilities (~2KB)
-- `autotel-mcp/metrics` — MCP-specific metrics
-- `autotel-mcp/semantic-conventions` — MCP semantic conventions
+### Entry points
+
+| Import                                       | Contents                          | Size |
+| -------------------------------------------- | --------------------------------- | ---- |
+| `autotel-mcp-instrumentation`                | Everything                        | ~7KB |
+| `autotel-mcp-instrumentation/server`         | `instrumentMcpServer`             | ~5KB |
+| `autotel-mcp-instrumentation/client`         | `instrumentMcpClient`             | ~4KB |
+| `autotel-mcp-instrumentation/context`        | `inject*`/`extract*`/`activate*`  | ~2KB |
+
+### Examples
+
+- [`example-mcp-server`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-server) — MCP server with `instrumentMcpServer()`.
+- [`example-mcp-client`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-client) — MCP client with `instrumentMcpClient()` and distributed tracing.
+
+---
+
+## autotel-mcp
+
+A standalone MCP server that gives AI agents (Claude Code, Claude Desktop,
+Cursor, Windsurf, VS Code, Goose) the ability to investigate your
+OpenTelemetry traces, metrics, and logs. It ships with a built-in OTLP
+collector on port 4318, so any instrumented app can send data directly. You
+don't need Jaeger, Tempo, or Grafana.
+
+- **Backend-agnostic.** Built-in OTLP collector accepts data from any
+  OTel-instrumented app.
+- **All three signals.** Traces, metrics, and logs with cross-signal correlation.
+- **Agent-optimised.** 33 tools designed for progressive investigation:
+  discover → diagnose → correlate → root-cause.
+- **Zero infrastructure.** In-memory by default; persistent with `--persist`.
+
+### Requirements
+
+- Node.js 20+
+- An MCP-compatible client
+
+### Standard config
+
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp"]
+    }
+  }
+}
+```
+
+### Claude Code
+
+```bash
+claude mcp add autotel npx autotel-mcp
+```
+
+Once installed, ask the agent things like *"What slowed down checkout in the
+last hour?"* or *"Show traces with errors for `service.name=api`"*. The agent
+will discover services, query traces, correlate logs, and return a written
+investigation.
+
+### Related
+
+- [AI-Assisted Observability](/autotel/ai-observability/) — patterns for letting
+  agents investigate production traces.
+- [MCP example app](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability) — autotel instruments a Node app, Claude queries the traces via MCP.
