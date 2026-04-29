@@ -1,5 +1,12 @@
 # autotel-mongoose
 
+## 2.0.0
+
+### Patch Changes
+
+- Updated dependencies [b1f3704]
+  - autotel@3.0.0
+
 ## 1.0.1
 
 ### Patch Changes
