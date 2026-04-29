@@ -81,7 +81,6 @@ export type {
   InstrumentOptions,
 } from './functional';
 export {
-  trace,
   instrument,
   withTracing,
   span,
@@ -89,6 +88,9 @@ export {
   withBaggage,
   ctx,
 } from './functional';
+// `trace` is the hybrid: callable like autotel's `trace(fn)` AND carries the
+// full `@opentelemetry/api` TraceAPI surface (getActiveSpan, getTracer, etc).
+export { trace } from './trace-hybrid';
 
 // Operation context (for advanced usage)
 export type { OperationContext } from './operation-context';
@@ -333,19 +335,33 @@ export {
   type TLSAttrs,
 } from './attributes';
 
-// Re-export common OpenTelemetry types and utilities
-// This allows plugins and apps to use OTel without needing separate @opentelemetry/api installation
+// Re-export common OpenTelemetry types and utilities so plugins, apps, and
+// existing OTel code can `import { ... } from 'autotel'` without also taking
+// a separate `@opentelemetry/api` dependency.
 export type {
   Span,
   SpanContext,
+  SpanAttributes,
   Tracer,
+  TracerProvider,
   Context,
+  Attributes,
+  AttributeValue,
+  Link,
   Link as SpanLink,
+  TimeInput,
+  HrTime,
+  Baggage,
+  BaggageEntry,
+  Exception,
+  TraceFlags,
+  TraceState,
   TextMapSetter,
   TextMapGetter,
 } from '@opentelemetry/api';
 export { SpanKind, ROOT_CONTEXT } from '@opentelemetry/api';
-// Note: trace exported from functional.ts, context/propagation/SpanStatusCode already exported above
+// Note: trace, context, propagation, SpanStatusCode already exported above
+// (`trace` is the hybrid; `otelTrace` is the pure TraceAPI singleton).
 
 // Export typed baggage helper
 export { defineBaggageSchema } from './trace-context';

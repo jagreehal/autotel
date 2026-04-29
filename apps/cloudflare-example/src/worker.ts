@@ -221,9 +221,7 @@ const processPayment = trace(
           code: SpanStatusCode.ERROR,
           message: error instanceof Error ? error.message : 'Unknown error',
         });
-        ctx.recordException(
-          error instanceof Error ? error : new Error(String(error)),
-        );
+        ctx.recordError(error);
         log.error(
           {
             amount,

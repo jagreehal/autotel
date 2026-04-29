@@ -67,7 +67,7 @@ const processPayment = trace((ctx: TraceContext) => async (amount: number, userI
   if (Math.random() > 0.75) {
     const err = new Error('Payment processing failed');
     ctx.setStatus({ code: 2, message: 'Payment failed' });
-    ctx.recordException(err);
+    ctx.recordError(err);
     logger.error({ err, amount, userId }, 'Payment failed');
     throw err;
   }

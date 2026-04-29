@@ -15,6 +15,8 @@ sources:
 
 Wrap functions and handlers with `trace()`, `span()`, or `instrument()`. Call `init()` once at app startup. Keep init synchronous; use `safeRequire`/`requireModule` for optional dependencies.
 
+For new event emission, prefer correlated logs (OTel Logs API path) over adding new direct span-event calls.
+
 ## Setup
 
 ```typescript

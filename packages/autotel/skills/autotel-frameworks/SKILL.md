@@ -19,6 +19,8 @@ This skill builds on autotel-instrumentation. Read it first for init() and span 
 
 Use framework-specific middleware or wrappers to create a span per request; then call `getRequestLogger()` inside handlers. Each framework package (autotel-hono, autotel-tanstack, autotel-cloudflare) provides the glue.
 
+When adding new request/exception events in framework handlers, prefer correlated logs (`getRequestLogger().info/warn/error`) instead of introducing new `span.addEvent()` usage.
+
 ## Setup
 
 ### Hono

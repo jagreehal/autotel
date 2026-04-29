@@ -55,6 +55,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Attributes, Link, SpanContext } from '@opentelemetry/api';
+import { emitCorrelatedEvent } from './correlated-events';
 import { trace } from './functional';
 import type { TraceContext } from './trace-context';
 import { getActiveSpan } from './trace-helpers';
@@ -440,7 +441,7 @@ export function traceStep<TArgs extends unknown[], TReturn>(
           try {
             if (attempt > 1) {
               ctx.setAttribute('workflow.step.retry_attempt', attempt);
-              ctx.addEvent('step_retry', {
+              emitCorrelatedEvent(ctx, 'step_retry', {
                 'workflow.step.attempt': attempt,
                 'workflow.step.max_attempts': maxAttempts,
               });
@@ -463,7 +464,7 @@ export function traceStep<TArgs extends unknown[], TReturn>(
             lastError = error as Error;
 
             if (attempt < maxAttempts) {
-              ctx.addEvent('step_retry_scheduled', {
+              emitCorrelatedEvent(ctx, 'step_retry_scheduled', {
                 'workflow.step.error': String(error),
                 'workflow.step.attempt': attempt,
               });
@@ -595,7 +596,7 @@ function createWorkflowContext(
         const step = state.steps.get(stepName);
         if (step && step.status === 'completed') {
           try {
-            baseCtx.addEvent('compensation_started', {
+            emitCorrelatedEvent(baseCtx, 'compensation_started', {
               'workflow.step.name': stepName,
             });
 
@@ -620,7 +621,7 @@ function createWorkflowContext(
       success: boolean,
       error?: Error,
     ): void {
-      baseCtx.addEvent('compensation_completed', {
+      emitCorrelatedEvent(baseCtx, 'compensation_completed', {
         'workflow.step.name': stepName,
         'workflow.compensation.success': success,
         ...(error && { 'workflow.compensation.error': String(error) }),
@@ -636,7 +637,7 @@ function createWorkflowContext(
       state.status = status;
       baseCtx.setAttribute('workflow.status', status);
 
-      baseCtx.addEvent('workflow_status_changed', {
+      emitCorrelatedEvent(baseCtx, 'workflow_status_changed', {
         'workflow.status': status,
       });
     },
@@ -702,7 +703,7 @@ function createStepContext(
       if (reason) {
         baseCtx.setAttribute('workflow.step.skip_reason', reason);
       }
-      baseCtx.addEvent('step_skipped', {
+      emitCorrelatedEvent(baseCtx, 'step_skipped', {
         'workflow.step.name': config.name,
         ...(reason && { 'workflow.step.skip_reason': reason }),
       });

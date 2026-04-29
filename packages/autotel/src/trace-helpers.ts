@@ -241,7 +241,7 @@ export function getTracer(name: string, version?: string): Tracer {
  * Get the currently active span
  *
  * Returns undefined if no span is currently active.
- * Useful for adding attributes or events to the current span.
+ * Useful for adding attributes to the current span.
  *
  * @returns Active span or undefined
  *
@@ -252,7 +252,7 @@ export function getTracer(name: string, version?: string): Tracer {
  * const span = getActiveSpan();
  * if (span) {
  *   span.setAttribute('user.id', userId);
- *   span.addEvent('User action', { action: 'click' });
+ *   span.setAttribute('user.action', 'click');
  * }
  * ```
  *
