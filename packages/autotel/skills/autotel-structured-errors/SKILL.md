@@ -69,6 +69,8 @@ try {
 
 **Record on current span:** Use `recordStructuredError(ctx, error)` or the request logger's `.error(error, fields)` so the span gets error attributes and status.
 
+For new exception event flows, prefer request-logger/log-based correlation and keep span-event compatibility as an implementation detail (processors/export path), not a new app-level dependency.
+
 **parseError** handles FetchError (ofetch), nested `data.data`, and plain Error. Returns `{ message, status, why?, fix?, link?, raw }`.
 
 ## Common Mistakes

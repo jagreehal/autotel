@@ -78,7 +78,7 @@ export const processPayment = trace((ctx: TraceContext) => async (amount: number
   // Randomly fail to demonstrate error tracking
   if (Math.random() > 0.7) {
     ctx.setStatus({ code: 2, message: 'Payment failed' }); // ERROR
-    ctx.recordException(new Error('Payment processing failed'));
+    ctx.recordError(new Error('Payment processing failed'));
     throw new Error('Payment processing failed');
   }
   

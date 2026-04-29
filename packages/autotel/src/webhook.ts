@@ -36,8 +36,10 @@
 
 import { SpanKind, trace as otelTrace } from '@opentelemetry/api';
 import type { SpanContext, Link } from '@opentelemetry/api';
+import { emitCorrelatedEvent } from './correlated-events';
 import { trace } from './functional';
-import type { TraceContext } from './trace-context';
+import type { AttributeValue, TraceContext } from './trace-context';
+import { recordStructuredError } from './structured-error';
 
 // ============================================================================
 // Types
@@ -426,10 +428,9 @@ export function createParkingLot(config: ParkingLotConfig): ParkingLot {
 
       await store.save(fullKey, storedContext);
 
-      // Add event to current span
       const activeSpan = otelTrace.getActiveSpan();
       if (activeSpan) {
-        activeSpan.addEvent('trace_context_parked', {
+        const parkAttrs: Record<string, AttributeValue> = {
           'parking_lot.correlation_key': correlationKey,
           'parking_lot.ttl_ms': defaultTTLMs,
           ...(metadata &&
@@ -439,7 +440,16 @@ export function createParkingLot(config: ParkingLotConfig): ParkingLot {
                 v,
               ]),
             )),
-        });
+        };
+        emitCorrelatedEvent(
+          {
+            setAttribute: (k, v) => activeSpan.setAttribute(k, v),
+            setAttributes: (a) => activeSpan.setAttributes(a),
+            addEvent: (n, a) => activeSpan.addEvent(n, a),
+          },
+          'trace_context_parked',
+          parkAttrs,
+        );
       }
 
       // Return the unprefixed key so callers can use the same key for retrieve()
@@ -520,8 +530,7 @@ export function createParkingLot(config: ParkingLotConfig): ParkingLot {
                 const link = parkingLot.createLink(parkedContext);
                 baseCtx.addLinks([link]);
 
-                // Add event
-                baseCtx.addEvent('parked_context_retrieved', {
+                emitCorrelatedEvent(baseCtx, 'parked_context_retrieved', {
                   'parking_lot.correlation_key': correlationKey,
                   'parking_lot.elapsed_ms': elapsedMs!,
                   'parking_lot.original_trace_id': parkedContext.traceId,
@@ -533,7 +542,7 @@ export function createParkingLot(config: ParkingLotConfig): ParkingLot {
                   const error = new Error(
                     `Required parked context not found for key: ${correlationKey}`,
                   );
-                  baseCtx.recordException(error);
+                  recordStructuredError(baseCtx, error);
                   throw error;
                 }
               }

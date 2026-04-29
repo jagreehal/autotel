@@ -14,6 +14,8 @@ sources:
 
 Send product and analytics events with `track(name, attributes)` or the `Event` class from `autotel/event`. Configure subscribers (e.g. PostHog) in `init()`; they receive events automatically.
 
+For observability events in new code, prefer log-based correlated events (OTel Logs API model) over introducing new direct span-event instrumentation.
+
 ## Setup
 
 ```typescript

@@ -149,11 +149,14 @@ export function traceLoader<TLoaderFn extends (ctx: any) => any>(
         ctx.setStatus({ code: SpanStatusCode.OK });
         return asyncResult;
       } catch (error) {
-        ctx.recordException(error as Error);
-        ctx.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: (error as Error).message,
-        });
+        if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+          ctx.recordError(error);
+        } else if (
+          'recordException' in ctx &&
+          typeof ctx.recordException === 'function'
+        ) {
+          ctx.recordException(error);
+        }
         throw error;
       }
     });
@@ -277,11 +280,14 @@ export function traceBeforeLoad<TBeforeLoadFn extends (opts: any) => any>(
           ctx.setAttribute('tanstack.beforeLoad.redirect', true);
           ctx.setStatus({ code: SpanStatusCode.OK });
         } else {
-          ctx.recordException(error as Error);
-          ctx.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: (error as Error).message,
-          });
+          if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+            ctx.recordError(error);
+          } else if (
+            'recordException' in ctx &&
+            typeof ctx.recordException === 'function'
+          ) {
+            ctx.recordException(error);
+          }
         }
         throw error;
       }

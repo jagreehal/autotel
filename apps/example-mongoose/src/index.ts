@@ -209,7 +209,7 @@ export const findUserOrFail = trace('findUserOrFail', (ctx) => async (email: str
   if (!user) {
     // This error will be automatically captured in the span
     const error = new Error(`User not found: ${email}`);
-    ctx.recordException(error);
+    ctx.recordError(error);
     ctx.setStatus({ code: 2, message: error.message }); // SpanStatusCode.ERROR = 2
     console.log(`❌ Error recorded in span: ${error.message}`);
     throw error;

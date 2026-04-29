@@ -50,6 +50,7 @@ import type {
 } from '@opentelemetry/api';
 import { trace } from './functional';
 import type { TraceContext } from './trace-context';
+import { emitCorrelatedEvent } from './correlated-events';
 import { createLinkFromHeaders, extractLinksFromBatch } from './sampling';
 
 // ============================================================================
@@ -1406,7 +1407,7 @@ function extendContextForConsumer(
           producerLink.context.spanId;
       }
 
-      baseCtx.addEvent('dlq_routed', eventAttrs);
+      emitCorrelatedEvent(baseCtx, 'dlq_routed', eventAttrs);
 
       // Call user's onDLQ callback if provided
       if (config.onDLQ) {
@@ -1447,7 +1448,7 @@ function extendContextForConsumer(
         }),
       };
 
-      baseCtx.addEvent('dlq_replay', eventAttrs);
+      emitCorrelatedEvent(baseCtx, 'dlq_replay', eventAttrs);
     },
 
     recordRetry(attemptNumber: number, maxAttempts?: number): void {
@@ -1455,7 +1456,7 @@ function extendContextForConsumer(
       if (maxAttempts !== undefined) {
         baseCtx.setAttribute('messaging.retry.max_attempts', maxAttempts);
       }
-      baseCtx.addEvent('retry_attempt', {
+      emitCorrelatedEvent(baseCtx, 'retry_attempt', {
         'messaging.retry.count': attemptNumber,
         ...(maxAttempts !== undefined && {
           'messaging.retry.max_attempts': maxAttempts,
@@ -1585,7 +1586,7 @@ function extendContextForConsumer(
           event.partitions.map((p) => `${p.topic}:${p.partition}`).join(',');
       }
 
-      baseCtx.addEvent(`consumer_group_${event.type}`, eventAttrs);
+      emitCorrelatedEvent(baseCtx, `consumer_group_${event.type}`, eventAttrs);
 
       // Call user's onRebalance callback if provided
       if (config.consumerGroupTracking?.onRebalance) {
@@ -1627,7 +1628,7 @@ function extendContextForConsumer(
         );
       }
 
-      baseCtx.addEvent('consumer_group_heartbeat', {
+      emitCorrelatedEvent(baseCtx, 'consumer_group_heartbeat', {
         'messaging.consumer_group.heartbeat.healthy': healthy,
         'messaging.consumer_group.heartbeat.timestamp':
           groupState.lastHeartbeat,
@@ -1644,7 +1645,7 @@ function extendContextForConsumer(
       baseCtx.setAttribute(`${prefix}.end_offset`, lag.endOffset);
       baseCtx.setAttribute(`${prefix}.lag`, lag.lag);
 
-      baseCtx.addEvent('partition_lag_recorded', {
+      emitCorrelatedEvent(baseCtx, 'partition_lag_recorded', {
         'messaging.consumer_group.lag.topic': lag.topic,
         'messaging.consumer_group.lag.partition': lag.partition,
         'messaging.consumer_group.lag.current_offset': lag.currentOffset,
@@ -1899,7 +1900,7 @@ async function extractLagMetrics(
         ctx.setAttribute('messaging.kafka.consumer_lag', lag);
 
         // Add lag event
-        ctx.addEvent('consumer_lag_measured', {
+        emitCorrelatedEvent(ctx, 'consumer_lag_measured', {
           'messaging.kafka.consumer_lag': lag,
           'messaging.kafka.message.offset': currentOffset,
           'messaging.kafka.high_watermark': endOffset,
@@ -2119,7 +2120,7 @@ function extractAndProcessOrdering(
           }
 
           // Add event for each out-of-order message
-          ctx.addEvent('message_out_of_order', {
+          emitCorrelatedEvent(ctx, 'message_out_of_order', {
             'messaging.ordering.batch_index': i,
             'messaging.ordering.current_sequence': msgSequence,
             'messaging.ordering.expected_sequence': expectedSequence,
@@ -2155,7 +2156,7 @@ function extractAndProcessOrdering(
         duplicateCount++;
 
         // Add event for each duplicate
-        ctx.addEvent('message_duplicate', {
+        emitCorrelatedEvent(ctx, 'message_duplicate', {
           'messaging.ordering.batch_index': i,
           'messaging.message.id': msgId,
         });

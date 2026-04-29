@@ -219,11 +219,14 @@ export function createTracingMiddleware<TContext = unknown>(
           return result;
         } catch (error) {
           if (mergedConfig.captureErrors) {
-            ctx.recordException(error as Error);
-            ctx.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: (error as Error).message,
-            });
+            if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+              ctx.recordError(error);
+            } else if (
+              'recordException' in ctx &&
+              typeof ctx.recordException === 'function'
+            ) {
+              ctx.recordException(error);
+            }
 
             // Report error to error store
             try {
@@ -315,11 +318,14 @@ export function createTracingMiddleware<TContext = unknown>(
           );
 
           if (mergedConfig.captureErrors) {
-            ctx.recordException(error as Error);
-            ctx.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: (error as Error).message,
-            });
+            if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+              ctx.recordError(error);
+            } else if (
+              'recordException' in ctx &&
+              typeof ctx.recordException === 'function'
+            ) {
+              ctx.recordException(error);
+            }
 
             // Report error to error store
             try {

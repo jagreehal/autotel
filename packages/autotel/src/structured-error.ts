@@ -138,10 +138,17 @@ export function getStructuredErrorAttributes(
 }
 
 export function recordStructuredError(
-  ctx: Pick<TraceContext, 'recordException' | 'setAttributes' | 'setStatus'>,
+  ctx: Pick<TraceContext, 'setAttributes' | 'setStatus'>,
   error: Error,
 ): void {
-  ctx.recordException(error);
+  const maybeRecordException = (
+    ctx as unknown as {
+      recordException?: (e: Error) => void;
+    }
+  ).recordException;
+  if (typeof maybeRecordException === 'function') {
+    maybeRecordException(error);
+  }
   ctx.setStatus({
     code: SpanStatusCode.ERROR,
     message: error.message,

@@ -23,6 +23,7 @@ You are working on the core Node.js package that provides OpenTelemetry instrume
 - **Production Hardening**: Built-in rate limiters, circuit breakers, and PII redaction
 - **Adaptive Sampling**: Defaults to 10% baseline sampling, 100% for errors/slow operations (tail sampling)
 - **Events Integration**: Unified API to send product events to any platform via adapters
+- **Event emission guidance**: For new observability events, prefer correlated log-based events over new direct span-event API usage.
 
 ## Entry Points
 

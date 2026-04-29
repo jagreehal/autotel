@@ -538,8 +538,9 @@ export const rollDice = trace(async function rollDice(rolls: number) {
       { name: 'roll.once', attributes: { roll: i + 1 } },
       async (span) => {
         span.setAttribute('range', '1-6');
-        span.addEvent('dice.rolled', { value: rollOnce() });
-        results.push(rollOnce());
+        const value = rollOnce();
+        span.setAttribute('dice.value', value);
+        results.push(value);
       },
     );
   }
@@ -555,6 +556,9 @@ Nested spans automatically inherit context and correlation IDs.
 Every `trace((ctx) => ...)` factory receives a type-safe helper backed by `AsyncLocalStorage`.
 
 ```typescript
+import { trace, recordStructuredError } from 'autotel';
+import { SpanStatusCode } from '@opentelemetry/api';
+
 export const createUser = trace((ctx) => async (input: CreateUserData) => {
   logger.info({ traceId: ctx.traceId }, 'Handling request');
   ctx.setAttributes({ 'user.id': input.id, 'user.plan': input.plan });
@@ -564,17 +568,20 @@ export const createUser = trace((ctx) => async (input: CreateUserData) => {
     ctx.setStatus({ code: SpanStatusCode.OK });
     return user;
   } catch (error) {
-    ctx.recordException(error as Error);
-    ctx.setStatus({
-      code: SpanStatusCode.ERROR,
-      message: 'Failed to create user',
-    });
+    // Records the error on the span and sets ERROR status. Pair with
+    // `getRequestLogger(ctx).error(error)` if you also want a correlated log.
+    recordStructuredError(ctx, error as Error);
     throw error;
   }
 });
 ```
 
-Available helpers: `traceId`, `spanId`, `correlationId`, `setAttribute`, `setAttributes`, `setStatus`, `recordException`, `getBaggage`, `setBaggage`, `deleteBaggage`, `getAllBaggage`.
+Available helpers: `traceId`, `spanId`, `correlationId`, `setAttribute`, `setAttributes`, `setStatus`, `getBaggage`, `setBaggage`, `deleteBaggage`, `getAllBaggage`.
+
+> **Errors and events:** prefer `recordStructuredError(ctx, error)` and the
+> request logger over the raw `Span.recordException` / `Span.addEvent` APIs.
+> See [MIGRATION.md](./MIGRATION.md) for the OTel Span Event deprecation
+> direction.
 
 #### Baggage (Context Propagation)
 
@@ -1749,7 +1756,7 @@ init({
 ### Request Logger DX
 
 For teams that prefer `log.set({...})` ergonomics, you can use `getRequestLogger()`.
-It writes directly to span attributes/events, so canonical log lines still emit one
+It writes correlated request context and log records, so canonical log lines still emit one
 wide event per request.
 
 ```typescript
@@ -1784,7 +1791,7 @@ export const checkout = trace((ctx) => async (order: Order) => {
 You also get:
 
 - `log.getContext()` to inspect the accumulated request context.
-- `log.emitNow(overrides?)` to capture an immediate snapshot (adds a span event
+- `log.emitNow(overrides?)` to capture an immediate snapshot (emits a correlated log-style snapshot
   and returns `{ timestamp, traceId, spanId, correlationId, context }`).
 
 ### Drain Pipeline (Batch + Retry + Flush)
@@ -2365,20 +2372,20 @@ export async function customWorkflow() {
   }
 }
 
-// Add attributes and events to the currently active span
+// Add attributes to the currently active span
 export function enrichCurrentSpan(userId: string) {
   const span = getActiveSpan();
   if (span) {
     span.setAttribute('user.id', userId);
-    span.addEvent('User identified', { userId, timestamp: Date.now() });
+    span.setAttribute('user.identified_at', Date.now());
   }
 }
 
-// Add events with attributes (e.g., queue operations)
+// Add attributes with queue context
 export async function processQueue() {
   const span = getActiveSpan();
   if (span) {
-    span.addEvent('queue.wait', {
+    span.setAttributes({
       queue_size: 42,
       queue_name: 'order-processing',
     });
@@ -2398,8 +2405,8 @@ export async function backgroundJob() {
     });
     span.setStatus({ code: SpanStatusCode.OK });
   } catch (error) {
-    span.recordException(error);
     span.setStatus({ code: SpanStatusCode.ERROR });
+    throw error;
   } finally {
     span.end();
   }
@@ -3024,11 +3031,14 @@ import {
 // Span methods
 span.setAttribute(key, value); // Add single attribute
 span.setAttributes({ key: value }); // Add multiple attributes
-span.addEvent('cache.hit'); // Add event (name only)
-span.addEvent('queue.wait', { queue_size: 42 }); // Add event with attributes
-span.recordException(error); // Record exception
-span.setStatus({ code: SpanStatusCode.ERROR }); // Set status
+span.setStatus({ code: SpanStatusCode.OK }); // Mark span successful
+span.setStatus({ code: SpanStatusCode.ERROR, message }); // Mark span failed
 span.end(); // End span
+
+// For events and exceptions, prefer the autotel APIs over raw Span methods:
+//   - recordStructuredError(ctx, error)         // span error + status
+//   - getRequestLogger(ctx).info(name, fields)  // correlated log event
+// See MIGRATION.md for the OTel Span Event deprecation direction.
 ```
 
 #### Semantic Conventions (Optional)

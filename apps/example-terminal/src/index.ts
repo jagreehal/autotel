@@ -153,7 +153,7 @@ const processPayment = trace({ name: 'processPayment' }, (ctx) => async (amount:
   // Randomly fail to demonstrate error tracking
   if (Math.random() > 0.75) {
     ctx.setStatus({ code: 2, message: 'Payment failed' });
-    ctx.recordException(new Error('Insufficient funds'));
+    ctx.recordError(new Error('Insufficient funds'));
     ctx.setAttribute('http.status_code', 500);
     logStream.emit({
       time: Date.now(),

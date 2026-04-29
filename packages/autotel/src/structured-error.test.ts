@@ -1,10 +1,41 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Span, SpanContext } from '@opentelemetry/api';
 import {
   createStructuredError,
   getStructuredErrorAttributes,
   recordStructuredError,
 } from './structured-error';
-import type { TraceContext } from './trace-context';
+import { createTraceContext, type TraceContext } from './trace-context';
+
+function createFakeSpan(): {
+  span: Span;
+  recordException: ReturnType<typeof vi.fn>;
+  setStatus: ReturnType<typeof vi.fn>;
+  setAttributes: ReturnType<typeof vi.fn>;
+} {
+  const recordException = vi.fn();
+  const setStatus = vi.fn();
+  const setAttributes = vi.fn();
+  const spanContext: SpanContext = {
+    traceId: '0123456789abcdef0123456789abcdef',
+    spanId: '0123456789abcdef',
+    traceFlags: 1,
+  };
+  const span = {
+    spanContext: () => spanContext,
+    setAttribute: vi.fn(),
+    setAttributes,
+    setStatus,
+    recordException,
+    addEvent: vi.fn(),
+    addLink: vi.fn(),
+    addLinks: vi.fn(),
+    updateName: vi.fn(),
+    isRecording: () => true,
+    end: vi.fn(),
+  } as unknown as Span;
+  return { span, recordException, setStatus, setAttributes };
+}
 
 describe('structured-error helpers', () => {
   it('creates an error with structured diagnostic fields', () => {
@@ -102,5 +133,56 @@ describe('structured-error helpers', () => {
         'error.fix': 'Re-sync inventory and retry',
       }),
     );
+  });
+});
+
+describe('ctx.recordError', () => {
+  it('records a structured error onto the underlying span', () => {
+    const { span, recordException, setStatus, setAttributes } =
+      createFakeSpan();
+    const ctx = createTraceContext(span);
+    const err = createStructuredError({
+      message: 'Order failed',
+      why: 'Inventory unavailable',
+      fix: 'Retry after restock',
+    });
+
+    ctx.recordError(err);
+
+    expect(recordException).toHaveBeenCalledWith(err);
+    expect(setStatus).toHaveBeenCalledWith({ code: 2, message: 'Order failed' });
+    expect(setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'error.message': 'Order failed',
+        'error.why': 'Inventory unavailable',
+        'error.fix': 'Retry after restock',
+      }),
+    );
+  });
+
+  it('coerces non-Error values to Error so it is safe in catch blocks', () => {
+    const { span, recordException, setStatus, setAttributes } =
+      createFakeSpan();
+    const ctx = createTraceContext(span);
+
+    ctx.recordError('boom');
+
+    expect(recordException).toHaveBeenCalledTimes(1);
+    const recorded = recordException.mock.calls[0][0];
+    expect(recorded).toBeInstanceOf(Error);
+    expect(recorded.message).toBe('boom');
+    expect(setStatus).toHaveBeenCalledWith({ code: 2, message: 'boom' });
+    expect(setAttributes).toHaveBeenCalled();
+  });
+});
+
+describe('ctx.track', () => {
+  it('exposes track on the trace context as the ergonomic replacement for ctx.addEvent', () => {
+    const { span } = createFakeSpan();
+    const ctx = createTraceContext(span);
+
+    expect(typeof ctx.track).toBe('function');
+    // Smoke test — should not throw without init() (track is a no-op when no queue is configured)
+    expect(() => ctx.track('test.event', { foo: 'bar' })).not.toThrow();
   });
 });

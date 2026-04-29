@@ -56,15 +56,11 @@ function wrapDiscoveryMethod(
           return result;
         } catch (error) {
           if (config.captureErrors) {
-            ctx.recordException(error as Error);
+            ctx.recordError(error);
             ctx.setAttribute(
               MCP_SEMCONV.ERROR_TYPE,
               (error as Error).name || 'Error',
             );
-            ctx.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: (error as Error).message,
-            });
           }
 
           if (config.enableMetrics) {
@@ -248,15 +244,11 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 return result;
               } catch (error) {
                 if (mergedConfig.captureErrors) {
-                  ctx.recordException(error as Error);
+                  ctx.recordError(error);
                   ctx.setAttribute(
                     MCP_SEMCONV.ERROR_TYPE,
                     (error as Error).name || 'Error',
                   );
-                  ctx.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message: (error as Error).message,
-                  });
                 }
 
                 if (mergedConfig.enableMetrics) {
@@ -342,15 +334,11 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 return result;
               } catch (error) {
                 if (mergedConfig.captureErrors) {
-                  ctx.recordException(error as Error);
+                  ctx.recordError(error);
                   ctx.setAttribute(
                     MCP_SEMCONV.ERROR_TYPE,
                     (error as Error).name || 'Error',
                   );
-                  ctx.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message: (error as Error).message,
-                  });
                 }
 
                 if (mergedConfig.enableMetrics) {
@@ -437,15 +425,11 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 return result;
               } catch (error) {
                 if (mergedConfig.captureErrors) {
-                  ctx.recordException(error as Error);
+                  ctx.recordError(error);
                   ctx.setAttribute(
                     MCP_SEMCONV.ERROR_TYPE,
                     (error as Error).name || 'Error',
                   );
-                  ctx.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message: (error as Error).message,
-                  });
                 }
 
                 if (mergedConfig.enableMetrics) {

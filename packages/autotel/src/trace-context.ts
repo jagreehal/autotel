@@ -8,10 +8,11 @@ import type {
   BaggageEntry,
   Context,
   Link,
-  TimeInput,
 } from '@opentelemetry/api';
 import { context, propagation } from '@opentelemetry/api';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { recordStructuredError } from './structured-error';
+import { track } from './track';
 
 type AsyncLocalBox<T> = {
   value: T;
@@ -132,14 +133,6 @@ export interface SpanMethods {
   setAttributes(attrs: Record<string, AttributeValue>): void;
   /** Set the status of the span */
   setStatus(status: { code: SpanStatusCode; message?: string }): void;
-  /** Record an exception on the span */
-  recordException(exception: Error, time?: TimeInput): void;
-  /** Add an event to the span (for logging milestones/checkpoints) */
-  addEvent(
-    name: string,
-    attributesOrStartTime?: Record<string, AttributeValue> | TimeInput,
-    startTime?: TimeInput,
-  ): void;
   /** Add a link to another span */
   addLink(link: Link): void;
   /** Add multiple links to other spans */
@@ -148,6 +141,26 @@ export interface SpanMethods {
   updateName(name: string): void;
   /** Check if the span is recording */
   isRecording(): boolean;
+  /**
+   * Record an error on the span: sets ERROR status, structured `error.*`
+   * attributes (including `why`/`fix`/`link` from `createStructuredError`),
+   * and during the OTel Span Event API back-compat window also records the
+   * exception via the legacy span event API.
+   *
+   * Replaces the deprecated `recordException` (OTEP 4430). Accepts `unknown`
+   * so it can be called directly with the value caught from a `catch` block.
+   */
+  recordError(error: unknown): void;
+  /**
+   * Emit a tracked event correlated to this span. Equivalent to the standalone
+   * `track(event, data)` but reads naturally on `ctx`. Replaces the deprecated
+   * `ctx.addEvent` (OTEP 4430) — events become correlated logs rather than
+   * span events.
+   */
+  track<Events extends Record<string, unknown> = Record<string, unknown>>(
+    event: keyof Events & string,
+    data?: Events[keyof Events & string],
+  ): void;
 }
 
 /**
@@ -411,7 +424,13 @@ export function createTraceContext<
       : never,
   };
 
-  return {
+  // `recordException` and `addEvent` are intentionally bound at runtime but
+  // omitted from the `SpanMethods` type. They exist solely so existing call
+  // sites keep working through the OTel Span Event API deprecation window
+  // (see MIGRATION.md). New code MUST go through `recordStructuredError`,
+  // `emitCorrelatedEvent`, or the request logger. The cast below is what hides
+  // these compatibility-only fields from the public type.
+  const traceCtx = {
     traceId: spanContext.traceId,
     spanId: spanContext.spanId,
     correlationId: spanContext.traceId.slice(0, 16),
@@ -424,8 +443,17 @@ export function createTraceContext<
     addLinks: span.addLinks.bind(span),
     updateName: span.updateName.bind(span),
     isRecording: span.isRecording.bind(span),
+    recordError: (error: unknown) => {
+      const err = error instanceof Error ? error : new Error(String(error));
+      recordStructuredError(traceCtx, err);
+    },
+    track: (event: string, data?: Record<string, unknown>) => {
+      track(event, data);
+    },
     ...baggageHelpers,
-  };
+  } as unknown as TraceContext<TBaggage>;
+
+  return traceCtx;
 }
 
 /**
