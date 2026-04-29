@@ -1,0 +1,203 @@
+---
+const before = `import { trace as otelTrace } from '@opentelemetry/api';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { OTLPTraceExporter }
+  from '@opentelemetry/exporter-trace-otlp-http';
+import { Resource } from '@opentelemetry/resources';
+import { SemanticResourceAttributes }
+  from '@opentelemetry/semantic-conventions';
+
+const sdk = new NodeSDK({
+  resource: new Resource({
+    [SemanticResourceAttributes.SERVICE_NAME]: 'my-api',
+  }),
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }),
+});
+sdk.start();
+
+const tracer = otelTrace.getTracer('my-api');
+
+export async function checkout(req, res) {
+  const span = tracer.startSpan('checkout');
+  try {
+    const result = await processCheckout(req.body);
+    span.setStatus({ code: 1 });
+    return res.json(result);
+  } catch (err) {
+    span.recordException(err);
+    span.setStatus({ code: 2 });
+    throw err;
+  } finally {
+    span.end();
+  }
+}`;
+
+const after = `import { init, trace } from 'autotel';
+
+init({ service: 'my-api', endpoint: 'http://localhost:4318' });
+
+export const checkout = trace((ctx) =>
+  async (req, res) => {
+    const result = await processCheckout(req.body);
+    return res.json(result);
+  },
+);`;
+---
+
+<section class="compare" aria-labelledby="compare-title">
+  <div class="compare__inner">
+    <header class="compare__head">
+      <p class="compare__eyebrow">Before / after</p>
+      <h2 id="compare-title" class="compare__title">
+        Same telemetry. A fraction of the surface area.
+      </h2>
+      <p class="compare__sub">
+        Autotel keeps OpenTelemetry compatibility intact. You just stop writing
+        the plumbing.
+      </p>
+    </header>
+
+    <div class="compare__grid">
+      <figure class="panel panel--before">
+        <figcaption class="panel__head">
+          <span class="panel__tag">raw OpenTelemetry</span>
+          <span class="panel__count">~36 lines</span>
+        </figcaption>
+        <pre class="panel__code"><code>{before}</code></pre>
+      </figure>
+
+      <figure class="panel panel--after">
+        <figcaption class="panel__head">
+          <span class="panel__tag panel__tag--accent">autotel</span>
+          <span class="panel__count">8 lines</span>
+        </figcaption>
+        <pre class="panel__code"><code>{after}</code></pre>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<style>
+  .compare {
+    border-top: 1px solid var(--sl-color-gray-6);
+    padding-block: clamp(3rem, 6vw, 5rem);
+  }
+
+  .compare__inner {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 4vw, 2rem);
+  }
+
+  .compare__head {
+    max-width: 48rem;
+    margin-bottom: 2.25rem;
+  }
+
+  .compare__eyebrow {
+    margin: 0 0 0.5rem;
+    font-family: var(--sl-font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--sl-color-accent);
+  }
+
+  .compare__title {
+    margin: 0 0 0.6rem;
+    font-family: var(--sl-font);
+    font-size: clamp(1.6rem, 3.2vw, 2.25rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--sl-color-white);
+    border: 0;
+  }
+
+  .compare__sub {
+    margin: 0;
+    color: var(--sl-color-gray-3);
+    font-size: 1rem;
+    line-height: 1.55;
+    max-width: 36rem;
+  }
+
+  .compare__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  @media (min-width: 900px) {
+    .compare__grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+  }
+
+  .panel {
+    margin: 0;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--sl-color-bg);
+  }
+
+  .panel--before {
+    opacity: 0.78;
+  }
+
+  .panel--after {
+    border-color: color-mix(in oklch, var(--sl-color-accent) 45%, var(--sl-color-gray-5));
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--sl-color-accent) 18%, transparent),
+      0 24px 60px -30px color-mix(in oklch, var(--sl-color-accent) 35%, transparent);
+  }
+
+  .panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.55rem 0.95rem;
+    border-bottom: 1px solid var(--sl-color-gray-6);
+    font-family: var(--sl-font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--sl-color-gray-3);
+  }
+
+  .panel__tag--accent {
+    color: var(--sl-color-accent);
+  }
+
+  .panel__count {
+    color: var(--sl-color-gray-4);
+  }
+
+  .panel__code {
+    margin: 0;
+    padding: 1rem 1.1rem 1.25rem;
+    background: var(--sl-color-bg-inline-code);
+    font-family: var(--sl-font-mono);
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: var(--sl-color-gray-2);
+    overflow-x: auto;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .panel__code code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+  }
+
+  .panel--after .panel__code {
+    color: var(--sl-color-text);
+  }
+</style>

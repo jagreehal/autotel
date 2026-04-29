@@ -1,0 +1,413 @@
+---
+const installCmd = 'npm install autotel';
+const spans = [
+  { name: 'POST /checkout', start: 0, width: 100, ms: '124ms', depth: 0, kind: 'root' },
+  { name: 'auth.verify', start: 4, width: 14, ms: '18ms', depth: 1, kind: 'child' },
+  { name: 'db.query', start: 20, width: 38, ms: '47ms', depth: 1, kind: 'child' },
+  { name: 'stripe.charge', start: 60, width: 38, ms: '52ms', depth: 1, kind: 'error' },
+];
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero__inner">
+    <p class="eyebrow">
+      <span class="dot" aria-hidden="true"></span>
+      v1.x · MIT · OpenTelemetry-native
+    </p>
+
+    <h1 id="hero-title" class="wordmark">
+      autotel<span class="cursor" aria-hidden="true">_</span>
+    </h1>
+
+    <p class="tagline">
+      Zero-boilerplate OpenTelemetry for TypeScript. Trace functions, track product
+      events, and ship structured errors with one import.
+    </p>
+
+    <div class="actions">
+      <a class="btn btn--primary" href="/autotel/quick-start/">
+        <span>Get started</span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+      <a class="btn btn--ghost" href="https://github.com/jagreehal/autotel">
+        <span>GitHub</span>
+        <span class="arrow" aria-hidden="true">↗</span>
+      </a>
+    </div>
+
+    <div class="install" role="group" aria-label="Install command">
+      <span class="prompt" aria-hidden="true">$</span>
+      <code>{installCmd}</code>
+    </div>
+
+    <figure class="trace" aria-label="Example trace waterfall">
+      <figcaption class="trace__head">
+        <span class="trace__label">trace</span>
+        <span class="trace__id">b5e1·c0ff·ee42</span>
+        <span class="trace__total">total 124ms</span>
+      </figcaption>
+
+      <ol class="trace__list">
+        {spans.map((s) => (
+          <li
+            class:list={[
+              'trace__row',
+              s.depth === 1 && 'trace__row--child',
+              s.kind === 'error' && 'trace__row--error',
+              s.kind === 'root' && 'trace__row--root',
+            ]}
+          >
+            <span class="trace__name">
+              {s.depth === 1 ? <span class="trace__branch" aria-hidden="true">└─</span> : null}
+              {s.name}
+            </span>
+            <span class="trace__bar-track">
+              <span
+                class="trace__bar"
+                style={`--bar-start:${s.start}%;--bar-width:${s.width}%`}
+              ></span>
+            </span>
+            <span class="trace__ms">{s.ms}</span>
+          </li>
+        ))}
+      </ol>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    padding-block: clamp(3rem, 7vw, 6rem) clamp(2rem, 4vw, 4rem);
+    isolation: isolate;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(
+        ellipse 60% 60% at 80% 0%,
+        color-mix(in oklch, var(--sl-color-accent) 14%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 80% 50% at 0% 100%,
+        color-mix(in oklch, var(--sl-color-accent) 6%, transparent),
+        transparent 60%
+      );
+    pointer-events: none;
+  }
+
+  .hero__inner {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 4vw, 2rem);
+  }
+
+  .eyebrow {
+    font-family: var(--sl-font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--sl-color-gray-3);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 1.75rem;
+  }
+
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--sl-color-accent);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--sl-color-accent) 18%, transparent);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(0.85); }
+  }
+
+  .wordmark {
+    font-family: var(--sl-font-mono);
+    font-size: clamp(3.5rem, 11vw, 8.5rem);
+    line-height: 0.9;
+    letter-spacing: -0.05em;
+    font-weight: 500;
+    margin: 0 0 1.5rem;
+    color: var(--sl-color-white);
+    /* defeat Starlight markdown h1 sizing */
+    border: 0;
+  }
+
+  .cursor {
+    display: inline-block;
+    color: var(--sl-color-accent);
+    margin-left: 0.05em;
+    animation: blink 1.05s steps(1) infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  .tagline {
+    font-family: var(--sl-font);
+    font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+    line-height: 1.55;
+    color: var(--sl-color-gray-2);
+    max-width: 38ch;
+    margin: 0 0 2.25rem;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1.1rem;
+    font-family: var(--sl-font-mono);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    border-radius: 6px;
+    transition:
+      background 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      transform 150ms ease;
+  }
+
+  .btn .arrow {
+    transition: transform 200ms ease;
+  }
+
+  .btn:hover .arrow {
+    transform: translateX(2px);
+  }
+
+  .btn--primary {
+    background: var(--sl-color-accent);
+    color: var(--sl-color-white);
+    border: 1px solid var(--sl-color-accent);
+  }
+
+  :root[data-theme='dark'] .btn--primary {
+    color: #ffffff;
+  }
+
+  .btn--primary:hover {
+    background: color-mix(in oklch, var(--sl-color-accent) 88%, white);
+  }
+
+  .btn--ghost {
+    background: transparent;
+    color: var(--sl-color-text);
+    border: 1px solid var(--sl-color-gray-5);
+  }
+
+  .btn--ghost:hover {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-accent);
+  }
+
+  .install {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 6px;
+    background: var(--sl-color-bg-inline-code);
+    font-family: var(--sl-font-mono);
+    font-size: 0.85rem;
+    margin-bottom: 3.5rem;
+  }
+
+  .install .prompt {
+    color: var(--sl-color-accent);
+    user-select: none;
+  }
+
+  .install code {
+    color: var(--sl-color-text);
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  /* ---- Trace waterfall ---- */
+  .trace {
+    margin: 0;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 10px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--sl-color-bg) 85%, transparent),
+      var(--sl-color-bg)
+    );
+    overflow: hidden;
+  }
+
+  .trace__head {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid var(--sl-color-gray-5);
+    font-family: var(--sl-font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--sl-color-gray-3);
+  }
+
+  .trace__label {
+    color: var(--sl-color-accent);
+  }
+
+  .trace__id {
+    color: var(--sl-color-gray-2);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.75rem;
+  }
+
+  .trace__total {
+    margin-left: auto;
+  }
+
+  .trace__list {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem 0;
+  }
+
+  .trace__row {
+    display: grid;
+    grid-template-columns: minmax(8rem, 14rem) 1fr 4rem;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.45rem 1rem;
+    font-family: var(--sl-font-mono);
+    font-size: 0.82rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .trace__row--root .trace__name {
+    color: var(--sl-color-text);
+  }
+
+  .trace__row--child {
+    color: var(--sl-color-gray-3);
+  }
+
+  .trace__branch {
+    color: var(--sl-color-gray-4);
+    margin-right: 0.4rem;
+  }
+
+  .trace__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trace__bar-track {
+    position: relative;
+    height: 0.85rem;
+    background:
+      repeating-linear-gradient(
+        to right,
+        color-mix(in oklch, var(--sl-color-gray-5) 35%, transparent) 0,
+        color-mix(in oklch, var(--sl-color-gray-5) 35%, transparent) 1px,
+        transparent 1px,
+        transparent 25%
+      );
+    border-radius: 2px;
+  }
+
+  .trace__bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--bar-start);
+    width: var(--bar-width);
+    background: var(--sl-color-gray-3);
+    border-radius: 2px;
+    transform-origin: left;
+    animation: span-grow 720ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .trace__row--root .trace__bar {
+    background: color-mix(in oklch, var(--sl-color-text) 75%, transparent);
+  }
+
+  .trace__row--error .trace__bar {
+    background: var(--sl-color-accent);
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--sl-color-accent) 30%, transparent);
+    animation:
+      span-grow 720ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
+      span-pulse 2.4s ease-in-out 1.2s infinite;
+  }
+
+  .trace__row--error .trace__ms {
+    color: var(--sl-color-accent);
+  }
+
+  .trace__row:nth-child(1) .trace__bar { animation-delay: 0ms; }
+  .trace__row:nth-child(2) .trace__bar { animation-delay: 120ms; }
+  .trace__row:nth-child(3) .trace__bar { animation-delay: 240ms; }
+  .trace__row:nth-child(4) .trace__bar { animation-delay: 360ms; }
+
+  @keyframes span-grow {
+    from { transform: scaleX(0); opacity: 0.4; }
+    to { transform: scaleX(1); opacity: 1; }
+  }
+
+  @keyframes span-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .trace__ms {
+    text-align: right;
+    color: var(--sl-color-gray-3);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cursor,
+    .dot,
+    .trace__bar {
+      animation: none !important;
+    }
+    .trace__bar {
+      transform: scaleX(1);
+      opacity: 1;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .trace__row {
+      grid-template-columns: minmax(6rem, 9rem) 1fr 3rem;
+      gap: 0.5rem;
+      font-size: 0.72rem;
+    }
+    .trace__head {
+      gap: 0.75rem;
+    }
+  }
+</style>

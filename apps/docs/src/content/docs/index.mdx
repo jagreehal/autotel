@@ -1,77 +1,18 @@
 ---
 title: autotel
-description: Write Once, Observe Anywhere - Zero-boilerplate OpenTelemetry for JavaScript/TypeScript.
+description: Zero-boilerplate OpenTelemetry for TypeScript. Trace functions, track product events, and ship structured errors with one import.
 template: splash
 hero:
-  tagline: Zero-boilerplate OpenTelemetry for TypeScript. Trace functions, track events, and ship structured errors with one import.
-  actions:
-    - text: Get Started
-      link: /autotel/introduction/
-      icon: right-arrow
-      variant: primary
-    - text: View on GitHub
-      link: https://github.com/jagreehal/autotel
-      icon: external
-      variant: minimal
+  tagline: Zero-boilerplate OpenTelemetry for TypeScript.
+pagefind: false
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import Primitives from '../../components/landing/Primitives.astro';
+import Compare from '../../components/landing/Compare.astro';
+import Frameworks from '../../components/landing/Frameworks.astro';
+import LandingFooter from '../../components/landing/LandingFooter.astro';
 
-## Why Autotel?
-
-<CardGrid>
-  <Card title="One Import" icon="rocket">
-    `init()`, `trace()`, `getRequestLogger()`, `createStructuredError()` — everything from `autotel`.
-  </Card>
-  <Card title="Trace Any Function" icon="seti:typescript">
-    Wrap handlers with `trace()` and get automatic spans, error recording, and context propagation.
-  </Card>
-  <Card title="Structured Errors" icon="error">
-    Throw `createStructuredError({ message, why, fix, link })` — clients parse with `parseError()`.
-  </Card>
-  <Card title="Product Events" icon="list-format">
-    `track('event.name', attrs)` fans out to PostHog, webhooks, or any subscriber.
-  </Card>
-</CardGrid>
-
-## Quick Start
-
-```bash
-npm install autotel
-```
-
-```typescript
-import { init, trace, getRequestLogger } from 'autotel';
-
-init({ service: 'my-api', endpoint: 'http://localhost:4318' });
-
-export const postCheckout = trace((ctx) => async (req, res) => {
-  const log = getRequestLogger(ctx);
-  log.set({ userId: req.user.id });
-
-  const result = await processCheckout(req.body);
-  log.set({ orderId: result.id });
-  log.emitNow();
-
-  return res.json(result);
-});
-```
-
-## Features
-
-<CardGrid>
-  <Card title="Framework Support" icon="setting">
-    Hono, Fastify, TanStack Start, Cloudflare Workers, Express, NestJS, and
-    more.
-  </Card>
-  <Card title="OpenTelemetry Native" icon="forward-slash">
-    Traces, spans, and metrics flow to any OTLP backend — Grafana, Datadog,
-    Honeycomb, etc.
-  </Card>
-  <Card title="Tail Sampling" icon="random">
-    10% baseline, 100% errors and slow requests — never miss what matters.
-  </Card>
-  <Card title="Tree-Shakeable" icon="approve-check">
-    Explicit `exports` in every package. Import only what you need.
-  </Card>
-</CardGrid>
+<Primitives />
+<Compare />
+<Frameworks />
+<LandingFooter />

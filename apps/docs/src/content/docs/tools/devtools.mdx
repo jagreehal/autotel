@@ -1,0 +1,136 @@
+---
+title: Devtools
+description: Standalone OTLP receiver with an embeddable web UI for local development.
+---
+
+`autotel-devtools` is a local OpenTelemetry receiver with a Preact web UI.
+Think TanStack Devtools for OTLP. Run it as a CLI to inspect traces, logs,
+metrics, and errors in the browser, or embed the widget directly in your app
+for in-page diagnostics.
+
+Any OTLP-compatible exporter sends into it, so autotel and vanilla
+OpenTelemetry both work.
+
+## Installation
+
+```bash
+npm install autotel-devtools
+```
+
+The package ships a CLI binary, a Node.js library, and a browser widget bundle.
+
+## Standalone Mode
+
+Run the receiver, then point any OTLP exporter at it:
+
+```bash
+npx autotel-devtools
+```
+
+```bash
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+node app.js
+```
+
+Open [http://localhost:4318](http://localhost:4318) for the dashboard. It
+includes a traces waterfall, flame graph, log filtering by severity and
+resource, error aggregation, service map, and resources view. Search
+debounces at 300ms.
+
+**CLI options:**
+
+- `-p, --port <port>` — Port (default: `4318`)
+- `-H, --host <host>` — Host (default: `127.0.0.1`)
+- `-t, --title <title>` — Dashboard title
+
+## Embedded Widget
+
+Add the widget to any web page. It mounts as a custom element with Shadow DOM
+isolation, so its CSS never leaks into your app:
+
+```html
+<script src="http://localhost:4318/widget.js"></script>
+<autotel-devtools></autotel-devtools>
+```
+
+The widget connects to the receiver over WebSocket, replays history on connect,
+and persists position via `localStorage`.
+
+## Programmatic API
+
+For tighter integration, wire the exporter directly into `init()` so spans flow
+to devtools without going over HTTP:
+
+```typescript
+import { init, trace } from 'autotel';
+import { createDevtools } from 'autotel-devtools';
+
+const { exporter, close } = createDevtools({
+  port: 4318,
+  verbose: true,
+});
+
+init({
+  service: 'my-app',
+  endpoint: 'http://localhost:4318',
+  spanProcessors: [exporter],
+});
+
+const checkout = trace((ctx) => async (req, res) => {
+  // spans appear in the devtools UI in real time
+});
+```
+
+Call `close()` on shutdown to release the port and WebSocket clients.
+
+## Configuration
+
+| Variable                    | Default        | Description                  |
+| --------------------------- | -------------- | ---------------------------- |
+| `AUTOTEL_DEVTOOLS_PORT`     | `4318`         | Server port                  |
+| `AUTOTEL_DEVTOOLS_HOST`     | `127.0.0.1`    | Bind host                    |
+| `AUTOTEL_DEVTOOLS_TITLE`    | _unset_        | Dashboard title              |
+| `AUTOTEL_MAX_TRACE_COUNT`   | `100`          | Max traces kept in memory    |
+| `AUTOTEL_MAX_LOG_COUNT`     | `100`          | Max log records kept         |
+| `AUTOTEL_MAX_METRIC_COUNT`  | `100`          | Max metric data points kept  |
+
+Bump the limits when you need a longer scrollback during a development session.
+
+## Endpoints
+
+The standalone server exposes:
+
+| Path           | Method | Purpose                                  |
+| -------------- | ------ | ---------------------------------------- |
+| `/v1/traces`   | POST   | OTLP/HTTP JSON traces ingest             |
+| `/v1/logs`     | POST   | OTLP/HTTP JSON logs ingest               |
+| `/v1/metrics`  | POST   | OTLP/HTTP JSON metrics ingest            |
+| `/`            | GET    | Full-page dashboard UI                   |
+| `/widget.js`   | GET    | Embeddable widget bundle                 |
+| `/healthz`     | GET    | Health check                             |
+| `/ws`          | WS     | WebSocket stream (live updates + replay) |
+
+## Devtools vs. Terminal Viewer
+
+Both ship as local OTLP receivers. Pick by surface:
+
+- **Devtools.** Browser UI, embeddable widget, service map, flame graph,
+  longer scrollback. Best when you want a real dashboard alongside the
+  running app.
+- **[Terminal viewer](/autotel/tools/terminal/).** Ink-powered TUI, no
+  browser needed. Best when you live in the terminal or are running over
+  SSH.
+
+To skip the standalone process entirely, enable devtools directly from
+`init()`:
+
+```typescript
+init({ service: 'my-app', devtools: true });
+```
+
+This wires the exporter automatically. No separate CLI process required.
+
+## License
+
+MIT.
