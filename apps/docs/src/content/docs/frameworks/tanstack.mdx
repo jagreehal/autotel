@@ -1,9 +1,13 @@
 ---
 title: TanStack Start
-description: Automatic tracing for TanStack Start server functions, middleware, and loaders.
+description: Automatic tracing for TanStack Start server functions, middleware, route loaders, and HTTP requests.
 ---
 
-`autotel-tanstack` provides automatic OpenTelemetry instrumentation for TanStack Start applications using the framework's native middleware patterns.
+`autotel-tanstack` instruments [TanStack Start](https://tanstack.com/start)
+applications using the framework's native middleware patterns. Configure global
+middleware once and every server function, route loader, and HTTP request is
+traced automatically. Works with both `@tanstack/react-start` and
+`@tanstack/solid-start` (^1.139.14).
 
 ## Installation
 
@@ -11,7 +15,7 @@ description: Automatic tracing for TanStack Start server functions, middleware, 
 npm install autotel-tanstack autotel
 ```
 
-## Quick Start
+## Quick start
 
 Configure global middleware in `start.ts`:
 
@@ -40,15 +44,31 @@ export const startInstance = createStart(() => ({
 
 ```typescript
 // src/instrumentation.ts
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
+```
+
+## Zero-config alternative
+
+Skip the explicit `init()` and use environment variables instead:
+
+```typescript
+// src/instrumentation.ts
 import 'autotel-tanstack/auto';
 export {};
 ```
 
-`autotel-tanstack/auto` reads `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT` from env vars. For custom config, call `init()` from `autotel` directly instead.
+`autotel-tanstack/auto` reads `OTEL_SERVICE_NAME`,
+`OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_HEADERS` at startup.
 
-## Server Functions (Auto-Traced)
+## Server functions
 
-With global middleware, server functions are automatically traced:
+With `functionMiddleware` configured globally, every `createServerFn(...)` is
+auto-traced:
 
 ```typescript
 import { createServerFn } from '@tanstack/react-start';
@@ -58,9 +78,37 @@ export const getUser = createServerFn({ method: 'GET' }).handler(
     return await db.users.findUnique({ where: { id } });
   },
 );
+
+export const createUser = createServerFn({ method: 'POST' })
+  .inputValidator((d: UserInput) => d)
+  .handler(async ({ data }) => {
+    return await db.users.create({ data });
+  });
 ```
 
-## Route Loaders
+### Per-function middleware
+
+For per-function options (e.g. capturing results for one operation), chain a
+function-scoped middleware:
+
+```typescript
+import { createServerFn, createMiddleware } from '@tanstack/react-start';
+import { createTracingServerHandler } from 'autotel-tanstack/middleware';
+
+const verboseTracing = createMiddleware({ type: 'function' }).server(
+  createTracingServerHandler({
+    type: 'function',
+    captureArgs: true,
+    captureResults: true,
+  }),
+);
+
+export const sensitiveOperation = createServerFn({ method: 'POST' })
+  .middleware([verboseTracing])
+  .handler(async ({ data }) => { /* ... */ });
+```
+
+## Route loaders
 
 ```typescript
 import { createFileRoute, redirect } from '@tanstack/react-router';
@@ -76,16 +124,83 @@ export const Route = createFileRoute('/users/$userId')({
 });
 ```
 
-## E2E Testing
+## Middleware options
 
-When running Playwright E2E tests against a TanStack Start server, set `E2E=1` in the `webServer` command. `autotel-tanstack/auto` detects this and switches to an in-memory exporter so spans are available for assertion instead of being exported to OTLP.
+`createTracingServerHandler` accepts:
+
+| Option              | Type                                           | Default       | Description                                                       |
+| ------------------- | ---------------------------------------------- | ------------- | ----------------------------------------------------------------- |
+| `type`              | `'request' \| 'function'`                      | `'request'`   | Span kind for this middleware                                     |
+| `captureHeaders`    | `string[]`                                     | `[]`          | Request headers to attach as span attributes                      |
+| `captureArgs`       | `boolean`                                      | `true`        | Record server-function arguments                                  |
+| `captureResults`    | `boolean`                                      | `false`       | Record server-function results (off by default; PII risk)         |
+| `excludePaths`      | `string[]`                                     | `[]`          | Glob paths to skip                                                |
+| `sampling`          | `'always' \| 'adaptive' \| 'never'`            | `'adaptive'`  | Sampling strategy                                                 |
+| `customAttributes`  | `({ type, name, request }) => Attributes`      | —             | Per-span custom attributes                                        |
+
+## Span attributes
+
+### HTTP request spans
+
+- `http.request.method` — `GET`, `POST`, etc.
+- `url.path`, `url.query`
+- `http.response.status_code`
+- `tanstack.request.duration_ms`
+
+### Server function spans
+
+- `rpc.system` — `tanstack-start`
+- `rpc.method` — function name
+- `tanstack.server_function.name`
+- `tanstack.server_function.method`
+- `tanstack.server_function.args` — when `captureArgs: true`
+
+### Loader spans
+
+- `tanstack.loader.route_id`
+- `tanstack.loader.type` — `loader` or `beforeLoad`
+- `tanstack.loader.params`
+
+## Environment variables
+
+| Variable                       | Description                              | Example                       |
+| ------------------------------ | ---------------------------------------- | ----------------------------- |
+| `OTEL_SERVICE_NAME`            | Service name reported on every span      | `my-app`                      |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`  | OTLP collector URL                       | `https://api.honeycomb.io`    |
+| `OTEL_EXPORTER_OTLP_HEADERS`   | Auth headers (`key=value,key=value`)     | `x-honeycomb-team=YOUR_KEY`   |
+| `AUTOTEL_DEBUG`                | Enable debug logging                     | `true`                        |
+| `E2E`                          | Switch to in-memory exporter for tests   | `1`                           |
+
+## Distributed tracing
+
+Inject and extract W3C trace context for cross-service calls:
+
+```typescript
+import {
+  createTracedHeaders,
+  extractContextFromRequest,
+} from 'autotel-tanstack/context';
+
+// Outgoing
+const headers = createTracedHeaders({ 'Content-Type': 'application/json' });
+await fetch('https://api.example.com', { headers, method: 'POST', body });
+
+// Incoming
+const parentContext = extractContextFromRequest(request);
+```
+
+## E2E testing
+
+Set `E2E=1` in your Playwright `webServer` command. `autotel-tanstack/auto`
+detects this and switches to an in-memory exporter so spans can be asserted on
+instead of being shipped to OTLP.
 
 ```bash
-# playwright.config.ts webServer command
+# playwright.config.ts webServer
 E2E=1 OTEL_SERVICE_NAME=my-app vite preview --port 3100
 ```
 
-Add a route to expose the spans over HTTP:
+Expose the spans over HTTP:
 
 ```typescript
 // src/routes/api/test-spans.ts
@@ -99,24 +214,44 @@ export const Route = createFileRoute('/api/test-spans')({
 });
 ```
 
-Then use [`createTestSpansClient`](/testing/playwright#server-side-span-inspection) from `autotel-playwright` to fetch and assert on spans in your tests.
+Then assert from Playwright using
+[`createTestSpansClient`](/autotel/testing/playwright/#server-side-span-inspection)
+from `autotel-playwright`.
 
-## Entry Points
+### Unit testing
 
-- `autotel-tanstack` — Everything
-- `autotel-tanstack/auto` — Zero-config auto-instrumentation
-- `autotel-tanstack/middleware` — Middleware integration
-- `autotel-tanstack/server-functions` — Server function wrappers
-- `autotel-tanstack/loaders` — Route loader instrumentation
-- `autotel-tanstack/handlers` — Handler wrappers
-- `autotel-tanstack/context` — Context propagation
-- `autotel-tanstack/testing` — Test utilities (`createTestHarness`, `createTestSpansHandlers`, `SerializedSpan`)
+```typescript
+import { describe, it, expect } from 'vitest';
+import { createTestCollector } from 'autotel-tanstack/testing';
 
-## Examples
+describe('getUser', () => {
+  it('creates a span', async () => {
+    const collector = createTestCollector();
+    await getUser({ data: '123' });
+    const spans = collector.getSpans();
+    expect(spans[0].name).toContain('getUser');
+  });
+});
+```
 
-- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start) — Full-stack TanStack Start with request/server-function middleware, route loaders, and `autotel-web` for browser trace propagation.
+## Entry points
 
-## Supported Frameworks
+| Import                              | Contents                                            |
+| ----------------------------------- | --------------------------------------------------- |
+| `autotel-tanstack`                  | Everything                                          |
+| `autotel-tanstack/auto`             | Zero-config auto-instrumentation                    |
+| `autotel-tanstack/middleware`       | `createTracingServerHandler`                        |
+| `autotel-tanstack/server-functions` | `traceServerFn` (explicit wrapper)                  |
+| `autotel-tanstack/loaders`          | `traceLoader`, `traceBeforeLoad`                    |
+| `autotel-tanstack/handlers`         | `wrapStartHandler` (handler-level wrapping)         |
+| `autotel-tanstack/context`          | `createTracedHeaders`, `extractContextFromRequest`  |
+| `autotel-tanstack/testing`          | `createTestCollector`, `createTestSpansHandlers`    |
+
+## Supported frameworks
 
 - `@tanstack/react-start` ^1.139.14
 - `@tanstack/solid-start` ^1.139.14
+
+## Examples
+
+- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start) — full-stack with request and server-function middleware, route loaders, and `autotel-web` for browser trace propagation.

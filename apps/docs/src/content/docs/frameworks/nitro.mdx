@@ -1,0 +1,123 @@
+---
+title: Nitro
+description: Instrument Nitro and Nuxt 3 event handlers with autotel-adapters/nitro.
+---
+
+`autotel-adapters/nitro` wraps Nitro event handlers (used directly or via
+[Nuxt 3](https://nuxt.com)) so each request gets a span and a request-scoped
+logger.
+
+## Installation
+
+```bash
+npm install autotel autotel-adapters
+```
+
+## Setup
+
+### Standalone Nitro
+
+Initialise autotel in a Nitro plugin so it runs before any handler:
+
+```typescript
+// server/plugins/autotel.ts
+import { init } from 'autotel';
+
+export default defineNitroPlugin(() => {
+  init({
+    service: 'my-nitro-app',
+    endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  });
+});
+```
+
+Then wrap event handlers with `withAutotelEventHandler`:
+
+```typescript
+// server/api/orders/[id].get.ts
+import { withAutotelEventHandler, useLogger } from 'autotel-adapters/nitro';
+
+export default withAutotelEventHandler(async (event) => {
+  const log = useLogger(event, 'api-service');
+  log.set({ route: event.path });
+
+  const order = await getOrder(event.context.params!.id);
+  log.set({ orderId: order.id });
+
+  return order;
+});
+```
+
+### Nuxt 3
+
+Same plugin and handler patterns work. Nuxt 3 server routes live in
+`server/api/**` and use the Nitro event API.
+
+```typescript
+// server/plugins/autotel.ts (Nuxt 3)
+import { init } from 'autotel';
+
+export default defineNitroPlugin(() => {
+  init({
+    service: 'my-nuxt-app',
+    endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  });
+});
+```
+
+```typescript
+// server/api/checkout.post.ts
+import { withAutotelEventHandler, useLogger, parseError } from 'autotel-adapters/nitro';
+import { createStructuredError } from 'autotel';
+
+export default withAutotelEventHandler(async (event) => {
+  const log = useLogger(event, 'checkout-service');
+  const body = await readBody(event);
+
+  if (!body.cartId) {
+    throw createStructuredError({
+      message: 'Missing cart ID',
+      status: 400,
+      why: 'cartId is required to start checkout',
+    });
+  }
+
+  log.set({ cartId: body.cartId });
+
+  try {
+    const result = await processCheckout(body);
+    log.set({ orderId: result.id });
+    return result;
+  } catch (error) {
+    const parsed = parseError(error);
+    log.set({ error_status: parsed.status, error_why: parsed.why });
+    throw error;
+  }
+});
+```
+
+## Patterns
+
+### Inner business logic
+
+Use `trace()` from `autotel` for any function below the request boundary:
+
+```typescript
+import { trace } from 'autotel';
+
+export const chargeCard = trace((ctx) => async (cardId: string, amount: number) => {
+  ctx.setAttribute('amount', amount);
+  return paymentProvider.charge(cardId, amount);
+});
+```
+
+### Auto-instrumentation
+
+For automatic tracing of `fetch`, databases, and HTTP, see
+[Auto-Instrumentation](/autotel/integrations/auto-instrumentation/). Install the
+package once and it covers Nitro's H3 server too.
+
+## Related
+
+- [Adapters](/autotel/frameworks/adapters/) — full `autotel-adapters` reference.
+- [Auto-Instrumentation](/autotel/integrations/auto-instrumentation/) — HTTP, databases, etc.

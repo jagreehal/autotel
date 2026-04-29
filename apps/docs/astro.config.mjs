@@ -12,6 +12,7 @@ export default defineConfig({
         PageTitle: './src/components/PageTitle.astro',
         ThemeProvider: './src/components/ThemeProvider.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',
+        Hero: './src/components/SplashHero.astro',
       },
       logo: {
         dark: './src/assets/logo-dark.svg',
@@ -52,8 +53,10 @@ export default defineConfig({
           items: [
             { label: 'Express', slug: 'frameworks/express' },
             { label: 'Fastify', slug: 'frameworks/fastify' },
-            { label: 'NestJS', slug: 'frameworks/nestjs' },
             { label: 'Hono', slug: 'frameworks/hono' },
+            { label: 'NestJS', slug: 'frameworks/nestjs' },
+            { label: 'Next.js', slug: 'frameworks/next' },
+            { label: 'Nitro / Nuxt', slug: 'frameworks/nitro' },
             { label: 'TanStack Start', slug: 'frameworks/tanstack' },
             { label: 'Cloudflare Workers', slug: 'frameworks/cloudflare' },
             { label: 'Edge Runtimes', slug: 'frameworks/edge' },
@@ -91,6 +94,7 @@ export default defineConfig({
           label: 'Tools',
           items: [
             { label: 'CLI', slug: 'tools/cli' },
+            { label: 'Devtools', slug: 'tools/devtools' },
             { label: 'Terminal Viewer', slug: 'tools/terminal' },
             { label: 'Web SDK', slug: 'tools/web' },
             { label: 'Claude Code Skill', slug: 'tools/claude-code-skill' },

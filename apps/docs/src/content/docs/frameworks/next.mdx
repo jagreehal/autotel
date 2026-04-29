@@ -1,0 +1,168 @@
+---
+title: Next.js
+description: Wire autotel into Next.js App Router routes, server components, and Route Handlers.
+---
+
+Use `autotel-adapters/next` to wrap App Router Route Handlers with one helper.
+It creates a span per request and exposes a request-scoped logger. Pair with
+`init()` from `autotel` for the SDK setup.
+
+## Installation
+
+```bash
+npm install autotel autotel-adapters
+```
+
+For HTTP and database auto-instrumentation, also install:
+
+```bash
+npm install @opentelemetry/auto-instrumentations-node
+```
+
+## Setup
+
+### 1. Initialise
+
+Use Next.js's official instrumentation hook so `init()` runs before any
+request is served:
+
+```typescript
+// instrumentation.ts (project root)
+export async function register() {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { init } = await import('autotel');
+    init({
+      service: 'my-next-app',
+      endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    });
+  }
+}
+```
+
+```javascript
+// next.config.js
+module.exports = {
+  experimental: {
+    instrumentationHook: true, // not required on Next 15+
+  },
+};
+```
+
+> **Edge runtime:** for `export const runtime = 'edge'` routes, use
+> [`autotel-edge`](/autotel/frameworks/edge/) instead. `init()` from the
+> Node.js package won't run there.
+
+### 2. Wrap Route Handlers
+
+```typescript
+// app/api/checkout/route.ts
+import { withAutotel, useLogger, parseError } from 'autotel-adapters/next';
+
+export const POST = withAutotel(async (request: Request) => {
+  const log = useLogger(request);
+  log.set({ feature: 'checkout' });
+
+  try {
+    const body = await request.json();
+    const result = await processCheckout(body);
+    log.set({ orderId: result.id });
+    return Response.json(result);
+  } catch (error) {
+    const parsed = parseError(error);
+    log.set({ error_status: parsed.status, error_why: parsed.why });
+    throw error;
+  }
+});
+```
+
+`withAutotel` creates the span and the request logger; `useLogger(request)`
+returns the logger bound to the active request.
+
+## Patterns
+
+### Server components and server actions
+
+Use the functional `trace()` API directly. There's no request boundary to
+wrap:
+
+```typescript
+// app/orders/page.tsx
+import { trace } from 'autotel';
+
+const loadOrders = trace((ctx) => async (userId: string) => {
+  ctx.setAttribute('user.id', userId);
+  return db.orders.findMany({ where: { userId } });
+});
+
+export default async function Page() {
+  const orders = await loadOrders('123');
+  return <OrdersTable orders={orders} />;
+}
+```
+
+```typescript
+// app/actions.ts ("use server")
+'use server';
+import { trace } from 'autotel';
+
+export const createOrder = trace((ctx) => async (data: OrderData) => {
+  ctx.setAttribute('source', 'server-action');
+  return db.orders.create({ data });
+});
+```
+
+### Structured errors → toasts
+
+Throw on the server with `createStructuredError`, parse on the client with
+`parseError` for a richer error UI:
+
+```typescript
+// server
+import { createStructuredError } from 'autotel';
+
+if (!user) {
+  throw createStructuredError({
+    message: 'User not found',
+    status: 404,
+    why: `No user with ID "${userId}"`,
+    fix: 'Check the URL and try again',
+  });
+}
+```
+
+```typescript
+// client
+import { parseError } from 'autotel';
+
+try {
+  await fetch('/api/checkout', { method: 'POST', body });
+} catch (err) {
+  const error = parseError(err);
+  toast.error(error.message, { description: error.why });
+}
+```
+
+### Auto-instrumentation
+
+For automatic tracing of `fetch`, `pg`, `mongodb`, and other libraries on the
+Node runtime, see
+[Auto-Instrumentation](/autotel/integrations/auto-instrumentation/).
+
+## When to use what
+
+Use `withAutotel()` for Route Handlers and Pages Router API routes
+(`pages/api/*`). Use `useLogger()` on its own in server components or actions
+where a span already exists higher up the call stack; wrapping with
+`withAutotel()` again would duplicate the span. For domain functions and
+server actions outside an HTTP boundary, use `trace()` from `autotel`
+directly.
+
+## Examples
+
+- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs) — Next.js with `autotel-adapters/next` and `parseError()` for client-side error handling.
+
+## Related
+
+- [Adapters](/autotel/frameworks/adapters/) — full `autotel-adapters` reference.
+- [Auto-Instrumentation](/autotel/integrations/auto-instrumentation/) — HTTP, databases, etc.
+- [Edge Runtimes](/autotel/frameworks/edge/) — for `runtime = 'edge'` routes.

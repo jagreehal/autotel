@@ -129,11 +129,34 @@ html {
   border-bottom: 1px solid var(--sl-color-gray-6);
 }
 
-/* Hero section on splash page */
-.hero {
-  padding-block: 4rem;
+/* ---- Custom landing page (template: splash on /) ----
+   The custom <Hero /> override + landing components render full-bleed
+   sections. Starlight's splash main pads + center-aligns the content
+   area; we neutralise that here so our sections own the canvas. */
+
+[data-has-hero] main {
+  padding-inline: 0 !important;
 }
 
+[data-has-hero] .sl-container,
+[data-has-hero] main > .content-panel,
+[data-has-hero] main .sl-markdown-content {
+  max-width: none !important;
+  margin-inline: 0 !important;
+  padding-inline: 0 !important;
+}
+
+[data-has-hero] main .sl-markdown-content {
+  text-align: left;
+}
+
+/* Starlight's default action buttons are unused on the new landing — hide
+   the action row container if it ever renders empty. */
+[data-has-hero] .hero .actions:empty {
+  display: none;
+}
+
+/* Default tagline styling preserved for any future splash pages */
 .hero .tagline {
   font-size: 1.2rem;
   max-width: 40ch;

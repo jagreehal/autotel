@@ -3,7 +3,13 @@ title: Cloudflare Workers
 description: Complete OpenTelemetry for Cloudflare Workers with full bindings coverage.
 ---
 
-`autotel-cloudflare` provides complete Cloudflare Workers instrumentation: KV, R2, D1, Durable Objects, AI, Vectorize, Hyperdrive, and more.
+`autotel-cloudflare` covers every Cloudflare Workers binding (KV, R2, D1,
+Durable Objects, Workers AI, Vectorize, Hyperdrive, Service Bindings, Queues,
+Analytics Engine, Email) with automatic instrumentation. It also provides tail
+sampling and three API styles compatible with `@microlabs/otel-cf-workers` and
+`workers-honeycomb-logger`.
+
+Built on [autotel-edge](/autotel/frameworks/edge/). Total bundle ~45KB.
 
 ## Installation
 
@@ -11,21 +17,36 @@ description: Complete OpenTelemetry for Cloudflare Workers with full bindings co
 npm install autotel-cloudflare
 ```
 
-## Quick Start
+## wrangler.toml setup
+
+Pair Cloudflare's native OTel destinations with autotel's sampling. Set
+`head_sampling_rate = 1.0` so autotel handles tail sampling itself:
+
+```toml
+[observability.traces]
+enabled = true
+destinations = ["honeycomb"]   # configure in CF dashboard
+head_sampling_rate = 1.0
+```
+
+If you'd rather export OTLP yourself, skip the `[observability]` block and pass
+an `exporter.url` to `wrapModule()` (see [Configuration](#configuration)).
+
+## Quick start
 
 ```typescript
 import { wrapModule, trace } from 'autotel-cloudflare';
 
 const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
-  const order = await kv.get(orderId); // Auto-instrumented!
+  const order = await kv.get(orderId); // auto-instrumented
   return order;
 });
 
 export default wrapModule(
   {
     service: { name: 'my-worker' },
-    instrumentBindings: true, // Auto-instrument KV, R2, D1, etc.
-    sampling: 'adaptive', // 10% baseline, 100% errors/slow
+    instrumentBindings: true,
+    sampling: 'adaptive',
   },
   {
     async fetch(req, env, ctx) {
@@ -35,32 +56,17 @@ export default wrapModule(
 );
 ```
 
-## Execution Logger
+Every call to `processOrder` produces a span; every `env.ORDERS_KV.get(...)`
+inside it produces a child span automatically.
 
-Pre-populated request logger for Cloudflare Workers:
+## API styles
 
-```typescript
-import { createWorkersLogger, trace } from 'autotel-cloudflare';
+Pick the style that matches the ecosystem you came from. All three accept the
+same config object.
 
-export default trace(async (request, env, ctx) => {
-  const log = createWorkersLogger(request, {
-    headers: ['authorization'], // Include specific headers
-    requestId: 'custom-id',     // Or use CF-Ray
-  }, ctx);
+### `wrapModule(config, handler)` — recommended
 
-  log.set({ feature: 'checkout' });
-  // Already has: request.method, request.path, cf-ray, traceparent, cf context
-
-  log.info('Processing order', { orderId: '123' });
-  log.emitNow();
-
-  return Response.json({ ok: true });
-});
-```
-
-## API Styles
-
-### wrapModule (Recommended)
+Compatible with `workers-honeycomb-logger`. Config first, handler second:
 
 ```typescript
 import { wrapModule } from 'autotel-cloudflare';
@@ -68,72 +74,313 @@ import { wrapModule } from 'autotel-cloudflare';
 export default wrapModule(
   { service: { name: 'my-worker' } },
   {
-    async fetch(req, env, ctx) {
-      return new Response('Hello');
-    },
+    async fetch(req, env, ctx) { return new Response('Hello'); },
+    async scheduled(event, env, ctx) { /* cron */ },
+    async queue(batch, env, ctx) { /* queue consumer */ },
+    async email(message, env, ctx) { /* email handler */ },
   },
 );
 ```
 
-### instrument
+### `instrument(handler, config)`
+
+Compatible with `@microlabs/otel-cf-workers`. Handler first, config second:
 
 ```typescript
 import { instrument } from 'autotel-cloudflare';
 
 export default instrument(
-  {
-    async fetch(req, env, ctx) {
-      return new Response('Hello');
-    },
-  },
+  { async fetch(req, env, ctx) { return new Response('Hello'); } },
   { service: { name: 'my-worker' } },
 );
 ```
 
-### Functional API
+### Functional `trace()` / `span()`
+
+For inner business logic. Combine with `wrapModule` for full coverage:
 
 ```typescript
-import { trace } from 'autotel-cloudflare';
+import { trace, span } from 'autotel-cloudflare';
 
-export default trace(async (request) => {
-  return new Response('OK');
+export const processPayment = trace((ctx) => async (amount: number) => {
+  ctx.setAttribute('amount', amount);
+  await span({ name: 'validate.card' }, () => validateCard());
+  await span({ name: 'charge.card' }, () => chargeCard(amount));
+  return { success: true };
 });
 ```
 
-## Bindings Coverage
+## Fetch route controls
 
-| Binding          | Auto-Instrumented |
-| ---------------- | :---------------: |
-| KV               |        ✅         |
-| R2               |        ✅         |
-| D1               |        ✅         |
-| Durable Objects  |        ✅         |
-| Workers AI       |        ✅         |
-| Vectorize        |        ✅         |
-| Hyperdrive       |        ✅         |
-| Service Bindings |        ✅         |
-| Queue            |        ✅         |
-| Analytics Engine |        ✅         |
-| Email            |        ✅         |
+Filter which routes are traced and map URL patterns to per-route service names.
+Useful for an edge gateway that forwards to multiple downstreams:
 
-## Entry Points
+```typescript
+export default wrapModule(
+  {
+    service: { name: 'edge-gateway' },
+    handlers: {
+      fetch: {
+        include: ['/api/**'],
+        exclude: ['/api/internal/**', '/health'],
+        routes: {
+          '/api/auth/**': { service: 'auth-service' },
+          '/api/**': { service: 'api-service' },
+        },
+        postProcess: (span, { request, response }) => {
+          const url = new URL(request.url);
+          span.setAttribute('api.endpoint', url.pathname);
+        },
+      },
+    },
+  },
+  handler,
+);
+```
 
-- `autotel-cloudflare` — Everything
-- `autotel-cloudflare/bindings` — Bindings instrumentation only
-- `autotel-cloudflare/handlers` — Handler wrappers only
-- `autotel-cloudflare/sampling` — Sampling from autotel-edge
-- `autotel-cloudflare/events` — Events from autotel-edge
-- `autotel-cloudflare/logger` — Logger from autotel-edge
-- `autotel-cloudflare/testing` — Testing from autotel-edge
+## Bindings coverage
 
-## Bundle Size
+All bindings are auto-instrumented when `instrumentBindings: true`. Each binding
+operation produces a span named `<Binding> <NAME>: <op>` (e.g.
+`KV ORDERS_KV: get`).
 
-~45KB total (autotel-edge 20KB + CF-specific 25KB)
+| Binding             | Operations                                                       |
+| ------------------- | ---------------------------------------------------------------- |
+| **KV**              | `get`, `put`, `delete`, `list`, `getWithMetadata`                |
+| **R2**              | `head`, `get`, `put`, `delete`, `list`, `createMultipartUpload`  |
+| **D1**              | `prepare`, `batch`, `exec`, `dump`                               |
+| **Durable Objects** | `fetch`, `alarm` (use `wrapDurableObject` for the class itself)  |
+| **Workflows**       | `get`, `create`, `getInstance`                                   |
+| **Workers AI**      | `run`                                                            |
+| **Vectorize**       | `insert`, `query`, `getByIds`, `deleteByIds`, `upsert`           |
+| **Hyperdrive**      | All queries                                                      |
+| **Service Binding** | `fetch`                                                          |
+| **Queue**           | `send`, `sendBatch`                                              |
+| **Analytics Engine**| `writeDataPoint`                                                 |
+| **Email**           | `send`, `forward`                                                |
+
+Global instrumentations are enabled with `instrumentation.instrumentGlobalFetch`
+and `instrumentation.instrumentGlobalCache`.
+
+## Durable Objects
+
+Wrap the DO class itself so its `fetch` and `alarm` methods become root spans:
+
+```typescript
+import { wrapDurableObject } from 'autotel-cloudflare';
+
+class Counter implements DurableObject {
+  async fetch(request: Request) {
+    const count = (await this.state.storage.get('count')) ?? 0;
+    await this.state.storage.put('count', count + 1);
+    return new Response(String(count + 1));
+  }
+
+  async alarm() {
+    // span "Counter: alarm"
+  }
+}
+
+export const CounterDO = wrapDurableObject(
+  { service: { name: 'counter-do' } },
+  Counter,
+);
+```
+
+## Queues, scheduled, email handlers
+
+`wrapModule` instruments every handler defined on the module. No extra setup
+needed:
+
+```typescript
+export default wrapModule(
+  { service: { name: 'consumer' } },
+  {
+    async queue(batch, env, ctx) {
+      // root span "queue.consumer"; each message processed inside
+      for (const msg of batch.messages) {
+        await processMessage(msg.body);
+        msg.ack();
+      }
+    },
+    async scheduled(event, env, ctx) {
+      // root span "scheduled.cron"
+    },
+    async email(message, env, ctx) {
+      // root span "email.received"
+    },
+  },
+);
+```
+
+## Sampling
+
+Tail sampling decides after the trace has been recorded, so you can keep 100%
+of errors and slow requests while sampling the rest at any rate.
+
+### Presets
+
+```typescript
+import { SamplingPresets } from 'autotel-cloudflare/sampling';
+
+wrapModule(
+  {
+    service: { name: 'my-worker' },
+    sampling: { tailSampler: SamplingPresets.production() },
+    // shorthand: sampling: 'adaptive'
+  },
+  handler,
+);
+```
+
+| Preset                             | Behaviour                                |
+| ---------------------------------- | ---------------------------------------- |
+| `SamplingPresets.development()`    | 100% sampling                            |
+| `SamplingPresets.production()`     | 10% baseline + 100% errors + slow >1s    |
+| `SamplingPresets.highTraffic()`    | 1% baseline + 100% errors + slow >1s     |
+| `SamplingPresets.debugging()`      | Errors only                              |
+
+Shorthand strings: `'adaptive'` → production preset, `'error-only'` → debugging
+preset.
+
+### Custom sampler
+
+```typescript
+import { createCustomTailSampler } from 'autotel-cloudflare/sampling';
+import { SpanStatusCode } from '@opentelemetry/api';
+
+const sampler = createCustomTailSampler((trace) => {
+  const span = trace.localRootSpan;
+  if (span.attributes['http.route']?.toString().startsWith('/api/')) return true;
+  if (span.status.code === SpanStatusCode.ERROR) return true;
+  const durationMs = (span.endTime[0] - span.startTime[0]) / 1_000_000;
+  if (durationMs > 1000) return true;
+  return Math.random() < 0.1;
+});
+```
+
+## Request logger
+
+`createWorkersLogger()` returns a request-scoped logger pre-populated with
+`http.method`, `url.path`, `cf-ray`, `traceparent`, and CF context:
+
+```typescript
+import { createWorkersLogger, wrapModule } from 'autotel-cloudflare';
+
+export default wrapModule(
+  { service: { name: 'checkout-worker' } },
+  {
+    async fetch(request) {
+      const log = createWorkersLogger(request, {
+        headers: ['x-request-id'],
+      });
+
+      log.set({ checkout: { stage: 'validated' } });
+      log.info('checkout.started');
+      log.emitNow({ status: 200 });
+
+      return new Response('ok');
+    },
+  },
+);
+```
+
+## Service bindings
+
+Outgoing `env.MY_SERVICE.fetch(...)` calls are auto-instrumented and propagate
+W3C trace headers automatically. No extra configuration required.
+
+## Events
+
+Product events fan out to your subscribers with the active trace ID attached:
+
+```typescript
+import { publishEvent } from 'autotel-cloudflare/events';
+
+wrapModule(
+  {
+    service: { name: 'my-worker' },
+    subscribers: [
+      async (event) => {
+        await fetch('https://analytics.example.com/events', {
+          method: 'POST',
+          body: JSON.stringify(event),
+        });
+      },
+    ],
+  },
+  {
+    async fetch(req, env, ctx) {
+      await publishEvent({
+        name: 'order.completed',
+        userId: '123',
+        properties: { orderId: 'abc', amount: 99.99 },
+      });
+      return new Response('OK');
+    },
+  },
+);
+```
+
+## Configuration
+
+Full surface, including dynamic config that closes over `env`:
+
+```typescript
+export default wrapModule(
+  (env, trigger) => ({
+    service: {
+      name: env.SERVICE_NAME ?? 'my-worker',
+      version: '1.0.0',
+      namespace: env.ENVIRONMENT,
+    },
+    instrumentBindings: true,
+    instrumentation: {
+      instrumentGlobalFetch: true,
+      instrumentGlobalCache: true,
+      disabled: false,
+    },
+    sampling: {
+      tailSampler: env.ENVIRONMENT === 'production'
+        ? SamplingPresets.production()
+        : SamplingPresets.development(),
+    },
+    exporter: {
+      url: env.OTEL_ENDPOINT,
+      headers: { 'x-api-key': env.API_KEY },
+    },
+  }),
+  handler,
+);
+```
+
+## Testing
+
+```typescript
+import { createTraceCollector, assertTraceCreated } from 'autotel-cloudflare/testing';
+
+const collector = createTraceCollector();
+await myWorker.fetch(new Request('https://example.com/'));
+assertTraceCreated(collector, 'fetch');
+```
+
+## Entry points
+
+| Import                          | Contents                                |
+| ------------------------------- | --------------------------------------- |
+| `autotel-cloudflare`            | Everything                              |
+| `autotel-cloudflare/bindings`   | `instrumentKV`, `instrumentR2`, etc.    |
+| `autotel-cloudflare/handlers`   | `instrumentDO`, handler wrappers        |
+| `autotel-cloudflare/sampling`   | `SamplingPresets`, custom samplers      |
+| `autotel-cloudflare/events`     | `publishEvent`, subscribers             |
+| `autotel-cloudflare/logger`     | `createWorkersLogger`                   |
+| `autotel-cloudflare/testing`    | Trace collectors and assertions         |
 
 ## Examples
 
-- [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example) — Cloudflare Workers with KV, R2, D1, AI, Queues auto-instrumentation and edge logger.
+- [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example) — KV, R2, D1, AI, Queues, Durable Objects, scheduled, email, custom sampling.
 
 ## Related
 
-- [Edge Runtimes](/autotel/frameworks/edge/) — Foundation package
+- [Edge Runtimes](/autotel/frameworks/edge/) — vendor-agnostic foundation
+- [Adapters](/autotel/frameworks/adapters/) — `autotel-adapters/cloudflare`

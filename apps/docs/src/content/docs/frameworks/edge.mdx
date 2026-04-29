@@ -1,11 +1,24 @@
 ---
 title: Edge Runtimes
-description: Vendor-agnostic OpenTelemetry for edge runtimes (~20KB).
+description: Vendor-agnostic OpenTelemetry for edge runtimes. ~20KB, fetch + AsyncLocalStorage only.
 ---
 
-`autotel-edge` is a lightweight (~20KB), vendor-agnostic OpenTelemetry implementation for edge runtimes: Cloudflare Workers, Vercel Edge, Netlify Edge, Deno Deploy, and more.
+`autotel-edge` is a lightweight, vendor-agnostic OpenTelemetry implementation
+for edge runtimes. It's the foundation under
+[autotel-cloudflare](/autotel/frameworks/cloudflare/) and works directly on
+Vercel Edge, Netlify Edge, Deno Deploy, and any runtime with `fetch()` and
+`AsyncLocalStorage`. There are no Node.js APIs and no auto-instrumentation
+libraries. The core SDK ships with sampling, events, logger, and testing
+helpers.
 
-> For Cloudflare Workers, use [autotel-cloudflare](/autotel/frameworks/cloudflare/) which includes complete bindings instrumentation.
+| Bundle                     | Size                       |
+| -------------------------- | -------------------------- |
+| Core (`autotel-edge`)      | ~20KB minified, ~8KB gz    |
+| All entry points combined  | ~25KB minified, ~10KB gz   |
+
+> **Cloudflare Workers users:** install
+> [`autotel-cloudflare`](/autotel/frameworks/cloudflare/) instead. Same
+> foundation, plus complete bindings instrumentation.
 
 ## Installation
 
@@ -13,7 +26,15 @@ description: Vendor-agnostic OpenTelemetry for edge runtimes (~20KB).
 npm install autotel-edge
 ```
 
-## Quick Start
+## When to use this directly
+
+- Vercel Edge Functions / Edge Middleware
+- Netlify Edge Functions
+- Deno Deploy
+- AWS Lambda@Edge (limited `AsyncLocalStorage` support)
+- Custom edge runtimes (e.g. building your own `autotel-vercel`)
+
+## Quick start
 
 ```typescript
 import { trace, init } from 'autotel-edge';
@@ -21,7 +42,7 @@ import { trace, init } from 'autotel-edge';
 init({
   service: { name: 'my-edge-function' },
   exporter: {
-    url: process.env.OTEL_ENDPOINT || 'http://localhost:4318/v1/traces',
+    url: process.env.OTEL_ENDPOINT ?? 'http://localhost:4318/v1/traces',
   },
 });
 
@@ -30,62 +51,175 @@ export const handler = trace(async (request: Request) => {
 });
 ```
 
-## Entry Points
+## Core API
+
+### `trace(fn)` / `trace(options, fn)`
+
+Wrap a function so its execution becomes a span. Three call shapes:
 
 ```typescript
-// Core API
-import { trace, span, init } from 'autotel-edge';
+// Bare function
+const handler = trace(async (request: Request) => new Response('OK'));
 
-// Sampling strategies
-import { createAdaptiveSampler, SamplingPresets } from 'autotel-edge/sampling';
+// With options
+const handler = trace(
+  {
+    name: 'fetch-handler',
+    attributesFromArgs: ([request]) => ({ 'http.method': request.method }),
+  },
+  async (request: Request) => new Response('OK'),
+);
 
-// Events system
-import { createEdgeSubscribers, publishEvent } from 'autotel-edge/events';
+// Factory pattern — receives ctx, returns the handler
+const handler = trace((ctx) => async (request: Request) => {
+  ctx.setAttribute('custom.attr', 'value');
+  return new Response('OK');
+});
+```
 
-// Logger
-import { createEdgeLogger } from 'autotel-edge/logger';
+### `span(options, fn)`
 
-// Testing utilities
-import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
+Create a named child span around a code block:
+
+```typescript
+import { span } from 'autotel-edge';
+
+const rows = await span(
+  { name: 'database.query', attributes: { table: 'users' } },
+  async (s) => {
+    const data = await db.query('SELECT * FROM users');
+    s.setAttribute('rows', data.length);
+    return data;
+  },
+);
+```
+
+### `init(config)`
+
+Configure the SDK once, at module load:
+
+```typescript
+init({
+  service: {
+    name: 'my-edge-function',
+    version: '1.0.0',
+    namespace: 'production',
+  },
+  exporter: {
+    url: 'https://api.honeycomb.io/v1/traces',
+    headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY },
+  },
+  sampling: { tailSampler: SamplingPresets.production() },
+});
+```
+
+`init()` accepts a function that closes over the runtime environment too:
+
+```typescript
+init((env) => ({
+  service: { name: env.SERVICE_NAME },
+  exporter: { url: env.OTEL_ENDPOINT },
+}));
+```
+
+## Fetch route controls
+
+Filter which paths are traced and map URL patterns to per-route service names:
+
+```typescript
+init({
+  service: { name: 'edge-app' },
+  exporter: { url: 'https://otlp.example.com/v1/traces' },
+  handlers: {
+    fetch: {
+      include: ['/api/**'],
+      exclude: ['/api/internal/**', '/health'],
+      routes: {
+        '/api/auth/**': { service: 'auth-service' },
+        '/api/**': { service: 'api-service' },
+      },
+    },
+  },
+});
 ```
 
 ## Sampling
+
+Tail sampling decides after the trace finishes, so you can keep 100% of errors
+and slow requests while sampling everything else at any rate.
+
+### Presets
 
 ```typescript
 import { SamplingPresets } from 'autotel-edge/sampling';
 
 init({
   service: { name: 'my-app' },
-  exporter: { url: '...' },
-  sampling: {
-    tailSampler: SamplingPresets.production(),
-    // 10% baseline, 100% errors, 100% slow requests (>1s)
-  },
+  sampling: { tailSampler: SamplingPresets.production() },
 });
 ```
 
-**Presets:**
+| Preset                             | Behaviour                                |
+| ---------------------------------- | ---------------------------------------- |
+| `SamplingPresets.development()`    | 100% sampling                            |
+| `SamplingPresets.production()`     | 10% baseline + 100% errors + slow >1s    |
+| `SamplingPresets.highTraffic()`    | 1% baseline + 100% errors + slow >1s     |
+| `SamplingPresets.debugging()`      | Errors only                              |
 
-- `SamplingPresets.development()` — 100% sampling
-- `SamplingPresets.production()` — 10% baseline, all errors, slow >1s
-- `SamplingPresets.highTraffic()` — 1% baseline, all errors, slow >1s
-- `SamplingPresets.debugging()` — Errors only
-
-## Custom Sampling
+### Custom sampler
 
 ```typescript
 import { createCustomTailSampler } from 'autotel-edge/sampling';
+import { SpanStatusCode } from '@opentelemetry/api';
 
-const customSampler = createCustomTailSampler((trace) => {
+const sampler = createCustomTailSampler((trace) => {
   const span = trace.localRootSpan;
-  if (span.attributes['http.route']?.toString().startsWith('/api/'))
-    return true;
+  if (span.attributes['http.route']?.toString().startsWith('/api/')) return true;
   if (span.status.code === SpanStatusCode.ERROR) return true;
   return false;
 });
 ```
 
+## Logger
+
+### Simple logger
+
+```typescript
+import { createEdgeLogger } from 'autotel-edge/logger';
+
+const log = createEdgeLogger('my-service');
+log.info('Processing request', { userId: '123' });
+log.error('Request failed', { error });
+// trace_id and span_id are attached automatically
+```
+
+### Execution logger
+
+The execution logger is a request-scoped accumulator: build context across the
+request, then emit once. Supports `fork()` for background work that should keep
+its own snapshot:
+
+```typescript
+import { getExecutionLogger, trace } from 'autotel-edge';
+
+export const handler = trace(async (request) => {
+  const log = getExecutionLogger();
+
+  log.set({ feature: 'checkout' });
+  log.info('Processing order', { orderId: '123' });
+
+  log.fork('send-email', async () => {
+    await sendEmail('123');
+  });
+
+  log.emitNow();
+  return Response.json({ ok: true });
+});
+```
+
 ## Events
+
+Track product events with the active trace ID attached automatically:
 
 ```typescript
 import { publishEvent } from 'autotel-edge/events';
@@ -97,52 +231,92 @@ await publishEvent({
 });
 ```
 
-## Logger
+## Runtime notes
+
+### Vercel Edge Functions
 
 ```typescript
-import { createEdgeLogger } from 'autotel-edge/logger';
+// app/api/route.ts (or middleware.ts)
+import { trace, init } from 'autotel-edge';
 
-const log = createEdgeLogger('my-service');
-log.info('Processing request', { userId: '123' });
-```
+init({
+  service: { name: 'vercel-edge' },
+  exporter: { url: process.env.OTEL_ENDPOINT! },
+});
 
-### Execution Logger (Advanced)
+export const runtime = 'edge';
 
-Full execution logger with fork support for edge runtimes:
-
-```typescript
-import { getExecutionLogger, trace } from 'autotel-edge';
-
-export const handler = trace(async (request) => {
-  const log = getExecutionLogger();
-
-  log.set({ feature: 'checkout' });
-  log.info('Processing order', { orderId: '123' });
-
-  // Fork for background work
-  log.fork('send-email', async () => {
-    await sendEmail(orderId);
-  });
-
-  log.emitNow();
+export const GET = trace(async (request: Request) => {
   return Response.json({ ok: true });
 });
 ```
 
-## Supported Runtimes
+### Netlify Edge Functions
 
-- Cloudflare Workers (use autotel-cloudflare)
-- Vercel Edge Functions
-- Netlify Edge Functions
-- Deno Deploy
-- AWS Lambda@Edge
-- Any runtime with `fetch()` and `AsyncLocalStorage` support
+```typescript
+// netlify/edge-functions/hello.ts
+import { trace, init } from 'autotel-edge';
+
+init({
+  service: { name: 'netlify-edge' },
+  exporter: { url: Deno.env.get('OTEL_ENDPOINT')! },
+});
+
+export default trace(async (request: Request) => {
+  return new Response('Hello from the edge');
+});
+```
+
+### Deno Deploy
+
+```typescript
+import { trace, init } from 'https://esm.sh/autotel-edge';
+
+init({
+  service: { name: 'deno-deploy' },
+  exporter: { url: Deno.env.get('OTEL_ENDPOINT')! },
+});
+
+Deno.serve(trace(async (request) => new Response('OK')));
+```
+
+## Testing
+
+```typescript
+import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
+
+const collector = createTraceCollector();
+await myFunction();
+assertTraceCreated(collector, 'myFunction');
+```
+
+## Constraints
+
+- **No Node.js APIs.** No `fs`, `net`, `process` (beyond `process.env` polyfills);
+  use Web APIs (`fetch`, `crypto.subtle`) instead.
+- **No auto-instrumentations.** Edge runtimes don't support
+  `@opentelemetry/auto-instrumentations-node`. Instrument explicitly with
+  `trace()` and `span()`.
+- **`AsyncLocalStorage` required.** Some runtimes need it enabled (e.g.
+  Cloudflare's `compatibility_flags = ["nodejs_compat"]`).
+
+## Entry points
+
+| Import                          | Contents                                |
+| ------------------------------- | --------------------------------------- |
+| `autotel-edge`                  | Core: `trace`, `span`, `init`           |
+| `autotel-edge/sampling`         | Presets and custom samplers             |
+| `autotel-edge/events`           | `publishEvent`, subscribers             |
+| `autotel-edge/logger`           | `createEdgeLogger`, execution logger    |
+| `autotel-edge/testing`          | Trace collectors and assertions         |
+
+## Vendor packages
+
+- [`autotel-cloudflare`](/autotel/frameworks/cloudflare/) — Cloudflare Workers
+  with full bindings coverage
+- `autotel-vercel` — coming soon
+- `autotel-netlify` — coming soon
 
 ## Examples
 
 - [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example) — Cloudflare Workers built on autotel-edge.
-
-## Bundle Size
-
-- **Core:** ~20KB minified (~8KB gzipped)
-- **With all entry points:** ~25KB minified (~10KB gzipped)

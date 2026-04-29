@@ -1,0 +1,158 @@
+---
+const frameworks = [
+  { name: 'Express', href: '/autotel/frameworks/express/' },
+  { name: 'Fastify', href: '/autotel/frameworks/fastify/' },
+  { name: 'NestJS', href: '/autotel/frameworks/nestjs/' },
+  { name: 'Hono', href: '/autotel/frameworks/hono/' },
+  { name: 'TanStack Start', href: '/autotel/frameworks/tanstack/' },
+  { name: 'Cloudflare Workers', href: '/autotel/frameworks/cloudflare/' },
+  { name: 'Edge runtimes', href: '/autotel/frameworks/edge/' },
+  { name: 'Adapters', href: '/autotel/frameworks/adapters/' },
+];
+
+const integrations = [
+  { name: 'Prisma', href: '/autotel/integrations/prisma/' },
+  { name: 'Drizzle', href: '/autotel/integrations/drizzle/' },
+  { name: 'Mongoose', href: '/autotel/integrations/mongoose/' },
+  { name: 'AWS', href: '/autotel/integrations/aws/' },
+  { name: 'MCP', href: '/autotel/integrations/mcp/' },
+  { name: 'Sentry', href: '/autotel/integrations/sentry/' },
+  { name: 'Datadog', href: '/autotel/integrations/datadog/' },
+  { name: 'PostHog', href: '/autotel/integrations/subscribers/' },
+];
+---
+
+<section class="frameworks" aria-labelledby="frameworks-title">
+  <div class="frameworks__inner">
+    <header class="frameworks__head">
+      <p class="frameworks__eyebrow">Surface coverage</p>
+      <h2 id="frameworks-title" class="frameworks__title">
+        Wire it once. Run it anywhere Node, Bun, or the edge runs.
+      </h2>
+    </header>
+
+    <div class="block">
+      <p class="block__label">Frameworks</p>
+      <ul class="grid">
+        {frameworks.map((f) => (
+          <li>
+            <a class="chip" href={f.href}>
+              <span class="chip__name">{f.name}</span>
+              <span class="chip__arrow" aria-hidden="true">→</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    <div class="block">
+      <p class="block__label">Integrations</p>
+      <ul class="grid">
+        {integrations.map((f) => (
+          <li>
+            <a class="chip" href={f.href}>
+              <span class="chip__name">{f.name}</span>
+              <span class="chip__arrow" aria-hidden="true">→</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </div>
+</section>
+
+<style>
+  .frameworks {
+    border-top: 1px solid var(--sl-color-gray-6);
+    padding-block: clamp(3rem, 6vw, 5rem);
+  }
+
+  .frameworks__inner {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 4vw, 2rem);
+  }
+
+  .frameworks__head {
+    max-width: 48rem;
+    margin-bottom: 2.25rem;
+  }
+
+  .frameworks__eyebrow {
+    margin: 0 0 0.5rem;
+    font-family: var(--sl-font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--sl-color-accent);
+  }
+
+  .frameworks__title {
+    margin: 0;
+    font-family: var(--sl-font);
+    font-size: clamp(1.6rem, 3.2vw, 2.25rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--sl-color-white);
+    border: 0;
+  }
+
+  .block + .block {
+    margin-top: 2rem;
+  }
+
+  .block__label {
+    font-family: var(--sl-font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--sl-color-gray-3);
+    margin: 0 0 0.85rem;
+  }
+
+  .grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+    gap: 1px;
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-6);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.85rem 1rem;
+    background: var(--sl-color-bg);
+    color: var(--sl-color-text);
+    font-family: var(--sl-font-mono);
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition:
+      background 150ms ease,
+      color 150ms ease;
+  }
+
+  .chip__arrow {
+    color: var(--sl-color-gray-4);
+    transition:
+      transform 200ms ease,
+      color 150ms ease;
+  }
+
+  .chip:hover {
+    background: color-mix(in oklch, var(--sl-color-accent) 6%, var(--sl-color-bg));
+    color: var(--sl-color-accent);
+  }
+
+  .chip:hover .chip__arrow {
+    color: var(--sl-color-accent);
+    transform: translateX(2px);
+  }
+</style>
