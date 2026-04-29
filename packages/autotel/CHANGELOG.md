@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- docs/skills: align guidance with OTel span-event deprecation direction. New instrumentation should prefer correlated log-based events; span-event APIs are compatibility-first.
+- add `MIGRATION.md` for v3 transition guidance from span-event-style emission to log-based correlated events.
+
 - dc4908d: Updated deps
 
 ## 2.26.2

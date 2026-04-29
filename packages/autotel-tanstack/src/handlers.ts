@@ -179,11 +179,7 @@ export function wrapStartHandler(
             );
 
             if (mergedConfig.captureErrors) {
-              ctx.recordException(error as Error);
-              ctx.setStatus({
-                code: SpanStatusCode.ERROR,
-                message: (error as Error).message,
-              });
+              ctx.recordError(error);
             }
 
             throw error;
@@ -323,11 +319,7 @@ export function createTracedHandler(
             );
 
             if (mergedConfig.captureErrors) {
-              ctx.recordException(error as Error);
-              ctx.setStatus({
-                code: SpanStatusCode.ERROR,
-                message: (error as Error).message,
-              });
+              ctx.recordError(error);
             }
 
             throw error;

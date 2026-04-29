@@ -49,6 +49,7 @@
 
 import { context, propagation, SpanKind } from '@opentelemetry/api';
 import { createSafeBaggageSchema } from './business-baggage';
+import { emitCorrelatedEvent } from './correlated-events';
 import { trace } from './functional';
 import type { TraceContext } from './trace-context';
 
@@ -422,7 +423,7 @@ export function traceDistributedWorkflow<TArgs extends unknown[], TReturn>(
               baggageValues.stepIndex = stepIndex;
               WorkflowBaggage.set(baseCtx, baggageValues);
 
-              baseCtx.addEvent('workflow.step_progress', {
+              emitCorrelatedEvent(baseCtx, 'workflow.step_progress', {
                 'workflow.step.name': stepName,
                 'workflow.step.index': stepIndex,
               });
@@ -433,7 +434,7 @@ export function traceDistributedWorkflow<TArgs extends unknown[], TReturn>(
           config.onStart?.(workflowCtx);
 
           // Add start event
-          baseCtx.addEvent('workflow.started', {
+          emitCorrelatedEvent(baseCtx, 'workflow.started', {
             'workflow.id': workflowId,
             'workflow.name': config.name,
           });
@@ -446,7 +447,7 @@ export function traceDistributedWorkflow<TArgs extends unknown[], TReturn>(
             config.onComplete?.(workflowCtx, result);
 
             // Add completion event
-            baseCtx.addEvent('workflow.completed', {
+            emitCorrelatedEvent(baseCtx, 'workflow.completed', {
               'workflow.id': workflowId,
             });
 
@@ -456,7 +457,7 @@ export function traceDistributedWorkflow<TArgs extends unknown[], TReturn>(
             config.onError?.(workflowCtx, error as Error);
 
             // Add error event
-            baseCtx.addEvent('workflow.failed', {
+            emitCorrelatedEvent(baseCtx, 'workflow.failed', {
               'workflow.id': workflowId,
               'workflow.error': (error as Error).message,
             });
@@ -634,12 +635,16 @@ export function traceDistributedStep<TArgs extends unknown[], TReturn>(
             requiresCompensation(data?: Record<string, unknown>): void {
               compensationData = data;
               baseCtx.setAttribute('workflow.step.requires_compensation', true);
-              baseCtx.addEvent('workflow.step.compensation_registered', {
-                'workflow.step.name': config.name,
-                ...(data && {
-                  'workflow.step.compensation_data': JSON.stringify(data),
-                }),
-              });
+              emitCorrelatedEvent(
+                baseCtx,
+                'workflow.step.compensation_registered',
+                {
+                  'workflow.step.name': config.name,
+                  ...(data && {
+                    'workflow.step.compensation_data': JSON.stringify(data),
+                  }),
+                },
+              );
             },
           };
 
@@ -647,7 +652,7 @@ export function traceDistributedStep<TArgs extends unknown[], TReturn>(
           config.onStart?.(stepCtx);
 
           // Add start event
-          baseCtx.addEvent('workflow.step.started', {
+          emitCorrelatedEvent(baseCtx, 'workflow.step.started', {
             'workflow.step.name': config.name,
             ...(baggageValues && { 'workflow.id': baggageValues.workflowId }),
           });
@@ -660,7 +665,7 @@ export function traceDistributedStep<TArgs extends unknown[], TReturn>(
             config.onComplete?.(stepCtx, result);
 
             // Add completion event
-            baseCtx.addEvent('workflow.step.completed', {
+            emitCorrelatedEvent(baseCtx, 'workflow.step.completed', {
               'workflow.step.name': config.name,
             });
 
@@ -670,7 +675,7 @@ export function traceDistributedStep<TArgs extends unknown[], TReturn>(
             config.onError?.(stepCtx, error as Error);
 
             // Add error event with compensation info if registered
-            baseCtx.addEvent('workflow.step.failed', {
+            emitCorrelatedEvent(baseCtx, 'workflow.step.failed', {
               'workflow.step.name': config.name,
               'workflow.step.error': (error as Error).message,
               ...(compensationData && {

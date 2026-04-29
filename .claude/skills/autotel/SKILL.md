@@ -51,6 +51,45 @@ span('db.insert', async () => {
 });
 ```
 
+### Recording Errors
+
+**Default: throw, don't catch.** `trace()` records status, exception, and structured attributes when the wrapped function rejects.
+
+```typescript
+import { trace, createStructuredError } from 'autotel';
+
+export const charge = trace((ctx) => async (cart) => {
+  if (!cart.items.length) {
+    throw createStructuredError({
+      message: 'Cart is empty',
+      why: 'User submitted checkout with no items',
+      fix: 'Validate cart on the client before submit',
+      link: 'https://docs.example.com/errors/empty-cart',
+    });
+  }
+  return await processCart(cart);
+});
+```
+
+Fallbacks, in order:
+
+1. **Attach call-site context, then rethrow** — `getRequestLogger(ctx).error(err, { step })`. Use when the rethrown error needs context only known at the catch site.
+2. **Writing instrumentation/middleware that wraps user handlers** — `ctx.recordError(err)` from inside a `trace((ctx) => ...)` callback. Sets ERROR status, structured `error.*` attributes, and (during the back-compat window) records the exception. Accepts `unknown` so no `as Error` cast is needed in catch blocks. For code that doesn't have a `ctx` handle, use the standalone form `recordStructuredError(ctx, err)`.
+
+```typescript
+// Inside a trace() callback — instrumentation wrapping a user handler:
+return trace({ name }, async (ctx) => {
+  try {
+    return await userHandler(args);
+  } catch (err) {
+    ctx.recordError(err); // ergonomic replacement for ctx.recordException
+    throw err;
+  }
+});
+```
+
+`ctx.recordException(...)` and `ctx.addEvent(...)` are intentionally hidden from the `TraceContext` type per OTEP 4430 (March 2026 — Span Event API deprecation). The runtime methods exist for back-compat only; new code MUST go through `createStructuredError`, `ctx.recordError(err)` / `recordStructuredError(ctx, err)`, or the request logger.
+
 ### Request Logger
 
 ```typescript
@@ -67,6 +106,8 @@ export const handleOrder = trace((ctx) => async (req) => {
     const payment = await processPayment(cart);
     log.set({ payment_method: payment.method });
   } catch (error) {
+    // Fallback pattern: attach call-site context, then rethrow.
+    // Default is to let the error propagate and let trace() record it.
     log.error(error, { step: 'payment' });
     throw error;
   }
@@ -76,8 +117,16 @@ export const handleOrder = trace((ctx) => async (req) => {
 ### Event Tracking
 
 ```typescript
-import { track, getEventQueue } from 'autotel';
+import { trace, getEventQueue } from 'autotel';
 
+// Inside trace() — use ctx.track for ergonomic, ctx-bound emission:
+export const signup = trace((ctx) => async (data) => {
+  ctx.track('user.signup', { userId: data.id, plan: data.plan });
+  return await db.users.create(data);
+});
+
+// Outside trace() — use the standalone track():
+import { track } from 'autotel';
 track('user.signup', { userId: '123', plan: 'pro' });
 
 // MUST flush before assertions or shutdown
@@ -122,9 +171,12 @@ app.get('/orders/:id', (c) => {
 | Anti-Pattern | Fix |
 |---|---|
 | `console.log('user created', userId)` | `log.set({ user_id: userId })` inside `trace()` |
-| `catch (e) { throw e }` | `catch (e) { log.error(e); throw e }` or `recordStructuredError()` |
+| `catch (e) { throw e }` | Delete the catch — `trace()` records errors automatically. Or `log.error(e, { step }); throw e` to attach call-site context |
 | `catch (e) { res.json({ error: e.message }) }` | `parseError(e)` for consistent shape |
 | `throw new Error('Payment failed')` | `createStructuredError({ message, why, fix, link })` |
+| `ctx.recordException(err)` / `span.recordException(err)` | App code: throw `createStructuredError(...)`. Instrumentation: `ctx.recordError(err)` (or `recordStructuredError(ctx, err)` if you don't have a `ctx` handle). Span Event API is deprecated (OTEP 4430) and type-gated out of `TraceContext` |
+| `ctx.addEvent('name', { ... })` / `span.addEvent(...)` | Discrete event inside `trace()`: `ctx.track('event.name', { ... })` (or standalone `track('event.name', { ... })` when there's no `ctx` handle). Wide-event attribute: `getRequestLogger(ctx).set({ ... })` |
+| `(ctx as any).recordException(err)` / `as unknown as { recordException }` | Don't bypass the type gate — use `recordStructuredError(ctx, err)` instead |
 | Manual `console.log` at start/end of function | `trace()` wrapper handles lifecycle |
 | Separate request ID generation | `ctx.correlationId` provides automatic correlation |
 
@@ -278,7 +330,16 @@ init({
 - SHOULD: Let trace names infer from const/function names
 - NEVER: Manually start/end spans for app logic (SDK glue only)
 
-### Events
+### Errors & Events
+
+- MUST: Throw `createStructuredError({ message, why, fix, link })` instead of `new Error(...)` in app code — let `trace()` record it on span exit
+- MUST: Use `ctx.recordError(err)` from instrumentation/middleware code that wraps user handlers (or `recordStructuredError(ctx, err)` if you don't have a `ctx` handle)
+- SHOULD: Only catch errors when you need to attach call-site context, then `getRequestLogger(ctx).error(err, { step })` and rethrow
+- SHOULD: Emit discrete events inside `trace()` with `ctx.track('event.name', { ... })` (or standalone `track('event.name', { ... })` outside `trace()`); emit wide-event attributes with `getRequestLogger(ctx).set({ ... })`
+- NEVER: Call `ctx.recordException(err)` or `ctx.addEvent(...)` — Span Event API is deprecated (OTEP 4430, March 2026) and intentionally type-gated out of `TraceContext`
+- NEVER: Cast `ctx as any` or `as unknown as { recordException }` to bypass the type gate
+
+### Event Queue
 
 - MUST: Call `getEventQueue()?.flush()` before assertions or shutdown
 - MUST: Forward `options.autotel` in subscriber payloads (contains trace context)

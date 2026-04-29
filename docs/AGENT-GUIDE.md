@@ -11,13 +11,13 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 | Wrap an async function with a span | `trace(fn)` or `span('Name', fn)` | Handlers, use-case functions, workers |
 | Wrap with explicit name/key | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })` | When name inference isn’t reliable |
 | Need span context (set attributes) | Factory: `trace((ctx) => async (args) => { ctx.setAttribute(...); ... })` | When you need to attach attributes inside the function |
-| One snapshot per request (attributes + log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs |
+| One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs |
 | Throw an error with why/fix/link | `createStructuredError({ message, why?, fix?, link?, status?, cause? })` | API routes, services, validation |
 | Show API error in UI (client) | `parseError(caught)` → use `message`, `why`, `fix`, `link` | Toasts, error banners, forms |
 | Product/analytics events | `track('event.name', attributes)` or `Event` from `autotel/event` | Clicks, signups, conversions |
 | Record error on current span | `recordStructuredError(ctx, error)` or request logger `.error()` | Inside catch blocks when you have a span |
 
-**Rule of thumb**: If there’s an HTTP request or a “job”, create a span (via `trace()` or framework middleware) and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents.
+**Rule of thumb**: If there’s an HTTP request or a “job”, create a span (via `trace()` or framework middleware) and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
 
 ---
 

@@ -195,15 +195,18 @@ function wrapHandler<T extends (...args: any[]) => any>(
           } catch (error) {
             // Record exception if configured
             if (config.captureErrors) {
-              ctx.recordException(error as Error);
+              if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+                ctx.recordError(error);
+              } else if (
+                'recordException' in ctx &&
+                typeof ctx.recordException === 'function'
+              ) {
+                ctx.recordException(error);
+              }
               ctx.setAttribute(
                 MCP_SEMCONV.ERROR_TYPE,
                 (error as Error).name || 'Error',
               );
-              ctx.setStatus({
-                code: SpanStatusCode.ERROR,
-                message: (error as Error).message,
-              });
             }
 
             // Record metric on error

@@ -42,6 +42,7 @@
  */
 
 import type { TraceContext } from './trace-context';
+import { emitCorrelatedEvent } from './correlated-events';
 
 type EventAttrs = Record<string, string | number | boolean>;
 
@@ -102,7 +103,7 @@ export function recordPromptSent(
   ctx: TraceContext,
   event: PromptSentEvent = {},
 ): void {
-  ctx.addEvent('gen_ai.prompt.sent', buildPromptSentAttrs(event));
+  emitCorrelatedEvent(ctx, 'gen_ai.prompt.sent', buildPromptSentAttrs(event));
 }
 
 /**
@@ -113,7 +114,11 @@ export function recordResponseReceived(
   ctx: TraceContext,
   event: ResponseReceivedEvent = {},
 ): void {
-  ctx.addEvent('gen_ai.response.received', buildResponseAttrs(event));
+  emitCorrelatedEvent(
+    ctx,
+    'gen_ai.response.received',
+    buildResponseAttrs(event),
+  );
 }
 
 /**
@@ -122,7 +127,7 @@ export function recordResponseReceived(
  * decision was made.
  */
 export function recordRetry(ctx: TraceContext, event: RetryEvent): void {
-  ctx.addEvent('gen_ai.retry', buildRetryAttrs(event));
+  emitCorrelatedEvent(ctx, 'gen_ai.retry', buildRetryAttrs(event));
 }
 
 /**
@@ -131,7 +136,7 @@ export function recordRetry(ctx: TraceContext, event: RetryEvent): void {
  * several tool calls within a single provider response.
  */
 export function recordToolCall(ctx: TraceContext, event: ToolCallEvent): void {
-  ctx.addEvent('gen_ai.tool.call', buildToolCallAttrs(event));
+  emitCorrelatedEvent(ctx, 'gen_ai.tool.call', buildToolCallAttrs(event));
 }
 
 /**
@@ -143,7 +148,11 @@ export function recordStreamFirstToken(
   ctx: TraceContext,
   event: StreamFirstTokenEvent = {},
 ): void {
-  ctx.addEvent('gen_ai.stream.first_token', buildStreamFirstTokenAttrs(event));
+  emitCorrelatedEvent(
+    ctx,
+    'gen_ai.stream.first_token',
+    buildStreamFirstTokenAttrs(event),
+  );
 }
 
 // ---- Attribute builders -------------------------------------------------

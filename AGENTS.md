@@ -18,7 +18,8 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 - **Write once, observe everywhere**: One instrumentation surface; many backends via OTLP.
 - **Functional API**: Wrap handlers and functions with `trace()`, `span()`, `instrument()`; avoid manual span lifecycle where possible.
 - **Structured errors**: Errors should carry `message`, `why`, `fix`, `link`, `status`, `code`, `cause`, `internal` (backend-only) so agents and users can diagnose and act.
-- **Request context**: Use `getRequestLogger()` when you need one coherent snapshot per request (attributes + log events on the span).
+- **Request context**: Use `getRequestLogger()` when you need one coherent snapshot per request (attributes + correlated log-based events).
+- **Event model**: For new instrumentation, emit events through the Logs API model (correlated logs). Do not add new direct dependencies on `Span.addEvent` / `Span.recordException` in app-facing guidance.
 
 ### Cloudflare Direction
 
@@ -87,6 +88,7 @@ When the user wants observability, suggest these entry points. All from `autotel
 
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
 - **Structured errors**: Prefer `createStructuredError` over `new Error()` in API routes and services. On the client, use `parseError(caught)` to show message/why/fix in UI.
+- **Span Event deprecation direction**: Existing span-event data remains supported, but new code should prefer log-based correlated events and keep span-timeline compatibility as an implementation detail.
 
 ---
 

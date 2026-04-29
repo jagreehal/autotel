@@ -107,11 +107,14 @@ export function traceServerFn<T extends (...args: any[]) => any>(
           ctx.setStatus({ code: SpanStatusCode.OK });
           return result;
         } catch (error) {
-          ctx.recordException(error as Error);
-          ctx.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: (error as Error).message,
-          });
+          if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+            ctx.recordError(error);
+          } else if (
+            'recordException' in ctx &&
+            typeof ctx.recordException === 'function'
+          ) {
+            ctx.recordException(error);
+          }
           throw error;
         }
       });

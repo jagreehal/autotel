@@ -298,12 +298,12 @@ export const workflow = trace('workflow', ctx => async () => {
 ### 3. Business Events
 
 ```typescript
-ctx.addEvent('agent_handoff', {
+ctx.track('agent_handoff', {
   from: 'triage',
   to: 'specialist',
 });
 
-track('workflow_completed', {
+ctx.track('workflow_completed', {
   duration_ms: 1234,
   success: true,
 });

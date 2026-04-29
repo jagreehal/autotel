@@ -59,8 +59,7 @@ async function chargePayment(amount: number) {
 
     if (Math.random() > 0.8) {
       const err = new Error('Payment declined by issuer');
-      ctx.recordException(err);
-      ctx.setStatus({ code: 2, message: err.message });
+      ctx.recordError(err);
       logger.error({ amount, err }, 'payment charge failed');
       throw err;
     }

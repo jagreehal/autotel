@@ -15,6 +15,8 @@ sources:
 
 OpenTelemetry instrumentation for Node.js and edge. Instrument once; stream to any OTLP backend. Use `trace()`/`span()` for spans, `getRequestLogger()` for one snapshot per request, `createStructuredError`/`parseError` for errors, `track()` for product events.
 
+Event guidance: for new instrumentation, emit events as correlated logs (via request logger or logging pipeline bridged to OTel Logs API). Do not introduce new direct span-event dependencies for business/exception events.
+
 ## When to Use What
 
 | Need                                  | API                                                              | Import                                 |

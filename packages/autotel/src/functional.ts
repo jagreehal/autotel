@@ -422,6 +422,8 @@ const MAX_ERROR_MESSAGE_LENGTH = 500;
 function createDummyCtx<
   TBaggage extends Record<string, unknown> | undefined = undefined,
 >(): TraceContext<TBaggage> {
+  // `recordException` / `addEvent` are no-op shims kept for the same
+  // compatibility window as `createTraceContext` (see trace-context.ts).
   return {
     traceId: '',
     spanId: '',

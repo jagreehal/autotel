@@ -18,6 +18,8 @@ This skill builds on autotel-instrumentation. Read it first for init and span cr
 
 Accumulate context with `getRequestLogger(ctx)`, `.set()`, and `.info()`/`.warn()`/`.error()`. Call `.emitNow()` (or rely on middleware) to emit one snapshot per request. Request logger requires an active span — use inside `trace()` or framework middleware.
 
+Preferred event model: treat request logger emissions as the default way to capture request-correlated events in new code. If a backend still expects span-event rendering, keep compatibility at export/processor level rather than adding new `span.addEvent()` calls in application code.
+
 ## Setup
 
 ```typescript

@@ -4,6 +4,7 @@ import type { TraceContext } from './trace-context';
 import { createTraceContext } from './trace-context';
 import { recordStructuredError } from './structured-error';
 import { flattenToAttributes } from './flatten-attributes';
+import { emitCorrelatedEvent } from './correlated-events';
 
 const POST_EMIT_FORK_HINT =
   "For intentional background work tied to this request, use log.fork('label', fn) when available.";
@@ -101,9 +102,9 @@ export function getRequestLogger(
     fields?: Record<string, unknown>,
   ) => {
     const attrs = fields ? flattenToAttributes(fields) : undefined;
-    activeContext.addEvent(`log.${level}`, {
+    emitCorrelatedEvent(activeContext, `log.${level}`, {
       message,
-      ...attrs,
+      ...(attrs ?? {}),
     });
   };
 
@@ -191,7 +192,7 @@ export function getRequestLogger(
         context: mergedContext,
       };
 
-      activeContext.addEvent('log.emit.manual', {
+      emitCorrelatedEvent(activeContext, 'log.emit.manual', {
         ...flattened,
       });
 

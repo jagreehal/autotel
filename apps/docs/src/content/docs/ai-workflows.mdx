@@ -425,7 +425,7 @@ const specialistAgent = trace('agent.specialist', (ctx) => async (plan: string) 
     'agent.model': 'gpt-4o',
   });
 
-  ctx.addEvent('specialist_engaged', { plan_length: plan.length });
+  ctx.track('specialist_engaged', { plan_length: plan.length });
 
   const result = await generateText({
     model: openai('gpt-4o'),
@@ -482,20 +482,20 @@ export const runMultiAgentWorkflow = trace(
 
     // Step 1: Triage
     const triage = await triageAgent(userRequest);
-    ctx.addEvent('triage_complete', { requires_specialist: triage.requiresSpecialist });
+    ctx.track('triage_complete', { requires_specialist: triage.requiresSpecialist });
 
     // Step 2: Specialist (if needed)
     let response;
     if (triage.requiresSpecialist) {
       response = await specialistAgent(triage.plan);
-      ctx.addEvent('specialist_complete', { requires_qa: response.requiresQA });
+      ctx.track('specialist_complete', { requires_qa: response.requiresQA });
     }
 
     // Step 3: QA (if needed)
     let qa;
     if (response?.requiresQA) {
       qa = await qaAgent(response.response);
-      ctx.addEvent('qa_complete', { approved: qa.approved });
+      ctx.track('qa_complete', { approved: qa.approved });
     }
 
     // Track workflow completion
@@ -596,14 +596,14 @@ export const ragPipeline = trace(
     });
 
     const embedding = await generateEmbeddings(query);
-    ctx.addEvent('embeddings_generated');
+    ctx.track('embeddings_generated');
 
     const searchResults = await vectorSearch(embedding);
-    ctx.addEvent('search_completed', { results_count: searchResults.length });
+    ctx.track('search_completed', { results_count: searchResults.length });
 
     const context = searchResults.map((r) => r.content);
     const response = await generateWithContext(query, context);
-    ctx.addEvent('generation_completed', { response_length: response.length });
+    ctx.track('generation_completed', { response_length: response.length });
 
     track('rag.pipeline_completed', {
       user_id: userId,
@@ -665,7 +665,7 @@ export const generateStreamingResponse = trace(
 
       // Add event for significant milestones
       if (chunkCount % 10 === 0) {
-        ctx.addEvent('streaming_progress', {
+        ctx.track('streaming_progress', {
           chunks_received: chunkCount,
           total_length: totalLength,
         });
@@ -749,19 +749,19 @@ export const generateWithQualityCheck = trace(
 
       do {
         attempt++;
-        ctx.addEvent('generation_attempt', { attempt });
+        ctx.track('generation_attempt', { attempt });
 
         content = await generateContent(prompt, 'gpt-4o');
         evaluation = await evaluateQuality(content);
 
         if (evaluation.passesThreshold) {
-          ctx.addEvent('quality_passed', {
+          ctx.track('quality_passed', {
             attempt,
             score: evaluation.score,
           });
           break;
         } else if (attempt < maxAttempts) {
-          ctx.addEvent('quality_failed_retrying', {
+          ctx.track('quality_failed_retrying', {
             attempt,
             score: evaluation.score,
             feedback: evaluation.feedback,
