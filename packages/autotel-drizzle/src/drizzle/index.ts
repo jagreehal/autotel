@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { createHash } from 'node:crypto';
 import { SpanKind, trace } from '@opentelemetry/api';
 import {
   SEMATTRS_DB_NAME,
   SEMATTRS_DB_OPERATION,
   SEMATTRS_DB_STATEMENT,
+  SEMATTRS_DB_STATEMENT_HASH,
   SEMATTRS_DB_SYSTEM,
   SEMATTRS_NET_PEER_NAME,
   SEMATTRS_NET_PEER_PORT,
@@ -159,6 +161,16 @@ function sanitizeQueryText(queryText: string, maxLength: number): string {
   return `${queryText.slice(0, Math.max(0, maxLength))}...`;
 }
 
+/**
+ * Stable sha1 of a parameterised SQL statement, used as `db.statement.hash`.
+ * Hashes the full original text (not the truncated form) so the hash is
+ * identical for queries that only differ in trailing length. We keep this
+ * cheap (sha1, hex, take 16 chars) — the goal is grouping, not crypto.
+ */
+function hashQueryText(queryText: string): string {
+  return createHash('sha1').update(queryText).digest('hex').slice(0, 16);
+}
+
 function extractOperation(queryText: string): string | undefined {
   const trimmed = queryText.trimStart();
   const match = /^(?<operation>\w+)/u.exec(trimmed);
@@ -184,6 +196,12 @@ function buildSpan(
 
   if (state.config.dbName !== undefined) {
     span.setAttribute(SEMATTRS_DB_NAME, state.config.dbName);
+  }
+
+  if (queryText !== undefined) {
+    // The hash always lives on the span — even when captureQueryText is off
+    // (e.g. for privacy / size reasons) — so query grouping still works.
+    span.setAttribute(SEMATTRS_DB_STATEMENT_HASH, hashQueryText(queryText));
   }
 
   if (state.config.captureQueryText && queryText !== undefined) {

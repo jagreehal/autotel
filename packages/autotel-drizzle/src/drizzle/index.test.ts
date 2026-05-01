@@ -211,6 +211,47 @@ describe('instrumentDrizzle', () => {
     expect(getSpan().attributes['db.operation']).toBe('UPDATE');
     expect(getSpan().attributes['db.statement']).toBeUndefined();
   });
+
+  it('emits db.statement.hash even when statement text is suppressed', async () => {
+    const client = {
+      query: vi.fn(async () => ({ rows: [] })),
+    };
+
+    instrumentDrizzle(client, { captureQueryText: false });
+    await client.query({ text: 'UPDATE users SET name = $1' });
+
+    const hash = getSpan().attributes['db.statement.hash'];
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('produces identical db.statement.hash for identical statements', async () => {
+    const client = {
+      query: vi.fn(async () => ({ rows: [] })),
+    };
+
+    instrumentDrizzle(client, {});
+    await client.query({ text: 'SELECT * FROM users WHERE id = $1' });
+    await client.query({ text: 'SELECT * FROM users WHERE id = $1' });
+
+    expect(getSpan(0).attributes['db.statement.hash']).toBeDefined();
+    expect(getSpan(0).attributes['db.statement.hash']).toBe(
+      getSpan(1).attributes['db.statement.hash'],
+    );
+  });
+
+  it('produces different db.statement.hash for different statements', async () => {
+    const client = {
+      query: vi.fn(async () => ({ rows: [] })),
+    };
+
+    instrumentDrizzle(client, {});
+    await client.query({ text: 'SELECT * FROM users WHERE id = $1' });
+    await client.query({ text: 'SELECT * FROM accounts WHERE id = $1' });
+
+    expect(getSpan(0).attributes['db.statement.hash']).not.toBe(
+      getSpan(1).attributes['db.statement.hash'],
+    );
+  });
 });
 
 describe('instrumentDrizzleClient', () => {

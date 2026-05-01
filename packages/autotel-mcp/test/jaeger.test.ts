@@ -53,6 +53,98 @@ describe('JaegerBackend', () => {
     expect(trace.spans[0]?.parentSpanId).toBeNull();
   });
 
+  it('reads parentSpanId from references[].refType=CHILD_OF (Jaeger native API)', () => {
+    const backend = new JaegerBackend('http://localhost:16686');
+    const trace = backend.toTraceRecord({
+      traceID: 'trace-refs',
+      processes: { p1: { serviceName: 'api' } },
+      spans: [
+        {
+          traceID: 'trace-refs',
+          spanID: 'parent',
+          operationName: 'POST /batch',
+          processID: 'p1',
+          startTime: 1_000_000,
+          duration: 100_000,
+          references: [],
+        },
+        {
+          traceID: 'trace-refs',
+          spanID: 'child',
+          operationName: 'drizzle.select',
+          processID: 'p1',
+          startTime: 1_010_000,
+          duration: 5_000,
+          references: [
+            {
+              refType: 'CHILD_OF',
+              traceID: 'trace-refs',
+              spanID: 'parent',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(trace.spans[0]?.parentSpanId).toBeNull();
+    expect(trace.spans[1]?.parentSpanId).toBe('parent');
+  });
+
+  it('prefers references[].CHILD_OF over the legacy parentSpanID field', () => {
+    const backend = new JaegerBackend('http://localhost:16686');
+    const trace = backend.toTraceRecord({
+      traceID: 'trace-mixed',
+      processes: { p1: { serviceName: 'api' } },
+      spans: [
+        {
+          traceID: 'trace-mixed',
+          spanID: 'span-x',
+          operationName: 'op',
+          processID: 'p1',
+          startTime: 1_000_000,
+          duration: 5_000,
+          parentSpanID: 'legacy-parent',
+          references: [
+            {
+              refType: 'CHILD_OF',
+              traceID: 'trace-mixed',
+              spanID: 'real-parent',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(trace.spans[0]?.parentSpanId).toBe('real-parent');
+  });
+
+  it('ignores FOLLOWS_FROM references when looking for the parent', () => {
+    const backend = new JaegerBackend('http://localhost:16686');
+    const trace = backend.toTraceRecord({
+      traceID: 'trace-ff',
+      processes: { p1: { serviceName: 'api' } },
+      spans: [
+        {
+          traceID: 'trace-ff',
+          spanID: 'span-y',
+          operationName: 'op',
+          processID: 'p1',
+          startTime: 1_000_000,
+          duration: 5_000,
+          references: [
+            {
+              refType: 'FOLLOWS_FROM',
+              traceID: 'trace-ff',
+              spanID: 'predecessor',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(trace.spans[0]?.parentSpanId).toBeNull();
+  });
+
   it('infers error status from http.status_code tag', () => {
     const backend = new JaegerBackend('http://localhost:16686');
     const trace = backend.toTraceRecord({

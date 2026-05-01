@@ -150,7 +150,10 @@ describe('ctx.recordError', () => {
     ctx.recordError(err);
 
     expect(recordException).toHaveBeenCalledWith(err);
-    expect(setStatus).toHaveBeenCalledWith({ code: 2, message: 'Order failed' });
+    expect(setStatus).toHaveBeenCalledWith({
+      code: 2,
+      message: 'Order failed',
+    });
     expect(setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
         'error.message': 'Order failed',
