@@ -113,10 +113,22 @@ export function findRootCause(trace: TraceRecord): RootCauseResult {
     reason = `Span "${bottleneck.operationName}" in service "${bottleneck.serviceName}" is the slowest span at ${bottleneck.durationMs}ms`;
   }
 
-  const percentOfTrace =
-    rootSpan.durationMs > 0
-      ? (bottleneck.durationMs / rootSpan.durationMs) * 100
-      : 0;
+  // Use the trace's wall-clock window (max end - min start) rather than
+  // rootSpan.durationMs alone. When the producer doesn't link spans into a
+  // single tree (e.g. a buggy backend that drops parent refs, or a workflow
+  // that emits multiple roots), rootSpan.durationMs can be much smaller than
+  // the bottleneck, which makes the percentage exceed 100% and looks broken.
+  const traceStart = Math.min(...spans.map((s) => s.startTimeUnixMs));
+  const traceEnd = Math.max(
+    ...spans.map((s) => s.startTimeUnixMs + s.durationMs),
+  );
+  const traceWindowMs = Math.max(traceEnd - traceStart, rootSpan.durationMs);
+
+  const rawPercent =
+    traceWindowMs > 0 ? (bottleneck.durationMs / traceWindowMs) * 100 : 0;
+  // Clamp to [0, 100] — if it ever exceeds 100 we still return 100 rather than
+  // a confusing 2348%, but in practice the wider denominator above prevents it.
+  const percentOfTrace = Math.min(100, Math.max(0, rawPercent));
 
   const path = buildPathToSpan(bottleneck, parentMap);
 

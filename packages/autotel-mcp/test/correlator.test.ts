@@ -85,4 +85,43 @@ describe('findRootCause', () => {
     expect(result.bottleneck.spanId).toBe('child');
     expect(result.reason).toContain('error');
   });
+
+  it('clamps percentOfTrace to <= 100 when spans are not linked into a tree', () => {
+    // Reproducer: a flat trace (every span has parentSpanId === null) — happens
+    // when a backend strips parent refs. Previously percentOfTrace divided
+    // bottleneck duration by the (often tiny) first span and produced values
+    // like 2348%. Should now use the trace wall-clock window instead.
+    const trace: TraceRecord = {
+      traceId: 't-flat',
+      spans: [
+        {
+          traceId: 't-flat',
+          spanId: 'a',
+          parentSpanId: null,
+          operationName: 'mark-running',
+          serviceName: 'processor',
+          startTimeUnixMs: 1000,
+          durationMs: 9,
+          statusCode: 'OK',
+          tags: {},
+          hasError: false,
+        },
+        {
+          traceId: 't-flat',
+          spanId: 'b',
+          parentSpanId: null,
+          operationName: 'workflow',
+          serviceName: 'processor',
+          startTimeUnixMs: 1000,
+          durationMs: 200,
+          statusCode: 'ERROR',
+          tags: {},
+          hasError: true,
+        },
+      ],
+    };
+    const result = findRootCause(trace);
+    expect(result.percentOfTrace).toBeLessThanOrEqual(100);
+    expect(result.percentOfTrace).toBeGreaterThanOrEqual(0);
+  });
 });

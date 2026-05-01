@@ -11,10 +11,18 @@ export function registerHealthTools(
   server.registerTool(
     'backend_health',
     {
-      description: 'Check backend health and readiness.',
+      description:
+        'Check backend health and readiness. Returns liveness plus the signal coverage map (traces / metrics / logs) so you can see at a glance what the backend can answer for, not just whether it is up.',
       inputSchema: z.object({}),
     },
-    async () => respondSafe(() => backend.healthCheck(), 'backend_health'),
+    async () =>
+      respondSafe(async () => {
+        const [health, capabilities] = await Promise.all([
+          backend.healthCheck(),
+          Promise.resolve(backend.capabilities()),
+        ]);
+        return { ...health, signals: capabilities };
+      }, 'backend_health'),
   );
 
   server.registerTool(
