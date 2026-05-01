@@ -30,12 +30,24 @@ import { summarizeTrace } from '../../modules/trace-summary';
 import type { ServiceMap, TraceSummary } from '../../types';
 
 type JaegerServiceResponse = { data: string[] };
+type JaegerSpanReference = {
+  refType: 'CHILD_OF' | 'FOLLOWS_FROM' | string;
+  traceID: string;
+  spanID: string;
+};
 type JaegerTraceData = {
   traceID: string;
   spans: Array<{
     traceID: string;
     spanID: string;
+    /**
+     * Jaeger's native API does NOT populate this field. It exposes parent
+     * relationships via `references` with `refType: 'CHILD_OF'`. Kept here
+     * for backward-compat with the few clients that synthesize it; we only
+     * use it as a last-resort fallback.
+     */
     parentSpanID?: string;
+    references?: JaegerSpanReference[];
     operationName: string;
     processID?: string;
     startTime: number;
@@ -249,10 +261,13 @@ export class JaegerBackend implements TelemetryBackend {
       const tags = Object.fromEntries(
         (span.tags ?? []).map((tag) => [tag.key, normalizeTagValue(tag.value)]),
       );
+      const childOfRef = span.references?.find(
+        (ref) => ref.refType === 'CHILD_OF',
+      );
       return {
         traceId: span.traceID,
         spanId: span.spanID,
-        parentSpanId: span.parentSpanID ?? null,
+        parentSpanId: childOfRef?.spanID ?? span.parentSpanID ?? null,
         operationName: span.operationName,
         serviceName,
         startTimeUnixMs: Math.floor(span.startTime / 1000),

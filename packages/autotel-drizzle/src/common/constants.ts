@@ -14,6 +14,14 @@ export const SEMATTRS_DB_COLLECTION_NAME = 'db.collection.name' as const;
 export const SEMATTRS_DB_OPERATION_NAME = 'db.operation.name' as const;
 export const SEMATTRS_DB_QUERY_TEXT = 'db.query.text' as const;
 export const SEMATTRS_DB_QUERY_SUMMARY = 'db.query.summary' as const;
+/**
+ * sha1 hex of the (parameterised, sanitized) statement text. Use to group
+ * identical queries in observability tools — the raw `db.statement` is
+ * usually unique per call due to inline params or comments, so high-
+ * cardinality grouping by it is unhelpful. Example use: aggregate the top
+ * 20 queries by total duration by `db.statement.hash`.
+ */
+export const SEMATTRS_DB_STATEMENT_HASH = 'db.statement.hash' as const;
 
 // MongoDB-specific attributes
 export const SEMATTRS_DB_MONGODB_COLLECTION = 'db.mongodb.collection' as const;

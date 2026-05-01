@@ -195,7 +195,10 @@ function wrapHandler<T extends (...args: any[]) => any>(
           } catch (error) {
             // Record exception if configured
             if (config.captureErrors) {
-              if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+              if (
+                'recordError' in ctx &&
+                typeof ctx.recordError === 'function'
+              ) {
                 ctx.recordError(error);
               } else if (
                 'recordException' in ctx &&

@@ -50,15 +50,19 @@ log.emitNow();`,
       </h2>
     </header>
 
-    <div class="primitives__grid">
-      {items.map((it) => (
-        <article class="card">
-          <p class="card__label">{it.label}</p>
-          <h3 class="card__title">{it.title}</h3>
-          <pre class="card__code"><code set:html={it.code}></code></pre>
-          <p class="card__blurb">{it.blurb}</p>
-        </article>
-      ))}
+    <div class="primitives__grid sl-markdown-no-margin">
+      {
+        items.map((it) => (
+          <article class="card">
+            <p class="card__label">{it.label}</p>
+            <h3 class="card__title">{it.title}</h3>
+            <pre class="card__code">
+              <code set:html={it.code} />
+            </pre>
+            <p class="card__blurb">{it.blurb}</p>
+          </article>
+        ))
+      }
     </div>
   </div>
 </section>

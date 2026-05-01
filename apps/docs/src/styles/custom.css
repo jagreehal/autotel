@@ -175,3 +175,7 @@ nav.sidebar .top-level > li + li {
 a {
   transition: color var(--sl-transition);
 }
+
+.sl-markdown-no-margin :not(a, strong, em, del, span, input, code, br) + :not(a, strong, em, del, span, input, code, br, :where(.not-content *)){
+  margin-top: 0;
+}
