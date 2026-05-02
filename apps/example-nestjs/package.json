@@ -13,7 +13,7 @@
     "@nestjs/common": "^11.1.19",
     "@nestjs/core": "^11.1.19",
     "@nestjs/platform-express": "^11.1.19",
-    "@opentelemetry/auto-instrumentations-node": "^0.73.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.74.0",
     "autotel": "workspace:*",
     "dotenv": "^17.4.2",
     "reflect-metadata": "^0.2.2",

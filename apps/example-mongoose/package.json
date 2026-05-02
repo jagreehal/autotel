@@ -14,7 +14,7 @@
     "autotel": "workspace:*",
     "autotel-mongoose": "workspace:*",
     "dotenv": "^17.4.2",
-    "mongoose": "^9.5.0"
+    "mongoose": "^9.6.1"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

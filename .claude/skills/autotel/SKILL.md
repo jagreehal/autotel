@@ -16,6 +16,7 @@ Philosophy: "Write once, observe everywhere" - instrument once, stream to any OT
 - Error handling lacks structured context (no why, fix, or link)
 - Adding tracing to any Node.js or edge runtime handler
 - Reviewing code for observability anti-patterns
+- Setting up observability in Cloudflare Workers, Hono, or Next.js
 - Working in the autotel monorepo
 
 ## Quick Reference
@@ -143,6 +144,24 @@ runWithCorrelationId(incomingId, () => handleRequest());
 ```
 
 ## Framework Adapters
+
+```typescript
+// Cloudflare Workers (via autotel/workers)
+import { init, wrapModule, trace } from 'autotel/workers';
+
+const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
+  return await kv.get(orderId);
+});
+
+export default wrapModule(
+  { service: { name: 'my-worker' } },
+  {
+    async fetch(_req, env) {
+      return Response.json(await processOrder('123', env.ORDERS_KV));
+    },
+  },
+);
+```
 
 ```typescript
 // Next.js
@@ -356,10 +375,10 @@ init({
 
 | Package | Role |
 |---------|------|
-| `autotel` | Node.js core: init, trace, span, track, event-queue, correlation-id |
-| `autotel-edge` | Edge runtime foundation |
-| `autotel-cloudflare` | Cloudflare Workers |
-| `autotel-adapters` | Framework adapters (Next.js, Hono, Nitro, Cloudflare) |
+| `autotel` | Node.js core: init, trace, span, track, event-queue, correlation-id. Also provides `autotel/workers` and `autotel/cloudflare` for Cloudflare Workers |
+| `autotel-edge` | Edge runtime foundation (alternative to workers for vendor-agnostic edge) |
+| `autotel-cloudflare` | Cloudflare Workers implementation (re-exported via `autotel/workers`) |
+| `autotel-adapters` | Framework adapters (Next.js, Hono, Nitro) |
 | `autotel-mcp-instrumentation` | MCP instrumentation |
 | `autotel-tanstack` | TanStack Start |
 | `autotel-subscribers` | Event subscribers (PostHog, Mixpanel, Webhook) |
