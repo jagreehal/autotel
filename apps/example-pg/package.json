@@ -8,7 +8,7 @@
     "bun:start": "bun --import ./src/instrumentation.mjs src/index.ts"
   },
   "dependencies": {
-    "@opentelemetry/instrumentation-pg": "^0.67.0",
+    "@opentelemetry/instrumentation-pg": "^0.68.0",
     "autotel": "workspace:*",
     "dotenv": "^17.4.2",
     "pg": "^8.20.0"

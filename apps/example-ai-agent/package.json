@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "@openai/agents": "^0.8.5",
-    "@opentelemetry/auto-instrumentations-node": "^0.73.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.74.0",
     "@traceloop/node-server-sdk": "^0.26.0",
-    "openai": "^6.34.0",
+    "openai": "^6.35.0",
     "autotel": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "dotenv": "^17.4.2",

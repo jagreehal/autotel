@@ -1,6 +1,6 @@
-# Cloudflare Example — autotel-cloudflare
+# Cloudflare Example — autotel/workers
 
-OpenTelemetry instrumentation for Cloudflare Workers. Wraps your handler with `instrument()` and every request produces traces with HTTP attributes, span status codes, and exception recording — no manual span management needed.
+OpenTelemetry instrumentation for Cloudflare Workers using the main `autotel` package (`autotel/workers`). Wraps your handler and every request produces traces with HTTP attributes, span status codes, and exception recording — no manual span management needed.
 
 ## Quick Start
 
@@ -65,7 +65,7 @@ const processPayment = trace(
 Structured JSON logger with Pino-style method calls that auto-correlates with OpenTelemetry traces. Every log entry includes `traceId`, `spanId`, and `correlationId` when inside an active span.
 
 ```typescript
-import { createEdgeLogger, runWithLogLevel } from 'autotel-cloudflare/logger';
+import { createEdgeLogger, runWithLogLevel } from 'autotel/workers';
 
 // Create a logger — options: level, pretty, bindings, redact
 const log = createEdgeLogger('my-service', {
@@ -113,7 +113,7 @@ runWithLogLevel('debug', () => {
 Use `getEdgeTraceContext()` to inject trace IDs into any logger (pino, bunyan, etc.):
 
 ```typescript
-import { getEdgeTraceContext } from 'autotel-cloudflare/logger';
+import { getEdgeTraceContext } from 'autotel/workers';
 
 const ctx = getEdgeTraceContext(); // { traceId, spanId, correlationId } or null
 pinoLogger.info({ ...ctx, userId: 'u123' }, 'processing');
@@ -180,7 +180,7 @@ sampling: {
 
 ```
 src/
-  worker.ts          Main worker — HTTP handler with instrument()
+  worker.ts          Main worker — HTTP handler with wrapModule()
   types.ts           Shared Env interface
   actor.ts           Cloudflare Actors example (Durable Objects)
   actor-worker.ts    Actor worker entrypoint
@@ -203,3 +203,8 @@ pnpm deploy
 ```
 
 Set `ENVIRONMENT=production` and configure `OTLP_ENDPOINT` to your observability backend (Honeycomb, Grafana Cloud, etc.).
+
+## Package Choice
+
+- **Recommended:** `autotel` + `autotel/workers` for the best single-package DX.
+- **Use `autotel-cloudflare` for feature-targeted Cloudflare instrumentation:** when you want direct control of Cloudflare-specific instrumentation surfaces (bindings, handlers, actors, agents, workflows).

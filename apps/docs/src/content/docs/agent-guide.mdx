@@ -221,7 +221,7 @@ See `packages/autotel-tanstack` and `apps/example-tanstack-start`: middleware an
 
 ### Cloudflare Workers
 
-See `packages/autotel-cloudflare`: init at top level, wrap `fetch` handler so each request gets a span; use `getRequestLogger()` or trace context inside the handler.
+Use `autotel/workers` from the main `autotel` package for primary DX. It wraps `fetch` so each request gets a span; use `getRequestLogger()` or trace context inside the handler. Use `autotel-cloudflare` when you need feature-targeted Cloudflare instrumentation surfaces (bindings, handlers, actors, agents, workflows).
 
 ### Generic Node HTTP
 

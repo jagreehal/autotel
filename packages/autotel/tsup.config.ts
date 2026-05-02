@@ -44,6 +44,8 @@ export default defineConfig({
     'parse-error': 'src/parse-error.ts',
     'drain-pipeline': 'src/drain-pipeline.ts',
     enrichers: 'src/enrichers.ts',
+    workers: 'src/workers.ts',
+    cloudflare: 'src/cloudflare.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats
   tsconfig: 'tsconfig.build.json',
