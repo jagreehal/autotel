@@ -10,7 +10,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.73.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.74.0",
     "@prisma/client": "^7.8.0",
     "@prisma/instrumentation": "^7.8.0",
     "autotel": "workspace:*",

@@ -3,7 +3,7 @@ title: Cloudflare Workers
 description: Complete OpenTelemetry for Cloudflare Workers with full bindings coverage.
 ---
 
-`autotel-cloudflare` covers every Cloudflare Workers binding (KV, R2, D1,
+`autotel/workers` (from the main `autotel` package) is the recommended DX for Cloudflare Workers. Under the hood, it uses `autotel-cloudflare`, which provides feature-targeted Cloudflare instrumentation and covers every binding (KV, R2, D1,
 Durable Objects, Workers AI, Vectorize, Hyperdrive, Service Bindings, Queues,
 Analytics Engine, Email) with automatic instrumentation. It also provides tail
 sampling and three API styles compatible with `@microlabs/otel-cf-workers` and
@@ -14,7 +14,7 @@ Built on [autotel-edge](/autotel/frameworks/edge/). Total bundle ~45KB.
 ## Installation
 
 ```bash
-npm install autotel-cloudflare
+npm install autotel
 ```
 
 ## wrangler.toml setup
@@ -35,7 +35,7 @@ an `exporter.url` to `wrapModule()` (see [Configuration](#configuration)).
 ## Quick start
 
 ```typescript
-import { wrapModule, trace } from 'autotel-cloudflare';
+import { wrapModule, trace } from 'autotel/workers';
 
 const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
   const order = await kv.get(orderId); // auto-instrumented
@@ -69,7 +69,7 @@ same config object.
 Compatible with `workers-honeycomb-logger`. Config first, handler second:
 
 ```typescript
-import { wrapModule } from 'autotel-cloudflare';
+import { wrapModule } from 'autotel/workers';
 
 export default wrapModule(
   { service: { name: 'my-worker' } },
@@ -87,7 +87,7 @@ export default wrapModule(
 Compatible with `@microlabs/otel-cf-workers`. Handler first, config second:
 
 ```typescript
-import { instrument } from 'autotel-cloudflare';
+import { instrument } from 'autotel/workers';
 
 export default instrument(
   { async fetch(req, env, ctx) { return new Response('Hello'); } },
@@ -100,7 +100,7 @@ export default instrument(
 For inner business logic. Combine with `wrapModule` for full coverage:
 
 ```typescript
-import { trace, span } from 'autotel-cloudflare';
+import { trace, span } from 'autotel/workers';
 
 export const processPayment = trace((ctx) => async (amount: number) => {
   ctx.setAttribute('amount', amount);
@@ -167,7 +167,7 @@ and `instrumentation.instrumentGlobalCache`.
 Wrap the DO class itself so its `fetch` and `alarm` methods become root spans:
 
 ```typescript
-import { wrapDurableObject } from 'autotel-cloudflare';
+import { wrapDurableObject } from 'autotel/workers';
 
 class Counter implements DurableObject {
   async fetch(request: Request) {
@@ -221,7 +221,7 @@ of errors and slow requests while sampling the rest at any rate.
 ### Presets
 
 ```typescript
-import { SamplingPresets } from 'autotel-cloudflare/sampling';
+import { SamplingPresets } from 'autotel/workers';
 
 wrapModule(
   {
@@ -246,7 +246,7 @@ preset.
 ### Custom sampler
 
 ```typescript
-import { createCustomTailSampler } from 'autotel-cloudflare/sampling';
+import { createCustomTailSampler } from 'autotel/workers';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 const sampler = createCustomTailSampler((trace) => {
@@ -265,7 +265,7 @@ const sampler = createCustomTailSampler((trace) => {
 `http.method`, `url.path`, `cf-ray`, `traceparent`, and CF context:
 
 ```typescript
-import { createWorkersLogger, wrapModule } from 'autotel-cloudflare';
+import { createWorkersLogger, wrapModule } from 'autotel/workers';
 
 export default wrapModule(
   { service: { name: 'checkout-worker' } },
@@ -292,12 +292,12 @@ W3C trace headers automatically. No extra configuration required.
 
 ## Events
 
-Product events fan out to your subscribers with the active trace ID attached:
+Emit product/business events through a request-scoped subscribers helper with active trace context attached:
 
 ```typescript
-import { publishEvent } from 'autotel-cloudflare/events';
+import { getEdgeSubscribers, wrapModule } from 'autotel/workers';
 
-wrapModule(
+export default wrapModule(
   {
     service: { name: 'my-worker' },
     subscribers: [
@@ -311,10 +311,10 @@ wrapModule(
   },
   {
     async fetch(req, env, ctx) {
-      await publishEvent({
-        name: 'order.completed',
-        userId: '123',
-        properties: { orderId: 'abc', amount: 99.99 },
+      const subscribers = getEdgeSubscribers(ctx);
+      await subscribers.trackEvent('order.completed', {
+        orderId: 'abc',
+        amount: 99.99,
       });
       return new Response('OK');
     },
@@ -356,25 +356,24 @@ export default wrapModule(
 
 ## Testing
 
-```typescript
-import { createTraceCollector, assertTraceCreated } from 'autotel-cloudflare/testing';
-
-const collector = createTraceCollector();
-await myWorker.fetch(new Request('https://example.com/'));
-assertTraceCreated(collector, 'fetch');
-```
+`autotel/workers` currently does not expose dedicated runtime testing helpers.
+Use your existing Worker test runner (Vitest/Miniflare/Wrangler) and assert on
+responses plus exporter output in integration tests.
 
 ## Entry points
 
+For most apps, start with `autotel/workers`.
+
 | Import                          | Contents                                |
 | ------------------------------- | --------------------------------------- |
-| `autotel-cloudflare`            | Everything                              |
+| `autotel/workers`               | Recommended Cloudflare DX from `autotel` |
+| `autotel-cloudflare`            | Feature-targeted Cloudflare instrumentation package |
 | `autotel-cloudflare/bindings`   | `instrumentKV`, `instrumentR2`, etc.    |
 | `autotel-cloudflare/handlers`   | `instrumentDO`, handler wrappers        |
-| `autotel-cloudflare/sampling`   | `SamplingPresets`, custom samplers      |
-| `autotel-cloudflare/events`     | `publishEvent`, subscribers             |
 | `autotel-cloudflare/logger`     | `createWorkersLogger`                   |
-| `autotel-cloudflare/testing`    | Trace collectors and assertions         |
+| `autotel-cloudflare/sampling`   | Advanced direct subpath (also re-exported by `autotel/workers`) |
+| `autotel-cloudflare/events`     | Advanced direct subpath (also re-exported by `autotel/workers`) |
+| `autotel-cloudflare/testing`    | Placeholder entrypoint (currently no runtime helpers) |
 
 ## Examples
 

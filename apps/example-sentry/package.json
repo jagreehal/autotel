@@ -8,7 +8,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@sentry/node": "^10.50.0",
+    "@sentry/node": "^10.51.0",
     "autotel": "workspace:*",
     "autotel-sentry": "workspace:*",
     "dotenv": "^17.4.2"

@@ -1,14 +1,15 @@
 import type { WorkerEnv } from './types';
 import {
-  instrument,
+  wrapModule,
   trace,
   span,
   instrumentRateLimiter,
   instrumentBrowserRendering,
-} from 'autotel-cloudflare';
-import { createEdgeLogger, runWithLogLevel } from 'autotel-cloudflare/logger';
-import { getEdgeSubscribers } from 'autotel-cloudflare/events';
-import { SamplingPresets } from 'autotel-cloudflare/sampling';
+  createEdgeLogger,
+  runWithLogLevel,
+  getEdgeSubscribers,
+  SamplingPresets,
+} from 'autotel/workers';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 function parseHeaders(raw?: string): Record<string, string> {
@@ -516,7 +517,7 @@ async function processMessage(message: Message) {
 }
 
 // Export instrumented handler with all features enabled
-export default instrument(handler, (env: WorkerEnv) => ({
+export default wrapModule((env: WorkerEnv) => ({
   exporter: {
     url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
     headers: parseHeaders(env.OTLP_HEADERS),
@@ -563,4 +564,4 @@ export default instrument(handler, (env: WorkerEnv) => ({
       },
     },
   },
-}));
+}), handler);

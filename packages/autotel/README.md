@@ -2530,14 +2530,31 @@ export const handler = trace(async (event) => {
 
 ### Edge Runtimes (Cloudflare Workers, Vercel Edge)
 
-For edge runtimes with different constraints, use the `autotel-edge` package instead:
+For edge runtimes with different constraints:
+
+- **Cloudflare Workers (recommended):** use `autotel/workers` from the main package.
+- **Other edge runtimes (Vercel/Netlify/Deno):** use `autotel-edge`.
+
+Cloudflare Workers example:
 
 ```typescript
-import { init } from 'autotel-edge';
-// Auto-flush built-in for edge environments
+import { wrapModule, trace, init } from 'autotel/workers';
+
+const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
+  return kv.get(orderId);
+});
+
+export default wrapModule(
+  { service: { name: 'my-worker' } },
+  {
+    async fetch(_req, env) {
+      return Response.json(await processOrder('123', env.ORDERS_KV));
+    },
+  },
+);
 ```
 
-The `autotel-edge` package is optimized for edge runtimes with automatic flush behavior.
+`autotel-edge` remains optimized for vendor-agnostic edge runtimes with automatic flush behavior.
 
 ## API Reference
 
