@@ -1,6 +1,6 @@
 {
   "name": "autotel-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP server for AI agents to investigate OpenTelemetry traces, metrics, and logs",
   "type": "module",
   "main": "./dist/index.js",

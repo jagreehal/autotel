@@ -1,5 +1,13 @@
 # autotel-cloudflare
 
+## 2.18.8
+
+### Patch Changes
+
+- 5d05a3e: Add Cloudflare Workers support to main `autotel` package. Introduces `autotel/workers` and `autotel/cloudflare` entry points that re-export the functional API and Cloudflare-specific instrumentation from `autotel-cloudflare`, providing better DX for Cloudflare users while keeping the core package modular. Updates package exports, build config, and documentation.
+- Updated dependencies [5d05a3e]
+  - autotel-edge@3.16.6
+
 ## 2.18.7
 
 ### Patch Changes

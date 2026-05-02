@@ -1,6 +1,6 @@
 {
   "name": "autotel",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Write Once, Observe Anywhere",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -303,8 +303,8 @@
     "@opentelemetry/resource-detector-container": "^0.8.7",
     "@opentelemetry/resource-detector-gcp": "^0.51.0",
     "@opentelemetry/sdk-trace-node": "^2.7.1",
-    "autotel-cloudflare": "^2.18.7",
-    "autotel-edge": "^3.16.5",
+    "autotel-cloudflare": "^2.18.8",
+    "autotel-edge": "^3.16.6",
     "@traceloop/node-server-sdk": "^0.26.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

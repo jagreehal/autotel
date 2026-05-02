@@ -1,5 +1,12 @@
 # @jagreehal/example-otel-tui
 
+## 1.0.13
+
+### Patch Changes
+
+- Updated dependencies [5d05a3e]
+  - autotel@3.0.1
+
 ## 1.0.12
 
 ### Patch Changes

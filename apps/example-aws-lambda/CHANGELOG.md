@@ -1,5 +1,13 @@
 # @jagreehal/example-aws-lambda
 
+## 1.0.36
+
+### Patch Changes
+
+- Updated dependencies [5d05a3e]
+  - autotel-aws@0.12.11
+  - autotel@3.0.1
+
 ## 1.0.35
 
 ### Patch Changes
