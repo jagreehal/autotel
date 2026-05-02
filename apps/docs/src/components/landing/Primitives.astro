@@ -5,7 +5,8 @@ const items = [
     title: 'Trace any function',
     blurb:
       'Wrap a handler. Spans, error recording, and request context come automatically.',
-    code: `import { trace } from 'autotel';
+    code: `
+import { trace } from 'autotel';
 
 export const checkout = trace((ctx) =>
   async (req, res) => {
@@ -19,7 +20,8 @@ export const checkout = trace((ctx) =>
     title: 'Emit product events',
     blurb:
       'Fan out to PostHog, webhooks, or any subscriber. Same call, every backend.',
-    code: `import { track } from 'autotel';
+    code: `
+import { track } from 'autotel';
 
 track('order.created', {
   userId: req.user.id,
@@ -32,7 +34,8 @@ track('order.created', {
     title: 'One canonical log line',
     blurb:
       'Build context across the request, then emit one structured event at the end.',
-    code: `import { getRequestLogger } from 'autotel';
+    code: `    
+import { getRequestLogger } from 'autotel';
 
 const log = getRequestLogger(ctx);
 log.set({ userId, plan, source });
