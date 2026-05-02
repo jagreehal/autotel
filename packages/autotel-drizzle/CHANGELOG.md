@@ -1,5 +1,13 @@
 # autotel-drizzle
 
+## 0.0.12
+
+### Patch Changes
+
+- 5d05a3e: Add Cloudflare Workers support to main `autotel` package. Introduces `autotel/workers` and `autotel/cloudflare` entry points that re-export the functional API and Cloudflare-specific instrumentation from `autotel-cloudflare`, providing better DX for Cloudflare users while keeping the core package modular. Updates package exports, build config, and documentation.
+- Updated dependencies [5d05a3e]
+  - autotel@3.0.1
+
 ## 0.0.11
 
 ### Patch Changes
