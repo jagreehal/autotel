@@ -102,7 +102,8 @@ describe('instrumentMongoose integration', () => {
     );
     const queryText = findSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
     expect(queryText).not.toContain('alice@example.com');
-    expect(queryText).toContain('[REDACTED]');
+    // Default preset smart-masks emails as a***@***.com.
+    expect(queryText).toContain('a***@***.com');
   });
 
   it('captures db.query.text for save operations', async () => {

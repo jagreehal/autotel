@@ -48,8 +48,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "npx eslint src/**/*.ts",
-    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

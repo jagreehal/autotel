@@ -49,6 +49,26 @@ export const processOrder = trace(async function processOrder(
 
 **[→ See complete examples and API docs](./packages/autotel/README.md#quick-start)**
 
+## Agent Skills
+
+autotel ships **35 Agent Skills** for AI assistants (Claude Code, Cursor, Windsurf, Continue, …) — one per package plus a flagship "review-otel-patterns" skill that surveys 13+ frameworks. Skills are auto-discovered by compatible agents.
+
+```bash
+npx skills add https://github.com/jagreehal/autotel
+```
+
+Or browse the [`skills/`](./skills) directory directly. Highlights:
+
+- **[`review-otel-patterns`](./packages/autotel/skills/review-otel-patterns/SKILL.md)** — audit a codebase for OTel anti-patterns; covers Next.js, Nuxt, Nitro, TanStack Start, Hono, Express, Fastify, Elysia, NestJS, Cloudflare Workers, AWS Lambda, edge runtimes, and standalone Node.
+- **[`analyze-traces`](./packages/autotel/skills/analyze-traces/SKILL.md)** — read OTLP traces from any backend, local dump, or in-memory exporter to debug failures, latency, and cardinality issues.
+- **[`migrate-to-autotel`](./skills/migrate-to-autotel/SKILL.md)** — safe cutover from raw OTel SDK / Sentry / Datadog APM / New Relic / Honeycomb Beelines / OpenTracing.
+- **[`tune-sampling`](./skills/tune-sampling/SKILL.md)** — head + tail sampling strategies, AI-aware, Cloudflare-aware.
+- **[`build-audit-trails`](./skills/build-audit-trails/SKILL.md)** — tamper-aware audit logs on top of OTel spans.
+- **[`debug-missing-spans`](./skills/debug-missing-spans/SKILL.md)** — top-to-bottom troubleshooting walkthrough.
+- **[`create-autotel-adapter`](./skills/create-autotel-adapter/SKILL.md)** / **[`create-autotel-instrumentation`](./skills/create-autotel-instrumentation/SKILL.md)** / **[`create-autotel-exporter`](./skills/create-autotel-exporter/SKILL.md)** — author new packages following autotel conventions, with templates included.
+
+See [`skills/README.md`](./skills/README.md) for the full index.
+
 ## Packages
 
 This monorepo contains the following packages:
@@ -104,6 +124,19 @@ Composable framework DX adapters on top of `autotel` core:
 - Extensible toolkit for custom framework adapters
 
 **[→ View adapters documentation](./packages/autotel-adapters/README.md)**
+
+### [autotel-audit](./packages/autotel-audit)
+
+[![npm](https://img.shields.io/npm/v/autotel-audit.svg)](https://www.npmjs.com/package/autotel-audit)
+
+Audit-focused helpers for compliance logging with automatic tail-sampling bypass:
+
+- `withAudit(...)` — Structured audit metadata with automatic outcome tagging
+- `forceKeepAuditEvent(...)` — Ensure critical audit trails bypass tail-drop sampling
+- `setAuditAttributes(...)` — Normalized `audit.*` span attributes
+- Type-safe metadata schemas and backend integration
+
+**[→ View audit documentation](./packages/autotel-audit/README.md)**
 
 ## Migrating from OpenTelemetry?
 

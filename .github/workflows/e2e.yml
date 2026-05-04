@@ -1,0 +1,72 @@
+name: e2e
+
+# E2E tests against a real OTLP collector. They are NOT run on every PR
+# because:
+#   - secrets are not exposed to fork PRs (security)
+#   - we don't want to spam the destination on every push
+#   - they are slower than unit tests (real network, ingestion lag)
+#
+# Triggers:
+#   - daily cron (3:00 UTC) — daily health check
+#   - push to main — confirm a merge didn't break anything
+#   - workflow_dispatch — manual run from the Actions tab
+#   - PR labelled `e2e` — opt-in for adapter changes (only on PRs from
+#     the same repo, never on forks)
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/autotel/src/**'
+      - 'packages/autotel/test/e2e/**'
+      - 'packages/autotel-edge/src/**'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    types: [labeled, synchronize, opened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    if: |
+      github.event_name != 'pull_request' || (
+        contains(github.event.pull_request.labels.*.name, 'e2e')
+        && github.event.pull_request.head.repo.full_name == github.repository
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install pnpm
+        run: corepack prepare pnpm@latest --activate
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: pnpm build
+      - name: Run e2e tests
+        run: pnpm --filter autotel run test:e2e
+        env:
+          OTLP_E2E_ENDPOINT: ${{ secrets.OTLP_E2E_ENDPOINT }}
+          OTLP_E2E_HEADERS: ${{ secrets.OTLP_E2E_HEADERS }}
+          OTLP_E2E_SERVICE: ${{ secrets.OTLP_E2E_SERVICE }}

@@ -50,7 +50,14 @@ export {
 } from './execution-logger';
 
 // Cloudflare-specific wrappers
-export { instrument, wrapModule, wrapDurableObject } from './wrappers';
+export {
+  instrument,
+  wrapModule,
+  wrapDurableObject,
+  defineWorkerFetch,
+  type DefineWorkerFetchOptions,
+  type WorkerFetchHandler,
+} from './wrappers';
 
 // Cloudflare-specific handlers
 export { instrumentDO, instrumentWorkflow } from './handlers';

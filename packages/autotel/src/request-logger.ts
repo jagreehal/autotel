@@ -56,7 +56,11 @@ export interface RequestLogger {
   error(error: Error | string, fields?: Record<string, unknown>): void;
   getContext(): Record<string, unknown>;
   emitNow(overrides?: Record<string, unknown>): RequestLogSnapshot;
-  fork(label: string, fn: () => void | Promise<void>): void;
+  fork(
+    label: string,
+    fn: () => void | Promise<void>,
+    options?: ForkOptions,
+  ): void;
 }
 
 export interface RequestLogSnapshot {
@@ -70,6 +74,21 @@ export interface RequestLogSnapshot {
 export interface RequestLoggerOptions {
   /** Callback invoked by emitNow() for manual fan-out. */
   onEmit?: (snapshot: RequestLogSnapshot) => void | Promise<void>;
+}
+
+/**
+ * Optional lifecycle hooks for adapters that need to track child loggers
+ * spawned by `log.fork()` (e.g. active logger maps in framework integrations).
+ */
+export interface ForkLifecycle {
+  /** Called after the child logger is created, before `fn` runs. */
+  onChildEnter?: (child: RequestLogger) => void;
+  /** Called after the child has finished (emit + drain), success or failure. */
+  onChildExit?: (child: RequestLogger) => void;
+}
+
+export interface ForkOptions {
+  lifecycle?: ForkLifecycle;
 }
 
 function resolveContext(ctx?: TraceContext): TraceContext {
@@ -207,7 +226,11 @@ export function getRequestLogger(
       return snapshot;
     },
 
-    fork(label: string, fn: () => void | Promise<void>): void {
+    fork(
+      label: string,
+      fn: () => void | Promise<void>,
+      forkOptions?: ForkOptions,
+    ): void {
       const parentRequestId = activeContext.correlationId;
       if (typeof parentRequestId !== 'string' || parentRequestId.length === 0) {
         throw new Error(
@@ -217,6 +240,7 @@ export function getRequestLogger(
       }
 
       const tracer = otelTrace.getTracer('autotel.request-logger');
+      const lifecycle = forkOptions?.lifecycle;
       void tracer.startActiveSpan(`request.fork:${label}`, (childSpan) => {
         const childContext: TraceContext = {
           ...createTraceContext(childSpan),
@@ -230,6 +254,8 @@ export function getRequestLogger(
             _parentCorrelationId: parentRequestId,
           });
 
+          lifecycle?.onChildEnter?.(childLog);
+
           void Promise.resolve()
             .then(() => fn())
             .then(() => {
@@ -241,6 +267,14 @@ export function getRequestLogger(
               childLog.emitNow();
             })
             .finally(() => {
+              try {
+                lifecycle?.onChildExit?.(childLog);
+              } catch (hookError) {
+                console.warn(
+                  '[autotel] fork onChildExit hook threw:',
+                  hookError,
+                );
+              }
               childSpan.end();
             });
         });

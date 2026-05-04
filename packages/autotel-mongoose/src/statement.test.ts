@@ -31,9 +31,9 @@ describe('createStatementCapture', () => {
       condition: { email: 'test@example.com' },
     });
     expect(result).toBeDefined();
-    // Email should be redacted by default preset
+    // Email should be smart-masked by the default preset (t***@***.com).
     expect(result).not.toContain('test@example.com');
-    expect(result).toContain('[REDACTED]');
+    expect(result).toContain('t***@***.com');
   });
 
   it('returns undefined when dbStatementSerializer is false', () => {
