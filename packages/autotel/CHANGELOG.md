@@ -1,5 +1,26 @@
 # autotel
 
+## 3.0.2
+
+### Patch Changes
+
+- 5999cb9: Add audit logging capabilities and enhance documentation:
+  - **New `autotel-audit` package**: Structured audit logging with compliance-ready features
+    - `withAudit()` for wrapping operations with audit metadata and automatic outcome tagging
+    - `forceKeepAuditEvent()` to bypass tail-drop sampling for critical audit trails
+    - `setAuditAttributes()` for normalized `audit.*` span attributes
+    - Type-safe metadata schemas and backend integration support
+  - **Documentation enhancements**:
+    - Comprehensive integration guide for audit logging
+    - Framework-specific setup examples (Express, Fastify, NestJS, Next.js, TanStack)
+    - API reference with compliance and sampling strategies
+    - Updated documentation site navigation
+  - **Runtime helpers and edge improvements**: Enhanced execution logging and request handling across edge runtimes and frameworks
+
+- Updated dependencies [5999cb9]
+  - autotel-cloudflare@2.18.9
+  - autotel-edge@3.16.7
+
 ## 3.0.1
 
 ### Patch Changes
