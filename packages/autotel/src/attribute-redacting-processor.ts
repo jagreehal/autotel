@@ -147,10 +147,19 @@ export const builtinPatterns = {
       /\b(?!0\.0\.0\.0\b)(?!127\.0\.0\.1\b)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g,
     mask: (m: string) => `***.***.***.${m.split('.').pop()}`,
   },
-  /** International phone numbers → +33******78 (country code + last 2 digits) */
+  /**
+   * International / formatted phone numbers.
+   *
+   * Matches:
+   * - `+33 1 23 45 67 89` -> `+33******89`
+   * - `(415) 555-1234` -> `********34`
+   * - `555-123-4567` / `555.123.4567` / `5551234567` -> `********67`
+   *
+   * Bare short digit runs like `12345678` are intentionally not matched.
+   */
   phone: {
     pattern:
-      /(?:\+\d{1,3}[\s.-]?)?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{2,4}\b/g,
+      /(?:\+\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}|\(\d{1,4}\)(?:[\s.-]?\d{2,4}){2,4}|\b\d{3}[-.]?\d{3}[-.]?\d{4}\b)/g,
     mask: (m: string) => {
       const digits = m.replace(/[^\d]/g, '');
       const hasPlus = m.startsWith('+');

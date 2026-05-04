@@ -1,6 +1,7 @@
 import { context, SpanStatusCode } from '@opentelemetry/api';
 import { trace, init, type TraceContext } from 'autotel';
 import { extractContextFromRequest } from './context';
+import { isExcludedPath } from './route-filter';
 import {
   type WrapStartHandlerConfig,
   DEFAULT_CONFIG,
@@ -83,20 +84,7 @@ export function wrapStartHandler(
       const url = new URL(request.url);
 
       // Check if path should be excluded
-      const shouldExclude = mergedConfig.excludePaths.some((pattern) => {
-        if (typeof pattern === 'string') {
-          if (pattern.includes('*')) {
-            const regex = new RegExp(
-              '^' + pattern.replaceAll('*', '.*').replaceAll('?', '.') + '$',
-            );
-            return regex.test(url.pathname);
-          }
-          return url.pathname === pattern || url.pathname.startsWith(pattern);
-        }
-        return pattern.test(url.pathname);
-      });
-
-      if (shouldExclude) {
+      if (isExcludedPath(url.pathname, mergedConfig.excludePaths)) {
         return handler(request, opts);
       }
 
@@ -230,20 +218,7 @@ export function createTracedHandler(
       const url = new URL(request.url);
 
       // Check if path should be excluded
-      const shouldExclude = mergedConfig.excludePaths.some((pattern) => {
-        if (typeof pattern === 'string') {
-          if (pattern.includes('*')) {
-            const regex = new RegExp(
-              '^' + pattern.replaceAll('*', '.*').replaceAll('?', '.') + '$',
-            );
-            return regex.test(url.pathname);
-          }
-          return url.pathname === pattern || url.pathname.startsWith(pattern);
-        }
-        return pattern.test(url.pathname);
-      });
-
-      if (shouldExclude) {
+      if (isExcludedPath(url.pathname, mergedConfig.excludePaths)) {
         return handler(request, opts);
       }
 

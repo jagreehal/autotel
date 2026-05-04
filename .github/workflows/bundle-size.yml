@@ -1,0 +1,49 @@
+name: bundle-size
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/**'
+      - 'scripts/check-bundle-size.mjs'
+      - 'bundle-size-baseline.json'
+      - '.github/workflows/bundle-size.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'packages/**'
+      - 'scripts/check-bundle-size.mjs'
+      - 'bundle-size-baseline.json'
+      - '.github/workflows/bundle-size.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install pnpm
+        run: corepack prepare pnpm@latest --activate
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: pnpm build
+      - name: Compare bundle sizes against baseline
+        run: node scripts/check-bundle-size.mjs

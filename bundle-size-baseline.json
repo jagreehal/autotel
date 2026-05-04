@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-05-04T19:01:01.614Z",
+  "sizes": {
+    "autotel": 4099928,
+    "autotel-adapters": 184435,
+    "autotel-audit": 24627,
+    "autotel-aws": 854228,
+    "autotel-backends": 212915,
+    "autotel-cli": 321954,
+    "autotel-cloudflare": 441422,
+    "autotel-devtools": 1013507,
+    "autotel-drizzle": 176138,
+    "autotel-edge": 398171,
+    "autotel-hono": 47548,
+    "autotel-mcp": 2727234,
+    "autotel-mcp-instrumentation": 420362,
+    "autotel-mongoose": 148090,
+    "autotel-playwright": 83375,
+    "autotel-plugins": 1415052,
+    "autotel-sentry": 12232,
+    "autotel-subscribers": 11203255,
+    "autotel-tanstack": 232017,
+    "autotel-terminal": 1636557,
+    "autotel-vitest": 40916,
+    "autotel-web": 164740
+  }
+}

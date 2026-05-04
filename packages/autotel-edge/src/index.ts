@@ -52,7 +52,27 @@ export {
   type ExecutionLogger,
   type ExecutionLoggerOptions,
   type ExecutionLogSnapshot,
+  type ForkLifecycle,
+  type ForkOptions,
 } from './execution-logger';
+
+export {
+  defineConfig,
+  composeSubscribers,
+  composePostProcessors,
+  composeSpanProcessors,
+} from './composition';
+export {
+  definePlugin,
+  createPluginRunner,
+  getEmptyPluginRunner,
+} from './plugin-runner';
+export {
+  matchesRoutePattern,
+  shouldInstrumentPath,
+  getServiceForPath,
+  runMiddlewareFinishPipeline,
+} from './middleware-toolkit';
 
 // Types
 export type {
@@ -77,7 +97,20 @@ export type {
   EdgeSubscriber,
   ReadableSpan,
   DataSafetyConfig,
+  RouteServiceConfig,
 } from './types';
+export type {
+  EdgePlugin,
+  PluginRunner,
+  PluginHookContexts,
+  DefaultPluginContexts,
+  PluginRunnerOptions,
+} from './plugin-runner';
+export type {
+  RouteFilterOptions,
+  MiddlewareFinishContext,
+  MiddlewarePipelineOptions,
+} from './middleware-toolkit';
 
 // Re-export OpenTelemetry APIs for convenience
 export { context, propagation } from '@opentelemetry/api';

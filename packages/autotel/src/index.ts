@@ -60,12 +60,16 @@ export {
   AttributeRedactingProcessor,
   REDACTOR_PATTERNS,
   REDACTOR_PRESETS,
+  builtinPatterns,
   createAttributeRedactor,
   createRedactedSpan,
+  normalizeAttributeRedactorConfig,
   type AttributeRedactorFn,
   type AttributeRedactorPreset,
   type AttributeRedactorConfig,
   type AttributeRedactingProcessorOptions,
+  type BuiltinPatternName,
+  type MaskFn,
   type ValuePatternConfig,
 } from './attribute-redacting-processor';
 
@@ -123,6 +127,8 @@ export {
   type RequestLogger,
   type RequestLogSnapshot,
   type RequestLoggerOptions,
+  type ForkLifecycle,
+  type ForkOptions,
 } from './request-logger';
 
 // Structured errors
@@ -147,6 +153,19 @@ export {
   type DrainPipelineOptions,
   type PipelineDrainFn,
 } from './drain-pipeline';
+export {
+  defineDrain,
+  defineHttpDrain,
+  type DrainOptions,
+  type HttpDrainOptions,
+  type HttpDrainRequest,
+} from './drain-toolkit';
+export {
+  defineEnricher,
+  type EnricherDefinition,
+  type EnrichContext,
+  type EnricherOptions,
+} from './enricher-toolkit';
 
 // Pretty log formatting
 export { formatDuration } from './pretty-log-formatter';

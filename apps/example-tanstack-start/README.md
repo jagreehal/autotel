@@ -53,6 +53,12 @@ output; set `AUTOTEL_DEBUG=false` to disable it.
 
 That's it for basic request and server-function tracing. The middleware works with autotel-tanstack's browser stubs, so no build issues.
 
+`excludePaths` supports:
+
+- plain strings (prefix match, e.g. `/health` also matches `/healthz`)
+- glob strings (e.g. `/api/internal/*`)
+- regex patterns
+
 ## Copy-Paste Examples
 
 ### Trace a Server Function

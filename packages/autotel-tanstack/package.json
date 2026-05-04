@@ -105,8 +105,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "npx eslint src/**/*.ts",
-    "lint:fix": "npx eslint src/**/*.ts --fix",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check src/**/*.ts",
     "type-check": "tsc --noEmit",
@@ -138,7 +138,8 @@
     "@opentelemetry/api": "^1.9.1",
     "@tanstack/intent": "^0.0.36",
     "autotel": "workspace:*",
-    "autotel-adapters": "workspace:*"
+    "autotel-adapters": "workspace:*",
+    "autotel-edge": "workspace:*"
   },
   "peerDependencies": {
     "@tanstack/react-start": "^1.167.59",

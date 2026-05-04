@@ -6,3 +6,8 @@
 export { instrument } from './instrument';
 export { wrapModule } from './wrap-module';
 export { wrapDurableObject } from './wrap-do';
+export {
+  defineWorkerFetch,
+  type DefineWorkerFetchOptions,
+  type WorkerFetchHandler,
+} from './define-worker-fetch';
