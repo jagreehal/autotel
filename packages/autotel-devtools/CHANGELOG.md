@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 2.0.2
+
+### Patch Changes
+
+- Updated dependencies [5999cb9]
+  - autotel@3.0.2
+
 ## 2.0.1
 
 ### Patch Changes
