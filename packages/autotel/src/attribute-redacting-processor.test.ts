@@ -184,8 +184,9 @@ describe('AttributeRedactingProcessor', () => {
         });
         processor.onEnd(span);
 
+        // SSN has no smart mask; falls back to the default replacement.
         expect(mockProcessor.endedSpans[0]!.attributes['user.ssn']).toBe(
-          '*******89',
+          '[REDACTED]',
         );
       });
 
@@ -199,8 +200,9 @@ describe('AttributeRedactingProcessor', () => {
         });
         processor.onEnd(span);
 
+        // PCI-DSS compliant: last 4 digits preserved.
         expect(mockProcessor.endedSpans[0]!.attributes['payment.card']).toBe(
-          '**************11',
+          '****1111',
         );
       });
 
@@ -710,12 +712,12 @@ describe('edge cases', () => {
     });
 
     const span = createMockReadableSpan({
-      contacts: 'Email: john@example.com, Phone: 555-123-4567',
+      contacts: 'Email: john@example.com, Phone: +1 555-123-4567',
     });
     processor.onEnd(span);
 
     expect(mockProcessor.endedSpans[0]!.attributes.contacts).toBe(
-      'Email: j***@***.com, Phone: ********67',
+      'Email: j***@***.com, Phone: +1******67',
     );
   });
 });

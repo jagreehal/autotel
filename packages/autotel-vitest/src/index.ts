@@ -18,9 +18,8 @@
 import { test as base } from 'vitest';
 import { otelTestSpanFixture } from './fixture';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const test = base.extend({
-  _otelTestSpan: otelTestSpanFixture as any,
+  _otelTestSpan: otelTestSpanFixture as never,
 });
 
 export { expect, describe, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';

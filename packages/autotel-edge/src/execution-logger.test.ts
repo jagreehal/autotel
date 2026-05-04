@@ -270,4 +270,99 @@ describe('getExecutionLogger', () => {
     expect(parent.setAttributes).not.toHaveBeenCalled();
     expect(childSpan.end).toHaveBeenCalledTimes(1);
   });
+
+  it('fork lifecycle hooks fire around the child handler', async () => {
+    const parent = createMockContext();
+    const log = getExecutionLogger(parent);
+
+    const childSpan = {
+      spanContext: () => ({
+        traceId: 'a'.repeat(32),
+        spanId: 'b'.repeat(16),
+        traceFlags: 1,
+      }),
+      setAttribute: vi.fn(),
+      setAttributes: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      addEvent: vi.fn(),
+      addLink: vi.fn(),
+      addLinks: vi.fn(),
+      updateName: vi.fn(),
+      isRecording: vi.fn(() => true),
+      end: vi.fn(),
+    };
+
+    vi.spyOn(otelTrace, 'getTracer').mockReturnValue({
+      startActiveSpan: (_name: string, cb: (s: typeof childSpan) => Promise<void>) =>
+        cb(childSpan),
+    } as unknown as ReturnType<typeof otelTrace.getTracer>);
+
+    const calls: string[] = [];
+    const onChildEnter = vi.fn(() => calls.push('enter'));
+    const onChildExit = vi.fn(() => calls.push('exit'));
+
+    log.fork(
+      'background-task',
+      async () => {
+        calls.push('handler');
+      },
+      { lifecycle: { onChildEnter, onChildExit } },
+    );
+
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onChildEnter).toHaveBeenCalledTimes(1);
+    expect(onChildExit).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['enter', 'handler', 'exit']);
+  });
+
+  it('fork onChildExit hook errors do not crash the fork', async () => {
+    const parent = createMockContext();
+    const log = getExecutionLogger(parent);
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const childSpan = {
+      spanContext: () => ({
+        traceId: 'a'.repeat(32),
+        spanId: 'b'.repeat(16),
+        traceFlags: 1,
+      }),
+      setAttribute: vi.fn(),
+      setAttributes: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      addEvent: vi.fn(),
+      addLink: vi.fn(),
+      addLinks: vi.fn(),
+      updateName: vi.fn(),
+      isRecording: vi.fn(() => true),
+      end: vi.fn(),
+    };
+
+    vi.spyOn(otelTrace, 'getTracer').mockReturnValue({
+      startActiveSpan: (_name: string, cb: (s: typeof childSpan) => Promise<void>) =>
+        cb(childSpan),
+    } as unknown as ReturnType<typeof otelTrace.getTracer>);
+
+    log.fork(
+      'task',
+      async () => {},
+      {
+        lifecycle: {
+          onChildExit: () => {
+            throw new Error('hook boom');
+          },
+        },
+      },
+    );
+
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(childSpan.end).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
 });

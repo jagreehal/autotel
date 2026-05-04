@@ -1,0 +1,384 @@
+---
+title: Audit Logging
+description: Structured audit logging with compliance-ready tail-sampling bypass.
+---
+
+`autotel-audit` provides audit-focused helpers for structured compliance logging with automatic outcome tagging and sampling bypass for critical events.
+
+## Installation
+
+```bash
+npm install autotel-audit
+```
+
+## Basic Usage
+
+Wrap sensitive operations with automatic audit metadata and outcome tracking:
+
+```typescript
+import { trace } from 'autotel';
+import { withAudit } from 'autotel-audit';
+
+export const deleteUser = trace(async (userId: string) => {
+  return withAudit(
+    {
+      action: 'user.delete',
+      resource: 'user',
+      actorId: 'admin-42',
+    },
+    async (_ctx, log) => {
+      await db.users.delete(userId);
+      log.info('User deleted successfully');
+      return { ok: true };
+    },
+    { emitNow: true },
+  );
+});
+```
+
+## Setup in Frameworks
+
+### Express / Fastify
+
+```typescript
+import { trace } from 'autotel';
+import { withAudit } from 'autotel-audit';
+
+app.delete('/users/:id', trace(async (req, res) => {
+  await withAudit(
+    {
+      action: 'user.delete',
+      resource: 'user',
+      actorId: req.user.id,
+      userId: req.params.id,
+    },
+    async () => {
+      await deleteUser(req.params.id);
+    },
+    { emitNow: true },
+  );
+
+  res.json({ ok: true });
+}));
+```
+
+### NestJS
+
+```typescript
+import { Controller, Delete, Param } from '@nestjs/common';
+import { trace } from 'autotel';
+import { withAudit } from 'autotel-audit';
+
+@Controller('users')
+export class UsersController {
+  @Delete(':id')
+  async deleteUser(@Param('id') id: string) {
+    return withAudit(
+      {
+        action: 'user.delete',
+        resource: 'user',
+        actorId: 'admin-123',
+      },
+      async (ctx, log) => {
+        await this.usersService.delete(id);
+        log.info('User deleted');
+        return { ok: true };
+      },
+      { emitNow: true },
+    );
+  }
+}
+```
+
+### Next.js / TanStack Start
+
+```typescript
+import { trace } from 'autotel';
+import { withAudit } from 'autotel-audit';
+
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  return withAudit(
+    {
+      action: 'user.delete',
+      resource: 'user',
+      actorId: req.user?.id || 'anonymous',
+    },
+    async () => {
+      await db.users.delete(params.id);
+    },
+    { emitNow: true },
+  );
+}
+```
+
+## API Reference
+
+### `withAudit<T>(metadata, fn, options?)`
+
+Wraps an async operation with audit context and automatic outcome tagging.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `metadata` | `AuditMetadata` | Audit event metadata (action, resource, actor, etc.) |
+| `fn` | `(ctx, logger) => Promise<T>` | Async function receiving audit context and request logger |
+| `options.emitNow` | `boolean` | Immediately emit the audit event (default: `false`) |
+| `options.forceKeep` | `boolean` | Force event through tail-sampling (default: `true`) |
+| `options.ctx` | `AuditContext` | Custom audit context (auto-resolved if omitted) |
+| `options.logger` | `RequestLogger` | Override request logger instance |
+
+**Returns:** `Promise<T>` — Result from the wrapped function.
+
+**Outcome Tagging:**
+
+- ✅ **Success:** Automatically tagged with `outcome: 'success'` (unless explicitly set)
+- ❌ **Failure:** Automatically tagged with `outcome: 'failure'` and logged as error
+
+```typescript
+// Explicit outcome override
+await withAudit(
+  { action: 'payment.process', outcome: 'partial' },
+  async () => {
+    // ...
+  },
+);
+```
+
+### `setAuditAttributes(metadata, ctx?)`
+
+Write audit metadata as normalized `audit.*` span attributes without wrapping an operation.
+
+```typescript
+import { setAuditAttributes } from 'autotel-audit';
+
+setAuditAttributes({
+  action: 'config.update',
+  resource: 'settings',
+  actorId: 'user-123',
+});
+// Sets: audit.action, audit.resource, audit.actorId, autotel.audit=true
+```
+
+### `forceKeepAuditEvent(ctx?)`
+
+Mark the active trace to bypass tail-drop sampling. Called automatically by `withAudit` unless disabled.
+
+```typescript
+import { forceKeepAuditEvent } from 'autotel-audit';
+
+if (request.isPrivileged()) {
+  forceKeepAuditEvent();
+}
+```
+
+## Audit Metadata Structure
+
+```typescript
+interface AuditMetadata {
+  action: string;           // Required: e.g., 'user.delete', 'payment.process'
+  resource?: string;        // What was modified: 'user', 'account', 'transaction'
+  actorId?: string;         // Who performed the action
+  category?: string;        // Optional grouping: 'admin', 'compliance', 'security'
+  outcome?: 'success' | 'failure' | string;  // Auto-set if omitted
+  [key: string]: unknown;   // Custom fields (auto-serialized)
+}
+```
+
+## Common Patterns
+
+### Critical Operations (Force Keep)
+
+Always keep sensitive operations in sampling:
+
+```typescript
+await withAudit(
+  {
+    action: 'secret.access',
+    resource: 'api-key',
+    actorId: user.id,
+    environment: 'production',
+  },
+  async () => {
+    // Fetch secret
+  },
+  { emitNow: true, forceKeep: true },
+);
+```
+
+### Conditional Audit Emission
+
+Emit only on errors or special conditions:
+
+```typescript
+try {
+  await withAudit(
+    { action: 'data.export', resource: 'report' },
+    async () => {
+      return await generateReport();
+    },
+    { emitNow: false }, // Default sampling applies
+  );
+} catch (error) {
+  // Error is auto-logged with outcome: failure
+  // forceKeep is enabled by default for errors
+  throw error;
+}
+```
+
+### Bulk Operations with Audit Trail
+
+```typescript
+await withAudit(
+  {
+    action: 'users.deactivate',
+    resource: 'user',
+    actorId: 'admin-123',
+    count: userIds.length,
+    reason: 'inactivity',
+  },
+  async (ctx, log) => {
+    for (const id of userIds) {
+      await deactivateUser(id);
+    }
+    log.info(`Deactivated ${userIds.length} users`);
+  },
+  { emitNow: true },
+);
+```
+
+### Nested Audit Context
+
+```typescript
+export const processPayment = trace(async (payment) => {
+  return withAudit(
+    {
+      action: 'payment.process',
+      resource: 'transaction',
+      actorId: payment.merchant,
+      amount: payment.amount,
+      currency: payment.currency,
+    },
+    async (ctx, log) => {
+      const charge = await stripe.charges.create({
+        amount: payment.amount,
+        currency: payment.currency,
+      });
+
+      log.info('Payment processed', { chargeId: charge.id });
+
+      // Nested audit for refund capability
+      setAuditAttributes({
+        chargeId: charge.id,
+        stripeId: charge.id,
+      });
+
+      return charge;
+    },
+    { emitNow: true },
+  );
+});
+```
+
+## Compliance & Sampling
+
+### Why Force-Keep?
+
+Tail-sampling decisions happen after spans complete. Critical audit trails must bypass statistical sampling:
+
+- `forceKeepAuditEvent()` marks spans for keeper-worthy treatment
+- Ensures compliance events aren't dropped by sampling rules
+- Enabled by default in `withAudit()`
+
+```typescript
+// Safe default: force-keep enabled for all audit events
+await withAudit(metadata, fn);
+
+// Disable for high-volume audit streams with separate retention
+await withAudit(metadata, fn, { forceKeep: false });
+```
+
+### Backend Integration
+
+Audit attributes integrate with any OTLP-compatible backend:
+
+**Attributes exported:**
+
+- `audit.action` — The audited action
+- `audit.resource` — The affected resource
+- `audit.actorId` — The actor performing the action
+- `audit.outcome` — `'success'` or `'failure'`
+- `audit.*` — All custom metadata fields
+- `autotel.audit` — Always `true` (for filtering)
+
+**Query examples (Datadog):**
+
+```
+@autotel.audit:true @audit.action:user.delete @audit.outcome:failure
+```
+
+**Alerts:**
+
+```typescript
+// Create alert for all failed admin operations
+@audit.category:admin @audit.outcome:failure
+```
+
+## Type Safety
+
+Define audit schemas per operation for IDE autocomplete:
+
+```typescript
+import type { AuditMetadata } from 'autotel-audit';
+
+type UserDeleteAudit = AuditMetadata & {
+  action: 'user.delete';
+  resource: 'user';
+  actorId: string;
+  reason?: string;
+};
+
+type PaymentProcessAudit = AuditMetadata & {
+  action: 'payment.process';
+  resource: 'transaction';
+  amount: number;
+  currency: string;
+  actorId: string;
+};
+
+// IDE will autocomplete these fields
+await withAudit<UserDeleteAudit>(metadata, fn);
+```
+
+## Error Handling
+
+Errors inside `withAudit` are automatically tagged with `outcome: 'failure'`:
+
+```typescript
+await withAudit(
+  { action: 'account.suspend' },
+  async () => {
+    await checkCompliance(); // May throw
+    await suspendAccount();
+  },
+  { emitNow: true },
+);
+// On error:
+// - outcome: 'failure' is set
+// - Error is logged via logger.error()
+// - Exception is re-thrown
+// - Event is emitted (if emitNow: true)
+```
+
+## Performance Considerations
+
+- `withAudit` adds minimal overhead (attribute serialization only)
+- Type conversion handles circular references gracefully
+- `emitNow: true` sends events immediately; omit for batch emission
+- Default `forceKeep: true` ensures compliance but may override sampling decisions
+
+## See Also
+
+- **[Request Logging](/integrations/logging)** — Structured context and event emission
+- **[Trace Helpers](/advanced#metadata-flattening)** — Automatic metadata serialization
+- **[Core API](/)** — `trace()`, `span()`, context propagation

@@ -51,6 +51,21 @@ function generateCorrelationId(): string {
   return `exec-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+/**
+ * Optional lifecycle hooks for adapters that need to track child loggers
+ * spawned by `log.fork()` (e.g. activeLoggers maps in framework integrations).
+ */
+export interface ForkLifecycle {
+  /** Called after the child logger is created, before `fn` runs. */
+  onChildEnter?: (child: ExecutionLogger) => void;
+  /** Called after the child has finished (emit + drain), success or failure. */
+  onChildExit?: (child: ExecutionLogger) => void;
+}
+
+export interface ForkOptions {
+  lifecycle?: ForkLifecycle;
+}
+
 export interface ExecutionLogger {
   set(fields: Record<string, unknown>): void;
   info(message: string, fields?: Record<string, unknown>): void;
@@ -58,7 +73,11 @@ export interface ExecutionLogger {
   error(error: Error | string, fields?: Record<string, unknown>): void;
   getContext(): Record<string, unknown>;
   emitNow(overrides?: Record<string, unknown>): ExecutionLogSnapshot;
-  fork(label: string, fn: () => void | Promise<void>): void;
+  fork(
+    label: string,
+    fn: () => void | Promise<void>,
+    options?: ForkOptions,
+  ): void;
 }
 
 export interface ExecutionLogSnapshot {
@@ -332,7 +351,11 @@ export function getExecutionLogger(
       return snapshot;
     },
 
-    fork(label: string, fn: () => void | Promise<void>): void {
+    fork(
+      label: string,
+      fn: () => void | Promise<void>,
+      forkOptions?: ForkOptions,
+    ): void {
       const parentCorrelationId = activeContext.correlationId;
       if (
         typeof parentCorrelationId !== 'string' ||
@@ -344,6 +367,7 @@ export function getExecutionLogger(
         );
       }
 
+      const lifecycle = forkOptions?.lifecycle;
       const tracer = otelTrace.getTracer('autotel-edge.execution-logger');
       void tracer.startActiveSpan(`execution.fork:${label}`, (childSpan) => {
         const childContext: TraceContext = {
@@ -357,6 +381,8 @@ export function getExecutionLogger(
           _parentCorrelationId: parentCorrelationId,
         });
 
+        lifecycle?.onChildEnter?.(childLog);
+
         return Promise.resolve()
           .then(() => fn())
           .then(() => {
@@ -368,6 +394,14 @@ export function getExecutionLogger(
             childLog.emitNow();
           })
           .finally(() => {
+            try {
+              lifecycle?.onChildExit?.(childLog);
+            } catch (hookError) {
+              console.warn(
+                '[autotel-edge] fork onChildExit hook threw:',
+                hookError,
+              );
+            }
             childSpan.end();
           });
       });

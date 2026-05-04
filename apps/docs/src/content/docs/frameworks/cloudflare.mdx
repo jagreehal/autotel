@@ -375,6 +375,10 @@ For most apps, start with `autotel/workers`.
 | `autotel-cloudflare/events`     | Advanced direct subpath (also re-exported by `autotel/workers`) |
 | `autotel-cloudflare/testing`    | Placeholder entrypoint (currently no runtime helpers) |
 
+`autotel-cloudflare` now uses shared route-matching utilities from
+`autotel-edge`, so include/exclude glob behavior is consistent across edge
+integrations.
+
 ## Examples
 
 - [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example) — KV, R2, D1, AI, Queues, Durable Objects, scheduled, email, custom sampling.

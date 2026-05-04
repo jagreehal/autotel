@@ -18,9 +18,16 @@ export function createStringRedactor(
 
   return (value: string): string => {
     let result = value;
-    for (const { pattern, replacement } of valuePatterns) {
+    for (const { pattern, replacement, mask } of valuePatterns) {
       pattern.lastIndex = 0;
-      result = result.replaceAll(pattern, replacement ?? defaultReplacement);
+      // Smart masks (e.g. email → a***@***.com) take precedence over the
+      // static replacement so callers see the same output as the
+      // span-attribute redactor does.
+      if (mask) {
+        result = result.replaceAll(pattern, (match) => mask(match));
+      } else {
+        result = result.replaceAll(pattern, replacement ?? defaultReplacement);
+      }
     }
     return result;
   };

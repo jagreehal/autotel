@@ -33,11 +33,14 @@ import type {
   HandlerInstrumentation,
   InitialSpanInfo,
   ReadableSpan,
+  RouteServiceConfig,
 } from 'autotel-edge';
 import {
   createInitialiser,
   setConfig,
   getActiveConfig,
+  getServiceForPath,
+  shouldInstrumentPath,
   type Initialiser,
   WorkerTracerProvider,
   WorkerTracer,
@@ -77,47 +80,6 @@ type EmailHandler = (
   env: any,
   ctx: ExecutionContext,
 ) => void | Promise<void>;
-
-type RouteServiceConfig = { service: string };
-
-function matchesPattern(path: string, pattern: string): boolean {
-  const regexPattern = pattern
-    .replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`)
-    .replaceAll('**', '{{GLOBSTAR}}')
-    .replaceAll('*', '[^/]*')
-    .replaceAll('{{GLOBSTAR}}', '.*')
-    .replaceAll('?', '[^/]');
-  return new RegExp(`^${regexPattern}$`).test(path);
-}
-
-function shouldInstrumentPath(
-  path: string,
-  include?: string[],
-  exclude?: string[],
-): boolean {
-  if (exclude && exclude.some((pattern) => matchesPattern(path, pattern))) {
-    return false;
-  }
-
-  if (!include || include.length === 0) {
-    return true;
-  }
-
-  return include.some((pattern) => matchesPattern(path, pattern));
-}
-
-function getServiceForPath(
-  path: string,
-  routes?: Record<string, RouteServiceConfig>,
-): string | undefined {
-  if (!routes) return undefined;
-  for (const [pattern, config] of Object.entries(routes)) {
-    if (matchesPattern(path, pattern)) {
-      return config.service;
-    }
-  }
-  return undefined;
-}
 
 /**
  * Create fetch handler instrumentation with config support for postProcess
@@ -623,7 +585,10 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
       const pathname = new URL(trigger.url).pathname;
       const fetchCfg = config.handlers.fetch;
       if (
-        !shouldInstrumentPath(pathname, fetchCfg.include, fetchCfg.exclude)
+        !shouldInstrumentPath(pathname, {
+          include: fetchCfg.include,
+          exclude: fetchCfg.exclude,
+        })
       ) {
         return handlerFn(trigger, env, ctx) as ReturnType<typeof handlerFn>;
       }

@@ -10,18 +10,32 @@ describe('createStringRedactor', () => {
       redact = createStringRedactor('default');
     });
 
-    it('redacts emails', () => {
+    it('smart-masks emails', () => {
       expect(redact('Contact user@example.com for info')).toBe(
-        'Contact [REDACTED] for info',
+        'Contact u***@***.com for info',
       );
     });
 
-    it('redacts phone numbers', () => {
-      expect(redact('Call 555-123-4567 now')).toBe('Call [REDACTED] now');
+    it('smart-masks international phone numbers (country code + last 2 digits)', () => {
+      expect(redact('Call +33 1 23 45 67 89 now')).toBe('Call +33******89 now');
     });
 
-    it('redacts credit card numbers', () => {
-      expect(redact('Card: 4111-1111-1111-1111')).toBe('Card: [REDACTED]');
+    it('smart-masks phone numbers with parens (last 2 digits)', () => {
+      expect(redact('Call (415) 555-1234 now')).toBe('Call ********34 now');
+    });
+
+    it('smart-masks common US phone formats', () => {
+      expect(redact('Call 555-123-4567 now')).toBe('Call ********67 now');
+      expect(redact('Call 5551234567 now')).toBe('Call ********67 now');
+    });
+
+    it('does not mistake bare digit runs for phone numbers', () => {
+      // UUIDs, order ids etc. should pass through untouched.
+      expect(redact('Order: 12345678 ok')).toBe('Order: 12345678 ok');
+    });
+
+    it('smart-masks credit card numbers (last four digits preserved)', () => {
+      expect(redact('Card: 4111-1111-1111-1111')).toBe('Card: ****1111');
     });
 
     it('returns input unchanged when no patterns match', () => {
@@ -36,15 +50,15 @@ describe('createStringRedactor', () => {
       redact = createStringRedactor('strict');
     });
 
-    it('redacts JWTs', () => {
+    it('smart-masks JWTs', () => {
       const jwt =
         'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc123_-def';
-      expect(redact(`Token: ${jwt}`)).toBe('Token: [REDACTED]');
+      expect(redact(`Token: ${jwt}`)).toBe('Token: eyJ***.***');
     });
 
-    it('redacts bearer tokens', () => {
+    it('smart-masks bearer tokens', () => {
       expect(redact('Authorization: Bearer abc123.xyz')).toBe(
-        'Authorization: [REDACTED]',
+        'Authorization: Bearer ***',
       );
     });
   });

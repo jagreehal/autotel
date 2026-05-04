@@ -2,36 +2,12 @@ import { context, SpanStatusCode, type Attributes } from '@opentelemetry/api';
 import { trace, type TraceContext } from 'autotel';
 import { extractContextFromRequest } from './context';
 import { isServerSide } from './env';
+import { isExcludedPath } from './route-filter';
 import {
   type TracingMiddlewareConfig,
   DEFAULT_CONFIG,
   SPAN_ATTRIBUTES,
 } from './types';
-
-/**
- * Check if a path should be excluded from tracing
- */
-function shouldExcludePath(
-  pathname: string,
-  excludePaths: (string | RegExp)[],
-): boolean {
-  for (const pattern of excludePaths) {
-    if (typeof pattern === 'string') {
-      // Simple glob matching
-      if (pattern.includes('*')) {
-        const regex = new RegExp(
-          '^' + pattern.replaceAll('*', '.*').replaceAll('?', '.') + '$',
-        );
-        if (regex.test(pathname)) return true;
-      } else {
-        if (pathname === pattern || pathname.startsWith(pattern)) return true;
-      }
-    } else {
-      if (pattern.test(pathname)) return true;
-    }
-  }
-  return false;
-}
 
 /**
  * Build span attributes for HTTP requests
@@ -254,7 +230,7 @@ export function createTracingMiddleware<TContext = unknown>(
     const url = new URL(request.url);
 
     // Check if path should be excluded
-    if (shouldExcludePath(url.pathname, mergedConfig.excludePaths)) {
+    if (isExcludedPath(url.pathname, mergedConfig.excludePaths)) {
       return next();
     }
 
