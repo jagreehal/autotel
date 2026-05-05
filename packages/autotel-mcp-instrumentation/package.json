@@ -1,6 +1,6 @@
 {
   "name": "autotel-mcp-instrumentation",
-  "version": "30.0.2",
+  "version": "30.0.3",
   "description": "OpenTelemetry instrumentation for Model Context Protocol (MCP) with distributed tracing support",
   "type": "module",
   "main": "./dist/index.js",
