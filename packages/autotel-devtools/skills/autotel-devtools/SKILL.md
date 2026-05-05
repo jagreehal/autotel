@@ -2,12 +2,6 @@
 name: autotel-devtools
 description: >
   Standalone OTLP receiver with a Preact web UI for local-dev observability. Use when a developer wants to see OpenTelemetry traces, logs, metrics, and service maps streaming from a running app without setting up Jaeger/Tempo/Prometheus — either as a CLI dashboard or an embedded `<autotel-devtools>` widget.
-type: integration
-library: autotel-devtools
-library_version: '1.0.1'
-sources:
-  - jagreehal/autotel:packages/autotel-devtools/CLAUDE.md
-  - jagreehal/autotel:packages/autotel-devtools/README.md
 ---
 
 # autotel-devtools

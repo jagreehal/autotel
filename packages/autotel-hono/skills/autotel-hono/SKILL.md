@@ -2,11 +2,6 @@
 name: autotel-hono
 description: >
   OpenTelemetry middleware for Hono. Add otel() middleware to trace HTTP requests with semantic attributes, capture headers, and track request metrics.
-type: integration
-library: autotel-hono
-library_version: "0.3.1"
-sources:
-  - jagreehal/autotel:packages/autotel-hono/CLAUDE.md
 ---
 
 # autotel-hono

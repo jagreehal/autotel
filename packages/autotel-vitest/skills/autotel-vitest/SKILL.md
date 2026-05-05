@@ -2,13 +2,6 @@
 name: autotel-vitest
 description: >
   Use this skill when adding OpenTelemetry tracing to Vitest tests — gives each test a parent span so all instrumented code becomes filterable child spans in your OTLP backend.
-type: integration
-library: autotel-vitest
-library_version: "0.4.4"
-sources:
-  - jagreehal/autotel:packages/autotel-vitest/src/index.ts
-  - jagreehal/autotel:packages/autotel-vitest/src/fixture.ts
-  - jagreehal/autotel:packages/autotel-vitest/src/reporter.ts
 ---
 
 # autotel-vitest

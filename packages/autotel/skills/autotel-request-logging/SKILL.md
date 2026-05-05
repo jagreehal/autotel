@@ -2,14 +2,6 @@
 name: autotel-request-logging
 description: >
   getRequestLogger(), set(), info/warn/error, emitNow(). One snapshot per request; requires active span. Use when adding request-scoped context or replacing scattered console.log.
-type: core
-library: autotel
-library_version: '2.23.0'
-requires:
-  - autotel-instrumentation
-sources:
-  - jagreehal/autotel:packages/autotel/src/request-logger.ts
-  - jagreehal/autotel:docs/AGENT-GUIDE.md
 ---
 
 # Autotel — Request Logging

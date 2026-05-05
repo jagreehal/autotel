@@ -2,11 +2,6 @@
 name: autotel-drizzle
 description: >
   Use this skill when adding OpenTelemetry tracing to a Drizzle ORM database instance — the only autotel instrumentation package needed for Drizzle, since no official OTel package exists for it.
-type: integration
-library: autotel-drizzle
-library_version: '0.0.3'
-sources:
-  - jagreehal/autotel:packages/autotel-drizzle/README.md
 ---
 
 # autotel-drizzle

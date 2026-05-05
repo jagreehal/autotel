@@ -2,12 +2,6 @@
 name: autotel-events
 description: >
   track(), Event API, subscribers (e.g. PostHog). Configure subscribers in init(); use track() or Event for product/analytics events.
-type: core
-library: autotel
-library_version: '2.23.0'
-sources:
-  - jagreehal/autotel:packages/autotel/src/event.ts
-  - jagreehal/autotel:packages/autotel/src/event-subscriber.ts
 ---
 
 # Autotel — Events

@@ -5,8 +5,6 @@ description: >
   investigate latency, follow requests across services, and surface cardinality / attribute hygiene
   problems. Works with traces from any OTLP backend (Honeycomb, Grafana Tempo, Datadog, Jaeger,
   Sentry, Axiom, HyperDX, …) plus the local `.autotel/spans/` dump and `InMemorySpanExporter` in tests.
-type: analyze
-library: autotel
 license: MIT
 ---
 

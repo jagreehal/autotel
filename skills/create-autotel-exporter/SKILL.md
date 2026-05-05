@@ -6,8 +6,6 @@ description: >
   PostHog, …) or a non-OTLP transport entirely. Covers retry, batching,
   error handling, auth resolution, and cross-runtime support
   (Node + Workers + edge).
-type: create
-library: autotel
 license: MIT
 ---
 

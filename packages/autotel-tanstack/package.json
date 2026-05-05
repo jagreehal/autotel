@@ -98,9 +98,7 @@
     "dist",
     "src",
     "README.md",
-    "skills",
-    "!skills/_artifacts",
-    "bin"
+    "skills"
   ],
   "scripts": {
     "build": "tsup",
@@ -136,7 +134,6 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@tanstack/intent": "^0.0.36",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "autotel-edge": "workspace:*"
@@ -171,8 +168,5 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-tanstack#readme",
-  "bin": {
-    "intent": "./bin/intent.js"
-  }
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-tanstack#readme"
 }

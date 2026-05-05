@@ -2,14 +2,6 @@
 name: autotel-terminal
 description: >
   Use this skill when integrating the autotel-terminal dashboard into a Node.js app or running it as a standalone OTLP receiver — covers renderTerminal(), StreamingSpanProcessor, the CLI, and the AI assistant configuration.
-type: integration
-library: autotel-terminal
-library_version: "17.0.8"
-sources:
-  - jagreehal/autotel:packages/autotel-terminal/src/index.tsx
-  - jagreehal/autotel:packages/autotel-terminal/src/cli.ts
-  - jagreehal/autotel:packages/autotel-terminal/src/streaming-processor.ts
-  - jagreehal/autotel:packages/autotel-terminal/src/span-stream.ts
 ---
 
 # autotel-terminal

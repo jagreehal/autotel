@@ -2,12 +2,6 @@
 name: autotel-mcp
 description: >
   MCP server AI agents connect to for investigating OpenTelemetry telemetry. Use when an agent needs to query traces, metrics, or logs from Jaeger, Tempo, Prometheus, Loki, or a built-in OTLP collector — including LLM-specific analytics (USD cost, token usage, per-model stats).
-type: integration
-library: autotel-mcp
-library_version: '0.1.1'
-sources:
-  - jagreehal/autotel:packages/autotel-mcp/CLAUDE.md
-  - jagreehal/autotel:packages/autotel-mcp/README.md
 ---
 
 # autotel-mcp

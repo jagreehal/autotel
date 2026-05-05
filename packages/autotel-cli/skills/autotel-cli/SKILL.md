@@ -2,11 +2,6 @@
 name: autotel-cli
 description: >
   Use this skill when running autotel CLI commands to set up, configure, or extend OpenTelemetry instrumentation in a Node.js project — including init, doctor, add, and codemod trace.
-type: core
-library: autotel-cli
-library_version: "0.8.2"
-sources:
-  - jagreehal/autotel:packages/autotel-cli/README.md
 ---
 
 # autotel-cli

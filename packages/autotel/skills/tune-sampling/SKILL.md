@@ -7,8 +7,6 @@ description: >
   tradeoffs, and the math for picking rates that hit a target spans/second
   budget. Includes recipes for low-volume admin services, high-volume APIs,
   AI agents, and Cloudflare Workers.
-type: tune
-library: autotel
 license: MIT
 ---
 
@@ -50,15 +48,15 @@ init({
   service: 'my-app',
   sampling: {
     rates: {
-      server: 25,    // server entry spans — sample ¼
-      client: 5,     // outbound HTTP — sample 1/20
-      internal: 5,   // internal sub-spans — sample 1/20
+      server: 25, // server entry spans — sample ¼
+      client: 5, // outbound HTTP — sample 1/20
+      internal: 5, // internal sub-spans — sample 1/20
     },
   },
-})
+});
 ```
 
-Children of a sampled root are **all** kept (parent-based propagation is the default). So `server: 25` means 25 % of *user requests*, complete trace each.
+Children of a sampled root are **all** kept (parent-based propagation is the default). So `server: 25` means 25 % of _user requests_, complete trace each.
 
 ### High-volume API (>1 k req/s)
 
@@ -84,7 +82,7 @@ defineWorkerFetch(
     sampling: { rates: { server: 10 } }, // 10 % per colo, scales naturally
   },
   handler,
-)
+);
 ```
 
 ## Tail sampling — keep interesting traces
@@ -92,28 +90,32 @@ defineWorkerFetch(
 Tail sampling looks at the full trace (root span + children) before deciding. autotel ships `TailSamplingProcessor`:
 
 ```typescript
-import { TailSamplingProcessor } from 'autotel/processors'
-import { SpanStatusCode } from '@opentelemetry/api'
+import { TailSamplingProcessor } from 'autotel/processors';
+import { SpanStatusCode } from '@opentelemetry/api';
 
 const tail = new TailSamplingProcessor({
   keep: (trace) => {
     // 1. Always keep errors
-    if (trace.localRootSpan.status?.code === SpanStatusCode.ERROR) return true
-    if (trace.spans.some((s) => s.status?.code === SpanStatusCode.ERROR)) return true
+    if (trace.localRootSpan.status?.code === SpanStatusCode.ERROR) return true;
+    if (trace.spans.some((s) => s.status?.code === SpanStatusCode.ERROR))
+      return true;
 
     // 2. Always keep slow traces (configurable threshold)
-    if (durationMs(trace.localRootSpan) > 1_000) return true
+    if (durationMs(trace.localRootSpan) > 1_000) return true;
 
     // 3. Always keep customer-marked traces
-    if (trace.localRootSpan.attributes['debug.trace'] === true) return true
+    if (trace.localRootSpan.attributes['debug.trace'] === true) return true;
 
     // 4. Always keep AI traces (rare + expensive — full visibility helps)
-    if (trace.spans.some((s) => typeof s.attributes['gen_ai.system'] === 'string')) return true
+    if (
+      trace.spans.some((s) => typeof s.attributes['gen_ai.system'] === 'string')
+    )
+      return true;
 
     // 5. Otherwise: respect head sampling decision
-    return false
+    return false;
   },
-})
+});
 ```
 
 ### Combining with multi-backend
@@ -122,9 +124,9 @@ const tail = new TailSamplingProcessor({
 spanProcessors: composeSpanProcessors([
   // Drop nothing here — we want the tail processor to see the full trace
   new BatchSpanProcessor(localExporter),
-  tail,                                            // filters before remote export
+  tail, // filters before remote export
   new BatchSpanProcessor(expensiveRemoteExporter),
-])
+]);
 ```
 
 ## AI / LLM-aware sampling
@@ -138,13 +140,17 @@ LLM calls produce 5–50 spans per request and are 100× more expensive than a t
 ```typescript
 keep: (trace) => {
   const cost = trace.spans.reduce(
-    (acc, s) => acc + (typeof s.attributes['gen_ai.cost.usd'] === 'number' ? (s.attributes['gen_ai.cost.usd'] as number) : 0),
+    (acc, s) =>
+      acc +
+      (typeof s.attributes['gen_ai.cost.usd'] === 'number'
+        ? (s.attributes['gen_ai.cost.usd'] as number)
+        : 0),
     0,
-  )
-  if (cost > 0.10) return true       // any trace > $0.10 → keep
-  if (cost > 0.01) return Math.random() < 0.5  // > $0.01 → 50 %
-  return Math.random() < 0.10        // < $0.01 → 10 %
-}
+  );
+  if (cost > 0.1) return true; // any trace > $0.10 → keep
+  if (cost > 0.01) return Math.random() < 0.5; // > $0.01 → 50 %
+  return Math.random() < 0.1; // < $0.01 → 10 %
+};
 ```
 
 ## Customer-driven sampling (debug header)
@@ -161,7 +167,7 @@ In your middleware:
 
 ```typescript
 if (request.headers.get('x-debug-trace') === '1') {
-  useLogger().set({ 'x-debug-trace': '1' })
+  useLogger().set({ 'x-debug-trace': '1' });
 }
 ```
 
@@ -177,11 +183,11 @@ spans/sec ≈ requests/sec × spans_per_request × head_rate × tail_keep_rate
 
 Worked example for a 100 req/s API with 8 spans/req:
 
-| Head rate | Tail keep | Result |
-| --- | --- | --- |
-| 100 % | 100 % | 800 spans/sec — expensive |
-| 10 % | 100 % (errors + slow + AI ≈ 5 %) | ≈ 110 spans/sec — sweet spot |
-| 1 % | 100 % | ≈ 18 spans/sec — too sparse for p99 alerting |
+| Head rate | Tail keep                        | Result                                       |
+| --------- | -------------------------------- | -------------------------------------------- |
+| 100 %     | 100 %                            | 800 spans/sec — expensive                    |
+| 10 %      | 100 % (errors + slow + AI ≈ 5 %) | ≈ 110 spans/sec — sweet spot                 |
+| 1 %       | 100 %                            | ≈ 18 spans/sec — too sparse for p99 alerting |
 
 For per-vendor pricing:
 
@@ -191,14 +197,14 @@ For per-vendor pricing:
 
 ## Anti-patterns
 
-| Anti-pattern | Fix |
-| --- | --- |
-| 100 % sampling at scale "to be safe" | You're paying 10–100× without proportional value |
-| 1 % sampling with no tail keep | You'll miss every interesting failure |
-| Forgetting to tail-keep errors | Sampled traces with errors → silent customer pain |
-| Same rate for `server` and `internal` | Internal sub-spans are 5–20× more numerous; sample harder |
-| Ratio-based sampling on service entry point | Use parent-based — children of a sampled trace stay together |
-| Head-sampling AI calls below 50 % | Debugging tool loops requires the full chain |
-| Audit spans subject to sampling | Route them to a separate processor (see `build-audit-trails`) |
-| Tail processor before exporter (loses spans) | Tail processor goes between head sampler and remote exporter |
-| Rate-by-route hand-coded in handlers | Use head sampler + tail keep — declarative, one place |
+| Anti-pattern                                 | Fix                                                           |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| 100 % sampling at scale "to be safe"         | You're paying 10–100× without proportional value              |
+| 1 % sampling with no tail keep               | You'll miss every interesting failure                         |
+| Forgetting to tail-keep errors               | Sampled traces with errors → silent customer pain             |
+| Same rate for `server` and `internal`        | Internal sub-spans are 5–20× more numerous; sample harder     |
+| Ratio-based sampling on service entry point  | Use parent-based — children of a sampled trace stay together  |
+| Head-sampling AI calls below 50 %            | Debugging tool loops requires the full chain                  |
+| Audit spans subject to sampling              | Route them to a separate processor (see `build-audit-trails`) |
+| Tail processor before exporter (loses spans) | Tail processor goes between head sampler and remote exporter  |
+| Rate-by-route hand-coded in handlers         | Use head sampler + tail keep — declarative, one place         |

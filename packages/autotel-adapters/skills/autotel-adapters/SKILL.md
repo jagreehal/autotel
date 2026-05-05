@@ -2,11 +2,6 @@
 name: autotel-adapters
 description: >
   Framework adapters for autotel that add request-scoped logging, tracing, and utility helpers for Next.js, Nitro, Cloudflare Workers, Hono, and TanStack Start.
-type: integration
-library: autotel-adapters
-library_version: "0.2.4"
-sources:
-  - jagreehal/autotel:packages/autotel-adapters/src/
 ---
 
 # autotel-adapters

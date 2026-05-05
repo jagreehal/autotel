@@ -2,10 +2,6 @@
 name: autotel-mcp-instrumentation
 description: >
   OpenTelemetry instrumentation for MCP (Model Context Protocol). instrumentMCPServer, instrumentMCPClient; W3C trace context via _meta; tools, resources, prompts.
-type: integration
-library: autotel-mcp-instrumentation
-sources:
-  - jagreehal/autotel:packages/autotel-mcp-instrumentation/CLAUDE.md
 ---
 
 # autotel-mcp-instrumentation
