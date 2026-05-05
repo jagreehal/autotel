@@ -2,15 +2,6 @@
 name: autotel-frameworks
 description: >
   Hono, Fastify, TanStack Start, Cloudflare Workers. Middleware and init; getRequestLogger() in handlers. Load when adding Autotel to a web framework.
-type: framework
-library: autotel
-library_version: '2.23.0'
-requires:
-  - autotel-instrumentation
-sources:
-  - jagreehal/autotel:packages/autotel-hono/src/index.ts
-  - jagreehal/autotel:docs/AGENT-GUIDE.md
-  - jagreehal/autotel:AGENTS.md
 ---
 
 # Autotel — Framework Integration

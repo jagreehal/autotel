@@ -2,11 +2,6 @@
 name: autotel-aws
 description: >
   OpenTelemetry instrumentation for AWS services (Lambda, SDK v3 clients, S3, DynamoDB, SQS, SNS, Kinesis, Step Functions, X-Ray) built on top of autotel.
-type: integration
-library: autotel-aws
-library_version: "0.12.4"
-sources:
-  - jagreehal/autotel:packages/autotel-aws/src/
 ---
 
 # autotel-aws

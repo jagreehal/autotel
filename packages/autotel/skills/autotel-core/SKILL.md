@@ -2,13 +2,6 @@
 name: autotel-core
 description: >
   When to use trace vs span vs request logger vs events in Autotel. Init once at startup, package exports (autotel, autotel/event, autotel/testing). Use for setup and choosing the right API.
-type: core
-library: autotel
-library_version: '2.23.0'
-sources:
-  - jagreehal/autotel:AGENTS.md
-  - jagreehal/autotel:docs/AGENT-GUIDE.md
-  - jagreehal/autotel:packages/autotel/CLAUDE.md
 ---
 
 # Autotel — Core

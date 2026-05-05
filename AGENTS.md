@@ -39,9 +39,8 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 | `pnpm lint`            | Lint all packages                        |
 | `pnpm format`          | Format with Prettier                     |
 | `pnpm quality`         | Build + lint + format + typecheck + test |
-| `pnpm intent:validate` | Validate Agent Skills in all packages    |
 
-**Agent Skills:** Skills ship in `packages/autotel/skills/`, `packages/autotel-hono/skills/`, `packages/autotel-tanstack/skills/`, `packages/autotel-cloudflare/skills/`, `packages/autotel-subscribers/skills/`, `packages/autotel-edge/skills/`, and `packages/autotel-mcp-instrumentation/skills/`. Consumers run `npx @tanstack/intent install` in their project to set up skill-to-task mappings. Maintainers: run `pnpm intent:validate` to validate SKILL.md files; run `npx @tanstack/intent scaffold` for full domain discovery and skill generation.
+**Agent Skills:** Skills ship inside each package under `skills/` (e.g. `packages/autotel/skills/`, `packages/autotel-cloudflare/skills/`). They follow the open [Agent Skills specification](https://agentskills.io/specification) — skill-aware agents discover them by scanning the filesystem for `SKILL.md` files, no consumer-side CLI required.
 
 ---
 

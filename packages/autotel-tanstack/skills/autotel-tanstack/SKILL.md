@@ -2,11 +2,6 @@
 name: autotel-tanstack
 description: >
   OpenTelemetry for TanStack Start. Trace server functions, route loaders, middleware, and request handlers. Supports zero-config, middleware-based, and explicit wrapper patterns.
-type: integration
-library: autotel-tanstack
-library_version: '1.12.0'
-sources:
-  - jagreehal/autotel:packages/autotel-tanstack/CLAUDE.md
 ---
 
 # autotel-tanstack

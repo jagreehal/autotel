@@ -21,7 +21,6 @@
     "agents": "^0.12.2",
     "alchemy": "^0.93.6",
     "autotel-adapters": "workspace:*",
-    "autotel": "workspace:*",
     "autotel-cloudflare": "workspace:*",
     "autotel-edge": "workspace:*"
   },

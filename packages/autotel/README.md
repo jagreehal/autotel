@@ -2532,13 +2532,13 @@ export const handler = trace(async (event) => {
 
 For edge runtimes with different constraints:
 
-- **Cloudflare Workers (recommended):** use `autotel/workers` from the main package.
+- **Cloudflare Workers:** use `autotel-cloudflare`.
 - **Other edge runtimes (Vercel/Netlify/Deno):** use `autotel-edge`.
 
 Cloudflare Workers example:
 
 ```typescript
-import { wrapModule, trace, init } from 'autotel/workers';
+import { wrapModule, trace, init } from 'autotel-cloudflare';
 
 const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
   return kv.get(orderId);

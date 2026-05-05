@@ -2,14 +2,6 @@
 name: autotel-subscribers
 description: >
   Event subscribers for autotel. PostHog, Mixpanel, Amplitude, Segment, Webhook, Slack. Configure in init() subscribers; use track() or Event from autotel. Import from autotel-subscribers/posthog etc.
-type: core
-library: autotel-subscribers
-library_version: "27.0.0"
-requires:
-  - autotel-events
-sources:
-  - jagreehal/autotel:packages/autotel-subscribers/CLAUDE.md
-  - jagreehal/autotel:packages/autotel/src/event.ts
 ---
 
 # autotel-subscribers

@@ -7,8 +7,6 @@ description: >
   OpenTracing / OpenCensus. Preserves trace fidelity (no gap in dashboards
   during cutover), maps vendor-specific span attributes to OTel semantic
   conventions, and runs both stacks side-by-side during the cutover window.
-type: migrate
-library: autotel
 license: MIT
 ---
 
@@ -18,15 +16,15 @@ Replacing tracing in a live service is risky — you can lose data, change span 
 
 ## Choose your starting point
 
-| You're using | Section |
-| --- | --- |
-| Raw `@opentelemetry/sdk-node` | [From raw OTel SDK](#from-raw-opentelemetry-sdk-node) |
-| Sentry `@sentry/node` performance / tracing | [From Sentry](#from-sentry-performance-tracing) |
-| Datadog APM (`dd-trace`) | [From Datadog APM](#from-datadog-apm) |
-| New Relic agent (`newrelic`) | [From New Relic Node agent](#from-new-relic-node-agent) |
-| Honeycomb Beelines | [From Honeycomb Beelines](#from-honeycomb-beelines) |
-| OpenTracing / OpenCensus | [From OpenTracing / OpenCensus](#from-opentracing--opencensus) |
-| `console.log` everything | [From unstructured logging](#from-unstructured-logging) |
+| You're using                                | Section                                                        |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| Raw `@opentelemetry/sdk-node`               | [From raw OTel SDK](#from-raw-opentelemetry-sdk-node)          |
+| Sentry `@sentry/node` performance / tracing | [From Sentry](#from-sentry-performance-tracing)                |
+| Datadog APM (`dd-trace`)                    | [From Datadog APM](#from-datadog-apm)                          |
+| New Relic agent (`newrelic`)                | [From New Relic Node agent](#from-new-relic-node-agent)        |
+| Honeycomb Beelines                          | [From Honeycomb Beelines](#from-honeycomb-beelines)            |
+| OpenTracing / OpenCensus                    | [From OpenTracing / OpenCensus](#from-opentracing--opencensus) |
+| `console.log` everything                    | [From unstructured logging](#from-unstructured-logging)        |
 
 ## Universal cutover plan
 
@@ -47,29 +45,31 @@ The smoothest migration. autotel layers on top of OTel — your span attributes,
 Before:
 
 ```typescript
-import { NodeSDK } from '@opentelemetry/sdk-node'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { resourceFromAttributes } from '@opentelemetry/resources'
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({ 'service.name': 'my-app' }),
   spanProcessors: [
-    new BatchSpanProcessor(new OTLPTraceExporter({ url: process.env.OTEL_ENDPOINT })),
+    new BatchSpanProcessor(
+      new OTLPTraceExporter({ url: process.env.OTEL_ENDPOINT }),
+    ),
   ],
-})
-sdk.start()
+});
+sdk.start();
 ```
 
 After:
 
 ```typescript
-import { init } from 'autotel'
+import { init } from 'autotel';
 
 init({
   service: 'my-app',
   exporter: { url: process.env.OTEL_ENDPOINT! },
-})
+});
 ```
 
 `init()` builds the same provider + exporter, plus turns on the global fetch instrumentation, sets up the W3C propagator, and primes the redactor.
@@ -96,24 +96,28 @@ Sentry's tracing is OTel-compatible since v7+, but their span shapes have non-st
 If you want the dashboards to stay in Sentry, autotel can export OTLP to Sentry's OTLP intake:
 
 ```typescript
-import { init } from 'autotel'
-import { SentrySpanExporter } from 'autotel-sentry'
+import { init } from 'autotel';
+import { SentrySpanExporter } from 'autotel-sentry';
 
 init({
   service: 'my-app',
-  spanProcessors: [new BatchSpanProcessor(new SentrySpanExporter({ dsn: process.env.SENTRY_DSN! }))],
-})
+  spanProcessors: [
+    new BatchSpanProcessor(
+      new SentrySpanExporter({ dsn: process.env.SENTRY_DSN! }),
+    ),
+  ],
+});
 ```
 
 ### Step 2: Replace Sentry-specific helpers
 
-| Sentry | autotel |
-| --- | --- |
-| `Sentry.startSpan({ op: 'fn', name: 'process' }, () => …)` | `trace({ name: 'process' }, () => …)` |
-| `Sentry.captureException(err)` | `createStructuredError({ … })` (auto-records on span) |
-| `Sentry.setUser({ id })` | `useLogger().set({ user: { id } })` |
-| `Sentry.setContext('cart', { … })` | `useLogger().set({ cart: { … } })` |
-| `Sentry.startTransaction({ name })` | `trace({ name }, fn)` |
+| Sentry                                                     | autotel                                               |
+| ---------------------------------------------------------- | ----------------------------------------------------- |
+| `Sentry.startSpan({ op: 'fn', name: 'process' }, () => …)` | `trace({ name: 'process' }, () => …)`                 |
+| `Sentry.captureException(err)`                             | `createStructuredError({ … })` (auto-records on span) |
+| `Sentry.setUser({ id })`                                   | `useLogger().set({ user: { id } })`                   |
+| `Sentry.setContext('cart', { … })`                         | `useLogger().set({ cart: { … } })`                    |
+| `Sentry.startTransaction({ name })`                        | `trace({ name }, fn)`                                 |
 
 ### Step 3: Decide on errors-only vs full tracing
 
@@ -122,8 +126,13 @@ Sentry shines at errors; for tracing you may want to fan out to Honeycomb or Gra
 ```typescript
 spanProcessors: composeSpanProcessors([
   new BatchSpanProcessor(new SentrySpanExporter({ dsn })),
-  new BatchSpanProcessor(new OTLPHttpJsonExporter({ url: honeycombUrl, headers: { 'x-honeycomb-team': key } })),
-])
+  new BatchSpanProcessor(
+    new OTLPHttpJsonExporter({
+      url: honeycombUrl,
+      headers: { 'x-honeycomb-team': key },
+    }),
+  ),
+]);
 ```
 
 ## From Datadog APM
@@ -137,7 +146,7 @@ Datadog APM uses its own format and proprietary tracer. The migration path is OT
 ### Step 2: Point autotel at Datadog OTLP intake
 
 ```typescript
-import { init } from 'autotel'
+import { init } from 'autotel';
 
 init({
   service: 'my-app',
@@ -145,7 +154,7 @@ init({
     url: 'https://trace.agent.datadoghq.com/api/v0.4/traces',
     headers: { 'dd-api-key': process.env.DD_API_KEY! },
   },
-})
+});
 ```
 
 For the EU site use `datadoghq.eu`; for US3 / US5 see Datadog's region matrix.
@@ -154,20 +163,20 @@ For the EU site use `datadoghq.eu`; for US3 / US5 see Datadog's region matrix.
 
 Datadog uses `service`, `resource`, `operation` — OTel uses `service.name`, `http.route`, span name. autotel handles the conversion automatically when exporting via `dd-api-key`. If you have custom Datadog tags in dashboards, rename them in code:
 
-| Datadog tag | OTel attribute |
-| --- | --- |
-| `env` | `deployment.environment` |
-| `version` | `service.version` |
-| `pod_name` | `k8s.pod.name` |
+| Datadog tag | OTel attribute              |
+| ----------- | --------------------------- |
+| `env`       | `deployment.environment`    |
+| `version`   | `service.version`           |
+| `pod_name`  | `k8s.pod.name`              |
 | `host.name` | (resource attr) `host.name` |
 
 ### Step 4: Replace `dd-trace`-specific APIs
 
-| `dd-trace` | autotel |
-| --- | --- |
+| `dd-trace`                             | autotel                                                                                             |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `tracer.trace('op', { resource }, fn)` | `trace({ name: 'op' }, fn)` (set `http.route` via `useLogger().set({ http: { route } })` if needed) |
-| `tracer.scope().active()` | `trace.getActiveSpan()` (from `@opentelemetry/api`) |
-| `tracer.wrap('op', fn)` | `trace(fn)` |
+| `tracer.scope().active()`              | `trace.getActiveSpan()` (from `@opentelemetry/api`)                                                 |
+| `tracer.wrap('op', fn)`                | `trace(fn)`                                                                                         |
 
 ## From New Relic Node agent
 
@@ -186,19 +195,19 @@ init({
     url: 'https://otlp.nr-data.net/v1/traces',
     headers: { 'api-key': process.env.NEW_RELIC_LICENSE_KEY! },
   },
-})
+});
 ```
 
 For EU: `https://otlp.eu01.nr-data.net/v1/traces`.
 
 ### Step 3: Replace agent APIs
 
-| `newrelic` | autotel |
-| --- | --- |
-| `newrelic.startSegment('name', true, fn)` | `trace({ name }, fn)` |
+| `newrelic`                                | autotel                             |
+| ----------------------------------------- | ----------------------------------- |
+| `newrelic.startSegment('name', true, fn)` | `trace({ name }, fn)`               |
 | `newrelic.addCustomAttribute(key, value)` | `useLogger().set({ [key]: value })` |
-| `newrelic.noticeError(err)` | `createStructuredError({ … })` |
-| `newrelic.recordMetric(name, value)` | OTel meter API |
+| `newrelic.noticeError(err)`               | `createStructuredError({ … })`      |
+| `newrelic.recordMetric(name, value)`      | OTel meter API                      |
 
 ## From Honeycomb Beelines
 
@@ -211,14 +220,14 @@ init({
     url: 'https://api.honeycomb.io/v1/traces',
     headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY! },
   },
-})
+});
 ```
 
-| Beeline | autotel |
-| --- | --- |
-| `beeline.withTrace(meta, fn)` | `trace({ name: meta.task }, fn)` |
-| `beeline.customContext.add(key, value)` | `useLogger().set({ [key]: value })` |
-| `beeline.flush()` | `await provider.forceFlush()` (autotel does this on shutdown automatically) |
+| Beeline                                 | autotel                                                                     |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| `beeline.withTrace(meta, fn)`           | `trace({ name: meta.task }, fn)`                                            |
+| `beeline.customContext.add(key, value)` | `useLogger().set({ [key]: value })`                                         |
+| `beeline.flush()`                       | `await provider.forceFlush()` (autotel does this on shutdown automatically) |
 
 ## From OpenTracing / OpenCensus
 
@@ -239,21 +248,21 @@ See [`review-otel-patterns`](../review-otel-patterns/SKILL.md) for the framework
 
 ## Verifying the cutover
 
-| Check | How |
-| --- | --- |
-| **Span volume matches** | Compare `count(spans)` per route over 24h; should be within ±5 % |
-| **p99 latency unchanged** | Histograms on both backends |
-| **Error rate unchanged** | `count(spans where status=error)` |
-| **Trace correlation works** | Pick 10 random `traceId`s; confirm cross-service spans resolve |
-| **Bundle size acceptable** | `pnpm bundle-size` — moving from heavy agents (New Relic, Datadog) often *shrinks* the bundle |
+| Check                       | How                                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| **Span volume matches**     | Compare `count(spans)` per route over 24h; should be within ±5 %                              |
+| **p99 latency unchanged**   | Histograms on both backends                                                                   |
+| **Error rate unchanged**    | `count(spans where status=error)`                                                             |
+| **Trace correlation works** | Pick 10 random `traceId`s; confirm cross-service spans resolve                                |
+| **Bundle size acceptable**  | `pnpm bundle-size` — moving from heavy agents (New Relic, Datadog) often _shrinks_ the bundle |
 
 ## Anti-patterns
 
-| Anti-pattern | Fix |
-| --- | --- |
-| Both old SDK and autotel running on the same library | Pick one — double-instrumentation duplicates spans |
-| Removing the old SDK in the same PR as adding autotel | Run both side-by-side for 24–48 h first |
-| Changing span names during migration | Preserve names; rename in a separate PR after dashboards re-pointed |
-| No metric snapshot before cutover | Take p50/p95/p99 + error-rate baselines first |
-| Migrating prod before staging | Always staging first — at least 24 h |
+| Anti-pattern                                              | Fix                                                                                                                           |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Both old SDK and autotel running on the same library      | Pick one — double-instrumentation duplicates spans                                                                            |
+| Removing the old SDK in the same PR as adding autotel     | Run both side-by-side for 24–48 h first                                                                                       |
+| Changing span names during migration                      | Preserve names; rename in a separate PR after dashboards re-pointed                                                           |
+| No metric snapshot before cutover                         | Take p50/p95/p99 + error-rate baselines first                                                                                 |
+| Migrating prod before staging                             | Always staging first — at least 24 h                                                                                          |
 | Trusting the old vendor agent's auto-instrumentation list | autotel's targeted instrumentations (`autotel-drizzle`, `autotel-mongoose`, …) are faster and tighter; expect to add a couple |

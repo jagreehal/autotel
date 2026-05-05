@@ -2,15 +2,6 @@
 name: autotel-web
 description: >
   Use this skill when adding distributed tracing to a browser application — covers lean mode (traceparent header injection, ~1.6KB), full mode (real OTel spans, Web Vitals, error capture), privacy controls, and SSR-safe setup.
-type: integration
-library: autotel-web
-library_version: "1.11.0"
-sources:
-  - jagreehal/autotel:packages/autotel-web/src/index.ts
-  - jagreehal/autotel:packages/autotel-web/src/init.ts
-  - jagreehal/autotel:packages/autotel-web/src/functional.ts
-  - jagreehal/autotel:packages/autotel-web/src/privacy.ts
-  - jagreehal/autotel:packages/autotel-web/src/full.ts
 ---
 
 # autotel-web

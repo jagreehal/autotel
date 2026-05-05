@@ -2,11 +2,6 @@
 name: autotel-mongoose
 description: >
   Use this skill when adding OpenTelemetry tracing to a Mongoose 8+ application — covers instrumentMongoose(), query text capture, automatic PII redaction, and Schema hook instrumentation.
-type: integration
-library: autotel-mongoose
-library_version: '0.0.2'
-sources:
-  - jagreehal/autotel:packages/autotel-mongoose/CLAUDE.md
 ---
 
 # autotel-mongoose

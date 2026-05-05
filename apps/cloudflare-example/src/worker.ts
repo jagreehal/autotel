@@ -5,11 +5,10 @@ import {
   span,
   instrumentRateLimiter,
   instrumentBrowserRendering,
-  createEdgeLogger,
-  runWithLogLevel,
-  getEdgeSubscribers,
-  SamplingPresets,
-} from 'autotel/workers';
+} from 'autotel-cloudflare';
+import { createEdgeLogger, runWithLogLevel } from 'autotel-cloudflare/logger';
+import { getEdgeSubscribers } from 'autotel-cloudflare/events';
+import { SamplingPresets } from 'autotel-cloudflare/sampling';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 function parseHeaders(raw?: string): Record<string, string> {

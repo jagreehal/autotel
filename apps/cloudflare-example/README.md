@@ -1,6 +1,6 @@
-# Cloudflare Example — autotel/workers
+# Cloudflare Example — autotel-cloudflare
 
-OpenTelemetry instrumentation for Cloudflare Workers using the main `autotel` package (`autotel/workers`). Wraps your handler and every request produces traces with HTTP attributes, span status codes, and exception recording — no manual span management needed.
+OpenTelemetry instrumentation for Cloudflare Workers using `autotel-cloudflare`. Wraps your handler and every request produces traces with HTTP attributes, span status codes, and exception recording — no manual span management needed.
 
 ## Quick Start
 
@@ -65,7 +65,7 @@ const processPayment = trace(
 Structured JSON logger with Pino-style method calls that auto-correlates with OpenTelemetry traces. Every log entry includes `traceId`, `spanId`, and `correlationId` when inside an active span.
 
 ```typescript
-import { createEdgeLogger, runWithLogLevel } from 'autotel/workers';
+import { createEdgeLogger, runWithLogLevel } from 'autotel-cloudflare';
 
 // Create a logger — options: level, pretty, bindings, redact
 const log = createEdgeLogger('my-service', {
@@ -113,7 +113,7 @@ runWithLogLevel('debug', () => {
 Use `getEdgeTraceContext()` to inject trace IDs into any logger (pino, bunyan, etc.):
 
 ```typescript
-import { getEdgeTraceContext } from 'autotel/workers';
+import { getEdgeTraceContext } from 'autotel-cloudflare';
 
 const ctx = getEdgeTraceContext(); // { traceId, spanId, correlationId } or null
 pinoLogger.info({ ...ctx, userId: 'u123' }, 'processing');
@@ -206,5 +206,4 @@ Set `ENVIRONMENT=production` and configure `OTLP_ENDPOINT` to your observability
 
 ## Package Choice
 
-- **Recommended:** `autotel` + `autotel/workers` for the best single-package DX.
-- **Use `autotel-cloudflare` for feature-targeted Cloudflare instrumentation:** when you want direct control of Cloudflare-specific instrumentation surfaces (bindings, handlers, actors, agents, workflows).
+`autotel-cloudflare` is the right package for Cloudflare Workers — it bundles the functional API (`trace`, `span`), handler wrappers (`wrapModule`, `instrument`), and bindings instrumentation (KV, R2, D1, AI, Vectorize, Queues, Durable Objects).

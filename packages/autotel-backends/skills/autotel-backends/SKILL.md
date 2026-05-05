@@ -2,11 +2,6 @@
 name: autotel-backends
 description: >
   Vendor preset configs for autotel that produce a ready-to-use AutotelConfig for Honeycomb, Datadog, Google Cloud, and Grafana Cloud with best-practice defaults already baked in.
-type: integration
-library: autotel-backends
-library_version: '2.12.4'
-sources:
-  - jagreehal/autotel:packages/autotel-backends/src/
 ---
 
 # autotel-backends

@@ -6,8 +6,6 @@ description: >
   span. Covers operation naming, attribute conventions (db.system,
   messaging.system, http.*, rpc.*), error capture, sensitive-statement
   redaction, package layout, and tests.
-type: create
-library: autotel
 license: MIT
 ---
 

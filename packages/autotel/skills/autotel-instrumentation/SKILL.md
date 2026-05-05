@@ -2,13 +2,6 @@
 name: autotel-instrumentation
 description: >
   trace(), span(), instrument(), init(). Factory vs direct pattern, name inference. Sync init; use node-require for optional deps. Load when wrapping handlers or functions with spans.
-type: core
-library: autotel
-library_version: '2.23.0'
-sources:
-  - jagreehal/autotel:docs/ARCHITECTURE.md
-  - jagreehal/autotel:packages/autotel/src/functional.ts
-  - jagreehal/autotel:packages/autotel/CLAUDE.md
 ---
 
 # Autotel — Instrumentation
