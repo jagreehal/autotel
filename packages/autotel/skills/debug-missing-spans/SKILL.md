@@ -7,8 +7,6 @@ description: >
   sampling, ctx.waitUntil drops on Cloudflare, init-order races, runtime
   detection failures, propagation breaks, exporter auth errors, and
   silent ratelimits.
-type: debug
-library: autotel
 license: MIT
 ---
 
@@ -29,8 +27,8 @@ Before chasing remote backends, confirm the span exists at all:
 ```typescript
 init({
   service: 'my-app',
-  debug: 'pretty',           // hierarchical colourised output to stdout
-})
+  debug: 'pretty', // hierarchical colourised output to stdout
+});
 ```
 
 If you see the span in stdout, the SDK + sampler are fine — skip to "exporter / network". If you don't, keep reading.
@@ -40,13 +38,13 @@ If you see the span in stdout, the SDK + sampler are fine — skip to "exporter 
 Common failure: `init()` runs after the first request because of import-order.
 
 ```typescript
-import { trace } from '@opentelemetry/api'
+import { trace } from '@opentelemetry/api';
 
-const tracer = trace.getTracer('autotel-debug')
+const tracer = trace.getTracer('autotel-debug');
 console.log(
   '[autotel-debug] tracer is no-op:',
   tracer.constructor.name === 'NoopTracer',
-)
+);
 ```
 
 If `true`, `init()` ran too late. Move it to the very top of the entry file (or to `instrumentation.ts` for Next.js).
@@ -56,8 +54,8 @@ If `true`, `init()` ran too late. Move it to the very top of the entry file (or 
 Print the effective head rate:
 
 ```typescript
-import { getActiveConfig } from 'autotel-edge'
-console.log('[autotel-debug] sampling:', getActiveConfig()?.sampling)
+import { getActiveConfig } from 'autotel-edge';
+console.log('[autotel-debug] sampling:', getActiveConfig()?.sampling);
 ```
 
 Common gotchas:
@@ -83,15 +81,15 @@ If you're using `addEventListener('fetch', …)` or a hand-rolled `fetch` in a m
 Fix — switch to `defineWorkerFetch` or `wrapModule`, both of which wire `waitUntil` automatically:
 
 ```typescript
-import { defineWorkerFetch } from 'autotel-cloudflare'
+import { defineWorkerFetch } from 'autotel-cloudflare';
 
 export default defineWorkerFetch(
   { service: { name: 'edge' } },
   async (request, env, ctx, log) => {
     // log.set / spans here all flush via ctx.waitUntil before response returns
-    return new Response('ok')
+    return new Response('ok');
   },
-)
+);
 ```
 
 ## Step 4: Processor pipeline
@@ -99,10 +97,15 @@ export default defineWorkerFetch(
 Print what's wired:
 
 ```typescript
-import { trace } from '@opentelemetry/api'
-const provider = trace.getTracerProvider()
-console.log('[autotel-debug] provider:', provider.constructor.name)
-console.log('[autotel-debug] processors:', (provider as any)._registeredSpanProcessors?.map((p: any) => p.constructor.name))
+import { trace } from '@opentelemetry/api';
+const provider = trace.getTracerProvider();
+console.log('[autotel-debug] provider:', provider.constructor.name);
+console.log(
+  '[autotel-debug] processors:',
+  (provider as any)._registeredSpanProcessors?.map(
+    (p: any) => p.constructor.name,
+  ),
+);
 ```
 
 Common issues:
@@ -118,7 +121,7 @@ init({
   service: 'my-app',
   exporter: { url: process.env.OTLP_ENDPOINT! },
   // no postProcessor, no tail sampler, no filter
-})
+});
 ```
 
 If the span shows up now, add back the processors one at a time.
@@ -128,8 +131,8 @@ If the span shows up now, add back the processors one at a time.
 Tail the SDK's diagnostic log:
 
 ```typescript
-import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api'
-diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG)
+import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 ```
 
 Look for:
@@ -140,15 +143,15 @@ Look for:
 
 Common exporter errors:
 
-| Status | Meaning | Fix |
-| --- | --- | --- |
-| `401` | Bad / missing auth header | Check `OTLP_HEADERS` / vendor token name |
-| `403` | Token has no write scope | Issue a token with the right scope |
-| `404` | Wrong endpoint URL | Check region (`api.honeycomb.io` vs `api.eu1.honeycomb.io`) |
-| `413` | Batch too big | Lower `BatchSpanProcessor` `maxExportBatchSize` |
-| `429` | Rate-limited | Reduce head/tail rates; honour `retry-after` |
-| `502/503/504` | Upstream unhealthy | Often transient; add retries; check backend status |
-| Network error | DNS / firewall | `curl -v <url>` from the same network |
+| Status        | Meaning                   | Fix                                                         |
+| ------------- | ------------------------- | ----------------------------------------------------------- |
+| `401`         | Bad / missing auth header | Check `OTLP_HEADERS` / vendor token name                    |
+| `403`         | Token has no write scope  | Issue a token with the right scope                          |
+| `404`         | Wrong endpoint URL        | Check region (`api.honeycomb.io` vs `api.eu1.honeycomb.io`) |
+| `413`         | Batch too big             | Lower `BatchSpanProcessor` `maxExportBatchSize`             |
+| `429`         | Rate-limited              | Reduce head/tail rates; honour `retry-after`                |
+| `502/503/504` | Upstream unhealthy        | Often transient; add retries; check backend status          |
+| Network error | DNS / firewall            | `curl -v <url>` from the same network                       |
 
 ## Step 6: Network / TLS
 
@@ -169,32 +172,32 @@ For Cloudflare Workers, run `wrangler tail` and look for `OTLPExporter` errors.
 
 Some backends accept the request with a 200 but drop the events:
 
-- **Honeycomb**: dataset must exist *and* the API key must have write access to it. Mismatched key/dataset → silent drop.
+- **Honeycomb**: dataset must exist _and_ the API key must have write access to it. Mismatched key/dataset → silent drop.
 - **Datadog**: check `service` is set (resource attribute `service.name`) — they ignore spans without it.
 - **Sentry**: SDK version mismatch on envelope → 200 but events disappear.
 - **Grafana Cloud Tempo**: spans without `service.name` go to a fallback service called `unknown_service`.
 
 For each backend, the dataset / index / project where you'd expect the span:
 
-| Backend | Where the span lands |
-| --- | --- |
-| Honeycomb | dataset = `service.name` (auto-created) |
-| Datadog | `service:<name>` filter |
-| Grafana Tempo | search by `traceId` |
-| Jaeger | service dropdown = `service.name` |
-| Sentry | project linked to the DSN |
+| Backend       | Where the span lands                    |
+| ------------- | --------------------------------------- |
+| Honeycomb     | dataset = `service.name` (auto-created) |
+| Datadog       | `service:<name>` filter                 |
+| Grafana Tempo | search by `traceId`                     |
+| Jaeger        | service dropdown = `service.name`       |
+| Sentry        | project linked to the DSN               |
 
 ## Step 8: Backend index lag
 
 After a 200, expect ingestion lag of:
 
-| Backend | Typical lag |
-| --- | --- |
-| Honeycomb | < 5 s |
-| Datadog | 30–60 s |
-| Grafana Tempo | 10–30 s |
-| Sentry | 30–120 s |
-| Self-hosted Jaeger | < 1 s |
+| Backend            | Typical lag |
+| ------------------ | ----------- |
+| Honeycomb          | < 5 s       |
+| Datadog            | 30–60 s     |
+| Grafana Tempo      | 10–30 s     |
+| Sentry             | 30–120 s    |
+| Self-hosted Jaeger | < 1 s       |
 
 Don't conclude the span is missing until you've waited > 2× the expected lag.
 
@@ -236,10 +239,10 @@ There should be exactly one resolved version. If there are two, dedup via `pnpm.
 
 ## Anti-patterns to fix as you debug
 
-| Anti-pattern | Why it loses spans |
-| --- | --- |
-| `init()` after the first import that uses tracing | Spans before `init()` are no-ops |
-| `addEventListener('fetch', …)` on Workers | Pre-module-worker style; no `ctx.waitUntil` to wire |
-| Single `OTLP_ENDPOINT` env var with `?` chars URL-encoded | Auth gets parsed as part of the path |
-| Importing both `@sentry/tracing` and `autotel` | Double-instrumentation eats spans |
-| `process.exit(0)` immediately after the work | The exporter never flushed; call `await provider.shutdown()` first |
+| Anti-pattern                                              | Why it loses spans                                                 |
+| --------------------------------------------------------- | ------------------------------------------------------------------ |
+| `init()` after the first import that uses tracing         | Spans before `init()` are no-ops                                   |
+| `addEventListener('fetch', …)` on Workers                 | Pre-module-worker style; no `ctx.waitUntil` to wire                |
+| Single `OTLP_ENDPOINT` env var with `?` chars URL-encoded | Auth gets parsed as part of the path                               |
+| Importing both `@sentry/tracing` and `autotel`            | Double-instrumentation eats spans                                  |
+| `process.exit(0)` immediately after the work              | The exporter never flushed; call `await provider.shutdown()` first |

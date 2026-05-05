@@ -11,8 +11,6 @@ description: >
   Grafana Cloud, Sentry, Axiom, HyperDX), `composeSpanProcessors` / `composeSubscribers` /
   `composePostProcessors` for pipelines, AI SDK observability with gen-ai semantic conventions, and
   end-to-end OTLP testing.
-type: review
-library: autotel
 license: MIT
 ---
 

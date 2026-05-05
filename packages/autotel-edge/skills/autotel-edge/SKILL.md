@@ -2,10 +2,6 @@
 name: autotel-edge
 description: >
   OpenTelemetry for edge runtimes (Cloudflare Workers, Vercel Edge, Deno). trace(), span(), instrument(); sampling, events, logger. Bundle-size optimized; no Node.js APIs.
-type: core
-library: autotel-edge
-sources:
-  - jagreehal/autotel:packages/autotel-edge/CLAUDE.md
 ---
 
 # autotel-edge

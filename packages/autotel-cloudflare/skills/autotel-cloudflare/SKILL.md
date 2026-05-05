@@ -2,11 +2,6 @@
 name: autotel-cloudflare
 description: >
   OpenTelemetry for Cloudflare Workers. Instrument handlers, bindings (KV, R2, D1, AI, Vectorize, Queues, Durable Objects), and global fetch/cache. Multiple API styles for compatibility.
-type: integration
-library: autotel-cloudflare
-library_version: "2.17.0"
-sources:
-  - jagreehal/autotel:packages/autotel-cloudflare/CLAUDE.md
 ---
 
 # autotel-cloudflare

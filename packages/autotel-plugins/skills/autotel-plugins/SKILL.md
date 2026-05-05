@@ -2,14 +2,6 @@
 name: autotel-plugins
 description: >
   OpenTelemetry instrumentation plugins for BigQuery, Kafka, and RabbitMQ — covering libraries with no official OTel support (BigQuery) or where the official package lacks critical DX (Kafka/RabbitMQ processing spans, batch lineage, correlation IDs).
-type: integration
-library: autotel-plugins
-library_version: '0.19.4'
-sources:
-  - jagreehal/autotel:packages/autotel-plugins/src/index.ts
-  - jagreehal/autotel:packages/autotel-plugins/src/kafka/index.ts
-  - jagreehal/autotel:packages/autotel-plugins/src/rabbitmq/index.ts
-  - jagreehal/autotel:packages/autotel-plugins/src/bigquery/index.ts
 ---
 
 # autotel-plugins

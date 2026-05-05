@@ -2,13 +2,6 @@
 name: autotel-structured-errors
 description: >
   createStructuredError, parseError, recordStructuredError. API errors with message, why, fix, link; client parsing for UI. Use in API routes and client catch blocks.
-type: core
-library: autotel
-library_version: '2.23.0'
-sources:
-  - jagreehal/autotel:packages/autotel/src/structured-error.ts
-  - jagreehal/autotel:packages/autotel/src/parse-error.ts
-  - jagreehal/autotel:docs/AGENT-GUIDE.md
 ---
 
 # Autotel — Structured Errors

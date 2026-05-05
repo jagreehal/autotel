@@ -36,8 +36,7 @@
     "dist",
     "src",
     "README.md",
-    "skills",
-    "bin"
+    "skills"
   ],
   "scripts": {
     "build": "tsup",
@@ -71,8 +70,7 @@
     "@opentelemetry/otlp-transformer": "^0.216.0",
     "@opentelemetry/resources": "^2.7.1",
     "@opentelemetry/sdk-trace-base": "^2.7.1",
-    "@opentelemetry/semantic-conventions": "^1.40.0",
-    "@tanstack/intent": "^0.0.36"
+    "@opentelemetry/semantic-conventions": "^1.40.0"
   },
   "devDependencies": {
     "@opentelemetry/context-async-hooks": "^2.7.1",
@@ -91,8 +89,5 @@
   "bugs": {
     "url": "https://github.com/jagreehal/autotel/issues"
   },
-  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-edge#readme",
-  "bin": {
-    "intent": "./bin/intent.js"
-  }
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-edge#readme"
 }

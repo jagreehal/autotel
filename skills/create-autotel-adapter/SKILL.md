@@ -6,8 +6,6 @@ description: >
   withAutotel handler wrapping, and async-safe context propagation through
   AsyncLocalStorage. Covers source layout, exports, tests, package.json
   setup, and registration in the monorepo.
-type: create
-library: autotel
 license: MIT
 ---
 
@@ -148,7 +146,6 @@ Create `packages/autotel-{name}/skills/autotel-{name}/SKILL.md`. Use the existin
 pnpm --filter autotel-{name} run build
 pnpm --filter autotel-{name} run test
 pnpm --filter autotel-{name} run type-check
-pnpm intent:validate
 pnpm bundle-size:update     # only if size grew intentionally
 ```
 

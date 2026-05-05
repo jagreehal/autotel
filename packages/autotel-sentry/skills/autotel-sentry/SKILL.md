@@ -2,13 +2,6 @@
 name: autotel-sentry
 description: >
   Bridge that converts OpenTelemetry (Autotel) spans to Sentry transactions/spans and propagates sentry-trace/baggage headers, linking OTel traces to Sentry performance monitoring and error tracking.
-type: integration
-library: autotel-sentry
-library_version: "0.5.4"
-sources:
-  - jagreehal/autotel:packages/autotel-sentry/CLAUDE.md
-  - jagreehal/autotel:packages/autotel-sentry/src/processor.ts
-  - jagreehal/autotel:packages/autotel-sentry/src/propagator.ts
 ---
 
 # autotel-sentry

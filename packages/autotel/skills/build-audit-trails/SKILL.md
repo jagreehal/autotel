@@ -6,14 +6,12 @@ description: >
   signing and tamper-detection, denial logging, redaction, retention,
   separation of concerns from operational telemetry, and framework wiring
   (Next.js, Nuxt, Hono, Express, Cloudflare Workers).
-type: build
-library: autotel
 license: MIT
 ---
 
 # Build audit trails
 
-An *audit trail* is a record of who did what to which resource, when, and whether it was permitted — durable, tamper-evident, and admissible. Operational telemetry (latency, errors, span shapes) is for engineers; audit trails are for compliance, security, and forensics. They overlap technically but differ on every other axis.
+An _audit trail_ is a record of who did what to which resource, when, and whether it was permitted — durable, tamper-evident, and admissible. Operational telemetry (latency, errors, span shapes) is for engineers; audit trails are for compliance, security, and forensics. They overlap technically but differ on every other axis.
 
 autotel lets you express both with the same primitive — a span — but you should keep them on **separate processors** so an audit event never gets dropped by sampling, never gets redacted by a debug rule, and never goes to the same backend as your ops data.
 
@@ -28,14 +26,14 @@ autotel lets you express both with the same primitive — a span — but you sho
 
 An auditable event has six required parts:
 
-| Field | OTel attribute | Example |
-| --- | --- | --- |
-| When | (span timestamp) | `2026-05-04T17:23:11.412Z` |
-| Who | `enduser.id` + `enduser.role` | `usr_42`, `admin` |
-| Where (acting from) | `client.address`, `network.peer.address`, `user_agent.original` | `203.0.113.5`, `Chrome 121` |
-| What | `audit.action` | `secret.read`, `policy.update`, `user.delete` |
-| Which resource | `audit.resource.type` + `audit.resource.id` | `secret`, `sec_abc` |
-| Outcome | `audit.outcome` (`allow` / `deny`) + `audit.reason` | `deny`, `MFA required` |
+| Field               | OTel attribute                                                  | Example                                       |
+| ------------------- | --------------------------------------------------------------- | --------------------------------------------- |
+| When                | (span timestamp)                                                | `2026-05-04T17:23:11.412Z`                    |
+| Who                 | `enduser.id` + `enduser.role`                                   | `usr_42`, `admin`                             |
+| Where (acting from) | `client.address`, `network.peer.address`, `user_agent.original` | `203.0.113.5`, `Chrome 121`                   |
+| What                | `audit.action`                                                  | `secret.read`, `policy.update`, `user.delete` |
+| Which resource      | `audit.resource.type` + `audit.resource.id`                     | `secret`, `sec_abc`                           |
+| Outcome             | `audit.outcome` (`allow` / `deny`) + `audit.reason`             | `deny`, `MFA required`                        |
 
 Plus useful optional fields: `audit.policy.id` (which policy made the call), `audit.evidence` (linked artefact id), `audit.actor.session.id`.
 
@@ -44,30 +42,35 @@ Plus useful optional fields: `audit.policy.id` (which policy made the call), `au
 Centralise the schema in one place so every site gets it right:
 
 ```typescript
-import { trace, SpanKind } from '@opentelemetry/api'
+import { trace, SpanKind } from '@opentelemetry/api';
 
 type AuditAction =
-  | 'secret.read' | 'secret.write' | 'secret.delete'
-  | 'policy.update' | 'user.create' | 'user.delete'
-  | 'data.export' | 'session.assume'
+  | 'secret.read'
+  | 'secret.write'
+  | 'secret.delete'
+  | 'policy.update'
+  | 'user.create'
+  | 'user.delete'
+  | 'data.export'
+  | 'session.assume';
 
 interface AuditPayload {
-  action: AuditAction
-  resource: { type: string; id: string }
-  outcome: 'allow' | 'deny'
-  reason?: string
-  actor?: { id: string; role?: string; sessionId?: string }
-  policy?: { id: string }
-  evidence?: { id: string }
+  action: AuditAction;
+  resource: { type: string; id: string };
+  outcome: 'allow' | 'deny';
+  reason?: string;
+  actor?: { id: string; role?: string; sessionId?: string };
+  policy?: { id: string };
+  evidence?: { id: string };
 }
 
-const tracer = trace.getTracer('autotel-audit', '1.0.0')
+const tracer = trace.getTracer('autotel-audit', '1.0.0');
 
 export function audit(payload: AuditPayload): void {
   const span = tracer.startSpan(`audit.${payload.action}`, {
     kind: SpanKind.INTERNAL,
     attributes: {
-      'audit': true,
+      audit: true,
       'audit.action': payload.action,
       'audit.outcome': payload.outcome,
       'audit.resource.type': payload.resource.type,
@@ -75,12 +78,14 @@ export function audit(payload: AuditPayload): void {
       ...(payload.reason && { 'audit.reason': payload.reason }),
       ...(payload.actor?.id && { 'enduser.id': payload.actor.id }),
       ...(payload.actor?.role && { 'enduser.role': payload.actor.role }),
-      ...(payload.actor?.sessionId && { 'audit.actor.session.id': payload.actor.sessionId }),
+      ...(payload.actor?.sessionId && {
+        'audit.actor.session.id': payload.actor.sessionId,
+      }),
       ...(payload.policy?.id && { 'audit.policy.id': payload.policy.id }),
       ...(payload.evidence?.id && { 'audit.evidence.id': payload.evidence.id }),
     },
-  })
-  span.end()
+  });
+  span.end();
 }
 ```
 
@@ -94,18 +99,18 @@ export async function withAuthz<T>(
   decide: () => Promise<{ allow: boolean; reason?: string }>,
   body: () => Promise<T>,
 ): Promise<T> {
-  const decision = await decide()
+  const decision = await decide();
   if (!decision.allow) {
-    audit({ ...payload, outcome: 'deny', reason: decision.reason })
+    audit({ ...payload, outcome: 'deny', reason: decision.reason });
     throw createStructuredError({
       status: 403,
       code: 'FORBIDDEN',
       message: 'Not allowed',
       why: decision.reason ?? 'Insufficient permissions',
-    })
+    });
   }
-  audit({ ...payload, outcome: 'allow' })
-  return body()
+  audit({ ...payload, outcome: 'allow' });
+  return body();
 }
 ```
 
@@ -122,32 +127,35 @@ import {
   composeSpanProcessors,
   composeSubscribers,
   defineConfig,
-} from 'autotel-edge'
-import { BatchSpanProcessor, FilteringSpanProcessor } from 'autotel/processors'
+} from 'autotel-edge';
+import { BatchSpanProcessor, FilteringSpanProcessor } from 'autotel/processors';
 
 const auditExporter = new BatchSpanProcessor(
-  new OTLPHttpJsonExporter({ url: process.env.AUDIT_OTLP!, headers: { authorization: `Bearer ${process.env.AUDIT_TOKEN!}` } }),
-)
+  new OTLPHttpJsonExporter({
+    url: process.env.AUDIT_OTLP!,
+    headers: { authorization: `Bearer ${process.env.AUDIT_TOKEN!}` },
+  }),
+);
 const opsExporter = new BatchSpanProcessor(
   new OTLPHttpJsonExporter({ url: process.env.OPS_OTLP! }),
-)
+);
 
 // Only audit spans reach the audit pipeline.
 const auditOnly = new FilteringSpanProcessor({
   include: (span) => span.attributes['audit'] === true,
   next: auditExporter,
-})
+});
 
 // Conversely, ops never sees audit spans (avoid leaking PII to dashboards).
 const opsOnly = new FilteringSpanProcessor({
   exclude: (span) => span.attributes['audit'] === true,
   next: opsExporter,
-})
+});
 
 export const otelConfig = defineConfig({
   service: { name: 'app' },
   spanProcessors: composeSpanProcessors([auditOnly, opsOnly]),
-})
+});
 ```
 
 ## Step 4: Tamper detection
@@ -179,14 +187,14 @@ For multi-tenant or extra-strict (HIPAA), use Ed25519 with per-environment keys 
 
 ## Step 5: Redaction — what stays and what goes
 
-| Field | In audit span? | Notes |
-| --- | --- | --- |
-| `enduser.id` | ✅ | Internal user id; never the email |
-| `audit.resource.id` | ✅ | Required for forensics |
-| `client.address` | ✅ | Last-octet redaction acceptable for IPv4 |
-| Free-form payload bodies | ❌ | Never inline raw input — link by id (`audit.evidence.id`) |
-| Secret values | ❌ | Use `audit.action=secret.read` + `audit.resource.id=sec_abc`, never the secret itself |
-| Authorization headers | ❌ | Token names ok (`bearer.*`), values never |
+| Field                    | In audit span? | Notes                                                                                 |
+| ------------------------ | -------------- | ------------------------------------------------------------------------------------- |
+| `enduser.id`             | ✅             | Internal user id; never the email                                                     |
+| `audit.resource.id`      | ✅             | Required for forensics                                                                |
+| `client.address`         | ✅             | Last-octet redaction acceptable for IPv4                                              |
+| Free-form payload bodies | ❌             | Never inline raw input — link by id (`audit.evidence.id`)                             |
+| Secret values            | ❌             | Use `audit.action=secret.read` + `audit.resource.id=sec_abc`, never the secret itself |
+| Authorization headers    | ❌             | Token names ok (`bearer.*`), values never                                             |
 
 `attributeRedactor` defaults are too aggressive for audit (you may need `enduser.id` literal, not masked). Disable redaction selectively:
 
@@ -196,20 +204,20 @@ spanProcessors: composeSpanProcessors([
   auditOnly,
   // Strict redactor on ops
   new AttributeRedactingProcessor(opsOnly, { redactor: 'strict' }),
-])
+]);
 ```
 
 ## Step 6: Retention
 
 Audit retention is set by regulation, not engineering taste. Common minimums:
 
-| Regulation | Minimum retention |
-| --- | --- |
-| GDPR | 6 years (financial), 12 months (operational) |
-| HIPAA | 6 years |
-| PCI-DSS | 1 year (online), 3 months hot |
-| SOX | 7 years |
-| GxP / 21 CFR Part 11 | Lifetime of product + 10 years |
+| Regulation           | Minimum retention                            |
+| -------------------- | -------------------------------------------- |
+| GDPR                 | 6 years (financial), 12 months (operational) |
+| HIPAA                | 6 years                                      |
+| PCI-DSS              | 1 year (online), 3 months hot                |
+| SOX                  | 7 years                                      |
+| GxP / 21 CFR Part 11 | Lifetime of product + 10 years               |
 
 Express retention as a backend lifecycle policy (S3 Object Lock COMPLIANCE mode, BigQuery `--time_partitioning_expiration`), not application code.
 
@@ -219,9 +227,12 @@ Express retention as a backend lifecycle policy (S3 Object Lock COMPLIANCE mode,
 
 ```typescript
 // app/admin/users/[id]/route.ts
-import { withAuthz, audit } from '@/lib/audit'
+import { withAuthz, audit } from '@/lib/audit';
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string } },
+) {
   return withAuthz(
     {
       action: 'user.delete',
@@ -230,17 +241,17 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     },
     async () => ({ allow: await canDelete(req, params.id) }),
     async () => {
-      await db.user.delete({ where: { id: params.id } })
-      return Response.json({ ok: true })
+      await db.user.delete({ where: { id: params.id } });
+      return Response.json({ ok: true });
     },
-  )
+  );
 }
 ```
 
 ### Hono
 
 ```typescript
-import { audit, withAuthz } from './audit'
+import { audit, withAuthz } from './audit';
 app.post('/secrets/:id/read', async (c) => {
   return withAuthz(
     {
@@ -250,8 +261,8 @@ app.post('/secrets/:id/read', async (c) => {
     },
     () => requireScope(c, 'secrets:read'),
     async () => c.json({ value: await secrets.read(c.req.param('id')) }),
-  )
-})
+  );
+});
 ```
 
 ### Cloudflare Workers
@@ -263,25 +274,29 @@ export default defineWorkerFetch(
   { service: { name: 'admin-api' } },
   async (request, env, ctx, log) => {
     return withAuthz(
-      { action: 'data.export', resource: { type: 'project', id: 'p_123' }, actor: { id: 'usr_42' } },
+      {
+        action: 'data.export',
+        resource: { type: 'project', id: 'p_123' },
+        actor: { id: 'usr_42' },
+      },
       async () => ({ allow: true }),
       async () => Response.json({ ok: true }),
-    )
+    );
   },
-)
+);
 ```
 
 ## Anti-patterns
 
-| Anti-pattern | Fix |
-| --- | --- |
-| Audit logs in `console.log` / unstructured | Use `audit()` so every event has the same shape |
-| Same backend for audit and ops | Separate processors, separate retention |
-| Audit subject to sampling | `FilteringSpanProcessor` with `include: span.attributes.audit` |
-| Logging only successes | Always log denials too |
-| Putting secrets / payloads in audit attributes | Reference by id only (`audit.evidence.id`) |
-| No tamper detection | HMAC signature on critical environments |
-| Custom retention in code | Express via storage-layer lifecycle policy |
-| Audit on every read of harmless data | Audit *meaningful* events; not every list call |
-| Audit row tied to a specific framework | The `audit()` function is framework-agnostic |
-| `enduser.id` = email | Use the internal id; emails go in a separate identity table |
+| Anti-pattern                                   | Fix                                                            |
+| ---------------------------------------------- | -------------------------------------------------------------- |
+| Audit logs in `console.log` / unstructured     | Use `audit()` so every event has the same shape                |
+| Same backend for audit and ops                 | Separate processors, separate retention                        |
+| Audit subject to sampling                      | `FilteringSpanProcessor` with `include: span.attributes.audit` |
+| Logging only successes                         | Always log denials too                                         |
+| Putting secrets / payloads in audit attributes | Reference by id only (`audit.evidence.id`)                     |
+| No tamper detection                            | HMAC signature on critical environments                        |
+| Custom retention in code                       | Express via storage-layer lifecycle policy                     |
+| Audit on every read of harmless data           | Audit _meaningful_ events; not every list call                 |
+| Audit row tied to a specific framework         | The `audit()` function is framework-agnostic                   |
+| `enduser.id` = email                           | Use the internal id; emails go in a separate identity table    |

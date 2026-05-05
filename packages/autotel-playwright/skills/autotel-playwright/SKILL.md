@@ -2,12 +2,6 @@
 name: autotel-playwright
 description: >
   Playwright fixture and reporter that create one OTel span per test and inject W3C trace context into API requests, linking e2e tests to server-side traces.
-type: integration
-library: autotel-playwright
-library_version: "0.4.10"
-sources:
-  - jagreehal/autotel:packages/autotel-playwright/src/index.ts
-  - jagreehal/autotel:packages/autotel-playwright/src/reporter.ts
 ---
 
 # autotel-playwright
