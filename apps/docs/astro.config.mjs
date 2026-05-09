@@ -96,6 +96,7 @@ export default defineConfig({
           items: [
             { label: 'CLI', slug: 'tools/cli' },
             { label: 'Devtools', slug: 'tools/devtools' },
+            { label: 'VS Code Extension', slug: 'tools/vscode' },
             { label: 'Terminal Viewer', slug: 'tools/terminal' },
             { label: 'Web SDK', slug: 'tools/web' },
             { label: 'Claude Code Skill', slug: 'tools/claude-code-skill' },

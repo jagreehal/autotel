@@ -40,5 +40,6 @@ export default new Map([
 ["src/content/docs/tools/cli.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fcli.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/tools/devtools.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fdevtools.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/tools/terminal.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fterminal.mdx&astroContentModuleFlag=true")],
+["src/content/docs/tools/vscode.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fvscode.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/tools/web.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftools%2Fweb.mdx&astroContentModuleFlag=true")]]);
 		

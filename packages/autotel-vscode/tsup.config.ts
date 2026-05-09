@@ -13,4 +13,7 @@ export default defineConfig({
   // The .vsix has no node_modules; runtime resolution will fail otherwise.
   noExternal: [/^autotel-devtools($|\/)/],
   external: ['vscode'],
+  esbuildOptions(options) {
+    options.conditions = ['require', 'node', 'default']
+  },
 })

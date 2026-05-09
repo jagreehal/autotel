@@ -1,9 +1,10 @@
 {
   "name": "autotel-vscode",
   "version": "0.1.0",
+  "private": true,
   "displayName": "Autotel",
   "description": "OpenTelemetry observability inside VSCode — receives OTLP, navigates traces, jumps to source.",
-  "publisher": "TBD",
+  "publisher": "jagreehal",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,7 +14,11 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Debuggers", "Visualization", "Other"],
+  "categories": [
+    "Debuggers",
+    "Visualization",
+    "Other"
+  ],
   "icon": "resources/icon.png",
   "main": "./dist/extension.js",
   "scripts": {
@@ -23,8 +28,8 @@
     "lint": "eslint src/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "node ./scripts/run-e2e.js",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies",
+    "vsce:publish": "vsce publish --no-dependencies"
   },
   "activationEvents": [
     "onView:autotel.services",
@@ -43,20 +48,57 @@
     },
     "views": {
       "autotel": [
-        { "id": "autotel.services", "name": "Services", "icon": "$(server)" },
-        { "id": "autotel.traces", "name": "Traces", "icon": "$(list-tree)" },
-        { "id": "autotel.logs", "name": "Logs", "icon": "$(output)" },
-        { "id": "autotel.errors", "name": "Errors", "icon": "$(error)" }
+        {
+          "id": "autotel.services",
+          "name": "Services",
+          "icon": "$(server)"
+        },
+        {
+          "id": "autotel.traces",
+          "name": "Traces",
+          "icon": "$(list-tree)"
+        },
+        {
+          "id": "autotel.logs",
+          "name": "Logs",
+          "icon": "$(output)"
+        },
+        {
+          "id": "autotel.errors",
+          "name": "Errors",
+          "icon": "$(error)"
+        }
       ]
     },
     "commands": [
-      { "command": "autotel.start", "title": "Autotel: Start Receiver" },
-      { "command": "autotel.stop", "title": "Autotel: Stop Receiver" },
-      { "command": "autotel.setPort", "title": "Autotel: Set Receiver Port" },
-      { "command": "autotel.clear", "title": "Autotel: Clear Buffered Data" },
-      { "command": "autotel.revealSource", "title": "Autotel: Reveal Span Source" },
-      { "command": "autotel.copySpanId", "title": "Autotel: Copy Span ID" },
-      { "command": "autotel.openSpanDetail", "title": "Autotel: Open Span Detail" }
+      {
+        "command": "autotel.start",
+        "title": "Autotel: Start Receiver"
+      },
+      {
+        "command": "autotel.stop",
+        "title": "Autotel: Stop Receiver"
+      },
+      {
+        "command": "autotel.setPort",
+        "title": "Autotel: Set Receiver Port"
+      },
+      {
+        "command": "autotel.clear",
+        "title": "Autotel: Clear Buffered Data"
+      },
+      {
+        "command": "autotel.revealSource",
+        "title": "Autotel: Reveal Span Source"
+      },
+      {
+        "command": "autotel.copySpanId",
+        "title": "Autotel: Copy Span ID"
+      },
+      {
+        "command": "autotel.openSpanDetail",
+        "title": "Autotel: Open Span Detail"
+      }
     ],
     "configuration": {
       "title": "Autotel",
@@ -76,11 +118,23 @@
           "default": "127.0.0.1",
           "description": "Host to bind. Use 0.0.0.0 to expose beyond loopback (NOT recommended)."
         },
-        "autotel.buffer.maxSpans": { "type": "number", "default": 10000 },
-        "autotel.buffer.maxLogs": { "type": "number", "default": 10000 },
-        "autotel.buffer.maxAgeMs": { "type": "number", "default": 1800000 },
+        "autotel.buffer.maxSpans": {
+          "type": "number",
+          "default": 10000
+        },
+        "autotel.buffer.maxLogs": {
+          "type": "number",
+          "default": 10000
+        },
+        "autotel.buffer.maxAgeMs": {
+          "type": "number",
+          "default": 1800000
+        },
         "autotel.source.workspaceRoot": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null,
           "description": "Override workspace root for source resolution. Null = auto."
         },
@@ -92,26 +146,34 @@
     }
   },
   "dependencies": {
-    "autotel-devtools": "workspace:*",
-    "@preact/signals-core": "^1.8.0"
+    "@preact/signals-core": "^1.8.0",
+    "autotel-devtools": "workspace:*"
   },
   "peerDependencies": {
     "autotel": "workspace:*"
   },
   "peerDependenciesMeta": {
-    "autotel": { "optional": true }
+    "autotel": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@preact/preset-vite": "^2.10.0",
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^2.4.0",
     "@vscode/vsce": "^3.0.0",
-    "@preact/preset-vite": "^2.10.0",
+    "ovsx": "^0.10.12",
     "preact": "^10.29.0",
     "tsup": "^8.5.0",
     "typescript": "^5.6.0",
     "vite": "^8.0.0",
     "vitest": "^4.1.0"
   },
-  "files": ["dist", "resources"]
+  "files": [
+    "dist",
+    "resources",
+    "LICENSE",
+    "README.md"
+  ]
 }
