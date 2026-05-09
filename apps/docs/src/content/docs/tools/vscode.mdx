@@ -1,0 +1,129 @@
+---
+title: VS Code Extension
+description: OpenTelemetry inside the editor. A local OTLP receiver, live tree views, and source jumps from any span.
+---
+
+`autotel-vscode` puts the receiver in your editor. It listens for OTLP/HTTP
+on `127.0.0.1:4318`, buffers traces and logs in memory, and surfaces them
+in the activity bar. Spans that carry `code.filepath` and `code.lineno`
+jump straight to the source line.
+
+No daemon, no separate collector, no account. Point any OTLP-compatible
+exporter at `http://127.0.0.1:4318` and the data shows up in the
+sidebar.
+
+## Installation
+
+The extension publishes to the VS Code Marketplace as `jagreehal.autotel`.
+Install from the Extensions view, or from the command line:
+
+```bash
+code --install-extension jagreehal.autotel
+```
+
+Reload the window. A radio-tower icon appears in the status bar once the
+receiver is up.
+
+## Sending data
+
+Most OTLP/HTTP exporters need no extra configuration. The OpenTelemetry
+SDK defaults already match.
+
+```bash
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+node app.js
+```
+
+With autotel, the same applies. `init()` honours `OTEL_EXPORTER_OTLP_ENDPOINT`,
+so no code change is needed:
+
+```typescript
+import { init, trace } from 'autotel';
+
+init({ service: 'my-app' });
+
+const checkout = trace((ctx) => async (req, res) => {
+  ctx.set('order.id', req.body.id);
+  // ...
+});
+```
+
+## What the activity bar shows
+
+The Services view lists every service that has sent a span, with span
+and error counts. The Traces view is the recent trace list, newest
+first; expand a trace to see its spans and click a span to open it.
+The Logs view shows the most recent log records with severity hints.
+
+The Errors view is the one that earns its keep on a noisy day: it
+groups exceptions by fingerprint, so the same `TypeError` across ten
+traces collapses into one row with a count of ten, not ten separate
+rows.
+
+The buffer is in-memory. When it fills up, older entries are dropped and
+the dropped count shows in the status bar tooltip. The defaults (10,000
+spans, 10,000 logs) are enough for hours of typical local development.
+
+## Span detail
+
+Right-click any span and pick **Open Span Detail** to open it in a
+webview. The view shows identity, timing, status, attributes (sorted),
+and any events. If the span has source metadata, a **Reveal Source**
+button opens the file at the right line.
+
+The webview talks back to the extension over `postMessage`. It can ask
+the extension to reveal source or copy the span ID; it cannot mutate
+buffer state. CSP is locked down with a per-render nonce, so only the
+bundled webview script runs.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `Autotel: Start Receiver` | Start the OTLP HTTP receiver. |
+| `Autotel: Stop Receiver` | Stop the receiver and free the port. |
+| `Autotel: Set Receiver Port` | Change the listen port. Saved to workspace settings. |
+| `Autotel: Clear Buffered Data` | Drop all buffered spans, logs, and error groups. |
+| `Autotel: Reveal Span Source` | Jump to `code.filepath:code.lineno` for the selected span. |
+| `Autotel: Copy Span ID` | Copy the span ID to the clipboard. |
+| `Autotel: Open Span Detail` | Open the span in the detail webview. |
+
+## Settings
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `autotel.receiver.enabled` | `true` | Boot the receiver on activation. |
+| `autotel.receiver.host` | `127.0.0.1` | Bind host. Non-loopback values trigger a confirmation prompt. |
+| `autotel.receiver.port` | `4318` | TCP port. Standard OTLP/HTTP port. |
+| `autotel.buffer.maxSpans` | `10000` | Span buffer cap. Older entries drop first. |
+| `autotel.buffer.maxLogs` | `10000` | Log buffer cap. |
+| `autotel.buffer.maxAgeMs` | `1800000` | Reserved for future age-based eviction. |
+| `autotel.source.workspaceRoot` | `null` | Override workspace root for source resolution. `null` auto-detects. |
+| `autotel.source.followSymlinks` | `false` | Follow symlinks when resolving span source paths. |
+
+## When the port is taken
+
+If something else is already on `4318` (an OpenTelemetry Collector is the
+usual culprit), the extension cannot bind. The status bar shows
+"Autotel port busy" and a warning fires. Run `Autotel: Set Receiver Port`
+and pick another port. Update your app's `OTEL_EXPORTER_OTLP_ENDPOINT`
+to match.
+
+## Security notes
+
+- The receiver binds to `127.0.0.1` by default. Setting the host to
+  something non-loopback prompts before starting.
+- The `revealSource` command rejects paths outside any workspace folder.
+  The check uses `path.relative` against the resolved workspace root, so
+  symlink games and `..` traversal cannot escape.
+- Maximum request body is 10 MB. Anything larger returns `413 Payload too
+  large`.
+- No credentials live in settings. Remote-export support, planned for
+  v0.2, will use `vscode.SecretStorage`.
+
+## Compatibility
+
+- VS Code `1.85` or later.
+- OTLP/HTTP with JSON. Protobuf is not yet supported.
+- Works with autotel and with vanilla OpenTelemetry SDKs.
