@@ -32,7 +32,10 @@ const integrations = [
     </header>
 
     <div class="block">
-      <p class="block__label">Frameworks</p>
+      <p class="block__label">
+        <span class="block__label-num" aria-hidden="true">01</span>
+        Frameworks
+      </p>
       <ul class="grid">
         {frameworks.map((f) => (
           <li>
@@ -46,7 +49,10 @@ const integrations = [
     </div>
 
     <div class="block">
-      <p class="block__label">Integrations</p>
+      <p class="block__label">
+        <span class="block__label-num" aria-hidden="true">02</span>
+        Integrations
+      </p>
       <ul class="grid">
         {integrations.map((f) => (
           <li>
@@ -63,8 +69,12 @@ const integrations = [
 
 <style>
   .frameworks {
-    border-top: 1px solid var(--sl-color-gray-6);
+    border-top: 1px solid var(--color-charcoal-grey);
     padding-block: clamp(3rem, 6vw, 5rem);
+  }
+
+  :root[data-theme='light'] .frameworks {
+    border-top-color: var(--sl-color-gray-5);
   }
 
   .frameworks__inner {
@@ -80,21 +90,27 @@ const integrations = [
 
   .frameworks__eyebrow {
     margin: 0 0 0.5rem;
-    font-family: var(--sl-font-mono);
-    font-size: 0.72rem;
+    font-family: var(--sl-font);
+    font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.18em;
-    color: var(--sl-color-accent);
+    color: var(--color-storm-cloud);
+    font-weight: 510;
   }
 
   .frameworks__title {
     margin: 0;
     font-family: var(--sl-font);
-    font-size: clamp(1.6rem, 3.2vw, 2.25rem);
-    line-height: 1.15;
+    font-size: clamp(1.5rem, 3vw, 2.125rem);
+    line-height: 1.18;
     letter-spacing: -0.02em;
-    color: var(--sl-color-white);
+    color: var(--color-porcelain);
+    font-weight: 590;
     border: 0;
+  }
+
+  :root[data-theme='light'] .frameworks__title {
+    color: var(--color-pitch-black);
   }
 
   .block + .block {
@@ -102,12 +118,23 @@ const integrations = [
   }
 
   .block__label {
-    font-family: var(--sl-font-mono);
-    font-size: 0.72rem;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-family: var(--sl-font);
+    font-size: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--sl-color-gray-3);
-    margin: 0 0 0.85rem;
+    letter-spacing: 0.16em;
+    color: var(--color-storm-cloud);
+    margin: 0 0 0.875rem;
+    font-weight: 510;
+  }
+
+  .block__label-num {
+    font-family: var(--sl-font-mono);
+    color: var(--color-fog-grey);
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
   }
 
   .grid {
@@ -117,10 +144,15 @@ const integrations = [
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
     gap: 1px;
-    background: var(--sl-color-gray-6);
-    border: 1px solid var(--sl-color-gray-6);
-    border-radius: 8px;
+    background: var(--color-charcoal-grey);
+    border: 1px solid var(--color-charcoal-grey);
+    border-radius: 6px;
     overflow: hidden;
+  }
+
+  :root[data-theme='light'] .grid {
+    background: var(--sl-color-gray-5);
+    border-color: var(--sl-color-gray-5);
   }
 
   .chip {
@@ -128,31 +160,46 @@ const integrations = [
     align-items: center;
     justify-content: space-between;
     gap: 0.6rem;
-    padding: 0.85rem 1rem;
-    background: var(--sl-color-bg);
-    color: var(--sl-color-text);
-    font-family: var(--sl-font-mono);
-    font-size: 0.85rem;
+    padding: 0.875rem 1rem;
+    background: var(--color-graphite);
+    color: var(--color-porcelain);
+    font-family: var(--sl-font);
+    font-size: 0.875rem;
+    font-weight: 510;
+    letter-spacing: -0.011em;
     text-decoration: none;
     transition:
-      background 150ms ease,
-      color 150ms ease;
+      background var(--sl-transition),
+      color var(--sl-transition);
+  }
+
+  :root[data-theme='light'] .chip {
+    background: #ffffff;
+    color: var(--color-pitch-black);
   }
 
   .chip__arrow {
-    color: var(--sl-color-gray-4);
+    color: var(--color-fog-grey);
     transition:
-      transform 200ms ease,
-      color 150ms ease;
+      transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      color var(--sl-transition);
   }
 
   .chip:hover {
-    background: color-mix(in oklch, var(--sl-color-accent) 6%, var(--sl-color-bg));
-    color: var(--sl-color-accent);
+    background: var(--color-deep-slate);
+    color: var(--color-porcelain);
+  }
+
+  :root[data-theme='light'] .chip:hover {
+    background: var(--sl-color-gray-6);
   }
 
   .chip:hover .chip__arrow {
-    color: var(--sl-color-accent);
+    color: var(--color-neon-lime);
     transform: translateX(2px);
+  }
+
+  :root[data-theme='light'] .chip:hover .chip__arrow {
+    color: var(--sl-color-accent);
   }
 </style>

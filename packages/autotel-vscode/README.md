@@ -31,6 +31,7 @@ If port 4318 is taken (most often by a local OpenTelemetry Collector), run **Aut
 | `Autotel: Reveal Span Source` | Jump to `code.filepath`:`code.lineno` for the selected span. |
 | `Autotel: Copy Span ID` | Copy the span ID to the clipboard. |
 | `Autotel: Open Span Detail` | Open the span in a detail webview. |
+| `Autotel: Open Devtools UI` | Open the `autotel-devtools` UI in a VS Code webview (or browser). |
 
 ## Settings
 
@@ -42,8 +43,7 @@ If port 4318 is taken (most often by a local OpenTelemetry Collector), run **Aut
 | `autotel.buffer.maxSpans` | `10000` | Span buffer cap. Older spans are dropped past the cap and the count shows in the status bar tooltip. |
 | `autotel.buffer.maxLogs` | `10000` | Log buffer cap. |
 | `autotel.buffer.maxAgeMs` | `1800000` | Reserved for future age-based eviction. |
-| `autotel.source.workspaceRoot` | `null` | Override workspace root for source resolution. `null` means auto-detect. |
-| `autotel.source.followSymlinks` | `false` | Follow symlinks when resolving span source paths. |
+| `autotel.devtools.url` | `null` | Optional URL for an existing `autotel-devtools` UI. If unset, falls back to `http://<receiver.host>:<receiver.port>`. |
 
 ## Security
 

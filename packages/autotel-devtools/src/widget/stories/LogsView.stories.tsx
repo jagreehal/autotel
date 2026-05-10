@@ -1,7 +1,12 @@
 import { h } from 'preact';
 import type { Meta, StoryObj } from '@storybook/preact-vite';
 import { LogsView } from '../components/LogsView';
-import { updateWidgetData, clearAllData } from '../store';
+import {
+  updateWidgetData,
+  clearAllData,
+  setPaused,
+  pendingLogsSignal,
+} from '../store';
 import type { LogData } from '../types';
 
 function makeLog(overrides: Partial<LogData> = {}): LogData {
@@ -29,6 +34,7 @@ const meta = {
   },
   beforeEach: () => {
     clearAllData();
+    setPaused(false);
   },
 } satisfies Meta<typeof LogsView>;
 
@@ -203,5 +209,40 @@ export const MultipleResources: Story = {
         }),
       ],
     });
+  },
+};
+
+export const PausedWithBuffer: Story = {
+  play: async () => {
+    updateWidgetData({
+      logs: [
+        makeLog({ id: 'shown-1', body: 'Application ready', severityText: 'INFO' }),
+      ],
+    });
+    setPaused(true);
+    pendingLogsSignal.value = [
+      makeLog({
+        id: 'pending-1',
+        body: 'Slow query detected (warn)',
+        severityText: 'WARN',
+        severityNumber: 13,
+      }),
+      makeLog({
+        id: 'pending-2',
+        body: 'Cache miss',
+        severityText: 'INFO',
+      }),
+      makeLog({
+        id: 'pending-3',
+        body: 'Connection refused',
+        severityText: 'ERROR',
+        severityNumber: 17,
+      }),
+      makeLog({
+        id: 'pending-4',
+        body: 'Retrying request',
+        severityText: 'INFO',
+      }),
+    ];
   },
 };

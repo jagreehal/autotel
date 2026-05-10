@@ -60,15 +60,16 @@ describe('Widget Store', () => {
     });
 
     it('limits log history to 100 entries', () => {
+      const base = Date.now();
       const logs = Array.from({ length: 150 }, (_, i) =>
-        makeLog({ id: `log-${i}` }),
+        makeLog({ id: `log-${i}`, timestamp: base + i }),
       );
 
       updateWidgetData({ logs });
 
       expect(sortedLogsSignal.value).toHaveLength(100);
-      // Should keep most recent logs
-      expect(sortedLogsSignal.value[0].id).toBe('log-149');
+      // slice(0, 100) keeps the first 100 prepended entries (log-0..log-99); sort shows newest of those first
+      expect(sortedLogsSignal.value[0].id).toBe('log-99');
     });
 
     it('sorts logs by timestamp (most recent first)', () => {

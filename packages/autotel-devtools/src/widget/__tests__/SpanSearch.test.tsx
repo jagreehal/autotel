@@ -1,8 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { SpanSearch } from '../components/SpanSearch';
-import { signal } from '@preact/signals';
 import { h } from 'preact';
-import { render, fireEvent, screen, waitFor } from '@testing-library/preact';
+import {
+  cleanup,
+  render,
+  fireEvent,
+  screen,
+  waitFor,
+} from '@testing-library/preact';
 import type { SpanData } from '../types';
 
 function makeSpan(overrides: Partial<SpanData> = {}): SpanData {
@@ -22,6 +27,11 @@ function makeSpan(overrides: Partial<SpanData> = {}): SpanData {
 }
 
 describe('SpanSearch with debounce', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
   it('debounces search input with 300ms default', async () => {
     const onMatchesChange = vi.fn();
     const onCurrentMatchChange = vi.fn();
@@ -31,6 +41,7 @@ describe('SpanSearch with debounce', () => {
     ];
 
     render(h(SpanSearch, { spans, onMatchesChange, onCurrentMatchChange }));
+    onMatchesChange.mockClear();
 
     const input = screen.getByPlaceholderText(/search spans/i);
 
@@ -39,7 +50,7 @@ describe('SpanSearch with debounce', () => {
     fireEvent.input(input, { target: { value: 'GET /' } });
     fireEvent.input(input, { target: { value: 'GET /api' } });
 
-    // Should not have called yet
+    // Debounce: no search callback yet (mount already cleared empty-set call)
     expect(onMatchesChange).not.toHaveBeenCalled();
 
     // Wait for debounce
@@ -50,7 +61,7 @@ describe('SpanSearch with debounce', () => {
       { timeout: 400 },
     );
 
-    // Should only be called once despite multiple inputs
+    // One debounced call despite multiple inputs
     expect(onMatchesChange).toHaveBeenCalledTimes(1);
 
     // Should find the matching span
@@ -69,6 +80,7 @@ describe('SpanSearch with debounce', () => {
         debounceMs: 100,
       }),
     );
+    onMatchesChange.mockClear();
 
     const input = screen.getByPlaceholderText(/search spans/i);
     fireEvent.input(input, { target: { value: 'test' } });
@@ -89,6 +101,7 @@ describe('SpanSearch with debounce', () => {
     render(
       h(SpanSearch, { spans, onMatchesChange, onCurrentMatchChange: vi.fn() }),
     );
+    onMatchesChange.mockClear();
 
     const input = screen.getByPlaceholderText(/search spans/i);
 
@@ -117,6 +130,7 @@ describe('SpanSearch with debounce', () => {
     render(
       h(SpanSearch, { spans, onMatchesChange, onCurrentMatchChange: vi.fn() }),
     );
+    onMatchesChange.mockClear();
 
     const input = screen.getByPlaceholderText(/search spans/i);
     fireEvent.input(input, { target: { value: 'user.id' } });
@@ -146,17 +160,15 @@ describe('SpanSearch with debounce', () => {
         debounceMs: 500,
       }),
     );
+    onMatchesChange.mockClear();
 
     const input = screen.getByPlaceholderText(/search spans/i);
     fireEvent.input(input, { target: { value: 'test' } });
 
-    // Advance timers
     vi.advanceTimersByTime(250);
     expect(onMatchesChange).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(250);
     expect(onMatchesChange).toHaveBeenCalled();
-
-    vi.useRealTimers();
   });
 });

@@ -1,6 +1,7 @@
 // src/widget/components/Layout.tsx
 import { h } from 'preact'
 import { TabBar, TabContent } from './TabContainer'
+import { SnapshotBar } from './SnapshotBar'
 
 export function Layout() {
   return (
@@ -9,6 +10,7 @@ export function Layout() {
         <TabBar orientation="vertical" />
       </div>
       <div className="flex-1 flex flex-col min-w-0">
+        <SnapshotBar />
         <div className="md:hidden">
           <TabBar orientation="horizontal" />
         </div>

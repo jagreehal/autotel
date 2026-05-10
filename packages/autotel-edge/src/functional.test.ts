@@ -592,6 +592,18 @@ describe('Functional API', () => {
       expect(value).toBe(7);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
     });
+
+    it('should accept a string name as first argument (sync)', () => {
+      const value = span('sync-name-shorthand', () => 11);
+      expect(value).toBe(11);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    });
+
+    it('should accept a string name as first argument (async)', async () => {
+      const value = await span('async-name-shorthand', async () => 13);
+      expect(value).toBe(13);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    });
   });
 
   describe('Immediate execution pattern', () => {

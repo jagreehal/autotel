@@ -1,138 +1,275 @@
 /* ================================================================
-   Theme matching autotel aesthetic
-   - Inter font family
-   - JetBrains Mono for code
-   - Dark-first design with red accents
+   autotel-docs — Midnight Command Center
+   Reference: Linear's dark UI. Pitch Black canvas, layered surfaces,
+   Neon Lime reserved for THE primary action, Aether Blue for links.
+   See .impeccable.md for design principles.
    ================================================================ */
 
-/* ---- Typography ---- */
+/* ---- Linear design tokens ------------------------------------------------ */
 
 :root {
-  --sl-font:
-    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --sl-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-}
-
-/* ---- Dark theme (primary) ---- */
-
-:root[data-theme='dark'] {
-  --sl-color-accent-low: #450a0a;
-  --sl-color-accent: #dc2626;
-  --sl-color-accent-high: #fca5a5;
-  --sl-color-white: #ffffff;
-  --sl-color-gray-1: #eceef2;
-  --sl-color-gray-2: #c6c8ce;
-  --sl-color-gray-3: #a0a4ae;
-  --sl-color-gray-4: #545861;
-  --sl-color-gray-5: #353841;
-  --sl-color-gray-6: #24272f;
-  --sl-color-black: #17181c;
+  /* Surfaces */
+  --color-pitch-black: #08090a;
+  --color-graphite: #0f1011;
+  --color-deep-slate: #161718;
+  --color-charcoal-grey: #23252a;
+  --color-muted-ash: #323334;
+  --color-gunmetal: #383b3f;
 
   /* Text */
-  --sl-color-text: #eceef2;
-  --sl-color-text-accent: #dc2626;
+  --color-porcelain: #f7f8f8;
+  --color-light-steel: #d0d6e0;
+  --color-storm-cloud: #8a8f98;
+  --color-fog-grey: #62666d;
+  --color-alabaster: #e5e5e6;
 
-  /* Backgrounds */
-  --sl-color-bg: #17181c;
-  --sl-color-bg-nav: #17181c;
-  --sl-color-bg-sidebar: #17181c;
+  /* Accents */
+  --color-neon-lime: #e4f222;
+  --color-aether-blue: #5e6ad2;
+  --color-warning-red: #eb5757;
+  --color-cyan-spark: #02b8cc;
+  --color-emerald: #27a644;
 
-  /* Code blocks */
-  --sl-color-bg-inline-code: #24272f;
+  /* Shadows */
+  --shadow-card: rgba(0, 0, 0, 0.4) 0 2px 4px 0;
+  --shadow-elevated-inset: rgb(35, 37, 42) 0 0 0 1px inset;
+  --shadow-focus-ring: rgba(228, 242, 34, 0.35) 0 0 0 3px;
+
+  /* Type system */
+  --sl-font:
+    'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --sl-font-mono:
+    'Berkeley Mono', 'IBM Plex Mono', 'JetBrains Mono', ui-monospace,
+    SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --sl-transition: 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* ---- Light theme ---- */
+/* Inter Variable wants -0.13px tracking at body and OpenType feature flags
+   that turn on alternate single-storey 'a' / 'g' (cv01) and stylistic set 3.
+   These are subtle but they are what makes Inter feel like Linear's Inter
+   rather than a 2018 Google Fonts copy. */
+html {
+  font-feature-settings:
+    'cv01' 1,
+    'ss03' 1;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.011em;
+}
+
+/* ---- Dark theme (primary) ----------------------------------------------- */
+
+:root[data-theme='dark'] {
+  /* Starlight token mapping */
+  --sl-color-accent-low: #1a1d3d;
+  --sl-color-accent: var(--color-aether-blue);
+  --sl-color-accent-high: #aab1ff;
+
+  --sl-color-white: var(--color-porcelain);
+  --sl-color-gray-1: #eceef0; /* very high contrast text */
+  --sl-color-gray-2: var(--color-light-steel);
+  --sl-color-gray-3: var(--color-storm-cloud);
+  --sl-color-gray-4: var(--color-fog-grey);
+  --sl-color-gray-5: var(--color-muted-ash);
+  --sl-color-gray-6: var(--color-charcoal-grey);
+  --sl-color-black: var(--color-pitch-black);
+
+  --sl-color-text: var(--color-porcelain);
+  --sl-color-text-accent: var(--color-aether-blue);
+
+  --sl-color-bg: var(--color-pitch-black);
+  --sl-color-bg-nav: var(--color-pitch-black);
+  --sl-color-bg-sidebar: var(--color-pitch-black);
+  --sl-color-bg-inline-code: var(--color-graphite);
+
+  /* Shiki code highlighting on Graphite surfaces */
+  --astro-code-color-background: var(--color-graphite);
+  --astro-code-color-text: var(--color-porcelain);
+}
+
+/* ---- Light theme -------------------------------------------------------- */
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #fee2e2;
-  --sl-color-accent: #dc2626;
-  --sl-color-accent-high: #7f1d1d;
-  --sl-color-white: #17181c;
-  --sl-color-gray-1: #24272f;
+  --sl-color-accent-low: #e9ebff;
+  --sl-color-accent: #4751b8;
+  --sl-color-accent-high: #2c3490;
+
+  --sl-color-white: var(--color-pitch-black);
+  --sl-color-gray-1: #1f2024;
   --sl-color-gray-2: #353841;
   --sl-color-gray-3: #545861;
   --sl-color-gray-4: #888b96;
-  --sl-color-gray-5: #c0c2c7;
-  --sl-color-gray-6: #eceef2;
-  --sl-color-black: #ffffff;
+  --sl-color-gray-5: #d3d5da;
+  --sl-color-gray-6: #ececef;
+  --sl-color-black: var(--color-porcelain);
 
-  /* Text */
-  --sl-color-text: #17181c;
-  --sl-color-text-accent: #dc2626;
+  --sl-color-text: var(--color-pitch-black);
+  --sl-color-text-accent: #4751b8;
 
-  /* Backgrounds */
-  --sl-color-bg: #ffffff;
-  --sl-color-bg-nav: #ffffff;
-  --sl-color-bg-sidebar: var(--sl-color-bg-nav);
-
-  /* Code blocks */
-  --sl-color-bg-inline-code: #eceef2;
+  --sl-color-bg: var(--color-porcelain);
+  --sl-color-bg-nav: var(--color-porcelain);
+  --sl-color-bg-sidebar: var(--color-porcelain);
+  --sl-color-bg-inline-code: #f0f1f3;
 }
 
-/* ---- Global refinements ---- */
+/* ---- Body baseline ------------------------------------------------------ */
 
-html {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+body {
+  font-family: var(--sl-font);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.011em;
+  color: var(--sl-color-text);
+  background: var(--sl-color-bg);
 }
 
-/* Tighten heading spacing */
+/* ---- Headings — markdown content ---------------------------------------- */
+
 .sl-markdown-content h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: clamp(1.75rem, 2.4vw, 2.25rem);
+  font-weight: 590;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
 }
 
 .sl-markdown-content h2 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 1.375rem;
+  font-weight: 590;
+  line-height: 1.25;
+  letter-spacing: -0.018em;
   margin-top: 2.5rem;
+  color: var(--sl-color-white);
 }
 
 .sl-markdown-content h3 {
-  font-size: 1.15rem;
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 510;
+  line-height: 1.4;
+  letter-spacing: -0.013em;
+  color: var(--sl-color-white);
 }
 
-/* Better code block styling */
+.sl-markdown-content h4 {
+  font-size: 0.9375rem;
+  font-weight: 510;
+  letter-spacing: -0.012em;
+  color: var(--sl-color-white);
+}
+
+.sl-markdown-content p,
+.sl-markdown-content li {
+  color: var(--sl-color-gray-2);
+}
+
+/* Body-text link styling — Aether Blue for actual prose links.
+   Exclusions are wrapped in :where() so they don't bump specificity, which
+   lets .foot a / component-scoped overrides win on equal terms. */
+.sl-markdown-content a:where(:not(.btn, .chip, .cta__btn, .copy-markdown-btn)) {
+  color: var(--sl-color-accent);
+  text-decoration: none;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: color var(--sl-transition);
+}
+
+.sl-markdown-content a:where(:not(.btn, .chip, .cta__btn, .copy-markdown-btn)):hover {
+  color: var(--sl-color-accent-high);
+  text-decoration: underline;
+}
+
+/* Landing footer links — quiet, light steel; hover Aether Blue. The inner
+   <a> tags don't carry a class so we have to take them by parent specificity. */
+.sl-markdown-content .foot a {
+  color: var(--color-light-steel);
+  text-decoration: none;
+}
+
+.sl-markdown-content .foot a:hover {
+  color: var(--color-aether-blue);
+  text-decoration: none;
+}
+
+:root[data-theme='light'] .sl-markdown-content .foot a {
+  color: var(--sl-color-gray-2);
+}
+
+/* ---- Code ---------------------------------------------------------------- */
+
 .sl-markdown-content pre {
-  border: 1px solid var(--sl-color-gray-5);
-  border-radius: 8px;
+  border: 1px solid var(--color-charcoal-grey);
+  border-radius: 6px;
+  background: var(--color-graphite);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+}
+
+:root[data-theme='light'] .sl-markdown-content pre {
+  border-color: var(--sl-color-gray-5);
+  background: var(--sl-color-bg-inline-code);
 }
 
 .sl-markdown-content code:not(pre code) {
   border-radius: 4px;
-  padding: 0.15em 0.35em;
-  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  font-size: 0.86em;
+  background: var(--sl-color-bg-inline-code);
+  color: var(--sl-color-light-steel, var(--sl-color-gray-2));
+  border: 1px solid var(--color-charcoal-grey);
 }
 
-/* Table styling */
+:root[data-theme='light'] .sl-markdown-content code:not(pre code) {
+  border-color: var(--sl-color-gray-5);
+}
+
+/* ---- Tables -------------------------------------------------------------- */
+
 .sl-markdown-content table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
+  letter-spacing: -0.01em;
 }
 
 .sl-markdown-content th {
-  font-weight: 600;
+  font-weight: 510;
   text-align: left;
-  border-bottom: 2px solid var(--sl-color-gray-5);
+  border-bottom: 1px solid var(--color-charcoal-grey);
+  color: var(--sl-color-white);
+  padding: 0.75rem 0.875rem;
 }
 
-.sl-markdown-content td,
-.sl-markdown-content th {
-  padding: 0.6rem 0.8rem;
+.sl-markdown-content td {
+  padding: 0.65rem 0.875rem;
+  border-bottom: 1px solid var(--color-charcoal-grey);
+  color: var(--sl-color-gray-2);
 }
 
-.sl-markdown-content tr {
-  border-bottom: 1px solid var(--sl-color-gray-6);
+.sl-markdown-content tr:last-child td {
+  border-bottom: 0;
 }
 
-/* ---- Custom landing page (template: splash on /) ----
-   The custom <Hero /> override + landing components render full-bleed
-   sections. Starlight's splash main pads + center-aligns the content
-   area; we neutralise that here so our sections own the canvas. */
+/* ---- Blockquotes / asides ----------------------------------------------- */
+
+.sl-markdown-content blockquote {
+  margin: 1.5rem 0;
+  padding: 0.875rem 1rem;
+  background: var(--color-graphite);
+  border: 1px solid var(--color-charcoal-grey);
+  border-radius: 6px;
+  color: var(--sl-color-gray-2);
+}
+
+.sl-markdown-content blockquote p {
+  margin: 0;
+}
+
+/* ---- Splash hero overrides ---------------------------------------------- */
 
 [data-has-hero] main {
   padding-inline: 0 !important;
@@ -150,32 +287,98 @@ html {
   text-align: left;
 }
 
-/* Starlight's default action buttons are unused on the new landing — hide
-   the action row container if it ever renders empty. */
 [data-has-hero] .hero .actions:empty {
   display: none;
 }
 
-/* Default tagline styling preserved for any future splash pages */
 .hero .tagline {
-  font-size: 1.2rem;
-  max-width: 40ch;
+  font-size: 1.0625rem;
+  max-width: 42ch;
+  letter-spacing: -0.012em;
 }
 
-/* Sidebar refinement */
+/* Sidebar — kept rhythm tight (Linear "compact density") */
 nav.sidebar .top-level > li + li {
-  margin-top: 0.25rem;
+  margin-top: 0.125rem;
 }
 
-/* Smooth transitions */
-:root {
-  --sl-transition: 150ms ease;
+nav.sidebar a {
+  letter-spacing: -0.011em;
 }
 
-a {
-  transition: color var(--sl-transition);
+nav.sidebar a[aria-current='page'] {
+  background: var(--color-graphite);
+  color: var(--sl-color-white);
+  border-radius: 4px;
 }
 
-.sl-markdown-no-margin :not(a, strong, em, del, span, input, code, br) + :not(a, strong, em, del, span, input, code, br, :where(.not-content *)){
+/* Top nav */
+header.header {
+  border-bottom: 1px solid var(--color-charcoal-grey);
+  background: color-mix(in oklch, var(--color-pitch-black) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+:root[data-theme='light'] header.header {
+  background: color-mix(in oklch, var(--color-porcelain) 88%, transparent);
+  border-color: var(--sl-color-gray-5);
+}
+
+/* Site title */
+.site-title {
+  letter-spacing: -0.018em;
+  font-weight: 510;
+}
+
+/* Selection — single point of lime in the document body */
+::selection {
+  background: var(--color-neon-lime);
+  color: var(--color-pitch-black);
+}
+
+/* Focus rings — subtle lime, only on keyboard focus */
+:focus-visible {
+  outline: 2px solid var(--color-neon-lime);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Scrollbar — subtle, dark */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-muted-ash) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-muted-ash);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gunmetal);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.sl-markdown-no-margin :not(a, strong, em, del, span, input, code, br) + :not(a, strong, em, del, span, input, code, br, :where(.not-content *)) {
   margin-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

@@ -1,7 +1,12 @@
 import { h } from 'preact';
 import type { Meta, StoryObj } from '@storybook/preact-vite';
 import { TracesView } from '../components/TracesView';
-import { updateWidgetData, clearAllData } from '../store';
+import {
+  updateWidgetData,
+  clearAllData,
+  setPaused,
+  pendingTracesSignal,
+} from '../store';
 import type { TraceData, SpanData } from '../types';
 
 function makeSpan(overrides: Partial<SpanData> = {}): SpanData {
@@ -45,6 +50,7 @@ const meta = {
   },
   beforeEach: () => {
     clearAllData();
+    setPaused(false);
   },
 } satisfies Meta<typeof TracesView>;
 
@@ -148,5 +154,33 @@ export const LongDuration: Story = {
         }),
       ],
     });
+  },
+};
+
+export const PausedWithBuffer: Story = {
+  play: async () => {
+    updateWidgetData({
+      traces: [
+        makeTrace({
+          traceId: 'shown-1',
+          rootSpan: makeSpan({ name: 'GET /api/users' }),
+        }),
+      ],
+    });
+    setPaused(true);
+    pendingTracesSignal.value = [
+      makeTrace({
+        traceId: 'pending-1',
+        rootSpan: makeSpan({ name: 'POST /api/orders' }),
+      }),
+      makeTrace({
+        traceId: 'pending-2',
+        rootSpan: makeSpan({ name: 'GET /api/products' }),
+      }),
+      makeTrace({
+        traceId: 'pending-3',
+        rootSpan: makeSpan({ name: 'POST /api/checkout' }),
+      }),
+    ];
   },
 };

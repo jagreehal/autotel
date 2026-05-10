@@ -786,15 +786,24 @@ export interface SpanOptions {
   attributes?: Record<string, string | number | boolean>;
 }
 
+// Aligned with trace(): accept a name string OR full SpanOptions as the first
+// argument so span() and trace() share the same calling conventions.
+export function span<T = unknown>(name: string, fn: (span: Span) => T): T;
+export function span<T = unknown>(
+  name: string,
+  fn: (span: Span) => Promise<T>,
+): Promise<T>;
 export function span<T = unknown>(options: SpanOptions, fn: (span: Span) => T): T;
 export function span<T = unknown>(
   options: SpanOptions,
   fn: (span: Span) => Promise<T>,
 ): Promise<T>;
 export function span<T = unknown>(
-  options: SpanOptions,
+  nameOrOptions: string | SpanOptions,
   fn: (span: Span) => T | Promise<T>,
 ): T | Promise<T> {
+  const options: SpanOptions =
+    typeof nameOrOptions === 'string' ? { name: nameOrOptions } : nameOrOptions;
   const tracer = otelTrace.getTracer('autotel-edge');
 
   const execute = (span: Span) => {

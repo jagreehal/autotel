@@ -2124,44 +2124,56 @@ export interface SpanOptions {
  * Useful for adding tracing to specific code blocks without wrapping
  * the entire function. Supports both synchronous and asynchronous functions.
  *
+ * Mirrors `trace()`: pass a span name as the first argument for the common
+ * case, or full `SpanOptions` when you need to attach attributes.
+ *
  * @example
  * ```typescript
- * // Async function
- * async function processOrder(order: Order) {
- *   await span({
- *     name: 'payment.charge',
- *     attributes: { amount: order.total }
- *   }, async (span) => {
- *     await chargeCustomer(order);
- *   })
- * }
+ * // Name shorthand
+ * await span('payment.charge', async (span) => {
+ *   await chargeCustomer(order);
+ * })
  *
- * // Sync function
- * function calculateTotal(items: Item[]) {
- *   return span({
- *     name: 'calculateTotal',
- *     attributes: { itemCount: items.length }
- *   }, (span) => {
- *     return items.reduce((sum, item) => sum + item.price, 0);
- *   })
- * }
+ * // Full options when attributes are needed
+ * await span(
+ *   { name: 'payment.charge', attributes: { amount: order.total } },
+ *   async (span) => {
+ *     await chargeCustomer(order);
+ *   },
+ * )
+ *
+ * // Sync
+ * const total = span('calculateTotal', (span) => {
+ *   return items.reduce((sum, item) => sum + item.price, 0);
+ * })
  * ```
  */
-// Overload for sync functions (more specific - should come first)
+// Overloads — sync first (more specific match), then async.
+// Each shape is offered with a string name OR a full SpanOptions object so
+// span() aligns with trace()'s argument flexibility.
+export function span<T = unknown>(
+  name: string,
+  fn: (span: Span) => T,
+): T;
+export function span<T = unknown>(
+  name: string,
+  fn: (span: Span) => Promise<T>,
+): Promise<T>;
 export function span<T = unknown>(
   options: SpanOptions,
   fn: (span: Span) => T,
 ): T;
-// Overload for async functions
 export function span<T = unknown>(
   options: SpanOptions,
   fn: (span: Span) => Promise<T>,
 ): Promise<T>;
 // Implementation
 export function span<T = unknown>(
-  options: SpanOptions,
+  nameOrOptions: string | SpanOptions,
   fn: (span: Span) => T | Promise<T>,
 ): T | Promise<T> {
+  const options: SpanOptions =
+    typeof nameOrOptions === 'string' ? { name: nameOrOptions } : nameOrOptions;
   const config = getConfig();
   const tracer = config.tracer;
   const { name, attributes } = options;
