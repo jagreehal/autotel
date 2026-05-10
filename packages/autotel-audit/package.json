@@ -1,6 +1,6 @@
 {
   "name": "autotel-audit",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Audit-focused helpers for Autotel (force-keep + structured audit instrumentation)",
   "type": "module",
   "main": "./dist/index.js",
