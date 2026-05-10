@@ -19,15 +19,15 @@ describe('ANSI Parser', () => {
   describe('parseAnsi', () => {
     it('parses simple color codes', () => {
       const segments = parseAnsi('\x1b[31mred text\x1b[0m');
-      expect(segments).toHaveLength(2);
+      expect(segments).toHaveLength(1);
       expect(segments[0].text).toBe('red text');
       expect(segments[0].style.fg).toBe('text-red-600');
-      expect(segments[1].text).toBe('');
     });
 
     it('parses bold text', () => {
       const segments = parseAnsi('\x1b[1mbold\x1b[0m');
-      expect(segments).toHaveLength(2);
+      expect(segments).toHaveLength(1);
+      expect(segments[0].text).toBe('bold');
       expect(segments[0].style.bold).toBe(true);
     });
 

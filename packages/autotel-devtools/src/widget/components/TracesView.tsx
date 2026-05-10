@@ -3,7 +3,7 @@
  */
 
 import { h } from 'preact';
-import { useState } from 'preact/hooks';
+import { useMemo, useState } from 'preact/hooks';
 import {
   Database,
   Clock,
@@ -17,11 +17,19 @@ import {
   Download,
   Copy,
   Check,
+  Pause,
+  Play,
+  Search,
+  X,
 } from 'lucide-preact';
 import {
   sortedTracesSignal,
   selectedTraceSignal,
   setSelectedTrace,
+  pausedSignal,
+  pendingTraceCountSignal,
+  togglePaused,
+  dropPendingBuffer,
 } from '../store';
 import { formatDuration, formatTimestamp, getStatusColor } from '../utils';
 import { cn } from '../utils/cn';
@@ -37,24 +45,76 @@ import {
 import type { TraceData, SpanData } from '../types';
 
 type ViewMode = 'waterfall' | 'flame' | 'list';
+type StatusFilter = 'all' | 'error' | 'ok';
+
+function traceMatches(
+  trace: TraceData,
+  query: string,
+  status: StatusFilter,
+): boolean {
+  if (status === 'error' && trace.status !== 'ERROR') return false;
+  if (status === 'ok' && trace.status === 'ERROR') return false;
+  if (!query) return true;
+  const needle = query.toLowerCase();
+  if (trace.service?.toLowerCase().includes(needle)) return true;
+  if (trace.rootSpan?.name?.toLowerCase().includes(needle)) return true;
+  if (trace.traceId.toLowerCase().includes(needle)) return true;
+  if (trace.correlationId?.toLowerCase().includes(needle)) return true;
+  return trace.spans.some((span) => span.name?.toLowerCase().includes(needle));
+}
 
 export function TracesView() {
   const traces = sortedTracesSignal.value;
   const selectedTrace = selectedTraceSignal.value;
+  const paused = pausedSignal.value;
+  const pendingCount = pendingTraceCountSignal.value;
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  const filtered = useMemo(
+    () => traces.filter((trace) => traceMatches(trace, query, statusFilter)),
+    [traces, query, statusFilter],
+  );
 
   if (selectedTrace) {
     return <TraceDetailView trace={selectedTrace} />;
   }
 
+  const isFiltered = query.length > 0 || statusFilter !== 'all';
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold flex items-center gap-2 text-zinc-900">
           <Database size={16} />
-          Traces ({traces.length})
+          Traces ({isFiltered ? `${filtered.length} of ${traces.length}` : traces.length})
         </h3>
         <div className="flex items-center gap-1">
+          <button
+            onClick={togglePaused}
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
+              paused
+                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                : 'hover:bg-zinc-100 text-zinc-600',
+            )}
+            title={paused ? 'Resume live tail' : 'Pause live tail'}
+          >
+            {paused ? <Play size={12} /> : <Pause size={12} />}
+            {paused
+              ? `Resume${pendingCount > 0 ? ` (+${pendingCount})` : ''}`
+              : 'Pause'}
+          </button>
+          {paused && pendingCount > 0 && (
+            <button
+              onClick={dropPendingBuffer}
+              className="px-2 py-1 text-xs rounded text-zinc-500 hover:bg-zinc-100 transition-colors"
+              title="Drop buffered traces received while paused"
+            >
+              Drop buffer
+            </button>
+          )}
           {traces.length > 0 && (
             <button
               onClick={() => downloadTracesAsJson(traces)}
@@ -67,15 +127,59 @@ export function TracesView() {
         </div>
       </div>
 
+      {/* Filter bar */}
+      <div className="px-4 py-2 border-b border-zinc-200 flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search
+            size={12}
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400"
+          />
+          <input
+            value={query}
+            onInput={(event) =>
+              setQuery((event.currentTarget as HTMLInputElement).value)
+            }
+            className="w-full pl-7 pr-7 py-1 text-xs rounded border border-zinc-200 focus:border-zinc-400 focus:outline-none"
+            placeholder="Filter by service, span, trace id…"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-700"
+              title="Clear filter"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(
+              (event.currentTarget as HTMLSelectElement).value as StatusFilter,
+            )
+          }
+          className="text-xs border border-zinc-200 rounded px-1.5 py-1 bg-white text-zinc-700"
+        >
+          <option value="all">All</option>
+          <option value="error">Errors</option>
+          <option value="ok">OK</option>
+        </select>
+      </div>
+
       {/* Traces list */}
       <div className="flex-1 overflow-auto p-4">
         {traces.length === 0 ? (
           <div className="text-center text-zinc-500 text-sm py-12">
             <p className="mb-3">No traces yet. Waiting for data...</p>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center text-zinc-500 text-sm py-12">
+            No traces match the current filter.
+          </div>
         ) : (
           <div className="space-y-2">
-            {traces.map((trace) => (
+            {filtered.map((trace) => (
               <TraceRow
                 key={trace.traceId}
                 trace={trace}

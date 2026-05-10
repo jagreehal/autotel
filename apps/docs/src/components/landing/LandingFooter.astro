@@ -12,7 +12,8 @@ const year = new Date().getFullYear();
     </div>
     <div class="cta__actions">
       <a class="cta__btn cta__btn--primary" href="/autotel/quick-start/">
-        Quick start <span aria-hidden="true">→</span>
+        <span>Quick start</span>
+        <span aria-hidden="true">→</span>
       </a>
       <a class="cta__btn cta__btn--ghost" href="/autotel/introduction/">
         Read the intro
@@ -38,8 +39,12 @@ const year = new Date().getFullYear();
 
 <style>
   .cta {
-    border-top: 1px solid var(--sl-color-gray-6);
+    border-top: 1px solid var(--color-charcoal-grey);
     padding-block: clamp(3rem, 6vw, 5rem) 0;
+  }
+
+  :root[data-theme='light'] .cta {
+    border-top-color: var(--sl-color-gray-5);
   }
 
   .cta__inner {
@@ -59,11 +64,12 @@ const year = new Date().getFullYear();
 
   .cta__eyebrow {
     margin: 0 0 0.5rem;
-    font-family: var(--sl-font-mono);
-    font-size: 0.72rem;
+    font-family: var(--sl-font);
+    font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.18em;
-    color: var(--sl-color-accent);
+    color: var(--color-storm-cloud);
+    font-weight: 510;
   }
 
   .cta__title {
@@ -71,68 +77,104 @@ const year = new Date().getFullYear();
     font-family: var(--sl-font);
     font-size: clamp(1.5rem, 3vw, 2rem);
     line-height: 1.2;
-    letter-spacing: -0.02em;
-    color: var(--sl-color-white);
+    letter-spacing: -0.022em;
+    color: var(--color-porcelain);
     max-width: 32ch;
+    font-weight: 590;
     border: 0;
   }
 
+  :root[data-theme='light'] .cta__title {
+    color: var(--color-pitch-black);
+  }
+
+  /* The init() inline code in the headline picks up Aether Blue —
+     informational, not a CTA. The lime CTA is the button below it. */
   .cta__title code {
     font-family: var(--sl-font-mono);
     font-size: 0.85em;
-    background: var(--sl-color-bg-inline-code);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-charcoal-grey);
     border-radius: 4px;
     padding: 0.05em 0.35em;
+    color: var(--color-aether-blue);
+    letter-spacing: -0.005em;
+  }
+
+  :root[data-theme='light'] .cta__title code {
+    background: var(--sl-color-bg-inline-code);
+    border-color: var(--sl-color-gray-5);
     color: var(--sl-color-accent);
   }
 
   .cta__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: 0.625rem;
   }
 
   .cta__btn {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.7rem 1.1rem;
-    font-family: var(--sl-font-mono);
-    font-size: 0.85rem;
+    padding: 0.625rem 1rem;
+    font-family: var(--sl-font);
+    font-size: 0.875rem;
+    font-weight: 590;
+    letter-spacing: -0.011em;
     text-decoration: none;
     border-radius: 6px;
     transition:
-      background 150ms ease,
-      border-color 150ms ease,
-      color 150ms ease;
+      background var(--sl-transition),
+      border-color var(--sl-transition),
+      color var(--sl-transition);
   }
 
   .cta__btn--primary {
-    background: var(--sl-color-accent);
-    color: #ffffff;
-    border: 1px solid var(--sl-color-accent);
+    background: var(--color-neon-lime);
+    color: var(--color-pitch-black);
+    border: 1px solid var(--color-neon-lime);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.12) inset,
+      0 6px 24px -8px color-mix(in oklch, var(--color-neon-lime) 35%, transparent);
   }
 
   .cta__btn--primary:hover {
-    background: color-mix(in oklch, var(--sl-color-accent) 88%, white);
+    background: color-mix(in oklch, var(--color-neon-lime) 92%, white 8%);
+    border-color: color-mix(in oklch, var(--color-neon-lime) 92%, white 8%);
   }
 
   .cta__btn--ghost {
     background: transparent;
-    color: var(--sl-color-text);
-    border: 1px solid var(--sl-color-gray-5);
+    color: var(--color-porcelain);
+    border: 1px solid var(--color-charcoal-grey);
+  }
+
+  :root[data-theme='light'] .cta__btn--ghost {
+    color: var(--color-pitch-black);
+    border-color: var(--sl-color-gray-5);
   }
 
   .cta__btn--ghost:hover {
-    border-color: var(--sl-color-accent);
-    color: var(--sl-color-accent);
+    background: var(--color-graphite);
+    border-color: var(--color-gunmetal);
+  }
+
+  :root[data-theme='light'] .cta__btn--ghost:hover {
+    background: var(--sl-color-gray-6);
+    border-color: var(--sl-color-gray-4);
   }
 
   .foot {
     margin-top: clamp(3rem, 6vw, 5rem);
-    border-top: 1px solid var(--sl-color-gray-6);
+    border-top: 1px solid var(--color-charcoal-grey);
     padding-block: 1.25rem;
-    background: color-mix(in oklch, var(--sl-color-bg) 92%, var(--sl-color-gray-6));
+    background: var(--color-graphite);
+  }
+
+  :root[data-theme='light'] .foot {
+    border-top-color: var(--sl-color-gray-5);
+    background: var(--sl-color-bg-inline-code);
   }
 
   .foot__inner {
@@ -142,32 +184,44 @@ const year = new Date().getFullYear();
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.6rem;
-    font-family: var(--sl-font-mono);
-    font-size: 0.78rem;
-    color: var(--sl-color-gray-3);
+    gap: 0.625rem;
+    font-family: var(--sl-font);
+    font-size: 0.8125rem;
+    color: var(--color-storm-cloud);
+    letter-spacing: -0.011em;
   }
 
   .foot__name {
-    color: var(--sl-color-text);
-    font-weight: 500;
+    font-family: var(--sl-font-mono);
+    color: var(--color-porcelain);
+    font-weight: 400;
+  }
+
+  :root[data-theme='light'] .foot__name {
+    color: var(--color-pitch-black);
   }
 
   .foot__sep {
-    color: var(--sl-color-gray-5);
+    color: var(--color-fog-grey);
   }
 
   .foot a {
-    color: var(--sl-color-gray-2);
+    color: var(--color-light-steel);
     text-decoration: none;
+    transition: color var(--sl-transition);
+  }
+
+  :root[data-theme='light'] .foot a {
+    color: var(--sl-color-gray-2);
   }
 
   .foot a:hover {
-    color: var(--sl-color-accent);
+    color: var(--color-aether-blue);
   }
 
   .foot__year {
     margin-left: auto;
-    color: var(--sl-color-gray-4);
+    color: var(--color-fog-grey);
+    font-variant-numeric: tabular-nums;
   }
 </style>

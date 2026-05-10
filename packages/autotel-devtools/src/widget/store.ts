@@ -41,6 +41,23 @@ export const logsSignal = signal<LogData[]>([]);
 
 export const connectionStatusSignal = signal<string>('disconnected');
 
+// ===== Live tail pause buffer =====
+// Exported so stories and tests can drive these states without going through
+// a paused live socket; mirrors how other data signals are exposed.
+export const pausedSignal = signal(false);
+export const pendingTracesSignal = signal<TraceData[]>([]);
+export const pendingLogsSignal = signal<LogData[]>([]);
+
+export const pendingTraceCountSignal = computed(
+  () => pendingTracesSignal.value.length,
+);
+export const pendingLogCountSignal = computed(
+  () => pendingLogsSignal.value.length,
+);
+
+// Marks the store as displaying a loaded snapshot rather than live data.
+export const snapshotModeSignal = signal(false);
+
 // ===== Computed Signals =====
 
 /**
@@ -137,18 +154,64 @@ export const selectedTraceSignal = computed(() => {
 
 // ===== Actions =====
 
+function mergeTraces(existing: TraceData[], incoming: TraceData[]): TraceData[] {
+  if (incoming.length === 0) return existing;
+  const existingIds = new Set(existing.map((t) => t.traceId));
+  const fresh = incoming.filter((t) => !existingIds.has(t.traceId));
+  if (fresh.length === 0) return existing;
+  return [...existing, ...fresh];
+}
+
+function mergeTracesCapped(
+  existing: TraceData[],
+  incoming: TraceData[],
+  limit: number,
+): TraceData[] {
+  const merged = mergeTraces(existing, incoming);
+  return merged.length > limit ? merged.slice(-limit) : merged;
+}
+
+function prependLogsCapped(existing: LogData[], incoming: LogData[]): LogData[] {
+  if (incoming.length === 0) return existing;
+  const merged = [...incoming, ...existing];
+  return merged.length > maxHistorySize ? merged.slice(0, maxHistorySize) : merged;
+}
+
 export function updateWidgetData(data: Partial<WidgetData>) {
-  if (data.traces && data.traces.length > 0) {
-    console.log(
-      `[Autotel Devtools] updateWidgetData: received ${data.traces.length} trace(s)`,
-    );
-    // Merge new traces, keeping unique by traceId
-    const existingIds = new Set(tracesSignal.value.map((t) => t.traceId));
-    const newTraces = data.traces.filter((t) => !existingIds.has(t.traceId));
-    console.log(
-      `[Autotel Devtools] Adding ${newTraces.length} new trace(s), total will be ${tracesSignal.value.length + newTraces.length}`,
-    );
-    tracesSignal.value = [...tracesSignal.value, ...newTraces];
+  // Snapshot mode is a frozen view of imported data — drop live updates,
+  // but keep health/connection status flowing so the user sees connectivity.
+  if (snapshotModeSignal.value) {
+    if (data.health) {
+      healthSignal.value = data.health;
+      connectionStatusSignal.value = data.health.connectionStatus;
+    }
+    return;
+  }
+
+  const incomingTraces = data.traces ?? [];
+  const incomingLogs = data.logs ?? [];
+
+  if (pausedSignal.value) {
+    if (incomingTraces.length > 0) {
+      pendingTracesSignal.value = mergeTracesCapped(
+        pendingTracesSignal.value,
+        incomingTraces,
+        maxHistorySize,
+      );
+    }
+    if (incomingLogs.length > 0) {
+      pendingLogsSignal.value = prependLogsCapped(
+        pendingLogsSignal.value,
+        incomingLogs,
+      );
+    }
+  } else {
+    if (incomingTraces.length > 0) {
+      tracesSignal.value = mergeTraces(tracesSignal.value, incomingTraces);
+    }
+    if (incomingLogs.length > 0) {
+      logsSignal.value = prependLogsCapped(logsSignal.value, incomingLogs);
+    }
   }
 
   if (data.metrics) {
@@ -161,16 +224,58 @@ export function updateWidgetData(data: Partial<WidgetData>) {
   }
 
   if (data.errors) {
-    // Replace error groups with updated list from server
     errorGroupsSignal.value = data.errors;
   }
+}
 
-  if (data.logs && data.logs.length > 0) {
-    logsSignal.value = [...data.logs, ...logsSignal.value];
-    if (logsSignal.value.length > maxHistorySize) {
-      logsSignal.value = logsSignal.value.slice(0, maxHistorySize);
+export function setPaused(paused: boolean) {
+  if (pausedSignal.value === paused) return;
+  pausedSignal.value = paused;
+  if (!paused) {
+    const pendingTraces = pendingTracesSignal.value;
+    const pendingLogs = pendingLogsSignal.value;
+    if (pendingTraces.length > 0) {
+      tracesSignal.value = mergeTraces(tracesSignal.value, pendingTraces);
+      pendingTracesSignal.value = [];
+    }
+    if (pendingLogs.length > 0) {
+      logsSignal.value = prependLogsCapped(logsSignal.value, pendingLogs);
+      pendingLogsSignal.value = [];
     }
   }
+}
+
+export function togglePaused() {
+  setPaused(!pausedSignal.value);
+}
+
+export function dropPendingBuffer() {
+  pendingTracesSignal.value = [];
+  pendingLogsSignal.value = [];
+}
+
+export function loadSnapshot(snapshot: {
+  traces?: TraceData[];
+  logs?: LogData[];
+  errors?: ErrorGroup[];
+  metrics?: MetricData[];
+}) {
+  tracesSignal.value = snapshot.traces ?? [];
+  logsSignal.value = (snapshot.logs ?? []).slice(0, maxHistorySize);
+  errorGroupsSignal.value = snapshot.errors ?? [];
+  metricsSignal.value = snapshot.metrics ?? [];
+  pendingTracesSignal.value = [];
+  pendingLogsSignal.value = [];
+  pausedSignal.value = false;
+  snapshotModeSignal.value = true;
+}
+
+export function exitSnapshotMode() {
+  snapshotModeSignal.value = false;
+  tracesSignal.value = [];
+  logsSignal.value = [];
+  errorGroupsSignal.value = [];
+  metricsSignal.value = [];
 }
 
 export function toggleWidget() {
@@ -218,6 +323,9 @@ export function clearAllData() {
   metricsSignal.value = [];
   errorGroupsSignal.value = [];
   logsSignal.value = [];
+  pendingTracesSignal.value = [];
+  pendingLogsSignal.value = [];
+  snapshotModeSignal.value = false;
 }
 
 /**

@@ -70,7 +70,10 @@ export const checkout = trace((ctx) =>
 
       <figure class="panel panel--after">
         <figcaption class="panel__head">
-          <span class="panel__tag panel__tag--accent">autotel</span>
+          <span class="panel__tag panel__tag--accent">
+            <span class="panel__tag-dot" aria-hidden="true"></span>
+            autotel
+          </span>
           <span class="panel__count">8 lines</span>
         </figcaption>
         <pre class="panel__code"><code>{after}</code></pre>
@@ -81,8 +84,12 @@ export const checkout = trace((ctx) =>
 
 <style>
   .compare {
-    border-top: 1px solid var(--sl-color-gray-6);
+    border-top: 1px solid var(--color-charcoal-grey);
     padding-block: clamp(3rem, 6vw, 5rem);
+  }
+
+  :root[data-theme='light'] .compare {
+    border-top-color: var(--sl-color-gray-5);
   }
 
   .compare__inner {
@@ -98,29 +105,40 @@ export const checkout = trace((ctx) =>
 
   .compare__eyebrow {
     margin: 0 0 0.5rem;
-    font-family: var(--sl-font-mono);
-    font-size: 0.72rem;
+    font-family: var(--sl-font);
+    font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.18em;
-    color: var(--sl-color-accent);
+    color: var(--color-storm-cloud);
+    font-weight: 510;
   }
 
   .compare__title {
-    margin: 0 0 0.6rem;
+    margin: 0 0 0.625rem;
     font-family: var(--sl-font);
-    font-size: clamp(1.6rem, 3.2vw, 2.25rem);
-    line-height: 1.15;
+    font-size: clamp(1.5rem, 3vw, 2.125rem);
+    line-height: 1.18;
     letter-spacing: -0.02em;
-    color: var(--sl-color-white);
+    color: var(--color-porcelain);
+    font-weight: 590;
     border: 0;
+  }
+
+  :root[data-theme='light'] .compare__title {
+    color: var(--color-pitch-black);
   }
 
   .compare__sub {
     margin: 0;
-    color: var(--sl-color-gray-3);
-    font-size: 1rem;
+    color: var(--color-light-steel);
+    font-size: 0.9375rem;
     line-height: 1.55;
-    max-width: 36rem;
+    max-width: 38rem;
+    letter-spacing: -0.012em;
+  }
+
+  :root[data-theme='light'] .compare__sub {
+    color: var(--sl-color-gray-2);
   }
 
   .compare__grid {
@@ -137,23 +155,42 @@ export const checkout = trace((ctx) =>
     }
   }
 
+  /* Before panel — Graphite card, full opacity (no fake "fading out the loser"
+     trick). Hierarchy comes from the autotel panel having its own beat. */
   .panel {
     margin: 0;
-    border: 1px solid var(--sl-color-gray-5);
-    border-radius: 10px;
+    border: 1px solid var(--color-charcoal-grey);
+    border-radius: 6px;
     overflow: hidden;
-    background: var(--sl-color-bg);
+    background: var(--color-graphite);
+    box-shadow: var(--shadow-card);
   }
 
-  .panel--before {
-    opacity: 0.78;
+  :root[data-theme='light'] .panel {
+    border-color: var(--sl-color-gray-5);
+    background: var(--sl-color-bg-inline-code);
   }
 
+  /* "after" panel — slightly elevated surface (Deep Slate) and a subtle
+     lime hairline at the top. The hairline is the entire treatment.
+     No drop-shadow brand glow, no border-color saturation. */
   .panel--after {
-    border-color: color-mix(in oklch, var(--sl-color-accent) 45%, var(--sl-color-gray-5));
-    box-shadow:
-      0 0 0 1px color-mix(in oklch, var(--sl-color-accent) 18%, transparent),
-      0 24px 60px -30px color-mix(in oklch, var(--sl-color-accent) 35%, transparent);
+    background: var(--color-deep-slate);
+    position: relative;
+  }
+
+  :root[data-theme='light'] .panel--after {
+    background: #ffffff;
+  }
+
+  .panel--after::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: var(--color-neon-lime);
+    opacity: 0.95;
+    z-index: 1;
   }
 
   .panel__head {
@@ -161,34 +198,64 @@ export const checkout = trace((ctx) =>
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.55rem 0.95rem;
-    border-bottom: 1px solid var(--sl-color-gray-6);
+    padding: 0.625rem 0.95rem;
+    border-bottom: 1px solid var(--color-charcoal-grey);
     font-family: var(--sl-font-mono);
-    font-size: 0.72rem;
+    font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.14em;
-    color: var(--sl-color-gray-3);
+    color: var(--color-fog-grey);
+  }
+
+  :root[data-theme='light'] .panel__head {
+    border-bottom-color: var(--sl-color-gray-5);
+  }
+
+  .panel__tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   .panel__tag--accent {
-    color: var(--sl-color-accent);
+    color: var(--color-porcelain);
+    font-weight: 510;
+    letter-spacing: 0.06em;
+  }
+
+  :root[data-theme='light'] .panel__tag--accent {
+    color: var(--color-pitch-black);
+  }
+
+  .panel__tag-dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 999px;
+    background: var(--color-neon-lime);
+    box-shadow: 0 0 8px color-mix(in oklch, var(--color-neon-lime) 50%, transparent);
   }
 
   .panel__count {
-    color: var(--sl-color-gray-4);
+    color: var(--color-fog-grey);
+    font-variant-numeric: tabular-nums;
   }
 
   .panel__code {
     margin: 0;
-    padding: 1rem 1.1rem 1.25rem;
-    background: var(--sl-color-bg-inline-code);
+    padding: 1rem 1.125rem 1.25rem;
+    background: transparent;
     font-family: var(--sl-font-mono);
     font-size: 0.78rem;
-    line-height: 1.55;
-    color: var(--sl-color-gray-2);
+    line-height: 1.6;
+    color: var(--color-light-steel);
     overflow-x: auto;
     border: 0;
     border-radius: 0;
+    letter-spacing: -0.005em;
+  }
+
+  :root[data-theme='light'] .panel__code {
+    color: var(--sl-color-gray-2);
   }
 
   .panel__code code {
@@ -198,6 +265,10 @@ export const checkout = trace((ctx) =>
   }
 
   .panel--after .panel__code {
-    color: var(--sl-color-text);
+    color: var(--color-porcelain);
+  }
+
+  :root[data-theme='light'] .panel--after .panel__code {
+    color: var(--color-pitch-black);
   }
 </style>

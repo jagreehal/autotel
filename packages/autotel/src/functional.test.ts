@@ -62,6 +62,24 @@ describe('Functional API', () => {
       expect(promise).toBeInstanceOf(Promise);
       await expect(promise).resolves.toBe(84);
     });
+
+    it('accepts a string name as first argument (sync)', () => {
+      const result = span('sync-name-shorthand', () => 'ok');
+      expect(result).toBe('ok');
+    });
+
+    it('accepts a string name as first argument (async)', async () => {
+      await expect(
+        span('async-name-shorthand', async () => 'ok'),
+      ).resolves.toBe('ok');
+    });
+
+    it('records spans created via the string-name shorthand', async () => {
+      const collector = createTraceCollector();
+      await span('shorthand.recorded', async () => undefined);
+      const names = collector.getSpans().map((s) => s.name);
+      expect(names).toContain('shorthand.recorded');
+    });
   });
 
   describe('trace()', () => {

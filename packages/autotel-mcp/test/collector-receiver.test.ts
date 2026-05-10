@@ -5,13 +5,14 @@ import { CollectorStore } from '../src/backends/collector/store';
 describe('OtlpReceiver', () => {
   let store: CollectorStore;
   let receiver: OtlpReceiver;
-  const port = 14318;
+  let port: number;
 
   beforeEach(async () => {
     store = new CollectorStore({ maxTraces: 100, retentionMs: 3_600_000 });
     await store.init();
-    receiver = new OtlpReceiver(store, port);
+    receiver = new OtlpReceiver(store, 0);
     await receiver.start();
+    port = receiver.getPort();
   });
 
   afterEach(async () => {

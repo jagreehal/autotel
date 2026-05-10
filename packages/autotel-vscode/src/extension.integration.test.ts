@@ -64,6 +64,12 @@ vi.mock('vscode', () => {
         update: vi.fn(async () => undefined),
       })),
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      createFileSystemWatcher: vi.fn(() => ({
+        onDidChange: vi.fn(),
+        onDidCreate: vi.fn(),
+        onDidDelete: vi.fn(),
+        dispose: vi.fn(),
+      })),
       workspaceFolders: [{ uri: { fsPath: '/workspace' } }],
       openTextDocument: vi.fn(async (uri: unknown) => ({ uri })),
     },

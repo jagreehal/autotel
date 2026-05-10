@@ -3,7 +3,13 @@
  * Allows exporting traces as JSON and importing them back for replay/demo
  */
 
-import type { TraceData, SpanData } from './types';
+import type {
+  TraceData,
+  SpanData,
+  LogData,
+  MetricData,
+  ErrorGroup,
+} from './types';
 
 /**
  * Export format version for compatibility checking
@@ -344,6 +350,147 @@ export async function importTracesFromFile(file: File): Promise<ImportResult> {
     return {
       success: false,
       traces: [],
+      errors: [`Failed to read file: ${(error as Error).message}`],
+      warnings: [],
+    };
+  }
+}
+
+// ============================================================================
+// Full devtools snapshot — captures traces + logs + errors + metrics
+// for sharing a complete local repro.
+// ============================================================================
+
+export interface SnapshotPayload {
+  traces: TraceData[];
+  logs: LogData[];
+  errors: ErrorGroup[];
+  metrics: MetricData[];
+}
+
+export interface ExportedSnapshot {
+  version: string;
+  kind: 'autotel-devtools-snapshot';
+  capturedAt: string;
+  data: SnapshotPayload;
+}
+
+export interface SnapshotImportResult {
+  success: boolean;
+  snapshot?: SnapshotPayload;
+  errors: string[];
+  warnings: string[];
+}
+
+export function exportSnapshot(payload: SnapshotPayload): ExportedSnapshot {
+  return {
+    version: EXPORT_VERSION,
+    kind: 'autotel-devtools-snapshot',
+    capturedAt: new Date().toISOString(),
+    data: payload,
+  };
+}
+
+export function downloadSnapshotAsJson(
+  payload: SnapshotPayload,
+  filename?: string,
+): void {
+  const json = JSON.stringify(exportSnapshot(payload), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const defaultFilename = `autotel-snapshot-${new Date().toISOString().replaceAll(':', '-').split('.')[0]}.json`;
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename || defaultFilename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function parseImportedSnapshot(
+  jsonString: string,
+): SnapshotImportResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonString);
+  } catch (error) {
+    return {
+      success: false,
+      errors: [`Invalid JSON: ${(error as Error).message}`],
+      warnings: [],
+    };
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return {
+      success: false,
+      errors: ['Snapshot is not an object'],
+      warnings: [],
+    };
+  }
+
+  const root = parsed as Record<string, unknown>;
+  const warnings: string[] = [];
+
+  if (root.kind && root.kind !== 'autotel-devtools-snapshot') {
+    warnings.push(`Unexpected snapshot kind: ${String(root.kind)}`);
+  }
+  if (
+    typeof root.version === 'string' &&
+    root.version !== EXPORT_VERSION
+  ) {
+    warnings.push(
+      `Version mismatch: expected ${EXPORT_VERSION}, got ${root.version}`,
+    );
+  }
+
+  const data =
+    root.data && typeof root.data === 'object'
+      ? (root.data as Record<string, unknown>)
+      : root;
+
+  const traces = Array.isArray(data.traces)
+    ? (data.traces as TraceData[]).map(normalizeTrace)
+    : [];
+  const logs = Array.isArray(data.logs) ? (data.logs as LogData[]) : [];
+  const errors = Array.isArray(data.errors)
+    ? (data.errors as ErrorGroup[])
+    : [];
+  const metrics = Array.isArray(data.metrics)
+    ? (data.metrics as MetricData[])
+    : [];
+
+  if (
+    traces.length === 0 &&
+    logs.length === 0 &&
+    errors.length === 0 &&
+    metrics.length === 0
+  ) {
+    return {
+      success: false,
+      errors: ['Snapshot contains no traces, logs, errors, or metrics'],
+      warnings,
+    };
+  }
+
+  return {
+    success: true,
+    snapshot: { traces, logs, errors, metrics },
+    errors: [],
+    warnings,
+  };
+}
+
+export async function importSnapshotFromFile(
+  file: File,
+): Promise<SnapshotImportResult> {
+  try {
+    const text = await readFileAsText(file);
+    return parseImportedSnapshot(text);
+  } catch (error) {
+    return {
+      success: false,
       errors: [`Failed to read file: ${(error as Error).message}`],
       warnings: [],
     };

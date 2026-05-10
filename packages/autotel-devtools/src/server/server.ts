@@ -3,7 +3,12 @@ import { WebSocketServer, WebSocket } from 'ws'
 import type { Server as HTTPServer } from 'node:http'
 import { createServer } from 'node:http'
 import { ErrorAggregator } from './error-aggregator'
-import type { TraceData, LogData, MetricData, DevtoolsData } from './types'
+import type {
+  TraceData,
+  LogData,
+  MetricData,
+  DevtoolsData,
+} from './types'
 import {
   appendManyWithLimit,
   appendWithLimit,
