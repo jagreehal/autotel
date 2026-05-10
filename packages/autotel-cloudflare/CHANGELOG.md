@@ -1,5 +1,12 @@
 # autotel-cloudflare
 
+## 2.18.11
+
+### Patch Changes
+
+- Updated dependencies [3a21282]
+  - autotel-edge@3.16.9
+
 ## 2.18.10
 
 ### Patch Changes
