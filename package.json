@@ -44,6 +44,18 @@
     "pnpm": ">=8"
   },
   "packageManager": "pnpm@10.27.0",
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "typescript": "6",
+        "eslint": "10",
+        "@langchain/core": "0.3.80",
+        "@opentelemetry/exporter-trace-otlp-proto": "0.216.0",
+        "@effect/platform": "0.94.4",
+        "ink": "7"
+      }
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jagreehal/autotel.git"

@@ -1,11 +1,8 @@
 /* ================================================================
    autotel-docs — Midnight Command Center
-   Reference: Linear's dark UI. Pitch Black canvas, layered surfaces,
-   Neon Lime reserved for THE primary action, Aether Blue for links.
-   See .impeccable.md for design principles.
+   Pitch-black canvas, layered grays, one electric-blue accent (CTAs,
+   links, hero highlights). Semantic red unchanged for errors.
    ================================================================ */
-
-/* ---- Linear design tokens ------------------------------------------------ */
 
 :root {
   /* Surfaces */
@@ -23,9 +20,11 @@
   --color-fog-grey: #62666d;
   --color-alabaster: #e5e5e6;
 
-  /* Accents */
-  --color-neon-lime: #e4f222;
-  --color-aether-blue: #5e6ad2;
+  /* Accents — single hue (electric blue); legacy lime name maps to same. */
+  --color-aether-blue: #3b82f6;
+  --color-aether-blue-muted: #1d4ed8;
+  --color-aether-blue-soft: #60a5fa;
+  --color-neon-lime: var(--color-aether-blue);
   --color-warning-red: #eb5757;
   --color-cyan-spark: #02b8cc;
   --color-emerald: #27a644;
@@ -33,7 +32,7 @@
   /* Shadows */
   --shadow-card: rgba(0, 0, 0, 0.4) 0 2px 4px 0;
   --shadow-elevated-inset: rgb(35, 37, 42) 0 0 0 1px inset;
-  --shadow-focus-ring: rgba(228, 242, 34, 0.35) 0 0 0 3px;
+  --shadow-focus-ring: rgba(59, 130, 246, 0.45);
 
   /* Type system */
   --sl-font:
@@ -46,10 +45,6 @@
   --sl-transition: 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Inter Variable wants -0.13px tracking at body and OpenType feature flags
-   that turn on alternate single-storey 'a' / 'g' (cv01) and stylistic set 3.
-   These are subtle but they are what makes Inter feel like Linear's Inter
-   rather than a 2018 Google Fonts copy. */
 html {
   font-feature-settings:
     'cv01' 1,
@@ -65,9 +60,9 @@ html {
 
 :root[data-theme='dark'] {
   /* Starlight token mapping */
-  --sl-color-accent-low: #1a1d3d;
+  --sl-color-accent-low: #172554;
   --sl-color-accent: var(--color-aether-blue);
-  --sl-color-accent-high: #aab1ff;
+  --sl-color-accent-high: #93c5fd;
 
   --sl-color-white: var(--color-porcelain);
   --sl-color-gray-1: #eceef0; /* very high contrast text */
@@ -94,9 +89,9 @@ html {
 /* ---- Light theme -------------------------------------------------------- */
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #e9ebff;
-  --sl-color-accent: #4751b8;
-  --sl-color-accent-high: #2c3490;
+  --sl-color-accent-low: #eff6ff;
+  --sl-color-accent: #3b82f6;
+  --sl-color-accent-high: #1d4ed8;
 
   --sl-color-white: var(--color-pitch-black);
   --sl-color-gray-1: #1f2024;
@@ -108,7 +103,7 @@ html {
   --sl-color-black: var(--color-porcelain);
 
   --sl-color-text: var(--color-pitch-black);
-  --sl-color-text-accent: #4751b8;
+  --sl-color-text-accent: #3b82f6;
 
   --sl-color-bg: var(--color-porcelain);
   --sl-color-bg-nav: var(--color-porcelain);
@@ -297,7 +292,6 @@ body {
   letter-spacing: -0.012em;
 }
 
-/* Sidebar — kept rhythm tight (Linear "compact density") */
 nav.sidebar .top-level > li + li {
   margin-top: 0.125rem;
 }
@@ -306,10 +300,59 @@ nav.sidebar a {
   letter-spacing: -0.011em;
 }
 
+/* Expressive Code — Carbon-style terminal chrome (traffic lights + depth) */
+.expressive-code figure.frame.is-terminal {
+  overflow: hidden;
+}
+
+.expressive-code figure.frame.is-terminal figcaption.header::before {
+  opacity: 1;
+  width: 3.25rem;
+  height: 0.6875rem;
+  background-color: transparent;
+  background-image:
+    radial-gradient(circle at center, #ff5f57 0%, #ff5f57 45%, transparent 46%),
+    radial-gradient(circle at center, #febc2e 0%, #febc2e 45%, transparent 46%),
+    radial-gradient(circle at center, #28c840 0%, #28c840 45%, transparent 46%);
+  background-size: 0.6875rem 0.6875rem;
+  background-position:
+    0 50%,
+    1.28125rem 50%,
+    2.5625rem 50%;
+  background-repeat: no-repeat;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+:root[data-theme='light'] .expressive-code figure.frame.is-terminal figcaption.header {
+  color: #374151;
+  background: linear-gradient(180deg, #f3f3f3 0%, #e8e8e8 100%);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme='dark'] .expressive-code figure.frame.is-terminal figcaption.header {
+  color: #d1d5db;
+  background: linear-gradient(180deg, #3a3a3a 0%, #2f2f2f 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.expressive-code figure.frame.is-terminal figcaption.header .title:not(:empty) {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
 nav.sidebar a[aria-current='page'] {
   background: var(--color-graphite);
   color: var(--sl-color-white);
   border-radius: 4px;
+}
+
+:root[data-theme='light'] nav.sidebar a[aria-current='page'] {
+  background: var(--sl-color-accent-low);
+  color: var(--sl-color-accent-high);
 }
 
 /* Top nav */
@@ -330,15 +373,23 @@ header.header {
   font-weight: 510;
 }
 
-/* Selection — single point of lime in the document body */
-::selection {
-  background: var(--color-neon-lime);
+header.header .site-title,
+header.header .site-title * {
+  color: var(--sl-color-white);
+}
+
+:root[data-theme='light'] header.header .site-title,
+:root[data-theme='light'] header.header .site-title * {
   color: var(--color-pitch-black);
 }
 
-/* Focus rings — subtle lime, only on keyboard focus */
+::selection {
+  background: color-mix(in oklch, var(--color-aether-blue) 38%, transparent);
+  color: var(--sl-color-text);
+}
+
 :focus-visible {
-  outline: 2px solid var(--color-neon-lime);
+  outline: 2px solid var(--color-aether-blue);
   outline-offset: 2px;
   border-radius: 3px;
 }

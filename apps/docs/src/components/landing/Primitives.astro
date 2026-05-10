@@ -57,13 +57,17 @@ log.emitNow();`,
       {
         items.map((it) => (
           <article class="card">
-            <div class="card__head">
-              <span class="card__index" aria-hidden="true">{it.label}</span>
-              <code class="card__name">{it.name}()</code>
+            <div class="card__top">
+              <div class="card__head">
+                <span class="card__index" aria-hidden="true">{it.label}</span>
+                <code class="card__name">{it.name}()</code>
+              </div>
+              <h3 class="card__title">{it.title}</h3>
+              <p class="card__blurb">{it.blurb}</p>
             </div>
-            <h3 class="card__title">{it.title}</h3>
-            <p class="card__blurb">{it.blurb}</p>
-            <pre class="card__code"><code>{it.code}</code></pre>
+            <div class="card__body">
+              <pre class="card__code"><code>{it.code}</code></pre>
+            </div>
           </article>
         ))
       }
@@ -116,13 +120,12 @@ log.emitNow();`,
   :root[data-theme='light'] .primitives__title {
     color: var(--color-pitch-black);
   }
-
-  /* Grid uses 1px Charcoal Grey gaps as hairline dividers between cards.
-     This is the Linear pattern: hairlines from the canvas underneath, not
-     from card borders. */
   .primitives__grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    /* Row 1 = tallest copy block across columns; row 2 = shared remainder (code). */
+    grid-template-rows: auto 1fr;
+    grid-auto-rows: auto 1fr;
     gap: 1px;
     background: var(--color-charcoal-grey);
     border: 1px solid var(--color-charcoal-grey);
@@ -138,14 +141,50 @@ log.emitNow();`,
   .card {
     background: var(--color-graphite);
     padding: 1.5rem 1.5rem 1.625rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
     min-width: 0;
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 2;
   }
 
   :root[data-theme='light'] .card {
     background: #ffffff;
+  }
+
+  .card__top {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-bottom: 0.75rem;
+    min-width: 0;
+  }
+
+  .card__body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  @supports not (grid-template-rows: subgrid) {
+    .primitives__grid {
+      grid-template-rows: none;
+      grid-auto-rows: auto;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      grid-row: auto;
+    }
+
+    .card__top {
+      flex: 0 0 auto;
+    }
+
+    .card__body {
+      flex: 1 1 auto;
+    }
   }
 
   .card__head {
@@ -165,7 +204,7 @@ log.emitNow();`,
   .card__name {
     font-family: var(--sl-font-mono);
     font-size: 0.875rem;
-    color: var(--color-neon-lime);
+    color: var(--color-aether-blue);
     background: transparent;
     border: 0;
     padding: 0;
@@ -174,7 +213,6 @@ log.emitNow();`,
   }
 
   :root[data-theme='light'] .card__name {
-    /* Lime is too pale on white; switch to Aether Blue accent for light. */
     color: var(--sl-color-accent);
   }
 
@@ -206,12 +244,18 @@ log.emitNow();`,
   }
 
   .card__code {
-    margin: 0.25rem 0 0;
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    box-sizing: border-box;
     padding: 0.875rem 1rem;
     background: var(--color-pitch-black);
     border: 1px solid var(--color-charcoal-grey);
     border-radius: 6px;
-    overflow-x: auto;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
     font-family: var(--sl-font-mono);
     font-size: 0.78rem;
     line-height: 1.6;
@@ -226,6 +270,8 @@ log.emitNow();`,
   }
 
   .card__code code {
+    display: block;
+    min-width: min-content;
     background: transparent;
     padding: 0;
     border: 0;
