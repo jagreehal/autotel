@@ -88,8 +88,7 @@ const year = new Date().getFullYear();
     color: var(--color-pitch-black);
   }
 
-  /* The init() inline code in the headline picks up Aether Blue —
-     informational, not a CTA. The lime CTA is the button below it. */
+  /* init() inline code uses the same accent family as links (not a filled CTA). */
   .cta__title code {
     font-family: var(--sl-font-mono);
     font-size: 0.85em;
@@ -131,17 +130,27 @@ const year = new Date().getFullYear();
   }
 
   .cta__btn--primary {
-    background: var(--color-neon-lime);
-    color: var(--color-pitch-black);
-    border: 1px solid var(--color-neon-lime);
+    background: var(--color-aether-blue);
+    color: var(--color-porcelain);
+    border: 1px solid var(--color-aether-blue);
     box-shadow:
-      0 1px 0 0 rgba(255, 255, 255, 0.12) inset,
-      0 6px 24px -8px color-mix(in oklch, var(--color-neon-lime) 35%, transparent);
+      0 1px 0 0 rgba(255, 255, 255, 0.18) inset,
+      0 6px 24px -8px color-mix(in oklch, var(--color-aether-blue) 40%, transparent);
   }
 
   .cta__btn--primary:hover {
-    background: color-mix(in oklch, var(--color-neon-lime) 92%, white 8%);
-    border-color: color-mix(in oklch, var(--color-neon-lime) 92%, white 8%);
+    background: var(--color-aether-blue-soft);
+    border-color: var(--color-aether-blue-soft);
+  }
+
+  :root[data-theme='light'] .cta__btn--primary {
+    background: var(--sl-color-accent);
+    border-color: var(--sl-color-accent);
+  }
+
+  :root[data-theme='light'] .cta__btn--primary:hover {
+    background: var(--sl-color-accent-high);
+    border-color: var(--sl-color-accent-high);
   }
 
   .cta__btn--ghost {

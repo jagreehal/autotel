@@ -1,23 +1,25 @@
 import { defineConfig } from 'astro/config';
+import preact from '@astrojs/preact';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   site: 'https://jagreehal.github.io',
   base: '/autotel',
   integrations: [
+    preact({ devtools: false }),
     starlight({
       title: 'autotel',
+      /**
+       * Use the `404.mdx` docs entry as the only `/404` route (via `[...slug]`).
+       * Avoids a duplicate prerender attempt and the Astro “route conflict” warning.
+       */
+      disable404Route: true,
       favicon: '/favicon.svg',
       components: {
         PageTitle: './src/components/PageTitle.astro',
         ThemeProvider: './src/components/ThemeProvider.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',
         Hero: './src/components/SplashHero.astro',
-      },
-      logo: {
-        dark: './src/assets/logo-dark.svg',
-        light: './src/assets/logo-light.svg',
-        replacesTitle: false,
       },
       social: [
         {

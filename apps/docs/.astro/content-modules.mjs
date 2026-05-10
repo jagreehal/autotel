@@ -1,5 +1,6 @@
 
 export default new Map([
+["src/content/docs/404.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2F404.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/advanced.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fadvanced.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/agent-guide.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fagent-guide.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/ai-observability.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fai-observability.mdx&astroContentModuleFlag=true")],

@@ -171,9 +171,7 @@ export const checkout = trace((ctx) =>
     background: var(--sl-color-bg-inline-code);
   }
 
-  /* "after" panel — slightly elevated surface (Deep Slate) and a subtle
-     lime hairline at the top. The hairline is the entire treatment.
-     No drop-shadow brand glow, no border-color saturation. */
+  /* "after" panel — elevated surface + single blue hairline. */
   .panel--after {
     background: var(--color-deep-slate);
     position: relative;
@@ -188,7 +186,7 @@ export const checkout = trace((ctx) =>
     position: absolute;
     inset: 0 0 auto 0;
     height: 1px;
-    background: var(--color-neon-lime);
+    background: var(--color-aether-blue);
     opacity: 0.95;
     z-index: 1;
   }
@@ -231,8 +229,8 @@ export const checkout = trace((ctx) =>
     width: 0.375rem;
     height: 0.375rem;
     border-radius: 999px;
-    background: var(--color-neon-lime);
-    box-shadow: 0 0 8px color-mix(in oklch, var(--color-neon-lime) 50%, transparent);
+    background: var(--color-aether-blue);
+    box-shadow: 0 0 8px color-mix(in oklch, var(--color-aether-blue) 50%, transparent);
   }
 
   .panel__count {
