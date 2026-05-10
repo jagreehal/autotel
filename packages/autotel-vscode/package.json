@@ -98,6 +98,10 @@
       {
         "command": "autotel.openSpanDetail",
         "title": "Autotel: Open Span Detail"
+      },
+      {
+        "command": "autotel.openDevtools",
+        "title": "Autotel: Open Devtools UI"
       }
     ],
     "configuration": {
@@ -130,17 +134,13 @@
           "type": "number",
           "default": 1800000
         },
-        "autotel.source.workspaceRoot": {
+        "autotel.devtools.url": {
           "type": [
             "string",
             "null"
           ],
           "default": null,
-          "description": "Override workspace root for source resolution. Null = auto."
-        },
-        "autotel.source.followSymlinks": {
-          "type": "boolean",
-          "default": false
+          "description": "URL of a running autotel-devtools UI to embed via Autotel: Open Devtools UI. When null, falls back to http://<receiver.host>:<receiver.port>."
         }
       }
     }

@@ -42,6 +42,15 @@
       ],
       "outputs": []
     },
+    "build-storybook": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!dist/**",
+        "!storybook-static/**"
+      ],
+      "outputs": ["storybook-static/**"]
+    },
     "test:integration": {
       "dependsOn": ["^build"],
       "inputs": [

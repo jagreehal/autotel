@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { resolve as pathResolve } from 'node:path'
 
-const CLI_PATH = pathResolve(__dirname, '../../cli.ts')
+const CLI_PATH = pathResolve(__dirname, '../../../dist/cli.js')
 const PKG_DIR = pathResolve(__dirname, '../../../')
 
 describe('CLI', () => {
@@ -33,7 +33,7 @@ describe('CLI', () => {
 
   it('starts server on specified port', async () => {
     const port = 9123 + Math.floor(Math.random() * 100)
-    proc = spawn('npx', ['tsx', CLI_PATH, '-p', String(port)], {
+    proc = spawn(process.execPath, [CLI_PATH, '-p', String(port)], {
       cwd: PKG_DIR,
       env: { ...process.env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -49,7 +49,7 @@ describe('CLI', () => {
 
   function runCli(args: string[]): Promise<string> {
     return new Promise((resolve) => {
-      const child = spawn('npx', ['tsx', CLI_PATH, ...args], {
+      const child = spawn(process.execPath, [CLI_PATH, ...args], {
         cwd: PKG_DIR,
         env: { ...process.env },
         stdio: ['pipe', 'pipe', 'pipe'],

@@ -47,8 +47,8 @@
     "dev": "tsup --watch",
     "type-check": "tsc --noEmit",
     "lint": "eslint src/",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --config vitest.config.ts && vitest run --config vitest.storybook.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -79,6 +79,7 @@
     "@testing-library/preact": "^3.2.4",
     "@types/node": "^25.6.0",
     "@types/ws": "^8.18.1",
+    "jsdom": "^29.1.1",
     "@vitest/browser-playwright": "4.1.5",
     "@vitest/coverage-v8": "4.1.5",
     "eslint-plugin-storybook": "^10.3.6",

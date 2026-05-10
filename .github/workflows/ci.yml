@@ -41,6 +41,9 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Build Storybook (autotel-devtools)
+        run: pnpm turbo run build-storybook --filter=autotel-devtools
+
       - name: Lint
         run: pnpm lint
 
@@ -48,7 +51,9 @@ jobs:
         run: pnpm type-check
 
       - name: Install Playwright browsers
-        run: pnpm --filter @jagreehal/example-playwright-e2e exec playwright install --with-deps chromium
+        run: |
+          pnpm --filter @jagreehal/example-playwright-e2e exec playwright install --with-deps chromium
+          pnpm --filter autotel-devtools exec playwright install --with-deps chromium
 
       - name: Run tests
         run: pnpm test

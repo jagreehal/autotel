@@ -23,6 +23,7 @@ const {
   registerTreeDataProvider,
   createWebviewPanel,
   receiverConfig,
+  createFileSystemWatcher,
 } =
   vi.hoisted(() => {
     const fakeServer = {
@@ -64,6 +65,12 @@ const {
         update: vi.fn(),
       })),
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      createFileSystemWatcher: vi.fn(() => ({
+        onDidChange: vi.fn(),
+        onDidCreate: vi.fn(),
+        onDidDelete: vi.fn(),
+        dispose: vi.fn(),
+      })),
       writeClipboardText: vi.fn(async () => undefined),
       createServer: vi.fn(() => fakeServer),
       fakeServer,
@@ -142,6 +149,7 @@ vi.mock('vscode', () => {
     workspace: {
       getConfiguration,
       onDidChangeConfiguration,
+      createFileSystemWatcher,
       workspaceFolders: [{ uri: { fsPath: '/workspace' } }],
       openTextDocument,
     },
@@ -221,7 +229,7 @@ describe('activate', () => {
 
     const registered = registerCommand.mock.calls.map((call) => call[0])
 
-    expect(registerCommand).toHaveBeenCalledTimes(7)
+    expect(registerCommand).toHaveBeenCalledTimes(8)
     expect(registered).toEqual(
       expect.arrayContaining([
         'autotel.start',
@@ -231,6 +239,7 @@ describe('activate', () => {
         'autotel.revealSource',
         'autotel.copySpanId',
         'autotel.openSpanDetail',
+        'autotel.openDevtools',
       ]),
     )
   })

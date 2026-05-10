@@ -21,6 +21,7 @@ const COMMANDS = [
   'autotel.revealSource',
   'autotel.copySpanId',
   'autotel.openSpanDetail',
+  'autotel.openDevtools',
 ] as const
 
 const extensionDisposables: vscode.Disposable[] = []
@@ -78,6 +79,9 @@ function registerCommands(context: vscode.ExtensionContext): void {
           return
         case 'autotel.openSpanDetail':
           void openSpanDetail(arg)
+          return
+        case 'autotel.openDevtools':
+          void openDevtools()
           return
       }
     })
@@ -490,6 +494,99 @@ function generateNonce(): string {
   return nonce
 }
 
+let devtoolsPanel: vscode.WebviewPanel | undefined
+
+function getDevtoolsUrl(): string {
+  const config = vscode.workspace.getConfiguration('autotel')
+  const explicit = config.get<string | null>('devtools.url', null)
+  if (typeof explicit === 'string' && explicit.length > 0) return explicit
+  const { host, port } = getReceiverConfig()
+  const safeHost = host === '0.0.0.0' ? '127.0.0.1' : host
+  return `http://${safeHost}:${port}`
+}
+
+async function openDevtools(): Promise<void> {
+  if (devtoolsPanel) {
+    devtoolsPanel.reveal(vscode.ViewColumn.Beside)
+    return
+  }
+
+  const targetUrl = getDevtoolsUrl()
+  let parsed: URL
+  try {
+    parsed = new URL(targetUrl)
+  } catch {
+    void vscode.window.showErrorMessage(
+      `Invalid autotel.devtools.url: "${targetUrl}". Expected http://host:port.`,
+    )
+    return
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    void vscode.window.showErrorMessage(
+      `Unsupported devtools url protocol: ${parsed.protocol}. Use http or https.`,
+    )
+    return
+  }
+
+  const panel = vscode.window.createWebviewPanel(
+    'autotel.devtools',
+    'Autotel Devtools',
+    vscode.ViewColumn.Beside,
+    { enableScripts: true, retainContextWhenHidden: true },
+  )
+  devtoolsPanel = panel
+  panel.onDidDispose(() => {
+    devtoolsPanel = undefined
+  })
+
+  try {
+    const externalUri = await vscode.env.asExternalUri(vscode.Uri.parse(targetUrl))
+    const iframeUrl = externalUri.toString(true)
+    const allowedFrameOrigin = `${new URL(iframeUrl).protocol}//${new URL(iframeUrl).host}`
+    const nonce = generateNonce()
+    const csp = [
+      `default-src 'none'`,
+      `style-src 'nonce-${nonce}'`,
+      `script-src 'nonce-${nonce}'`,
+      `frame-src ${allowedFrameOrigin}`,
+    ].join('; ')
+
+    panel.webview.html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="${csp}" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autotel Devtools</title>
+  <style nonce="${nonce}">
+    html, body { height: 100%; margin: 0; padding: 0; background: var(--vscode-editor-background); color: var(--vscode-foreground); font-family: var(--vscode-font-family); }
+    .toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 12px; }
+    .toolbar a { color: var(--vscode-textLink-foreground); text-decoration: none; }
+    .toolbar a:hover { text-decoration: underline; }
+    iframe { display: block; width: 100%; height: calc(100% - 32px); border: 0; background: white; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span>Autotel Devtools</span>
+    <span style="color: var(--vscode-descriptionForeground)">·</span>
+    <a href="${iframeUrl}" target="_blank" rel="noreferrer">Open in browser</a>
+    <span style="color: var(--vscode-descriptionForeground); margin-left: auto">${iframeUrl}</span>
+  </div>
+  <iframe src="${iframeUrl}" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" referrerpolicy="no-referrer"></iframe>
+</body>
+</html>`
+  } catch (error) {
+    outputChannel?.appendLine(
+      `Failed to open devtools UI: ${error instanceof Error ? error.message : String(error)}`,
+    )
+    panel.dispose()
+    void vscode.window.showErrorMessage(
+      `Failed to open Autotel Devtools at ${targetUrl}.`,
+    )
+  }
+}
+
 class ServicesProvider implements vscode.TreeDataProvider<ServiceNode> {
   private readonly emitter = new vscode.EventEmitter<ServiceNode | undefined>()
   readonly onDidChangeTreeData = this.emitter.event
@@ -696,6 +793,10 @@ export function deactivate(): void {
     panel.dispose()
   }
   spanPanels.clear()
+  if (devtoolsPanel) {
+    devtoolsPanel.dispose()
+    devtoolsPanel = undefined
+  }
   while (extensionDisposables.length > 0) {
     extensionDisposables.pop()?.dispose()
   }
