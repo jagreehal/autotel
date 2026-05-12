@@ -2151,10 +2151,7 @@ export interface SpanOptions {
 // Overloads — sync first (more specific match), then async.
 // Each shape is offered with a string name OR a full SpanOptions object so
 // span() aligns with trace()'s argument flexibility.
-export function span<T = unknown>(
-  name: string,
-  fn: (span: Span) => T,
-): T;
+export function span<T = unknown>(name: string, fn: (span: Span) => T): T;
 export function span<T = unknown>(
   name: string,
   fn: (span: Span) => Promise<T>,

@@ -1,24 +1,5 @@
 /**
  * Webhook Subscriber for autotel
- *
- * Send events to any webhook endpoint (custom integrations, Zapier, Make.com, etc.).
- *
- * @example
- * ```typescript
- * import { Events } from 'autotel/events';
- * import { WebhookSubscriber } from 'autotel-subscribers/webhook';
- *
- * const events = new Events('checkout', {
- *   subscribers: [
- *     new WebhookSubscriber({
- *       url: 'https://hooks.zapier.com/hooks/catch/...',
- *       headers: { 'X-API-Key': 'secret' }
- *     })
- *   ]
- * });
- *
- * events.trackEvent('order.completed', { userId: '123', amount: 99.99 });
- * ```
  */
 
 import type {
@@ -28,63 +9,94 @@ import type {
   FunnelStatus,
   OutcomeStatus,
 } from 'autotel/event-subscriber';
+import { createHttpClient } from './http-client';
+import {
+  mapHttpStatus,
+  SubscriberProviderError,
+  isProviderRetriable,
+} from './retry-classification';
 
 export interface WebhookConfig {
-  /** Webhook URL */
   url: string;
-  /** Optional headers (e.g., API keys) */
   headers?: Record<string, string>;
-  /** Enable/disable the subscriber */
   enabled?: boolean;
-  /** Retry failed requests (default: 3) */
   maxRetries?: number;
+  method?: 'POST' | 'PUT';
+  timeoutMs?: number;
+  retryDelayMs?: number;
 }
 
 export class WebhookSubscriber implements EventSubscriber {
   readonly name = 'WebhookSubscriber';
-  readonly version = '1.0.0';
+  readonly version = '1.1.0';
 
-  private config: WebhookConfig;
+  private readonly config: WebhookConfig;
   private enabled: boolean;
-  private pendingRequests: Set<Promise<void>> = new Set();
+  private readonly pendingRequests: Set<Promise<void>> = new Set();
+  private readonly httpClient;
 
   constructor(config: WebhookConfig) {
     this.config = config;
     this.enabled = config.enabled ?? true;
+    this.httpClient = createHttpClient({ timeoutMs: config.timeoutMs });
   }
 
-  private async send(payload: any): Promise<void> {
+  private async delay(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async send(payload: unknown): Promise<void> {
     if (!this.enabled) return;
 
     const maxRetries = this.config.maxRetries ?? 3;
+    const retryDelayMs = this.config.retryDelayMs ?? 1000;
+    const method = this.config.method ?? 'POST';
     let lastError: Error | undefined;
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const response = await fetch(this.config.url, {
-          method: 'POST',
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const response = await this.httpClient.request<unknown, unknown>(
+        this.config.url,
+        {
+          method,
           headers: {
             'Content-Type': 'application/json',
             ...this.config.headers,
           },
           body: JSON.stringify(payload),
+          timeoutMs: this.config.timeoutMs,
+        },
+      );
+
+      if (response.ok) return;
+
+      if (response.kind === 'network') {
+        lastError = new SubscriberProviderError({
+          message: response.timedOut
+            ? 'Webhook request timed out'
+            : 'Webhook network request failed',
+          code: 'NETWORK',
+          retriable: true,
+          details: response.cause,
+          cause: response.cause,
         });
-
-        if (!response.ok) {
-          throw new Error(`Webhook returned ${response.status}: ${response.statusText}`);
-        }
-
-        return; // Success
-      } catch (error) {
-        lastError = error as Error;
-        if (attempt < maxRetries - 1) {
-          // Exponential backoff
-          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-        }
+      } else {
+        const mapped = mapHttpStatus(response.status);
+        lastError = new SubscriberProviderError({
+          message: `Webhook returned ${response.status}: ${response.statusText}`,
+          code: mapped.code,
+          retriable: mapped.retriable,
+          details: response.body,
+        });
       }
+
+      const canRetry = isProviderRetriable(lastError) && attempt < maxRetries;
+      if (!canRetry) break;
+
+      const backoffMs = retryDelayMs * 2 ** (attempt - 1);
+      await this.delay(backoffMs);
     }
 
-    console.error(`Webhook subscriber failed after ${maxRetries} attempts:`, lastError);
+    throw lastError ?? new Error('Webhook send failed');
   }
 
   async trackEvent(
@@ -159,16 +171,14 @@ export class WebhookSubscriber implements EventSubscriber {
 
   private trackRequest(request: Promise<void>): void {
     this.pendingRequests.add(request);
-    void request.finally(() => {
+    void request.catch(() => {}).finally(() => {
       this.pendingRequests.delete(request);
     });
   }
 
-  /** Wait for all pending webhook requests to complete */
   async shutdown(): Promise<void> {
     if (this.pendingRequests.size > 0) {
       await Promise.allSettled(this.pendingRequests);
     }
   }
 }
-
