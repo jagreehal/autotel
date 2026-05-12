@@ -1,0 +1,29 @@
+{
+  "name": "@jagreehal/example-contract-testing",
+  "version": "0.1.0",
+  "description": "Contract testing observability demo with Autotel - shows how to instrument contract testing workflows with traces, structured errors, and product events",
+  "private": true,
+  "type": "module",
+  "author": "Jag Reehal",
+  "license": "MIT",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "autotel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "keywords": [
+    "observability",
+    "contract-testing",
+    "pact",
+    "tracing",
+    "opentelemetry",
+    "structured-logging",
+    "autotel"
+  ]
+}
