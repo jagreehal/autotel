@@ -8,13 +8,13 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@sentry/node": "^10.51.0",
+    "@sentry/node": "^10.53.1",
     "autotel": "workspace:*",
     "autotel-sentry": "workspace:*",
     "dotenv": "^17.4.2"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.7.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   }
