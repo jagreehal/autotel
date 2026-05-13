@@ -1,5 +1,15 @@
 # autotel-tanstack
 
+## 1.13.16
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+- Updated dependencies [1a8bedd]
+  - autotel-adapters@0.2.15
+  - autotel-edge@3.16.10
+  - autotel@3.0.5
+
 ## 1.13.15
 
 ### Patch Changes

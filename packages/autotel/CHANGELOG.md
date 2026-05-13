@@ -1,5 +1,11 @@
 # autotel
 
+## 3.0.5
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+
 ## 3.0.4
 
 ### Patch Changes
