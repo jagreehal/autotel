@@ -1,5 +1,13 @@
 # autotel-subscribers
 
+## 31.1.1
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+- Updated dependencies [1a8bedd]
+  - autotel@3.0.5
+
 ## 31.1.0
 
 ### Minor Changes

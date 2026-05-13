@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.21
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+- Updated dependencies [1a8bedd]
+  - autotel@3.0.5
+
 ## 0.4.20
 
 ### Patch Changes

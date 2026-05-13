@@ -1,5 +1,11 @@
 # autotel-cli
 
+## 0.8.7
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+
 ## 0.8.6
 
 ### Patch Changes

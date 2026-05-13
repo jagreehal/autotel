@@ -1,5 +1,13 @@
 # autotel-cloudflare
 
+## 2.18.12
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+- Updated dependencies [1a8bedd]
+  - autotel-edge@3.16.10
+
 ## 2.18.11
 
 ### Patch Changes

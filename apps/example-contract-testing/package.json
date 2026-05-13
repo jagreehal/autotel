@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-contract-testing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Contract testing observability demo with Autotel - shows how to instrument contract testing workflows with traces, structured errors, and product events",
   "private": true,
   "type": "module",

@@ -1,5 +1,11 @@
 # autotel-edge
 
+## 3.16.10
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+
 ## 3.16.9
 
 ### Patch Changes

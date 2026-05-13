@@ -1,6 +1,6 @@
 {
   "name": "autotel-mongoose",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "OpenTelemetry instrumentation for Mongoose with db.query.text capture and automatic redaction",
   "type": "module",
   "main": "./dist/index.js",

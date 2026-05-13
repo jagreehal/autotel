@@ -1,5 +1,11 @@
 # autotel-web
 
+## 1.11.6
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+
 ## 1.11.5
 
 ### Patch Changes

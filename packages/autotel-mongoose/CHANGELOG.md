@@ -1,5 +1,13 @@
 # autotel-mongoose
 
+## 2.0.4
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+- Updated dependencies [1a8bedd]
+  - autotel@3.0.5
+
 ## 2.0.3
 
 ### Patch Changes

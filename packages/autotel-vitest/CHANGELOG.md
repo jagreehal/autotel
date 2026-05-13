@@ -1,5 +1,13 @@
 # autotel-vitest
 
+## 0.4.15
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+- Updated dependencies [1a8bedd]
+  - autotel@3.0.5
+
 ## 0.4.14
 
 ### Patch Changes
