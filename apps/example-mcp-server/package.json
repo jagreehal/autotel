@@ -12,10 +12,10 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "autotel": "workspace:*",
     "autotel-mcp-instrumentation": "workspace:*",
-    "zod": "4.4.2"
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.7.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   }
