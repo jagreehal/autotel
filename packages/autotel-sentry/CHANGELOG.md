@@ -1,5 +1,11 @@
 # autotel-sentry
 
+## 0.5.11
+
+### Patch Changes
+
+- 1a8bedd: Updated dependencies
+
 ## 0.5.10
 
 ### Patch Changes
