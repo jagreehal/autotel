@@ -37,6 +37,25 @@ pnpm add autotel-cloudflare
 yarn add autotel-cloudflare
 ```
 
+## Quickstart: Structured logging in a Cloudflare Worker
+
+For just structured logs (no tracing setup required), import from `autotel-cloudflare/logger`:
+
+```ts
+import { createEdgeLogger } from 'autotel-cloudflare/logger'
+
+const log = createEdgeLogger('my-worker', { level: 'info' })
+
+export default {
+  async fetch() {
+    log.info({ user_id: 'u1' }, 'request handled')
+    return new Response('ok')
+  },
+}
+```
+
+`autotel-cloudflare/logger` is the edge-clean entry: it re-exports `createEdgeLogger` from `autotel-edge/logger` plus the Cloudflare execution-logger helpers (`createWorkersLogger`, `getRequestLogger`, `getQueueLogger`). The root `autotel-cloudflare` import pulls in tracing, `AsyncLocalStorage`, and the wrappers — only use it when you want spans.
+
 ## Quick Start
 
 ### 1. Configure Cloudflare Native OTel (wrangler.toml)
@@ -444,7 +463,7 @@ export default wrapModule(
 ## Entry Points (Tree-Shaking)
 
 ```typescript
-// Main export (everything)
+// Main export (everything — pulls AsyncLocalStorage, needs nodejs_compat)
 import { wrapModule, trace, instrument } from 'autotel-cloudflare'
 
 // Tree-shakeable entry points
@@ -455,6 +474,31 @@ import { publishEvent } from 'autotel-cloudflare/events'
 import { createEdgeLogger } from 'autotel-cloudflare/logger'
 import { createTraceCollector } from 'autotel-cloudflare/testing'
 ```
+
+## Cloudflare compatibility
+
+Workers run on V8 isolates, not Node. Anything that transitively imports `node:async_hooks` (used by `AsyncLocalStorageContextManager` for span context) or `node:buffer` requires `compatibility_flags = ["nodejs_compat"]` in your `wrangler.toml`. The `/logger` subpath stays clear of those.
+
+| Entry | Edge-safe without `nodejs_compat`? | Notes |
+| --- | --- | --- |
+| `autotel-cloudflare` | No — needs `nodejs_compat` | Pulls `AsyncLocalStorage` (span context) and `Buffer` transitively via `autotel-edge` root |
+| `autotel-cloudflare/logger` | Yes | Edge-clean. `createEdgeLogger`, `createWorkersLogger`, `getRequestLogger`, `getQueueLogger`, `getWorkflowLogger`, `getActorLogger` |
+| `autotel-cloudflare/bindings` | No — needs `nodejs_compat` | Wrappers create spans, require context manager |
+| `autotel-cloudflare/handlers` | No — needs `nodejs_compat` | DO/Workflow wrappers create spans |
+| `autotel-cloudflare/sampling` | Yes | Pure samplers, no runtime imports |
+| `autotel-cloudflare/events` | No — needs `nodejs_compat` | Pulls trace context for correlation |
+| `autotel-cloudflare/testing` | Yes (test-only) | Collectors live in test runtime; do not ship to Workers |
+| `autotel-cloudflare/actors` | No — needs `nodejs_compat` | Builds on DO wrappers |
+| `autotel-cloudflare/agents` | No — needs `nodejs_compat` | Builds on DO wrappers |
+| `autotel-cloudflare/parse-error` | Yes | Pure error normaliser |
+
+Rule of thumb: if you only need logs, import `autotel-cloudflare/logger` and skip `nodejs_compat`. If you want spans, add `nodejs_compat` and import from the root.
+
+## See also
+
+- [autotel-edge](../autotel-edge) — vendor-agnostic foundation re-exported by this package
+- [autotel](../autotel) — Node.js entry, full SDK with auto-instrumentation
+- [autotel-drizzle](../autotel-drizzle) — Drizzle ORM spans (Node only)
 
 ## Testing
 

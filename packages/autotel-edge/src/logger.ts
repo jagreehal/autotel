@@ -23,6 +23,8 @@ export {
   type ExecutionLogSnapshot,
 } from './execution-logger';
 
+export type { TraceContext } from './core/trace-context';
+
 export {
   createRedactor,
   REDACT_PRESETS,

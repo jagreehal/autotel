@@ -343,6 +343,12 @@ init({
 - **autotel-vercel** - Coming soon
 - **autotel-netlify** - Coming soon
 
+## See also
+
+- [autotel-cloudflare](../autotel-cloudflare) — Cloudflare Workers wrappers + bindings (KV, R2, D1, DO)
+- [autotel](../autotel) — Node SDK with auto-instrumentation
+- [autotel-drizzle](../autotel-drizzle) — Drizzle ORM spans (Node only)
+
 ## License
 
 MIT © [Jag Reehal](https://github.com/jagreehal)
