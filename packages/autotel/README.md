@@ -138,6 +138,25 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
 | Teams need both observability **and** product events.                                          | Ship technical telemetry and funnel/behavior events through the same API with contextual enrichment.                             |
 | Production readiness requires redaction, rate limiting, and circuit breakers.                  | Those guardrails are on by default so you can safely enable telemetry everywhere.                                                |
 
+## Entry point map
+
+`autotel` has ~35 subpath exports. For most scenarios you only need one or two. Cloudflare Workers and other edge runtimes should use [`autotel-cloudflare`](../autotel-cloudflare) or [`autotel-edge`](../autotel-edge), not `autotel` (which expects Node).
+
+| Scenario                                            | Package                               | Import                                                                 |
+| --------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| Node service — init + spans                         | `autotel`                             | `import { init, trace, span } from 'autotel'`                          |
+| Node service — pino-style logger with trace context | `autotel`                             | `import { createLogger } from 'autotel/logger'`                        |
+| Node service — class decorators                     | `autotel`                             | `import { Trace, Span } from 'autotel/decorators'`                     |
+| Node service — Drizzle ORM spans                    | `autotel-drizzle`                     | `import { instrumentDrizzleClient } from 'autotel-drizzle'`            |
+| Node service — testing assertions                   | `autotel`                             | `import { createTraceCollector } from 'autotel/testing'`               |
+| Cloudflare Worker — fetch with spans                | `autotel-cloudflare`                  | `import { wrapModule, trace } from 'autotel-cloudflare'`               |
+| Cloudflare Worker — logs only, no `nodejs_compat`   | `autotel-cloudflare`                  | `import { createEdgeLogger } from 'autotel-cloudflare/logger'`         |
+| Cloudflare Worker — queue consumer                  | `autotel-cloudflare`                  | `import { wrapModule, getQueueLogger } from 'autotel-cloudflare'`      |
+| Cloudflare Worker — Durable Object                  | `autotel-cloudflare`                  | `import { wrapDurableObject } from 'autotel-cloudflare'`               |
+| Hono on Workers                                     | `autotel-cloudflare` + `autotel-hono` | `wrapModule` from `autotel-cloudflare`, middleware from `autotel-hono` |
+| Vercel Edge / Netlify Edge / Deno Deploy            | `autotel-edge`                        | `import { init, trace } from 'autotel-edge'`                           |
+| Edge runtime — logs only                            | `autotel-edge`                        | `import { createEdgeLogger } from 'autotel-edge/logger'`               |
+
 ## Quick Start
 
 > Want to follow along in code? This repo ships with `apps/example-basic` (mirrors the steps below) and `apps/example-http` for an Express server, you can run either with `pnpm start` after `pnpm install && pnpm build` at the root.
@@ -3129,5 +3148,11 @@ init({
 
 // MongoDB and Redis operations are now automatically traced
 ```
+
+## See also
+
+- [autotel-cloudflare](../autotel-cloudflare) — Cloudflare Workers with KV/R2/D1/DO instrumentation
+- [autotel-edge](../autotel-edge) — vendor-agnostic edge runtime foundation
+- [autotel-drizzle](../autotel-drizzle) — Drizzle ORM query spans
 
 Happy observing!

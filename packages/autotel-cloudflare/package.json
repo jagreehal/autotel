@@ -1,6 +1,6 @@
 {
   "name": "autotel-cloudflare",
-  "version": "2.18.12",
+  "version": "2.18.13",
   "description": "The #1 OpenTelemetry package for Cloudflare Workers - complete bindings coverage, native CF OTel integration, advanced sampling",
   "type": "module",
   "main": "./dist/index.js",
@@ -84,16 +84,22 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/resources": "^2.7.1",
-    "autotel-edge": "workspace:*"
+    "@opentelemetry/resources": "^2.7.1"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "^4.20260511.1"
+    "@cloudflare/workers-types": "^4.20260511.1",
+    "autotel-edge": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "autotel-edge": {
+      "optional": false
+    }
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260511.1",
     "@opentelemetry/context-async-hooks": "^2.7.1",
     "@types/node": "^25.7.0",
+    "autotel-edge": "workspace:*",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
