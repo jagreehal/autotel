@@ -4,7 +4,7 @@ import {
   type ExecutionLogSnapshot,
   getExecutionLogger,
   type TraceContext,
-} from 'autotel-edge';
+} from 'autotel-edge/logger';
 
 export type {
   ExecutionLogger,

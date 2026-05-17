@@ -2,6 +2,17 @@
 
 OpenTelemetry instrumentation for Drizzle ORM.
 
+## Compatibility
+
+- **Requires `drizzle-orm >= 0.45.2`** (declared as a peer dependency).
+- Node runtime only. For Drizzle running on Cloudflare D1 in a Worker, instrument the binding directly via `autotel-cloudflare/bindings`'s `instrumentD1` instead.
+
+If you are pinned to an older Drizzle (for example 0.38.x):
+
+- npm/pnpm will warn on install but the package will still resolve; the public callable surface (`instrumentDrizzleClient`, `instrumentDrizzle`) targets shapes that exist on 0.45+ and may misbehave on older versions.
+- Either upgrade Drizzle, or skip this package and emit spans manually around your queries with `span()` from `autotel` (see the [autotel README](../autotel#span)).
+- A backport is not currently planned — track the version in `package.json`.
+
 ## Philosophy
 
 **autotel-drizzle only includes instrumentation for Drizzle ORM.**
@@ -122,6 +133,12 @@ instrumentDrizzleClient(db, {
   captureQueryText: false,
 });
 ```
+
+## See also
+
+- [autotel](../autotel) — Node SDK that this package builds on
+- [autotel-cloudflare](../autotel-cloudflare) — instrument D1 directly when running Drizzle on Workers
+- [autotel-edge](../autotel-edge) — vendor-agnostic edge foundation
 
 ## License
 
