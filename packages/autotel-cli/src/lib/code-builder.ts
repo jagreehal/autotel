@@ -21,6 +21,13 @@ export interface CodeFile {
   backendImports: Import[];
   pluginImports: Import[];
   subscriberImports: Import[];
+  loggerImports: Import[];
+  /** Code to construct logger before init() (e.g. `const logger = pino({...});`). */
+  loggerSetup: string | null;
+  /** Identifier passed as `logger:` to init() (e.g. `logger`). null = omit. */
+  loggerExpr: string | null;
+  /** Strings to put into the autoInstrumentations array (e.g. 'winston'). */
+  autoInstrumentations: string[];
   backendConfig: string | null;
   subscribersConfig: string[];
   pluginInit: string[];
@@ -35,10 +42,38 @@ export function createCodeFile(): CodeFile {
     backendImports: [],
     pluginImports: [],
     subscriberImports: [],
+    loggerImports: [],
+    loggerSetup: null,
+    loggerExpr: null,
+    autoInstrumentations: [],
     backendConfig: null,
     subscribersConfig: [],
     pluginInit: [],
   };
+}
+
+/**
+ * Wire Pino as the first-class autotel logger. Adds the import, the
+ * `const logger = pino({...})` construction snippet, and sets the
+ * `logger:` field on init().
+ */
+export function setPinoLogger(file: CodeFile): void {
+  file.loggerImports.push({ source: 'pino', default: 'pino' });
+  file.loggerSetup = `const logger = pino({ name: 'app', level: process.env.LOG_LEVEL ?? 'info' });`;
+  file.loggerExpr = 'logger';
+}
+
+/**
+ * Add a logger to the autoInstrumentations array. For Winston/Bunyan this
+ * enables OpenTelemetry contrib's trace-context injection.
+ */
+export function addAutoInstrumentationLogger(
+  file: CodeFile,
+  name: string
+): void {
+  if (!file.autoInstrumentations.includes(name)) {
+    file.autoInstrumentations.push(name);
+  }
 }
 
 /**
@@ -185,8 +220,30 @@ export function renderCodeFile(file: CodeFile): string {
     lines.push('');
   }
 
+  // Logger imports + setup
+  if (file.loggerImports.length > 0) {
+    lines.push(SECTION_MARKER('LOGGER'));
+    lines.push(renderImports(file.loggerImports));
+    lines.push('');
+  }
+  if (file.loggerSetup !== null) {
+    lines.push(file.loggerSetup);
+    lines.push('');
+  }
+
   // Init call
   lines.push('init({');
+
+  // Logger reference (first-class)
+  if (file.loggerExpr !== null) {
+    lines.push(`  logger: ${file.loggerExpr},`);
+  }
+
+  // Auto-instrumentations (Winston/Bunyan trace-context injection)
+  if (file.autoInstrumentations.length > 0) {
+    const list = file.autoInstrumentations.map((n) => `'${n}'`).join(', ');
+    lines.push(`  autoInstrumentations: [${list}],`);
+  }
 
   // Backend config
   if (file.backendConfig) {
