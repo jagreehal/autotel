@@ -122,6 +122,41 @@ const getUser = traceDynamoDB({
    - Terraform
    - Manual ZIP upload
 
+## Telemetry shipping modes (`OTEL_MODE`)
+
+The CDK stack and the handlers share a single env switch — `OTEL_MODE` —
+that controls how OpenTelemetry data leaves the function. Set it before
+running `cdk deploy`.
+
+| `OTEL_MODE` | What happens | When to pick it |
+|---|---|---|
+| `custom-endpoint` (default) | Handlers init autotel with `OTEL_EXPORTER_OTLP_ENDPOINT`. Use for LocalStack, a standalone collector, Honeycomb, Datadog, … | Local dev, vendor-portable production |
+| `cloudwatch-direct` | Handlers wire CloudWatch trace/log/metric exporters from `autotel-aws/cloudwatch`. SigV4-signed OTLP/JSON goes straight to X-Ray, CloudWatch Logs, and CloudWatch Metrics endpoints. No collector. | Low/medium volume Lambdas where you want one fewer moving part |
+| `cloudwatch-adot` | The stack attaches the ADOT Lambda extension layer (`ADOT_LAYER_ARN` required). Handlers still use the default OTLP endpoint — the layer's collector signs and forwards to CloudWatch. | Higher-throughput Lambdas — export latency lives outside the billed handler time |
+
+Both CloudWatch modes land traces in X-Ray + Application Signals +
+Transaction Search, logs in CloudWatch Logs, and metrics in CloudWatch
+Metrics. Ensure the Lambda role can write all signals you export:
+`xray:PutTraceSegments`/`xray:PutTelemetryRecords`, CloudWatch Logs write
+permissions for your log group/stream, and metric ingestion permissions.
+
+### Deploy with the in-process exporter
+
+```bash
+OTEL_MODE=cloudwatch-direct pnpm cdk:deploy
+```
+
+### Deploy with the ADOT layer
+
+```bash
+OTEL_MODE=cloudwatch-adot \
+ADOT_LAYER_ARN=arn:aws:lambda:eu-west-1:901920570463:layer:aws-otel-nodejs-amd64-ver-1-25-0:1 \
+  pnpm cdk:deploy
+```
+
+Look up the right layer ARN for your region at
+https://aws-otel.github.io/docs/getting-started/lambda.
+
 ## Observability Backends
 
 This example works with any OTLP-compatible backend:

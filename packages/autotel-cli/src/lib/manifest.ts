@@ -244,6 +244,171 @@ export const COMMANDS: CommandSpec[] = [
   },
 ];
 
+// Investigate commands — mirror autotel-mcp tools. All emit JSON, none
+// mutate files. Backend-touching commands set network: true. Schemas are
+// terse (full flag docs live in the runtime); the manifest exists for agent
+// discoverability + drift-test parity with the dispatcher.
+const INVESTIGATE_FLAGS: FlagSpec[] = [
+  { name: '--backend', takesValue: true, description: 'Backend kind (env: AUTOTEL_BACKEND)' },
+  { name: '--jaeger-base-url', takesValue: true, description: 'Jaeger base URL' },
+  { name: '--tempo-base-url', takesValue: true, description: 'Tempo base URL' },
+  { name: '--prometheus-base-url', takesValue: true, description: 'Prometheus base URL' },
+  { name: '--loki-base-url', takesValue: true, description: 'Loki base URL' },
+  { name: '--collector-port', takesValue: true, description: 'OTLP receiver port' },
+  { name: '--fixture-path', takesValue: true, description: 'Fixture JSON path' },
+  { name: '--output-file', takesValue: true, description: 'Persist JSON output to this path' },
+  { name: '--no-secrets-in-output', description: 'Redact secret-shaped values' },
+];
+
+const STATIC_FLAGS: FlagSpec[] = [
+  { name: '--output-file', takesValue: true, description: 'Persist JSON output to this path' },
+  { name: '--no-secrets-in-output', description: 'Redact secret-shaped values' },
+];
+
+function investigateCmd(
+  name: string,
+  description: string,
+  extras: {
+    args?: CommandSpec['args'];
+    flags?: FlagSpec[];
+    network?: boolean;
+    static?: boolean;
+  } = {},
+): CommandSpec {
+  return {
+    name,
+    description,
+    ...(extras.args ? { args: extras.args } : {}),
+    flags: [...(extras.static ? STATIC_FLAGS : INVESTIGATE_FLAGS), ...(extras.flags ?? [])],
+    mutating: false,
+    network: extras.network ?? !extras.static,
+    writesFiles: false,
+    supportsDryRun: false,
+    requiresPackageJson: false,
+    mayReadEnv: false,
+    supportsJson: true,
+  };
+}
+
+const traceIdArg: NonNullable<CommandSpec['args']> = [
+  { name: 'traceId', required: true, description: 'Trace ID' },
+];
+const serviceNameArg: NonNullable<CommandSpec['args']> = [
+  { name: 'serviceName', required: true, description: 'Service name' },
+];
+
+const INVESTIGATE_COMMANDS: CommandSpec[] = [
+  investigateCmd('health', 'Backend health + signal coverage'),
+  investigateCmd('capabilities', 'Which signals the active backend serves'),
+
+  investigateCmd('discover', 'Discover services and field shapes (parent)'),
+  investigateCmd('discover services', 'Services with cross-signal metadata'),
+  investigateCmd('discover trace-fields', 'Trace/span field names from sampled traces', {
+    flags: [{ name: '--search', takesValue: true, description: 'Substring filter' }],
+  }),
+  investigateCmd('discover log-fields', 'Log field names from sampled logs', {
+    flags: [{ name: '--search', takesValue: true, description: 'Substring filter' }],
+  }),
+
+  investigateCmd('query', 'Query traces/spans/metrics/logs (parent)'),
+  investigateCmd('query traces', 'Search traces by service/op/status/tags/time/error'),
+  investigateCmd('query spans', 'Search individual spans (extra duration filters)'),
+  investigateCmd('query metrics', 'List metric series'),
+  investigateCmd('query logs', 'Search logs'),
+
+  investigateCmd('trace', 'Trace lookup commands (parent)'),
+  investigateCmd('trace get', 'Get a trace by ID', { args: traceIdArg }),
+  investigateCmd('trace summary', 'Compact incident-friendly trace summary', { args: traceIdArg }),
+
+  investigateCmd('topology', 'Service topology commands (parent)'),
+  investigateCmd('topology services', 'List known services'),
+  investigateCmd('topology operations', 'List operations for a service', { args: serviceNameArg }),
+  investigateCmd('topology map', 'Service dependency map with node/edge health'),
+
+  investigateCmd('diagnose', 'Anomaly / root-cause / errors / SLO diagnosis (parent)'),
+  investigateCmd('diagnose anomalies', 'Latency / error-rate outliers'),
+  investigateCmd('diagnose root-cause', 'Bottleneck span in a trace', { args: traceIdArg }),
+  investigateCmd('diagnose errors', 'Error spans grouped by service/operation'),
+  investigateCmd('diagnose slos', 'SLO violations for a service'),
+
+  investigateCmd('correlate', 'Cross-signal correlation (parent)'),
+  investigateCmd('correlate trace', 'Trace + metrics + logs for a trace ID', { args: traceIdArg }),
+  investigateCmd('correlate explain-slowdown', 'Anomalies + root cause + correlated signals'),
+
+  investigateCmd('llm', 'LLM analytics (parent)'),
+  investigateCmd('llm usage', 'Token usage + USD by model and service'),
+  investigateCmd('llm models', 'Discover LLM models in use'),
+  investigateCmd('llm model-stats', 'Per-model latency/token/error stats'),
+  investigateCmd('llm expensive', 'Top token-spend traces'),
+  investigateCmd('llm slow', 'Slowest LLM traces'),
+  investigateCmd('llm tools', 'Tool/function spans grouped by tool name'),
+
+  investigateCmd('semconv', 'Semantic conventions lookup (parent)', { static: true }),
+  investigateCmd('semconv list', 'List semconv namespaces', { static: true, network: true }),
+  investigateCmd('semconv get', 'Groups for one namespace', {
+    static: true,
+    network: true,
+    args: [{ name: 'namespace', required: true, description: 'Namespace (e.g. http)' }],
+  }),
+  investigateCmd('semconv refresh', 'Clear semconv cache', { static: true }),
+
+  investigateCmd('score', 'Score a span for instrumentation quality (JSON on stdin)', {
+    static: true,
+    flags: [{ name: '--span-file', takesValue: true, description: 'Read span JSON from file' }],
+  }),
+  investigateCmd('score explain', 'Explain the instrumentation scoring rubric', { static: true }),
+
+  investigateCmd('collector', 'OpenTelemetry Collector config + schema commands (parent)', {
+    static: true,
+  }),
+  investigateCmd('collector validate', 'Validate OTLP receiver config', {
+    static: true,
+    flags: [{ name: '--config-file', takesValue: true, description: 'Read JSON config from file' }],
+  }),
+  investigateCmd('collector suggest', 'Minimal OTLP receiver config', { static: true }),
+  investigateCmd('collector explain', 'Receiver config shape + defaults', { static: true }),
+  investigateCmd('collector versions', 'Supported collector schema versions', { static: true, network: true }),
+  investigateCmd('collector components', 'Components for a version', {
+    static: true,
+    network: true,
+    flags: [
+      { name: '--version', takesValue: true, description: 'Collector version' },
+      { name: '--kind', takesValue: true, description: 'Component kind filter' },
+    ],
+  }),
+  investigateCmd('collector schema', 'JSON schema for a component', {
+    static: true,
+    network: true,
+    flags: [
+      { name: '--kind', takesValue: true, description: 'Component kind' },
+      { name: '--name', takesValue: true, description: 'Component name' },
+      { name: '--version', takesValue: true, description: 'Collector version' },
+    ],
+  }),
+  investigateCmd('collector readme', 'README for a component', {
+    static: true,
+    network: true,
+    flags: [
+      { name: '--kind', takesValue: true, description: 'Component kind' },
+      { name: '--name', takesValue: true, description: 'Component name' },
+      { name: '--version', takesValue: true, description: 'Collector version' },
+    ],
+  }),
+  investigateCmd('collector validate-component', 'Validate component config against upstream schema', {
+    static: true,
+    network: true,
+    flags: [
+      { name: '--kind', takesValue: true, description: 'Component kind' },
+      { name: '--name', takesValue: true, description: 'Component name' },
+      { name: '--version', takesValue: true, description: 'Collector version' },
+      { name: '--config-file', takesValue: true, description: 'Read JSON config from file' },
+    ],
+  }),
+  investigateCmd('collector refresh', 'Refresh in-memory collector metadata cache', { static: true, network: true }),
+];
+
+COMMANDS.push(...INVESTIGATE_COMMANDS);
+
 export function getCommand(name: string): CommandSpec | undefined {
   return COMMANDS.find((c) => c.name === name);
 }

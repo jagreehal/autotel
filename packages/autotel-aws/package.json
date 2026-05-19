@@ -65,6 +65,11 @@
       "import": "./dist/xray.js",
       "require": "./dist/xray.cjs"
     },
+    "./cloudwatch": {
+      "types": "./dist/cloudwatch.d.ts",
+      "import": "./dist/cloudwatch.js",
+      "require": "./dist/cloudwatch.cjs"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js",
@@ -118,7 +123,15 @@
     "@aws-sdk/client-sfn": "^3.1045.0",
     "@aws-sdk/client-lambda": "^3.1045.0",
     "@aws-sdk/client-eventbridge": "^3.1045.0",
-    "@middy/core": "^7.5.0"
+    "@middy/core": "^7.5.0",
+    "@smithy/signature-v4": "^5.4.0",
+    "@aws-sdk/credential-providers": "^3.1045.0",
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@opentelemetry/otlp-transformer": ">=0.200.0",
+    "@opentelemetry/sdk-trace-base": ">=2.0.0",
+    "@opentelemetry/sdk-logs": ">=0.200.0",
+    "@opentelemetry/sdk-metrics": ">=2.0.0",
+    "@opentelemetry/core": ">=2.0.0"
   },
   "peerDependenciesMeta": {
     "@aws-sdk/client-s3": {
@@ -147,6 +160,30 @@
     },
     "@middy/core": {
       "optional": true
+    },
+    "@smithy/signature-v4": {
+      "optional": true
+    },
+    "@aws-sdk/credential-providers": {
+      "optional": true
+    },
+    "@aws-crypto/sha256-js": {
+      "optional": true
+    },
+    "@opentelemetry/otlp-transformer": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-trace-base": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-logs": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-metrics": {
+      "optional": true
+    },
+    "@opentelemetry/core": {
+      "optional": true
     }
   },
   "dependencies": {
@@ -170,7 +207,15 @@
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.6",
-    "rimraf": "^6.1.3"
+    "rimraf": "^6.1.3",
+    "@smithy/signature-v4": "^5.4.0",
+    "@aws-sdk/credential-providers": "^3.1045.0",
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@opentelemetry/otlp-transformer": "^0.218.0",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@opentelemetry/sdk-logs": "^0.218.0",
+    "@opentelemetry/sdk-metrics": "^2.7.1",
+    "@opentelemetry/core": "^2.7.1"
   },
   "repository": {
     "type": "git",

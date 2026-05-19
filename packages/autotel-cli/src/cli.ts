@@ -12,6 +12,19 @@ import {
   runExamples,
   runVersion,
 } from './commands/schema';
+import { registerHealthCommands } from './commands/investigate/health';
+import { registerDiscoveryCommands } from './commands/investigate/discovery';
+import {
+  registerQueryCommands,
+  registerTraceCommands,
+} from './commands/investigate/investigation';
+import { registerTopologyCommands } from './commands/investigate/topology';
+import { registerDiagnoseCommands } from './commands/investigate/diagnosis';
+import { registerCorrelateCommands } from './commands/investigate/correlation';
+import { registerLlmCommands } from './commands/investigate/llm';
+import { registerSemconvCommands } from './commands/investigate/semconv';
+import { registerScoreCommands } from './commands/investigate/instrumentation';
+import { registerCollectorCommands } from './commands/investigate/collector';
 
 /**
  * Create the CLI program
@@ -241,13 +254,61 @@ export function createProgram(): Command {
     });
   program.addCommand(versionCmd);
 
+  // Investigate commands — read telemetry via the same backends autotel-mcp
+  // uses, but exposed as one-shot CLI subcommands returning JSON on stdout.
+  // Each command group's commander wiring lives in its own file under
+  // commands/investigate/ so this surface scales without ballooning cli.ts.
+  registerHealthCommands(program);
+  registerDiscoveryCommands(program);
+  registerQueryCommands(program);
+  registerTraceCommands(program);
+  registerTopologyCommands(program);
+  registerDiagnoseCommands(program);
+  registerCorrelateCommands(program);
+  registerLlmCommands(program);
+  registerSemconvCommands(program);
+  registerScoreCommands(program);
+  registerCollectorCommands(program);
+
   return program;
 }
 
 /**
- * Run the CLI
+ * Run the CLI.
+ *
+ * Commander's built-in error path (missing required option, unknown command,
+ * etc.) writes a plain string to stderr and calls `process.exit(1)` before
+ * any action runs — bypassing the JSON envelope contract investigate commands
+ * promise to agents. `exitOverride()` flips that to throwing `CommanderError`
+ * which the top-level handler in `index.ts` converts to an envelope.
  */
 export async function run(): Promise<void> {
   const program = createProgram();
+  program.exitOverride();
+  // Investigate / JSON-only commands need their failure path to be
+  // single-document JSON. Commander defaults to writing an `error: ...`
+  // line to stderr before raising, which doubles the output an agent sees.
+  // Suppress it for JSON-only invocations; humans on other commands still
+  // get the helpful stderr hint.
+  const argvJoined = process.argv.slice(2).join(' ');
+  const isJsonOnly =
+    process.argv.includes('--json') ||
+    /^(schema|commands|examples|version|health|capabilities|discover|query|trace|diagnose|topology|correlate|llm|semconv|score|collector)\b/.test(
+      argvJoined,
+    );
+  if (isJsonOnly) {
+    program.configureOutput({ writeErr: () => {} });
+  }
+  // Apply exitOverride (+ stderr suppression) to every subcommand too;
+  // commander doesn't propagate either automatically through `addCommand()`.
+  const stack: Command[] = [...program.commands];
+  while (stack.length > 0) {
+    const cmd = stack.pop()!;
+    cmd.exitOverride();
+    if (isJsonOnly) {
+      cmd.configureOutput({ writeErr: () => {} });
+    }
+    stack.push(...cmd.commands);
+  }
   await program.parseAsync(process.argv);
 }

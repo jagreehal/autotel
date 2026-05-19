@@ -4,6 +4,7 @@ import {
   exitCodeForError,
   toAutotelError,
 } from './lib/errors';
+import { commanderErrorToAutotel } from './lib/commander-error';
 import { printJson } from './lib/json-output';
 
 /**
@@ -16,11 +17,12 @@ function jsonModeRequested(): boolean {
 }
 
 run().catch((error: unknown) => {
-  const err: AutotelError = toAutotelError(error);
+  const err: AutotelError =
+    commanderErrorToAutotel(error) ?? toAutotelError(error);
   const isJson =
     jsonModeRequested() ||
-    // schema/commands/examples/version are JSON-only
-    /^(schema|commands|examples|version)\b/.test(
+    // schema/commands/examples/version + investigate commands are JSON-only
+    /^(schema|commands|examples|version|health|capabilities|discover|query|trace|diagnose|topology|correlate|llm|semconv|score|collector)\b/.test(
       process.argv.slice(2).join(' ')
     );
 
