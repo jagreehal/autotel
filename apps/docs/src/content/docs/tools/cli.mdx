@@ -3,7 +3,7 @@ title: CLI
 description: Setup wizard, diagnostics, and codemods for autotel.
 ---
 
-`autotel-cli` provides an interactive setup wizard, diagnostics, and incremental feature additions.
+`autotel-cli` provides an interactive setup wizard, diagnostics, incremental feature additions, and telemetry investigation commands.
 
 ## Installation
 
@@ -61,6 +61,46 @@ npx autotel add plugin bigquery
 npx autotel add platform cloudflare
 ```
 
+### `autotel investigate` surface
+
+The CLI can query and diagnose telemetry directly (same backend model as `autotel-mcp`), returning one JSON document per invocation.
+
+```bash
+# backend health + signal availability
+npx autotel health
+npx autotel capabilities
+
+# discovery
+npx autotel discover services
+npx autotel discover trace-fields
+npx autotel discover log-fields
+
+# traces / spans / logs / metrics
+npx autotel query traces --service-name checkout --error-only --limit 20
+npx autotel query spans --service-name checkout --operation-name db.query
+npx autotel query logs --trace-id <traceId>
+npx autotel query metrics --service-name checkout
+
+# incident triage
+npx autotel diagnose anomalies --service checkout
+npx autotel diagnose root-cause <traceId>
+npx autotel correlate trace <traceId>
+```
+
+All backend-touching commands accept:
+
+```bash
+--backend collector|jaeger|tempo|prometheus|loki|stack|auto|fixture
+--jaeger-base-url <url>
+--tempo-base-url <url>
+--prometheus-base-url <url>
+--loki-base-url <url>
+--collector-port <n>
+--fixture-path <path>
+```
+
+Use `--output-file <path>` to persist command JSON and `--no-secrets-in-output` to redact secret-shaped values.
+
 ## Examples
 
 See any example app — `autotel init` generates the `instrumentation.ts` file used across all examples.
@@ -72,3 +112,8 @@ Wrap functions with `trace()`:
 ```bash
 npx autotel codemod trace ./src
 ```
+
+## Related
+
+- [MCP](/autotel/integrations/mcp/) — the `autotel-mcp` server this CLI investigate surface mirrors.
+- [Claude Code Skill](/autotel/tools/claude-code-skill/) — using these commands from a Claude skill workflow.

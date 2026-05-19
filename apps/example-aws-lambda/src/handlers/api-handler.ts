@@ -7,19 +7,16 @@
  * - DynamoDB instrumentation
  */
 
-import { init } from 'autotel';
 import { wrapHandler, traceLambda } from 'autotel-aws/lambda';
 import { instrumentSDK } from 'autotel-aws/sdk';
 import { traceDynamoDB } from 'autotel-aws/dynamodb';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import type { LambdaContext } from 'autotel-aws';
+import { initTelemetry } from '../otel-init';
 
-// Initialize autotel (reads from OTEL_* env vars)
-init({
-  service: process.env.OTEL_SERVICE_NAME || 'autotel-lambda',
-  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318',
-});
+// Wires up the right exporter for the current OTEL_MODE (see ../otel-init.ts).
+initTelemetry(process.env.OTEL_SERVICE_NAME || 'autotel-lambda');
 
 // Create instrumented DynamoDB client
 const dynamodb = instrumentSDK(new DynamoDBClient({
