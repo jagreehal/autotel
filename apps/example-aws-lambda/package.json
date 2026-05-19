@@ -26,17 +26,20 @@
     "lambda:list": "dotenv -e .env.local -- sh -c 'aws --endpoint-url=http://localhost:4566 lambda list-functions --query \"Functions[].FunctionName\" --output table'"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1045.0",
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/client-sqs": "^3.1045.0",
+    "@opentelemetry/sdk-logs": "^0.218.0",
+    "@opentelemetry/sdk-metrics": "^2.7.1",
     "autotel": "workspace:*",
     "autotel-aws": "workspace:*",
-    "@aws-sdk/client-s3": "^3.1045.0",
-    "@aws-sdk/client-dynamodb": "^3.1045.0",
-    "@aws-sdk/client-sqs": "^3.1045.0",
     "aws-cdk-lib": "^2.254.0",
     "constructs": "^10.6.0",
     "dotenv": "^17.4.2",
     "source-map-support": "^0.5.21"
   },
   "devDependencies": {
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@types/aws-lambda": "^8.10.161",
     "@types/node": "^25.7.0",
     "aws-cdk": "^2.1121.0",

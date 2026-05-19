@@ -8,7 +8,6 @@
  * - X-Ray annotations
  */
 
-import { init } from 'autotel';
 import { traceLambda } from 'autotel-aws/lambda';
 import { setXRayAnnotation } from 'autotel-aws/xray';
 import { instrumentSDK } from 'autotel-aws/sdk';
@@ -19,12 +18,10 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import type { S3Event } from 'aws-lambda';
+import { initTelemetry } from '../otel-init';
 
-// Initialize autotel (reads from OTEL_* env vars)
-init({
-  service: process.env.OTEL_SERVICE_NAME || 'autotel-lambda',
-  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318',
-});
+// Wires up the right exporter for the current OTEL_MODE (see ../otel-init.ts).
+initTelemetry(process.env.OTEL_SERVICE_NAME || 'autotel-lambda');
 
 // Create instrumented AWS SDK clients
 const s3 = instrumentSDK(new S3Client({

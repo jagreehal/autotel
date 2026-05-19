@@ -347,6 +347,150 @@ export const publishEvent = traceKinesis({
 });
 ```
 
+## CloudWatch native OTLP endpoints
+
+As of late 2025 / early 2026, CloudWatch accepts OTLP/HTTP directly — no collector required. Three SigV4-authed endpoints:
+
+| Signal | Endpoint | Lands in |
+|---|---|---|
+| Traces | `https://xray.<region>.amazonaws.com/v1/traces` | X-Ray + Application Signals + Transaction Search |
+| Logs | `https://logs.<region>.amazonaws.com/v1/logs` | CloudWatch Logs (Logs Insights / LiveTail) |
+| Metrics | `https://monitoring.<region>.amazonaws.com/v1/metrics` | CloudWatch Metrics (PromQL-queryable) |
+
+`autotel-aws/cloudwatch` ships SpanExporter / LogRecordExporter / PushMetricExporter implementations that serialize OTLP/JSON, sign with SigV4, and POST via `globalThis.fetch` — usable directly from a Lambda or any Node 18+ runtime, no sidecar.
+
+### Install the optional peers
+
+```bash
+pnpm add autotel-aws autotel \
+  @smithy/signature-v4 @aws-crypto/sha256-js \
+  @aws-sdk/credential-providers \
+  @opentelemetry/sdk-trace-base \
+  @opentelemetry/sdk-logs \
+  @opentelemetry/sdk-metrics \
+  @opentelemetry/otlp-transformer
+```
+
+Only the peers you actually use are needed (e.g. drop `sdk-logs` / `sdk-metrics` if you only export traces).
+
+### Traces
+
+```typescript
+import { init } from 'autotel';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { CloudWatchTraceExporter } from 'autotel-aws/cloudwatch';
+
+init({
+  service: 'my-service',
+  spanProcessors: [
+    new BatchSpanProcessor(
+      new CloudWatchTraceExporter({ region: 'eu-west-1' }),
+    ),
+  ],
+});
+```
+
+In Lambda, call `provider.forceFlush()` before the handler returns, or use `SimpleSpanProcessor` for synchronous export — otherwise the runtime freezes the process before the batch ships.
+
+### Logs
+
+The logs exporter needs an existing CloudWatch log group + stream. In Lambda the runtime provisions both and exposes them as `AWS_LAMBDA_LOG_GROUP_NAME` / `AWS_LAMBDA_LOG_STREAM_NAME` (read by default).
+
+```typescript
+import { BatchLogRecordProcessor, LoggerProvider } from '@opentelemetry/sdk-logs';
+import { CloudWatchLogExporter } from 'autotel-aws/cloudwatch';
+
+const provider = new LoggerProvider({
+  processors: [new BatchLogRecordProcessor(new CloudWatchLogExporter())],
+});
+```
+
+### Metrics
+
+```typescript
+import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { CloudWatchMetricExporter } from 'autotel-aws/cloudwatch';
+
+const provider = new MeterProvider({
+  readers: [
+    new PeriodicExportingMetricReader({
+      exporter: new CloudWatchMetricExporter({ region: 'eu-west-1' }),
+      exportIntervalMillis: 60_000,
+    }),
+  ],
+});
+```
+
+### Direct vs ADOT collector layer
+
+You have two integration paths:
+
+| | In-process (`autotel-aws/cloudwatch`) | ADOT Lambda extension layer |
+|---|---|---|
+| Sidecar | None | Yes (extension layer) |
+| Export latency | In the billed handler time | Outside billed time |
+| Cold start cost | Bundle size + SigV4 init | Layer init |
+| Best for | Low-volume functions, custom transports | Higher-throughput functions |
+
+Pick one — running both ships duplicate spans.
+
+### ADOT collector config (SigV4)
+
+If you prefer the ADOT Lambda extension layer, configure the collector with
+`sigv4auth` and signal-specific endpoints:
+
+```yaml
+extensions:
+  sigv4auth:
+    region: us-west-2
+    service: xray
+
+receivers:
+  otlp:
+    protocols:
+      http:
+
+exporters:
+  otlphttp/traces:
+    endpoint: https://xray.us-west-2.amazonaws.com/v1/traces
+    auth:
+      authenticator: sigv4auth
+
+service:
+  extensions: [sigv4auth]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlphttp/traces]
+```
+
+For logs/metrics use the same pattern with:
+- logs endpoint `https://logs.<region>.amazonaws.com/v1/logs`, service `logs`
+- metrics endpoint `https://monitoring.<region>.amazonaws.com/v1/metrics`, service `monitoring`
+
+### Production checklist
+
+- Set `AWS_REGION` explicitly and keep endpoint region + signer region aligned.
+- Grant IAM permissions for every signal you export (X-Ray, Logs, Metrics).
+- For logs endpoint, ensure log group + stream exist (`CloudWatchLogExporter` can read Lambda defaults).
+- Flush before Lambda return (or use ADOT mode) so buffered spans/logs/metrics are not dropped on freeze.
+- Monitor 4xx/429 responses and tune batch size / export interval to stay within quotas.
+- Choose one export path per signal (direct exporters or ADOT collector), not both.
+- Keep payload sizes within endpoint limits and use gzip where appropriate.
+- Keep runtime clocks in sync (timestamp windows are enforced).
+
+### Limits to remember
+
+- **Traces**: 5 MB / request, 10 000 spans / batch, 200 KB / span, timestamps within `[-14d, +2h]`.
+- **Logs**: 1 MB / request (20 MB in some regions for LLO-backed events). 1 MB / log event before truncation.
+- **Metrics**: 500 TPS / account, 150 labels / datapoint, 1 MB / request, 1 000 datapoints / request.
+
+### Payload format note
+
+`autotel-aws/cloudwatch` currently sends OTLP over HTTP using JSON payloads. CloudWatch endpoints also accept protobuf payloads, but protobuf transport is not currently wired in these exporters.
+
+Full details: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-OTLPEndpoint.html
+
 ## X-Ray Annotations
 
 For users sending traces to AWS X-Ray, annotations are indexed for filtering:
