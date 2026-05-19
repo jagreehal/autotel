@@ -17,6 +17,10 @@ import { otlpHttp, otlpGrpc, local } from './backends/otlp';
 import { posthog } from './subscribers/posthog';
 import { mixpanel, amplitude, segment, slack, webhook } from './subscribers/mixpanel';
 import { mongoose, drizzle } from './plugins/mongoose';
+import { sentry } from './plugins/sentry';
+import { hono } from './plugins/hono';
+import { mcp } from './plugins/mcp';
+import { tanstack } from './plugins/tanstack';
 import { awsLambda, cloudflare, edge } from './platforms/aws';
 
 /**
@@ -50,6 +54,10 @@ export const subscribers = new Map<string, SubscriberPreset>([
 export const plugins = new Map<string, PluginPreset>([
   ['mongoose', mongoose],
   ['drizzle', drizzle],
+  ['sentry', sentry],
+  ['hono', hono],
+  ['mcp', mcp],
+  ['tanstack', tanstack],
 ]);
 
 /**
@@ -202,6 +210,10 @@ export {
   webhook,
   mongoose,
   drizzle,
+  sentry,
+  hono,
+  mcp,
+  tanstack,
   awsLambda,
   cloudflare,
   edge,

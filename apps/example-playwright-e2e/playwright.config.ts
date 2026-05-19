@@ -18,7 +18,9 @@ export default defineConfig({
     command: 'PORT=3310 HOST=127.0.0.1 pnpm run start',
     url: apiBaseUrl + '/health',
     timeout: 15_000,
-    reuseExistingServer: false,
+    // In monorepo quality runs another local process can already own 3310.
+    // Reuse when available instead of failing the whole pipeline.
+    reuseExistingServer: true,
     stdout: 'ignore',
     stderr: 'pipe',
   },

@@ -1,6 +1,12 @@
 # autotel-cli
 
-CLI for autotel - setup wizard, diagnostics, and incremental features.
+CLI for autotel — setup wizard, diagnostics, and incremental features.
+
+Designed for **both humans and AI agents**: every command supports `--json`,
+errors are returned as a structured envelope with stable `AUTOTEL_E_*` codes,
+and the binary describes itself via `autotel schema`.
+
+For agents: see [`SKILL.md`](./SKILL.md) for the one-command bootstrap.
 
 ## Installation
 
@@ -30,18 +36,78 @@ npx autotel init --preset node-datadog-pino
 npx autotel init --dry-run
 ```
 
+By default `autotel init` **scans your package.json** (and the workspace root
+if you're in a monorepo) and proposes a plan: which presets to wire, which
+packages to install, which env vars you'll need. Detected loggers, web
+frameworks, MCP servers, Sentry, Cloudflare, etc. are wired automatically;
+deps covered by `@opentelemetry/auto-instrumentations-node` (Express,
+Fastify, NestJS, Next.js, pg, redis, …) are listed but not wired
+individually.
+
 **Options:**
-- `--yes, -y` - Accept defaults, non-interactive
-- `--preset <name>` - Use a quick preset (e.g., `node-datadog-pino`, `node-honeycomb`)
-- `--dry-run` - Skip installation and print what would be done
-- `--no-install` - Generate files only, skip package installation
-- `--force` - Overwrite existing config (creates backup first)
+
+| Flag | What it does |
+| --- | --- |
+| `--yes, -y` | Auto-apply detected items; no prompts |
+| `--preset <name>` | Use a named quick preset (skips detection) |
+| `--dry-run` | Print plan; write nothing |
+| `--no-install` | Generate files only; print install command |
+| `--force` | Overwrite a hand-edited instrumentation file (backup written) |
+| `--no-detect` | Skip auto-detection; requires `--plan`, `--input`, or `--preset` |
+| `--detect-only` | Print the detected plan and exit |
+| `--plan <path>` | Apply a pre-built `InitPlan` JSON file |
+| `--input -` / `--input <path>` | Read `InitPlan` JSON from stdin or a file |
+| `--scan-env` | Consent to reading `.env` / `.env.local` for backend detection |
+| `--json` | Machine-readable JSON instead of human output |
+| `--output-file <path>` | Persist JSON output to a file |
+| `--no-secrets-in-output` | Redact secret-shaped values (`*KEY*`, `*TOKEN*`, etc.) |
+| `--no-interactive` | Fail fast instead of prompting |
+
+**Detection coverage:**
+
+- **Frameworks (auto-wired):** Hono, MCP servers/clients, TanStack Start
+- **Frameworks (via `auto-instrumentations-node`):** Express, Fastify, NestJS, Next.js, pg, mysql/2, redis, ioredis, GraphQL, AWS SDK
+- **Loggers:** Pino (first-class — `init({ logger })`), Winston/Bunyan (auto-instrumented)
+- **Subscribers:** PostHog, Mixpanel, Amplitude, Segment, Slack
+- **Plugins:** Mongoose, Drizzle, Sentry
+- **Platforms:** Cloudflare (from `wrangler.toml`), AWS Lambda, Edge
+- **Backends from env vars:** `DD_API_KEY` → Datadog, `HONEYCOMB_API_KEY` → Honeycomb, `OTEL_EXPORTER_OTLP_ENDPOINT` → OTLP
 
 **Quick presets:**
 - `node-datadog-pino` - Node.js + Datadog + Pino logging
 - `node-datadog-agent` - Node.js + Datadog Agent (local development)
 - `node-honeycomb` - Node.js + Honeycomb
 - `node-otlp` - Node.js + Generic OTLP endpoint
+
+### Agent-native discovery
+
+```bash
+autotel schema              # Full command manifest with side-effect metadata
+autotel schema errors       # Error envelope shape + AUTOTEL_E_* codes
+autotel schema outputs      # JSON output shapes per command
+autotel commands            # Compact one-line-per-command listing
+autotel examples [name]     # Copy-pasteable examples
+autotel version             # Version + runtime info as JSON
+```
+
+All output is JSON. Errors are returned as:
+
+```json
+{
+  "ok": false,
+  "command": "autotel init",
+  "error": {
+    "type": "validation",
+    "code": "AUTOTEL_E_NO_PACKAGE_JSON",
+    "message": "No package.json found at ...",
+    "retryable": false,
+    "fix": "cd into a directory with a package.json, or pass --cwd <path>",
+    "expected": { "file": "package.json" }
+  }
+}
+```
+
+Exit codes: `0` success, `1` runtime failure, `2` validation/conflict.
 
 ### `autotel doctor`
 

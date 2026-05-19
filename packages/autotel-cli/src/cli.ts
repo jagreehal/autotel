@@ -4,6 +4,14 @@ import { runInit } from './commands/init';
 import { runDoctor } from './commands/doctor';
 import { runAdd } from './commands/add';
 import { runCodemodTrace } from './commands/codemod-trace';
+import {
+  runSchema,
+  runSchemaErrors,
+  runSchemaOutputs,
+  runCommandsListing,
+  runExamples,
+  runVersion,
+} from './commands/schema';
 
 /**
  * Create the CLI program
@@ -34,11 +42,24 @@ export function createProgram(): Command {
     .option('--preset <name>', 'Use a quick preset (e.g., node-datadog-pino)')
     .option('--force', 'Overwrite existing config (creates backup first)')
     .option('--workspace-root', 'Install at workspace root instead of package root')
+    // Detection-driven flow
+    .option('--no-detect', 'Skip auto-detection of installed deps')
+    .option('--detect-only', 'Run detection, print the plan, write nothing')
+    .option('--plan <path>', 'Apply a pre-built InitPlan JSON file')
+    .option('--input <path>', 'Read InitPlan JSON from stdin (-) or a file')
+    .option('--scan-env', 'Consent to reading .env / .env.local for backend detection')
+    // Agent-native I/O
+    .option('--json', 'Emit machine-readable JSON')
+    .option('--output-file <path>', 'Persist JSON output to this file')
+    .option('--no-secrets-in-output', 'Redact secret-shaped values')
+    .option('--no-interactive', 'Never prompt; fail if input would be required')
     .action(async (opts) => {
+      // Commander maps --no-X flags to opts.X = false (NOT opts.noX), so
+      // read the negative flags via the positive name.
       const options: InitOptions = {
         cwd: opts.cwd ?? process.cwd(),
         dryRun: opts.dryRun ?? false,
-        noInstall: opts.noInstall ?? false,
+        noInstall: opts.install === false,
         printInstallCmd: opts.printInstallCmd ?? false,
         verbose: opts.verbose ?? false,
         quiet: opts.quiet ?? false,
@@ -46,6 +67,15 @@ export function createProgram(): Command {
         yes: opts.yes ?? false,
         preset: opts.preset,
         force: opts.force ?? false,
+        noDetect: opts.detect === false,
+        detectOnly: opts.detectOnly ?? false,
+        plan: opts.plan,
+        input: opts.input,
+        scanEnv: opts.scanEnv ?? false,
+        json: opts.json ?? false,
+        outputFile: opts.outputFile,
+        noSecrets: opts.secretsInOutput === false,
+        noInteractive: opts.interactive === false,
       };
 
       // --dry-run implies --no-install and --print-install-cmd
@@ -158,6 +188,58 @@ export function createProgram(): Command {
   codemodCmd.addCommand(traceCmd);
   addGlobalOptions(codemodCmd);
   program.addCommand(codemodCmd);
+
+  // Agent-native discovery surface (always JSON).
+  const schemaCmd = new Command('schema')
+    .description('Print the CLI manifest as JSON (agent discovery)')
+    .option('--output-file <path>', 'Persist JSON to a file')
+    .option('--no-secrets-in-output', 'Redact secret-shaped values')
+    .action((opts) => {
+      runSchema({ outputFile: opts.outputFile, noSecrets: opts.secretsInOutput === false });
+    });
+
+  const schemaErrorsCmd = new Command('errors')
+    .description('Print error envelope shape + AUTOTEL_E_* codes')
+    .option('--output-file <path>', 'Persist JSON to a file')
+    .action((opts) => {
+      runSchemaErrors({ outputFile: opts.outputFile });
+    });
+
+  const schemaOutputsCmd = new Command('outputs')
+    .description('Print JSON output shapes per command')
+    .option('--output-file <path>', 'Persist JSON to a file')
+    .action((opts) => {
+      runSchemaOutputs({ outputFile: opts.outputFile });
+    });
+
+  schemaCmd.addCommand(schemaErrorsCmd);
+  schemaCmd.addCommand(schemaOutputsCmd);
+  program.addCommand(schemaCmd);
+
+  const commandsCmd = new Command('commands')
+    .description('Print compact tool-style listing of commands')
+    .option('--output-file <path>', 'Persist JSON to a file')
+    .action((opts) => {
+      runCommandsListing({ outputFile: opts.outputFile });
+    });
+  program.addCommand(commandsCmd);
+
+  const examplesCmd = new Command('examples')
+    .description('Print copy-pasteable examples for a command')
+    .argument('[command]', 'Command name (omit for all)')
+    .option('--output-file <path>', 'Persist JSON to a file')
+    .action((name: string | undefined, opts) => {
+      runExamples(name, { outputFile: opts.outputFile });
+    });
+  program.addCommand(examplesCmd);
+
+  const versionCmd = new Command('version')
+    .description('Print version info as JSON')
+    .option('--output-file <path>', 'Persist JSON to a file')
+    .action((opts) => {
+      runVersion({ outputFile: opts.outputFile });
+    });
+  program.addCommand(versionCmd);
 
   return program;
 }

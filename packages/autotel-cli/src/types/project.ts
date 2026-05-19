@@ -94,6 +94,20 @@ export interface InitOptions extends GlobalOptions {
   yes: boolean;
   preset?: string;
   force: boolean;
+  // Detection-driven flow flags
+  noDetect: boolean;
+  detectOnly: boolean;
+  /** Path to a pre-built InitPlan JSON. Skips detection. */
+  plan?: string;
+  /** Stdin if "-" else path to a JSON plan/overrides. */
+  input?: string;
+  /** Consent to read .env / .env.local for backend detection. */
+  scanEnv: boolean;
+  // Agent-native I/O flags
+  json: boolean;
+  outputFile?: string;
+  noSecrets: boolean;
+  noInteractive: boolean;
 }
 
 /**

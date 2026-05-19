@@ -1,7 +1,8 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 import type { InitOptions, Preset, EnvVar } from '../types/index';
-import { discoverProject, getInstrumentationPath } from '../lib/project';
+import { discoverProject } from '../lib/project';
 import { getInstallCommand } from '../lib/package-manager';
 import { detectConfig } from '../lib/config-detector';
 import {
@@ -11,180 +12,350 @@ import {
   addSubscriberConfig,
   addPluginInit,
   renderCodeFile,
+  setPinoLogger,
+  addAutoInstrumentationLogger,
 } from '../lib/code-builder';
 import { generateEnvExample } from '../lib/env-generator';
-import { atomicWrite, fileExists } from '../lib/fs';
+import { atomicWrite, fileExists, readFileSafe } from '../lib/fs';
 import {
-  buildDependencyPlan,
-  getProdPackages,
-  getDevPackages,
-} from '../lib/dependency-planner';
+  detectInProject,
+  envFilesRequireConsent,
+} from '../lib/dep-detector';
+import { buildPlanFromDetection } from '../lib/plan-builder';
+import { parsePlan, type InitPlan } from '../lib/plan';
 import {
-  backends,
-  subscribers,
-  plugins,
+  parseInstrumentation,
+  diffImportSources,
+  diffAutoInstrumentations,
+} from '../lib/instrumentation-parser';
+import { confirmOrEditPlan } from '../ui/preview';
+import {
+  AutotelError,
+  AutotelErrorCodes,
+  toAutotelError,
+} from '../lib/errors';
+import {
+  configureJsonOutput,
+  printJson,
+} from '../lib/json-output';
+import {
   getQuickPreset,
   getPreset,
 } from '../presets/index';
 import {
-  promptRuntime,
-  promptBackend,
-  promptLogging,
-  promptDatabases,
-  promptSubscribers,
-  promptAutoInstrumentation,
-  promptStartupStyle,
+  promptConfirm,
   promptExistingConfigAction,
 } from '../ui/prompts';
 import * as output from '../ui/output';
-import { createSpinner, isCI } from '../ui/spinner';
+import { isCI } from '../ui/spinner';
 
 /**
- * Run the init command
+ * Run the init command.
+ *
+ * Order of operations:
+ *   1. Source the plan:
+ *        --plan <path>  → read+parse a pre-built plan
+ *        --input -      → read plan from stdin
+ *        --preset <q>   → translate quick preset to plan
+ *        else           → run detection (unless --no-detect)
+ *      If no source is available, fail fast with E_INVALID_FLAG.
+ *   2. If detection-driven and interactive: preview + confirm (or edit/abort).
+ *      --yes / --no-interactive / --json skip the prompt.
+ *   3. --json or --dry-run: emit/print the plan, do not write.
+ *   4. Apply: render instrumentation file (merge if existing CLI-owned),
+ *      write .env.example, run installs (per-package PM-native).
  */
 export async function runInit(options: InitOptions): Promise<void> {
-  const spinner = createSpinner();
-
-  // Set output mode
-  if (options.verbose) {
-    process.env['AUTOTEL_VERBOSE'] = 'true';
-  }
-  if (options.quiet) {
-    process.env['AUTOTEL_QUIET'] = 'true';
+  // Configure agent-native I/O up front so errors bubble through correctly.
+  if (options.json) {
+    configureJsonOutput({
+      outputFile: options.outputFile,
+      noSecrets: options.noSecrets,
+    });
   }
 
-  // Discover project
-  spinner.start('Discovering project...');
+  if (options.verbose) process.env['AUTOTEL_VERBOSE'] = 'true';
+  if (options.quiet) process.env['AUTOTEL_QUIET'] = 'true';
+
   const project = discoverProject(options.cwd);
-
-  if (!project) {
-    spinner.fail('No package.json found');
-    output.error('Run this command in a directory with a package.json, or use --cwd');
-    process.exit(1);
+  if (project === null) {
+    throw new AutotelError({
+      type: 'environment',
+      code: AutotelErrorCodes.E_NO_PACKAGE_JSON,
+      message: `No package.json found at or above ${options.cwd}`,
+      fix: 'cd into a directory with a package.json, or pass --cwd <path>',
+      expected: { file: 'package.json' },
+    });
   }
 
-  spinner.succeed(`Found ${project.packageJson.name ?? 'project'}`);
-  output.verbose(`Package root: ${project.packageRoot}`);
-  output.verbose(`Package manager: ${project.packageManager}`);
+  // Configure output root for any --output-file writes.
+  if (options.json && options.outputFile !== undefined) {
+    configureJsonOutput({
+      outputFile: options.outputFile,
+      outputRoot: project.packageRoot,
+      noSecrets: options.noSecrets,
+    });
+  }
 
-  // Check for existing config
-  const existingConfig = detectConfig(project.packageRoot);
+  // === Plan sourcing =====================================================
 
-  if (existingConfig.found && !options.force) {
-    output.info(`Existing instrumentation detected at ${existingConfig.path}`);
+  let plan: InitPlan | null = null;
 
-    if (options.yes || isCI()) {
-      output.warn('Use --force to overwrite existing config');
-      process.exit(0);
-    }
+  if (options.plan !== undefined) {
+    plan = readPlanFromFile(options.plan);
+  } else if (options.input !== undefined) {
+    plan = await readPlanFromInput(options.input);
+  } else if (options.preset !== undefined) {
+    plan = planFromQuickPreset(options.preset, project);
+  } else if (!options.noDetect) {
+    plan = await planFromDetection(project, options);
+  }
 
-    const action = await promptExistingConfigAction();
-    if (action === 'abort') {
+  // If no plan source was available (e.g. --no-detect with no --plan/--input/
+  // --preset), fail fast. init is detection/plan-driven.
+  if (plan === null) {
+    throw new AutotelError({
+      type: 'validation',
+      code: AutotelErrorCodes.E_INVALID_FLAG,
+      message:
+        'No plan source available (--no-detect disables detection)',
+      fix: 'Drop --no-detect or pass --plan / --input / --preset',
+    });
+  }
+
+  // === Preview / confirmation ===========================================
+
+  const interactive =
+    !options.yes && !options.noInteractive && !options.json && !isCI();
+
+  if (
+    interactive &&
+    options.plan === undefined &&
+    options.input === undefined &&
+    options.preset === undefined
+  ) {
+    // Only show preview for the auto-detected flow. Explicit-input flows
+    // skip preview because the user already supplied the plan.
+    const confirmed = await confirmOrEditPlan(plan);
+    if (confirmed === null) {
       output.info('Aborted');
-      process.exit(0);
+      return;
     }
-    // For 'update' or 'new', continue with the flow
+    plan = confirmed;
   }
 
-  // Determine selections
-  const selectedPresets: Preset[] = [];
-  let autoInstrumentations: 'all' | 'none' | string[] = 'all';
-  let startupStyle = 'node-esm';
+  // === Detect-only / JSON / dry-run early exits =========================
 
-  // Check for quick preset
-  if (options.preset) {
-    const quickPreset = getQuickPreset(options.preset);
-    if (quickPreset) {
-      output.info(`Using quick preset: ${quickPreset.name}`);
-      const backendPreset = getPreset('backend', quickPreset.backend);
-      if (backendPreset) {
-        selectedPresets.push(backendPreset);
-      }
-      if (quickPreset.subscribers) {
-        for (const sub of quickPreset.subscribers) {
-          const subPreset = getPreset('subscriber', sub);
-          if (subPreset) selectedPresets.push(subPreset);
-        }
-      }
-      if (quickPreset.plugins) {
-        for (const plug of quickPreset.plugins) {
-          const plugPreset = getPreset('plugin', plug);
-          if (plugPreset) selectedPresets.push(plugPreset);
-        }
-      }
-      autoInstrumentations = quickPreset.autoInstrumentations;
+  if (options.detectOnly) {
+    if (options.json) {
+      printJson({ ok: true, command: 'autotel init', plan });
     } else {
-      output.error(`Unknown preset: ${options.preset}`);
-      output.info('Available presets: node-datadog-pino, node-datadog-agent, node-honeycomb, node-otlp');
-      process.exit(1);
+      output.info('Detection-only mode — no files written');
+      console.log(JSON.stringify(plan, null, 2));
     }
-  } else if (options.yes || isCI()) {
-    // Default profile for --yes
-    output.info('Using defaults (local backend, all auto-instrumentations)');
-    const localPreset = getPreset('backend', 'local');
-    if (localPreset) {
-      selectedPresets.push(localPreset);
-    }
-  } else {
-    // Interactive prompts
-    const runtime = await promptRuntime();
-    output.verbose(`Runtime: ${runtime}`);
-
-    // Backend
-    const backendSlug = await promptBackend(backends);
-    const backendPreset = getPreset('backend', backendSlug);
-    if (backendPreset) {
-      selectedPresets.push(backendPreset);
-    }
-
-    // Logging (future enhancement - not fully implemented)
-    await promptLogging();
-
-    // Databases/Plugins
-    const pluginSlugs = await promptDatabases(plugins);
-    for (const slug of pluginSlugs) {
-      const preset = getPreset('plugin', slug);
-      if (preset) selectedPresets.push(preset);
-    }
-
-    // Subscribers
-    const subscriberSlugs = await promptSubscribers(subscribers);
-    for (const slug of subscriberSlugs) {
-      const preset = getPreset('subscriber', slug);
-      if (preset) selectedPresets.push(preset);
-    }
-
-    // Auto-instrumentation
-    const autoChoice = await promptAutoInstrumentation();
-    if (autoChoice === 'none') {
-      autoInstrumentations = 'none';
-    } else if (autoChoice === 'specific') {
-      // For now, just use all - specific selection would need another prompt
-      autoInstrumentations = 'all';
-    }
-
-    // Startup style
-    if (runtime === 'node') {
-      startupStyle = await promptStartupStyle(project.hasTypeScript);
-    }
+    return;
   }
 
-  // Build code file
-  const codeFile = createCodeFile();
+  if (options.json && options.dryRun) {
+    printJson({ ok: true, command: 'autotel init', plan, dryRun: true });
+    return;
+  }
 
-  // Add core imports
+  if (options.json && !options.dryRun) {
+    // Apply, then emit a result envelope.
+    const applied = applyPlan({ plan, project, options });
+    printJson({ ok: true, command: 'autotel init', plan, applied });
+    return;
+  }
+
+  // === Apply (human-output path) ========================================
+
+  if (options.dryRun) {
+    output.heading('\nDry run — no files will be written\n');
+    console.log(JSON.stringify(plan, null, 2));
+    return;
+  }
+
+  const applied = applyPlan({ plan, project, options });
+  printApplySummary({ plan, applied, project, options });
+}
+
+// ----------------------------------------------------------------------------
+// Plan sourcing helpers
+// ----------------------------------------------------------------------------
+
+function readPlanFromFile(filePath: string): InitPlan {
+  const content = readFileSafe(filePath);
+  if (content === null) {
+    throw new AutotelError({
+      type: 'io',
+      code: AutotelErrorCodes.E_READ_FAILED,
+      message: `Could not read plan file: ${filePath}`,
+    });
+  }
+  try {
+    return parsePlan(JSON.parse(content));
+  } catch (error) {
+    if (error instanceof AutotelError) throw error;
+    throw new AutotelError({
+      type: 'validation',
+      code: AutotelErrorCodes.E_INVALID_PLAN,
+      message: `Plan file is not valid JSON: ${(error as Error).message}`,
+    });
+  }
+}
+
+async function readPlanFromInput(input: string): Promise<InitPlan> {
+  if (input === '-') {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const content = Buffer.concat(chunks).toString('utf8');
+    try {
+      return parsePlan(JSON.parse(content));
+    } catch (error) {
+      if (error instanceof AutotelError) throw error;
+      throw new AutotelError({
+        type: 'validation',
+        code: AutotelErrorCodes.E_INVALID_INPUT,
+        message: `stdin did not contain valid JSON: ${(error as Error).message}`,
+      });
+    }
+  }
+  return readPlanFromFile(input);
+}
+
+function planFromQuickPreset(
+  slug: string,
+  project: ReturnType<typeof discoverProject>
+): InitPlan {
+  if (project === null) {
+    throw new AutotelError({
+      type: 'environment',
+      code: AutotelErrorCodes.E_NO_PACKAGE_JSON,
+      message: 'project required',
+    });
+  }
+  const quick = getQuickPreset(slug);
+  if (quick === undefined) {
+    throw new AutotelError({
+      type: 'validation',
+      code: AutotelErrorCodes.E_UNKNOWN_PRESET,
+      message: `Unknown preset: ${slug}`,
+      fix: 'Run `autotel commands --json` to see available presets',
+    });
+  }
+  // Synthesise a DetectionResult-equivalent and reuse the plan builder.
+  const presets: string[] = [ quick.backend];
+  if (quick.subscribers) presets.push(...quick.subscribers);
+  if (quick.plugins) presets.push(...quick.plugins);
+
+  const { plan } = buildPlanFromDetection({
+    project,
+    detection: {
+      packages: [],
+      presets: presets as ReturnType<
+        typeof detectInProject
+      >['presets'],
+      primaryLogger: quick.logging === 'pino' ? 'pino' : null,
+      autoInstrumentLoggers: [],
+      autoInstrumentedDeps: [],
+      backend: { slug: quick.backend as never, source: 'default' },
+      platform: null,
+    },
+  });
+  return plan;
+}
+
+async function planFromDetection(
+  project: ReturnType<typeof discoverProject>,
+  options: InitOptions
+): Promise<InitPlan> {
+  if (project === null) {
+    throw new AutotelError({
+      type: 'environment',
+      code: AutotelErrorCodes.E_NO_PACKAGE_JSON,
+      message: 'project required',
+    });
+  }
+
+  let envConsent = options.scanEnv;
+  if (
+    !envConsent &&
+    envFilesRequireConsent(project.packageRoot) &&
+    !options.yes &&
+    !options.noInteractive &&
+    !options.json &&
+    !isCI()
+  ) {
+    envConsent = await promptConfirm(
+      `Found a .env file. Read its keys to help detect the backend? (values are never read)`,
+      false
+    );
+  }
+
+  const detection = detectInProject({ project, envConsent });
+  const { plan } = buildPlanFromDetection({ project, detection });
+  return plan;
+}
+
+// ----------------------------------------------------------------------------
+// Apply
+// ----------------------------------------------------------------------------
+
+interface ApplyResult {
+  wroteFiles: string[];
+  ranInstalls: string[];
+  printedInstalls: string[];
+  installErrors: string[];
+}
+
+function applyPlan(args: {
+  plan: InitPlan;
+  project: NonNullable<ReturnType<typeof discoverProject>>;
+  options: InitOptions;
+}): ApplyResult {
+  const { plan, project, options } = args;
+  const result: ApplyResult = {
+    wroteFiles: [],
+    ranInstalls: [],
+    printedInstalls: [],
+    installErrors: [],
+  };
+
+  // Resolve presets
+  const presets: Preset[] = [];
+  for (const slug of plan.presets) {
+    const p = resolvePreset(slug);
+    if (p !== null) presets.push(p);
+  }
+
+  // Build the instrumentation file
+  const codeFile = createCodeFile();
   addImport(codeFile, { source: 'autotel/register', sideEffect: true });
   addImport(codeFile, { source: 'autotel', specifiers: ['init'] });
 
-  // Add preset imports and config
-  for (const preset of selectedPresets) {
+  // Logger
+  if (plan.detected?.primaryLogger === 'pino') {
+    setPinoLogger(codeFile);
+  }
+  for (const l of plan.detected?.autoInstrumentLoggers ?? []) {
+    addAutoInstrumentationLogger(codeFile, l);
+  }
+
+  for (const preset of presets) {
     for (const imp of preset.imports) {
-      const section = preset.type === 'backend' || preset.type === 'platform' ? 'backend' :
-                      preset.type === 'plugin' ? 'plugin' :
-                      preset.type === 'subscriber' ? 'subscriber' : undefined;
+      const section =
+        preset.type === 'backend' || preset.type === 'platform'
+          ? 'backend'
+          : preset.type === 'plugin'
+            ? 'plugin'
+            : preset.type === 'subscriber'
+              ? 'subscriber'
+              : undefined;
       addImport(codeFile, imp, section);
     }
-
     if (preset.configBlock.section === 'BACKEND_CONFIG') {
       setBackendConfig(codeFile, preset.configBlock.code);
     } else if (preset.configBlock.section === 'SUBSCRIBERS_CONFIG') {
@@ -194,163 +365,182 @@ export async function runInit(options: InitOptions): Promise<void> {
     }
   }
 
-  // If no backend config was set, add placeholder
-  if (!codeFile.backendConfig) {
+  if (codeFile.backendConfig === null) {
     setBackendConfig(codeFile, '// Local/console mode - no backend configured');
   }
 
-  const instrumentationContent = renderCodeFile(codeFile);
+  const newContent = renderCodeFile(codeFile);
 
-  // Build dependency plan
-  const depPlan = buildDependencyPlan({
-    presets: selectedPresets,
-    autoInstrumentations,
-  });
-
-  // Collect env vars
-  const envVars: EnvVar[] = [];
-  for (const preset of selectedPresets) {
-    envVars.push(...preset.env.required, ...preset.env.optional);
-  }
-
-  const envExampleContent = generateEnvExample(envVars);
-
-  // Determine paths
-  const instrumentationPath = getInstrumentationPath(project.packageRoot, project.hasTypeScript);
+  // Path resolution
+  const instrumentationPath = resolveInstrumentationPath(project);
   const envExamplePath = path.join(project.packageRoot, '.env.example');
 
-  // Dry run - just print what would happen
-  if (options.dryRun) {
-    output.heading('\nDry run - no files will be written\n');
-
-    output.info(`Would write: ${path.relative(project.cwd, instrumentationPath)}`);
-    console.log('---');
-    console.log(instrumentationContent);
-    console.log('---\n');
-
-    if (envExampleContent) {
-      output.info(`Would write: ${path.relative(project.cwd, envExamplePath)}`);
-      console.log('---');
-      console.log(envExampleContent);
-      console.log('---\n');
+  // Merge with existing CLI-owned file if present
+  const existing = readFileSafe(instrumentationPath);
+  if (existing !== null) {
+    const parsed = parseInstrumentation(existing);
+    if (!parsed.cliOwned && !options.force) {
+      throw new AutotelError({
+        type: 'conflict',
+        code: AutotelErrorCodes.E_EXISTING_CONFIG,
+        message: `Hand-edited instrumentation file at ${instrumentationPath} (no CLI markers found)`,
+        fix: 'Pass --force to overwrite (creates a .bak backup) or remove the file',
+        expected: { path: instrumentationPath },
+      });
     }
-
-    const prodPkgs = getProdPackages(depPlan);
-    const devPkgs = getDevPackages(depPlan);
-
-    if (prodPkgs.length > 0) {
-      const cmd = getInstallCommand(project.packageManager, prodPkgs);
-      output.info(`Would run: ${cmd}`);
+    // For CLI-owned files we still atomic-overwrite. Surgical merging is
+    // best-effort: we use the diff helpers to compute what was actually new
+    // for logging purposes, but we re-render the whole file. This keeps
+    // the output canonical and matches the existing --force backup contract.
+    const addedImports = diffImportSources(
+      parsed,
+      [
+        ...codeFile.imports,
+        ...codeFile.backendImports,
+        ...codeFile.pluginImports,
+        ...codeFile.subscriberImports,
+        ...codeFile.loggerImports,
+      ].map((i) => i.source)
+    );
+    const addedAuto = diffAutoInstrumentations(
+      parsed,
+      codeFile.autoInstrumentations
+    );
+    const contentChanged = existing !== newContent;
+    if (
+      addedImports.length === 0 &&
+      addedAuto.length === 0 &&
+      parsed.cliOwned &&
+      !contentChanged
+    ) {
+      // Nothing new — skip the write entirely.
+      result.wroteFiles.push(
+        `${path.relative(project.cwd, instrumentationPath)} (no changes)`
+      );
+    } else {
+      atomicWrite(instrumentationPath, newContent, {
+        root: project.packageRoot,
+        backup: true,
+      });
+      result.wroteFiles.push(path.relative(project.cwd, instrumentationPath));
     }
-    if (devPkgs.length > 0) {
-      const cmd = getInstallCommand(project.packageManager, devPkgs, { dev: true });
-      output.info(`Would run: ${cmd}`);
-    }
-
-    process.exit(0);
+  } else {
+    atomicWrite(instrumentationPath, newContent, {
+      root: project.packageRoot,
+    });
+    result.wroteFiles.push(path.relative(project.cwd, instrumentationPath));
   }
 
-  // Write files
-  spinner.start('Writing instrumentation file...');
-  const { backupPath: instrBackup } = atomicWrite(instrumentationPath, instrumentationContent, {
-    root: project.packageRoot,
-    backup: options.force,
-  });
-  if (instrBackup) {
-    output.verbose(`Backup created: ${instrBackup}`);
+  // .env.example
+  const envVars: EnvVar[] = [];
+  for (const p of presets) {
+    envVars.push(...p.env.required, ...p.env.optional);
   }
-  spinner.succeed(`Wrote ${path.relative(project.cwd, instrumentationPath)}`);
-
-  // Write .env.example if we have env vars
-  if (envExampleContent && !fileExists(envExamplePath)) {
-    spinner.start('Writing .env.example...');
-    atomicWrite(envExamplePath, envExampleContent, { root: project.packageRoot });
-    spinner.succeed(`Wrote ${path.relative(project.cwd, envExamplePath)}`);
+  const envExampleContent = generateEnvExample(envVars);
+  if (envExampleContent.length > 0 && !fileExists(envExamplePath)) {
+    atomicWrite(envExamplePath, envExampleContent, {
+      root: project.packageRoot,
+    });
+    result.wroteFiles.push(path.relative(project.cwd, envExamplePath));
   }
 
-  // Install dependencies
-  const prodPkgs = getProdPackages(depPlan);
-  const devPkgs = getDevPackages(depPlan);
+  // Installs
+  const prod = plan.packagesToInstall.prod;
+  const dev = plan.packagesToInstall.dev;
 
-  if (!options.noInstall && (prodPkgs.length > 0 || devPkgs.length > 0)) {
-    if (prodPkgs.length > 0) {
-      const cmd = getInstallCommand(project.packageManager, prodPkgs);
-      if (options.printInstallCmd) {
-        output.info(`Install command: ${cmd}`);
-      } else {
-        spinner.start('Installing dependencies...');
+  if (prod.length > 0 || dev.length > 0) {
+    if (options.noInstall || options.printInstallCmd) {
+      if (prod.length > 0) {
+        result.printedInstalls.push(
+          getInstallCommand(project.packageManager, prod)
+        );
+      }
+      if (dev.length > 0) {
+        result.printedInstalls.push(
+          getInstallCommand(project.packageManager, dev, { dev: true })
+        );
+      }
+    } else {
+      if (prod.length > 0) {
+        const cmd = getInstallCommand(project.packageManager, prod);
         try {
           execSync(cmd, { cwd: project.packageRoot, stdio: 'pipe' });
-          spinner.succeed('Dependencies installed');
+          result.ranInstalls.push(cmd);
         } catch {
-          spinner.fail('Failed to install dependencies');
-          output.error(`Run manually: ${cmd}`);
+          result.installErrors.push(cmd);
+        }
+      }
+      if (dev.length > 0) {
+        const cmd = getInstallCommand(project.packageManager, dev, {
+          dev: true,
+        });
+        try {
+          execSync(cmd, { cwd: project.packageRoot, stdio: 'pipe' });
+          result.ranInstalls.push(cmd);
+        } catch {
+          result.installErrors.push(cmd);
         }
       }
     }
-
-    if (devPkgs.length > 0) {
-      const cmd = getInstallCommand(project.packageManager, devPkgs, { dev: true });
-      if (options.printInstallCmd) {
-        output.info(`Install command (dev): ${cmd}`);
-      } else {
-        spinner.start('Installing dev dependencies...');
-        try {
-          execSync(cmd, { cwd: project.packageRoot, stdio: 'pipe' });
-          spinner.succeed('Dev dependencies installed');
-        } catch {
-          spinner.fail('Failed to install dev dependencies');
-          output.error(`Run manually: ${cmd}`);
-        }
-      }
-    }
-  } else if (options.noInstall && (prodPkgs.length > 0 || devPkgs.length > 0)) {
-    output.info('Skipping installation (--no-install)');
-    if (prodPkgs.length > 0) {
-      const cmd = getInstallCommand(project.packageManager, prodPkgs);
-      output.dim(`Run: ${cmd}`);
-    }
-    if (devPkgs.length > 0) {
-      const cmd = getInstallCommand(project.packageManager, devPkgs, { dev: true });
-      output.dim(`Run: ${cmd}`);
-    }
   }
 
-  // Print next steps
-  const relInstrPath = path.relative(project.packageRoot, instrumentationPath);
+  return result;
+}
 
-  let nextStepCmd: string;
-  switch (startupStyle) {
-    case 'tsx':
-      nextStepCmd = `tsx --import ./${relInstrPath} src/index.ts`;
-      break;
-    case 'node-esm':
-    default:
-      nextStepCmd = `node --import ./${relInstrPath} dist/index.js`;
+function resolveInstrumentationPath(
+  project: NonNullable<ReturnType<typeof discoverProject>>
+): string {
+  // Re-use existing logic from project.ts. Local import-free version:
+  const srcDir = path.join(project.packageRoot, 'src');
+  const hasSrcDir =
+    fs.existsSync(srcDir) ||
+    fileExists(path.join(project.packageRoot, 'src', 'index.ts')) ||
+    fileExists(path.join(project.packageRoot, 'src', 'index.js'));
+  const dir = hasSrcDir ? srcDir : project.packageRoot;
+  const ext = project.hasTypeScript ? 'mts' : 'mjs';
+  return path.join(dir, `instrumentation.${ext}`);
+}
+
+function resolvePreset(slug: string): Preset | null {
+  for (const type of ['backend', 'subscriber', 'plugin', 'platform'] as const) {
+    const p = getPreset(type, slug);
+    if (p !== undefined) return p;
   }
+  return null;
+}
 
-  // Print footer
-  const pmInfo = project.workspace.isMonorepo
-    ? `${project.packageManager} workspace, package root ${project.packageRoot}`
-    : `${project.packageManager}`;
-
-  const writtenFiles = [path.relative(project.cwd, instrumentationPath)];
-  if (envExampleContent && !fileExists(envExamplePath)) {
-    writtenFiles.push('.env.example');
+function printApplySummary(args: {
+  plan: InitPlan;
+  applied: ApplyResult;
+  project: NonNullable<ReturnType<typeof discoverProject>>;
+  options: InitOptions;
+}): void {
+  const { applied, plan, project } = args;
+  if (applied.wroteFiles.length > 0) {
+    output.success(`Wrote: ${applied.wroteFiles.join(', ')}`);
   }
-
-  console.log(output.formatFooter({
-    detected: pmInfo,
-    wrote: writtenFiles,
-    next: nextStepCmd,
-  }));
-
-  // Print additional next steps from presets
-  const allNextSteps = selectedPresets.flatMap((p) => p.nextSteps);
-  if (allNextSteps.length > 0) {
+  for (const cmd of applied.ranInstalls) {
+    output.info(`Installed: ${cmd}`);
+  }
+  for (const cmd of applied.printedInstalls) {
+    output.dim(`Run: ${cmd}`);
+  }
+  for (const cmd of applied.installErrors) {
+    output.error(`Install failed — run manually: ${cmd}`);
+  }
+  if (plan.nextSteps.length > 0) {
     console.log('\nNext steps:');
-    for (const step of allNextSteps) {
+    for (const step of plan.nextSteps) {
       console.log(`  - ${step}`);
     }
   }
+  const pmInfo = project.workspace.isMonorepo
+    ? `${project.packageManager} workspace, package root ${project.packageRoot}`
+    : project.packageManager;
+  console.log(`\n${output.formatPackageManagerInfo
+    ? output.formatPackageManagerInfo(project.packageManager, project.lockfilePath)
+    : pmInfo}`);
 }
+
+// Re-export for tests / external callers (existing public surface).
+export { detectConfig, toAutotelError, promptExistingConfigAction };
