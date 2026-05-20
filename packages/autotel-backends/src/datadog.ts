@@ -32,6 +32,11 @@ import { createRequire } from 'node:module';
 import type { AutotelConfig } from 'autotel';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 
+// `__filename` exists under CJS (including esbuild's CJS output wrapper) but
+// not pure ESM. `typeof` is safe against an undeclared identifier and lets
+// the conditional pick the working URL in either format.
+declare const __filename: string | undefined;
+
 /**
  * Datadog site regions
  */
@@ -308,7 +313,9 @@ export function createDatadogConfig(
     } else {
       // Create default OTLP log exporter
       try {
-        const pkgRequire = createRequire(import.meta.url);
+        const pkgRequire = createRequire(
+          typeof __filename === 'string' ? __filename : import.meta.url,
+        );
         const { BatchLogRecordProcessor } = pkgRequire(
           '@opentelemetry/sdk-logs',
         );

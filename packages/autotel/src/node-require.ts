@@ -11,13 +11,21 @@
 
 import { createRequire } from 'node:module';
 
-// createRequire(import.meta.url) works in both formats: esbuild/tsup rewrites
-// `import.meta.url` to a working equivalent in CJS output (pathToFileURL of
-// __filename). A previous `typeof require === 'undefined'` ternary did NOT
-// survive bundling — with tsup's code-splitting it was rewritten to use a
-// polyglot `__require` stub that threw "Dynamic require not supported" in
-// ESM consumers, breaking optional peers like @traceloop/node-server-sdk.
-const nodeRequire = createRequire(import.meta.url);
+// `__filename` is provided by CJS and by esbuild's CJS output wrapper, but
+// is undefined under pure ESM. `import.meta.url` is provided by ESM. Pick
+// whichever is available so the helper works in:
+//   - native CJS (autotel's published `.cjs`)
+//   - native ESM (autotel's published `.js`)
+//   - ESM-bundled-into-CJS by a downstream consumer (e.g. CDK's
+//     `aws-lambda-nodejs` → esbuild with `format: cjs`). esbuild rewrites
+//     `import.meta` to `{}` in this case, so `createRequire(import.meta.url)`
+//     alone collapses to `createRequire(undefined)` and crashes at load.
+// `typeof __filename` does NOT throw when the identifier is undeclared, so
+// the ESM build evaluates the conditional safely.
+declare const __filename: string | undefined;
+const nodeRequire = createRequire(
+  typeof __filename === 'string' ? __filename : import.meta.url,
+);
 
 /**
  * Synchronously require a module (works in both CJS and ESM)
