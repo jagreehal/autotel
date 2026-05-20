@@ -1,0 +1,25 @@
+{
+  "_source": "opentelemetry-python-contrib instrumentation-openai-agents-v2 — HandoffSpanData emission: gen_ai.operation.name='execute_handoff', gen_ai.handoff.from_agent / to_agent set, conversation.id shared across the trace.",
+  "traceId": "b1d2c3e4f5a6b7c8d9e0f1a2b3c4d5e6",
+  "spanId": "cccc3333dddd4444",
+  "parentSpanId": "eeee5555ffff6666",
+  "name": "execute_handoff",
+  "kind": "INTERNAL",
+  "startTime": 1716100004000000000,
+  "endTime": 1716100004012000000,
+  "duration": 12000000,
+  "attributes": {
+    "gen_ai.operation.name": "execute_handoff",
+    "gen_ai.provider.name": "openai",
+    "gen_ai.system": "openai",
+    "gen_ai.handoff.from_agent": "Triage Agent",
+    "gen_ai.handoff.to_agent": "Refunds Specialist",
+    "gen_ai.agent.id": "agent_triage_001",
+    "gen_ai.agent.name": "Triage Agent",
+    "gen_ai.agent.description": "Routes customer queries to the right specialist.",
+    "gen_ai.conversation.id": "conv_2026_05_19_42",
+    "gen_ai.request.model": "gpt-4o-mini",
+    "gen_ai.output.type": "text"
+  },
+  "status": { "code": "OK" }
+}

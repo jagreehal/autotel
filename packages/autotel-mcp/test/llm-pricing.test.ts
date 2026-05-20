@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -75,10 +75,16 @@ describe('llm-pricing', () => {
     const path = join(dir, 'prices.json');
     writeFileSync(path, '{ not valid json');
     process.env.AUTOTEL_LLM_PRICES_JSON = path;
+    // The loader logs the parse failure via console.error — that's the
+    // contract under test (it warns instead of crashing). Silence the noise
+    // since we're asserting graceful-degradation, not the log.
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     resetCostCatalogCache();
 
     // Still works with defaults.
     expect(priceFor('gpt-4o')?.inputPerMtok).toBe(2.5);
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 
   it('catalog is readable and includes expected anchor models', () => {

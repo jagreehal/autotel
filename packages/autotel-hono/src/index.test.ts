@@ -191,8 +191,13 @@ describe('otel middleware', () => {
         throw new Error('boom');
       });
 
+    // Hono logs unhandled errors to console.error by default. The test
+    // intentionally throws to verify span behavior — silence the framework
+    // log so the test output stays clean.
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await app.request('http://localhost/err', { method: 'GET' });
     expect(res.status).toBe(500);
+    errSpy.mockRestore();
 
     expect(spanCollector.span.setStatus).toHaveBeenCalledWith({ code: 2 }); // SpanStatusCode.ERROR
     expect(spanCollector.span.recordException).toHaveBeenCalledWith(
@@ -236,8 +241,11 @@ describe('otel middleware', () => {
         throw 'string throw' as unknown as Error;
       });
 
+    // Hono surfaces the string throw via console.error; silence for the test.
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(app.request('http://localhost/bad', { method: 'GET' })).rejects.toBe('string throw');
     expect(baseSpan.end).toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 
   it('when disableTracing is true, does not create span but still records metrics', async () => {

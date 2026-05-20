@@ -15,6 +15,11 @@ import type {
   DockPosition,
 } from './types';
 import { buildResourceSummaries } from './utils/resources';
+import { isGenAiSpan } from './genai/detect';
+import { toGenAiSpan } from './genai/normalize';
+import { buildToolResultIndex, hydrateToolResults } from './genai/stitch';
+import type { GenAiSpan } from './genai/types';
+import type { SpanData } from './types';
 
 // ===== Widget UI State =====
 export const widgetExpandedSignal = signal(false);
@@ -111,6 +116,36 @@ export const resourceSummariesSignal = computed(() =>
     errors: errorGroupsSignal.value,
   }),
 );
+
+/**
+ * GenAI rows — normalized once whenever traces change, not per render.
+ * Each row pairs the raw span with its normalized GenAiSpan, the service
+ * it came from, and the traceId for cross-linking.
+ */
+export interface GenAiRow {
+  raw: SpanData;
+  normalized: GenAiSpan;
+  service: string;
+  traceId: string;
+}
+
+export const genAiRowsSignal = computed<GenAiRow[]>(() => {
+  const rows: GenAiRow[] = [];
+  for (const trace of tracesSignal.value) {
+    const toolResultIndex = buildToolResultIndex(trace.spans);
+    for (const span of trace.spans) {
+      if (!isGenAiSpan(span)) continue;
+      const normalized = toGenAiSpan(span);
+      hydrateToolResults(normalized, toolResultIndex);
+      rows.push({ raw: span, normalized, service: trace.service, traceId: trace.traceId });
+    }
+  }
+  // Newest first.
+  rows.sort((a, b) => b.normalized.startNs - a.normalized.startNs);
+  return rows;
+});
+
+export const genAiCountSignal = computed(() => genAiRowsSignal.value.length);
 
 /**
  * Error groups sorted by most recent

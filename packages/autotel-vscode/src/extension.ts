@@ -2,6 +2,8 @@ import * as vscode from 'vscode'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { relative, resolve, sep } from 'node:path'
 import type { ErrorGroup, LogData, TraceData } from 'autotel-devtools/server'
+import { AutotelCodeLensProvider, AutotelHoverProvider } from './codelens'
+import { getAdapter, listAdapters, credentialKey } from './backends'
 
 const {
   ErrorAggregator,
@@ -22,6 +24,11 @@ const COMMANDS = [
   'autotel.copySpanId',
   'autotel.openSpanDetail',
   'autotel.openDevtools',
+  'autotel.queryBackend',
+  'autotel.setBackendCredential',
+  'autotel.clearBackendCredential',
+  'autotel.openMetrics',
+  'autotel.openServiceMap',
 ] as const
 
 const extensionDisposables: vscode.Disposable[] = []
@@ -44,15 +51,20 @@ let servicesProvider: ServicesProvider | undefined
 let tracesProvider: TracesProvider | undefined
 let logsProvider: LogsProvider | undefined
 let errorsProvider: ErrorsProvider | undefined
+let codeLensProvider: AutotelCodeLensProvider | undefined
 
 const spanPanels = new Map<string, vscode.WebviewPanel>()
 let extensionUri: vscode.Uri | undefined
+let extensionSecrets: vscode.SecretStorage | undefined
 
 function refreshTreeViews(): void {
   servicesProvider?.refresh()
   tracesProvider?.refresh()
   logsProvider?.refresh()
   errorsProvider?.refresh()
+  codeLensProvider?.refresh()
+  refreshMetricsPanel()
+  refreshServiceMapPanel()
 }
 
 function registerCommands(context: vscode.ExtensionContext): void {
@@ -82,6 +94,21 @@ function registerCommands(context: vscode.ExtensionContext): void {
           return
         case 'autotel.openDevtools':
           void openDevtools()
+          return
+        case 'autotel.queryBackend':
+          void queryRemoteBackend()
+          return
+        case 'autotel.setBackendCredential':
+          void setBackendCredential()
+          return
+        case 'autotel.clearBackendCredential':
+          void clearBackendCredential()
+          return
+        case 'autotel.openMetrics':
+          openMetricsPanel()
+          return
+        case 'autotel.openServiceMap':
+          openServiceMapPanel()
           return
       }
     })
@@ -125,6 +152,420 @@ class PayloadTooLargeError extends Error {
     super('Payload too large')
     this.name = 'PayloadTooLargeError'
   }
+}
+
+interface MetricsSummary {
+  service: string
+  count: number
+  errorCount: number
+  p50Ms: number
+  p95Ms: number
+  topOperations: Array<{ name: string; count: number; p95Ms: number; errorPct: number }>
+}
+
+function quantile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0
+  const pos = (sorted.length - 1) * q
+  const lo = Math.floor(pos)
+  const hi = Math.ceil(pos)
+  if (lo === hi) return sorted[lo]
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo)
+}
+
+function summarizeMetrics(currentTraces: readonly TraceData[]): MetricsSummary[] {
+  const byService = new Map<string, { durations: number[]; errors: number; ops: Map<string, { d: number[]; errs: number }> }>()
+  for (const trace of currentTraces) {
+    for (const span of trace.spans) {
+      const svc = trace.service ?? 'unknown'
+      const ms = span.duration / 1_000_000
+      const errored = span.status?.code === 'ERROR'
+      let entry = byService.get(svc)
+      if (!entry) {
+        entry = { durations: [], errors: 0, ops: new Map() }
+        byService.set(svc, entry)
+      }
+      entry.durations.push(ms)
+      if (errored) entry.errors += 1
+      let opEntry = entry.ops.get(span.name)
+      if (!opEntry) {
+        opEntry = { d: [], errs: 0 }
+        entry.ops.set(span.name, opEntry)
+      }
+      opEntry.d.push(ms)
+      if (errored) opEntry.errs += 1
+    }
+  }
+  const out: MetricsSummary[] = []
+  for (const [service, e] of byService) {
+    const sorted = [...e.durations].sort((a, b) => a - b)
+    const topOps = [...e.ops.entries()]
+      .map(([name, op]) => {
+        const opSorted = [...op.d].sort((a, b) => a - b)
+        return {
+          name,
+          count: op.d.length,
+          p95Ms: quantile(opSorted, 0.95),
+          errorPct: (op.errs / op.d.length) * 100,
+        }
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+    out.push({
+      service,
+      count: e.durations.length,
+      errorCount: e.errors,
+      p50Ms: quantile(sorted, 0.5),
+      p95Ms: quantile(sorted, 0.95),
+      topOperations: topOps,
+    })
+  }
+  return out.sort((a, b) => b.count - a.count)
+}
+
+let metricsPanel: vscode.WebviewPanel | undefined
+
+function openMetricsPanel(): void {
+  if (metricsPanel) {
+    metricsPanel.reveal(vscode.ViewColumn.Beside)
+    metricsPanel.webview.html = renderMetricsHtml(summarizeMetrics(traces))
+    return
+  }
+  const panel = vscode.window.createWebviewPanel(
+    'autotel.metrics',
+    'Autotel Metrics',
+    vscode.ViewColumn.Beside,
+    { enableScripts: false, retainContextWhenHidden: true },
+  )
+  metricsPanel = panel
+  panel.onDidDispose(() => {
+    metricsPanel = undefined
+  })
+  panel.webview.html = renderMetricsHtml(summarizeMetrics(traces))
+}
+
+function refreshMetricsPanel(): void {
+  if (!metricsPanel) return
+  metricsPanel.webview.html = renderMetricsHtml(summarizeMetrics(traces))
+}
+
+interface ServiceMapEdge {
+  from: string
+  to: string
+  callCount: number
+  errorCount: number
+  p95Ms: number
+}
+
+interface ServiceMapData {
+  services: string[]
+  edges: ServiceMapEdge[]
+}
+
+function buildServiceMap(currentTraces: readonly TraceData[]): ServiceMapData {
+  const services = new Set<string>()
+  const edgeKey = (from: string, to: string): string => `${from} ${to}`
+  const edges = new Map<string, { calls: number; errors: number; durations: number[] }>()
+  for (const trace of currentTraces) {
+    const spanService = new Map<string, string>()
+    for (const span of trace.spans) {
+      const svc = String(span.attributes?.['service.name'] ?? trace.service ?? 'unknown')
+      spanService.set(span.spanId, svc)
+      services.add(svc)
+    }
+    for (const span of trace.spans) {
+      if (!span.parentSpanId) continue
+      const parentSvc = spanService.get(span.parentSpanId)
+      const ownSvc = spanService.get(span.spanId)
+      if (!parentSvc || !ownSvc || parentSvc === ownSvc) continue
+      const key = edgeKey(parentSvc, ownSvc)
+      let edge = edges.get(key)
+      if (!edge) {
+        edge = { calls: 0, errors: 0, durations: [] }
+        edges.set(key, edge)
+      }
+      edge.calls += 1
+      if (span.status?.code === 'ERROR') edge.errors += 1
+      edge.durations.push(span.duration / 1_000_000)
+    }
+  }
+  const edgeList: ServiceMapEdge[] = [...edges.entries()].map(([k, v]) => {
+    const [from, to] = k.split(' ')
+    const sorted = [...v.durations].sort((a, b) => a - b)
+    const p95 = quantile(sorted, 0.95)
+    return { from, to, callCount: v.calls, errorCount: v.errors, p95Ms: p95 }
+  })
+  edgeList.sort((a, b) => b.callCount - a.callCount)
+  return { services: [...services].sort(), edges: edgeList }
+}
+
+let serviceMapPanel: vscode.WebviewPanel | undefined
+
+function openServiceMapPanel(): void {
+  if (serviceMapPanel) {
+    serviceMapPanel.reveal(vscode.ViewColumn.Beside)
+    serviceMapPanel.webview.html = renderServiceMapHtml(buildServiceMap(traces))
+    return
+  }
+  const panel = vscode.window.createWebviewPanel(
+    'autotel.serviceMap',
+    'Autotel Service Map',
+    vscode.ViewColumn.Beside,
+    { enableScripts: false, retainContextWhenHidden: true },
+  )
+  serviceMapPanel = panel
+  panel.onDidDispose(() => {
+    serviceMapPanel = undefined
+  })
+  panel.webview.html = renderServiceMapHtml(buildServiceMap(traces))
+}
+
+function refreshServiceMapPanel(): void {
+  if (!serviceMapPanel) return
+  serviceMapPanel.webview.html = renderServiceMapHtml(buildServiceMap(traces))
+}
+
+function renderServiceMapHtml(data: ServiceMapData): string {
+  const escape = (s: string): string =>
+    s.replace(/[&<>"']/g, (ch) =>
+      ch === '&' ? '&amp;' :
+      ch === '<' ? '&lt;' :
+      ch === '>' ? '&gt;' :
+      ch === '"' ? '&quot;' : '&#39;',
+    )
+  const fmt = (ms: number): string =>
+    ms < 1 ? `${(ms * 1000).toFixed(0)}μs` : ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(2)}s`
+
+  // Build an inline SVG layout: services arranged in a vertical list, edges
+  // drawn as curves between them with thickness ∝ call count. Keeps the
+  // webview script-free (no graph library, no CSP relaxation needed).
+  const ROW_HEIGHT = 36
+  const LEFT_X = 180
+  const RIGHT_X = 480
+  const svgHeight = Math.max(120, data.services.length * ROW_HEIGHT + 40)
+  const yFor = (svc: string): number => 20 + data.services.indexOf(svc) * ROW_HEIGHT + ROW_HEIGHT / 2
+
+  const svcRows = data.services.map((svc) => {
+    const y = yFor(svc)
+    return `<text x="20" y="${y}" dy="0.35em" class="svc">${escape(svc)}</text>`
+  }).join('')
+
+  const edgePaths = data.edges.map((edge) => {
+    const x1 = LEFT_X
+    const x2 = RIGHT_X - 20
+    const y1 = yFor(edge.from)
+    const y2 = yFor(edge.to)
+    const mx = (x1 + x2) / 2
+    const stroke = Math.max(1, Math.min(8, Math.log2(edge.callCount + 1) * 1.5))
+    const errored = edge.errorCount > 0
+    return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" class="edge ${errored ? 'edge-err' : ''}" stroke-width="${stroke}" />`
+  }).join('')
+
+  const edgeRows = data.edges.length === 0
+    ? '<tr><td colspan="4" class="muted">No cross-service edges detected. Service map populates as soon as a parent span on one service calls a child on another.</td></tr>'
+    : data.edges.map((e) => `
+        <tr>
+          <td><code>${escape(e.from)}</code> → <code>${escape(e.to)}</code></td>
+          <td class="num">${e.callCount}</td>
+          <td class="num">${fmt(e.p95Ms)}</td>
+          <td class="num ${e.errorCount > 0 ? 'err' : ''}">${e.errorCount > 0 ? `${((e.errorCount / e.callCount) * 100).toFixed(0)}%` : '—'}</td>
+        </tr>`).join('')
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); margin: 0; padding: 16px; }
+  h2, h3 { margin-top: 0; }
+  .svc { fill: var(--vscode-foreground); font-size: 12px; font-family: var(--vscode-editor-font-family); }
+  .edge { stroke: var(--vscode-charts-blue, #2563eb); fill: none; opacity: 0.65; }
+  .edge-err { stroke: var(--vscode-errorForeground); opacity: 0.9; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+  th { color: var(--vscode-descriptionForeground); font-weight: 600; font-size: 0.8rem; }
+  .num { text-align: right; }
+  .err { color: var(--vscode-errorForeground); }
+  .muted { color: var(--vscode-descriptionForeground); font-style: italic; padding: 12px; text-align: center; }
+  code { background: var(--vscode-textBlockQuote-background); padding: 1px 4px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 0.85rem; }
+  .map { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 4px; background: var(--vscode-editor-inactiveSelectionBackground, transparent); }
+</style>
+</head>
+<body>
+<h2>Service Map</h2>
+<p>${data.services.length} service${data.services.length === 1 ? '' : 's'} · ${data.edges.length} cross-service edge${data.edges.length === 1 ? '' : 's'}</p>
+${data.services.length > 0 ? `<div class="map"><svg viewBox="0 0 ${RIGHT_X} ${svgHeight}" width="100%" height="${svgHeight}">${edgePaths}${svcRows}</svg></div>` : ''}
+<h3>Edge details</h3>
+<table>
+  <thead><tr><th>Edge</th><th class="num">Calls</th><th class="num">p95</th><th class="num">Errors</th></tr></thead>
+  <tbody>${edgeRows}</tbody>
+</table>
+</body>
+</html>`
+}
+
+function renderMetricsHtml(rows: MetricsSummary[]): string {
+  const escape = (s: string): string =>
+    s.replace(/[&<>"']/g, (ch) =>
+      ch === '&' ? '&amp;' :
+      ch === '<' ? '&lt;' :
+      ch === '>' ? '&gt;' :
+      ch === '"' ? '&quot;' : '&#39;',
+    )
+  const fmt = (ms: number): string =>
+    ms < 1 ? `${(ms * 1000).toFixed(0)}μs` : ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(2)}s`
+  const body = rows.length === 0
+    ? '<p class="muted">No traces buffered yet.</p>'
+    : rows.map((r) => `
+        <section>
+          <h3>${escape(r.service)}</h3>
+          <p class="meta">
+            <strong>${r.count}</strong> spans ·
+            p50 <strong>${fmt(r.p50Ms)}</strong> ·
+            p95 <strong>${fmt(r.p95Ms)}</strong> ·
+            ${r.errorCount > 0 ? `<span class="err">${((r.errorCount / r.count) * 100).toFixed(1)}% errors</span>` : '<span class="ok">no errors</span>'}
+          </p>
+          <table>
+            <thead><tr><th>Operation</th><th class="num">Count</th><th class="num">p95</th><th class="num">Errors</th></tr></thead>
+            <tbody>
+              ${r.topOperations.map((op) => `
+                <tr>
+                  <td><code>${escape(op.name)}</code></td>
+                  <td class="num">${op.count}</td>
+                  <td class="num">${fmt(op.p95Ms)}</td>
+                  <td class="num ${op.errorPct > 0 ? 'err' : ''}">${op.errorPct > 0 ? `${op.errorPct.toFixed(0)}%` : '—'}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </section>`).join('')
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); margin: 0; padding: 16px; }
+  h2 { margin-top: 0; }
+  section { margin: 0 0 28px; border-top: 1px solid var(--vscode-panel-border); padding-top: 12px; }
+  h3 { margin: 0 0 6px; }
+  .meta { color: var(--vscode-descriptionForeground); margin: 4px 0 12px; }
+  .err { color: var(--vscode-errorForeground); }
+  .ok { color: var(--vscode-testing-iconPassed, #4caf50); }
+  .muted { color: var(--vscode-descriptionForeground); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+  th { color: var(--vscode-descriptionForeground); font-weight: 600; font-size: 0.8rem; }
+  .num { text-align: right; }
+  code { background: var(--vscode-textBlockQuote-background); padding: 1px 4px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<h2>Service Metrics</h2>
+${body}
+</body>
+</html>`
+}
+
+async function pickAdapterId(): Promise<string | undefined> {
+  const adapters = listAdapters()
+  if (adapters.length === 0) return undefined
+  const choice = await vscode.window.showQuickPick(
+    adapters.map((a) => ({ label: a.label, id: a.id })),
+    { placeHolder: 'Which backend?' },
+  )
+  return choice?.id
+}
+
+async function setBackendCredential(): Promise<void> {
+  if (!extensionSecrets) {
+    void vscode.window.showErrorMessage('Extension not fully activated; secrets unavailable.')
+    return
+  }
+  const adapterId = await pickAdapterId()
+  if (!adapterId) return
+  const token = await vscode.window.showInputBox({
+    prompt: `API key / bearer token for ${adapterId}`,
+    password: true,
+    ignoreFocusOut: true,
+  })
+  if (!token) return
+  await extensionSecrets.store(credentialKey(adapterId), token)
+  void vscode.window.showInformationMessage(`Saved ${adapterId} credential to VSCode SecretStorage.`)
+}
+
+async function clearBackendCredential(): Promise<void> {
+  if (!extensionSecrets) return
+  const adapterId = await pickAdapterId()
+  if (!adapterId) return
+  await extensionSecrets.delete(credentialKey(adapterId))
+  void vscode.window.showInformationMessage(`Cleared ${adapterId} credential.`)
+}
+
+async function queryRemoteBackend(): Promise<void> {
+  const config = vscode.workspace.getConfiguration('autotel')
+  const type = config.get<string>('backend.type', 'none')
+  if (type === 'none' || type === '') {
+    void vscode.window.showWarningMessage(
+      'No backend configured. Set autotel.backend.type to "jaeger" (or another supported backend) and autotel.backend.url first.',
+    )
+    return
+  }
+  const adapter = getAdapter(type)
+  if (!adapter) {
+    void vscode.window.showErrorMessage(
+      `Unknown autotel.backend.type "${type}". Available: ${listAdapters()
+        .map((a) => a.id)
+        .join(', ')}.`,
+    )
+    return
+  }
+  const baseUrl = config.get<string | null>('backend.url', null)
+  if (!baseUrl) {
+    void vscode.window.showErrorMessage('autotel.backend.url is required to query the backend.')
+    return
+  }
+  const dataset = config.get<string | null>('backend.dataset', null) ?? undefined
+  const aborter = new AbortController()
+  const ctx = {
+    baseUrl,
+    dataset,
+    secrets: {
+      get: (k: string): Promise<string | undefined> =>
+        Promise.resolve(extensionSecrets?.get(k)),
+    },
+    abortSignal: aborter.signal,
+    timeoutMs: 30_000,
+  }
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Querying ${adapter.label}…`,
+      cancellable: true,
+    },
+    async (_progress, token) => {
+      token.onCancellationRequested(() => aborter.abort())
+      try {
+        const services = await adapter.listServices(ctx)
+        const service = await vscode.window.showQuickPick(services, {
+          placeHolder: 'Select a service',
+        })
+        if (!service) return
+        const remoteTraces = await adapter.searchTraces(ctx, { service, limit: 50 })
+        if (remoteTraces.length === 0) {
+          void vscode.window.showInformationMessage(`No traces for ${service}.`)
+          return
+        }
+        // Merge into the existing buffer so every existing view (tree, span
+        // detail, GenAI render, CodeLens) lights up without further wiring.
+        ingestTraces(remoteTraces)
+        updateStatusBar('running')
+        void vscode.window.showInformationMessage(
+          `Pulled ${remoteTraces.length} trace${remoteTraces.length === 1 ? '' : 's'} from ${adapter.label}.`,
+        )
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        void vscode.window.showErrorMessage(`Backend query failed: ${msg}`)
+      }
+    },
+  )
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -476,6 +917,37 @@ function renderWebviewHtml(webview: vscode.Webview, scriptUri: vscode.Uri): stri
     .status-message { color: var(--vscode-errorForeground); }
     .muted { color: var(--vscode-descriptionForeground); }
     ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+
+    /* GenAI section — uses VSCode theme tokens so it follows light/dark mode. */
+    .genai-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+    .genai-chip { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+    .genai-chip[data-provider="anthropic"] { background: var(--vscode-charts-orange, #d97706); color: white; }
+    .genai-chip[data-provider="openai"] { background: var(--vscode-charts-green, #059669); color: white; }
+    .genai-chip[data-provider="google"] { background: var(--vscode-charts-blue, #2563eb); color: white; }
+    .genai-chip[data-provider="ollama"] { background: var(--vscode-charts-purple, #7c3aed); color: white; }
+    .genai-model { font-weight: 500; }
+    .genai-meta { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 0.85rem; }
+    .genai-cached { color: var(--vscode-charts-green, #059669); margin-left: 4px; }
+    .genai-cost { color: var(--vscode-foreground); }
+    .genai-agent { margin: 4px 0 8px 0; }
+    .genai-conversation { display: flex; flex-direction: column; gap: 8px; }
+    .genai-message { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 8px 10px; }
+    .genai-role { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; color: var(--vscode-descriptionForeground); margin-bottom: 4px; }
+    .genai-role-user { border-left: 3px solid var(--vscode-charts-blue, #2563eb); }
+    .genai-role-assistant { border-left: 3px solid var(--vscode-charts-green, #059669); }
+    .genai-role-system { border-left: 3px solid var(--vscode-descriptionForeground); }
+    .genai-role-tool { border-left: 3px solid var(--vscode-charts-orange, #d97706); }
+    .genai-parts { display: flex; flex-direction: column; gap: 6px; }
+    .genai-text { margin: 0; white-space: pre-wrap; line-height: 1.4; }
+    .genai-json { background: var(--vscode-textBlockQuote-background); padding: 6px 8px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 0.75rem; margin: 2px 0; overflow-x: auto; max-height: 240px; }
+    .genai-finish { font-size: 0.7rem; color: var(--vscode-descriptionForeground); margin-top: 4px; }
+    .genai-tool { border: 1px solid var(--vscode-charts-purple, #7c3aed); border-radius: 4px; margin-top: 6px; overflow: hidden; }
+    .genai-tool-header { background: var(--vscode-charts-purple, #7c3aed); background: color-mix(in srgb, var(--vscode-charts-purple, #7c3aed) 20%, transparent); color: var(--vscode-foreground); border: none; padding: 4px 8px; width: 100%; text-align: left; cursor: pointer; font-family: var(--vscode-editor-font-family); font-size: 0.8rem; }
+    .genai-tool-name { font-weight: 500; }
+    .genai-tool-body { padding: 6px 8px; }
+    .genai-tool-section { margin-bottom: 6px; }
+    .genai-tool-output { background: color-mix(in srgb, var(--vscode-charts-green, #059669) 10%, transparent); padding: 6px; border-radius: 3px; }
+    .genai-tool-label { font-size: 0.65rem; font-weight: 600; letter-spacing: 0.08em; color: var(--vscode-descriptionForeground); margin-bottom: 2px; }
   </style>
 </head>
 <body>
@@ -742,6 +1214,7 @@ function formatDuration(ms: number): string {
 
 export function activate(context: vscode.ExtensionContext): void {
   extensionUri = context.extensionUri
+  extensionSecrets = context.secrets
   outputChannel = vscode.window.createOutputChannel('Autotel')
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10)
   statusBarItem.command = 'autotel.start'
@@ -762,6 +1235,27 @@ export function activate(context: vscode.ExtensionContext): void {
   const errorsView = vscode.window.registerTreeDataProvider('autotel.errors', errorsProvider)
   context.subscriptions.push(servicesView, tracesView, logsView, errorsView)
   extensionDisposables.push(servicesView, tracesView, logsView, errorsView)
+
+  // Tier 2 — editor-integrated DX: CodeLens + hover providers attach to every
+  // open document and surface live telemetry next to the source. Both read
+  // from the same `traces` array refreshed by the OTLP receiver.
+  codeLensProvider = new AutotelCodeLensProvider(() => traces)
+  const hoverProvider = new AutotelHoverProvider(() => traces)
+  const selector: vscode.DocumentSelector = [
+    { scheme: 'file' },
+    { language: 'typescript' },
+    { language: 'typescriptreact' },
+    { language: 'javascript' },
+    { language: 'javascriptreact' },
+    { language: 'python' },
+    { language: 'go' },
+    { language: 'rust' },
+    { language: 'java' },
+  ]
+  const codeLensSub = vscode.languages.registerCodeLensProvider(selector, codeLensProvider)
+  const hoverSub = vscode.languages.registerHoverProvider(selector, hoverProvider)
+  context.subscriptions.push(codeLensSub, hoverSub)
+  extensionDisposables.push(codeLensSub, hoverSub)
 
   const configSub = vscode.workspace.onDidChangeConfiguration((event) => {
     if (!event.affectsConfiguration('autotel.receiver.enabled') &&
