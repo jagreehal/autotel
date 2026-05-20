@@ -169,8 +169,57 @@ function getFirstParameterToken(fn: GenericFunction): string | null {
   return null;
 }
 
+/**
+ * Symbol that explicitly marks a function as immediate-execution-with-ctx
+ * (`(ctx) => result`), bypassing parameter-name introspection. Library
+ * authors who wrap user handlers — like `autotel-aws/lambda`'s `wrapHandler`
+ * — should mark their inner trace function with this so dispatch survives
+ * downstream bundlers that minify parameter names.
+ */
+const IMMEDIATE_EXECUTION_SYMBOL = Symbol.for('autotel.immediate-execution');
+
+type ImmediateExecutionFlag = {
+  [IMMEDIATE_EXECUTION_SYMBOL]?: true;
+};
+
+function hasImmediateExecutionMark(fn: unknown): boolean {
+  return (
+    typeof fn === 'function' &&
+    (fn as ImmediateExecutionFlag)[IMMEDIATE_EXECUTION_SYMBOL] === true
+  );
+}
+
+/**
+ * Mark a function as immediate-execution-with-ctx so `trace(name, fn)`
+ * dispatch doesn't depend on the first parameter being named `ctx`.
+ *
+ * Necessary when the function will be bundled by a minifier (esbuild,
+ * terser, etc.) that renames identifiers. The name-allowlist heuristic in
+ * `looksLikeTraceFactory` cannot recover from that; the marker can.
+ *
+ * @example
+ * ```ts
+ * import { markAsImmediate, trace } from 'autotel';
+ *
+ * const inner = markAsImmediate(async (ctx) => {
+ *   ctx.setAttribute('user.id', '123');
+ *   return { ok: true };
+ * });
+ * const result = await trace('user.read', inner);
+ * ```
+ */
+export function markAsImmediate<F>(fn: F): F {
+  if (typeof fn === 'function') {
+    (fn as unknown as ImmediateExecutionFlag)[IMMEDIATE_EXECUTION_SYMBOL] = true;
+  }
+  return fn;
+}
+
 function looksLikeTraceFactory(fn: GenericFunction): boolean {
   if (hasFactoryMark(fn)) {
+    return true;
+  }
+  if (hasImmediateExecutionMark(fn)) {
     return true;
   }
 

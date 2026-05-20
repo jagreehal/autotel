@@ -91,6 +91,7 @@ export {
   withNewContext,
   withBaggage,
   ctx,
+  markAsImmediate,
 } from './functional';
 // `trace` is the hybrid: callable like autotel's `trace(fn)` AND carries the
 // full `@opentelemetry/api` TraceAPI surface (getActiveSpan, getTracer, etc).

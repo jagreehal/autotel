@@ -7,6 +7,7 @@ import {
   ctx,
   span,
   withBaggage,
+  markAsImmediate,
 } from './functional';
 import type { TraceContext } from './trace-helpers';
 import type { TracingOptions } from './functional';
@@ -919,6 +920,30 @@ describe('Functional API', () => {
       expect(spans).toHaveLength(1);
       expect(spans[0]!.name).toBe('custom.operation');
       expect(spans[0]!.attributes['operation.id']).toBe('123');
+    });
+
+    // Regression: when esbuild/terser minifies the inner function, the
+    // `ctx` parameter gets renamed to a single letter and the name-allowlist
+    // in looksLikeTraceFactory stops matching. Library authors who wrap user
+    // handlers (e.g. autotel-aws/lambda's wrapHandler) should use
+    // `markAsImmediate` to opt the inner function into immediate execution
+    // regardless of parameter naming.
+    it('honors markAsImmediate so dispatch survives minified parameter names', async () => {
+      const collector = createTraceCollector();
+
+      // Parameter named `d` simulates the post-minification shape.
+      const inner = markAsImmediate(async (d: TraceContext) => {
+        d.setAttribute('test.minified', true);
+        return 'ok';
+      });
+      const result = await trace('minified.handler', inner);
+
+      expect(result).toBe('ok');
+
+      const spans = collector.getSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.name).toBe('minified.handler');
+      expect(spans[0]!.attributes['test.minified']).toBe(true);
     });
 
     it('should support options with immediate execution', async () => {
