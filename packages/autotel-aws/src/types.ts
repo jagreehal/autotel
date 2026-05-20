@@ -2,6 +2,7 @@
  * AWS-specific types for autotel-aws
  */
 
+import type { Context } from 'aws-lambda';
 import type { SpanContext } from '@opentelemetry/api';
 
 /**
@@ -23,17 +24,13 @@ export interface LambdaEvent {
 }
 
 /**
- * AWS Lambda context
+ * AWS Lambda context.
+ *
+ * Aliased to `aws-lambda`'s `Context` so consumers can pass a standard
+ * Lambda context through `wrapHandler`/`traceLambda`/`tracingMiddleware`
+ * without narrowing or casting.
  */
-export interface LambdaContext {
-  awsRequestId: string;
-  functionName: string;
-  functionVersion: string;
-  invokedFunctionArn: string;
-  memoryLimitInMB: string;
-  getRemainingTimeInMillis: () => number;
-  [key: string]: unknown;
-}
+export type LambdaContext = Context;
 
 /**
  * AWS SDK v3 command metadata
