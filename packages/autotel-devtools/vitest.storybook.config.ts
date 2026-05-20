@@ -22,4 +22,11 @@ export default defineConfig({
       instances: [{ browser: 'chromium' }],
     },
   },
+  // The project is Preact (configured via @storybook/preact-vite with JSX
+  // aliased to preact). Storybook's addon-vitest registers React entries in
+  // optimizeDeps.include — exclude them so Vite doesn't try (and fail) to
+  // pre-bundle a stack the project never touches.
+  optimizeDeps: {
+    exclude: ['react', 'react-dom', 'react-dom/client', 'react-dom/test-utils', 'react/jsx-runtime'],
+  },
 });

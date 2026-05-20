@@ -1,0 +1,90 @@
+[
+  {
+    "traceId": "f87a8f0cf6074681f8df1bed2120ee5f",
+    "spanId": "30d93cf84ec7df18",
+    "name": "probe",
+    "kind": "INTERNAL",
+    "startTime": 1779223762850000000,
+    "endTime": 1779223762850156300,
+    "duration": 156416,
+    "attributes": {
+      "probe.ok": true
+    },
+    "status": {
+      "code": "UNSET"
+    },
+    "events": []
+  },
+  {
+    "traceId": "3d2bec74b5a62d2999e8ea2266db0695",
+    "spanId": "1b06593c1c22f6b8",
+    "name": "ai.generateText.doGenerate",
+    "kind": "INTERNAL",
+    "startTime": 1779223762862000000,
+    "endTime": 1779223763056395300,
+    "duration": 194395136,
+    "attributes": {
+      "operation.name": "ai.generateText.doGenerate",
+      "ai.operationId": "ai.generateText.doGenerate",
+      "ai.model.provider": "ollama",
+      "ai.model.id": "granite4.1:3b",
+      "ai.settings.maxRetries": 2,
+      "ai.request.headers.user-agent": "ai/6.0.174",
+      "ai.prompt.messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply with one short greeting.\"}]}]",
+      "gen_ai.system": "ollama",
+      "gen_ai.request.model": "granite4.1:3b",
+      "ai.response.finishReason": "stop",
+      "ai.response.text": "Hello!",
+      "ai.response.id": "aitxt-jqiCBPw71YdJPDyuQdCYepZN",
+      "ai.response.model": "granite4.1:3b",
+      "ai.response.timestamp": "2026-05-19T20:49:23.056Z",
+      "ai.response.providerMetadata": "{\"ollama\":{\"model\":\"granite4.1:3b\",\"created_at\":\"2026-05-19T20:49:23.051Z\",\"total_duration\":181237667,\"load_duration\":68036167,\"eval_duration\":40825042,\"reliable_tool_calling\":false}}",
+      "ai.usage.inputTokens": 14,
+      "ai.usage.inputTokenDetails.noCacheTokens": 14,
+      "ai.usage.outputTokens": 3,
+      "ai.usage.outputTokenDetails.textTokens": 3,
+      "ai.usage.totalTokens": 17,
+      "gen_ai.response.finish_reasons": [
+        "stop"
+      ],
+      "gen_ai.response.id": "aitxt-jqiCBPw71YdJPDyuQdCYepZN",
+      "gen_ai.response.model": "granite4.1:3b",
+      "gen_ai.usage.input_tokens": 14,
+      "gen_ai.usage.output_tokens": 3
+    },
+    "status": {
+      "code": "UNSET"
+    },
+    "events": []
+  },
+  {
+    "traceId": "45b4f13ef427b1a5de530edf5b4c04e2",
+    "spanId": "b9b134c0632657f7",
+    "name": "ai.generateText",
+    "kind": "INTERNAL",
+    "startTime": 1779223762861000000,
+    "endTime": 1779223763057121300,
+    "duration": 196121344,
+    "attributes": {
+      "operation.name": "ai.generateText",
+      "ai.operationId": "ai.generateText",
+      "ai.model.provider": "ollama",
+      "ai.model.id": "granite4.1:3b",
+      "ai.settings.maxRetries": 2,
+      "ai.request.headers.user-agent": "ai/6.0.174",
+      "ai.prompt": "{\"prompt\":\"Reply with one short greeting.\"}",
+      "ai.response.finishReason": "stop",
+      "ai.response.text": "Hello!",
+      "ai.response.providerMetadata": "{\"ollama\":{\"model\":\"granite4.1:3b\",\"created_at\":\"2026-05-19T20:49:23.051Z\",\"total_duration\":181237667,\"load_duration\":68036167,\"eval_duration\":40825042,\"reliable_tool_calling\":false}}",
+      "ai.usage.inputTokens": 14,
+      "ai.usage.inputTokenDetails.noCacheTokens": 14,
+      "ai.usage.outputTokens": 3,
+      "ai.usage.outputTokenDetails.textTokens": 3,
+      "ai.usage.totalTokens": 17
+    },
+    "status": {
+      "code": "UNSET"
+    },
+    "events": []
+  }
+]

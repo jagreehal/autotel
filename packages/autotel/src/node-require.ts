@@ -11,11 +11,13 @@
 
 import { createRequire } from 'node:module';
 
-// Use native `require` in CJS, `createRequire` in ESM.
-// tsup will compile this appropriately for each format.
-// Type is ReturnType<typeof createRequire> which is a function that loads modules.
-const nodeRequire =
-  typeof require === 'undefined' ? createRequire(import.meta.url) : require;
+// createRequire(import.meta.url) works in both formats: esbuild/tsup rewrites
+// `import.meta.url` to a working equivalent in CJS output (pathToFileURL of
+// __filename). A previous `typeof require === 'undefined'` ternary did NOT
+// survive bundling — with tsup's code-splitting it was rewritten to use a
+// polyglot `__require` stub that threw "Dynamic require not supported" in
+// ESM consumers, breaking optional peers like @traceloop/node-server-sdk.
+const nodeRequire = createRequire(import.meta.url);
 
 /**
  * Synchronously require a module (works in both CJS and ESM)

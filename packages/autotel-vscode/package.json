@@ -102,6 +102,26 @@
       {
         "command": "autotel.openDevtools",
         "title": "Autotel: Open Devtools UI"
+      },
+      {
+        "command": "autotel.queryBackend",
+        "title": "Autotel: Query Remote Backend"
+      },
+      {
+        "command": "autotel.setBackendCredential",
+        "title": "Autotel: Set Remote Backend Credential"
+      },
+      {
+        "command": "autotel.clearBackendCredential",
+        "title": "Autotel: Clear Remote Backend Credential"
+      },
+      {
+        "command": "autotel.openMetrics",
+        "title": "Autotel: Open Metrics Panel"
+      },
+      {
+        "command": "autotel.openServiceMap",
+        "title": "Autotel: Open Service Map"
       }
     ],
     "configuration": {
@@ -141,6 +161,33 @@
           ],
           "default": null,
           "description": "URL of a running autotel-devtools UI to embed via Autotel: Open Devtools UI. When null, falls back to http://<receiver.host>:<receiver.port>."
+        },
+        "autotel.backend.type": {
+          "type": "string",
+          "enum": ["none", "jaeger", "tempo", "honeycomb", "datadog", "logfire", "signoz"],
+          "default": "none",
+          "description": "Read traces from a remote OTel-compatible backend in addition to the local receiver. Credentials live in vscode SecretStorage, never in settings."
+        },
+        "autotel.backend.dataset": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Dataset/scope identifier required by some backends (e.g. Honeycomb dataset name)."
+        },
+        "autotel.backend.url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Base URL of the remote backend (e.g. http://localhost:16686 for Jaeger)."
+        },
+        "autotel.codeLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show telemetry stats (count, p50, p95, error rate) above instrumented functions."
         }
       }
     }

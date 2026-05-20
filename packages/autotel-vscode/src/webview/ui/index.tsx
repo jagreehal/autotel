@@ -1,12 +1,19 @@
 import { render } from 'preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
+import { isGenAiSpan, toGenAiSpan } from 'autotel-devtools/genai'
+import type {
+  GenAiMessage,
+  GenAiMessagePart,
+  GenAiSpan,
+  GenAiToolCall,
+} from 'autotel-devtools/genai'
 
 interface Span {
   traceId: string
   spanId: string
   parentSpanId?: string
   name: string
-  kind: string
+  kind: 'INTERNAL' | 'SERVER' | 'CLIENT' | 'PRODUCER' | 'CONSUMER'
   startTime: number
   endTime: number
   duration: number
@@ -155,6 +162,8 @@ function SpanDetail({ span, trace }: { span: Span; trace?: Trace }) {
         </section>
       ) : null}
 
+      {isGenAiSpan(span) ? <GenAiSection rawSpan={span} /> : null}
+
       {filepath ? (
         <section>
           <h2>Source</h2>
@@ -208,6 +217,150 @@ function SpanDetail({ span, trace }: { span: Span; trace?: Trace }) {
         </section>
       ) : null}
     </main>
+  )
+}
+
+function formatTokens(n: number | undefined): string {
+  if (n == null) return '—'
+  if (n < 1000) return String(n)
+  return `${(n / 1000).toFixed(1)}k`
+}
+
+function formatCost(usd: number, source: 'table' | 'unknown'): string {
+  if (source === 'unknown' || !usd) return '—'
+  if (usd < 0.0001) return `$${(usd * 1_000_000).toFixed(2)}μ`
+  if (usd < 0.01) return `$${(usd * 1000).toFixed(3)}m`
+  return `$${usd.toFixed(4)}`
+}
+
+function GenAiSection({ rawSpan }: { rawSpan: Span }) {
+  const normalized = useMemo<GenAiSpan>(() => toGenAiSpan(rawSpan), [rawSpan])
+  const cached =
+    normalized.usage.cacheReadInputTokens && normalized.usage.inputTokens
+      ? Math.round((normalized.usage.cacheReadInputTokens / normalized.usage.inputTokens) * 100)
+      : 0
+
+  return (
+    <section className="genai">
+      <h2>GenAI</h2>
+      <div className="genai-header">
+        <span className="genai-chip" data-provider={normalized.provider}>
+          {normalized.provider}
+        </span>
+        <code className="genai-model">{normalized.responseModel ?? normalized.requestModel}</code>
+        <span className="muted">{normalized.operation}</span>
+        <span className="genai-meta">
+          {formatTokens(normalized.usage.inputTokens)} → {formatTokens(normalized.usage.outputTokens)}
+          {cached > 0 ? <span className="genai-cached"> ({cached}% cached)</span> : null}
+          <span className="genai-cost">
+            {' · '}
+            {formatCost(normalized.cost?.total ?? 0, normalized.cost?.source ?? 'unknown')}
+          </span>
+        </span>
+      </div>
+
+      {normalized.agent?.name || normalized.handoff?.fromAgent ? (
+        <dl className="genai-agent">
+          {normalized.agent?.name ? (
+            <>
+              <dt>Agent</dt>
+              <dd>{normalized.agent.name}</dd>
+            </>
+          ) : null}
+          {normalized.handoff?.fromAgent ? (
+            <>
+              <dt>Handoff</dt>
+              <dd>
+                {normalized.handoff.fromAgent} → {normalized.handoff.toAgent}
+              </dd>
+            </>
+          ) : null}
+          {normalized.conversationId ? (
+            <>
+              <dt>Conversation</dt>
+              <dd><code>{normalized.conversationId}</code></dd>
+            </>
+          ) : null}
+        </dl>
+      ) : null}
+
+      {normalized.messages.length > 0 ? (
+        <div className="genai-conversation">
+          {normalized.messages.map((m, i) => (
+            <GenAiMessageBubble key={i} message={m} />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function GenAiMessageBubble({ message }: { message: GenAiMessage }) {
+  return (
+    <div className={`genai-message genai-role-${message.role}`}>
+      <div className="genai-role">{message.role.toUpperCase()}</div>
+      <div className="genai-parts">
+        {message.parts.map((part, i) => (
+          <GenAiPartView key={i} part={part} />
+        ))}
+        {message.toolCalls?.map((call, i) => (
+          <GenAiToolCallView key={`tc-${i}`} call={call} />
+        ))}
+      </div>
+      {message.finishReason ? (
+        <div className="genai-finish">finish: {message.finishReason}</div>
+      ) : null}
+    </div>
+  )
+}
+
+function GenAiPartView({ part }: { part: GenAiMessagePart }) {
+  if (part.kind === 'text') {
+    return <p className="genai-text">{part.text}</p>
+  }
+  if (part.kind === 'image' || part.kind === 'audio') {
+    return (
+      <div className="muted">
+        [{part.kind} · {part.mediaType} · ref={part.dataRef}]
+      </div>
+    )
+  }
+  if (part.kind === 'ref') {
+    return (
+      <div className="muted">
+        Content stored externally ({part.direction}): <code>{part.ref}</code>
+      </div>
+    )
+  }
+  return <pre className="genai-json">{JSON.stringify(part.value, null, 2)}</pre>
+}
+
+function GenAiToolCallView({ call }: { call: GenAiToolCall }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="genai-tool">
+      <button
+        type="button"
+        className="genai-tool-header"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? '▾' : '▸'} 🔧 <span className="genai-tool-name">{call.name}</span>
+      </button>
+      {open ? (
+        <div className="genai-tool-body">
+          <div className="genai-tool-section">
+            <div className="genai-tool-label">INPUT</div>
+            <pre className="genai-json">{JSON.stringify(call.arguments, null, 2)}</pre>
+          </div>
+          {call.result !== undefined ? (
+            <div className="genai-tool-section genai-tool-output">
+              <div className="genai-tool-label">OUTPUT</div>
+              <pre className="genai-json">{JSON.stringify(call.result, null, 2)}</pre>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   )
 }
 

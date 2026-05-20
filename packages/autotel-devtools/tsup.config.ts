@@ -9,6 +9,7 @@ export default defineConfig({
     'server/exporter': 'src/server/exporter.ts',
     'server/log-exporter': 'src/server/log-exporter.ts',
     'server/remote-exporter': 'src/server/remote-exporter.ts',
+    'genai/index': 'src/widget/genai/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

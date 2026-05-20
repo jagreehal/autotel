@@ -94,6 +94,21 @@ vi.mock('vscode', () => {
     },
     ConfigurationTarget: { Workspace: 2 },
     StatusBarAlignment: { Left: 1 },
+    languages: {
+      registerCodeLensProvider: vi.fn(() => ({ dispose: () => {} })),
+      registerHoverProvider: vi.fn(() => ({ dispose: () => {} })),
+    },
+    ProgressLocation: { Notification: 15 },
+    MarkdownString: class {
+      value = ''
+      isTrusted = false
+      appendMarkdown(text: string) {
+        this.value += text
+        return this
+      }
+    },
+    Hover: class { constructor(public contents: unknown) {} },
+    CodeLens: class { constructor(public range: unknown, public command?: unknown) {} },
   }
 })
 

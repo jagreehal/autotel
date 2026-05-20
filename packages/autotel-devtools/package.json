@@ -22,6 +22,11 @@
       "types": "./dist/server/exporter.d.ts",
       "import": "./dist/server/exporter.js",
       "require": "./dist/server/exporter.cjs"
+    },
+    "./genai": {
+      "types": "./dist/genai/index.d.ts",
+      "import": "./dist/genai/index.js",
+      "require": "./dist/genai/index.cjs"
     }
   },
   "main": "./dist/index.js",
@@ -79,17 +84,19 @@
     "@testing-library/preact": "^3.2.4",
     "@types/node": "^25.7.0",
     "@types/ws": "^8.18.1",
-    "jsdom": "^29.1.1",
     "@vitest/browser-playwright": "4.1.6",
     "@vitest/coverage-v8": "4.1.6",
     "eslint-plugin-storybook": "^10.3.6",
+    "jsdom": "^29.1.1",
     "playwright": "^1.60.0",
     "postcss": "^8.5.14",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "storybook": "^10.3.6",
     "tailwindcss": "^4.3.0",
+    "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.12",
-    "tsup": "^8.5.1",
     "vitest": "^4.1.6",
     "vitest-mock-extended": "^4.0.0"
   },

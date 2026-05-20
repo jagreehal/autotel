@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Network,
   FileText,
+  Sparkles,
 } from 'lucide-preact';
 import {
   widgetExpandedSignal,
@@ -28,6 +29,8 @@ import { ServiceMapView } from './ServiceMapView';
 import { MetricsView } from './MetricsView';
 import { ErrorsView } from './ErrorsView';
 import { LogsView } from './LogsView';
+import { GenAiView } from './GenAiView';
+import { genAiCountSignal } from '../store';
 import type { TabType } from '../types';
 
 export function Panel() {
@@ -46,10 +49,17 @@ export function Panel() {
   }
 
   const totalErrors = totalErrorCountSignal.value;
+  const genAiCount = genAiCountSignal.value;
 
   const tabs: Array<{ id: TabType; label: string; icon: any; badge?: number }> =
     [
       { id: 'traces', label: 'Traces', icon: Database },
+      {
+        id: 'genai',
+        label: 'GenAI',
+        icon: Sparkles,
+        badge: genAiCount > 0 ? genAiCount : undefined,
+      },
       { id: 'service-map', label: 'Services', icon: Network },
       { id: 'metrics', label: 'Metrics', icon: BarChart },
       { id: 'logs', label: 'Logs', icon: FileText },
@@ -159,6 +169,9 @@ export function Panel() {
       case 'errors': {
         return <ErrorsView />;
       }
+      case 'genai': {
+        return <GenAiView />;
+      }
       default: {
         return null;
       }
@@ -244,7 +257,14 @@ export function Panel() {
                   />
                   {tab.label}
                   {tab.badge && (
-                    <span className="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                    <span
+                      className={cn(
+                        'px-1.5 py-0.5 text-xs font-medium rounded-full',
+                        tab.id === 'errors'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-zinc-100 text-zinc-700',
+                      )}
+                    >
                       {tab.badge > 99 ? '99+' : tab.badge}
                     </span>
                   )}
