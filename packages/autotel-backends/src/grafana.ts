@@ -25,6 +25,10 @@ import { createRequire } from 'node:module';
 import type { AutotelConfig } from 'autotel';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 
+// See packages/autotel/src/node-require.ts for why the __filename fallback
+// is necessary alongside import.meta.url.
+declare const __filename: string | undefined;
+
 /**
  * Configuration options for Grafana Cloud preset
  */
@@ -143,7 +147,9 @@ export function createGrafanaConfig(
       result.logRecordProcessors = logRecordProcessors;
     } else {
       try {
-        const pkgRequire = createRequire(import.meta.url);
+        const pkgRequire = createRequire(
+          typeof __filename === 'string' ? __filename : import.meta.url,
+        );
         const { BatchLogRecordProcessor } = pkgRequire(
           '@opentelemetry/sdk-logs',
         );
