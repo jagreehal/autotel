@@ -3,7 +3,10 @@
   "version": "0.13.0",
   "description": "OpenTelemetry instrumentation for AWS",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/lambda-auto.js",
+    "./dist/lambda-auto.cjs"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
