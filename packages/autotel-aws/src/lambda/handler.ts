@@ -26,7 +26,11 @@
 
 import { context, trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import type { SpanContext, Context } from '@opentelemetry/api';
-import { trace as autotelTrace, type TraceContext } from 'autotel';
+import {
+  markAsImmediate,
+  trace as autotelTrace,
+  type TraceContext,
+} from 'autotel';
 import type { LambdaHandler } from './types';
 import type { LambdaEvent, LambdaContext } from '../types';
 import { extractTraceContext, detectTriggerType } from './context-extractor';
@@ -139,11 +143,16 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
     // Detect trigger type for semantic attributes
     const trigger = detectTriggerType(event as LambdaEvent);
 
-    // Core tracing logic
+    // Core tracing logic. `markAsImmediate` pins the inner function to
+    // immediate-execution dispatch so downstream bundlers (esbuild in
+    // `aws-lambda-nodejs`, etc.) that minify the `ctx` parameter name
+    // don't make autotel mis-dispatch into factory mode — which would
+    // return a function instead of awaiting the inner result and break
+    // the Lambda response with "Wrong arguments".
     const executeWithTracing = async (): Promise<TResult> => {
       return autotelTrace(
         `lambda.${functionName}`,
-        async (ctx: TraceContext): Promise<TResult> => {
+        markAsImmediate(async (ctx: TraceContext): Promise<TResult> => {
           // Set Lambda semantic attributes
           ctx.setAttributes(
             buildLambdaAttributes({
@@ -206,7 +215,7 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
 
             throw error;
           }
-        },
+        }),
       );
     };
 
@@ -277,11 +286,12 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
     // Detect trigger type
     const trigger = detectTriggerType(event as LambdaEvent);
 
-    // Core tracing logic
+    // Core tracing logic — see wrapHandler above for why we mark the inner
+    // function as immediate-execution.
     const executeWithTracing = async (): Promise<TResult> => {
       return autotelTrace(
         `lambda.${functionName}`,
-        async (ctx: TraceContext): Promise<TResult> => {
+        markAsImmediate(async (ctx: TraceContext): Promise<TResult> => {
           // Set Lambda semantic attributes
           ctx.setAttributes(
             buildLambdaAttributes({
@@ -308,7 +318,7 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
           // Create handler with context access and execute
           const handler = factory(ctx);
           return handler(event, lambdaContext);
-        },
+        }),
       );
     };
 
