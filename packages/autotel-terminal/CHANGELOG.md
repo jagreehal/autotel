@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 19.0.7
+
+### Patch Changes
+
+- Updated dependencies [ee60622]
+  - autotel@3.0.7
+
 ## 19.0.6
 
 ### Patch Changes
