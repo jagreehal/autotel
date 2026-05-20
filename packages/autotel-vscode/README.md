@@ -33,6 +33,8 @@ If port 4318 is taken (most often by a local OpenTelemetry Collector), run **Aut
 | `Autotel: Open Span Detail` | Open the span in a detail webview. |
 | `Autotel: Open Devtools UI` | Open the `autotel-devtools` UI in a VS Code webview (or browser). |
 
+If you want a standalone Devtools UI process outside VS Code, run `npx autotel-devtools`.
+
 ## Settings
 
 | Setting | Default | Description |

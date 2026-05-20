@@ -114,6 +114,11 @@ describe('middleware', () => {
       const error = new Error('Handler error');
       const next = vi.fn().mockRejectedValue(error);
       const request = new Request('http://localhost/api/users');
+      // Middleware reports the rejected error via console.error in
+      // error-reporting.ts — that's the contract under test (errors don't
+      // get silently swallowed). Silence the noise; the rejection assertion
+      // proves the propagation.
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       await expect(
         middleware({
@@ -123,6 +128,8 @@ describe('middleware', () => {
           context: {},
         }),
       ).rejects.toThrow('Handler error');
+
+      errSpy.mockRestore();
     });
 
     it('should pass through when no request is available', async () => {

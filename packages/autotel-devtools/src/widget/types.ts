@@ -105,7 +105,8 @@ export type TabType =
   | 'service-map'
   | 'metrics'
   | 'logs'
-  | 'errors';
+  | 'errors'
+  | 'genai';
 
 export type CornerPosition =
   | 'top-left'

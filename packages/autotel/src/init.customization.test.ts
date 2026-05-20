@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
 import type { NodeSDK } from '@opentelemetry/sdk-node';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { mock, mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import { AlwaysSampler, NeverSampler } from './sampling';
 
@@ -293,6 +294,18 @@ describe('init() customization', () => {
     expect(metricReaderOptions).toHaveLength(0);
   });
 
+  it('supports singular metricReader alias', async () => {
+    const { init, sdkInstances, metricReaderOptions } =
+      await loadInitWithMocks();
+    const customMetricReader = mock<MetricReader>();
+
+    init({ service: 'custom-metric-alias', metricReader: customMetricReader });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.metricReaders).toEqual([customMetricReader]);
+    expect(metricReaderOptions).toHaveLength(0);
+  });
+
   it('applies OTLP headers for default exporters', async () => {
     const { init, traceExporterOptions, metricExporterOptions } =
       await loadInitWithMocks();
@@ -401,6 +414,58 @@ describe('init() customization', () => {
     expect(options.spanProcessors).toEqual([customProcessor]);
   });
 
+  it('supports singular spanProcessor alias', async () => {
+    const { init, sdkInstances } = await loadInitWithMocks();
+    const customProcessor = mock<SpanProcessor>();
+    customProcessor.shutdown.mockResolvedValue();
+    customProcessor.forceFlush.mockResolvedValue();
+
+    init({ service: 'custom-span-alias', spanProcessor: customProcessor });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.spanProcessors).toEqual([customProcessor]);
+  });
+
+  it('prefers plural spanProcessors over singular spanProcessor when both are set', async () => {
+    const { init, sdkInstances } = await loadInitWithMocks();
+    const pluralProcessor = mock<SpanProcessor>();
+    pluralProcessor.shutdown.mockResolvedValue();
+    pluralProcessor.forceFlush.mockResolvedValue();
+    const singularProcessor = mock<SpanProcessor>();
+    singularProcessor.shutdown.mockResolvedValue();
+    singularProcessor.forceFlush.mockResolvedValue();
+
+    init({
+      service: 'custom-span-precedence',
+      spanProcessor: singularProcessor,
+      spanProcessors: [pluralProcessor],
+    });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.spanProcessors).toEqual([pluralProcessor]);
+  });
+
+  it('supports singular spanExporter alias', async () => {
+    const { init, sdkInstances, traceExporterOptions } =
+      await loadInitWithMocks();
+    const customExporter = {
+      export: vi.fn(),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      forceFlush: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    init({
+      service: 'custom-exporter-alias',
+      endpoint: 'http://localhost:4318',
+      spanExporter: customExporter,
+    });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.spanProcessors).toBeDefined();
+    // Custom exporter path should bypass default OTLP trace exporter creation.
+    expect(traceExporterOptions).toHaveLength(0);
+  });
+
   it('auto-configures OTLP log exporter when logs enabled with endpoint', async () => {
     const { init, sdkInstances, logExporterOptions } =
       await loadInitWithMocks();
@@ -418,6 +483,21 @@ describe('init() customization', () => {
     expect(
       (options.logRecordProcessors as unknown[]).length,
     ).toBeGreaterThanOrEqual(1);
+  });
+
+  it('supports singular logRecordProcessor alias', async () => {
+    const { init, sdkInstances } = await loadInitWithMocks();
+    const customLogProcessor = mock<LogRecordProcessor>();
+    customLogProcessor.shutdown.mockResolvedValue();
+    customLogProcessor.forceFlush.mockResolvedValue();
+
+    init({
+      service: 'custom-log-alias',
+      logRecordProcessor: customLogProcessor,
+    });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    expect(options.logRecordProcessors).toEqual([customLogProcessor]);
   });
 
   it('does not auto-configure logs when logRecordProcessors are omitted', async () => {

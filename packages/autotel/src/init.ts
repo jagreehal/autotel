@@ -452,6 +452,12 @@ export interface AutotelConfig {
   spanProcessors?: SpanProcessor[];
 
   /**
+   * Custom span processor for traces (single-item alias of spanProcessors)
+   * @deprecated Use spanProcessors for consistency with other multi-value config fields
+   */
+  spanProcessor?: SpanProcessor;
+
+  /**
    * Custom span exporters for traces (alternative to spanProcessors, supports multiple exporters)
    * Provide either spanProcessors OR spanExporters, not both
    * Each exporter will be wrapped in TailSamplingSpanProcessor + BatchSpanProcessor
@@ -483,6 +489,12 @@ export interface AutotelConfig {
   spanExporters?: SpanExporter[];
 
   /**
+   * Custom span exporter for traces (single-item alias of spanExporters)
+   * @deprecated Use spanExporters for consistency with other multi-value config fields
+   */
+  spanExporter?: SpanExporter;
+
+  /**
    * Custom metric readers (supports multiple readers)
    * Allows sending metrics to multiple backends: OTLP, Prometheus, custom readers
    * Defaults to OTLP metrics exporter when metrics are enabled.
@@ -505,9 +517,21 @@ export interface AutotelConfig {
   metricReaders?: MetricReader[];
 
   /**
+   * Custom metric reader (single-item alias of metricReaders)
+   * @deprecated Use metricReaders for consistency with other multi-value config fields
+   */
+  metricReader?: MetricReader;
+
+  /**
    * Custom log record processors. When omitted, logs are not configured.
    */
   logRecordProcessors?: LogRecordProcessor[];
+
+  /**
+   * Custom log record processor (single-item alias of logRecordProcessors)
+   * @deprecated Use logRecordProcessors for consistency with other multi-value config fields
+   */
+  logRecordProcessor?: LogRecordProcessor;
 
   /**
    * PostHog integration - auto-configures OTLP log exporter.
@@ -627,7 +651,22 @@ export interface AutotelConfig {
    * Sampling preset shorthand — resolves to a pre-configured sampler.
    * If both `sampler` and `sampling` are provided, `sampler` takes precedence.
    *
-   * @default 'production'
+   * @default 'production' (10% baseline + always-on for errors/slow)
+   *
+   * **Footgun for one-shot scripts:** the default samples ~90% of spans away,
+   * which means a fixture-capture script that emits a single normal span
+   * almost always sees zero output. For local debugging and capture use:
+   *
+   * ```typescript
+   * init({
+   *   service: 'fixture-capture',
+   *   spanProcessors: [new SimpleSpanProcessor(new InMemorySpanExporter())],
+   *   sampling: 'development', // capture EVERY span
+   * });
+   * ```
+   *
+   * Read `exporter.getFinishedSpans()` **before** calling `shutdown()` —
+   * `InMemorySpanExporter.shutdown()` resets state.
    */
   sampling?: SamplingPreset;
 
@@ -1522,18 +1561,42 @@ export function init(cfg: AutotelConfig): void {
   // Resolve OTLP protocol (http or grpc)
   const protocol = resolveProtocol(mergedConfig.protocol);
 
+  // Backward-compatible singular aliases. Plural forms take precedence when both are provided.
+  const configuredSpanProcessors =
+    mergedConfig.spanProcessors && mergedConfig.spanProcessors.length > 0
+      ? mergedConfig.spanProcessors
+      : mergedConfig.spanProcessor
+        ? [mergedConfig.spanProcessor]
+        : undefined;
+  const configuredSpanExporters =
+    mergedConfig.spanExporters && mergedConfig.spanExporters.length > 0
+      ? mergedConfig.spanExporters
+      : mergedConfig.spanExporter
+        ? [mergedConfig.spanExporter]
+        : undefined;
+  const configuredMetricReaders =
+    mergedConfig.metricReaders && mergedConfig.metricReaders.length > 0
+      ? mergedConfig.metricReaders
+      : mergedConfig.metricReader
+        ? [mergedConfig.metricReader]
+        : undefined;
+  const configuredLogRecordProcessors =
+    mergedConfig.logRecordProcessors &&
+    mergedConfig.logRecordProcessors.length > 0
+      ? mergedConfig.logRecordProcessors
+      : mergedConfig.logRecordProcessor
+        ? [mergedConfig.logRecordProcessor]
+        : undefined;
+
   // Build array of span processors (supports multiple)
   let spanProcessors: SpanProcessor[] = [];
 
-  if (mergedConfig.spanProcessors && mergedConfig.spanProcessors.length > 0) {
+  if (configuredSpanProcessors && configuredSpanProcessors.length > 0) {
     // User provided custom processors (full control)
-    spanProcessors.push(...mergedConfig.spanProcessors);
-  } else if (
-    mergedConfig.spanExporters &&
-    mergedConfig.spanExporters.length > 0
-  ) {
+    spanProcessors.push(...configuredSpanProcessors);
+  } else if (configuredSpanExporters && configuredSpanExporters.length > 0) {
     // User provided custom exporters (wrap each with tail sampling)
-    for (const exporter of mergedConfig.spanExporters) {
+    for (const exporter of configuredSpanExporters) {
       spanProcessors.push(
         new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter)),
       );
@@ -1651,9 +1714,9 @@ export function init(cfg: AutotelConfig): void {
   // Build array of metric readers (supports multiple)
   const metricReaders: MetricReader[] = [];
 
-  if (mergedConfig.metricReaders && mergedConfig.metricReaders.length > 0) {
+  if (configuredMetricReaders && configuredMetricReaders.length > 0) {
     // User provided custom metric readers
-    metricReaders.push(...mergedConfig.metricReaders);
+    metricReaders.push(...configuredMetricReaders);
   } else if (metricsEnabled && endpoint) {
     // Default: OTLP metrics exporter (only if endpoint is configured)
     const metricExporter = createMetricExporter(protocol, {
@@ -1670,10 +1733,10 @@ export function init(cfg: AutotelConfig): void {
 
   let logRecordProcessors: LogRecordProcessor[] | undefined;
   if (
-    mergedConfig.logRecordProcessors &&
-    mergedConfig.logRecordProcessors.length > 0
+    configuredLogRecordProcessors &&
+    configuredLogRecordProcessors.length > 0
   ) {
-    logRecordProcessors = [...mergedConfig.logRecordProcessors];
+    logRecordProcessors = [...configuredLogRecordProcessors];
   }
 
   // Auto-configure OTLP log exporter when logs are enabled and endpoint is set
@@ -1828,8 +1891,8 @@ export function init(cfg: AutotelConfig): void {
       }
 
       // Pass span exporter to OpenLLMetry if provided
-      if (mergedConfig.spanExporters?.[0]) {
-        initOptions.exporter = mergedConfig.spanExporters[0];
+      if (configuredSpanExporters?.[0]) {
+        initOptions.exporter = configuredSpanExporters[0];
       }
 
       if (typeof traceloop.initialize === 'function') {

@@ -1,0 +1,72 @@
+[
+  {
+    "traceId": "019e42019c8b70d0e36c9c528c5c1408",
+    "spanId": "3bd90e055fbd9188",
+    "parentSpanId": "a8c912e29e14fd35",
+    "name": "chat granite4:latest",
+    "kind": "CLIENT",
+    "startTime": 1779223862413557000,
+    "endTime": 1779223866629752000,
+    "duration": 4216195000,
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "ollama",
+      "gen_ai.system": "ollama",
+      "gen_ai.request.model": "granite4:latest",
+      "server.address": "localhost",
+      "server.port": 11434,
+      "model_request_parameters": "{\"function_tools\":[],\"native_tools\":[],\"output_mode\":\"text\",\"output_object\":null,\"output_tools\":[],\"prompted_output_template\":null,\"allow_text_output\":true,\"allow_image_output\":false,\"instruction_parts\":null,\"thinking\":null}",
+      "gen_ai.agent.name": "agent",
+      "gen_ai.agent.call.id": "019e4201-9c88-730a-b706-bb97105ea5f8",
+      "gen_ai.conversation.id": "019e4201-9c88-730a-b706-bb9672afc3f3",
+      "logfire.span_type": "span",
+      "logfire.msg": "chat granite4:latest",
+      "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Reply with one short greeting.\"}]}]",
+      "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"Hello!\"}], \"finish_reason\": \"stop\"}]",
+      "logfire.json_schema": "{\"type\": \"object\", \"properties\": {\"gen_ai.input.messages\": {\"type\": \"array\"}, \"gen_ai.output.messages\": {\"type\": \"array\"}, \"model_request_parameters\": {\"type\": \"object\"}}}",
+      "gen_ai.usage.input_tokens": 14,
+      "gen_ai.usage.output_tokens": 3,
+      "gen_ai.response.model": "granite4:latest",
+      "gen_ai.response.id": "chatcmpl-12",
+      "gen_ai.response.finish_reasons": [
+        "stop"
+      ]
+    },
+    "status": {
+      "code": "UNSET",
+      "message": null
+    },
+    "events": []
+  },
+  {
+    "traceId": "019e42019c8b70d0e36c9c528c5c1408",
+    "spanId": "a8c912e29e14fd35",
+    "parentSpanId": null,
+    "name": "agent run",
+    "kind": "INTERNAL",
+    "startTime": 1779223862411921000,
+    "endTime": 1779223866633904000,
+    "duration": 4221983000,
+    "attributes": {
+      "model_name": "granite4:latest",
+      "agent_name": "agent",
+      "gen_ai.agent.name": "agent",
+      "gen_ai.agent.call.id": "019e4201-9c88-730a-b706-bb97105ea5f8",
+      "gen_ai.conversation.id": "019e4201-9c88-730a-b706-bb9672afc3f3",
+      "gen_ai.operation.name": "invoke_agent",
+      "logfire.msg": "agent run",
+      "logfire.span_type": "span",
+      "final_result": "Hello!",
+      "gen_ai.usage.input_tokens": 14,
+      "gen_ai.usage.output_tokens": 3,
+      "pydantic_ai.all_messages": "[{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"content\":\"Reply with one short greeting.\"}]},{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"Hello!\"}],\"finish_reason\":\"stop\"}]",
+      "logfire.json_schema": "{\"type\":\"object\",\"properties\":{\"pydantic_ai.all_messages\":{\"type\":\"array\"},\"final_result\":{\"type\":\"object\"}}}",
+      "logfire.metrics": "{\"gen_ai.client.token.usage\": {\"details\": [{\"attributes\": {\"gen_ai.operation.name\": \"chat\", \"gen_ai.provider.name\": \"ollama\", \"gen_ai.request.model\": \"granite4:latest\", \"gen_ai.response.model\": \"granite4:latest\", \"gen_ai.system\": \"ollama\", \"gen_ai.token.type\": \"input\"}, \"total\": 14}, {\"attributes\": {\"gen_ai.operation.name\": \"chat\", \"gen_ai.provider.name\": \"ollama\", \"gen_ai.request.model\": \"granite4:latest\", \"gen_ai.response.model\": \"granite4:latest\", \"gen_ai.system\": \"ollama\", \"gen_ai.token.type\": \"output\"}, \"total\": 3}], \"total\": 17}}"
+    },
+    "status": {
+      "code": "UNSET",
+      "message": null
+    },
+    "events": []
+  }
+]

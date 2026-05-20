@@ -1,0 +1,76 @@
+[
+  {
+    "traceId": "019e43ca2ba4b4b7eb07e01056d3894c",
+    "spanId": "647340b1fcb75259",
+    "parentSpanId": "0f89d8ec5dd4db6d",
+    "name": "chat gemini-2.5-flash",
+    "kind": "CLIENT",
+    "startTime": 1779253783461350000,
+    "endTime": 1779253784816315000,
+    "duration": 1354965000,
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "google-gla",
+      "gen_ai.system": "google-gla",
+      "gen_ai.request.model": "gemini-2.5-flash",
+      "server.address": "generativelanguage.googleapis.com",
+      "model_request_parameters": "{\"function_tools\":[],\"native_tools\":[],\"output_mode\":\"text\",\"output_object\":null,\"output_tools\":[],\"prompted_output_template\":null,\"allow_text_output\":true,\"allow_image_output\":false,\"instruction_parts\":null,\"thinking\":null}",
+      "gen_ai.agent.name": "agent",
+      "gen_ai.agent.call.id": "019e43ca-2ba0-73db-96f0-daec048ddaba",
+      "gen_ai.conversation.id": "019e43ca-2ba0-73db-96f0-daeba7a1c552",
+      "logfire.span_type": "span",
+      "logfire.msg": "chat gemini-2.5-flash",
+      "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Reply with one short greeting.\"}]}]",
+      "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"Hi!\"}], \"finish_reason\": \"stop\"}]",
+      "logfire.json_schema": "{\"type\": \"object\", \"properties\": {\"gen_ai.input.messages\": {\"type\": \"array\"}, \"gen_ai.output.messages\": {\"type\": \"array\"}, \"model_request_parameters\": {\"type\": \"object\"}}}",
+      "gen_ai.usage.input_tokens": 7,
+      "gen_ai.usage.output_tokens": 39,
+      "gen_ai.usage.details.thoughts_tokens": 37,
+      "gen_ai.usage.details.text_prompt_tokens": 7,
+      "gen_ai.response.model": "gemini-2.5-flash",
+      "operation.cost": 9.96e-05,
+      "gen_ai.response.id": "F0INasypLLjYvdIP9avxiQM",
+      "gen_ai.response.finish_reasons": [
+        "stop"
+      ]
+    },
+    "status": {
+      "code": "UNSET",
+      "message": null
+    },
+    "events": []
+  },
+  {
+    "traceId": "019e43ca2ba4b4b7eb07e01056d3894c",
+    "spanId": "0f89d8ec5dd4db6d",
+    "parentSpanId": null,
+    "name": "agent run",
+    "kind": "INTERNAL",
+    "startTime": 1779253783460062000,
+    "endTime": 1779253784817226000,
+    "duration": 1357164000,
+    "attributes": {
+      "model_name": "gemini-2.5-flash",
+      "agent_name": "agent",
+      "gen_ai.agent.name": "agent",
+      "gen_ai.agent.call.id": "019e43ca-2ba0-73db-96f0-daec048ddaba",
+      "gen_ai.conversation.id": "019e43ca-2ba0-73db-96f0-daeba7a1c552",
+      "gen_ai.operation.name": "invoke_agent",
+      "logfire.msg": "agent run",
+      "logfire.span_type": "span",
+      "final_result": "Hi!",
+      "gen_ai.usage.input_tokens": 7,
+      "gen_ai.usage.output_tokens": 39,
+      "gen_ai.usage.details.thoughts_tokens": 37,
+      "gen_ai.usage.details.text_prompt_tokens": 7,
+      "pydantic_ai.all_messages": "[{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"content\":\"Reply with one short greeting.\"}]},{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"Hi!\"}],\"finish_reason\":\"stop\"}]",
+      "logfire.json_schema": "{\"type\":\"object\",\"properties\":{\"pydantic_ai.all_messages\":{\"type\":\"array\"},\"final_result\":{\"type\":\"object\"}}}",
+      "logfire.metrics": "{\"gen_ai.client.token.usage\": {\"details\": [{\"attributes\": {\"gen_ai.operation.name\": \"chat\", \"gen_ai.provider.name\": \"google-gla\", \"gen_ai.request.model\": \"gemini-2.5-flash\", \"gen_ai.response.model\": \"gemini-2.5-flash\", \"gen_ai.system\": \"google-gla\", \"gen_ai.token.type\": \"input\"}, \"total\": 7}, {\"attributes\": {\"gen_ai.operation.name\": \"chat\", \"gen_ai.provider.name\": \"google-gla\", \"gen_ai.request.model\": \"gemini-2.5-flash\", \"gen_ai.response.model\": \"gemini-2.5-flash\", \"gen_ai.system\": \"google-gla\", \"gen_ai.token.type\": \"output\"}, \"total\": 39}], \"total\": 46}, \"operation.cost\": {\"details\": [{\"attributes\": {\"gen_ai.operation.name\": \"chat\", \"gen_ai.provider.name\": \"google-gla\", \"gen_ai.request.model\": \"gemini-2.5-flash\", \"gen_ai.response.model\": \"gemini-2.5-flash\", \"gen_ai.system\": \"google-gla\"}, \"total\": 9.96e-05}], \"total\": 9.96e-05}}"
+    },
+    "status": {
+      "code": "UNSET",
+      "message": null
+    },
+    "events": []
+  }
+]
