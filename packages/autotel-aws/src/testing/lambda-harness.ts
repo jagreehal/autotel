@@ -19,9 +19,9 @@ export function createMockLambdaContext(overrides?: Partial<LambdaContext>): Lam
     logGroupName: '/aws/lambda/test-function',
     logStreamName: '2026/01/01/[$LATEST]test',
     getRemainingTimeInMillis: () => 30_000,
-    done: () => undefined,
-    fail: () => undefined,
-    succeed: () => undefined,
+    done: () => {},
+    fail: () => {},
+    succeed: () => {},
     ...overrides,
   };
 }
