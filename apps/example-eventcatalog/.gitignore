@@ -1,0 +1,10 @@
+node_modules
+dist
+.turbo
+.astro
+catalog/.astro
+catalog/.eventcatalog-core
+catalog/dist
+catalog/node_modules
+*.log
+.DS_Store

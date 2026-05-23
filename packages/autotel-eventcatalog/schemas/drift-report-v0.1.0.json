@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/eventcatalog/drift-report/v0.1.0.json",
+  "title": "Autotel EventCatalog Drift Report v0.1.0",
+  "description": "JSON output of `autotel-eventcatalog drift --format json`. Wraps a DriftReport (mode: all) or a DriftDelta (mode: new-only) in a versioned envelope.",
+  "type": "object",
+  "required": ["spec", "mode"],
+  "oneOf": [
+    {
+      "required": ["spec", "mode", "report"],
+      "properties": {
+        "spec": { "const": "autotel-eventcatalog-report/v0.1.0" },
+        "mode": { "const": "all" },
+        "report": { "$ref": "#/$defs/DriftReport" }
+      }
+    },
+    {
+      "required": ["spec", "mode", "delta"],
+      "properties": {
+        "spec": { "const": "autotel-eventcatalog-report/v0.1.0" },
+        "mode": { "const": "new-only" },
+        "delta": { "$ref": "#/$defs/DriftDelta" }
+      }
+    }
+  ],
+  "$defs": {
+    "FieldDrift": {
+      "type": "object",
+      "required": ["event", "extra", "missing"],
+      "properties": {
+        "event": { "type": "string" },
+        "extra": { "type": "array", "items": { "type": "string" } },
+        "missing": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "DriftEntries": {
+      "type": "object",
+      "required": ["events", "services", "channels"],
+      "properties": {
+        "events": {
+          "type": "object",
+          "required": [
+            "observedButUndocumented",
+            "documentedButUnseen",
+            "fieldDrift"
+          ],
+          "properties": {
+            "observedButUndocumented": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "documentedButUnseen": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "fieldDrift": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/FieldDrift" }
+            }
+          }
+        },
+        "services": {
+          "type": "object",
+          "required": ["observedButUndocumented"],
+          "properties": {
+            "observedButUndocumented": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "channels": {
+          "type": "object",
+          "required": ["observedButUndocumented"],
+          "properties": {
+            "observedButUndocumented": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "DriftReport": {
+      "allOf": [
+        { "$ref": "#/$defs/DriftEntries" },
+        {
+          "type": "object",
+          "required": ["snapshotGeneratedAt", "snapshotService"],
+          "properties": {
+            "snapshotGeneratedAt": { "type": "string" },
+            "snapshotService": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "DriftDelta": {
+      "type": "object",
+      "required": ["introduced", "resolved", "hasNewDrift"],
+      "properties": {
+        "introduced": { "$ref": "#/$defs/DriftEntries" },
+        "resolved": { "$ref": "#/$defs/DriftEntries" },
+        "hasNewDrift": { "type": "boolean" }
+      }
+    }
+  }
+}

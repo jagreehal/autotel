@@ -1,0 +1,15 @@
+{
+  "spec": "autotel-eventcatalog-drift-summary/v0.1.0",
+  "mode": "all",
+  "shouldFail": false,
+  "reason": "No drift detected.",
+  "counts": {
+    "observedButUndocumentedEvents": 0,
+    "documentedButUnseenEvents": 0,
+    "fieldDriftEvents": 0,
+    "fieldDriftPaths": 0,
+    "undocumentedServices": 0,
+    "undocumentedChannels": 0,
+    "total": 0
+  }
+}

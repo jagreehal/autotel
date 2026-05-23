@@ -1,0 +1,97 @@
+---
+id: PaymentService
+name: Payment Service
+version: 1.0.0
+summary: |
+  Captures payment for placed orders. Retries on soft declines. Emits
+  `PaymentCaptured` on success and `PaymentFailed` after retries are exhausted.
+owners:
+  - autotel-team
+sends:
+  - id: PaymentCaptured
+    to:
+      - id: payments.events
+  - id: PaymentFailed
+    to:
+      - id: payments.events
+receives:
+  - id: OrderPlaced
+    from:
+      - id: orders.events
+repository:
+  language: TypeScript
+  url: https://github.com/jagreehal/autotel
+badges:
+  - content: 'Instrumented with autotel'
+    backgroundColor: orange
+    textColor: white
+    icon: BoltIcon
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+The Payment Service consumes [[event|OrderPlaced]], attempts to capture payment
+against the configured PSP, retries on soft declines with exponential backoff,
+and emits either [[event|PaymentCaptured]] or [[event|PaymentFailed]].
+
+<NodeGraph />
+
+### How it's instrumented
+
+The PSP call is wrapped in `span()` so each retry attempt is a separate child
+span with its own attributes. Domain events use `track()`.
+
+```ts
+import { span, track } from 'autotel';
+import { traceConsumer } from 'autotel/messaging';
+
+export const handleOrderPlaced = traceConsumer({
+  system: 'kafka',
+  destination: 'orders.events',
+})(() => async (msg: OrderPlacedMessage) => {
+  const result = await span('payment.capture', async (s) => {
+    s.setAttribute('payment.psp', 'stripe');
+    s.setAttribute('payment.amount_cents', msg.totalCents);
+    return stripe.charges.create({ amount: msg.totalCents });
+  });
+
+  if (result.status === 'succeeded') {
+    track('payment.captured', {
+      orderId: msg.id,
+      amountCents: msg.totalCents,
+      _autotel: { channel: 'payments.events', producer: 'PaymentService' },
+    });
+  } else {
+    track('payment.failed', {
+      orderId: msg.id,
+      declineCode: result.declineCode,
+      _autotel: { channel: 'payments.events', producer: 'PaymentService' },
+    });
+  }
+});
+```
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+`payment.capture` ran **27,248 times** in the last 7 days. p95 **187ms**, p99
+**412ms**. Soft-decline retry rate **2.3%**. Hard failure rate **0.67%**.
+
+The retry path triggered the [[flow|PaymentRecoveryFlow]] **183 times**, of which
+**173 recovered** within the second attempt window.
+
+Last seen: 4 seconds ago. Sample trace: `trace-2c9d8a1f-77b3`.
+</div>
+
+### Sends
+
+- [[event|PaymentCaptured]] → [[channel|payments.events]]
+- [[event|PaymentFailed]] → [[channel|payments.events]]
+
+### Receives
+
+- [[event|OrderPlaced]] from [[channel|orders.events]]
+
+<Footer />

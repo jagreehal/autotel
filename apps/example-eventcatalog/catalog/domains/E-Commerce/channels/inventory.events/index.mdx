@@ -1,0 +1,30 @@
+---
+id: inventory.events
+name: inventory.events
+version: 1.0.0
+summary: |
+  Kafka topic carrying inventory reservation outcomes. Consumed by Orders to
+  confirm the order is ready to dispatch.
+deliveryGuarantee: at-least-once
+address: kafka://broker.prod.autotel.dev:9092/inventory.events
+protocols:
+  - kafka
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+Carries [[event|InventoryReserved]]. Partitioned by `warehouseId` so stock
+state per warehouse stays ordered.
+
+<NodeGraph />
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+Throughput **27,136 msgs / 7d** (out-of-stock orders never reach this topic).
+p95 producer ack **7ms**.
+</div>
+
+<Footer />

@@ -1,0 +1,33 @@
+---
+id: orders.events
+name: orders.events
+version: 1.0.0
+summary: |
+  Kafka topic carrying every order lifecycle event. The fanout point for the
+  checkout — every other service in the domain subscribes here.
+deliveryGuarantee: at-least-once
+address: kafka://broker.prod.autotel.dev:9092/orders.events
+protocols:
+  - kafka
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+The canonical Kafka topic for order lifecycle events. Partitioned by
+`customerId` so a single customer's events stay in order.
+
+<NodeGraph />
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+Throughput **27,431 msgs / 7d** (steady). p95 producer ack **8ms**, p95
+consumer lag **180ms**. No partitions rebalanced in the last 30 days.
+
+Largest consumer lag observed: [[service|RecommendationsService]] during the
+Black Friday surge (peak 4.2s, recovered within 90s).
+</div>
+
+<Footer />

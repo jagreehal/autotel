@@ -37,6 +37,14 @@ export { SegmentSubscriber, type SegmentConfig } from './segment';
 export { AmplitudeSubscriber, type AmplitudeConfig } from './amplitude';
 export { SlackSubscriber, type SlackSubscriberConfig } from './slack';
 export { WebhookSubscriber, type WebhookConfig } from './webhook';
+export {
+  ArchitectureSnapshotSubscriber,
+  ARCHITECTURE_SNAPSHOT_SPEC,
+  extractFieldPaths,
+  type ArchitectureSnapshot,
+  type ArchitectureSnapshotConfig,
+  type EventObservation,
+} from './architecture-snapshot';
 
 // ============================================================================
 // Base Classes for Building Custom Subscribers

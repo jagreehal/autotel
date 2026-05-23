@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/inventory-reserved/1.0.0.json",
+  "title": "InventoryReserved",
+  "type": "object",
+  "required": ["orderId", "reservationId", "warehouseId", "items", "reservedAt"],
+  "properties": {
+    "orderId": { "type": "string", "format": "uuid" },
+    "reservationId": { "type": "string", "format": "uuid" },
+    "warehouseId": { "type": "string" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sku", "quantity"],
+        "properties": {
+          "sku": { "type": "string" },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "priceCents": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "reservedAt": { "type": "string", "format": "date-time" }
+  }
+}

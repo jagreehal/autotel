@@ -52,6 +52,11 @@
       "import": "./dist/middleware.js",
       "require": "./dist/middleware.cjs"
     },
+    "./architecture-snapshot": {
+      "types": "./dist/architecture-snapshot.d.ts",
+      "import": "./dist/architecture-snapshot.js",
+      "require": "./dist/architecture-snapshot.cjs"
+    },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.js",

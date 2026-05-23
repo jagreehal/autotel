@@ -1,0 +1,33 @@
+{
+  "name": "@jagreehal/example-eventcatalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo: an EventCatalog populated from autotel telemetry — the destination autotel-eventcatalog generates toward.",
+  "scripts": {
+    "catalog:install": "cd catalog && pnpm install --ignore-workspace",
+    "catalog:dev": "cd catalog && pnpm dev",
+    "catalog:build": "cd catalog && pnpm build",
+    "catalog:start": "cd catalog && pnpm start",
+    "catalog:drift": "autotel-eventcatalog drift --snapshot services/test/snapshot.json --catalog catalog",
+    "catalog:drift:ci": "autotel-eventcatalog drift --snapshot services/test/snapshot.json --catalog catalog --output catalog-drift.md --fail-on-drift",
+    "catalog:stamp": "autotel-eventcatalog stamp --snapshot services/test/snapshot.json --catalog catalog",
+    "catalog:stamp:dry": "autotel-eventcatalog stamp --snapshot services/test/snapshot.json --catalog catalog --dry-run",
+    "services:demo": "tsx services/src/demo.ts",
+    "services:snapshot": "tsx services/src/build-snapshot.ts",
+    "services:live": "tsx services/src/live/runner.ts",
+    "test": "vitest run --root services",
+    "dev": "pnpm catalog:install && pnpm catalog:dev"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-eventcatalog": "workspace:*",
+    "autotel-subscribers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.1"
+  }
+}

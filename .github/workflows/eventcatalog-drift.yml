@@ -1,0 +1,186 @@
+name: eventcatalog drift
+
+# Runs on every PR that touches the example app, the snapshot subscriber, or
+# the drift CLI. Demonstrates the autotel-eventcatalog GitHub Action against
+# the monorepo's own example catalog.
+#
+# The workflow:
+#   1. installs deps and builds the workspace
+#   2. regenerates services/test/snapshot.json (the snapshot is committed; CI
+#      proves it is up to date)
+#   3. runs the drift CLI against the static catalog
+#   4. posts a sticky PR comment with the drift report
+#   5. fails the check on *new* drift compared to the base branch
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/example-eventcatalog/**'
+      - 'packages/autotel-eventcatalog/**'
+      - 'packages/autotel-subscribers/**'
+      - '.github/workflows/eventcatalog-drift.yml'
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history so we can read the base ref's version of snapshot.json.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install pnpm
+        run: corepack prepare pnpm@latest --activate
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build autotel-eventcatalog + autotel-subscribers (with workspace deps)
+        # The `...` suffix tells pnpm to include workspace dependencies, so the
+        # autotel core package builds first and the DTS step can resolve its types.
+        run: pnpm --filter "autotel-eventcatalog..." --filter "autotel-subscribers..." build
+
+      - name: Regenerate snapshot
+        working-directory: apps/example-eventcatalog
+        run: pnpm services:snapshot
+
+      - name: Verify snapshot is committed and up to date
+        # Snapshot timestamps (generatedAt, firstSeen, lastSeen, sampleTraceIds)
+        # are non-deterministic — they reflect the moment the snapshot was
+        # generated, not the architecture. Strip them on both sides so the diff
+        # only flags real architectural drift (event names, field paths,
+        # producers, channels).
+        run: |
+          set -euo pipefail
+          SNAPSHOT=apps/example-eventcatalog/services/test/snapshot.json
+          FILTER='.generatedAt = "" | .events |= with_entries(.value.firstSeen = "" | .value.lastSeen = "" | .value.sampleTraceIds = [])'
+          ACTUAL="$RUNNER_TEMP/snapshot-actual.json"
+          COMMITTED="$RUNNER_TEMP/snapshot-committed.json"
+          jq "$FILTER" "$SNAPSHOT" > "$ACTUAL"
+          git show "HEAD:$SNAPSHOT" | jq "$FILTER" > "$COMMITTED"
+          if ! diff -u "$COMMITTED" "$ACTUAL"; then
+            echo "::error::services/test/snapshot.json is out of date (architectural drift, not timestamp drift). Run 'pnpm services:snapshot' locally and commit the result."
+            exit 1
+          fi
+
+      - name: Stamp catalog with runtime evidence
+        # The stamp embeds the snapshot's "last seen" timestamp into mdx, so the
+        # stamped output is non-deterministic across CI runs by design. We
+        # regenerate it here so the drift report sees the freshest evidence,
+        # but we don't gate on byte equality with the committed version — the
+        # snapshot check above is the architectural-drift gate.
+        # We invoke dist/cli.js directly rather than via the `autotel-eventcatalog`
+        # bin symlink, which pnpm sometimes fails to create in CI when the
+        # binary's target file doesn't exist at install time.
+        run: |
+          node packages/autotel-eventcatalog/dist/cli.js stamp \
+            --snapshot apps/example-eventcatalog/services/test/snapshot.json \
+            --catalog apps/example-eventcatalog/catalog
+
+      - name: Resolve base snapshot
+        id: base
+        run: |
+          set -euo pipefail
+          BASE_SNAPSHOT="$RUNNER_TEMP/base-snapshot.json"
+          if git show "origin/${{ github.base_ref }}:apps/example-eventcatalog/services/test/snapshot.json" > "$BASE_SNAPSHOT" 2>/dev/null; then
+            echo "Found base snapshot at origin/${{ github.base_ref }}"
+            echo "path=$BASE_SNAPSHOT" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No base snapshot on origin/${{ github.base_ref }} (first run on this branch?)"
+            echo "path=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute drift
+        id: drift
+        run: |
+          set -euo pipefail
+          REPORT="$RUNNER_TEMP/drift.md"
+          SUMMARY="$RUNNER_TEMP/drift-summary.json"
+          echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+
+          # Policy:
+          # - When a base snapshot exists, gate on *new* drift introduced by
+          #   this PR. Pre-existing demo drift in the catalog is intentional
+          #   and shouldn't fail every PR.
+          # - When there's no base (the first PR that introduces the example,
+          #   or a force-push that rewrote history), the report is
+          #   informational: we surface the full picture but don't block.
+          POLICY="all"
+          ARGS=(--snapshot apps/example-eventcatalog/services/test/snapshot.json \
+                --catalog apps/example-eventcatalog/catalog \
+                --output "$REPORT" \
+                --summary-output "$SUMMARY")
+          if [ -n "${{ steps.base.outputs.path }}" ]; then
+            ARGS+=(--base-snapshot "${{ steps.base.outputs.path }}")
+            POLICY="new-only"
+            ARGS+=(--fail-on-drift)
+          fi
+          ARGS+=(--policy "$POLICY")
+
+          set +e
+          node packages/autotel-eventcatalog/dist/cli.js drift "${ARGS[@]}"
+          STATUS=$?
+          set -e
+
+          if [ $STATUS -ne 0 ] && [ $STATUS -ne 1 ]; then
+            echo "::error::autotel-eventcatalog drift CLI failed with exit $STATUS"
+            exit $STATUS
+          fi
+
+          if [ ! -f "$SUMMARY" ]; then
+            echo "::error::autotel-eventcatalog did not produce a summary output."
+            exit 1
+          fi
+          DRIFT="$(node -e "const fs=require('fs');const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(s.shouldFail ? 'true':'false')" "$SUMMARY")"
+          echo "drift=$DRIFT" >> "$GITHUB_OUTPUT"
+
+          echo "::group::Drift report"
+          cat "$REPORT"
+          echo "::endgroup::"
+
+      # Sticky-comment action pinned to a specific commit SHA for supply-chain
+      # safety. A missed comment is downgraded to a warning so the drift signal
+      # is never lost to a flaky GitHub API call.
+      - name: Post sticky PR comment
+        id: comment
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728
+        with:
+          header: autotel-eventcatalog-drift
+          path: ${{ steps.drift.outputs.report }}
+
+      - name: Warn on comment failure
+        if: steps.comment.outcome == 'failure'
+        run: |
+          echo "::warning::Drift report rendered but the PR comment failed to post. See the job log."
+
+      - name: Fail on new drift
+        # Only gate when there's a baseline to compare against. The first PR
+        # that introduces the example catalog has no base snapshot on the
+        # target branch, so any drift it reports is pre-existing demo state,
+        # not something this PR introduced. After merge, future PRs do have
+        # a base and the gate becomes active.
+        if: steps.drift.outputs.drift == 'true' && steps.base.outputs.path != ''
+        run: |
+          echo "::error::Catalog and runtime have diverged. See the drift report in the job log."
+          exit 1
