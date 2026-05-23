@@ -1,0 +1,75 @@
+{
+  "name": "autotel-eventcatalog",
+  "version": "0.1.0",
+  "description": "Diff your autotel architecture snapshot against an EventCatalog and report drift. Same model as Pact, for event architectures.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js",
+      "require": "./dist/cli.cjs"
+    }
+  },
+  "bin": {
+    "autotel-eventcatalog": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "schemas",
+    "docs",
+    "action.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --exclude **/*.e2e.test.ts",
+    "test:e2e": "pnpm build && vitest run cli.e2e",
+    "test:watch": "vitest --exclude **/*.e2e.test.ts",
+    "clean": "rimraf dist",
+    "format": "prettier --write .",
+    "format:check": "prettier --check src/**/*.ts",
+    "quality": "pnpm type-check && pnpm test && pnpm test:e2e && pnpm lint && pnpm format:check"
+  },
+  "keywords": [
+    "eventcatalog",
+    "opentelemetry",
+    "autotel",
+    "observability",
+    "architecture",
+    "drift",
+    "contract-testing"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jagreehal/autotel.git",
+    "directory": "packages/autotel-eventcatalog"
+  },
+  "peerDependencies": {
+    "autotel-subscribers": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "autotel-subscribers": "workspace:*",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
+  }
+}

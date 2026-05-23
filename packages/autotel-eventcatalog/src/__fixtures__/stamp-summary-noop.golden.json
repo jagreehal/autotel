@@ -1,0 +1,10 @@
+{
+  "spec": "autotel-eventcatalog-stamp-summary/v0.1.0",
+  "dryRun": false,
+  "attempted": 0,
+  "skipped": 0,
+  "inserts": 0,
+  "replaces": 0,
+  "changedFiles": 0,
+  "hadChanges": false
+}

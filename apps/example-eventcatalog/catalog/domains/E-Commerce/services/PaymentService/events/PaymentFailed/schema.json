@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/payment-failed/1.0.0.json",
+  "title": "PaymentFailed",
+  "type": "object",
+  "required": ["orderId", "declineCode", "attempts", "failedAt"],
+  "properties": {
+    "orderId": { "type": "string", "format": "uuid" },
+    "declineCode": {
+      "type": "string",
+      "enum": ["insufficient_funds", "card_declined", "expired_card", "fraud_suspected", "other"]
+    },
+    "attempts": { "type": "integer", "minimum": 1 },
+    "psp": { "type": "string" },
+    "failedAt": { "type": "string", "format": "date-time" }
+  }
+}

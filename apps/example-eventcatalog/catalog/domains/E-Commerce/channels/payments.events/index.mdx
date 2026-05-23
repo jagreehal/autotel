@@ -1,0 +1,30 @@
+---
+id: payments.events
+name: payments.events
+version: 1.0.0
+summary: |
+  Kafka topic carrying payment outcomes. Consumed by Inventory (to reserve
+  stock) and Orders (to advance the order state).
+deliveryGuarantee: at-least-once
+address: kafka://broker.prod.autotel.dev:9092/payments.events
+protocols:
+  - kafka
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+Carries [[event|PaymentCaptured]] and [[event|PaymentFailed]]. Partitioned by
+`orderId` so retry attempts for the same order stay sequenced.
+
+<NodeGraph />
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+Throughput **27,431 msgs / 7d** (matches order volume). p95 producer ack
+**6ms**. Failure-event share **0.67%**.
+</div>
+
+<Footer />

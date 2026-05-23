@@ -1,0 +1,152 @@
+---
+id: PaymentRecoveryFlow
+name: Payment Recovery Flow
+version: 1.0.0
+summary: |
+  What happens when the initial payment capture fails. The retry budget, the
+  customer-facing email, and the eventual recovery or abandonment.
+owners:
+  - autotel-team
+badges:
+  - content: 'Generated from tests'
+    backgroundColor: orange
+    textColor: white
+    icon: BoltIcon
+  - content: 'Recovery rate: 94.5%'
+    backgroundColor: green
+    textColor: white
+    icon: CheckBadgeIcon
+steps:
+  - id: order_placed
+    title: 'OrderPlaced received'
+    message:
+      id: OrderPlaced
+      version: 1.0.0
+    next_step:
+      id: capture_attempt_1
+      label: 'First capture attempt'
+
+  - id: capture_attempt_1
+    title: 'Payment capture (attempt 1)'
+    service:
+      id: PaymentService
+    next_steps:
+      - id: payment_captured
+        label: 'Success'
+      - id: backoff_1
+        label: 'Soft decline'
+
+  - id: backoff_1
+    title: 'Exponential backoff (200ms)'
+    custom:
+      title: 'Backoff'
+      color: blue
+      icon: ClockIcon
+      type: 'Policy'
+      summary: 'Pause before retry. Captured as a `span()` so the wait is visible in traces.'
+    next_step:
+      id: capture_attempt_2
+      label: 'Retry'
+
+  - id: capture_attempt_2
+    title: 'Payment capture (attempt 2)'
+    service:
+      id: PaymentService
+    next_steps:
+      - id: payment_captured
+        label: 'Success'
+      - id: backoff_2
+        label: 'Soft decline'
+
+  - id: backoff_2
+    title: 'Exponential backoff (800ms)'
+    custom:
+      title: 'Backoff'
+      color: blue
+      icon: ClockIcon
+      type: 'Policy'
+      summary: 'Final pause. The next attempt is the last.'
+    next_step:
+      id: capture_attempt_3
+      label: 'Final retry'
+
+  - id: capture_attempt_3
+    title: 'Payment capture (attempt 3, final)'
+    service:
+      id: PaymentService
+    next_steps:
+      - id: payment_captured
+        label: 'Success'
+      - id: payment_failed
+        label: 'Hard fail'
+
+  - id: payment_captured
+    title: 'PaymentCaptured'
+    message:
+      id: PaymentCaptured
+      version: 1.0.0
+    next_step:
+      id: rejoin_checkout
+      label: 'Rejoin checkout flow'
+
+  - id: rejoin_checkout
+    title: 'Continue to Checkout Flow'
+    flow:
+      id: CheckoutFlow
+
+  - id: payment_failed
+    title: 'PaymentFailed'
+    message:
+      id: PaymentFailed
+      version: 1.0.0
+    next_step:
+      id: recovery_email
+      label: 'Send recovery email'
+
+  - id: recovery_email
+    title: 'Recovery email sent'
+    custom:
+      title: 'Recovery email'
+      color: orange
+      icon: EnvelopeIcon
+      type: 'Outcome'
+      summary: 'Customer receives an email with a one-tap retry link. Tracks `payment.recovery_email.sent`.'
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## How this flow was generated
+
+This flow was generated from the `payment-failure.integration.test.ts` suite,
+which exercises the retry path with a PSP stub that returns `card_declined`
+twice then succeeds, and once that returns `card_declined` three times.
+
+<NodeGraph />
+
+<div class="evidence-callout">
+<strong>Observed in tests</strong>
+
+Two integration tests exercise this flow:
+
+- `payment > retries soft declines and eventually succeeds`
+- `payment > emits PaymentFailed after exhausting retries`
+
+Snapshot diff against the previous CI run: no changes. Schemas stable.
+</div>
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+This flow fired **183 times** in the last 7 days. Of those:
+
+- **2-attempt recoveries**: 142 (78%)
+- **3-attempt recoveries**: 31 (17%)
+- **Hard failures**: 10 (5%)
+
+The 10 hard failures triggered the recovery email. **6 customers retried
+within 24h and succeeded.** Final unrecoverable rate: **2.2%**.
+
+p95 end-to-end (including retries): **2.4s**.
+</div>
+
+<Footer />

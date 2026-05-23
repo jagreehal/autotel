@@ -1,0 +1,72 @@
+---
+id: OrderPlaced
+name: Order Placed
+version: 1.0.0
+summary: |
+  The customer's order has been accepted and persisted. Downstream services use
+  this as the cue to capture payment, reserve stock, and generate recommendations.
+owners:
+  - autotel-team
+badges:
+  - content: 'Broker: Apache Kafka'
+    backgroundColor: neutral
+    textColor: neutral
+    icon: kafka
+  - content: 'Observed: 27,431 / week'
+    backgroundColor: orange
+    textColor: white
+    icon: BoltIcon
+schemaPath: schema.json
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+`OrderPlaced` is the **fanout event** of the checkout. It is the first thing
+written to Kafka once the order is durably persisted, and it triggers the
+three parallel reactions: payment capture, recommendation generation, and
+(eventually, via payment) inventory reservation.
+
+Produced by [[service|OrdersService]] via `traceProducer` on [[channel|orders.events]].
+
+<NodeGraph />
+
+<SchemaViewer file="schema.json" title="JSON Schema" maxHeight="500" />
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+Volume **27,431 / 7d**. p95 publish latency **8ms**. Last seen **12s ago**.
+
+**Field paths seen in payloads**: `id`, `customerId`, `totalCents`, `currency`,
+`items[].sku`, `items[].quantity`, `items[].priceCents`, `shipping.addressId`,
+`metadata.source`.
+
+**Drift status**: clean. All observed field paths match the declared schema.
+
+Sample trace: `trace-9f2a7b3c-1a2b`.
+</div>
+
+## Consumers
+
+| Service | Why it cares |
+|---|---|
+| [[service\|PaymentService]] | Capture payment against the recorded total |
+| [[service\|RecommendationsService]] | Generate post-purchase recommendation |
+
+
+
+<!-- autotel:stamp-start -->
+
+<div class="evidence-callout">
+<strong>Observed in autotel snapshot</strong>
+
+**Volume**: 5 events · **Last seen**: 2026-05-22 05:33 UTC · **Producer**: OrdersService · **Channel**: `orders.events`
+
+**Field paths observed**: `currency`, `customerId`, `items`, `items[].priceCents`, `items[].quantity`, `items[].sku`, `metadata`, `metadata.source`, `orderId`, `shipping`, `shipping.addressId`, `totalCents`
+</div>
+
+<!-- autotel:stamp-end -->
+
+<Footer />

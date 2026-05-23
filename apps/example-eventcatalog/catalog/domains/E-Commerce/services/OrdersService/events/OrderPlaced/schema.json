@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/order-placed/1.0.0.json",
+  "title": "OrderPlaced",
+  "type": "object",
+  "required": ["orderId", "customerId", "totalCents", "currency", "items"],
+  "properties": {
+    "orderId": { "type": "string", "format": "uuid" },
+    "customerId": { "type": "string", "format": "uuid" },
+    "totalCents": { "type": "integer", "minimum": 0 },
+    "currency": { "type": "string", "enum": ["USD", "EUR", "GBP"] },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["sku", "quantity", "priceCents"],
+        "properties": {
+          "sku": { "type": "string" },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "priceCents": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "shipping": {
+      "type": "object",
+      "properties": {
+        "addressId": { "type": "string" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "enum": ["web", "mobile", "api"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+/* Subtle accent tweaks layered on top of the 'sunset' theme.
+   The catalog feels confident and intentional, not generic-startup. */
+
+:root {
+  --ec-color-primary: #d35400;
+  --ec-color-primary-hover: #b8480f;
+}
+
+/* Evidence callouts: where autotel-observed runtime data shows up next to
+   hand-curated catalog content. The visual signal says 'this is live data,
+   not aspiration'. */
+.evidence-callout {
+  border-left: 3px solid var(--ec-color-primary);
+  background: linear-gradient(90deg, rgba(211, 84, 0, 0.06), transparent);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  font-size: 0.92em;
+  border-radius: 0 6px 6px 0;
+}
+
+.evidence-callout strong {
+  color: var(--ec-color-primary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.78em;
+}

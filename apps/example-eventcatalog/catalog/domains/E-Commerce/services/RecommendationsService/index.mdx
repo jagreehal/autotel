@@ -1,0 +1,98 @@
+---
+id: RecommendationsService
+name: Recommendations Service
+version: 1.0.0
+summary: |
+  Generates a personalized post-purchase recommendation using an LLM.
+  Instrumented with autotel's gen-AI helpers — the LLM call appears as a span
+  inside the checkout flow, with model, prompt tokens, and completion tokens.
+owners:
+  - autotel-team
+sends:
+  - id: RecommendationGenerated
+    to:
+      - id: orders.events
+receives:
+  - id: OrderPlaced
+    from:
+      - id: orders.events
+repository:
+  language: TypeScript
+  url: https://github.com/jagreehal/autotel
+badges:
+  - content: 'Instrumented with autotel'
+    backgroundColor: orange
+    textColor: white
+    icon: BoltIcon
+  - content: 'gen-ai'
+    backgroundColor: purple
+    textColor: white
+    icon: SparklesIcon
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+When an order is placed, the Recommendations Service uses an LLM to generate
+three "you might also like" items personalized to the basket. The LLM call is
+captured by autotel's gen-AI instrumentation, so it shows up in the catalog
+as a first-class step inside [[flow|CheckoutFlow]].
+
+This is the kind of step that **hand-written catalogs cannot describe well**:
+the prompt template, the model, the token counts, and the latency only exist
+at runtime. Autotel captures them, the catalog renders them.
+
+<NodeGraph />
+
+### How it's instrumented
+
+```ts
+import { track } from 'autotel';
+import { traceConsumer } from 'autotel/messaging';
+
+export const generateRecommendation = traceConsumer({
+  system: 'kafka',
+  destination: 'orders.events',
+})(() => async (msg: OrderPlacedMessage) => {
+  const result = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: buildPrompt(msg),
+  });
+
+  track('recommendation.generated', {
+    orderId: msg.id,
+    model: 'gpt-4o-mini',
+    usage: {
+      promptTokens: result.usage.prompt_tokens,
+      completionTokens: result.usage.completion_tokens,
+    },
+    _autotel: { channel: 'orders.events', producer: 'RecommendationsService' },
+  });
+});
+```
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+`generateRecommendation` ran **27,431 times** in the last 7 days. p95 LLM
+latency **1.8s**, p99 **3.4s**. Average completion tokens **142**.
+
+**Total LLM spend**: $14.27 across the week (model: `gpt-4o-mini`).
+
+This service produced **2 schema-drift findings** this week: the field
+`personalization_seed` started appearing in payloads but is not declared in
+[[event|RecommendationGenerated]]. Drift is surfaced on the event page below.
+
+Last seen: 18 seconds ago. Sample trace: `trace-8d4e2c7a-91f5`.
+</div>
+
+### Sends
+
+- [[event|RecommendationGenerated]] → [[channel|orders.events]]
+
+### Receives
+
+- [[event|OrderPlaced]] from [[channel|orders.events]]
+
+<Footer />

@@ -1,0 +1,61 @@
+---
+id: PaymentCaptured
+name: Payment Captured
+version: 1.0.0
+summary: |
+  Payment has been successfully captured against the PSP. The order can now
+  proceed to inventory reservation.
+owners:
+  - autotel-team
+badges:
+  - content: 'Broker: Apache Kafka'
+    backgroundColor: neutral
+    textColor: neutral
+    icon: kafka
+  - content: 'Observed: 27,248 / week'
+    backgroundColor: orange
+    textColor: white
+    icon: BoltIcon
+schemaPath: schema.json
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+Emitted by [[service|PaymentService]] after a successful PSP capture. Consumed
+by [[service|InventoryService]] (to reserve stock) and [[service|OrdersService]]
+(to advance the order state to `paid`).
+
+<NodeGraph />
+
+<SchemaViewer file="schema.json" title="JSON Schema" maxHeight="500" />
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+Volume **27,248 / 7d** (matches `OrderPlaced` minus hard payment failures).
+p95 end-to-end from `OrderPlaced` consumption to `PaymentCaptured` publish:
+**194ms**.
+
+**Field paths seen**: `orderId`, `amountCents`, `currency`, `psp`,
+`pspTransactionId`, `capturedAt`.
+
+Sample trace: `trace-2c9d8a1f-77b3`.
+</div>
+
+
+
+<!-- autotel:stamp-start -->
+
+<div class="evidence-callout">
+<strong>Observed in autotel snapshot</strong>
+
+**Volume**: 5 events · **Last seen**: 2026-05-22 05:33 UTC · **Producer**: PaymentService · **Channel**: `payments.events`
+
+**Field paths observed**: `amountCents`, `capturedAt`, `currency`, `orderId`, `psp`, `pspTransactionId`
+</div>
+
+<!-- autotel:stamp-end -->
+
+<Footer />

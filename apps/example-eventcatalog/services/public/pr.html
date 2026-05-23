@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pull request · autotel/commerce</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* Mock GitHub PR view. Styling is a deliberate reproduction of
+         GitHub's dark-mode PR conversation chrome — close enough that a
+         viewer's eye believes "this is what landed on the PR." */
+      :root {
+        --gh-canvas: #0d1117;
+        --gh-canvas-2: #161b22;
+        --gh-canvas-3: #1c2128;
+        --gh-border: #30363d;
+        --gh-border-muted: #21262d;
+        --gh-text: #c9d1d9;
+        --gh-text-muted: #8b949e;
+        --gh-text-link: #58a6ff;
+        --gh-text-link-hover: #79c0ff;
+        --gh-text-success: #3fb950;
+        --gh-text-danger: #f85149;
+        --gh-text-warning: #d29922;
+        --gh-btn-primary: #238636;
+        --gh-btn-primary-hover: #2ea043;
+        --gh-state-merged: #8957e5;
+        --gh-state-open: #238636;
+        --gh-state-draft: #6e7681;
+        --gh-accent: #316dca;
+        --autotel-orange: #ff8a3d;
+
+        --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --mono: 'IBM Plex Mono', ui-monospace, monospace;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+
+      body {
+        background: var(--gh-canvas);
+        color: var(--gh-text);
+        font-family: var(--sans);
+        font-size: 14px;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+
+      .demo-ribbon {
+        background: linear-gradient(90deg, rgba(255, 138, 61, 0.16), rgba(255, 138, 61, 0.06) 70%, transparent);
+        border-bottom: 1px solid rgba(255, 138, 61, 0.32);
+        padding: 0.55rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--autotel-orange);
+      }
+      .demo-ribbon strong { color: #ffd6b3; font-weight: 500; letter-spacing: 0.18em; }
+      .demo-ribbon .sep { color: var(--gh-text-muted); }
+      .demo-ribbon a { color: var(--gh-text-muted); text-decoration: none; border-bottom: 1px solid var(--gh-border); }
+      .demo-ribbon a:hover { color: var(--gh-text); }
+
+      /* GitHub header */
+      .gh-header {
+        background: var(--gh-canvas-2);
+        border-bottom: 1px solid var(--gh-border);
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .gh-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--gh-text);
+      }
+      .gh-mark svg { display: block; width: 100%; height: 100%; }
+      .gh-breadcrumb { color: var(--gh-text); font-weight: 600; }
+      .gh-breadcrumb .slash { color: var(--gh-text-muted); margin: 0 4px; font-weight: 400; }
+      .gh-breadcrumb a { color: var(--gh-text-link); text-decoration: none; }
+      .gh-breadcrumb a:hover { text-decoration: underline; }
+
+      /* PR title + state */
+      .pr-head {
+        padding: 20px 32px 16px;
+        border-bottom: 1px solid var(--gh-border);
+      }
+      .pr-title {
+        font-size: 26px;
+        line-height: 1.25;
+        font-weight: 400;
+        margin: 0 0 8px;
+        color: var(--gh-text);
+      }
+      .pr-title .num { color: var(--gh-text-muted); font-weight: 300; }
+      .pr-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        color: var(--gh-text-muted);
+        flex-wrap: wrap;
+      }
+      .state-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 500;
+        background: var(--gh-state-open);
+        color: white;
+      }
+      .state-pill .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: white;
+      }
+      .pr-meta a { color: var(--gh-text-link); text-decoration: none; }
+      .pr-meta a:hover { text-decoration: underline; }
+      .pr-meta code {
+        font-family: var(--mono);
+        background: var(--gh-canvas-3);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 12px;
+      }
+
+      /* Tabs */
+      .pr-tabs {
+        display: flex;
+        gap: 0;
+        padding: 0 32px;
+        border-bottom: 1px solid var(--gh-border);
+        background: var(--gh-canvas);
+      }
+      .pr-tab {
+        padding: 12px 16px;
+        font-size: 14px;
+        color: var(--gh-text-muted);
+        cursor: pointer;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pr-tab .count {
+        background: var(--gh-canvas-3);
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .pr-tab.active {
+        color: var(--gh-text);
+        font-weight: 600;
+      }
+      .pr-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 8px;
+        right: 8px;
+        height: 2px;
+        background: var(--autotel-orange);
+      }
+
+      main {
+        max-width: 1012px;
+        margin: 0 auto;
+        padding: 24px 32px 64px;
+        display: grid;
+        grid-template-columns: 1fr 220px;
+        gap: 24px;
+      }
+
+      @media (max-width: 900px) {
+        main { grid-template-columns: 1fr; }
+      }
+
+      .timeline { display: flex; flex-direction: column; gap: 16px; position: relative; }
+      .timeline::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 20px;
+        width: 2px;
+        background: var(--gh-border-muted);
+      }
+
+      .timeline-item {
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        gap: 12px;
+        align-items: start;
+        position: relative;
+      }
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--autotel-orange), #b8480f);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 14px;
+        position: relative;
+        z-index: 1;
+        font-family: var(--mono);
+        letter-spacing: 0;
+      }
+      .avatar.human {
+        background: linear-gradient(135deg, #41a661, #267245);
+        font-family: var(--sans);
+      }
+
+      .comment {
+        border: 1px solid var(--gh-border);
+        border-radius: 6px;
+        background: var(--gh-canvas-2);
+      }
+      .comment-head {
+        background: var(--gh-canvas-3);
+        border-bottom: 1px solid var(--gh-border);
+        padding: 8px 14px;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .comment-head .who { font-weight: 600; color: var(--gh-text); }
+      .comment-head .when { color: var(--gh-text-muted); }
+      .comment-head .bot-badge {
+        background: transparent;
+        border: 1px solid var(--gh-border);
+        padding: 0 5px;
+        border-radius: 3px;
+        font-size: 11px;
+        color: var(--gh-text-muted);
+        margin-left: 4px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .comment-body { padding: 16px; font-size: 14px; color: var(--gh-text); }
+
+      .comment-body h1 {
+        font-size: 24px;
+        margin: 0 0 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--gh-border-muted);
+        font-weight: 600;
+        line-height: 1.25;
+      }
+      .comment-body h2 {
+        font-size: 18px;
+        margin: 22px 0 10px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--gh-border-muted);
+        font-weight: 600;
+      }
+      .comment-body h3 {
+        font-size: 15px;
+        margin: 16px 0 8px;
+        font-weight: 600;
+      }
+      .comment-body p { margin: 8px 0; }
+      .comment-body ul { margin: 8px 0; padding-left: 26px; }
+      .comment-body li { margin: 3px 0; }
+      .comment-body code {
+        font-family: var(--mono);
+        font-size: 0.92em;
+        background: var(--gh-canvas-3);
+        padding: 0.15em 0.4em;
+        border-radius: 3px;
+        color: #e6edf3;
+      }
+      .comment-body strong { font-weight: 600; color: #e6edf3; }
+      .comment-body em { color: var(--gh-text-muted); font-style: italic; }
+      .comment-body a { color: var(--gh-text-link); }
+
+      .check-block {
+        margin-top: 8px;
+        border: 1px solid var(--gh-border);
+        border-radius: 6px;
+        background: var(--gh-canvas-2);
+        padding: 12px 14px;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .check-block .icon {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--gh-text-danger);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 11px;
+        margin-top: 1px;
+        flex-shrink: 0;
+      }
+      .check-block .icon.pass {
+        background: var(--gh-text-success);
+      }
+      .check-block .name { font-weight: 600; color: var(--gh-text); }
+      .check-block .desc { font-size: 13px; color: var(--gh-text-muted); margin-top: 2px; }
+      .check-block .details {
+        margin-left: auto;
+        color: var(--gh-text-link);
+        font-size: 13px;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      /* Right sidebar */
+      aside { display: flex; flex-direction: column; gap: 24px; }
+      .side-section {
+        font-size: 12px;
+      }
+      .side-section h3 {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--gh-text-muted);
+        margin: 0 0 8px;
+        text-transform: none;
+      }
+      .label-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0 7px;
+        border-radius: 999px;
+        font-size: 12px;
+        height: 20px;
+        font-weight: 500;
+        background: var(--autotel-orange);
+        color: #1a1303;
+        margin: 2px 4px 2px 0;
+      }
+      .label-pill.muted {
+        background: #58a6ff;
+        color: white;
+      }
+      .side-section .review {
+        font-size: 13px;
+        color: var(--gh-text-muted);
+        line-height: 1.5;
+      }
+      .side-section .review strong { color: var(--gh-text); font-weight: 500; }
+
+      /* "What you're looking at" callout */
+      .explainer {
+        max-width: 1012px;
+        margin: 16px auto -8px;
+        padding: 14px 32px 0;
+        font-size: 13px;
+        color: var(--gh-text-muted);
+        line-height: 1.55;
+      }
+      .explainer strong { color: var(--autotel-orange); font-weight: 600; }
+
+      .toolbar {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        padding: 10px;
+        background: rgba(13, 17, 23, 0.95);
+        border: 1px solid var(--gh-border);
+        border-radius: 8px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--gh-text-muted);
+        z-index: 50;
+      }
+      .toolbar a { color: var(--autotel-orange); text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div class="demo-ribbon">
+      <strong>Live mock</strong>
+      <span class="sep">·</span>
+      <span>What an actual PR comment looks like, rendered against the running snapshot</span>
+      <span class="sep">·</span>
+      <a href="/">← back to live dashboard</a>
+    </div>
+
+    <header class="gh-header">
+      <div class="gh-mark">
+        <svg viewBox="0 0 24 24" fill="#0d1117" aria-hidden="true">
+          <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/>
+        </svg>
+      </div>
+      <div class="gh-breadcrumb">
+        <a href="#">jagreehal</a>
+        <span class="slash">/</span>
+        <a href="#">autotel-commerce</a>
+        <span class="slash">·</span>
+        <span style="color:var(--gh-text-muted);font-weight:400;">Pull request #142</span>
+      </div>
+    </header>
+
+    <div class="pr-head">
+      <h1 class="pr-title">
+        Add post-purchase personalization seed for recommendation model
+        <span class="num">#142</span>
+      </h1>
+      <div class="pr-meta">
+        <span class="state-pill"><span class="dot"></span>Open</span>
+        <span><strong style="color:var(--gh-text)">jagreehal</strong> wants to merge <strong style="color:var(--gh-text)">3</strong> commits into
+          <code>main</code> from <code>feat/personalization-seed</code>
+        </span>
+      </div>
+    </div>
+
+    <nav class="pr-tabs">
+      <div class="pr-tab active">Conversation <span class="count">8</span></div>
+      <div class="pr-tab">Commits <span class="count">3</span></div>
+      <div class="pr-tab">Checks <span class="count" id="check-count">1</span></div>
+      <div class="pr-tab">Files changed <span class="count">5</span></div>
+    </nav>
+
+    <div class="explainer">
+      <strong>What you're looking at:</strong> a faithful reproduction of the
+      PR conversation page. The "autotel-eventcatalog" comment below is
+      generated from the live drift report this server is serving right now.
+      Refresh after editing the snapshot and the comment updates with the
+      real markdown that would post on a real PR.
+    </div>
+
+    <main>
+      <section class="timeline">
+        <div class="timeline-item">
+          <div class="avatar human">JR</div>
+          <div class="comment">
+            <div class="comment-head">
+              <span class="who">jagreehal</span>
+              <span class="when">opened this pull request 14 minutes ago · 3 commits</span>
+            </div>
+            <div class="comment-body">
+              <p>
+                Adds a per-order personalization seed to the recommendation
+                payload so the LLM stays stable across retries. Behind a
+                feature flag for now.
+              </p>
+              <p>
+                Touches: <code>services/recommendations</code>,
+                <code>schemas/recommendation-generated.json</code> (no),
+                <code>catalog/events/RecommendationGenerated</code> (no).
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-item">
+          <div class="avatar">A</div>
+          <div class="comment">
+            <div class="comment-head">
+              <span class="who">autotel-eventcatalog</span>
+              <span class="bot-badge">bot</span>
+              <span class="when">commented just now · sticky</span>
+            </div>
+            <div class="comment-body" id="pr-comment-body">
+              <p><em>Loading drift report…</em></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-item">
+          <div class="avatar human">JR</div>
+          <div class="comment">
+            <div class="comment-head">
+              <span class="who">jagreehal</span>
+              <span class="when">12 minutes ago</span>
+            </div>
+            <div class="comment-body">
+              <p>Oh — I forgot the schema update. Fixing.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="check-block" id="check-block">
+          <div class="icon" id="check-icon">×</div>
+          <div>
+            <div class="name" id="check-name">eventcatalog drift / drift — Failing</div>
+            <div class="desc" id="check-desc">Catalog and runtime have diverged. See the comment above.</div>
+          </div>
+          <a class="details" href="#">Details</a>
+        </div>
+      </section>
+
+      <aside>
+        <div class="side-section">
+          <h3>Reviewers</h3>
+          <div class="review">
+            <strong>autotel-eventcatalog</strong> requested changes
+          </div>
+        </div>
+        <div class="side-section">
+          <h3>Labels</h3>
+          <span class="label-pill">drift detected</span>
+          <span class="label-pill muted">recommendations</span>
+        </div>
+        <div class="side-section">
+          <h3>Linked issues</h3>
+          <div class="review">None.</div>
+        </div>
+      </aside>
+    </main>
+
+    <div class="toolbar">
+      live · <a href="/snapshot.json">snapshot.json</a> · <a href="/drift.md">drift.md</a>
+    </div>
+
+    <script>
+      // Render the live drift.md as if it were the bot's comment body.
+      const $ = (id) => document.getElementById(id);
+
+      function mdToHtml(md) {
+        const lines = md.split('\n');
+        const out = [];
+        let inList = false;
+        const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+        for (const raw of lines) {
+          const line = raw.replace(/`([^`]+)`/g, '<code>$1</code>')
+                          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                          .replace(/_([^_]+)_/g, '<em>$1</em>');
+          if (/^# /.test(line))       { closeList(); out.push('<h1>'    + line.slice(2)  + '</h1>'); }
+          else if (/^## /.test(line)) { closeList(); out.push('<h2>'    + line.slice(3)  + '</h2>'); }
+          else if (/^### /.test(line)){ closeList(); out.push('<h3>'    + line.slice(4)  + '</h3>'); }
+          else if (/^- /.test(line))  { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + line.slice(2) + '</li>'); }
+          else if (line.trim() === '')  closeList();
+          else                          { closeList(); out.push('<p>' + line + '</p>'); }
+        }
+        closeList();
+        return out.join('\n');
+      }
+
+      async function refresh() {
+        try {
+          const [md, drift] = await Promise.all([
+            fetch('/drift.md', { cache: 'no-store' }).then((r) => r.text()),
+            fetch('/drift.json', { cache: 'no-store' }).then((r) => r.json()),
+          ]);
+          $('pr-comment-body').innerHTML = mdToHtml(md);
+
+          const findings =
+            drift.events.observedButUndocumented.length +
+            drift.events.documentedButUnseen.length +
+            drift.events.fieldDrift.reduce((s, fd) => s + fd.extra.length + fd.missing.length, 0) +
+            drift.services.observedButUndocumented.length +
+            drift.channels.observedButUndocumented.length;
+
+          if (findings === 0) {
+            $('check-icon').classList.add('pass');
+            $('check-icon').textContent = '✓';
+            $('check-name').textContent = 'eventcatalog drift / drift — Passing';
+            $('check-desc').textContent = 'Catalog and runtime agree.';
+            $('check-count').textContent = '1';
+          } else {
+            $('check-icon').classList.remove('pass');
+            $('check-icon').textContent = '×';
+            $('check-name').textContent = 'eventcatalog drift / drift — Failing';
+            $('check-desc').textContent =
+              findings + ' drift finding' + (findings === 1 ? '' : 's') +
+              ' — see the comment above.';
+            $('check-count').textContent = '1';
+          }
+        } catch (err) {
+          $('pr-comment-body').innerHTML =
+            '<p><em>Could not load drift report. Is the live runner up?</em></p>';
+        }
+      }
+
+      refresh();
+      setInterval(refresh, 4000);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/recommendation-generated/1.0.0.json",
+  "title": "RecommendationGenerated",
+  "type": "object",
+  "required": ["orderId", "recommendations", "model", "usage"],
+  "properties": {
+    "orderId": { "type": "string", "format": "uuid" },
+    "recommendations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["sku", "score"],
+        "properties": {
+          "sku": { "type": "string" },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "model": { "type": "string" },
+    "usage": {
+      "type": "object",
+      "required": ["promptTokens", "completionTokens"],
+      "properties": {
+        "promptTokens": { "type": "integer" },
+        "completionTokens": { "type": "integer" }
+      }
+    }
+  }
+}

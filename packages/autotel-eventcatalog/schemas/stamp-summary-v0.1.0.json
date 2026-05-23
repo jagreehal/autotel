@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/eventcatalog/stamp-summary/v0.1.0.json",
+  "title": "Autotel EventCatalog Stamp Summary v0.1.0",
+  "description": "Machine-readable summary written by `autotel-eventcatalog stamp --summary-output`. CI workflows gate on `hadChanges` to detect 'this PR forgot to re-stamp'.",
+  "type": "object",
+  "required": [
+    "spec",
+    "dryRun",
+    "attempted",
+    "skipped",
+    "inserts",
+    "replaces",
+    "changedFiles",
+    "hadChanges"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec": {
+      "type": "string",
+      "const": "autotel-eventcatalog-stamp-summary/v0.1.0"
+    },
+    "dryRun": { "type": "boolean" },
+    "attempted": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total snapshot events the stamp run considered (matched + skipped)."
+    },
+    "skipped": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Snapshot events with no matching catalog entry."
+    },
+    "inserts": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Files where a stamp block was inserted for the first time."
+    },
+    "replaces": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Files where an existing stamp block was replaced (regardless of whether content actually changed)."
+    },
+    "changedFiles": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Files whose contents actually changed on disk (or would change in dry-run)."
+    },
+    "hadChanges": {
+      "type": "boolean",
+      "description": "True iff the run produced (or would produce) at least one real change."
+    }
+  }
+}

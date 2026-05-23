@@ -1,0 +1,9 @@
+**/dist/**
+**/.next/**
+**/node_modules/**
+**/coverage/**
+# Locked golden fixtures whose bytes are part of a public JSON contract.
+# Prettier collapses single-item arrays which would corrupt the byte
+# comparison in contract.test.ts.
+packages/autotel-eventcatalog/src/__fixtures__/**
+packages/autotel-eventcatalog/schemas/**
