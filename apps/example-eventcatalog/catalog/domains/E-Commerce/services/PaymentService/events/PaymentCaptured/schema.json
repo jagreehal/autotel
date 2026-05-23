@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/payment-captured/1.0.0.json",
+  "title": "PaymentCaptured",
+  "type": "object",
+  "required": ["orderId", "amountCents", "currency", "psp", "pspTransactionId", "capturedAt"],
+  "properties": {
+    "orderId": { "type": "string", "format": "uuid" },
+    "amountCents": { "type": "integer", "minimum": 0 },
+    "currency": { "type": "string", "enum": ["USD", "EUR", "GBP"] },
+    "psp": { "type": "string", "enum": ["stripe", "adyen", "braintree"] },
+    "pspTransactionId": { "type": "string" },
+    "capturedAt": { "type": "string", "format": "date-time" }
+  }
+}

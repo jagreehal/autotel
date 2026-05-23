@@ -1,0 +1,31 @@
+{
+  "spec": "autotel-eventcatalog-report/v0.1.0",
+  "mode": "all",
+  "report": {
+    "snapshotGeneratedAt": "2026-05-22T00:00:00.000Z",
+    "snapshotService": "fixture",
+    "events": {
+      "observedButUndocumented": [
+        "order.cancelled"
+      ],
+      "documentedButUnseen": [
+        "LegacyEvent"
+      ],
+      "fieldDrift": [
+        {
+          "event": "recommendation.generated",
+          "extra": [
+            "personalization_seed"
+          ],
+          "missing": []
+        }
+      ]
+    },
+    "services": {
+      "observedButUndocumented": []
+    },
+    "channels": {
+      "observedButUndocumented": []
+    }
+  }
+}

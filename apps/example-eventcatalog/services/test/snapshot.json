@@ -1,0 +1,87 @@
+{
+  "spec": "autotel-architecture/v0.1.0",
+  "generatedAt": "2026-05-22T05:33:09.794Z",
+  "service": "example-eventcatalog",
+  "events": {
+    "inventory.reserved": {
+      "name": "inventory.reserved",
+      "observedCount": 5,
+      "firstSeen": "2026-05-22T05:33:09.791Z",
+      "lastSeen": "2026-05-22T05:33:09.793Z",
+      "fieldPaths": [
+        "items",
+        "items[].priceCents",
+        "items[].quantity",
+        "items[].sku",
+        "orderId",
+        "reservationId",
+        "reservedAt",
+        "warehouseId"
+      ],
+      "sampleTraceIds": [],
+      "channel": "inventory.events",
+      "producer": "InventoryService"
+    },
+    "order.placed": {
+      "name": "order.placed",
+      "observedCount": 5,
+      "firstSeen": "2026-05-22T05:33:09.786Z",
+      "lastSeen": "2026-05-22T05:33:09.793Z",
+      "fieldPaths": [
+        "currency",
+        "customerId",
+        "items",
+        "items[].priceCents",
+        "items[].quantity",
+        "items[].sku",
+        "metadata",
+        "metadata.source",
+        "orderId",
+        "shipping",
+        "shipping.addressId",
+        "totalCents"
+      ],
+      "sampleTraceIds": [],
+      "channel": "orders.events",
+      "producer": "OrdersService"
+    },
+    "payment.captured": {
+      "name": "payment.captured",
+      "observedCount": 5,
+      "firstSeen": "2026-05-22T05:33:09.789Z",
+      "lastSeen": "2026-05-22T05:33:09.793Z",
+      "fieldPaths": [
+        "amountCents",
+        "capturedAt",
+        "currency",
+        "orderId",
+        "psp",
+        "pspTransactionId"
+      ],
+      "sampleTraceIds": [],
+      "channel": "payments.events",
+      "producer": "PaymentService"
+    },
+    "recommendation.generated": {
+      "name": "recommendation.generated",
+      "observedCount": 5,
+      "firstSeen": "2026-05-22T05:33:09.789Z",
+      "lastSeen": "2026-05-22T05:33:09.793Z",
+      "fieldPaths": [
+        "model",
+        "orderId",
+        "personalization_seed",
+        "recommendations",
+        "recommendations[].reason",
+        "recommendations[].score",
+        "recommendations[].sku",
+        "usage",
+        "usage.completionTokens",
+        "usage.promptTokens"
+      ],
+      "sampleTraceIds": [],
+      "channel": "orders.events",
+      "producer": "RecommendationsService"
+    }
+  }
+}

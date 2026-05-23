@@ -1,0 +1,60 @@
+---
+id: InventoryReserved
+name: Inventory Reserved
+version: 1.0.0
+summary: |
+  Stock has been durably reserved in the warehouse management system. The order
+  is now ready to be confirmed and dispatched.
+owners:
+  - autotel-team
+badges:
+  - content: 'Broker: Apache Kafka'
+    backgroundColor: neutral
+    textColor: neutral
+    icon: kafka
+  - content: 'Observed: 27,136 / week'
+    backgroundColor: orange
+    textColor: white
+    icon: BoltIcon
+schemaPath: schema.json
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+Emitted by [[service|InventoryService]] once the WMS confirms the reservation
+is durable. Consumed by [[service|OrdersService]] to advance the order to
+`confirmed`.
+
+<NodeGraph />
+
+<SchemaViewer file="schema.json" title="JSON Schema" maxHeight="500" />
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+Volume **27,136 / 7d** (`PaymentCaptured` minus 112 out-of-stock failures).
+p95 reservation latency **78ms**.
+
+**Field paths seen**: `orderId`, `reservationId`, `warehouseId`, `items[].sku`,
+`items[].quantity`, `reservedAt`.
+
+Sample trace: `trace-5e1f4b8a-c2d7`.
+</div>
+
+
+
+<!-- autotel:stamp-start -->
+
+<div class="evidence-callout">
+<strong>Observed in autotel snapshot</strong>
+
+**Volume**: 5 events · **Last seen**: 2026-05-22 05:33 UTC · **Producer**: InventoryService · **Channel**: `inventory.events`
+
+**Field paths observed**: `items`, `items[].priceCents`, `items[].quantity`, `items[].sku`, `orderId`, `reservationId`, `reservedAt`, `warehouseId`
+</div>
+
+<!-- autotel:stamp-end -->
+
+<Footer />

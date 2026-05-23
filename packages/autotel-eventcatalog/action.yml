@@ -1,0 +1,155 @@
+name: 'autotel-eventcatalog drift'
+description: |
+  Diff your autotel architecture snapshot against an EventCatalog and surface
+  drift on the pull request. With base-ref input, only drift the PR introduces
+  fails the check — pre-existing drift is reported but ignored.
+
+branding:
+  icon: 'activity'
+  color: 'orange'
+
+inputs:
+  snapshot:
+    description: 'Path to the architecture snapshot JSON (the PR head version).'
+    required: true
+  catalog:
+    description: 'Path to the EventCatalog directory (containing eventcatalog.config.* and domains/).'
+    required: true
+  base-ref:
+    description: |
+      Git ref to read the baseline snapshot from (typically the PR base branch,
+      e.g. `origin/main`). When set, the action reports only drift the PR
+      introduces — pre-existing drift is shown for context but does not fail.
+    required: false
+    default: ''
+  fail-on-drift:
+    description: 'Fail the check when drift is detected. With base-ref, fails only on *new* drift.'
+    required: false
+    default: 'true'
+  comment-on-pr:
+    description: 'Post the drift report as a sticky comment on the pull request.'
+    required: false
+    default: 'true'
+  comment-header:
+    description: 'Header tag for the sticky comment (use this if you have multiple drift checks).'
+    required: false
+    default: 'autotel-eventcatalog'
+  package-version:
+    description: |
+      Semver range for autotel-eventcatalog. Defaults to `^0` so a new
+      major release won't silently land on your CI — pin to an exact
+      version (e.g. `0.1.0`) for fully reproducible runs.
+    required: false
+    default: '^0'
+  continue-on-comment-failure:
+    description: |
+      When `true`, a failure of the sticky-comment step (e.g. GitHub API
+      rate limit, transient 5xx, permissions) is downgraded to a warning
+      and the workflow keeps running. The drift check itself is
+      unaffected. Default `true` because a missed comment is annoying;
+      a failed job because of a missed comment is worse.
+    required: false
+    default: 'true'
+
+outputs:
+  drift-detected:
+    description: '"true" if any drift was detected, "false" otherwise.'
+    value: ${{ steps.run.outputs.drift-detected }}
+  report-path:
+    description: 'Path to the generated markdown drift report.'
+    value: ${{ steps.run.outputs.report-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve base snapshot
+      id: base
+      if: ${{ inputs.base-ref != '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        BASE_SNAPSHOT="$RUNNER_TEMP/autotel-eventcatalog-base-snapshot.json"
+        if git show "${{ inputs.base-ref }}:${{ inputs.snapshot }}" > "$BASE_SNAPSHOT" 2>/dev/null; then
+          echo "Found base snapshot at ${{ inputs.base-ref }}:${{ inputs.snapshot }}"
+          echo "path=$BASE_SNAPSHOT" >> "$GITHUB_OUTPUT"
+        else
+          echo "::notice::No base snapshot at ${{ inputs.base-ref }}:${{ inputs.snapshot }} — first run on this branch?"
+          echo "path=" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Run drift check
+      id: run
+      shell: bash
+      env:
+        SNAPSHOT: ${{ inputs.snapshot }}
+        CATALOG: ${{ inputs.catalog }}
+        BASE_SNAPSHOT_PATH: ${{ steps.base.outputs.path }}
+        PACKAGE_VERSION: ${{ inputs.package-version }}
+      run: |
+        set -euo pipefail
+        REPORT="$RUNNER_TEMP/autotel-eventcatalog-drift.md"
+        SUMMARY="$RUNNER_TEMP/autotel-eventcatalog-summary.json"
+        echo "report-path=$REPORT" >> "$GITHUB_OUTPUT"
+
+        # Always pass --fail-on-drift internally so the exit code is the
+        # authoritative drift signal. The user-facing `fail-on-drift` input
+        # only controls whether we re-emit that failure as a workflow
+        # failure further down — the action itself needs the signal either
+        # way (for the drift-detected output, the sticky comment, etc.).
+        POLICY="all"
+        ARGS=(--snapshot "$SNAPSHOT" --catalog "$CATALOG" --output "$REPORT" --summary-output "$SUMMARY" --fail-on-drift)
+        if [ -n "${BASE_SNAPSHOT_PATH:-}" ]; then
+          ARGS+=(--base-snapshot "$BASE_SNAPSHOT_PATH")
+          POLICY="new-only"
+        fi
+        ARGS+=(--policy "$POLICY")
+
+        # Run the CLI — non-zero exit means drift was detected.
+        set +e
+        npx --yes "autotel-eventcatalog@$PACKAGE_VERSION" drift "${ARGS[@]}"
+        STATUS=$?
+        set -e
+
+        if [ $STATUS -ne 0 ] && [ $STATUS -ne 1 ]; then
+          # Anything else (2 = bad args, etc.) is a hard error; surface it.
+          echo "::error::autotel-eventcatalog drift CLI failed with exit $STATUS"
+          exit $STATUS
+        fi
+
+        if [ ! -f "$SUMMARY" ]; then
+          echo "::error::autotel-eventcatalog did not produce a summary output."
+          exit 1
+        fi
+        DRIFT_DETECTED="$(node -e "const fs=require('fs');const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(s.shouldFail ? 'true':'false')" "$SUMMARY")"
+        echo "drift-detected=$DRIFT_DETECTED" >> "$GITHUB_OUTPUT"
+
+        # Always show the report in the job log for easy review.
+        echo "::group::Drift report"
+        cat "$REPORT"
+        echo "::endgroup::"
+
+    # Sticky-comment action pinned to a specific commit SHA. This is a
+    # supply-chain control — a future malicious tag wouldn't affect anyone
+    # using this action. Update the SHA deliberately when bumping the
+    # external action's version. Currently pinned to v2.9.4 (2024-12-03).
+    - name: Post sticky PR comment
+      id: comment
+      if: ${{ inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' }}
+      continue-on-error: ${{ inputs.continue-on-comment-failure == 'true' }}
+      uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728
+      with:
+        header: ${{ inputs.comment-header }}
+        path: ${{ steps.run.outputs.report-path }}
+
+    - name: Warn on comment failure
+      if: ${{ steps.comment.outcome == 'failure' }}
+      shell: bash
+      run: |
+        echo "::warning::Could not post the drift report as a PR comment. The drift check itself completed and the report is available at ${{ steps.run.outputs.report-path }}."
+
+    - name: Fail on drift
+      if: ${{ inputs.fail-on-drift == 'true' && steps.run.outputs.drift-detected == 'true' }}
+      shell: bash
+      run: |
+        echo "::error::autotel-eventcatalog detected drift between the catalog and the snapshot."
+        exit 1

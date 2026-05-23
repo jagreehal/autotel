@@ -1,0 +1,48 @@
+---
+id: PaymentFailed
+name: Payment Failed
+version: 1.0.0
+summary: |
+  Payment capture failed after the configured retry budget. The order is
+  parked in `awaiting_payment` and a recovery email is triggered.
+owners:
+  - autotel-team
+badges:
+  - content: 'Broker: Apache Kafka'
+    backgroundColor: neutral
+    textColor: neutral
+    icon: kafka
+  - content: 'Observed: 183 / week'
+    backgroundColor: red
+    textColor: white
+    icon: ExclamationTriangleIcon
+schemaPath: schema.json
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+Emitted by [[service|PaymentService]] only after all retry attempts are
+exhausted. The [[flow|PaymentRecoveryFlow]] page documents the retry strategy
+and the customer-facing recovery path.
+
+<NodeGraph />
+
+<SchemaViewer file="schema.json" title="JSON Schema" maxHeight="500" />
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+Volume **183 / 7d** — the rare event. p95 time-to-fail **2.4s** (covers three
+PSP attempts with exponential backoff).
+
+**Decline code distribution**: `insufficient_funds` 42%, `card_declined` 31%,
+`expired_card` 14%, other 13%.
+
+**Recovery rate after retry email**: 94.5% within 24h.
+
+Sample trace: `trace-7a3c1e9b-44de`.
+</div>
+
+<Footer />

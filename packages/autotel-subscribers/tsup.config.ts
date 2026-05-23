@@ -12,6 +12,7 @@ export default defineConfig({
     slack: 'src/slack.ts',
     factories: 'src/factories.ts',
     middleware: 'src/middleware.ts',
+    'architecture-snapshot': 'src/architecture-snapshot.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

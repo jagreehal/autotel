@@ -1,0 +1,46 @@
+---
+// Catalog footer rendered at the bottom of each service / event / flow page.
+// Keeps the "this catalog is generated from autotel" message in front of every reader.
+---
+
+<footer class="ec-footer">
+  <div class="ec-footer__inner">
+    <span class="ec-footer__tag">Powered by autotel telemetry</span>
+    <a
+      class="ec-footer__link"
+      href="https://github.com/jagreehal/autotel"
+      target="_blank"
+      rel="noreferrer"
+    >
+      github.com/jagreehal/autotel
+    </a>
+  </div>
+</footer>
+
+<style>
+  .ec-footer {
+    margin-top: 3rem;
+    padding: 1rem 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    font-size: 0.85em;
+    color: #666;
+  }
+  .ec-footer__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .ec-footer__tag {
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 0.78em;
+  }
+  .ec-footer__link {
+    color: #d35400;
+    text-decoration: none;
+  }
+  .ec-footer__link:hover {
+    text-decoration: underline;
+  }
+</style>

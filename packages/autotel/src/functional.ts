@@ -210,7 +210,8 @@ function hasImmediateExecutionMark(fn: unknown): boolean {
  */
 export function markAsImmediate<F>(fn: F): F {
   if (typeof fn === 'function') {
-    (fn as unknown as ImmediateExecutionFlag)[IMMEDIATE_EXECUTION_SYMBOL] = true;
+    (fn as unknown as ImmediateExecutionFlag)[IMMEDIATE_EXECUTION_SYMBOL] =
+      true;
   }
   return fn;
 }

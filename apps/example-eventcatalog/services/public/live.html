@@ -1,0 +1,1971 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Autotel Commerce — Live</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        --bg-0: #07090d;
+        --bg-1: #0d1116;
+        --bg-rail: #0b0e13;
+        --bg-card: #11161f;
+        --bg-card-2: #161c27;
+        --line: rgba(255, 255, 255, 0.06);
+        --line-strong: rgba(255, 255, 255, 0.14);
+        --text: #e9edf4;
+        --text-2: #aab3c1;
+        --muted: #6b7587;
+        --paper: #f1e7d6;
+        --hot: #ff8a3d;
+        --hot-soft: rgba(255, 138, 61, 0.14);
+        --hot-glow: rgba(255, 138, 61, 0.35);
+        --warn: #f0b13a;
+        --warn-soft: rgba(240, 177, 58, 0.12);
+        --good: #61dca3;
+        --good-soft: rgba(97, 220, 163, 0.10);
+        --red: #f87171;
+        --ch-orders: #7aa7ff;
+        --ch-payments: #c084fc;
+        --ch-inventory: #34d399;
+
+        --serif: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+        --sans: 'IBM Plex Sans', system-ui, sans-serif;
+        --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+        --radius: 6px;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+
+      body {
+        background: var(--bg-0);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 13.5px;
+        line-height: 1.5;
+        min-height: 100vh;
+        overflow-x: hidden;
+        background-image:
+          radial-gradient(ellipse 70% 50% at 20% 0%, rgba(255, 138, 61, 0.04), transparent 60%),
+          radial-gradient(ellipse 80% 60% at 100% 20%, rgba(122, 167, 255, 0.03), transparent 60%),
+          linear-gradient(180deg, var(--bg-0), var(--bg-1));
+        position: relative;
+      }
+
+      /* Film grain texture overlay — barely perceptible but adds atmosphere */
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+        pointer-events: none;
+        z-index: 2;
+        mix-blend-mode: overlay;
+        opacity: 0.55;
+      }
+
+      .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+      .serif { font-family: var(--serif); }
+
+      /* ─── Top instrument bar ─────────────────────────── */
+      .topbar {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.85rem 1.75rem;
+        border-bottom: 1px solid var(--line);
+        background: rgba(11, 14, 19, 0.7);
+        backdrop-filter: blur(6px);
+        z-index: 5;
+      }
+      .topbar::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          repeating-linear-gradient(
+            0deg,
+            transparent 0,
+            transparent 3px,
+            rgba(255, 255, 255, 0.012) 3px,
+            rgba(255, 255, 255, 0.012) 4px
+          );
+        pointer-events: none;
+      }
+
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+      }
+      .brand .mark {
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 0.78rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--hot);
+      }
+      .brand .title {
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: 1.05rem;
+        color: var(--paper);
+        letter-spacing: -0.005em;
+      }
+      .brand .title em {
+        font-style: italic;
+        color: var(--muted);
+        font-weight: 400;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .status .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--muted);
+        box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+        transition: all 0.25s;
+      }
+      .status .dot.connected {
+        background: var(--good);
+        box-shadow: 0 0 12px var(--good);
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.42; }
+      }
+      .status .label { color: var(--text-2); }
+
+      /* ─── Drift banner — the moment ─────────────────── */
+      .alert {
+        position: relative;
+        max-height: 0;
+        overflow: hidden;
+        background: linear-gradient(90deg, rgba(240, 177, 58, 0.18), rgba(255, 138, 61, 0.10) 60%, transparent);
+        border-bottom: 1px solid rgba(240, 177, 58, 0.32);
+        transition: max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .alert.show {
+        max-height: 140px;
+        animation: alert-bloom 6s ease-out forwards;
+      }
+      @keyframes alert-bloom {
+        0%   { box-shadow: 0 0 0 0 var(--hot-glow); }
+        15%  { box-shadow: 0 6px 60px -10px var(--hot-glow); }
+        100% { box-shadow: 0 0 0 0 transparent; }
+      }
+      .alert-inner {
+        display: flex;
+        align-items: center;
+        gap: 1.4rem;
+        padding: 1.05rem 1.75rem;
+      }
+      .alert .badge {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #1a1303;
+        background: var(--warn);
+        padding: 0.22rem 0.55rem;
+        border-radius: 3px;
+        white-space: nowrap;
+      }
+      .alert .headline {
+        font-family: var(--serif);
+        font-size: 1.18rem;
+        font-weight: 500;
+        color: var(--paper);
+        line-height: 1.3;
+        flex: 1;
+        letter-spacing: -0.01em;
+      }
+      .alert .headline em {
+        font-style: italic;
+        color: var(--warn);
+      }
+      .alert .headline code {
+        font-family: var(--mono);
+        font-size: 0.94em;
+        color: var(--paper);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 0.1em 0.4em;
+        border-radius: 3px;
+      }
+      .alert .dismiss {
+        background: none;
+        border: 1px solid var(--line-strong);
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 0.35rem 0.65rem;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .alert .dismiss:hover {
+        color: var(--text);
+        border-color: var(--line-strong);
+      }
+
+      /* ─── Hero ────────────────────────────────────────── */
+      .hero {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .hero > div {
+        padding: 1.75rem 1.75rem 1.5rem;
+      }
+      .hero .left { border-right: 1px solid var(--line); }
+
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 0.5rem;
+      }
+
+      .hero-number {
+        font-family: var(--mono);
+        font-weight: 500;
+        font-size: clamp(3.6rem, 8vw, 5.6rem);
+        line-height: 1;
+        letter-spacing: -0.03em;
+        color: var(--paper);
+        font-variant-numeric: tabular-nums;
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+      }
+      .hero-number .unit {
+        font-family: var(--mono);
+        font-size: 0.95rem;
+        font-weight: 400;
+        color: var(--muted);
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+      }
+
+      .hero-sub {
+        display: flex;
+        gap: 2.5rem;
+        margin-top: 1.25rem;
+        padding-top: 1.1rem;
+        border-top: 1px solid var(--line);
+      }
+      .hero-sub > div { display: flex; flex-direction: column; gap: 0.2rem; }
+      .hero-sub .v {
+        font-family: var(--mono);
+        font-size: 1.4rem;
+        font-weight: 500;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      .hero-sub .k {
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .hero .right { display: flex; flex-direction: column; justify-content: space-between; }
+
+      .drift-meter {
+        display: flex;
+        align-items: baseline;
+        gap: 0.6rem;
+      }
+      .drift-meter .n {
+        font-family: var(--mono);
+        font-size: clamp(2.6rem, 5vw, 3.6rem);
+        font-weight: 500;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+      }
+      .drift-meter .n.clean { color: var(--good); }
+      .drift-meter .n.drift { color: var(--hot); }
+      .drift-meter .l {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .drift-meter .verdict {
+        font-family: var(--serif);
+        font-style: italic;
+        color: var(--text-2);
+        margin-top: 0.5rem;
+        font-size: 0.95rem;
+      }
+      .drift-meter .verdict.bad { color: var(--warn); }
+
+      .session-meta {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.8rem;
+        padding-top: 1.1rem;
+        border-top: 1px solid var(--line);
+        margin-top: 1rem;
+      }
+      .session-meta > div { display: flex; flex-direction: column; gap: 0.2rem; }
+      .session-meta .v {
+        font-family: var(--mono);
+        font-size: 0.95rem;
+        color: var(--text);
+      }
+      .session-meta .k {
+        font-family: var(--mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      /* ─── Main body: diff panel + side rail ───────────── */
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        gap: 0;
+      }
+      @media (max-width: 1100px) {
+        main { grid-template-columns: 1fr; }
+      }
+
+      .col-main { padding: 1.75rem; min-width: 0; }
+      .col-rail {
+        background: var(--bg-rail);
+        border-left: 1px solid var(--line);
+        padding: 1.5rem 1.5rem;
+        min-height: calc(100vh - 220px);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 0.85rem;
+      }
+      .section-head h2 {
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--text-2);
+        margin: 0;
+      }
+      .section-head .hint {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--muted);
+        letter-spacing: 0.05em;
+      }
+
+      /* ─── Declared vs Observed diff — the centerpiece ─ */
+      .diff {
+        margin-bottom: 2rem;
+      }
+      .diff-card {
+        background: var(--bg-card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .diff-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--line);
+        background: var(--bg-card-2);
+      }
+      .diff-header .event-title {
+        font-family: var(--mono);
+        font-size: 0.92rem;
+        color: var(--paper);
+        font-weight: 500;
+      }
+      .diff-header .event-meta {
+        font-family: var(--mono);
+        font-size: 0.74rem;
+        color: var(--muted);
+      }
+      .diff-tabs {
+        display: flex;
+        gap: 0.3rem;
+      }
+      .diff-tab {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        padding: 0.35rem 0.65rem;
+        border-radius: 3px;
+        cursor: pointer;
+        letter-spacing: 0.02em;
+        transition: all 0.15s;
+      }
+      .diff-tab:hover { color: var(--text-2); border-color: var(--line-strong); }
+      .diff-tab.active {
+        color: var(--paper);
+        background: var(--hot-soft);
+        border-color: var(--hot);
+      }
+      .diff-tab .count {
+        opacity: 0.6;
+        margin-left: 0.3rem;
+      }
+      .diff-tab.active .count { opacity: 1; }
+
+      .diff-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+      }
+      .diff-side { padding: 1rem 1.25rem; min-height: 240px; }
+      .diff-side.declared { border-right: 1px solid var(--line); }
+
+      .diff-side-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 0.6rem;
+      }
+      .diff-side-head h3 {
+        font-family: var(--mono);
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--text-2);
+        margin: 0;
+      }
+      .diff-side-head .source {
+        font-family: var(--serif);
+        font-style: italic;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      .diff-list { display: flex; flex-direction: column; gap: 0.15rem; }
+      .diff-row {
+        font-family: var(--mono);
+        font-size: 0.84rem;
+        padding: 0.32rem 0.55rem;
+        color: var(--text-2);
+        border-radius: 3px;
+        border-left: 2px solid transparent;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: background 0.3s ease-out;
+      }
+      .diff-row .sign {
+        color: var(--muted);
+        font-size: 0.85rem;
+        width: 0.85rem;
+        display: inline-block;
+      }
+      .diff-row.match { color: var(--text-2); }
+      .diff-row.extra {
+        background: var(--hot-soft);
+        border-left-color: var(--hot);
+        color: var(--paper);
+      }
+      .diff-row.extra .sign { color: var(--hot); }
+      .diff-row.missing {
+        background: var(--warn-soft);
+        border-left-color: var(--warn);
+        color: var(--paper);
+      }
+      .diff-row.missing .sign { color: var(--warn); }
+      .diff-row.new {
+        animation: row-highlight 1.8s ease-out;
+      }
+      @keyframes row-highlight {
+        0%   { background: var(--hot-glow); transform: translateX(-4px); }
+        20%  { background: var(--hot-glow); transform: translateX(0); }
+        100% { background: var(--hot-soft); }
+      }
+
+      .diff-empty {
+        font-family: var(--serif);
+        font-style: italic;
+        color: var(--muted);
+        font-size: 0.9rem;
+        padding: 0.5rem 0;
+      }
+
+      /* ─── Events strip ────────────────────────────────── */
+      .events-strip {
+        margin-bottom: 2rem;
+      }
+      .events-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1px;
+        background: var(--line);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .event-tile {
+        background: var(--bg-card);
+        padding: 0.85rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        position: relative;
+        transition: background 0.2s;
+      }
+      .event-tile.bump {
+        background: var(--bg-card-2);
+      }
+      .event-tile .name {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        color: var(--text);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      .event-tile .name .ch {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .event-tile .count {
+        font-family: var(--mono);
+        font-size: 1.6rem;
+        font-weight: 500;
+        line-height: 1;
+        color: var(--paper);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+      }
+      .event-tile .foot {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        color: var(--muted);
+        letter-spacing: 0.05em;
+      }
+      .event-tile .foot .producer { color: var(--text-2); }
+
+      .ch-orders .ch { background: var(--ch-orders); }
+      .ch-payments .ch { background: var(--ch-payments); }
+      .ch-inventory .ch { background: var(--ch-inventory); }
+
+      .events-grid:empty::after {
+        content: 'Waiting for first event…';
+        grid-column: 1 / -1;
+        padding: 2rem;
+        text-align: center;
+        background: var(--bg-card);
+        color: var(--muted);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+
+      /* ─── PR preview ──────────────────────────────────── */
+      .pr-preview {
+        background: var(--bg-card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .pr-preview-head {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.7rem 0.9rem;
+        background: var(--bg-card-2);
+        border-bottom: 1px solid var(--line);
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        color: var(--text-2);
+      }
+      .pr-preview-head .gh-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--hot), #b8480f);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.65rem;
+        color: white;
+        font-weight: 600;
+      }
+      .pr-preview-head .when { margin-left: auto; color: var(--muted); }
+      .pr-preview-body {
+        padding: 0.9rem 1rem;
+        font-family: var(--sans);
+        font-size: 0.85rem;
+        max-height: 480px;
+        overflow-y: auto;
+      }
+      .pr-preview-body h1 {
+        font-family: var(--serif);
+        font-size: 1.05rem;
+        font-weight: 500;
+        margin: 0 0 0.5rem;
+        color: var(--paper);
+        letter-spacing: -0.01em;
+      }
+      .pr-preview-body h2 {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-2);
+        margin: 1rem 0 0.4rem;
+        padding-top: 0.6rem;
+        border-top: 1px solid var(--line);
+      }
+      .pr-preview-body h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0.5rem; }
+      .pr-preview-body p { color: var(--text-2); margin: 0.35rem 0; }
+      .pr-preview-body ul { padding-left: 1.2rem; margin: 0.35rem 0; }
+      .pr-preview-body li { color: var(--text-2); margin: 0.15rem 0; }
+      .pr-preview-body code {
+        font-family: var(--mono);
+        font-size: 0.92em;
+        background: var(--bg-card-2);
+        color: var(--paper);
+        padding: 0.05em 0.35em;
+        border-radius: 3px;
+      }
+      .pr-preview-body strong { color: var(--paper); font-weight: 600; }
+      .pr-preview-body em { font-family: var(--serif); color: var(--muted); }
+
+      /* ─── Activity feed ───────────────────────────────── */
+      .feed {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        background: var(--line);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin-top: 0.5rem;
+        max-height: 340px;
+        overflow-y: auto;
+      }
+      .feed-row {
+        display: grid;
+        grid-template-columns: 62px 1fr auto;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.5rem 0.8rem;
+        background: var(--bg-card);
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        animation: feed-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes feed-in {
+        from {
+          opacity: 0;
+          transform: translateY(-6px);
+          background: var(--hot-soft);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+          background: var(--bg-card);
+        }
+      }
+      .feed-row .t { color: var(--muted); font-size: 0.7rem; }
+      .feed-row .n { color: var(--text); }
+      .feed-row .ch-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+      }
+
+      .feed:empty::after {
+        content: 'Waiting…';
+        padding: 1.5rem;
+        font-family: var(--serif);
+        font-style: italic;
+        text-align: center;
+        color: var(--muted);
+        background: var(--bg-card);
+      }
+
+      /* ─── Footer ──────────────────────────────────────── */
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 0.85rem 1.75rem;
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--muted);
+        letter-spacing: 0.05em;
+      }
+      footer a { color: var(--text-2); text-decoration: none; border-bottom: 1px solid var(--line); }
+      footer a:hover { color: var(--paper); border-bottom-color: var(--paper); }
+
+      /* ─── Page load stagger ──────────────────────────── */
+      .reveal {
+        opacity: 0;
+        transform: translateY(8px);
+        animation: reveal 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      @keyframes reveal {
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .topbar { animation-delay: 0s; }
+      .hero { animation-delay: 0.08s; }
+      .map-section { animation-delay: 0.14s; }
+      .diff   { animation-delay: 0.22s; }
+      .events-strip { animation-delay: 0.30s; }
+      .col-rail { animation-delay: 0.38s; }
+      .demo-controls { animation-delay: 0.5s; }
+
+      /* ─── Demo controls (bottom-right floating panel) ── */
+      .demo-controls {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px;
+        background: rgba(7, 9, 13, 0.92);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.6);
+        z-index: 50;
+        max-width: 200px;
+      }
+      .demo-controls .label {
+        font-family: var(--mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+      .demo-btn {
+        font-family: var(--mono);
+        font-size: 0.76rem;
+        color: var(--text);
+        background: var(--bg-card-2);
+        border: 1px solid var(--line-strong);
+        border-radius: 4px;
+        padding: 7px 11px;
+        cursor: pointer;
+        text-align: left;
+        letter-spacing: 0.02em;
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .demo-btn:hover {
+        border-color: var(--hot);
+        color: var(--paper);
+        background: var(--hot-soft);
+      }
+      .demo-btn:active { transform: scale(0.97); }
+      .demo-btn .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--muted);
+        transition: background 0.2s;
+      }
+      .demo-btn.drift .dot { background: var(--warn); }
+      .demo-btn.clear .dot { background: var(--good); }
+      .demo-btn.burst .dot { background: var(--hot); }
+      .demo-btn.firing {
+        animation: btn-fire 0.4s ease-out;
+      }
+      @keyframes btn-fire {
+        0%   { background: var(--hot-soft); }
+        100% { background: var(--bg-card-2); }
+      }
+
+      /* ─── Service map ────────────────────────────────── */
+      .map-section {
+        padding: 1.5rem 1.75rem 1.75rem;
+        border-bottom: 1px solid var(--line);
+        background:
+          radial-gradient(ellipse 90% 70% at 50% 50%, rgba(255, 138, 61, 0.04), transparent 70%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent);
+      }
+
+      .map-card {
+        background: rgba(7, 9, 13, 0.5);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0.5rem 1rem 1rem;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .map-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: linear-gradient(
+          90deg,
+          var(--bg-0),
+          transparent 4%,
+          transparent 96%,
+          var(--bg-0)
+        );
+        opacity: 0.4;
+      }
+
+      svg.map {
+        width: 100%;
+        height: auto;
+        display: block;
+        font-family: var(--mono);
+      }
+
+      svg.map .edge {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.13);
+        stroke-width: 1.2;
+        transition: stroke 0.3s, stroke-width 0.3s;
+      }
+      svg.map .edge.producer {
+        stroke: rgba(255, 138, 61, 0.22);
+        stroke-dasharray: 0;
+      }
+      svg.map .edge.active {
+        stroke: rgba(255, 138, 61, 0.55);
+        stroke-width: 1.6;
+      }
+
+      svg.map .channel rect {
+        fill: rgba(255, 255, 255, 0.025);
+        stroke: rgba(255, 255, 255, 0.12);
+        stroke-width: 1;
+        stroke-dasharray: 3 3;
+      }
+      svg.map .channel text.name {
+        fill: var(--paper);
+        font-size: 11px;
+        font-weight: 500;
+        font-family: var(--mono);
+        text-anchor: middle;
+      }
+      svg.map .channel text.sub {
+        fill: var(--muted);
+        font-size: 9px;
+        font-family: var(--mono);
+        text-anchor: middle;
+        letter-spacing: 0.08em;
+      }
+
+      svg.map .service circle.bg {
+        fill: var(--bg-card);
+        stroke: rgba(255, 255, 255, 0.18);
+        stroke-width: 1.4;
+        transition: stroke 0.3s, filter 0.3s;
+      }
+      svg.map .service circle.ring {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.05);
+        stroke-width: 1;
+      }
+      svg.map .service text.title {
+        fill: var(--paper);
+        font-size: 11px;
+        font-weight: 500;
+        font-family: var(--mono);
+        text-anchor: middle;
+        dominant-baseline: central;
+      }
+      svg.map .service text.count {
+        fill: var(--text);
+        font-size: 13px;
+        font-weight: 600;
+        font-family: var(--mono);
+        text-anchor: middle;
+        font-variant-numeric: tabular-nums;
+      }
+      svg.map .service text.subtitle {
+        fill: var(--muted);
+        font-size: 9px;
+        font-family: var(--mono);
+        text-anchor: middle;
+        letter-spacing: 0.1em;
+      }
+
+      svg.map .service.focus circle.bg {
+        stroke: var(--hot);
+        filter: drop-shadow(0 0 6px var(--hot-glow));
+      }
+      svg.map .service.drift circle.bg {
+        stroke: var(--warn);
+        animation: ring-warn 2.4s ease-in-out infinite;
+      }
+      @keyframes ring-warn {
+        0%, 100% { filter: drop-shadow(0 0 0 rgba(240, 177, 58, 0)); }
+        50%      { filter: drop-shadow(0 0 8px rgba(240, 177, 58, 0.6)); }
+      }
+
+      svg.map .channel.active rect {
+        stroke: rgba(255, 138, 61, 0.6);
+      }
+
+      svg.map .particle {
+        fill: var(--hot);
+        filter: drop-shadow(0 0 6px var(--hot-glow));
+      }
+      svg.map .particle.trail {
+        fill: var(--hot);
+        opacity: 0.4;
+      }
+
+      .map-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 0.4rem 0.4rem 0.6rem;
+      }
+      .map-header h2 {
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--text-2);
+        margin: 0;
+      }
+      .map-header .legend {
+        display: flex;
+        gap: 1.1rem;
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+      .map-header .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .map-header .legend .swatch {
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+      }
+      .map-header .legend .swatch.flow {
+        background: var(--hot);
+        box-shadow: 0 0 6px var(--hot-glow);
+      }
+      .map-header .legend .swatch.drift {
+        background: var(--warn);
+        animation: ring-warn 2.4s ease-in-out infinite;
+        border-radius: 50%;
+      }
+      .map-header .legend .swatch.idle {
+        background: rgba(255, 255, 255, 0.18);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar reveal">
+      <div class="brand">
+        <span class="mark">autotel · live</span>
+        <span class="title">Autotel Commerce <em>— architecture stream</em></span>
+      </div>
+      <div class="status">
+        <span class="label">Stream</span>
+        <span class="dot" id="conn-dot"></span>
+        <span id="conn-text">offline</span>
+      </div>
+    </div>
+
+    <div class="alert" id="drift-alert">
+      <div class="alert-inner">
+        <span class="badge">Drift</span>
+        <div class="headline" id="drift-alert-text">
+          <em>Drift detected.</em> Reading from <code>recommendation.generated</code>…
+        </div>
+        <button class="dismiss" id="drift-alert-dismiss">Acknowledge</button>
+      </div>
+    </div>
+
+    <div class="hero reveal">
+      <div class="left">
+        <div class="eyebrow">Activity · last 5s</div>
+        <div class="hero-number">
+          <span id="hero-rate">0.0</span>
+          <span class="unit">events / sec</span>
+        </div>
+        <div class="hero-sub">
+          <div>
+            <span class="v mono" id="total-count">0</span>
+            <span class="k">total observed</span>
+          </div>
+          <div>
+            <span class="v mono" id="distinct-count">0</span>
+            <span class="k">distinct events</span>
+          </div>
+          <div>
+            <span class="v mono" id="session-uptime">0s</span>
+            <span class="k">session age</span>
+          </div>
+        </div>
+      </div>
+      <div class="right">
+        <div>
+          <div class="eyebrow">Catalog vs runtime</div>
+          <div class="drift-meter">
+            <span class="n clean" id="drift-num">0</span>
+            <span class="l">findings</span>
+          </div>
+          <div class="verdict" id="drift-verdict">Catalog and runtime agree.</div>
+        </div>
+        <div class="session-meta">
+          <div>
+            <span class="v" id="snap-service">—</span>
+            <span class="k">service</span>
+          </div>
+          <div>
+            <span class="v" id="snap-spec">—</span>
+            <span class="k">spec</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="map-section reveal">
+      <div class="map-header">
+        <h2>Architecture · live flow</h2>
+        <div class="legend">
+          <span><span class="swatch flow"></span> event in flight</span>
+          <span><span class="swatch drift"></span> drift on event</span>
+          <span><span class="swatch idle"></span> idle edge</span>
+        </div>
+      </div>
+      <div class="map-card">
+        <svg
+          class="map"
+          viewBox="0 0 980 280"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <defs>
+            <marker
+              id="arrow"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="6.5"
+              markerHeight="6.5"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.32)" />
+            </marker>
+          </defs>
+
+          <g id="map-edges">
+            <path
+              id="edge-order-placed"
+              class="edge producer"
+              d="M 104 100 L 170 100"
+              marker-end="url(#arrow)"
+              data-event="order.placed"
+            />
+            <path
+              id="edge-orders-payment"
+              class="edge"
+              d="M 280 100 L 346 100"
+              marker-end="url(#arrow)"
+            />
+            <path
+              id="edge-payment-captured"
+              class="edge producer"
+              d="M 414 100 L 480 100"
+              marker-end="url(#arrow)"
+              data-event="payment.captured"
+            />
+            <path
+              id="edge-payments-inventory"
+              class="edge"
+              d="M 590 100 L 656 100"
+              marker-end="url(#arrow)"
+            />
+            <path
+              id="edge-inventory-reserved"
+              class="edge producer"
+              d="M 724 100 L 790 100"
+              marker-end="url(#arrow)"
+              data-event="inventory.reserved"
+            />
+            <path
+              id="edge-orders-recommendations"
+              class="edge"
+              d="M 225 122 Q 225 175 290 188"
+              marker-end="url(#arrow)"
+            />
+            <path
+              id="edge-recommendation-generated"
+              class="edge producer"
+              d="M 256 218 Q 195 200 195 122"
+              marker-end="url(#arrow)"
+              data-event="recommendation.generated"
+            />
+          </g>
+
+          <g id="map-channels">
+            <g class="channel" data-id="orders.events" transform="translate(170 80)">
+              <rect width="110" height="40" rx="4" />
+              <text class="name" x="55" y="17">orders.events</text>
+              <text class="sub" x="55" y="31" data-count="orders.events">0 events published</text>
+            </g>
+            <g class="channel" data-id="payments.events" transform="translate(480 80)">
+              <rect width="110" height="40" rx="4" />
+              <text class="name" x="55" y="17">payments.events</text>
+              <text class="sub" x="55" y="31" data-count="payments.events">0 events published</text>
+            </g>
+            <g class="channel" data-id="inventory.events" transform="translate(790 80)">
+              <rect width="110" height="40" rx="4" />
+              <text class="name" x="55" y="17">inventory.events</text>
+              <text class="sub" x="55" y="31" data-count="inventory.events">0 events published</text>
+            </g>
+          </g>
+
+          <g id="map-services">
+            <g class="service" data-id="OrdersService" data-focus="order.placed" transform="translate(70 100)">
+              <circle class="ring" r="42" />
+              <circle class="bg" r="34" />
+              <text class="title" y="-2">Orders</text>
+              <text class="subtitle" y="12">SERVICE</text>
+              <text class="count" y="60" data-svc="OrdersService">0</text>
+              <text class="subtitle" y="74">EMITTED</text>
+            </g>
+            <g class="service" data-id="PaymentService" data-focus="payment.captured" transform="translate(380 100)">
+              <circle class="ring" r="42" />
+              <circle class="bg" r="34" />
+              <text class="title" y="-2">Payment</text>
+              <text class="subtitle" y="12">SERVICE</text>
+              <text class="count" y="60" data-svc="PaymentService">0</text>
+              <text class="subtitle" y="74">EMITTED</text>
+            </g>
+            <g class="service" data-id="InventoryService" data-focus="inventory.reserved" transform="translate(690 100)">
+              <circle class="ring" r="42" />
+              <circle class="bg" r="34" />
+              <text class="title" y="-2">Inventory</text>
+              <text class="subtitle" y="12">SERVICE</text>
+              <text class="count" y="60" data-svc="InventoryService">0</text>
+              <text class="subtitle" y="74">EMITTED</text>
+            </g>
+            <g class="service" data-id="RecommendationsService" data-focus="recommendation.generated" transform="translate(290 218)">
+              <circle class="ring" r="42" />
+              <circle class="bg" r="34" />
+              <text class="title" y="-2">Recos</text>
+              <text class="subtitle" y="12">AI · gpt-4o-mini</text>
+              <text class="count" y="60" data-svc="RecommendationsService">0</text>
+              <text class="subtitle" y="74">EMITTED</text>
+            </g>
+          </g>
+
+          <g id="map-particles"></g>
+        </svg>
+      </div>
+    </section>
+
+    <main>
+      <div class="col-main">
+        <section class="diff reveal">
+          <div class="section-head">
+            <h2>Declared vs observed</h2>
+            <span class="hint">drift surfaces here the moment a new field appears in a payload</span>
+          </div>
+          <div class="diff-card">
+            <div class="diff-header">
+              <div>
+                <div class="event-title mono" id="focus-name">—</div>
+                <div class="event-meta" id="focus-meta">—</div>
+              </div>
+              <div class="diff-tabs" id="focus-tabs"></div>
+            </div>
+            <div class="diff-grid">
+              <div class="diff-side declared">
+                <div class="diff-side-head">
+                  <h3>Catalog declares</h3>
+                  <span class="source" id="declared-source">— fields</span>
+                </div>
+                <div class="diff-list" id="declared-list"></div>
+              </div>
+              <div class="diff-side observed">
+                <div class="diff-side-head">
+                  <h3>Runtime observes</h3>
+                  <span class="source" id="observed-source">— fields</span>
+                </div>
+                <div class="diff-list" id="observed-list"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="events-strip reveal">
+          <div class="section-head">
+            <h2>Events</h2>
+            <span class="hint" id="events-hint">click a tile to focus the diff</span>
+          </div>
+          <div class="events-grid" id="events-grid"></div>
+        </section>
+      </div>
+
+      <aside class="col-rail reveal">
+        <div class="section-head">
+          <h2>PR comment preview</h2>
+          <span class="hint">what would land on a PR</span>
+        </div>
+        <div class="pr-preview">
+          <div class="pr-preview-head">
+            <span class="gh-dot">A</span>
+            <span>autotel-eventcatalog</span>
+            <span class="when" id="pr-when">just now</span>
+          </div>
+          <div class="pr-preview-body" id="pr-body">
+            <p><em>Awaiting first snapshot…</em></p>
+          </div>
+        </div>
+
+        <div class="section-head" style="margin-top:1.5rem">
+          <h2>Activity</h2>
+          <span class="hint">most recent first</span>
+        </div>
+        <div class="feed" id="feed"></div>
+      </aside>
+    </main>
+
+    <footer>
+      <span>autotel-architecture/v0.1.0 — <a href="/snapshot.json">snapshot.json</a></span>
+      <span>
+        <a href="/drift.json">drift.json</a>
+        &nbsp;·&nbsp;
+        <a href="/drift.md">drift.md</a>
+      </span>
+    </footer>
+
+    <div class="demo-controls reveal" id="demo-controls">
+      <div class="label">Demo</div>
+      <button class="demo-btn drift" data-action="trigger-drift">
+        <span class="dot"></span>Trigger drift
+      </button>
+      <button class="demo-btn burst" data-action="burst">
+        <span class="dot"></span>Burst (×8)
+      </button>
+      <button class="demo-btn clear" data-action="clear-drift">
+        <span class="dot"></span>Clear &amp; reset
+      </button>
+    </div>
+
+    <script>
+      // ─── Topology mapping ─────────────────────────────
+      // Each track() event we know about maps to (producer service, channel,
+      // edge id). Producer edges have data-event set in the SVG; we use this
+      // map to route particles and update counts in O(1).
+      const TOPOLOGY = {
+        'order.placed': {
+          producer: 'OrdersService',
+          channel: 'orders.events',
+          edge: 'edge-order-placed',
+        },
+        'payment.captured': {
+          producer: 'PaymentService',
+          channel: 'payments.events',
+          edge: 'edge-payment-captured',
+        },
+        'payment.failed': {
+          producer: 'PaymentService',
+          channel: 'payments.events',
+          edge: 'edge-payment-captured',
+        },
+        'inventory.reserved': {
+          producer: 'InventoryService',
+          channel: 'inventory.events',
+          edge: 'edge-inventory-reserved',
+        },
+        'recommendation.generated': {
+          producer: 'RecommendationsService',
+          channel: 'orders.events',
+          edge: 'edge-recommendation-generated',
+        },
+      };
+
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+
+      // ─── State ──────────────────────────────────────────
+      const state = {
+        events: new Map(),
+        catalogEvents: {}, // declared field paths by catalog event id
+        focus: null,        // current focused snapshot event name
+        focusKnownPaths: new Set(),
+        recentTimestamps: [],
+        startedAt: Date.now(),
+        connection: 'offline',
+        drift: null,
+        priorDriftKey: '',
+        animatedRate: 0,
+        // Polish state:
+        driftRendered: '',   // last key we actually rendered, for de-bounced renders
+        snapshotFetchedAt: Date.now(),
+        bannerShownOnce: false,
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      // ─── Helpers ────────────────────────────────────────
+      const fmtTimeAgo = (iso) => {
+        const d = Date.now() - new Date(iso).getTime();
+        if (d < 1500) return 'now';
+        if (d < 60_000) return Math.floor(d / 1000) + 's';
+        if (d < 3_600_000) return Math.floor(d / 60_000) + 'm';
+        return Math.floor(d / 3_600_000) + 'h';
+      };
+      const fmtClock = (iso) => {
+        const d = new Date(iso);
+        const p = (n) => String(n).padStart(2, '0');
+        return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+      };
+      const channelClass = (channel) => {
+        if (!channel) return '';
+        if (channel.startsWith('orders')) return 'ch-orders';
+        if (channel.startsWith('payments')) return 'ch-payments';
+        if (channel.startsWith('inventory')) return 'ch-inventory';
+        return '';
+      };
+      // Normalise snapshot event name ("order.placed") to catalog id ("OrderPlaced").
+      const normalise = (id) => id.toLowerCase().replace(/[._\-\s]/g, '');
+      const findCatalogId = (snapName) => {
+        const n = normalise(snapName);
+        for (const id of Object.keys(state.catalogEvents)) {
+          if (normalise(id) === n) return id;
+        }
+        return null;
+      };
+
+      // ─── Animated counters ──────────────────────────────
+      function animateText(el, to, formatter = (n) => Math.round(n).toString()) {
+        const from = parseFloat(el.dataset.v || '0');
+        const start = performance.now();
+        const dur = 320;
+        function frame(t) {
+          const p = Math.min(1, (t - start) / dur);
+          const eased = 1 - Math.pow(1 - p, 3);
+          const cur = from + (to - from) * eased;
+          el.textContent = formatter(cur);
+          if (p < 1) requestAnimationFrame(frame);
+          else el.dataset.v = String(to);
+        }
+        requestAnimationFrame(frame);
+      }
+
+      // ─── Hero / meta ────────────────────────────────────
+      function refreshHero() {
+        const now = Date.now();
+        state.recentTimestamps = state.recentTimestamps.filter((t) => now - t < 5000);
+        const rate = state.recentTimestamps.length / 5;
+        animateText($('hero-rate'), rate, (n) => n.toFixed(1));
+
+        const total = [...state.events.values()].reduce((s, e) => s + e.count, 0);
+        animateText($('total-count'), total, (n) => Math.round(n).toLocaleString());
+        animateText($('distinct-count'), state.events.size);
+
+        const upS = Math.floor((now - state.startedAt) / 1000);
+        $('session-uptime').textContent = upS < 60
+          ? upS + 's'
+          : Math.floor(upS / 60) + 'm ' + (upS % 60) + 's';
+      }
+
+      // ─── Drift counters (FIXED: count individual paths) ─
+      function countDrift(drift) {
+        let n = 0;
+        n += drift.events.observedButUndocumented.length;
+        n += drift.events.documentedButUnseen.length;
+        for (const fd of drift.events.fieldDrift) {
+          n += fd.extra.length + fd.missing.length;
+        }
+        n += drift.services.observedButUndocumented.length;
+        n += drift.channels.observedButUndocumented.length;
+        return n;
+      }
+      function driftKey(drift) {
+        const parts = [];
+        parts.push(drift.events.observedButUndocumented.join('|'));
+        parts.push(drift.events.documentedButUnseen.join('|'));
+        for (const fd of drift.events.fieldDrift) {
+          parts.push(fd.event + ':+' + fd.extra.join(',') + ':-' + fd.missing.join(','));
+        }
+        return parts.join('||');
+      }
+      function findNewFields(prev, next) {
+        // Return the field paths that appeared in `next` but not in `prev`.
+        const prevSet = new Set();
+        if (prev) {
+          for (const fd of prev.events.fieldDrift) {
+            for (const p of fd.extra) prevSet.add(fd.event + '::' + p);
+          }
+        }
+        const fresh = [];
+        for (const fd of next.events.fieldDrift) {
+          for (const p of fd.extra) {
+            if (!prevSet.has(fd.event + '::' + p)) {
+              fresh.push({ event: fd.event, path: p });
+            }
+          }
+        }
+        return fresh;
+      }
+
+      // ─── Drift banner ───────────────────────────────────
+      let alertTimer = 0;
+      function fireAlert(fresh) {
+        const headlines = fresh.map((f) =>
+          `<em>Drift detected.</em> <code>${f.event}</code> contains <code>${f.path}</code>, not declared in the schema.`
+        ).join(' &nbsp; · &nbsp; ');
+        $('drift-alert-text').innerHTML = headlines;
+        $('drift-alert').classList.add('show');
+        clearTimeout(alertTimer);
+        alertTimer = setTimeout(() => $('drift-alert').classList.remove('show'), 7000);
+      }
+
+      // ─── Diff panel ─────────────────────────────────────
+      function renderDiffTabs() {
+        const tabs = $('focus-tabs');
+        const events = [...state.events.values()].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        );
+        tabs.innerHTML = events
+          .map((e) => {
+            const active = e.name === state.focus ? 'active' : '';
+            return `<button class="diff-tab ${active}" data-name="${e.name}">${
+              e.name
+            }<span class="count">${e.count}</span></button>`;
+          })
+          .join('');
+        tabs.querySelectorAll('.diff-tab').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.focus = btn.dataset.name;
+            state.focusManuallySet = true;
+            state.focusKnownPaths = new Set();
+            renderDiffPanel();
+            renderDiffTabs();
+          });
+        });
+      }
+
+      function renderDiffPanel() {
+        if (!state.focus) {
+          // Default focus: the first event with field drift, else the first event.
+          const withDrift = state.drift?.events.fieldDrift[0]?.event;
+          state.focus = withDrift ?? [...state.events.keys()].sort()[0] ?? null;
+        }
+        if (!state.focus) return;
+
+        const obs = state.events.get(state.focus);
+        const catalogId = findCatalogId(state.focus);
+        const declared = catalogId ? state.catalogEvents[catalogId]?.declaredFieldPaths ?? [] : [];
+        const observed = obs?.fieldPaths ?? [];
+
+        $('focus-name').textContent = state.focus;
+        $('focus-meta').innerHTML =
+          (obs?.producer ? `<span style="color:var(--text-2)">${obs.producer}</span> ` : '') +
+          (obs?.channel ? `<span>· ${obs.channel}</span> ` : '') +
+          (catalogId ? `<span>· catalog: ${catalogId}</span>` : '<span style="color:var(--warn)">· not in catalog</span>');
+
+        const declaredSet = new Set(declared);
+        const observedSet = new Set(observed);
+        const declaredOnly = declared.filter((p) => !observedSet.has(p)).sort();
+        const observedOnly = observed.filter((p) => !declaredSet.has(p)).sort();
+        const both = declared.filter((p) => observedSet.has(p)).sort();
+
+        $('declared-source').textContent = declared.length + ' field' + (declared.length === 1 ? '' : 's');
+        $('observed-source').textContent = observed.length + ' field' + (observed.length === 1 ? '' : 's');
+
+        const declaredHtml = renderList(
+          declared.map((p) => ({
+            path: p,
+            kind: observedSet.has(p) ? 'match' : 'missing',
+            sign: observedSet.has(p) ? '=' : '−',
+          })),
+          'No fields declared in the catalog.',
+        );
+        const observedHtml = renderList(
+          observed.map((p) => ({
+            path: p,
+            kind: declaredSet.has(p) ? 'match' : 'extra',
+            sign: declaredSet.has(p) ? '=' : '+',
+            new: !state.focusKnownPaths.has(p),
+          })),
+          'No fields observed yet.',
+        );
+        // Track which paths we've now seen so the highlight only fires for fresh additions.
+        for (const p of observed) state.focusKnownPaths.add(p);
+
+        $('declared-list').innerHTML = declaredHtml;
+        $('observed-list').innerHTML = observedHtml;
+        void both; // (kept for potential future "both" column treatment)
+      }
+      function renderList(rows, empty) {
+        if (rows.length === 0) return `<div class="diff-empty">${empty}</div>`;
+        return rows
+          .map((r) => {
+            const classes = ['diff-row', r.kind];
+            if (r.new && r.kind === 'extra') classes.push('new');
+            return `<div class="${classes.join(' ')}"><span class="sign">${r.sign}</span>${r.path}</div>`;
+          })
+          .join('');
+      }
+
+      // ─── Events strip ───────────────────────────────────
+      function refreshEventsGrid() {
+        const grid = $('events-grid');
+        const items = [...state.events.values()].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        );
+        grid.innerHTML = items
+          .map((e) => {
+            const cc = channelClass(e.channel);
+            const isFocus = e.name === state.focus ? ' style="outline:1px solid var(--hot)"' : '';
+            return `
+              <div class="event-tile ${cc}" data-name="${e.name}"${isFocus}>
+                <div class="name"><span class="ch"></span><span>${e.name}</span></div>
+                <div class="count">${e.count.toLocaleString()}</div>
+                <div class="foot">
+                  <span class="producer">${e.producer ?? '—'}</span>
+                  <span>${fmtTimeAgo(e.lastSeen)}</span>
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+        grid.querySelectorAll('.event-tile').forEach((tile) => {
+          tile.addEventListener('click', () => {
+            state.focus = tile.dataset.name;
+            state.focusManuallySet = true;
+            state.focusKnownPaths = new Set();
+            renderDiffPanel();
+            renderDiffTabs();
+            refreshEventsGrid();
+          });
+        });
+      }
+      function bumpTile(name) {
+        const tile = document.querySelector(`.event-tile[data-name="${name}"]`);
+        if (!tile) return;
+        tile.classList.add('bump');
+        setTimeout(() => tile.classList.remove('bump'), 260);
+      }
+
+      // ─── Activity feed ──────────────────────────────────
+      function pushFeed(event) {
+        const feed = $('feed');
+        const row = document.createElement('div');
+        row.className = 'feed-row';
+        const cc = channelClass(event.channel);
+        const dotColor = cc === 'ch-orders'
+          ? 'var(--ch-orders)'
+          : cc === 'ch-payments'
+          ? 'var(--ch-payments)'
+          : cc === 'ch-inventory'
+          ? 'var(--ch-inventory)'
+          : 'var(--muted)';
+        row.innerHTML = `
+          <span class="t">${fmtClock(event.timestamp)}</span>
+          <span class="n">${event.name}</span>
+          <span class="ch-dot" style="background:${dotColor}"></span>
+        `;
+        feed.prepend(row);
+        while (feed.children.length > 30) feed.removeChild(feed.lastChild);
+      }
+
+      // ─── PR preview ─────────────────────────────────────
+      let prFetchedAt = 0;
+      async function refreshPrPreview() {
+        try {
+          const res = await fetch('/drift.md', { cache: 'no-store' });
+          const md = await res.text();
+          $('pr-body').innerHTML = miniMarkdown(md);
+          prFetchedAt = Date.now();
+          updatePrWhen();
+        } catch {}
+      }
+      function updatePrWhen() {
+        if (!prFetchedAt) return;
+        const d = Date.now() - prFetchedAt;
+        const txt = d < 2000 ? 'just now'
+          : d < 60_000 ? Math.floor(d / 1000) + 's ago'
+          : Math.floor(d / 60_000) + 'm ago';
+        $('pr-when').textContent = txt;
+      }
+      // Tiny markdown renderer scoped to what drift.md actually emits.
+      function miniMarkdown(md) {
+        const lines = md.split('\n');
+        const out = [];
+        let inList = false;
+        const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+        for (const raw of lines) {
+          const line = raw.replace(/`([^`]+)`/g, '<code>$1</code>')
+                          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                          .replace(/_([^_]+)_/g, '<em>$1</em>');
+          if (/^# /.test(line)) { closeList(); out.push('<h1>' + line.slice(2) + '</h1>'); }
+          else if (/^## /.test(line)) { closeList(); out.push('<h2>' + line.slice(3) + '</h2>'); }
+          else if (/^### /.test(line)) { closeList(); out.push('<h2 style="color:var(--text-2)">' + line.slice(4) + '</h2>'); }
+          else if (/^- /.test(line)) {
+            if (!inList) { out.push('<ul>'); inList = true; }
+            out.push('<li>' + line.slice(2) + '</li>');
+          } else if (line.trim() === '') {
+            closeList();
+          } else {
+            closeList();
+            out.push('<p>' + line + '</p>');
+          }
+        }
+        closeList();
+        return out.join('\n');
+      }
+
+      // ─── Drift refresh ──────────────────────────────────
+      let driftInFlight = 0;
+      async function refreshDrift() {
+        const token = ++driftInFlight;
+        try {
+          const res = await fetch('/drift.json', { cache: 'no-store' });
+          if (token !== driftInFlight) return; // a newer fetch superseded us
+          const next = await res.json();
+          if (token !== driftInFlight) return;
+
+          const prev = state.drift;
+          state.drift = next;
+          state.snapshotFetchedAt = Date.now();
+
+          const nextKey = driftKey(next);
+          const samePayload = nextKey === state.driftRendered;
+          if (samePayload) {
+            // Nothing user-visible changed; skip re-render to kill jitter.
+            // Still need to advance bookkeeping below.
+          } else {
+            state.driftRendered = nextKey;
+
+            const n = countDrift(next);
+            const numEl = $('drift-num');
+            numEl.classList.toggle('clean', n === 0);
+            numEl.classList.toggle('drift', n > 0);
+            animateText(numEl, n);
+
+            const verdictEl = $('drift-verdict');
+            verdictEl.classList.toggle('bad', n > 0);
+            if (n === 0) {
+              verdictEl.textContent = 'Catalog and runtime agree.';
+            } else {
+              const m = next.events.fieldDrift[0];
+              const focusEvent = m?.event ?? next.events.observedButUndocumented[0];
+              verdictEl.innerHTML = focusEvent
+                ? `Diverged. <em style="color:var(--paper)">${focusEvent}</em> needs attention.`
+                : 'Diverged.';
+            }
+          }
+
+          // On the FIRST drift poll, snap focus to the event with the most
+          // drift AND fire the banner once so a first-time visitor sees the
+          // wow moment without waiting for the runner's drift timer.
+          if (!state.priorDriftKey && !state.focusManuallySet) {
+            const ranked = [...next.events.fieldDrift].sort(
+              (a, b) =>
+                (b.extra.length + b.missing.length) -
+                (a.extra.length + a.missing.length),
+            );
+            if (ranked[0]) {
+              state.focus = ranked[0].event;
+              renderDiffTabs();
+              if (!state.bannerShownOnce && ranked[0].extra.length > 0) {
+                fireAlert(
+                  ranked[0].extra.map((path) => ({ event: ranked[0].event, path })),
+                );
+                state.bannerShownOnce = true;
+              }
+            }
+          } else if (state.priorDriftKey && nextKey !== state.priorDriftKey) {
+            const fresh = findNewFields(prev, next);
+            if (fresh.length > 0) {
+              state.focus = fresh[0].event;
+              state.focusKnownPaths.delete(fresh[0].path);
+              fireAlert(fresh);
+              state.bannerShownOnce = true;
+              renderDiffTabs();
+            }
+          }
+          state.priorDriftKey = nextKey;
+
+          renderDiffPanel();
+          refreshPrPreview();
+          updateMapFocusAndDrift();
+        } catch {}
+      }
+
+      // ─── Boot ───────────────────────────────────────────
+      async function loadInitial() {
+        const [snapRes, catalogRes] = await Promise.all([
+          fetch('/snapshot.json'),
+          fetch('/catalog-events.json'),
+        ]);
+        const snap = await snapRes.json();
+        state.catalogEvents = await catalogRes.json();
+        $('snap-service').textContent = snap.service;
+        $('snap-spec').textContent = snap.spec;
+
+        for (const [name, obs] of Object.entries(snap.events)) {
+          state.events.set(name, {
+            name,
+            count: obs.observedCount,
+            lastSeen: obs.lastSeen,
+            channel: obs.channel,
+            producer: obs.producer,
+            fieldPaths: obs.fieldPaths,
+          });
+          for (const p of obs.fieldPaths) state.focusKnownPaths.add(p);
+        }
+        refreshEventsGrid();
+        refreshHero();
+        renderDiffPanel();
+        renderDiffTabs();
+        updateMapCounts();
+        updateMapFocusAndDrift();
+      }
+
+      function connect() {
+        const src = new EventSource('/events');
+        src.addEventListener('open', () => {
+          $('conn-dot').classList.add('connected');
+          $('conn-text').textContent = 'live';
+        });
+        src.addEventListener('track', (msg) => {
+          const event = JSON.parse(msg.data);
+          state.recentTimestamps.push(Date.now());
+
+          let obs = state.events.get(event.name);
+          if (!obs) {
+            obs = {
+              name: event.name,
+              count: 0,
+              lastSeen: event.timestamp,
+              channel: event.channel,
+              producer: event.producer,
+              fieldPaths: [],
+            };
+            state.events.set(event.name, obs);
+          }
+          obs.count += 1;
+          obs.lastSeen = event.timestamp;
+          // Track field paths from attribute keys (best-effort).
+          const newPaths = Object.keys(event.attributes ?? {}).filter(
+            (k) => k !== '_autotel' && k !== 'traceId' && k !== 'spanId',
+          );
+          obs.fieldPaths = [...new Set([...obs.fieldPaths, ...newPaths])].sort();
+
+          refreshEventsGrid();
+          bumpTile(event.name);
+          pushFeed(event);
+          refreshHero();
+          fireParticle(event.name);
+          updateMapCounts();
+
+          if (event.name === state.focus) renderDiffPanel();
+          renderDiffTabs();
+
+          if (obs.count % 6 === 0) refreshDrift();
+        });
+        src.addEventListener('error', () => {
+          $('conn-dot').classList.remove('connected');
+          $('conn-text').textContent = 'reconnecting';
+        });
+      }
+
+      $('drift-alert-dismiss').addEventListener('click', () => {
+        $('drift-alert').classList.remove('show');
+      });
+
+      // ─── Demo controls ──────────────────────────────────
+      document.querySelectorAll('.demo-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const action = btn.dataset.action;
+          btn.classList.add('firing');
+          setTimeout(() => btn.classList.remove('firing'), 400);
+          try {
+            await fetch('/demo/' + action, { method: 'POST' });
+          } catch {}
+          // Force a quick drift refresh so the dashboard reacts within a
+          // visible beat instead of waiting for the next 3.5s poll.
+          setTimeout(refreshDrift, 250);
+          setTimeout(refreshDrift, 1500);
+        });
+      });
+
+      // ─── Service map ────────────────────────────────────
+      function fireParticle(eventName) {
+        const topo = TOPOLOGY[eventName];
+        if (!topo) return;
+        const path = document.getElementById(topo.edge);
+        if (!path) return;
+
+        // Briefly mark the edge active for the trail visual.
+        path.classList.add('active');
+        setTimeout(() => path.classList.remove('active'), 700);
+
+        const len = path.getTotalLength();
+        const particles = $('map-particles');
+        const dot = document.createElementNS(SVG_NS, 'circle');
+        dot.setAttribute('r', '4.5');
+        dot.setAttribute('class', 'particle');
+        particles.appendChild(dot);
+
+        // Subtle trailing dot for a tracer effect.
+        const trail = document.createElementNS(SVG_NS, 'circle');
+        trail.setAttribute('r', '2.5');
+        trail.setAttribute('class', 'particle trail');
+        particles.appendChild(trail);
+
+        const start = performance.now();
+        const dur = 700;
+        function step(t) {
+          const p = Math.min(1, (t - start) / dur);
+          const eased = 1 - Math.pow(1 - p, 2.4);
+          const pt = path.getPointAtLength(len * eased);
+          dot.setAttribute('cx', pt.x);
+          dot.setAttribute('cy', pt.y);
+          dot.setAttribute('opacity', String(p < 0.85 ? 1 : 1 - (p - 0.85) / 0.15));
+
+          const trailP = Math.max(0, eased - 0.08);
+          const trailPt = path.getPointAtLength(len * trailP);
+          trail.setAttribute('cx', trailPt.x);
+          trail.setAttribute('cy', trailPt.y);
+          trail.setAttribute('opacity', String(0.35 * (1 - p)));
+
+          if (p < 1) requestAnimationFrame(step);
+          else { dot.remove(); trail.remove(); }
+        }
+        requestAnimationFrame(step);
+
+        // Briefly highlight the destination channel.
+        const ch = document.querySelector(`.channel[data-id="${topo.channel}"]`);
+        if (ch) {
+          setTimeout(() => {
+            ch.classList.add('active');
+            setTimeout(() => ch.classList.remove('active'), 500);
+          }, dur - 80);
+        }
+      }
+
+      function updateMapCounts() {
+        // Service "emitted" counts: sum of all events produced by that service.
+        const svcCounts = {};
+        const chCounts = {};
+        for (const [, obs] of state.events) {
+          if (obs.producer) svcCounts[obs.producer] = (svcCounts[obs.producer] ?? 0) + obs.count;
+          if (obs.channel) chCounts[obs.channel] = (chCounts[obs.channel] ?? 0) + obs.count;
+        }
+        document.querySelectorAll('[data-svc]').forEach((el) => {
+          const v = svcCounts[el.dataset.svc] ?? 0;
+          el.textContent = v.toLocaleString();
+        });
+        document.querySelectorAll('[data-count]').forEach((el) => {
+          const v = chCounts[el.dataset.count] ?? 0;
+          el.textContent = `${v.toLocaleString()} EVENTS PUBLISHED`;
+        });
+      }
+
+      function updateMapFocusAndDrift() {
+        // Focus: the service whose event the diff panel is currently showing.
+        const focusedSvc = state.focus ? TOPOLOGY[state.focus]?.producer : null;
+        document.querySelectorAll('.service').forEach((el) => {
+          el.classList.toggle('focus', el.dataset.id === focusedSvc);
+        });
+
+        // Drift: any service producing an event with current drift findings.
+        const driftServices = new Set();
+        if (state.drift) {
+          for (const fd of state.drift.events.fieldDrift) {
+            const p = TOPOLOGY[fd.event]?.producer;
+            if (p) driftServices.add(p);
+          }
+          for (const name of state.drift.events.observedButUndocumented) {
+            const p = TOPOLOGY[name]?.producer;
+            if (p) driftServices.add(p);
+          }
+        }
+        document.querySelectorAll('.service').forEach((el) => {
+          el.classList.toggle('drift', driftServices.has(el.dataset.id));
+        });
+      }
+
+      // Service nodes are clickable to focus the diff panel on their event.
+      document.querySelectorAll('.service').forEach((node) => {
+        node.style.cursor = 'pointer';
+        node.addEventListener('click', () => {
+          const evt = node.dataset.focus;
+          if (!evt || !state.events.has(evt)) return;
+          state.focus = evt;
+          state.focusManuallySet = true;
+          state.focusKnownPaths = new Set();
+          renderDiffPanel();
+          renderDiffTabs();
+          refreshEventsGrid();
+          updateMapFocusAndDrift();
+        });
+      });
+
+      setInterval(refreshHero, 1000);
+      setInterval(refreshEventsGrid, 2500); // refresh time-ago labels without losing animation
+      setInterval(refreshDrift, 3500);
+      setInterval(refreshPrPreview, 6000);
+      setInterval(updatePrWhen, 1000); // tick the "Ns ago" stamp
+
+      loadInitial()
+        .then(refreshDrift)
+        .then(refreshPrPreview)
+        .then(connect);
+    </script>
+  </body>
+</html>

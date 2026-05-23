@@ -1,0 +1,95 @@
+---
+id: OrdersService
+name: Orders Service
+version: 1.0.0
+summary: |
+  Accepts customer orders, owns the order lifecycle, publishes the canonical
+  `OrderPlaced` event that the rest of the domain reacts to.
+owners:
+  - autotel-team
+sends:
+  - id: OrderPlaced
+    to:
+      - id: orders.events
+receives:
+  - id: PaymentCaptured
+    from:
+      - id: payments.events
+  - id: InventoryReserved
+    from:
+      - id: inventory.events
+repository:
+  language: TypeScript
+  url: https://github.com/jagreehal/autotel
+badges:
+  - content: 'Instrumented with autotel'
+    backgroundColor: orange
+    textColor: white
+    icon: BoltIcon
+---
+
+import Footer from '@catalog/components/footer.astro';
+
+## Overview
+
+The Orders Service is the entry point of the checkout. It validates the incoming
+order, persists it, and publishes [[event|OrderPlaced]] on the
+[[channel|orders.events]] Kafka topic.
+
+It listens for [[event|PaymentCaptured]] and [[event|InventoryReserved]] to
+advance the order to `confirmed`.
+
+<NodeGraph />
+
+### How it's instrumented
+
+The order acceptance handler is wrapped in `trace()`. The Kafka publish uses
+`traceProducer` so the consumer-side spans link automatically.
+
+```ts
+import { trace, track } from 'autotel';
+import { traceProducer } from 'autotel/messaging';
+
+const publishOrderPlaced = traceProducer({
+  system: 'kafka',
+  destination: 'orders.events',
+})(() => async (msg) => kafka.publish('orders.events', msg));
+
+export const placeOrder = trace((ctx) => async (order: PlaceOrderInput) => {
+  ctx.setAttribute('order.customer_id', order.customerId);
+  ctx.setAttribute('order.value_cents', order.totalCents);
+
+  await db.orders.insert(order);
+  await publishOrderPlaced({ type: 'OrderPlaced', ...order });
+
+  track('order.placed', {
+    orderId: order.id,
+    customerId: order.customerId,
+    totalCents: order.totalCents,
+    _autotel: { channel: 'orders.events', producer: 'OrdersService' },
+  });
+
+  return order;
+});
+```
+
+<div class="evidence-callout">
+<strong>Observed in production</strong>
+
+`placeOrder` was invoked **27,431 times** in the last 7 days. p95 latency is
+**42ms**, p99 **89ms**. Error rate **0.07%** — three of those were timeouts
+on the Kafka publish and recovered on retry.
+
+Last seen: 12 seconds ago. Sample trace: `trace-9f2a7b3c-1a2b`.
+</div>
+
+### Sends
+
+- [[event|OrderPlaced]] → [[channel|orders.events]]
+
+### Receives
+
+- [[event|PaymentCaptured]] from [[channel|payments.events]]
+- [[event|InventoryReserved]] from [[channel|inventory.events]]
+
+<Footer />

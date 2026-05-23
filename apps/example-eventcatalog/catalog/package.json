@@ -1,0 +1,14 @@
+{
+  "name": "autotel-example-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "eventcatalog dev",
+    "build": "eventcatalog build",
+    "start": "eventcatalog start",
+    "generate": "eventcatalog generate"
+  },
+  "dependencies": {
+    "@eventcatalog/core": "^2.49.0"
+  }
+}

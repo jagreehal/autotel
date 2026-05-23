@@ -1,0 +1,7 @@
+dist/**
+node_modules/**
+# Locked golden fixtures whose bytes are part of a public JSON contract.
+# Prettier collapses single-item arrays which would corrupt the byte
+# comparison in contract.test.ts.
+src/__fixtures__/**
+schemas/**
