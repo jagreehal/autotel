@@ -106,6 +106,12 @@ export {
 
 // Global track function
 export { track, getEventQueue } from './track';
+export {
+  defineEvent,
+  type SchemaLike,
+  type DefineEventOptions,
+  type DefinedEvent,
+} from './define-event';
 
 // Correlation ID utilities
 export {

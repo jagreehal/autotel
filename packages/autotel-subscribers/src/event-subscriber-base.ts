@@ -122,6 +122,8 @@ export interface EventPayload {
    * - Mixpanel: autotel.trace_id → trace_id
    */
   autotel?: AutotelEventContext;
+  /** Optional schema metadata for contract-aware subscribers. */
+  schema?: EventTrackingOptions['schema'];
 }
 
 /**
@@ -239,6 +241,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
       attributes,
       timestamp: new Date().toISOString(),
       autotel: options?.autotel,
+      schema: options?.schema,
     };
 
     await this.send(payload);

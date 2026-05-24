@@ -103,12 +103,13 @@ export async function stampCatalog(opts: StampOptions): Promise<StampResult> {
  * `.evidence-callout` class, plus a small header label).
  */
 export function buildStampBlock(obs: EventObservation): string {
-  const lines: string[] = [];
-  lines.push(STAMP_START);
-  lines.push('');
-  lines.push('<div class="evidence-callout">');
-  lines.push('<strong>Observed in autotel snapshot</strong>');
-  lines.push('');
+  const lines: string[] = [
+    STAMP_START,
+    '',
+    '<div class="evidence-callout">',
+    '<strong>Observed in autotel snapshot</strong>',
+    '',
+  ];
   const facts: string[] = [];
   facts.push(`**Volume**: ${obs.observedCount.toLocaleString()} events`);
   facts.push(`**Last seen**: ${formatTimestamp(obs.lastSeen)}`);
@@ -127,9 +128,7 @@ export function buildStampBlock(obs: EventObservation): string {
       `**Sample traces**: ${obs.sampleTraceIds.map((t) => `\`${t}\``).join(', ')}`,
     );
   }
-  lines.push('</div>');
-  lines.push('');
-  lines.push(STAMP_END);
+  lines.push('</div>', '', STAMP_END);
 
   return lines.join('\n');
 }
@@ -147,7 +146,7 @@ async function stampFile(
   let next: string;
   let action: 'insert' | 'replace';
 
-  if (startIdx >= 0 && endIdx > startIdx) {
+  if (startIdx !== -1 && endIdx > startIdx) {
     // Replace existing block (including markers).
     const before = content.slice(0, startIdx);
     const after = content.slice(endIdx + STAMP_END.length);
@@ -157,15 +156,13 @@ async function stampFile(
     // Insert. Prefer just before <Footer /> if present, else append.
     const footerIdx = content.search(/<Footer\s*\/>/);
     const insertion = '\n\n' + block + '\n';
-    if (footerIdx >= 0) {
-      next =
-        content.slice(0, footerIdx) +
-        insertion +
-        '\n' +
-        content.slice(footerIdx);
-    } else {
-      next = content.replace(/\s*$/, '') + insertion;
-    }
+    next =
+      footerIdx >= 0
+        ? content.slice(0, footerIdx) +
+          insertion +
+          '\n' +
+          content.slice(footerIdx)
+        : content.replace(/\s*$/, '') + insertion;
     action = 'insert';
   }
 
@@ -221,7 +218,7 @@ export function buildStampSummary(
 }
 
 function normaliseEventId(id: string): string {
-  return id.toLowerCase().replace(/[._\-\s]/g, '');
+  return id.toLowerCase().replaceAll(/[._\-\s]/g, '');
 }
 
 function formatTimestamp(iso: string): string {

@@ -16,6 +16,10 @@ function catalog(opts: {
   events?: Array<{
     id: string;
     declaredFieldPaths?: string[];
+    declaredSchemaConstraints?: Record<
+      string,
+      { types?: string[]; enumValues?: unknown[] }
+    >;
   }>;
   services?: string[];
   channels?: string[];
@@ -28,6 +32,7 @@ function catalog(opts: {
           id: e.id,
           filePath: `mock/${e.id}.mdx`,
           declaredFieldPaths: e.declaredFieldPaths,
+          declaredSchemaConstraints: e.declaredSchemaConstraints,
         },
       ]),
     ),
@@ -176,6 +181,59 @@ describe('diffCatalogAgainstSnapshot — field drift', () => {
     );
 
     expect(report.events.fieldDrift).toEqual([]);
+  });
+});
+
+describe('diffCatalogAgainstSnapshot — type/value drift', () => {
+  it('reports type drift and enum value drift against declared schema constraints', () => {
+    const report = diffCatalogAgainstSnapshot(
+      snap({
+        'order.placed': {
+          ...baseObservation,
+          name: 'order.placed',
+          fieldPaths: ['amountCents', 'status'],
+          fieldStats: {
+            amountCents: {
+              types: ['string'],
+              sampleValues: ['1299'],
+            },
+            status: {
+              types: ['string'],
+              sampleValues: ['placed'],
+            },
+          },
+        },
+      }),
+      catalog({
+        events: [
+          {
+            id: 'OrderPlaced',
+            declaredFieldPaths: ['amountCents', 'status'],
+            declaredSchemaConstraints: {
+              amountCents: { types: ['number'] },
+              status: { types: ['string'], enumValues: ['pending', 'paid'] },
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(report.events.typeDrift).toEqual([
+      {
+        event: 'order.placed',
+        path: 'amountCents',
+        declared: ['number'],
+        observed: ['string'],
+      },
+    ]);
+    expect(report.events.valueDrift).toEqual([
+      {
+        event: 'order.placed',
+        path: 'status',
+        declared: ['pending', 'paid'],
+        observed: ['placed'],
+      },
+    ]);
   });
 });
 

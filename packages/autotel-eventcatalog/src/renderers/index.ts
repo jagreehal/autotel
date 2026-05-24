@@ -6,11 +6,13 @@ import type { Renderer } from './types';
 import { markdownRenderer } from './markdown';
 import { terminalRenderer } from './terminal';
 import { jsonRenderer } from './json';
+import { eventcatalogSnapshotDiffRenderer } from './eventcatalog-snapshot-diff';
 
 export const RENDERERS: readonly Renderer[] = [
   markdownRenderer,
   terminalRenderer,
   jsonRenderer,
+  eventcatalogSnapshotDiffRenderer,
 ];
 
 export const RENDERER_NAMES = RENDERERS.map((r) => r.name);
@@ -32,4 +34,10 @@ export {
   type JsonReport,
   type JsonReportEnvelope,
 } from './json';
+export {
+  EVENTCATALOG_SNAPSHOT_DIFF_SPEC,
+  renderEventCatalogSnapshotDiffFromReport,
+  renderEventCatalogSnapshotDiffFromDelta,
+  type EventCatalogSnapshotDiffEnvelope,
+} from './eventcatalog-snapshot-diff';
 export { type Renderer } from './types';

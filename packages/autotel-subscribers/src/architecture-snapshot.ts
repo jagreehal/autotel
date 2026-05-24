@@ -60,6 +60,23 @@ export type EventObservation = {
   channel?: string;
   /** Service that produced the event, if not the snapshot's own service. */
   producer?: string;
+  /** Services known to consume this event (optional metadata from _autotel.consumers). */
+  consumers?: string[];
+  /** Observed runtime types and sample primitive values per field path. */
+  fieldStats?: Record<string, FieldStats>;
+  /** Optional contract schema metadata carried from track() call sites. */
+  schema?: {
+    source: 'zod';
+    jsonSchema: unknown;
+    hash: string;
+  };
+};
+
+export type FieldStats = {
+  /** Runtime types observed for this field path (e.g. string, number). */
+  types: string[];
+  /** Small set of observed primitive values (for enum/value drift checks). */
+  sampleValues: Array<string | number | boolean | null>;
 };
 
 export interface ArchitectureSnapshotConfig {
@@ -94,7 +111,9 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
     const traceId = payload.autotel?.trace_id;
     const attrs = payload.attributes ?? {};
     const autotelMeta = readAutotelMeta(attrs);
-    const fieldPaths = extractFieldPaths(stripAutotelMeta(attrs));
+    const cleanAttrs = stripAutotelMeta(attrs);
+    const fieldPaths = extractFieldPaths(cleanAttrs);
+    const fieldStats = extractFieldStats(cleanAttrs);
 
     if (!existing) {
       this.observations.set(payload.name, {
@@ -106,6 +125,15 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
         sampleTraceIds: traceId ? [traceId] : [],
         channel: autotelMeta.channel,
         producer: autotelMeta.producer,
+        consumers: autotelMeta.consumers,
+        fieldStats,
+        schema: payload.schema
+          ? {
+              source: payload.schema.source,
+              jsonSchema: payload.schema.jsonSchema,
+              hash: payload.schema.hash,
+            }
+          : undefined,
       });
       return;
     }
@@ -113,6 +141,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
     existing.observedCount += 1;
     existing.lastSeen = now;
     existing.fieldPaths = mergeUnique(existing.fieldPaths, fieldPaths);
+    existing.fieldStats = mergeFieldStats(existing.fieldStats ?? {}, fieldStats);
 
     if (
       traceId &&
@@ -124,6 +153,14 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
 
     existing.channel ??= autotelMeta.channel;
     existing.producer ??= autotelMeta.producer;
+    existing.consumers = mergeUnique(existing.consumers ?? [], autotelMeta.consumers ?? []);
+    existing.schema ??= payload.schema
+      ? {
+          source: payload.schema.source,
+          jsonSchema: payload.schema.jsonSchema,
+          hash: payload.schema.hash,
+        }
+      : undefined;
   }
 
   /**
@@ -142,6 +179,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
         ...obs,
         fieldPaths: obs.fieldPaths.toSorted(),
         sampleTraceIds: obs.sampleTraceIds.toSorted(),
+        fieldStats: sortFieldStats(obs.fieldStats),
       };
     }
 
@@ -175,6 +213,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
 type AutotelMeta = {
   channel?: string;
   producer?: string;
+  consumers?: string[];
 };
 
 function readAutotelMeta(attrs: Record<string, unknown>): AutotelMeta {
@@ -184,6 +223,9 @@ function readAutotelMeta(attrs: Record<string, unknown>): AutotelMeta {
   return {
     channel: typeof m.channel === 'string' ? m.channel : undefined,
     producer: typeof m.producer === 'string' ? m.producer : undefined,
+    consumers: Array.isArray(m.consumers)
+      ? m.consumers.filter((v): v is string => typeof v === 'string').toSorted()
+      : undefined,
   };
 }
 
@@ -248,4 +290,111 @@ function mergeUnique(a: string[], b: string[]): string[] {
   const set = new Set(a);
   for (const v of b) set.add(v);
   return [...set];
+}
+
+function extractFieldStats(value: unknown, prefix = ''): Record<string, FieldStats> {
+  const out = new Map<string, { types: Set<string>; sampleValues: Set<string | number | boolean | null> }>();
+  walkFieldStats(value, prefix, out);
+  const obj: Record<string, FieldStats> = {};
+  for (const [path, stats] of out) {
+    obj[path] = {
+      types: [...stats.types].toSorted(),
+      sampleValues: [...stats.sampleValues].toSorted(comparePrimitiveValues),
+    };
+  }
+  return obj;
+}
+
+function walkFieldStats(
+  value: unknown,
+  prefix: string,
+  out: Map<string, { types: Set<string>; sampleValues: Set<string | number | boolean | null> }>,
+): void {
+  if (value === null || value === undefined) return;
+  if (Array.isArray(value)) {
+    const arrayPrefix = prefix + '[]';
+    for (const item of value) walkFieldStats(item, arrayPrefix, out);
+    return;
+  }
+  if (typeof value === 'object') {
+    for (const [key, v] of Object.entries(value)) {
+      const path = prefix === '' ? key : `${prefix}.${key}`;
+      addPathValue(path, v, out);
+      walkFieldStats(v, path, out);
+    }
+  }
+}
+
+function addPathValue(
+  path: string,
+  value: unknown,
+  out: Map<string, { types: Set<string>; sampleValues: Set<string | number | boolean | null> }>,
+): void {
+  const existing = out.get(path) ?? { types: new Set<string>(), sampleValues: new Set<string | number | boolean | null>() };
+  const t = classifyValueType(value);
+  existing.types.add(t);
+  if (
+    (value === null ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean') &&
+    existing.sampleValues.size < 20
+  ) {
+    existing.sampleValues.add(value);
+  }
+  out.set(path, existing);
+}
+
+function classifyValueType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function mergeFieldStats(
+  a: Record<string, FieldStats>,
+  b: Record<string, FieldStats>,
+): Record<string, FieldStats> {
+  const merged: Record<string, FieldStats> = { ...a };
+  for (const [path, bs] of Object.entries(b)) {
+    const prev = merged[path];
+    if (!prev) {
+      merged[path] = bs;
+      continue;
+    }
+    const types = new Set([...prev.types, ...bs.types]);
+    const sampleValues = new Set([...prev.sampleValues, ...bs.sampleValues]);
+    merged[path] = {
+      types: [...types].toSorted(),
+      sampleValues: [...sampleValues]
+        .toSorted(comparePrimitiveValues)
+        .slice(0, 20),
+    };
+  }
+  return merged;
+}
+
+function sortFieldStats(
+  stats: Record<string, FieldStats> | undefined,
+): Record<string, FieldStats> | undefined {
+  if (!stats) return undefined;
+  const out: Record<string, FieldStats> = {};
+  for (const path of Object.keys(stats).toSorted()) {
+    out[path] = {
+      types: [...stats[path].types].toSorted(),
+      sampleValues: [...stats[path].sampleValues].toSorted(
+        comparePrimitiveValues,
+      ),
+    };
+  }
+  return out;
+}
+
+function comparePrimitiveValues(
+  a: string | number | boolean | null,
+  b: string | number | boolean | null,
+): number {
+  const sa = JSON.stringify(a);
+  const sb = JSON.stringify(b);
+  return sa.localeCompare(sb);
 }

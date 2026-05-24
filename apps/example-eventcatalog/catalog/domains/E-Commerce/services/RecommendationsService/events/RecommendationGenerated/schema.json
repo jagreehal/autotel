@@ -3,7 +3,13 @@
   "$id": "https://autotel.dev/schemas/recommendation-generated/1.0.0.json",
   "title": "RecommendationGenerated",
   "type": "object",
-  "required": ["orderId", "recommendations", "model", "usage"],
+  "required": [
+    "orderId",
+    "recommendations",
+    "model",
+    "usage",
+    "personalization_seed"
+  ],
   "properties": {
     "orderId": { "type": "string", "format": "uuid" },
     "recommendations": {
@@ -28,6 +34,10 @@
         "promptTokens": { "type": "integer" },
         "completionTokens": { "type": "integer" }
       }
+    },
+    "personalization_seed": {
+      "type": "string",
+      "description": "Seed used to derive deterministic personalization for the order. Declared at the track() call site via defineEvent."
     }
   }
 }

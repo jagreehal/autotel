@@ -38,6 +38,9 @@ export {
   renderDeltaTerminal,
   renderJson,
   REPORT_SPEC,
+  EVENTCATALOG_SNAPSHOT_DIFF_SPEC,
+  renderEventCatalogSnapshotDiffFromReport,
+  renderEventCatalogSnapshotDiffFromDelta,
   RENDERERS,
   RENDERER_NAMES,
   getRenderer,
@@ -45,9 +48,20 @@ export {
 export type {
   JsonReport,
   JsonReportEnvelope,
+  EventCatalogSnapshotDiffEnvelope,
   Renderer,
   RendererName,
 } from './report';
+
+export {
+  toSnapshotDiffFromReport,
+  toSnapshotDiffFromDelta,
+} from './eventcatalog-snapshot-diff';
+export type {
+  EventCatalogSnapshotDiff,
+  ResourceChange,
+  RelationshipChange,
+} from './eventcatalog-snapshot-diff';
 
 export { evaluatePolicy } from './policy';
 export type {
@@ -71,3 +85,16 @@ export type {
   StampSkip,
   StampSummary,
 } from './stamp';
+
+export {
+  generateCatalogFromSnapshot,
+  buildGenerateSummary,
+  inferJsonSchemaFromObservation,
+  GENERATE_SUMMARY_SPEC,
+} from './generate';
+export type {
+  GenerateOptions,
+  GenerateResult,
+  GenerateSummaryItem,
+  GenerateSummary,
+} from './generate';

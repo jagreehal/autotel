@@ -67,6 +67,28 @@ export function renderMarkdown(report: DriftReport): string {
     }
   }
 
+  if ((report.events.typeDrift ?? []).length > 0) {
+    lines.push('## Type drift', '');
+    for (const drift of report.events.typeDrift ?? []) {
+      lines.push(
+        `- \`${drift.event}\` \`${drift.path}\``,
+        `  declared: \`${drift.declared.join(' | ')}\`, observed: \`${drift.observed.join(' | ')}\``,
+      );
+    }
+    lines.push('');
+  }
+
+  if ((report.events.valueDrift ?? []).length > 0) {
+    lines.push('## Value drift', '');
+    for (const drift of report.events.valueDrift ?? []) {
+      lines.push(
+        `- \`${drift.event}\` \`${drift.path}\``,
+        `  declared enum: \`${drift.declared.map((v) => JSON.stringify(v)).join(', ')}\`, observed: \`${drift.observed.map((v) => JSON.stringify(v)).join(', ')}\``,
+      );
+    }
+    lines.push('');
+  }
+
   if (report.services.observedButUndocumented.length > 0) {
     lines.push('## Services observed but undocumented', '');
     for (const id of report.services.observedButUndocumented) {
@@ -124,6 +146,8 @@ function entriesHasContent(e: DriftEntries): boolean {
     e.events.observedButUndocumented.length > 0 ||
     e.events.documentedButUnseen.length > 0 ||
     e.events.fieldDrift.length > 0 ||
+    (e.events.typeDrift ?? []).length > 0 ||
+    (e.events.valueDrift ?? []).length > 0 ||
     e.services.observedButUndocumented.length > 0 ||
     e.channels.observedButUndocumented.length > 0
   );
@@ -154,6 +178,22 @@ function renderEntries(
     for (const p of fd.missing)
       out.push(`- ${options.sign} \`${p}\` (missing)`);
     out.push('');
+  }
+  for (const td of entries.events.typeDrift ?? []) {
+    out.push(
+      `**Type drift on \`${td.event}\` \`${td.path}\`**`,
+      '',
+      `- ${options.sign} declared \`${td.declared.join(' | ')}\`, observed \`${td.observed.join(' | ')}\``,
+      '',
+    );
+  }
+  for (const vd of entries.events.valueDrift ?? []) {
+    out.push(
+      `**Value drift on \`${vd.event}\` \`${vd.path}\`**`,
+      '',
+      `- ${options.sign} declared enum \`${vd.declared.map((v) => JSON.stringify(v)).join(', ')}\`, observed \`${vd.observed.map((v) => JSON.stringify(v)).join(', ')}\``,
+      '',
+    );
   }
   if (entries.services.observedButUndocumented.length > 0) {
     out.push('**Services observed but undocumented**', '');

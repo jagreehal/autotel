@@ -1,5 +1,5 @@
 {
-  "spec": "autotel-eventcatalog-drift-summary/v0.1.0",
+  "spec": "autotel-eventcatalog-drift-summary/v0.2.0",
   "mode": "all",
   "shouldFail": true,
   "reason": "Drift detected in current snapshot.",
@@ -8,6 +8,8 @@
     "documentedButUnseenEvents": 1,
     "fieldDriftEvents": 1,
     "fieldDriftPaths": 1,
+    "typeDriftPaths": 0,
+    "valueDriftPaths": 0,
     "undocumentedServices": 0,
     "undocumentedChannels": 0,
     "total": 3

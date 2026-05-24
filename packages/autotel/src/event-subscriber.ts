@@ -102,11 +102,26 @@ export interface AutotelEventContext {
 }
 
 /**
+ * Optional machine-readable schema metadata attached to an event payload.
+ * Intended for contract-aware subscribers (e.g. architecture snapshot capture).
+ */
+export interface EventSchemaMetadata {
+  /** Schema source format used at the call site. */
+  source: 'zod';
+  /** JSON Schema representation of the payload contract. */
+  jsonSchema: unknown;
+  /** Stable schema hash for change detection and cache keys. */
+  hash: string;
+}
+
+/**
  * Options for event tracking methods
  */
 export interface EventTrackingOptions {
   /** Autotel trace context to include in the event */
   autotel?: AutotelEventContext;
+  /** Optional event payload schema metadata */
+  schema?: EventSchemaMetadata;
 }
 
 /**

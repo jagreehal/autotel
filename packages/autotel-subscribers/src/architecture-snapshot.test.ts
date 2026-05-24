@@ -71,6 +71,12 @@ describe('ArchitectureSnapshotSubscriber', () => {
       name: 'order.placed',
       observedCount: 1,
       fieldPaths: ['items', 'items[].quantity', 'items[].sku', 'orderId'],
+      fieldStats: {
+        orderId: { types: ['string'], sampleValues: ['o-1'] },
+        items: { types: ['array'], sampleValues: [] },
+        'items[].sku': { types: ['string'], sampleValues: ['sku-1'] },
+        'items[].quantity': { types: ['number'], sampleValues: [2] },
+      },
     });
   });
 
@@ -94,14 +100,48 @@ describe('ArchitectureSnapshotSubscriber', () => {
   it('reads channel and producer from the _autotel namespace', async () => {
     await sub.trackEvent('order.placed', {
       orderId: 'o-1',
-      _autotel: { channel: 'orders.events', producer: 'OrdersService' },
+      _autotel: {
+        channel: 'orders.events',
+        producer: 'OrdersService',
+        consumers: ['PaymentService'],
+      },
     });
 
     const obs = sub.toSnapshot(FIXED_NOW).events['order.placed'];
     expect(obs.channel).toBe('orders.events');
     expect(obs.producer).toBe('OrdersService');
+    expect(obs.consumers).toEqual(['PaymentService']);
     // _autotel must not leak into the captured field paths.
     expect(obs.fieldPaths).toEqual(['orderId']);
+  });
+
+  it('captures schema metadata passed at track() call sites', async () => {
+    await sub.trackEvent(
+      'order.placed',
+      { orderId: 'o-1' },
+      {
+        schema: {
+          source: 'zod',
+          jsonSchema: {
+            type: 'object',
+            properties: { orderId: { type: 'string' } },
+            required: ['orderId'],
+          },
+          hash: 'abc123',
+        },
+      },
+    );
+
+    const obs = sub.toSnapshot(FIXED_NOW).events['order.placed'];
+    expect(obs.schema).toEqual({
+      source: 'zod',
+      jsonSchema: {
+        type: 'object',
+        properties: { orderId: { type: 'string' } },
+        required: ['orderId'],
+      },
+      hash: 'abc123',
+    });
   });
 
   it('collects up to maxSampleTraceIds distinct trace ids', async () => {

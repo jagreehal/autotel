@@ -3,7 +3,13 @@
 // pre-existing drift; with it, the check only fails on drift the PR is
 // responsible for.
 
-import type { DriftReport, FieldDrift, DriftCounts } from './diff';
+import type {
+  DriftReport,
+  FieldDrift,
+  DriftCounts,
+  TypeDrift,
+  ValueDrift,
+} from './diff';
 
 export type DriftDelta = {
   /** Drift entries present in head but not in base. */
@@ -19,6 +25,8 @@ export type DriftEntries = {
     observedButUndocumented: string[];
     documentedButUnseen: string[];
     fieldDrift: FieldDrift[];
+    typeDrift: TypeDrift[];
+    valueDrift: ValueDrift[];
   };
   services: { observedButUndocumented: string[] };
   channels: { observedButUndocumented: string[] };
@@ -54,6 +62,14 @@ export function compareDriftReports(
       observedButUndocumented: introducedEvents.added,
       documentedButUnseen: introducedMissing.added,
       fieldDrift: introducedFieldDrift.added,
+      typeDrift: diffTypeDrift(
+        base.events.typeDrift ?? [],
+        head.events.typeDrift ?? [],
+      ).added,
+      valueDrift: diffValueDrift(
+        base.events.valueDrift ?? [],
+        head.events.valueDrift ?? [],
+      ).added,
     },
     services: { observedButUndocumented: introducedServices.added },
     channels: { observedButUndocumented: introducedChannels.added },
@@ -64,6 +80,14 @@ export function compareDriftReports(
       observedButUndocumented: introducedEvents.removed,
       documentedButUnseen: introducedMissing.removed,
       fieldDrift: introducedFieldDrift.removed,
+      typeDrift: diffTypeDrift(
+        base.events.typeDrift ?? [],
+        head.events.typeDrift ?? [],
+      ).removed,
+      valueDrift: diffValueDrift(
+        base.events.valueDrift ?? [],
+        head.events.valueDrift ?? [],
+      ).removed,
     },
     services: { observedButUndocumented: introducedServices.removed },
     channels: { observedButUndocumented: introducedChannels.removed },
@@ -73,6 +97,8 @@ export function compareDriftReports(
     introduced.events.observedButUndocumented.length > 0 ||
     introduced.events.documentedButUnseen.length > 0 ||
     introduced.events.fieldDrift.length > 0 ||
+    introduced.events.typeDrift.length > 0 ||
+    introduced.events.valueDrift.length > 0 ||
     introduced.services.observedButUndocumented.length > 0 ||
     introduced.channels.observedButUndocumented.length > 0;
 
@@ -95,18 +121,24 @@ export function countDriftEntries(entries: DriftEntries): DriftCounts {
   const documentedButUnseenEvents = entries.events.documentedButUnseen.length;
   const undocumentedServices = entries.services.observedButUndocumented.length;
   const undocumentedChannels = entries.channels.observedButUndocumented.length;
+  const typeDriftPaths = (entries.events.typeDrift ?? []).length;
+  const valueDriftPaths = (entries.events.valueDrift ?? []).length;
 
   return {
     observedButUndocumentedEvents,
     documentedButUnseenEvents,
     fieldDriftEvents,
     fieldDriftPaths,
+    typeDriftPaths,
+    valueDriftPaths,
     undocumentedServices,
     undocumentedChannels,
     total:
       observedButUndocumentedEvents +
       documentedButUnseenEvents +
       fieldDriftPaths +
+      typeDriftPaths +
+      valueDriftPaths +
       undocumentedServices +
       undocumentedChannels,
   };
@@ -171,5 +203,40 @@ function diffFieldDrift(
     }
   }
 
+  return { added, removed };
+}
+
+function diffTypeDrift(
+  base: TypeDrift[],
+  head: TypeDrift[],
+): { added: TypeDrift[]; removed: TypeDrift[] } {
+  return diffStructuredByKey(base, head, (x) => `${x.event}::${x.path}`);
+}
+
+function diffValueDrift(
+  base: ValueDrift[],
+  head: ValueDrift[],
+): { added: ValueDrift[]; removed: ValueDrift[] } {
+  return diffStructuredByKey(base, head, (x) => `${x.event}::${x.path}`);
+}
+
+function diffStructuredByKey<T>(
+  base: T[],
+  head: T[],
+  keyOf: (v: T) => string,
+): { added: T[]; removed: T[] } {
+  const baseMap = new Map(base.map((v) => [keyOf(v), v]));
+  const headMap = new Map(head.map((v) => [keyOf(v), v]));
+  const added: T[] = [];
+  const removed: T[] = [];
+
+  for (const [k, hv] of headMap) {
+    const bv = baseMap.get(k);
+    if (!bv || JSON.stringify(bv) !== JSON.stringify(hv)) added.push(hv);
+  }
+  for (const [k, bv] of baseMap) {
+    const hv = headMap.get(k);
+    if (!hv || JSON.stringify(hv) !== JSON.stringify(bv)) removed.push(bv);
+  }
   return { added, removed };
 }

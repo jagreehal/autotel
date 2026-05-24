@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/eventcatalog/generate-summary/v0.1.0.json",
+  "title": "Autotel EventCatalog Generate Summary v0.1.0",
+  "description": "Machine-readable summary written by `autotel-eventcatalog generate --summary-output`. Downstream tooling (CI dashboards, status checks, Slack bots) should read this. Major-version bumps are breaking; minor-version bumps add optional fields only.",
+  "type": "object",
+  "required": [
+    "spec",
+    "dryRun",
+    "edgesOnly",
+    "attempted",
+    "totals",
+    "created",
+    "edges",
+    "schemaSources",
+    "skipped"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec": {
+      "type": "string",
+      "const": "autotel-eventcatalog-generate-summary/v0.1.0"
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "True iff the run was --dry-run (no writes to the catalog)."
+    },
+    "edgesOnly": {
+      "type": "boolean",
+      "description": "True iff the run was --edges-only (existing resources, edge wiring only)."
+    },
+    "attempted": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of operations the planner attempted (creates + skips + links)."
+    },
+    "totals": {
+      "type": "object",
+      "required": ["created", "linked", "skipped"],
+      "additionalProperties": false,
+      "properties": {
+        "created": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sum of resources created (services + events + channels). Matches the CI badge."
+        },
+        "linked": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sum of edges added (sends + receives + messages)."
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sum of resources skipped because they already exist in the catalog."
+        }
+      }
+    },
+    "created": {
+      "type": "object",
+      "required": ["services", "events", "channels"],
+      "additionalProperties": false,
+      "properties": {
+        "services": { "type": "array", "items": { "type": "string" } },
+        "events":   { "type": "array", "items": { "type": "string" } },
+        "channels": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "edges": {
+      "type": "object",
+      "required": ["sends", "receives", "messages"],
+      "additionalProperties": false,
+      "properties": {
+        "sends": {
+          "type": "array",
+          "description": "Producer service -> event edges.",
+          "items": {
+            "type": "object",
+            "required": ["service", "event"],
+            "additionalProperties": false,
+            "properties": {
+              "service": { "type": "string" },
+              "event":   { "type": "string" }
+            }
+          }
+        },
+        "receives": {
+          "type": "array",
+          "description": "Consumer service <- event edges.",
+          "items": {
+            "type": "object",
+            "required": ["service", "event"],
+            "additionalProperties": false,
+            "properties": {
+              "service": { "type": "string" },
+              "event":   { "type": "string" }
+            }
+          }
+        },
+        "messages": {
+          "type": "array",
+          "description": "Event -> channel routing edges.",
+          "items": {
+            "type": "object",
+            "required": ["channel", "event"],
+            "additionalProperties": false,
+            "properties": {
+              "channel": { "type": "string" },
+              "event":   { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "schemaSources": {
+      "type": "object",
+      "description": "Counts of events grouped by where their JSON Schema came from. Reveals how widely defineEvent has been adopted.",
+      "required": ["declared", "inferred"],
+      "additionalProperties": false,
+      "properties": {
+        "declared": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Events whose schema was declared at the track() call site (via defineEvent + Zod)."
+        },
+        "inferred": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Events whose schema was inferred from observed runtime fieldStats (fallback)."
+        }
+      }
+    },
+    "skipped": {
+      "type": "object",
+      "required": ["services", "events", "channels"],
+      "additionalProperties": false,
+      "properties": {
+        "services": { "type": "array", "items": { "type": "string" } },
+        "events":   { "type": "array", "items": { "type": "string" } },
+        "channels": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -6,9 +6,10 @@ bots, CI scripts) should validate against them.
 
 | File                                                       | Emitted by                      | `spec:` value                               |
 | ---------------------------------------------------------- | ------------------------------- | ------------------------------------------- |
-| [`drift-report-v0.1.0.json`](./drift-report-v0.1.0.json)   | `drift --format json`           | `autotel-eventcatalog-report/v0.1.0`        |
-| [`drift-summary-v0.1.0.json`](./drift-summary-v0.1.0.json) | `drift --summary-output <path>` | `autotel-eventcatalog-drift-summary/v0.1.0` |
+| [`drift-report-v0.2.0.json`](./drift-report-v0.2.0.json)   | `drift --format json`           | `autotel-eventcatalog-report/v0.2.0`        |
+| [`drift-summary-v0.2.0.json`](./drift-summary-v0.2.0.json) | `drift --summary-output <path>` | `autotel-eventcatalog-drift-summary/v0.2.0` |
 | [`stamp-summary-v0.1.0.json`](./stamp-summary-v0.1.0.json) | `stamp --summary-output <path>` | `autotel-eventcatalog-stamp-summary/v0.1.0` |
+| [`generate-summary-v0.1.0.json`](./generate-summary-v0.1.0.json) | `generate --summary-output <path>` | `autotel-eventcatalog-generate-summary/v0.1.0` |
 
 For consumption examples and the version policy, see
 [`docs/CONTRACT.md`](../docs/CONTRACT.md).
@@ -27,7 +28,7 @@ mainstream validator works:
 
 ```typescript
 import Ajv from 'ajv';
-import schema from 'autotel-eventcatalog/schemas/drift-summary-v0.1.0.json';
+import schema from 'autotel-eventcatalog/schemas/drift-summary-v0.2.0.json';
 
 const ajv = new Ajv();
 const validate = ajv.compile(schema);
