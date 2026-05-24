@@ -1,5 +1,13 @@
 # @jagreehal/example-bunyan
 
+## 1.0.38
+
+### Patch Changes
+
+- Updated dependencies [9fbbc3a]
+  - autotel@3.2.0
+  - autotel-subscribers@33.0.0
+
 ## 1.0.37
 
 ### Patch Changes
