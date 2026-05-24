@@ -1,5 +1,12 @@
 # @jagreehal/example-canonical-logs
 
+## 1.0.40
+
+### Patch Changes
+
+- Updated dependencies [9fbbc3a]
+  - autotel@3.2.0
+
 ## 1.0.39
 
 ### Patch Changes
