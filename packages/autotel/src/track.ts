@@ -15,6 +15,7 @@ import {
 } from './init';
 import { validateEvent } from './validation';
 import { getOrCreateCorrelationId } from './correlation-id';
+import type { EventTrackingOptions } from './event-subscriber';
 import type { AutotelEventContext } from './event-subscriber';
 
 // Global events queue (initialized on first track call)
@@ -167,6 +168,7 @@ function getOrCreateQueue(): EventQueue | null {
 export function track<Events extends Record<string, any> = Record<string, any>>(
   event: keyof Events & string,
   data?: Events[typeof event],
+  options?: EventTrackingOptions,
 ): void {
   const queue = getOrCreateQueue();
   if (!queue) return; // No-op if not initialized or no subscribers
@@ -193,6 +195,7 @@ export function track<Events extends Record<string, any> = Record<string, any>>(
     attributes: enrichedData,
     timestamp: Date.now(),
     autotel: autotelContext,
+    schema: options?.schema,
   });
 }
 

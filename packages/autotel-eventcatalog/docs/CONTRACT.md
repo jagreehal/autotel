@@ -1,14 +1,15 @@
 # The public JSON contract
 
-`autotel-eventcatalog` ships **three versioned JSON shapes** as published
+`autotel-eventcatalog` ships **four versioned JSON shapes** as published
 JSON Schema files. Downstream tooling (your own GitHub Actions,
 dashboards, Slack bots, custom CI checks) should read these.
 
-| Schema file                                                                 | Produced by                     | Spec field                                  |
-| --------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------- |
-| [`schemas/drift-report-v0.1.0.json`](../schemas/drift-report-v0.1.0.json)   | `drift --format json`           | `autotel-eventcatalog-report/v0.1.0`        |
-| [`schemas/drift-summary-v0.1.0.json`](../schemas/drift-summary-v0.1.0.json) | `drift --summary-output <path>` | `autotel-eventcatalog-drift-summary/v0.1.0` |
-| [`schemas/stamp-summary-v0.1.0.json`](../schemas/stamp-summary-v0.1.0.json) | `stamp --summary-output <path>` | `autotel-eventcatalog-stamp-summary/v0.1.0` |
+| Schema file                                                                       | Produced by                        | Spec field                                     |
+| --------------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------- |
+| [`schemas/drift-report-v0.2.0.json`](../schemas/drift-report-v0.2.0.json)         | `drift --format json`              | `autotel-eventcatalog-report/v0.2.0`           |
+| [`schemas/drift-summary-v0.2.0.json`](../schemas/drift-summary-v0.2.0.json)       | `drift --summary-output <path>`    | `autotel-eventcatalog-drift-summary/v0.2.0`    |
+| [`schemas/stamp-summary-v0.1.0.json`](../schemas/stamp-summary-v0.1.0.json)       | `stamp --summary-output <path>`    | `autotel-eventcatalog-stamp-summary/v0.1.0`    |
+| [`schemas/generate-summary-v0.1.0.json`](../schemas/generate-summary-v0.1.0.json) | `generate --summary-output <path>` | `autotel-eventcatalog-generate-summary/v0.1.0` |
 
 Each envelope carries a `spec:` field. Downstream code should refuse to
 parse an unknown major version.
@@ -47,13 +48,13 @@ inside v0; breaking changes wait for v1.
 
 ## Schema details
 
-### `drift-summary-v0.1.0`
+### `drift-summary-v0.2.0`
 
 Use this for **CI gating**. It's the smallest, most stable shape.
 
 ```json
 {
-  "spec": "autotel-eventcatalog-drift-summary/v0.1.0",
+  "spec": "autotel-eventcatalog-drift-summary/v0.2.0",
   "mode": "all",
   "shouldFail": true,
   "reason": "Drift detected in current snapshot.",
@@ -116,13 +117,13 @@ Use this to gate **"did this PR forget to re-stamp?"** checks.
   has just run `stamp` and `hadChanges === true`, the PR forgot to
   commit the freshly-stamped catalog. Fail it.
 
-### `drift-report-v0.1.0` (the full envelope)
+### `drift-report-v0.2.0` (the full envelope)
 
 Use this when you need the full structured findings, not just counts.
 
 ```json
 {
-  "spec": "autotel-eventcatalog-report/v0.1.0",
+  "spec": "autotel-eventcatalog-report/v0.2.0",
   "mode": "all",
   "report": {
     "snapshotGeneratedAt": "2026-05-22T00:00:00.000Z",
@@ -169,7 +170,7 @@ if (summary.shouldFail) {
 
 ```typescript
 import Ajv from 'ajv';
-import schema from 'autotel-eventcatalog/schemas/drift-summary-v0.1.0.json';
+import schema from 'autotel-eventcatalog/schemas/drift-summary-v0.2.0.json';
 
 const ajv = new Ajv();
 const validate = ajv.compile(schema);
@@ -234,7 +235,7 @@ load; refuse to render anything you don't recognise.
 ```typescript
 const res = await fetch('https://my-runner/drift.json');
 const envelope = await res.json();
-if (envelope.spec !== 'autotel-eventcatalog-report/v0.1.0') {
+if (envelope.spec !== 'autotel-eventcatalog-report/v0.2.0') {
   return showVersionMismatchBanner(envelope.spec);
 }
 renderReport(envelope.report);

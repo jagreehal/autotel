@@ -7,6 +7,7 @@ import { compareDriftReports, countDriftEntries } from './diff-vs-base';
 import { getRenderer, RENDERER_NAMES } from './renderers/index';
 import { evaluatePolicy, type DriftPolicyMode } from './policy';
 import { stampCatalog, buildStampSummary } from './stamp';
+import { generateCatalogFromSnapshot, buildGenerateSummary } from './generate';
 
 /** Built-in renderer names. Kept as a string so the type allows future
  *  renderers (sarif, slack, ...) without churning the CLI argument type. */
@@ -33,13 +34,27 @@ type StampArgs = {
   summaryOutput?: string;
 };
 
-type Args = DriftArgs | StampArgs;
+type GenerateArgs = {
+  command: 'generate';
+  snapshot: string;
+  catalog: string;
+  dryRun: boolean;
+  edgesOnly: boolean;
+  version: string;
+  summaryOutput?: string;
+};
+
+type Args = DriftArgs | StampArgs | GenerateArgs;
 
 function parseArgs(argv: string[]): Args {
   const [command, ...rest] = argv;
-  if (command !== 'drift' && command !== 'stamp') {
+  if (command !== 'drift' && command !== 'stamp' && command !== 'generate') {
     usage();
     process.exit(2);
+  }
+
+  if (command === 'generate') {
+    return parseGenerateArgs(rest);
   }
 
   if (command === 'stamp') {
@@ -63,30 +78,36 @@ function parseDriftArgs(rest: string[]): DriftArgs {
     const arg = rest[i];
     const next = rest[i + 1];
     switch (arg) {
-      case '--snapshot':
+      case '--snapshot': {
         snapshot = next;
         i++;
         break;
-      case '--base-snapshot':
+      }
+      case '--base-snapshot': {
         baseSnapshot = next;
         i++;
         break;
-      case '--catalog':
+      }
+      case '--catalog': {
         catalog = next;
         i++;
         break;
-      case '--output':
+      }
+      case '--output': {
         output = next;
         i++;
         break;
-      case '--summary-output':
+      }
+      case '--summary-output': {
         summaryOutput = next;
         i++;
         break;
-      case '--fail-on-drift':
+      }
+      case '--fail-on-drift': {
         failOnDrift = true;
         break;
-      case '--policy':
+      }
+      case '--policy': {
         if (next !== 'all' && next !== 'new-only') {
           process.stderr.write(
             `Invalid --policy value: ${next}. Use 'all' or 'new-only'.\n`,
@@ -96,7 +117,8 @@ function parseDriftArgs(rest: string[]): DriftArgs {
         policy = next;
         i++;
         break;
-      case '--format':
+      }
+      case '--format': {
         if (!getRenderer(next)) {
           process.stderr.write(
             `Invalid --format value: ${next}. Available renderers: ${RENDERER_NAMES.join(', ')}.\n`,
@@ -106,15 +128,18 @@ function parseDriftArgs(rest: string[]): DriftArgs {
         format = next;
         i++;
         break;
+      }
       case '-h':
-      case '--help':
+      case '--help': {
         usage();
         process.exit(0);
         break;
-      default:
+      }
+      default: {
         process.stderr.write(`Unknown argument: ${arg}\n`);
         usage();
         process.exit(2);
+      }
     }
   }
 
@@ -157,30 +182,36 @@ function parseStampArgs(rest: string[]): StampArgs {
     const arg = rest[i];
     const next = rest[i + 1];
     switch (arg) {
-      case '--snapshot':
+      case '--snapshot': {
         snapshot = next;
         i++;
         break;
-      case '--catalog':
+      }
+      case '--catalog': {
         catalog = next;
         i++;
         break;
-      case '--dry-run':
+      }
+      case '--dry-run': {
         dryRun = true;
         break;
-      case '--summary-output':
+      }
+      case '--summary-output': {
         summaryOutput = next;
         i++;
         break;
+      }
       case '-h':
-      case '--help':
+      case '--help': {
         usage();
         process.exit(0);
         break;
-      default:
+      }
+      default: {
         process.stderr.write(`Unknown argument: ${arg}\n`);
         usage();
         process.exit(2);
+      }
     }
   }
 
@@ -201,12 +232,86 @@ function parseStampArgs(rest: string[]): StampArgs {
   };
 }
 
+function parseGenerateArgs(rest: string[]): GenerateArgs {
+  let snapshot: string | undefined;
+  let catalog: string | undefined;
+  let dryRun = false;
+  let edgesOnly = false;
+  let version = '1.0.0';
+  let summaryOutput: string | undefined;
+
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    const next = rest[i + 1];
+    switch (arg) {
+      case '--snapshot': {
+        snapshot = next;
+        i++;
+        break;
+      }
+      case '--catalog': {
+        catalog = next;
+        i++;
+        break;
+      }
+      case '--dry-run': {
+        dryRun = true;
+        break;
+      }
+      case '--edges-only': {
+        edgesOnly = true;
+        break;
+      }
+      case '--version': {
+        version = next;
+        i++;
+        break;
+      }
+      case '--summary-output': {
+        summaryOutput = next;
+        i++;
+        break;
+      }
+      case '-h':
+      case '--help': {
+        usage();
+        process.exit(0);
+        break;
+      }
+      default: {
+        process.stderr.write(`Unknown argument: ${arg}\n`);
+        usage();
+        process.exit(2);
+      }
+    }
+  }
+
+  if (!snapshot || !catalog) {
+    process.stderr.write(
+      'Both --snapshot and --catalog are required for generate.\n',
+    );
+    usage();
+    process.exit(2);
+  }
+
+  return {
+    command: 'generate',
+    snapshot: resolve(snapshot),
+    catalog: resolve(catalog),
+    dryRun,
+    edgesOnly,
+    version,
+    summaryOutput: summaryOutput ? resolve(summaryOutput) : undefined,
+  };
+}
+
 function usage(): void {
   process.stderr.write(
     [
       'Usage:',
       '  autotel-eventcatalog drift --snapshot <path> --catalog <path> [options]',
       '  autotel-eventcatalog stamp --snapshot <path> --catalog <path> [--dry-run]',
+      '  autotel-eventcatalog generate --snapshot <path> --catalog <path> [options]',
       '',
       'drift options:',
       '  --snapshot <path>        Path to the autotel architecture snapshot JSON',
@@ -223,6 +328,13 @@ function usage(): void {
       '  --catalog <path>         EventCatalog root',
       '  --dry-run                Print the update plan without writing files',
       '  --summary-output <path>  Write a machine-readable stamp summary JSON file',
+      '',
+      'generate options:',
+      '  --snapshot <path>        Architecture snapshot JSON',
+      '  --catalog <path>         EventCatalog root',
+      '  --dry-run                Print the generation plan without writing files',
+      '  --edges-only             Only generate producer/event/channel edges',
+      '  --summary-output <path>  Write a machine-readable generate summary JSON file',
       '',
       '  -h, --help               Show this help',
       '',
@@ -304,7 +416,7 @@ async function runDrift(args: DriftArgs): Promise<void> {
   }
 }
 
-const DRIFT_SUMMARY_SPEC = 'autotel-eventcatalog-drift-summary/v0.1.0' as const;
+const DRIFT_SUMMARY_SPEC = 'autotel-eventcatalog-drift-summary/v0.2.0' as const;
 
 type DriftSummary = {
   spec: typeof DRIFT_SUMMARY_SPEC;
@@ -371,16 +483,53 @@ async function runStamp(args: StampArgs): Promise<void> {
   }
 }
 
+async function runGenerate(args: GenerateArgs): Promise<void> {
+  const snapshot = await loadSnapshot(args.snapshot);
+  const result = await generateCatalogFromSnapshot({
+    snapshot,
+    catalogPath: args.catalog,
+    dryRun: args.dryRun,
+    edgesOnly: args.edgesOnly,
+    version: args.version,
+  });
+
+  for (const op of result.operations) {
+    const suffix = op.schemaSource ? ` (schema: ${op.schemaSource})` : '';
+    process.stdout.write(`${op.action} ${op.kind} ${op.id}${suffix}\n`);
+  }
+  if (result.operations.length === 0) {
+    process.stdout.write('No generation operations needed.\n');
+  }
+
+  if (args.summaryOutput) {
+    const summary = buildGenerateSummary(result, {
+      dryRun: args.dryRun,
+      edgesOnly: args.edgesOnly,
+    });
+    await mkdir(dirname(args.summaryOutput), { recursive: true });
+    await writeFile(
+      args.summaryOutput,
+      JSON.stringify(summary, null, 2),
+      'utf8',
+    );
+    process.stderr.write(`Wrote generate summary: ${args.summaryOutput}\n`);
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.command === 'stamp') {
     await runStamp(args);
     return;
   }
+  if (args.command === 'generate') {
+    await runGenerate(args);
+    return;
+  }
   await runDrift(args);
 }
 
-main().catch((err) => {
-  process.stderr.write(`autotel-eventcatalog: ${(err as Error).message}\n`);
+main().catch((error) => {
+  process.stderr.write(`autotel-eventcatalog: ${(error as Error).message}\n`);
   process.exit(1);
 });

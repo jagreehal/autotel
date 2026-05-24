@@ -2,9 +2,9 @@
 // recommendation via an LLM. The autotel gen-AI instrumentation surfaces the
 // model, prompt tokens, and completion tokens to the catalog as evidence.
 
-import { track } from 'autotel';
 import { traceConsumer } from 'autotel/messaging';
 import type { OrderPlacedMessage } from '../shared/types';
+import { recommendationGeneratedEvent } from '../shared/events';
 
 const openai = {
   chat: {
@@ -49,7 +49,7 @@ export const generateRecommendation = traceConsumer({
     (globalThis as { __autotel_demo_extra_recommendation_field__?: boolean })
       .__autotel_demo_extra_recommendation_field__ === true;
 
-  track('recommendation.generated', {
+  recommendationGeneratedEvent.track({
     orderId: msg.id,
     recommendations,
     model: 'gpt-4o-mini',

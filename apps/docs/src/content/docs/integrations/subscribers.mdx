@@ -38,14 +38,38 @@ track('user.signup', { userId: '123', plan: 'pro' });
 
 ## Built-in Subscribers
 
-| Subscriber | Import                          |
-| ---------- | ------------------------------- |
-| PostHog    | `autotel-subscribers/posthog`   |
-| Mixpanel   | `autotel-subscribers/mixpanel`  |
-| Segment    | `autotel-subscribers/segment`   |
-| Amplitude  | `autotel-subscribers/amplitude` |
-| Webhook    | `autotel-subscribers/webhook`   |
-| Slack      | `autotel-subscribers/slack`     |
+| Subscriber              | Import                                       |
+| ----------------------- | -------------------------------------------- |
+| PostHog                 | `autotel-subscribers/posthog`                |
+| Mixpanel                | `autotel-subscribers/mixpanel`               |
+| Segment                 | `autotel-subscribers/segment`                |
+| Amplitude               | `autotel-subscribers/amplitude`              |
+| Webhook                 | `autotel-subscribers/webhook`                |
+| Slack                   | `autotel-subscribers/slack`                  |
+| ArchitectureSnapshot    | `autotel-subscribers/architecture-snapshot`  |
+
+## ArchitectureSnapshotSubscriber
+
+Records every event your code emits — names, field paths, runtime types,
+sample values, producer/consumer edges — into a single snapshot. The
+output feeds [`autotel-eventcatalog`](/autotel/integrations/eventcatalog/)
+to diff what production does against what your EventCatalog says it does.
+
+```typescript
+import { init } from 'autotel';
+import { ArchitectureSnapshotSubscriber } from 'autotel-subscribers/architecture-snapshot';
+
+const snapshot = new ArchitectureSnapshotSubscriber({ service: 'my-app' });
+
+init({ service: 'my-app', subscribers: [snapshot] });
+
+// ...run integration tests, then persist the snapshot...
+await writeFile('snapshot.json', JSON.stringify(snapshot.toSnapshot(), null, 2));
+```
+
+For each tracked event the snapshot includes `fieldStats` — observed
+runtime types and sampled primitive values per dotted field path — which
+powers type-drift and value-drift detection downstream.
 
 ## Custom Subscriber
 
@@ -95,5 +119,6 @@ const subscriber = applyMiddleware(
 - `autotel-subscribers/amplitude` — Amplitude
 - `autotel-subscribers/webhook` — Webhook
 - `autotel-subscribers/slack` — Slack
+- `autotel-subscribers/architecture-snapshot` — Architecture snapshot for drift detection
 - `autotel-subscribers/middleware` — Middleware composition
 - `autotel-subscribers/testing` — Test harnesses

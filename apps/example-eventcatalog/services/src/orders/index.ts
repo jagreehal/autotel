@@ -4,9 +4,10 @@
 // OrdersService/index.mdx) is the read-side of the instrumentation below.
 // Field names, event names, and channel names match the catalog exactly.
 
-import { trace, track } from 'autotel';
+import { trace } from 'autotel';
 import { traceProducer } from 'autotel/messaging';
 import type { PlaceOrderInput, OrderPlacedMessage } from '../shared/types';
+import { orderPlacedEvent } from '../shared/events';
 
 const db = {
   orders: { insert: async (_order: PlaceOrderInput) => undefined },
@@ -28,7 +29,7 @@ export const placeOrder = trace((ctx) => async (order: PlaceOrderInput) => {
   await db.orders.insert(order);
   await publishOrderPlaced({ type: 'OrderPlaced', ...order });
 
-  track('order.placed', {
+  orderPlacedEvent.track({
     orderId: order.id,
     customerId: order.customerId,
     totalCents: order.totalCents,
@@ -36,7 +37,11 @@ export const placeOrder = trace((ctx) => async (order: PlaceOrderInput) => {
     items: order.items,
     shipping: order.shipping,
     metadata: order.metadata,
-    _autotel: { channel: 'orders.events', producer: 'OrdersService' },
+    _autotel: {
+      channel: 'orders.events',
+      producer: 'OrdersService',
+      consumers: ['PaymentService', 'RecommendationsService'],
+    },
   });
 
   return order;

@@ -1,16 +1,22 @@
 # example-eventcatalog
 
-**Your tests become living architecture docs.**
+A worked example of an [EventCatalog](https://www.eventcatalog.dev) kept in
+sync with a running system using
+[`autotel-eventcatalog`](../../packages/autotel-eventcatalog).
 
-This app is the demonstration target for `autotel-eventcatalog`: what a
-catalog looks like once it is **generated and continuously kept fresh** from
-autotel telemetry instead of hand-maintained.
+> **First time here?** [autotel](https://github.com/jagreehal/autotel) is an
+> OpenTelemetry wrapper for Node.js. The services in `services/src/`
+> (`orders`, `payments`, `inventory`, `recommendations`) wrap their business
+> logic in `trace()`, `span()` and `track(eventName, payload)`. A test run
+> with `ArchitectureSnapshotSubscriber` attached produces
+> `services/test/snapshot.json` — every domain event that fired, what
+> fields and types its payload had, who produced it, on what channel.
+> `autotel-eventcatalog drift` then diffs that snapshot against the
+> EventCatalog in `catalog/`.
 
-It is intentionally a hand-curated catalog *today*. The catalog content under
-`catalog/` is the **specification** for what the future
-`autotel-eventcatalog` generator will produce from snapshots.
-
-Build the destination first; build the generator that reaches it second.
+The catalog is hand-curated today and acts as the **specification** for
+what an autotel-driven generator should produce from snapshots. Build the
+destination first; build the generator that reaches it second.
 
 ## What's inside
 
@@ -47,20 +53,18 @@ example-eventcatalog/
         └── demo.jsonl        # committed event recording — input to REPLAY mode
 ```
 
-## The "wow" claim
+## What this catalog shows that a hand-drawn diagram can't
 
-A hand-written sequence diagram of the checkout flow names the steps. It
-does not know:
+A static sequence diagram of the checkout flow names the steps. It does
+not know:
 
 - That `payment.capture` retries soft declines **2.3% of the time** in production.
 - That the LLM step costs **$0.0005 per call** and uses **412 prompt tokens** on average.
 - That a `personalization_seed` field has appeared in payloads but is **not declared** in the event schema.
 
-Those facts live in autotel spans. This catalog renders them as
-**evidence callouts** on every page — service pages, event pages, flow pages.
-
-That is the gap `autotel-eventcatalog` closes: **the diagram and the runtime
-are the same thing.**
+Those facts live in autotel spans and events. The catalog pages here
+render them as evidence callouts, so the diagram and the runtime can't
+silently disagree.
 
 ## Quick start
 
@@ -85,7 +89,7 @@ You will see, in real time:
 - **A `payments.failed` tile** appearing once the first card decline lands (default 18% failure rate)
 - **A drift panel** that is empty at first, then fills in after ~25 seconds when the runner deliberately introduces a `_drift_demo_field` into recommendation payloads — autotel-eventcatalog detects it and surfaces it on the dashboard within a few seconds
 
-This is the value prop, visible in one screen: the architecture is alive, the runtime is the diagram, and drift surfaces the moment it appears.
+The dashboard, the snapshot, and the drift report all read the same SSE stream — so what you see ticking on screen is the same data the CLI fails CI on.
 
 ### Deterministic replay (for recording, conference demos, anywhere wifi is unreliable)
 
@@ -186,6 +190,17 @@ pnpm catalog:drift           # human-readable drift report
 pnpm catalog:drift:ci        # writes catalog-drift.md and exits 1 on drift
 ```
 
+### Generate/refresh catalog scaffolding from snapshot
+
+```bash
+autotel-eventcatalog generate \
+  --snapshot ./services/test/snapshot.json \
+  --catalog ./catalog
+```
+
+This scaffolds missing services/events/channels, infers event schemas from
+`fieldStats`, and creates producer→event and event→channel relationships.
+
 To see *only the drift this branch introduces* compared to another snapshot
 (this is the PR-check semantic):
 
@@ -208,8 +223,37 @@ visible immediately. Two findings you should see:
    the happy path, so the failure event never fires. Real coverage gap.
 2. **`recommendation.generated` has extra field `personalization_seed`** —
    the service emits it; the catalog schema does not declare it. Real
-   schema drift the kind of thing autotel-eventcatalog catches and nobody
-   else's tool does.
+   schema drift that autotel-eventcatalog catches directly from runtime
+   telemetry vs declared catalog schema.
+
+In `autotel-eventcatalog` v1, drift detection also covers:
+
+1. **Type drift** — runtime field type differs from declared schema type
+2. **Value drift** — runtime primitive value falls outside declared enum
+
+Both checks rely on `fieldStats` captured by `ArchitectureSnapshotSubscriber`
+for each observed event field path. The contract that this actually works
+end-to-end lives in
+[`services/test/snapshot-fieldstats.integration.test.ts`](services/test/snapshot-fieldstats.integration.test.ts).
+That test:
+
+1. Calls `init()` with a real `ArchitectureSnapshotSubscriber`.
+2. Drives the same four-service checkout flow used by the demo
+   (`placeOrder` → `handleOrderPlaced` / `generateRecommendation` →
+   `handlePaymentCaptured`).
+3. Asserts on the snapshot the subscriber produces, e.g.:
+   ```ts
+   expect(snap.events['order.placed'].fieldStats?.totalCents?.types)
+     .toContain('number');
+   expect(snap.events['order.placed'].fieldStats?.currency?.sampleValues)
+     .toContain('GBP');
+   ```
+
+If autotel ever stops capturing those runtime types and sample values,
+this test fails — which means `autotel-eventcatalog`'s type and value
+drift detection has nothing to compare against, and *that* failure
+would surface as a separate broken test in the catalog package. Two
+tests, two packages, one contract.
 
 ## How this becomes "generated, not maintained"
 
@@ -220,9 +264,10 @@ The build sequence the catalog is designed to support:
 | 1. Hand-curate the destination catalog | done | the `catalog/` you see |
 | 2. `ArchitectureSnapshotSubscriber` in `autotel-subscribers` | done | `services/test/snapshot.json` from a real test run |
 | 3. `autotel-eventcatalog` drift diff + CLI | done | `pnpm catalog:drift` reports real findings |
+| 3a. `autotel-eventcatalog` catalog scaffolding (`generate`) | done | services/events/channels + producer↔event↔channel edges generated from snapshot |
 | 4. Live HTTP+SSE dashboard | done | `pnpm services:live` → real-time updates at :4000 |
 | 5. Snapshot-vs-base PR comparison + GitHub Action | done | the workflow at `.github/workflows/eventcatalog-drift.yml` |
-| 6. Frontmatter-level annotations + opt-in writes | not yet | annotations on existing pages |
+| 6. Frontmatter-level annotations + opt-in writes | in progress | `stamp` writes evidence blocks between markers in event pages |
 
 Steps 2–5 are the engineering work. Step 1 is the proof that the destination
 is worth reaching.

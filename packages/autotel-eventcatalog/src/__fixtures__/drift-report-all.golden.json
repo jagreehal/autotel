@@ -1,5 +1,5 @@
 {
-  "spec": "autotel-eventcatalog-report/v0.1.0",
+  "spec": "autotel-eventcatalog-report/v0.2.0",
   "mode": "all",
   "report": {
     "snapshotGeneratedAt": "2026-05-22T00:00:00.000Z",
@@ -19,7 +19,9 @@
           ],
           "missing": []
         }
-      ]
+      ],
+      "typeDrift": [],
+      "valueDrift": []
     },
     "services": {
       "observedButUndocumented": []

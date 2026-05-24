@@ -84,6 +84,7 @@ export default defineConfig({
             { label: 'Backends', slug: 'integrations/backends' },
             { label: 'Datadog', slug: 'integrations/datadog' },
             { label: 'Event Subscribers', slug: 'integrations/subscribers' },
+            { label: 'EventCatalog', slug: 'integrations/eventcatalog' },
           ],
         },
         {

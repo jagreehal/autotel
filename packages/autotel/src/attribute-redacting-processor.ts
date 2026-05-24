@@ -424,17 +424,20 @@ function createRedactorFromConfig(
     .map((vp) => [cloneRegex(vp.pattern), vp.mask!]);
 
   return (key: string, value: AttributeValue): AttributeValue => {
-    // Check if key matches any sensitive key pattern
-    for (const pattern of keyPatterns) {
-      pattern.lastIndex = 0;
-      if (pattern.test(key)) {
+    // Key-pattern and path-based redaction only applies to string values.
+    // Numbers, booleans and other non-string attributes are not credentials;
+    // replacing them with the string '[REDACTED]' silently changes their
+    // type and corrupts downstream consumers (LLM token counters etc.).
+    if (typeof value === 'string') {
+      for (const pattern of keyPatterns) {
+        pattern.lastIndex = 0;
+        if (pattern.test(key)) {
+          return defaultReplacement;
+        }
+      }
+      if (pathSet.has(key)) {
         return defaultReplacement;
       }
-    }
-
-    // Check if key matches any path-based redaction
-    if (pathSet.has(key)) {
-      return defaultReplacement;
     }
 
     // For non-string values, return as-is

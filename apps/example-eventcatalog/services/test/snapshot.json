@@ -1,13 +1,13 @@
 {
   "spec": "autotel-architecture/v0.1.0",
-  "generatedAt": "2026-05-22T05:33:09.794Z",
+  "generatedAt": "2026-05-22T00:00:00.000Z",
   "service": "example-eventcatalog",
   "events": {
     "inventory.reserved": {
       "name": "inventory.reserved",
       "observedCount": 5,
-      "firstSeen": "2026-05-22T05:33:09.791Z",
-      "lastSeen": "2026-05-22T05:33:09.793Z",
+      "firstSeen": "2026-05-24T18:52:51.399Z",
+      "lastSeen": "2026-05-24T18:52:51.402Z",
       "fieldPaths": [
         "items",
         "items[].priceCents",
@@ -20,13 +20,168 @@
       ],
       "sampleTraceIds": [],
       "channel": "inventory.events",
-      "producer": "InventoryService"
+      "producer": "InventoryService",
+      "consumers": [],
+      "fieldStats": {
+        "items": {
+          "types": [
+            "array"
+          ],
+          "sampleValues": []
+        },
+        "items[].priceCents": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            3000,
+            5499
+          ]
+        },
+        "items[].quantity": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            1
+          ]
+        },
+        "items[].sku": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "sku-101",
+            "sku-202"
+          ]
+        },
+        "orderId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "order-happy-0",
+            "order-happy-1",
+            "order-happy-2",
+            "order-happy-3",
+            "order-happy-4"
+          ]
+        },
+        "reservationId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "rsv_seed_0000",
+            "rsv_seed_0001",
+            "rsv_seed_0002",
+            "rsv_seed_0003",
+            "rsv_seed_0004"
+          ]
+        },
+        "reservedAt": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "2026-05-22T00:00:00.001Z",
+            "2026-05-22T00:00:00.003Z",
+            "2026-05-22T00:00:00.005Z",
+            "2026-05-22T00:00:00.007Z",
+            "2026-05-22T00:00:00.009Z"
+          ]
+        },
+        "warehouseId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "wh-eu-1"
+          ]
+        }
+      },
+      "schema": {
+        "source": "zod",
+        "jsonSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string"
+            },
+            "reservationId": {
+              "type": "string"
+            },
+            "warehouseId": {
+              "type": "string"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "sku": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "number"
+                  },
+                  "priceCents": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "sku",
+                  "quantity",
+                  "priceCents"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "reservedAt": {
+              "type": "string"
+            },
+            "_autotel": {
+              "type": "object",
+              "properties": {
+                "channel": {
+                  "type": "string"
+                },
+                "producer": {
+                  "type": "string"
+                },
+                "consumers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "channel",
+                "producer"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "orderId",
+            "reservationId",
+            "warehouseId",
+            "items",
+            "reservedAt",
+            "_autotel"
+          ],
+          "additionalProperties": false
+        },
+        "hash": "6cbb7b83ac50c12f41c3b768be492c532d39739ffd78e01de4c0f0501ca4964a"
+      }
     },
     "order.placed": {
       "name": "order.placed",
-      "observedCount": 5,
-      "firstSeen": "2026-05-22T05:33:09.786Z",
-      "lastSeen": "2026-05-22T05:33:09.793Z",
+      "observedCount": 7,
+      "firstSeen": "2026-05-24T18:52:51.386Z",
+      "lastSeen": "2026-05-24T18:52:51.402Z",
       "fieldPaths": [
         "currency",
         "customerId",
@@ -43,13 +198,227 @@
       ],
       "sampleTraceIds": [],
       "channel": "orders.events",
-      "producer": "OrdersService"
+      "producer": "OrdersService",
+      "consumers": [
+        "PaymentService",
+        "RecommendationsService"
+      ],
+      "fieldStats": {
+        "currency": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "GBP"
+          ]
+        },
+        "customerId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "customer-0",
+            "customer-1",
+            "customer-2",
+            "customer-3",
+            "customer-4"
+          ]
+        },
+        "items": {
+          "types": [
+            "array"
+          ],
+          "sampleValues": []
+        },
+        "items[].priceCents": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            3000,
+            5499
+          ]
+        },
+        "items[].quantity": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            1
+          ]
+        },
+        "items[].sku": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "sku-101",
+            "sku-202"
+          ]
+        },
+        "metadata": {
+          "types": [
+            "object"
+          ],
+          "sampleValues": []
+        },
+        "metadata.source": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "web"
+          ]
+        },
+        "orderId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "order-fail-0",
+            "order-fail-1",
+            "order-happy-0",
+            "order-happy-1",
+            "order-happy-2",
+            "order-happy-3",
+            "order-happy-4"
+          ]
+        },
+        "shipping": {
+          "types": [
+            "object"
+          ],
+          "sampleValues": []
+        },
+        "shipping.addressId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "addr_demo"
+          ]
+        },
+        "totalCents": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            8499,
+            8599,
+            8699,
+            8799,
+            8899
+          ]
+        }
+      },
+      "schema": {
+        "source": "zod",
+        "jsonSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string"
+            },
+            "customerId": {
+              "type": "string"
+            },
+            "totalCents": {
+              "type": "number"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "sku": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "number"
+                  },
+                  "priceCents": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "sku",
+                  "quantity",
+                  "priceCents"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "shipping": {
+              "type": "object",
+              "properties": {
+                "addressId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "addressId"
+              ],
+              "additionalProperties": false
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source"
+              ],
+              "additionalProperties": false
+            },
+            "_autotel": {
+              "type": "object",
+              "properties": {
+                "channel": {
+                  "type": "string"
+                },
+                "producer": {
+                  "type": "string"
+                },
+                "consumers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "channel",
+                "producer"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "orderId",
+            "customerId",
+            "totalCents",
+            "currency",
+            "items",
+            "shipping",
+            "metadata",
+            "_autotel"
+          ],
+          "additionalProperties": false
+        },
+        "hash": "67643f3fff9ae53d254da521081b10bffaa8d80f71574bf5ff10e41bc1175ea9"
+      }
     },
     "payment.captured": {
       "name": "payment.captured",
       "observedCount": 5,
-      "firstSeen": "2026-05-22T05:33:09.789Z",
-      "lastSeen": "2026-05-22T05:33:09.793Z",
+      "firstSeen": "2026-05-24T18:52:51.398Z",
+      "lastSeen": "2026-05-24T18:52:51.401Z",
       "fieldPaths": [
         "amountCents",
         "capturedAt",
@@ -60,13 +429,257 @@
       ],
       "sampleTraceIds": [],
       "channel": "payments.events",
-      "producer": "PaymentService"
+      "producer": "PaymentService",
+      "consumers": [],
+      "fieldStats": {
+        "amountCents": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            8499,
+            8599,
+            8699,
+            8799,
+            8899
+          ]
+        },
+        "capturedAt": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "2026-05-22T00:00:00.000Z",
+            "2026-05-22T00:00:00.002Z",
+            "2026-05-22T00:00:00.004Z",
+            "2026-05-22T00:00:00.006Z",
+            "2026-05-22T00:00:00.008Z"
+          ]
+        },
+        "currency": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "GBP"
+          ]
+        },
+        "orderId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "order-happy-0",
+            "order-happy-1",
+            "order-happy-2",
+            "order-happy-3",
+            "order-happy-4"
+          ]
+        },
+        "psp": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "stripe"
+          ]
+        },
+        "pspTransactionId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "ch_seed_0000",
+            "ch_seed_0001",
+            "ch_seed_0002",
+            "ch_seed_0003",
+            "ch_seed_0004"
+          ]
+        }
+      },
+      "schema": {
+        "source": "zod",
+        "jsonSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string"
+            },
+            "amountCents": {
+              "type": "number"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "psp": {
+              "type": "string"
+            },
+            "pspTransactionId": {
+              "type": "string"
+            },
+            "capturedAt": {
+              "type": "string"
+            },
+            "_autotel": {
+              "type": "object",
+              "properties": {
+                "channel": {
+                  "type": "string"
+                },
+                "producer": {
+                  "type": "string"
+                },
+                "consumers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "channel",
+                "producer"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "orderId",
+            "amountCents",
+            "currency",
+            "psp",
+            "pspTransactionId",
+            "capturedAt",
+            "_autotel"
+          ],
+          "additionalProperties": false
+        },
+        "hash": "9fdbd9841a021e5db0df87ebfb2665a488abb87d819678e147b66f84f96258fb"
+      }
+    },
+    "payment.failed": {
+      "name": "payment.failed",
+      "observedCount": 2,
+      "firstSeen": "2026-05-24T18:52:51.402Z",
+      "lastSeen": "2026-05-24T18:52:51.402Z",
+      "fieldPaths": [
+        "attempts",
+        "declineCode",
+        "failedAt",
+        "orderId",
+        "psp"
+      ],
+      "sampleTraceIds": [],
+      "channel": "payments.events",
+      "producer": "PaymentService",
+      "consumers": [],
+      "fieldStats": {
+        "attempts": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            1
+          ]
+        },
+        "declineCode": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "card_declined"
+          ]
+        },
+        "failedAt": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "2026-05-22T00:00:00.010Z",
+            "2026-05-22T00:00:00.011Z"
+          ]
+        },
+        "orderId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "order-fail-0",
+            "order-fail-1"
+          ]
+        },
+        "psp": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "stripe"
+          ]
+        }
+      },
+      "schema": {
+        "source": "zod",
+        "jsonSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string"
+            },
+            "declineCode": {
+              "type": "string"
+            },
+            "attempts": {
+              "type": "number"
+            },
+            "psp": {
+              "type": "string"
+            },
+            "failedAt": {
+              "type": "string"
+            },
+            "_autotel": {
+              "type": "object",
+              "properties": {
+                "channel": {
+                  "type": "string"
+                },
+                "producer": {
+                  "type": "string"
+                },
+                "consumers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "channel",
+                "producer"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "orderId",
+            "declineCode",
+            "attempts",
+            "psp",
+            "failedAt",
+            "_autotel"
+          ],
+          "additionalProperties": false
+        },
+        "hash": "b841a7b4c2e97e10171d9fe336230e61389d6a0376ef04ec92a58bae9e65083b"
+      }
     },
     "recommendation.generated": {
       "name": "recommendation.generated",
       "observedCount": 5,
-      "firstSeen": "2026-05-22T05:33:09.789Z",
-      "lastSeen": "2026-05-22T05:33:09.793Z",
+      "firstSeen": "2026-05-24T18:52:51.398Z",
+      "lastSeen": "2026-05-24T18:52:51.401Z",
       "fieldPaths": [
         "model",
         "orderId",
@@ -81,7 +694,186 @@
       ],
       "sampleTraceIds": [],
       "channel": "orders.events",
-      "producer": "RecommendationsService"
+      "producer": "RecommendationsService",
+      "consumers": [],
+      "fieldStats": {
+        "model": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "gpt-4o-mini"
+          ]
+        },
+        "orderId": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "order-happy-0",
+            "order-happy-1",
+            "order-happy-2",
+            "order-happy-3",
+            "order-happy-4"
+          ]
+        },
+        "personalization_seed": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "seed-appy-0",
+            "seed-appy-1",
+            "seed-appy-2",
+            "seed-appy-3",
+            "seed-appy-4"
+          ]
+        },
+        "recommendations": {
+          "types": [
+            "array"
+          ],
+          "sampleValues": []
+        },
+        "recommendations[].reason": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "completes the set",
+            "frequently bought together",
+            "matches style profile"
+          ]
+        },
+        "recommendations[].score": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            0.62,
+            0.78,
+            0.91
+          ]
+        },
+        "recommendations[].sku": {
+          "types": [
+            "string"
+          ],
+          "sampleValues": [
+            "sku-rec-1",
+            "sku-rec-2",
+            "sku-rec-3"
+          ]
+        },
+        "usage": {
+          "types": [
+            "object"
+          ],
+          "sampleValues": []
+        },
+        "usage.completionTokens": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            142
+          ]
+        },
+        "usage.promptTokens": {
+          "types": [
+            "number"
+          ],
+          "sampleValues": [
+            412
+          ]
+        }
+      },
+      "schema": {
+        "source": "zod",
+        "jsonSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string"
+            },
+            "recommendations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "sku": {
+                    "type": "string"
+                  },
+                  "score": {
+                    "type": "number"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "sku",
+                  "score",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "model": {
+              "type": "string"
+            },
+            "usage": {
+              "type": "object",
+              "properties": {
+                "promptTokens": {
+                  "type": "number"
+                },
+                "completionTokens": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "promptTokens",
+                "completionTokens"
+              ],
+              "additionalProperties": false
+            },
+            "personalization_seed": {
+              "type": "string"
+            },
+            "_drift_demo_field": {
+              "type": "string"
+            },
+            "_autotel": {
+              "type": "object",
+              "properties": {
+                "channel": {
+                  "type": "string"
+                },
+                "producer": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "channel",
+                "producer"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "orderId",
+            "recommendations",
+            "model",
+            "usage",
+            "personalization_seed",
+            "_autotel"
+          ],
+          "additionalProperties": false
+        },
+        "hash": "fc24f44848b8c4a527eeb854b47e57d3634ee0a95e104ab4fe4e0e8f28a701fa"
+      }
     }
   }
 }

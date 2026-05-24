@@ -22,6 +22,7 @@ import type {
   EventSubscriber,
   EventAttributes,
   AutotelEventContext,
+  EventSchemaMetadata,
 } from './event-subscriber';
 import { getLogger } from './init';
 import { getConfig as getRuntimeConfig } from './config';
@@ -38,6 +39,8 @@ export interface EventData {
   _traceId?: string;
   /** Autotel context for trace correlation (passed to subscribers) */
   autotel?: AutotelEventContext;
+  /** Optional schema metadata for contract-aware subscribers. */
+  schema?: EventSchemaMetadata;
 }
 
 /**
@@ -591,6 +594,7 @@ export class EventQueue {
         try {
           await subscriber.trackEvent(event.name, event.attributes, {
             autotel: event.autotel,
+            schema: event.schema,
           });
           this.recordDelivered(event, subscriberName, startTime);
           return { subscriberName, success: true };

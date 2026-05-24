@@ -1,0 +1,218 @@
+---
+title: EventCatalog
+description: Keep your EventCatalog honest about what the code actually does at runtime — drift detection from autotel telemetry.
+---
+
+`autotel-eventcatalog` diffs an [EventCatalog](https://www.eventcatalog.dev)
+against an autotel snapshot of what your tests actually emit, and fails the
+PR when the catalog and the runtime disagree.
+
+Two pieces:
+
+| Piece | Lives in | Role |
+| --- | --- | --- |
+| `ArchitectureSnapshotSubscriber` | `autotel-subscribers` | Records every event your tests emit, with field paths, runtime types and sample values |
+| `autotel-eventcatalog` | this package | Reads the snapshot, diffs it against the catalog, reports drift |
+
+Same model as [Pact](https://docs.pact.io/) — for event architectures.
+
+## What gets caught
+
+| Drift class | Example finding |
+| --- | --- |
+| **Events observed but undocumented** | `order.cancelled` emitted by code; no entry in catalog |
+| **Events documented but never observed** | `LegacyEvent` in catalog; never seen in tests |
+| **Field-path drift (extra)** | `personalization_seed` in payload; not declared in schema |
+| **Field-path drift (missing)** | `customerId` declared in schema; never present in payloads |
+| **Type drift** | `amount` declared `number`; observed `string` |
+| **Value drift (enum mismatch)** | `status: "placed"` observed; schema enum excludes it |
+| **Services observed but undocumented** | `OrdersService` is a producer; no service page |
+| **Channels observed but undocumented** | `orders.events` carries messages; no channel page |
+
+Type and value drift use declared schema constraints from the catalog's
+`schemaPath` plus runtime `fieldStats` captured by the subscriber (observed
+types + sampled primitive values per path). JSON Schema's `integer` is
+treated as compatible with JavaScript's `number` at the type level; sample
+values are checked separately against `Number.isInteger`, so a runtime `1.5`
+against a declared `integer` still flags as drift.
+
+## Installation
+
+```bash
+npm install autotel autotel-subscribers
+npm install -D autotel-eventcatalog
+```
+
+## Capture the snapshot
+
+Wire `ArchitectureSnapshotSubscriber` into your test setup. It records every
+`track()` call, every `traceProducer` / `traceConsumer` edge, and every
+LLM step into a single snapshot.
+
+```typescript
+import { init } from 'autotel';
+import { ArchitectureSnapshotSubscriber } from 'autotel-subscribers/architecture-snapshot';
+
+const snapshot = new ArchitectureSnapshotSubscriber({ service: 'my-app' });
+
+init({
+  service: 'my-app',
+  subscribers: [snapshot],
+});
+
+// ...run your integration tests...
+
+// Persist for the drift CLI:
+import { writeFile } from 'node:fs/promises';
+await writeFile(
+  './services/test/snapshot.json',
+  JSON.stringify(snapshot.toSnapshot(), null, 2),
+);
+```
+
+What ends up in the snapshot, per event:
+
+```json
+{
+  "events": {
+    "order.placed": {
+      "observedCount": 5,
+      "fieldPaths": ["currency", "customerId", "items[].priceCents", "totalCents"],
+      "fieldStats": {
+        "currency":    { "types": ["string"], "sampleValues": ["GBP"] },
+        "totalCents":  { "types": ["number"], "sampleValues": [8499, 8599, 8699] }
+      },
+      "producer": "OrdersService",
+      "channel":  "orders.events"
+    }
+  }
+}
+```
+
+## Run the drift CLI
+
+```bash
+autotel-eventcatalog drift \
+  --snapshot ./services/test/snapshot.json \
+  --catalog ./catalog \
+  --output ./drift.md \
+  --summary-output ./drift-summary.json \
+  --policy all \
+  --fail-on-drift
+```
+
+Real output from the `example-eventcatalog` app (which deliberately ships
+with two drift conditions so the CLI has something genuine to catch):
+
+```
+# Architecture drift report
+
+## Events documented but never observed
+
+- `PaymentFailed`
+
+## Field-path drift
+
+### `recommendation.generated`
+
+**Extra fields in payloads (not in declared schema):**
+
+- `personalization_seed`
+
+Drift detected in current snapshot.
+```
+
+Exit code 1, CI fails. Two genuine findings, zero noise.
+
+## Wire it into CI
+
+The package ships a composite GitHub Action that runs drift on every PR
+with a sticky comment:
+
+```yaml
+# .github/workflows/eventcatalog-drift.yml
+name: eventcatalog drift
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm services:snapshot
+
+      - uses: jagreehal/autotel-eventcatalog@v0
+        with:
+          snapshot: ./services/test/snapshot.json
+          catalog: ./catalog
+          base-ref: origin/${{ github.base_ref }}
+          fail-on-drift: true
+          comment-on-pr: true
+```
+
+What lands on the PR:
+
+- A sticky comment titled "Architecture drift: what this change introduces"
+  with sections for new events, removed events, field-path drift, type
+  drift, value drift, and drift the PR resolved.
+- The check fails only when this PR introduces **new** drift; pre-existing
+  drift is reported for context but does not block.
+
+## Use the library directly
+
+```typescript
+import {
+  loadSnapshot,
+  readCatalogState,
+  diffCatalogAgainstSnapshot,
+  renderMarkdown,
+  countDriftReport,
+  hasDrift,
+} from 'autotel-eventcatalog';
+
+const snapshot = await loadSnapshot('./services/test/snapshot.json');
+const catalog  = await readCatalogState('./catalog');
+const report   = diffCatalogAgainstSnapshot(snapshot, catalog);
+
+console.log(renderMarkdown(report));
+console.log('findings:', countDriftReport(report).total);
+if (hasDrift(report)) process.exit(1);
+```
+
+Catalog state is read via [`@eventcatalog/sdk`](https://www.eventcatalog.dev/docs/sdk),
+so `CatalogEvent`, `CatalogService` and `CatalogChannel` extend the SDK's
+`Event`, `Service` and `Channel` types directly. New fields the SDK adds in
+future flow through without changes here.
+
+## What this package does NOT do
+
+To keep the scope tight:
+
+- **Does not produce snapshots.** Snapshots come from
+  `ArchitectureSnapshotSubscriber` in `autotel-subscribers`. This package
+  only consumes them.
+- **Does not run a web server or dashboard.** Live dashboards live in the
+  example app (`apps/example-eventcatalog`).
+- **Does not modify catalog files outside the stamp markers.** Everything
+  the `stamp` command writes lives between `<!-- autotel:stamp-start -->`
+  and `<!-- autotel:stamp-end -->`.
+
+## Examples
+
+- [`example-eventcatalog`](https://github.com/jagreehal/autotel/tree/main/apps/example-eventcatalog) —
+  four-service e-commerce catalog, deliberate drift, live dashboard, mock
+  PR view, recorded replay for talks.
+
+## See also
+
+- [Event Subscribers](/autotel/integrations/subscribers/) — including
+  `ArchitectureSnapshotSubscriber`, which produces the input snapshot.
+- [Architecture](/autotel/architecture/) — how `track()`, `traceProducer`
+  and `traceConsumer` produce the signal this package consumes.

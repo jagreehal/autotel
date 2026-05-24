@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 import { REPORT_SPEC, renderJson, type JsonReportEnvelope } from './report';
 import { buildStampSummary, STAMP_SUMMARY_SPEC } from './stamp';
+import { buildGenerateSummary, GENERATE_SUMMARY_SPEC } from './generate';
 import { evaluatePolicy } from './policy';
 import { countDriftReport } from './diff';
 import type { DriftReport } from './diff';
@@ -168,6 +169,8 @@ const emptyReport: DriftReport = {
     observedButUndocumented: [],
     documentedButUnseen: [],
     fieldDrift: [],
+    typeDrift: [],
+    valueDrift: [],
   },
   services: { observedButUndocumented: [] },
   channels: { observedButUndocumented: [] },
@@ -185,6 +188,8 @@ const driftyReport: DriftReport = {
         missing: [],
       },
     ],
+    typeDrift: [],
+    valueDrift: [],
   },
 };
 
@@ -195,6 +200,8 @@ const cleanDelta: DriftDelta = {
       observedButUndocumented: [],
       documentedButUnseen: [],
       fieldDrift: [],
+      typeDrift: [],
+      valueDrift: [],
     },
     services: { observedButUndocumented: [] },
     channels: { observedButUndocumented: [] },
@@ -204,6 +211,8 @@ const cleanDelta: DriftDelta = {
       observedButUndocumented: [],
       documentedButUnseen: [],
       fieldDrift: [],
+      typeDrift: [],
+      valueDrift: [],
     },
     services: { observedButUndocumented: [] },
     channels: { observedButUndocumented: [] },
@@ -211,8 +220,8 @@ const cleanDelta: DriftDelta = {
 };
 
 // ─── Contract: drift report JSON envelope ──────────────────
-describe('drift report JSON envelope (autotel-eventcatalog-report/v0.1.0)', () => {
-  const schema = loadSchema('drift-report-v0.1.0.json');
+describe('drift report JSON envelope (autotel-eventcatalog-report/v0.2.0)', () => {
+  const schema = loadSchema('drift-report-v0.2.0.json');
 
   it('mode=all output validates against the published schema', () => {
     const json = renderJson({ mode: 'all', report: driftyReport });
@@ -255,8 +264,8 @@ describe('drift report JSON envelope (autotel-eventcatalog-report/v0.1.0)', () =
 });
 
 // ─── Contract: drift summary JSON ──────────────────────────
-describe('drift summary JSON (autotel-eventcatalog-drift-summary/v0.1.0)', () => {
-  const schema = loadSchema('drift-summary-v0.1.0.json');
+describe('drift summary JSON (autotel-eventcatalog-drift-summary/v0.2.0)', () => {
+  const schema = loadSchema('drift-summary-v0.2.0.json');
   // The CLI builds the summary inline; we replicate the shape here so the
   // contract test is independent of CLI implementation details. The
   // important thing is that the shape we ship matches the published schema.
@@ -266,7 +275,7 @@ describe('drift summary JSON (autotel-eventcatalog-drift-summary/v0.1.0)', () =>
   ): unknown {
     const policy = evaluatePolicy({ mode: 'all', report });
     return {
-      spec: 'autotel-eventcatalog-drift-summary/v0.1.0',
+      spec: 'autotel-eventcatalog-drift-summary/v0.2.0',
       mode,
       shouldFail: policy.shouldFail,
       reason: policy.reason,
@@ -342,6 +351,93 @@ describe('stamp summary JSON (autotel-eventcatalog-stamp-summary/v0.1.0)', () =>
       'utf8',
     );
     expect(json).toBe(golden.trimEnd());
+  });
+});
+
+// ─── Contract: generate summary JSON ───────────────────────
+describe('generate summary JSON (autotel-eventcatalog-generate-summary/v0.1.0)', () => {
+  const schema = loadSchema('generate-summary-v0.1.0.json');
+
+  it('validates against the published schema', () => {
+    const summary = buildGenerateSummary(
+      {
+        operations: [
+          { kind: 'service', id: 'OrdersService', action: 'create' },
+          { kind: 'service', id: 'PaymentService', action: 'create' },
+          {
+            kind: 'event',
+            id: 'OrderPlaced',
+            action: 'create',
+            schemaSource: 'declared',
+          },
+          {
+            kind: 'event',
+            id: 'PaymentCaptured',
+            action: 'create',
+            schemaSource: 'inferred',
+          },
+          { kind: 'channel', id: 'orders.events', action: 'create' },
+          {
+            kind: 'service-edge',
+            id: 'OrdersService->OrderPlaced',
+            action: 'link',
+          },
+          {
+            kind: 'service-edge',
+            id: 'PaymentService<-OrderPlaced',
+            action: 'link',
+            detail: 'receives',
+          },
+          {
+            kind: 'channel-edge',
+            id: 'OrderPlaced->orders.events',
+            action: 'link',
+          },
+        ],
+      },
+      { dryRun: false, edgesOnly: false },
+    );
+    expect(validate(summary, schema)).toEqual([]);
+    expect(summary.spec).toBe(GENERATE_SUMMARY_SPEC);
+    expect(summary.totals).toEqual({ created: 5, linked: 3, skipped: 0 });
+    expect(summary.created.services).toEqual([
+      'OrdersService',
+      'PaymentService',
+    ]);
+    expect(summary.edges.sends).toEqual([
+      { service: 'OrdersService', event: 'OrderPlaced' },
+    ]);
+    expect(summary.edges.receives).toEqual([
+      { service: 'PaymentService', event: 'OrderPlaced' },
+    ]);
+    expect(summary.edges.messages).toEqual([
+      { channel: 'orders.events', event: 'OrderPlaced' },
+    ]);
+    expect(summary.schemaSources).toEqual({ declared: 1, inferred: 1 });
+  });
+
+  it('validates a dry-run no-op (empty plan) against the schema', () => {
+    const summary = buildGenerateSummary(
+      { operations: [] },
+      { dryRun: true, edgesOnly: false },
+    );
+    expect(validate(summary, schema)).toEqual([]);
+    expect(summary.dryRun).toBe(true);
+    expect(summary.totals).toEqual({ created: 0, linked: 0, skipped: 0 });
+  });
+
+  it('rejects a payload missing required `totals`', () => {
+    const broken = {
+      spec: GENERATE_SUMMARY_SPEC,
+      dryRun: false,
+      edgesOnly: false,
+      attempted: 0,
+      created: { services: [], events: [], channels: [] },
+      edges: { sends: [], receives: [], messages: [] },
+      schemaSources: { declared: 0, inferred: 0 },
+      skipped: { services: [], events: [], channels: [] },
+    };
+    expect(validate(broken, schema).length).toBeGreaterThan(0);
   });
 });
 
