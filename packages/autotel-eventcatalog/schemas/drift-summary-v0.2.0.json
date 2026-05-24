@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://autotel.dev/schemas/eventcatalog/drift-summary/v0.1.0.json",
-  "title": "Autotel EventCatalog Drift Summary v0.1.0",
+  "$id": "https://autotel.dev/schemas/eventcatalog/drift-summary/v0.2.0.json",
+  "title": "Autotel EventCatalog Drift Summary v0.2.0",
   "description": "Machine-readable summary written by `autotel-eventcatalog drift --summary-output`. Downstream tooling (GitHub Actions, dashboards, Slack bots) should read this. Major-version bumps are breaking; minor-version bumps add optional fields only.",
   "type": "object",
   "required": ["spec", "mode", "shouldFail", "reason", "counts"],
@@ -9,7 +9,7 @@
   "properties": {
     "spec": {
       "type": "string",
-      "const": "autotel-eventcatalog-drift-summary/v0.1.0"
+      "const": "autotel-eventcatalog-drift-summary/v0.2.0"
     },
     "mode": {
       "type": "string",

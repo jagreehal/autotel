@@ -130,19 +130,22 @@ export function validateAttributes(
       );
     }
 
-    // Check for sensitive field
-    const isSensitive = config.sensitivePatterns.some((pattern) =>
-      pattern.test(key),
-    );
+    const value = attributes[key];
+
+    // Redact sensitive *strings* only. Numeric/boolean values are not
+    // credentials and replacing them with the literal string '[REDACTED]'
+    // both leaks no useful signal and breaks downstream type expectations
+    // (e.g. an LLM `promptTokens` counter becoming a string poisons every
+    // consumer that treats it as a number).
+    const isSensitive =
+      typeof value === 'string' &&
+      config.sensitivePatterns.some((pattern) => pattern.test(key));
 
     if (isSensitive) {
-      // Redact sensitive data
       sanitized[key] = '[REDACTED]';
       continue;
     }
 
-    // Sanitize value
-    const value = attributes[key];
     sanitized[key] = sanitizeValue(value, config, 1) as
       | string
       | number
@@ -196,20 +199,15 @@ function sanitizeValue(
       const sanitized: Record<string, unknown> = {};
       for (const key in value) {
         if (Object.prototype.hasOwnProperty.call(value, key)) {
-          // Check for sensitive field in nested objects
-          const isSensitive = config.sensitivePatterns.some((pattern) =>
-            pattern.test(key),
-          );
+          const nested = (value as Record<string, unknown>)[key];
+          // See top-level branch above: only string values are redacted.
+          const isSensitive =
+            typeof nested === 'string' &&
+            config.sensitivePatterns.some((pattern) => pattern.test(key));
 
-          if (isSensitive) {
-            sanitized[key] = '[REDACTED]';
-          } else {
-            sanitized[key] = sanitizeValue(
-              (value as Record<string, unknown>)[key],
-              config,
-              depth + 1,
-            );
-          }
+          sanitized[key] = isSensitive
+            ? '[REDACTED]'
+            : sanitizeValue(nested, config, depth + 1);
         }
       }
       return sanitized;

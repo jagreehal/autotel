@@ -298,17 +298,21 @@ describe('Sensitive data patterns', () => {
     expect(result?.API_KEY).toBe('[REDACTED]');
   });
 
-  it('should redact auth fields', () => {
+  it('should redact auth fields (strings only)', () => {
     const attrs = {
       auth: 'abc123',
       authorization: 'Bearer token',
-      authenticated: true, // Contains "auth" but should still be redacted
+      // `authenticated` matches the /auth/i key pattern, but `true` is a
+      // boolean status — not a credential — so it passes through unchanged.
+      // Redacting it to the string '[REDACTED]' would silently corrupt its
+      // type without protecting any secret.
+      authenticated: true,
     };
 
     const result = validateAttributes(attrs);
     expect(result?.auth).toBe('[REDACTED]');
     expect(result?.authorization).toBe('[REDACTED]');
-    expect(result?.authenticated).toBe('[REDACTED]');
+    expect(result?.authenticated).toBe(true);
   });
 
   it('should not redact non-sensitive fields with similar names', () => {

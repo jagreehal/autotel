@@ -14,6 +14,9 @@ export {
   renderDeltaTerminal,
   renderJson,
   REPORT_SPEC,
+  EVENTCATALOG_SNAPSHOT_DIFF_SPEC,
+  renderEventCatalogSnapshotDiffFromReport,
+  renderEventCatalogSnapshotDiffFromDelta,
   RENDERERS,
   RENDERER_NAMES,
   getRenderer,
@@ -24,4 +27,5 @@ export type {
   RendererName,
   JsonReport,
   JsonReportEnvelope,
+  EventCatalogSnapshotDiffEnvelope,
 } from './renderers/index';

@@ -13,6 +13,8 @@ const emptyReport: DriftReport = {
     observedButUndocumented: [],
     documentedButUnseen: [],
     fieldDrift: [],
+    typeDrift: [],
+    valueDrift: [],
   },
   services: { observedButUndocumented: [] },
   channels: { observedButUndocumented: [] },
@@ -25,6 +27,8 @@ const cleanDelta: DriftDelta = {
       observedButUndocumented: [],
       documentedButUnseen: [],
       fieldDrift: [],
+      typeDrift: [],
+      valueDrift: [],
     },
     services: { observedButUndocumented: [] },
     channels: { observedButUndocumented: [] },
@@ -34,6 +38,8 @@ const cleanDelta: DriftDelta = {
       observedButUndocumented: [],
       documentedButUnseen: [],
       fieldDrift: [],
+      typeDrift: [],
+      valueDrift: [],
     },
     services: { observedButUndocumented: [] },
     channels: { observedButUndocumented: [] },
@@ -43,7 +49,12 @@ const cleanDelta: DriftDelta = {
 describe('renderer registry', () => {
   it('ships at least the three built-in renderers', () => {
     expect(RENDERER_NAMES).toEqual(
-      expect.arrayContaining(['markdown', 'terminal', 'json']),
+      expect.arrayContaining([
+        'markdown',
+        'terminal',
+        'json',
+        'eventcatalog-snapshot-diff',
+      ]),
     );
   });
 

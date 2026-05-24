@@ -1,9 +1,11 @@
 // PaymentService — captures payment, retries on soft declines, emits
 // PaymentCaptured or PaymentFailed.
 
-import { span, track } from 'autotel';
+import { span } from 'autotel';
 import { traceConsumer } from 'autotel/messaging';
 import type { OrderPlacedMessage } from '../shared/types';
+import { paymentCapturedEvent, paymentFailedEvent } from '../shared/events';
+import { isoNow } from '../shared/clock';
 
 type CaptureResult =
   | { status: 'succeeded'; pspTransactionId: string }
@@ -47,13 +49,13 @@ export const handleOrderPlaced = traceConsumer({
     });
 
     if (result.status === 'succeeded') {
-      track('payment.captured', {
+      paymentCapturedEvent.track({
         orderId: msg.id,
         amountCents: msg.totalCents,
         currency: msg.currency,
         psp: 'stripe',
         pspTransactionId: result.pspTransactionId,
-        capturedAt: new Date().toISOString(),
+        capturedAt: isoNow(),
         _autotel: { channel: 'payments.events', producer: 'PaymentService' },
       });
       return;
@@ -64,12 +66,12 @@ export const handleOrderPlaced = traceConsumer({
     await new Promise((r) => setTimeout(r, BACKOFFS_MS[i]));
   }
 
-  track('payment.failed', {
+  paymentFailedEvent.track({
     orderId: msg.id,
     declineCode: lastDecline || 'other',
     attempts,
     psp: 'stripe',
-    failedAt: new Date().toISOString(),
+    failedAt: isoNow(),
     _autotel: { channel: 'payments.events', producer: 'PaymentService' },
   });
 });

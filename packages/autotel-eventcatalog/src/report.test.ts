@@ -5,6 +5,8 @@ import {
   renderTerminal,
   renderDeltaTerminal,
   REPORT_SPEC,
+  renderEventCatalogSnapshotDiffFromReport,
+  EVENTCATALOG_SNAPSHOT_DIFF_SPEC,
 } from './report';
 import type { DriftReport } from './diff';
 import type { DriftDelta } from './diff-vs-base';
@@ -16,6 +18,8 @@ const emptyReport: DriftReport = {
     observedButUndocumented: [],
     documentedButUnseen: [],
     fieldDrift: [],
+    typeDrift: [],
+    valueDrift: [],
   },
   services: { observedButUndocumented: [] },
   channels: { observedButUndocumented: [] },
@@ -42,6 +46,8 @@ describe('renderMarkdown', () => {
             missing: ['recommendations[].reason'],
           },
         ],
+        typeDrift: [],
+        valueDrift: [],
       },
       services: { observedButUndocumented: ['GhostService'] },
       channels: { observedButUndocumented: ['rogue.events'] },
@@ -89,6 +95,8 @@ describe('renderJson', () => {
               observedButUndocumented: [],
               documentedButUnseen: [],
               fieldDrift: [],
+              typeDrift: [],
+              valueDrift: [],
             },
             services: { observedButUndocumented: [] },
             channels: { observedButUndocumented: [] },
@@ -98,6 +106,8 @@ describe('renderJson', () => {
               observedButUndocumented: [],
               documentedButUnseen: [],
               fieldDrift: [],
+              typeDrift: [],
+              valueDrift: [],
             },
             services: { observedButUndocumented: [] },
             channels: { observedButUndocumented: [] },
@@ -122,6 +132,8 @@ const driftyReport: DriftReport = {
         missing: ['recommendations[].reason'],
       },
     ],
+    typeDrift: [],
+    valueDrift: [],
   },
 };
 
@@ -156,6 +168,8 @@ describe('renderDeltaTerminal', () => {
         observedButUndocumented: [],
         documentedButUnseen: [],
         fieldDrift: [],
+        typeDrift: [],
+        valueDrift: [],
       },
       services: { observedButUndocumented: [] },
       channels: { observedButUndocumented: [] },
@@ -165,6 +179,8 @@ describe('renderDeltaTerminal', () => {
         observedButUndocumented: [],
         documentedButUnseen: [],
         fieldDrift: [],
+        typeDrift: [],
+        valueDrift: [],
       },
       services: { observedButUndocumented: [] },
       channels: { observedButUndocumented: [] },
@@ -177,6 +193,8 @@ describe('renderDeltaTerminal', () => {
         observedButUndocumented: ['order.cancelled'],
         documentedButUnseen: [],
         fieldDrift: [],
+        typeDrift: [],
+        valueDrift: [],
       },
       services: { observedButUndocumented: [] },
       channels: { observedButUndocumented: [] },
@@ -186,6 +204,8 @@ describe('renderDeltaTerminal', () => {
         observedButUndocumented: [],
         documentedButUnseen: [],
         fieldDrift: [],
+        typeDrift: [],
+        valueDrift: [],
       },
       services: { observedButUndocumented: [] },
       channels: { observedButUndocumented: [] },
@@ -201,5 +221,24 @@ describe('renderDeltaTerminal', () => {
   it('renders cleanly when there is no new drift', () => {
     const text = renderDeltaTerminal(noNewDrift);
     expect(text).toContain('No new drift detected');
+  });
+});
+
+describe('eventcatalog snapshot diff renderer', () => {
+  it('renders a SnapshotDiff-compatible envelope', () => {
+    const json = renderEventCatalogSnapshotDiffFromReport(driftyReport);
+    const parsed = JSON.parse(json) as {
+      spec: string;
+      mode: string;
+      diff: { resources: Array<{ resourceId: string; changeType: string }> };
+    };
+    expect(parsed.spec).toBe(EVENTCATALOG_SNAPSHOT_DIFF_SPEC);
+    expect(parsed.mode).toBe('all');
+    expect(
+      parsed.diff.resources.some((r) => r.resourceId === 'order.cancelled'),
+    ).toBe(true);
+    expect(parsed.diff.resources.some((r) => r.changeType === 'modified')).toBe(
+      true,
+    );
   });
 });

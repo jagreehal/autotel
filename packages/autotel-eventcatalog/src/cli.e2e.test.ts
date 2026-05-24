@@ -201,7 +201,7 @@ describe('cli e2e — drift', () => {
     ]);
     expect(res.exitCode).toBe(0);
     const parsed = JSON.parse(res.stdout);
-    expect(parsed.spec).toBe('autotel-eventcatalog-report/v0.1.0');
+    expect(parsed.spec).toBe('autotel-eventcatalog-report/v0.2.0');
     expect(parsed.mode).toBe('all');
     expect(parsed.report.snapshotService).toBe('fixture');
   });
@@ -292,6 +292,35 @@ describe('cli e2e — stamp', () => {
     expect(summary.hadChanges).toBe(false);
     expect(summary.changedFiles).toBe(0);
     expect(summary.replaces).toBe(1);
+  });
+});
+
+describe('cli e2e — generate', () => {
+  it('dry-run prints planned scaffold and edge operations', () => {
+    const { snapshotPath, catalogPath } = buildFixture({
+      events: {
+        'order.placed': {
+          fields: ['orderId'],
+          producer: 'OrdersService',
+          channel: 'orders.events',
+        },
+      },
+      catalogEvents: [],
+    });
+    const res = runCli([
+      'generate',
+      '--snapshot',
+      snapshotPath,
+      '--catalog',
+      catalogPath,
+      '--dry-run',
+    ]);
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain('would-create service OrdersService');
+    expect(res.stdout).toContain('would-create event OrderPlaced');
+    expect(res.stdout).toContain(
+      'would-link service-edge OrdersService->OrderPlaced',
+    );
   });
 });
 
