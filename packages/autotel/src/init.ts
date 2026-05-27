@@ -1023,7 +1023,12 @@ export interface AutotelConfig {
    * Automatically redact PII and sensitive data from span attributes before export.
    * Critical for compliance (GDPR, PCI-DSS, HIPAA) and data security.
    *
-   * Can be a preset name or custom configuration:
+   * Auto-enabled in production: when this is left unset and the resolved
+   * environment is `production`, the `'default'` preset is applied. Override
+   * with the `AUTOTEL_REDACT_PII` env var (`off` / `strict` / `pci-dss` / ...)
+   * or pass `false` to disable redaction entirely.
+   *
+   * Can be a preset name, custom configuration, or `false` to disable:
    * - `'default'`: Emails, phones, SSNs, credit cards, sensitive keys (password, secret, token)
    * - `'strict'`: Default + Bearer tokens, JWTs, API keys in values
    * - `'pci-dss'`: Payment card industry focus (credit cards, CVV, card-related keys)
@@ -1064,7 +1069,7 @@ export interface AutotelConfig {
    * })
    * ```
    */
-  attributeRedactor?: AttributeRedactorConfig | AttributeRedactorPreset;
+  attributeRedactor?: AttributeRedactorConfig | AttributeRedactorPreset | false;
 
   /**
    * OpenLLMetry integration for LLM observability.
@@ -1264,6 +1269,34 @@ function wrapLogger(
   };
 }
 
+/**
+ * Resolve the effective attribute redactor. Explicit config wins (`false`
+ * disables). Otherwise the `AUTOTEL_REDACT_PII` env var controls it, and as a
+ * final default PII redaction is auto-enabled in production.
+ */
+export function resolveAttributeRedactor(
+  explicit: AttributeRedactorConfig | AttributeRedactorPreset | false | undefined,
+  environment: string,
+): AttributeRedactorConfig | AttributeRedactorPreset | undefined {
+  if (explicit === false) return undefined;
+  if (explicit !== undefined) return explicit;
+
+  const flag = process.env.AUTOTEL_REDACT_PII?.trim().toLowerCase();
+  if (flag) {
+    if (['off', 'false', '0', 'none', 'disabled'].includes(flag)) {
+      return undefined;
+    }
+    if (flag === 'default' || flag === 'strict' || flag === 'pci-dss') {
+      return flag;
+    }
+    if (['on', 'true', '1', 'enabled'].includes(flag)) {
+      return 'default';
+    }
+  }
+
+  return environment === 'production' ? 'default' : undefined;
+}
+
 function detectEnvironmentAttributes(): Record<string, string> {
   const attrs: Record<string, string> = {};
 
@@ -1456,10 +1489,15 @@ export function init(cfg: AutotelConfig): void {
     headers: cfg.headers ?? yamlConfig.headers ?? envConfig.headers,
   } as AutotelConfig;
 
-  if (mergedConfig.attributeRedactor !== undefined) {
-    const normalizedRedactor = normalizeAttributeRedactorConfig(
-      mergedConfig.attributeRedactor,
-    );
+  const resolvedRedactor = resolveAttributeRedactor(
+    mergedConfig.attributeRedactor,
+    mergedConfig.environment || process.env.NODE_ENV || 'development',
+  );
+  if (resolvedRedactor === undefined) {
+    mergedConfig.attributeRedactor = undefined;
+  } else {
+    const normalizedRedactor =
+      normalizeAttributeRedactorConfig(resolvedRedactor);
     if (!normalizedRedactor) {
       throw new Error('Invalid attributeRedactor config');
     }
@@ -1664,10 +1702,11 @@ export function init(cfg: AutotelConfig): void {
 
   // Step 1: Wrap with AttributeRedactingProcessor (innermost - executes last in onEnd)
   if (mergedConfig.attributeRedactor && spanProcessors.length > 0) {
+    const redactor = mergedConfig.attributeRedactor;
     spanProcessors = spanProcessors.map(
       (processor) =>
         new AttributeRedactingProcessor(processor, {
-          redactor: mergedConfig.attributeRedactor!,
+          redactor,
         }),
     );
   }

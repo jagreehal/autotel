@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { renderTerminal } from './index';
+import { listenLoopbackDualStack } from './listen';
 import { getTerminalLogStream } from './log-stream';
 import { CliTerminalSpanStream } from './cli-stream';
 import {
@@ -148,7 +149,10 @@ async function main(): Promise<void> {
     spanStream,
   );
 
-  const server = createServer(async (req, res) => {
+  const requestHandler = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): Promise<void> => {
     if (req.method === 'GET' && req.url === '/healthz') {
       sendJson(res, 200, { ok: true });
       return;
@@ -191,24 +195,38 @@ async function main(): Promise<void> {
         message: error instanceof Error ? error.message : String(error),
       });
     }
+  };
+
+  const server = createServer(requestHandler);
+
+  // Bind both loopback families when host is loopback, so a `localhost` proxy
+  // reaches us whether it resolves to 127.0.0.1 or ::1 (the macOS IPv6 footgun).
+  const listeners = listenLoopbackDualStack({
+    primary: server,
+    port: options.port,
+    host: options.host,
+    attachSecondary: (s) => s.on('request', requestHandler),
   });
 
-  server.listen(options.port, options.host, () => {
-    process.stdout.write(
-      `[autotel-terminal] listening on http://${options.host}:${options.port}\n`,
-    );
-    process.stdout.write(
-      '[autotel-terminal] endpoints: /v1/traces, /v1/logs, /v1/metrics\n',
-    );
-    process.stdout.write(
-      '[autotel-terminal] set OTEL_EXPORTER_OTLP_PROTOCOL=http/json and OTEL_EXPORTER_OTLP_ENDPOINT to this host/port\n',
-    );
-  });
+  const { addresses, warnings } = await listeners.ready;
+  process.stdout.write(
+    `[autotel-terminal] listening on ${addresses.join(' + ')}\n`,
+  );
+  process.stdout.write(
+    '[autotel-terminal] endpoints: /v1/traces, /v1/logs, /v1/metrics\n',
+  );
+  process.stdout.write(
+    '[autotel-terminal] set OTEL_EXPORTER_OTLP_PROTOCOL=http/json and OTEL_EXPORTER_OTLP_ENDPOINT to this host/port\n',
+  );
+  for (const w of warnings) {
+    process.stdout.write(`[autotel-terminal] ⚠ ${w}\n`);
+  }
 
   const shutdown = () => {
-    server.close(() => {
-      process.exit(0);
-    });
+    Promise.all([
+      new Promise<void>((r) => server.close(() => r())),
+      listeners.closeSibling(),
+    ]).then(() => process.exit(0));
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

@@ -10,6 +10,8 @@ export default defineConfig({
     next: 'src/next.ts',
     nitro: 'src/nitro.ts',
     cloudflare: 'src/cloudflare.ts',
+    express: 'src/express.ts',
+    fastify: 'src/fastify.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

@@ -1,6 +1,6 @@
 # AI/LLM Workflow Patterns with Autotel
 
-This guide demonstrates how to instrument AI/LLM applications using Autotel's existing APIs. All patterns shown leverage standard OpenTelemetry primitives and work seamlessly with OpenLLMetry's automatic LLM instrumentation.
+This guide shows how to instrument AI/LLM applications using Autotel's existing APIs. All patterns use standard OpenTelemetry primitives and work with OpenLLMetry's automatic LLM instrumentation.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ This guide demonstrates how to instrument AI/LLM applications using Autotel's ex
 
 ## Overview
 
-Autotel provides all the building blocks needed for comprehensive AI/LLM observability:
+Autotel provides the building blocks for AI/LLM observability:
 
 - **Automatic LLM instrumentation** via OpenLLMetry integration
 - **Workflow orchestration** via nested `trace()` calls
@@ -35,19 +35,19 @@ Autotel provides all the building blocks needed for comprehensive AI/LLM observa
 - **Business event tracking** via `ctx.setAttribute()` and `track()`
 - **Multi-destination events** via adapters (PostHog, Mixpanel, etc.)
 
-**Key Insight**: Autotel's functional API patterns work perfectly for AI workflows - no special "AI-specific" APIs needed!
+**Key Insight**: Autotel's functional API patterns fit AI workflows. No special "AI-specific" APIs needed.
 
 ## When to Use OpenLLMetry
 
-[OpenLLMetry](https://github.com/traceloop/openllmetry-js) provides automatic instrumentation for LLM API calls, while autotel's `trace()` function handles workflow orchestration and business metrics. Understanding when to use each - or both together - helps you build comprehensive AI observability.
+[OpenLLMetry](https://github.com/traceloop/openllmetry-js) provides automatic instrumentation for LLM API calls, while autotel's `trace()` function handles workflow orchestration and business metrics. Knowing when to use each (or both together) helps you build complete AI observability.
 
 ### Decision Criteria
 
 | Use Case | Recommendation | Why |
 |----------|---------------|-----|
 | **Using LLM SDKs** (OpenAI, Anthropic, Langchain, Vercel AI SDK, etc.) | ✅ **Enable OpenLLMetry** | Automatic capture of prompts, completions, tokens, model params without manual instrumentation |
-| **Custom LLM integrations** (direct HTTP calls, custom models) | ⚠️ **Manual `trace()` only** | OpenLLMetry won't detect custom integrations - use `trace()` with AI semantic conventions |
-| **Workflow orchestration** (multi-agent, RAG pipelines, evaluation loops) | ✅ **Always use `trace()`** | Critical for tracking workflow steps, handoffs, business logic - OpenLLMetry doesn't capture this |
+| **Custom LLM integrations** (direct HTTP calls, custom models) | ⚠️ **Manual `trace()` only** | OpenLLMetry won't detect custom integrations. Use `trace()` with AI semantic conventions |
+| **Workflow orchestration** (multi-agent, RAG pipelines, evaluation loops) | ✅ **Always use `trace()`** | Tracks workflow steps, handoffs, and business logic that OpenLLMetry doesn't capture |
 | **Business metrics** (user engagement, escalations, feedback loops) | ✅ **Always use `trace()` + `track()`** | Domain events require explicit instrumentation regardless of LLM library |
 | **Production applications** | ✅ **Use both together** | OpenLLMetry handles LLM internals, `trace()` handles everything else |
 
@@ -96,7 +96,7 @@ const result = await generateText({
 
 #### Manual `trace()` Instrumentation
 
-Using autotel's `trace()` function provides full control over observability:
+Autotel's `trace()` function gives you full control over observability:
 
 ```typescript
 import { trace } from 'autotel';
@@ -134,7 +134,7 @@ const triageAgent = trace('agent.triage', ctx => async (input: string) => {
 
 ### Best Practice: Use Both Together
 
-The most powerful approach combines OpenLLMetry's automatic LLM instrumentation with autotel's workflow orchestration:
+Combine OpenLLMetry's automatic LLM instrumentation with autotel's workflow orchestration:
 
 ```typescript
 import { init, trace, track } from 'autotel';
@@ -230,17 +230,17 @@ escalation_occurred
 
 **Key benefits of combining both:**
 
-1. **Zero-effort LLM telemetry**: OpenLLMetry captures all SDK calls automatically
+1. **Automatic LLM telemetry**: OpenLLMetry captures all SDK calls
 2. **Business context**: `trace()` adds workflow meaning and business logic
-3. **Perfect correlation**: All spans and events share the same correlation ID
-4. **Complete picture**: See both "what the LLM did" (OpenLLMetry) and "why it did it" (your trace spans)
-5. **Events integration**: Business events automatically correlated with technical traces
+3. **Shared correlation**: All spans and events use the same correlation ID
+4. **Complete picture**: see both what the LLM did (OpenLLMetry) and why it did it (your trace spans)
+5. **Events integration**: business events correlate with technical traces
 
 ### Setup Guide
 
 #### Option 1: OpenLLMetry Only (Not Recommended)
 
-If you only enable OpenLLMetry without using `trace()`, you'll get LLM call details but miss business context:
+If you enable OpenLLMetry without using `trace()`, you get LLM call details but miss business context:
 
 ```typescript
 import { init } from 'autotel';
@@ -257,7 +257,7 @@ const result = await generateText({ model: openai('gpt-4o'), prompt: 'test' });
 
 #### Option 2: Manual trace() Only (Good for Custom Models)
 
-If you're using custom LLM integrations or direct HTTP calls:
+For custom LLM integrations or direct HTTP calls:
 
 ```typescript
 import { trace } from 'autotel';
@@ -522,7 +522,7 @@ track('workflow.completed', {
 
 1. ✅ **Use nested `trace()` calls** for multi-step workflows (creates parent-child spans)
 2. ✅ **Correlation IDs are automatic** via `ctx.correlationId` (no manual setup)
-3. ✅ **OpenLLMetry auto-instruments LLM calls** (just enable it in `init()`)
+3. ✅ **OpenLLMetry auto-instruments LLM calls** (enable it in `init()`)
 4. ✅ **Business events via `ctx.setAttribute()` and `track()`** (enriched with trace context)
 5. ✅ **Works with ANY LLM SDK** (OpenAI, Anthropic, Vercel AI SDK, etc.)
 6. ✅ **OTLP-native** (works with any observability backend)
@@ -533,7 +533,7 @@ track('workflow.completed', {
 
 ### Correlation IDs
 
-Correlation IDs automatically propagate through your entire workflow, making it easy to trace requests across multiple agents, services, and LLM calls.
+Correlation IDs propagate through your entire workflow, so you can trace requests across multiple agents, services, and LLM calls.
 
 ```typescript
 import { trace, track } from 'autotel';
@@ -568,7 +568,7 @@ export const processUserRequest = trace('ai.user_request', ctx => async (userId:
 
 ### Multi-Step Workflows
 
-Create parent-child span hierarchies naturally with nested `trace()` calls. Each step becomes a child span with automatic error handling and lifecycle management.
+Create parent-child span hierarchies with nested `trace()` calls. Each step becomes a child span with automatic error handling and lifecycle management.
 
 ```typescript
 import { trace } from 'autotel';
@@ -643,7 +643,7 @@ export const handleAgentHandoff = trace('agent.handoff', ctx => async (task: Tas
 
 ## Pattern: Multi-Agent Workflows
 
-Multi-agent systems require tracking "baton passes" between agents with full context propagation.
+Multi-agent systems need to track the handoffs between agents with full context propagation.
 
 ### Example: Triage → Specialist → QA Escalation
 
@@ -777,7 +777,7 @@ export const runMultiAgentWorkflow = trace('workflow.multi_agent_escalation', ct
 
 ## Pattern: RAG Pipelines
 
-Retrieval-Augmented Generation (RAG) pipelines involve embeddings, vector search, retrieval, and generation steps.
+Retrieval-Augmented Generation (RAG) pipelines run embeddings, vector search, retrieval, and generation steps.
 
 ```typescript
 import { trace } from 'autotel';
@@ -892,7 +892,7 @@ rag.pipeline (parent)
 
 ## Pattern: Streaming Responses
 
-Track streaming LLM responses with progress events and final metrics.
+Track streaming LLM responses with progress events and final metrics. The example below records chunk counts and timing as the stream arrives.
 
 ```typescript
 import { trace } from 'autotel';
@@ -947,7 +947,7 @@ export const generateStreamingResponse = trace('ai.stream', ctx => async (prompt
 
 ## Pattern: Evaluation Loops
 
-Implement quality checks and iterative refinement with full observability.
+Add quality checks and iterative refinement with full observability.
 
 ```typescript
 import { trace } from 'autotel';
@@ -1048,7 +1048,7 @@ export const generateWithQualityCheck = trace('ai.generate_with_qa', ctx => asyn
 
 ## AI Semantic Conventions
 
-Following OpenTelemetry semantic conventions ensures consistency across your AI applications.
+OpenTelemetry semantic conventions keep attribute names consistent across your AI applications.
 
 ### Recommended Attribute Names
 
@@ -1315,7 +1315,7 @@ export const generateABTestContent = trace('content.ab_test', ctx => async (
 
 ## Summary
 
-**Key Takeaway**: Autotel's existing functional API (`trace()`, `ctx`, `track()`) provides everything needed for comprehensive AI/LLM observability. Combined with OpenLLMetry's automatic instrumentation, you get:
+**Key Takeaway**: Autotel's existing functional API (`trace()`, `ctx`, `track()`) covers AI/LLM observability. Combined with OpenLLMetry's automatic instrumentation, you get:
 
 - ✅ Multi-agent workflow orchestration
 - ✅ Automatic correlation ID propagation
@@ -1324,4 +1324,4 @@ export const generateABTestContent = trace('content.ab_test', ctx => async (
 - ✅ OTLP-native output to any observability backend
 - ✅ Product events integration
 
-No special "AI-specific" APIs required - just familiar, composable patterns that work for any workflow!
+No special "AI-specific" APIs required. The same composable patterns work for any workflow.

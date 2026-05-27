@@ -56,6 +56,7 @@ autotel/
 │   ├── autotel-hono/         # Hono middleware
 │   ├── autotel-mcp-instrumentation/          # MCP instrumentation
 │   ├── autotel-subscribers/   # Event subscribers (PostHog, etc.)
+│   ├── autotel-web/           # Browser SDK: traceparent + W3C baggage propagation (setBaggage)
 │   └── ...
 ├── docs/
 │   ├── DEVELOPMENT.md
@@ -101,6 +102,7 @@ When the user wants observability, suggest these entry points. All from `autotel
 | **Cloudflare Workers** | `autotel-cloudflare`: init and wrap handlers; see package CLAUDE.                                           |
 | **Next.js**            | Use `autotel` init and `trace()`/request logger in API routes / server components.                          |
 | **Express**            | Middleware that creates a span per request; then `getRequestLogger()` in route handlers.                    |
+| **Browser / SPA**      | `autotel-web`: `init()` auto-injects `traceparent`. For per-tenant tracing, call `setBaggage({ 'tenant.id': id })` after login — it propagates as a W3C `baggage` header (same-origin/fail-closed) and the backend's `BaggageSpanProcessor` tags server spans. Do **not** hand-roll a fetch wrapper for this. |
 
 Always suggest `init()` (or instrumentation) once at app entry; then spans + request logger or `trace()` in handlers.
 

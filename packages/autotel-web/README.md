@@ -478,6 +478,17 @@ interface AutotelWebConfig {
 
   /** Privacy controls for traceparent header injection */
   privacy?: PrivacyConfig
+
+  /**
+   * Business-context baggage propagated end-to-end as a W3C `baggage` header.
+   * Set values at runtime with `setBaggage()` (e.g. `tenant.id` after login).
+   */
+  baggage?: {
+    /** Initial entries applied at init() (e.g. tenant from the subdomain) */
+    initial?: Record<string, string>
+    /** Cross-origin destinations allowed to receive baggage (same-origin always allowed) */
+    allowedOrigins?: string[]
+  }
 }
 
 interface PrivacyConfig {
@@ -505,6 +516,41 @@ init({
     allowedOrigins: ['api.myapp.com'],
     respectDoNotTrack: true
   }
+})
+```
+
+### `setBaggage(record)` / `clearBaggage(key?)`
+
+Attach business context (e.g. `tenant.id`) that propagates **end-to-end**. Every subsequent instrumented request carries it as a W3C `baggage` header, and every browser-recorded span is tagged with it. On the backend, autotel's `BaggageSpanProcessor` copies the entries onto server spans — so a single attribute appears on browser **and** server spans in the same trace.
+
+`setBaggage()` merges additively (like Sentry `setTags` / Datadog `setGlobalContextProperty`); tenant is just a key, so the same API later carries `user.id`, plan tier, region, etc.
+
+```typescript
+import { init, setBaggage, clearBaggage } from 'autotel-web'
+
+init({ service: 'my-spa', endpoint: 'https://collector.example.com' })
+
+// After login or a tenant switch — values known at runtime, not at init():
+setBaggage({ 'tenant.id': 'acme' })
+
+// On logout:
+clearBaggage()              // clear everything
+clearBaggage('tenant.id')   // or remove a single key
+```
+
+**Backend (autotel Node) — pick the attribute key you want:**
+
+```typescript
+init({ service: 'my-api', endpoint: '...', baggage: '' })   // → bare `tenant.id` on server spans
+init({ service: 'my-api', endpoint: '...', baggage: true }) // → `baggage.tenant.id` (prefixed)
+```
+
+**Security — fail-closed:** baggage is sent **only to same-origin** requests unless you list a destination in `baggage.allowedOrigins`. This keeps customer-identifying values (e.g. `tenant.id`) from leaking to third-party origins (analytics, CDNs). Baggage also never travels wider than `traceparent` — it inherits all `privacy` suppression (DNT/GPC/blocked origins). Local browser spans are always tagged regardless of destination (that telemetry is yours and never leaves your collector).
+
+```typescript
+init({
+  service: 'my-spa',
+  baggage: { allowedOrigins: ['api.example.com'] }, // cross-origin opt-in
 })
 ```
 
