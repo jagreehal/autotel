@@ -167,8 +167,19 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
    * Build the snapshot in memory. Use this in tests or when you want to
    * inspect the result before writing it. Field paths and trace IDs are
    * sorted so equal inputs always produce byte-identical snapshots.
+   *
+   * @param options.now Clock used for the snapshot's `generatedAt` field.
+   * @param options.freezeTimestamps If supplied, every timestamp in the
+   *   output (`generatedAt`, and each event's `firstSeen` / `lastSeen`)
+   *   is replaced with this value. Use when writing a snapshot intended
+   *   to be committed to a repo as a stable artifact — production code
+   *   should not pass this.
    */
-  toSnapshot(now: () => Date = () => new Date()): ArchitectureSnapshot {
+  toSnapshot(
+    options: { now?: () => Date; freezeTimestamps?: string } = {},
+  ): ArchitectureSnapshot {
+    const { now = () => new Date(), freezeTimestamps } = options;
+
     const events: Record<string, EventObservation> = {};
 
     const names = [...this.observations.keys()].toSorted();
@@ -177,6 +188,8 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
       if (!obs) continue;
       events[name] = {
         ...obs,
+        firstSeen: freezeTimestamps ?? obs.firstSeen,
+        lastSeen: freezeTimestamps ?? obs.lastSeen,
         fieldPaths: obs.fieldPaths.toSorted(),
         sampleTraceIds: obs.sampleTraceIds.toSorted(),
         fieldStats: sortFieldStats(obs.fieldStats),
@@ -185,7 +198,7 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
 
     return {
       spec: ARCHITECTURE_SNAPSHOT_SPEC,
-      generatedAt: now().toISOString(),
+      generatedAt: freezeTimestamps ?? now().toISOString(),
       service: this.service,
       events,
     };
@@ -194,13 +207,16 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
   /**
    * Write the snapshot to disk. Creates parent directories as needed.
    * Files are written with a trailing newline so they diff cleanly in git.
+   *
+   * See {@link toSnapshot} for option semantics, including `freezeTimestamps`
+   * for byte-stable committed artifacts.
    */
   async writeToFile(
     filePath: string,
-    options: { now?: () => Date } = {},
+    options: { now?: () => Date; freezeTimestamps?: string } = {},
   ): Promise<void> {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const json = JSON.stringify(this.toSnapshot(options.now), null, 2);
+    const json = JSON.stringify(this.toSnapshot(options), null, 2);
     await fs.writeFile(filePath, json + '\n', 'utf8');
   }
 

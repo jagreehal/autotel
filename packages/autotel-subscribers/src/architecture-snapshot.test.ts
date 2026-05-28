@@ -64,7 +64,7 @@ describe('ArchitectureSnapshotSubscriber', () => {
       items: [{ sku: 'sku-1', quantity: 2 }],
     });
 
-    const snap = sub.toSnapshot(FIXED_NOW);
+    const snap = sub.toSnapshot({ now: FIXED_NOW });
     expect(snap.spec).toBe(ARCHITECTURE_SNAPSHOT_SPEC);
     expect(snap.service).toBe('orders');
     expect(snap.events['order.placed']).toMatchObject({
@@ -88,7 +88,7 @@ describe('ArchitectureSnapshotSubscriber', () => {
       shipping: { addressId: 'addr_1' },
     });
 
-    const obs = sub.toSnapshot(FIXED_NOW).events['order.placed'];
+    const obs = sub.toSnapshot({ now: FIXED_NOW }).events['order.placed'];
     expect(obs.observedCount).toBe(2);
     expect(obs.fieldPaths).toEqual([
       'orderId',
@@ -107,7 +107,7 @@ describe('ArchitectureSnapshotSubscriber', () => {
       },
     });
 
-    const obs = sub.toSnapshot(FIXED_NOW).events['order.placed'];
+    const obs = sub.toSnapshot({ now: FIXED_NOW }).events['order.placed'];
     expect(obs.channel).toBe('orders.events');
     expect(obs.producer).toBe('OrdersService');
     expect(obs.consumers).toEqual(['PaymentService']);
@@ -132,7 +132,7 @@ describe('ArchitectureSnapshotSubscriber', () => {
       },
     );
 
-    const obs = sub.toSnapshot(FIXED_NOW).events['order.placed'];
+    const obs = sub.toSnapshot({ now: FIXED_NOW }).events['order.placed'];
     expect(obs.schema).toEqual({
       source: 'zod',
       jsonSchema: {
@@ -153,7 +153,7 @@ describe('ArchitectureSnapshotSubscriber', () => {
       await (limited as unknown as { sendToDestination(p: EventPayload): Promise<void> })
         .sendToDestination(event('order.placed', {}, { traceId: id }));
     }
-    const obs = limited.toSnapshot(FIXED_NOW).events['order.placed'];
+    const obs = limited.toSnapshot({ now: FIXED_NOW }).events['order.placed'];
     expect(obs.sampleTraceIds).toEqual(['t-1', 't-2']);
   });
 
@@ -162,7 +162,7 @@ describe('ArchitectureSnapshotSubscriber', () => {
     await sub.trackOutcome('checkout', 'success');
     await sub.trackValue('revenue', 99);
 
-    const snap = sub.toSnapshot(FIXED_NOW);
+    const snap = sub.toSnapshot({ now: FIXED_NOW });
     expect(Object.keys(snap.events)).toEqual(['order.placed']);
   });
 
@@ -185,8 +185,8 @@ describe('ArchitectureSnapshotSubscriber', () => {
       await b.trackEvent('order.placed', payload);
 
       const at = () => new Date('2026-05-21T18:04:00.000Z');
-      expect(JSON.stringify(a.toSnapshot(at))).toBe(
-        JSON.stringify(b.toSnapshot(at)),
+      expect(JSON.stringify(a.toSnapshot({ now: at }))).toBe(
+        JSON.stringify(b.toSnapshot({ now: at })),
       );
     } finally {
       vi.useRealTimers();
@@ -215,6 +215,6 @@ describe('ArchitectureSnapshotSubscriber', () => {
   it('reset() clears all accumulated observations', async () => {
     await sub.trackEvent('order.placed', { orderId: 'o-1' });
     sub.reset();
-    expect(sub.toSnapshot(FIXED_NOW).events).toEqual({});
+    expect(sub.toSnapshot({ now: FIXED_NOW }).events).toEqual({});
   });
 });

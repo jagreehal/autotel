@@ -102,12 +102,14 @@ async function main() {
     await walkFailedCheckout(orderFor(i, 'fail'));
   }
 
-  // Pin generatedAt too, for the same determinism reason. The CI check
-  // strips this on both sides, but locally a stable value makes git diffs
-  // cleaner.
+  // Pin every timestamp (generatedAt + each event's firstSeen/lastSeen) so
+  // the committed snapshot is byte-stable across regenerations. Without
+  // this, running `pnpm services:snapshot` produces a noisy diff every
+  // time. The architectural shape is what matters; wall-clock timestamps
+  // are not.
   const out = new URL('../test/snapshot.json', import.meta.url).pathname;
   await snapshot.writeToFile(out, {
-    now: () => new Date('2026-05-22T00:00:00.000Z'),
+    freezeTimestamps: '2026-05-22T00:00:00.000Z',
   });
   console.log(`wrote architecture snapshot: ${out}`);
 }

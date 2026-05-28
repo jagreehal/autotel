@@ -1,0 +1,108 @@
+{
+  "name": "autotel-pact",
+  "version": "0.2.0",
+  "description": "Runtime evidence for Pact contracts — autotel bridge that records which contract interactions were actually exercised, and audits 'contracted but never observed'.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "./dist/auto-wrap.js",
+    "./dist/auto-wrap.cjs"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./audit": {
+      "types": "./dist/audit.d.ts",
+      "import": "./dist/audit.js",
+      "require": "./dist/audit.cjs"
+    },
+    "./auto-wrap": {
+      "types": "./dist/auto-wrap.d.ts",
+      "import": "./dist/auto-wrap.js",
+      "require": "./dist/auto-wrap.cjs"
+    },
+    "./provider": {
+      "types": "./dist/provider.d.ts",
+      "import": "./dist/provider.js",
+      "require": "./dist/provider.cjs"
+    },
+    "./broker": {
+      "types": "./dist/broker.d.ts",
+      "import": "./dist/broker.js",
+      "require": "./dist/broker.cjs"
+    },
+    "./processor": {
+      "types": "./dist/processor.d.ts",
+      "import": "./dist/processor.js",
+      "require": "./dist/processor.cjs"
+    },
+    "./tag": {
+      "types": "./dist/tag.d.ts",
+      "import": "./dist/tag.js",
+      "require": "./dist/tag.cjs"
+    },
+    "./schemas/*.json": "./schemas/*.json"
+  },
+  "bin": {
+    "autotel-pact": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "schemas",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "autotel",
+    "pact",
+    "contract-testing",
+    "opentelemetry",
+    "observability",
+    "runtime-evidence",
+    "pact-message",
+    "async"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "peerDependencies": {
+    "@pact-foundation/pact": ">=13",
+    "autotel": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@pact-foundation/pact": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@pact-foundation/pact": "^16.5.0",
+    "@types/node": "^25.7.0",
+    "autotel": "workspace:*",
+    "rimraf": "^6.1.3",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-pact"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-pact#readme"
+}

@@ -237,11 +237,11 @@ All options work with `init()`, framework adapters, and `wrapModule` / `defineWo
 
 Enrichers turn raw request data into standard, low-cardinality span attributes. Import the helpers from `autotel/enrichers` and spread their output onto the active span or request logger. Each returns `undefined` when there is nothing to add, so spreading is safe.
 
-| Helper                                       | Returns attributes                                                   | Source                                  |
-| -------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------- |
-| `userAgent(headers)`                         | `user_agent.raw`, `user_agent.browser`, `user_agent.os`, `user_agent.device` | `user-agent` request header     |
-| `geo(headers)`                               | `geo.country`, `geo.region`, `geo.city`, `geo.latitude`, `geo.longitude`     | Vercel / Cloudflare geo headers |
-| `requestSize(reqHeaders, resHeaders?)`       | `http.request.body.size`, `http.response.body.size`                  | `content-length` headers                |
+| Helper                                 | Returns attributes                                                           | Source                          |
+| -------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------- |
+| `userAgent(headers)`                   | `user_agent.raw`, `user_agent.browser`, `user_agent.os`, `user_agent.device` | `user-agent` request header     |
+| `geo(headers)`                         | `geo.country`, `geo.region`, `geo.city`, `geo.latitude`, `geo.longitude`     | Vercel / Cloudflare geo headers |
+| `requestSize(reqHeaders, resHeaders?)` | `http.request.body.size`, `http.response.body.size`                          | `content-length` headers        |
 
 ```typescript
 import { userAgent, geo, requestSize } from 'autotel/enrichers';
@@ -262,7 +262,10 @@ For your own derived fields on a request's wide event, build a reusable enricher
 import { defineEnricher } from 'autotel';
 
 // Merge a derived, low-cardinality object into event.user on each request.
-const enrichTier = defineEnricher<{ user?: { plan?: string } }, { tier: string }>({
+const enrichTier = defineEnricher<
+  { user?: { plan?: string } },
+  { tier: string }
+>({
   name: 'user-tier',
   field: 'user',
   compute: ({ event }) => ({ tier: event.user?.plan ?? 'anonymous' }),

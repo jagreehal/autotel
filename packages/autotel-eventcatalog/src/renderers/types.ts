@@ -7,8 +7,8 @@
 //   - `RenderReport`   for full reports (mode === 'all')
 //   - `RenderDelta`    for diff-of-diffs (mode === 'new-only')
 //
-// A `Renderer` implements both — most renderers can share helpers between the
-// two — so the registry can dispatch by `(mode, format)` without branches.
+// A `Renderer` implements both; most renderers can share helpers between the
+// two; so the registry can dispatch by `(mode, format)` without branches.
 
 import type { DriftReport } from '../diff';
 import type { DriftDelta } from '../diff-vs-base';

@@ -31,3 +31,8 @@ logs/
 # Testing
 .nyc_output/
 coverage/
+
+# autotel-pact demo artifacts (regenerated each `pnpm start`)
+pacts/
+.autotel-pact/
+.autotel-pact-prod/

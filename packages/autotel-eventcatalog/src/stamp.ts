@@ -23,7 +23,7 @@ export interface StampOptions {
   snapshot: ArchitectureSnapshot;
   /** Catalog root (the directory containing eventcatalog.config.*). */
   catalogPath: string;
-  /** If true, do not write files — just return the diff plan. */
+  /** If true, do not write files; just return the diff plan. */
   dryRun?: boolean;
   /** Override "now" for deterministic tests. */
   now?: () => Date;
@@ -40,7 +40,7 @@ export type StampUpdate = {
   action: 'insert' | 'replace';
   /**
    * True if the proposed content differs from what's on disk. False when a
-   * replace would write byte-identical content — meaning no real change.
+   * replace would write byte-identical content; meaning no real change.
    * Used by `--summary-output` so CI can answer "did this PR need stamping?"
    * without diffing files.
    */
