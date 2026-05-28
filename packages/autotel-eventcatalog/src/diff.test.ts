@@ -58,7 +58,7 @@ const baseObservation = {
   sampleTraceIds: [],
 };
 
-describe('diffCatalogAgainstSnapshot — event existence', () => {
+describe('diffCatalogAgainstSnapshot; event existence', () => {
   it('matches dotted snapshot names to PascalCase catalog ids', () => {
     const report = diffCatalogAgainstSnapshot(
       snap({
@@ -111,7 +111,7 @@ describe('diffCatalogAgainstSnapshot — event existence', () => {
   });
 });
 
-describe('diffCatalogAgainstSnapshot — field drift', () => {
+describe('diffCatalogAgainstSnapshot; field drift', () => {
   it('reports extra field paths in the observed payload', () => {
     const report = diffCatalogAgainstSnapshot(
       snap({
@@ -184,7 +184,7 @@ describe('diffCatalogAgainstSnapshot — field drift', () => {
   });
 });
 
-describe('diffCatalogAgainstSnapshot — type/value drift', () => {
+describe('diffCatalogAgainstSnapshot; type/value drift', () => {
   it('reports type drift and enum value drift against declared schema constraints', () => {
     const report = diffCatalogAgainstSnapshot(
       snap({
@@ -237,7 +237,7 @@ describe('diffCatalogAgainstSnapshot — type/value drift', () => {
   });
 });
 
-describe('diffCatalogAgainstSnapshot — services and channels', () => {
+describe('diffCatalogAgainstSnapshot; services and channels', () => {
   it('reports producers that are not declared as services', () => {
     const report = diffCatalogAgainstSnapshot(
       snap({

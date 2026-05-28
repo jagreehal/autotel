@@ -21,6 +21,15 @@ The version segment in each schema's `$id` (`v0.1.0`) follows semver.
 `spec:` field on every emitted envelope is your one-way gate against
 unknown majors.
 
+### Previous schema versions
+
+The `drift-report-v0.1.0` and `drift-summary-v0.1.0` files were removed in
+this release. The CLI has emitted `v0.2.0` since package v2.0.0, so the
+v0.1 schemas validated nothing the current code produces. Consumers still
+importing the v0.1 path should either pin the package to v2.x or migrate
+to the v0.2 schemas listed above; the `spec:` field on every envelope tells
+you which one a given output uses.
+
 ## Validation example
 
 These schemas use only standard JSON Schema 2020-12 features, so any
@@ -40,6 +49,6 @@ if (!validate(parsedJson)) {
 
 ## Why these live in the package, not on a CDN
 
-So that the schema version you validate against is always exactly the
-version your CLI emitted. `npm` is the source of truth; pin the package
-version and the schemas are pinned with it.
+So the schema version you validate against matches the version your CLI
+emitted. `npm` is the source of truth; pin the package version and the
+schemas pin with it.

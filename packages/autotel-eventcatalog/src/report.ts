@@ -1,6 +1,6 @@
 // Backwards-compatible re-export of the renderer surface.
 //
-// The actual implementations live in `./renderers/<name>.ts` — see the
+// The actual implementations live in `./renderers/<name>.ts`; see the
 // Renderer adapter pattern there. This module exists so any consumer (or
 // internal test) that imports from `'./report'` continues to work.
 //

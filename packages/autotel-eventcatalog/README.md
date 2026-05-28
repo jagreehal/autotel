@@ -26,8 +26,6 @@ directory. Both ship a versioned JSON summary you can gate CI on. The
 `drift` command also ships as a one-line GitHub Action with a sticky PR
 comment.
 
-Same model as Pact, for event architectures.
-
 ## What this package does NOT do
 
 To keep the scope tight:
@@ -78,25 +76,29 @@ autotel-eventcatalog generate \
 Re-runnable: existing catalog files are skipped, never overwritten. New
 events / services / channels from the snapshot are added on top.
 Producer (`sends`), consumer (`receives`), and channel routing edges
-are wired automatically. Pass `--dry-run` to preview, `--edges-only`
-to re-sync relationships without touching resource bodies, or
-`--version 2.0.0` to override the default version for newly created
-resources.
+are wired automatically.
+
+| Flag                 | Default | Use it when…                                                                                 |
+| -------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| `--dry-run`          | off     | You want to preview the operations without touching disk.                                    |
+| `--edges-only`       | off     | The catalog already has resources; you just want producer/consumer/channel wiring re-synced. |
+| `--version <semver>` | `1.0.0` | Override the version assigned to newly created resources.                                    |
+| `--format json`      | `text`  | You want a machine-readable plan on stdout (the same shape as `--summary-output`).           |
 
 ### Schema sources
 
 When `generate` writes an event's `schema.json`, it picks the schema
 in this order:
 
-1. **Declared schema** — if the snapshot's event observation carries a
+1. **Declared schema**: if the snapshot's event observation carries a
    `schema.jsonSchema` (recorded by `ArchitectureSnapshotSubscriber`
    when a `track()` call was made through [`defineEvent`](#defineevent-zod-schemas-at-the-call-site)),
    that schema is used verbatim.
-2. **Inferred schema** — otherwise, the schema is inferred from observed
+2. **Inferred schema**: otherwise, the schema is inferred from observed
    `fieldStats` (runtime types per dotted path) as a fallback. This
    gets a new project from zero to a usable catalog on the first run;
    `defineEvent` is the path to a robust, single-source-of-truth
-   contract once you're ready.
+   contract when you adopt it.
 
 The choice is recorded in the operations log and the `generate-summary`
 JSON envelope as `schemaSource: 'declared' | 'inferred'`, so CI can
@@ -129,8 +131,8 @@ orderPlacedEvent.track({ orderId, customerId, totalCents, items });
 The schema is now the single source of truth: TypeScript catches drift
 at compile time, `safeParse` validates payloads at runtime, and
 `ArchitectureSnapshotSubscriber` carries the JSON Schema forward into
-the snapshot — so `generate` writes the _same_ schema your code
-enforces, no inference guesswork.
+the snapshot, so `generate` writes the _same_ schema your code
+enforces. No inference guesswork.
 
 ### From code
 
@@ -176,22 +178,22 @@ and the catalog's schemas align with what the code emits, running
 No drift detected. Catalog and runtime agree.
 ```
 
-Exit code 0, CI passes. That's the steady-state goal: the catalog and
-the running code make the same claims and the drift detector confirms
-it. Every additional finding is genuine signal of code-vs-catalog
-divergence — a new event added without a schema, a removed producer
-still listed, a schema field that no longer ships.
+Exit code 0, CI passes. That is the steady-state goal: the catalog and
+the running code make the same claims, and the drift detector confirms
+it. Each additional finding signals real code-vs-catalog divergence:
+a new event added without a schema, a removed producer still listed,
+a schema field that no longer ships.
 
 Type drift handles the JSON Schema ↔ JavaScript impedance mismatch
 deliberately: a declared `integer` accepts an observed `number` at the
-type level, then sample values are checked against `Number.isInteger`
+type level, then sample values are checked against `Number.isInteger`,
 so a runtime `1.5` against a declared `integer` still flags. No false
-positives, no swept-under-the-rug genuine signal.
+positives, no missed signal.
 
 The example app exercises both the happy path and the payment-failure
 path so the snapshot covers every documented event. Value drift would
 fire if, for instance, a `declineCode` outside the declared enum
-appeared at runtime — try replacing `card_declined` with something else
+appeared at runtime. Try replacing `card_declined` with something else
 in `build-snapshot.ts` and re-running to see it.
 
 ### As a GitHub Action
@@ -260,7 +262,7 @@ What lands on the PR:
 **How type and value drift work in practice.**
 
 1. `ArchitectureSnapshotSubscriber` records `fieldStats` per event during
-   a test run — for each dotted path it captures the runtime types it
+   a test run. For each dotted path it captures the runtime types it
    saw (`string`, `number`, `object`, …) and up to 20 primitive sample
    values. Verified by
    [`snapshot-fieldstats.integration.test.ts`](../../apps/example-eventcatalog/services/test/snapshot-fieldstats.integration.test.ts),
@@ -277,9 +279,9 @@ What lands on the PR:
    a `valueDrift` entry. Both feed `countDriftReport` and the markdown
    renderer.
 
-You can now pass first-class Zod metadata from `track()` call sites (via
-`defineEvent(...)` in `autotel`) so contracts can be declared in code and
-propagated into runtime snapshots.
+You can pass Zod metadata from `track()` call sites (via `defineEvent(...)`
+in `autotel`) so contracts are declared in code and propagated into runtime
+snapshots.
 
 ## Public JSON contract
 
@@ -303,35 +305,51 @@ changes them without bumping the spec version will fail CI.
 
 `drift --format <name>` dispatches through a small renderer registry. The
 built-ins are `markdown`, `terminal`, `json`, `eventcatalog-snapshot-diff`.
-The registry is exported
-from the library so applications and other tooling can add their own:
+You can plug in your own at runtime in two ways.
+
+**Programmatic** (when you import the library):
 
 ```typescript
-import { RENDERERS, type Renderer } from 'autotel-eventcatalog';
+import { registerRenderer, type Renderer } from 'autotel-eventcatalog';
 
 const sarifRenderer: Renderer = {
   name: 'sarif',
   description: 'Static Analysis Results Interchange Format',
   renderReport(report) {
-    /* ... */ return '';
+    /* return SARIF JSON */ return '';
   },
   renderDelta(delta) {
-    /* ... */ return '';
+    /* return SARIF JSON */ return '';
   },
 };
-// Programmatic consumers can plug it in. The CLI is also extensible via
-// a follow-up release that supports loading renderers from a config file.
+
+registerRenderer(sarifRenderer);
 ```
 
+**From the CLI**, with `--register-renderer <module>` as a global option:
+
+```bash
+npx autotel-eventcatalog \
+  --register-renderer ./renderers/sarif.mjs \
+  drift --snapshot snap.json --catalog catalog --format sarif
+```
+
+The loader expects the module to export either a `default` or a named
+`renderer` matching the `Renderer` shape. ESM (`.mjs`) or compiled
+JavaScript both work; TypeScript users compile to ESM first. Pass the
+flag more than once to load multiple renderers in the same invocation.
+The loader refuses to overwrite a built-in name (`markdown`, `terminal`,
+`json`, `eventcatalog-snapshot-diff`): pick a unique `name` for yours.
+
 The core diff and policy modules are renderer-agnostic; adding a new
-output target should never require touching `diff.ts` or `policy.ts`.
+output target never requires touching `diff.ts` or `policy.ts`.
 
 ## What writes to the catalog
 
 `drift` is **read-only**. It diffs the snapshot against the catalog and
 reports findings. It never modifies catalog files.
 
-`stamp` is the **write path**. By design, it injects a runtime evidence
+`stamp` is the **write path**. It injects a runtime evidence
 block into each event mdx between idempotent markers
 (`<!-- autotel:stamp-start -->` / `<!-- autotel:stamp-end -->`). Re-runs
 replace the content between the markers; nothing outside the markers is
@@ -345,10 +363,26 @@ need to gate on "did this PR forget to re-stamp?".
 ## Working example
 
 See [`apps/example-eventcatalog`](../../apps/example-eventcatalog) in the
-monorepo. It has a working e-commerce catalog and a snapshot. Running
-`pnpm catalog:drift` from that app prints a drift report that surfaces
-two findings, including a deliberately-introduced `personalization_seed`
-field that the schema does not declare.
+monorepo. It has a working e-commerce catalog and a committed snapshot.
+Running `pnpm catalog:drift` from that app prints
+
+```text
+No drift detected. Catalog and runtime agree.
+```
+
+That is the steady-state goal. Each additional finding from there signals
+real code-vs-catalog divergence. The same agreement is locked in as a
+vitest integration test, so a service that stops emitting a documented
+event or a catalog file that rots fails CI before the drift script runs.
+
+### Coverage caveat
+
+Drift only sees what `ArchitectureSnapshotSubscriber` recorded in the
+run that produced the snapshot. Events emitted only on paths your test
+suite does not exercise will not appear; documented events your test
+suite does not exercise will be flagged as `documentedButUnseen`. In
+practice this gives you **catalog honesty for what your test suite
+covers**, which is the property a green pipeline should buy you.
 
 ## Documentation
 
@@ -362,14 +396,12 @@ field that the schema does not declare.
 | Contribute to the package                              | [`CONTRIBUTING.md`](CONTRIBUTING.md)                 |
 | Validate the published JSON shapes                     | [`schemas/README.md`](schemas/README.md)             |
 
-## Used by
+## Related packages
 
-_If you adopt this in production, open a PR adding your team to this
-section. We'd like to know who depends on the contract before shipping
-breaking changes, and seeing a name here helps future adopters gauge
-the project's maturity._
-
-- _no public adopters yet; be the first_
+- [`autotel`](../autotel): OpenTelemetry instrumentation for Node.js.
+  The substrate every snapshot is built from.
+- [`autotel-subscribers/architecture-snapshot`](../autotel-subscribers):
+  produces the snapshot this package consumes.
 
 ## License
 

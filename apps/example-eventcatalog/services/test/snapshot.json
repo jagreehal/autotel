@@ -6,8 +6,8 @@
     "inventory.reserved": {
       "name": "inventory.reserved",
       "observedCount": 5,
-      "firstSeen": "2026-05-24T18:52:51.399Z",
-      "lastSeen": "2026-05-24T18:52:51.402Z",
+      "firstSeen": "2026-05-22T00:00:00.000Z",
+      "lastSeen": "2026-05-22T00:00:00.000Z",
       "fieldPaths": [
         "items",
         "items[].priceCents",
@@ -180,8 +180,8 @@
     "order.placed": {
       "name": "order.placed",
       "observedCount": 7,
-      "firstSeen": "2026-05-24T18:52:51.386Z",
-      "lastSeen": "2026-05-24T18:52:51.402Z",
+      "firstSeen": "2026-05-22T00:00:00.000Z",
+      "lastSeen": "2026-05-22T00:00:00.000Z",
       "fieldPaths": [
         "currency",
         "customerId",
@@ -417,8 +417,8 @@
     "payment.captured": {
       "name": "payment.captured",
       "observedCount": 5,
-      "firstSeen": "2026-05-24T18:52:51.398Z",
-      "lastSeen": "2026-05-24T18:52:51.401Z",
+      "firstSeen": "2026-05-22T00:00:00.000Z",
+      "lastSeen": "2026-05-22T00:00:00.000Z",
       "fieldPaths": [
         "amountCents",
         "capturedAt",
@@ -561,8 +561,8 @@
     "payment.failed": {
       "name": "payment.failed",
       "observedCount": 2,
-      "firstSeen": "2026-05-24T18:52:51.402Z",
-      "lastSeen": "2026-05-24T18:52:51.402Z",
+      "firstSeen": "2026-05-22T00:00:00.000Z",
+      "lastSeen": "2026-05-22T00:00:00.000Z",
       "fieldPaths": [
         "attempts",
         "declineCode",
@@ -678,8 +678,8 @@
     "recommendation.generated": {
       "name": "recommendation.generated",
       "observedCount": 5,
-      "firstSeen": "2026-05-24T18:52:51.398Z",
-      "lastSeen": "2026-05-24T18:52:51.401Z",
+      "firstSeen": "2026-05-22T00:00:00.000Z",
+      "lastSeen": "2026-05-22T00:00:00.000Z",
       "fieldPaths": [
         "model",
         "orderId",

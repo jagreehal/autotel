@@ -30,7 +30,10 @@
  * ```
  */
 
-import { createStructuredError, type StructuredError } from './structured-error';
+import {
+  createStructuredError,
+  type StructuredError,
+} from './structured-error';
 
 const catalogCodeKey = Symbol.for('autotel.catalog.code');
 
@@ -69,9 +72,10 @@ type ParamsOf<E> = E extends { message: (params: infer P) => string }
     ? P
     : void;
 
-type BuilderArgs<E extends ErrorCatalogEntry> = ParamsOf<E> extends void
-  ? [options?: ErrorBuildOptions]
-  : [params: ParamsOf<E>, options?: ErrorBuildOptions];
+type BuilderArgs<E extends ErrorCatalogEntry> =
+  ParamsOf<E> extends void
+    ? [options?: ErrorBuildOptions]
+    : [params: ParamsOf<E>, options?: ErrorBuildOptions];
 
 /** A callable error factory produced by {@link defineErrorCatalog}. */
 export interface ErrorBuilder<E extends ErrorCatalogEntry> {
@@ -127,9 +131,9 @@ export function defineErrorCatalog<
       maybeOptions?: ErrorBuildOptions,
     ): StructuredError => {
       const params = usesParams ? paramsOrOptions : undefined;
-      const options = (
-        usesParams ? maybeOptions : paramsOrOptions
-      ) as ErrorBuildOptions | undefined;
+      const options = (usesParams ? maybeOptions : paramsOrOptions) as
+        | ErrorBuildOptions
+        | undefined;
 
       const message =
         typeof entry.message === 'function'
@@ -200,9 +204,8 @@ export interface AuditAction {
   readonly message?: string;
 }
 
-type AuditDescriptorArgs<E extends AuditCatalogEntry> = ParamsOf<E> extends void
-  ? []
-  : [params: ParamsOf<E>];
+type AuditDescriptorArgs<E extends AuditCatalogEntry> =
+  ParamsOf<E> extends void ? [] : [params: ParamsOf<E>];
 
 /** A callable audit-action descriptor produced by {@link defineAuditCatalog}. */
 export interface AuditDescriptor<E extends AuditCatalogEntry> {

@@ -31,17 +31,17 @@ autotel lets you express both with the same primitive — a span — but you sho
 
 ## Quick reference
 
-| Situation                                                | Use                                                              |
-| -------------------------------------------------------- | ---------------------------------------------------------------- |
-| Wrap an action so success/failure is audited + kept      | `withAudit(metadata, fn)` from `autotel-audit`                   |
-| Tag the active span with `audit.*` attributes only       | `setAuditAttributes(metadata)`                                   |
-| Make sure an audit span survives tail sampling           | `forceKeepAuditEvent()`                                          |
-| Record an authorization denial                           | `audit({ …, outcome: 'deny', reason })` (Step 1 helper)          |
-| Full control / framework-agnostic span helper            | hand-rolled `audit()` (Step 1)                                   |
-| Keep audit data off ops dashboards                       | `FilteringSpanProcessor` split (Step 3)                          |
-| Prove a record was not altered                           | HMAC or hash-chain signature (Step 4)                            |
-| Honor a GDPR erasure request on an append-only log       | crypto-shredding (Step 6.5)                                      |
-| Assert the trail in tests                                | `createTraceCollector()` from `autotel/testing` (Step 8)         |
+| Situation                                           | Use                                                      |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| Wrap an action so success/failure is audited + kept | `withAudit(metadata, fn)` from `autotel-audit`           |
+| Tag the active span with `audit.*` attributes only  | `setAuditAttributes(metadata)`                           |
+| Make sure an audit span survives tail sampling      | `forceKeepAuditEvent()`                                  |
+| Record an authorization denial                      | `audit({ …, outcome: 'deny', reason })` (Step 1 helper)  |
+| Full control / framework-agnostic span helper       | hand-rolled `audit()` (Step 1)                           |
+| Keep audit data off ops dashboards                  | `FilteringSpanProcessor` split (Step 3)                  |
+| Prove a record was not altered                      | HMAC or hash-chain signature (Step 4)                    |
+| Honor a GDPR erasure request on an append-only log  | crypto-shredding (Step 6.5)                              |
+| Assert the trail in tests                           | `createTraceCollector()` from `autotel/testing` (Step 8) |
 
 ## The shortest path: the `autotel-audit` package
 
@@ -57,12 +57,21 @@ import {
 // Wrap the action: sets audit.* attributes, force-keeps past tail sampling,
 // and tags outcome 'success' / 'failure' automatically.
 await withAudit(
-  { action: 'user.delete', resource: 'user', actorId: 'usr_42', category: 'admin' },
+  {
+    action: 'user.delete',
+    resource: 'user',
+    actorId: 'usr_42',
+    category: 'admin',
+  },
   async () => db.user.delete({ where: { id } }),
 );
 
 // Or tag the current span yourself and opt out of sampling:
-setAuditAttributes({ action: 'secret.read', resource: 'sec_abc', actorId: 'usr_42' });
+setAuditAttributes({
+  action: 'secret.read',
+  resource: 'sec_abc',
+  actorId: 'usr_42',
+});
 forceKeepAuditEvent();
 ```
 
@@ -381,7 +390,9 @@ describe('audit trail', () => {
   });
 
   it('records a denial with reason and actor', async () => {
-    await expect(deleteUser(forbiddenReq)).rejects.toMatchObject({ status: 403 });
+    await expect(deleteUser(forbiddenReq)).rejects.toMatchObject({
+      status: 403,
+    });
 
     const [span] = collector.getSpansByAttributes({ 'audit.outcome': 'deny' });
     expect(span).toBeDefined();
@@ -392,7 +403,9 @@ describe('audit trail', () => {
 
   it('records the success path on allow', async () => {
     await deleteUser(allowedReq);
-    expect(collector.getSpansByAttributes({ 'audit.outcome': 'allow' })).toHaveLength(1);
+    expect(
+      collector.getSpansByAttributes({ 'audit.outcome': 'allow' }),
+    ).toHaveLength(1);
   });
 });
 ```

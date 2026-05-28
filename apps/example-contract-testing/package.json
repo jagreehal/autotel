@@ -1,16 +1,23 @@
 {
   "name": "@jagreehal/example-contract-testing",
-  "version": "0.1.7",
-  "description": "Contract testing observability demo with Autotel - shows how to instrument contract testing workflows with traces, structured errors, and product events",
+  "version": "0.2.0",
+  "description": "Runtime evidence for Pact contracts using autotel-pact. Demonstrates the 'contracted but never observed' audit on a real MessageConsumerPact flow.",
   "private": true,
   "type": "module",
   "author": "Jag Reehal",
   "license": "MIT",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "test": "tsx src/index.ts",
+    "pact:audit": "autotel-pact audit --pacts pacts --ledger .autotel-pact",
+    "pact:audit:gate": "autotel-pact audit --pacts pacts --ledger .autotel-pact --gate",
+    "pact:audit:broker": "autotel-pact audit --pacts pacts --ledger .autotel-pact --gate=broker"
   },
   "dependencies": {
-    "autotel": "workspace:*"
+    "@pact-foundation/pact": "^16.5.0",
+    "autotel": "workspace:*",
+    "autotel-pact": "workspace:*",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.7.0",
@@ -21,9 +28,10 @@
     "observability",
     "contract-testing",
     "pact",
+    "pact-message",
     "tracing",
     "opentelemetry",
-    "structured-logging",
+    "runtime-evidence",
     "autotel"
   ]
 }

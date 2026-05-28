@@ -14,7 +14,7 @@ import type {
 export type DriftDelta = {
   /** Drift entries present in head but not in base. */
   introduced: DriftEntries;
-  /** Drift entries present in base but not in head — the PR fixed these. */
+  /** Drift entries present in base but not in head; the PR fixed these. */
   resolved: DriftEntries;
   /** True if `introduced` has any non-empty section. */
   hasNewDrift: boolean;

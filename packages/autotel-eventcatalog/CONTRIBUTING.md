@@ -1,7 +1,7 @@
 # Contributing to autotel-eventcatalog
 
-A short, opinionated guide. The package is small enough that you can read all
-of it in an afternoon; this doc is here so you don't have to.
+A short, opinionated guide. The package is small enough to read in an
+afternoon; this doc covers it so you don't have to.
 
 ## Where things live
 
@@ -27,9 +27,10 @@ packages/autotel-eventcatalog/
 │   └── cli.e2e.test.ts      e2e tests (spawn the built CLI)
 │   └── contract.test.ts     versioned-JSON contract tests
 ├── schemas/
-│   ├── drift-report-v0.1.0.json
-│   ├── drift-summary-v0.1.0.json
-│   └── stamp-summary-v0.1.0.json
+│   ├── drift-report-v0.2.0.json
+│   ├── drift-summary-v0.2.0.json
+│   ├── stamp-summary-v0.1.0.json
+│   └── generate-summary-v0.1.0.json
 ├── action.yml               composite GitHub Action (used by external repos)
 ├── docs/                    this folder
 └── README.md
@@ -59,13 +60,12 @@ cli.ts ─► everything (the only place all branches meet)
 3. `cli.ts` is the dispatcher; nothing else imports from `cli.ts`.
 4. `stamp.ts` is independent of `diff.ts`. They share inputs but no logic.
 
-If a future change wants to break one of these rules, that's the signal to
-stop and ask whether the new feature belongs in this package.
+If a future change would break one of these rules, stop and ask whether the
+new feature belongs in this package.
 
 ## Load-bearing invariants
 
-These are the rules I'd commit to keeping. Future-me, future-contributors:
-when in doubt, push back.
+These are the rules I'd commit to keeping. When in doubt, push back.
 
 ### 1. No new top-level commands without a user
 
@@ -94,10 +94,9 @@ dashboard, a file watcher, an LSP server, an MCP server, a webhook
 listener) lives in [`autotel-subscribers`](../autotel-subscribers/) or in
 example apps.
 
-The reason: long-running processes have a different lifecycle from
-command-line tools. Process management, signal handling, restart
-semantics, observability. Mixing the two doubles the operational surface
-for no clarity gain.
+Long-running processes have a different lifecycle from command-line
+tools: process management, signal handling, restart semantics, observability.
+Mixing the two doubles the operational surface for no clarity gain.
 
 ### 3. No domain-specific extensions to the core
 
@@ -106,11 +105,10 @@ events, services, channels, field paths. Adding a SARIF renderer should
 never require a `severity` field on `DriftCounts`. Adding a Slack
 renderer should never require a `messageColor` field on `DriftReport`.
 
-If a new renderer wants information that doesn't fit the existing types,
+If a new renderer needs information that doesn't fit the existing types,
 the renderer should derive it locally, not push back into the core. If
-multiple renderers want the same derived information, _then_ it earns a
-place in `diff.ts`. Pause and confirm it's about drift, not about
-presentation.
+multiple renderers need the same derived information, _then_ it earns a
+place in `diff.ts`. Confirm it's about drift, not about presentation.
 
 ## How to do common things
 
@@ -166,8 +164,8 @@ produced, also update the golden fixture for that scenario.
 8. Update golden fixtures
 9. Tests for each of the above
 
-New categories cost a lot. The reason this list is long is to make you
-pause before adding one.
+New categories cost a lot. This list is long to make you pause before
+adding one.
 
 ## Commit conventions
 

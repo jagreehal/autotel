@@ -1275,7 +1275,11 @@ function wrapLogger(
  * final default PII redaction is auto-enabled in production.
  */
 export function resolveAttributeRedactor(
-  explicit: AttributeRedactorConfig | AttributeRedactorPreset | false | undefined,
+  explicit:
+    | AttributeRedactorConfig
+    | AttributeRedactorPreset
+    | false
+    | undefined,
   environment: string,
 ): AttributeRedactorConfig | AttributeRedactorPreset | undefined {
   if (explicit === false) return undefined;

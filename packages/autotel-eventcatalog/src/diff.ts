@@ -1,7 +1,10 @@
 // Compute drift between an autotel architecture snapshot and an existing
-// EventCatalog. The diff is intentionally conservative: it reports only
-// existence and field-path drift. Type drift, value drift, and enum-value
-// checks are deferred — they need richer signal than v0 carries.
+// EventCatalog. The diff covers five drift classes:
+//   - event existence (observedButUndocumented, documentedButUnseen)
+//   - field-path drift (extras and missing per event)
+//   - type drift (declared primitive type vs observed runtime types)
+//   - value drift (declared enum vs observed sample values)
+//   - service and channel existence drift
 
 import type { ArchitectureSnapshot } from './snapshot';
 import type { CatalogState } from './catalog';
@@ -71,7 +74,7 @@ export function hasDrift(report: DriftReport): boolean {
  * on what "N findings" means.
  */
 export type DriftCounts = {
-  /** Total of all categories — what a dashboard "drift findings" badge shows. */
+  /** Total of all categories; what a dashboard "drift findings" badge shows. */
   total: number;
   observedButUndocumentedEvents: number;
   documentedButUnseenEvents: number;
@@ -173,15 +176,7 @@ export function diffCatalogAgainstSnapshot(
     }
 
     const constraints = eventDecl?.declaredSchemaConstraints ?? {};
-    const stats =
-      (
-        obs as {
-          fieldStats?: Record<
-            string,
-            { types: string[]; sampleValues: unknown[] }
-          >;
-        }
-      ).fieldStats ?? {};
+    const stats = obs.fieldStats ?? {};
     for (const [path, declaredConstraint] of Object.entries(constraints)) {
       const observed = stats[path];
       if (!observed) continue;

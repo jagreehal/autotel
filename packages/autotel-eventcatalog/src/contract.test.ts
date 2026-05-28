@@ -1,6 +1,6 @@
 // Contract tests for the public JSON surface.
 //
-// These are *not* about whether the renderer produces nice-looking output —
+// These are *not* about whether the renderer produces nice-looking output;
 // `report.test.ts` covers that. These tests treat the JSON shape as a public
 // contract that downstream tooling (the GitHub Action, Slack bots, dashboards)
 // can depend on. A failure here should read as:
@@ -251,7 +251,7 @@ describe('drift report JSON envelope (autotel-eventcatalog-report/v0.2.0)', () =
     expect(json).toBe(golden.replace(/\n$/, ''));
   });
 
-  it('spec marker is the only place the version lives — bumping it is a breaking change', () => {
+  it('spec marker is the only place the version lives; bumping it is a breaking change', () => {
     // Sanity: if someone renames REPORT_SPEC by accident, the published
     // contract changes silently. Pin it to the schema's const here.
     const schemaConst = (

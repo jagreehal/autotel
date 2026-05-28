@@ -13,8 +13,9 @@ import type { PlaceOrderInput, OrderPlacedMessage } from './shared/types';
 init({
   service: 'example-eventcatalog',
   // No exporter configured here — running this against a real OTLP collector
-  // is left to the integrator. The autotel-eventcatalog snapshot subscriber
-  // (future work) would plug in here.
+  // is left to the integrator. To capture an architecture snapshot from this
+  // demo, run `pnpm services:snapshot` instead (see `build-snapshot.ts`),
+  // which wires in `ArchitectureSnapshotSubscriber` from autotel-subscribers.
 });
 
 async function main() {

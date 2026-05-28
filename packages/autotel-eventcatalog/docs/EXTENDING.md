@@ -1,8 +1,8 @@
 # Extending autotel-eventcatalog
 
-The package is designed to be extended in **one** direction: new
-renderers. Everything else (the diff engine, the policy layer, the
-stamper) is deliberately stable. See [CONTRIBUTING.md](../CONTRIBUTING.md#3-no-domain-specific-extensions-to-the-core)
+The package extends in **one** direction: new renderers. Everything
+else (the diff engine, the policy layer, the stamper) is stable by
+design. See [CONTRIBUTING.md](../CONTRIBUTING.md#3-no-domain-specific-extensions-to-the-core)
 for why.
 
 ## Writing a custom renderer
@@ -93,9 +93,8 @@ export const RENDERERS: readonly Renderer[] = [
 ];
 ```
 
-That's it. The CLI's `--format sarif` will automatically work, the help
-text will mention it, and the validator that catches bad `--format`
-values will accept it.
+The CLI's `--format sarif` works, the help text mentions it, and the
+validator that catches bad `--format` values accepts it.
 
 ### Step 3: write the tests
 
@@ -130,9 +129,8 @@ describe('sarifRenderer', () => {
 
 ### Step 4 (optional): document it
 
-If the renderer is going to be a first-class citizen, add a row to the
-"Renderers" section in the README and bump the changeset (`pnpm
-changeset`).
+If the renderer will ship as a built-in, add a row to the "Renderers"
+section in the README and bump the changeset (`pnpm changeset`).
 
 ## What a good renderer looks like
 
@@ -148,9 +146,9 @@ changeset`).
 - **Deterministic.** Same input, same output. No timestamps from
   `Date.now()`, no random IDs. (The snapshot already carries
   `snapshotGeneratedAt` if you need a timestamp.)
-- **Compact.** The Markdown renderer is ~120 lines. If yours is
-  significantly longer, you're probably doing logic that belongs in
-  the core. Push back to the renderer interface.
+- **Compact.** The Markdown renderer is ~120 lines. If yours is much
+  longer, you're probably doing logic that belongs in the core. Push
+  back to the renderer interface.
 
 ## When NOT to write a renderer
 
@@ -231,6 +229,46 @@ console.log(myRenderer.renderReport(report));
 You don't have to modify the package to use your own renderer. Upstreaming
 is for when the renderer has general value to other users.
 
+## CLI-mode custom renderers
+
+The CLI accepts `--register-renderer <module>` as a global option (any
+subcommand). It dynamically imports the module, expects either a
+`default` export or a named `renderer` export matching the `Renderer`
+shape, and registers it. The renderer's `name` then works with `--format`.
+
+```bash
+# in your repo
+cat > slack-renderer.mjs <<'EOF'
+export const renderer = {
+  name: 'slack',
+  description: 'Slack Block Kit JSON.',
+  renderReport(report) { /* return JSON string */ },
+  renderDelta(delta) { /* return JSON string */ },
+};
+EOF
+
+npx autotel-eventcatalog \
+  --register-renderer ./slack-renderer.mjs \
+  drift \
+  --snapshot ./snapshot.json \
+  --catalog ./catalog \
+  --format slack \
+  > slack-blocks.json
+
+curl -X POST -H 'Content-Type: application/json' \
+  --data @slack-blocks.json \
+  "$SLACK_WEBHOOK_URL"
+```
+
+Pass `--register-renderer` more than once to load multiple renderers in
+the same invocation. The loader refuses to overwrite a built-in name
+(`markdown`, `terminal`, `json`, `eventcatalog-snapshot-diff`): pick a
+unique `name` for your renderer.
+
+Either ESM (`.mjs`) or compiled JavaScript works. TypeScript users should
+compile to ESM first; the loader uses Node's native `import()` against a
+file URL, so it cannot transpile on the fly.
+
 ## What's NOT extendable (and why)
 
 | Surface             | Extension allowed?            | Why                                                                                                       |
@@ -242,7 +280,7 @@ is for when the renderer has general value to other users.
 | Snapshot format     | No                            | Owned by `autotel-subscribers`; this package only consumes                                                |
 | Stamp marker syntax | No                            | Backwards compatibility with previously-stamped catalogs                                                  |
 
-If you find yourself wanting to extend something marked "no", the answer
-is almost always: file an issue describing the use case, and we'll figure
-out whether it belongs in this package, in `autotel-subscribers`, in a
-new sister package, or in your own downstream code.
+If you want to extend something marked "no", file an issue describing the
+use case. We'll figure out whether it belongs in this package, in
+`autotel-subscribers`, in a new sister package, or in your own downstream
+code.
