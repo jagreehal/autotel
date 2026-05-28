@@ -1,5 +1,13 @@
 # @jagreehal/example-drizzle
 
+## 1.0.61
+
+### Patch Changes
+
+- Updated dependencies [30a485b]
+  - autotel@3.3.0
+  - autotel-drizzle@0.0.22
+
 ## 1.0.60
 
 ### Patch Changes
