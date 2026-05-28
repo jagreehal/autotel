@@ -1,5 +1,14 @@
 # @jagreehal/example-eventcatalog
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [30a485b]
+  - autotel@3.3.0
+  - autotel-subscribers@34.0.0
+  - autotel-eventcatalog@3.0.0
+
 ## 0.1.2
 
 ### Patch Changes

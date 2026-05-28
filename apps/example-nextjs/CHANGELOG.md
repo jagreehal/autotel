@@ -1,5 +1,14 @@
 # example-nextjs
 
+## 0.2.38
+
+### Patch Changes
+
+- Updated dependencies [30a485b]
+  - autotel@3.3.0
+  - autotel-web@1.12.0
+  - autotel-adapters@0.3.0
+
 ## 0.2.37
 
 ### Patch Changes
