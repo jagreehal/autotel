@@ -6,7 +6,7 @@
 
 **Write once, observe everywhere.**
 
-Instrument your Node.js code a single time, keep the DX you love, and stream traces, metrics, logs, and product events to **any** observability stack without vendor lock-in.
+Instrument your Node.js code once and stream traces, metrics, logs, and product events to **any** OTLP-compatible backend. No vendor lock-in.
 
 **One `init()`, wrap functions with `trace()`, and get automatic traces, metrics, and events:**
 
@@ -47,11 +47,13 @@ export const processOrder = trace(async function processOrder(
 - ✅ Sends events with `traceId` and `spanId` to **all** adapters
 - ✅ Works with **any** OTLP-compatible backend (Grafana, Datadog, New Relic, Tempo, etc.)
 
+Wrap a handler and autotel emits one canonical wide event per request (full context in a single log line) on top of real distributed traces and metrics. You get the debuggability of one event per operation and the call graph of OpenTelemetry from the same instrumentation.
+
 **[→ See complete examples and API docs](./packages/autotel/README.md#quick-start)**
 
 ## Agent Skills
 
-autotel ships **35 Agent Skills** for AI assistants (Claude Code, Cursor, Windsurf, Continue, …) — one per package plus a flagship "review-otel-patterns" skill that surveys 13+ frameworks. Skills are auto-discovered by compatible agents.
+autotel ships **35 Agent Skills** for AI assistants (Claude Code, Cursor, Windsurf, Continue, …): one per package, plus a `review-otel-patterns` skill that surveys 13+ frameworks. Compatible agents discover them automatically.
 
 ```bash
 npx skills add https://github.com/jagreehal/autotel
@@ -59,13 +61,13 @@ npx skills add https://github.com/jagreehal/autotel
 
 Or browse the [`skills/`](./skills) directory directly. Highlights:
 
-- **[`review-otel-patterns`](./packages/autotel/skills/review-otel-patterns/SKILL.md)** — audit a codebase for OTel anti-patterns; covers Next.js, Nuxt, Nitro, TanStack Start, Hono, Express, Fastify, Elysia, NestJS, Cloudflare Workers, AWS Lambda, edge runtimes, and standalone Node.
-- **[`analyze-traces`](./packages/autotel/skills/analyze-traces/SKILL.md)** — read OTLP traces from any backend, local dump, or in-memory exporter to debug failures, latency, and cardinality issues.
-- **[`migrate-to-autotel`](./packages/autotel/skills/migrate-to-autotel/SKILL.md)** — safe cutover from raw OTel SDK / Sentry / Datadog APM / New Relic / Honeycomb Beelines / OpenTracing.
-- **[`tune-sampling`](./packages/autotel/skills/tune-sampling/SKILL.md)** — head + tail sampling strategies, AI-aware, Cloudflare-aware.
-- **[`build-audit-trails`](./packages/autotel/skills/build-audit-trails/SKILL.md)** — tamper-aware audit logs on top of OTel spans.
-- **[`debug-missing-spans`](./packages/autotel/skills/debug-missing-spans/SKILL.md)** — top-to-bottom troubleshooting walkthrough.
-- **[`create-autotel-adapter`](./skills/create-autotel-adapter/SKILL.md)** / **[`create-autotel-instrumentation`](./skills/create-autotel-instrumentation/SKILL.md)** / **[`create-autotel-exporter`](./skills/create-autotel-exporter/SKILL.md)** — author new packages following autotel conventions, with templates included.
+- **[`review-otel-patterns`](./packages/autotel/skills/review-otel-patterns/SKILL.md)**: audit a codebase for OTel anti-patterns. Covers Next.js, Nuxt, Nitro, TanStack Start, Hono, Express, Fastify, Elysia, NestJS, Cloudflare Workers, AWS Lambda, edge runtimes, and standalone Node.
+- **[`analyze-traces`](./packages/autotel/skills/analyze-traces/SKILL.md)**: read OTLP traces from any backend, local dump, or in-memory exporter to debug failures, latency, and cardinality issues.
+- **[`migrate-to-autotel`](./packages/autotel/skills/migrate-to-autotel/SKILL.md)**: cut over from raw OTel SDK, Sentry, Datadog APM, New Relic, Honeycomb Beelines, or OpenTracing.
+- **[`tune-sampling`](./packages/autotel/skills/tune-sampling/SKILL.md)**: head and tail sampling strategies, AI-aware and Cloudflare-aware.
+- **[`build-audit-trails`](./packages/autotel/skills/build-audit-trails/SKILL.md)**: tamper-aware audit logs on top of OTel spans.
+- **[`debug-missing-spans`](./packages/autotel/skills/debug-missing-spans/SKILL.md)**: top-to-bottom troubleshooting walkthrough.
+- **[`create-autotel-adapter`](./skills/create-autotel-adapter/SKILL.md)** / **[`create-autotel-instrumentation`](./skills/create-autotel-instrumentation/SKILL.md)** / **[`create-autotel-exporter`](./skills/create-autotel-exporter/SKILL.md)**: author new packages following autotel conventions, with templates included.
 
 See [`skills/README.md`](./skills/README.md) for the full index.
 
@@ -83,7 +85,8 @@ Core library providing ergonomic OpenTelemetry instrumentation with:
 - Adaptive sampling (10% baseline, 100% errors/slow paths)
 - Production hardening (rate limiting, circuit breakers, redaction)
 - Auto trace context enrichment
-- LLM observability via OpenLLMetry integration
+- Typed error and audit catalogs (`defineErrorCatalog`, `defineAuditCatalog`)
+- LLM observability via OpenLLMetry, plus per-model cost estimation (`recordLLMCost`)
 - AI workflow patterns (multi-agent, RAG, evaluation loops)
 
 **[→ View full documentation](./packages/autotel/README.md)**
@@ -99,6 +102,7 @@ Product events subscribers for:
 - Amplitude
 - Slack webhooks
 - Custom webhooks
+- Filesystem NDJSON (for agents, scripts, and evals)
 
 **[→ View subscribers documentation](./packages/autotel-subscribers/README.md)**
 
@@ -119,7 +123,8 @@ Edge runtime support for:
 Composable framework DX adapters on top of `autotel` core:
 
 - `useLogger(...)` style ergonomics for framework handlers
-- `withAutotel(...)` wrappers for Next/Nitro-style handler DX
+- `withAutotel(...)` wrappers for Next, Nitro, Cloudflare, Express, and Fastify
+- One canonical wide event per request, emitted automatically (`autoEmit`, default on; opt out per handler)
 - `parseError()` and drain pipeline composition
 - Extensible toolkit for custom framework adapters
 
@@ -131,9 +136,9 @@ Composable framework DX adapters on top of `autotel` core:
 
 Audit-focused helpers for compliance logging with automatic tail-sampling bypass:
 
-- `withAudit(...)` — Structured audit metadata with automatic outcome tagging
-- `forceKeepAuditEvent(...)` — Ensure critical audit trails bypass tail-drop sampling
-- `setAuditAttributes(...)` — Normalized `audit.*` span attributes
+- `withAudit(...)`: structured audit metadata with automatic outcome tagging
+- `forceKeepAuditEvent(...)`: keep critical audit trails past tail-drop sampling
+- `setAuditAttributes(...)`: normalized `audit.*` span attributes
 - Type-safe metadata schemas and backend integration
 
 **[→ View audit documentation](./packages/autotel-audit/README.md)**
@@ -197,7 +202,7 @@ This requires `autotel-devtools` to be installed. If it is not installed, autote
 
 ### Quick Debug Mode
 
-See traces instantly during development - perfect for progressive development:
+See traces during development without configuring a backend:
 
 ```typescript
 import { init, trace } from 'autotel';
@@ -219,7 +224,7 @@ const result = await trace(async () => {
 
 **How it works:**
 - `debug: true` - Print spans to console AND send to backend (if endpoint configured)
-  - No endpoint = console-only (perfect for local development)
+  - No endpoint = console-only output for local development
   - With endpoint = console + backend (verify before choosing provider)
 - No debug flag - Send to backend only (default production behavior)
 
@@ -366,7 +371,7 @@ Follow the prompts to:
 Autotel is built on top of OpenTelemetry and provides:
 
 - **Ergonomic API layer** - Wraps verbose OpenTelemetry APIs
-- **Smart defaults** - Production-ready configuration out of the box
+- **Smart defaults** - Production-ready configuration without tuning
 - **Platform agnostic** - Works with any OTLP-compatible backend
 - **Type-safe** - Full TypeScript support with strict types
 - **Modular design** - Use only what you need

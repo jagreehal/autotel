@@ -151,6 +151,23 @@ export {
 // parseError
 export { parseError, type ParsedError } from './parse-error';
 
+// Typed error + audit catalogs
+export {
+  defineErrorCatalog,
+  defineAuditCatalog,
+  isCatalogError,
+  getCatalogCode,
+  type ErrorCatalog,
+  type ErrorCatalogEntry,
+  type ErrorBuilder,
+  type ErrorBuildOptions,
+  type AuditCatalog,
+  type AuditCatalogEntry,
+  type AuditDescriptor,
+  type AuditAction,
+  type AuditSeverity,
+} from './error-catalog';
+
 // Attribute flattening
 export { toAttributeValue, flattenToAttributes } from './flatten-attributes';
 
@@ -240,6 +257,18 @@ export {
   type ToolCallEvent,
   type StreamFirstTokenEvent,
 } from './gen-ai-events';
+
+// Per-model LLM cost estimation — estimate USD cost from token usage and
+// record it as the gen_ai.usage.cost.usd span attribute.
+export {
+  estimateLLMCost,
+  recordLLMCost,
+  MODEL_PRICING,
+  GEN_AI_COST_ATTRIBUTE,
+  type ModelPricing,
+  type TokenUsage,
+  type EstimateCostOptions,
+} from './gen-ai-cost';
 
 // Tracer helpers for custom spans
 export {

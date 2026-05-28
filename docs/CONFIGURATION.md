@@ -4,7 +4,7 @@ Environment variables, YAML configuration, and configuration precedence for Auto
 
 ## Environment Variables
 
-Autotel supports standard OpenTelemetry environment variables for configuration. This enables zero-code configuration changes across environments and compatibility with the broader OTEL ecosystem.
+Autotel reads standard OpenTelemetry environment variables. You can change configuration across environments without touching code, and the variables stay compatible with the broader OTEL ecosystem.
 
 ### Supported Environment Variables
 
@@ -29,7 +29,7 @@ Autotel supports standard OpenTelemetry environment variables for configuration.
 
 ### Configuration Precedence
 
-Configuration is resolved in the following priority order (highest to lowest):
+Configuration resolves in this priority order, highest to lowest:
 
 1. **Explicit `init()` parameters** - Direct code configuration
 2. **YAML file** - `autotel.yaml` or `AUTOTEL_CONFIG_FILE` env var
@@ -45,11 +45,11 @@ init({
 });
 ```
 
-For local development, prefer `devtools: true` over manually hardcoding `http://localhost:4318`. It enables the local `autotel-devtools` workflow while keeping the same `init()` surface you use for remote OTLP backends.
+For local development, prefer `devtools: true` over hardcoding `http://localhost:4318`. It enables the local `autotel-devtools` workflow while keeping the same `init()` surface you use for remote OTLP backends.
 
 ### YAML Configuration
 
-Autotel supports YAML file configuration for a declarative setup without code changes. Create an `autotel.yaml` file in your project root:
+Autotel reads YAML file configuration for a declarative setup without code changes. Create an `autotel.yaml` file in your project root:
 
 ```yaml
 # autotel.yaml
@@ -78,7 +78,7 @@ debug: false
 
 **Key features:**
 
-- **Auto-discovery**: Automatically loads `autotel.yaml` or `autotel.yml` from the current directory
+- **Auto-discovery**: Loads `autotel.yaml` or `autotel.yml` from the current directory
 - **Explicit path**: Set `AUTOTEL_CONFIG_FILE=./config/otel.yaml` to use a custom path
 - **Environment variable substitution**: Use `${env:VAR_NAME}` or `${env:VAR_NAME:-default}` in YAML values
 - **Programmatic loading**: Use `loadYamlConfigFromFile()` from `autotel/yaml` for custom loading
@@ -146,7 +146,7 @@ See `packages/autotel/.env.example` for a complete template.
 
 - Validates env var formats (URLs, enum values)
 - Parses complex values (comma-separated key=value pairs)
-- Provides type-safe config objects
+- Returns type-safe config objects
 
 **YAML configuration** is handled in `packages/autotel/src/yaml-config.ts`. The loader:
 
@@ -156,6 +156,34 @@ See `packages/autotel/.env.example` for a complete template.
 - Converts YAML structure to `AutotelConfig` type
 
 **Config merging** happens in `init()` with the priority: `explicit > yaml > env > defaults`
+
+## PII Redaction
+
+Redaction is auto-enabled in production. When you leave `attributeRedactor` unset and the resolved environment is `production` (`config.environment` or `NODE_ENV`), autotel applies the `'default'` preset so span attributes never carry raw PII to your backend. In non-production environments redaction stays off so local debugging shows real values.
+
+Set a stronger preset, or control the default, three ways:
+
+```typescript
+import { init } from 'autotel';
+
+// Stronger preset, applied in every environment:
+init({ service: 'checkout-api', attributeRedactor: 'strict' });
+
+// Disable redaction entirely, even in production:
+init({ service: 'checkout-api', attributeRedactor: false });
+```
+
+The `AUTOTEL_REDACT_PII` env var overrides the default without a code change: `off` (or `false` / `none`) disables it, `default` / `strict` / `pci-dss` selects a preset, and `on` (or `true`) forces the `default` preset on in any environment. Precedence is explicit config, then env var, then the production default.
+
+The presets mask values before any exporter sees them:
+
+- `default`: redacts keys like `password`, `secret`, `token`, `authorization`, and values matching email, phone, SSN, and credit card patterns.
+- `strict`: everything in `default` plus JWTs, bearer tokens, IBANs, and API keys in values.
+- `pci-dss`: focuses on card data (`card`, `cvv`, `pan`, expiry) and credit card numbers.
+
+Built-in value masks keep a recognizable suffix where useful: credit cards become `****1111`, emails `a***@***.com`, IPv4 `***.***.***.1`, JWTs `eyJ***.***`, and bearer tokens `Bearer ***`.
+
+Pass an object instead of a preset name for custom key and value patterns. See `REDACTOR_PATTERNS` and `REDACTOR_PRESETS` from `autotel` and the `AttributeRedactingProcessor` for the full surface.
 
 ## Event Delivery Timing
 
@@ -231,10 +259,10 @@ The event queue can be configured with custom settings:
 
 ### Correlation ID
 
-The correlation ID is a stable join key across events, logs, and spans. It is available via `getCorrelationId()` and `getOrCreateCorrelationId()` from `autotel`.
+The correlation ID is a stable join key across events, logs, and spans. Read it via `getCorrelationId()` and `getOrCreateCorrelationId()` from `autotel`.
 
-- **Where it's set:** The first use of `getOrCreateCorrelationId()` in an async context creates it; or set it at a boundary (e.g. HTTP handler, message processor) via `runWithCorrelationId(id, fn)` or `setCorrelationId(id)` from `autotel/correlation-id`.
-- **Stability:** The same value is used for the duration of the same AsyncLocalStorage context (the same async chain). A new context (e.g. a new request) gets a new ID unless you propagate it (e.g. via baggage or Kafka headers).
+- **Where it's set:** The first call to `getOrCreateCorrelationId()` in an async context creates it. You can also set it at a boundary such as an HTTP handler or message processor via `runWithCorrelationId(id, fn)` or `setCorrelationId(id)` from `autotel/correlation-id`.
+- **Stability:** The same value holds for the duration of one AsyncLocalStorage context (the same async chain). A new context, such as a new request, gets a new ID unless you propagate it via baggage or Kafka headers.
 - **Public API:** `getCorrelationId()` and `getOrCreateCorrelationId()` are exported from `autotel`. For cross-service propagation, use `setCorrelationIdInBaggage()` from `autotel/correlation-id`.
 
 ```typescript
@@ -248,9 +276,9 @@ const correlationId = getOrCreateCorrelationId();
 
 ### Event payload and autotel context
 
-With `events.includeTraceContext` and `events.traceUrl` configured in `init()`, every `track(name, props)` call automatically includes `correlation_id` and `trace_url`: no wrappers needed.
+With `events.includeTraceContext` and `events.traceUrl` configured in `init()`, every `track(name, props)` call includes `correlation_id` and `trace_url` with no wrappers needed.
 
-When using `track()` or the Event class, subscribers receive an optional **autotel** context (e.g. `correlation_id`, `trace_id`, `span_id`, `trace_url`) when `events.includeTraceContext` is enabled in `init()`. Subscribers that support it (e.g. WebhookSubscriber) receive this via the third parameter to `trackEvent` and include it in the payload (e.g. as a top-level `autotel` field or merged into attributes), so consumers can correlate events with traces.
+When you call `track()` or use the Event class, subscribers receive an optional **autotel** context (`correlation_id`, `trace_id`, `span_id`, `trace_url`) once `events.includeTraceContext` is enabled in `init()`. Subscribers that support it, such as WebhookSubscriber, receive this via the third parameter to `trackEvent` and include it in the payload (as a top-level `autotel` field or merged into attributes), so consumers can correlate events with traces.
 
 ### Event Attribute Types
 

@@ -47,7 +47,7 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
   httpServer.on('request', async (req: IncomingMessage, res: ServerResponse) => {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
     if (req.method === 'OPTIONS') {
@@ -76,6 +76,25 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
     // GET /healthz
     if (req.method === 'GET' && url === '/healthz') {
       sendJson(res, 200, { ok: true, clients: devtools.clientCount })
+      return
+    }
+
+    // GET /v1/traces — read back what the collector has actually received.
+    // This is the verification primitive for tests: poll the collector over
+    // HTTP and assert receipt, instead of only asserting "the client tried to
+    // send" (which a browser-level route intercept can fake). Bypasses the UI's
+    // WebSocket entirely.
+    if (req.method === 'GET' && url === '/v1/traces') {
+      const data = devtools.getCurrentData()
+      sendJson(res, 200, { traces: data.traces, count: data.traces.length })
+      return
+    }
+
+    // DELETE /v1/traces — clear captured telemetry (test isolation / reset).
+    // Clears traces, logs, metrics and aggregated errors so each test starts clean.
+    if (req.method === 'DELETE' && url === '/v1/traces') {
+      devtools.clearData()
+      sendJson(res, 200, { cleared: true })
       return
     }
 

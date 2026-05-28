@@ -7,6 +7,7 @@ description: >
   missing span attributes, manual exporter setup, broken context propagation, exposed PII, and ad-hoc
   error handling. Covers spans, metrics, logs, structured errors, the autotel processor pipeline
   (tail-sampling, attribute redaction, span-name normalisation, filtering, baggage),
+  built-in enrichers (user agent, geo, request size) and custom `defineEnricher`,
   `defineWorkerFetch` for Cloudflare async drains, multi-vendor OTLP backends (Honeycomb, Datadog,
   Grafana Cloud, Sentry, Axiom, HyperDX), `composeSpanProcessors` / `composeSubscribers` /
   `composePostProcessors` for pipelines, AI SDK observability with gen-ai semantic conventions, and
@@ -229,6 +230,46 @@ All options work with `init()`, framework adapters, and `wrapModule` / `defineWo
 | `postProcessor`                         | `PostProcessorFn`                                               | —                 | Mutate spans before export (redact, drop, tag)                  |
 | `propagator`                            | `TextMapPropagator`                                             | W3C trace-context | Override propagation format                                     |
 | `dataSafety`                            | `DataSafetyConfig`                                              | —                 | Per-attribute safety (`captureDbStatement: 'obfuscated'`, etc.) |
+
+---
+
+## Built-in enrichers
+
+Enrichers turn raw request data into standard, low-cardinality span attributes. Import the helpers from `autotel/enrichers` and spread their output onto the active span or request logger. Each returns `undefined` when there is nothing to add, so spreading is safe.
+
+| Helper                                       | Returns attributes                                                   | Source                                  |
+| -------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------- |
+| `userAgent(headers)`                         | `user_agent.raw`, `user_agent.browser`, `user_agent.os`, `user_agent.device` | `user-agent` request header     |
+| `geo(headers)`                               | `geo.country`, `geo.region`, `geo.city`, `geo.latitude`, `geo.longitude`     | Vercel / Cloudflare geo headers |
+| `requestSize(reqHeaders, resHeaders?)`       | `http.request.body.size`, `http.response.body.size`                  | `content-length` headers                |
+
+```typescript
+import { userAgent, geo, requestSize } from 'autotel/enrichers';
+
+export const handler = trace((ctx) => async (request: Request) => {
+  ctx.setAttributes({
+    ...userAgent(request.headers),
+    ...geo(request.headers),
+    ...requestSize(request.headers),
+  });
+  // ... handle request
+});
+```
+
+For your own derived fields on a request's wide event, build a reusable enricher with `defineEnricher` (from `autotel`) instead of scattering ad-hoc field writes. `compute` returns an object that is merged into the named `field`; return `undefined` to skip. Keep the output low-cardinality (bucket or hash high-cardinality values):
+
+```typescript
+import { defineEnricher } from 'autotel';
+
+// Merge a derived, low-cardinality object into event.user on each request.
+const enrichTier = defineEnricher<{ user?: { plan?: string } }, { tier: string }>({
+  name: 'user-tier',
+  field: 'user',
+  compute: ({ event }) => ({ tier: event.user?.plan ?? 'anonymous' }),
+});
+```
+
+**Review checks:** raw `User-Agent` strings stored verbatim (use `userAgent()` to parse), geo data hand-parsed per framework (use `geo()`), and high-cardinality values (full URLs, emails, ids) set directly as attributes instead of being bucketed or hashed.
 
 ---
 

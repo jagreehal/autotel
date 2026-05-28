@@ -54,3 +54,5 @@ apps/cloudflare-example/.alchemy
 .claude-work
 .autotel-cache/
 **/.autotel-cache/
+
+___/*

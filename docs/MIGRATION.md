@@ -1,12 +1,12 @@
 # Migration Guide: From OpenTelemetry to Autotel
 
-This guide shows how to migrate from vanilla OpenTelemetry to autotel.
+This guide covers migrating from vanilla OpenTelemetry to autotel.
 
-Typical migration reduces SDK setup from 30+ lines to 5-10 lines and replaces manual span lifecycle management with functional wrappers.
+A typical migration reduces SDK setup from 30+ lines to 5-10 lines and replaces manual span lifecycle management with functional wrappers.
 
 ## Quick Migration
 
-Follow these 4 steps:
+The migration takes four steps.
 
 ### Step 1: Install
 
@@ -342,7 +342,7 @@ process.on('SIGTERM', shutdown);
 ```
 
 Need to customize metric export intervals or swap exporters? Provide your own
-`metricReader`, just like you would with vanilla OpenTelemetry:
+`metricReader`, the same way you would with vanilla OpenTelemetry:
 
 ```typescript
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
@@ -583,7 +583,7 @@ init({
 - Tail sampling instead of head sampling
 - Sampling decisions can consider operation success/failure and duration
 - Never lose error traces or slow requests
-- Dramatically better observability at the same cost
+- Better observability at the same cost
 
 **Benefits:**
 
@@ -894,7 +894,7 @@ const result = await db.transaction(async (tx) => {
 
 **What Changed:**
 
-- Reduced from ~60 lines to ~10 lines (83% reduction!)
+- Reduced from ~60 lines to ~10 lines (83% reduction)
 - No manual `NodeTracerProvider` or `SimpleSpanProcessor` setup
 - No manual span management (no `startSpan()` / `end()`)
 - **SQL queries automatically captured** (hard to do manually in Drizzle)
@@ -971,7 +971,7 @@ pnpm start
 
 ### Migrating OpenTelemetry Collector Configuration
 
-Your collector config **doesn't need to change**. Autotel uses standard OTLP protocol.
+Your collector config stays the same. Autotel uses the standard OTLP protocol.
 
 **Before** (collector config):
 
@@ -1124,7 +1124,7 @@ expect(spans[0].name).toBe('myFunction');
 
 ## Migration Checklist
 
-Use this checklist for a smooth migration:
+Work through this checklist as you migrate.
 
 ### Phase 1: Preparation
 

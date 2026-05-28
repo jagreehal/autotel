@@ -1,6 +1,6 @@
 # Advanced Features (v2.25.4+)
 
-Advanced features and capabilities for power users.
+Features for power users.
 
 ## Deterministic Trace IDs
 
@@ -27,7 +27,7 @@ console.log(`View traces: https://your-backend.com/traces/${traceId}`);
 
 ## Metadata Flattening
 
-Automatically flatten nested objects into dot-notation span attributes:
+Flatten nested objects into dot-notation span attributes:
 
 ```typescript
 import { flattenMetadata } from 'autotel/trace-helpers';
@@ -49,7 +49,7 @@ export const processOrder = trace((ctx) => async (order: Order) => {
 
 - Auto-serializes non-string values to JSON
 - Filters out null/undefined values
-- Gracefully handles circular references (→ `<serialization-failed>`)
+- Handles circular references (→ `<serialization-failed>`)
 - Customizable prefix (default: `'metadata'`)
 
 ## Isolated Tracer Provider
@@ -165,7 +165,7 @@ export const publishEvent = traceMessaging({
 
 ## Event-Driven Observability
 
-First-class support for message-based systems with `traceProducer` and `traceConsumer` helpers:
+Instrument message-based systems with `traceProducer` and `traceConsumer` helpers:
 
 ```typescript
 import { traceProducer, traceConsumer } from 'autotel/messaging';

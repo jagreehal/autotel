@@ -13,6 +13,7 @@ export default defineConfig({
     factories: 'src/factories.ts',
     middleware: 'src/middleware.ts',
     'architecture-snapshot': 'src/architecture-snapshot.ts',
+    file: 'src/file.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

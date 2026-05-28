@@ -47,7 +47,7 @@
  */
 
 // Core initialization
-export { init, type AutotelWebConfig } from './init';
+export { init, setBaggage, clearBaggage, type AutotelWebConfig } from './init';
 
 // Span exporter
 export { flushSpans } from './span-exporter';

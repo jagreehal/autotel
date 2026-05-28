@@ -8,3 +8,4 @@ catalog/dist
 catalog/node_modules
 *.log
 .DS_Store
+___/

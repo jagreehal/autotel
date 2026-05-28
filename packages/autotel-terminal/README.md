@@ -68,6 +68,32 @@ Port 4319 is used by default to avoid clashing with the standard OTLP port (4318
 | `POST /v1/metrics` | Metrics | Accepts OTLP JSON metrics (acknowledged and counted) |
 | `GET /healthz` | — | Health check |
 
+When bound to a loopback host, the receiver listens on **both** `127.0.0.1`
+and `::1`, so a `localhost` client connects regardless of how the OS resolves
+`localhost` (macOS prefers IPv6 `::1`). The startup line prints every bound
+address; an unbindable family becomes a warning, not a silent failure.
+
+### Behind a dev-server proxy
+
+If a dev server proxies `/v1/traces` to the terminal receiver, two bugs make
+spans silently vanish:
+
+```ts
+// Express / http-proxy-middleware
+app.use(
+  '/v1/traces',
+  createProxyMiddleware({
+    pathRewrite: () => '/v1/traces',      // Express strips the mount prefix → would forward "/"
+    target: 'http://127.0.0.1:4319',      // 127.0.0.1, not localhost (macOS resolves localhost → ::1)
+    changeOrigin: true,
+  }),
+);
+```
+
+The browser shows the request succeeding while the receiver stays empty — so
+verify on the receiver (the TUI should show the spans), not just that the
+request left the browser.
+
 ## Quick Start
 
 ### Recommended Usage

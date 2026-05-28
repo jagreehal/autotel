@@ -45,6 +45,7 @@ export {
   type ArchitectureSnapshotConfig,
   type EventObservation,
 } from './architecture-snapshot';
+export { FileSubscriber, type FileSubscriberConfig } from './file';
 
 // ============================================================================
 // Base Classes for Building Custom Subscribers

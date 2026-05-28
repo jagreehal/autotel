@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useLogger, withAutotelFetch } from './cloudflare';
 
 describe('cloudflare adapter', () => {
@@ -26,6 +26,31 @@ describe('cloudflare adapter', () => {
         {},
       ),
     ).resolves.toMatchObject({ ok: true });
+  });
+
+  it('auto-emits one wide event by default', async () => {
+    const onEmit = vi.fn();
+    const handler = withAutotelFetch(
+      async (request) => {
+        useLogger(request).set({ worker: 'example' });
+        return { ok: true };
+      },
+      { requestLoggerOptions: { onEmit } },
+    );
+
+    await handler({ method: 'GET', url: 'https://example.com/orders' }, {}, {});
+    expect(onEmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not emit when autoEmit is false', async () => {
+    const onEmit = vi.fn();
+    const handler = withAutotelFetch(async () => ({ ok: true }), {
+      autoEmit: false,
+      requestLoggerOptions: { onEmit },
+    });
+
+    await handler({ method: 'GET', url: 'https://example.com/x' }, {}, {});
+    expect(onEmit).not.toHaveBeenCalled();
   });
 });
 
