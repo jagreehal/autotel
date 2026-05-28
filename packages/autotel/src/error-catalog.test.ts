@@ -17,8 +17,13 @@ describe('defineErrorCatalog', () => {
     },
     INSUFFICIENT_FUNDS: {
       status: 402,
-      message: ({ available, required }: { available: number; required: number }) =>
-        `Insufficient funds: $${available} of $${required}`,
+      message: ({
+        available,
+        required,
+      }: {
+        available: number;
+        required: number;
+      }) => `Insufficient funds: $${available} of $${required}`,
       why: ({ required }: { available: number; required: number }) =>
         `Needs $${required}`,
     },

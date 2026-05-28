@@ -1,5 +1,5 @@
 // End-to-end tests for the CLI dispatcher. These run the compiled
-// dist/cli.js as a subprocess against fixture inputs — the same shape a
+// dist/cli.js as a subprocess against fixture inputs; the same shape a
 // CI step or a user shell would invoke.
 //
 // Unit tests in cli.ts would test each branch in isolation; these tests
@@ -42,7 +42,7 @@ function runCli(args: string[]): CliResult {
   };
 }
 
-/** Tiny fixture builder — a snapshot file + a minimal catalog tree. */
+/** Tiny fixture builder; a snapshot file + a minimal catalog tree. */
 function buildFixture(opts: {
   /** Snapshot events keyed by event name. */
   events: Record<
@@ -112,7 +112,7 @@ beforeAll(() => {
   }
 });
 
-describe('cli e2e — drift', () => {
+describe('cli e2e; drift', () => {
   it('exits 0 with --fail-on-drift when catalog and runtime agree', () => {
     const { snapshotPath, catalogPath } = buildFixture({
       events: { 'order.placed': { fields: ['orderId'] } },
@@ -163,7 +163,7 @@ describe('cli e2e — drift', () => {
     ]);
     expect(res.exitCode).toBe(0);
     expect(res.stdout).toContain('Architecture drift report');
-    // Drift outcome line is still printed to stderr — the gating just doesn't fire.
+    // Drift outcome line is still printed to stderr; the gating just doesn't fire.
     expect(res.stderr).toMatch(/Drift detected/);
   });
 
@@ -224,7 +224,7 @@ describe('cli e2e — drift', () => {
   });
 });
 
-describe('cli e2e — stamp', () => {
+describe('cli e2e; stamp', () => {
   it('dry-run leaves files untouched', () => {
     const { snapshotPath, catalogPath } = buildFixture({
       events: { 'order.placed': { fields: ['orderId'] } },
@@ -267,6 +267,32 @@ describe('cli e2e — stamp', () => {
     expect(summary.changedFiles).toBe(1);
   });
 
+  it('--format json emits a single parseable document on stdout', () => {
+    const { snapshotPath, catalogPath } = buildFixture({
+      events: { 'order.placed': { fields: ['orderId'] } },
+      catalogEvents: [{ id: 'OrderPlaced' }],
+    });
+    const res = runCli([
+      'stamp',
+      '--snapshot',
+      snapshotPath,
+      '--catalog',
+      catalogPath,
+      '--dry-run',
+      '--format',
+      'json',
+    ]);
+    expect(res.exitCode).toBe(0);
+    const parsed = JSON.parse(res.stdout);
+    expect(parsed.summary.spec).toBe(
+      'autotel-eventcatalog-stamp-summary/v0.1.0',
+    );
+    expect(Array.isArray(parsed.updates)).toBe(true);
+    expect(parsed.updates[0].catalogId).toBe('OrderPlaced');
+    // Per-line text output must be absent when JSON mode is on.
+    expect(res.stdout).not.toMatch(/would insert OrderPlaced/);
+  });
+
   it('summary.hadChanges is false when re-stamping is a no-op', () => {
     const { snapshotPath, catalogPath, root } = buildFixture({
       events: { 'order.placed': { fields: ['orderId'] } },
@@ -295,7 +321,7 @@ describe('cli e2e — stamp', () => {
   });
 });
 
-describe('cli e2e — generate', () => {
+describe('cli e2e; generate', () => {
   it('dry-run prints planned scaffold and edge operations', () => {
     const { snapshotPath, catalogPath } = buildFixture({
       events: {
@@ -322,9 +348,37 @@ describe('cli e2e — generate', () => {
       'would-link service-edge OrdersService->OrderPlaced',
     );
   });
+
+  it('--format json emits operations + summary on stdout', () => {
+    const { snapshotPath, catalogPath } = buildFixture({
+      events: {
+        'order.placed': {
+          fields: ['orderId'],
+          producer: 'OrdersService',
+          channel: 'orders.events',
+        },
+      },
+      catalogEvents: [],
+    });
+    const res = runCli([
+      'generate',
+      '--snapshot',
+      snapshotPath,
+      '--catalog',
+      catalogPath,
+      '--dry-run',
+      '--format',
+      'json',
+    ]);
+    expect(res.exitCode).toBe(0);
+    const parsed = JSON.parse(res.stdout);
+    expect(Array.isArray(parsed.operations)).toBe(true);
+    expect(parsed.summary).toBeDefined();
+    expect(res.stdout).not.toMatch(/would-create service/);
+  });
 });
 
-describe('cli e2e — top-level', () => {
+describe('cli e2e; top-level', () => {
   it('exits 2 with usage on no command', () => {
     const res = runCli([]);
     expect(res.exitCode).toBe(2);
@@ -335,5 +389,125 @@ describe('cli e2e — top-level', () => {
     const res = runCli(['rumpus']);
     expect(res.exitCode).toBe(2);
     expect(res.stderr).toContain('Usage');
+  });
+});
+
+describe('cli e2e; --register-renderer', () => {
+  function writeRendererModule(dir: string, body: string): string {
+    const file = join(dir, 'custom-renderer.mjs');
+    writeFileSync(file, body, 'utf8');
+    return file;
+  }
+
+  it('loads a custom renderer and dispatches --format <its-name>', () => {
+    const { snapshotPath, catalogPath, root } = buildFixture({
+      events: { 'order.placed': { fields: ['orderId'] } },
+      catalogEvents: [{ id: 'OrderPlaced', declaredFields: ['orderId'] }],
+    });
+    const modulePath = writeRendererModule(
+      root,
+      [
+        'export const renderer = {',
+        "  name: 'tagline',",
+        "  description: 'Single-line drift tagline for tests.',",
+        '  renderReport(report) {',
+        '    const n = report.events.observedButUndocumented.length;',
+        '    return `tagline: ${n} undocumented event(s)`;',
+        '  },',
+        "  renderDelta() { return 'tagline-delta'; },",
+        '};',
+        '',
+      ].join('\n'),
+    );
+
+    const res = runCli([
+      '--register-renderer',
+      modulePath,
+      'drift',
+      '--snapshot',
+      snapshotPath,
+      '--catalog',
+      catalogPath,
+      '--format',
+      'tagline',
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain('tagline: 0 undocumented event(s)');
+  });
+
+  it('exits 2 when the module does not export a Renderer', () => {
+    const { snapshotPath, catalogPath, root } = buildFixture({
+      events: { 'order.placed': { fields: ['orderId'] } },
+      catalogEvents: [{ id: 'OrderPlaced', declaredFields: ['orderId'] }],
+    });
+    const modulePath = writeRendererModule(
+      root,
+      'export const renderer = { iAmNotARenderer: true };\n',
+    );
+
+    const res = runCli([
+      '--register-renderer',
+      modulePath,
+      'drift',
+      '--snapshot',
+      snapshotPath,
+      '--catalog',
+      catalogPath,
+    ]);
+
+    expect(res.exitCode).toBe(2);
+    expect(res.stderr).toContain('does not export a Renderer');
+  });
+
+  it('exits 2 when the module path cannot be loaded', () => {
+    const { snapshotPath, catalogPath, root } = buildFixture({
+      events: { 'order.placed': { fields: ['orderId'] } },
+      catalogEvents: [{ id: 'OrderPlaced', declaredFields: ['orderId'] }],
+    });
+    const res = runCli([
+      '--register-renderer',
+      join(root, 'nope.mjs'),
+      'drift',
+      '--snapshot',
+      snapshotPath,
+      '--catalog',
+      catalogPath,
+    ]);
+
+    expect(res.exitCode).toBe(2);
+    expect(res.stderr).toMatch(/Failed to load renderer module/);
+  });
+
+  it('refuses to overwrite a built-in renderer name', () => {
+    const { snapshotPath, catalogPath, root } = buildFixture({
+      events: { 'order.placed': { fields: ['orderId'] } },
+      catalogEvents: [{ id: 'OrderPlaced', declaredFields: ['orderId'] }],
+    });
+    const modulePath = writeRendererModule(
+      root,
+      [
+        'export const renderer = {',
+        "  name: 'json',",
+        "  description: 'Bad citizen claims the built-in name.',",
+        "  renderReport() { return ''; },",
+        "  renderDelta() { return ''; },",
+        '};',
+        '',
+      ].join('\n'),
+    );
+
+    const res = runCli([
+      '--register-renderer',
+      modulePath,
+      'drift',
+      '--snapshot',
+      snapshotPath,
+      '--catalog',
+      catalogPath,
+    ]);
+
+    expect(res.exitCode).toBe(2);
+    expect(res.stderr).toMatch(/already registered/);
   });
 });

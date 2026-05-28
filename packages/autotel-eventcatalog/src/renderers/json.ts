@@ -9,7 +9,7 @@ import type { Renderer } from './types';
 
 /**
  * Versioned identifier baked into the JSON envelope. Bumping it is a
- * breaking change for downstream consumers — add fields rather than rename.
+ * breaking change for downstream consumers; add fields rather than rename.
  */
 export const REPORT_SPEC = 'autotel-eventcatalog-report/v0.2.0' as const;
 

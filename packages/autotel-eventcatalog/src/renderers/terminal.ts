@@ -1,4 +1,4 @@
-// Plain-text rendering — for terminals, log files, Slack messages, anywhere
+// Plain-text rendering; for terminals, log files, Slack messages, anywhere
 // markdown decorations would render as noise. Reuses the markdown renderer
 // and strips heading marks, inline code backticks, and bold emphasis.
 

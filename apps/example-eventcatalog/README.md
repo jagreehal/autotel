@@ -25,20 +25,18 @@ flowchart LR
 
 ## The problem this solves
 
-EventCatalog goes stale. Someone adds an event in code and forgets to update
-the catalog. A producer is deprecated and the diagram still shows it. A new
-field appears in payloads, and nobody documents it. Six months later the
-catalog has drifted far enough that engineers stop trusting it.
+EventCatalog goes stale. An engineer adds an event in code and forgets to update
+the catalog. A team deprecates a producer and the diagram still shows it. A new
+field appears in payloads and nobody documents it. Six months later, engineers
+stop trusting the catalog.
 
 The teams using the catalog keep asking:
 
 - *"Is this event still in production? When was it last fired?"*
-- *"Has anyone added a field nobody declared in the schema?"*
-- *"Which producer is still emitting this event nobody consumes?"*
+- *"Did someone add a field nobody declared in the schema?"*
+- *"Which producer still emits this event nobody consumes?"*
 - *"Did the LLM token cost change since last release?"*
-- *"Does the catalog match what the code actually does at runtime?"*
-
-The rest of this README is how autotel answers them.
+- *"Does the catalog match what the code does at runtime?"*
 
 ---
 
@@ -52,7 +50,7 @@ pnpm services:snapshot       # writes services/test/snapshot.json
 pnpm catalog:drift           # diffs snapshot vs catalog
 ```
 
-That's it. Real output from this repo:
+Real output from this repo:
 
 ```text
 $ pnpm test
@@ -74,8 +72,7 @@ _Snapshot from `example-eventcatalog` at 2026-05-22T00:00:00.000Z_
 No drift detected. Catalog and runtime agree.
 ```
 
-That's the steady state. Any finding after this is genuine divergence to
-investigate.
+That is the steady state. Any later finding is real divergence to investigate.
 
 ---
 
@@ -215,7 +212,7 @@ The data comes from one test run, with no manual annotation.
 ## What drift looks like when it fires
 
 Inject a field nobody declared (e.g. add `_drift_demo_field` to a
-recommendation payload) and `pnpm catalog:drift` reports it immediately:
+recommendation payload) and `pnpm catalog:drift` reports it:
 
 ```text
 # Architecture drift report
@@ -231,7 +228,7 @@ recommendation payload) and `pnpm catalog:drift` reports it immediately:
 Drift detected in current snapshot.
 ```
 
-The exit code is non-zero. The PR fails. The author sees the sticky comment
+The exit code is non-zero, the PR fails, and the author sees the sticky comment
 and updates the catalog.
 
 What gets caught:
@@ -289,8 +286,41 @@ expect(snap.events['order.placed'].fieldStats?.currency?.sampleValues)
   .toContain('GBP');
 ```
 
-If autotel ever stops capturing those runtime types and sample values, the
+If autotel stops capturing those runtime types and sample values, the
 test fails, which surfaces as a broken test in the catalog package itself.
+
+A third test, `services/test/catalog-drift.integration.test.ts`, runs the
+same drift the CLI runs and asserts the catalog and the committed snapshot
+agree. Any new catalog entry that nobody exercises, or any service that
+stops emitting a documented event, fails CI here before the
+`pnpm catalog:drift` script gets a chance to.
+
+---
+
+## Coverage discipline
+
+Drift only sees what your test suite exercises. The committed snapshot is
+the artefact of one run of `build-snapshot.ts`; a payload field that only
+appears under a code path your tests skip will not show up in `fieldPaths`
+or `fieldStats`, and an event that only fires under a rare production
+condition will not appear at all.
+
+In practice this gives you **catalog honesty for what your test suite
+covers**. Two consequences:
+
+1. **Adding a new documented event is a two-step change.** Add it to the
+   catalog, *and* extend `services/src/build-snapshot.ts` so a test run
+   emits it. If you only do step one, `catalog-drift.integration.test.ts`
+   fails with `documentedButUnseen` and the message tells you to run
+   `pnpm services:snapshot`.
+2. **Edge cases in the demo are deliberate.** `walkFailedCheckout` in
+   `build-snapshot.ts` exists so the snapshot covers `payment.failed`
+   alongside the happy path. When you add a new edge case in real
+   services, add the analogous walk to your own `build-snapshot.ts` and
+   keep the coverage discipline honest.
+
+The drift test is the gate; the snapshot script is where you spend the
+effort to broaden coverage. Treat them as a pair, not a one-time setup.
 
 ---
 

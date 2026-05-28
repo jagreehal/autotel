@@ -1,4 +1,4 @@
-// GitHub-flavoured Markdown — the default. Used directly as the body of
+// GitHub-flavoured Markdown; the default. Used directly as the body of
 // the sticky PR comment posted by the bundled action.
 
 import type { DriftReport, FieldDrift } from '../diff';
@@ -114,7 +114,7 @@ export function renderMarkdown(report: DriftReport): string {
  */
 export function renderDeltaMarkdown(delta: DriftDelta): string {
   const lines: string[] = [
-    '# Architecture drift — what this change introduces',
+    '# Architecture drift; what this change introduces',
     '',
   ];
 

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/autotel-pact/ledger-entry-v0.2.0.json",
+  "title": "autotel-pact ledger entry",
+  "description": "JSONL ledger row: interaction observation or provider verification run failure.",
+  "oneOf": [
+    { "$ref": "#/$defs/interaction" },
+    { "$ref": "#/$defs/provider_verification_run" }
+  ],
+  "$defs": {
+    "interaction": {
+      "type": "object",
+      "required": [
+        "spec",
+        "consumer",
+        "provider",
+        "interaction",
+        "states",
+        "kind",
+        "source",
+        "role",
+        "outcome",
+        "duration_ms",
+        "observed_at"
+      ],
+      "properties": {
+        "type": { "const": "interaction" },
+        "spec": { "const": "autotel-pact-ledger-entry/v0.2.0" },
+        "consumer": { "type": "string" },
+        "provider": { "type": "string" },
+        "interaction": { "type": "string" },
+        "interaction_id": { "type": "string", "minLength": 1 },
+        "states": { "type": "array", "items": { "type": "string" } },
+        "kind": { "enum": ["message", "http"] },
+        "source": { "enum": ["test", "production"] },
+        "role": { "enum": ["consumer", "provider"] },
+        "outcome": { "enum": ["passed", "failed"] },
+        "duration_ms": { "type": "number", "minimum": 0 },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "trace_id": { "type": "string" },
+        "span_id": { "type": "string" },
+        "run_id": { "type": "string" },
+        "git_sha": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "provider_verification_run": {
+      "type": "object",
+      "required": [
+        "type",
+        "spec",
+        "consumer",
+        "provider",
+        "source",
+        "role",
+        "outcome",
+        "observed_at",
+        "error"
+      ],
+      "properties": {
+        "type": { "const": "provider_verification_run" },
+        "spec": { "const": "autotel-pact-ledger-entry/v0.2.0" },
+        "consumer": { "type": "string" },
+        "provider": { "type": "string" },
+        "source": { "enum": ["test", "production"] },
+        "role": { "const": "provider" },
+        "outcome": { "const": "failed" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "error": { "type": "string" },
+        "run_id": { "type": "string" },
+        "git_sha": { "type": "string" },
+        "trace_id": { "type": "string" },
+        "span_id": { "type": "string" }
+      }
+    }
+  }
+}

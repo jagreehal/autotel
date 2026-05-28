@@ -56,3 +56,5 @@ apps/cloudflare-example/.alchemy
 **/.autotel-cache/
 
 ___/*
+# Spike/scratch work
+temp/

@@ -1,449 +1,111 @@
-# Contract Testing Observability Demo
+# example-contract-testing
 
-Production-grade observability for contract testing workflows using Autotel. This demo shows how to instrument contract testing pipelines (`contract-check`, `contract-test`, `pact-verify`) with comprehensive traces, structured logging, and product events for better reliability and faster triage.
+End-to-end demo of [`autotel-pact`](../../packages/autotel-pact/README.md) v0.2. One `pnpm start` exercises every evidence path the v0.2 audit knows about and prints the matrix.
 
-## Why This Matters
+```text
+autotel-pact demo — runtime evidence for Pact contracts (v0.2)
+================================================================================================
 
-Contract testing failures are hard to debug without proper observability. This demo shows how to:
+  ▶ Running 2 contracted interactions through withPactInteraction()
+  ▶ Injecting a stale pact entry (contract exists, nothing exercised it)
+  ▶ Recording a SHADOW observation (runtime fires, no contract)
+  ▶ Running provider verification (skipVerifier: true)
+  ▶ Simulating a production span carrying pact.* tags
 
-- **Trace workflow phases** — Each step (generate, sync, normalize, verify) has its own span with timing
-- **Identify failures quickly** — Deterministic error codes and attributes power automated triage and gating
-- **Track trends over time** — Product events show drift patterns, sync behavior, and verification success rates
-- **Correlate across systems** — Trace IDs link contract checks to deployment events and service changes
+  ▶ Running audit...
 
-## Features
-
-✅ **Phase Tracing** — `consumer.generate`, `pacts.sync`, `pacts.normalize`, `provider.verify`, `contract.health.audit`
-
-✅ **Structured Errors** — Typed error codes (`PROVIDER_VERIFY_FAILED`, `CONTRACT_MISSING_PROVIDER_COPY`) with remediation guidance
-
-✅ **Rich Attributes** — Contract-specific span attributes for triage: `contract.consumer`, `contract.provider`, `contract.diff_type`, `contract.check`
-
-✅ **Product Events** — `contract_check_completed`, `contract_sync_performed`, `contract_verification_failed` for trend analysis
-
-✅ **Request Snapshots** — One-shot execution log via `getRequestLogger().emitNow()` showing full execution context
-
-✅ **Built-in Redaction** — Automatic masking of tokens, authorization headers, and sensitive fields
-
-## Prerequisites
-
-- Node.js 22+
-- pnpm (or npm/yarn)
-- Optional: OTLP-compatible backend (e.g., Jaeger, Datadog, Grafana Cloud)
-
-## Setup
-
-```bash
-# From repository root
-pnpm install
-
-# Optional: set OTLP endpoint if not using localhost:4318
-export OTLP_ENDPOINT=https://your-otel-backend.example.com:4318
+Window: last 14 day(s)
+────────────────────────────────────────────────────────────────────────────────────────────────
+  STATUS    TEST  PROD  PROVIDER  BROKER   CONSUMER → PROVIDER             INTERACTION
+────────────────────────────────────────────────────────────────────────────────────────────────
+  👻 SHADOW   yes    no    no       no     OrderShipper → InventoryService  an InventoryReserved event
+  ✅ OK       yes   yes   yes       no     OrderShipper → OrderService      an OrderCreated event
+  ⚠️  STALE    no    no   yes       no     OrderShipper → OrderService      an OrderRefunded event
+  ✅ OK       yes    no   yes       no     OrderShipper → OrderService      an OrderShipped event
+────────────────────────────────────────────────────────────────────────────────────────────────
+Summary
+  Contracted:                  3
+  Seen in test:                3
+  Seen in production:          1
+  Provider verified:           3
+  Contracted AND seen in test: 2
+  Contracted, NOT seen in test:1  ← stale confidence
+  Seen, NOT contracted:        1  ← ungoverned flow
 ```
 
-## Running the Demo
+## What it shows
+
+Each row demonstrates a different combination of v0.2 evidence sources.
+
+| Row               | Status | TEST_SEEN | PROD_SEEN | PROVIDER_VERIFIED | What set it up                                                                                                                                  |
+| ----------------- | ------ | --------- | --------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| OrderCreated      | OK     | yes       | yes       | yes               | `withPactInteraction` with a Zod schema at the message boundary, `tagPactInteraction` inside a `trace()`, plus provider verify (`skipVerifier`) |
+| OrderShipped      | OK     | yes       | no        | yes               | `withPactInteraction` with a Zod schema at the message boundary, plus provider verify (`skipVerifier`)                                          |
+| OrderRefunded     | STALE  | no        | no        | yes               | Hand-injected into the pact file; covered by `skipVerifier` provider verify but never exercised by a consumer test                              |
+| InventoryReserved | SHADOW | yes       | no        | no                | Hand-written `appendLedgerEntry`, no matching pact                                                                                              |
+
+The STALE row is the headline. A green Pact suite would tell you all three contracts are verified. The audit tells you only two were actually exercised this run, even though all three got the provider stamp.
+
+The matrix above is the demo script's compact printer. `pnpm pact:audit` prints a wider table that also includes a CONTRACTED column and a KIND column (`message` or `http`), useful when you diff the two. The BROKER column stays `no` for every row until you run `pnpm pact:audit:broker` with `PACT_BROKER_BASE_URL` and a token set.
+
+## Run it
 
 ```bash
-# From repository root
+pnpm install   # from repo root
 pnpm --filter @jagreehal/example-contract-testing start
 ```
 
-You'll see:
-- Console table of contract pair statuses
-- Trace summary with counts (healthy, stale, uncommitted, sync gaps, failures)
-- Log output showing each pair audit with structured error details
-- Telemetry events sent to your OTLP endpoint
-
-### What Gets Traced
-
-The demo simulates three contract pairs:
-
-| Pair | Status | Purpose |
-|------|--------|---------|
-| `admin → account` | ✅ Healthy | Shows clean contract check with all attributes |
-| `digest → membership` | ⚠️ Warn | Stale + uncommitted with UUID-only diff noise |
-| `reconciler → messagequeue` | ❌ Fail | Missing provider copy + verification failure |
-
-## Architecture
-
-```
-┌─────────────────────────────────┐
-│  Contract Health Audit Span     │ (runId, workflow_id, mode)
-│  ├─ Consumer.generate Span      │ (consumer_count)
-│  ├─ Pacts.sync Span             │ (uncommitted_count)
-│  ├─ Pacts.normalize Span        │
-│  ├─ Provider.verify Span        │ (verify_failed_count)
-│  └─ Pair Audit Loop             │
-│     ├─ contract.pair.audit (x3) │ (consumer, provider, status, diff_type)
-│     │  └─ Error log (on fail)   │ (code, reason, fix)
-│     └─ Product event emission   │ (contract_check_completed, etc)
-└─────────────────────────────────┘
-```
-
-## Key Patterns
-
-### 1. Workflow Tracing
-
-```typescript
-const summary = await span('contract.demo.run', async () => {
-  return runner.run(config, async () => {
-    await trace('consumer.generate', async () => { ... });
-    await trace('pacts.sync', async () => { ... });
-    // ... other phases
-  });
-});
-```
-
-### 2. Pair-level Audits with Attributes
-
-```typescript
-pairSpan.setAttributes({
-  'contract.consumer': pair.consumer,
-  'contract.provider': pair.provider,
-  'contract.status': inferStatus(pair),
-  'contract.diff_type': pair.diffType,
-});
-```
-
-### 3. Structured Errors with Remediation
-
-```typescript
-if (pair.verificationFailed) {
-  const err = createStructuredError({
-    message: 'Contract verification failed',
-    why: 'Pair digest→membership failed checks',
-    fix: 'Sync pacts, normalize values, re-run verification',
-    code: 'PROVIDER_VERIFY_FAILED',
-  });
-  log.error(err, { pair, contract_file: pair.file });
-}
-```
-
-### 4. Product Events for Trends
-
-```typescript
-track('contract_check_completed', {
-  run_id: runId,
-  service: input.service,
-  status: summary.status,
-  checked_pairs: summary.checkedPairs,
-  // ... additional context
-});
-```
-
-## Extending the Demo
-
-### Adding Custom Contract Pairs
-
-Edit `src/index.ts` to add your contract pairs:
-
-```typescript
-const scenarios: ContractPairResult[] = [
-  {
-    consumer: 'your-service',
-    provider: 'their-api',
-    file: 'contracts/your-service-their-api.json',
-    stale: false,
-    syncGap: false,
-    missingProviderCopy: false,
-    uncommitted: false,
-    verificationFailed: false,
-    diffType: 'none',
-  },
-];
-```
-
-**Field Reference:**
-
-| Field | Type | Purpose |
-|-------|------|---------|
-| `consumer` | string | Consumer service name |
-| `provider` | string | Provider service name |
-| `file` | string | Path to pact file |
-| `stale` | boolean | Contract older than threshold |
-| `syncGap` | boolean | Consumer version not synced to broker |
-| `missingProviderCopy` | boolean | Provider hasn't downloaded contract |
-| `uncommitted` | boolean | Local changes not committed |
-| `verificationFailed` | boolean | Provider verification failed |
-| `diffType` | 'none' \| 'uuid-noise' \| 'timestamp-noise' \| 'semantic-change' | Type of difference |
-| `diffNoiseFields?` | string[] | Fields that are just noise (optional) |
-| `reason?` | string | Failure explanation (optional) |
-
-### Customizing Trace Phases
-
-Modify workflow phases in `src/index.ts`:
-
-```typescript
-await trace('consumer.generate', async () => {
-  // Your custom generation logic
-  await yourConsumerGeneration();
-});
-
-await trace('pacts.sync', async () => {
-  // Your custom sync logic
-  await yourPactSync();
-});
-```
-
-### Adding Custom Span Attributes
-
-Enhance pair audits with custom attributes:
-
-```typescript
-pairSpan.setAttributes({
-  'contract.team': 'platform',
-  'contract.sla': '1h',
-  'contract.owner': 'my-team',
-});
-```
-
-### Customizing Error Codes
-
-Modify error creation in `src/contract-observability.ts`:
-
-```typescript
-const err = createStructuredError({
-  message: 'Your message',
-  why: 'Why it happened',
-  fix: 'How to fix it',
-  code: 'YOUR_ERROR_CODE', // SCREAMING_SNAKE_CASE
-});
-```
-
-### Change OTLP Endpoint
+Inspect the artifacts the demo wrote:
 
 ```bash
-OTLP_ENDPOINT=https://your-backend.example.com:4318 pnpm start
+cat pacts/OrderShipper-OrderService.json     # 3 messages
+ls .autotel-pact/                             # consumer + provider rows
+ls .autotel-pact-prod/                        # production rows from the span processor
 ```
 
-Or modify `src/index.ts`:
+The demo uses two ledger directories on purpose. In real deployments the `PactLedgerSpanProcessor` runs in production while `withPactInteraction` runs in CI, so they never share a process. The demo runs both inside one Node process, so routing the processor to `.autotel-pact-prod` and copying it into `.autotel-pact` before the audit avoids cross-talk between the wrapper's own spans and the explicit production tag.
 
-```typescript
-init({
-  service: 'example-contract-testing',
-  endpoint: process.env.OTLP_ENDPOINT || 'http://localhost:4318',
-});
-```
-
-### Disable Telemetry (Local Testing)
-
-```typescript
-init({
-  disabled: true, // Disables trace/event export
-  debug: true,    // Logs to console instead
-});
-```
-
-### Custom Redaction Policies
-
-Extend sensitive field masking:
-
-```typescript
-init({
-  attributeRedactor: {
-    keyPatterns: [/authorization/i, /token/i, /api[_-]?key/i],
-    valuePatterns: [
-      {
-        name: 'custom-pattern',
-        pattern: /your_regex_here/g,
-        replacement: '[REDACTED]',
-      },
-    ],
-  },
-});
-```
-
-### Emit Custom Product Events
-
-Track metrics specific to your workflow:
-
-```typescript
-track('contract_audit_completed', {
-  run_id: runId,
-  service: input.service,
-  team: 'platform',
-  custom_metric: value,
-});
-```
-
-## Expected Output
-
-```
-Contract Health Demo Summary
-┌─────────────────────┬────────────────┐
-│ runId               │ abc123...      │
-│ status              │ warn           │
-│ staleCount          │ 1              │
-│ missingProviderCount│ 0              │
-│ uncommittedCount    │ 1              │
-│ syncGapCount        │ 0              │
-│ verifyFailedCount   │ 0              │
-│ checkedPairs        │ 3              │
-└─────────────────────┴────────────────┘
-
-Pair Statuses
-┌─────────────────────────┬──────────────────────────────┬───────┐
-│ pair                    │ file                         │ ...   │
-│ admin->account          │ admin-consumer-account-...   │ ok    │
-│ digest->membership      │ digest-consumer-membership.. │ warn  │
-│ reconciler->messagequeue│ reconciler-consumer-message..│ fail  │
-└─────────────────────────┴──────────────────────────────┴───────┘
-```
-
-## Integration with CI/CD
-
-### Use Status for Gating
+## CLI scripts
 
 ```bash
-status=$(pnpm start | grep -A 1 'status' | tail -1)
-if [ "$status" != "ok" ]; then
-  echo "⚠️  Contract warnings detected"
-  exit 0  # Warnings don't block
-fi
+pnpm pact:audit            # print the v0.2 matrix
+pnpm pact:audit:gate       # exit 1 if any contracted interaction was not seen in test
+pnpm pact:audit:broker     # exit 1 if a Pact Broker is configured and any contracted row lacks proof
 ```
 
-### Report Events to Slack/Teams
+`pact:audit:broker` requires `PACT_BROKER_BASE_URL` and `PACT_BROKER_TOKEN` (or `--broker-url` / `--broker-token`). Without them the script exits non-zero because no contracted row has broker proof; that is the gate doing its job.
 
-Connect your OTLP backend to send alerts on `contract_verification_failed` events.
+## What the demo's source code shows
 
-## Troubleshooting
+[`src/index.ts`](./src/index.ts) is a single self-contained script. Each slice maps to one v0.2 evidence path.
 
-### No Telemetry Received
+1. **`exerciseOrderCreated` / `exerciseOrderShipped`** — the canonical consumer-side pattern. `new MessageConsumerPact(...)`, fluent `.given().expectsToReceive().withContent()`, then `withPactInteraction(pact, handler, { interactionId })`. The handler parses `message.contents` (Pact-JS types it as `unknown`) through a Zod schema before calling the business handler, which makes the type boundary explicit and surfaces drift between the pact file and the consumer code as a clear validation error. `interactionId` keeps audit rows stable across rewrites of the `expectsToReceive` text.
+2. **`injectStalePactFile`** — appends a message to the pact file by hand to simulate a contract that some other test no longer runs.
+3. **`recordShadowObservation`** — `appendLedgerEntry` with a consumer the pact files do not mention.
+4. **`runProviderVerification`** — `withProviderVerification` with `skipVerifier: true`. The wrapper parses the pact file and fans out one ledger row per interaction with `role: 'provider'` without loading or calling the real Verifier. In production drop the option and `@pact-foundation/pact` runs against a real provider service.
+5. **`simulateProductionObservation`** — `trace('handleOrderCreated', () => { tagPactInteraction({...}); handler(); })`. The `PactLedgerSpanProcessor` registered at `init()` time catches the span and writes a `source: production` row.
 
-1. Check `OTLP_ENDPOINT` — defaults to `http://localhost:4318`
-2. Run locally: `docker run -p 4317:4317 -p 4318:4318 otel/opentelemetry-collector`
-3. Set `debug: true` in `init()` to see console logs
+In a real codebase the consumer-side pattern is the one you write per test. The other four are demo plumbing that simulates failure modes the audit catches.
 
-### Spans Not Appearing
+After printing the matrix, `assertMatrix(matrix)` checks every row and every count against the expected story so the README's documented output cannot drift silently. If you change the demo and the matrix changes shape, the assertions fail loud.
 
-- Confirm `init()` is called before any `trace()` or `span()` calls
-- Check `shutdown()` is called to flush traces
-
-### Memory/Performance Issues
-
-The demo stores all pair results in memory. For large contract suites, stream results instead of collecting.
-
-## Files
-
-- `src/index.ts` — Runnable demo with 3 contract pair scenarios
-- `src/contract-observability.ts` — Reusable `ContractObservabilityRunner` abstraction
-- `package.json` — Dependencies and scripts
-- `tsconfig.json` — TypeScript configuration
-
-## Testing & Debugging
-
-### Local Testing (No OTLP Backend)
+## Environment
 
 ```bash
-DEBUG=true pnpm start
+OTLP_ENDPOINT=http://localhost:4318    # default
+DEBUG=true                             # autotel debug logging
+AUTOTEL_PACT_RUN_ID=ci-build-1234      # tag ledger entries with a run id
+
+# Optional broker integration
+PACT_BROKER_BASE_URL=https://pact-broker.example
+PACT_BROKER_TOKEN=...
+# or: PACT_BROKER_USERNAME / PACT_BROKER_PASSWORD
 ```
 
-All traces and events log to console instead of sending to OTLP.
+If there is no local OTLP collector the demo still works; spans just have nowhere to go.
 
-### With Jaeger (Docker)
+## Related
 
-```bash
-# Start Jaeger locally
-docker run -p 4317:4317 -p 4318:4318 -p 16686:16686 otel/opentelemetry-collector
-
-# Run demo
-pnpm start
-
-# View traces at http://localhost:16686
-```
-
-### Debugging Tips
-
-Enable verbose logging:
-
-```bash
-DEBUG=true NODE_DEBUG=opentelemetry pnpm start
-```
-
-Check trace context in code:
-
-```typescript
-import { trace } from 'opentelemetry-api';
-
-const span = trace.getActiveSpan();
-console.log('Trace ID:', span?.spanContext().traceId);
-console.log('Span ID:', span?.spanContext().spanId);
-```
-
-## Performance Considerations
-
-For large contract suites (100+ pairs):
-
-1. **Stream results** instead of collecting in memory
-2. **Emit events incrementally** per pair
-3. **Use sampling** to reduce event volume
-4. **Batch spans** if needed for throughput
-
-## File Structure
-
-```
-src/
-  ├── index.ts                    # Main demo (edit to customize)
-  └── contract-observability.ts   # Reusable runner (extend as needed)
-
-Configuration:
-  ├── package.json                # Dependencies
-  ├── tsconfig.json               # TypeScript config
-  ├── .env.example                # Environment template
-  └── .gitignore                  # Git ignore rules
-
-Documentation:
-  ├── README.md                   # This file
-```
-
-## Real-World Integration Examples
-
-### Slack Alerts
-
-Connect your OTLP backend to post alerts on failures:
-
-```typescript
-track('contract_verification_failed', {
-  run_id: runId,
-  pair: `${pair.consumer}->${pair.provider}`,
-  slack_channel: '#contracts',
-});
-```
-
-### GitHub Issues
-
-Auto-create issues from failed checks:
-
-```typescript
-if (pair.verificationFailed) {
-  track('contract_needs_attention', {
-    pair: `${pair.consumer}->${pair.provider}`,
-    reason: pair.reason,
-    github_repo: 'my-org/contracts',
-  });
-}
-```
-
-### Dashboard Metrics
-
-Tag events for dashboard filtering:
-
-```typescript
-track('contract_check_completed', {
-  run_id: runId,
-  service: input.service,
-  env: 'staging',
-  status: summary.status,
-});
-```
-
-## Related Documentation
-
-- [Autotel Docs](https://autotel.dev)
-- [Pact Testing](https://docs.pact.foundation)
-- [OpenTelemetry](https://opentelemetry.io)
-- [OTLP Protocol](https://opentelemetry.io/docs/specs/otel/protocol/)
-
-## License
-
-MIT
+- [`autotel-pact`](../../packages/autotel-pact/README.md) — the package this demo uses
+- [Pact documentation](https://docs.pact.io)
+- [Pact-Message overview](https://docs.pact.io/getting_started/how_pact_works#message-pact)

@@ -10,7 +10,10 @@ The rule across every framework is the same: wrap the authorization decision so 
 // app/admin/users/[id]/route.ts
 import { withAuthz } from '@/lib/audit';
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string } },
+) {
   return withAuthz(
     {
       action: 'user.delete',
@@ -101,7 +104,8 @@ fastify.delete('/admin/users/:id', async (request, reply) => {
       actor: { id: request.user.id, role: request.user.role },
     },
     async () => ({ allow: request.user.role === 'admin' }),
-    async () => db.user.delete({ where: { id: (request.params as { id: string }).id } }),
+    async () =>
+      db.user.delete({ where: { id: (request.params as { id: string }).id } }),
   );
   return { ok: true };
 });
@@ -180,7 +184,12 @@ import { withAudit } from 'autotel-audit';
 
 export const nightlyPurge = trace(async function nightlyPurge() {
   await withAudit(
-    { action: 'data.purge', resource: 'expired-sessions', actorId: 'system:cron', category: 'maintenance' },
+    {
+      action: 'data.purge',
+      resource: 'expired-sessions',
+      actorId: 'system:cron',
+      category: 'maintenance',
+    },
     async () => sessions.purgeExpired(),
   );
 });

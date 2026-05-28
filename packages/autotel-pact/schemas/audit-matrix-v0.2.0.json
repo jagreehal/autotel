@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autotel.dev/schemas/autotel-pact/audit-matrix-v0.2.0.json",
+  "title": "autotel-pact audit matrix",
+  "description": "Output of `autotel-pact audit --json`.",
+  "type": "object",
+  "required": ["spec", "rows", "counts", "window_days", "generated_at"],
+  "properties": {
+    "spec": { "const": "autotel-pact-audit-matrix/v0.2.0" },
+    "window_days": { "type": "integer", "minimum": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "verification_failures": {
+      "type": "array",
+      "items": { "$ref": "ledger-entry-v0.2.0.json#/$defs/provider_verification_run" }
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "total",
+        "contracted",
+        "observed",
+        "contracted_and_test_seen",
+        "contracted_not_test_seen",
+        "test_or_prod_seen_not_contracted",
+        "test_seen",
+        "prod_seen",
+        "provider_verified",
+        "broker_verified"
+      ],
+      "properties": {
+        "total": { "type": "integer" },
+        "contracted": { "type": "integer" },
+        "observed": { "type": "integer" },
+        "contracted_and_test_seen": { "type": "integer" },
+        "contracted_not_test_seen": { "type": "integer" },
+        "test_or_prod_seen_not_contracted": { "type": "integer" },
+        "test_seen": { "type": "integer" },
+        "prod_seen": { "type": "integer" },
+        "provider_verified": { "type": "integer" },
+        "broker_verified": { "type": "integer" }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "consumer",
+          "provider",
+          "interaction",
+          "kind",
+          "contracted",
+          "observed",
+          "test_seen",
+          "prod_seen",
+          "provider_verified",
+          "broker_verified"
+        ],
+        "properties": {
+          "consumer": { "type": "string" },
+          "provider": { "type": "string" },
+          "interaction": { "type": "string" },
+          "interaction_id": { "type": "string" },
+          "kind": { "enum": ["message", "http"] },
+          "contracted": { "type": "boolean" },
+          "observed": { "type": "boolean" },
+          "test_seen": { "type": "boolean" },
+          "prod_seen": { "type": "boolean" },
+          "provider_verified": { "type": "boolean" },
+          "broker_verified": { "type": "boolean" },
+          "broker_verified_at": { "type": "string" },
+          "last_observed_at": { "type": "string" },
+          "last_outcome": { "enum": ["passed", "failed"] }
+        }
+      }
+    }
+  }
+}

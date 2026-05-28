@@ -203,7 +203,7 @@ export async function generateCatalogFromSnapshot(
           summary: `Generated from autotel snapshot event "${snapshotName}"`,
           schemaPath: 'schema.json',
           markdown: buildEventMarkdown(snapshotName, obs, schemaSource),
-          // Bind to channel here rather than via sdk.addEventToChannel —
+          // Bind to channel here rather than via sdk.addEventToChannel,
           // @eventcatalog/sdk@2.21.2 has a bug in addMessageToChannel where
           // the path split uses a string literal instead of a regex, which
           // ends up nesting a duplicate event file under index.mdx/. Setting
@@ -474,7 +474,7 @@ function collectChannels(snapshot: ArchitectureSnapshot): Set<string> {
   return out;
 }
 
-export const GENERATED_MARKER = '<!-- autotel:generated -->';
+const GENERATED_MARKER = '<!-- autotel:generated -->';
 
 const GENERATED_PREAMBLE = `${GENERATED_MARKER}
 <!-- Edit freely. Subsequent \`autotel-eventcatalog generate\` runs skip files that already exist. -->`;
