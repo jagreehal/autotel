@@ -2,6 +2,7 @@
 import { createServer } from 'node:http'
 import { DevtoolsServer } from './server/server'
 import { attachDevtoolsRoutes } from './server/http'
+import { listenLoopbackDualStack } from './server/listen'
 import { DevtoolsSpanExporter } from './server/exporter'
 import type { Server } from 'node:http'
 
@@ -38,7 +39,20 @@ export function createDevtools(options: CreateDevtoolsOptions = {}): DevtoolsIns
   })
   attachDevtoolsRoutes(httpServer, wsServer)
 
-  httpServer.listen(port, host)
+  // Bind both loopback families when host is loopback, so a `localhost` client
+  // reaches us whether it resolves to 127.0.0.1 or ::1. Stays synchronous:
+  // listening completes via callbacks just like the previous bare listen().
+  const listeners = listenLoopbackDualStack({
+    primary: httpServer,
+    port,
+    host,
+    attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer),
+  })
+  if (options.verbose) {
+    listeners.ready.then(({ warnings }) => {
+      for (const w of warnings) console.warn(`[autotel-devtools] ${w}`)
+    })
+  }
 
   const exporter = new DevtoolsSpanExporter(wsServer)
 
@@ -49,6 +63,7 @@ export function createDevtools(options: CreateDevtoolsOptions = {}): DevtoolsIns
     port,
     close: async () => {
       await wsServer.close()
+      await listeners.closeSibling()
     },
   }
 }

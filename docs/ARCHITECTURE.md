@@ -30,7 +30,7 @@ Trace names are inferred automatically with the following priority:
 3. **Variable name from assignment** (e.g., `const processDocuments = trace(...)` → "processDocuments")
 4. **Factory function name** (if the outer function is named)
 
-The variable name inference (priority #3) works by analyzing the call stack to find the source line where `trace()` is called, then parsing it to extract the variable name from const/let/var assignments. This is especially useful for arrow functions in the factory pattern:
+The variable name inference (priority #3) analyzes the call stack to find the source line where `trace()` is called, then parses it to extract the variable name from const/let/var assignments. This helps with arrow functions in the factory pattern:
 
 ```typescript
 // Arrow function with inferred name from const assignment
@@ -144,7 +144,7 @@ const enrichedResource = mergeServiceResource(resource, {
 
 ### Tree-Shaking & Bundle Size
 
-All packages are configured for aggressive tree-shaking:
+All packages are configured for tree-shaking:
 
 - Use `"sideEffects": false` in package.json
 - Export all public APIs explicitly in package.json `exports` field
@@ -192,7 +192,7 @@ const content = fs.readFileSync('file.txt', 'utf8');
 - `await import()` makes functions async, breaking the API contract
 - The `node-require` helper uses `createRequire()` pattern for ESM compatibility
 - Works in both CJS and ESM builds (tsup handles the differences)
-- Consistent, synchronous module loading across the codebase
+- Synchronous module loading stays consistent across the codebase
 
 **Implementation:** See `packages/autotel/src/node-require.ts` for details.
 
@@ -271,7 +271,7 @@ OpenTelemetry's ESM instrumentation uses `import-in-the-middle` to hook into mod
 - Logger integrations (pino, winston) are optional peer dependencies
 - OpenLLMetry integration (@traceloop/node-server-sdk) is optional peer dependency
 - gRPC exporters are optional peer dependencies
-- Missing optional peer dependencies gracefully degrade with helpful error messages
+- Missing optional peer dependencies degrade with clear error messages
 
 ### Build Outputs
 

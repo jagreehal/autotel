@@ -27,10 +27,30 @@
         </li>
         <li class="flex items-start">
           <span class="mr-2">•</span>
+          <span>Per-tenant context with <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">setBaggage()</code> → W3C <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">baggage</code> header (fail-closed, same-origin by default)</span>
+        </li>
+        <li class="flex items-start">
+          <span class="mr-2">•</span>
           <span>Trace context in <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">trace(ctx => ...)</code> (traceId, spanId, correlationId)</span>
         </li>
       </ul>
       <p class="text-sm text-gray-600 mt-3">For real browser spans and <code class="bg-gray-100 px-1 rounded font-mono">setAttribute</code> / network timing, use <code class="bg-gray-100 px-1 rounded font-mono">initFull</code> from <code class="bg-gray-100 px-1 rounded font-mono">autotel-web/full</code> (see README).</p>
+    </div>
+
+    <div class="bg-purple-50 border-l-4 border-purple-500 rounded-lg p-6 mb-8">
+      <p class="font-semibold text-gray-900 mb-3">Per-tenant tracing with <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">setBaggage()</code>:</p>
+      <p class="text-gray-700 mb-4">Attach business context (e.g. <code class="bg-gray-100 px-1 rounded font-mono">tenant.id</code>) once. It rides along as a W3C <code class="bg-gray-100 px-1 rounded font-mono">baggage</code> header on every instrumented request and is tagged onto every browser span — and your backend's <code class="bg-gray-100 px-1 rounded font-mono">BaggageSpanProcessor</code> copies it onto server spans. One attribute, end-to-end.</p>
+      <div class="flex flex-wrap items-center gap-3">
+        <input id="tenantInput" type="text" value="acme-corp" placeholder="tenant.id"
+          class="px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm" />
+        <button onclick="setTenant()" class="bg-purple-600 hover:bg-purple-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
+          Set Tenant Context
+        </button>
+        <button onclick="clearTenant()" class="bg-gray-500 hover:bg-gray-600 text-white font-medium px-6 py-3 rounded-lg transition-colors">
+          Clear Tenant
+        </button>
+      </div>
+      <p id="tenantStatus" class="text-sm text-gray-600 mt-3 font-mono">No tenant context set.</p>
     </div>
 
     <div class="mb-8">
@@ -52,12 +72,16 @@
 
   <script type="module">
     // Import autotel-web
-    import { init, trace, getActiveContext } from '../../packages/autotel-web/dist/index.js'
+    import { init, trace, getActiveContext, setBaggage, clearBaggage } from '../../packages/autotel-web/dist/index.js'
 
     // Initialize the SDK (lean mode: header injection only, no real spans)
     init({
       service: 'vanilla-js-example',
-      debug: true
+      debug: true,
+      // Business-context baggage is same-origin-only by default (fail-closed).
+      // This demo calls the cross-origin jsonplaceholder API, so we opt that
+      // host in here. Without this, baggage would NOT be sent to it.
+      baggage: { allowedOrigins: ['jsonplaceholder.typicode.com'] }
     })
 
     console.log('✅ Autotel Web initialized!')
@@ -100,6 +124,25 @@
       }
     })
 
+    // Set per-tenant baggage context
+    window.setTenant = function() {
+      const id = document.getElementById('tenantInput').value.trim()
+      if (!id) {
+        document.getElementById('tenantStatus').textContent = 'Enter a tenant.id first.'
+        return
+      }
+      setBaggage({ 'tenant.id': id })
+      document.getElementById('tenantStatus').textContent =
+        `✅ baggage set → tenant.id=${id}  (sent on the next instrumented request)`
+    }
+
+    // Clear per-tenant baggage context (e.g. on logout)
+    window.clearTenant = function() {
+      clearBaggage()
+      document.getElementById('tenantStatus').textContent =
+        'Cleared — subsequent requests carry no baggage.'
+    }
+
     // Show current trace context
     window.showTraceContext = function() {
       const result = document.getElementById('result')
@@ -123,10 +166,12 @@
       <ol class="space-y-2 text-gray-700 list-decimal list-inside mb-8">
         <li>Open DevTools (F12)</li>
         <li>Go to the Network tab</li>
-        <li>Click one of the buttons above</li>
+        <li>Click <strong>Set Tenant Context</strong>, then click one of the request buttons above</li>
         <li>Click on the request in the Network tab</li>
         <li>Look for <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> in the Request Headers section</li>
         <li>You should see: <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent: 00-{trace-id}-{span-id}-01</code></li>
+        <li>You should also see: <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">baggage: tenant.id=acme-corp</code></li>
+        <li>Now click <strong>Clear Tenant</strong> and repeat — the <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">baggage</code> header is gone, <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> remains</li>
       </ol>
 
       <h3 class="text-xl font-semibold text-gray-900 mb-4">What happens in a real app:</h3>
@@ -138,11 +183,13 @@
 <span class="text-gray-600">// Backend (Express + Autotel)</span>
 <span class="text-blue-600">import</span> { init, trace } <span class="text-blue-600">from</span> <span class="text-green-600">'autotel'</span>
 
-<span class="text-blue-600">init</span>({ service: <span class="text-green-600">'my-api'</span>, endpoint: <span class="text-green-600">'http://localhost:4318'</span> })
+<span class="text-gray-600">// baggage: '' copies baggage entries onto every span with NO prefix → bare `tenant.id`</span>
+<span class="text-blue-600">init</span>({ service: <span class="text-green-600">'my-api'</span>, endpoint: <span class="text-green-600">'http://localhost:4318'</span>, baggage: <span class="text-green-600">''</span> })
 
 app.<span class="text-blue-600">get</span>(<span class="text-green-600">'/api/users/:id'</span>, <span class="text-blue-600">async</span> (req, res) => {
-  <span class="text-gray-600">// traceparent header is automatically extracted!</span>
+  <span class="text-gray-600">// traceparent AND baggage headers are automatically extracted!</span>
   <span class="text-blue-600">const</span> user = <span class="text-blue-600">await</span> <span class="text-blue-600">trace</span>(() => db.users.findById(req.params.id))()
+  <span class="text-gray-600">// Every server span now carries  tenant.id=acme-corp  (no manual work)</span>
   res.json(user)
 })
       </pre>

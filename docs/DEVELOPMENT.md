@@ -76,7 +76,7 @@ When creating changesets:
 
 ### OpenTelemetry Utilities
 
-Autotel re-exports commonly-needed OpenTelemetry utilities in semantically-organized modules. These are already included in autotel's dependencies, so **no additional installation is required**.
+Autotel re-exports common OpenTelemetry utilities in modules organized by purpose. These ship with autotel's dependencies, so you need **no additional installation**.
 
 **Module Organization:**
 
@@ -96,7 +96,7 @@ Autotel re-exports commonly-needed OpenTelemetry utilities in semantically-organ
 - `assertTraceCreated()`, `assertTraceSucceeded()`, `assertTraceFailed()`, etc.
 - Events and metrics testing utilities
 
-**Why re-export?** Achieves "one install is all you need" DX without bundle size impact (these are from `@opentelemetry/sdk-trace-base`, already a dependency).
+**Why re-export?** You get "one install is all you need" without bundle size cost. These come from `@opentelemetry/sdk-trace-base`, already a dependency.
 
 ```typescript
 // Development debugging - see spans in console
@@ -127,7 +127,7 @@ const spans = exporter.getFinishedSpans();
 expect(spans).toHaveLength(1);
 ```
 
-**Note:** For most testing scenarios, prefer autotel's high-level `createTraceCollector()` utility from `autotel/testing` which provides assertion helpers and automatic tracer configuration.
+For most testing scenarios, prefer autotel's high-level `createTraceCollector()` utility from `autotel/testing`, which provides assertion helpers and automatic tracer configuration.
 
 ### Test Harnesses
 
@@ -158,7 +158,7 @@ const exporter = new InMemorySpanExporter();
 
 ### Integration Tests
 
-Integration tests require OpenTelemetry SDK setup, so they're isolated in `*.integration.test.ts` files and run with a separate vitest config.
+Integration tests need OpenTelemetry SDK setup, so they live in `*.integration.test.ts` files and run with a separate vitest config.
 
 ## Common Development Workflows
 

@@ -10,6 +10,15 @@
 import { createTraceparent, parseTraceparent } from './traceparent';
 import { PrivacyManager, PrivacyConfig, getDenialReason } from './privacy';
 import { configureExporter, setRawFetch, recordSpan, flushSpans, isConfigured, resetForTesting as resetExporter } from './span-exporter';
+import {
+  setBaggage as setBaggageInternal,
+  clearBaggage,
+  getBaggageEntries,
+  getBaggageHeader,
+  hasBaggage,
+  isBaggageDestinationAllowed,
+  resetBaggageForTesting,
+} from './baggage';
 
 export interface AutotelWebConfig {
   /**
@@ -70,6 +79,45 @@ export interface AutotelWebConfig {
    * ```
    */
   privacy?: PrivacyConfig;
+
+  /**
+   * Business-context baggage propagated end-to-end as a W3C `baggage` header.
+   *
+   * Set values at runtime with {@link setBaggage} (e.g. after login or a tenant
+   * switch); they are injected on every instrumented same-origin request and
+   * tagged onto every browser-recorded span. On the backend, autotel's
+   * `BaggageSpanProcessor` (`init({ baggage: '' })` for bare keys, or
+   * `baggage: true` for `baggage.`-prefixed keys) copies them onto server spans.
+   *
+   * **Fail-closed:** baggage is sent only to same-origin requests unless a
+   * destination is explicitly listed in `allowedOrigins`. This keeps
+   * customer-identifying values (e.g. `tenant.id`) from leaking to third-party
+   * origins. Baggage never travels wider than traceparent.
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'my-spa',
+   *   endpoint: 'https://collector.example.com',
+   *   baggage: { allowedOrigins: ['api.example.com'] },
+   * });
+   * setBaggage({ 'tenant.id': 'acme' });
+   * ```
+   */
+  baggage?: {
+    /**
+     * Initial baggage entries, applied during init() before any request fires.
+     * Use this for context known at startup (e.g. tenant from the subdomain).
+     */
+    initial?: Record<string, string>;
+
+    /**
+     * Cross-origin destinations permitted to receive the baggage header.
+     * Same-origin is always allowed; everything else is fail-closed.
+     * Substring-matched, same convention as `privacy.allowedOrigins`.
+     */
+    allowedOrigins?: string[];
+  };
 }
 
 let isInitialized = false;
@@ -134,6 +182,11 @@ export function init(userConfig: AutotelWebConfig): void {
     privacyManager = new PrivacyManager(config.privacy);
   }
 
+  // Seed any baggage known at startup (e.g. tenant from the subdomain).
+  if (config.baggage?.initial) {
+    setBaggageInternal(config.baggage.initial, config.debug ?? false);
+  }
+
   // Capture unpatched fetch for the exporter before we patch it
   if (config.endpoint !== undefined) {
     setRawFetch(window.fetch.bind(window));
@@ -175,6 +228,38 @@ export function init(userConfig: AutotelWebConfig): void {
     });
   }
 }
+
+/**
+ * Set business-context baggage that propagates end-to-end.
+ *
+ * Merges `record` into the active baggage (additive, like Sentry `setTags` /
+ * Datadog `setGlobalContextProperty`). Every subsequent instrumented request
+ * carries it as a W3C `baggage` header (same-origin / allowlisted only), and
+ * every browser-recorded span is tagged with it. Invalid entries are dropped
+ * (warned in `debug` mode); this never throws in the request path.
+ *
+ * Safe to call any time after {@link init} — typically right after login or a
+ * tenant switch. Requests fired before the call won't carry the new value.
+ *
+ * @example
+ * ```typescript
+ * setBaggage({ 'tenant.id': 'acme' });
+ * ```
+ */
+export function setBaggage(record: Record<string, string>): void {
+  setBaggageInternal(record, config?.debug ?? false);
+}
+
+/**
+ * Remove a single baggage key, or clear all baggage when called with no key.
+ *
+ * @example
+ * ```typescript
+ * clearBaggage('tenant.id'); // remove one key
+ * clearBaggage();            // clear everything (e.g. on logout)
+ * ```
+ */
+export { clearBaggage };
 
 /**
  * Patch fetch() to auto-inject traceparent headers
@@ -226,6 +311,30 @@ function patchFetch(): void {
       }
     }
 
+    // Inject W3C baggage header (business context, e.g. tenant.id).
+    // Fail-closed by origin and a strict subset of where traceparent goes:
+    // only sent if privacy allows AND the destination is same-origin/allowlisted.
+    if (hasBaggage() && !headers.has('baggage')) {
+      const privacyAllows =
+        !privacyManager || privacyManager.shouldInjectTraceparent(url);
+      if (
+        privacyAllows &&
+        isBaggageDestinationAllowed(
+          url,
+          window.location.origin,
+          config?.baggage?.allowedOrigins,
+        )
+      ) {
+        const baggageHeader = getBaggageHeader();
+        if (baggageHeader) {
+          headers.set('baggage', baggageHeader);
+          if (config?.debug) {
+            console.log('[autotel-web] Injected baggage on fetch:', url, baggageHeader);
+          }
+        }
+      }
+    }
+
     // Resolve HTTP method: prefer init override, then Request.method, then default GET
     const method = init?.method
       ?? (input instanceof Request ? input.method : undefined)
@@ -245,6 +354,9 @@ function patchFetch(): void {
             let pathname: string;
             try { pathname = new URL(url, window.location.origin).pathname; } catch { pathname = url; }
             recordSpan(parsed.traceId, parsed.spanId, `browser ${pathname}`, startTime, endTime, {
+              // Tag local spans with current baggage regardless of destination —
+              // this is our own telemetry and never leaves our collector.
+              ...getBaggageEntries(),
               'http.method': method,
               'http.url': url,
               'http.status_code': response.status,
@@ -258,6 +370,7 @@ function patchFetch(): void {
             let pathname: string;
             try { pathname = new URL(url, window.location.origin).pathname; } catch { pathname = url; }
             recordSpan(parsed.traceId, parsed.spanId, `browser ${pathname}`, startTime, endTime, {
+              ...getBaggageEntries(),
               'http.method': method,
               'http.url': url,
             });
@@ -279,8 +392,9 @@ function patchXMLHttpRequest(): void {
   originalXHROpen = XMLHttpRequest.prototype.open;
   originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
 
-  // Track which XHR instances have traceparent set
+  // Track which XHR instances have traceparent / baggage set
   const xhrHasTraceparent = new WeakSet<XMLHttpRequest>();
+  const xhrHasBaggage = new WeakSet<XMLHttpRequest>();
 
   // Patch setRequestHeader to track manual traceparent headers
   XMLHttpRequest.prototype.setRequestHeader = function (
@@ -349,6 +463,36 @@ function patchXMLHttpRequest(): void {
                   '[autotel-web] Failed to inject traceparent on XHR:',
                   error
                 );
+              }
+            }
+          }
+        }
+
+        // Inject W3C baggage header (independent of traceparent).
+        // Fail-closed by origin and a strict subset of where traceparent goes.
+        if (hasBaggage() && !xhrHasBaggage.has(xhr)) {
+          const privacyAllows =
+            !privacyManager || privacyManager.shouldInjectTraceparent(urlStr);
+          if (
+            privacyAllows &&
+            isBaggageDestinationAllowed(
+              urlStr,
+              window.location.origin,
+              config?.baggage?.allowedOrigins,
+            )
+          ) {
+            const baggageHeader = getBaggageHeader();
+            if (baggageHeader) {
+              try {
+                originalXHRSetRequestHeader!.call(xhr, 'baggage', baggageHeader);
+                xhrHasBaggage.add(xhr);
+                if (config?.debug) {
+                  console.log('[autotel-web] Injected baggage on XHR:', urlStr, baggageHeader);
+                }
+              } catch (error) {
+                if (config?.debug) {
+                  console.warn('[autotel-web] Failed to inject baggage on XHR:', error);
+                }
               }
             }
           }
@@ -440,6 +584,7 @@ export function resetForTesting(): void {
   config = undefined;
   privacyManager = undefined;
   resetExporter();
+  resetBaggageForTesting();
 
   // Restore original fetch/XHR if they were patched
   // Then clear the stored originals so next test can set up fresh mocks

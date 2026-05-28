@@ -9,8 +9,8 @@
 // snapshot + stream subscribers using their public trackEvent() interface,
 // pacing the dispatch to match the original deltas. The dashboard sees an
 // identical SSE stream and the snapshot accumulates identically, but the
-// session is fully deterministic — no random orders, no live PSP, no
-// conference-wifi anxiety.
+// session is fully deterministic — no random orders, no live PSP — useful
+// for repeatable demos and CI runs that need a stable event stream.
 
 import { createWriteStream } from 'node:fs';
 import { readFile, mkdir } from 'node:fs/promises';

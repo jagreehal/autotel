@@ -1,11 +1,17 @@
 ---
 name: build-audit-trails
 description: >
-  Design tamper-aware audit trails on top of OpenTelemetry spans using
-  autotel. Covers what counts as auditable, the audit-only span discipline,
-  signing and tamper-detection, denial logging, redaction, retention,
-  separation of concerns from operational telemetry, and framework wiring
-  (Next.js, Nuxt, Hono, Express, Cloudflare Workers).
+  Build or review tamper-aware audit trails on top of OpenTelemetry spans
+  using autotel and the autotel-audit package (`withAudit`,
+  `setAuditAttributes`, `forceKeepAuditEvent`). Covers what counts as
+  auditable, the audit-only span discipline, sampling bypass, HMAC and
+  hash-chain signing with tamper detection, denial logging, redaction,
+  retention, GDPR right-to-erasure via crypto-shredding, separation from
+  operational telemetry, testing audit spans, backend-agnostic audit queries,
+  a production-readiness checklist, and framework wiring (Next.js, Nuxt,
+  Nitro, NestJS, Express, Fastify, Hono, Cloudflare Workers, AWS Lambda,
+  standalone). Use it to design new audit trails or review existing ones for
+  GDPR, HIPAA, SOC 2, PCI-DSS, ISO 27001, SOX, and GxP compliance.
 license: MIT
 ---
 
@@ -21,6 +27,46 @@ autotel lets you express both with the same primitive — a span — but you sho
 - Adding "who did what" trails for admin actions, access reviews, payments
 - Recording authorization decisions (allow + deny)
 - Building immutable evidence for incident response
+- Reviewing an existing audit trail for compliance gaps (see "Review an existing audit trail")
+
+## Quick reference
+
+| Situation                                                | Use                                                              |
+| -------------------------------------------------------- | ---------------------------------------------------------------- |
+| Wrap an action so success/failure is audited + kept      | `withAudit(metadata, fn)` from `autotel-audit`                   |
+| Tag the active span with `audit.*` attributes only       | `setAuditAttributes(metadata)`                                   |
+| Make sure an audit span survives tail sampling           | `forceKeepAuditEvent()`                                          |
+| Record an authorization denial                           | `audit({ …, outcome: 'deny', reason })` (Step 1 helper)          |
+| Full control / framework-agnostic span helper            | hand-rolled `audit()` (Step 1)                                   |
+| Keep audit data off ops dashboards                       | `FilteringSpanProcessor` split (Step 3)                          |
+| Prove a record was not altered                           | HMAC or hash-chain signature (Step 4)                            |
+| Honor a GDPR erasure request on an append-only log       | crypto-shredding (Step 6.5)                                      |
+| Assert the trail in tests                                | `createTraceCollector()` from `autotel/testing` (Step 8)         |
+
+## The shortest path: the `autotel-audit` package
+
+`autotel-audit` ships this discipline as helpers. Reach for these before hand-rolling:
+
+```typescript
+import {
+  withAudit,
+  setAuditAttributes,
+  forceKeepAuditEvent,
+} from 'autotel-audit';
+
+// Wrap the action: sets audit.* attributes, force-keeps past tail sampling,
+// and tags outcome 'success' / 'failure' automatically.
+await withAudit(
+  { action: 'user.delete', resource: 'user', actorId: 'usr_42', category: 'admin' },
+  async () => db.user.delete({ where: { id } }),
+);
+
+// Or tag the current span yourself and opt out of sampling:
+setAuditAttributes({ action: 'secret.read', resource: 'sec_abc', actorId: 'usr_42' });
+forceKeepAuditEvent();
+```
+
+`withAudit` marks the span with `autotel.audit = true` and sets the tail-sampling keep flags via `forceKeepAuditEvent`, so audit events are never dropped. The rest of this guide builds the same model from raw spans when you need full control over the schema, signing, and the pipeline split. If you use the package, filter on `autotel.audit` (not `audit`) in Step 3.
 
 ## The audit span discipline
 
@@ -122,6 +168,17 @@ Critical: route audit spans to a **different processor and backend** so:
 - They are not subject to development-mode debug exporters.
 - They go to a write-once / append-only store (S3 Object Lock, immutable bucket, dedicated audit DB).
 
+How a span flows once you split the pipeline:
+
+```text
+audit(payload)
+  └─ span.attributes['audit'] = true   (or autotel.audit via the package)
+       │
+       ├─► FilteringSpanProcessor include: audit === true  ─► auditExporter ─► append-only store
+       │
+       └─► FilteringSpanProcessor exclude: audit === true  ─► opsExporter  (PII-redacted dashboards)
+```
+
 ```typescript
 import {
   composeSpanProcessors,
@@ -221,7 +278,30 @@ Audit retention is set by regulation, not engineering taste. Common minimums:
 
 Express retention as a backend lifecycle policy (S3 Object Lock COMPLIANCE mode, BigQuery `--time_partitioning_expiration`), not application code.
 
+## Step 6.5: GDPR and the right to erasure
+
+An append-only audit log and GDPR Article 17 ("right to be forgotten") look like a contradiction: you must keep the audit record, but the subject can demand their personal data be erased. Resolve it with **crypto-shredding** rather than deleting rows.
+
+- Store the immutable facts in the clear: `audit.action`, `audit.outcome`, timestamps, `audit.resource.id`.
+- Encrypt any personal data (names, emails, free-form context) with a **per-subject key**, and store only the ciphertext on the span (or a reference to it).
+- Keep per-subject keys in a separate key store. To honor an erasure request, delete that subject's key. The audit record stays intact and tamper-evident; the personal fields become permanently unrecoverable.
+
+```typescript
+// Never put raw PII on the span. Store a reference and shred the key on request.
+setAuditAttributes({
+  action: 'profile.update',
+  resource: 'user',
+  actorId: 'usr_42',
+  'subject.id': 'usr_42', // internal id, safe to retain
+  'pii.ref': 'kms://subjects/usr_42/v3', // ciphertext lives off-span, keyed per subject
+});
+```
+
+This keeps the chain of custody and signatures valid (you never mutate a signed record) while making erasure a key-management operation. Confirm the approach with your DPO; some regulators accept crypto-shredding as erasure, others want documented justification.
+
 ## Step 7: Framework wiring
+
+The handlers below are the common cases. For Nuxt, Nitro, NestJS, Fastify, AWS Lambda, and standalone jobs, see [references/framework-wiring.md](references/framework-wiring.md).
 
 ### Next.js
 
@@ -286,6 +366,62 @@ export default defineWorkerFetch(
 );
 ```
 
+## Step 8: Test the trail
+
+An audit trail you have not tested is a compliance risk. The two tests that matter most: the denial path is recorded, and the audit attributes are present and correct. Use `createTraceCollector()` from `autotel/testing` to assert on emitted spans.
+
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createTraceCollector, type TraceCollector } from 'autotel/testing';
+
+describe('audit trail', () => {
+  let collector: TraceCollector;
+  beforeEach(() => {
+    collector = createTraceCollector();
+  });
+
+  it('records a denial with reason and actor', async () => {
+    await expect(deleteUser(forbiddenReq)).rejects.toMatchObject({ status: 403 });
+
+    const [span] = collector.getSpansByAttributes({ 'audit.outcome': 'deny' });
+    expect(span).toBeDefined();
+    expect(span.attributes['audit.action']).toBe('user.delete');
+    expect(span.attributes['audit.reason']).toBeTruthy();
+    expect(span.attributes['enduser.id']).toBe('usr_42');
+  });
+
+  it('records the success path on allow', async () => {
+    await deleteUser(allowedReq);
+    expect(collector.getSpansByAttributes({ 'audit.outcome': 'allow' })).toHaveLength(1);
+  });
+});
+```
+
+Test the signature too: build an audit span, recompute the HMAC over the sorted attributes, and assert it matches; then mutate one attribute and assert it no longer does.
+
+## Review an existing audit trail
+
+When the task is to audit existing code rather than build new, work these four passes in order and report findings as you go.
+
+1. **Pipeline.** Grep for where audit spans are produced (`audit(`, `withAudit`, `setAuditAttributes`). Confirm a `FilteringSpanProcessor` routes them to a separate, append-only backend, and that ops never receives them. Flag any audit span subject to sampling.
+2. **Coverage.** List every `audit(`/`withAudit` call site. Are denials logged, not just successes? Are mutating admin actions, access reviews, payments, and data exports all covered? Flag audit-on-every-read noise.
+3. **Integrity + redaction.** Is there a signature (HMAC or hash-chain) where storage is shared with the producer? Are raw payloads, secrets, or emails on the span instead of references and internal ids? Is the ops branch redacted?
+4. **Tests + retention.** Is there a denial-path test and a signature-verification test? Is retention enforced at the storage layer (lifecycle policy), not in code?
+
+## Production checklist
+
+- [ ] Audit spans marked (`audit` / `autotel.audit`) and force-kept past sampling
+- [ ] Separate processor and backend from ops; ops branch redacted
+- [ ] Both allow and deny outcomes recorded
+- [ ] No secrets, tokens, raw payloads, or emails on spans (references and internal ids only)
+- [ ] Signature (HMAC or hash-chain) where storage is shared with the producer; keys rotated
+- [ ] Retention set as a storage lifecycle policy per regulation
+- [ ] GDPR erasure plan (crypto-shredding) for personal fields
+- [ ] Multi-tenant isolation on the audit store
+- [ ] Denial-path and signature-verification tests in CI
+
+To query the trail (denials, per-actor history, tamper detection) across Honeycomb, Grafana Tempo, or Datadog, see [references/audit-queries.md](references/audit-queries.md).
+
 ## Anti-patterns
 
 | Anti-pattern                                   | Fix                                                            |
@@ -300,3 +436,12 @@ export default defineWorkerFetch(
 | Audit on every read of harmless data           | Audit _meaningful_ events; not every list call                 |
 | Audit row tied to a specific framework         | The `audit()` function is framework-agnostic                   |
 | `enduser.id` = email                           | Use the internal id; emails go in a separate identity table    |
+
+## Glossary
+
+- **Audit span** — an OpenTelemetry span that records who did what to which resource, marked `audit` / `autotel.audit` so it is routed and retained separately from ops telemetry.
+- **Force-keep** — opting a span out of tail sampling so it is always exported; `forceKeepAuditEvent()` sets the autotel tail-keep flags.
+- **Denial** — an authorization decision that blocked an action; recorded with `audit.outcome = 'deny'` and a reason. Logging denials is as important as logging successes.
+- **Hash-chain** — linking each audit record to the hash of the previous one so removing or reordering records is detectable.
+- **Crypto-shredding** — satisfying an erasure request by destroying the per-subject encryption key rather than deleting the immutable record.
+- **Append-only store** — a backend that rejects updates and deletes (S3 Object Lock, immutable bucket, WORM storage), the destination for audit spans.

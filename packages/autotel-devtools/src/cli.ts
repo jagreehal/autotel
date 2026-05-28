@@ -6,6 +6,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DevtoolsServer } from './server/server'
 import { attachDevtoolsRoutes } from './server/http'
+import { listenLoopbackDualStack } from './server/listen'
 
 interface CliOptions {
   port: number
@@ -28,13 +29,15 @@ Options:
   -v, --version        Show version number
 
 Endpoints:
-  GET  /               Web devtools UI (fullpage)
-  GET  /widget.js      Widget bundle (embed in your app)
-  POST /v1/traces      Receive OTLP JSON trace data
-  POST /v1/logs        Receive OTLP JSON log data
-  POST /v1/metrics     Receive OTLP JSON metric data
-  WS   /ws             WebSocket stream for real-time updates
-  GET  /healthz        Health check
+  GET    /             Web devtools UI (fullpage)
+  GET    /widget.js    Widget bundle (embed in your app)
+  POST   /v1/traces    Receive OTLP JSON trace data
+  GET    /v1/traces    Read back received traces (verify ingestion in tests)
+  DELETE /v1/traces    Clear captured telemetry (test reset)
+  POST   /v1/logs      Receive OTLP JSON log data
+  POST   /v1/metrics   Receive OTLP JSON metric data
+  WS     /ws           WebSocket stream for real-time updates
+  GET    /healthz      Health check
 
 Examples:
   npx autotel-devtools
@@ -91,19 +94,37 @@ async function main(): Promise<void> {
   const wsServer = new DevtoolsServer({ server: httpServer, verbose: true })
   attachDevtoolsRoutes(httpServer, wsServer)
 
-  httpServer.listen(options.port, options.host, () => {
-    const title = options.title || 'autotel-devtools'
-    process.stdout.write(`\n  ${title}\n\n`)
-    process.stdout.write(`  UI:        http://${options.host}:${options.port}\n`)
-    process.stdout.write(`  Widget:    <script src="http://${options.host}:${options.port}/widget.js"></script>\n`)
-    process.stdout.write(`  WebSocket: ws://${options.host}:${options.port}/ws\n`)
-    process.stdout.write(`  OTLP:      http://${options.host}:${options.port}/v1/traces\n\n`)
-    process.stdout.write(`  Set OTEL_EXPORTER_OTLP_PROTOCOL=http/json\n`)
-    process.stdout.write(`  Set OTEL_EXPORTER_OTLP_ENDPOINT=http://${options.host}:${options.port}\n\n`)
+  const listeners = listenLoopbackDualStack({
+    primary: httpServer,
+    port: options.port,
+    host: options.host,
+    attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer),
   })
 
+  const { addresses, warnings } = await listeners.ready
+  const uiBase = `http://${options.host === 'localhost' ? '127.0.0.1' : options.host}:${options.port}`
+  const title = options.title || 'autotel-devtools'
+  process.stdout.write(`\n  ${title}\n\n`)
+  process.stdout.write(`  Listening: ${addresses.join('  +  ')}\n`)
+  process.stdout.write(`  UI:        ${uiBase}\n`)
+  process.stdout.write(`  Widget:    <script src="${uiBase}/widget.js"></script>\n`)
+  process.stdout.write(`  WebSocket: ${uiBase.replace('http', 'ws')}/ws\n`)
+  process.stdout.write(`  OTLP:      ${uiBase}/v1/traces\n\n`)
+  process.stdout.write(`  Set OTEL_EXPORTER_OTLP_PROTOCOL=http/json\n`)
+  process.stdout.write(`  Set OTEL_EXPORTER_OTLP_ENDPOINT=${uiBase}\n\n`)
+  // Self-check: confirm the collector is reachable AND that ingestion works,
+  // not just that something is listening. Reading /v1/traces back is the same
+  // check a test should make instead of trusting "the client tried to send".
+  process.stdout.write(`  Verify ingestion: curl -s ${uiBase}/v1/traces\n\n`)
+  for (const w of warnings) {
+    process.stdout.write(`  ⚠ ${w}\n`)
+  }
+  if (warnings.length > 0) process.stdout.write('\n')
+
   const shutdown = () => {
-    wsServer.close().then(() => process.exit(0))
+    Promise.all([wsServer.close(), listeners.closeSibling()]).then(() =>
+      process.exit(0),
+    )
   }
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)

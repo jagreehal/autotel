@@ -41,6 +41,16 @@
       "types": "./dist/cloudflare.d.ts",
       "import": "./dist/cloudflare.js",
       "require": "./dist/cloudflare.cjs"
+    },
+    "./express": {
+      "types": "./dist/express.d.ts",
+      "import": "./dist/express.js",
+      "require": "./dist/express.cjs"
+    },
+    "./fastify": {
+      "types": "./dist/fastify.d.ts",
+      "import": "./dist/fastify.js",
+      "require": "./dist/fastify.cjs"
     }
   },
   "files": [

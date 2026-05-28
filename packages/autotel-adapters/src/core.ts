@@ -1,8 +1,10 @@
+import type { AsyncLocalStorage } from 'node:async_hooks';
 import {
   createDrainPipeline,
   createStructuredError,
   getRequestLogger,
   parseError,
+  trace,
   type ParsedError,
   type RequestLogger,
   type RequestLoggerOptions,
@@ -55,6 +57,48 @@ export function createUseLogger<TContext = unknown>(
     }
 
     return logger;
+  };
+}
+
+export interface RequestRunnerOptions {
+  requestLoggerOptions?: RequestLoggerOptions;
+  /** Emit one wide event automatically when the handler settles. Default `true`. */
+  autoEmit?: boolean;
+  /** Fields merged into the wide event at emit time (e.g. response status). */
+  finalize?: () => Record<string, unknown> | undefined;
+}
+
+/**
+ * Build a request runner bound to one framework's logger storage. The returned
+ * function opens a span, creates a request logger, runs `handler` inside the
+ * storage so `useLogger()` resolves it, records thrown errors, and emits one
+ * wide event when the handler settles (unless `autoEmit` is `false`).
+ */
+export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
+  return function runRequest<T>(
+    spanName: string,
+    enrich: (log: RequestLogger) => void,
+    handler: () => T | Promise<T>,
+    options?: RequestRunnerOptions,
+  ): Promise<T> {
+    const wrapped = trace(
+      { name: spanName },
+      (ctx) => async (): Promise<T> => {
+        const log = getRequestLogger(ctx, options?.requestLoggerOptions);
+        enrich(log);
+        try {
+          return await storage.run(log, () => handler());
+        } catch (error) {
+          log.error(error instanceof Error ? error : new Error(String(error)));
+          throw error;
+        } finally {
+          if (options?.autoEmit !== false) {
+            log.emitNow(options?.finalize?.());
+          }
+        }
+      },
+    );
+    return wrapped();
   };
 }
 

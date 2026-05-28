@@ -57,6 +57,11 @@
       "import": "./dist/architecture-snapshot.js",
       "require": "./dist/architecture-snapshot.cjs"
     },
+    "./file": {
+      "types": "./dist/file.d.ts",
+      "import": "./dist/file.js",
+      "require": "./dist/file.cjs"
+    },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.js",

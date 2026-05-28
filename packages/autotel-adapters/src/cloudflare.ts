@@ -36,6 +36,8 @@ export interface CloudflareWithAutotelOptions<TEnv = unknown> {
     env: TEnv,
     ctx: CloudflareExecutionContextLike,
   ) => Record<string, unknown> | undefined;
+  /** Emit one wide event automatically when the handler settles. Default `true`. */
+  autoEmit?: boolean;
 }
 
 const requestLoggers = new WeakMap<object, RequestLogger>();
@@ -137,6 +139,9 @@ export function withAutotelFetch<
         try {
           return await handler(innerRequest, innerEnv, innerExecutionContext);
         } finally {
+          if (options?.autoEmit !== false) {
+            log.emitNow();
+          }
           requestLoggers.delete(innerRequest as object);
         }
       },

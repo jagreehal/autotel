@@ -17,6 +17,8 @@ export interface NitroWithAutotelOptions {
   spanName?: string | ((event: NitroEventLike) => string);
   requestLoggerOptions?: RequestLoggerOptions;
   enrich?: (event: NitroEventLike) => Record<string, unknown> | undefined;
+  /** Emit one wide event automatically when the handler settles. Default `true`. */
+  autoEmit?: boolean;
 }
 
 function enrichFromEvent(
@@ -78,7 +80,15 @@ export function withAutotelEventHandler<TEvent extends NitroEventLike, TReturn>(
       if (custom && Object.keys(custom).length > 0) {
         log.set(custom);
       }
-      return await nitroLoggerStorage.run(log, async () => handler(innerEvent));
+      try {
+        return await nitroLoggerStorage.run(log, async () =>
+          handler(innerEvent),
+        );
+      } finally {
+        if (options?.autoEmit !== false) {
+          log.emitNow();
+        }
+      }
     });
 
     return await wrapped(event);

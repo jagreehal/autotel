@@ -1,6 +1,6 @@
 # Agent Guide: Instrumentation Patterns and Examples
 
-This document gives AI coding agents **before/after examples**, **when-to-use-what** rules, and **framework setup snippets** for Autotel. Use it together with `AGENTS.md` when suggesting or reviewing instrumentation.
+This document gives AI coding agents **before/after examples**, **when-to-use-what** rules, and **framework setup snippets** for Autotel. Use it with `AGENTS.md` when suggesting or reviewing instrumentation.
 
 ---
 
@@ -9,7 +9,7 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 | Scenario | Use | Example |
 |----------|-----|--------|
 | Wrap an async function with a span | `trace(fn)` or `span('Name', fn)` | Handlers, use-case functions, workers |
-| Wrap with explicit name/key | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })` | When name inference isn’t reliable |
+| Wrap with explicit name/key | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })` | When name inference is unreliable |
 | Need span context (set attributes) | Factory: `trace((ctx) => async (args) => { ctx.setAttribute(...); ... })` | When you need to attach attributes inside the function |
 | One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs |
 | Throw an error with why/fix/link | `createStructuredError({ message, why?, fix?, link?, status?, cause? })` | API routes, services, validation |
@@ -17,7 +17,7 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 | Product/analytics events | `track('event.name', attributes)` or `Event` from `autotel/event` | Clicks, signups, conversions |
 | Record error on current span | `recordStructuredError(ctx, error)` or request logger `.error()` | Inside catch blocks when you have a span |
 
-**Rule of thumb**: If there’s an HTTP request or a “job”, create a span (via `trace()` or framework middleware) and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
+**Rule of thumb**: If there is an HTTP request or a "job", create a span via `trace()` or framework middleware, and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
 
 ---
 
@@ -56,7 +56,7 @@ export const postCheckout = trace((ctx) => async (req: Request, res: Response) =
 });
 ```
 
-If the framework already creates a span per request (e.g. Autotel Hono middleware), you can call `getRequestLogger()` with no args inside the handler instead of passing `ctx`.
+If the framework already creates a span per request, such as Autotel Hono middleware, call `getRequestLogger()` with no args inside the handler instead of passing `ctx`.
 
 ---
 
@@ -171,7 +171,7 @@ export default trace((ctx) => async (event) => {
 });
 ```
 
-(If the framework attaches the event to an existing span, use `getRequestLogger()` with no args and omit the outer `trace` if the framework already creates the span.)
+If the framework attaches the event to an existing span, use `getRequestLogger()` with no args and omit the outer `trace`.
 
 ---
 
@@ -223,11 +223,11 @@ app.post('/api/checkout', async (request, reply) => {
 
 ### TanStack Start
 
-See `packages/autotel-tanstack` and `apps/example-tanstack-start`: middleware and env config. Use `getRequestLogger()` inside server handlers when a span is active.
+See `packages/autotel-tanstack` and `apps/example-tanstack-start` for middleware and env config. Use `getRequestLogger()` inside server handlers when a span is active.
 
 ### Cloudflare Workers
 
-See `packages/autotel-cloudflare`: init at top level, wrap `fetch` handler so each request gets a span.
+See `packages/autotel-cloudflare`. Init at top level, then wrap the `fetch` handler so each request gets a span.
 
 - Use `handlers.fetch.include` / `exclude` to control which paths are instrumented.
 - Use `handlers.fetch.routes` to map route patterns to service names.
@@ -267,7 +267,7 @@ When adding Autotel support for a new framework (e.g. a new web framework):
    Create middleware/plugin that: (a) creates a span per request, (b) optionally runs in AsyncLocalStorage so `getRequestLogger()` can be called with no args.
 
 2. **Touchpoints to update**  
-   - New source: e.g. `packages/autotel-<name>/src/index.ts` (or new package).  
+   - New source, e.g. `packages/autotel-<name>/src/index.ts`, or a new package.  
    - Build: add entry in `tsup.config.ts` / package build.  
    - Exports: add in `package.json` exports and typesVersions.  
    - Tests: add `*.test.ts` for middleware (span created, request logger available).  
@@ -286,7 +286,7 @@ When adding Autotel support for a new framework (e.g. a new web framework):
 ## Checklist Summary (copy-paste for reviews)
 
 - [ ] Handlers wrapped with `trace()` or framework middleware that creates a span.
-- [ ] Request-scoped context via `getRequestLogger()` and `.emitNow()` where “one snapshot per request” is desired.
+- [ ] Request-scoped context via `getRequestLogger()` and `.emitNow()` where "one snapshot per request" is desired.
 - [ ] Thrown errors use `createStructuredError({ message, why?, fix?, link?, status?, cause? })` where it helps.
 - [ ] Client uses `parseError(err)` and shows message/why/fix (and link if present).
 - [ ] No raw `console.log` for request/context when request logger or span attributes are available.

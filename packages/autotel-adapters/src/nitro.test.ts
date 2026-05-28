@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useLogger, withAutotelEventHandler } from './nitro';
 
 describe('nitro adapter', () => {
@@ -20,5 +20,30 @@ describe('nitro adapter', () => {
     await expect(
       handler({ path: '/orders', context: {} }),
     ).resolves.toMatchObject({ ok: true });
+  });
+
+  it('auto-emits one wide event by default', async () => {
+    const onEmit = vi.fn();
+    const handler = withAutotelEventHandler(
+      async (event: { path: string; context: Record<string, unknown> }) => {
+        useLogger(event).set({ route: event.path });
+        return { ok: true };
+      },
+      { requestLoggerOptions: { onEmit } },
+    );
+
+    await handler({ path: '/orders', context: {} });
+    expect(onEmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not emit when autoEmit is false', async () => {
+    const onEmit = vi.fn();
+    const handler = withAutotelEventHandler(async () => ({ ok: true }), {
+      autoEmit: false,
+      requestLoggerOptions: { onEmit },
+    });
+
+    await handler({ path: '/x', context: {} });
+    expect(onEmit).not.toHaveBeenCalled();
   });
 });

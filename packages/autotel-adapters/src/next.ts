@@ -27,6 +27,8 @@ export interface NextWithAutotelOptions {
   spanName?: string | ((request?: NextRequestLike) => string);
   requestLoggerOptions?: RequestLoggerOptions;
   enrich?: (request?: NextRequestLike) => Record<string, unknown> | undefined;
+  /** Emit one wide event automatically when the handler settles. Default `true`. */
+  autoEmit?: boolean;
 }
 
 const nextLoggerStorage = new AsyncLocalStorage<RequestLogger>();
@@ -92,7 +94,15 @@ export function withAutotel<TArgs extends unknown[], TReturn>(
         if (custom && Object.keys(custom).length > 0) {
           log.set(custom);
         }
-        return await nextLoggerStorage.run(log, async () => handler(...innerArgs));
+        try {
+          return await nextLoggerStorage.run(log, async () =>
+            handler(...innerArgs),
+          );
+        } finally {
+          if (options?.autoEmit !== false) {
+            log.emitNow();
+          }
+        }
       },
     );
     return await wrapped(...args);
