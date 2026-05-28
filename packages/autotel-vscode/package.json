@@ -1,6 +1,6 @@
 {
   "name": "autotel-vscode",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "displayName": "Autotel",
   "description": "OpenTelemetry observability inside VSCode — receives OTLP, navigates traces, jumps to source.",
