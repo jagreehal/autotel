@@ -18,7 +18,14 @@
 // strings and `bytes` (trace/span IDs) become base64 — which `normalizeHexId` in
 // `./otlp` already converts to hex. Enums are left numeric, which the parsers handle.
 
-import * as protobuf from 'protobufjs'
+// Default import (not `* as`): under esbuild's CJS->ESM interop a namespace import
+// only reliably exposes `.default`, leaving `protobuf.Root`/`protobuf.parse` undefined
+// in the bundled ESM output (`protobuf.Root is not a constructor` at runtime — the bug
+// that shipped in 5.0.1). The default import binds to protobufjs's `module.exports`, so
+// the constructors resolve in both the ESM and CJS bundles. Guarded by the dist ESM
+// smoke test in `__tests__/otlp-proto.dist.test.ts`.
+import protobuf from 'protobufjs'
+import type { IConversionOptions, Root } from 'protobufjs'
 
 const COMMON_PROTO = `
 syntax = "proto3";
@@ -219,15 +226,15 @@ message ExportMetricsServiceRequest {
 // Mirror the OTLP/JSON encoding so the existing parsers handle protobuf input
 // identically: 64-bit ints as decimal strings, bytes as base64 (IDs are then
 // hex-normalized downstream), enums left numeric, defaults omitted.
-const TO_OBJECT_OPTIONS: protobuf.IConversionOptions = {
+const TO_OBJECT_OPTIONS: IConversionOptions = {
   longs: String,
   bytes: String,
   defaults: false,
 }
 
-let cachedRoot: protobuf.Root | null = null
+let cachedRoot: Root | null = null
 
-function getRoot(): protobuf.Root {
+function getRoot(): Root {
   if (cachedRoot) return cachedRoot
   const root = new protobuf.Root()
   for (const source of [COMMON_PROTO, RESOURCE_PROTO, TRACE_PROTO, LOGS_PROTO, METRICS_PROTO]) {

@@ -54,8 +54,10 @@
     "lint": "eslint src/",
     "test": "vitest run --config vitest.config.ts && vitest run --config vitest.storybook.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
+    "test:dist": "node scripts/check-dist-esm.mjs",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "prepublishOnly": "pnpm build && pnpm test:dist"
   },
   "dependencies": {
     "@preact/signals": "^2.9.1",
