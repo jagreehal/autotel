@@ -3,7 +3,7 @@
  */
 
 import { h } from 'preact';
-import { useMemo, useState } from 'preact/hooks';
+import { useMemo, useRef, useState } from 'preact/hooks';
 import {
   Database,
   Clock,
@@ -37,6 +37,7 @@ import { Copyable } from './Copyable';
 import { WaterfallView } from './WaterfallView';
 import { FlameGraphView } from './FlameGraphView';
 import { SpanDetailPanel } from './SpanDetailPanel';
+import { ResizeHandle, useResizable } from './ResizablePanel';
 import {
   downloadTraceAsJson,
   copyTraceToClipboard,
@@ -258,6 +259,15 @@ function TraceDetailView({ trace }: TraceDetailViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('waterfall');
   const [selectedSpan, setSelectedSpan] = useState<SpanData | null>(null);
   const [copied, setCopied] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const { size: detailWidth, dragging, separatorProps } = useResizable({
+    initial: 320,
+    min: 260,
+    minOther: 360,
+    containerRef: contentRef,
+    storageKey: 'autotel-devtools:span-detail-width',
+    invert: true,
+  });
 
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -396,14 +406,9 @@ function TraceDetailView({ trace }: TraceDetailViewProps) {
       </div>
 
       {/* Content area - flex row for waterfall + detail panel */}
-      <div className="flex-1 overflow-hidden flex">
+      <div ref={contentRef} className="flex-1 overflow-hidden flex">
         {/* Main content */}
-        <div
-          className={cn(
-            'flex-1 overflow-hidden',
-            selectedSpan && 'border-r border-zinc-200',
-          )}
-        >
+        <div className="flex-1 overflow-hidden min-w-0">
           {viewMode === 'waterfall' ? (
             <WaterfallView
               trace={trace}
@@ -433,15 +438,25 @@ function TraceDetailView({ trace }: TraceDetailViewProps) {
           )}
         </div>
 
-        {/* Span detail panel (right side) */}
+        {/* Resizable span detail panel (right side) */}
         {selectedSpan && (
-          <div className="w-[320px] flex-shrink-0 overflow-hidden">
-            <SpanDetailPanel
-              span={selectedSpan}
-              trace={trace}
-              onClose={() => setSelectedSpan(null)}
+          <>
+            <ResizeHandle
+              dragging={dragging}
+              title="Drag to resize the detail panel · double-click to reset"
+              {...separatorProps}
             />
-          </div>
+            <div
+              className="flex-shrink-0 overflow-hidden"
+              style={{ width: `${detailWidth}px` }}
+            >
+              <SpanDetailPanel
+                span={selectedSpan}
+                trace={trace}
+                onClose={() => setSelectedSpan(null)}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>
