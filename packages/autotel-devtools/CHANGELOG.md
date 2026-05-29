@@ -1,5 +1,19 @@
 # autotel-devtools
 
+## 5.1.0
+
+### Minor Changes
+
+- 52f8269: Make the trace detail panel resizable. Drag the divider between the timeline and the span detail panel to widen it (handy for long attributes like `gen_ai.input.messages`), double-click to reset, or focus the divider and use the arrow keys. The chosen width is clamped to the container and persisted to `localStorage`.
+
+### Patch Changes
+
+- 52f8269: Fix OTLP/protobuf ingestion failing with `protobuf.Root is not a constructor` in the published bundle.
+
+  `otlp-proto.ts` imported protobufjs with `import * as protobuf`, which under esbuild's CJS→ESM interop left `protobuf.Root`/`protobuf.parse` undefined in the bundled ESM output — the form `npx autotel-devtools` runs. Every protobuf POST (the default for the Python/Java/Go SDKs over `http/protobuf`) was rejected with HTTP 400. Switched to a default import so the constructors resolve in both the ESM and CJS bundles.
+
+  Added a regression guard that loads the built `dist/` bundle in a real Node process and decodes an OTLP/protobuf payload (`scripts/check-dist-esm.mjs`, run via the `otlp-proto.dist.test.ts` suite test and gated on publish through `prepublishOnly`). Source-level and vitest tests could not catch this because vite's loader resolves CJS interop differently than Node.
+
 ## 5.0.1
 
 ### Patch Changes
