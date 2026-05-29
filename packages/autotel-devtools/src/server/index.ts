@@ -7,7 +7,8 @@ export type { DevtoolsRemoteExporterOptions } from './remote-exporter'
 export { ErrorAggregator } from './error-aggregator'
 export { attachDevtoolsRoutes, createDevtoolsHttpServer } from './http'
 export type { HttpServerOptions } from './http'
-export { parseOtlpTraces, parseOtlpLogs } from './otlp'
+export { parseOtlpTraces, parseOtlpLogs, isProtobufContentType } from './otlp'
+export { decodeOtlpTraceRequest, decodeOtlpLogsRequest, decodeOtlpMetricsRequest } from './otlp-proto'
 export {
   resolveTelemetryLimits,
   appendWithLimit,

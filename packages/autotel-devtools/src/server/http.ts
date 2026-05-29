@@ -3,8 +3,27 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseOtlpTraces, parseOtlpLogs, countOtlpMetrics, readJsonBody, sendJson } from './otlp'
+import { parseOtlpTraces, parseOtlpLogs, countOtlpMetrics, readJsonBody, readRawBody, isProtobufContentType, sendJson } from './otlp'
+import { decodeOtlpTraceRequest, decodeOtlpLogsRequest, decodeOtlpMetricsRequest } from './otlp-proto'
 import type { DevtoolsServer } from './server'
+
+type OtlpSignal = 'traces' | 'logs' | 'metrics'
+
+const PROTOBUF_DECODERS: Record<OtlpSignal, (body: Buffer) => Record<string, unknown>> = {
+  traces: decodeOtlpTraceRequest,
+  logs: decodeOtlpLogsRequest,
+  metrics: decodeOtlpMetricsRequest,
+}
+
+// Read an OTLP request body as a plain object, transparently decoding both
+// OTLP/JSON (`application/json`) and OTLP/protobuf (`application/x-protobuf`).
+// Both shapes feed the same parsers, so callers don't care which the client sent.
+async function readOtlpPayload(req: IncomingMessage, signal: OtlpSignal): Promise<unknown> {
+  if (isProtobufContentType(req.headers['content-type'])) {
+    return PROTOBUF_DECODERS[signal](await readRawBody(req))
+  }
+  return readJsonBody(req)
+}
 
 export interface HttpServerOptions {
   port?: number
@@ -98,40 +117,40 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
       return
     }
 
-    // POST /v1/traces
+    // POST /v1/traces — accepts OTLP/JSON or OTLP/protobuf
     if (req.method === 'POST' && url === '/v1/traces') {
       try {
-        const payload = await readJsonBody(req)
+        const payload = await readOtlpPayload(req, 'traces')
         const traces = parseOtlpTraces(payload)
         devtools.addTraces(traces)
         sendJson(res, 200, { acceptedTraces: traces.length })
       } catch (e) {
-        sendJson(res, 400, { error: 'Invalid OTLP JSON', message: e instanceof Error ? e.message : String(e) })
+        sendJson(res, 400, { error: 'Invalid OTLP payload', message: e instanceof Error ? e.message : String(e) })
       }
       return
     }
 
-    // POST /v1/logs
+    // POST /v1/logs — accepts OTLP/JSON or OTLP/protobuf
     if (req.method === 'POST' && url === '/v1/logs') {
       try {
-        const payload = await readJsonBody(req)
+        const payload = await readOtlpPayload(req, 'logs')
         const logs = parseOtlpLogs(payload)
         devtools.addLogs(logs)
         sendJson(res, 200, { acceptedLogs: logs.length })
       } catch (e) {
-        sendJson(res, 400, { error: 'Invalid OTLP JSON', message: e instanceof Error ? e.message : String(e) })
+        sendJson(res, 400, { error: 'Invalid OTLP payload', message: e instanceof Error ? e.message : String(e) })
       }
       return
     }
 
-    // POST /v1/metrics
+    // POST /v1/metrics — accepts OTLP/JSON or OTLP/protobuf
     if (req.method === 'POST' && url === '/v1/metrics') {
       try {
-        const payload = await readJsonBody(req)
+        const payload = await readOtlpPayload(req, 'metrics')
         const count = countOtlpMetrics(payload)
         sendJson(res, 200, { acceptedMetrics: count })
       } catch (e) {
-        sendJson(res, 400, { error: 'Invalid OTLP JSON', message: e instanceof Error ? e.message : String(e) })
+        sendJson(res, 400, { error: 'Invalid OTLP payload', message: e instanceof Error ? e.message : String(e) })
       }
       return
     }

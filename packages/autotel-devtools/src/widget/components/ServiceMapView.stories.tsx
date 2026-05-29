@@ -1,6 +1,7 @@
 import { h } from 'preact';
 import type { Meta, StoryObj } from '@storybook/preact-vite';
-import { ServiceMapView } from '../components/ServiceMapView';
+import { expect } from 'storybook/test';
+import { ServiceMapView } from './ServiceMapView';
 import { updateWidgetData, clearAllData } from '../store';
 import type { TraceData, SpanData } from '../types';
 
@@ -51,18 +52,26 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Empty: Story = {};
+export const Empty: Story = {
+  play: async ({ canvas }) => {
+    await expect(
+      canvas.getByText(/No traces available to build service map/),
+    ).toBeInTheDocument();
+  },
+};
 
 export const SingleService: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       traces: [makeTrace({ service: 'api-service' })],
     });
+    await expect(await canvas.findByText('Service Map (1 services)')).toBeInTheDocument();
+    await expect(canvas.getByText('api-service')).toBeInTheDocument();
   },
 };
 
 export const MultipleServices: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       traces: [
         makeTrace({ traceId: 't1', service: 'api-gateway' }),
@@ -71,11 +80,14 @@ export const MultipleServices: Story = {
         makeTrace({ traceId: 't4', service: 'payment-service' }),
       ],
     });
+    await expect(await canvas.findByText('Service Map (4 services)')).toBeInTheDocument();
+    await expect(canvas.getByText('api-gateway')).toBeInTheDocument();
+    await expect(canvas.getByText('user-service')).toBeInTheDocument();
   },
 };
 
 export const WithErrors: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       traces: [
         makeTrace({ traceId: 't1', service: 'api-service', status: 'ERROR' }),
@@ -83,11 +95,13 @@ export const WithErrors: Story = {
         makeTrace({ traceId: 't3', service: 'auth-service', status: 'ERROR' }),
       ],
     });
+    await expect(await canvas.findByText('Service Map (2 services)')).toBeInTheDocument();
+    await expect(canvas.getByText('Has Errors')).toBeInTheDocument();
   },
 };
 
 export const ManyServices: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const services = [
       'api-gateway',
       'user-service',
@@ -108,11 +122,13 @@ export const ManyServices: Story = {
         }),
       ),
     });
+    await expect(await canvas.findByText('Service Map (8 services)')).toBeInTheDocument();
+    await expect(canvas.getByText(/cache-serv/)).toBeInTheDocument();
   },
 };
 
 export const HighTrafficServices: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const traces: TraceData[] = [];
 
     for (let i = 0; i < 50; i++) {
@@ -128,11 +144,13 @@ export const HighTrafficServices: Story = {
     }
 
     updateWidgetData({ traces });
+    await expect(await canvas.findByText('Service Map (3 services)')).toBeInTheDocument();
+    await expect(canvas.getByText('50 req')).toBeInTheDocument();
   },
 };
 
 export const WithLogsAndErrors: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       traces: [
         makeTrace({ traceId: 't1', service: 'api-service' }),
@@ -172,5 +190,7 @@ export const WithLogsAndErrors: Story = {
         },
       ],
     });
+    await expect(await canvas.findByText('Service Map (2 services)')).toBeInTheDocument();
+    await expect(canvas.getByText(/worker-ser/)).toBeInTheDocument();
   },
 };

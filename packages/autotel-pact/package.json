@@ -79,7 +79,7 @@
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
   "license": "MIT",
   "peerDependencies": {
-    "@pact-foundation/pact": ">=13",
+    "@pact-foundation/pact": ">=16",
     "autotel": "workspace:*"
   },
   "peerDependenciesMeta": {
@@ -89,12 +89,12 @@
   },
   "devDependencies": {
     "@pact-foundation/pact": "^16.5.0",
-    "@types/node": "^25.7.0",
+    "@types/node": "^25.9.1",
     "autotel": "workspace:*",
     "rimraf": "^6.1.3",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.7"
   },
   "repository": {
     "type": "git",
