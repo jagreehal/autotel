@@ -17,12 +17,16 @@ npx autotel-devtools
 # → OTLP receiver on :4318, UI at http://localhost:4318
 ```
 
-Point any OTel-instrumented app at it:
+Point any OTel-instrumented app at it. The endpoints accept **both OTLP/JSON and
+OTLP/protobuf**, chosen from the request `Content-Type`, so protobuf-default SDKs
+(Python/Java/Go) work with no extra config:
 
 ```bash
-OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-node app.js
+# JS (defaults to JSON, or set http/protobuf — both work)
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node app.js
+
+# Python/Java/Go (default to http/protobuf)
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python app.py
 ```
 
 ### Embedded widget
@@ -65,7 +69,7 @@ export const loadUser = trace(ctx => async (id: string) => {
 
 | Route | What |
 | --- | --- |
-| `POST /v1/traces` · `/v1/logs` · `/v1/metrics` | OTLP JSON receivers |
+| `POST /v1/traces` · `/v1/logs` · `/v1/metrics` | OTLP receivers — JSON or protobuf (`application/x-protobuf`) |
 | `GET /` | Dashboard UI (traces, logs, metrics, errors, resources, service map) |
 | `GET /widget.js` | Embeddable widget bundle (IIFE) |
 | `GET /healthz` | Health check |

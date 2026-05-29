@@ -16,9 +16,9 @@ Standalone OTLP receiver with web UI for local development. Think TanStack Devto
 │  npx autotel-devtools                       │
 │  ┌───────────────────────────────────────┐ │
 │  │  HTTP Server (port 4318)               │ │
-│  │  ├── POST /v1/traces  ← OTLP JSON     │ │
-│  │  ├── POST /v1/logs     ← OTLP JSON     │ │
-│  │  ├── POST /v1/metrics  ← OTLP JSON     │ │
+│  │  ├── POST /v1/traces  ← OTLP JSON/PB │ │
+│  │  ├── POST /v1/logs     ← OTLP JSON/PB │ │
+│  │  ├── POST /v1/metrics  ← OTLP JSON/PB │ │
 │  │  ├── GET  /            → Full page UI  │ │
 │  │  ├── GET  /widget.js   → Widget bundle │ │
 │  │  ├── GET  /healthz     → Health check  │ │
@@ -39,6 +39,16 @@ npx autotel-devtools
 OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 node app.js
+```
+
+The endpoints accept **both OTLP/JSON and OTLP/protobuf** (`application/x-protobuf`),
+selected automatically from the request `Content-Type`. That means SDKs that default
+to protobuf over OTLP HTTP — including the Python, Java, and Go OpenTelemetry SDKs —
+work without any extra configuration:
+
+```bash
+# Python / Java / Go SDKs default to http/protobuf — just point them at the receiver
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python app.py
 ```
 
 Open http://localhost:4318 to see traces, logs, and metrics.
@@ -100,7 +110,7 @@ const myFunction = trace((ctx) => async () => {
 ### Server (Node.js)
 
 - **DevtoolsServer** - WebSocket server + in-memory data store
-- **HTTP Routes** - OTLP receivers for traces/logs/metrics
+- **HTTP Routes** - OTLP receivers for traces/logs/metrics (JSON + protobuf)
 - **Exporters** - OpenTelemetry span/log exporters
 
 ### Widget (Preact)

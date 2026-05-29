@@ -1,6 +1,7 @@
 import { h } from 'preact'
 import type { Meta, StoryObj } from '@storybook/preact-vite'
-import { SnapshotBar } from '../components/SnapshotBar'
+import { expect } from 'storybook/test'
+import { SnapshotBar } from './SnapshotBar'
 import {
   clearAllData,
   loadSnapshot,
@@ -48,21 +49,32 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-export const LiveEmpty: Story = {}
+export const LiveEmpty: Story = {
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText('Download snapshot')).toBeInTheDocument()
+    await expect(canvas.getByText('Load snapshot')).toBeInTheDocument()
+    await expect(canvas.getByText('Local data')).toBeInTheDocument()
+  },
+}
 
 export const LiveWithData: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({ traces: [makeTrace('t1'), makeTrace('t2', 'ERROR')] })
+    await expect(canvas.getByText('Download snapshot')).toBeInTheDocument()
+    await expect(canvas.queryByText('Snapshot mode')).not.toBeInTheDocument()
   },
 }
 
 export const SnapshotMode: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     loadSnapshot({
       traces: [makeTrace('s1'), makeTrace('s2', 'ERROR')],
       logs: [],
       errors: [],
       metrics: [],
     })
+    await expect(await canvas.findByText('Snapshot mode')).toBeInTheDocument()
+    await expect(canvas.getByText(/live updates paused/)).toBeInTheDocument()
+    await expect(canvas.getByRole('button', { name: /Exit/i })).toBeInTheDocument()
   },
 }

@@ -1,6 +1,7 @@
 import { h } from 'preact';
 import type { Meta, StoryObj } from '@storybook/preact-vite';
-import { LogsView } from '../components/LogsView';
+import { expect } from 'storybook/test';
+import { LogsView } from './LogsView';
 import {
   updateWidgetData,
   clearAllData,
@@ -41,18 +42,28 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Empty: Story = {};
+export const Empty: Story = {
+  play: async ({ canvas }) => {
+    await expect(
+      canvas.getByText(/No logs yet\. Send logs via AutotelLogExporter/),
+    ).toBeInTheDocument();
+  },
+};
 
 export const SingleLog: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       logs: [makeLog({ body: 'Application started successfully' })],
     });
+    await expect(
+      await canvas.findByText('Application started successfully'),
+    ).toBeInTheDocument();
+    await expect(canvas.getByText('Logs (1)')).toBeInTheDocument();
   },
 };
 
 export const MultipleLogs: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       logs: [
@@ -76,11 +87,14 @@ export const MultipleLogs: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('Connecting to database')).toBeInTheDocument();
+    await expect(canvas.getByText('Cache initialized')).toBeInTheDocument();
+    await expect(canvas.getByText('Server listening on port 3000')).toBeInTheDocument();
   },
 };
 
 export const WithErrors: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       logs: [
@@ -112,11 +126,15 @@ export const WithErrors: Story = {
         }),
       ],
     });
+    await expect(
+      await canvas.findByText('Database connection failed'),
+    ).toBeInTheDocument();
+    await expect(canvas.getByText('Retry attempt 1')).toBeInTheDocument();
   },
 };
 
 export const WithTraceLink: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       logs: [
@@ -137,11 +155,13 @@ export const WithTraceLink: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('Processing request')).toBeInTheDocument();
+    await expect(canvas.getAllByRole('button', { name: /Go to trace/i })).toHaveLength(2);
   },
 };
 
 export const DifferentSeverities: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       logs: [
@@ -175,11 +195,14 @@ export const DifferentSeverities: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('Debug message')).toBeInTheDocument();
+    await expect(canvas.getByText('ERROR')).toBeInTheDocument();
+    await expect(canvas.getByText('WARN')).toBeInTheDocument();
   },
 };
 
 export const MultipleResources: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       logs: [
@@ -209,11 +232,14 @@ export const MultipleResources: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('API server started')).toBeInTheDocument();
+    await expect(canvas.getByText('Worker initialized')).toBeInTheDocument();
+    await expect(canvas.getByText('Job processed')).toBeInTheDocument();
   },
 };
 
 export const PausedWithBuffer: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       logs: [
         makeLog({ id: 'shown-1', body: 'Application ready', severityText: 'INFO' }),
@@ -244,5 +270,7 @@ export const PausedWithBuffer: Story = {
         severityText: 'INFO',
       }),
     ];
+    await expect(await canvas.findByText('Resume (+4)')).toBeInTheDocument();
+    await expect(canvas.getByText('Application ready')).toBeInTheDocument();
   },
 };

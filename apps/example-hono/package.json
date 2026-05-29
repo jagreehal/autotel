@@ -7,16 +7,16 @@
     "start": "tsx --import ./instrumentation.ts src/index.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.2",
+    "@hono/node-server": "^2.0.4",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "autotel-hono": "workspace:*",
     "dotenv": "^17.4.2",
-    "hono": "^4.12.18"
+    "hono": "^4.12.23"
   },
   "devDependencies": {
-    "@types/node": "^25.7.0",
-    "tsx": "^4.21.0",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
     "typescript": "^6.0.3"
   }
 }
