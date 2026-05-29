@@ -1,5 +1,16 @@
 # autotel-cloudflare
 
+## 2.18.15
+
+### Patch Changes
+
+- 4ce86fc: Refresh package dependencies across the workspace and keep generated lockfile state in sync.
+
+  Add OTLP/protobuf ingestion support to `autotel-devtools` for traces, logs, and metrics. The devtools HTTP receiver now accepts both OTLP/JSON and OTLP/protobuf payloads on the existing `/v1/traces`, `/v1/logs`, and `/v1/metrics` endpoints, decodes protobuf payloads with embedded OTLP schemas, and includes interop coverage using the OpenTelemetry protobuf serializers.
+
+- Updated dependencies [4ce86fc]
+  - autotel-edge@3.16.12
+
 ## 2.18.14
 
 ### Patch Changes
