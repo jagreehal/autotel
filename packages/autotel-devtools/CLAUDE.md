@@ -39,3 +39,4 @@ pnpm storybook          # Launch Storybook for widget components
 - **Server build**: tsup (ESM + CJS). **Widget build**: Vite IIFE (separate config)
 - Do not add Node.js APIs to widget code (it runs in the browser)
 - Works with both autotel and standard OpenTelemetry — any OTLP-compatible exporter can send data to it
+- OTLP receivers accept **both JSON and protobuf** bodies, dispatched on `Content-Type` (`application/x-protobuf` → decoded in `src/server/otlp-proto.ts` via embedded proto definitions; otherwise OTLP/JSON). This is what lets protobuf-default SDKs (Python/Java/Go) send directly.

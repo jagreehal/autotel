@@ -1,9 +1,10 @@
 import { h } from 'preact'
 import type { Meta, StoryObj } from '@storybook/preact-vite'
-import { useEffect } from 'preact/hooks'
-import { GenAiView } from '../components/GenAiView'
-import { ModelHeader } from '../components/genai/ModelHeader'
-import { ConversationPanel } from '../components/genai/ConversationPanel'
+import { useLayoutEffect } from 'preact/hooks'
+import { expect } from 'storybook/test'
+import { GenAiView } from './GenAiView'
+import { ModelHeader } from './genai/ModelHeader'
+import { ConversationPanel } from './genai/ConversationPanel'
 import { toGenAiSpan } from '../genai/normalize'
 import { tracesSignal } from '../store'
 import type { SpanData, TraceData } from '../types'
@@ -33,35 +34,76 @@ const meta: Meta<typeof ComponentPair> = {
 export default meta
 type Story = StoryObj<typeof ComponentPair>
 
-export const OpenAiChat: Story = { args: { raw: openaiChat as unknown as SpanData } }
-export const AnthropicCacheHit: Story = { args: { raw: anthropicCache as unknown as SpanData } }
-export const OpenAiAgentsHandoff: Story = { args: { raw: openaiAgentsHandoff as unknown as SpanData } }
+export const OpenAiChat: Story = {
+  args: { raw: openaiChat as unknown as SpanData },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('openai')).toBeInTheDocument()
+    await expect(canvas.getByText('gpt-4o-mini-2024-07-18')).toBeInTheDocument()
+    await expect(canvas.getByText('This is a test.')).toBeInTheDocument()
+  },
+}
+
+export const AnthropicCacheHit: Story = {
+  args: { raw: anthropicCache as unknown as SpanData },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('anthropic')).toBeInTheDocument()
+    await expect(canvas.getByText(/% cached/)).toBeInTheDocument()
+  },
+}
+
+export const OpenAiAgentsHandoff: Story = {
+  args: { raw: openaiAgentsHandoff as unknown as SpanData },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('Agent handoff')).toBeInTheDocument()
+    await expect(canvas.getAllByText('Triage Agent').length).toBeGreaterThan(0)
+    await expect(canvas.getByText('Refunds Specialist')).toBeInTheDocument()
+  },
+}
+
 export const VercelAiSdkOllamaReal: Story = {
   args: {
     raw: (aisdkOllama as unknown as SpanData[]).find(
       (s) => s.name === 'ai.generateText.doGenerate',
     )!,
   },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('ollama')).toBeInTheDocument()
+    await expect(canvas.getByText('granite4.1:3b')).toBeInTheDocument()
+  },
 }
+
 export const PydanticAiLogfireReal: Story = {
   args: {
     raw: (pydanticAi as unknown as SpanData[]).find((s) => s.name.startsWith('chat '))!,
   },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('ollama')).toBeInTheDocument()
+    await expect(canvas.getByText('chat')).toBeInTheDocument()
+  },
 }
+
 export const GeminiPydanticReal: Story = {
   args: {
     raw: (gemini as unknown as SpanData[]).find((s) => s.name.startsWith('chat '))!,
   },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('google')).toBeInTheDocument()
+    await expect(canvas.getByText(/^gemini-/)).toBeInTheDocument()
+  },
 }
+
 export const LangChainOllamaReal: Story = {
   args: {
     raw: (langchain as unknown as SpanData[])[0],
   },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('ollama')).toBeInTheDocument()
+    await expect(canvas.getByText('chat')).toBeInTheDocument()
+  },
 }
 
-// Full-view story that drives the master/detail layout off the store.
 function GenAiViewHarness({ fixtures }: { fixtures: SpanData[][] }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const traces: TraceData[] = fixtures.map((spans, i) => ({
       traceId: `fixture-${i}`,
       correlationId: `fixture-${i}`,
@@ -77,7 +119,7 @@ function GenAiViewHarness({ fixtures }: { fixtures: SpanData[][] }) {
     return () => {
       tracesSignal.value = []
     }
-  }, [])
+  }, [fixtures])
   return (
     <div className="w-[960px] h-[480px] border border-zinc-200 rounded-lg overflow-hidden bg-white">
       <GenAiView />
@@ -100,10 +142,24 @@ export const FullViewAllFixtures: StoryObj<typeof GenAiViewHarness> = {
       ]}
     />
   ),
+  play: async ({ canvas }) => {
+    await expect(
+      (await canvas.findAllByText(/openai\/gpt-4o-mini/i)).length,
+    ).toBeGreaterThan(0)
+    await expect(await canvas.findByText(/anthropic\//)).toBeInTheDocument()
+    await expect(canvas.getByRole('button', { name: /Timeline/i })).toBeInTheDocument()
+  },
 }
 
-// Dedicated story for the agentic tools capture so the ToolCallCard polish
-// (purple-themed, inline param summary, Input/Output split) is easy to find.
 export const VercelAiSdkToolsReal: StoryObj<typeof GenAiViewHarness> = {
   render: () => <GenAiViewHarness fixtures={[aisdkTools as unknown as SpanData[]]} />,
+  play: async ({ canvas, userEvent }) => {
+    await expect(
+      (await canvas.findAllByText(/ollama\/qwen2:latest/i)).length,
+    ).toBeGreaterThan(0)
+
+    const toolName = await canvas.findByText('lookupTraveler')
+    await userEvent.click(toolName)
+    await expect(await canvas.findByText('Input')).toBeInTheDocument()
+  },
 }

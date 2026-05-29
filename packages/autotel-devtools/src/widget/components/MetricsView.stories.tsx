@@ -1,6 +1,7 @@
 import { h } from 'preact';
 import type { Meta, StoryObj } from '@storybook/preact-vite';
-import { MetricsView } from '../components/MetricsView';
+import { expect } from 'storybook/test';
+import { MetricsView } from './MetricsView';
 import { updateWidgetData, clearAllData } from '../store';
 import type { MetricData } from '../types';
 
@@ -29,10 +30,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Empty: Story = {};
+export const Empty: Story = {
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText(/No metrics yet/)).toBeInTheDocument();
+  },
+};
 
 export const SingleEvent: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       metrics: [
         makeMetric({
@@ -42,11 +47,13 @@ export const SingleEvent: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('user.signup')).toBeInTheDocument();
+    await expect(canvas.getByText('Events (1)')).toBeInTheDocument();
   },
 };
 
 export const MultipleEvents: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       metrics: [
@@ -67,11 +74,14 @@ export const MultipleEvents: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('user.signup')).toBeInTheDocument();
+    await expect(canvas.getByText('user.login')).toBeInTheDocument();
+    await expect(canvas.getByText('user.logout')).toBeInTheDocument();
   },
 };
 
 export const DifferentTypes: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       metrics: [
@@ -102,11 +112,15 @@ export const DifferentTypes: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('Events (1)')).toBeInTheDocument();
+    await expect(canvas.getByText('Funnels (1)')).toBeInTheDocument();
+    await expect(canvas.getByText('Outcomes (1)')).toBeInTheDocument();
+    await expect(canvas.getByText('Values (1)')).toBeInTheDocument();
   },
 };
 
 export const WithAttributes: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       metrics: [
         makeMetric({
@@ -131,11 +145,13 @@ export const WithAttributes: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('method: GET')).toBeInTheDocument();
+    await expect(canvas.getByText('path: /api/orders')).toBeInTheDocument();
   },
 };
 
 export const WithTraceLink: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       metrics: [
         makeMetric({
@@ -146,11 +162,13 @@ export const WithTraceLink: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('db.query')).toBeInTheDocument();
+    await expect(canvas.getByText('query: SELECT * FROM users')).toBeInTheDocument();
   },
 };
 
 export const ManyMetrics: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     const metrics = Array.from({ length: 20 }, (_, i) =>
       makeMetric({
@@ -161,5 +179,8 @@ export const ManyMetrics: Story = {
       }),
     );
     updateWidgetData({ metrics });
+    await expect(await canvas.findByText('metric.0')).toBeInTheDocument();
+    await expect(canvas.getByText('Events (20)')).toBeInTheDocument();
+    await expect(canvas.getByText('+10 more')).toBeInTheDocument();
   },
 };

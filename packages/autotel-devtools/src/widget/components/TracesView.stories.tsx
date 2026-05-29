@@ -1,11 +1,13 @@
 import { h } from 'preact';
 import type { Meta, StoryObj } from '@storybook/preact-vite';
-import { TracesView } from '../components/TracesView';
+import { expect } from 'storybook/test';
+import { TracesView } from './TracesView';
 import {
   updateWidgetData,
   clearAllData,
   setPaused,
   pendingTracesSignal,
+  setSelectedTrace,
 } from '../store';
 import type { TraceData, SpanData } from '../types';
 
@@ -51,16 +53,21 @@ const meta = {
   beforeEach: () => {
     clearAllData();
     setPaused(false);
+    setSelectedTrace(null);
   },
 } satisfies Meta<typeof TracesView>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Empty: Story = {};
+export const Empty: Story = {
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText(/No traces yet/)).toBeInTheDocument();
+  },
+};
 
 export const SingleTrace: Story = {
-  play: async () => {
+  play: async ({ canvas, userEvent }) => {
     updateWidgetData({
       traces: [
         makeTrace({
@@ -70,11 +77,16 @@ export const SingleTrace: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('GET /api/users')).toBeInTheDocument();
+    await expect(canvas.getByText('Traces (1)')).toBeInTheDocument();
+
+    await userEvent.click(await canvas.findByText('GET /api/users'));
+    await expect(await canvas.findByText('Back to traces')).toBeInTheDocument();
   },
 };
 
 export const MultipleTraces: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       traces: [
@@ -103,11 +115,15 @@ export const MultipleTraces: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('GET /api/users')).toBeInTheDocument();
+    await expect(canvas.getByText('POST /api/orders')).toBeInTheDocument();
+    await expect(canvas.getByText('GET /api/products')).toBeInTheDocument();
+    await expect(canvas.getByText('Traces (3)')).toBeInTheDocument();
   },
 };
 
 export const WithError: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       traces: [
         makeTrace({
@@ -134,11 +150,14 @@ export const WithError: Story = {
         }),
       ],
     });
+    await expect(await canvas.findByText('GET /api/fail')).toBeInTheDocument();
+    await expect(canvas.getByText('GET /api/success')).toBeInTheDocument();
+    await expect(canvas.getByText('ERROR')).toBeInTheDocument();
   },
 };
 
 export const LongDuration: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     updateWidgetData({
       traces: [
@@ -154,11 +173,14 @@ export const LongDuration: Story = {
         }),
       ],
     });
+    await expect(
+      await canvas.findByText('GET /api/slow-endpoint'),
+    ).toBeInTheDocument();
   },
 };
 
 export const PausedWithBuffer: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     updateWidgetData({
       traces: [
         makeTrace({
@@ -182,5 +204,8 @@ export const PausedWithBuffer: Story = {
         rootSpan: makeSpan({ name: 'POST /api/checkout' }),
       }),
     ];
+    await expect(await canvas.findByText('Resume (+3)')).toBeInTheDocument();
+    await expect(canvas.getByText('GET /api/users')).toBeInTheDocument();
+    await expect(canvas.getByText('Drop buffer')).toBeInTheDocument();
   },
 };

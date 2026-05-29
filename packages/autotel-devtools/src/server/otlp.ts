@@ -50,9 +50,11 @@ const SPAN_KIND_MAP: Record<number | string, SpanData['kind']> = {
 function normalizeHexId(id?: string): string {
   if (!id) return ''
   // Only attempt base64 decode for strings that look like base64-encoded binary IDs
-  // (length 24 or 28 chars for 16/32-byte IDs, valid base64 chars, not plain hex)
+  // (length 12 for 8-byte span IDs, 24/28 for 16-byte trace IDs, etc; valid base64
+  // chars, not plain hex). Protobuf clients emit IDs as base64 (8-byte span IDs ->
+  // 12 chars, 16-byte trace IDs -> 24 chars), so length 12 must be recognised too.
   const isBase64Like = /^[A-Za-z0-9+/=]+$/.test(id) && !(/^[0-9a-f]+$/i.test(id))
-  const isLikelyBase64Id = isBase64Like && (id.length === 24 || id.length === 28 || id.length === 44 || id.length === 48)
+  const isLikelyBase64Id = isBase64Like && (id.length === 12 || id.length === 24 || id.length === 28 || id.length === 44 || id.length === 48)
   if (isLikelyBase64Id) {
     try {
       const bytes = Buffer.from(id, 'base64')
@@ -198,6 +200,26 @@ export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
     })
     req.on('error', reject)
   })
+}
+
+export async function readRawBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
+
+/**
+ * True for OTLP/protobuf bodies. The OpenTelemetry Python/Java/Go SDKs default to
+ * `http/protobuf` over OTLP HTTP, sending `application/x-protobuf`; some clients use
+ * `application/protobuf`. Anything else (JSON, unset) is treated as OTLP/JSON.
+ */
+export function isProtobufContentType(contentType?: string): boolean {
+  if (!contentType) return false
+  const value = contentType.toLowerCase()
+  return value.includes('application/x-protobuf') || value.includes('application/protobuf')
 }
 
 export function sendJson(res: ServerResponse, status: number, data: Record<string, unknown>): void {

@@ -1,6 +1,7 @@
 import { h } from 'preact';
 import type { Meta, StoryObj } from '@storybook/preact-vite';
-import { ErrorsView } from '../components/ErrorsView';
+import { expect } from 'storybook/test';
+import { ErrorsView } from './ErrorsView';
 import { errorGroupsSignal, clearAllData } from '../store';
 import type { ErrorGroup } from '../types';
 
@@ -36,10 +37,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Empty: Story = {};
+export const Empty: Story = {
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText('No errors captured')).toBeInTheDocument();
+  },
+};
 
 export const SingleError: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     errorGroupsSignal.value = [
       makeErrorGroup({
         type: 'TypeError',
@@ -47,11 +52,15 @@ export const SingleError: Story = {
         count: 1,
       }),
     ];
+    await expect(await canvas.findByText('TypeError')).toBeInTheDocument();
+    await expect(
+      canvas.getByText("Cannot read property 'id' of undefined"),
+    ).toBeInTheDocument();
   },
 };
 
 export const MultipleErrors: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     errorGroupsSignal.value = [
       makeErrorGroup({
@@ -76,11 +85,14 @@ export const MultipleErrors: Story = {
         lastSeen: now - 3000,
       }),
     ];
+    await expect(await canvas.findByText('NetworkError')).toBeInTheDocument();
+    await expect(canvas.getByText('ValidationError')).toBeInTheDocument();
+    await expect(canvas.getByText('Groups:')).toBeInTheDocument();
   },
 };
 
 export const WithStackTrace: Story = {
-  play: async () => {
+  play: async ({ canvas, userEvent }) => {
     errorGroupsSignal.value = [
       makeErrorGroup({
         type: 'Error',
@@ -92,11 +104,15 @@ export const WithStackTrace: Story = {
         count: 10,
       }),
     ];
+    const row = await canvas.findByText('Unexpected token in JSON');
+    await userEvent.click(row);
+    await expect(await canvas.findByText('Stack Trace')).toBeInTheDocument();
+    await expect(canvas.getByText(/JSON\.parse/)).toBeInTheDocument();
   },
 };
 
 export const WithService: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     errorGroupsSignal.value = [
       makeErrorGroup({
@@ -116,11 +132,13 @@ export const WithService: Story = {
         lastSeen: now - 2000,
       }),
     ];
+    await expect(await canvas.findByText('api-service')).toBeInTheDocument();
+    await expect(canvas.getByText('cache-service')).toBeInTheDocument();
   },
 };
 
 export const WithAffectedTraces: Story = {
-  play: async () => {
+  play: async ({ canvas, userEvent }) => {
     const now = Date.now();
     errorGroupsSignal.value = [
       makeErrorGroup({
@@ -133,11 +151,14 @@ export const WithAffectedTraces: Story = {
         lastSeen: now - 100,
       }),
     ];
+    await userEvent.click(await canvas.findByText('Request failed with status 500'));
+    await expect(await canvas.findByText('Recent Traces')).toBeInTheDocument();
+    await expect(canvas.getByText('GET /api/users')).toBeInTheDocument();
   },
 };
 
 export const HighFrequencyError: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     errorGroupsSignal.value = [
       makeErrorGroup({
@@ -149,11 +170,13 @@ export const HighFrequencyError: Story = {
         service: 'api-gateway',
       }),
     ];
+    await expect(await canvas.findByText('500x')).toBeInTheDocument();
+    await expect(canvas.getByText('api-gateway')).toBeInTheDocument();
   },
 };
 
 export const DifferentErrorTypes: Story = {
-  play: async () => {
+  play: async ({ canvas }) => {
     const now = Date.now();
     errorGroupsSignal.value = [
       makeErrorGroup({
@@ -182,5 +205,8 @@ export const DifferentErrorTypes: Story = {
         count: 2,
       }),
     ];
+    await expect(await canvas.findByText('ReferenceError')).toBeInTheDocument();
+    await expect(canvas.getByText('URIError')).toBeInTheDocument();
+    await expect(canvas.getByText('Total:')).toBeInTheDocument();
   },
 };
