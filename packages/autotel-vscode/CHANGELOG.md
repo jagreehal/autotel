@@ -1,5 +1,13 @@
 # autotel-vscode
 
+## 3.0.2
+
+### Patch Changes
+
+- Updated dependencies [52f8269]
+- Updated dependencies [52f8269]
+  - autotel-devtools@5.1.0
+
 ## 3.0.1
 
 ### Patch Changes
