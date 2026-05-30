@@ -1,5 +1,5 @@
 ---
-"autotel-devtools": minor
+'autotel-devtools': minor
 ---
 
 Rewrite the devtools widget UI from Preact to Svelte 5.
@@ -10,4 +10,4 @@ Rewrite the devtools widget UI from Preact to Svelte 5.
 - **Visual fixes**: service-map edge labels get a surface-coloured halo so they stay legible over their connection lines; waterfall event markers now align to the bar instead of hanging below it.
 - Unified the tab → view dispatch into a single `TabView` shared by the full-page and embedded-panel surfaces (previously duplicated and drifted).
 - Icons moved from `lucide-svelte` to the Svelte 5-native `@lucide/svelte`.
-- **Tooling**: Vite, Storybook, Vitest, ESLint, and Prettier all moved to Svelte. `.svelte` files are now linted (`eslint-plugin-svelte`, incl. a11y rules) and formatted (`prettier-plugin-svelte`). The Storybook browser story-tests are temporarily out of CI pending an upstream `@storybook/svelte-vite` + `vite-plugin-svelte` + rolldown incompatibility; `build-storybook` still compiles and validates every story.
+- **Tooling**: Vite, Storybook, Vitest, ESLint, and Prettier all moved to Svelte. `.svelte` files are now linted (`eslint-plugin-svelte`, incl. a11y rules) and formatted (`prettier-plugin-svelte`). Storybook stories run as browser tests (play functions) in CI alongside the unit suite, and `build-storybook` validates that every story compiles.
