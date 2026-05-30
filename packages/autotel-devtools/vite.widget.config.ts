@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import preact from '@preact/preset-vite'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/postcss'
 
@@ -29,6 +29,9 @@ export default defineConfig({
     },
   },
   plugins: [
-    preact(),
+    // emitCss:false keeps Svelte from emitting separate stylesheets — all
+    // widget styling comes from the inlined styles.css injected into the shadow
+    // root (component <style> blocks are forbidden, see MIGRATION.md).
+    svelte({ emitCss: false }),
   ],
 })

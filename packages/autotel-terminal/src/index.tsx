@@ -1264,7 +1264,7 @@ function Dashboard({
       {/* eslint-disable unicorn/no-negated-condition */}
       {viewMode !== 'topology' && viewMode !== 'ai' && (drilldownTraceId != null ? (
         <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>
-          {/* Trace header — otel-gui style */}
+          {/* Trace header */}
           <Box marginBottom={0} flexDirection="column">
             <Text bold>Trace {drilldownTraceId.slice(0, 16)}…</Text>
             <Box flexDirection="row" gap={1}>

@@ -151,6 +151,15 @@ export class DevtoolsSpanExporter implements SpanExporter {
         : undefined,
     }));
 
+    // Convert links
+    const links = span.links.map((link) => ({
+      traceId: link.context.traceId,
+      spanId: link.context.spanId,
+      attributes: link.attributes
+        ? Object.fromEntries(Object.entries(link.attributes))
+        : undefined,
+    }));
+
     return {
       traceId: spanContext.traceId,
       spanId: spanContext.spanId,
@@ -166,7 +175,16 @@ export class DevtoolsSpanExporter implements SpanExporter {
         message: span.status.message,
       },
       events: events.length > 0 ? events : undefined,
+      links: links.length > 0 ? links : undefined,
+      scope: this.convertScope(span),
     };
+  }
+
+  private convertScope(span: ReadableSpan): SpanData['scope'] {
+    const s =
+      (span as any).instrumentationScope ??
+      (span as any).instrumentationLibrary;
+    return s?.name ? { name: s.name, version: s.version || undefined } : undefined;
   }
 
   /**

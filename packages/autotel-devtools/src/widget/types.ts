@@ -21,6 +21,12 @@ export interface SpanData {
     timestamp: number;
     attributes?: Record<string, any>;
   }>;
+  links?: Array<{
+    traceId: string;
+    spanId: string;
+    attributes?: Record<string, any>;
+  }>;
+  scope?: { name?: string; version?: string };
 }
 
 export interface TraceData {

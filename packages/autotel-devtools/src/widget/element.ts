@@ -1,4 +1,4 @@
-import { mountWidget } from './Widget'
+import { mountWidget } from './mount'
 import cssText from './styles.css?inline'
 
 class AutotelDevtoolsElement extends HTMLElement {
@@ -8,10 +8,12 @@ class AutotelDevtoolsElement extends HTMLElement {
   connectedCallback() {
     const shadow = this.attachShadow({ mode: 'open' })
 
-    // Inject Google Fonts (JetBrains Mono) into shadow root
+    // Inject Google Fonts (Hanken Grotesk for UI chrome, JetBrains Mono for
+    // data) into the shadow root.
     const fontLink = document.createElement('link')
     fontLink.rel = 'stylesheet'
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap'
+    fontLink.href =
+      'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap'
     shadow.appendChild(fontLink)
 
     // Inject styles
