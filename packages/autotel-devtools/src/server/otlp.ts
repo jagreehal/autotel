@@ -38,7 +38,14 @@ function flattenAttributes(attrs?: OtlpKeyValue[]): Record<string, unknown> {
 
 function nanoToMs(nano?: string): number {
   if (!nano) return 0
-  return Number(BigInt(nano) / 1_000_000n)
+  // Split into integer ms (kept in BigInt to stay exact at epoch magnitude,
+  // which exceeds Number.MAX_SAFE_INTEGER in nanoseconds) plus the sub-ms
+  // remainder, so fast spans (<1ms) keep microsecond precision instead of
+  // collapsing to 0ms.
+  const ns = BigInt(nano)
+  const ms = ns / 1_000_000n
+  const remNs = ns % 1_000_000n
+  return Number(ms) + Number(remNs) / 1_000_000
 }
 
 const SPAN_KIND_MAP: Record<number | string, SpanData['kind']> = {
@@ -77,6 +84,9 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
     const scopeSpans = rs.scopeSpans || []
 
     for (const ss of scopeSpans) {
+      const scope = ss.scope?.name
+        ? { name: ss.scope.name, version: ss.scope.version || undefined }
+        : undefined
       for (const span of ss.spans || []) {
         const traceId = normalizeHexId(span.traceId)
         if (!traceId) continue
@@ -104,6 +114,12 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
             timestamp: nanoToMs(e.timeUnixNano),
             attributes: flattenAttributes(e.attributes) as Record<string, any>,
           })),
+          links: (span.links || []).map((l: any) => ({
+            traceId: normalizeHexId(l.traceId),
+            spanId: normalizeHexId(l.spanId),
+            attributes: flattenAttributes(l.attributes) as Record<string, any>,
+          })),
+          scope,
         }
 
         const existing = traceMap.get(traceId)

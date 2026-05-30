@@ -11,6 +11,8 @@ export interface SpanData {
   attributes: Record<string, any>
   status: { code: 'OK' | 'ERROR' | 'UNSET'; message?: string }
   events?: Array<{ name: string; timestamp: number; attributes?: Record<string, any> }>
+  links?: Array<{ traceId: string; spanId: string; attributes?: Record<string, any> }>
+  scope?: { name?: string; version?: string }
 }
 
 export interface TraceData {

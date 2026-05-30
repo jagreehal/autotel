@@ -1,6 +1,45 @@
 import { describe, it, expect } from 'vitest'
 import { parseOtlpTraces, parseOtlpLogs, countOtlpMetrics } from '../otlp'
 
+describe('parseOtlpTraces — sub-millisecond precision', () => {
+  it('preserves fractional ms for fast spans instead of collapsing to 0', () => {
+    // 700µs span: start 1_000_000_000ns, end 1_000_700_000ns
+    const payload = {
+      resourceSpans: [{
+        resource: { attributes: [{ key: 'service.name', value: { stringValue: 'svc' } }] },
+        scopeSpans: [{ scope: {}, spans: [{
+          traceId: 't1', spanId: 's1', name: 'fast', kind: 1,
+          startTimeUnixNano: '1000000000', endTimeUnixNano: '1000700000',
+          status: { code: 1 },
+        }] }],
+      }],
+    }
+    const traces = parseOtlpTraces(payload)
+    expect(traces[0].spans[0].duration).toBeCloseTo(0.7, 4)
+  })
+
+  it('keeps integer-ms epoch magnitude exact', () => {
+    const payload = {
+      resourceSpans: [{
+        resource: { attributes: [{ key: 'service.name', value: { stringValue: 'svc' } }] },
+        scopeSpans: [{
+          scope: { name: 'my.instrumentation', version: '1.2.3' },
+          spans: [{
+            traceId: 't1', spanId: 's1', name: 'root', kind: 2,
+            startTimeUnixNano: '1748600000000000000',
+            endTimeUnixNano: '1748600000123456000',
+            status: { code: 1 },
+          }],
+        }],
+      }],
+    }
+    const span = parseOtlpTraces(payload)[0].spans[0]
+    expect(span.startTime).toBe(1748600000000)
+    expect(span.duration).toBeCloseTo(123.456, 3)
+    expect(span.scope).toEqual({ name: 'my.instrumentation', version: '1.2.3' })
+  })
+})
+
 describe('parseOtlpTraces', () => {
   it('parses a valid OTLP JSON trace payload into TraceData[]', () => {
     const payload = {

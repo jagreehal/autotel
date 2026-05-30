@@ -1,9 +1,10 @@
-import type { StorybookConfig } from '@storybook/preact-vite';
+import type { StorybookConfig } from '@storybook/svelte-vite';
 
 import { dirname } from 'path';
 
 import { fileURLToPath } from 'url';
 import tailwindcss from '@tailwindcss/vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 /**
  * This function is used to resolve the absolute path of a package.
@@ -13,18 +14,31 @@ function getAbsolutePath(value: string) {
   return dirname(fileURLToPath(import.meta.resolve(`${value}/package.json`)));
 }
 const config: StorybookConfig = {
-  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
+  stories: ['../src/**/*.stories.@(js|mjs|ts|svelte)'],
   addons: [
     getAbsolutePath('@chromatic-com/storybook'),
     getAbsolutePath('@storybook/addon-vitest'),
     getAbsolutePath('@storybook/addon-a11y'),
-    getAbsolutePath('@storybook/addon-docs'),
   ],
-  framework: getAbsolutePath('@storybook/preact-vite'),
+  framework: {
+    name: getAbsolutePath('@storybook/svelte-vite') as '@storybook/svelte-vite',
+    // The svelte component-docgen plugin parses raw `.svelte` source with the
+    // bundler's JS parser (storybook 10.4 + rolldown), which chokes on
+    // `<script lang="ts">`. We have no Docs tab (addon-docs removed) and every
+    // story declares explicit args, so the inferred prop tables aren't needed.
+    options: { docgen: false },
+  },
   async viteFinal(config) {
+    // The svelte-vite framework doesn't reliably add the compile plugin to the
+    // static build pipeline (rolldown parses raw .svelte otherwise), so add it
+    // explicitly. emitCss:false matches the widget build (shadow-DOM styling).
     return {
       ...config,
-      plugins: [...(config.plugins || []), tailwindcss()],
+      plugins: [
+        ...(config.plugins || []),
+        svelte({ emitCss: false }),
+        tailwindcss(),
+      ],
     };
   },
 };
