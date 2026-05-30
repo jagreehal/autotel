@@ -113,10 +113,10 @@ const myFunction = trace((ctx) => async () => {
 - **HTTP Routes** - OTLP receivers for traces/logs/metrics (JSON + protobuf)
 - **Exporters** - OpenTelemetry span/log exporters
 
-### Widget (Preact)
+### Widget (Svelte 5)
 
 - **Shadow DOM** - Isolated styles, no conflicts with app CSS
-- **Preact Signals** - Reactive state management
+- **Svelte 5 runes** - Reactive state via a signal shim that preserves a `.value` API
 - **Views** - Traces, Logs, Metrics, Errors, Resources, Service Map
 
 ## Features

@@ -1,6 +1,6 @@
 # autotel-devtools
 
-Standalone OTLP receiver with a Preact-based web UI for local development observability.
+Standalone OTLP receiver with a Svelte 5-based web UI for local development observability.
 
 ## Architecture
 
@@ -29,11 +29,11 @@ pnpm storybook          # Launch Storybook for widget components
 - `src/index.ts` — Main entry, `createDevtools()` factory
 - `src/cli.ts` — CLI binary (`npx autotel-devtools`)
 - `src/server/` — WebSocket server, HTTP routes, OTLP parsing, exporters (`exporter.ts`, `log-exporter.ts`, `remote-exporter.ts`), error aggregation, telemetry limits, resource utils
-- `src/widget/` — Preact UI components, signals store, WebSocket client, custom element
+- `src/widget/` — Svelte 5 UI components, runes-backed signal store, WebSocket client, custom element
 
 ## Boundaries
 
-- **Widget uses Preact** (not React) with `jsxImportSource: "preact"`
+- **Widget uses Svelte 5** (runes). Reactive state goes through a signal shim over runes (`src/widget/signals.svelte.ts`) that preserves a `.value` API, consumed by `store.svelte.ts`. Components are Tailwind-utility-only — **no `<style>` blocks** (they wouldn't reach the shadow root)
 - **Widget CSS**: Tailwind CSS inlined into IIFE bundle via PostCSS
 - **Shadow DOM**: Widget CSS is isolated, does not leak into host page
 - **Server build**: tsup (ESM + CJS). **Widget build**: Vite IIFE (separate config)

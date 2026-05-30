@@ -1,4 +1,4 @@
-import { mountWidget } from './Widget'
+import { mountWidget } from './mount'
 import { registerElement } from './element'
 import cssText from './styles.css?inline'
 
@@ -49,5 +49,5 @@ if (document.readyState === 'loading') {
   init()
 }
 
-export { mountWidget } from './Widget'
+export { mountWidget } from './mount'
 export { registerElement } from './element'
