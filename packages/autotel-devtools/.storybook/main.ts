@@ -29,14 +29,20 @@ const config: StorybookConfig = {
     options: { docgen: false },
   },
   async viteFinal(config) {
-    // The svelte-vite framework doesn't reliably add the compile plugin to the
-    // static build pipeline (rolldown parses raw .svelte otherwise), so add it
-    // explicitly. emitCss:false matches the widget build (shadow-DOM styling).
+    // The svelte-vite framework doesn't add the compile plugin to the build
+    // pipeline (rolldown parses raw .svelte otherwise), so add it explicitly —
+    // this config is also applied to the storybook vitest run via storybookTest.
+    // prebundleSvelteLibraries:false: the browser-mode dep optimizer (rolldown)
+    // can't parse `new.target` in svelte 5's compiled output, and its
+    // optimize-module hook tries to re-compile @storybook/svelte's precompiled
+    // `.svelte.js` helpers. Disabling prebundle skips both — the svelte plugin
+    // transforms libraries on demand instead. emitCss:false matches the widget
+    // build (shadow-DOM styling).
     return {
       ...config,
       plugins: [
         ...(config.plugins || []),
-        svelte({ emitCss: false }),
+        svelte({ emitCss: false, prebundleSvelteLibraries: false }),
         tailwindcss(),
       ],
     };
