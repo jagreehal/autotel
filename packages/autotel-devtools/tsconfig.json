@@ -9,15 +9,17 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "declaration": true,
-    "declarationMap": true,
+    // Declarations for the published package are emitted by tsup
+    // (tsconfig.build.json). This config is check-only (tsc --noEmit /
+    // svelte-check), so declaration emit is off — it otherwise raises TS4023 on
+    // stories' `Meta<typeof Component>` because .svelte components don't export
+    // their internal `Props` interface.
+    "declaration": false,
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "jsx": "react-jsx",
-    "jsxImportSource": "preact",
     "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "src/**/*.svelte"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
 }

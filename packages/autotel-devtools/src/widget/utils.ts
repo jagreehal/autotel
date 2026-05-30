@@ -3,13 +3,56 @@
  */
 
 /**
- * Format duration in milliseconds to human-readable string
+ * Format duration in milliseconds to a human-readable simple string.
+ * Handles negative durations (clock skew / out-of-order timestamps).
  */
 export function formatDuration(ms: number): string {
-  if (ms < 1) return `${(ms * 1000).toFixed(2)}μs`
-  if (ms < 1000) return `${ms.toFixed(2)}ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(2)}s`
-  return `${(ms / 60_000).toFixed(2)}m`
+  const isNegative = ms < 0;
+  const absMs = Math.abs(ms);
+
+  let result: string;
+  if (absMs === 0) {
+    result = '0';
+  } else if (absMs < 0.001) {
+    result = `${(absMs * 1_000_000).toFixed(0)}ns`;
+  } else if (absMs < 1) {
+    result = `${(absMs * 1_000).toFixed(2).replace(/\.?0+$/, '')}µs`;
+  } else if (absMs < 1_000) {
+    result = `${absMs.toFixed(2).replace(/\.?0+$/, '')}ms`;
+  } else if (absMs < 60_000) {
+    result = `${(absMs / 1_000).toFixed(2).replace(/\.?0+$/, '')}s`;
+  } else {
+    const mins = Math.floor(absMs / 60_000);
+    const secs = Math.floor((absMs % 60_000) / 1_000);
+    result = secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  }
+
+  return isNegative ? `⚠ ${result}` : result;
+}
+
+/**
+ * Format duration with detailed mode (always shows a single unit for easier comparison).
+ */
+export function formatDurationDetailed(ms: number): string {
+  const isNegative = ms < 0;
+  const absMs = Math.abs(ms);
+
+  let result: string;
+  if (absMs === 0) {
+    result = '0';
+  } else if (absMs < 0.001) {
+    result = `${(absMs * 1_000_000).toFixed(0)}ns`;
+  } else if (absMs < 1) {
+    result = `${(absMs * 1_000).toFixed(0)}µs`;
+  } else if (absMs < 1_000) {
+    result = `${absMs.toFixed(1)}ms`;
+  } else if (absMs < 60_000) {
+    result = `${(absMs / 1_000).toFixed(1)}s`;
+  } else {
+    result = `${Math.floor(absMs / 60_000)}m`;
+  }
+
+  return isNegative ? `⚠ ${result}` : result;
 }
 
 /**

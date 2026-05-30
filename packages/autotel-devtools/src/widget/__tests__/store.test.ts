@@ -1,12 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { signal } from '@preact/signals';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   updateWidgetData,
   clearAllData,
   sortedTracesSignal,
   sortedLogsSignal,
-} from '../store';
-import type { TraceData, LogData } from '../types';
+} from '../store.svelte';
 import { makeTrace, makeLog } from '../../server/__tests__/test-utils/stubs';
 
 describe('Widget Store', () => {

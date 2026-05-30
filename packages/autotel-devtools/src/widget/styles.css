@@ -1,14 +1,113 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: "JetBrains Mono", ui-monospace, monospace;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Chrome is sans (Hanken Grotesk); data stays monospace (JetBrains Mono). */
+  --font-sans: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Semantic theme colors — resolve to --at-* tokens below, which swap
+     by [data-theme]. Components use bg-surface/text-fg/border-line etc.
+     so light/dark follows the token swap with no per-class dark: variants. */
+  --color-surface: var(--at-surface);
+  --color-subtle: var(--at-muted);
+  --color-hover: var(--at-surface-hover);
+  --color-code: var(--at-code);
+  --color-fg: var(--at-text-primary);
+  --color-fg-muted: var(--at-text-secondary);
+  --color-fg-subtle: var(--at-text-muted);
+  --color-line: var(--at-border);
+  --color-line-subtle: var(--at-border-light);
 }
 
 @tailwind utilities;
 
 * {
   box-sizing: border-box;
+}
+
+/* ─── Theme tokens ───
+   OKLCH, neutrals tinted toward the brand hue (~258° cool blue). No pure
+   black/white; chroma drops toward the extremes. Light values live in the
+   default block; dark values are shared between explicit `dark` and
+   `system` + OS-dark via the custom property group below. */
+:host,
+:root {
+  --at-surface: oklch(99.4% 0.002 258);
+  --at-surface-hover: oklch(97.4% 0.004 258);
+  --at-muted: oklch(96.8% 0.005 258);
+  --at-code: oklch(97.2% 0.006 258);
+  --at-text-primary: oklch(24% 0.02 262);
+  --at-text-secondary: oklch(46% 0.021 260);
+  --at-text-muted: oklch(64% 0.018 258);
+  --at-border: oklch(91% 0.006 258);
+  --at-border-light: oklch(95.5% 0.005 258);
+  --at-shadow: oklch(24% 0.03 262 / 0.1);
+  --at-accent: oklch(58% 0.17 258);
+  --at-error-bg: oklch(96% 0.03 25);
+  --at-error-text: oklch(55% 0.2 27);
+  --at-error-border: oklch(80% 0.1 25);
+  --at-ok-bg: oklch(96% 0.04 150);
+  --at-ok-text: oklch(56% 0.15 150);
+  --at-ok-border: oklch(82% 0.12 150);
+  --at-highlight-bg: oklch(97% 0.05 95);
+  --at-selected-bg: oklch(96% 0.03 258);
+  --at-scrollbar-thumb: oklch(86% 0.008 258);
+  --at-scrollbar-thumb-hover: oklch(70% 0.015 258);
+}
+
+/* Dark palette — explicit `dark`, plus `system` when the OS prefers dark.
+   (CSS can't share a declaration block across a media boundary, so the dark
+   values are listed for each; keep the two in sync.) */
+:host([data-theme='dark']),
+:root[data-theme='dark'] {
+  --at-surface: oklch(22% 0.022 262);
+  --at-surface-hover: oklch(26% 0.026 262);
+  --at-muted: oklch(24% 0.024 262);
+  --at-code: oklch(25% 0.024 262);
+  --at-text-primary: oklch(92% 0.012 256);
+  --at-text-secondary: oklch(72% 0.022 256);
+  --at-text-muted: oklch(58% 0.022 258);
+  --at-border: oklch(33% 0.025 262);
+  --at-border-light: oklch(28% 0.022 262);
+  --at-shadow: oklch(0% 0 0 / 0.45);
+  --at-accent: oklch(72% 0.15 256);
+  --at-error-bg: oklch(40% 0.1 27 / 0.25);
+  --at-error-text: oklch(74% 0.16 27);
+  --at-error-border: oklch(58% 0.18 27);
+  --at-ok-bg: oklch(52% 0.1 150 / 0.2);
+  --at-ok-text: oklch(80% 0.15 150);
+  --at-ok-border: oklch(62% 0.15 150);
+  --at-highlight-bg: oklch(72% 0.1 95 / 0.12);
+  --at-selected-bg: oklch(62% 0.1 258 / 0.18);
+  --at-scrollbar-thumb: oklch(38% 0.02 262);
+  --at-scrollbar-thumb-hover: oklch(48% 0.025 262);
+}
+
+@media (prefers-color-scheme: dark) {
+  :host([data-theme='system']),
+  :root[data-theme='system'] {
+    --at-surface: oklch(22% 0.022 262);
+    --at-surface-hover: oklch(26% 0.026 262);
+    --at-muted: oklch(24% 0.024 262);
+    --at-code: oklch(25% 0.024 262);
+    --at-text-primary: oklch(92% 0.012 256);
+    --at-text-secondary: oklch(72% 0.022 256);
+    --at-text-muted: oklch(58% 0.022 258);
+    --at-border: oklch(33% 0.025 262);
+    --at-border-light: oklch(28% 0.022 262);
+    --at-shadow: oklch(0% 0 0 / 0.45);
+    --at-accent: oklch(72% 0.15 256);
+    --at-error-bg: oklch(40% 0.1 27 / 0.25);
+    --at-error-text: oklch(74% 0.16 27);
+    --at-error-border: oklch(58% 0.18 27);
+    --at-ok-bg: oklch(52% 0.1 150 / 0.2);
+    --at-ok-text: oklch(80% 0.15 150);
+    --at-ok-border: oklch(62% 0.15 150);
+    --at-highlight-bg: oklch(72% 0.1 95 / 0.12);
+    --at-selected-bg: oklch(62% 0.1 258 / 0.18);
+    --at-scrollbar-thumb: oklch(38% 0.02 262);
+    --at-scrollbar-thumb-hover: oklch(48% 0.025 262);
+  }
 }
 
 ::-webkit-scrollbar {
@@ -21,12 +120,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d4d4d8;
+  background: var(--at-scrollbar-thumb, #d4d4d8);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1aa;
+  background: var(--at-scrollbar-thumb-hover, #a1a1aa);
 }
 
 .waterfall-row:hover .waterfall-bar {
@@ -35,4 +134,102 @@
 
 .waterfall-bar {
   transition: all 0.15s ease-out;
+}
+
+/* ─── Trace list: dense rows aligned to a shared grid, responsive to the
+   widget's own width (container query, not viewport — it's an embedded,
+   resizable widget). Spans + relative-time columns drop first when cramped. */
+.trace-list-container {
+  container-type: inline-size;
+}
+
+.trace-grid {
+  display: grid;
+  align-items: center;
+  gap: 0.75rem;
+  grid-template-columns: 20px 104px minmax(0, 1fr) 84px 52px 88px 60px 16px;
+}
+
+@container (max-width: 640px) {
+  .trace-grid {
+    grid-template-columns: 20px 92px minmax(0, 1fr) 80px 58px 16px;
+  }
+  .trace-col-spans,
+  .trace-col-time {
+    display: none;
+  }
+}
+
+/* ─── Motion: state-change entrances only (exponential ease-out) ─── */
+@keyframes at-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes at-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.at-modal-in {
+  animation: at-modal-in 170ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.at-backdrop-in {
+  animation: at-fade-in 170ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .at-modal-in,
+  .at-backdrop-in {
+    animation: none;
+  }
+}
+
+/* Service-map edge labels sit on top of their connection curves. A
+   surface-coloured stroke painted under the fill knocks the line out from
+   behind the text so the label stays legible without a boxy background. */
+.at-edge-label {
+  paint-order: stroke;
+  stroke: var(--color-surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Cohesive keyboard-focus ring in the brand accent, replacing the browser
+   default (generic blue, off-brand, and clipped at scroll-container edges).
+   Unlayered so it wins over Tailwind's `focus:outline-none` utility — which
+   several inputs use, leaving them with no visible focus state at all.
+   Mouse clicks don't trigger :focus-visible, so the ring only appears for
+   keyboard users — quiet by default, exactly per the "accent is rare" brief. */
+:where(
+  a,
+  button,
+  [role='button'],
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex]:not([tabindex='-1'])
+):focus-visible {
+  outline: 2px solid var(--at-accent);
+  outline-offset: 2px;
+}
+
+/* Inside scrolling/clipping regions, an outward ring would be cut off at the
+   container edge. An inset ring (drawn just inside the element) stays fully
+   visible while reading the same. Applies to focusable rows/cards in the
+   trace, span, and log lists. */
+:where([data-focus-inset]):focus-visible {
+  outline-offset: -2px;
 }
