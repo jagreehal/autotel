@@ -1,5 +1,62 @@
 # autotel-devtools
 
+## 6.0.0
+
+### Minor Changes
+
+- 20a1186: Span inspection: code-location links, database query view, and inline span events.
+  - **Code-location linking**: when a span carries `code.*` attributes (both the legacy `code.filepath`/`code.lineno` and current `code.file.path`/`code.line.number` conventions), the span detail panel renders a clickable editor deep-link. The target editor (VS Code / Cursor / WebStorm) is selectable and persisted across sessions.
+  - **Database query inspection**: spans with `db.*` attributes get a dedicated panel showing system, operation, table, database name, and row counts, plus the SQL statement with display-only keyword/string highlighting. Highlighting only tokenises — it never reformats or rewrites the query.
+  - **Inline span-event popover**: waterfall event markers are now clickable, opening an inline popover with the event name, timestamp, severity, and attributes. Dismissed on outside click or Escape. The marker lane-packing logic was extracted into a tested pure module.
+
+- 20a1186: Cross-view navigation, connection status, and Flow keyboard control.
+  - **Deep-link to a span**: a global `selectedSpanIdSignal` plus `openSpanInWaterfall(traceId, spanId)` let any view jump to a specific span in the Traces waterfall. The Flow detail panel and the GenAI span view now have an "Open in Traces" button; the waterfall expands collapsed ancestors and scrolls the target into view.
+  - **Connection status**: the receiver connection state (connected / connecting / disconnected) is now shown — a labelled dot in the full-page sidebar and a compact dot in the embedded panel header — so "no data yet" is distinguishable from "not connected".
+  - **Flow keyboard navigation**: with the graph focused, arrow keys move between nodes (left/right within a layer, up/down to the nearest node in the adjacent layer), Enter opens the node in Traces, and Esc deselects.
+
+- 8fd868f: Devtools DX pass:
+  - **Theming**: functional light/dark/system theme driven by `data-theme` + CSS custom-property tokens (`--at-*` mapped into Tailwind `@theme`), with a theme cycle toggle and `localStorage` persistence. Storybook gains a Theme toolbar so every story is viewable in both modes.
+  - **JSON attribute viewer**: span attributes that are JSON objects/arrays (e.g. `gen_ai.input.messages`) now render as a collapsible, syntax-coloured tree instead of one long line. Reliable detection (try-parse, object/array only) falls back to the raw value for scalars and invalid JSON.
+  - **Keyboard shortcuts**: centralised the `?` help modal into a single source of truth, fixing a bug where two help dialogs could stack. Context-aware shortcut lists for the trace list and trace detail.
+  - **Span detail**: the attributes panel is now vertically resizable; the fullscreen value button is reachable (it previously had no `group` hover ancestor).
+  - **Waterfall**: time-axis labels are responsive — marker count adapts to the column width and the first/last labels are edge-aligned, so they no longer collide in a narrow pane.
+  - **Sub-millisecond precision**: fixed OTLP parsing truncating durations to whole milliseconds — fast spans (<1ms) now keep microsecond precision instead of showing `0ms`.
+  - **Critical path**: the waterfall highlights the span chain that determines total trace latency (toggleable), pointing straight at the bottleneck.
+  - **Self time**: span detail shows exclusive duration (span time minus children, interval-unioned) so you can tell a slow span from a slow subtree.
+  - **Trace sorting**: sort the trace list by time / duration / span count / service / name / status to surface the slowest or largest traces.
+  - **Min-duration filter**: filter the trace list to traces at least N ms long.
+  - **Instrumentation scope**: span detail shows the emitting instrumentation name/version (parsed from OTLP `scope`).
+  - **Service map redesign**: per-service pastel node fills with soft shadows, bold names, and `N spans · N err` subtitles; connection edges now show always-on labels (`1× · 900ms`, `2× · 50% err · 150ms`) with filled arrowheads and dashed red error edges — keeping the type-coded shapes (DB cylinder, messaging hexagon).
+  - **Service map bug fixes**: (1) CLIENT-span connections used `inferResourceName` for the source, which resolved to the _peer_ and collapsed source==target so no edges ever rendered — the caller is now the span's own resource service; (2) SVG presentation attributes were written camelCase (`strokeWidth`, `strokeDasharray`, `markerEnd`, `textAnchor`), which Preact passes through verbatim and SVG ignores, so arrowheads, dashes, stroke widths, and text centring never applied — all converted to kebab-case.
+  - **Design system pass**: introduced a typography duality — **Hanken Grotesk** for UI chrome, **JetBrains Mono** reserved for data (IDs, durations, attributes, code) — replacing the previous monospace-everything UI. Reworked the theme tokens into an **OKLCH** system with neutrals subtly tinted toward the brand hue (no pure black/white), and added restrained, reduced-motion-aware entrance animations for modals. Recorded the design context in `.impeccable.md`.
+  - **Trace list redesign**: replaced the tall cards with a dense, scannable table — sortable column headers (Service, Operation, Duration, Spans, Time, Status) that drive the multi-axis sort directly, aligned monospace metrics, status badges, and per-service colour pills that match the service-map node colours. The columns are **container-responsive** (Spans + Time drop first) so it stays usable in a narrow docked widget without horizontal scroll.
+  - Removed the unused `react-json-view-lite` dependency.
+
+- 20a1186: Add a **Flow** view: a per-trace call graph that unifies AI tool calls, LLM calls and plain functions into one picture of what a run did.
+  - New `Flow` tab (full-page + embedded panel) rendering a top-to-bottom node graph with `__start__`/`__end__` bookends, role-coloured nodes (entry / LLM / AI tool / function / db / http), and repeated calls collapsed into a single node with a count and error ratio (e.g. `calculate 4/5`).
+  - Selecting a node opens an input/output panel that renders functions and AI tools identically — AI tools from `ai.toolCall.args/result`, plain functions from the `autotel.input`/`autotel.output` capture convention, with sensible fallbacks for db/http.
+  - LLM economics: nodes and a per-trace header chip show token counts and USD cost, sourced from the canonical GenAI pricing layer. AI-SDK wrapper aggregates (`ai.streamText`) are counted once rather than double-counted with their `doStream` children.
+  - Pure, unit-tested graph layer (`flow/flow.ts`): span classification, I/O extraction, repeat-collapsing graph build, per-node metric aggregation, and BFS/barycenter layout.
+  - Shared `JsonField` and token/cost formatters so the Flow view, the GenAI view, and the ToolCallCard render I/O and economics from one place.
+
+- 20a1186: `DevtoolsServer` gains an optional `onData(incremental)` callback, invoked after each ingest with the data just broadcast to WebSocket clients. Lets an embedder (e.g. the VS Code extension) keep its own views in sync while the server owns the buffer, error aggregation and WS fan-out. Listener errors are swallowed so a bad embedder can't break ingestion.
+- 8fd868f: Rewrite the devtools widget UI from Preact to Svelte 5.
+  - All widget components migrated to Svelte 5 (runes). Reactive state flows through a small signal shim (`signals.svelte.ts`) that preserves the `.value` API on top of runes, consumed by `store.svelte.ts` — so the store and call sites stayed stable across the rewrite.
+  - The widget still mounts into a Shadow DOM custom element (`<autotel-devtools>`); the **public surface is unchanged** — server exports, the custom element, the CLI, and `widget.js` all behave as before.
+  - **Accessibility**: a cohesive brand-accent `:focus-visible` ring replaces the browser default (which was off-brand and got clipped at scroll-container edges); list rows use an inset ring so it's never cut off; inputs that previously showed no visible focus now do. Clickable rows/SVG nodes gain keyboard activation, and modal backdrops are real `<button>`s.
+  - **Visual fixes**: service-map edge labels get a surface-coloured halo so they stay legible over their connection lines; waterfall event markers now align to the bar instead of hanging below it.
+  - Unified the tab → view dispatch into a single `TabView` shared by the full-page and embedded-panel surfaces (previously duplicated and drifted).
+  - Icons moved from `lucide-svelte` to the Svelte 5-native `@lucide/svelte`.
+  - **Tooling**: Vite, Storybook, Vitest, ESLint, and Prettier all moved to Svelte. `.svelte` files are now linted (`eslint-plugin-svelte`, incl. a11y rules) and formatted (`prettier-plugin-svelte`). Storybook stories run as browser tests (play functions) in CI alongside the unit suite, and `build-storybook` validates that every story compiles.
+
+- 20a1186: The fullpage widget now honours a URL-hash deep-link: `#trace=<id>&span=<id>` opens the widget on the Traces waterfall focused on that trace/span once it arrives over the wire. Exposed via a new optional `deepLink` on `mountWidget`'s props and the `requestDeepLink(traceId, spanId?)` store helper. Lets an embedder (e.g. the VS Code extension) point an iframe at `/#trace=…` and land on the right span. (Also removes the unused `?position=` script param.)
+
+### Patch Changes
+
+- 20a1186: Clearer CLI startup banner for embedding the widget. The bundle auto-mounts on load, so the bare `<script src=".../widget.js"></script>` is all that's needed — the banner now says so explicitly (a floating panel appears automatically), and shows the two opt-in variations: `?mode=fullpage` for a full-screen view, or placing `<autotel-devtools></autotel-devtools>` yourself to control location. No behaviour change.
+- Updated dependencies [20a1186]
+  - autotel@3.4.0
+
 ## 5.1.0
 
 ### Minor Changes

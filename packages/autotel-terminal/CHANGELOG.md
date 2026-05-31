@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 23.0.0
+
+### Patch Changes
+
+- Updated dependencies [20a1186]
+  - autotel@3.4.0
+
 ## 22.0.1
 
 ### Patch Changes

@@ -1,5 +1,26 @@
 # autotel-vscode
 
+## 4.0.0
+
+### Minor Changes
+
+- 20a1186: Embed the real devtools widget inside the extension. The receiver is now a `DevtoolsServer` + `attachDevtoolsRoutes` (replacing the bespoke `http.createServer` handler), so the same port that ingests OTLP also serves the widget UI (`/`, `/widget.js`, `/ws`). The `Open Devtools` command now points its webview at this local URL by default — the full Traces / Flow / GenAI / Logs / Errors widget renders live, with no separate `npx autotel-devtools` process. The extension's tree views, CodeLens and hover stay in sync via the new `DevtoolsServer` `onData` hook, and backend-query results flow through the same path so they appear in the widget too. Payload-size limiting and OTLP route handling are now owned by the shared server.
+- 20a1186: Retire the bespoke Preact span-detail webview. Clicking a span (tree node or CodeLens) now deep-links into the embedded `autotel-devtools` widget focused on that span (`#trace=…&span=…`), giving the full waterfall / Flow / GenAI view instead of a single-span panel. Removes the `src/webview` UI, the Vite webview build step, and the `preact` / `vite` toolchain — the extension now builds with `tsup` alone.
+
+### Patch Changes
+
+- Updated dependencies [20a1186]
+- Updated dependencies [20a1186]
+- Updated dependencies [20a1186]
+- Updated dependencies [8fd868f]
+- Updated dependencies [20a1186]
+- Updated dependencies [20a1186]
+- Updated dependencies [8fd868f]
+- Updated dependencies [20a1186]
+- Updated dependencies [20a1186]
+  - autotel-devtools@6.0.0
+  - autotel@3.4.0
+
 ## 3.0.2
 
 ### Patch Changes
