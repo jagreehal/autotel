@@ -22,7 +22,7 @@
   "icon": "resources/icon.png",
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "tsup && vite build --config vite.webview.config.ts",
+    "build": "tsup",
     "dev": "tsup --watch",
     "type-check": "tsc --noEmit",
     "lint": "eslint src/",
@@ -201,7 +201,6 @@
     }
   },
   "dependencies": {
-    "@preact/signals-core": "^1.14.2",
     "autotel-devtools": "workspace:*"
   },
   "peerDependencies": {
@@ -213,16 +212,13 @@
     }
   },
   "devDependencies": {
-    "@preact/preset-vite": "^2.10.5",
     "@types/node": "^25.9.1",
     "@types/vscode": "^1.120.0",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.9.1",
     "ovsx": "^1.0.0",
-    "preact": "^10.29.2",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14",
     "vitest": "^4.1.7"
   },
   "files": [

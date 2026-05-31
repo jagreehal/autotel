@@ -1,0 +1,244 @@
+[
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "1000000000000001",
+    "name": "handle-tools-demo",
+    "kind": "SERVER",
+    "startTime": 1000,
+    "endTime": 55410,
+    "duration": 54410,
+    "attributes": { "http.request.method": "POST", "http.route": "/api/tools-demo" },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "2000000000000001",
+    "parentSpanId": "1000000000000001",
+    "name": "loadPortfolio",
+    "kind": "INTERNAL",
+    "startTime": 1100,
+    "endTime": 1180,
+    "duration": 80,
+    "attributes": {
+      "autotel.input": "{\"userId\":\"anonymous\"}",
+      "autotel.output": "{\"holdings\":3,\"baseCurrency\":\"USD\"}"
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "2000000000000002",
+    "parentSpanId": "1000000000000001",
+    "name": "validateScenario",
+    "kind": "INTERNAL",
+    "startTime": 1180,
+    "endTime": 1230,
+    "duration": 50,
+    "attributes": {
+      "autotel.input": "{\"years\":5,\"initial\":10000}",
+      "autotel.output": "{\"ok\":true}"
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "3000000000000001",
+    "parentSpanId": "1000000000000001",
+    "name": "complex-financial-calculator:ai.streamText",
+    "kind": "INTERNAL",
+    "startTime": 1250,
+    "endTime": 55400,
+    "duration": 54150,
+    "attributes": {
+      "ai.model.provider": "ollama",
+      "ai.model.id": "granite4:latest",
+      "operation.name": "ai.streamText",
+      "ai.prompt": "{\"system\":\"You are a financial analyst...\",\"prompt\":\"Calculate the total return on investment...\"}",
+      "ai.response.text": "**Step-by-step calculations** Year 1 (8% return)...",
+      "ai.usage.inputTokens": 12672,
+      "ai.usage.outputTokens": 1177
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "4000000000000001",
+    "parentSpanId": "3000000000000001",
+    "name": "complex-financial-calculator:ai.streamText.doStream",
+    "kind": "INTERNAL",
+    "startTime": 1300,
+    "endTime": 2530,
+    "duration": 1230,
+    "attributes": {
+      "ai.model.provider": "ollama",
+      "ai.model.id": "granite4:latest",
+      "operation.name": "ai.streamText.doStream",
+      "ai.response.text": "I'll calculate year 1.",
+      "ai.usage.inputTokens": 1178,
+      "ai.usage.outputTokens": 39
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "5000000000000001",
+    "parentSpanId": "4000000000000001",
+    "name": "ai.toolCall",
+    "kind": "INTERNAL",
+    "startTime": 2540,
+    "endTime": 2545,
+    "duration": 5,
+    "attributes": {
+      "operation.name": "ai.toolCall",
+      "ai.toolCall.name": "calculate",
+      "ai.toolCall.id": "call-1",
+      "ai.toolCall.args": "{\"expression\":\"10000 * (1 + 0.08)\",\"step\":\"Year 1 growth\"}",
+      "ai.toolCall.result": "{\"result\":10800,\"expression\":\"10000 * (1 + 0.08)\",\"step\":\"Year 1 growth\"}"
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "4000000000000002",
+    "parentSpanId": "3000000000000001",
+    "name": "complex-financial-calculator:ai.streamText.doStream",
+    "kind": "INTERNAL",
+    "startTime": 2600,
+    "endTime": 3990,
+    "duration": 1390,
+    "attributes": {
+      "ai.model.provider": "ollama",
+      "ai.model.id": "granite4:latest",
+      "operation.name": "ai.streamText.doStream",
+      "ai.usage.inputTokens": 1267,
+      "ai.usage.outputTokens": 31
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "5000000000000002",
+    "parentSpanId": "4000000000000002",
+    "name": "ai.toolCall",
+    "kind": "INTERNAL",
+    "startTime": 4000,
+    "endTime": 4006,
+    "duration": 6,
+    "attributes": {
+      "operation.name": "ai.toolCall",
+      "ai.toolCall.name": "calculate",
+      "ai.toolCall.id": "call-2",
+      "ai.toolCall.args": "{\"expression\":\"10800 + 2000\",\"step\":\"Add bonus\"}",
+      "ai.toolCall.result": "{\"result\":12800,\"expression\":\"10800 + 2000\"}"
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "5000000000000003",
+    "parentSpanId": "4000000000000002",
+    "name": "ai.toolCall",
+    "kind": "INTERNAL",
+    "startTime": 4010,
+    "endTime": 4014,
+    "duration": 4,
+    "attributes": {
+      "operation.name": "ai.toolCall",
+      "ai.toolCall.name": "calculate",
+      "ai.toolCall.id": "call-3",
+      "ai.toolCall.args": "{\"expression\":\"12800 * (1 + 0.12)\",\"step\":\"Year 2 growth\"}",
+      "ai.toolCall.result": "{\"result\":14336,\"expression\":\"12800 * (1 + 0.12)\"}"
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "4000000000000003",
+    "parentSpanId": "3000000000000001",
+    "name": "complex-financial-calculator:ai.streamText.doStream",
+    "kind": "INTERNAL",
+    "startTime": 4100,
+    "endTime": 5300,
+    "duration": 1200,
+    "attributes": {
+      "ai.model.provider": "ollama",
+      "ai.model.id": "granite4:latest",
+      "operation.name": "ai.streamText.doStream",
+      "ai.usage.inputTokens": 1340,
+      "ai.usage.outputTokens": 44
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "5000000000000004",
+    "parentSpanId": "4000000000000003",
+    "name": "ai.toolCall",
+    "kind": "INTERNAL",
+    "startTime": 5310,
+    "endTime": 5340,
+    "duration": 30,
+    "attributes": {
+      "operation.name": "ai.toolCall",
+      "ai.toolCall.name": "calculate",
+      "ai.toolCall.id": "call-4",
+      "ai.toolCall.args": "{\"expression\":\"14336 - 1500\",\"step\":\"Year 2 withdrawal\"}",
+      "ai.toolCall.result": "{\"result\":12836,\"expression\":\"14336 - 1500\"}"
+    },
+    "status": { "code": "ERROR", "message": "Mismatched parentheses" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "5000000000000005",
+    "parentSpanId": "4000000000000003",
+    "name": "ai.toolCall",
+    "kind": "INTERNAL",
+    "startTime": 5350,
+    "endTime": 5356,
+    "duration": 6,
+    "attributes": {
+      "operation.name": "ai.toolCall",
+      "ai.toolCall.name": "calculate",
+      "ai.toolCall.id": "call-5",
+      "ai.toolCall.args": "{\"expression\":\"12836 * (1 + 0.15)\",\"step\":\"Year 4 growth\"}",
+      "ai.toolCall.result": "{\"result\":14761.4,\"expression\":\"12836 * (1 + 0.15)\"}"
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "5000000000000006",
+    "parentSpanId": "4000000000000003",
+    "name": "ai.toolCall",
+    "kind": "INTERNAL",
+    "startTime": 5360,
+    "endTime": 5366,
+    "duration": 6,
+    "attributes": {
+      "operation.name": "ai.toolCall",
+      "ai.toolCall.name": "compare",
+      "ai.toolCall.id": "call-6",
+      "ai.toolCall.args": "{\"scenario1\":\"Actively managed\",\"value1\":14761.4,\"scenario2\":\"Simple 10%\",\"value2\":16105.1}",
+      "ai.toolCall.result": "{\"difference\":-1343.7,\"percentDifference\":-8.34}"
+    },
+    "status": { "code": "OK" }
+  },
+  {
+    "traceId": "6c57c8ed1aca9c680eb04f0f30bf5ce0",
+    "spanId": "5000000000000007",
+    "parentSpanId": "4000000000000003",
+    "name": "ai.toolCall",
+    "kind": "INTERNAL",
+    "startTime": 5370,
+    "endTime": 5376,
+    "duration": 6,
+    "attributes": {
+      "operation.name": "ai.toolCall",
+      "ai.toolCall.name": "formatCurrency",
+      "ai.toolCall.id": "call-7",
+      "ai.toolCall.args": "{\"amount\":14761.4,\"label\":\"Final value\"}",
+      "ai.toolCall.result": "{\"formatted\":\"$14,761.40\",\"amount\":14761.4,\"label\":\"Final value\"}"
+    },
+    "status": { "code": "OK" }
+  }
+]

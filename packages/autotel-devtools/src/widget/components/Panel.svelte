@@ -11,6 +11,7 @@
     Network,
     FileText,
     Sparkles,
+    Workflow,
   } from '@lucide/svelte';
   import {
     widgetExpandedSignal,
@@ -21,10 +22,12 @@
     setSelectedTab,
     setPopoverDimensions,
     genAiCountSignal,
+    flowCountSignal,
   } from '../store.svelte';
   import { clamp } from '../utils';
   import { cn } from '../utils/cn';
   import TabView from './TabView.svelte';
+  import ConnectionStatus from './ConnectionStatus.svelte';
   import type { TabType } from '../types';
 
   // Mutable, non-reactive bookkeeping (never rendered directly).
@@ -40,6 +43,7 @@
 
   const totalErrors = $derived(totalErrorCountSignal.value);
   const genAiCount = $derived(genAiCountSignal.value);
+  const flowCount = $derived(flowCountSignal.value);
 
   const tabs = $derived<
     Array<{ id: TabType; label: string; icon: typeof Database; badge?: number }>
@@ -50,6 +54,12 @@
       label: 'GenAI',
       icon: Sparkles,
       badge: genAiCount > 0 ? genAiCount : undefined,
+    },
+    {
+      id: 'flow',
+      label: 'Flow',
+      icon: Workflow,
+      badge: flowCount > 0 ? flowCount : undefined,
     },
     { id: 'service-map', label: 'Services', icon: Network },
     { id: 'metrics', label: 'Metrics', icon: BarChart },
@@ -237,6 +247,9 @@
             {/if}
           </button>
         {/each}
+      </div>
+      <div class="ml-auto pb-3">
+        <ConnectionStatus compact />
       </div>
     </div>
 

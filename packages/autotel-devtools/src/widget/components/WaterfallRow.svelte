@@ -90,10 +90,12 @@
     ChevronRight,
     Info,
     Zap,
+    X,
   } from '@lucide/svelte';
   import { cn } from '../utils/cn';
   import { formatDuration } from '../utils';
   import type { TraceData } from '../types';
+  import { packEventLanes, classifyEvent } from '../utils/spanEvents';
 
   interface Props {
     node: SpanNode;
@@ -122,41 +124,36 @@
   const isError = $derived(span.status.code === 'ERROR');
   const hasEvents = $derived(span.events && span.events.length > 0);
 
-  // Pack event markers into sub-lanes to avoid overlap
-  const eventLanes = $derived.by(() => {
-    if (!span.events || span.events.length === 0) return [];
-    const lanes: number[][] = []; // Each lane is a list of event indices
+  // Pack event markers into sub-lanes to avoid overlap (see utils/spanEvents)
+  const eventLanes = $derived(
+    packEventLanes(span.events ?? [], trace.startTime, trace.duration),
+  );
 
-    for (let i = 0; i < span.events.length; i++) {
-      const event = span.events[i];
-      const eventPos =
-        trace.duration > 0
-          ? ((event.timestamp - trace.startTime) / trace.duration) * 100
-          : 0;
-      const clampedPos = Math.min(Math.max(eventPos, 0), 100);
+  // Index of the event whose detail popover is open (null = none).
+  let activeEventIdx = $state<number | null>(null);
+  const toggleEvent = (idx: number) => {
+    activeEventIdx = activeEventIdx === idx ? null : idx;
+  };
 
-      // Place in the first lane that doesn't overlap
-      let placed = false;
-      for (let lane = 0; lane < lanes.length; lane++) {
-        const canPlace = lanes[lane].every((otherIdx) => {
-          const other = span.events![otherIdx];
-          const otherPos =
-            trace.duration > 0
-              ? ((other.timestamp - trace.startTime) / trace.duration) * 100
-              : 0;
-          return Math.abs(clampedPos - otherPos) > 2; // 2% gap
-        });
-        if (canPlace) {
-          lanes[lane].push(i);
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        lanes.push([i]);
-      }
-    }
-    return lanes;
+  // Dismiss the popover on outside click or Escape. The marker buttons and the
+  // popover itself call stopPropagation, so their clicks never reach this
+  // window-level listener — only genuine outside clicks close it. The effect
+  // runs after the opening click has finished propagating, so it can't
+  // self-close.
+  $effect(() => {
+    if (activeEventIdx === null) return;
+    const close = () => {
+      activeEventIdx = null;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('keydown', onKey);
+    };
   });
 </script>
 
@@ -255,25 +252,92 @@
       {/if}
     </div>
 
-    <!-- Event markers in sub-lanes -->
+    <!-- Event markers in sub-lanes (click to inspect) -->
     {#each eventLanes as lane, laneIdx (laneIdx)}
-      {#each lane as eventIdx (eventIdx)}
-        {@const event = span.events![eventIdx]}
-        {@const eventPos =
-          trace.duration > 0
-            ? ((event.timestamp - trace.startTime) / trace.duration) * 100
-            : 0}
+      {#each lane as entry (entry.index)}
+        {@const event = span.events![entry.index]}
         {@const topOffset = 28 + laneIdx * 8}
-        <div
+        {@const isException = classifyEvent(event) === 'exception'}
+        <button
+          type="button"
+          onclick={(e) => {
+            e.stopPropagation();
+            toggleEvent(entry.index);
+          }}
           class={cn(
-            'absolute w-2 h-2 rounded-full border border-white z-10',
-            event.name === 'exception' ? 'bg-red-500' : 'bg-yellow-500',
+            'absolute w-2.5 h-2.5 rounded-full border border-white z-10 cursor-pointer hover:scale-125 transition-transform',
+            isException ? 'bg-red-500' : 'bg-yellow-500',
+            activeEventIdx === entry.index && 'ring-2 ring-blue-400 scale-125',
           )}
-          style={`left: ${Math.min(Math.max(eventPos, 0), 100)}%; top: ${topOffset}px;`}
-          title={`${event.name} at ${formatDuration(event.timestamp - trace.startTime)}`}
-        ></div>
+          style={`left: ${entry.posPercent}%; top: ${topOffset}px; transform: translateX(-50%);`}
+          title={`${event.name} at ${formatDuration(event.timestamp - trace.startTime)} — click for detail`}
+          aria-label={`Event ${event.name}`}
+        ></button>
       {/each}
     {/each}
+
+    <!-- Inline event detail popover -->
+    {#if activeEventIdx !== null && span.events?.[activeEventIdx]}
+      {@const event = span.events[activeEventIdx]}
+      {@const isException = classifyEvent(event) === 'exception'}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="absolute z-30 top-[calc(100%-2px)] left-2 right-2 max-w-[420px] bg-surface border border-line rounded-md shadow-lg p-2.5 text-left at-modal-in"
+        onclick={(e) => e.stopPropagation()}
+      >
+        <div class="flex items-center gap-2 mb-1.5">
+          <span
+            class={cn(
+              'w-2 h-2 rounded-full flex-shrink-0',
+              isException ? 'bg-red-500' : 'bg-yellow-500',
+            )}
+          ></span>
+          <span
+            class={cn(
+              'text-xs font-medium flex-1 truncate',
+              isException ? 'text-red-700' : 'text-fg',
+            )}
+          >
+            {event.name}
+          </span>
+          <span class="text-[10px] text-fg-subtle font-mono">
+            +{formatDuration(event.timestamp - trace.startTime)}
+          </span>
+          <button
+            type="button"
+            onclick={(e) => {
+              e.stopPropagation();
+              activeEventIdx = null;
+            }}
+            class="p-0.5 hover:bg-hover rounded flex-shrink-0"
+            aria-label="Close event detail"
+          >
+            <X size={12} class="text-fg-subtle" />
+          </button>
+        </div>
+        <div class="text-[10px] text-fg-subtle font-mono mb-1.5">
+          {new Date(event.timestamp).toLocaleTimeString()}
+        </div>
+        {#if event.attributes && Object.keys(event.attributes).length > 0}
+          <div
+            class="font-mono text-[11px] text-fg-muted bg-subtle rounded p-2 border border-line-subtle max-h-[160px] overflow-auto"
+          >
+            {#each Object.entries(event.attributes) as [key, value] (key)}
+              <div class="flex gap-2 py-0.5">
+                <span class="text-fg-subtle flex-shrink-0">{key}</span>
+                <span class="text-fg break-all">
+                  {typeof value === 'object'
+                    ? JSON.stringify(value)
+                    : String(value)}
+                </span>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="text-[11px] text-fg-subtle italic">No attributes</div>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <!-- Duration column -->

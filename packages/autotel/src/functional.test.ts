@@ -337,6 +337,57 @@ describe('Functional API', () => {
         expect(spans[0]!.attributes['userId']).toBe('456');
       });
 
+      it('captures input/output as autotel.input/output when opted in', async () => {
+        const collector = createTraceCollector();
+
+        const calc = traceOptionsFactory(
+          { name: 'calc', captureInput: true, captureOutput: true },
+          (_ctx: TraceContext) => async (a: number, b: number) => a + b,
+        );
+
+        await calc(2, 3);
+
+        const span = collector.getSpans()[0]!;
+        // Multiple args captured as an array; single value would be captured directly.
+        expect(span.attributes['autotel.input']).toBe('[2,3]');
+        expect(span.attributes['autotel.output']).toBe('5');
+      });
+
+      it('does not capture input/output by default', async () => {
+        const collector = createTraceCollector();
+
+        const calc = traceOptionsFactory(
+          { name: 'calc-default' },
+          (_ctx: TraceContext) => async (a: number, b: number) => a + b,
+        );
+
+        await calc(2, 3);
+
+        const span = collector.getSpans()[0]!;
+        expect(span.attributes['autotel.input']).toBeUndefined();
+        expect(span.attributes['autotel.output']).toBeUndefined();
+      });
+
+      it('captures a single argument directly (not wrapped in an array)', async () => {
+        const collector = createTraceCollector();
+
+        const load = traceOptionsFactory(
+          { name: 'load', captureInput: true, captureOutput: true },
+          (_ctx: TraceContext) => async (req: { userId: string }) => ({
+            holdings: 3,
+            userId: req.userId,
+          }),
+        );
+
+        await load({ userId: 'anon' });
+
+        const span = collector.getSpans()[0]!;
+        expect(span.attributes['autotel.input']).toBe('{"userId":"anon"}');
+        expect(span.attributes['autotel.output']).toBe(
+          '{"holdings":3,"userId":"anon"}',
+        );
+      });
+
       it('should respect NeverSampler', async () => {
         const collector = createTraceCollector();
 

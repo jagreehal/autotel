@@ -28,6 +28,12 @@ const {
   vi.hoisted(() => {
     const fakeServer = {
       once: vi.fn(),
+      // DevtoolsServer attaches a WebSocketServer + request listener to the
+      // server, so it must expose `.on` / `.removeListener` / `.address` even in
+      // the unit mock (close() tears the WS listeners back down).
+      on: vi.fn(),
+      removeListener: vi.fn(),
+      address: vi.fn(() => ({ port: 4318 })),
       listen: vi.fn(),
       close: vi.fn((cb?: () => void) => cb?.()),
     }
@@ -329,37 +335,11 @@ describe('activate', () => {
     )
   })
 
-  it('returns 413 for oversized OTLP payloads', async () => {
-    const context = { subscriptions: [] as { dispose(): void }[] }
-    activate(context as never)
-    await new Promise((resolve) => setImmediate(resolve))
-
-    const firstCall = createServer.mock.calls[0] as unknown as unknown[] | undefined
-    const serverHandler = firstCall?.[0] as
-      | ((req: unknown, res: unknown) => void | Promise<void>)
-      | undefined
-    expect(serverHandler).toBeDefined()
-
-    const hugeChunk = Buffer.alloc(10 * 1024 * 1024 + 1, 1)
-    const req = {
-      method: 'POST',
-      url: '/v1/traces',
-      async *[Symbol.asyncIterator]() {
-        yield hugeChunk
-      },
-    }
-    const writeHead = vi.fn()
-    const end = vi.fn()
-    const res = { writeHead, end }
-
-    await serverHandler?.(req, res)
-    await new Promise((resolve) => setImmediate(resolve))
-
-    expect(writeHead).toHaveBeenCalledWith(
-      413,
-      expect.objectContaining({ 'content-type': 'application/json' }),
-    )
-  })
+  // Payload-size limiting and OTLP route handling now live in the shared
+  // DevtoolsServer / attachDevtoolsRoutes (tested in the autotel-devtools
+  // package), so the extension no longer owns a bespoke request handler to
+  // unit-test here. The HTTP ingest path is covered end-to-end in
+  // extension.integration.test.ts against a real server.
 
   it('does not start receiver on non-loopback host without consent', async () => {
     receiverConfig.host = '0.0.0.0'

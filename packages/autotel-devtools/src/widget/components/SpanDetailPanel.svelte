@@ -58,6 +58,9 @@
     FileText,
     Maximize2,
     Link2,
+    Code2,
+    Database,
+    ExternalLink,
   } from '@lucide/svelte';
   import type { Snippet } from 'svelte';
   import { formatDuration } from '../utils';
@@ -67,7 +70,20 @@
   import type { SpanData, TraceData } from '../types';
   import { inferResourceName, inferResourceType } from '../utils/resources';
   import { computeSelfTime } from '../utils/spanAnalysis';
-  import { logsSignal } from '../store.svelte';
+  import {
+    logsSignal,
+    editorSchemeSignal,
+    setEditorScheme,
+    type EditorSchemeValue,
+  } from '../store.svelte';
+  import { buildCodeLocation } from '../utils/codeLocation';
+  import { extractDbInfo, highlightSql } from '../utils/dbInfo';
+
+  const EDITOR_OPTIONS: { value: EditorSchemeValue; label: string }[] = [
+    { value: 'vscode', label: 'VS Code' },
+    { value: 'cursor', label: 'Cursor' },
+    { value: 'webstorm', label: 'WebStorm' },
+  ];
 
   interface Props {
     span: SpanData;
@@ -113,6 +129,17 @@
     Object.entries(span.attributes || {}).sort(([a], [b]) =>
       a.localeCompare(b),
     ),
+  );
+
+  // Code location → clickable editor deep-link (feature: code location linking)
+  const codeLocation = $derived(
+    buildCodeLocation(span.attributes || {}, editorSchemeSignal.value),
+  );
+
+  // Database query inspection
+  const dbInfo = $derived(extractDbInfo(span.attributes || {}));
+  const sqlTokens = $derived(
+    dbInfo?.statement ? highlightSql(dbInfo.statement) : [],
   );
 
   // Calculate timing relative to trace
@@ -341,6 +368,93 @@
         )}
       </div>
     </div>
+
+    <!-- Code location (clickable editor deep-link) -->
+    {#if codeLocation}
+      <div class="px-4 py-3 border-b border-line-subtle">
+        <div class="flex items-center gap-2 mb-2">
+          <Code2 size={14} class="text-fg-subtle" />
+          <span class="text-xs font-medium text-fg-muted flex-1">
+            Code Location
+          </span>
+          <select
+            value={editorSchemeSignal.value}
+            onchange={(e) =>
+              setEditorScheme(e.currentTarget.value as EditorSchemeValue)}
+            class="text-[10px] bg-subtle border border-line rounded px-1 py-0.5 text-fg-muted"
+            title="Editor to open source files in"
+          >
+            {#each EDITOR_OPTIONS as opt (opt.value)}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+        <a
+          href={codeLocation.href}
+          class="group flex items-center gap-2 text-xs font-mono text-blue-600 hover:underline break-all"
+          title={`Open ${codeLocation.filepath}${codeLocation.line ? `:${codeLocation.line}` : ''}`}
+        >
+          <ExternalLink size={12} class="flex-shrink-0" />
+          <span class="break-all">{codeLocation.display}</span>
+        </a>
+        {#if codeLocation.functionName}
+          <div class="mt-1 text-[11px] text-fg-subtle font-mono">
+            {codeLocation.namespace
+              ? `${codeLocation.namespace}.`
+              : ''}{codeLocation.functionName}()
+          </div>
+        {/if}
+        <div class="mt-1 text-[10px] text-fg-subtle break-all">
+          {codeLocation.filepath}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Database query inspection -->
+    {#if dbInfo}
+      <div class="px-4 py-3 border-b border-line-subtle">
+        <div class="flex items-center gap-2 mb-2">
+          <Database size={14} class="text-fg-subtle" />
+          <span class="text-xs font-medium text-fg-muted flex-1">Database</span>
+          {#if dbInfo.system}
+            <span
+              class="text-[10px] px-1.5 py-px rounded border font-mono bg-indigo-50 text-indigo-700 border-indigo-300"
+            >
+              {dbInfo.system}
+            </span>
+          {/if}
+        </div>
+
+        {#if dbInfo.operation || dbInfo.table || dbInfo.dbName || dbInfo.rowCount !== undefined}
+          <div class="grid grid-cols-2 gap-2 text-xs mb-2">
+            {#if dbInfo.operation}
+              {@render timingItem('Operation', dbInfo.operation)}
+            {/if}
+            {#if dbInfo.table}
+              {@render timingItem('Table', dbInfo.table)}
+            {/if}
+            {#if dbInfo.dbName}
+              {@render timingItem('Database', dbInfo.dbName)}
+            {/if}
+            {#if dbInfo.rowCount !== undefined}
+              {@render timingItem('Rows', String(dbInfo.rowCount))}
+            {/if}
+          </div>
+        {/if}
+
+        {#if dbInfo.statement}
+          <Copyable content={dbInfo.statement}>
+            <pre
+              class="bg-subtle rounded p-2.5 border border-line font-mono text-[11px] text-fg whitespace-pre-wrap break-all overflow-auto max-h-[240px]">{#each sqlTokens as token, i (i)}<span
+                  class={token.kind === 'keyword'
+                    ? 'text-indigo-600 font-semibold'
+                    : token.kind === 'string'
+                      ? 'text-green-600'
+                      : ''}>{token.text}</span>{/each}</pre>
+          </Copyable>
+        {/if}
+      </div>
+    {/if}
 
     <!-- Relationships -->
     {#if parentSpan || childSpans.length > 0}
