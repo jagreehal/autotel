@@ -13,6 +13,8 @@ export { connectionStatusSignal }
 export interface WidgetProps {
   mode: 'widget' | 'fullpage'
   wsUrl: string
+  /** Optional deep-link: select this trace/span once it arrives over the wire. */
+  deepLink?: { traceId: string; spanId?: string }
 }
 
 export function mountWidget(

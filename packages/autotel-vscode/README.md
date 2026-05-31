@@ -8,7 +8,7 @@ The receiver listens on `POST /v1/traces` and `POST /v1/logs` at `127.0.0.1:4318
 
 The activity bar has four views populated live from the in-memory buffer: Services, Traces, Logs, and Errors. Errors are grouped by fingerprint so the same exception across many traces collapses into a single row with a count.
 
-Spans open in a webview that shows status, timing, attributes, and any events. If a span carries `code.filepath` and `code.lineno`, there is a "Reveal Source" button that opens the file at the right line. Files outside the workspace are refused.
+Opening a span (or **Open Devtools UI**) embeds the full `autotel-devtools` widget — Traces waterfall, Flow call graph, GenAI, Logs, Errors — in a VS Code webview, served from the same receiver and fed live. Clicking a span deep-links the widget straight to it. If a span carries `code.filepath` and `code.lineno`, **Reveal Source** opens the file at the right line; files outside the workspace are refused.
 
 The status bar tells you whether the receiver is running, stopped, or could not bind. Click it to start.
 
@@ -16,7 +16,7 @@ The status bar tells you whether the receiver is running, stopped, or could not 
 
 Install the extension. Point your app at `http://127.0.0.1:4318`. That is the default OTLP/HTTP endpoint, so most SDKs need no extra configuration.
 
-Open the Autotel activity bar. Right-click a span and choose **Open Span Detail**. From there, **Reveal Source** opens the code.
+Open the Autotel activity bar. Click a span to open the embedded Devtools widget focused on it. **Reveal Source** opens the code.
 
 If port 4318 is taken (most often by a local OpenTelemetry Collector), run **Autotel: Set Receiver Port** and pick another one. The status bar will say "port busy" until the conflict is resolved.
 
@@ -30,8 +30,8 @@ If port 4318 is taken (most often by a local OpenTelemetry Collector), run **Aut
 | `Autotel: Clear Buffered Data` | Drop all buffered spans, logs, and error groups. |
 | `Autotel: Reveal Span Source` | Jump to `code.filepath`:`code.lineno` for the selected span. |
 | `Autotel: Copy Span ID` | Copy the span ID to the clipboard. |
-| `Autotel: Open Span Detail` | Open the span in a detail webview. |
-| `Autotel: Open Devtools UI` | Open the `autotel-devtools` UI in a VS Code webview (or browser). |
+| `Autotel: Open Span Detail` | Open the embedded Devtools widget focused on the selected span. |
+| `Autotel: Open Devtools UI` | Open the embedded `autotel-devtools` widget in a VS Code webview (or browser). |
 
 If you want a standalone Devtools UI process outside VS Code, run `npx autotel-devtools`.
 

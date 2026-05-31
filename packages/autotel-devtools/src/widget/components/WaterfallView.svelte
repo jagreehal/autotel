@@ -114,6 +114,7 @@
    * Waterfall visualization for trace spans
    * Shows spans in a timeline view with bars representing duration
    */
+  import { untrack } from 'svelte';
   import { Zap } from '@lucide/svelte';
   import { cn } from '../utils/cn';
   import { formatDuration } from '../utils';
@@ -196,6 +197,31 @@
     void selectedSpanId;
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
+  });
+
+  // When a span is selected from outside (a deep-link from Flow/GenAI/Errors),
+  // expand any collapsed ancestors so the row is visible, then scroll to it.
+  // Only re-runs on selectedSpanId change — the collapsed read/write is
+  // untracked so toggling unrelated rows doesn't re-trigger a scroll.
+  $effect(() => {
+    const id = selectedSpanId;
+    if (!id) return;
+    untrack(() => {
+      const byId = new Map(trace.spans.map((s) => [s.spanId, s]));
+      const next = new Set(collapsed);
+      let changed = false;
+      let p = byId.get(id)?.parentSpanId;
+      while (p) {
+        if (next.delete(p)) changed = true;
+        p = byId.get(p)?.parentSpanId;
+      }
+      if (changed) collapsed = next;
+      requestAnimationFrame(() =>
+        document
+          .getElementById(`waterfall-row-${id}`)
+          ?.scrollIntoView({ block: 'center' }),
+      );
+    });
   });
 
   const toggleCollapse = (spanId: string) => {

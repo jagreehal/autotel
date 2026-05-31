@@ -4,6 +4,11 @@
     updateWidgetData,
     loadPersistedState,
     connectionStatusSignal,
+    tracesSignal,
+    pendingDeepLinkSignal,
+    requestDeepLink,
+    setSelectedTrace,
+    setSelectedTab,
   } from './store.svelte';
   import Bubble from './components/Bubble.svelte';
   import Panel from './components/Panel.svelte';
@@ -12,8 +17,24 @@
   interface Props {
     mode: 'widget' | 'fullpage';
     wsUrl: string;
+    deepLink?: { traceId: string; spanId?: string };
   }
-  let { mode, wsUrl }: Props = $props();
+  let { mode, wsUrl, deepLink }: Props = $props();
+
+  // Register an inbound deep-link (e.g. from the VS Code extension's URL hash).
+  $effect(() => {
+    if (deepLink) requestDeepLink(deepLink.traceId, deepLink.spanId);
+  });
+
+  // Apply the pending deep-link once its trace has arrived over the wire.
+  $effect(() => {
+    const target = pendingDeepLinkSignal.value;
+    if (!target) return;
+    if (!tracesSignal.value.some((t) => t.traceId === target.traceId)) return;
+    setSelectedTrace(target.traceId, target.spanId ?? null);
+    setSelectedTab('traces');
+    pendingDeepLinkSignal.value = null;
+  });
 
   $effect(() => {
     loadPersistedState();

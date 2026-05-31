@@ -25,6 +25,7 @@
   import { useResizable } from './resizable.svelte';
   import SpanRow from './SpanRow.svelte';
   import { downloadTraceAsJson, copyTraceToClipboard } from '../export-import';
+  import { selectedSpanIdSignal } from '../store.svelte';
   import type { TraceData, SpanData } from '../types';
 
   type ViewMode = 'waterfall' | 'flame' | 'list';
@@ -36,6 +37,17 @@
 
   let viewMode = $state<ViewMode>('waterfall');
   let selectedSpan = $state<SpanData | null>(null);
+
+  // Consume a one-shot deep-link: when another view asked to open a specific
+  // span (Flow/GenAI/Errors → "open in waterfall"), select it here, then clear
+  // the signal so it doesn't override the user's subsequent clicks.
+  $effect(() => {
+    const targetId = selectedSpanIdSignal.value;
+    if (!targetId) return;
+    const match = trace.spans.find((s) => s.spanId === targetId);
+    if (match) selectedSpan = match;
+    selectedSpanIdSignal.value = null;
+  });
   let copied = $state(false);
   let contentRef: HTMLDivElement | undefined = $state();
 

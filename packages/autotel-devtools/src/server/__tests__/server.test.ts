@@ -69,6 +69,35 @@ describe('DevtoolsServer', () => {
     });
   });
 
+  describe('onData hook', () => {
+    it('invokes onData with each ingest after broadcast', async () => {
+      const seen: string[] = [];
+      server = new DevtoolsServer({
+        port: 0,
+        onData: (d) => seen.push(...d.traces.map((t) => t.traceId)),
+      });
+      await new Promise((r) => setTimeout(r, 50));
+
+      server!.addTrace(makeTrace({ traceId: 't1' }));
+      server!.addTrace(makeTrace({ traceId: 't2' }));
+
+      expect(seen).toEqual(['t1', 't2']);
+    });
+
+    it('keeps ingesting when an onData listener throws', async () => {
+      server = new DevtoolsServer({
+        port: 0,
+        onData: () => {
+          throw new Error('listener boom');
+        },
+      });
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(() => server!.addTrace(makeTrace({ traceId: 't1' }))).not.toThrow();
+      expect(server!.getCurrentData().traces).toHaveLength(1);
+    });
+  });
+
   describe('trace management', () => {
     it('merges out-of-order spans into existing traces', async () => {
       server = new DevtoolsServer({ port: 0 });

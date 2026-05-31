@@ -31,6 +31,22 @@ export const widgetDockedSignal = signal<DockPosition>(null);
 
 export const selectedTabSignal = signal<TabType>('traces');
 export const selectedTraceIdSignal = signal<string | null>(null);
+// One-shot deep-link target: when set, the trace detail view selects this span
+// on open, then clears it. Lets any view (Flow, GenAI, Errors) say "open trace
+// X focused on span Y" without each managing its own selection plumbing.
+export const selectedSpanIdSignal = signal<string | null>(null);
+
+// External deep-link request (e.g. the VS Code extension opens the widget at a
+// specific span via a URL hash). Applied once the target trace has arrived over
+// the wire — see Widget.svelte — so it survives the async data load.
+export const pendingDeepLinkSignal = signal<{
+  traceId: string;
+  spanId?: string;
+} | null>(null);
+
+export function requestDeepLink(traceId: string, spanId?: string): void {
+  pendingDeepLinkSignal.value = { traceId, spanId };
+}
 
 export type ThemeValue = 'system' | 'light' | 'dark';
 export const themeSignal = signal<ThemeValue>('system');
@@ -53,6 +69,34 @@ export function cycleTheme() {
   themeSignal.value = next;
   try {
     localStorage.setItem('autotel-devtools-theme', next);
+  } catch {
+    /* localStorage unavailable */
+  }
+}
+
+// ===== Editor scheme (code-location deep links) =====
+// Which editor's URL scheme to use when turning `code.*` span attributes into
+// clickable source links. Persisted independently of widget layout state.
+export type EditorSchemeValue = 'vscode' | 'cursor' | 'webstorm';
+const EDITOR_SCHEME_KEY = 'autotel-devtools-editor';
+
+function readEditorScheme(): EditorSchemeValue {
+  try {
+    const stored = localStorage.getItem(EDITOR_SCHEME_KEY);
+    if (stored === 'vscode' || stored === 'cursor' || stored === 'webstorm')
+      return stored;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return 'vscode';
+}
+
+export const editorSchemeSignal = signal<EditorSchemeValue>(readEditorScheme());
+
+export function setEditorScheme(scheme: EditorSchemeValue) {
+  editorSchemeSignal.value = scheme;
+  try {
+    localStorage.setItem(EDITOR_SCHEME_KEY, scheme);
   } catch {
     /* localStorage unavailable */
   }
@@ -250,6 +294,15 @@ export const genAiRowsSignal = computed<GenAiRow[]>(() => {
 });
 
 export const genAiCountSignal = computed(() => genAiRowsSignal.value.length);
+
+/**
+ * Number of traces that have more than one span — i.e. traces worth showing as
+ * a Flow call graph. A single-span trace has no flow to draw, so the Flow tab
+ * badge counts only multi-span traces.
+ */
+export const flowCountSignal = computed(
+  () => tracesSignal.value.filter((t) => t.spans.length > 1).length,
+);
 
 /**
  * Error groups sorted by most recent
@@ -458,8 +511,12 @@ export function setSelectedTab(tab: TabType) {
   selectedTabSignal.value = tab;
 }
 
-export function setSelectedTrace(traceId: string | null) {
+export function setSelectedTrace(
+  traceId: string | null,
+  spanId: string | null = null,
+) {
   selectedTraceIdSignal.value = traceId;
+  selectedSpanIdSignal.value = traceId ? spanId : null;
   if (traceId) {
     // Expand popover when viewing trace details
     popoverDimensionsSignal.value = {
@@ -470,6 +527,12 @@ export function setSelectedTrace(traceId: string | null) {
     // Collapse to default size
     popoverDimensionsSignal.value = { width: 630, height: 400 };
   }
+}
+
+/** Deep-link to a span: open its trace in the Traces waterfall, focused. */
+export function openSpanInWaterfall(traceId: string, spanId?: string) {
+  setSelectedTrace(traceId, spanId ?? null);
+  setSelectedTab('traces');
 }
 
 export function setWidgetPosition(x: number, y: number) {
