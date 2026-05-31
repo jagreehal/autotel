@@ -10,6 +10,7 @@
   "ignore": [
     "@jagreehal/example-basic",
     "@jagreehal/example-http",
-    "cloudflare-example"
+    "cloudflare-example",
+    "autotel-vscode"
   ]
 }
