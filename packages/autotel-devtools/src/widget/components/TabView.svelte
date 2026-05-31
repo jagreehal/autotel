@@ -9,6 +9,7 @@
   import { selectedTabSignal } from '../store.svelte';
   import TracesView from './TracesView.svelte';
   import GenAiView from './GenAiView.svelte';
+  import FlowView from './FlowView.svelte';
   import ResourcesView from './ResourcesView.svelte';
   import ServiceMapView from './ServiceMapView.svelte';
   import MetricsView from './MetricsView.svelte';
@@ -20,6 +21,8 @@
 
 {#if selected === 'genai'}
   <GenAiView />
+{:else if selected === 'flow'}
+  <FlowView />
 {:else if selected === 'resources'}
   <ResourcesView />
 {:else if selected === 'service-map'}

@@ -9,6 +9,7 @@
     BarChart,
     FileText,
     AlertTriangle,
+    Workflow,
   } from '@lucide/svelte';
 
   interface Props {
@@ -18,6 +19,7 @@
 
   const TABS: Array<{ id: TabType; label: string; icon: typeof Database }> = [
     { id: 'traces', label: 'Traces', icon: Database },
+    { id: 'flow', label: 'Flow', icon: Workflow },
     { id: 'resources', label: 'Resources', icon: Boxes },
     { id: 'service-map', label: 'Service Map', icon: Network },
     { id: 'metrics', label: 'Metrics', icon: BarChart },

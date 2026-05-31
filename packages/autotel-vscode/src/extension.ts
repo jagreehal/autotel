@@ -1,19 +1,26 @@
 import * as vscode from 'vscode'
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { createServer, type Server } from 'node:http'
 import { relative, resolve, sep } from 'node:path'
-import type { ErrorGroup, LogData, TraceData } from 'autotel-devtools/server'
+import type {
+  DevtoolsData,
+  ErrorGroup,
+  LogData,
+  TraceData,
+} from 'autotel-devtools/server'
 import { AutotelCodeLensProvider, AutotelHoverProvider } from './codelens'
 import { getAdapter, listAdapters, credentialKey } from './backends'
 
+// Value imports via require (CJS interop). The receiver is now a full
+// DevtoolsServer + attachDevtoolsRoutes, so it serves the devtools widget UI
+// (/, /widget.js, /ws) from this same port — `openDevtools` embeds it directly.
 const {
   ErrorAggregator,
-  appendManyWithLimit,
-  parseOtlpLogs,
-  parseOtlpTraces,
-  resolveTelemetryLimits,
+  DevtoolsServer,
+  attachDevtoolsRoutes,
 } = require('autotel-devtools/server') as typeof import('autotel-devtools/server')
 
 type Span = TraceData['spans'][number]
+type DevtoolsServerInstance = InstanceType<typeof DevtoolsServer>
 
 const COMMANDS = [
   'autotel.start',
@@ -35,14 +42,15 @@ const extensionDisposables: vscode.Disposable[] = []
 let outputChannel: vscode.OutputChannel | undefined
 let statusBarItem: vscode.StatusBarItem | undefined
 let receiverServer: Server | undefined
+let devtools: DevtoolsServerInstance | undefined
 let traces: TraceData[] = []
 let logs: LogData[] = []
 let spansById = new Map<string, Span>()
+let totalTracesSeen = 0
+let totalLogsSeen = 0
 let droppedTraceCount = 0
 let droppedLogCount = 0
 let errorAggregator = new ErrorAggregator()
-
-const MAX_REQUEST_BYTES = 10 * 1024 * 1024
 
 type ReceiverState = 'running' | 'stopped' | 'port-busy'
 type ReceiverStartGuard = 'ok' | 'blocked'
@@ -53,8 +61,6 @@ let logsProvider: LogsProvider | undefined
 let errorsProvider: ErrorsProvider | undefined
 let codeLensProvider: AutotelCodeLensProvider | undefined
 
-const spanPanels = new Map<string, vscode.WebviewPanel>()
-let extensionUri: vscode.Uri | undefined
 let extensionSecrets: vscode.SecretStorage | undefined
 
 function refreshTreeViews(): void {
@@ -147,12 +153,6 @@ function updateStatusBar(state: ReceiverState): void {
   statusBarItem.tooltip = 'Receiver is stopped.'
 }
 
-class PayloadTooLargeError extends Error {
-  constructor() {
-    super('Payload too large')
-    this.name = 'PayloadTooLargeError'
-  }
-}
 
 interface MetricsSummary {
   service: string
@@ -553,9 +553,20 @@ async function queryRemoteBackend(): Promise<void> {
           void vscode.window.showInformationMessage(`No traces for ${service}.`)
           return
         }
-        // Merge into the existing buffer so every existing view (tree, span
-        // detail, GenAI render, CodeLens) lights up without further wiring.
-        ingestTraces(remoteTraces)
+        // Merge into the buffer so every view (tree, span detail, GenAI
+        // render, CodeLens) lights up. When the receiver is running, route
+        // through DevtoolsServer so the embedded widget also updates; otherwise
+        // merge straight into the read model.
+        if (devtools) {
+          devtools.addTraces(remoteTraces)
+        } else {
+          traces = [...traces, ...remoteTraces]
+          for (const trace of remoteTraces) {
+            errorAggregator.addErrorsFromTrace(trace)
+          }
+          rebuildSpanIndex()
+          refreshTreeViews()
+        }
         updateStatusBar('running')
         void vscode.window.showInformationMessage(
           `Pulled ${remoteTraces.length} trace${remoteTraces.length === 1 ? '' : 's'} from ${adapter.label}.`,
@@ -568,90 +579,34 @@ async function queryRemoteBackend(): Promise<void> {
   )
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = []
-  let total = 0
-  for await (const chunk of req) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    total += buffer.length
-    if (total > MAX_REQUEST_BYTES) {
-      throw new PayloadTooLargeError()
-    }
-    chunks.push(buffer)
-  }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
-}
+// The DevtoolsServer owns ingestion, limits, the buffer, error aggregation and
+// the WS fan-out (and serves the widget UI). This runs on every ingest to keep
+// the extension's read model — tree views, CodeLens, hover — in sync with it.
+function onReceiverData(incremental: DevtoolsData): void {
+  const data = devtools?.getCurrentData()
+  if (!data) return
 
-function sendJson(res: ServerResponse, status: number, body: Record<string, unknown>): void {
-  const encoded = JSON.stringify(body)
-  res.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(encoded),
-  })
-  res.end(encoded)
-}
+  totalTracesSeen += incremental.traces.length
+  totalLogsSeen += incremental.logs.length
+  droppedTraceCount = Math.max(0, totalTracesSeen - data.traces.length)
+  droppedLogCount = Math.max(0, totalLogsSeen - data.logs.length)
 
-function applyLimits(nextTraces: TraceData[], nextLogs: LogData[]): void {
-  const limits = resolveTelemetryLimits({
-    maxTraceCount: getReceiverConfig().maxSpans,
-    maxLogCount: getReceiverConfig().maxLogs,
-  })
-  if (nextTraces.length > limits.maxTraceCount) {
-    droppedTraceCount += nextTraces.length - limits.maxTraceCount
-  }
-  if (nextLogs.length > limits.maxLogCount) {
-    droppedLogCount += nextLogs.length - limits.maxLogCount
-  }
-  traces = nextTraces.slice(-limits.maxTraceCount)
-  logs = nextLogs.slice(-limits.maxLogCount)
-  spansById = new Map(
-    traces.flatMap((trace) => trace.spans.map((span) => [span.spanId, span] as const)),
-  )
-}
-
-function ingestTraces(incoming: TraceData[]): void {
-  applyLimits(appendManyWithLimit(traces, incoming, Number.MAX_SAFE_INTEGER), logs)
-  for (const trace of incoming) {
+  traces = data.traces
+  logs = data.logs
+  rebuildSpanIndex()
+  for (const trace of incremental.traces) {
     errorAggregator.addErrorsFromTrace(trace)
   }
+  updateStatusBar('running')
   refreshTreeViews()
 }
 
-function ingestLogs(incoming: LogData[]): void {
-  applyLimits(traces, appendManyWithLimit(logs, incoming, Number.MAX_SAFE_INTEGER))
-  refreshTreeViews()
-}
-
-async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  try {
-    if (req.method !== 'POST') {
-      sendJson(res, 404, { error: 'Not found' })
-      return
-    }
-    const payload = await readJson(req)
-    if (req.url === '/v1/traces') {
-      ingestTraces(parseOtlpTraces(payload))
-      updateStatusBar('running')
-      sendJson(res, 200, { ok: true, traces: traces.length })
-      return
-    }
-    if (req.url === '/v1/logs') {
-      ingestLogs(parseOtlpLogs(payload))
-      updateStatusBar('running')
-      sendJson(res, 200, { ok: true, logs: logs.length })
-      return
-    }
-    sendJson(res, 404, { error: 'Not found' })
-  } catch (error) {
-    outputChannel?.appendLine(
-      `Receiver request failed: ${error instanceof Error ? error.message : String(error)}`,
-    )
-    if (error instanceof PayloadTooLargeError) {
-      sendJson(res, 413, { error: 'Payload too large' })
-      return
-    }
-    sendJson(res, 400, { error: 'Invalid OTLP payload' })
-  }
+function rebuildSpanIndex(): void {
+  spansById = new Map(
+    traces.flatMap((trace) =>
+      trace.spans.map((span) => [span.spanId, span] as const),
+    ),
+  )
 }
 
 async function ensureReceiverHostAllowed(host: string): Promise<ReceiverStartGuard> {
@@ -672,12 +627,22 @@ async function startReceiver(): Promise<void> {
     updateStatusBar('running')
     return
   }
-  const { host, port } = getReceiverConfig()
+  const { host, port, maxSpans, maxLogs } = getReceiverConfig()
   const guard = await ensureReceiverHostAllowed(host)
   if (guard === 'blocked') return
-  const server = createServer((req, res) => {
-    void handleRequest(req, res)
+  const server = createServer()
+  // DevtoolsServer attaches its WebSocket (/ws) to this http server;
+  // attachDevtoolsRoutes adds the OTLP ingest routes plus the widget UI
+  // (/, /widget.js), so the same port both receives telemetry and serves the
+  // embeddable devtools widget that `openDevtools` points at.
+  devtools = new DevtoolsServer({
+    server,
+    verbose: false,
+    maxTraceCount: maxSpans,
+    maxLogCount: maxLogs,
+    onData: onReceiverData,
   })
+  attachDevtoolsRoutes(server, devtools)
   receiverServer = server
 
   await new Promise<void>((resolve) => {
@@ -709,19 +674,26 @@ async function stopReceiver(): Promise<void> {
     return
   }
   receiverServer = undefined
-  await new Promise<void>((resolve) => {
-    server.close(() => {
-      outputChannel?.appendLine('Receiver stopped')
-      resolve()
-    })
-  })
+  const dt = devtools
+  devtools = undefined
+  // DevtoolsServer.close() closes the shared http server too, so prefer it and
+  // only fall back to closing the raw server directly.
+  if (dt) {
+    await dt.close()
+  } else {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+  outputChannel?.appendLine('Receiver stopped')
   updateStatusBar('stopped')
 }
 
 function clearBufferedData(): void {
+  devtools?.clearData()
   traces = []
   logs = []
   spansById = new Map()
+  totalTracesSeen = 0
+  totalLogsSeen = 0
   droppedTraceCount = 0
   droppedLogCount = 0
   errorAggregator.clear()
@@ -812,149 +784,21 @@ async function copySpanId(arg?: unknown): Promise<void> {
   void vscode.window.showInformationMessage('Span ID copied.')
 }
 
+// Span clicks (tree node, CodeLens) now open the embedded devtools widget
+// focused on the span via a URL-hash deep-link, instead of a separate
+// single-span webview. One UI, far richer (waterfall, Flow, GenAI).
 async function openSpanDetail(arg?: unknown): Promise<void> {
   const span = resolveSpanFromArg(arg)
   if (!span) {
     void vscode.window.showInformationMessage('Span not found in buffer.')
     return
   }
-  if (!extensionUri) {
-    void vscode.window.showWarningMessage('Extension is not fully initialised.')
+  const trace = traces.find((t) => t.spans.some((s) => s.spanId === span.spanId))
+  if (!trace) {
+    void vscode.window.showInformationMessage('Trace for span not found in buffer.')
     return
   }
-
-  const existing = spanPanels.get(span.spanId)
-  if (existing) {
-    existing.reveal(vscode.ViewColumn.Beside)
-    existing.webview.postMessage({ type: 'span', span, trace: findTraceForSpan(span.spanId) })
-    return
-  }
-
-  const panel = vscode.window.createWebviewPanel(
-    'autotel.spanDetail',
-    `Span · ${span.name}`,
-    vscode.ViewColumn.Beside,
-    {
-      enableScripts: true,
-      retainContextWhenHidden: true,
-      localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')],
-    },
-  )
-
-  const scriptUri = panel.webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'span-detail.js'),
-  )
-  panel.webview.html = renderWebviewHtml(panel.webview, scriptUri)
-  panel.webview.onDidReceiveMessage((message: unknown) => {
-    if (!message || typeof message !== 'object') return
-    const msg = message as { type?: string; spanId?: string }
-    if (msg.type === 'ready') {
-      panel.webview.postMessage({ type: 'span', span, trace: findTraceForSpan(span.spanId) })
-      return
-    }
-    if (msg.type === 'revealSource' && typeof msg.spanId === 'string') {
-      void revealSource({ spanId: msg.spanId })
-      return
-    }
-    if (msg.type === 'copySpanId' && typeof msg.spanId === 'string') {
-      void copySpanId(msg.spanId)
-      return
-    }
-  })
-  panel.onDidDispose(() => {
-    spanPanels.delete(span.spanId)
-  })
-
-  spanPanels.set(span.spanId, panel)
-}
-
-function findTraceForSpan(spanId: string): TraceData | undefined {
-  return traces.find((trace) => trace.spans.some((s) => s.spanId === spanId))
-}
-
-function renderWebviewHtml(webview: vscode.Webview, scriptUri: vscode.Uri): string {
-  const nonce = generateNonce()
-  const csp = [
-    `default-src 'none'`,
-    `style-src ${webview.cspSource} 'nonce-${nonce}'`,
-    `script-src 'nonce-${nonce}'`,
-    `img-src ${webview.cspSource} data:`,
-    `font-src ${webview.cspSource}`,
-  ].join('; ')
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Autotel Span Detail</title>
-  <style nonce="${nonce}">
-    :root { color-scheme: light dark; }
-    body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-editor-background); margin: 0; padding: 0; }
-    #root { padding: 16px; }
-    main { display: flex; flex-direction: column; gap: 24px; }
-    main.empty { color: var(--vscode-descriptionForeground); }
-    h1 { margin: 0 0 6px 0; font-size: 1.4rem; }
-    h2 { margin: 0 0 8px 0; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vscode-descriptionForeground); }
-    section { display: flex; flex-direction: column; gap: 6px; }
-    .subtitle { display: flex; gap: 12px; align-items: center; margin: 0; }
-    .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
-    .badge-error { background: var(--vscode-errorForeground); color: var(--vscode-editor-background); }
-    .badge-ok { background: var(--vscode-testing-iconPassed, #4caf50); color: var(--vscode-editor-background); }
-    .badge-unset { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
-    .kind, .duration { color: var(--vscode-descriptionForeground); font-size: 0.85rem; }
-    dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
-    dt { color: var(--vscode-descriptionForeground); font-size: 0.85rem; }
-    dd { margin: 0; word-break: break-all; display: flex; gap: 8px; align-items: center; }
-    code { background: var(--vscode-textBlockQuote-background); padding: 1px 4px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 0.85rem; }
-    button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 10px; border-radius: 3px; cursor: pointer; font-size: 0.8rem; }
-    button:hover { background: var(--vscode-button-hoverBackground); }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); vertical-align: top; }
-    th { color: var(--vscode-descriptionForeground); font-weight: 600; font-size: 0.8rem; }
-    pre { background: var(--vscode-textBlockQuote-background); padding: 8px; border-radius: 3px; overflow-x: auto; font-family: var(--vscode-editor-font-family); font-size: 0.8rem; margin: 4px 0; }
-    .status-message { color: var(--vscode-errorForeground); }
-    .muted { color: var(--vscode-descriptionForeground); }
-    ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
-
-    /* GenAI section — uses VSCode theme tokens so it follows light/dark mode. */
-    .genai-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--vscode-panel-border); }
-    .genai-chip { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
-    .genai-chip[data-provider="anthropic"] { background: var(--vscode-charts-orange, #d97706); color: white; }
-    .genai-chip[data-provider="openai"] { background: var(--vscode-charts-green, #059669); color: white; }
-    .genai-chip[data-provider="google"] { background: var(--vscode-charts-blue, #2563eb); color: white; }
-    .genai-chip[data-provider="ollama"] { background: var(--vscode-charts-purple, #7c3aed); color: white; }
-    .genai-model { font-weight: 500; }
-    .genai-meta { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 0.85rem; }
-    .genai-cached { color: var(--vscode-charts-green, #059669); margin-left: 4px; }
-    .genai-cost { color: var(--vscode-foreground); }
-    .genai-agent { margin: 4px 0 8px 0; }
-    .genai-conversation { display: flex; flex-direction: column; gap: 8px; }
-    .genai-message { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 8px 10px; }
-    .genai-role { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; color: var(--vscode-descriptionForeground); margin-bottom: 4px; }
-    .genai-role-user { border-left: 3px solid var(--vscode-charts-blue, #2563eb); }
-    .genai-role-assistant { border-left: 3px solid var(--vscode-charts-green, #059669); }
-    .genai-role-system { border-left: 3px solid var(--vscode-descriptionForeground); }
-    .genai-role-tool { border-left: 3px solid var(--vscode-charts-orange, #d97706); }
-    .genai-parts { display: flex; flex-direction: column; gap: 6px; }
-    .genai-text { margin: 0; white-space: pre-wrap; line-height: 1.4; }
-    .genai-json { background: var(--vscode-textBlockQuote-background); padding: 6px 8px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 0.75rem; margin: 2px 0; overflow-x: auto; max-height: 240px; }
-    .genai-finish { font-size: 0.7rem; color: var(--vscode-descriptionForeground); margin-top: 4px; }
-    .genai-tool { border: 1px solid var(--vscode-charts-purple, #7c3aed); border-radius: 4px; margin-top: 6px; overflow: hidden; }
-    .genai-tool-header { background: var(--vscode-charts-purple, #7c3aed); background: color-mix(in srgb, var(--vscode-charts-purple, #7c3aed) 20%, transparent); color: var(--vscode-foreground); border: none; padding: 4px 8px; width: 100%; text-align: left; cursor: pointer; font-family: var(--vscode-editor-font-family); font-size: 0.8rem; }
-    .genai-tool-name { font-weight: 500; }
-    .genai-tool-body { padding: 6px 8px; }
-    .genai-tool-section { margin-bottom: 6px; }
-    .genai-tool-output { background: color-mix(in srgb, var(--vscode-charts-green, #059669) 10%, transparent); padding: 6px; border-radius: 3px; }
-    .genai-tool-label { font-size: 0.65rem; font-weight: 600; letter-spacing: 0.08em; color: var(--vscode-descriptionForeground); margin-bottom: 2px; }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`
+  await openDevtools({ traceId: trace.traceId, spanId: span.spanId })
 }
 
 function generateNonce(): string {
@@ -977,9 +821,16 @@ function getDevtoolsUrl(): string {
   return `http://${safeHost}:${port}`
 }
 
-async function openDevtools(): Promise<void> {
+interface DevtoolsFocus {
+  traceId: string
+  spanId?: string
+}
+
+async function openDevtools(focus?: DevtoolsFocus): Promise<void> {
   if (devtoolsPanel) {
     devtoolsPanel.reveal(vscode.ViewColumn.Beside)
+    // Re-point the embedded widget at the requested span (reloads the iframe).
+    if (focus) await applyDevtoolsContent(devtoolsPanel, focus)
     return
   }
 
@@ -1011,9 +862,24 @@ async function openDevtools(): Promise<void> {
     devtoolsPanel = undefined
   })
 
+  await applyDevtoolsContent(panel, focus)
+}
+
+// Builds the webview HTML that frames the embedded devtools widget. `focus`
+// adds a `#trace=…&span=…` hash the widget reads to open on that span.
+async function applyDevtoolsContent(
+  panel: vscode.WebviewPanel,
+  focus?: DevtoolsFocus,
+): Promise<void> {
+  const targetUrl = getDevtoolsUrl()
   try {
     const externalUri = await vscode.env.asExternalUri(vscode.Uri.parse(targetUrl))
-    const iframeUrl = externalUri.toString(true)
+    let iframeUrl = externalUri.toString(true)
+    if (focus) {
+      const hash = new URLSearchParams({ trace: focus.traceId })
+      if (focus.spanId) hash.set('span', focus.spanId)
+      iframeUrl += `#${hash.toString()}`
+    }
     const allowedFrameOrigin = `${new URL(iframeUrl).protocol}//${new URL(iframeUrl).host}`
     const nonce = generateNonce()
     const csp = [
@@ -1213,7 +1079,6 @@ function formatDuration(ms: number): string {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  extensionUri = context.extensionUri
   extensionSecrets = context.secrets
   outputChannel = vscode.window.createOutputChannel('Autotel')
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10)
@@ -1279,14 +1144,14 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  if (receiverServer) {
+  if (devtools) {
+    void devtools.close()
+    devtools = undefined
+    receiverServer = undefined
+  } else if (receiverServer) {
     receiverServer.close()
     receiverServer = undefined
   }
-  for (const panel of spanPanels.values()) {
-    panel.dispose()
-  }
-  spanPanels.clear()
   if (devtoolsPanel) {
     devtoolsPanel.dispose()
     devtoolsPanel = undefined
@@ -1298,6 +1163,8 @@ export function deactivate(): void {
   traces = []
   logs = []
   spansById = new Map()
+  totalTracesSeen = 0
+  totalLogsSeen = 0
   droppedTraceCount = 0
   droppedLogCount = 0
 }

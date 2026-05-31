@@ -106,12 +106,25 @@ async function main(): Promise<void> {
   const title = options.title || 'autotel-devtools'
   process.stdout.write(`\n  ${title}\n\n`)
   process.stdout.write(`  Listening: ${addresses.join('  +  ')}\n`)
-  process.stdout.write(`  UI:        ${uiBase}\n`)
-  process.stdout.write(`  Widget:    <script src="${uiBase}/widget.js"></script>\n`)
-  process.stdout.write(`  WebSocket: ${uiBase.replace('http', 'ws')}/ws\n`)
-  process.stdout.write(`  OTLP:      ${uiBase}/v1/traces\n\n`)
-  process.stdout.write(`  Set OTEL_EXPORTER_OTLP_PROTOCOL=http/json\n`)
-  process.stdout.write(`  Set OTEL_EXPORTER_OTLP_ENDPOINT=${uiBase}\n\n`)
+  process.stdout.write(`  UI:        ${uiBase}   (open in a browser)\n`)
+  process.stdout.write(`  OTLP:      ${uiBase}/v1/traces\n`)
+  process.stdout.write(`  WebSocket: ${uiBase.replace('http', 'ws')}/ws\n\n`)
+  // The widget bundle auto-mounts on load, so the bare <script> tag is all the
+  // user needs — spell that out, plus the two opt-in variations, so nobody
+  // wonders whether they also have to add an element by hand.
+  process.stdout.write(
+    `  Embed in your app — paste into your HTML; a floating panel appears automatically:\n`,
+  )
+  process.stdout.write(`    <script src="${uiBase}/widget.js"></script>\n\n`)
+  process.stdout.write(
+    `    full screen instead:  <script src="${uiBase}/widget.js?mode=fullpage"></script>\n`,
+  )
+  process.stdout.write(
+    `    choose where it goes: add <autotel-devtools></autotel-devtools> to your markup\n\n`,
+  )
+  process.stdout.write(`  Or point any OTLP exporter at this receiver:\n`)
+  process.stdout.write(`    OTEL_EXPORTER_OTLP_PROTOCOL=http/json\n`)
+  process.stdout.write(`    OTEL_EXPORTER_OTLP_ENDPOINT=${uiBase}\n\n`)
   // Self-check: confirm the collector is reachable AND that ingestion works,
   // not just that something is listening. Reading /v1/traces back is the same
   // check a test should make instead of trusting "the client tried to send".

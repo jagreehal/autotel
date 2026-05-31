@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { GenAiSpan } from '../genai/types';
+  import { formatTokenCounts, formatCostUsd } from '../utils/genaiFormat';
 
   function formatLatency(ns: number): string {
     const ms = ns / 1_000_000;
@@ -9,25 +10,26 @@
   }
 
   function formatTokens(usage: GenAiSpan['usage']): string {
-    const i = usage.inputTokens;
-    const o = usage.outputTokens;
-    if (i == null && o == null) return '—';
-    return `${i ?? '—'}→${o ?? '—'}`;
+    return formatTokenCounts(usage.inputTokens, usage.outputTokens);
   }
 
   function formatCost(cost: GenAiSpan['cost']): string {
-    if (!cost || cost.source === 'unknown') return '—';
-    if (cost.total < 0.0001) return `$${(cost.total * 1_000_000).toFixed(2)}μ`;
-    if (cost.total < 0.01) return `$${(cost.total * 1000).toFixed(3)}m`;
-    return `$${cost.total.toFixed(4)}`;
+    return formatCostUsd(cost?.total, cost?.source === 'table');
   }
 
   type Mode = 'list' | 'timeline';
 </script>
 
 <script lang="ts">
-  import { Cpu, MessageSquare, Bot, List, Network } from '@lucide/svelte';
-  import { genAiRowsSignal } from '../store.svelte';
+  import {
+    Cpu,
+    MessageSquare,
+    Bot,
+    List,
+    Network,
+    ExternalLink,
+  } from '@lucide/svelte';
+  import { genAiRowsSignal, openSpanInWaterfall } from '../store.svelte';
   import ModelHeader from './genai/ModelHeader.svelte';
   import ConversationPanel from './genai/ConversationPanel.svelte';
   import AgentTimeline from './genai/AgentTimeline.svelte';
@@ -179,6 +181,21 @@
       </div>
       <div class="flex-1 overflow-y-auto">
         {#if selected}
+          <div class="flex justify-end px-3 pt-2">
+            <button
+              type="button"
+              onclick={() =>
+                openSpanInWaterfall(
+                  selected.traceId,
+                  selected.normalized.spanId,
+                )}
+              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-fg-subtle hover:text-fg hover:bg-hover transition-colors"
+              title="Open this span in the Traces waterfall"
+            >
+              <ExternalLink size={11} />
+              Open in Traces
+            </button>
+          </div>
           <ModelHeader span={selected.normalized} />
           <ConversationPanel span={selected.normalized} />
         {/if}

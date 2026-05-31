@@ -3,6 +3,7 @@
   import TabView from './TabView.svelte';
   import SnapshotBar from './SnapshotBar.svelte';
   import KeyboardShortcutsHelp from './KeyboardShortcutsHelp.svelte';
+  import ConnectionStatus from './ConnectionStatus.svelte';
   import { isInputFocused } from '../utils/keyboard';
   import {
     themeSignal,
@@ -26,6 +27,7 @@
 
   const TABS_ORDER: TabType[] = [
     'traces',
+    'flow',
     'resources',
     'service-map',
     'metrics',
@@ -99,6 +101,7 @@
   <div class="hidden md:flex flex-col border-r border-line">
     <TabBar orientation="vertical" />
     <div class="mt-auto p-2 border-t border-line flex flex-col gap-1">
+      <ConnectionStatus />
       <button
         onclick={cycleTheme}
         class="flex items-center gap-2 px-3 py-2 text-xs text-fg-subtle hover:bg-hover hover:text-fg rounded transition-colors"

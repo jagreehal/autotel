@@ -416,6 +416,21 @@ export interface TracingOptions<
   attributesFromResult?: (result: TReturn) => Record<string, unknown>;
 
   /**
+   * Capture the function arguments onto the span as `autotel.input`
+   * (JSON, truncated). One arg is captured directly; multiple are captured as
+   * an array. Off by default — opt in per call. Tools (visualizers, devtools)
+   * read this alongside `ai.toolCall.args` to show function I/O uniformly.
+   * Avoid on args with secrets/PII, or pair with a redacting processor.
+   */
+  captureInput?: boolean;
+
+  /**
+   * Capture the function return value onto the span as `autotel.output`
+   * (JSON, truncated). Off by default. Same caveats as {@link captureInput}.
+   */
+  captureOutput?: boolean;
+
+  /**
    * Start a new root span instead of creating a child
    * Useful for serverless entry points
    * @default false
@@ -492,6 +507,45 @@ function createDummyCtx<
     deleteBaggage: () => {},
     getAllBaggage: () => new Map(),
   } as unknown as TraceContext<TBaggage>;
+}
+
+/** Attribute keys for opt-in function I/O capture (see TracingOptions). */
+const AUTOTEL_INPUT_ATTR = 'autotel.input';
+const AUTOTEL_OUTPUT_ATTR = 'autotel.output';
+const CAPTURE_MAX_CHARS = 4096;
+
+/** JSON-serialize a captured value, defensively (truncate, swallow cycles). */
+function serializeCapture(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const json = typeof value === 'string' ? value : JSON.stringify(value);
+    if (json === undefined) return undefined;
+    return json.length > CAPTURE_MAX_CHARS
+      ? `${json.slice(0, CAPTURE_MAX_CHARS)}…[truncated]`
+      : json;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `autotel.input` from args (single arg captured directly, else the array). */
+function captureInputAttrs(
+  args: unknown[],
+  enabled?: boolean,
+): Record<string, unknown> {
+  if (!enabled) return {};
+  const s = serializeCapture(args.length === 1 ? args[0] : args);
+  return s === undefined ? {} : { [AUTOTEL_INPUT_ATTR]: s };
+}
+
+/** `autotel.output` from the return value. */
+function captureOutputAttrs(
+  result: unknown,
+  enabled?: boolean,
+): Record<string, unknown> {
+  if (!enabled) return {};
+  const s = serializeCapture(result);
+  return s === undefined ? {} : { [AUTOTEL_OUTPUT_ATTR]: s };
 }
 
 function isAsyncFunction(fn: unknown): boolean {
@@ -842,9 +896,12 @@ function wrapWithTracing<TArgs extends unknown[], TReturn>(
 
           const ctxValue = createTraceContext(span);
           const fn = fnFactory(ctxValue);
-          const argsAttributes = options.attributesFromArgs
-            ? options.attributesFromArgs(args)
-            : {};
+          const argsAttributes = {
+            ...captureInputAttrs(args, options.captureInput),
+            ...(options.attributesFromArgs
+              ? options.attributesFromArgs(args)
+              : {}),
+          };
 
           const handleTailSampling = (
             success: boolean,
@@ -879,9 +936,12 @@ function wrapWithTracing<TArgs extends unknown[], TReturn>(
               status: 'success',
             });
 
-            const resultAttributes = options.attributesFromResult
-              ? options.attributesFromResult(result)
-              : {};
+            const resultAttributes = {
+              ...captureOutputAttrs(result, options.captureOutput),
+              ...(options.attributesFromResult
+                ? options.attributesFromResult(result)
+                : {}),
+            };
 
             span.setStatus({ code: SpanStatusCode.OK });
             span.setAttributes({
@@ -1155,9 +1215,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
 
           // Extract attributes only when actually tracing
           // This avoids expensive preprocessing when sampling rejects the trace
-          const argsAttributes = options.attributesFromArgs
-            ? options.attributesFromArgs(args)
-            : {};
+          const argsAttributes = {
+            ...captureInputAttrs(args, options.captureInput),
+            ...(options.attributesFromArgs
+              ? options.attributesFromArgs(args)
+              : {}),
+          };
 
           const handleTailSampling = (
             success: boolean,
@@ -1192,9 +1255,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
               status: 'success',
             });
 
-            const resultAttributes = options.attributesFromResult
-              ? options.attributesFromResult(result)
-              : {};
+            const resultAttributes = {
+              ...captureOutputAttrs(result, options.captureOutput),
+              ...(options.attributesFromResult
+                ? options.attributesFromResult(result)
+                : {}),
+            };
 
             span.setStatus({ code: SpanStatusCode.OK });
             span.setAttributes({

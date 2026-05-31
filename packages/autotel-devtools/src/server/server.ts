@@ -25,6 +25,12 @@ export interface DevtoolsServerOptions {
   maxTraceCount?: number
   maxLogCount?: number
   maxMetricCount?: number
+  /**
+   * Called after each ingest, with the incremental data just broadcast to WS
+   * clients. Lets an embedder (e.g. the VS Code extension) react to new
+   * telemetry — refresh its own tree views — while the server owns the buffer.
+   */
+  onData?: (incremental: DevtoolsData) => void
 }
 
 export class DevtoolsServer {
@@ -38,11 +44,13 @@ export class DevtoolsServer {
   private limits: TelemetryLimits
   private verbose: boolean
   private _port: number
+  private onData?: (incremental: DevtoolsData) => void
 
   constructor(options: DevtoolsServerOptions = {}) {
     this.limits = resolveTelemetryLimits(options)
     this.verbose = options.verbose ?? false
     this._port = options.port ?? 4318
+    this.onData = options.onData
 
     this.httpServer = options.server ?? createServer()
     this.wss = new WebSocketServer({ server: this.httpServer, path: options.path ?? '/ws' })
@@ -153,6 +161,14 @@ export class DevtoolsServer {
     for (const client of this.clients) {
       if (client.readyState === WebSocket.OPEN) {
         client.send(msg)
+      }
+    }
+    // Notify embedders after WS fan-out; never let a listener throw break ingest.
+    if (this.onData) {
+      try {
+        this.onData(data)
+      } catch {
+        /* embedder listener errors are their own concern */
       }
     }
   }
