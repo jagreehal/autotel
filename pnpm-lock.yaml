@@ -1180,7 +1180,7 @@ importers:
         version: 1.41.1
       '@traceloop/node-server-sdk':
         specifier: ^0.26.0
-        version: 0.26.0(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@4.4.3)))(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.7.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(chokidar@3.6.0)
+        version: 0.26.0(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@3.25.76)))(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.7.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(chokidar@3.6.0)
       import-in-the-middle:
         specifier: ^3.0.1
         version: 3.0.1
@@ -1274,10 +1274,10 @@ importers:
         version: 1.5.9(@swc/core@1.15.40)(rollup@4.60.2)
       vite-tsconfig-paths:
         specifier: ^6.1.1
-        version: 6.1.1(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 6.1.1(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
       vitest:
         specifier: ^4.1.7
-        version: 4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
       vitest-mock-extended:
         specifier: ^4.0.0
         version: 4.0.0(typescript@6.0.3)(vitest@4.1.7)
@@ -2341,8 +2341,8 @@ importers:
         specifier: ^25.9.1
         version: 25.9.1
       '@types/vscode':
-        specifier: ^1.120.0
-        version: 1.120.0
+        specifier: ^1.85.0
+        version: 1.85.0
       '@vscode/test-electron':
         specifier: ^2.5.2
         version: 2.5.2
@@ -2360,7 +2360,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.7
-        version: 4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
+        version: 4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/autotel-web:
     dependencies:
@@ -8237,8 +8237,8 @@ packages:
   '@types/uuid@10.0.0':
     resolution: {integrity: sha512-7gqG38EyHgyP1S+7+xomFtL+ZNHcKv6DwNaCZmJmo1vgMugyF3TCnXVg4t1uk89mLNwnLtnY3TpOpCOyp1/xHQ==}
 
-  '@types/vscode@1.120.0':
-    resolution: {integrity: sha512-feaT4Rst+FkTch5zz/ZbNCxoIvo55YU80Be2kiL7OJcod4+CUYf2lUBPdIJzozNnSEMq1VRTGrWEcCGFB3fBmA==}
+  '@types/vscode@1.85.0':
+    resolution: {integrity: sha512-CF/RBon/GXwdfmnjZj0WTUMZN5H6YITOfBCP4iEZlOtVQXuzw6t7Le7+cR+7JzdMrnlm7Mfp49Oj2TuSXIWo3g==}
 
   '@types/webidl-conversions@7.0.3':
     resolution: {integrity: sha512-CiJJvcRtIgzadHCYXw7dqEnMNRjhGZlYK05Mj9OyktqV8uVT8fD2BFOB7S1uwBE3Kj2Z+4UyPmFw/Ixgw/LAlA==}
@@ -18180,6 +18180,26 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
+  '@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@3.25.76))':
+    dependencies:
+      '@cfworker/json-schema': 4.1.1
+      ansi-styles: 5.2.0
+      camelcase: 6.3.0
+      decamelize: 1.2.0
+      js-tiktoken: 1.0.21
+      langsmith: 0.3.81(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@3.25.76))
+      mustache: 4.2.0
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      uuid: 10.0.0
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@opentelemetry/exporter-trace-otlp-proto'
+      - '@opentelemetry/sdk-trace-base'
+      - openai
+
   '@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@4.4.3))':
     dependencies:
       '@cfworker/json-schema': 4.1.1
@@ -22181,6 +22201,18 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@traceloop/instrumentation-langchain@0.26.0(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@3.25.76)))(supports-color@10.2.2)':
+    dependencies:
+      '@langchain/core': 0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@3.25.76))
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/instrumentation': 0.203.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
+      '@opentelemetry/semantic-conventions': 1.41.1
+      '@traceloop/ai-semantic-conventions': 0.26.0
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
   '@traceloop/instrumentation-langchain@0.26.0(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@4.4.3)))(supports-color@10.2.2)':
     dependencies:
       '@langchain/core': 0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@4.4.3))
@@ -22280,6 +22312,48 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+
+  '@traceloop/node-server-sdk@0.26.0(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@3.25.76)))(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.7.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(chokidar@3.6.0)':
+    dependencies:
+      '@google-cloud/opentelemetry-cloud-trace-exporter': 3.0.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.7.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-proto': 0.218.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/instrumentation': 0.203.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
+      '@opentelemetry/resources': 2.7.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
+      '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node': 2.7.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.40.0
+      '@traceloop/ai-semantic-conventions': 0.26.0
+      '@traceloop/instrumentation-anthropic': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-bedrock': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-chromadb': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-cohere': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-google-generativeai': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-langchain': 0.26.0(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@3.25.76)))(supports-color@10.2.2)
+      '@traceloop/instrumentation-llamaindex': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-mcp': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-openai': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-pinecone': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-qdrant': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-together': 0.26.0(supports-color@10.2.2)
+      '@traceloop/instrumentation-utils': 0.26.0
+      '@traceloop/instrumentation-vertexai': 0.26.0(supports-color@10.2.2)
+      '@types/nunjucks': 3.2.6
+      cross-fetch: 4.1.0
+      eventsource: 3.0.7
+      fetch-retry: 6.0.0
+      mime-types: 3.0.2
+      nunjucks: 3.2.4(chokidar@3.6.0)
+      papaparse: 5.5.3
+      supports-color: 10.2.2
+      tslib: 2.8.1
+      uuid: 11.1.0
+    transitivePeerDependencies:
+      - '@langchain/core'
+      - chokidar
+      - encoding
 
   '@traceloop/node-server-sdk@0.26.0(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@4.4.3)))(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.7.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(chokidar@3.6.0)':
     dependencies:
@@ -22547,7 +22621,7 @@ snapshots:
 
   '@types/uuid@10.0.0': {}
 
-  '@types/vscode@1.120.0': {}
+  '@types/vscode@1.85.0': {}
 
   '@types/webidl-conversions@7.0.3': {}
 
@@ -22978,9 +23052,9 @@ snapshots:
       obug: 2.1.1
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
+      vitest: 4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
-      '@vitest/browser': 4.1.7(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))(vitest@4.1.7)
+      '@vitest/browser': 4.1.7(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))(vitest@4.1.7)
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -27237,6 +27311,21 @@ snapshots:
       dotenv: 16.6.1
       winston: 3.19.0
 
+  langsmith@0.3.81(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@3.25.76)):
+    dependencies:
+      '@types/uuid': 10.0.0
+      chalk: 4.1.2
+      console-table-printer: 2.15.0
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      semver: 7.8.1
+      uuid: 10.0.0
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/exporter-trace-otlp-proto': 0.218.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
+      openai: 6.39.1(ws@8.21.0)(zod@3.25.76)
+
   langsmith@0.3.81(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.218.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.1))(openai@6.39.1(ws@8.21.0)(zod@4.4.3)):
     dependencies:
       '@types/uuid': 10.0.0
@@ -28683,6 +28772,12 @@ snapshots:
       is-inside-container: 1.0.0
       powershell-utils: 0.1.0
       wsl-utils: 0.3.1
+
+  openai@6.39.1(ws@8.21.0)(zod@3.25.76):
+    optionalDependencies:
+      ws: 8.21.0
+      zod: 3.25.76
+    optional: true
 
   openai@6.39.1(ws@8.21.0)(zod@4.4.3):
     optionalDependencies:
@@ -31357,12 +31452,12 @@ snapshots:
       stack-trace: 1.0.0-pre2
       vite: 7.3.2(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0)
 
-  vite-tsconfig-paths@6.1.1(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0)):
+  vite-tsconfig-paths@6.1.1(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0)):
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
       globrex: 0.1.2
       tsconfck: 3.1.6(typescript@6.0.3)
-      vite: 8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0)
+      vite: 8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0)
     transitivePeerDependencies:
       - supports-color
       - typescript
@@ -31457,7 +31552,7 @@ snapshots:
     dependencies:
       ts-essentials: 10.1.1(typescript@6.0.3)
       typescript: 6.0.3
-      vitest: 4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
+      vitest: 4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0))
 
   vitest@4.1.7(@edge-runtime/vm@5.0.0)(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.3)(yaml@2.9.0)):
     dependencies:
