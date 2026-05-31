@@ -1,5 +1,12 @@
 # autotel-adapters
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [20a1186]
+  - autotel@3.4.0
+
 ## 0.3.1
 
 ### Patch Changes
