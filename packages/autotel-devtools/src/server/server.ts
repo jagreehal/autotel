@@ -55,6 +55,16 @@ export class DevtoolsServer {
     this.httpServer = options.server ?? createServer()
     this.wss = new WebSocketServer({ server: this.httpServer, path: options.path ?? '/ws' })
 
+    // The `ws` library re-emits the http server's `error` event onto the
+    // WebSocketServer itself. During the bind phase (EADDRINUSE etc.) the
+    // http server's own listener owns recovery, and the re-emission here has
+    // no listener — it would crash the process. Swallow ONLY that bind-phase
+    // re-emission (server not yet listening). Anything emitted once the server
+    // is live is a genuine WSS fault — re-throw so it surfaces.
+    this.wss.on('error', (err) => {
+      if (this.httpServer.listening) throw err
+    })
+
     this.wss.on('connection', (ws) => {
       this.clients.add(ws)
       this.log(`Client connected (${this.clients.size} total)`)

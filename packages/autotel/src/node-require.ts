@@ -23,9 +23,30 @@ import { createRequire } from 'node:module';
 // `typeof __filename` does NOT throw when the identifier is undeclared, so
 // the ESM build evaluates the conditional safely.
 declare const __filename: string | undefined;
-const nodeRequire = createRequire(
-  typeof __filename === 'string' ? __filename : import.meta.url,
-);
+
+// Build the Node `require` lazily on first use. Calling `createRequire`
+// eagerly at module load crashes in runtimes where neither `__filename` nor
+// `import.meta.url` resolves to a path — e.g. Cloudflare Workers / workerd,
+// where the bundle has no module path and `createRequire(undefined)` throws
+// synchronously at import. Deferring the call keeps merely importing this
+// module (and therefore anything that re-exports it, such as `track`)
+// side-effect-free; Node/CJS/ESM still get a real `require` on first call.
+let cachedRequire: NodeRequire | undefined;
+
+function getNodeRequire(): NodeRequire {
+  if (cachedRequire) return cachedRequire;
+  const base = typeof __filename === 'string' ? __filename : import.meta.url;
+  if (!base) {
+    // No module path in this runtime. Surface as a missing-module error so
+    // optional lookups via `safeRequire()` degrade gracefully to `undefined`.
+    throw Object.assign(
+      new Error('node require() is unavailable in this runtime'),
+      { code: 'MODULE_NOT_FOUND' },
+    );
+  }
+  cachedRequire = createRequire(base);
+  return cachedRequire;
+}
 
 /**
  * Synchronously require a module (works in both CJS and ESM)
@@ -46,7 +67,7 @@ const nodeRequire = createRequire(
  */
 export function safeRequire<T = unknown>(id: string): T | undefined {
   try {
-    return nodeRequire(id) as T;
+    return getNodeRequire()(id) as T;
   } catch (error) {
     if (error && (error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') {
       // Optional dependency missing – return undefined
@@ -75,10 +96,27 @@ export function safeRequire<T = unknown>(id: string): T | undefined {
  * ```
  */
 export function requireModule<T = unknown>(id: string): T {
-  return nodeRequire(id) as T;
+  return getNodeRequire()(id) as T;
 }
 
 /**
- * Direct access to the nodeRequire function (for advanced use cases)
+ * Direct access to the nodeRequire function (for advanced use cases).
+ *
+ * Lazily resolves the underlying Node `require` on first call, so importing
+ * this binding never triggers `createRequire` in runtimes that lack a module
+ * path (e.g. Cloudflare Workers).
+ *
+ * Only the call signature and `resolve` (including `resolve.paths`) are
+ * forwarded. The live, mutable members of a real `require` — `.cache`,
+ * `.main`, `.extensions` — are intentionally NOT exposed: a lazy wrapper
+ * can't mirror that shared state without resolving eagerly, which would
+ * reintroduce the workerd crash. Use `createRequire` directly if you need
+ * them.
  */
+const nodeRequire = ((id: string) => getNodeRequire()(id)) as NodeRequire;
+const lazyResolve = ((id: string, options?: { paths?: string[] }) =>
+  getNodeRequire().resolve(id, options)) as NodeRequire['resolve'];
+lazyResolve.paths = (request: string) => getNodeRequire().resolve.paths(request);
+nodeRequire.resolve = lazyResolve;
+
 export { nodeRequire };

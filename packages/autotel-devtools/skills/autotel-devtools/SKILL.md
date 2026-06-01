@@ -98,12 +98,14 @@ export const loadUser = trace(ctx => async (id: string) => {
 ## CLI
 
 ```bash
+npx autotel-devtools 4319                                       # port as bare positional
 npx autotel-devtools --port 4319 --host 0.0.0.0 --title "My App"
 ```
 
-| Flag | Short | Purpose |
+| Arg / Flag | Short | Purpose |
 | --- | --- | --- |
-| `--port` | `-p` | Listen port (default 4318) |
+| `[port]` | — | Listen port shorthand for `--port` (explicit `--port` wins) |
+| `--port` | `-p` | Listen port (default 4318); walks to next free port if taken |
 | `--host` | `-H` | Bind host (default 127.0.0.1) |
 | `--title` | `-t` | Dashboard title |
 
