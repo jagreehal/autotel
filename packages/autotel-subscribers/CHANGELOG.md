@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 35.0.1
+
+### Patch Changes
+
+- Updated dependencies [ea2cb4a]
+  - autotel@3.4.1
+
 ## 35.0.0
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # autotel-plugins
 
+## 0.19.24
+
+### Patch Changes
+
+- Updated dependencies [ea2cb4a]
+  - autotel@3.4.1
+
 ## 0.19.23
 
 ### Patch Changes
