@@ -50,22 +50,27 @@
     themeSignal.value = getInitialTheme();
   });
 
-  // Apply theme to shadow host element
+  // Apply theme to the shadow host. The theme tokens are defined under
+  // `:host([data-theme='…'])` inside the widget's shadow root stylesheet, so
+  // the attribute MUST live on the host — :root or documentElement don't see
+  // selectors from a scoped shadow stylesheet. We grab a reference to this
+  // component's root element with bind:this, then walk to its shadow host
+  // via getRootNode(). Works in both auto-mount (host is the synthetic
+  // <div id="autotel-devtools-root">) and explicit custom-element paths
+  // (host is <autotel-devtools>). If we're somehow not in a shadow root
+  // (e.g. tests render the component into a normal DOM node), fall back to
+  // <html> so :root[data-theme] still has a chance of matching.
+  let rootEl: HTMLElement | undefined = $state();
   $effect(() => {
-    const host = (() => {
-      // Walk up to the shadow host (autotel-devtools element)
-      let el: Node | null =
-        typeof document !== 'undefined'
-          ? document.querySelector('autotel-devtools')
-          : null;
-      if (!el) {
-        // Try to find the shadow root host
-        el = document.documentElement;
-      }
-      return el as HTMLElement | null;
-    })();
-    if (host) {
-      host.setAttribute('data-theme', theme);
+    let target: Element | null = null;
+    const root = rootEl?.getRootNode();
+    if (root instanceof ShadowRoot) {
+      target = root.host;
+    } else if (typeof document !== 'undefined') {
+      target = document.documentElement;
+    }
+    if (target) {
+      target.setAttribute('data-theme', theme);
     }
   });
 
@@ -97,7 +102,7 @@
   );
 </script>
 
-<div class="flex h-screen w-screen bg-surface text-fg">
+<div bind:this={rootEl} class="flex h-screen w-screen bg-surface text-fg">
   <div class="hidden md:flex flex-col border-r border-line">
     <TabBar orientation="vertical" />
     <div class="mt-auto p-2 border-t border-line flex flex-col gap-1">
