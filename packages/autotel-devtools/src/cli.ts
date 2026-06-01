@@ -18,10 +18,14 @@ function printHelp(): void {
   process.stdout.write(
     `autotel-devtools - Standalone OTLP receiver with web devtools UI
 
-Usage: autotel-devtools [options]
+Usage: autotel-devtools [port] [options]
+
+Arguments:
+  port                 Port to listen on (shorthand for --port; must be a positive integer)
 
 Options:
-  -p, --port <port>    Port to listen on (default: 4318, env: AUTOTEL_DEVTOOLS_PORT)
+  -p, --port <port>    Port to listen on (default: 4318, env: AUTOTEL_DEVTOOLS_PORT).
+                       If the port is taken, the next free port is used and a warning is shown.
   -H, --host <host>    Host to bind to (default: 127.0.0.1, env: AUTOTEL_DEVTOOLS_HOST)
   -t, --title <title>  Dashboard title (env: AUTOTEL_DEVTOOLS_TITLE)
   Env limits:          AUTOTEL_MAX_TRACE_COUNT, AUTOTEL_MAX_LOG_COUNT, AUTOTEL_MAX_METRIC_COUNT
@@ -41,7 +45,8 @@ Endpoints:
 
 Examples:
   npx autotel-devtools
-  npx autotel-devtools -p 4319
+  npx autotel-devtools 4319
+  npx autotel-devtools -p 4319 -H 0.0.0.0
 
 Then point your app:
   OTEL_EXPORTER_OTLP_PROTOCOL=http/json OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node app.js
@@ -68,22 +73,42 @@ function printVersion(): void {
 
 function parseArgs(argv: string[]): CliOptions | null {
   const options: CliOptions = {
-    port: Number(process.env.AUTOTEL_DEVTOOLS_PORT || 4318),
+    port: parsePort(process.env.AUTOTEL_DEVTOOLS_PORT || '4318'),
     host: process.env.AUTOTEL_DEVTOOLS_HOST || '127.0.0.1',
     title: process.env.AUTOTEL_DEVTOOLS_TITLE,
   }
 
+  // An explicit `--port`/`-p` always wins, regardless of where it sits in
+  // argv. A bare numeric positional is shorthand for `--port`, but only when
+  // no explicit flag was given — and only the first positional counts, so a
+  // stray "4318" can't override an earlier positional either.
+  let portWasExplicit = false
+  let positionalPortConsumed = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     const next = argv[i + 1]
     if (arg === '--help' || arg === '-h') { printHelp(); return null }
     if (arg === '--version' || arg === '-v') { printVersion(); return null }
-    if ((arg === '--port' || arg === '-p') && next) { options.port = Number(next); i++; continue }
+    if ((arg === '--port' || arg === '-p') && next) { options.port = parsePort(next); portWasExplicit = true; i++; continue }
     if ((arg === '--host' || arg === '-H') && next) { options.host = next; i++; continue }
     if ((arg === '--title' || arg === '-t') && next) { options.title = next; i++; continue }
+    if (/^\d+$/.test(arg) && !positionalPortConsumed) {
+      if (!portWasExplicit) options.port = parsePort(arg)
+      positionalPortConsumed = true
+      continue
+    }
   }
 
   return options
+}
+
+function parsePort(value: string): number {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 0 || n > 65535) {
+    process.stderr.write(`[autotel-devtools] invalid port: ${value}\n`)
+    process.exit(2)
+  }
+  return n
 }
 
 async function main(): Promise<void> {
@@ -101,8 +126,8 @@ async function main(): Promise<void> {
     attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer),
   })
 
-  const { addresses, warnings } = await listeners.ready
-  const uiBase = `http://${options.host === 'localhost' ? '127.0.0.1' : options.host}:${options.port}`
+  const { addresses, warnings, port: boundPort } = await listeners.ready
+  const uiBase = `http://${options.host === 'localhost' ? '127.0.0.1' : options.host}:${boundPort}`
   const title = options.title || 'autotel-devtools'
   process.stdout.write(`\n  ${title}\n\n`)
   process.stdout.write(`  Listening: ${addresses.join('  +  ')}\n`)

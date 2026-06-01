@@ -152,12 +152,17 @@ AUTOTEL_DEVTOOLS_TITLE="My App"  # Dashboard title (optional)
 ### CLI Options
 
 ```bash
+npx autotel-devtools 4319                      # port as a bare positional
 npx autotel-devtools --port 4319 --host 0.0.0.0
 ```
 
+Arguments:
+
+- `[port]` - Port to listen on, shorthand for `--port` (an explicit `--port` always wins)
+
 Options:
 
-- `--port, -p` - Port to listen on (default: 4318)
+- `--port, -p` - Port to listen on (default: 4318). If the port is taken, the receiver walks forward to the next free port and prints a warning.
 - `--host, -H` - Host to bind to (default: 127.0.0.1)
 - `--title, -t` - Dashboard title
 
