@@ -32,7 +32,9 @@ export function normalizeTags(
 }
 
 /** Read a tag as a finite number, parsing numeric strings. */
-export function readNumericTag(value: TagValue | undefined): number | undefined {
+export function readNumericTag(
+  value: TagValue | undefined,
+): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }

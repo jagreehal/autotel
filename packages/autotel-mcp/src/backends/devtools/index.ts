@@ -29,10 +29,7 @@ import type {
   TraceSearchResult,
   TraceSummary,
 } from '../../types';
-import {
-  inferErrorStatusFromTags,
-  normalizeTags,
-} from '../span-mapping';
+import { inferErrorStatusFromTags, normalizeTags } from '../span-mapping';
 import type { TelemetryBackend } from '../telemetry';
 
 /**
@@ -289,7 +286,10 @@ function withinTimeWindow(
   trace: TraceRecord,
   query: TraceSearchQuery,
 ): boolean {
-  if (query.startTimeUnixMs === undefined && query.endTimeUnixMs === undefined) {
+  if (
+    query.startTimeUnixMs === undefined &&
+    query.endTimeUnixMs === undefined
+  ) {
     return true;
   }
   const startMs = query.startTimeUnixMs ?? 0;

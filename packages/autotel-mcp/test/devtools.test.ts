@@ -51,14 +51,17 @@ function stubFetch(traces: ReturnType<typeof trace>[]): string[] {
     requests.push(url);
     if (url.endsWith('/healthz')) {
       return new Response(
-        JSON.stringify({ ok: true, service: 'autotel-devtools', version: '6.0.1' }),
+        JSON.stringify({
+          ok: true,
+          service: 'autotel-devtools',
+          version: '6.0.1',
+        }),
         { status: 200 },
       );
     }
-    return new Response(
-      JSON.stringify({ traces, count: traces.length }),
-      { status: 200 },
-    );
+    return new Response(JSON.stringify({ traces, count: traces.length }), {
+      status: 200,
+    });
   }) as typeof fetch);
   return requests;
 }
@@ -118,7 +121,13 @@ describe('DevtoolsBackend', () => {
         traceId: 't2',
         service: 'api',
         spans: [
-          { traceId: 't2', spanId: 'root', name: 'root', startTime: 1, duration: 1 },
+          {
+            traceId: 't2',
+            spanId: 'root',
+            name: 'root',
+            startTime: 1,
+            duration: 1,
+          },
           {
             traceId: 't2',
             spanId: 'child',
@@ -148,7 +157,9 @@ describe('DevtoolsBackend', () => {
             startTime: 1,
             duration: 1,
             status: { code: 'ERROR', message: 'Invalid IBAN format' },
-            attributes: { 'transfer.recipient_iban': 'GB29b00mNWBK000000000001' },
+            attributes: {
+              'transfer.recipient_iban': 'GB29b00mNWBK000000000001',
+            },
           },
         ],
       }),
@@ -185,12 +196,16 @@ describe('DevtoolsBackend', () => {
       trace({
         traceId: 'a',
         service: 'money-transfer',
-        spans: [{ traceId: 'a', spanId: '1', name: 'op', startTime: 1, duration: 1 }],
+        spans: [
+          { traceId: 'a', spanId: '1', name: 'op', startTime: 1, duration: 1 },
+        ],
       }),
       trace({
         traceId: 'b',
         service: 'rates-api',
-        spans: [{ traceId: 'b', spanId: '2', name: 'op', startTime: 1, duration: 1 }],
+        spans: [
+          { traceId: 'b', spanId: '2', name: 'op', startTime: 1, duration: 1 },
+        ],
       }),
     ]);
     const result = await backend.listServices();
@@ -204,8 +219,20 @@ describe('DevtoolsBackend', () => {
         traceId: 'a',
         service: 'money-transfer',
         spans: [
-          { traceId: 'a', spanId: '1', name: 'sendMoney', startTime: 1, duration: 1 },
-          { traceId: 'a', spanId: '2', name: 'validate', startTime: 2, duration: 1 },
+          {
+            traceId: 'a',
+            spanId: '1',
+            name: 'sendMoney',
+            startTime: 1,
+            duration: 1,
+          },
+          {
+            traceId: 'a',
+            spanId: '2',
+            name: 'validate',
+            startTime: 2,
+            duration: 1,
+          },
         ],
       }),
     ]);
@@ -258,7 +285,15 @@ describe('DevtoolsBackend', () => {
       trace({
         traceId: 'wanted',
         service: 'api',
-        spans: [{ traceId: 'wanted', spanId: '1', name: 'op', startTime: 1, duration: 1 }],
+        spans: [
+          {
+            traceId: 'wanted',
+            spanId: '1',
+            name: 'op',
+            startTime: 1,
+            duration: 1,
+          },
+        ],
       }),
     ]);
     expect((await backend.getTrace('wanted'))?.traceId).toBe('wanted');
