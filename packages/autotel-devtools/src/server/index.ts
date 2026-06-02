@@ -8,6 +8,8 @@ export { ErrorAggregator } from './error-aggregator'
 export { attachDevtoolsRoutes, createDevtoolsHttpServer } from './http'
 export type { HttpServerOptions } from './http'
 export { parseOtlpTraces, parseOtlpLogs, isProtobufContentType } from './otlp'
+export { DEVTOOLS_IDENTITY, probePortHolder } from './identity'
+export type { PortHolder } from './identity'
 export { decodeOtlpTraceRequest, decodeOtlpLogsRequest, decodeOtlpMetricsRequest } from './otlp-proto'
 export {
   resolveTelemetryLimits,

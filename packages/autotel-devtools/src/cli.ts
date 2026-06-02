@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { DevtoolsServer } from './server/server'
 import { attachDevtoolsRoutes } from './server/http'
 import { listenLoopbackDualStack } from './server/listen'
+import { probePortHolder } from './server/identity'
 
 interface CliOptions {
   port: number
@@ -127,6 +128,28 @@ async function main(): Promise<void> {
   })
 
   const { addresses, warnings, port: boundPort } = await listeners.ready
+
+  // Falling forward to a different port means the one we wanted is held by
+  // someone else. Classify them: another autotel-devtools (benign) versus a
+  // foreign process. The foreign case is the silent footgun — apps keep
+  // exporting OTLP to the requested port and reach that process, not us, so
+  // this UI stays empty while they see export errors. Say so, with the fix.
+  if (boundPort !== options.port) {
+    const holder = await probePortHolder(options.host, options.port)
+    if (holder === 'autotel-devtools') {
+      warnings.push(
+        `another autotel-devtools is already running on port ${options.port}; ` +
+          `this instance is on ${boundPort}. Use the existing one, or stop it and restart here.`,
+      )
+    } else {
+      warnings.push(
+        `port ${options.port} is held by another process that is NOT autotel-devtools. ` +
+          `Anything exporting OTLP to :${options.port} is reaching that process, not this devtools. ` +
+          `Point your exporter at :${boundPort}, or free :${options.port} and restart.`,
+      )
+    }
+  }
+
   const uiBase = `http://${options.host === 'localhost' ? '127.0.0.1' : options.host}:${boundPort}`
   const title = options.title || 'autotel-devtools'
   process.stdout.write(`\n  ${title}\n\n`)
