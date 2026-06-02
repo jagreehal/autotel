@@ -2,6 +2,7 @@ import type { AppConfig } from '../config';
 import type { TelemetryBackend } from './telemetry';
 import { CollectorBackend } from './collector/index';
 import { JaegerBackend } from './jaeger/index';
+import { DevtoolsBackend } from './devtools/index';
 import { TempoBackend } from './tempo/index';
 import { PrometheusBackend } from './prometheus/index';
 import { LokiBackend } from './loki/index';
@@ -38,6 +39,10 @@ export async function createBackend(config: AppConfig): Promise<BackendHandle> {
     }
     case 'jaeger': {
       backend = new JaegerBackend(config.jaegerBaseUrl);
+      break;
+    }
+    case 'devtools': {
+      backend = new DevtoolsBackend(config.devtoolsBaseUrl);
       break;
     }
     case 'tempo': {
