@@ -5,6 +5,7 @@ const configSchema = z.object({
     .enum([
       'collector',
       'jaeger',
+      'devtools',
       'tempo',
       'prometheus',
       'loki',
@@ -21,6 +22,7 @@ const configSchema = z.object({
   retentionMs: z.coerce.number().optional(),
   maxTraces: z.coerce.number().default(10_000),
   jaegerBaseUrl: z.string().default('http://localhost:16686'),
+  devtoolsBaseUrl: z.string().default('http://localhost:4318'),
   tempoBaseUrl: z.string().default('http://localhost:3200'),
   prometheusBaseUrl: z.string().default('http://localhost:9090'),
   lokiBaseUrl: z.string().default('http://localhost:3100'),
@@ -40,6 +42,7 @@ export function loadConfig(): AppConfig {
     retentionMs: process.env.AUTOTEL_RETENTION_MS,
     maxTraces: process.env.AUTOTEL_MAX_TRACES,
     jaegerBaseUrl: process.env.JAEGER_BASE_URL,
+    devtoolsBaseUrl: process.env.DEVTOOLS_BASE_URL,
     tempoBaseUrl: process.env.TEMPO_BASE_URL,
     prometheusBaseUrl: process.env.PROMETHEUS_BASE_URL,
     lokiBaseUrl: process.env.LOKI_BASE_URL,

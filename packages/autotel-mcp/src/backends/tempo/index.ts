@@ -29,6 +29,7 @@ import {
 } from '../../modules/query-filters';
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
+import { inferErrorStatusFromTags, readNumericTag } from '../span-mapping';
 import type { TelemetryBackend } from '../telemetry';
 
 type TempoSearchResponse = {
@@ -440,18 +441,14 @@ function resolveOtlpStatus(
     if (upper.includes('ERROR')) return 'ERROR';
     if (upper.includes('OK')) return 'OK';
   }
-  if (tags['error'] === true || tags['error.kind'] !== undefined) {
+  if (inferErrorStatusFromTags(tags) === 'ERROR') {
     return 'ERROR';
   }
-  const httpStatus =
-    typeof tags['http.status_code'] === 'number'
-      ? tags['http.status_code']
-      : typeof tags['http.status_code'] === 'string'
-        ? Number(tags['http.status_code'])
-        : undefined;
-  if (httpStatus !== undefined && Number.isFinite(httpStatus)) {
-    if (httpStatus >= 500) return 'ERROR';
-    if (httpStatus >= 100) return 'OK';
+  // Positive success inference: a non-error HTTP code means the span completed
+  // OK (error codes were already handled above).
+  const httpStatus = readNumericTag(tags['http.status_code']);
+  if (httpStatus !== undefined && httpStatus >= 100) {
+    return 'OK';
   }
   return 'UNSET';
 }

@@ -27,6 +27,11 @@ import {
 } from '../../modules/query-filters';
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
+import {
+  inferErrorStatusFromTags,
+  normalizeTagValue,
+  readNumericTag,
+} from '../span-mapping';
 import type { ServiceMap, TraceSummary } from '../../types';
 
 type JaegerServiceResponse = { data: string[] };
@@ -291,17 +296,12 @@ export class JaegerBackend implements TelemetryBackend {
   }
 }
 
-function normalizeTagValue(value: unknown): string | number | boolean {
-  if (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return value;
-  }
-  return String(value);
-}
-
+/**
+ * Jaeger has no structured OTel status, so reconstruct it from tags. Error
+ * detection is shared (`inferErrorStatusFromTags`); on top of it Jaeger adds
+ * its own positive-success inference: a `status.code` tag, or a non-error
+ * HTTP/gRPC code, means the span completed OK.
+ */
 function inferStatusCode(
   tags: Record<string, string | number | boolean>,
 ): SpanStatusCode {
@@ -317,33 +317,19 @@ function inferStatusCode(
     }
   }
 
-  if (tags['error'] === true || tags['error.kind'] !== undefined) {
+  if (inferErrorStatusFromTags(tags) === 'ERROR') {
     return 'ERROR';
   }
 
   const httpStatus = readNumericTag(tags['http.status_code']);
-  if (httpStatus !== undefined) {
-    if (httpStatus >= 500) return 'ERROR';
-    if (httpStatus >= 100) return 'OK';
+  if (httpStatus !== undefined && httpStatus >= 100) {
+    return 'OK';
   }
 
   const grpcStatus = readNumericTag(tags['rpc.grpc.status_code']);
   if (grpcStatus !== undefined) {
-    return grpcStatus === 0 ? 'OK' : 'ERROR';
+    return 'OK';
   }
 
   return 'UNSET';
-}
-
-function readNumericTag(
-  value: string | number | boolean | undefined,
-): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
 }
