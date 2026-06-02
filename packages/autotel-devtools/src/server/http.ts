@@ -56,7 +56,7 @@ const FULLPAGE_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta na
 
 let cachedVersion: string | null = null
 function getVersion(): string {
-  if (cachedVersion) return cachedVersion
+  if (cachedVersion !== null) return cachedVersion
   let version = 'unknown'
   try {
     const pkg = JSON.parse(readFileSync(resolve(findPackageRoot(), 'package.json'), 'utf8'))

@@ -40,7 +40,12 @@ debounces at 300ms.
 
 **CLI options:**
 
-- `-p, --port <port>` — Port (default: `4318`)
+- `-p, --port <port>` — Port (default: `4318`). If the port is taken, falls
+  forward to the next free port and prints a warning. When the original port is
+  held by a **foreign** process (not another autotel-devtools), the warning
+  explains that any OTLP exporter still pointed at the busy port is reaching
+  that process — point the exporter at the bound port, or free the original and
+  restart.
 - `-H, --host <host>` — Host (default: `127.0.0.1`)
 - `-t, --title <title>` — Dashboard title
 
@@ -103,13 +108,37 @@ The standalone server exposes:
 
 | Path           | Method | Purpose                                  |
 | -------------- | ------ | ---------------------------------------- |
-| `/v1/traces`   | POST   | OTLP/HTTP JSON traces ingest             |
-| `/v1/logs`     | POST   | OTLP/HTTP JSON logs ingest               |
-| `/v1/metrics`  | POST   | OTLP/HTTP JSON metrics ingest            |
+| `/v1/traces`   | POST   | OTLP/HTTP traces ingest (JSON or protobuf) |
+| `/v1/traces`   | GET    | Read back received traces                |
+| `/v1/traces`   | DELETE | Clear all captured telemetry             |
+| `/v1/logs`     | POST   | OTLP/HTTP logs ingest (JSON or protobuf) |
+| `/v1/metrics`  | POST   | OTLP/HTTP metrics ingest (JSON or protobuf) |
 | `/`            | GET    | Full-page dashboard UI                   |
 | `/widget.js`   | GET    | Embeddable widget bundle                 |
-| `/healthz`     | GET    | Health check                             |
+| `/healthz`     | GET    | Health + identity (`{ ok, service, version, clients }`) |
 | `/ws`          | WS     | WebSocket stream (live updates + replay) |
+
+Every response carries an `x-autotel-devtools: <version>` header. Use it to
+confirm you are talking to autotel-devtools rather than another OTLP collector
+that happens to share the port.
+
+## Identity Detection
+
+When an IDE or other tool is already listening on port 4318, the CLI warns you
+and falls forward to the next free port. To detect what owns a port
+programmatically:
+
+```typescript
+import { probePortHolder } from 'autotel-devtools/server';
+
+// Returns 'autotel-devtools' | 'foreign' | 'none'
+const holder = await probePortHolder('127.0.0.1', 4318);
+```
+
+`probePortHolder` checks for the `x-autotel-devtools` header and the
+`/healthz` `service` field. Use it in test setup scripts to verify the
+receiver is ready, or in tooling that needs to decide whether to start a new
+instance.
 
 ## Devtools vs. Terminal Viewer
 

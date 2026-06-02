@@ -116,7 +116,8 @@ export function requireModule<T = unknown>(id: string): T {
 const nodeRequire = ((id: string) => getNodeRequire()(id)) as NodeRequire;
 const lazyResolve = ((id: string, options?: { paths?: string[] }) =>
   getNodeRequire().resolve(id, options)) as NodeRequire['resolve'];
-lazyResolve.paths = (request: string) => getNodeRequire().resolve.paths(request);
+lazyResolve.paths = (request: string) =>
+  getNodeRequire().resolve.paths(request);
 nodeRequire.resolve = lazyResolve;
 
 export { nodeRequire };
