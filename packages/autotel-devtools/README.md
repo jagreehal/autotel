@@ -111,6 +111,25 @@ const myFunction = trace((ctx) => async () => {
 
 - **DevtoolsServer** - WebSocket server + in-memory data store
 - **HTTP Routes** - OTLP receivers for traces/logs/metrics (JSON + protobuf)
+
+#### Detecting the receiver
+
+Every response carries an `x-autotel-devtools: <version>` header, and `GET /healthz`
+returns `{ ok, service: "autotel-devtools", version, clients }`. Use either to confirm
+you are talking to autotel-devtools rather than another OTLP collector that happens to
+share the port — for example before pointing an exporter at `:4318`:
+
+```ts
+import { probePortHolder } from 'autotel-devtools/server'
+
+// 'autotel-devtools' | 'foreign' | 'none'
+const holder = await probePortHolder('127.0.0.1', 4318)
+```
+
+If you start the receiver and the requested port is held by a *foreign* process (some
+IDEs run their own OTLP collector on `:4318`), the CLI falls forward to the next free
+port and warns that exporters still aimed at the busy port are reaching that other
+process — point them at the bound port, or free the original.
 - **Exporters** - OpenTelemetry span/log exporters
 
 ### Widget (Svelte 5)

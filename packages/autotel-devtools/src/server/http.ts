@@ -5,9 +5,22 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseOtlpTraces, parseOtlpLogs, countOtlpMetrics, readJsonBody, readRawBody, isProtobufContentType, sendJson } from './otlp'
 import { decodeOtlpTraceRequest, decodeOtlpLogsRequest, decodeOtlpMetricsRequest } from './otlp-proto'
+import { DEVTOOLS_IDENTITY } from './identity'
 import type { DevtoolsServer } from './server'
 
 type OtlpSignal = 'traces' | 'logs' | 'metrics'
+
+// Reply to a failed OTLP ingest. Echoing the content-type we received turns the
+// otherwise opaque "Invalid OTLP payload" into something a misconfigured
+// exporter can act on (e.g. it shows up as `null` when no header was sent, or
+// as a protobuf type the sender didn't expect to be using).
+function sendOtlpError(res: ServerResponse, req: IncomingMessage, e: unknown): void {
+  sendJson(res, 400, {
+    error: 'Invalid OTLP payload',
+    message: e instanceof Error ? e.message : String(e),
+    contentType: req.headers['content-type'] ?? null,
+  })
+}
 
 const PROTOBUF_DECODERS: Record<OtlpSignal, (body: Buffer) => Record<string, unknown>> = {
   traces: decodeOtlpTraceRequest,
@@ -41,6 +54,20 @@ function findPackageRoot(): string {
 
 const FULLPAGE_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>autotel-devtools</title><style>*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;width:100%;overflow:hidden}</style></head><body><script src="/widget.js?mode=fullpage"></script></body></html>`
 
+let cachedVersion: string | null = null
+function getVersion(): string {
+  if (cachedVersion) return cachedVersion
+  let version = 'unknown'
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(findPackageRoot(), 'package.json'), 'utf8'))
+    if (typeof pkg.version === 'string') version = pkg.version
+  } catch {
+    /* keep 'unknown' */
+  }
+  cachedVersion = version
+  return version
+}
+
 let cachedWidgetJs: string | null = null
 function getWidgetJs(): string {
   if (!cachedWidgetJs) {
@@ -69,6 +96,12 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
+    // Identity stamp on every response: lets a client confirm it is really
+    // talking to autotel-devtools (and not, say, an IDE's OTLP collector that
+    // happens to share the port) without guessing from the body shape.
+    res.setHeader('x-autotel-devtools', getVersion())
+    res.setHeader('Access-Control-Expose-Headers', 'x-autotel-devtools')
+
     if (req.method === 'OPTIONS') {
       res.writeHead(204)
       res.end()
@@ -92,9 +125,15 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
       return
     }
 
-    // GET /healthz
+    // GET /healthz — also the canonical identity probe: `service` + `version`
+    // let a caller positively confirm this is autotel-devtools.
     if (req.method === 'GET' && url === '/healthz') {
-      sendJson(res, 200, { ok: true, clients: devtools.clientCount })
+      sendJson(res, 200, {
+        ok: true,
+        service: DEVTOOLS_IDENTITY,
+        version: getVersion(),
+        clients: devtools.clientCount,
+      })
       return
     }
 
@@ -125,7 +164,7 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
         devtools.addTraces(traces)
         sendJson(res, 200, { acceptedTraces: traces.length })
       } catch (e) {
-        sendJson(res, 400, { error: 'Invalid OTLP payload', message: e instanceof Error ? e.message : String(e) })
+        sendOtlpError(res, req, e)
       }
       return
     }
@@ -138,7 +177,7 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
         devtools.addLogs(logs)
         sendJson(res, 200, { acceptedLogs: logs.length })
       } catch (e) {
-        sendJson(res, 400, { error: 'Invalid OTLP payload', message: e instanceof Error ? e.message : String(e) })
+        sendOtlpError(res, req, e)
       }
       return
     }
@@ -150,7 +189,7 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
         const count = countOtlpMetrics(payload)
         sendJson(res, 200, { acceptedMetrics: count })
       } catch (e) {
-        sendJson(res, 400, { error: 'Invalid OTLP payload', message: e instanceof Error ? e.message : String(e) })
+        sendOtlpError(res, req, e)
       }
       return
     }
