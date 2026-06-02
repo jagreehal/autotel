@@ -1,5 +1,11 @@
 # autotel-mcp
 
+## 0.1.12
+
+### Patch Changes
+
+- 0818a9b: Add devtools telemetry backend that reads traces from a running autotel-devtools receiver via its GET /v1/traces read-back API. Extract shared span-mapping utilities (normalizeTagValue, normalizeTags, readNumericTag, inferErrorStatusFromTags) to eliminate duplication across jaeger, tempo, and devtools backends.
+
 ## 0.1.11
 
 ### Patch Changes
