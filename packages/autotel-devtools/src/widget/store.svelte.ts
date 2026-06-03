@@ -27,7 +27,11 @@ import type { Shortcut } from './shortcuts';
 export const widgetExpandedSignal = signal(false);
 export const widgetPositionSignal = signal({ x: 20, y: 20 });
 export const widgetCornerSignal = signal<CornerPosition>('bottom-right');
-export const widgetDockedSignal = signal<DockPosition>(null);
+// Edge the expanded panel docks to. The panel is non-blocking (no backdrop) and
+// the host page stays interactive — same model as the TanStack Query devtools.
+export const widgetDockedSignal = signal<DockPosition>('bottom');
+// True while the panel is popped out into a Document Picture-in-Picture window.
+export const pipActiveSignal = signal(false);
 
 export const selectedTabSignal = signal<TabType>('traces');
 export const selectedTraceIdSignal = signal<string | null>(null);
@@ -116,10 +120,45 @@ export function toggleHelp(shortcuts: Shortcut[]) {
   helpShortcutsSignal.value = helpShortcutsSignal.value ? null : shortcuts;
 }
 
-export const popoverDimensionsSignal = signal({
-  width: 630,
-  height: 400,
-});
+/**
+ * Size of the docked panel along its docking axis, in px:
+ * - `vertical` is the height when docked to `top`/`bottom`
+ * - `horizontal` is the width when docked to `left`/`right`
+ *
+ * The panel always spans the full cross-axis, so this is the only dimension the
+ * user controls. It is persisted and never changes on its own — selecting a
+ * trace no longer resizes the panel (that was the old "size jumps around" bug).
+ */
+/** Default panel size per axis, used as the initial value and on reset. */
+export const DEFAULT_PANEL_SIZE: { vertical: number; horizontal: number } = {
+  vertical: 440,
+  horizontal: 560,
+};
+
+export const panelSizeSignal = signal({ ...DEFAULT_PANEL_SIZE });
+
+/** Clamp limits for the docked panel, derived from the viewport at call time. */
+export function panelSizeBounds(axis: 'vertical' | 'horizontal') {
+  if (typeof window === 'undefined') {
+    return axis === 'vertical'
+      ? { min: 200, max: 900 }
+      : { min: 360, max: 1200 };
+  }
+  return axis === 'vertical'
+    ? { min: 200, max: Math.round(window.innerHeight * 0.92) }
+    : { min: 360, max: Math.round(window.innerWidth * 0.92) };
+}
+
+export function setPanelSize(axis: 'vertical' | 'horizontal', px: number) {
+  const { min, max } = panelSizeBounds(axis);
+  const clamped = Math.min(max, Math.max(min, Math.round(px)));
+  panelSizeSignal.value = { ...panelSizeSignal.value, [axis]: clamped };
+}
+
+/** Reset one axis to its default size (double-click the resize handle). */
+export function resetPanelSize(axis: 'vertical' | 'horizontal') {
+  setPanelSize(axis, DEFAULT_PANEL_SIZE[axis]);
+}
 
 // ===== Data State =====
 export const tracesSignal = signal<TraceData[]>([]);
@@ -138,6 +177,7 @@ export const connectionStatusSignal = signal<string>('disconnected');
 export const pausedSignal = signal(false);
 export const pendingTracesSignal = signal<TraceData[]>([]);
 export const pendingLogsSignal = signal<LogData[]>([]);
+export const pendingMetricsSignal = signal<MetricData[]>([]);
 
 export const pendingTraceCountSignal = computed(
   () => pendingTracesSignal.value.length,
@@ -145,6 +185,17 @@ export const pendingTraceCountSignal = computed(
 export const pendingLogCountSignal = computed(
   () => pendingLogsSignal.value.length,
 );
+export const pendingMetricCountSignal = computed(
+  () => pendingMetricsSignal.value.length,
+);
+
+// Metrics arrive without a unique id; assign a monotonic one at ingestion so
+// the (live-updating, capped) metrics list can key on it instead of the array
+// index — index keys corrupt rendering as rows shift in/out.
+let metricSeq = 0;
+function withMetricId(m: MetricData): MetricData {
+  return m.id ? m : { ...m, id: `m${++metricSeq}` };
+}
 
 // Marks the store as displaying a loaded snapshot rather than live data.
 export const snapshotModeSignal = signal(false);
@@ -402,6 +453,60 @@ function prependLogsCapped(existing: LogData[], incoming: LogData[]): LogData[] 
   return merged.length > maxHistorySize ? merged.slice(0, maxHistorySize) : merged;
 }
 
+// ===== Pause-buffer streams =====
+//
+// Traces, logs and metrics share one shape: a live signal, a pending buffer,
+// and the same ingest / flush-on-unpause / drop behaviour. Describe each stream
+// once so updateWidgetData, setPaused and dropPendingBuffer stop re-spelling the
+// three by hand. Only traces merge differently into live vs pending (the pending
+// buffer is capped as it accumulates), so each stream carries both merges.
+interface WritableList<T> {
+  value: T[];
+}
+
+function makeStream<T>(
+  live: WritableList<T>,
+  pending: WritableList<T>,
+  mergeLive: (base: T[], incoming: T[]) => T[],
+  mergePending: (base: T[], incoming: T[]) => T[] = mergeLive,
+) {
+  return {
+    /** Buffer `incoming` while paused, otherwise merge it straight into live. */
+    ingest(incoming: T[], paused: boolean) {
+      if (incoming.length === 0) return;
+      if (paused) pending.value = mergePending(pending.value, incoming);
+      else live.value = mergeLive(live.value, incoming);
+    },
+    /** Move the pending buffer into the live list (on un-pause). */
+    flushToLive() {
+      if (pending.value.length === 0) return;
+      live.value = mergeLive(live.value, pending.value);
+      pending.value = [];
+    },
+    /** Drop whatever has been buffered while paused. */
+    clearPending() {
+      pending.value = [];
+    },
+  };
+}
+
+const tracesStream = makeStream(
+  tracesSignal,
+  pendingTracesSignal,
+  mergeTraces,
+  (base, incoming) => mergeTracesCapped(base, incoming, maxHistorySize),
+);
+const logsStream = makeStream(logsSignal, pendingLogsSignal, prependLogsCapped);
+const metricsStream = makeStream(
+  metricsSignal,
+  pendingMetricsSignal,
+  (base, incoming) => [...base, ...incoming].slice(-maxHistorySize),
+);
+
+// Iterated for the uniform flush / clear operations. Ingest stays per-stream
+// because the incoming shape differs (metrics get ids assigned at ingestion).
+const PAUSE_BUFFER_STREAMS = [tracesStream, logsStream, metricsStream];
+
 export function updateWidgetData(data: Partial<WidgetData>) {
   // Snapshot mode is a frozen view of imported data — drop live updates,
   // but keep health/connection status flowing so the user sees connectivity.
@@ -413,34 +518,14 @@ export function updateWidgetData(data: Partial<WidgetData>) {
     return;
   }
 
-  const incomingTraces = data.traces ?? [];
-  const incomingLogs = data.logs ?? [];
-
-  if (pausedSignal.value) {
-    if (incomingTraces.length > 0) {
-      pendingTracesSignal.value = mergeTracesCapped(
-        pendingTracesSignal.value,
-        incomingTraces,
-        maxHistorySize,
-      );
-    }
-    if (incomingLogs.length > 0) {
-      pendingLogsSignal.value = prependLogsCapped(
-        pendingLogsSignal.value,
-        incomingLogs,
-      );
-    }
-  } else {
-    if (incomingTraces.length > 0) {
-      tracesSignal.value = mergeTraces(tracesSignal.value, incomingTraces);
-    }
-    if (incomingLogs.length > 0) {
-      logsSignal.value = prependLogsCapped(logsSignal.value, incomingLogs);
-    }
-  }
-
-  if (data.metrics) {
-    metricsSignal.value = [...metricsSignal.value, ...data.metrics];
+  // Buffer while paused, otherwise merge straight into the live lists. Metrics
+  // arrive without ids, so assign them before buffering; the stream caps the
+  // live/pending lists so a long-running session can't grow them unbounded.
+  const paused = pausedSignal.value;
+  tracesStream.ingest(data.traces ?? [], paused);
+  logsStream.ingest(data.logs ?? [], paused);
+  if (data.metrics && data.metrics.length > 0) {
+    metricsStream.ingest(data.metrics.map(withMetricId), paused);
   }
 
   if (data.health) {
@@ -457,16 +542,7 @@ export function setPaused(paused: boolean) {
   if (pausedSignal.value === paused) return;
   pausedSignal.value = paused;
   if (!paused) {
-    const pendingTraces = pendingTracesSignal.value;
-    const pendingLogs = pendingLogsSignal.value;
-    if (pendingTraces.length > 0) {
-      tracesSignal.value = mergeTraces(tracesSignal.value, pendingTraces);
-      pendingTracesSignal.value = [];
-    }
-    if (pendingLogs.length > 0) {
-      logsSignal.value = prependLogsCapped(logsSignal.value, pendingLogs);
-      pendingLogsSignal.value = [];
-    }
+    for (const stream of PAUSE_BUFFER_STREAMS) stream.flushToLive();
   }
 }
 
@@ -475,8 +551,7 @@ export function togglePaused() {
 }
 
 export function dropPendingBuffer() {
-  pendingTracesSignal.value = [];
-  pendingLogsSignal.value = [];
+  for (const stream of PAUSE_BUFFER_STREAMS) stream.clearPending();
 }
 
 export function loadSnapshot(snapshot: {
@@ -488,7 +563,7 @@ export function loadSnapshot(snapshot: {
   tracesSignal.value = snapshot.traces ?? [];
   logsSignal.value = (snapshot.logs ?? []).slice(0, maxHistorySize);
   errorGroupsSignal.value = snapshot.errors ?? [];
-  metricsSignal.value = snapshot.metrics ?? [];
+  metricsSignal.value = (snapshot.metrics ?? []).map(withMetricId);
   pendingTracesSignal.value = [];
   pendingLogsSignal.value = [];
   pausedSignal.value = false;
@@ -517,16 +592,9 @@ export function setSelectedTrace(
 ) {
   selectedTraceIdSignal.value = traceId;
   selectedSpanIdSignal.value = traceId ? spanId : null;
-  if (traceId) {
-    // Expand popover when viewing trace details
-    popoverDimensionsSignal.value = {
-      width: Math.min(window.innerWidth * 0.6, 900),
-      height: Math.min(window.innerHeight * 0.7, 700),
-    };
-  } else {
-    // Collapse to default size
-    popoverDimensionsSignal.value = { width: 630, height: 400 };
-  }
+  // The panel keeps its user-chosen size; the trace detail renders inside it
+  // (master/detail split). It deliberately does NOT resize the panel here —
+  // that caused the panel to jump dimensions every time you opened a trace.
 }
 
 /** Deep-link to a span: open its trace in the Traces waterfall, focused. */
@@ -547,8 +615,12 @@ export function setWidgetDocked(docked: DockPosition) {
   widgetDockedSignal.value = docked;
 }
 
-export function setPopoverDimensions(width: number, height: number) {
-  popoverDimensionsSignal.value = { width, height };
+/** Cycle the dock edge: bottom → right → left → bottom. */
+export function cycleDock() {
+  const order: Exclude<DockPosition, null>[] = ['bottom', 'right', 'left'];
+  const current = widgetDockedSignal.value ?? 'bottom';
+  const idx = order.indexOf(current as Exclude<DockPosition, null>);
+  widgetDockedSignal.value = order[(idx + 1) % order.length];
 }
 
 const maxHistorySize = 100;
@@ -560,6 +632,7 @@ export function clearAllData() {
   logsSignal.value = [];
   pendingTracesSignal.value = [];
   pendingLogsSignal.value = [];
+  pendingMetricsSignal.value = [];
   snapshotModeSignal.value = false;
 }
 
@@ -591,7 +664,14 @@ export function loadPersistedState() {
       const state = JSON.parse(stored);
       if (state.position) widgetPositionSignal.value = state.position;
       if (state.corner) widgetCornerSignal.value = state.corner;
-      if (state.docked !== undefined) widgetDockedSignal.value = state.docked;
+      // A persisted `null` (legacy floating mode) is upgraded to bottom-dock.
+      if (state.docked) widgetDockedSignal.value = state.docked;
+      if (state.panelSize) {
+        panelSizeSignal.value = {
+          vertical: Number(state.panelSize.vertical) || 440,
+          horizontal: Number(state.panelSize.horizontal) || 560,
+        };
+      }
     }
   } catch (error) {
     console.error('[Autotel Devtools] Failed to load persisted state:', error);
@@ -604,6 +684,7 @@ export function persistState() {
       position: widgetPositionSignal.value,
       corner: widgetCornerSignal.value,
       docked: widgetDockedSignal.value,
+      panelSize: panelSizeSignal.value,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
@@ -617,5 +698,6 @@ effect(() => {
   void widgetPositionSignal.value;
   void widgetCornerSignal.value;
   void widgetDockedSignal.value;
+  void panelSizeSignal.value;
   persistState();
 });

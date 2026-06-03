@@ -57,7 +57,7 @@
       <span class="text-sm font-semibold text-fg"> Keyboard Shortcuts </span>
       <button
         onclick={onClose}
-        class="inline-flex items-center justify-center w-7 h-7 p-0 bg-transparent border border-line rounded cursor-pointer text-sm text-fg-subtle hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
+        class="inline-flex items-center justify-center w-7 h-7 p-0 bg-transparent border border-line rounded cursor-pointer text-sm text-fg-subtle hover:bg-danger-bg hover:border-danger-border hover:text-danger transition-colors"
         title="Close (Esc)"
       >
         <X size={14} />

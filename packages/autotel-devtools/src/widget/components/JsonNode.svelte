@@ -16,11 +16,11 @@
     if (v === null) return 'text-fg-subtle';
     switch (typeof v) {
       case 'string':
-        return 'text-green-700';
+        return 'text-green-600';
       case 'number':
-        return 'text-blue-700';
+        return 'text-blue-600';
       case 'boolean':
-        return 'text-purple-700';
+        return 'text-purple-600';
       default:
         return 'text-fg';
     }

@@ -18,26 +18,26 @@
     if (Array.isArray(v))
       return {
         label: 'array',
-        cls: 'bg-amber-50 text-amber-700 border-amber-300',
+        cls: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
       };
     if (typeof v === 'string')
       return {
         label: 'string',
-        cls: 'bg-green-50 text-green-700 border-green-300',
+        cls: 'bg-green-500/15 text-green-600 border-green-500/30',
       };
     if (typeof v === 'number')
       return {
         label: 'number',
-        cls: 'bg-blue-50 text-blue-700 border-blue-300',
+        cls: 'bg-blue-500/15 text-blue-600 border-blue-500/30',
       };
     if (typeof v === 'boolean')
       return {
         label: 'boolean',
-        cls: 'bg-purple-50 text-purple-700 border-purple-300',
+        cls: 'bg-purple-500/15 text-purple-600 border-purple-500/30',
       };
     return {
       label: 'object',
-      cls: 'bg-stone-50 text-stone-700 border-stone-300',
+      cls: 'bg-stone-500/15 text-stone-600 border-stone-500/30',
     };
   }
 
@@ -65,6 +65,8 @@
   import type { Snippet } from 'svelte';
   import { formatDuration } from '../utils';
   import Copyable from './Copyable.svelte';
+  import SearchInput from './SearchInput.svelte';
+  import { matchesNeedle } from '../utils/textMatch';
   import JsonTree from './JsonTree.svelte';
   import IdRow from './IdRow.svelte';
   import type { SpanData, TraceData } from '../types';
@@ -131,6 +133,17 @@
     ),
   );
 
+  // Attribute filter: case-insensitive substring match across key OR value.
+  let attrQuery = $state('');
+  const filteredAttributes = $derived.by(() => {
+    const needle = attrQuery.trim().toLowerCase();
+    if (!needle) return sortedAttributes;
+    return sortedAttributes.filter(([key, value]) =>
+      matchesNeedle(needle, [key, value]),
+    );
+  });
+  const isAttrFiltered = $derived(attrQuery.trim().length > 0);
+
   // Code location → clickable editor deep-link (feature: code location linking)
   const codeLocation = $derived(
     buildCodeLocation(span.attributes || {}, editorSchemeSignal.value),
@@ -181,7 +194,9 @@
     <div class="py-1 border-b border-line-subtle last:border-b-0">
       <div class="flex items-center gap-2">
         <span class="text-fg-subtle font-medium">{attrKey}</span>
-        <span class={cn(BADGE, 'bg-amber-50 text-amber-700 border-amber-300')}>
+        <span
+          class={cn(BADGE, 'bg-amber-500/15 text-amber-600 border-amber-500/30')}
+        >
           json
         </span>
         {#if isResource}
@@ -195,26 +210,34 @@
   {:else}
     {@const typeInfo = valueTypeInfo(value)}
     {@const text = String(value)}
-    <div class="group flex gap-2 py-0.5 items-start">
-      <span class="text-fg-subtle flex-shrink-0 font-medium">{attrKey}</span>
-      <span class="text-fg break-all flex-1 min-w-0">
+    <!-- Key + badges on one line; value on its own full-width line below. This
+         guarantees the value always has the panel's full width to wrap into —
+         the old single-row flex layout let long keys starve the value column
+         until it broke one character per line. -->
+    <div class="group py-1 border-b border-line-subtle last:border-b-0">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-fg-subtle font-medium truncate" title={attrKey}>
+          {attrKey}
+        </span>
+        <span class={cn(BADGE, typeInfo.cls)}>
+          {isSensitive ? 'sensitive' : typeInfo.label}
+        </span>
+        {#if isResource && !isSensitive}
+          <span class={RESOURCE_BADGE}>resource</span>
+        {/if}
+        {#if !isSensitive && text.length > 60}
+          <button
+            onclick={() => onFullscreen({ key: attrKey, value: text })}
+            class="ml-auto p-0.5 hover:bg-hover rounded flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            title="View full value"
+          >
+            <Maximize2 size={10} class="text-fg-subtle" />
+          </button>
+        {/if}
+      </div>
+      <div class="mt-0.5 text-fg leading-snug at-wrap-anywhere">
         {isSensitive ? '[redacted]' : text}
-      </span>
-      <span class={cn(BADGE, typeInfo.cls)}>
-        {isSensitive ? 'sensitive' : typeInfo.label}
-      </span>
-      {#if isResource && !isSensitive}
-        <span class={RESOURCE_BADGE}>resource</span>
-      {/if}
-      {#if !isSensitive && text.length > 60}
-        <button
-          onclick={() => onFullscreen({ key: attrKey, value: text })}
-          class="p-0.5 hover:bg-hover rounded flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          title="View full value"
-        >
-          <Maximize2 size={10} class="text-fg-subtle" />
-        </button>
-      {/if}
+      </div>
     </div>
   {/if}
 {/snippet}
@@ -269,7 +292,11 @@
         <span
           class={cn(
             'px-2 py-0.5 rounded text-xs font-medium',
-            isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700',
+            isError
+              ? 'bg-danger-bg text-danger'
+              : span.status.code === 'OK'
+                ? 'bg-success-bg text-success'
+                : 'bg-hover text-fg-muted',
           )}
         >
           {span.status.code}
@@ -303,10 +330,12 @@
   <div class="flex-1 overflow-auto">
     <!-- Error message if present -->
     {#if span.status.message}
-      <div class="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+      <div
+        class="mx-4 mt-4 p-3 bg-danger-bg border border-danger-border rounded-md"
+      >
         <div class="flex items-start gap-2">
-          <AlertCircle size={14} class="text-red-500 flex-shrink-0 mt-0.5" />
-          <div class="text-xs text-red-700">
+          <AlertCircle size={14} class="text-danger flex-shrink-0 mt-0.5" />
+          <div class="text-xs text-danger">
             <span class="font-medium">Error: </span>
             {span.status.message}
           </div>
@@ -391,7 +420,7 @@
         </div>
         <a
           href={codeLocation.href}
-          class="group flex items-center gap-2 text-xs font-mono text-blue-600 hover:underline break-all"
+          class="group flex items-center gap-2 text-xs font-mono text-accent hover:underline break-all"
           title={`Open ${codeLocation.filepath}${codeLocation.line ? `:${codeLocation.line}` : ''}`}
         >
           <ExternalLink size={12} class="flex-shrink-0" />
@@ -418,7 +447,7 @@
           <span class="text-xs font-medium text-fg-muted flex-1">Database</span>
           {#if dbInfo.system}
             <span
-              class="text-[10px] px-1.5 py-px rounded border font-mono bg-indigo-50 text-indigo-700 border-indigo-300"
+              class="text-[10px] px-1.5 py-px rounded border font-mono bg-indigo-500/15 text-indigo-600 border-indigo-500/30"
             >
               {dbInfo.system}
             </span>
@@ -447,9 +476,9 @@
             <pre
               class="bg-subtle rounded p-2.5 border border-line font-mono text-[11px] text-fg whitespace-pre-wrap break-all overflow-auto max-h-[240px]">{#each sqlTokens as token, i (i)}<span
                   class={token.kind === 'keyword'
-                    ? 'text-indigo-600 font-semibold'
+                    ? 'text-indigo-500 font-semibold'
                     : token.kind === 'string'
-                      ? 'text-green-600'
+                      ? 'text-green-500'
                       : ''}>{token.text}</span>{/each}</pre>
           </Copyable>
         {/if}
@@ -501,19 +530,32 @@
         <Tag size={14} />
       {/snippet}
       {#snippet attributesBody()}
+        <SearchInput
+          bind:value={attrQuery}
+          class="mb-2"
+          inputClass="border-line bg-subtle text-fg focus:border-line focus-visible:ring-1 focus-visible:ring-accent"
+          placeholder="Filter attributes by key or value…"
+          ariaLabel="Filter attributes by key or value"
+        />
         <Copyable content={JSON.stringify(span.attributes, null, 2)}>
           <div
             class="bg-subtle rounded p-3 border border-line font-mono text-xs h-[300px] min-h-[120px] overflow-auto resize-y"
             title="Drag bottom edge to resize"
           >
-            {#each sortedAttributes as [key, value] (key)}
-              {@render attributeRow(key, value, (v) => (fullscreenValue = v))}
-            {/each}
+            {#if filteredAttributes.length === 0}
+              <div class="text-fg-subtle py-2 text-center">No matches</div>
+            {:else}
+              {#each filteredAttributes as [key, value] (key)}
+                {@render attributeRow(key, value, (v) => (fullscreenValue = v))}
+              {/each}
+            {/if}
           </div>
         </Copyable>
       {/snippet}
       {@render collapsibleSection(
-        `Attributes (${Object.keys(span.attributes).length})`,
+        isAttrFiltered
+          ? `Attributes (${filteredAttributes.length} of ${Object.keys(span.attributes).length})`
+          : `Attributes (${Object.keys(span.attributes).length})`,
         attributesIcon,
         expandedSections.attributes,
         () => toggleSection('attributes'),
@@ -631,9 +673,9 @@
               {@const sev = log.severityText || 'INFO'}
               {@const sevColor =
                 sev === 'ERROR'
-                  ? 'text-red-600'
+                  ? 'text-danger'
                   : sev === 'WARN'
-                    ? 'text-amber-600'
+                    ? 'text-warning'
                     : 'text-fg-subtle'}
               {@const body =
                 typeof log.body === 'string'
@@ -643,7 +685,7 @@
                 class={cn(
                   'text-xs p-2 rounded border',
                   isMatch
-                    ? 'border-blue-200 bg-blue-50'
+                    ? 'border-accent/30 bg-accent/10'
                     : 'border-line-subtle bg-subtle',
                 )}
               >
@@ -652,7 +694,7 @@
                     {sev}
                   </span>
                   {#if isMatch}
-                    <span class="text-[10px] text-blue-600 font-medium">
+                    <span class="text-[10px] text-accent font-medium">
                       this span
                     </span>
                   {/if}

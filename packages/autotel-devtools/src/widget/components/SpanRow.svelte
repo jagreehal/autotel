@@ -54,7 +54,7 @@
   class={cn(
     'px-4 py-3',
     'hover:bg-subtle transition-colors cursor-pointer',
-    isError && 'bg-red-50/30',
+    isError && 'bg-danger-bg',
     isSelected && 'bg-hover hover:bg-hover',
   )}
   style="padding-left: {16 + indentLevel * 20}px;"

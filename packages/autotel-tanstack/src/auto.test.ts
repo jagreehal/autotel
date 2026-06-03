@@ -7,6 +7,8 @@ const mockGetFinishedSpans = vi.fn(() => []);
 
 vi.mock('autotel', () => ({
   init: mockInit,
+  // instrument() guards on this; false so every test proceeds to init().
+  isInitialized: vi.fn(() => false),
 }));
 
 const mockExporterInstance = {
@@ -85,15 +87,20 @@ describe('auto.ts E2E mode', () => {
     expect(call.spanProcessors).toHaveLength(2);
   });
 
-  it('passes endpoint and debug to init in production mode', async () => {
+  it('initializes in production mode without injecting an in-memory processor', async () => {
+    // The OTLP endpoint/headers are resolved by autotel core from env, so the
+    // zero-config path no longer passes them explicitly — it just inits.
     delete process.env.E2E;
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     await import('./auto');
-    expect(mockInit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        endpoint: 'http://localhost:4318',
-      }),
-    );
+    expect(mockInit).toHaveBeenCalledOnce();
+    const call = mockInit.mock.calls[0][0] as {
+      spanProcessors?: unknown[];
+      service?: string;
+    };
+    expect(call.spanProcessors).toBeUndefined();
+    expect(call.service).toBe('tanstack-start');
+    expect(MockInMemorySpanExporter).not.toHaveBeenCalled();
   });
 
   it('uses OTEL_SERVICE_NAME env var', async () => {

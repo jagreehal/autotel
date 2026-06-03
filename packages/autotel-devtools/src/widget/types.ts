@@ -48,6 +48,9 @@ export interface MetricData {
   attributes: Record<string, any>;
   timestamp: number;
   traceId?: string;
+  /** Stable id assigned at ingestion so live-updating lists can key on it
+   *  instead of the array index (which corrupts rendering as metrics stream). */
+  id?: string;
 }
 
 export interface HealthStatus {
@@ -127,9 +130,12 @@ export interface WidgetPosition {
   y: number;
 }
 
-export interface PopoverDimensions {
-  width: number;
-  height: number;
+/** Size of the docked panel along its docking axis (see `panelSizeSignal`). */
+export interface PanelSize {
+  /** Height when docked top/bottom. */
+  vertical: number;
+  /** Width when docked left/right. */
+  horizontal: number;
 }
 
 export interface WidgetState {
@@ -139,5 +145,5 @@ export interface WidgetState {
   docked: DockPosition;
   selectedTab: TabType;
   selectedTraceId: string | null;
-  popoverDimensions: PopoverDimensions;
+  panelSize: PanelSize;
 }

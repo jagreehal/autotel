@@ -92,7 +92,7 @@
       <span class="text-sm font-semibold text-fg"> Import Traces </span>
       <button
         onclick={onclose}
-        class="inline-flex items-center justify-center w-7 h-7 bg-transparent border border-line rounded text-sm text-fg-subtle hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
+        class="inline-flex items-center justify-center w-7 h-7 bg-transparent border border-line rounded text-sm text-fg-subtle hover:bg-danger-bg hover:border-danger-border hover:text-danger transition-colors"
         title="Close (Esc)"
       >
         <X size={14} />
@@ -128,7 +128,7 @@
 
       {#if error}
         <div
-          class="p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700 flex items-start gap-2"
+          class="p-3 bg-danger-bg border border-danger-border rounded-md text-sm text-danger flex items-start gap-2"
         >
           <AlertTriangle size={14} class="flex-shrink-0 mt-0.5" />
           <span>{error}</span>
@@ -137,7 +137,7 @@
 
       {#if result && result.warnings.length > 0}
         <div
-          class="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700"
+          class="p-3 bg-accent/10 border border-accent/30 rounded-md text-sm text-accent"
         >
           {#each result.warnings as w, i (i)}
             <p class="mb-1 last:mb-0">
@@ -149,7 +149,7 @@
 
       {#if result && result.imported > 0}
         <div
-          class="p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-700"
+          class="p-3 bg-success-bg border border-success-border rounded-md text-sm text-success"
         >
           Successfully imported {result.imported} trace{result.imported !== 1
             ? 's'
@@ -172,7 +172,7 @@
       <button
         onclick={handleImport}
         disabled={!file || importing}
-        class="px-4 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        class="px-4 py-1.5 text-sm rounded bg-accent text-white hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {importing ? 'Importing...' : 'Confirm Import'}
       </button>

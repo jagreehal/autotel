@@ -35,7 +35,7 @@
     title="Copy"
   >
     {#if copied}
-      <Check size={14} class="text-green-600" />
+      <Check size={14} class="text-success" />
     {:else}
       <Copy size={14} class="text-fg-muted" />
     {/if}

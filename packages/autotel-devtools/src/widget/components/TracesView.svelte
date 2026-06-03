@@ -9,8 +9,6 @@
     Download,
     Pause,
     Play,
-    Search,
-    X,
     HelpCircle,
     Trash2,
     Upload,
@@ -45,6 +43,10 @@
   import { isInputFocused, activateOnKey } from '../utils/keyboard';
   import TraceImportModal from './TraceImportModal.svelte';
   import TraceDetailView from './TraceDetailView.svelte';
+  import CopyButton from './CopyButton.svelte';
+  import SearchInput from './SearchInput.svelte';
+  import { useListKeyboardNav } from './listNav.svelte';
+  import { matchesNeedle } from '../utils/textMatch';
   import {
     readFileAsText,
     parseImportedJson,
@@ -63,15 +65,13 @@
     if (status === 'error' && trace.status !== 'ERROR') return false;
     if (status === 'ok' && trace.status === 'ERROR') return false;
     if (minDurationMs > 0 && trace.duration < minDurationMs) return false;
-    if (!query) return true;
-    const needle = query.toLowerCase();
-    if (trace.service?.toLowerCase().includes(needle)) return true;
-    if (trace.rootSpan?.name?.toLowerCase().includes(needle)) return true;
-    if (trace.traceId.toLowerCase().includes(needle)) return true;
-    if (trace.correlationId?.toLowerCase().includes(needle)) return true;
-    return trace.spans.some((span) =>
-      span.name?.toLowerCase().includes(needle),
-    );
+    return matchesNeedle(query.toLowerCase(), [
+      trace.service,
+      trace.rootSpan?.name,
+      trace.traceId,
+      trace.correlationId,
+      ...trace.spans.map((span) => span.name),
+    ]);
   }
 
   const traces = $derived(sortedTracesSignal.value);
@@ -85,7 +85,7 @@
   let query = $state('');
   let statusFilter = $state<StatusFilter>('all');
   let minDuration = $state(0);
-  let searchRef: HTMLInputElement | undefined = $state();
+  let searchRef: HTMLInputElement | null = $state(null);
   let showImport = $state(false);
 
   const hasSelection = $derived(selectedCount > 0);
@@ -121,6 +121,23 @@
       traceMatches(trace, query, statusFilter, minDuration),
     ),
   );
+
+  // Keyboard row navigation over the filtered list.
+  let listRef: HTMLDivElement | undefined = $state();
+
+  const nav = useListKeyboardNav({
+    count: () => filtered.length,
+    onActivate: (index) => {
+      const trace = filtered[index];
+      if (trace) setSelectedTrace(trace.traceId);
+    },
+    scrollToIndex: (index) =>
+      queueMicrotask(() => {
+        listRef
+          ?.querySelector<HTMLElement>(`[data-row-index="${index}"]`)
+          ?.scrollIntoView({ block: 'nearest' });
+      }),
+  });
 
   function handleExportSelected() {
     const selected = traces.filter((t) => selectedIds.has(t.traceId));
@@ -163,22 +180,29 @@
   </button>
 {/snippet}
 
-{#snippet traceRow(trace: TraceData, isSelected: boolean)}
+{#snippet traceRow(trace: TraceData, isSelected: boolean, index: number)}
   {@const isError = trace.status === 'ERROR'}
   {@const sc = serviceColor(trace.service || 'unknown')}
+  {@const isCursor = nav.cursor === index}
   <div
     class={cn(
-      'trace-grid px-4 py-2 border-b border-line-subtle cursor-pointer transition-colors',
+      'group trace-grid px-4 py-2 border-b border-line-subtle cursor-pointer transition-colors',
       isSelected
-        ? 'bg-blue-50/60'
+        ? 'bg-accent/10'
         : isError
-          ? 'bg-red-50/40 hover:bg-red-50/70'
+          ? 'bg-danger-bg/40 hover:bg-danger-bg/70'
           : 'hover:bg-hover',
+      isCursor && 'ring-1 ring-inset ring-accent bg-accent/10',
     )}
-    role="button"
-    tabindex="0"
+    role="option"
+    aria-selected={isCursor}
+    tabindex="-1"
+    data-row-index={index}
     data-focus-inset
-    onclick={() => setSelectedTrace(trace.traceId)}
+    onclick={() => {
+      nav.cursor = index;
+      setSelectedTrace(trace.traceId);
+    }}
     onkeydown={activateOnKey(() => setSelectedTrace(trace.traceId))}
   >
     <!-- Select. stopPropagation lives on the checkbox (interactive) so toggling
@@ -189,7 +213,7 @@
         checked={isSelected}
         onclick={(e) => e.stopPropagation()}
         onchange={() => toggleTraceSelection(trace.traceId)}
-        class="w-3.5 h-3.5 rounded border-line text-blue-600"
+        class="w-3.5 h-3.5 rounded border-line text-accent"
       />
     </label>
 
@@ -205,11 +229,19 @@
     <!-- Operation -->
     <div class="flex items-center gap-1.5 min-w-0">
       {#if isError}
-        <AlertCircle size={13} class="text-red-600 flex-shrink-0" />
+        <AlertCircle size={13} class="text-danger flex-shrink-0" />
       {/if}
       <span class="truncate text-sm text-fg" title={trace.rootSpan.name}>
         {trace.rootSpan.name || 'unknown'}
       </span>
+      <!-- One copy affordance per row (trace ID — the primary thing to grab).
+           Correlation ID copy lives in the trace detail to avoid two identical
+           icons cluttering the row. -->
+      <CopyButton
+        value={trace.traceId}
+        label="Copy trace ID"
+        class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+      />
     </div>
 
     <!-- Duration -->
@@ -234,9 +266,9 @@
       class={cn(
         'text-[10px] font-semibold px-1.5 py-0.5 rounded justify-self-start',
         isError
-          ? 'bg-red-100 text-red-700'
+          ? 'bg-danger-bg text-danger'
           : trace.status === 'OK'
-            ? 'bg-green-100 text-green-700'
+            ? 'bg-success-bg text-success'
             : 'bg-hover text-fg-muted',
       )}
     >
@@ -261,7 +293,7 @@
           ? `${filtered.length} of ${traces.length}`
           : traces.length})
         {#if hasSelection}
-          <span class="text-xs font-normal text-blue-600">
+          <span class="text-xs font-normal text-accent">
             ({selectedCount} selected)
           </span>
         {/if}
@@ -272,7 +304,7 @@
           <div class="flex items-center gap-1 mr-2 px-2 border-r border-line">
             <button
               onclick={handleExportSelected}
-              class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
               title="Export selected traces"
             >
               <Download size={12} />
@@ -280,7 +312,7 @@
             </button>
             <button
               onclick={deleteSelectedTraces}
-              class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+              class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-danger-bg text-danger hover:bg-danger-bg/80 transition-colors"
               title="Delete selected traces"
             >
               <Trash2 size={12} />
@@ -293,7 +325,7 @@
           class={cn(
             'flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
             paused
-              ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+              ? 'bg-warning-bg text-warning hover:bg-warning-bg/80'
               : 'hover:bg-hover text-fg-muted',
           )}
           title={paused ? 'Resume live tail' : 'Pause live tail'}
@@ -344,29 +376,11 @@
 
     <!-- Filter bar -->
     <div class="px-4 py-2 border-b border-line flex items-center gap-2">
-      <div class="relative flex-1">
-        <Search
-          size={12}
-          class="absolute left-2 top-1/2 -translate-y-1/2 text-fg-subtle"
-        />
-        <input
-          bind:this={searchRef}
-          value={query}
-          oninput={(event) =>
-            (query = (event.currentTarget as HTMLInputElement).value)}
-          class="w-full pl-7 pr-7 py-1 text-xs rounded border border-line focus:border-line focus:outline-none"
-          placeholder="Filter by service, span, trace id…"
-        />
-        {#if query}
-          <button
-            onclick={() => (query = '')}
-            class="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-fg-subtle hover:text-fg-muted"
-            title="Clear filter"
-          >
-            <X size={12} />
-          </button>
-        {/if}
-      </div>
+      <SearchInput
+        bind:value={query}
+        bind:ref={searchRef}
+        placeholder="Filter by service, span, trace id…"
+      />
       <select
         value={statusFilter}
         onchange={(event) =>
@@ -400,7 +414,14 @@
     </div>
 
     <!-- Traces list — dense, sortable, container-responsive -->
-    <div class="trace-list-container flex-1 overflow-auto">
+    <div
+      bind:this={listRef}
+      class="trace-list-container flex-1 overflow-auto focus:outline-none"
+      role="listbox"
+      aria-label="Traces"
+      tabindex="0"
+      onkeydown={nav.onKeyDown}
+    >
       {#if traces.length === 0}
         <div class="text-center text-fg-subtle text-sm py-12">
           <p class="mb-3">No traces yet. Waiting for data…</p>
@@ -427,7 +448,7 @@
                   allFilteredSelected
                     ? clearTraceSelection()
                     : selectAllTraces()}
-                class="w-3.5 h-3.5 rounded border-line text-blue-600"
+                class="w-3.5 h-3.5 rounded border-line text-accent"
               />
             </label>
             {@render sortHeader('Service', 'service')}
@@ -439,8 +460,8 @@
             <span></span>
           </div>
 
-          {#each filtered as trace (trace.traceId)}
-            {@render traceRow(trace, selectedIds.has(trace.traceId))}
+          {#each filtered as trace, index (trace.traceId)}
+            {@render traceRow(trace, selectedIds.has(trace.traceId), index)}
           {/each}
         </div>
       {/if}
