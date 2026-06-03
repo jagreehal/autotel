@@ -22,18 +22,9 @@
     TRACE_LIST_SHORTCUTS,
     TRACE_DETAIL_SHORTCUTS,
   } from '../shortcuts';
-  import type { TabType } from '../types';
+  import { TAB_ORDER } from '../tabs';
   import { Sun, Moon, Monitor, HelpCircle } from '@lucide/svelte';
 
-  const TABS_ORDER: TabType[] = [
-    'traces',
-    'flow',
-    'resources',
-    'service-map',
-    'metrics',
-    'logs',
-    'errors',
-  ];
 
   /** Help list for the active context (read live; signals, not render state). */
   function contextShortcuts() {
@@ -85,11 +76,11 @@
       }
       if (helpShortcutsSignal.value) return; // help open — ignore other keys
 
-      // Tab switching with number keys
-      if (!isInputFocused() && e.key >= '1' && e.key <= '6') {
+      // Tab switching with number keys (1 → first tab, in TAB_ORDER order)
+      if (!isInputFocused() && e.key >= '1' && e.key <= '9') {
         const idx = parseInt(e.key, 10) - 1;
-        if (idx < TABS_ORDER.length) {
-          setSelectedTab(TABS_ORDER[idx]);
+        if (idx < TAB_ORDER.length) {
+          setSelectedTab(TAB_ORDER[idx]);
         }
       }
     };

@@ -1,8 +1,10 @@
 <script lang="ts">
   import { Boxes } from '@lucide/svelte';
-  import { resourceSummariesSignal } from '../store.svelte';
+  import { resourceSummariesSignal, setSelectedTab } from '../store.svelte';
   import { formatTimestamp } from '../utils';
   import { cn } from '../utils/cn';
+  import { matchesNeedle } from '../utils/textMatch';
+  import type { TabType } from '../types';
   import type {
     ResourceHealth,
     ResourceSummary,
@@ -21,11 +23,11 @@
   function healthClass(health: ResourceHealth): string {
     switch (health) {
       case 'healthy':
-        return 'bg-green-50 text-green-700 border-green-200';
+        return 'bg-success-bg text-success border-success-border';
       case 'degraded':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
+        return 'bg-warning-bg text-warning border-warning-border';
       case 'unhealthy':
-        return 'bg-red-50 text-red-700 border-red-200';
+        return 'bg-danger-bg text-danger border-danger-border';
       default:
         return 'bg-subtle text-fg-muted border-line';
     }
@@ -39,10 +41,7 @@
     const normalizedQuery = query.trim().toLowerCase();
     return resources.filter((resource) => {
       const matchesType = type === 'all' || resource.type === type;
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        resource.name.toLowerCase().includes(normalizedQuery);
-      return matchesType && matchesQuery;
+      return matchesType && matchesNeedle(normalizedQuery, [resource.name]);
     });
   });
 </script>
@@ -52,8 +51,28 @@
     <div class="text-[11px] uppercase tracking-wide text-fg-subtle">
       {label}
     </div>
-    <div class="text-sm text-gray-800">{value}</div>
+    <div class="text-sm text-fg">{value}</div>
   </div>
+{/snippet}
+
+<!-- A stat whose count deep-links to the matching tab when there's something to
+     see; falls back to a plain (non-clickable) stat when the count is zero. -->
+{#snippet navStat(label: string, value: number, tab: TabType)}
+  {#if value > 0}
+    <button
+      type="button"
+      onclick={() => setSelectedTab(tab)}
+      class="group/stat text-left rounded -m-1 p-1 hover:bg-hover transition-colors"
+      title={`View ${label.toLowerCase()} in the ${tab} tab`}
+    >
+      <div class="text-[11px] uppercase tracking-wide text-fg-subtle">
+        {label}
+      </div>
+      <div class="text-sm text-accent group-hover/stat:underline">{value}</div>
+    </button>
+  {:else}
+    {@render stat(label, value)}
+  {/if}
 {/snippet}
 
 {#snippet resourceRow(resource: ResourceSummary)}
@@ -76,9 +95,9 @@
     </div>
     <div class="grid grid-cols-2 gap-2 text-xs text-fg-muted sm:grid-cols-5">
       {@render stat('Requests', resource.requestCount)}
-      {@render stat('Errors', resource.errorCount)}
-      {@render stat('Traces', resource.traceCount)}
-      {@render stat('Logs', resource.logCount)}
+      {@render navStat('Errors', resource.errorCount, 'errors')}
+      {@render navStat('Traces', resource.traceCount, 'traces')}
+      {@render navStat('Logs', resource.logCount, 'logs')}
       {@render stat(
         'Last Seen',
         resource.lastSeen ? formatTimestamp(resource.lastSeen) : 'n/a',

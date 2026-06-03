@@ -1,31 +1,12 @@
 <script lang="ts">
   import { selectedTabSignal, setSelectedTab } from '../store.svelte';
   import { cn } from '../utils/cn';
-  import type { TabType } from '../types';
-  import {
-    Database,
-    Boxes,
-    Network,
-    BarChart,
-    FileText,
-    AlertTriangle,
-    Workflow,
-  } from '@lucide/svelte';
+  import { TAB_DEFS } from '../tabs';
 
   interface Props {
     orientation?: 'horizontal' | 'vertical';
   }
   let { orientation = 'horizontal' }: Props = $props();
-
-  const TABS: Array<{ id: TabType; label: string; icon: typeof Database }> = [
-    { id: 'traces', label: 'Traces', icon: Database },
-    { id: 'flow', label: 'Flow', icon: Workflow },
-    { id: 'resources', label: 'Resources', icon: Boxes },
-    { id: 'service-map', label: 'Service Map', icon: Network },
-    { id: 'metrics', label: 'Metrics', icon: BarChart },
-    { id: 'logs', label: 'Logs', icon: FileText },
-    { id: 'errors', label: 'Errors', icon: AlertTriangle },
-  ];
 
   const selected = $derived(selectedTabSignal.value);
 </script>
@@ -38,13 +19,13 @@
       : 'border-b border-line overflow-x-auto',
   )}
 >
-  {#each TABS as { id, label, icon: Icon } (id)}
+  {#each TAB_DEFS as { id, label, icon: Icon } (id)}
     <button
       onclick={() => setSelectedTab(id)}
       class={cn(
         'flex items-center gap-2 px-3 py-2 text-xs font-medium rounded transition-colors whitespace-nowrap',
         selected === id
-          ? 'bg-zinc-900 text-zinc-50'
+          ? 'bg-accent text-white'
           : 'text-fg-subtle hover:bg-hover hover:text-fg',
       )}
     >

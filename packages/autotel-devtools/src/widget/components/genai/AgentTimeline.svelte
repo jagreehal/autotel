@@ -92,10 +92,10 @@
     if (isWrapper)
       return 'bg-transparent border border-dashed border-line text-fg-subtle hover:bg-hover/50';
     if (isHandoffLane)
-      return 'bg-violet-200 hover:bg-violet-300 text-violet-900 border border-violet-300';
+      return 'bg-violet-500/15 hover:bg-violet-500/25 text-violet-600 border border-violet-500/30';
     if (errored)
-      return 'bg-red-200 hover:bg-red-300 text-red-900 border border-red-300';
-    return 'bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-200';
+      return 'bg-red-500/15 hover:bg-red-500/25 text-red-600 border border-red-500/30';
+    return 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 border border-emerald-500/30';
   }
 
   // Builds the per-lane ordering, span map and wrapper sets for a group.
@@ -152,7 +152,7 @@
           <div
             class={cn(
               'w-44 shrink-0 flex items-center gap-1.5 text-xs font-mono truncate',
-              isHandoffLane ? 'text-violet-700' : 'text-fg-muted',
+              isHandoffLane ? 'text-violet-600' : 'text-fg-muted',
             )}
             title={lane}
           >
@@ -184,7 +184,7 @@
                 class={cn(
                   'absolute top-0.5 bottom-0.5 rounded text-[10px] font-mono px-1 truncate flex items-center gap-1 transition-all',
                   spanBarClass(isWrapper, isHandoffLane, errored),
-                  active && 'ring-2 ring-zinc-900 ring-offset-1',
+                  active && 'ring-2 ring-accent ring-offset-1',
                 )}
                 style="left: {leftPct}%; width: {widthPct}%; min-width: 8px; z-index: {isWrapper
                   ? 1

@@ -29,7 +29,13 @@
  */
 
 // Core initialization
-export { init, lockLogger, isLoggerLocked, type AutotelConfig } from './init';
+export {
+  init,
+  isInitialized,
+  lockLogger,
+  isLoggerLocked,
+  type AutotelConfig,
+} from './init';
 
 // Baggage span processor
 export {

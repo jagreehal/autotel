@@ -28,7 +28,7 @@
 <div
   class={cn(
     'text-[10px] font-medium uppercase tracking-wider mb-1',
-    tone === 'positive' ? 'text-emerald-700' : 'text-fg-subtle',
+    tone === 'positive' ? 'text-success' : 'text-fg-subtle',
   )}
 >
   {label}
@@ -37,6 +37,6 @@
   class={cn(
     'text-xs p-2 rounded overflow-x-auto whitespace-pre-wrap',
     tone === 'positive'
-      ? 'bg-surface border border-emerald-200 text-fg'
+      ? 'bg-surface border border-success-border text-fg'
       : 'bg-subtle border border-line text-fg',
   )}>{prettyJson(value)}</pre>

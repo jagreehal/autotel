@@ -2,17 +2,47 @@
   /**
    * Metrics view - displays events, funnels, outcomes, and values
    */
-  import { BarChart, TrendingUp, Target, DollarSign } from '@lucide/svelte';
-  import { groupedMetricsSignal } from '../store.svelte';
+  import {
+    BarChart,
+    TrendingUp,
+    Target,
+    DollarSign,
+    SquareArrowOutUpRight,
+  } from '@lucide/svelte';
+  import {
+    groupedMetricsSignal,
+    setSelectedTrace,
+    setSelectedTab,
+  } from '../store.svelte';
   import { formatNumber, formatTimestamp } from '../utils';
   import type { MetricData } from '../types';
+  import CopyButton from './CopyButton.svelte';
+
+  function goToTrace(traceId: string) {
+    setSelectedTrace(traceId);
+    setSelectedTab('traces');
+  }
+
+  function metricToJson(metric: MetricData): string {
+    return JSON.stringify(
+      {
+        name: metric.name,
+        type: metric.type,
+        value: metric.value,
+        attributes: metric.attributes,
+        timestamp: metric.timestamp,
+      },
+      null,
+      2,
+    );
+  }
 
   const metrics = $derived(groupedMetricsSignal.value);
 </script>
 
 {#snippet metricRow(metric: MetricData)}
   <div
-    class="flex items-center justify-between gap-3 p-3 bg-subtle rounded-md text-sm border border-line"
+    class="group flex items-center justify-between gap-3 p-3 bg-subtle rounded-md text-sm border border-line"
   >
     <div class="flex-1 min-w-0">
       <div class="font-medium truncate text-fg">{metric.name}</div>
@@ -25,15 +55,34 @@
       {/if}
     </div>
 
-    <div class="text-right flex-shrink-0">
-      {#if metric.value !== undefined}
-        <div class="font-semibold text-blue-600 text-sm">
-          {formatNumber(metric.value)}
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <div class="text-right">
+        {#if metric.value !== undefined}
+          <div class="font-semibold text-accent text-sm">
+            {formatNumber(metric.value)}
+          </div>
+        {/if}
+        <div class="text-xs text-fg-subtle mt-1">
+          {formatTimestamp(metric.timestamp)}
         </div>
-      {/if}
-      <div class="text-xs text-fg-subtle mt-1">
-        {formatTimestamp(metric.timestamp)}
       </div>
+
+      {#if metric.traceId}
+        <button
+          onclick={() => goToTrace(metric.traceId!)}
+          title="Go to originating trace"
+          aria-label="Go to originating trace"
+          class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded text-fg-subtle hover:text-accent hover:bg-hover flex-shrink-0"
+        >
+          <SquareArrowOutUpRight size={12} />
+        </button>
+      {/if}
+
+      <CopyButton
+        value={metricToJson(metric)}
+        label="Copy metric JSON"
+        class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+      />
     </div>
   </div>
 {/snippet}
@@ -51,7 +100,7 @@
     </h4>
 
     <div class="space-y-2">
-      {#each items.slice(0, 10) as metric, idx (idx)}
+      {#each items.slice(0, 10) as metric (metric.id ?? `${metric.name}-${metric.timestamp}`)}
         {@render metricRow(metric)}
       {/each}
 

@@ -2,6 +2,8 @@
   import { User, Bot, Settings, Wrench } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
   import ToolCallCard from './ToolCallCard.svelte';
+  import Copyable from '../Copyable.svelte';
+  import CopyButton from '../CopyButton.svelte';
   import type {
     GenAiMessage,
     GenAiMessagePart,
@@ -12,6 +14,22 @@
     span: GenAiSpan;
   }
   let { span }: Props = $props();
+
+  // Flatten a message into a single copyable string: plain text for text
+  // parts, JSON for structured parts, plus any tool-call payloads.
+  function messageToText(message: GenAiMessage): string {
+    const parts = message.parts.map((part) => {
+      if (part.kind === 'text') return part.text;
+      if (part.kind === 'ref') return `[ref:${part.direction}] ${part.ref}`;
+      if (part.kind === 'image' || part.kind === 'audio')
+        return `[${part.kind} · ${part.mediaType} · ${part.dataRef}]`;
+      return JSON.stringify(part.value, null, 2);
+    });
+    for (const call of message.toolCalls ?? []) {
+      parts.push(JSON.stringify({ tool: call.name, ...call }, null, 2));
+    }
+    return parts.join('\n\n');
+  }
 
   const ROLE_STYLES: Record<
     GenAiMessage['role'],
@@ -24,20 +42,20 @@
       icon: Settings,
     },
     user: {
-      wrap: 'bg-blue-50/40 border-blue-100',
-      chip: 'bg-blue-100 text-blue-800',
+      wrap: 'bg-blue-500/10 border-blue-500/30',
+      chip: 'bg-blue-500/15 text-blue-600',
       label: 'user',
       icon: User,
     },
     assistant: {
-      wrap: 'bg-emerald-50/40 border-emerald-100',
-      chip: 'bg-emerald-100 text-emerald-800',
+      wrap: 'bg-emerald-500/10 border-emerald-500/30',
+      chip: 'bg-emerald-500/15 text-emerald-600',
       label: 'assistant',
       icon: Bot,
     },
     tool: {
-      wrap: 'bg-amber-50/40 border-amber-100',
-      chip: 'bg-amber-100 text-amber-800',
+      wrap: 'bg-amber-500/10 border-amber-500/30',
+      chip: 'bg-amber-500/15 text-amber-600',
       label: 'tool',
       icon: Wrench,
     },
@@ -63,19 +81,18 @@
       <code class="not-italic text-fg">{part.ref}</code>
     </div>
   {:else}
-    <pre
-      class="text-xs bg-zinc-900 text-zinc-100 p-2 rounded overflow-x-auto">{JSON.stringify(
-        part.value,
-        null,
-        2,
-      )}</pre>
+    {@const json = JSON.stringify(part.value, null, 2)}
+    <Copyable content={json}>
+      <pre
+        class="text-xs bg-code text-fg p-2 rounded overflow-x-auto">{json}</pre>
+    </Copyable>
   {/if}
 {/snippet}
 
 {#snippet messageBubble(message: GenAiMessage)}
   {@const style = ROLE_STYLES[message.role] ?? ROLE_STYLES.user}
   {@const Icon = style.icon}
-  <div class={cn('border rounded-lg px-3 py-2', style.wrap)}>
+  <div class={cn('group border rounded-lg px-3 py-2', style.wrap)}>
     <div class="flex items-center gap-1.5 mb-1.5">
       <span
         class={cn(
@@ -97,6 +114,11 @@
           tool_call_id={message.toolCallId}
         </span>
       {/if}
+      <CopyButton
+        value={messageToText(message)}
+        label="Copy message"
+        class="ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+      />
     </div>
     <div class="space-y-2">
       {#each message.parts as p (p)}
@@ -111,7 +133,7 @@
 
 {#snippet handoffPanel(span: GenAiSpan)}
   <div class="p-4 space-y-3 text-sm">
-    <div class="flex items-center gap-2 text-violet-700 font-medium">
+    <div class="flex items-center gap-2 text-violet-600 font-medium">
       <Wrench size={14} />
       Agent handoff
     </div>
@@ -140,7 +162,7 @@
 
 {#snippet agentRunPanel(span: GenAiSpan)}
   <div class="p-4 space-y-3 text-sm">
-    <div class="flex items-center gap-2 text-violet-700 font-medium">
+    <div class="flex items-center gap-2 text-violet-600 font-medium">
       <Bot size={14} />
       Agent run
     </div>

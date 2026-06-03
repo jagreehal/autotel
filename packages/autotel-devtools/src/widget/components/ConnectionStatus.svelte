@@ -14,22 +14,31 @@
   const status = $derived(connectionStatusSignal.value);
   const meta = $derived(
     status === 'connected'
-      ? { dot: 'bg-emerald-500', label: 'Connected', text: 'text-emerald-700' }
+      ? { dot: 'bg-success', label: 'Connected', text: 'text-success' }
       : status === 'connecting'
         ? {
-            dot: 'bg-amber-500 animate-pulse',
+            dot: 'bg-warning animate-pulse',
             label: 'Connecting…',
-            text: 'text-amber-700',
+            text: 'text-warning',
           }
-        : { dot: 'bg-red-500', label: 'Disconnected', text: 'text-red-600' },
+        : {
+            dot: 'bg-danger',
+            label: 'Disconnected',
+            text: 'text-fg-subtle',
+          },
   );
 </script>
 
 <div
   class={cn('flex items-center gap-1.5', !compact && 'px-3 py-2')}
+  role="status"
+  aria-label={`OTLP receiver: ${meta.label}`}
   title={`OTLP receiver: ${meta.label}`}
 >
-  <span class={cn('inline-block w-2 h-2 rounded-full shrink-0', meta.dot)}></span>
+  <span
+    class={cn('inline-block w-2 h-2 rounded-full shrink-0', meta.dot)}
+    aria-hidden="true"
+  ></span>
   {#if !compact}
     <span class={cn('text-xs font-medium', meta.text)}>{meta.label}</span>
   {/if}

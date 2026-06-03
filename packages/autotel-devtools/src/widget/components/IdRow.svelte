@@ -25,7 +25,7 @@
     title="Copy to clipboard"
   >
     {#if copied}
-      <Check size={12} class="text-green-500" />
+      <Check size={12} class="text-success" />
     {:else}
       <Copy size={12} class="text-fg-subtle" />
     {/if}

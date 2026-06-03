@@ -162,10 +162,10 @@
 <div
   id={`waterfall-row-${span.spanId}`}
   class={cn(
-    'flex items-center border-b border-line-subtle hover:bg-blue-50/50 cursor-pointer transition-colors',
-    isSelected && 'bg-blue-50 hover:bg-blue-100/50',
-    isError && 'bg-red-50/30 hover:bg-red-50/50',
-    isCritical && 'border-l-2 border-l-amber-400',
+    'flex items-center border-b border-line-subtle hover:bg-accent/5 cursor-pointer transition-colors',
+    isSelected && 'bg-accent/10 hover:bg-accent/15',
+    isError && 'bg-danger-bg/40 hover:bg-danger-bg/60',
+    isCritical && 'border-l-2 border-l-warning',
   )}
   onclick={() => onSelect?.()}
 >
@@ -195,22 +195,22 @@
 
     <!-- Error indicator -->
     {#if isError}
-      <AlertCircle size={12} class="text-red-500 flex-shrink-0" />
+      <AlertCircle size={12} class="text-danger flex-shrink-0" />
     {/if}
 
     <!-- Events indicator -->
     {#if hasEvents}
-      <Info size={10} class="text-blue-500 flex-shrink-0" />
+      <Info size={10} class="text-accent flex-shrink-0" />
     {/if}
 
     <!-- Critical-path indicator -->
     {#if isCritical}
-      <Zap size={10} class="text-amber-500 fill-amber-400 flex-shrink-0" />
+      <Zap size={10} class="text-warning fill-warning flex-shrink-0" />
     {/if}
 
     <!-- Span name -->
     <span
-      class={cn('text-xs truncate', isError ? 'text-red-700' : 'text-fg')}
+      class={cn('text-xs truncate', isError ? 'text-danger' : 'text-fg')}
       title={span.name}
     >
       {span.name || 'unknown'}
@@ -235,9 +235,9 @@
     <div
       class={cn(
         'absolute h-5 rounded-sm transition-colors group',
-        isError ? 'bg-red-500' : getSpanKindColor(span.kind),
+        isError ? 'bg-danger' : getSpanKindColor(span.kind),
         isSelected &&
-          (isError ? 'bg-red-600' : getSpanKindColorLight(span.kind)),
+          (isError ? 'bg-danger' : getSpanKindColorLight(span.kind)),
       )}
       style={`left: ${timing.offsetPercent}%; width: ${timing.widthPercent}%; top: 6px; min-width: 4px;`}
       title={`${span.name}: ${formatDuration(span.duration)}`}
@@ -266,8 +266,8 @@
           }}
           class={cn(
             'absolute w-2.5 h-2.5 rounded-full border border-white z-10 cursor-pointer hover:scale-125 transition-transform',
-            isException ? 'bg-red-500' : 'bg-yellow-500',
-            activeEventIdx === entry.index && 'ring-2 ring-blue-400 scale-125',
+            isException ? 'bg-danger' : 'bg-warning',
+            activeEventIdx === entry.index && 'ring-2 ring-accent scale-125',
           )}
           style={`left: ${entry.posPercent}%; top: ${topOffset}px; transform: translateX(-50%);`}
           title={`${event.name} at ${formatDuration(event.timestamp - trace.startTime)} — click for detail`}
@@ -289,13 +289,13 @@
           <span
             class={cn(
               'w-2 h-2 rounded-full flex-shrink-0',
-              isException ? 'bg-red-500' : 'bg-yellow-500',
+              isException ? 'bg-danger' : 'bg-warning',
             )}
           ></span>
           <span
             class={cn(
               'text-xs font-medium flex-1 truncate',
-              isException ? 'text-red-700' : 'text-fg',
+              isException ? 'text-danger' : 'text-fg',
             )}
           >
             {event.name}
@@ -345,7 +345,7 @@
     <span
       class={cn(
         'text-xs font-mono',
-        isError ? 'text-red-600' : 'text-fg-muted',
+        isError ? 'text-danger' : 'text-fg-muted',
       )}
     >
       {formatDuration(span.duration)}

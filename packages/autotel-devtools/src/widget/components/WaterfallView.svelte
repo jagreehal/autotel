@@ -128,9 +128,42 @@
     trace: TraceData;
     onSpanSelect?: (span: SpanData | null) => void;
     selectedSpanId?: string | null;
+    /** Case-insensitive query used to highlight matching spans by name/service. */
+    query?: string;
+    /** Reports how many visible spans match the current query (for the toolbar). */
+    onMatchCount?: (count: number) => void;
   }
 
-  let { trace, onSpanSelect, selectedSpanId = null }: Props = $props();
+  let {
+    trace,
+    onSpanSelect,
+    selectedSpanId = null,
+    query = '',
+    onMatchCount,
+  }: Props = $props();
+
+  // Spans matching the current search (by name or trace service), case-insensitive.
+  // When the query is empty nothing is "matched" — every row renders normally.
+  const matchedSpanIds = $derived.by(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return new Set<string>();
+    const ids = new Set<string>();
+    const service = trace.service?.toLowerCase() ?? '';
+    const serviceHit = service.includes(needle);
+    for (const span of trace.spans) {
+      if (serviceHit || span.name?.toLowerCase().includes(needle)) {
+        ids.add(span.spanId);
+      }
+    }
+    return ids;
+  });
+
+  const hasQuery = $derived(query.trim().length > 0);
+
+  // Report the match count up so the parent's toolbar can show "N matches".
+  $effect(() => {
+    onMatchCount?.(matchedSpanIds.size);
+  });
 
   const GRID_LINES_STYLE = 'left: 200px; right: 80px;';
 
@@ -309,20 +342,37 @@
       {/each}
     </div>
 
-    <!-- Span rows -->
+    <!-- Span rows. The tree stays intact while searching: matches are
+         highlighted (accent ring), non-matches are dimmed via a wrapper so
+         WaterfallRow itself stays untouched. -->
     <div class="relative">
       {#each visibleSpans as node (node.span.spanId)}
-        <WaterfallRow
-          {node}
-          {trace}
-          isSelected={selectedSpanId === node.span.spanId}
-          isCollapsed={collapsed.has(node.span.spanId)}
-          hasChildren={hasChildren(node.span.spanId)}
-          isCritical={showCritical && criticalPath.has(node.span.spanId)}
-          onSelect={() => onSpanSelect?.(node.span)}
-          onToggleCollapse={() => toggleCollapse(node.span.spanId)}
-        />
+        {@const isMatch = matchedSpanIds.has(node.span.spanId)}
+        <div
+          class={cn(
+            'transition-opacity',
+            hasQuery && !isMatch && 'opacity-40',
+            hasQuery && isMatch && 'ring-1 ring-inset ring-accent rounded-sm',
+          )}
+        >
+          <WaterfallRow
+            {node}
+            {trace}
+            isSelected={selectedSpanId === node.span.spanId}
+            isCollapsed={collapsed.has(node.span.spanId)}
+            hasChildren={hasChildren(node.span.spanId)}
+            isCritical={showCritical && criticalPath.has(node.span.spanId)}
+            onSelect={() => onSpanSelect?.(node.span)}
+            onToggleCollapse={() => toggleCollapse(node.span.spanId)}
+          />
+        </div>
       {/each}
+
+      {#if hasQuery && matchedSpanIds.size === 0}
+        <div class="px-3 py-6 text-center text-xs text-fg-subtle">
+          No spans match “{query.trim()}”.
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -342,7 +392,7 @@
       class={cn(
         'ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors',
         showCritical
-          ? 'bg-amber-100 text-amber-800 border-amber-300'
+          ? 'bg-warning-bg text-warning border-warning-border'
           : 'text-fg-subtle border-line hover:bg-hover',
       )}
       title="Highlight the spans that determine total trace latency"

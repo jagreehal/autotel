@@ -52,8 +52,8 @@
   <div
     class={cn(
       'absolute inset-y-0 -left-px w-0.5 transition-colors',
-      'group-hover:bg-blue-400 group-focus-visible:bg-blue-400',
-      dragging && 'bg-blue-500',
+      'group-hover:bg-accent group-focus-visible:bg-accent',
+      dragging && 'bg-accent',
     )}
   ></div>
 </div>
