@@ -24,6 +24,8 @@
   import ResizeHandle from './ResizablePanel.svelte';
   import { useResizable } from './resizable.svelte';
   import SpanRow from './SpanRow.svelte';
+  import CopyButton from './CopyButton.svelte';
+  import SearchInput from './SearchInput.svelte';
   import { downloadTraceAsJson, copyTraceToClipboard } from '../export-import';
   import { selectedSpanIdSignal } from '../store.svelte';
   import type { TraceData, SpanData } from '../types';
@@ -37,6 +39,26 @@
 
   let viewMode = $state<ViewMode>('waterfall');
   let selectedSpan = $state<SpanData | null>(null);
+
+  // Per-span search inside the waterfall. The query highlights matching rows
+  // (by span name / service) while dimming the rest so the tree stays intact;
+  // WaterfallView reports how many spans match via the bindable count.
+  let spanQuery = $state('');
+  let spanMatchCount = $state(0);
+  let spanSearchInput: HTMLInputElement | null = $state(null);
+
+  // `/` focuses the span search (when not already typing), matching the trace
+  // list's `/` shortcut. Scoped to the waterfall view.
+  $effect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '/' && viewMode === 'waterfall' && !isInputFocused()) {
+        e.preventDefault();
+        spanSearchInput?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   // Consume a one-shot deep-link: when another view asked to open a specific
   // span (Flow/GenAI/Errors → "open in waterfall"), select it here, then clear
@@ -164,7 +186,7 @@
             title="Copy trace JSON to clipboard"
           >
             {#if copied}
-              <Check size={14} class="text-green-600" />
+              <Check size={14} class="text-success" />
             {:else}
               <Copy size={14} class="text-fg-subtle" />
             {/if}
@@ -237,7 +259,14 @@
         </h3>
         <div class="text-xs text-fg-subtle space-y-0.5">
           <div>{formatDate(trace.startTime)}</div>
-          <div class="font-mono">Trace ID: {trace.traceId}</div>
+          <div class="font-mono flex items-center gap-1">
+            <span class="truncate">Trace ID: {trace.traceId}</span>
+            <CopyButton
+              value={trace.traceId}
+              label="Copy trace ID"
+              stop={false}
+            />
+          </div>
         </div>
       </div>
 
@@ -257,6 +286,25 @@
     </div>
   </div>
 
+  <!-- Waterfall search toolbar — only relevant to the timeline view -->
+  {#if viewMode === 'waterfall'}
+    <div class="px-4 py-2 border-b border-line flex items-center gap-2">
+      <SearchInput
+        bind:value={spanQuery}
+        bind:ref={spanSearchInput}
+        placeholder="Search spans… (press /)"
+        ariaLabel="Search spans by name or service"
+        clearTitle="Clear search"
+      />
+      {#if spanQuery.trim()}
+        <span class="text-xs text-fg-muted tabular-nums flex-shrink-0">
+          {spanMatchCount}
+          {spanMatchCount === 1 ? 'match' : 'matches'}
+        </span>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Content area - flex row for waterfall + detail panel -->
   <div bind:this={contentRef} class="flex-1 overflow-hidden flex">
     <!-- Main content -->
@@ -266,6 +314,8 @@
           {trace}
           onSpanSelect={(s) => (selectedSpan = s)}
           selectedSpanId={selectedSpan?.spanId}
+          query={spanQuery}
+          onMatchCount={(n) => (spanMatchCount = n)}
         />
       {:else if viewMode === 'flame'}
         <FlameGraphView
@@ -275,7 +325,7 @@
         />
       {:else}
         <div class="overflow-auto h-full">
-          <div class="divide-y divide-zinc-100">
+          <div class="divide-y divide-line-subtle">
             {#each trace.spans as span (span.spanId)}
               <SpanRow
                 {span}

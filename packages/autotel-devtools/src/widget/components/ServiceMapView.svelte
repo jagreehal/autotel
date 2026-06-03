@@ -5,364 +5,57 @@
    * Highlights error paths and displays latency information
    */
 
-  import { Server, ArrowRight, Activity } from '@lucide/svelte';
+  import {
+    Server,
+    ArrowRight,
+    Activity,
+    Plus,
+    Minus,
+    Scan,
+    RotateCcw,
+  } from '@lucide/svelte';
   import { cn } from '../utils/cn';
   import { formatDuration } from '../utils';
-  import { activateOnKey } from '../utils/keyboard';
   import { tracesSignal } from '../store.svelte';
-  import type { TraceData, SpanData } from '../types';
-  import { inferResourceName } from '../utils/resources';
   import { serviceColor } from '../utils/serviceColor';
+  import CopyButton from './CopyButton.svelte';
+  import Copyable from './Copyable.svelte';
+  import SearchInput from './SearchInput.svelte';
+  import { matchesNeedle } from '../utils/textMatch';
+  import {
+    buildServiceMap,
+    calculateSugiyamaLayout,
+    NODE_W,
+    NODE_H,
+    type ServiceNode,
+  } from './serviceMap';
+  import { useZoomPan } from './zoomPan.svelte';
 
-  /**
-   * Service node in the map
-   */
-  interface ServiceNode {
-    id: string;
-    name: string;
-    requestCount: number;
-    errorCount: number;
-    avgLatency: number;
-    minLatency: number;
-    maxLatency: number;
-    spanKinds: Set<SpanData['kind']>;
-    nodeType: 'service' | 'database' | 'messaging' | 'external';
-  }
-
-  /**
-   * Connection between services
-   */
-  interface ServiceConnection {
-    id: string;
-    source: string;
-    target: string;
-    requestCount: number;
-    errorCount: number;
-    avgLatency: number;
-    p50Latency: number;
-    p99Latency: number;
-    latencies: number[];
-  }
-
-  // Sugiyama layout constants
-  const NODE_W = 140;
-  const NODE_H = 52;
-  const LAYER_GAP_X = 200;
-  const NODE_GAP_Y = 70;
-  const MARGIN = 20;
   const SVG_MIN_HEIGHT = 'min-height: 300px;';
 
-  /**
-   * Extract service name from span
-   */
-  function getServiceFromSpan(span: SpanData, traceService: string): string {
-    return inferResourceName(span, traceService);
-  }
-
-  /**
-   * Detect node type from span attributes
-   */
-  function detectNodeType(span: SpanData): ServiceNode['nodeType'] {
-    const attrs = span.attributes || {};
-    if (attrs['db.system'] || attrs['db.name'] || attrs['db.statement'])
-      return 'database';
-    if (
-      attrs['messaging.system'] ||
-      attrs['messaging.destination'] ||
-      attrs['messaging.url']
-    )
-      return 'messaging';
-    if (attrs['rpc.system'] || attrs['rpc.service'] || attrs['peer.service'])
-      return 'external';
-    return 'service';
-  }
-
-  /**
-   * Calculate a percentile from a sorted array
-   */
-  function percentile(sorted: number[], p: number): number {
-    if (sorted.length === 0) return 0;
-    const idx = Math.ceil((p / 100) * sorted.length) - 1;
-    return sorted[Math.max(0, idx)];
-  }
-
-  /**
-   * Build service map from traces
-   */
-  function buildServiceMap(traces: TraceData[]): {
-    nodes: ServiceNode[];
-    connections: ServiceConnection[];
-  } {
-    const nodeMap = new Map<string, ServiceNode>();
-    const connectionMap = new Map<string, ServiceConnection>();
-
-    for (const trace of traces) {
-      const spanMap = new Map<string, SpanData>();
-      for (const span of trace.spans) spanMap.set(span.spanId, span);
-
-      for (const span of trace.spans) {
-        const serviceName = getServiceFromSpan(span, trace.service);
-
-        // Update or create service node
-        let node = nodeMap.get(serviceName);
-        if (!node) {
-          node = {
-            id: serviceName,
-            name: serviceName,
-            requestCount: 0,
-            errorCount: 0,
-            avgLatency: 0,
-            minLatency: Infinity,
-            maxLatency: 0,
-            spanKinds: new Set(),
-            nodeType: 'service',
-          };
-          nodeMap.set(serviceName, node);
-        }
-
-        node.requestCount++;
-        if (span.status.code === 'ERROR') {
-          node.errorCount++;
-        }
-        node.avgLatency =
-          (node.avgLatency * (node.requestCount - 1) + span.duration) /
-          node.requestCount;
-        node.minLatency = Math.min(node.minLatency, span.duration);
-        node.maxLatency = Math.max(node.maxLatency, span.duration);
-        node.spanKinds.add(span.kind);
-
-        // Upgrade node type if span suggests a more specific type
-        const spanType = detectNodeType(span);
-        if (spanType !== 'service') node.nodeType = spanType;
-
-        // Find connections (CLIENT -> SERVER patterns)
-        if (span.kind === 'CLIENT') {
-          // The caller is the span's own resource service (service.name /
-          // trace.service) — NOT inferResourceName, which would pick up the
-          // peer attributes and collapse source into target.
-          const callerService = String(
-            span.attributes?.['service.name'] || trace.service || serviceName,
-          );
-          // Look for the target service from attributes
-          const targetService =
-            span.attributes?.['peer.service'] ||
-            span.attributes?.['http.host'] ||
-            span.attributes?.['db.system'] ||
-            span.attributes?.['net.peer.name'] ||
-            span.attributes?.['rpc.service'] ||
-            span.attributes?.['messaging.system'] ||
-            'external';
-
-          // Ensure the caller node exists (it may have no spans of its own).
-          if (!nodeMap.has(callerService)) {
-            nodeMap.set(callerService, {
-              id: callerService,
-              name: callerService,
-              requestCount: 0,
-              errorCount: 0,
-              avgLatency: 0,
-              minLatency: Infinity,
-              maxLatency: 0,
-              spanKinds: new Set(),
-              nodeType: 'service',
-            });
-          }
-
-          if (callerService !== targetService) {
-            const connId = `${callerService}->${targetService}`;
-            let conn = connectionMap.get(connId);
-            if (!conn) {
-              conn = {
-                id: connId,
-                source: callerService,
-                target: targetService,
-                requestCount: 0,
-                errorCount: 0,
-                avgLatency: 0,
-                p50Latency: 0,
-                p99Latency: 0,
-                latencies: [],
-              };
-              connectionMap.set(connId, conn);
-
-              // Ensure target node exists with detected type
-              if (!nodeMap.has(targetService)) {
-                nodeMap.set(targetService, {
-                  id: targetService,
-                  name: targetService,
-                  requestCount: 0,
-                  errorCount: 0,
-                  avgLatency: 0,
-                  minLatency: Infinity,
-                  maxLatency: 0,
-                  spanKinds: new Set(),
-                  nodeType: detectNodeType(span),
-                });
-              } else {
-                // Upgrade target node type
-                const target = nodeMap.get(targetService)!;
-                const t = detectNodeType(span);
-                if (t !== 'service') target.nodeType = t;
-              }
-            }
-
-            conn.requestCount++;
-            if (span.status.code === 'ERROR') {
-              conn.errorCount++;
-            }
-            conn.avgLatency =
-              (conn.avgLatency * (conn.requestCount - 1) + span.duration) /
-              conn.requestCount;
-            conn.latencies.push(span.duration);
-            const sortedLatencies = [...conn.latencies].sort((a, b) => a - b);
-            conn.p50Latency = percentile(sortedLatencies, 50);
-            conn.p99Latency = percentile(sortedLatencies, 99);
-          }
-        }
-
-        // SERVER spans that indicate incoming requests — use early continues
-        // to avoid deep nesting.
-        if (span.kind !== 'SERVER' || !span.parentSpanId) continue;
-        const parentSpan = spanMap.get(span.parentSpanId);
-        if (!parentSpan || parentSpan.kind !== 'CLIENT') continue;
-        const sourceService = getServiceFromSpan(parentSpan, trace.service);
-        if (sourceService === serviceName) continue;
-        const connId = `${sourceService}->${serviceName}`;
-        if (connectionMap.has(connId)) continue;
-
-        connectionMap.set(connId, {
-          id: connId,
-          source: sourceService,
-          target: serviceName,
-          requestCount: 1,
-          errorCount: span.status.code === 'ERROR' ? 1 : 0,
-          avgLatency: span.duration,
-          p50Latency: span.duration,
-          p99Latency: span.duration,
-          latencies: [span.duration],
-        });
-      }
-    }
-
-    // Convert to arrays and fix min latency
-    const nodes = [...nodeMap.values()].map((node) => ({
-      ...node,
-      minLatency: node.minLatency === Infinity ? 0 : node.minLatency,
-    }));
-
-    const connections = [...connectionMap.values()];
-
-    return { nodes, connections };
-  }
-
-  /**
-   * Sugiyama-style layered layout for service graph.
-   * Layers: BFS from root nodes, barycenter ordering, coordinate assignment.
-   */
-  function calculateSugiyamaLayout(
-    nodes: ServiceNode[],
-    connections: ServiceConnection[],
-  ): Map<string, { x: number; y: number }> {
-    const positions = new Map<string, { x: number; y: number }>();
-    if (nodes.length === 0) return positions;
-
-    if (nodes.length === 1) {
-      positions.set(nodes[0].id, { x: NODE_W + 40, y: NODE_H + 40 });
-      return positions;
-    }
-
-    const names = nodes.map((n) => n.id);
-    const outEdges = new Map<string, string[]>();
-    const inEdges = new Map<string, string[]>();
-    for (const n of names) {
-      outEdges.set(n, []);
-      inEdges.set(n, []);
-    }
-    for (const c of connections) {
-      if (outEdges.has(c.source)) outEdges.get(c.source)!.push(c.target);
-      if (inEdges.has(c.target)) inEdges.get(c.target)!.push(c.source);
-    }
-
-    // Layer assignment via BFS from roots
-    const layer = new Map<string, number>();
-    const roots = names.filter((n) => (inEdges.get(n)?.length ?? 0) === 0);
-    const starts = roots.length > 0 ? roots : names;
-    const queue = [...starts];
-    for (const r of starts) layer.set(r, 0);
-    while (queue.length > 0) {
-      const cur = queue.shift()!;
-      const curLayer = layer.get(cur) ?? 0;
-      for (const next of outEdges.get(cur) ?? []) {
-        const existing = layer.get(next) ?? -1;
-        if (existing <= curLayer) {
-          layer.set(next, curLayer + 1);
-          queue.push(next);
-        }
-      }
-    }
-    for (const n of names) {
-      if (!layer.has(n)) layer.set(n, 0);
-    }
-
-    const maxLayer = Math.max(...Array.from(layer.values()));
-    const layers: string[][] = Array.from({ length: maxLayer + 1 }, () => []);
-    for (const n of names) layers[layer.get(n)!].push(n);
-
-    // Barycenter ordering (2 passes)
-    for (let pass = 0; pass < 2; pass++) {
-      for (let l = 1; l <= maxLayer; l++) {
-        const prev = layers[l - 1];
-        const posMap = new Map<string, number>();
-        prev.forEach((n, i) => posMap.set(n, i));
-        layers[l].sort((a, b) => {
-          const aSources = inEdges.get(a) ?? [];
-          const bSources = inEdges.get(b) ?? [];
-          const aAvg =
-            aSources.length > 0
-              ? aSources.reduce((s, p) => s + (posMap.get(p) ?? 0), 0) /
-                aSources.length
-              : 999;
-          const bAvg =
-            bSources.length > 0
-              ? bSources.reduce((s, p) => s + (posMap.get(p) ?? 0), 0) /
-                bSources.length
-              : 999;
-          return aAvg - bAvg;
-        });
-      }
-    }
-
-    // Coordinate assignment
-    const maxNodesInLayer = Math.max(...layers.map((l) => l.length));
-    const totalHeight = Math.max(
-      maxNodesInLayer * (NODE_H + NODE_GAP_Y) - NODE_GAP_Y,
-      NODE_H,
-    );
-
-    for (let l = 0; l <= maxLayer; l++) {
-      const nodesInLayer = layers[l];
-      const layerHeight =
-        nodesInLayer.length * (NODE_H + NODE_GAP_Y) - NODE_GAP_Y;
-      const startY = (totalHeight - layerHeight) / 2;
-      const cx = l * LAYER_GAP_X + NODE_W / 2 + MARGIN;
-      nodesInLayer.forEach((n, i) => {
-        positions.set(n, {
-          x: cx - NODE_W / 2,
-          y: startY + i * (NODE_H + NODE_GAP_Y) + MARGIN,
-        });
-      });
-    }
-
-    return positions;
-  }
 
   const traces = $derived(tracesSignal.value);
   let selectedNode = $state<string | null>(null);
   let hoveredNode = $state<string | null>(null);
+  let query = $state('');
 
   const map = $derived.by(() => buildServiceMap(traces));
   const nodes = $derived(map.nodes);
   const connections = $derived(map.connections);
+
+  const isFiltered = $derived(query.length > 0);
+
+  /**
+   * Case-insensitive substring match of a node's name against the query.
+   * Highlights — rather than removes — matches so the graph layout stays put.
+   */
+  function nodeMatches(node: ServiceNode): boolean {
+    return matchesNeedle(query.toLowerCase(), [node.name]);
+  }
+
+  const matchedNodes = $derived.by(() => nodes.filter(nodeMatches));
+  const matchedIds = $derived(new Set(matchedNodes.map((n) => n.id)));
+  const hasMatches = $derived(matchedNodes.length > 0);
 
   const positions = $derived.by(() =>
     calculateSugiyamaLayout(nodes, connections),
@@ -385,9 +78,53 @@
     return maxY;
   });
 
+  // Zoom & pan: large maps are unusable in a narrow dock, so let users zoom
+  // toward the cursor, pan empty canvas, fit-to-content and reset to 1:1. The
+  // controller is useZoomPan; we feed it the live view dimensions, the SVG
+  // element and the content bounding box (node extents).
+  let svgEl = $state<SVGSVGElement | null>(null);
+
+  const zoom = useZoomPan({
+    viewWidth: () => viewWidth,
+    viewHeight: () => viewHeight,
+    svg: () => svgEl,
+    contentBounds: () => {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const [, pos] of positions) {
+        minX = Math.min(minX, pos.x);
+        minY = Math.min(minY, pos.y);
+        maxX = Math.max(maxX, pos.x + NODE_W);
+        maxY = Math.max(maxY, pos.y + NODE_H);
+      }
+      return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : null;
+    },
+  });
+
   const selectedNodeData = $derived(
     selectedNode ? (nodes.find((n) => n.id === selectedNode) ?? null) : null,
   );
+
+  /**
+   * Keyboard activation for a service node (a graph element, not a list row).
+   * Enter/Space toggles selection (mirrors the node's onclick); Escape clears
+   * the current selection. The Escape branch calls stopPropagation so that
+   * "Escape-to-deselect" does NOT also bubble up to the panel's global
+   * Escape-closes-devtools handler.
+   */
+  function handleNodeKeydown(event: KeyboardEvent, nodeId: string): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      selectedNode = selectedNode === nodeId ? null : nodeId;
+      return;
+    }
+    if (event.key === 'Escape' && selectedNode) {
+      event.stopPropagation();
+      selectedNode = null;
+    }
+  }
 
   const relatedConnections = $derived(
     selectedNode
@@ -396,12 +133,53 @@
         )
       : [],
   );
+
+  const relatedConnectionsSummary = $derived.by(() =>
+    relatedConnections.length > 0
+      ? JSON.stringify(
+          relatedConnections.map((c) => ({
+            source: c.source,
+            target: c.target,
+            requests: c.requestCount,
+            errors: c.errorCount,
+            avgLatency: formatDuration(c.avgLatency),
+          })),
+          null,
+          2,
+        )
+      : '',
+  );
+
+  const selectedNodeSummary = $derived.by(() => {
+    if (!selectedNodeData) return '';
+    const node = selectedNodeData;
+    return JSON.stringify(
+      {
+        service: node.name,
+        requests: node.requestCount,
+        errors: node.errorCount,
+        errorRate: `${((node.errorCount / node.requestCount) * 100).toFixed(1)}%`,
+        avgLatency: formatDuration(node.avgLatency),
+        minLatency: formatDuration(node.minLatency),
+        maxLatency: formatDuration(node.maxLatency),
+        connections: relatedConnections.map((c) => ({
+          source: c.source,
+          target: c.target,
+          requests: c.requestCount,
+          errors: c.errorCount,
+          avgLatency: formatDuration(c.avgLatency),
+        })),
+      },
+      null,
+      2,
+    );
+  });
 </script>
 
 {#snippet statRow(label: string, value: string, isError = false)}
   <div class="flex justify-between text-xs">
     <span class="text-fg-subtle">{label}</span>
-    <span class={cn('font-medium', isError ? 'text-red-600' : 'text-fg')}>
+    <span class={cn('font-medium', isError ? 'text-danger' : 'text-fg')}>
       {value}
     </span>
   </div>
@@ -437,21 +215,49 @@
     >
       <h3 class="text-sm font-semibold flex items-center gap-2 text-fg">
         <Activity size={16} />
-        Service Map ({nodes.length} services)
+        Service Map ({isFiltered
+          ? `${matchedNodes.length} of ${nodes.length}`
+          : nodes.length} services)
       </h3>
       <div class="text-xs text-fg-subtle">
         {connections.length} connections
       </div>
     </div>
 
+    <!-- Filter bar -->
+    <div class="px-4 py-2 border-b border-line flex items-center gap-2">
+      <SearchInput
+        bind:value={query}
+        placeholder="Find a service by name…"
+        ariaLabel="Find a service by name"
+      />
+      {#if isFiltered && !hasMatches}
+        <span class="text-xs text-fg-subtle flex-shrink-0">
+          No service matches
+        </span>
+      {/if}
+    </div>
+
     <!-- Map container -->
     <div class="flex-1 overflow-hidden flex">
       <!-- SVG Map -->
-      <div class="flex-1 overflow-auto p-4">
+      <div class="relative flex-1 overflow-auto p-4">
         <svg
+          bind:this={svgEl}
           viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-          class="w-full h-full"
+          class={cn(
+            'w-full h-full',
+            zoom.isPanning ? 'cursor-grabbing' : 'cursor-grab',
+          )}
           style={SVG_MIN_HEIGHT}
+          role="application"
+          aria-label="Service map. Drag to pan, ctrl or cmd and scroll to zoom."
+          onwheel={zoom.onWheel}
+          onpointerdown={zoom.onPointerDown}
+          onpointermove={zoom.onPointerMove}
+          onpointerup={zoom.onPointerEnd}
+          onpointercancel={zoom.onPointerEnd}
+          onpointerleave={zoom.onPointerEnd}
         >
           <!-- Arrow markers + soft node shadow -->
           <defs>
@@ -492,6 +298,11 @@
             </filter>
           </defs>
 
+          <!-- Zoom/pan group — wraps the layout output; the layout algorithm
+               itself is untouched, we only transform its rendered coordinates. -->
+          <g
+            transform={`translate(${zoom.translate.x}, ${zoom.translate.y}) scale(${zoom.scale})`}
+          >
           <!-- Connection lines with bezier curves -->
           {#each connections as conn (conn.id)}
             {@const source = positions.get(conn.source)}
@@ -530,7 +341,7 @@
                   text-anchor="middle"
                   class={cn(
                     'at-edge-label text-[10px]',
-                    hasError ? 'fill-red-500 font-medium' : 'fill-gray-500',
+                    hasError ? 'fill-danger font-medium' : 'fill-fg-subtle',
                   )}
                   opacity={selectedNode && !isHighlighted ? 0.25 : 1}
                 >
@@ -547,22 +358,41 @@
               {@const isSelected = selectedNode === node.id}
               {@const isHovered = hoveredNode === node.id}
               {@const hasError = node.errorCount > 0}
+              {@const isMatch = matchedIds.has(node.id)}
+              {@const isDimmed = isFiltered && !isMatch}
               {@const palette = serviceColor(node.id)}
               {@const fill = palette.fill}
               {@const stroke = hasError ? '#ef4444' : palette.stroke}
               {@const sw = isSelected || hasError ? 2.5 : isHovered ? 2 : 1.5}
               <g
+                data-node={node.id}
                 transform={`translate(${pos.x}, ${pos.y})`}
                 onclick={() => (selectedNode = isSelected ? null : node.id)}
-                onkeydown={activateOnKey(
-                  () => (selectedNode = isSelected ? null : node.id),
-                )}
+                onkeydown={(event) => handleNodeKeydown(event, node.id)}
                 onmouseenter={() => (hoveredNode = node.id)}
                 onmouseleave={() => (hoveredNode = null)}
-                class="cursor-pointer"
+                class={cn(
+                  'cursor-pointer',
+                  isDimmed && 'opacity-30',
+                )}
                 role="button"
-                tabindex="-1"
+                aria-label={node.name}
+                tabindex="0"
               >
+                <!-- Accent ring for query matches — keeps layout intact while
+                     drawing attention to the searched service(s). -->
+                {#if isFiltered && isMatch}
+                  <rect
+                    x={-3}
+                    y={-3}
+                    width={NODE_W + 6}
+                    height={NODE_H + 6}
+                    rx={11}
+                    fill="none"
+                    class="stroke-accent"
+                    stroke-width={2.5}
+                  />
+                {/if}
                 <!-- Node shape (per-type) filled with the service colour -->
                 <g filter="url(#nodeShadow)">
                   {#if node.nodeType === 'database'}
@@ -656,7 +486,50 @@
               </g>
             {/if}
           {/each}
+          </g>
         </svg>
+
+        <!-- Zoom / pan controls — bottom-right cluster -->
+        <div
+          class="absolute bottom-3 right-3 flex flex-col gap-1 rounded-md border border-line bg-surface p-1 shadow-sm"
+        >
+          <button
+            type="button"
+            onclick={zoom.zoomIn}
+            class="flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent transition-colors"
+            title="Zoom in"
+            aria-label="Zoom in"
+          >
+            <Plus size={14} />
+          </button>
+          <button
+            type="button"
+            onclick={zoom.zoomOut}
+            class="flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent transition-colors"
+            title="Zoom out"
+            aria-label="Zoom out"
+          >
+            <Minus size={14} />
+          </button>
+          <button
+            type="button"
+            onclick={zoom.fit}
+            class="flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent transition-colors"
+            title="Fit to content"
+            aria-label="Fit to content"
+          >
+            <Scan size={14} />
+          </button>
+          <button
+            type="button"
+            onclick={zoom.reset}
+            class="flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent transition-colors"
+            title="Reset to 1:1"
+            aria-label="Reset zoom to 1:1"
+          >
+            <RotateCcw size={14} />
+          </button>
+        </div>
       </div>
 
       <!-- Details panel -->
@@ -664,9 +537,16 @@
         <div class="w-64 border-l border-line bg-subtle overflow-auto">
           <div class="p-4">
             <div class="flex items-center justify-between mb-4">
-              <h4 class="font-semibold text-fg">
-                {selectedNodeData.name}
-              </h4>
+              <div class="group flex items-center gap-1 min-w-0">
+                <h4 class="font-semibold text-fg truncate">
+                  {selectedNodeData.name}
+                </h4>
+                <CopyButton
+                  value={selectedNodeData.name}
+                  label="Copy service name"
+                  class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                />
+              </div>
               <button
                 onclick={() => (selectedNode = null)}
                 class="text-fg-subtle hover:text-fg-muted"
@@ -676,7 +556,8 @@
             </div>
 
             <!-- Stats -->
-            <div class="space-y-3">
+            <Copyable content={selectedNodeSummary}>
+              <div class="space-y-3 pr-8">
               {@render statRow(
                 'Requests',
                 selectedNodeData.requestCount.toString(),
@@ -707,14 +588,22 @@
                 'Max Latency',
                 formatDuration(selectedNodeData.maxLatency),
               )}
-            </div>
+              </div>
+            </Copyable>
 
             <!-- Connections -->
             {#if relatedConnections.length > 0}
               <div class="mt-4 pt-4 border-t border-line">
-                <h5 class="text-xs font-medium text-fg-muted mb-2">
-                  Connections
-                </h5>
+                <div class="group flex items-center justify-between mb-2">
+                  <h5 class="text-xs font-medium text-fg-muted">
+                    Connections
+                  </h5>
+                  <CopyButton
+                    value={relatedConnectionsSummary}
+                    label="Copy connections"
+                    class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  />
+                </div>
                 <div class="space-y-2">
                   {#each relatedConnections as conn (conn.id)}
                     <div
@@ -735,7 +624,7 @@
                       <div class="flex items-center gap-2 mt-1 text-fg-subtle">
                         <span>{conn.requestCount} req</span>
                         {#if conn.errorCount > 0}
-                          <span class="text-red-600">
+                          <span class="text-danger">
                             {conn.errorCount} err
                           </span>
                         {/if}
@@ -757,18 +646,18 @@
     >
       <div class="flex items-center gap-1">
         <div
-          class="w-4 h-4 rounded-full border-2 border-blue-500 bg-surface"
+          class="w-4 h-4 rounded-full border-2 border-accent bg-surface"
         ></div>
         <span class="text-fg-muted">Healthy</span>
       </div>
       <div class="flex items-center gap-1">
         <div
-          class="w-4 h-4 rounded-full border-2 border-red-500 bg-surface"
+          class="w-4 h-4 rounded-full border-2 border-danger-border bg-surface"
         ></div>
         <span class="text-fg-muted">Has Errors</span>
       </div>
       <div class="flex items-center gap-1">
-        <div class="w-6 h-0.5 bg-gray-400"></div>
+        <div class="w-6 h-0.5 bg-fg-subtle"></div>
         <span class="text-fg-muted">Connection</span>
       </div>
     </div>

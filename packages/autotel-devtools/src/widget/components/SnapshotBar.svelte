@@ -57,16 +57,16 @@
 <div
   class={cn(
     'border-b border-line px-3 py-1.5 text-xs flex items-center gap-2',
-    inSnapshot ? 'bg-amber-50 text-amber-900' : 'bg-subtle text-fg-muted',
+    inSnapshot ? 'bg-warning-bg text-warning' : 'bg-subtle text-fg-muted',
   )}
 >
   {#if inSnapshot}
     <Camera size={12} />
     <span class="font-medium">Snapshot mode</span>
-    <span class="text-amber-700">— live updates paused.</span>
+    <span class="text-warning">— live updates paused.</span>
     <button
       onclick={exitSnapshotMode}
-      class="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded hover:bg-amber-100 transition-colors"
+      class="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded hover:bg-warning-bg transition-colors"
       title="Exit snapshot and clear data"
     >
       <X size={12} />
@@ -99,12 +99,12 @@
     onchange={onFileChange}
   />
   {#if error}
-    <span class="text-red-600 truncate" title={error}>
+    <span class="text-danger truncate" title={error}>
       {error}
     </span>
   {/if}
   {#if warning && !error}
-    <span class="text-amber-700 truncate" title={warning}>
+    <span class="text-warning truncate" title={warning}>
       {warning}
     </span>
   {/if}

@@ -12,6 +12,8 @@
 // via arrow keys. Double-clicking resets to the initial size. Pointer / resize
 // behavior is byte-for-byte identical to the original hook.
 
+import { startPointerDrag } from '../utils/pointerDrag'
+
 export interface UseResizableOptions {
   /** Default size in px, used until the user drags (or restored from storage). */
   initial: number
@@ -80,10 +82,13 @@ export function useResizable(options: UseResizableOptions): ResizableState {
     step = 24,
   } = options
 
-  let size = $state(Math.max(min, readStored(storageKey, initial)))
+  const initialSize = Math.max(min, readStored(storageKey, initial))
+  let size = $state(initialSize)
   let dragging = $state(false)
   // Mutable, non-reactive mirror of the current size (the old `sizeRef`).
-  const sizeRef = { current: size }
+  // Seeded from the plain `initialSize`, not the `$state` `size`, so it reads
+  // as a deliberate initial-value capture (not an accidental reactive read).
+  const sizeRef = { current: initialSize }
 
   const maxFor = () => {
     const containerWidth = containerRef.current?.clientWidth
@@ -99,31 +104,21 @@ export function useResizable(options: UseResizableOptions): ResizableState {
   }
 
   const onPointerDown = (event: PointerEvent) => {
-    event.preventDefault()
     const startX = event.clientX
     const startSize = sizeRef.current
-    dragging = true
-    // Keep a stable cursor / no text selection while dragging anywhere on the page.
-    const prevCursor = document.body.style.cursor
-    const prevSelect = document.body.style.userSelect
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-
-    const onMove = (moveEvent: PointerEvent) => {
-      const rawDelta = moveEvent.clientX - startX
-      const delta = invert ? -rawDelta : rawDelta
-      setSize(clamp(startSize + delta))
-    }
-    const onUp = () => {
-      dragging = false
-      document.body.style.cursor = prevCursor
-      document.body.style.userSelect = prevSelect
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      persist(storageKey, sizeRef.current)
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
+    startPointerDrag(event, {
+      cursor: 'col-resize',
+      onStart: () => (dragging = true),
+      onMove: (move) => {
+        const rawDelta = move.clientX - startX
+        const delta = invert ? -rawDelta : rawDelta
+        setSize(clamp(startSize + delta))
+      },
+      onEnd: () => {
+        dragging = false
+        persist(storageKey, sizeRef.current)
+      },
+    })
   }
 
   const onKeyDown = (event: KeyboardEvent) => {

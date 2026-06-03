@@ -179,9 +179,9 @@
    */
   function getSelectedBorder(span: SpanData): string {
     if (span.status.code === 'ERROR') {
-      return 'ring-2 ring-red-700';
+      return 'ring-2 ring-danger';
     }
-    return 'ring-2 ring-gray-900';
+    return 'ring-2 ring-accent';
   }
 
   const ROW_HEIGHT = 24;
@@ -362,18 +362,18 @@
         )}px; top: {tooltipPos.y + 10}px;"
       >
         <div
-          class="bg-gray-900 text-white text-xs rounded-md shadow-lg p-2 max-w-[200px]"
+          class="bg-surface text-fg text-xs rounded-md shadow-lg p-2 max-w-[200px]"
         >
           <div class="font-medium truncate mb-1">
             {hoveredSpan.name}
           </div>
-          <div class="flex items-center gap-2 text-gray-300">
+          <div class="flex items-center gap-2 text-fg-muted">
             <span>{formatDuration(hoveredSpan.duration)}</span>
             <span>|</span>
             <span>{hoveredSpan.kind}</span>
           </div>
           {#if hoveredSpan.status.code === 'ERROR'}
-            <div class="flex items-center gap-1 mt-1 text-red-400">
+            <div class="flex items-center gap-1 mt-1 text-danger">
               <AlertCircle size={10} />
               <span>Error</span>
             </div>

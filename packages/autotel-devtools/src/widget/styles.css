@@ -17,6 +17,22 @@
   --color-fg-subtle: var(--at-text-muted);
   --color-line: var(--at-border);
   --color-line-subtle: var(--at-border-light);
+  --color-accent: var(--at-accent);
+
+  /* Status semantics — resolve to --at tokens that swap with the theme, so
+     error/success/warning affordances stay legible in dark mode. Use these
+     instead of literal red / green / amber palette utility classes. */
+  --color-danger: var(--at-error-text);
+  --color-danger-bg: var(--at-error-bg);
+  --color-danger-border: var(--at-error-border);
+  --color-success: var(--at-ok-text);
+  --color-success-bg: var(--at-ok-bg);
+  --color-success-border: var(--at-ok-border);
+  --color-warning: var(--at-warn-text);
+  --color-warning-bg: var(--at-warn-bg);
+  --color-warning-border: var(--at-warn-border);
+  --color-selected: var(--at-selected-bg);
+  --color-highlight: var(--at-highlight-bg);
 }
 
 @tailwind utilities;
@@ -49,6 +65,9 @@
   --at-ok-bg: oklch(96% 0.04 150);
   --at-ok-text: oklch(56% 0.15 150);
   --at-ok-border: oklch(82% 0.12 150);
+  --at-warn-bg: oklch(96% 0.05 85);
+  --at-warn-text: oklch(56% 0.13 70);
+  --at-warn-border: oklch(83% 0.1 85);
   --at-highlight-bg: oklch(97% 0.05 95);
   --at-selected-bg: oklch(96% 0.03 258);
   --at-scrollbar-thumb: oklch(86% 0.008 258);
@@ -77,6 +96,9 @@
   --at-ok-bg: oklch(52% 0.1 150 / 0.2);
   --at-ok-text: oklch(80% 0.15 150);
   --at-ok-border: oklch(62% 0.15 150);
+  --at-warn-bg: oklch(50% 0.09 80 / 0.22);
+  --at-warn-text: oklch(83% 0.13 82);
+  --at-warn-border: oklch(62% 0.13 78);
   --at-highlight-bg: oklch(72% 0.1 95 / 0.12);
   --at-selected-bg: oklch(62% 0.1 258 / 0.18);
   --at-scrollbar-thumb: oklch(38% 0.02 262);
@@ -187,6 +209,28 @@
 
 .at-backdrop-in {
   animation: at-fade-in 170ms ease-out;
+}
+
+/* The docked panel's open/close slide is driven by a Svelte `dockSlide`
+   transition (Panel.svelte) so enter and exit share one definition and respect
+   the dock edge + reduced-motion. */
+
+/* Wrap long attribute values at word boundaries, breaking only when a single
+   token is wider than the column. Unlike `break-all`, normal words stay intact
+   — this is what stops values rendering one character per line in a narrow
+   panel. */
+.at-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Hide the scrollbar on the horizontally-scrolling tab strip while keeping it
+   scrollable (wheel / trackpad / keyboard). */
+.at-no-scrollbar {
+  scrollbar-width: none;
+}
+.at-no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

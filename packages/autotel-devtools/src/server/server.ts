@@ -131,14 +131,17 @@ export class DevtoolsServer {
     for (const trace of traces) this.addTrace(trace)
   }
 
+  // `errors` is full-state on every broadcast (the client replaces, not appends),
+  // so non-trace broadcasts must echo the current error groups rather than `[]` —
+  // otherwise a log/metric arriving after an error would wipe it from the UI.
   addLog(log: LogData): void {
     this.logs = appendWithLimit(this.logs, log, this.limits.maxLogCount)
-    this.broadcast({ traces: [], metrics: [], logs: [log], errors: [] })
+    this.broadcast({ traces: [], metrics: [], logs: [log], errors: this.errorAggregator.getErrorGroups() })
   }
 
   addLogs(logs: LogData[]): void {
     this.logs = appendManyWithLimit(this.logs, logs, this.limits.maxLogCount)
-    this.broadcast({ traces: [], metrics: [], logs, errors: [] })
+    this.broadcast({ traces: [], metrics: [], logs, errors: this.errorAggregator.getErrorGroups() })
   }
 
   addMetric(metric: MetricData): void {
@@ -147,7 +150,7 @@ export class DevtoolsServer {
       metric,
       this.limits.maxMetricCount,
     )
-    this.broadcast({ traces: [], metrics: [metric], logs: [], errors: [] })
+    this.broadcast({ traces: [], metrics: [metric], logs: [], errors: this.errorAggregator.getErrorGroups() })
   }
 
   getCurrentData(): DevtoolsData {

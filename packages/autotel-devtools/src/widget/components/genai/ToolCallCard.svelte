@@ -47,13 +47,13 @@
   const paramSummary = $derived(formatToolParams(args));
 </script>
 
-<div class="mt-2 border border-violet-200 rounded-md overflow-hidden">
+<div class="mt-2 border border-violet-500/30 rounded-md overflow-hidden">
   <button
     type="button"
     onclick={() => (open = !open)}
     class={cn(
       'w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left',
-      'text-xs bg-violet-50 hover:bg-violet-100/70 transition-colors',
+      'text-xs bg-violet-500/15 hover:bg-violet-500/25 transition-colors',
     )}
   >
     <ChevronRight
@@ -64,9 +64,9 @@
       )}
     />
     <Wrench size={12} class="text-violet-600 shrink-0" />
-    <span class="font-mono font-medium text-violet-900">{call.name}</span>
+    <span class="font-mono font-medium text-violet-600">{call.name}</span>
     {#if !open && paramSummary}
-      <span class="font-mono text-[11px] text-violet-700/70 truncate">
+      <span class="font-mono text-[11px] text-violet-600/70 truncate">
         ({paramSummary})
       </span>
     {/if}
@@ -77,11 +77,11 @@
     {/if}
   </button>
   {#if open}
-    <div class="px-3 py-2 border-t border-violet-200/60 bg-surface">
+    <div class="px-3 py-2 border-t border-violet-500/30 bg-surface">
       <JsonField label="Input" value={args} />
     </div>
     {#if result !== undefined}
-      <div class="px-3 py-2 border-t border-emerald-200/60 bg-emerald-50/40">
+      <div class="px-3 py-2 border-t border-emerald-500/30 bg-emerald-500/15">
         <JsonField label="Output" value={result} tone="positive" />
       </div>
     {/if}

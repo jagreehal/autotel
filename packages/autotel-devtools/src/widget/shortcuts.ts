@@ -30,6 +30,6 @@ export const TRACE_DETAIL_SHORTCUTS: Shortcut[] = [
   { keys: ['l'], description: 'Switch to list view' },
   { keys: ['↑', '↓', 'Enter'], description: 'Navigate spans / select in waterfall' },
   { keys: ['e', 'Shift+E'], description: 'Next / previous error span' },
-  { keys: ['/', 'n', 'Shift+N'], description: 'Search spans / next / prev match' },
+  { keys: ['/'], description: 'Search spans in this trace' },
   { keys: ['?'], description: 'Show/hide keyboard shortcuts' },
 ];

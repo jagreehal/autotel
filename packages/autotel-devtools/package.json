@@ -52,7 +52,7 @@
     "dev": "tsup --watch",
     "type-check": "svelte-check --tsconfig ./tsconfig.json && tsc --noEmit",
     "lint": "eslint src/",
-    "test": "vitest run --config vitest.config.ts && vitest run --config vitest.storybook.config.ts",
+    "test": "vitest run --config vitest.config.ts --project server && vitest run --config vitest.config.ts --project widget && vitest run --config vitest.storybook.config.ts",
     "test:storybook": "vitest run --config vitest.storybook.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:dist": "node scripts/check-dist-esm.mjs",

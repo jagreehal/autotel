@@ -84,6 +84,10 @@ export {
   type ErrorReport,
 } from './error-reporting';
 
+// Configurable TanStack Start tracing setup (the configurable form of the
+// zero-config `autotel-tanstack/auto` import).
+export { instrument, type InstrumentOptions } from './instrument';
+
 // Re-export autotel core utilities for convenience
 // Note: These should only be used on the server side
 // They use Node.js APIs (AsyncLocalStorage) that don't exist in the browser

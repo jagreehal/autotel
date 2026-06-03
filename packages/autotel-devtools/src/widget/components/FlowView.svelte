@@ -14,51 +14,51 @@
   // AI tools and plain functions are instantly distinguishable.
   const ROLE_STYLES: Record<FlowRole, RoleStyle> = {
     entry: {
-      fill: 'fill-emerald-50',
-      stroke: 'stroke-emerald-400',
-      text: 'fill-emerald-900',
+      fill: 'fill-emerald-500/15',
+      stroke: 'stroke-emerald-500/60',
+      text: 'fill-emerald-600',
       dot: 'bg-emerald-500',
       label: 'Entry',
     },
     end: {
-      fill: 'fill-rose-50',
-      stroke: 'stroke-rose-400',
-      text: 'fill-rose-900',
+      fill: 'fill-rose-500/15',
+      stroke: 'stroke-rose-500/60',
+      text: 'fill-rose-600',
       dot: 'bg-rose-500',
       label: 'End',
     },
     llm: {
-      fill: 'fill-blue-50',
-      stroke: 'stroke-blue-400',
-      text: 'fill-blue-900',
+      fill: 'fill-blue-500/15',
+      stroke: 'stroke-blue-500/60',
+      text: 'fill-blue-600',
       dot: 'bg-blue-500',
       label: 'LLM',
     },
     tool: {
-      fill: 'fill-violet-50',
-      stroke: 'stroke-violet-400',
-      text: 'fill-violet-900',
+      fill: 'fill-violet-500/15',
+      stroke: 'stroke-violet-500/60',
+      text: 'fill-violet-600',
       dot: 'bg-violet-500',
       label: 'AI tool',
     },
     function: {
-      fill: 'fill-amber-50',
-      stroke: 'stroke-amber-400',
-      text: 'fill-amber-900',
+      fill: 'fill-amber-500/15',
+      stroke: 'stroke-amber-500/60',
+      text: 'fill-amber-600',
       dot: 'bg-amber-500',
       label: 'Function',
     },
     db: {
-      fill: 'fill-teal-50',
-      stroke: 'stroke-teal-400',
-      text: 'fill-teal-900',
+      fill: 'fill-teal-500/15',
+      stroke: 'stroke-teal-500/60',
+      text: 'fill-teal-600',
       dot: 'bg-teal-500',
       label: 'Database',
     },
     http: {
-      fill: 'fill-sky-50',
-      stroke: 'stroke-sky-400',
-      text: 'fill-sky-900',
+      fill: 'fill-sky-500/15',
+      stroke: 'stroke-sky-500/60',
+      text: 'fill-sky-600',
       dot: 'bg-sky-500',
       label: 'HTTP',
     },
@@ -76,7 +76,12 @@
 </script>
 
 <script lang="ts">
-  import { Workflow, MessageSquare, Coins, ExternalLink } from '@lucide/svelte';
+  import {
+    Workflow,
+    MessageSquare,
+    Coins,
+    ExternalLink,
+  } from '@lucide/svelte';
   import {
     tracesSignal,
     genAiRowsSignal,
@@ -95,7 +100,11 @@
   import { cn } from '../utils/cn';
   import { formatDuration } from '../utils';
   import { formatTokenCounts, formatCostUsd } from '../utils/genaiFormat';
-  import JsonField from './JsonField.svelte';
+  import JsonField, { prettyJson } from './JsonField.svelte';
+  import CopyButton from './CopyButton.svelte';
+  import Copyable from './Copyable.svelte';
+  import SearchInput from './SearchInput.svelte';
+  import { matchesNeedle } from '../utils/textMatch';
 
   const traces = $derived(tracesSignal.value);
   let selectedTraceId = $state<string | null>(null);
@@ -166,6 +175,28 @@
   const selectedNode = $derived(
     selectedNodeId ? (nodeById.get(selectedNodeId) ?? null) : null,
   );
+
+  // Node search — highlight matches, dim the rest, never remove nodes/edges.
+  // Matches case-insensitively across the node label and its role label
+  // ("AI tool", "Function", …), which reads as the node's operation.
+  let query = $state('');
+
+  function nodeMatches(node: PositionedNode, needle: string): boolean {
+    return matchesNeedle(needle, [node.label, ROLE_STYLES[node.role].label]);
+  }
+
+  const isSearching = $derived(query.trim().length > 0);
+
+  const matchedIds = $derived.by(() => {
+    const ids = new Set<string>();
+    if (!layout || !isSearching) return ids;
+    const needle = query.trim().toLowerCase();
+    for (const n of layout.nodes) if (nodeMatches(n, needle)) ids.add(n.id);
+    return ids;
+  });
+
+  const matchCount = $derived(matchedIds.size);
+  const totalNodeCount = $derived(layout?.nodes.length ?? 0);
 
   // Curved cubic edge from the bottom-centre of source to top-centre of target.
   function edgePath(sourceId: string, targetId: string): string {
@@ -295,14 +326,14 @@
       {/if}
       {#if totalMetrics.costUsd != null || totalMetrics.inputTokens != null}
         <div
-          class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-medium text-blue-900"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-[11px] font-medium text-accent"
           title="Total LLM tokens and cost for this trace"
         >
-          <Coins size={11} class="text-blue-500" />
+          <Coins size={11} class="text-accent" />
           {#if totalMetrics.costUsd != null}
             <span>{formatCostUsd(totalMetrics.costUsd)}</span>
           {/if}
-          <span class="font-mono text-blue-700/80"
+          <span class="font-mono text-accent/80"
             >{formatTokenCounts(
               totalMetrics.inputTokens,
               totalMetrics.outputTokens,
@@ -310,7 +341,23 @@
           >
         </div>
       {/if}
-      <div class="flex items-center gap-3 ml-auto flex-wrap">
+      <SearchInput
+        bind:value={query}
+        class="ml-auto w-48 max-w-[14rem]"
+        inputClass={cn(
+          'bg-subtle text-fg',
+          isSearching ? 'border-accent ring-1 ring-accent' : 'border-line',
+        )}
+        ariaLabel="Search flow nodes by name or type"
+        placeholder="Search nodes…"
+        clearTitle="Clear search"
+      />
+      <div class="flex items-center gap-3 flex-wrap">
+        {#if isSearching}
+          <span class="text-[10px] text-fg-muted whitespace-nowrap">
+            Nodes ({matchCount} of {totalNodeCount})
+          </span>
+        {/if}
         {#each LEGEND_ORDER as role (role)}
           <div class="flex items-center gap-1 text-[10px] text-fg-subtle">
             <span class={cn('inline-block w-2 h-2 rounded-sm', ROLE_STYLES[role].dot)}
@@ -327,13 +374,20 @@
            window (gated by focus) to match WaterfallView's pattern. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div
-        class="flex-1 overflow-auto bg-surface focus:outline-none"
+        class="relative flex-1 overflow-auto bg-surface focus:outline-none"
         role="application"
         aria-label="Flow call graph — arrow keys to navigate, Enter to open in Traces"
         tabindex="0"
         onfocusin={() => (graphFocused = true)}
         onfocusout={() => (graphFocused = false)}
       >
+        {#if isSearching && matchCount === 0}
+          <div
+            class="absolute left-1/2 top-3 -translate-x-1/2 z-10 px-3 py-1.5 rounded border border-line bg-subtle text-xs text-fg-muted shadow-sm"
+          >
+            No matches for “{query.trim()}”
+          </div>
+        {/if}
         <svg
           width={layout.width}
           height={layout.height}
@@ -390,13 +444,16 @@
           {#each layout.nodes as node (node.id)}
             {@const style = ROLE_STYLES[node.role]}
             {@const active = node.id === selectedNodeId}
-            {@const dimmed = selectedNodeId && !active}
+            {@const matched = matchedIds.has(node.id)}
+            {@const highlighted = isSearching && matched}
+            {@const dimmed =
+              (isSearching && !matched) || (selectedNodeId && !active)}
             {@const errored = node.errorCount > 0}
             <g
               role="button"
               tabindex="0"
               class={cn(
-                'cursor-pointer transition-opacity focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500',
+                'cursor-pointer transition-opacity focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
                 dimmed && 'opacity-40',
               )}
               onclick={() => selectNode(node.id)}
@@ -415,10 +472,14 @@
                 rx="8"
                 class={cn(
                   style.fill,
-                  errored ? 'stroke-red-500' : style.stroke,
-                  active && 'stroke-[2.5px]',
+                  highlighted
+                    ? 'stroke-accent'
+                    : errored
+                      ? 'stroke-red-500'
+                      : style.stroke,
+                  (active || highlighted) && 'stroke-[2.5px]',
                 )}
-                stroke-width={active ? 2.5 : 1.5}
+                stroke-width={active || highlighted ? 2.5 : 1.5}
               />
               <text
                 x={node.x + node.width / 2}
@@ -466,11 +527,16 @@
         {@const style = ROLE_STYLES[selectedNode.role]}
         <div class="w-80 shrink-0 border-l border-line overflow-y-auto bg-surface">
           <div class="px-3 py-2.5 border-b border-line">
-            <div class="flex items-center gap-1.5">
+            <div class="group flex items-center gap-1.5">
               <span class={cn('inline-block w-2 h-2 rounded-sm', style.dot)}></span>
               <span class="font-mono text-sm font-medium text-fg truncate"
                 >{selectedNode.label}</span
               >
+              <CopyButton
+                value={selectedNode.label}
+                label="Copy node name"
+                class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+              />
               {#if selectedNode.spanIds.length > 0}
                 <button
                   type="button"
@@ -481,6 +547,11 @@
                   <ExternalLink size={11} />
                   Traces
                 </button>
+                <CopyButton
+                  value={trace.traceId}
+                  label="Copy trace ID"
+                  class="shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                />
               {/if}
             </div>
             <div
@@ -494,7 +565,7 @@
               >
               {#if selectedNode.errorCount > 0}
                 <span>·</span>
-                <span class="text-red-600">{selectedNode.errorCount} errored</span>
+                <span class="text-danger">{selectedNode.errorCount} errored</span>
               {/if}
               {#if selectedNode.totalDurationMs > 0}
                 <span>·</span>
@@ -503,16 +574,16 @@
             </div>
             {#if selectedNode.metrics}
               <div
-                class="mt-1.5 flex items-center gap-1.5 text-[11px] text-blue-900"
+                class="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent"
               >
-                <Coins size={11} class="text-blue-500" />
+                <Coins size={11} class="text-accent" />
                 {#if selectedNode.metrics.costUsd != null}
                   <span class="font-medium"
                     >{formatCostUsd(selectedNode.metrics.costUsd)}</span
                   >
                   <span class="text-fg-subtle">·</span>
                 {/if}
-                <span class="font-mono text-blue-700/80"
+                <span class="font-mono text-accent/80"
                   >{formatTokenCounts(
                     selectedNode.metrics.inputTokens,
                     selectedNode.metrics.outputTokens,
@@ -524,16 +595,20 @@
 
           {#if selectedNode.sample.input !== undefined}
             <div class="px-3 py-2 border-b border-line">
-              <JsonField label="Input" value={selectedNode.sample.input} />
+              <Copyable content={prettyJson(selectedNode.sample.input)}>
+                <JsonField label="Input" value={selectedNode.sample.input} />
+              </Copyable>
             </div>
           {/if}
           {#if selectedNode.sample.output !== undefined}
-            <div class="px-3 py-2 border-b border-emerald-200/60 bg-emerald-50/30">
-              <JsonField
-                label="Output"
-                value={selectedNode.sample.output}
-                tone="positive"
-              />
+            <div class="px-3 py-2 border-b border-success-border bg-success-bg">
+              <Copyable content={prettyJson(selectedNode.sample.output)}>
+                <JsonField
+                  label="Output"
+                  value={selectedNode.sample.output}
+                  tone="positive"
+                />
+              </Copyable>
             </div>
           {/if}
           {#if selectedNode.sample.input === undefined && selectedNode.sample.output === undefined}

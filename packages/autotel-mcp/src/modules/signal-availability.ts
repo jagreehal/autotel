@@ -47,8 +47,12 @@ export async function probeSignalAvailability(
   const caps = backend.capabilities();
 
   const [traces, metrics, logs] = await Promise.all([
-    probeSignal('traces', 'Trace', caps, () => backend.searchTraces({ limit: 1 })),
-    probeSignal('metrics', 'Metric', caps, () => backend.listMetrics({ limit: 1 })),
+    probeSignal('traces', 'Trace', caps, () =>
+      backend.searchTraces({ limit: 1 }),
+    ),
+    probeSignal('metrics', 'Metric', caps, () =>
+      backend.listMetrics({ limit: 1 }),
+    ),
     probeSignal('logs', 'Log', caps, () => backend.searchLogs({ limit: 1 })),
   ]);
 
@@ -71,7 +75,9 @@ async function probeSignal(
   try {
     const res = await runQuery();
     if (res.unsupported) {
-      return unsupported(res.detail ?? `${label} queries returned unsupported.`);
+      return unsupported(
+        res.detail ?? `${label} queries returned unsupported.`,
+      );
     }
     return available((res.totalCount ?? 0) > 0, `${label} query succeeded.`);
   } catch (error) {
