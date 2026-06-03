@@ -1,5 +1,18 @@
 # autotel-tanstack
 
+## 1.13.26
+
+### Patch Changes
+
+- bb9a1b7: Restructure the DevTools widget UX and add a configurable TanStack instrument() preset.
+  - **autotel-devtools**: extract reusable abstractions (`useListKeyboardNav`, `useZoomPan`, `matchesNeedle`, `SearchInput`), decompose the `Panel` and restore its resize UX, unify the drag mechanic and tab bar across surfaces so no view is unreachable, and collapse the pause-buffer into a stream table.
+  - **autotel-tanstack**: add a configurable `instrument()` preset; `auto.ts` now delegates to it.
+  - **autotel**: export `isInitialized` from the package entry point.
+
+- Updated dependencies [bb9a1b7]
+  - autotel@3.4.2
+  - autotel-adapters@0.3.4
+
 ## 1.13.25
 
 ### Patch Changes
