@@ -1,12 +1,5 @@
 # autotel-vitest
 
-## 0.4.25
-
-### Patch Changes
-
-- Updated dependencies [bb9a1b7]
-  - autotel@3.4.2
-
 ## 0.4.24
 
 ### Patch Changes

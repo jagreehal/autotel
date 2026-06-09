@@ -58,7 +58,7 @@
     "@json-render/core": "^0.19.0",
     "@json-render/ink": "^0.19.0",
     "ai": "^6.0.193",
-    "ai-sdk-ollama": "^3.8.4",
+    "ai-sdk-ollama": "3.8.4",
     "ink": "^7.0.4",
     "react": "^19.2.6",
     "zod": "4.4.3"

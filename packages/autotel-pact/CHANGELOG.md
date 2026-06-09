@@ -1,12 +1,5 @@
 # autotel-pact
 
-## 1.0.2
-
-### Patch Changes
-
-- Updated dependencies [bb9a1b7]
-  - autotel@3.4.2
-
 ## 1.0.1
 
 ### Patch Changes
