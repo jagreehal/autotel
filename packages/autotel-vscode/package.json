@@ -212,14 +212,14 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^25.9.2",
+    "@types/vscode": "^1.120.0",
     "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.9.1",
+    "@vscode/vsce": "^3.9.2",
     "ovsx": "^1.0.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.8"
   },
   "files": [
     "dist",
