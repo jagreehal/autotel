@@ -85,7 +85,15 @@ npx autotel query metrics --service-name checkout
 npx autotel diagnose anomalies --service checkout
 npx autotel diagnose root-cause <traceId>
 npx autotel correlate trace <traceId>
+
+# security triage (security.* schema)
+npx autotel security summary --lookback-minutes 60
+npx autotel security events --severity critical --lookback-minutes 240
 ```
+
+The `security` commands read the stable `security.*` schema emitted by
+`autotel-audit` — see [Security Observability](/autotel/integrations/security/)
+for the full picture.
 
 All backend-touching commands accept:
 

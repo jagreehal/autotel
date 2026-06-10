@@ -10,11 +10,7 @@ import type {
   OutcomeStatus,
 } from 'autotel/event-subscriber';
 import { createHttpClient } from './http-client';
-import {
-  mapHttpStatus,
-  SubscriberProviderError,
-  isProviderRetriable,
-} from './retry-classification';
+import { postJsonWithRetry } from './webhook-delivery';
 
 export interface WebhookConfig {
   url: string;
@@ -41,62 +37,16 @@ export class WebhookSubscriber implements EventSubscriber {
     this.httpClient = createHttpClient({ timeoutMs: config.timeoutMs });
   }
 
-  private async delay(ms: number): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
   private async send(payload: unknown): Promise<void> {
     if (!this.enabled) return;
 
-    const maxRetries = this.config.maxRetries ?? 3;
-    const retryDelayMs = this.config.retryDelayMs ?? 1000;
-    const method = this.config.method ?? 'POST';
-    let lastError: Error | undefined;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const response = await this.httpClient.request<unknown, unknown>(
-        this.config.url,
-        {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...this.config.headers,
-          },
-          body: JSON.stringify(payload),
-          timeoutMs: this.config.timeoutMs,
-        },
-      );
-
-      if (response.ok) return;
-
-      if (response.kind === 'network') {
-        lastError = new SubscriberProviderError({
-          message: response.timedOut
-            ? 'Webhook request timed out'
-            : 'Webhook network request failed',
-          code: 'NETWORK',
-          retriable: true,
-          details: response.cause,
-          cause: response.cause,
-        });
-      } else {
-        const mapped = mapHttpStatus(response.status);
-        lastError = new SubscriberProviderError({
-          message: `Webhook returned ${response.status}: ${response.statusText}`,
-          code: mapped.code,
-          retriable: mapped.retriable,
-          details: response.body,
-        });
-      }
-
-      const canRetry = isProviderRetriable(lastError) && attempt < maxRetries;
-      if (!canRetry) break;
-
-      const backoffMs = retryDelayMs * 2 ** (attempt - 1);
-      await this.delay(backoffMs);
-    }
-
-    throw lastError ?? new Error('Webhook send failed');
+    await postJsonWithRetry(this.httpClient, this.config.url, payload, {
+      method: this.config.method,
+      headers: this.config.headers,
+      maxRetries: this.config.maxRetries,
+      retryDelayMs: this.config.retryDelayMs,
+      label: 'Webhook',
+    });
   }
 
   async trackEvent(

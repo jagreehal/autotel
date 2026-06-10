@@ -46,6 +46,7 @@ track('user.signup', { userId: '123', plan: 'pro' });
 | Amplitude               | `autotel-subscribers/amplitude`              |
 | Webhook                 | `autotel-subscribers/webhook`                |
 | Slack                   | `autotel-subscribers/slack`                  |
+| Security                | `autotel-subscribers/security`               |
 | ArchitectureSnapshot    | `autotel-subscribers/architecture-snapshot`  |
 
 ## ArchitectureSnapshotSubscriber
@@ -119,6 +120,7 @@ const subscriber = applyMiddleware(
 - `autotel-subscribers/amplitude` — Amplitude
 - `autotel-subscribers/webhook` — Webhook
 - `autotel-subscribers/slack` — Slack
+- `autotel-subscribers/security` — Forward `security.*` events to a webhook/SIEM/pager ([Security Observability](/autotel/integrations/security/))
 - `autotel-subscribers/architecture-snapshot` — Architecture snapshot for drift detection
 - `autotel-subscribers/middleware` — Middleware composition
 - `autotel-subscribers/testing` — Test harnesses

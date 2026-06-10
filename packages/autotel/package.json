@@ -203,6 +203,11 @@
       "import": "./dist/correlation-id.js",
       "require": "./dist/correlation-id.cjs"
     },
+    "./security-schema": {
+      "types": "./dist/security-schema.d.ts",
+      "import": "./dist/security-schema.js",
+      "require": "./dist/security-schema.cjs"
+    },
     "./test-span-collector": {
       "types": "./dist/test-span-collector.d.ts",
       "import": "./dist/test-span-collector.js",

@@ -343,6 +343,13 @@ const INVESTIGATE_COMMANDS: CommandSpec[] = [
   investigateCmd('llm slow', 'Slowest LLM traces'),
   investigateCmd('llm tools', 'Tool/function spans grouped by tool name'),
 
+  investigateCmd('security', 'Security telemetry (parent)'),
+  investigateCmd(
+    'security summary',
+    'Security posture: events by severity/category, probe signals, denied responses',
+  ),
+  investigateCmd('security events', 'List spans carrying security.* events'),
+
   investigateCmd('semconv', 'Semantic conventions lookup (parent)', { static: true }),
   investigateCmd('semconv list', 'List semconv namespaces', { static: true, network: true }),
   investigateCmd('semconv get', 'Groups for one namespace', {

@@ -16,6 +16,7 @@ import {
   BarChart,
   FileText,
   AlertTriangle,
+  ShieldAlert,
 } from '@lucide/svelte';
 import type { TabType } from './types';
 
@@ -34,6 +35,7 @@ export const TAB_DEFS: readonly TabDef[] = [
   { id: 'metrics', label: 'Metrics', icon: BarChart },
   { id: 'logs', label: 'Logs', icon: FileText },
   { id: 'errors', label: 'Errors', icon: AlertTriangle },
+  { id: 'security', label: 'Security', icon: ShieldAlert },
 ];
 
 /** Tab ids in display order — drives keyboard (1–9) tab switching. */

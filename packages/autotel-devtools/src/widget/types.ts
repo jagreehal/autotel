@@ -116,7 +116,8 @@ export type TabType =
   | 'logs'
   | 'errors'
   | 'genai'
-  | 'flow';
+  | 'flow'
+  | 'security';
 
 export type CornerPosition =
   | 'top-left'

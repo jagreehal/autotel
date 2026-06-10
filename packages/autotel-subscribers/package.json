@@ -42,6 +42,11 @@
       "import": "./dist/slack.js",
       "require": "./dist/slack.cjs"
     },
+    "./security": {
+      "types": "./dist/security.d.ts",
+      "import": "./dist/security.js",
+      "require": "./dist/security.cjs"
+    },
     "./factories": {
       "types": "./dist/factories.d.ts",
       "import": "./dist/factories.js",

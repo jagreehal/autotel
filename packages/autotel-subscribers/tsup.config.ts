@@ -10,6 +10,7 @@ export default defineConfig({
     amplitude: 'src/amplitude.ts',
     webhook: 'src/webhook.ts',
     slack: 'src/slack.ts',
+    security: 'src/security.ts',
     factories: 'src/factories.ts',
     middleware: 'src/middleware.ts',
     'architecture-snapshot': 'src/architecture-snapshot.ts',

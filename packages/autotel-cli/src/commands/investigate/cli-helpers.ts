@@ -80,3 +80,26 @@ export function addTimeWindowFlags(cmd: Command): Command {
     .option('--to <iso>', 'End time (ISO 8601)')
     .option('--limit <n>', 'Max results', intArg);
 }
+
+/** Values collected by `addTimeWindowFlags`. */
+export type TimeWindowFlags = {
+  serviceName?: string;
+  operationName?: string;
+  lookbackMinutes?: number;
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
+export function windowFlagsFromOpts(
+  opts: Record<string, unknown>,
+): TimeWindowFlags {
+  return {
+    serviceName: opts.serviceName as string | undefined,
+    operationName: opts.operationName as string | undefined,
+    lookbackMinutes: opts.lookbackMinutes as number | undefined,
+    from: opts.from as string | undefined,
+    to: opts.to as string | undefined,
+    limit: opts.limit as number | undefined,
+  };
+}

@@ -49,6 +49,11 @@ const logger = {
 vi.mock('autotel', () => ({
   AUTOTEL_SAMPLING_TAIL_EVALUATED: 'autotel.sampling.tail.evaluated',
   AUTOTEL_SAMPLING_TAIL_KEEP: 'autotel.sampling.tail.keep',
+  createCounter: vi.fn(() => ({ add: vi.fn() })),
+  REDACTOR_PATTERNS: {
+    sensitiveKey:
+      /^(password|passwd|pwd|secret|token|api[_-]?key|auth|credential|private[_-]?key|authorization)$/i,
+  },
   getTraceContext: vi.fn(() => mockCtx),
   getRequestLogger: vi.fn(() => logger),
   otelTrace: {

@@ -25,6 +25,7 @@ import { registerLlmCommands } from './commands/investigate/llm';
 import { registerSemconvCommands } from './commands/investigate/semconv';
 import { registerScoreCommands } from './commands/investigate/instrumentation';
 import { registerCollectorCommands } from './commands/investigate/collector';
+import { registerSecurityCommands } from './commands/investigate/security';
 
 /**
  * Create the CLI program
@@ -269,6 +270,7 @@ export function createProgram(): Command {
   registerSemconvCommands(program);
   registerScoreCommands(program);
   registerCollectorCommands(program);
+  registerSecurityCommands(program);
 
   return program;
 }
