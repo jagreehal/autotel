@@ -1,6 +1,6 @@
 {
   "name": "autotel-cli",
-  "version": "0.8.15",
+  "version": "0.9.0",
   "description": "CLI for autotel - setup wizard, diagnostics, and incremental features",
   "type": "module",
   "bin": {

@@ -1,5 +1,13 @@
 # autotel-mongoose
 
+## 7.0.0
+
+### Patch Changes
+
+- Updated dependencies [1c43d26]
+- Updated dependencies [3ab5dc3]
+  - autotel@3.5.0
+
 ## 6.0.0
 
 ### Patch Changes

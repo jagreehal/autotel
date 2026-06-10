@@ -1,5 +1,12 @@
 # Changelog
 
+## 6.0.0
+
+### Patch Changes
+
+- Updated dependencies [1c43d26]
+  - autotel-subscribers@36.0.0
+
 ## 5.0.0
 
 ### Patch Changes
