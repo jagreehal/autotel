@@ -74,6 +74,7 @@ export default defineConfig({
             },
             { label: 'Logging', slug: 'integrations/logging' },
             { label: 'Audit Logging', slug: 'integrations/audit' },
+            { label: 'Security Observability', slug: 'integrations/security' },
             { label: 'AWS', slug: 'integrations/aws' },
             { label: 'Prisma', slug: 'integrations/prisma' },
             { label: 'Drizzle ORM', slug: 'integrations/drizzle' },

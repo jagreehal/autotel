@@ -81,7 +81,7 @@ Test (trace X)  →  traceparent header  →  Server (trace X)
 
 ## Server-Side Span Inspection
 
-When your app runs server-side code during E2E tests, you can capture and assert on those spans using `createTestSpansClient`. It pairs with `createTestSpansHandlers()` from `autotel-tanstack/testing` (see [TanStack E2E setup](/frameworks/tanstack#e2e-testing)).
+When your app runs server-side code during E2E tests, you can capture and assert on those spans using `createTestSpansClient`. It pairs with `createTestSpansHandlers()` from `autotel-tanstack/testing` (see [TanStack E2E setup](/autotel/frameworks/tanstack/#e2e-testing)).
 
 ```typescript
 import { test, expect, createTestSpansClient } from 'autotel-playwright';

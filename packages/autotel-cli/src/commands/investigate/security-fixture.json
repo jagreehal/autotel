@@ -1,0 +1,102 @@
+{
+  "traces": [
+    {
+      "traceId": "sec-trace-1",
+      "serviceName": "api",
+      "startTimeUnixMs": 1000,
+      "durationMs": 120,
+      "statusCode": "OK",
+      "spans": [
+        {
+          "traceId": "sec-trace-1",
+          "spanId": "s1",
+          "operationName": "POST /login",
+          "serviceName": "api",
+          "startTimeUnixMs": 1000,
+          "durationMs": 120,
+          "tags": {
+            "security.event": "auth.login.failed",
+            "security.category": "authentication",
+            "security.outcome": "failure",
+            "security.severity": "warning",
+            "security.reason": "invalid_password",
+            "http.response.status_code": 401,
+            "client.address": "203.0.113.7"
+          }
+        }
+      ]
+    },
+    {
+      "traceId": "sec-trace-2",
+      "serviceName": "api",
+      "startTimeUnixMs": 2000,
+      "durationMs": 80,
+      "statusCode": "OK",
+      "spans": [
+        {
+          "traceId": "sec-trace-2",
+          "spanId": "s2",
+          "operationName": "GET /.env",
+          "serviceName": "api",
+          "startTimeUnixMs": 2000,
+          "durationMs": 80,
+          "tags": {
+            "security.suspicious_request": true,
+            "security.signal": "sensitive_file_probe",
+            "url.path": "/.env",
+            "http.response.status_code": 404,
+            "client.address": "198.51.100.9"
+          }
+        }
+      ]
+    },
+    {
+      "traceId": "sec-trace-3",
+      "serviceName": "api",
+      "startTimeUnixMs": 3000,
+      "durationMs": 60,
+      "statusCode": "OK",
+      "spans": [
+        {
+          "traceId": "sec-trace-3",
+          "spanId": "s3",
+          "operationName": "GET /admin",
+          "serviceName": "api",
+          "startTimeUnixMs": 3000,
+          "durationMs": 60,
+          "tags": {
+            "security.event": "access.denied",
+            "security.category": "authorization",
+            "security.outcome": "denied",
+            "security.severity": "critical",
+            "http.status_code": 403,
+            "client.address": "203.0.113.7"
+          }
+        }
+      ]
+    },
+    {
+      "traceId": "sec-trace-4",
+      "serviceName": "api",
+      "startTimeUnixMs": 4000,
+      "durationMs": 40,
+      "statusCode": "OK",
+      "spans": [
+        {
+          "traceId": "sec-trace-4",
+          "spanId": "s4",
+          "operationName": "GET /orders",
+          "serviceName": "api",
+          "startTimeUnixMs": 4000,
+          "durationMs": 40,
+          "tags": {
+            "http.response.status_code": 200,
+            "client.address": "192.0.2.1"
+          }
+        }
+      ]
+    }
+  ],
+  "metrics": [],
+  "logs": []
+}

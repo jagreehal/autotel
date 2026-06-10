@@ -22,7 +22,7 @@ run().catch((error: unknown) => {
   const isJson =
     jsonModeRequested() ||
     // schema/commands/examples/version + investigate commands are JSON-only
-    /^(schema|commands|examples|version|health|capabilities|discover|query|trace|diagnose|topology|correlate|llm|semconv|score|collector)\b/.test(
+    /^(schema|commands|examples|version|health|capabilities|discover|query|trace|diagnose|topology|correlate|llm|semconv|score|collector|security)\b/.test(
       process.argv.slice(2).join(' ')
     );
 

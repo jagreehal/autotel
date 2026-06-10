@@ -36,6 +36,12 @@ export { MixpanelSubscriber, type MixpanelConfig } from './mixpanel';
 export { SegmentSubscriber, type SegmentConfig } from './segment';
 export { AmplitudeSubscriber, type AmplitudeConfig } from './amplitude';
 export { SlackSubscriber, type SlackSubscriberConfig } from './slack';
+export {
+  SecuritySubscriber,
+  type SecuritySubscriberConfig,
+  type SecurityAlert,
+  type SecurityAlertSeverity,
+} from './security';
 export { WebhookSubscriber, type WebhookConfig } from './webhook';
 export {
   ArchitectureSnapshotSubscriber,

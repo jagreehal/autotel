@@ -15,6 +15,7 @@
   import MetricsView from './MetricsView.svelte';
   import LogsView from './LogsView.svelte';
   import ErrorsView from './ErrorsView.svelte';
+  import SecurityView from './SecurityView.svelte';
 
   const selected = $derived(selectedTabSignal.value);
 </script>
@@ -33,6 +34,8 @@
   <LogsView />
 {:else if selected === 'errors'}
   <ErrorsView />
+{:else if selected === 'security'}
+  <SecurityView />
 {:else}
   <TracesView />
 {/if}

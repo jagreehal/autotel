@@ -38,6 +38,7 @@ export default defineConfig({
     webhook: 'src/webhook.ts',
     'workflow-distributed': 'src/workflow-distributed.ts',
     'correlation-id': 'src/correlation-id.ts',
+    'security-schema': 'src/security-schema.ts',
     attributes: 'src/attributes/index.ts',
     'semantic-conventions': 'src/semantic-conventions.ts',
     'test-span-collector': 'src/test-span-collector.ts',

@@ -49,6 +49,7 @@ pnpm changeset          # Create a changeset
 - **Architecture**: `docs/ARCHITECTURE.md` - Code patterns, conventions, structure
 - **Advanced Features**: `docs/ADVANCED.md` - Advanced features (v1.1.0+)
 - **Configuration**: `docs/CONFIGURATION.md` - Environment variables, YAML config
+- **Security Observability**: `docs/SECURITY-OBSERVABILITY.md` - Security events, signals, detection rules, OWASP mapping
 
 ## Boundaries
 

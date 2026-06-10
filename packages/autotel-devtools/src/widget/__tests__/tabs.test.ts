@@ -14,6 +14,7 @@ const EVERY_TAB = {
   metrics: true,
   logs: true,
   errors: true,
+  security: true,
 } satisfies Record<TabType, true>;
 
 describe('shared tab definitions', () => {

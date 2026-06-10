@@ -85,6 +85,7 @@ When the user wants observability, suggest these entry points. All from `autotel
 | Init (once at startup)      | `init({ service, ... })` from `autotel` or `autotel/instrumentation`                             |
 | PII redaction               | `init({ attributeRedactor: 'default' | 'strict' | 'pci-dss' | { keyPatterns, valuePatterns } })`       |
 | Testing                     | `createTraceCollector()` from `autotel/testing`; `InMemorySpanExporter` from `autotel/exporters` |
+| Security events (OWASP A09) | `securityEvent()` / `withSecurity()` / `hashIdentifier()` from `autotel-audit`; zero-code signals via `createSecuritySignalProcessor()` in `init({ spanProcessors })` — see `docs/SECURITY-OBSERVABILITY.md` |
 
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
 - **Structured errors**: Prefer `createStructuredError` over `new Error()` in API routes and services. On the client, use `parseError(caught)` to show message/why/fix in UI.
@@ -171,6 +172,10 @@ Use these when suggesting changes to user code:
 **Scattered logging**
 
 > Replace multiple logs with a single request-scoped snapshot: use `getRequestLogger()` and `.set()` throughout the request, then `.emitNow()` (or rely on middleware) so one coherent snapshot is emitted per request.
+
+**Security-relevant path without telemetry**
+
+> This is a security decision point (auth, access control, key/secret handling, payment, tenant boundary). Emit a typed security event with `securityEvent({ name, category, outcome, severity })` from `autotel-audit` so it survives tail sampling and feeds the `autotel.security.events` counter. Use `hashIdentifier()` for emails/IPs — never raw PII, never secrets (the credential-key guard drops them, but don't rely on it).
 
 **Wrong import or init**
 
