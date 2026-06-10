@@ -3,3 +3,6 @@ packages:
   - 'apps/*'
   - 'examples/*'
   - 'docs'
+
+overrides:
+  'vite': '^8.0.0'

@@ -80,7 +80,7 @@
     "@opentelemetry/exporter-metrics-otlp-http": ">=0.218.0",
     "@opentelemetry/exporter-trace-otlp-http": ">=0.218.0",
     "@opentelemetry/sdk-metrics": ">=2.7.1",
-    "google-auth-library": ">=10.6.2"
+    "google-auth-library": ">=10.7.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/exporter-metrics-otlp-http": {
@@ -97,14 +97,14 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
-    "@typescript-eslint/eslint-plugin": "^8.60.0",
-    "@typescript-eslint/parser": "^8.60.0",
+    "@types/node": "^25.9.2",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^64.0.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.8"
   },
   "repository": {
     "type": "git",
