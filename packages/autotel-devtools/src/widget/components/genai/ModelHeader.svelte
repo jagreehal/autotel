@@ -18,8 +18,7 @@
     deepseek: 'bg-cyan-500/15 text-cyan-600 border-cyan-500/30',
   };
 
-  function formatMs(ns: number): string {
-    const ms = ns / 1_000_000;
+  function formatMs(ms: number): string {
     if (ms < 1) return `${(ms * 1000).toFixed(0)}μs`;
     if (ms < 1000) return `${ms.toFixed(0)}ms`;
     return `${(ms / 1000).toFixed(2)}s`;
@@ -41,7 +40,7 @@
   const providerClass = $derived(
     PROVIDER_COLORS[span.provider] ?? 'bg-subtle text-fg-muted border-line',
   );
-  const latency = $derived(formatMs(span.endNs - span.startNs));
+  const latency = $derived(formatMs(span.endMs - span.startMs));
   const cachedPct = $derived(
     span.usage.cacheReadInputTokens && span.usage.inputTokens
       ? Math.round(

@@ -4,9 +4,9 @@
   "spanId": "aaaa1111bbbb2222",
   "name": "chat claude-sonnet-4-20250514",
   "kind": "CLIENT",
-  "startTime": 1716100002000000000,
-  "endTime": 1716100003456000000,
-  "duration": 1456000000,
+  "startTime": 1716100002000.0,
+  "endTime": 1716100003456.0,
+  "duration": 1456.0,
   "attributes": {
     "gen_ai.operation.name": "chat",
     "gen_ai.system": "anthropic",
@@ -17,14 +17,18 @@
     "gen_ai.request.top_k": 40,
     "gen_ai.response.id": "msg_01ABC7def8GhIjKlMnOpQrSt",
     "gen_ai.response.model": "claude-sonnet-4-20250514",
-    "gen_ai.response.finish_reasons": ["stop"],
+    "gen_ai.response.finish_reasons": [
+      "stop"
+    ],
     "gen_ai.usage.input_tokens": 700,
     "gen_ai.usage.output_tokens": 142,
     "gen_ai.usage.cache_read.input_tokens": 500,
     "gen_ai.usage.cache_creation.input_tokens": 0,
     "gen_ai.input.messages": "[{\"role\":\"system\",\"parts\":[{\"type\":\"text\",\"content\":\"You are a helpful assistant for the Acme docs site. (Long context cached.)\"}]},{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"content\":\"How do I rotate my API key?\"}]}]",
-    "gen_ai.output.messages": "[{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"To rotate your Acme API key, open Settings → API → Rotate. The previous key keeps working for 24 hours.\"}],\"finish_reason\":\"stop\"}]",
+    "gen_ai.output.messages": "[{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"To rotate your Acme API key, open Settings \u2192 API \u2192 Rotate. The previous key keeps working for 24 hours.\"}],\"finish_reason\":\"stop\"}]",
     "server.address": "api.anthropic.com"
   },
-  "status": { "code": "OK" }
+  "status": {
+    "code": "OK"
+  }
 }

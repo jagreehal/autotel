@@ -16,8 +16,8 @@
     service: string;
     traceId: string;
     spans: GenAiSpan[];
-    startNs: number;
-    endNs: number;
+    startMs: number;
+    endMs: number;
   }
 
   function groupByConversation(rows: Props['rows']): Group[] {
@@ -29,21 +29,21 @@
       const g = byId.get(id);
       if (g) {
         g.spans.push(row.normalized);
-        g.startNs = Math.min(g.startNs, row.normalized.startNs);
-        g.endNs = Math.max(g.endNs, row.normalized.endNs);
+        g.startMs = Math.min(g.startMs, row.normalized.startMs);
+        g.endMs = Math.max(g.endMs, row.normalized.endMs);
       } else {
         byId.set(id, {
           conversationId: id,
           service: row.service,
           traceId: row.traceId,
           spans: [row.normalized],
-          startNs: row.normalized.startNs,
-          endNs: row.normalized.endNs,
+          startMs: row.normalized.startMs,
+          endMs: row.normalized.endMs,
         });
       }
     }
     // Newest first by conversation start.
-    return [...byId.values()].sort((a, b) => b.startNs - a.startNs);
+    return [...byId.values()].sort((a, b) => b.startMs - a.startMs);
   }
 
   function laneFor(span: GenAiSpan): string {
@@ -53,8 +53,7 @@
     return `${span.provider}/${span.responseModel ?? span.requestModel}`;
   }
 
-  function formatMs(ns: number): string {
-    const ms = ns / 1_000_000;
+  function formatMs(ms: number): string {
     if (ms < 1000) return `${ms.toFixed(0)}ms`;
     return `${(ms / 1000).toFixed(2)}s`;
   }
@@ -71,9 +70,9 @@
         if (i === j) continue;
         const b = spans[j];
         const contains =
-          b.startNs >= a.startNs &&
-          b.endNs <= a.endNs &&
-          b.endNs - b.startNs < a.endNs - a.startNs;
+          b.startMs >= a.startMs &&
+          b.endMs <= a.endMs &&
+          b.endMs - b.startMs < a.endMs - a.startMs;
         if (contains) {
           wrapperIds.add(a.spanId);
           break;
@@ -116,8 +115,8 @@
     for (const [lane, spans] of laneMap) {
       wrapperIdsByLane.set(lane, markWrappers(spans));
     }
-    const durationNs = Math.max(1, group.endNs - group.startNs);
-    return { laneOrder, laneMap, wrapperIdsByLane, durationNs };
+    const durationMs = Math.max(1, group.endMs - group.startMs);
+    return { laneOrder, laneMap, wrapperIdsByLane, durationMs };
   }
 
   const groups = $derived.by(() => groupByConversation(rows));
@@ -140,7 +139,7 @@
       </span>
       <span class="text-xs text-fg-subtle ml-auto">
         {group.spans.length} span{group.spans.length === 1 ? '' : 's'} · {formatMs(
-          lanes.durationNs,
+          lanes.durationMs,
         )} · {group.service}
       </span>
     </header>
@@ -168,10 +167,10 @@
           >
             {#each spans as s (s.spanId)}
               {@const leftPct =
-                ((s.startNs - group.startNs) / lanes.durationNs) * 100}
+                ((s.startMs - group.startMs) / lanes.durationMs) * 100}
               {@const widthPct = Math.max(
                 0.5,
-                ((s.endNs - s.startNs) / lanes.durationNs) * 100,
+                ((s.endMs - s.startMs) / lanes.durationMs) * 100,
               )}
               {@const errored = s.status === 'error'}
               {@const active = s.spanId === selectedSpanId}
@@ -180,7 +179,7 @@
               <button
                 type="button"
                 onclick={() => onSelectSpan?.(s.spanId)}
-                title={`${s.operation} · ${formatMs(s.endNs - s.startNs)}${s.usage.inputTokens != null ? ` · ${s.usage.inputTokens}→${s.usage.outputTokens ?? '—'}` : ''}${isWrapper ? ' (wraps children)' : ''}`}
+                title={`${s.operation} · ${formatMs(s.endMs - s.startMs)}${s.usage.inputTokens != null ? ` · ${s.usage.inputTokens}→${s.usage.outputTokens ?? '—'}` : ''}${isWrapper ? ' (wraps children)' : ''}`}
                 class={cn(
                   'absolute top-0.5 bottom-0.5 rounded text-[10px] font-mono px-1 truncate flex items-center gap-1 transition-all',
                   spanBarClass(isWrapper, isHandoffLane, errored),

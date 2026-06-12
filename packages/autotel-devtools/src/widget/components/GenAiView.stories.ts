@@ -49,7 +49,9 @@ export const OpenAiChat: Story = {
   beforeEach: () => seedTraces([[openaiChat as unknown as SpanData]]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('openai')).toBeInTheDocument()
-    await expect(canvas.getByText('gpt-4o-mini-2024-07-18')).toBeInTheDocument()
+    await expect(
+      canvas.getAllByText('gpt-4o-mini-2024-07-18').length,
+    ).toBeGreaterThan(0)
     await expect(canvas.getByText('This is a test.')).toBeInTheDocument()
   },
 }
@@ -82,7 +84,9 @@ export const VercelAiSdkOllamaReal: Story = {
     ]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('ollama')).toBeInTheDocument()
-    await expect(canvas.getByText('granite4.1:3b')).toBeInTheDocument()
+    await expect(canvas.getAllByText('granite4.1:3b').length).toBeGreaterThan(
+      0,
+    )
   },
 }
 
@@ -106,7 +110,7 @@ export const GeminiPydanticReal: Story = {
     ]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('google')).toBeInTheDocument()
-    await expect(canvas.getByText(/^gemini-/)).toBeInTheDocument()
+    await expect(canvas.getAllByText(/^gemini-/).length).toBeGreaterThan(0)
   },
 }
 
@@ -145,9 +149,35 @@ export const VercelAiSdkToolsReal: Story = {
     await expect(
       (await canvas.findAllByText(/ollama\/qwen2:latest/i)).length,
     ).toBeGreaterThan(0)
+    await expect(await canvas.findByText('Explain run')).toBeInTheDocument()
 
     const toolName = await canvas.findByText('lookupTraveler')
     await userEvent.click(toolName)
     await expect(await canvas.findByText('Input')).toBeInTheDocument()
+  },
+}
+
+// A multi-span run shows the run-summary strip (cost/tokens/tools) and the
+// "Explain run" guided tour. The tour
+// steps through the run with plain-language narration; here we open it and
+// assert the first narrated step renders.
+export const RunSummaryAndGuidedTour: Story = {
+  beforeEach: () => seedTraces([aisdkTools as unknown as SpanData[]]),
+  play: async ({ canvas }) => {
+    // Run summary strip appears above the detail for a multi-span run.
+    await expect((await canvas.findAllByText('Tokens')).length).toBeGreaterThan(0)
+    await expect(canvas.getAllByText('Tools').length).toBeGreaterThan(0)
+
+    // Start the guided tour.
+    const explain = await canvas.findByRole('button', { name: /Explain run/i })
+    await userEvent.click(explain)
+
+    // The narration banner renders a step counter and exit control.
+    await expect(await canvas.findByRole('region', { name: /Guided tour/i })).toBeInTheDocument()
+    await expect(canvas.getByRole('button', { name: /Exit tour/i })).toBeInTheDocument()
+
+    // Advance one step.
+    await userEvent.click(canvas.getByRole('button', { name: /Next step/i }))
+    await expect(canvas.getByRole('button', { name: /Exit tour/i })).toBeInTheDocument()
   },
 }

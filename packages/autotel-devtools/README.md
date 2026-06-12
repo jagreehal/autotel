@@ -149,11 +149,28 @@ process — point them at the bound port, or free the original.
 - ✅ Error aggregation and grouping
 - ✅ Service map visualization
 - ✅ Resources view (derived from telemetry)
+- ✅ GenAI run summaries + narrated walkthrough
 - ✅ Search with debounce (300ms)
 - ✅ Configurable telemetry limits (env vars)
 - ✅ Widget position persistence (localStorage)
 - ✅ Export traces as JSON
 - ✅ Custom element support (`<autotel-devtools>`)
+
+### GenAI: read an agent run at a glance
+
+When your app emits OpenTelemetry GenAI spans (Vercel AI SDK, Pydantic AI, OpenAI
+Agents, Anthropic, Google GenAI, LangChain, …), the **GenAI** tab gives two extras
+on top of the per-span detail:
+
+- A **run summary strip** sits above the detail for any multi-span run — total
+  cost (table-priced; a trailing `+` marks a lower bound when some calls are
+  unpriced), input→output tokens, reasoning tokens, model calls, tool
+  executions, sub-agents, duration and errors.
+- An **Explain run** button steps through the run in chronological order with
+  plain-language narration of each step. Auto-play or step manually with the
+  arrow keys / Space (Esc exits); clicking a span jumps the tour to that step.
+  Useful for showing a teammate or a client exactly what the agent did, which
+  tools it called, and where the cost went.
 
 ## Configuration
 
