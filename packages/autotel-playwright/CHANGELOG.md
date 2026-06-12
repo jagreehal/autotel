@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.35
+
+### Patch Changes
+
+- 0e944ed: Add missing license metadata to package manifests.
+- Updated dependencies [47a69ac]
+  - autotel@3.6.0
+
 ## 0.4.34
 
 ### Patch Changes

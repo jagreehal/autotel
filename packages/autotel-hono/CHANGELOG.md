@@ -1,5 +1,15 @@
 # autotel-hono
 
+## 0.4.29
+
+### Patch Changes
+
+- 0e944ed: Add missing license metadata to package manifests.
+- Updated dependencies [0e944ed]
+- Updated dependencies [47a69ac]
+  - autotel-adapters@0.3.8
+  - autotel@3.6.0
+
 ## 0.4.28
 
 ### Patch Changes
