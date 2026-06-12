@@ -1,6 +1,6 @@
 {
   "name": "autotel-hono",
-  "version": "0.4.27",
+  "version": "0.4.28",
   "description": "OpenTelemetry Hono middleware powered by autotel",
   "type": "module",
   "main": "./dist/index.js",
