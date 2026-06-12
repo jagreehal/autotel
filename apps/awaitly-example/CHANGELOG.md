@@ -1,5 +1,12 @@
 # @jagreehal/awaitly-example
 
+## 1.0.46
+
+### Patch Changes
+
+- Updated dependencies [47a69ac]
+  - autotel@3.6.0
+
 ## 1.0.45
 
 ### Patch Changes

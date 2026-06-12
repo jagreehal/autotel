@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 37.0.0
+
+### Patch Changes
+
+- Updated dependencies [47a69ac]
+  - autotel@3.6.0
+
 ## 36.0.0
 
 ### Minor Changes

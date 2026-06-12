@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 8.0.0
+
+### Patch Changes
+
+- Updated dependencies [47a69ac]
+  - autotel@3.6.0
+
 ## 7.0.0
 
 ### Minor Changes

@@ -1,5 +1,13 @@
 # @jagreehal/example-terminal
 
+## 1.0.53
+
+### Patch Changes
+
+- Updated dependencies [47a69ac]
+  - autotel@3.6.0
+  - autotel-terminal@25.0.0
+
 ## 1.0.52
 
 ### Patch Changes
