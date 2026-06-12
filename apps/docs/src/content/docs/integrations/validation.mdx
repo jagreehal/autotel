@@ -1,0 +1,127 @@
+---
+title: Validation Telemetry
+description: Make Zod (or any safeParse) mismatches observable at your boundaries — record field paths and codes as spans + a metric, with per-validator observe vs reject mode, PII-safe by construction.
+---
+
+When an input payload fails validation today, you get one of two bad outcomes:
+the `safeParse` throws (no span, no metric, no alert) or a handler swallows it
+silently. Either way the mismatch is invisible to the telemetry an agent reads
+at 3am.
+
+`autotel/validate` connects validation to telemetry at the boundary where bad
+data enters. Declare the expected shape once; every mismatch becomes a
+`validation.*` span attribute and a counter increment.
+
+:::note[PII-safe by construction]
+Only field **paths**, issue **codes**, and the declared **type** are ever
+recorded — never the offending value, and never a validator's error `message`
+(which routinely embeds the received value). The secret in a bad SSN field
+never reaches your spans.
+:::
+
+## Two modes
+
+| Mode | Behaviour |
+| --- | --- |
+| `reject` (default) | Record telemetry, then throw a 400-shaped [structured error](/autotel/introduction) so the boundary fails cleanly |
+| `observe` | Record telemetry, return the raw input so the handler continues — measure real-world drift before you enforce it |
+
+## Usage
+
+```ts
+import { z } from 'zod';
+import { defineValidator } from 'autotel/validate';
+
+const OrderBody = defineValidator(
+  'POST /orders',
+  z.object({
+    items: z.array(z.object({ sku: z.string(), qty: z.number().int() })),
+  }),
+  { boundary: 'http', toJsonSchema: (s) => z.toJSONSchema(s) },
+);
+
+// reject mode (default): records the mismatch, then throws a 400 structured error
+app.post('/orders', (req, res) => {
+  const order = OrderBody.parse(req.body); // throws → your error middleware maps to 400
+  return createOrder(order);
+});
+
+// observe mode: records, never throws — handler decides what to do
+const result = OrderBody.safeParse(req.body);
+if (!result.success) {
+  // result.issues is [{ path, code, expected? }] — safe to log
+  metrics.noteDrift(result.issues);
+}
+```
+
+`parse()` applies the mode; `safeParse()` always returns a discriminated result
+and never throws.
+
+## What gets recorded
+
+On the active span:
+
+| Attribute | Example |
+| --- | --- |
+| `validation.name` | `POST /orders` |
+| `validation.boundary` | `http` |
+| `validation.mode` | `reject` |
+| `validation.issue.count` | `2` |
+| `validation.issue.paths` | `items.0.qty,items.1.sku` |
+| `validation.issue.codes` | `invalid_type,too_small` |
+| `validation.hash` | sha256 of the declared shape (when `toJsonSchema` is given) |
+
+Plus the counter `autotel.validation.mismatches`, labelled
+`{ boundary, validation, mode }`.
+
+The attribute keys are exported as `VALIDATION_ATTR` from
+`autotel/validation-attributes` (dependency-free) for dashboards, CLI filters,
+and alert rules.
+
+## Alerting — reuse what you have
+
+Validation telemetry is **first-class on its own metric — not a security
+event**. A malformed body is usually a bug or version skew, not an attack. So:
+
+- **Metrics / paging:** alert on `autotel_validation_mismatches_total` (e.g. a
+  spike on one `validation` label after a deploy).
+- **Agent triage:** filter spans by `validation.name` / `validation.boundary`.
+
+If a *specific* validator genuinely is a security signal (injection-shaped
+input), escalate it explicitly — never automatically:
+
+```ts
+import { onValidationMismatch } from 'autotel/validate';
+
+// opt in, e.g. forward to autotel-audit's securityEvent for the cases you choose
+const off = onValidationMismatch((m) => {
+  if (m.name === 'POST /login') securityEvent({ /* ... */ });
+});
+```
+
+There is no package-presence-driven magic: nothing escalates unless you register
+a handler.
+
+## Applying it at each boundary
+
+`defineValidator` is the primitive. Wire it wherever input enters:
+
+- **HTTP:** call `.parse(req.body)` in the handler (reject) or branch on
+  `.safeParse()` (observe). Your existing error middleware maps the thrown 400.
+- **Events:** validate before `track()`.
+- **Messaging:** validate the decoded message; on `reject`, route to your DLQ.
+
+## Notes
+
+- **Not Zod-specific:** any object with a `safeParse(input)` returning
+  `{ success, data }` or `{ success: false, error }` works.
+- **Fail-open:** a bug in the recorder never breaks the validated boundary.
+- **Backward compatible:** `defineEvent` is unchanged — it still throws on a bad
+  payload. `defineValidator` is the new, observable path.
+
+## Related
+
+- [Configuration](/autotel/configuration) — `init()` sets up the meter the
+  counter writes to.
+- [Security Observability](/autotel/integrations/security) — where you'd route
+  the narrow subset of mismatches that are genuinely security signals.

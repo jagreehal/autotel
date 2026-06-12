@@ -1,14 +1,30 @@
 # Security Observability
 
-How to use Autotel as a security control plane: emit security events with a
-stable schema, derive signals from telemetry you already have, alert on
-rates and absences, and triage incidents from the CLI.
+Record security-relevant behaviour with structured hooks and metrics. Emit
+`security.*` events at decision points, derive signals from spans you already
+have, and triage from the CLI. Alert rules live in your OTLP backend.
 
-> OWASP A09:2025 (Security Logging & Alerting Failures) calls out missing
-> logs for important events, unclear messages, and ineffective alerting.
-> Autotel's answer: structured, correlated, redaction-safe, sampling-exempt
-> security telemetry plus alertable metrics — detection rules and dashboards
-> stay in your backend, where they belong.
+> **Scope**
+>
+> - Autotel exports traces, metrics, and structured events. It does not
+>   authenticate, authorize, block, or page anyone.
+> - You call the hooks at auth checks, tenant boundaries, and secret access.
+>   Autotel writes `security.*` attributes and counters.
+> - Alert rules and dashboards live in your OTLP backend (Prometheus, Datadog,
+>   Loki, etc.).
+
+OWASP A09:2025 (Security Logging & Alerting Failures) targets missing logs,
+unclear messages, and weak alerting. Autotel exports structured,
+redaction-safe, sampling-exempt security telemetry plus alertable metrics.
+
+## The hooks
+
+| Explicit (you call at decision points) | Passive (wire once) |
+|---|---|
+| `securityEvent()` / `withSecurity()` | `createSecuritySignalProcessor()` |
+| `hashIdentifier()` | `startSecurityHeartbeat()` |
+| `defineValidator()` + `onValidationMismatch()` | `init({ attributeRedactor })` |
+| `withAudit()` (compliance trail) | `SecuritySubscriber` (routing) |
 
 ## The pieces
 
@@ -16,10 +32,11 @@ rates and absences, and triage incidents from the CLI.
 |---|---|---|
 | `securityEvent()` / `withSecurity()` | `autotel-audit` | Typed events, stable `security.*` schema, force-keep through tail sampling, credential-key guard, auto counter |
 | `createSecuritySignalProcessor()` | `autotel-audit` | Zero-code signals from HTTP/LLM spans: probe detection, denied-response metrics, auth-failure bursts, token anomalies |
-| `startSecurityHeartbeat()` | `autotel-audit` | `autotel.security.heartbeat` counter — alert on the *absence* of telemetry |
+| `startSecurityHeartbeat()` | `autotel-audit` | `autotel.security.heartbeat` counter; alert on the *absence* of telemetry |
 | `hashIdentifier()` | `autotel-audit` | Correlate emails/IPs across events without logging raw PII |
 | `SecuritySubscriber` | `autotel-subscribers/security` | Forward `security.*` events to webhook/SIEM/pager, severity-gated |
 | `autotel security summary` / `events` | `autotel-cli` | Incident triage from the terminal, JSON envelope output |
+| Security lens | `autotel-devtools` | Live **Security** tab surfacing `security.*` spans during local development |
 
 ## Setup (one-time)
 
@@ -68,7 +85,7 @@ Span attributes: `security.event`, `security.category`, `security.outcome`,
 `security.reason`, `security.suspicious_request`, `security.signal`,
 `autotel.security=true` (plus force-keep markers).
 
-## Detection rules — starter pack
+## Detection rules (starter pack)
 
 OTLP metric names map to backend-specific forms; Prometheus renders
 `autotel.security.events` as `autotel_security_events_total`.
@@ -125,7 +142,7 @@ groups:
             signal=~"llm_.*"}[15m])) > 0
         labels: { severity: warning }
 
-      # 7. THE one that matters most: telemetry went dark
+      # 7. Alert when heartbeat stops (telemetry pipeline went dark)
       - alert: SecurityTelemetryAbsent
         expr: >
           absent(rate(autotel_security_heartbeat_total{
@@ -133,7 +150,7 @@ groups:
         for: 5m
         labels: { severity: critical }
         annotations:
-          summary: "No security telemetry from api — pipeline dead or service compromised"
+          summary: "No security telemetry from api; pipeline dead or service compromised"
 ```
 
 ### Datadog (monitor queries)
@@ -174,7 +191,8 @@ autotel trace summary <traceId>
 
 `security summary` returns events by severity/category/outcome, top event
 names, probe signals by pattern, denied responses by status with top
-clients, and sample trace IDs for pivoting — one JSON document on stdout.
+clients, and sample trace IDs for pivoting. Output is one JSON document on
+stdout.
 
 ## Routing alerts without a backend
 
@@ -197,13 +215,16 @@ const events = new Events('api', {
 
 ## OWASP Top 10 mapping
 
+You instrument the rows below at the relevant decision point. Autotel
+standardizes the telemetry; your backend runs detection.
+
 | OWASP 2025 | What Autotel makes visible |
 |---|---|
 | A01 Broken Access Control | `access.denied`, `access.tenant.violation` events; denied-response metrics |
 | A03 Software Supply Chain | `dependency.scan.failed`, `config.changed` events (emit from CI/deploy hooks) |
 | A05 Injection | `validation.failed` events; SQLi/XSS probe signals from the processor |
 | A07 Auth Failures | `auth.*` events; auth-failure burst anomalies |
-| A09 Logging & Alerting Failures | the whole feature set — plus the heartbeat for the meta-failure (logging silently stopped) |
+| A09 Logging & Alerting Failures | the whole feature set, plus the heartbeat for the meta-failure (logging silently stopped) |
 | LLM01 Prompt Injection | `llm.prompt_injection.detected` events |
 | LLM10 Unbounded Consumption | `llm_excessive_tokens` / `llm_token_budget_exceeded` signals |
 
@@ -218,8 +239,8 @@ catches value-shaped PII as a second layer.
 
 ## Testing your security telemetry
 
-A control you cannot observe is a control you cannot trust. In integration
-tests, assert that security paths emit:
+In integration tests, assert that security paths emit the expected spans and
+attributes:
 
 ```typescript
 import { createTraceCollector } from 'autotel/testing';
@@ -230,5 +251,5 @@ const span = collector.expectSpan({ 'security.event': 'auth.login.failed' });
 expect(span.attributes['security.severity']).toBe('warning');
 ```
 
-And periodically fire a synthetic probe (e.g. request `/.env` from a
-canary) to verify the whole chain: signal → metric → alert → human.
+Periodically fire a synthetic probe (e.g. request `/.env` from a canary) to
+verify the chain from signal through metric, alert, and on-call response.

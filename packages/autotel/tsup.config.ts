@@ -39,6 +39,8 @@ export default defineConfig({
     'workflow-distributed': 'src/workflow-distributed.ts',
     'correlation-id': 'src/correlation-id.ts',
     'security-schema': 'src/security-schema.ts',
+    validate: 'src/validate.ts',
+    'validation-attributes': 'src/validation-attributes.ts',
     attributes: 'src/attributes/index.ts',
     'semantic-conventions': 'src/semantic-conventions.ts',
     'test-span-collector': 'src/test-span-collector.ts',

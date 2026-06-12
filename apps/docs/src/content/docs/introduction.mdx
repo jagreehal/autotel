@@ -23,6 +23,15 @@ Autotel is a zero-boilerplate OpenTelemetry wrapper for TypeScript. It replaces 
 | Product/analytics events    | `track(name, attributes)`                                                       |
 | Init (once at startup)      | `init({ service, ... })`                                                        |
 | Testing                     | `createTraceCollector()` from `autotel/testing`                                 |
+| Security observability hooks | `securityEvent()` from `autotel-audit`. See [Security Observability](/autotel/integrations/security/). |
+| Input validation telemetry  | `defineValidator()` from `autotel/validate`. See [Validation Telemetry](/autotel/integrations/validation/). |
+| Audit / compliance trail    | `withAudit()` from `autotel-audit`. See [Audit Logging](/autotel/integrations/audit/). |
+
+## Related integrations
+
+- [Security Observability](/autotel/integrations/security/): hooks at auth and access-control decision points
+- [Validation Telemetry](/autotel/integrations/validation/): observable `safeParse` mismatches at API boundaries
+- [Audit Logging](/autotel/integrations/audit/): compliance trail with sampling bypass
 
 ## Installation
 
