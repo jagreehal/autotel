@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import { track } from './track';
+import { hashJson } from './stable-hash';
 import type { EventSchemaMetadata } from './event-subscriber';
 
 type SafeParseResult<T> =
@@ -34,7 +34,7 @@ export function defineEvent<
     ? {
         source: 'zod' as const,
         jsonSchema,
-        hash: hashSchema(jsonSchema),
+        hash: hashJson(jsonSchema),
       }
     : undefined;
 
@@ -55,23 +55,4 @@ export function defineEvent<
       );
     },
   };
-}
-
-function hashSchema(schema: unknown): string {
-  return createHash('sha256').update(stableStringify(schema)).digest('hex');
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || value === undefined || typeof value !== 'object') {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return '[' + value.map((v) => stableStringify(v)).join(',') + ']';
-  }
-  const obj = value as Record<string, unknown>;
-  const body = Object.keys(obj)
-    .sort()
-    .map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k]))
-    .join(',');
-  return '{' + body + '}';
 }

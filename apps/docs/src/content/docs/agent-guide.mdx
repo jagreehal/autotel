@@ -15,6 +15,11 @@ description: Before/after examples, when-to-use-what rules, and framework setup 
 | Show API error in UI (client)      | `parseError(caught)` → use `message`, `why`, `fix`, `link`                  | Toasts, error banners, forms           |
 | Product/analytics events           | `track('event.name', attributes)` or `Event` from `autotel/event`           | Clicks, signups, conversions           |
 | Record error on current span       | `recordStructuredError(ctx, error)` or request logger `.error()`            | Inside catch blocks when you have a span |
+| Security decision point            | `securityEvent()` from `autotel-audit`                                      | Login failure, `access.tenant.violation` |
+| Wrap a sensitive operation         | `withSecurity()` from `autotel-audit`                                       | API key creation                       |
+| Correlate actor without raw PII    | `hashIdentifier()` from `autotel-audit`                                     | Email or IP in `actorId`               |
+| Validation mismatch observability  | `defineValidator()` from `autotel/validate`                                 | POST body shape at boundary            |
+| Zero-code probe/401/LLM signals    | `createSecuritySignalProcessor()` in `init({ spanProcessors })`             | Scanner traffic, credential stuffing   |
 
 **Rule of thumb**: If there's an HTTP request or a "job", create a span (via `trace()` or framework middleware) and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents.
 
@@ -170,6 +175,47 @@ export default trace((ctx) => async (event) => {
 
 (If the framework attaches the event to an existing span, use `getRequestLogger()` with no args and omit the outer `trace` if the framework already creates the span.)
 
+### 5. Failed login without telemetry → `securityEvent()` hook
+
+**Before:**
+
+```typescript
+export const postLogin = trace((ctx) => async (req, res) => {
+  const { email, password } = req.body;
+  const user = await findUser(email);
+  if (!user || !(await verifyPassword(user, password))) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  return res.json({ token: await issueToken(user) });
+});
+```
+
+**After:**
+
+```typescript
+import { trace } from 'autotel';
+import { securityEvent, hashIdentifier } from 'autotel-audit';
+
+export const postLogin = trace((ctx) => async (req, res) => {
+  const { email, password } = req.body;
+  const user = await findUser(email);
+  if (!user || !(await verifyPassword(user, password))) {
+    securityEvent({
+      name: 'auth.login.failed',
+      category: 'authentication',
+      outcome: 'failure',
+      severity: 'warning',
+      actorId: hashIdentifier(email),
+      reason: 'invalid_password',
+    });
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  return res.json({ token: await issueToken(user) });
+});
+```
+
+The handler still enforces auth. Autotel records the signal. See [Security Observability](/autotel/integrations/security/) for setup and metrics.
+
 ---
 
 ## Framework Setup Snippets
@@ -223,11 +269,15 @@ See `packages/autotel-tanstack` and `apps/example-tanstack-start`: middleware an
 
 Use `autotel-cloudflare`. It wraps `fetch` so each request gets a span and provides full bindings instrumentation (KV, R2, D1, Durable Objects, Workers AI, Vectorize, Queues, etc.). Use `getRequestLogger()` or trace context inside the handler.
 
-### Audit / Compliance
+### Audit & Security Observability
 
-For audit-grade events that must bypass tail-drop sampling, use the optional
-`autotel-audit` package (`withAudit`, `forceKeepAuditEvent`,
-`setAuditAttributes`).
+Use the optional `autotel-audit` package for compliance and security telemetry:
+
+- **Audit trail** (`withAudit`, `forceKeepAuditEvent`, `setAuditAttributes`): who did what to which resource.
+- **Security signals** (`securityEvent`, `withSecurity`): abuse and detection events at auth, access control, and secret-handling decision points.
+- **Zero-code HTTP signals**: register `createSecuritySignalProcessor()` in `init({ spanProcessors })` for probe paths, denied responses, and auth bursts.
+
+See [Audit Logging](/autotel/integrations/audit/) and [Security Observability](/autotel/integrations/security/).
 
 ### Generic Node HTTP
 
@@ -288,6 +338,9 @@ When adding Autotel support for a new framework (e.g. a new web framework):
 - [ ] No raw `console.log` for request/context when request logger is available
 - [ ] No `await import()` at init; use `node-require` helpers if needed
 - [ ] No secrets or full PII in attributes or logs
+- [ ] Security decision points emit `securityEvent()` or use `withSecurity()`
+- [ ] `createSecuritySignalProcessor()` registered in `init()` for zero-code HTTP signals
+- [ ] PII in security events uses `hashIdentifier()`, never raw values
 
 ## Claude Code Skill
 

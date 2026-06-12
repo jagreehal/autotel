@@ -82,10 +82,11 @@ When the user wants observability, suggest these entry points. All from `autotel
 | Parse API errors (client)   | `parseError(err)` → `{ message, status, why?, fix?, link?, raw }`                                |
 | Lock init (framework)       | `lockLogger()`, `isLoggerLocked()`                                                               |
 | Product/analytics events    | `track(name, attributes)` or `Event` from `autotel/event`                                        |
+| Observable input validation | `defineValidator(name, schema, { boundary, onMismatch })` from `autotel/validate` — records Zod/`safeParse` mismatches as `validation.*` spans + `autotel.validation.mismatches` counter. `reject` (default) records then throws a 400; `observe` records then returns raw input. PII-safe (paths/codes only). Security escalation is explicit opt-in via `onValidationMismatch()`. Not the same as `autotel-schema` (telemetry-surface contract) |
 | Init (once at startup)      | `init({ service, ... })` from `autotel` or `autotel/instrumentation`                             |
 | PII redaction               | `init({ attributeRedactor: 'default' | 'strict' | 'pci-dss' | { keyPatterns, valuePatterns } })`       |
 | Testing                     | `createTraceCollector()` from `autotel/testing`; `InMemorySpanExporter` from `autotel/exporters` |
-| Security events (OWASP A09) | `securityEvent()` / `withSecurity()` / `hashIdentifier()` from `autotel-audit`; zero-code signals via `createSecuritySignalProcessor()` in `init({ spanProcessors })` — see `docs/SECURITY-OBSERVABILITY.md` |
+| Security observability hooks (OWASP A09) | Observability at security decision points: `securityEvent()` / `withSecurity()` / `hashIdentifier()` from `autotel-audit`; zero-code signals via `createSecuritySignalProcessor()` in `init({ spanProcessors })`. See `docs/SECURITY-OBSERVABILITY.md` and `integrations/security` in apps/docs. |
 
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
 - **Structured errors**: Prefer `createStructuredError` over `new Error()` in API routes and services. On the client, use `parseError(caught)` to show message/why/fix in UI.
@@ -175,7 +176,7 @@ Use these when suggesting changes to user code:
 
 **Security-relevant path without telemetry**
 
-> This is a security decision point (auth, access control, key/secret handling, payment, tenant boundary). Emit a typed security event with `securityEvent({ name, category, outcome, severity })` from `autotel-audit` so it survives tail sampling and feeds the `autotel.security.events` counter. Use `hashIdentifier()` for emails/IPs — never raw PII, never secrets (the credential-key guard drops them, but don't rely on it).
+> This is a security decision point (auth, access control, key/secret handling, payment, tenant boundary). Emit `securityEvent({ name, category, outcome, severity })` from `autotel-audit` so the signal survives tail sampling and feeds the `autotel.security.events` counter. Autotel records the event; this handler still enforces the decision. Use `hashIdentifier()` for emails/IPs. Never raw PII or secrets (the credential-key guard drops them, but don't rely on it).
 
 **Wrong import or init**
 

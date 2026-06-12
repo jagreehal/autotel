@@ -208,6 +208,16 @@
       "import": "./dist/security-schema.js",
       "require": "./dist/security-schema.cjs"
     },
+    "./validate": {
+      "types": "./dist/validate.d.ts",
+      "import": "./dist/validate.js",
+      "require": "./dist/validate.cjs"
+    },
+    "./validation-attributes": {
+      "types": "./dist/validation-attributes.d.ts",
+      "import": "./dist/validation-attributes.js",
+      "require": "./dist/validation-attributes.cjs"
+    },
     "./test-span-collector": {
       "types": "./dist/test-span-collector.d.ts",
       "import": "./dist/test-span-collector.js",
