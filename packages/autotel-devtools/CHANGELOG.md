@@ -1,5 +1,51 @@
 # autotel-devtools
 
+## 8.1.0
+
+### Minor Changes
+
+- e6037fb: GenAI view: a "Trace" mode that decomposes a run into a depth-indented tree.
+
+  Alongside List and Timeline, the GenAI tab now has a **Trace** view that breaks the selected run down into what actually happened inside it — each model call decomposed into its reasoning, the tools it called and the text it wrote, with nested sub-agents underneath. Built from the real span tree (`parentSpanId` + GenAI semantics), so it adapts to both common shapes:
+  - **Pydantic AI + Logfire** — `invoke_agent → [chat, execute_tool, chat]`: the tool is its own span, shown with its result; the chats are leaf steps and the answer step carries the text.
+  - **Wrapper-span runs** — an outer generate span (e.g. `ai.generateText`) that is itself classified as a `chat` renders as a container `group`, its child model calls as steps, and the inline tool call is synthesized under the step that made it.
+
+  Tool calls are deduped two ways so they appear exactly once: against a dedicated `execute_tool` span, and against the same call id replayed across later steps' input history. Clicking any node jumps to that span in the List view.
+
+  New pure, unit-tested helpers exported from the widget internals: `buildRunTrace` and `flattenTrace` (`genai/trace`).
+
+- e6037fb: GenAI view: run-level summary strip and a guided "Explain run" tour.
+  - **Run summary strip** — for any multi-span run (conversation group, or trace when there's no conversation id), a compact KPI row above the detail pane shows total cost, input→output tokens, reasoning tokens, model calls, tool executions, sub-agent count, duration and errors. Cost is summed only from table-priced calls and flagged with a trailing `+` when some calls are unpriced (a lower bound, never a fabricated total).
+  - **Guided tour** — an "Explain run" button steps through the run's spans in chronological order with plain-language narration ("the model decides what to do", "a tool is real code the agent ran", "the model writes the answer"). Auto-play, prev/next, keyboard control (←/→/Space/Esc) and a progress bar; it drives the existing detail panes as the stage, and clicking a span jumps the narration to that step. Built for demoing what an agent actually did.
+
+  New tree-shakeable helpers exported from the widget internals: `summarizeRun`/`groupRuns` (`genai/summary`) and `explainSpan`/`buildTour` (`genai/narration`), both pure and unit-tested.
+
+  The run summary is accurate across span shapes. Some frameworks emit a wrapping model-call span (e.g. an outer `ai.generateText`) that is itself classified as `chat` and carries aggregate tokens, cost and tool calls that duplicate its child model calls; aggregate/parent spans (those that time-contain another span in the run) are now excluded from model-call, token and cost tallies. Inline tool calls are also deduped by tool-call id, since prior tool calls are often replayed in each turn's input history and the same call otherwise surfaces on several spans. Verified end-to-end against both a Logfire (Python) agent and a step-based JS agent, running on Ollama.
+
+  Fixes a pre-existing units bug in GenAI span timing. `server/otlp.ts` converts OTLP nanosecond timestamps to **milliseconds** at ingestion (absolute nanosecond unix times overflow JS `Number` precision), which is the `SpanData` contract the whole app uses — but the GenAI layer mislabelled these as nanoseconds (`startNs`/`endNs`) and its formatters divided by 1e6 again, collapsing every live GenAI latency and run duration to `0μs`/`0ms`. The normalized fields are now `startMs`/`endMs` (`durationNs` → `durationMs` on `RunSummary`), the GenAI list/detail/timeline/summary formatters treat the value as milliseconds, and the captured test fixtures were converted from nanoseconds to milliseconds to match real ingestion. The unit-test data was stale-but-consistent (also nanoseconds), which is why this never failed a test; it only showed on live data.
+
+  Also surfaces the executed tool name on normalized GenAI spans — `gen_ai.tool.name`/`gen_ai.tool.call.id` now populate a typed `tool: { name, callId }` field (previously only present untyped in `extras.raw`), so `execute_tool` steps read e.g. "Tool: get_user_time" instead of the generic agent name. The narration's planning-vs-responding classification also recognises a tool decision signalled purely via `finish_reasons` (`tool_call`/`tool_calls`/`tool_use`/`function_call`), which is how Ollama-via-Logfire reports it.
+
+### Patch Changes
+
+- e6037fb: GenAI view: token-breakdown labels and named tool steps in the tour.
+  - The model detail header now spells out the **cached** and **reasoning** share of token usage inline — `176 (100 cached) → 90 (32 reasoning)` — instead of only a cached percentage, so the reasoning-token count is visible where the call is inspected.
+  - The guided tour's planning step now **names the tools** the model requested: "Model calls getWeather (x3)" rather than the generic "Model decides what to do", falling back to the generic title when a provider signals the decision only via a finish reason (no structured tool calls to name).
+
+  New shared formatters in `widget/utils/genaiFormat`: `formatInputTokens`, `formatOutputTokens`, and `summarizeToolCalls` (collapses repeats into `name (xN)`, truncates long lists).
+
+- e6037fb: Guard the receiver's read surface against cross-origin scraping by web pages.
+
+  The captured-telemetry read-back (`GET /v1/traces`), the clear endpoint (`DELETE /v1/traces`) and the live WebSocket (`/ws`) are now origin-checked. Previously every response carried `Access-Control-Allow-Origin: *`, so any website a developer happened to visit could `fetch('http://127.0.0.1:4318/v1/traces')` or open `ws://127.0.0.1:4318/ws` and read their locally captured prompts, responses and tokens.
+
+  Two checks, matching the threat model:
+  - A request to a read/stream endpoint carrying a **non-loopback `Origin`** (a cross-origin browser read) is rejected with `403`.
+  - When the receiver is bound to a loopback host (the default), a **non-loopback `Host`** (DNS rebinding, where the read looks same-origin and may carry no `Origin`) is also rejected. An explicit non-loopback bind (`--host 0.0.0.0`) is treated as an opt-in to network exposure, so only the `Origin` check applies there.
+
+  OTLP ingestion (`POST /v1/{traces,logs,metrics}`), `widget.js` and `healthz` stay fully open — browser apps on arbitrary dev origins must still send telemetry and load the embeddable widget, which keeps working because it connects from a loopback origin. Server-side reads with no `Origin` (curl, Node `fetch` in Playwright tests) are unaffected.
+
+  New guard helpers are exported from `autotel-devtools/server`: `allowSensitiveRequest`, `isLoopbackHostname`, `hostHeaderIsLoopback`, `originIsLoopback`.
+
 ## 8.0.0
 
 ### Patch Changes
