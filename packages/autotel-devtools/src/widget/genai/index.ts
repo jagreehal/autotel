@@ -1,6 +1,7 @@
-// Public entry for the GenAI normalization layer. Consumers (the widget
-// itself and the VSCode extension) import detect/normalize/stitch/prices/types
-// from this single path so the shape stays in sync.
+// Public entry for the GenAI normalization layer, exposed as the
+// `autotel-devtools/genai` package export: re-exports detect/normalize/stitch/
+// prices/types so external consumers can pull the pure-TS layer from one path.
+// Widget-internal code imports the individual modules directly, not this barrel.
 
 export { isGenAiSpan } from './detect'
 export { toGenAiSpan } from './normalize'

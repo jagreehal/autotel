@@ -1,6 +1,6 @@
 // src/server/server.ts
 import { WebSocketServer, WebSocket } from 'ws'
-import type { Server as HTTPServer } from 'node:http'
+import type { Server as HTTPServer, IncomingMessage } from 'node:http'
 import { createServer } from 'node:http'
 import { ErrorAggregator } from './error-aggregator'
 import type {
@@ -15,6 +15,7 @@ import {
   resolveTelemetryLimits,
   type TelemetryLimits,
 } from './telemetry-limits'
+import { allowSensitiveRequest, hostHeaderIsLoopback } from './origin-guard'
 
 export interface DevtoolsServerOptions {
   port?: number
@@ -25,6 +26,12 @@ export interface DevtoolsServerOptions {
   maxTraceCount?: number
   maxLogCount?: number
   maxMetricCount?: number
+  /**
+   * Bind host, used only to decide the WebSocket origin policy. A loopback host
+   * (the default) enables the DNS-rebinding `Host` check on the live stream; an
+   * explicit non-loopback bind opts out, leaving just the cross-origin check.
+   */
+  host?: string
   /**
    * Called after each ingest, with the incremental data just broadcast to WS
    * clients. Lets an embedder (e.g. the VS Code extension) react to new
@@ -53,7 +60,16 @@ export class DevtoolsServer {
     this.onData = options.onData
 
     this.httpServer = options.server ?? createServer()
-    this.wss = new WebSocketServer({ server: this.httpServer, path: options.path ?? '/ws' })
+    // Reject a live-stream subscription from a page that isn't same-machine —
+    // a browser tab on evil.com opening `ws://127.0.0.1:PORT/ws` would otherwise
+    // receive every captured span. Mirrors the read-back HTTP guard.
+    const loopbackOnly = options.host == null || hostHeaderIsLoopback(options.host)
+    this.wss = new WebSocketServer({
+      server: this.httpServer,
+      path: options.path ?? '/ws',
+      verifyClient: ({ origin, req }: { origin: string; req: IncomingMessage }) =>
+        allowSensitiveRequest({ origin, host: req.headers.host }, loopbackOnly),
+    })
 
     // The `ws` library re-emits the http server's `error` event onto the
     // WebSocketServer itself. During the bind phase (EADDRINUSE etc.) the

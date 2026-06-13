@@ -6,6 +6,8 @@
 // Pure functions over normalized spans so the copy is unit-tested and the
 // Svelte layer stays a thin renderer.
 
+import { summarizeToolCalls } from '../utils/genaiFormat'
+import { MODEL_OPS } from './operations'
 import type { GenAiSpan } from './types'
 
 export interface NarrationStep {
@@ -17,8 +19,6 @@ export interface NarrationStep {
   /** One-sentence, jargon-free explanation for a demo audience. */
   explain: string
 }
-
-const MODEL_OPS = new Set(['chat', 'text_completion', 'generate_content'])
 
 /** A finish reason that means "the model asked to call a tool". Providers spell
  *  it differently (`tool_call`, `tool_calls`, `tool_use`, `function_call`). */
@@ -106,9 +106,14 @@ export function explainSpan(span: GenAiSpan): Omit<NarrationStep, 'span'> {
 
   if (MODEL_OPS.has(op)) {
     if (decidesTools(span)) {
+      // Name the tools when we know them ("Model calls getWeather (x3)");
+      // otherwise stay generic — some providers only signal the decision via a
+      // finish reason, with no structured tool calls on the span.
+      const names = span.toolCalls.map((t) => t.name).filter(Boolean)
+      const tools = summarizeToolCalls(names)
       return {
         role: 'Model · planning',
-        title: 'Model decides what to do',
+        title: tools.label ? `Model calls ${tools.label}` : 'Model decides what to do',
         explain:
           'The model reads the request, reasons about it, and decides which tools to call — it requests them, it does not run them yet.',
       }

@@ -1,16 +1,12 @@
 <script lang="ts" module>
   import { formatCostUsd } from '../../utils/genaiFormat';
+  import { formatDuration } from '../../utils';
 
   function formatTokens(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 10_000) return `${(n / 1000).toFixed(0)}k`;
     if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
     return String(n);
-  }
-
-  function formatDuration(ms: number): string {
-    if (ms < 1000) return `${ms.toFixed(0)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
   }
 </script>
 

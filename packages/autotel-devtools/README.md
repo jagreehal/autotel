@@ -257,6 +257,26 @@ await expect
   .toBeGreaterThan(0);
 ```
 
+These read-back calls run from Node (no `Origin` header), so they are unaffected
+by the origin guard below.
+
+## Read-surface origin guard
+
+OTLP **ingestion** (`POST /v1/{traces,logs,metrics}`), `GET /widget.js` and
+`GET /healthz` are open to any origin — browser apps on arbitrary dev origins
+must be able to send telemetry and load the embeddable widget. The **read**
+surface is not: `GET /v1/traces`, `DELETE /v1/traces` and the `/ws` WebSocket are
+origin-checked so a web page you happen to be visiting can't `fetch()` or stream
+your locally captured prompts, responses and tokens.
+
+- A non-loopback `Origin` (a cross-origin browser read) is rejected with `403`.
+- When bound to a loopback host (the default), a non-loopback `Host` (DNS
+  rebinding) is also rejected. `--host 0.0.0.0` opts into network exposure and
+  applies only the `Origin` check.
+
+The embedded widget keeps working — it connects from a loopback origin
+(`http://localhost:<your-app-port>`). Server-side reads with no `Origin` pass.
+
 ## License
 
 MIT

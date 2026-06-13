@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Bot, ArrowRight, Cpu, AlertTriangle } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
+  import { formatDuration } from '../../utils';
   import type { GenAiSpan } from '../../genai/types';
 
   interface Props {
@@ -51,11 +52,6 @@
       return `handoff: ${span.handoff.fromAgent ?? '?'} → ${span.handoff.toAgent ?? '?'}`;
     if (span.agent?.name) return span.agent.name;
     return `${span.provider}/${span.responseModel ?? span.requestModel}`;
-  }
-
-  function formatMs(ms: number): string {
-    if (ms < 1000) return `${ms.toFixed(0)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
   }
 
   // A span is a wrapper if another span in the same lane is fully contained
@@ -138,7 +134,7 @@
           : `conversation ${group.conversationId.slice(0, 12)}…`}
       </span>
       <span class="text-xs text-fg-subtle ml-auto">
-        {group.spans.length} span{group.spans.length === 1 ? '' : 's'} · {formatMs(
+        {group.spans.length} span{group.spans.length === 1 ? '' : 's'} · {formatDuration(
           lanes.durationMs,
         )} · {group.service}
       </span>
@@ -179,7 +175,7 @@
               <button
                 type="button"
                 onclick={() => onSelectSpan?.(s.spanId)}
-                title={`${s.operation} · ${formatMs(s.endMs - s.startMs)}${s.usage.inputTokens != null ? ` · ${s.usage.inputTokens}→${s.usage.outputTokens ?? '—'}` : ''}${isWrapper ? ' (wraps children)' : ''}`}
+                title={`${s.operation} · ${formatDuration(s.endMs - s.startMs)}${s.usage.inputTokens != null ? ` · ${s.usage.inputTokens}→${s.usage.outputTokens ?? '—'}` : ''}${isWrapper ? ' (wraps children)' : ''}`}
                 class={cn(
                   'absolute top-0.5 bottom-0.5 rounded text-[10px] font-mono px-1 truncate flex items-center gap-1 transition-all',
                   spanBarClass(isWrapper, isHandoffLane, errored),

@@ -55,12 +55,25 @@ describe('explainSpan', () => {
     expect(e.explain).toMatch(/real code/i)
   })
 
-  it('distinguishes a planning model call (decides tools)', () => {
+  it('distinguishes a planning model call and names the tools', () => {
     const planning = explainSpan(
-      span({ toolCalls: [{ name: 'search', arguments: {} }] }),
+      span({
+        toolCalls: [
+          { name: 'search', arguments: {} },
+          { name: 'search', arguments: {} },
+          { name: 'getWeather', arguments: {} },
+        ],
+      }),
     )
     expect(planning.role).toBe('Model · planning')
-    expect(planning.title).toMatch(/decides/i)
+    expect(planning.title).toBe('Model calls search (x2), getWeather')
+  })
+
+  it('stays generic when the planning span has no structured tool calls', () => {
+    // finish-reason-only signal: no toolCalls array to name.
+    const planning = explainSpan(span({ finishReasons: ['tool_call'] }))
+    expect(planning.role).toBe('Model · planning')
+    expect(planning.title).toBe('Model decides what to do')
   })
 
   it('detects tool decisions from assistant messages too', () => {

@@ -60,7 +60,8 @@ export const AnthropicCacheHit: Story = {
   beforeEach: () => seedTraces([[anthropicCache as unknown as SpanData]]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('anthropic')).toBeInTheDocument()
-    await expect(canvas.getByText(/% cached/)).toBeInTheDocument()
+    // ModelHeader spells out the cached token share inline, e.g. "176 (100 cached)".
+    await expect(canvas.getByText(/\(\d+ cached\)/)).toBeInTheDocument()
   },
 }
 
@@ -154,6 +155,19 @@ export const VercelAiSdkToolsReal: Story = {
     const toolName = await canvas.findByText('lookupTraveler')
     await userEvent.click(toolName)
     await expect(await canvas.findByText('Input')).toBeInTheDocument()
+  },
+}
+
+// Trace mode decomposes the selected run into a depth-indented tree of steps,
+// tools and text — switching to it surfaces the tool the model invoked.
+export const TraceMode: Story = {
+  beforeEach: () => seedTraces([aisdkTools as unknown as SpanData[]]),
+  play: async ({ canvas }) => {
+    const traceBtn = await canvas.findByRole('button', { name: /^Trace$/i })
+    await userEvent.click(traceBtn)
+    await expect(
+      (await canvas.findAllByText(/Tool: lookupTraveler/i)).length,
+    ).toBeGreaterThan(0)
   },
 }
 

@@ -25,6 +25,42 @@ describe('DevtoolsServer', () => {
       await new Promise((r) => setTimeout(r, 50));
     });
 
+    it('rejects a live-stream subscription from a remote origin', async () => {
+      server = new DevtoolsServer({ port: 0 });
+      await new Promise((r) => setTimeout(r, 100));
+      const port = server!.port;
+
+      const ws = new WebSocket(`ws://localhost:${port}/ws`, {
+        origin: 'https://evil.com',
+      });
+      const rejected = await new Promise<boolean>((resolve) => {
+        ws.on('open', () => resolve(false));
+        ws.on('error', () => resolve(true));
+        ws.on('unexpected-response', () => resolve(true));
+      });
+
+      expect(rejected).toBe(true);
+      expect(server!.clientCount).toBe(0);
+    });
+
+    it('allows a live-stream subscription from a loopback origin', async () => {
+      server = new DevtoolsServer({ port: 0 });
+      await new Promise((r) => setTimeout(r, 100));
+      const port = server!.port;
+
+      const ws = new WebSocket(`ws://localhost:${port}/ws`, {
+        origin: 'http://localhost:3000',
+      });
+      await new Promise<void>((resolve, reject) => {
+        ws.on('open', resolve);
+        ws.on('error', reject);
+      });
+
+      expect(server!.clientCount).toBe(1);
+      ws.close();
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
     it('broadcasts trace data to connected clients', async () => {
       server = new DevtoolsServer({ port: 0 });
       await new Promise((r) => setTimeout(r, 100));

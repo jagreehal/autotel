@@ -2,6 +2,12 @@
   import { Cpu, Clock, Coins, Hash, Bot } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
   import CopyButton from '../CopyButton.svelte';
+  import {
+    formatInputTokens,
+    formatOutputTokens,
+    formatCostUsd,
+  } from '../../utils/genaiFormat';
+  import { formatDuration } from '../../utils';
   import type { GenAiSpan } from '../../genai/types';
 
   interface Props {
@@ -18,35 +24,18 @@
     deepseek: 'bg-cyan-500/15 text-cyan-600 border-cyan-500/30',
   };
 
-  function formatMs(ms: number): string {
-    if (ms < 1) return `${(ms * 1000).toFixed(0)}μs`;
-    if (ms < 1000) return `${ms.toFixed(0)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  }
-
-  function formatCost(usd: number): string {
-    if (usd === 0) return '$0';
-    if (usd < 0.0001) return `$${(usd * 1_000_000).toFixed(2)}μ`;
-    if (usd < 0.01) return `$${(usd * 1000).toFixed(3)}m`;
-    return `$${usd.toFixed(4)}`;
-  }
-
-  function formatTokens(n: number | undefined): string {
-    if (n == null) return '—';
-    if (n < 1000) return `${n}`;
-    return `${(n / 1000).toFixed(1)}k`;
-  }
-
   const providerClass = $derived(
     PROVIDER_COLORS[span.provider] ?? 'bg-subtle text-fg-muted border-line',
   );
-  const latency = $derived(formatMs(span.endMs - span.startMs));
-  const cachedPct = $derived(
-    span.usage.cacheReadInputTokens && span.usage.inputTokens
-      ? Math.round(
-          (span.usage.cacheReadInputTokens / span.usage.inputTokens) * 100,
-        )
-      : 0,
+  const latency = $derived(formatDuration(span.endMs - span.startMs));
+  const inputTokensLabel = $derived(
+    formatInputTokens(span.usage.inputTokens, span.usage.cacheReadInputTokens),
+  );
+  const outputTokensLabel = $derived(
+    formatOutputTokens(
+      span.usage.outputTokens,
+      span.usage.reasoningOutputTokens,
+    ),
   );
 
   const paramText = $derived.by(() => {
@@ -130,14 +119,14 @@
       <Clock size={12} />
       {latency}
     </span>
-    <span class="inline-flex items-center gap-1" title="Tokens in → out">
+    <span
+      class="inline-flex items-center gap-1 font-mono text-xs"
+      title="Tokens in (cached) → out (reasoning)"
+    >
       <Hash size={12} />
-      {formatTokens(span.usage.inputTokens)}
+      {inputTokensLabel}
       <span class="text-fg-subtle">→</span>
-      {formatTokens(span.usage.outputTokens)}
-      {#if cachedPct > 0}
-        <span class="ml-1 text-success">({cachedPct}% cached)</span>
-      {/if}
+      {outputTokensLabel}
     </span>
     <span
       class={cn(
@@ -149,9 +138,7 @@
         : 'Estimated cost'}
     >
       <Coins size={12} />
-      {span.cost?.source === 'unknown'
-        ? '—'
-        : formatCost(span.cost?.total ?? 0)}
+      {formatCostUsd(span.cost?.total, span.cost?.source === 'table')}
     </span>
   </span>
 </div>

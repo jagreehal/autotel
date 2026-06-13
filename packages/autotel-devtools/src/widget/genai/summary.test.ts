@@ -135,10 +135,9 @@ describe('summarizeRun', () => {
     expect(s.durationMs).toBe(400)
   })
 
-  it('excludes aggregate/wrapper spans (Vercel AI SDK) from model & token counts', () => {
-    // ai.generateText (parent) time-contains its two ai.generateText.doGenerate
-    // children and carries aggregate tokens + the inlined tool call. Counting it
-    // would double the totals.
+  it('excludes aggregate/wrapper spans from model & token counts', () => {
+    // The wrapper (parent) time-contains its two child model calls and carries
+    // aggregate tokens + the inlined tool call. Counting it would double totals.
     const s = summarizeRun([
       span({
         spanId: 'root',
@@ -163,8 +162,8 @@ describe('summarizeRun', () => {
     expect(s.durationMs).toBe(5510)
   })
 
-  it('dedups the same tool-call id replayed across turns (AI SDK history)', () => {
-    // The AI SDK passes prior tool calls in each turn's input history, so the
+  it('dedups the same tool-call id replayed across turns (history replay)', () => {
+    // Some frameworks pass prior tool calls in each turn's input history, so the
     // same call id surfaces on multiple sibling spans — count it once.
     const s = summarizeRun([
       span({

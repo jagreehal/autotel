@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { GenAiSpan } from '../genai/types';
   import { formatTokenCounts, formatCostUsd } from '../utils/genaiFormat';
+  import { formatDuration } from '../utils';
   import { groupRuns } from '../genai/summary';
 
   // The "run" a given span belongs to — its conversation group, or its trace
@@ -18,12 +19,6 @@
     return run?.rows ?? [];
   }
 
-  function formatLatency(ms: number): string {
-    if (ms < 1) return `${(ms * 1000).toFixed(0)}μs`;
-    if (ms < 1000) return `${ms.toFixed(0)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  }
-
   function formatTokens(usage: GenAiSpan['usage']): string {
     return formatTokenCounts(usage.inputTokens, usage.outputTokens);
   }
@@ -32,7 +27,7 @@
     return formatCostUsd(cost?.total, cost?.source === 'table');
   }
 
-  type Mode = 'list' | 'timeline';
+  type Mode = 'list' | 'timeline' | 'trace';
 
   function rowMatches(
     row: { normalized: GenAiSpan; service?: string },
@@ -58,6 +53,7 @@
     Bot,
     List,
     Network,
+    ListTree,
     ExternalLink,
     ArrowLeft,
   } from '@lucide/svelte';
@@ -66,10 +62,12 @@
   import ModelHeader from './genai/ModelHeader.svelte';
   import ConversationPanel from './genai/ConversationPanel.svelte';
   import AgentTimeline from './genai/AgentTimeline.svelte';
+  import RunTraceView from './genai/RunTraceView.svelte';
   import RunSummaryBar from './genai/RunSummaryBar.svelte';
   import GenAiTour from './genai/GenAiTour.svelte';
   import { summarizeRun } from '../genai/summary';
   import { buildTour } from '../genai/narration';
+  import { buildRunTrace } from '../genai/trace';
   import SearchInput from './SearchInput.svelte';
   import { useListKeyboardNav } from './listNav.svelte';
   import { matchesNeedle } from '../utils/textMatch';
@@ -119,6 +117,7 @@
     runRowsFor(rows, selected?.normalized.spanId ?? selectedSpanId ?? undefined),
   );
   const runSummary = $derived(summarizeRun(runRows.map((r) => r.normalized)));
+  const runTrace = $derived(buildRunTrace(runRows.map((r) => r.normalized)));
 
   // Guided tour ("Explain this run") — steps through the run's spans in order
   // with plain-language narration. Driving selectedSpanId reuses the existing
@@ -187,6 +186,20 @@
         <span class="ml-1 text-[10px] text-fg-subtle">(by trace)</span>
       {/if}
     </button>
+    <button
+      type="button"
+      onclick={() => (mode = 'trace')}
+      class={cn(
+        'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+        mode === 'trace'
+          ? 'bg-surface border border-line text-fg shadow-sm'
+          : 'text-fg-subtle hover:text-fg-muted',
+      )}
+      title="Decompose the selected run into reasoning, tools, text and nested agents"
+    >
+      <ListTree size={12} />
+      Trace
+    </button>
 
     <!-- Explain this run: a narrated, step-by-step walkthrough for demos. -->
     <button
@@ -233,6 +246,30 @@
           mode = 'list';
         }}
       />
+    </div>
+  </div>
+{:else if mode === 'trace'}
+  <div class="flex flex-col h-full">
+    {@render modeToggle()}
+    {#if runSummary.spanCount > 0}
+      <RunSummaryBar summary={runSummary} />
+    {/if}
+    <div class="flex-1 overflow-hidden">
+      {#if runRows.length === 0}
+        <div class="p-6 text-sm text-fg-subtle">
+          Select a span (in List) to trace its run, or wait for a multi-span run
+          to arrive.
+        </div>
+      {:else}
+        <RunTraceView
+          nodes={runTrace}
+          selectedSpanId={selected?.normalized.spanId ?? null}
+          onSelectSpan={(id) => {
+            selectedSpanId = id;
+            mode = 'list';
+          }}
+        />
+      {/if}
     </div>
   </div>
 {:else}
@@ -376,7 +413,7 @@
             <span>{row.normalized.operation}</span>
             <span>·</span>
             <span
-              >{formatLatency(
+              >{formatDuration(
                 row.normalized.endMs - row.normalized.startMs,
               )}</span
             >

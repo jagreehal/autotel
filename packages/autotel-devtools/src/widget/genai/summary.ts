@@ -3,15 +3,8 @@
 // Pure function over normalized spans so it can be unit-tested and reused by
 // any view (GenAiView summary strip, timeline headers, future exports).
 
+import { MODEL_OPS, AGENT_OPS } from './operations'
 import type { GenAiSpan } from './types'
-
-const MODEL_OPS = new Set([
-  'chat',
-  'text_completion',
-  'generate_content',
-  'embeddings',
-])
-const AGENT_OPS = new Set(['invoke_agent', 'create_agent'])
 
 export interface RunSummary {
   spanCount: number
@@ -21,7 +14,7 @@ export interface RunSummary {
   /** Tool executions. Counted from `execute_tool` spans when present, else from
    *  inlined `toolCalls` on model spans (providers that don't emit a dedicated
    *  tool span), deduped by tool-call id. Aggregate/parent spans are excluded so
-   *  the AI SDK's wrapping span and per-turn history replay don't double-count. */
+   *  a wrapping span and per-turn history replay don't double-count. */
   toolCalls: number
   /** Agent invocations — a proxy for "sub-agents" when more than one. */
   agentInvocations: number
@@ -52,11 +45,11 @@ function isHandoff(span: GenAiSpan): boolean {
 }
 
 /** Span ids that strictly time-contain another span in the run — i.e. parent /
- *  aggregate spans. The Vercel AI SDK emits a wrapping `ai.generateText` span
- *  that is itself classified as a `chat` and carries *aggregate* tokens, tool
- *  calls and cost that duplicate its `ai.generateText.doGenerate` children.
- *  Counting both double-counts model calls, tokens and tools, so we exclude
- *  aggregates from those tallies. (Same "wrapper" notion AgentTimeline uses.) */
+ *  aggregate spans. Some frameworks emit a wrapping model-call span that is
+ *  itself classified as a `chat` and carries *aggregate* tokens, tool calls and
+ *  cost that duplicate its child model calls. Counting both double-counts model
+ *  calls, tokens and tools, so we exclude aggregates from those tallies. (Same
+ *  "wrapper" notion AgentTimeline uses.) */
 function findAggregateSpanIds(spans: GenAiSpan[]): Set<string> {
   const ids = new Set<string>()
   for (const a of spans) {
@@ -107,7 +100,7 @@ export function summarizeRun(spans: GenAiSpan[]): RunSummary {
   let modelCallsPriced = 0
   const modelSet = new Set<string>()
   const providerSet = new Set<string>()
-  // Inline tool calls deduped by id: the AI SDK replays the full message
+  // Inline tool calls deduped by id: some frameworks replay the full message
   // history each turn, so the same tool call surfaces on several spans. Calls
   // without an id can't be deduped, so each counts.
   const inlineToolCallIds = new Set<string>()
