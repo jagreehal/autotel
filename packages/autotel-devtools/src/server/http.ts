@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { parseOtlpTraces, parseOtlpLogs, countOtlpMetrics, readJsonBody, readRawBody, isProtobufContentType, sendJson } from './otlp'
 import { decodeOtlpTraceRequest, decodeOtlpLogsRequest, decodeOtlpMetricsRequest } from './otlp-proto'
 import { DEVTOOLS_IDENTITY } from './identity'
+import { allowSensitiveRequest } from './origin-guard'
 import type { DevtoolsServer } from './server'
 
 type OtlpSignal = 'traces' | 'logs' | 'metrics'
@@ -89,7 +90,18 @@ function getWidgetJs(): string {
   return cachedWidgetJs
 }
 
-export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServer): void {
+export interface DevtoolsRoutesOptions {
+  /** Bound to a loopback host (the default). Enables the DNS-rebinding `Host`
+   *  check on read endpoints; an explicit non-loopback bind opts out. */
+  loopbackOnly?: boolean
+}
+
+export function attachDevtoolsRoutes(
+  httpServer: Server,
+  devtools: DevtoolsServer,
+  options: DevtoolsRoutesOptions = {},
+): void {
+  const loopbackOnly = options.loopbackOnly ?? true
   httpServer.on('request', async (req: IncomingMessage, res: ServerResponse) => {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -143,6 +155,10 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
     // send" (which a browser-level route intercept can fake). Bypasses the UI's
     // WebSocket entirely.
     if (req.method === 'GET' && url === '/v1/traces') {
+      if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+        sendJson(res, 403, { error: 'Forbidden' })
+        return
+      }
       const data = devtools.getCurrentData()
       sendJson(res, 200, { traces: data.traces, count: data.traces.length })
       return
@@ -151,6 +167,10 @@ export function attachDevtoolsRoutes(httpServer: Server, devtools: DevtoolsServe
     // DELETE /v1/traces — clear captured telemetry (test isolation / reset).
     // Clears traces, logs, metrics and aggregated errors so each test starts clean.
     if (req.method === 'DELETE' && url === '/v1/traces') {
+      if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+        sendJson(res, 403, { error: 'Forbidden' })
+        return
+      }
       devtools.clearData()
       sendJson(res, 200, { cleared: true })
       return

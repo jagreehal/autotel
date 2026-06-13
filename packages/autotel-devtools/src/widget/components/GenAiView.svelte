@@ -1,12 +1,22 @@
 <script lang="ts" module>
   import type { GenAiSpan } from '../genai/types';
   import { formatTokenCounts, formatCostUsd } from '../utils/genaiFormat';
+  import { formatDuration } from '../utils';
+  import { groupRuns } from '../genai/summary';
 
-  function formatLatency(ns: number): string {
-    const ms = ns / 1_000_000;
-    if (ms < 1) return `${(ms * 1000).toFixed(0)}μs`;
-    if (ms < 1000) return `${ms.toFixed(0)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
+  // The "run" a given span belongs to — its conversation group, or its trace
+  // when no conversation id. Used to scope the summary strip and the tour to
+  // one agent run rather than the whole capture buffer.
+  function runRowsFor(
+    rows: Array<{ normalized: GenAiSpan; traceId: string }>,
+    spanId: string | undefined,
+  ): Array<{ normalized: GenAiSpan; traceId: string }> {
+    if (!spanId) return [];
+    const runs = groupRuns(rows);
+    const run = runs.find((r) =>
+      r.rows.some((row) => row.normalized.spanId === spanId),
+    );
+    return run?.rows ?? [];
   }
 
   function formatTokens(usage: GenAiSpan['usage']): string {
@@ -17,7 +27,7 @@
     return formatCostUsd(cost?.total, cost?.source === 'table');
   }
 
-  type Mode = 'list' | 'timeline';
+  type Mode = 'list' | 'timeline' | 'trace';
 
   function rowMatches(
     row: { normalized: GenAiSpan; service?: string },
@@ -43,13 +53,21 @@
     Bot,
     List,
     Network,
+    ListTree,
     ExternalLink,
     ArrowLeft,
   } from '@lucide/svelte';
+  import { Sparkles } from '@lucide/svelte';
   import { genAiRowsSignal, openSpanInWaterfall } from '../store.svelte';
   import ModelHeader from './genai/ModelHeader.svelte';
   import ConversationPanel from './genai/ConversationPanel.svelte';
   import AgentTimeline from './genai/AgentTimeline.svelte';
+  import RunTraceView from './genai/RunTraceView.svelte';
+  import RunSummaryBar from './genai/RunSummaryBar.svelte';
+  import GenAiTour from './genai/GenAiTour.svelte';
+  import { summarizeRun } from '../genai/summary';
+  import { buildTour } from '../genai/narration';
+  import { buildRunTrace } from '../genai/trace';
   import SearchInput from './SearchInput.svelte';
   import { useListKeyboardNav } from './listNav.svelte';
   import { matchesNeedle } from '../utils/textMatch';
@@ -85,12 +103,53 @@
   const hasConversations = $derived(
     rows.some((r) => r.normalized.conversationId),
   );
+  const runCount = $derived(groupRuns(rows).length);
   // Single-column (narrow container) master/detail: the detail view replaces
   // the list only once the user has explicitly picked a span. `selected`
   // falls back to the first row for the side-by-side layout, so gate on the
   // explicit `selectedSpanId` here. Above the @md threshold both panes show
   // regardless and these utilities are no-ops.
   const mobileDetailOpen = $derived(selectedSpanId !== null);
+
+  // The agent run (conversation group) the selected span belongs to. Scopes
+  // both the summary strip and the guided tour to one run.
+  const runRows = $derived(
+    runRowsFor(rows, selected?.normalized.spanId ?? selectedSpanId ?? undefined),
+  );
+  const runSummary = $derived(summarizeRun(runRows.map((r) => r.normalized)));
+  const runTrace = $derived(buildRunTrace(runRows.map((r) => r.normalized)));
+
+  // Guided tour ("Explain this run") — steps through the run's spans in order
+  // with plain-language narration. Driving selectedSpanId reuses the existing
+  // detail panes (ModelHeader + ConversationPanel) as the tour's "stage".
+  let tourActive = $state(false);
+  let tourIndex = $state(0);
+  const tourSteps = $derived(
+    tourActive ? buildTour(runRows.map((r) => r.normalized)) : [],
+  );
+
+  function startTour() {
+    if (runRows.length === 0) return;
+    // The tour narrates the detail panes, which live in list mode.
+    mode = 'list';
+    // Ensure single-column mode shows the detail pane during the tour.
+    if (selectedSpanId === null) selectedSpanId = runRows[0].normalized.spanId;
+    tourIndex = 0;
+    tourActive = true;
+  }
+  function endTour() {
+    tourActive = false;
+  }
+
+  // Sync selection to the active tour step (and back: clicking a span while the
+  // tour is open just moves the tour to that step, handled in the list).
+  $effect(() => {
+    if (!tourActive) return;
+    const stepSpanId = tourSteps[tourIndex]?.span.spanId;
+    if (stepSpanId && stepSpanId !== selectedSpanId) {
+      selectedSpanId = stepSpanId;
+    }
+  });
 </script>
 
 {#snippet modeToggle()}
@@ -127,6 +186,35 @@
         <span class="ml-1 text-[10px] text-fg-subtle">(by trace)</span>
       {/if}
     </button>
+    <button
+      type="button"
+      onclick={() => (mode = 'trace')}
+      class={cn(
+        'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+        mode === 'trace'
+          ? 'bg-surface border border-line text-fg shadow-sm'
+          : 'text-fg-subtle hover:text-fg-muted',
+      )}
+      title="Decompose the selected run into reasoning, tools, text and nested agents"
+    >
+      <ListTree size={12} />
+      Trace
+    </button>
+
+    <!-- Explain this run: a narrated, step-by-step walkthrough for demos. -->
+    <button
+      type="button"
+      onclick={startTour}
+      disabled={runRows.length === 0 || tourActive}
+      class={cn(
+        'ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+        'text-accent hover:bg-accent/10 disabled:opacity-40 disabled:hover:bg-transparent',
+      )}
+      title="Step through this run with plain-language narration"
+    >
+      <Sparkles size={12} />
+      Explain run
+    </button>
   </div>
 {/snippet}
 
@@ -160,9 +248,36 @@
       />
     </div>
   </div>
+{:else if mode === 'trace'}
+  <div class="flex flex-col h-full">
+    {@render modeToggle()}
+    {#if runSummary.spanCount > 0}
+      <RunSummaryBar summary={runSummary} />
+    {/if}
+    <div class="flex-1 overflow-hidden">
+      {#if runRows.length === 0}
+        <div class="p-6 text-sm text-fg-subtle">
+          Select a span (in List) to trace its run, or wait for a multi-span run
+          to arrive.
+        </div>
+      {:else}
+        <RunTraceView
+          nodes={runTrace}
+          selectedSpanId={selected?.normalized.spanId ?? null}
+          onSelectSpan={(id) => {
+            selectedSpanId = id;
+            mode = 'list';
+          }}
+        />
+      {/if}
+    </div>
+  </div>
 {:else}
   <div class="flex flex-col h-full">
     {@render modeToggle()}
+    {#if tourActive && tourSteps.length > 0}
+      <GenAiTour steps={tourSteps} bind:index={tourIndex} onClose={endTour} />
+    {/if}
     <!-- container-type: inline-size — collapse to a single column when the
          docked panel is narrow (right/left dock), no JS viewport hack. -->
     <div class="@container flex flex-1 overflow-hidden">
@@ -209,6 +324,9 @@
               Open in Traces
             </button>
           </div>
+          {#if runSummary.spanCount > 0}
+            <RunSummaryBar summary={runSummary} />
+          {/if}
           <ModelHeader span={selected.normalized} />
           <ConversationPanel span={selected.normalized} />
         {/if}
@@ -219,8 +337,11 @@
 
 {#snippet spanList()}
   <div class="px-3 py-2 border-b border-line bg-subtle/50">
-    <div class="text-[11px] font-medium text-fg-muted mb-1.5">
-      Spans ({isFiltered ? `${filtered.length} of ${rows.length}` : rows.length})
+    <div class="mb-1.5 flex items-center justify-between gap-2 text-[11px] font-medium text-fg-muted">
+      <span>
+        Spans ({isFiltered ? `${filtered.length} of ${rows.length}` : rows.length})
+      </span>
+      <span>{runCount} run{runCount === 1 ? '' : 's'}</span>
     </div>
     <SearchInput
       bind:value={query}
@@ -256,6 +377,14 @@
           onclick={() => {
             nav.cursor = i;
             selectedSpanId = row.normalized.spanId;
+            // During a tour, clicking a span jumps the narration to that step
+            // rather than fighting the step→selection sync.
+            if (tourActive) {
+              const stepIdx = tourSteps.findIndex(
+                (s) => s.span.spanId === row.normalized.spanId,
+              );
+              if (stepIdx >= 0) tourIndex = stepIdx;
+            }
           }}
           class={cn(
             'w-full text-left px-3 py-2 hover:bg-subtle transition-colors',
@@ -284,8 +413,8 @@
             <span>{row.normalized.operation}</span>
             <span>·</span>
             <span
-              >{formatLatency(
-                row.normalized.endNs - row.normalized.startNs,
+              >{formatDuration(
+                row.normalized.endMs - row.normalized.startMs,
               )}</span
             >
             <span>·</span>

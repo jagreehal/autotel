@@ -6,7 +6,13 @@ export { DevtoolsRemoteExporter } from './remote-exporter'
 export type { DevtoolsRemoteExporterOptions } from './remote-exporter'
 export { ErrorAggregator } from './error-aggregator'
 export { attachDevtoolsRoutes, createDevtoolsHttpServer } from './http'
-export type { HttpServerOptions } from './http'
+export type { HttpServerOptions, DevtoolsRoutesOptions } from './http'
+export {
+  allowSensitiveRequest,
+  isLoopbackHostname,
+  hostHeaderIsLoopback,
+  originIsLoopback,
+} from './origin-guard'
 export { parseOtlpTraces, parseOtlpLogs, isProtobufContentType } from './otlp'
 export { DEVTOOLS_IDENTITY, probePortHolder } from './identity'
 export type { PortHolder } from './identity'

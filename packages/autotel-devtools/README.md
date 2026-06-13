@@ -149,11 +149,28 @@ process — point them at the bound port, or free the original.
 - ✅ Error aggregation and grouping
 - ✅ Service map visualization
 - ✅ Resources view (derived from telemetry)
+- ✅ GenAI run summaries + narrated walkthrough
 - ✅ Search with debounce (300ms)
 - ✅ Configurable telemetry limits (env vars)
 - ✅ Widget position persistence (localStorage)
 - ✅ Export traces as JSON
 - ✅ Custom element support (`<autotel-devtools>`)
+
+### GenAI: read an agent run at a glance
+
+When your app emits OpenTelemetry GenAI spans (Vercel AI SDK, Pydantic AI, OpenAI
+Agents, Anthropic, Google GenAI, LangChain, …), the **GenAI** tab gives two extras
+on top of the per-span detail:
+
+- A **run summary strip** sits above the detail for any multi-span run — total
+  cost (table-priced; a trailing `+` marks a lower bound when some calls are
+  unpriced), input→output tokens, reasoning tokens, model calls, tool
+  executions, sub-agents, duration and errors.
+- An **Explain run** button steps through the run in chronological order with
+  plain-language narration of each step. Auto-play or step manually with the
+  arrow keys / Space (Esc exits); clicking a span jumps the tour to that step.
+  Useful for showing a teammate or a client exactly what the agent did, which
+  tools it called, and where the cost went.
 
 ## Configuration
 
@@ -239,6 +256,26 @@ await expect
   .poll(async () => (await (await fetch(`${RECEIVER}/v1/traces`)).json()).count)
   .toBeGreaterThan(0);
 ```
+
+These read-back calls run from Node (no `Origin` header), so they are unaffected
+by the origin guard below.
+
+## Read-surface origin guard
+
+OTLP **ingestion** (`POST /v1/{traces,logs,metrics}`), `GET /widget.js` and
+`GET /healthz` are open to any origin — browser apps on arbitrary dev origins
+must be able to send telemetry and load the embeddable widget. The **read**
+surface is not: `GET /v1/traces`, `DELETE /v1/traces` and the `/ws` WebSocket are
+origin-checked so a web page you happen to be visiting can't `fetch()` or stream
+your locally captured prompts, responses and tokens.
+
+- A non-loopback `Origin` (a cross-origin browser read) is rejected with `403`.
+- When bound to a loopback host (the default), a non-loopback `Host` (DNS
+  rebinding) is also rejected. `--host 0.0.0.0` opts into network exposure and
+  applies only the `Origin` check.
+
+The embedded widget keeps working — it connects from a loopback origin
+(`http://localhost:<your-app-port>`). Server-side reads with no `Origin` pass.
 
 ## License
 

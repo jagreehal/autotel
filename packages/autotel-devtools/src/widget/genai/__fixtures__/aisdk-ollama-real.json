@@ -4,9 +4,9 @@
     "spanId": "30d93cf84ec7df18",
     "name": "probe",
     "kind": "INTERNAL",
-    "startTime": 1779223762850000000,
-    "endTime": 1779223762850156300,
-    "duration": 156416,
+    "startTime": 1779223762849.9998,
+    "endTime": 1779223762850.1562,
+    "duration": 0.156416,
     "attributes": {
       "probe.ok": true
     },
@@ -20,9 +20,9 @@
     "spanId": "1b06593c1c22f6b8",
     "name": "ai.generateText.doGenerate",
     "kind": "INTERNAL",
-    "startTime": 1779223762862000000,
-    "endTime": 1779223763056395300,
-    "duration": 194395136,
+    "startTime": 1779223762862.0002,
+    "endTime": 1779223763056.3953,
+    "duration": 194.395136,
     "attributes": {
       "operation.name": "ai.generateText.doGenerate",
       "ai.operationId": "ai.generateText.doGenerate",
@@ -62,9 +62,9 @@
     "spanId": "b9b134c0632657f7",
     "name": "ai.generateText",
     "kind": "INTERNAL",
-    "startTime": 1779223762861000000,
-    "endTime": 1779223763057121300,
-    "duration": 196121344,
+    "startTime": 1779223762861.0,
+    "endTime": 1779223763057.1213,
+    "duration": 196.121344,
     "attributes": {
       "operation.name": "ai.generateText",
       "ai.operationId": "ai.generateText",

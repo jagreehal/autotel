@@ -6,6 +6,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DevtoolsServer } from './server/server'
 import { attachDevtoolsRoutes } from './server/http'
+import { hostHeaderIsLoopback } from './server/origin-guard'
 import { listenLoopbackDualStack } from './server/listen'
 import { probePortHolder } from './server/identity'
 
@@ -117,14 +118,15 @@ async function main(): Promise<void> {
   if (!options) { process.exit(0) }
 
   const httpServer = createServer()
-  const wsServer = new DevtoolsServer({ server: httpServer, verbose: true })
-  attachDevtoolsRoutes(httpServer, wsServer)
+  const loopbackOnly = hostHeaderIsLoopback(options.host)
+  const wsServer = new DevtoolsServer({ server: httpServer, host: options.host, verbose: true })
+  attachDevtoolsRoutes(httpServer, wsServer, { loopbackOnly })
 
   const listeners = listenLoopbackDualStack({
     primary: httpServer,
     port: options.port,
     host: options.host,
-    attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer),
+    attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer, { loopbackOnly }),
   })
 
   const { addresses, warnings, port: boundPort } = await listeners.ready

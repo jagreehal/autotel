@@ -4,6 +4,7 @@ import { DevtoolsServer } from './server/server'
 import { attachDevtoolsRoutes } from './server/http'
 import { listenLoopbackDualStack } from './server/listen'
 import { DevtoolsSpanExporter } from './server/exporter'
+import { hostHeaderIsLoopback } from './server/origin-guard'
 import type { Server } from 'node:http'
 
 export interface CreateDevtoolsOptions {
@@ -27,17 +28,21 @@ export interface DevtoolsInstance {
 export function createDevtools(options: CreateDevtoolsOptions = {}): DevtoolsInstance {
   const port = options.port ?? 4318
   const host = options.host ?? '127.0.0.1'
+  // Loopback bind (the default) gets DNS-rebinding protection on the read/stream
+  // surface; an explicit non-loopback bind is an opt-in to network exposure.
+  const loopbackOnly = hostHeaderIsLoopback(host)
 
   const httpServer = createServer()
   const wsServer = new DevtoolsServer({
     server: httpServer,
+    host,
     verbose: options.verbose,
     maxHistory: options.maxHistory,
     maxTraceCount: options.maxTraceCount,
     maxLogCount: options.maxLogCount,
     maxMetricCount: options.maxMetricCount,
   })
-  attachDevtoolsRoutes(httpServer, wsServer)
+  attachDevtoolsRoutes(httpServer, wsServer, { loopbackOnly })
 
   // Bind both loopback families when host is loopback, so a `localhost` client
   // reaches us whether it resolves to 127.0.0.1 or ::1. Stays synchronous:
@@ -46,7 +51,7 @@ export function createDevtools(options: CreateDevtoolsOptions = {}): DevtoolsIns
     primary: httpServer,
     port,
     host,
-    attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer),
+    attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer, { loopbackOnly }),
   })
   if (options.verbose) {
     listeners.ready.then(({ warnings }) => {

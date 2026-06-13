@@ -5,9 +5,9 @@
     "parentSpanId": null,
     "name": "ChatOllama.chat",
     "kind": "CLIENT",
-    "startTime": 1779254064646288000,
-    "endTime": 1779254067802460000,
-    "duration": 3156172000,
+    "startTime": 1779254064646.2878,
+    "endTime": 1779254067802.46,
+    "duration": 3156.172,
     "attributes": {
       "traceloop.workflow.name": "",
       "traceloop.entity.path": "",

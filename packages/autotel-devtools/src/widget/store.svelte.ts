@@ -340,7 +340,7 @@ export const genAiRowsSignal = computed<GenAiRow[]>(() => {
     }
   }
   // Newest first.
-  rows.sort((a, b) => b.normalized.startNs - a.normalized.startNs);
+  rows.sort((a, b) => b.normalized.startMs - a.normalized.startMs);
   return rows;
 });
 

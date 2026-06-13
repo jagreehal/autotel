@@ -35,8 +35,9 @@ node app.js
 
 Open [http://localhost:4318](http://localhost:4318) for the dashboard. It
 includes a traces waterfall, flame graph, log filtering by severity and
-resource, error aggregation, service map, resources view, and a **Security**
-lens that surfaces spans carrying the `security.*` schema (see
+resource, error aggregation, service map, resources view, a **GenAI** view for
+LLM and agent runs ([see below](#genai-runs)), and a **Security** lens that
+surfaces spans carrying the `security.*` schema (see
 [Security Observability](/autotel/integrations/security/)). Search debounces at
 300ms.
 
@@ -91,6 +92,39 @@ const checkout = trace((ctx) => async (req, res) => {
 
 Call `close()` on shutdown to release the port and WebSocket clients.
 
+## GenAI runs
+
+When your app emits OpenTelemetry GenAI spans — any of `gen_ai.system`,
+`gen_ai.provider.name`, or `gen_ai.operation.name` — the **GenAI** tab turns
+them into a readable view of each LLM and agent run. It works with anything that
+follows the spec, including the Vercel AI SDK (`experimental_telemetry`),
+Pydantic AI + Logfire, OpenAI Agents, Anthropic, Google GenAI, LangChain and
+OpenLLMetry.
+
+Per span you get the model, provider, parameters, token usage (with the cached
+and reasoning share called out), estimated cost, and the full conversation
+transcript — messages, tool calls and their results.
+
+On top of the per-span detail, three things make a multi-span run readable at a
+glance:
+
+- **Run summary strip** — a KPI row above the detail showing the run's total
+  cost, input→output tokens, reasoning tokens, model calls, tool executions,
+  sub-agents, duration and errors. Cost is summed only from priced calls and
+  marked with a trailing `+` when some calls are unpriced (a lower bound, never a
+  fabricated total). Wrapper/aggregate spans and tool calls replayed across turns
+  are de-duplicated, so counts and totals don't double-count.
+- **Explain run** — a guided, narrated walkthrough for demos. It steps through
+  the run in order with plain-language narration of each step ("the model decides
+  what to do", "a tool is real code the agent ran", "the model writes the
+  answer"). Auto-play, step with the arrow keys / Space, Esc to exit; clicking a
+  span jumps the tour to that step.
+- **Trace** — decomposes the selected run into a depth-indented tree of what
+  happened inside it: each model call broken into its reasoning, the tools it
+  called (with arguments and results) and the text it wrote, with nested
+  sub-agents underneath. A **Timeline** view shows the same run as time-aligned
+  lanes.
+
 ## Configuration
 
 | Variable                    | Default        | Description                  |
@@ -123,6 +157,16 @@ The standalone server exposes:
 Every response carries an `x-autotel-devtools: <version>` header. Use it to
 confirm you are talking to autotel-devtools rather than another OTLP collector
 that happens to share the port.
+
+**Read surface is origin-guarded.** Ingestion (`POST`), `/widget.js` and
+`/healthz` are open to any origin so apps on arbitrary dev origins can send
+telemetry and load the widget. The read/clear endpoints (`GET`/`DELETE
+/v1/traces`) and the `/ws` stream reject cross-origin browser requests (a
+non-loopback `Origin`) with `403`, so a page you happen to be visiting can't read
+your captured prompts and responses. When bound to a loopback host (the default),
+a non-loopback `Host` is rejected too (DNS-rebinding defense); `--host 0.0.0.0`
+opts into network exposure and applies only the `Origin` check. Server-side reads
+with no `Origin` (curl, Node `fetch` in tests) are unaffected.
 
 ## Identity Detection
 

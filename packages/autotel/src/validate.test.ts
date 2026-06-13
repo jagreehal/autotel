@@ -17,7 +17,9 @@ import { VALIDATION_ATTR } from './validation-attributes';
 
 /** A fake `SchemaLike` so tests don't depend on Zod. */
 function schema<T>(
-  decide: (input: unknown) => { success: true; data: T } | { success: false; error: unknown },
+  decide: (
+    input: unknown,
+  ) => { success: true; data: T } | { success: false; error: unknown },
 ) {
   return { safeParse: decide };
 }

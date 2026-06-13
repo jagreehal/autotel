@@ -19,3 +19,41 @@ export function formatCostUsd(total?: number, known = true): string {
   if (total < 0.01) return `$${(total * 1000).toFixed(3)}m`;
   return `$${total.toFixed(4)}`;
 }
+
+/** Input token total with the cached share called out: `176 (100 cached)`. */
+export function formatInputTokens(total?: number, cached?: number): string {
+  if (total == null) return '—';
+  return cached && cached > 0 ? `${total} (${cached} cached)` : String(total);
+}
+
+/** Output token total with the reasoning share called out: `90 (32 reasoning)`. */
+export function formatOutputTokens(total?: number, reasoning?: number): string {
+  if (total == null) return '—';
+  return reasoning && reasoning > 0
+    ? `${total} (${reasoning} reasoning)`
+    : String(total);
+}
+
+/**
+ * Compact label for a list of tool-call names, collapsing repeats: a single
+ * tool → `getWeather`; repeats → `getWeather (x3)`; many → `a, b, …` with the
+ * full list in `details`. Takes names (primitive) so any caller can use it.
+ */
+export function summarizeToolCalls(names: string[]): {
+  label: string;
+  details: string;
+} {
+  if (names.length === 0) return { label: '', details: '' };
+  const counts = new Map<string, number>();
+  for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
+  const unique = [...counts.keys()];
+  const fmt = (n: string) => {
+    const c = counts.get(n) ?? 0;
+    return c > 1 ? `${n} (x${c})` : n;
+  };
+  const all = unique.map(fmt).join(', ');
+  if (unique.length === 1) return { label: fmt(unique[0]), details: '' };
+  if (unique.length === 2)
+    return { label: `${fmt(unique[0])}, ${fmt(unique[1])}`, details: all };
+  return { label: `${fmt(unique[0])}, ${fmt(unique[1])}, …`, details: all };
+}

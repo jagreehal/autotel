@@ -25,7 +25,10 @@
 
 import { trace } from '@opentelemetry/api';
 import { createCounter } from './metric-helpers';
-import { createStructuredError, type StructuredError } from './structured-error';
+import {
+  createStructuredError,
+  type StructuredError,
+} from './structured-error';
 import { hashJson } from './stable-hash';
 import type { SchemaLike } from './define-event';
 import {
@@ -164,7 +167,8 @@ function extractRawIssues(error: unknown): Array<Record<string, unknown>> {
       (error as { errors?: unknown }).errors;
     if (Array.isArray(candidate)) {
       return candidate.filter(
-        (i): i is Record<string, unknown> => i !== null && typeof i === 'object',
+        (i): i is Record<string, unknown> =>
+          i !== null && typeof i === 'object',
       );
     }
   }
@@ -292,7 +296,9 @@ export function defineValidator<T, S extends SchemaLike<T>>(
       const issues = formatValidationIssues(parsed.error);
       record(issues);
       if (mode === 'reject') {
-        throw options.onReject?.(issues, name) ?? defaultRejectError(issues, name);
+        throw (
+          options.onReject?.(issues, name) ?? defaultRejectError(issues, name)
+        );
       }
       // observe: continue with the raw input (documented type caveat)
       return input as T;

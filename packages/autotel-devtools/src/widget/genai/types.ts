@@ -70,8 +70,11 @@ export interface GenAiSpan {
   spanId: string
   parentSpanId?: string
   name: string
-  startNs: number
-  endNs: number
+  // Milliseconds (the SpanData contract — OTLP nanos are converted to ms at
+  // ingestion in server/otlp.ts). Absolute nanosecond unix timestamps overflow
+  // JS Number precision, which is why the whole app works in ms.
+  startMs: number
+  endMs: number
   status: 'ok' | 'error' | 'unset'
   errorMessage?: string
 
@@ -104,6 +107,9 @@ export interface GenAiSpan {
   responseId?: string
 
   agent?: { id?: string; name?: string; description?: string }
+  // The executed tool, on `execute_tool` spans (`gen_ai.tool.*`). Distinct from
+  // `toolCalls` (a model's *requests* to call tools) and from `agent`.
+  tool?: { name?: string; callId?: string }
   handoff?: { fromAgent?: string; toAgent?: string }
   guardrail?: { name?: string; triggered?: boolean }
   conversationId?: string

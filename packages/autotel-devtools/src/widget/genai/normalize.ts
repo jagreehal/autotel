@@ -313,6 +313,8 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   'gen_ai.agent.id',
   'gen_ai.agent.name',
   'gen_ai.agent.description',
+  'gen_ai.tool.name',
+  'gen_ai.tool.call.id',
   'gen_ai.handoff.from_agent',
   'gen_ai.handoff.to_agent',
   'gen_ai.guardrail.name',
@@ -538,6 +540,8 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
   const agentName = str(attrs['gen_ai.agent.name'])
   const agentId = str(attrs['gen_ai.agent.id'])
   const agentDescription = str(attrs['gen_ai.agent.description'])
+  const toolName = str(attrs['gen_ai.tool.name'])
+  const toolCallId = str(attrs['gen_ai.tool.call.id'])
   const handoffFrom = str(attrs['gen_ai.handoff.from_agent'])
   const handoffTo = str(attrs['gen_ai.handoff.to_agent'])
   const guardrailName = str(attrs['gen_ai.guardrail.name'])
@@ -567,8 +571,8 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId,
     name: span.name,
-    startNs: span.startTime,
-    endNs: span.endTime,
+    startMs: span.startTime,
+    endMs: span.endTime,
     status:
       span.status?.code === 'OK' ? 'ok' : span.status?.code === 'ERROR' ? 'error' : 'unset',
     errorMessage: span.status?.message,
@@ -603,6 +607,7 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
     agent: agentId || agentName || agentDescription
       ? { id: agentId, name: agentName, description: agentDescription }
       : undefined,
+    tool: toolName || toolCallId ? { name: toolName, callId: toolCallId } : undefined,
     handoff: handoffFrom || handoffTo ? { fromAgent: handoffFrom, toAgent: handoffTo } : undefined,
     guardrail: guardrailName || guardrailTriggered !== undefined
       ? { name: guardrailName, triggered: guardrailTriggered }
