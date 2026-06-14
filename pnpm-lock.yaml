@@ -405,12 +405,6 @@ importers:
       '@libsql/client':
         specifier: ^0.17.3
         version: 0.17.3
-      ai:
-        specifier: ^6.0.193
-        version: 6.0.197(zod@4.4.3)
-      ai-sdk-ollama:
-        specifier: 3.8.7
-        version: 3.8.7(ai@6.0.197(zod@4.4.3))(zod@4.4.3)
       autotel:
         specifier: workspace:*
         version: link:../../packages/autotel
@@ -426,6 +420,9 @@ importers:
       autotel-hono:
         specifier: workspace:*
         version: link:../../packages/autotel-hono
+      autotel-web:
+        specifier: workspace:*
+        version: link:../../packages/autotel-web
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -8983,12 +8980,6 @@ packages:
     engines: {node: '>=22'}
     peerDependencies:
       ai: ^6.0.154
-
-  ai-sdk-ollama@3.8.7:
-    resolution: {integrity: sha512-q4oN8gWc5fxnzXnc96sveE6vy4BoKOZQr8uAYywKzu3r5CR+jwwI7csmdzxMqhEdj5TUJ7OT5O9jTGZr5YDYng==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      ai: ^6.0.197
 
   ai@6.0.197:
     resolution: {integrity: sha512-U3KsjkqwQXGHC0u0VeUDqUaNaBS/uQc7v4Vj92Cjv5lPx5DIyRBQYk4Hipy5vwD9AQKIG8uRvdaN9R+pAvrtcQ==}
@@ -23566,16 +23557,6 @@ snapshots:
       - supports-color
 
   ai-sdk-ollama@3.8.6(ai@6.0.197(zod@4.4.3))(zod@4.4.3):
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
-      ai: 6.0.197(zod@4.4.3)
-      jsonrepair: 3.14.0
-      ollama: 0.6.3
-    transitivePeerDependencies:
-      - zod
-
-  ai-sdk-ollama@3.8.7(ai@6.0.197(zod@4.4.3))(zod@4.4.3):
     dependencies:
       '@ai-sdk/provider': 3.0.10
       '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
