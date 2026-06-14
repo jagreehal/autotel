@@ -20,6 +20,7 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 - **Structured errors**: Errors should carry `message`, `why`, `fix`, `link`, `status`, `code`, `cause`, `internal` (backend-only) so agents and users can diagnose and act.
 - **Request context**: Use `getRequestLogger()` when you need one coherent snapshot per request (attributes + correlated log-based events).
 - **Event model**: For new instrumentation, emit events through the Logs API model (correlated logs). Do not add new direct dependencies on `Span.addEvent` / `Span.recordException` in app-facing guidance.
+- **Agent audits**: For agentic workflows, prefer `autotel-agent` for identity-bound audit metadata, delegated scope checks, session lifecycle, tool-call hashing, and bounded `decision.summary` evidence. Do not log raw reasoning traces or raw tool payloads.
 
 ### Cloudflare Direction
 
@@ -55,6 +56,7 @@ autotel/
 │   ├── autotel-tanstack/      # TanStack Start
 │   ├── autotel-hono/         # Hono middleware
 │   ├── autotel-mcp-instrumentation/          # MCP instrumentation
+│   ├── autotel-agent/         # Agent identity, delegation, scoped-tool, and audit helpers
 │   ├── autotel-subscribers/   # Event subscribers (PostHog, etc.)
 │   ├── autotel-web/           # Browser SDK: traceparent + W3C baggage propagation (setBaggage)
 │   └── ...
@@ -87,6 +89,7 @@ When the user wants observability, suggest these entry points. All from `autotel
 | PII redaction               | `init({ attributeRedactor: 'default' | 'strict' | 'pci-dss' | { keyPatterns, valuePatterns } })`       |
 | Testing                     | `createTraceCollector()` from `autotel/testing`; `InMemorySpanExporter` from `autotel/exporters` |
 | Security observability hooks (OWASP A09) | Observability at security decision points: `securityEvent()` / `withSecurity()` / `hashIdentifier()` from `autotel-audit`; zero-code signals via `createSecuritySignalProcessor()` in `init({ spanProcessors })`. See `docs/SECURITY-OBSERVABILITY.md` and `integrations/security` in apps/docs. |
+| Agent identity + auditability | `withAgentAction()`, `withAgentSession()`, `withScopedTool()`, `recordPolicyDecision()`, `recordDecisionBasis()`, `createAgentIdentityRegistry()`, `createSignedEventEnvelope()` from `autotel-agent` |
 
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
 - **Structured errors**: Prefer `createStructuredError` over `new Error()` in API routes and services. On the client, use `parseError(caught)` to show message/why/fix in UI.

@@ -1,0 +1,36 @@
+{
+  "name": "@jagreehal/example-devtools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:deps": "pnpm --filter autotel-devtools build && pnpm --filter autotel-web build",
+    "start": "pnpm run build:deps && tsx start.ts",
+    "start:api": "tsx src/api/server.ts",
+    "start:auth": "tsx src/auth/server.ts",
+    "start:worker": "tsx src/worker/server.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.4",
+    "@libsql/client": "^0.17.3",
+    "autotel": "workspace:*",
+    "autotel-adapters": "workspace:*",
+    "autotel-devtools": "workspace:*",
+    "autotel-drizzle": "workspace:*",
+    "autotel-hono": "workspace:*",
+    "autotel-web": "workspace:*",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.23",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

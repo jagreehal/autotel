@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Autotel Devtools — Browser to Services Showcase</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="__DEVTOOLS_URL__/widget.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Autotel Devtools showcase</p>
+        <h1>Trace a browser action all the way through the stack.</h1>
+        <p class="hero-text">
+          Every button below starts in <strong>shop-web</strong> and fans out through
+          <strong>shop-api</strong>, <strong>shop-auth</strong>, <strong>shop-worker</strong>,
+          and <strong>sqlite</strong>. Use the embedded widget while you click, then pop the
+          trace into the standalone dashboard for deeper inspection.
+        </p>
+      </div>
+      <div class="hero-panel">
+        <a id="standaloneLink" href="__DEVTOOLS_URL__" target="_blank" class="hero-link">
+          Open standalone dashboard
+        </a>
+        <div class="stack-diagram">
+          <span>shop-web</span>
+          <span>shop-api</span>
+          <span>shop-auth</span>
+          <span>shop-worker</span>
+          <span>sqlite</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="status-strip">
+      <div class="status-group">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Ready to generate traces.</span>
+      </div>
+      <div class="status-group status-trace">
+        <span class="trace-label">Latest trace</span>
+        <a id="traceLink" class="trace-link trace-link-empty" href="__DEVTOOLS_URL__" target="_blank">
+          none yet
+        </a>
+      </div>
+    </section>
+
+    <section class="persona-panel">
+      <div>
+        <p class="panel-label">Persona</p>
+        <h2 id="personaTitle">Demo User</h2>
+        <p id="personaSummary" class="panel-help">
+          Standard storefront customer. Baggage and auth headers update when you switch.
+        </p>
+      </div>
+      <div class="persona-actions">
+        <button class="chip is-active" data-persona="demo">Demo User</button>
+        <button class="chip" data-persona="alice">Alice VIP</button>
+        <button class="chip" data-persona="ops">Ops Analyst</button>
+      </div>
+    </section>
+
+    <main class="showcase-grid">
+      <article class="card card-accent">
+        <div class="card-head">
+          <p class="card-kicker">Browser → API → DB</p>
+          <h3>Catalog fetch</h3>
+        </div>
+        <p class="card-copy">
+          Proves browser-root spans and same-origin propagation. The API queries featured
+          products with Drizzle and responds with the trace ID for deep-linking.
+        </p>
+        <div class="actions">
+          <button onclick="browseProducts()" class="btn btn-primary">Featured catalog</button>
+          <button onclick="browseProducts('electronics')" class="btn btn-secondary">Electronics</button>
+          <button onclick="browseProducts('books')" class="btn btn-secondary">Books</button>
+        </div>
+        <pre id="catalogResult" class="result"></pre>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <p class="card-kicker">Browser → API → Auth → DB</p>
+          <h3>Profile with session hop</h3>
+        </div>
+        <p class="card-copy">
+          The selected persona is validated by <strong>shop-auth</strong>, then
+          <strong>shop-api</strong> loads the profile, orders, and notification history.
+        </p>
+        <div class="actions">
+          <button onclick="loadProfile()" class="btn btn-primary">Load active persona</button>
+        </div>
+        <pre id="profileResult" class="result"></pre>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <p class="card-kicker">Browser → API → Auth → DB → Worker → DB</p>
+          <h3>Checkout orchestration</h3>
+        </div>
+        <p class="card-copy">
+          The most complete distributed flow: session validation, transactional order writes,
+          worker fan-out, and a persisted notification job you can follow in the flow view.
+        </p>
+        <div class="actions">
+          <button onclick="checkout()" class="btn btn-primary">Run checkout</button>
+        </div>
+        <pre id="checkoutResult" class="result"></pre>
+      </article>
+
+      <article class="card card-warn">
+        <div class="card-head">
+          <p class="card-kicker">Browser → API → DB (slow path)</p>
+          <h3>Inventory report</h3>
+        </div>
+        <p class="card-copy">
+          Runs a real recursive CTE plus summary queries so the waterfall has a clearly slow
+          span to inspect and compare against the fast catalog path.
+        </p>
+        <div class="actions">
+          <button onclick="runInventoryReport()" class="btn btn-warn">Run slow report</button>
+        </div>
+        <pre id="reportResult" class="result"></pre>
+      </article>
+
+      <article class="card card-ai">
+        <div class="card-head">
+          <p class="card-kicker">Browser → API → GenAI view</p>
+          <h3>Recommendation copilot</h3>
+        </div>
+        <p class="card-copy">
+          Deterministic GenAI-style spans with token usage, cost metadata, and product-aware
+          recommendations. Good for proving the GenAI tab without extra local setup.
+        </p>
+        <div class="actions">
+          <button onclick="recommend('electronics', 500)" class="btn btn-ai">Electronics bundle</button>
+          <button onclick="recommend('books', 60)" class="btn btn-ai">Reading list</button>
+        </div>
+        <pre id="recommendationResult" class="result"></pre>
+      </article>
+
+      <article class="card card-ai">
+        <div class="card-head">
+          <p class="card-kicker">Browser → API → GenAI view</p>
+          <h3>Support copilot</h3>
+        </div>
+        <p class="card-copy">
+          Simulated support narration that references the trace itself. Use this to jump from
+          a natural-language answer back into logs and spans in devtools.
+        </p>
+        <div class="actions">
+          <button onclick="support('Where is the worker notification?')" class="btn btn-ai">Worker question</button>
+          <button onclick="support('Why did checkout slow down?')" class="btn btn-ai">Latency question</button>
+        </div>
+        <pre id="supportResult" class="result"></pre>
+      </article>
+
+      <article class="card card-danger">
+        <div class="card-head">
+          <p class="card-kicker">Browser → API error path</p>
+          <h3>Structured failure</h3>
+        </div>
+        <p class="card-copy">
+          Emits a machine-readable error with <code>why</code>, <code>fix</code>, and
+          <code>link</code>. It should group cleanly in the Errors tab and still carry the
+          browser root trace.
+        </p>
+        <div class="actions">
+          <button onclick="triggerError()" class="btn btn-danger">Trigger payment error</button>
+        </div>
+        <pre id="errorResult" class="result"></pre>
+      </article>
+    </main>
+
+    <footer class="footer-note">
+      <p>
+        The embedded widget opens from the bottom edge. If it covers content, scroll a little more —
+        this page reserves extra space so every control stays reachable while the panel is docked.
+      </p>
+    </footer>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
