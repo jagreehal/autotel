@@ -118,8 +118,12 @@ export class DevtoolsServer {
   }
 
   addTrace(trace: TraceData): void {
-    // Merge if trace already exists (out-of-order spans)
+    // Merge if trace already exists (out-of-order spans). Spans for one trace
+    // arrive across multiple batches and services, so the root span and timing
+    // must be recomputed from the merged span set — the first batch to arrive
+    // (e.g. a downstream service) may not contain the parentless root span.
     const existing = this.traces.find(t => t.traceId === trace.traceId)
+    const merged = existing ?? trace
     if (existing) {
       const existingSpanIds = new Set(existing.spans.map(s => s.spanId))
       for (const span of trace.spans) {
@@ -131,6 +135,15 @@ export class DevtoolsServer {
       existing.endTime = Math.max(existing.endTime, trace.endTime)
       existing.duration = existing.endTime - existing.startTime
       if (trace.status === 'ERROR') existing.status = 'ERROR'
+
+      const root = existing.spans.find(s => !s.parentSpanId)
+      if (root) {
+        existing.rootSpan = root
+        const rootService = root.attributes?.['service.name']
+        if (typeof rootService === 'string' && rootService.length > 0) {
+          existing.service = rootService
+        }
+      }
     } else {
       this.traces = appendWithLimit(
         this.traces,
@@ -140,7 +153,9 @@ export class DevtoolsServer {
     }
 
     this.errorAggregator.addErrorsFromTrace(trace)
-    this.broadcast({ traces: [trace], metrics: [], logs: [], errors: this.errorAggregator.getErrorGroups() })
+    // Broadcast the merged trace (not just the incoming batch) so live clients
+    // and any client that reconnects mid-trace converge on the full picture.
+    this.broadcast({ traces: [merged], metrics: [], logs: [], errors: this.errorAggregator.getErrorGroups() })
   }
 
   addTraces(traces: TraceData[]): void {

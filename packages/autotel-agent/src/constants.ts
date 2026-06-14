@@ -1,0 +1,1 @@
+export const AGENT_AUDIT_SCHEMA_VERSION = '1.1.0';

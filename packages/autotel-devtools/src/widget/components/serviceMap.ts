@@ -124,10 +124,19 @@ export function buildServiceMap(traces: TraceData[]): {
 
       // Upgrade node type if span suggests a more specific type
       const spanType = detectNodeType(span);
-      if (spanType !== 'service') node.nodeType = spanType;
+      const localServiceName = String(
+        span.attributes?.['service.name'] || trace.service || serviceName,
+      );
+      if (spanType !== 'service' && serviceName !== localServiceName) {
+        node.nodeType = spanType;
+      }
 
       // Find connections (CLIENT -> SERVER patterns)
       if (span.kind === 'CLIENT') {
+        const childServerSpan = trace.spans.find(
+          (candidate) =>
+            candidate.parentSpanId === span.spanId && candidate.kind === 'SERVER',
+        );
         // The caller is the span's own resource service (service.name /
         // trace.service) — NOT inferResourceName, which would pick up the
         // peer attributes and collapse source into target.
@@ -136,6 +145,9 @@ export function buildServiceMap(traces: TraceData[]): {
         );
         // Look for the target service from attributes
         const targetService =
+          (childServerSpan
+            ? getServiceFromSpan(childServerSpan, trace.service)
+            : undefined) ||
           span.attributes?.['peer.service'] ||
           span.attributes?.['http.host'] ||
           span.attributes?.['db.system'] ||

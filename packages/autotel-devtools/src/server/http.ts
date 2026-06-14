@@ -53,7 +53,10 @@ function findPackageRoot(): string {
   return dir
 }
 
-const FULLPAGE_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>autotel-devtools</title><style>*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;width:100%;overflow:hidden}</style></head><body><script src="/widget.js?mode=fullpage"></script></body></html>`
+const DEVTOOLS_FAVICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0f172a"/><text x="32" y="41" text-anchor="middle" font-size="32">🛰️</text></svg>'
+
+const FULLPAGE_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>autotel-devtools</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;width:100%;overflow:hidden}</style></head><body><script src="/widget.js?mode=fullpage"></script></body></html>`
 
 let cachedVersion: string | null = null
 function getVersion(): string {
@@ -103,6 +106,11 @@ export function attachDevtoolsRoutes(
 ): void {
   const loopbackOnly = options.loopbackOnly ?? true
   httpServer.on('request', async (req: IncomingMessage, res: ServerResponse) => {
+    // WebSocket upgrade requests are handled by the 'upgrade' event (via the
+    // ws library's WebSocketServer). Responding here would close the connection
+    // before the upgrade can complete.
+    if (req.headers.upgrade?.toLowerCase() === 'websocket') return
+
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
@@ -134,6 +142,16 @@ export function attachDevtoolsRoutes(
       const js = getWidgetJs()
       res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Content-Length': Buffer.byteLength(js) })
       res.end(js)
+      return
+    }
+
+    if (req.method === 'GET' && (url === '/favicon.svg' || url === '/favicon.ico')) {
+      res.writeHead(200, {
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=86400',
+        'Content-Length': Buffer.byteLength(DEVTOOLS_FAVICON_SVG),
+      })
+      res.end(DEVTOOLS_FAVICON_SVG)
       return
     }
 

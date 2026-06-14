@@ -430,12 +430,75 @@ export const selectedTraceCountSignal = computed(
 
 // ===== Actions =====
 
+// Recompute a trace's derived fields from its current span set. Spans arrive
+// out of order and across services (browser, then API, then auth/worker), so
+// the root span, timing, status, and service label are only correct once they
+// are derived from the merged span list rather than from whichever batch the
+// trace was first seen in.
+function recomputeTrace(base: TraceData, spans: SpanData[]): TraceData {
+  const sorted = [...spans].sort((a, b) => a.startTime - b.startTime);
+  const rootSpan =
+    sorted.find((s) => !s.parentSpanId) ?? base.rootSpan ?? sorted[0];
+  const startTime = Math.min(...sorted.map((s) => s.startTime));
+  const endTime = Math.max(...sorted.map((s) => s.endTime));
+  const status: TraceData['status'] = sorted.some(
+    (s) => s.status.code === 'ERROR',
+  )
+    ? 'ERROR'
+    : 'OK';
+  const rootService = rootSpan?.attributes?.['service.name'];
+  return {
+    ...base,
+    rootSpan,
+    spans: sorted,
+    startTime,
+    endTime,
+    duration: endTime - startTime,
+    status,
+    service:
+      typeof rootService === 'string' && rootService.length > 0
+        ? rootService
+        : base.service,
+  };
+}
+
+// Merge two views of the same trace, de-duplicating spans by spanId.
+function mergeTraceData(base: TraceData, incoming: TraceData): TraceData {
+  const byId = new Map<string, SpanData>();
+  for (const s of base.spans) byId.set(s.spanId, s);
+  for (const s of incoming.spans) {
+    if (!byId.has(s.spanId)) byId.set(s.spanId, s);
+  }
+  return recomputeTrace(base, [...byId.values()]);
+}
+
 function mergeTraces(existing: TraceData[], incoming: TraceData[]): TraceData[] {
   if (incoming.length === 0) return existing;
+
+  // Collapse any duplicate trace ids within the incoming batch first. A single
+  // occurrence is trusted as-is (its derived fields already come from the OTLP
+  // parser); duplicates are merged so their spans combine.
+  const incomingById = new Map<string, TraceData>();
+  for (const t of incoming) {
+    const prev = incomingById.get(t.traceId);
+    incomingById.set(t.traceId, prev ? mergeTraceData(prev, t) : t);
+  }
+
   const existingIds = new Set(existing.map((t) => t.traceId));
-  const fresh = incoming.filter((t) => !existingIds.has(t.traceId));
-  if (fresh.length === 0) return existing;
-  return [...existing, ...fresh];
+
+  // Merge updates into existing traces in place (keep list position stable so
+  // the live view does not reshuffle as new spans stream in).
+  const merged = existing.map((t) => {
+    const update = incomingById.get(t.traceId);
+    return update ? mergeTraceData(t, update) : t;
+  });
+
+  // Append genuinely new traces in arrival order.
+  for (const [id, t] of incomingById) {
+    if (!existingIds.has(id)) merged.push(t);
+  }
+
+  return merged;
 }
 
 function mergeTracesCapped(

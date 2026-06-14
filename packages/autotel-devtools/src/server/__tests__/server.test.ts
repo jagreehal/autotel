@@ -167,6 +167,62 @@ describe('DevtoolsServer', () => {
       expect(data.traces[0].spans).toHaveLength(2);
     });
 
+    it('recovers the root span when a downstream batch arrives first', async () => {
+      server = new DevtoolsServer({ port: 0 });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const traceId = 'trace-root-recovery';
+
+      // A downstream service exports its (child) span before the root service.
+      server!.addTrace(
+        makeTrace({
+          traceId,
+          service: 'shop-auth',
+          rootSpan: makeSpan({
+            traceId,
+            spanId: 'auth',
+            name: 'POST /validate',
+            parentSpanId: 'api',
+          }),
+          spans: [
+            makeSpan({
+              traceId,
+              spanId: 'auth',
+              name: 'POST /validate',
+              parentSpanId: 'api',
+            }),
+          ],
+        }),
+      );
+
+      // The parentless root span lands in a later batch.
+      server!.addTrace(
+        makeTrace({
+          traceId,
+          service: 'shop-api',
+          rootSpan: makeSpan({
+            traceId,
+            spanId: 'api',
+            name: 'POST /api/checkout',
+            attributes: { 'service.name': 'shop-api' },
+          }),
+          spans: [
+            makeSpan({
+              traceId,
+              spanId: 'api',
+              name: 'POST /api/checkout',
+              attributes: { 'service.name': 'shop-api' },
+            }),
+          ],
+        }),
+      );
+
+      const data = server!.getCurrentData();
+      expect(data.traces[0].spans).toHaveLength(2);
+      expect(data.traces[0].rootSpan.spanId).toBe('api');
+      expect(data.traces[0].service).toBe('shop-api');
+    });
+
     it('updates trace status when error spans are added', async () => {
       server = new DevtoolsServer({ port: 0 });
       await new Promise((r) => setTimeout(r, 100));

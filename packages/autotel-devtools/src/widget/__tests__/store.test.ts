@@ -5,7 +5,11 @@ import {
   sortedTracesSignal,
   sortedLogsSignal,
 } from '../store.svelte';
-import { makeTrace, makeLog } from '../../server/__tests__/test-utils/stubs';
+import {
+  makeTrace,
+  makeLog,
+  makeSpan,
+} from '../../server/__tests__/test-utils/stubs';
 
 describe('Widget Store', () => {
   beforeEach(() => {
@@ -45,6 +49,69 @@ describe('Widget Store', () => {
       expect(traces[0].traceId).toBe('t2'); // most recent
       expect(traces[1].traceId).toBe('t3');
       expect(traces[2].traceId).toBe('t1'); // oldest
+    });
+
+    it('merges late-arriving spans into an existing trace', () => {
+      const root = makeSpan({
+        traceId: 'm1',
+        spanId: 'root',
+        name: 'POST /checkout',
+      });
+      const child = makeSpan({
+        traceId: 'm1',
+        spanId: 'child',
+        name: 'POST /validate',
+        parentSpanId: 'root',
+      });
+
+      // First batch carries only the root span...
+      updateWidgetData({
+        traces: [makeTrace({ traceId: 'm1', rootSpan: root, spans: [root] })],
+      });
+      // ...a later batch (e.g. a downstream service) adds more spans.
+      updateWidgetData({
+        traces: [makeTrace({ traceId: 'm1', rootSpan: child, spans: [child] })],
+      });
+
+      const trace = sortedTracesSignal.value.find((t) => t.traceId === 'm1');
+      expect(trace?.spans).toHaveLength(2);
+      expect(trace?.rootSpan.spanId).toBe('root');
+    });
+
+    it('recovers the real root when downstream spans arrive first', () => {
+      const child = makeSpan({
+        traceId: 'm2',
+        spanId: 'child',
+        name: 'POST /validate',
+        parentSpanId: 'root',
+      });
+      const root = makeSpan({
+        traceId: 'm2',
+        spanId: 'root',
+        name: 'POST /checkout',
+        attributes: { 'service.name': 'shop-api' },
+      });
+
+      // Downstream-only batch arrives before the parentless root span...
+      updateWidgetData({
+        traces: [
+          makeTrace({
+            traceId: 'm2',
+            rootSpan: child,
+            spans: [child],
+            service: 'shop-auth',
+          }),
+        ],
+      });
+      // ...then the root batch lands and should take over.
+      updateWidgetData({
+        traces: [makeTrace({ traceId: 'm2', rootSpan: root, spans: [root] })],
+      });
+
+      const trace = sortedTracesSignal.value.find((t) => t.traceId === 'm2');
+      expect(trace?.spans).toHaveLength(2);
+      expect(trace?.rootSpan.spanId).toBe('root');
+      expect(trace?.service).toBe('shop-api');
     });
   });
 
