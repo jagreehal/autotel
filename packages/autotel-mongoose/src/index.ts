@@ -1,3 +1,10 @@
-export type { InstrumentMongooseConfig, SerializerPayload } from './types';
+export type {
+  InstrumentMongooseConfig,
+  SerializerPayload,
+  CustomMethodsConfig,
+  CustomMethodType,
+  MethodSelector,
+  ParameterCaptureConfig,
+} from './types';
 
 export { instrumentMongoose } from './instrumentation';

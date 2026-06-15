@@ -19,22 +19,95 @@ import {
   ATTR_DB_QUERY_TEXT,
   ATTR_SERVER_ADDRESS,
   ATTR_SERVER_PORT,
+  ATTR_CODE_FUNCTION_NAME,
+  ATTR_MONGOOSE_METHOD_NAME,
+  ATTR_MONGOOSE_METHOD_TYPE,
+  ATTR_MONGOOSE_METHOD_MODEL,
+  ATTR_MONGOOSE_METHOD_PARAMETERS,
+  ATTR_MONGOOSE_METHOD_PARAMETER_COUNT,
   DB_SYSTEM_NAME_VALUE_MONGODB,
 } from './constants';
 import type {
   InstrumentMongooseConfig,
   ResolvedConfig,
+  ResolvedCustomMethods,
+  CustomMethodsConfig,
+  CustomMethodType,
+  MethodSelector,
   SerializerPayload,
 } from './types';
 import { DEFAULT_TRACER_NAME } from './types';
 import {
   createStatementCapture,
+  createParameterCapture,
   defaultSerializer,
   type StatementCaptureFn,
 } from './statement';
 
 const INSTRUMENTED_FLAG = '__autotelMongooseInstrumented' as const;
 const WRAPPED_HOOK_FLAG = '__autotelWrappedHook' as const;
+const WRAPPED_METHOD_FLAG = '__autotelWrappedMethod' as const;
+const MODEL_PATCHED_FLAG = '__autotelModelPatched' as const;
+
+/**
+ * Per-Mongoose-instance registry of the resolved tracer + config.
+ *
+ * Custom-function wrappers are installed once on the (potentially shared)
+ * schema object, so they must NOT close over a single instance's
+ * tracer/config — a schema reused across instances/connections would otherwise
+ * be permanently bound to whichever instrumented it first. Instead each wrapper
+ * resolves the owning Mongoose instance from its runtime `this` and looks up
+ * the config here at call time. An instance that was never instrumented (or has
+ * custom methods disabled) is absent, so its calls pass straight through.
+ */
+const INSTANCE_REGISTRY = new WeakMap<
+  object,
+  { tracer: Tracer; config: ResolvedConfig }
+>();
+
+/** Resolves the owning Mongoose instance from a custom function's `this`. */
+function resolveMongooseInstance(
+  self: any,
+  methodType: CustomMethodType,
+): object | undefined {
+  try {
+    switch (methodType) {
+      case 'static': {
+        // `this` is the Model.
+        return self?.base ?? self?.db?.base;
+      }
+      case 'instance': {
+        // `this` is the Document; its constructor is the Model.
+        return self?.constructor?.base ?? self?.db?.base;
+      }
+      case 'query': {
+        // `this` is the Query.
+        return self?.model?.base;
+      }
+    }
+  } catch {
+    // Ignore — treated as "not instrumented".
+  }
+  return undefined;
+}
+
+/** Picks the selector for a given method category from a resolved config. */
+function selectorFor(
+  cm: ResolvedCustomMethods,
+  methodType: CustomMethodType,
+): MethodSelector {
+  switch (methodType) {
+    case 'static': {
+      return cm.statics;
+    }
+    case 'instance': {
+      return cm.methods;
+    }
+    case 'query': {
+      return cm.query;
+    }
+  }
+}
 
 /**
  * Symbol used to store the parent span on Query/Aggregate objects.
@@ -739,6 +812,370 @@ function wrapHookHandler(
 }
 
 // ---------------------------------------------------------------------------
+// Custom user-defined functions (statics / methods / query helpers)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the `customMethods` config into a concrete, defaults-applied shape.
+ * Omitted/true → wrap everything and capture (redacted) parameters.
+ */
+function resolveCustomMethods(
+  config: InstrumentMongooseConfig | undefined,
+): ResolvedCustomMethods {
+  const setting = config?.customMethods;
+
+  if (setting === false) {
+    return {
+      enabled: false,
+      statics: false,
+      methods: false,
+      query: false,
+      captureParameters: false,
+    };
+  }
+
+  // Default and explicit-true both mean "maximum observability".
+  const obj: CustomMethodsConfig =
+    setting === undefined || setting === true ? {} : setting;
+
+  const cp = obj.captureParameters;
+  let captureParameters: ResolvedCustomMethods['captureParameters'] = false;
+  if (cp !== false) {
+    captureParameters = createParameterCapture({
+      parameterConfig: cp === undefined || cp === true ? undefined : cp,
+      // Parameters inherit the same PII redaction as db.query.text by default.
+      statementRedactor: config?.statementRedactor ?? 'default',
+    });
+  }
+
+  return {
+    enabled: true,
+    statics: obj.statics ?? true,
+    methods: obj.methods ?? true,
+    query: obj.query ?? true,
+    captureParameters,
+  };
+}
+
+/**
+ * Evaluates whether a named function in a category should be instrumented.
+ * Supports boolean, include-list, and `{ include, exclude }` selectors.
+ */
+function selectorAllows(selector: MethodSelector, name: string): boolean {
+  if (selector === false) {
+    return false;
+  }
+  if (selector === true) {
+    return true;
+  }
+  if (Array.isArray(selector)) {
+    return selector.includes(name);
+  }
+  if (selector.include && !selector.include.includes(name)) {
+    return false;
+  }
+  if (selector.exclude && selector.exclude.includes(name)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Derives model + collection names from the runtime `this` of a custom
+ * function, which differs by category (Model / Document / Query).
+ */
+function resolveModelContext(
+  self: any,
+  methodType: CustomMethodType,
+): { modelName?: string; collectionName?: string } {
+  try {
+    switch (methodType) {
+      case 'static': {
+        return {
+          modelName: self?.modelName,
+          collectionName: self?.collection?.collectionName || self?.modelName,
+        };
+      }
+      case 'instance': {
+        const ctor = self?.constructor;
+        return {
+          modelName: ctor?.modelName,
+          collectionName: ctor?.collection?.collectionName || ctor?.modelName,
+        };
+      }
+      case 'query': {
+        const model = self?.model;
+        return {
+          modelName: model?.modelName,
+          collectionName: model?.collection?.collectionName || model?.modelName,
+        };
+      }
+    }
+  } catch {
+    // Ignore — fall through to empty context.
+  }
+  return {};
+}
+
+/**
+ * Wraps a single user-defined function so its invocation is traced. Purely
+ * observational: preserves `this`, the return value, and error propagation.
+ *
+ * The tracer, config, and selection are resolved per Mongoose instance at call
+ * time (see {@link INSTANCE_REGISTRY}), so a schema shared across instances or
+ * connections is never bound to whichever config instrumented it first. Calls
+ * from a non-instrumented, disabled, or de-selected instance pass straight
+ * through with no span.
+ */
+function wrapCustomFunction(
+  original: (...args: any[]) => any,
+  methodName: string,
+  methodType: CustomMethodType,
+): (...args: any[]) => any {
+  if ((original as any)[WRAPPED_METHOD_FLAG]) {
+    return original;
+  }
+
+  const wrapped = function instrumentedCustomFn(
+    this: any,
+    ...args: any[]
+  ): any {
+    // Resolve the owning instance's tracer/config at call time.
+    const instance = resolveMongooseInstance(this, methodType);
+    const entry = instance ? INSTANCE_REGISTRY.get(instance) : undefined;
+    if (
+      !entry ||
+      !entry.config.customMethods.enabled ||
+      !selectorAllows(
+        selectorFor(entry.config.customMethods, methodType),
+        methodName,
+      )
+    ) {
+      // Not instrumented / disabled / de-selected for this instance.
+      return original.apply(this, args);
+    }
+
+    const { tracer, config } = entry;
+    const captureParameters = config.customMethods.captureParameters;
+
+    const { modelName, collectionName } = resolveModelContext(this, methodType);
+
+    const spanName = modelName
+      ? `mongoose.${modelName}.${methodName}`
+      : `mongoose.${methodType}.${methodName}`;
+
+    const span = tracer.startSpan(spanName, { kind: SpanKind.INTERNAL });
+    span.setAttribute(ATTR_DB_SYSTEM_NAME, DB_SYSTEM_NAME_VALUE_MONGODB);
+    span.setAttribute(ATTR_CODE_FUNCTION_NAME, methodName);
+    span.setAttribute(ATTR_MONGOOSE_METHOD_NAME, methodName);
+    span.setAttribute(ATTR_MONGOOSE_METHOD_TYPE, methodType);
+    if (modelName) {
+      span.setAttribute(ATTR_MONGOOSE_METHOD_MODEL, modelName);
+    }
+    if (collectionName && config.captureCollectionName) {
+      span.setAttribute(ATTR_DB_COLLECTION_NAME, collectionName);
+    }
+    if (config.dbName) {
+      span.setAttribute(ATTR_DB_NAMESPACE, config.dbName);
+    }
+
+    if (captureParameters) {
+      span.setAttribute(ATTR_MONGOOSE_METHOD_PARAMETER_COUNT, args.length);
+      try {
+        const params = captureParameters(args, { methodName, methodType });
+        if (params !== undefined) {
+          span.setAttribute(ATTR_MONGOOSE_METHOD_PARAMETERS, params);
+        }
+      } catch {
+        // Never let parameter capture break the call.
+      }
+    }
+
+    return runWithSpan(span, () => {
+      try {
+        const result = original.apply(this, args);
+
+        // Query helpers return the Query for further chaining; the DB call is
+        // traced separately on exec(). Finalize now so we don't hold the span
+        // open across an arbitrary chain.
+        if (methodType === 'query') {
+          finalizeSpan(span);
+          return result;
+        }
+
+        // Statics/instance methods returning a Query/Aggregate: finalize when
+        // exec() settles so the span spans the real DB work.
+        if (result && typeof result.exec === 'function') {
+          const originalExec = result.exec.bind(result);
+          result.exec = function wrappedExec(): Promise<any> {
+            try {
+              return Promise.resolve(originalExec())
+                .then((value: any) => {
+                  finalizeSpan(span);
+                  return value;
+                })
+                .catch((error: unknown) => {
+                  finalizeSpan(
+                    span,
+                    error instanceof Error ? error : new Error(String(error)),
+                  );
+                  throw error;
+                });
+            } catch (error) {
+              finalizeSpan(
+                span,
+                error instanceof Error ? error : new Error(String(error)),
+              );
+              throw error;
+            }
+          };
+          return result;
+        }
+
+        // Promise-returning (async statics / instance methods).
+        if (result && typeof result.then === 'function') {
+          return Promise.resolve(result as Promise<any>)
+            .then((value) => {
+              finalizeSpan(span);
+              return value;
+            })
+            .catch((error: unknown) => {
+              finalizeSpan(
+                span,
+                error instanceof Error ? error : new Error(String(error)),
+              );
+              throw error;
+            });
+        }
+
+        // Synchronous value.
+        finalizeSpan(span);
+        return result;
+      } catch (error) {
+        finalizeSpan(
+          span,
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        throw error;
+      }
+    });
+  };
+
+  // Preserve the original name for stack traces / debugging.
+  try {
+    Object.defineProperty(wrapped, 'name', {
+      value: original.name || methodName,
+      configurable: true,
+    });
+  } catch {
+    // Ignore — non-fatal.
+  }
+  (wrapped as any)[WRAPPED_METHOD_FLAG] = true;
+  return wrapped;
+}
+
+/**
+ * Wraps every user-defined function on a schema in place (statics / methods /
+ * query) at model-compile time. Mutating the schema's collections before
+ * compilation means Mongoose copies the wrapped versions onto the Model, its
+ * prototype, and its query class.
+ *
+ * Wrapping is unconditional and idempotent: each wrapper decides per Mongoose
+ * instance at call time whether to actually trace (honoring that instance's
+ * `enabled` flag and include/exclude selectors). This keeps a schema shared
+ * across instances correct — a function excluded by one instance can still be
+ * traced by another, and vice versa — while a function is only ever wrapped
+ * once.
+ */
+/**
+ * Functions Mongoose itself injects into `schema.statics`/`methods`/`query`
+ * (e.g. the `timestamps: true` option adds an `initializeTimestamps` instance
+ * method). These are framework internals, not user code, so we skip them to
+ * avoid noisy spans. Names starting with `$` (Mongoose's internal prefix) are
+ * also skipped.
+ */
+const MONGOOSE_INTERNAL_FUNCTION_NAMES = new Set<string>([
+  'initializeTimestamps',
+]);
+
+function isMongooseInternalFunctionName(name: string): boolean {
+  return name.startsWith('$') || MONGOOSE_INTERNAL_FUNCTION_NAMES.has(name);
+}
+
+function instrumentSchemaCustomFunctions(schema: any): void {
+  if (!schema) {
+    return;
+  }
+
+  const wrapCollection = (
+    collection: any,
+    methodType: CustomMethodType,
+  ): void => {
+    if (!collection) {
+      return;
+    }
+    for (const name of Object.keys(collection)) {
+      if (isMongooseInternalFunctionName(name)) {
+        continue;
+      }
+      const fn = collection[name];
+      if (typeof fn !== 'function' || (fn as any)[WRAPPED_METHOD_FLAG]) {
+        continue;
+      }
+      collection[name] = wrapCustomFunction(fn, name, methodType);
+    }
+  };
+
+  wrapCollection(schema.statics, 'static');
+  wrapCollection(schema.methods, 'instance');
+  wrapCollection(schema.query, 'query');
+}
+
+/**
+ * Patches `mongoose.model()` (and `Connection.prototype.model()`) so custom
+ * functions are wrapped automatically as each model compiles. Idempotent per
+ * host and per function. Whether a wrapped function actually traces is decided
+ * per instance at call time, so it is safe for the patch to be global.
+ */
+function patchModelFactory(m: any, config: ResolvedConfig): void {
+  if (!config.customMethods.enabled) {
+    return;
+  }
+
+  const patchHost = (host: any): void => {
+    if (!host || typeof host.model !== 'function' || host[MODEL_PATCHED_FLAG]) {
+      return;
+    }
+    const originalModel = host.model;
+    host.model = function patchedModel(
+      this: any,
+      nameOrSchema: any,
+      schema?: any,
+      ...rest: any[]
+    ): any {
+      if (schema && typeof schema === 'object') {
+        try {
+          instrumentSchemaCustomFunctions(schema);
+        } catch {
+          // Never let instrumentation break model compilation.
+        }
+      }
+      return Reflect.apply(originalModel, this, [
+        nameOrSchema,
+        schema,
+        ...rest,
+      ]);
+    };
+    host[MODEL_PATCHED_FLAG] = true;
+  };
+
+  patchHost(m);
+  if (m.Connection?.prototype) {
+    patchHost(m.Connection.prototype);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main instrumentation function
 // ---------------------------------------------------------------------------
 
@@ -798,9 +1235,19 @@ export function instrumentMongoose(
         ? false
         : (resolvedSerializer ?? defaultSerializer),
     statementRedactor: resolvedRedactor,
+    customMethods: resolveCustomMethods(config),
   };
 
   const tracer = trace.getTracer(finalConfig.tracerName);
+
+  // Register this instance so custom-function wrappers can resolve its
+  // tracer/config at call time (rather than closing over them — which would
+  // bind a shared schema to whichever instance instrumented it first).
+  INSTANCE_REGISTRY.set(mongoose, { tracer, config: finalConfig });
+
+  // Patch model factory so user-defined statics/methods/query helpers are
+  // wrapped automatically as models compile (no manual trace() calls).
+  patchModelFactory(m, finalConfig);
 
   // Create statement capture function
   const captureStatement = createStatementCapture({
