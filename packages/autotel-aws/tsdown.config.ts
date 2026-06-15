@@ -1,6 +1,8 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from 'tsdown';
+import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
 
 export default defineConfig({
+  outExtensions: tsupCompatOutExtensions,
   tsconfig: 'tsconfig.build.json',
   entry: {
     index: 'src/index.ts',
@@ -25,9 +27,9 @@ export default defineConfig({
   outDir: 'dist',
   clean: true,
   treeshake: true,
-  splitting: true,
   minify: false,
-  external: [
+  deps: {
+    neverBundle: [
     'autotel',
     '@aws-sdk/client-s3',
     '@aws-sdk/client-dynamodb',
@@ -47,4 +49,6 @@ export default defineConfig({
     '@opentelemetry/sdk-metrics',
     '@opentelemetry/core',
   ],
+  },
+  target: false,
 });

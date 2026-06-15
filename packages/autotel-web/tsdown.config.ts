@@ -1,6 +1,8 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from 'tsdown';
+import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
 
 export default defineConfig({
+  outExtensions: tsupCompatOutExtensions,
   tsconfig: 'tsconfig.build.json',
   entry: ['src/index.ts', 'src/full.ts'],
   format: ['esm'],

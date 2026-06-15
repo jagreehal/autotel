@@ -39,9 +39,9 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsdown",
     "ci": "npm run build && npm run check-format && npm run check-exports && npm run lint && npm run test",
-    "dev": "tsup --watch",
+    "dev": "tsdown --watch",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write .",
@@ -102,7 +102,7 @@
     "@typescript-eslint/parser": "^8.60.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^64.0.0",
-    "tsup": "^8.5.1",
+    "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   },

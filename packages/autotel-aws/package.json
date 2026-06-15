@@ -92,9 +92,9 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsdown",
     "build:layer": "bash scripts/build-layer.sh",
-    "dev": "tsup --watch",
+    "dev": "tsdown --watch",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
@@ -207,7 +207,7 @@
     "@aws-sdk/client-eventbridge": "^3.1063.0",
     "@middy/core": "^7.6.5",
     "@types/node": "^25.9.2",
-    "tsup": "^8.5.1",
+    "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8",
     "rimraf": "^6.1.3",

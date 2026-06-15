@@ -19,6 +19,7 @@ import {
   withAgentToolCall,
 } from './index.js';
 import { buildLifecycleUpdateContext, buildLoggerContext } from './metadata.js';
+import { otelTrace } from 'autotel';
 
 const mocked = vi.hoisted(() => {
   const setAttribute = vi.fn();
@@ -72,10 +73,21 @@ vi.mock('autotel', () => ({
   ),
   getTraceContext: vi.fn(() => mocked.mockCtx),
   getRequestLogger: vi.fn(() => mocked.logger),
+  getRequestLoggerSafe: vi.fn(() => mocked.logger),
+  createNoopRequestLogger: vi.fn(() => mocked.logger),
+  GEN_AI_COST_ATTRIBUTE: 'gen_ai.usage.cost.usd',
+  estimateLLMCost: vi.fn(
+    (_model: string, usage: { inputTokens?: number; outputTokens?: number }) =>
+      ((usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)) / 1000,
+  ),
   otelTrace: {
     getActiveSpan: vi.fn(() => ({
       setAttribute: mocked.setAttribute,
       setAttributes: mocked.setAttributes,
+      spanContext: () => ({
+        traceId: '0af7651916cd43dd8448eb211c80319c',
+        spanId: 'b7ad6b7169203331',
+      }),
     })),
   },
 }));
@@ -305,6 +317,101 @@ describe('autotel-agent', () => {
         'policy.reason': 'off_topic',
       }),
     );
+  });
+
+  it('recordPolicyDecision degrades gracefully (warn) when no trace context', () => {
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined as never);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(() =>
+      recordPolicyDecision({
+        action: 'agent.guardrail.nocontext',
+        agent: { id: 'tripmate' },
+        policy: { decision: 'deny' },
+      }),
+    ).not.toThrow();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(forceKeepAuditEvent).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('recordPolicyDecision throws when onMissingContext is "throw" and no context', () => {
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined as never);
+
+    expect(() =>
+      recordPolicyDecision(
+        {
+          action: 'agent.guardrail.throw',
+          agent: { id: 'tripmate' },
+          policy: { decision: 'deny' },
+        },
+        { onMissingContext: 'throw' },
+      ),
+    ).toThrow('No active trace context');
+  });
+
+  it('withAgentToolCall records GenAI cost + token attributes from extractUsage', async () => {
+    await withAgentToolCall(
+      {
+        action: 'agent.research',
+        resource: 'evidence',
+        agent: { id: 'researcher' },
+        tool: { name: 'gpt-4o' },
+        ai: { model: 'gpt-4o', operation: 'chat', finishReasons: ['stop'] },
+      },
+      async () => ({ text: 'ok', usage: { inputTokens: 1000, outputTokens: 500 } }),
+      {
+        ctx: mockCtx,
+        extractUsage: (result) =>
+          (result as { usage: { inputTokens: number; outputTokens: number } }).usage,
+      },
+    );
+
+    expect(setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'gen_ai.request.model': 'gpt-4o',
+        'gen_ai.operation.name': 'chat',
+        'gen_ai.response.finish_reasons': ['stop'],
+        'gen_ai.usage.input_tokens': 1000,
+        'gen_ai.usage.output_tokens': 500,
+        'gen_ai.usage.total_tokens': 1500,
+        'gen_ai.usage.cost.usd': 1.5,
+      }),
+    );
+  });
+
+  it('withAgentAction records GenAI request model from static ai.usage, no cost when model unknown is still attempted', async () => {
+    await withAgentAction(
+      {
+        action: 'agent.embed',
+        agent: { id: 'embedder' },
+        ai: { model: 'text-embedding-3-small', usage: { inputTokens: 200 } },
+      },
+      async () => 'done',
+      { ctx: mockCtx },
+    );
+
+    expect(setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'gen_ai.request.model': 'text-embedding-3-small',
+        'gen_ai.usage.input_tokens': 200,
+        'gen_ai.usage.total_tokens': 200,
+      }),
+    );
+  });
+
+  it('withAgentAction without ai metadata records no GenAI attributes', async () => {
+    await withAgentAction(
+      { action: 'agent.plain', agent: { id: 'a1' } },
+      async () => 'done',
+      { ctx: mockCtx },
+    );
+
+    const sawGenAi = setAttributes.mock.calls.some(([attrs]) =>
+      Object.keys(attrs as Record<string, unknown>).some((k) => k.startsWith('gen_ai.')),
+    );
+    expect(sawGenAi).toBe(false);
   });
 
   it('recordAgentHandoff records a canonical handoff event with derived delegation lineage', () => {

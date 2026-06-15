@@ -1,6 +1,8 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from 'tsdown';
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 
 export default defineConfig({
+  outExtensions: tsupCompatOutExtensions,
   entry: {
     index: 'src/index.ts',
     instrumentation: 'src/instrumentation.ts',
@@ -55,8 +57,10 @@ export default defineConfig({
   outDir: 'dist',
   clean: true,
   treeshake: true, // Enable aggressive tree-shaking
-  splitting: true, // Enable code splitting for shared chunks
   minify: false, // Let bundlers handle minification
   // Mark logger implementations as external so user bundlers can tree-shake
-  external: ['pino', 'pino-pretty', 'winston'],
+  deps: {
+    neverBundle: ['pino', 'pino-pretty', 'winston'],
+  },
+  target: false,
 });

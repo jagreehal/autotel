@@ -127,6 +127,7 @@ Wraps an async operation with audit context and automatic outcome tagging.
 | `options.forceKeep` | `boolean` | Force event through tail-sampling (default: `true`) |
 | `options.ctx` | `AuditContext` | Custom audit context (auto-resolved if omitted) |
 | `options.logger` | `RequestLogger` | Override request logger instance |
+| `options.onMissingContext` | `'throw' \| 'warn' \| 'skip'` | What to do when there is no active trace context (default: `'warn'`) |
 
 **Returns:** `Promise<T>` — Result from the wrapped function.
 
@@ -144,6 +145,30 @@ await withAudit(
   },
 );
 ```
+
+#### Best-effort by default
+
+Audit is observability — a missing trace context must never crash the business
+logic it wraps. When there is no active trace context, `withAudit` no longer
+throws into your handler. The `onMissingContext` option controls the behaviour:
+
+- `'warn'` (default): run the wrapped handler un-audited and log **one** warning
+  per action.
+- `'skip'`: run un-audited, silently.
+- `'throw'`: previous fail-fast behaviour — opt in when telemetry is mandatory.
+
+```typescript
+// Safe to drop into a production hot path: no surrounding trace() needed,
+// no try/catch required.
+await withAudit(
+  { action: 'user.delete', resource: 'user', actorId: 'admin-42' },
+  async () => deleteUser(userId),
+  { onMissingContext: 'skip' },
+);
+```
+
+The same option is accepted by `securityEvent()` / `withSecurity()` (see
+[Security Observability](/autotel/integrations/security/)).
 
 ### `setAuditAttributes(metadata, ctx?)`
 

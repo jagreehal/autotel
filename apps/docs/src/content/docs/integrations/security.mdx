@@ -106,6 +106,29 @@ await withSecurity(
 );
 ```
 
+### Best-effort by default
+
+Security telemetry is observability — a missing trace context must never crash
+the business logic it wraps. When there is no active trace context,
+`securityEvent()` and `withSecurity()` no longer throw into your handler. An
+`onMissingContext` option (passed via the options arg) controls the behaviour:
+
+- `'warn'` (default): record nothing but run the wrapped handler and log **one**
+  warning per action.
+- `'skip'`: run un-recorded, silently.
+- `'throw'`: previous fail-fast behaviour — opt in when telemetry is mandatory.
+
+```typescript
+await withSecurity(
+  { name: 'api_key.created', category: 'secrets', outcome: 'success', actorId: userId },
+  async () => createApiKey(userId),
+  { onMissingContext: 'skip' },
+);
+```
+
+This makes the hooks safe to drop into a production hot path without a
+surrounding `trace()` or a `try`/`catch`.
+
 ### Event fields
 
 | Field | Notes |

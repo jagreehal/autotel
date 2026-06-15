@@ -277,7 +277,38 @@ Use the optional `autotel-audit` package for compliance and security telemetry:
 - **Security signals** (`securityEvent`, `withSecurity`): abuse and detection events at auth, access control, and secret-handling decision points.
 - **Zero-code HTTP signals**: register `createSecuritySignalProcessor()` in `init({ spanProcessors })` for probe paths, denied responses, and auth bursts.
 
+The `autotel-agent` package adds agent-layer audit (`withAgentAction`, `withAgentToolCall`, `recordPolicyDecision`) for tool calls, policy decisions, and delegation.
+
 See [Audit Logging](/autotel/integrations/audit/) and [Security Observability](/autotel/integrations/security/).
+
+#### Best-effort by default
+
+Audit and agent telemetry is observability — a missing trace context must never crash the business logic it wraps. `withAudit`, `withAgentAction`, `withAgentToolCall`, `recordPolicyDecision`, and `securityEvent` / `withSecurity` no longer throw into your handler when there is no active trace context. An `onMissingContext` option (on each wrapper's options arg) controls the behaviour:
+
+- `'warn'` (default): run the wrapped handler un-audited and log one warning per action.
+- `'skip'`: run un-audited, silently.
+- `'throw'`: previous fail-fast behaviour — opt in when telemetry is mandatory.
+
+This makes the agent layer safe to drop into a production hot path with no surrounding `trace()` and no `try`/`catch`.
+
+#### Works beyond autotel's own `trace()`
+
+The agent wrappers resolve trace context from **any** active OpenTelemetry span, not only inside autotel's own `trace()`. They compose inside `@effect/opentelemetry`, a vanilla OpenTelemetry `NodeSDK`, and `autotel-cloudflare`-instrumented `fetch` handlers and Cloudflare Workflows. For example, inside a `step.do(...)` of an `instrumentWorkflow`-wrapped `WorkflowEntrypoint`:
+
+```typescript
+import { withAgentToolCall } from 'autotel-agent';
+
+await step.do('research', async () =>
+  withAgentToolCall(
+    {
+      action: 'agent.research',
+      agent: { id: 'researcher' },
+      tool: { name: model, input: { prompt } },
+    },
+    () => env.AI.run(model, { messages }),
+  ),
+);
+```
 
 ### Generic Node HTTP
 
@@ -314,7 +345,7 @@ When adding Autotel support for a new framework (e.g. a new web framework):
 
 2. **Touchpoints to update**
    - New source: e.g. `packages/autotel-<name>/src/index.ts` (or new package).
-   - Build: add entry in `tsup.config.ts` / package build.
+   - Build: add entry in `tsdown.config.ts` / package build.
    - Exports: add in `package.json` exports and typesVersions.
    - Tests: add `*.test.ts` for middleware (span created, request logger available).
    - Example app: add under `apps/example-<name>` and wire init + middleware.

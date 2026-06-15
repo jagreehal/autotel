@@ -1,13 +1,18 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from 'tsdown';
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-// Read version from package.json for build-time injection
-const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
+// Read version from package.json for build-time injection.
+// tsdown loads this config as ESM, so use import.meta.dirname (not __dirname).
+const pkg = JSON.parse(
+  readFileSync(join(import.meta.dirname, 'package.json'), 'utf8'),
+);
 
 export default defineConfig([
   // Server build (Node.js) - full OpenTelemetry implementation
   {
+    outExtensions: tsupCompatOutExtensions,
     tsconfig: 'tsconfig.build.json',
     entry: {
       index: 'src/index.ts',
@@ -28,16 +33,15 @@ export default defineConfig([
     outDir: 'dist',
     clean: true,
     treeshake: true,
-    splitting: true,
     minify: false,
     target: 'es2022',
-    external: ['autotel', '@tanstack/react-start', '@tanstack/solid-start'],
     define: {
       'process.env.AUTOTEL_TANSTACK_VERSION': JSON.stringify(pkg.version),
     },
   },
   // Browser build - no-op stubs (no OpenTelemetry dependencies)
   {
+    outExtensions: tsupCompatOutExtensions,
     tsconfig: 'tsconfig.build.json',
     entry: {
       'browser/index': 'src/browser/index.ts',
@@ -59,7 +63,6 @@ export default defineConfig([
     // Don't clean - already cleaned by server build
     clean: false,
     treeshake: true,
-    splitting: true,
     minify: false,
     target: 'es2022',
     // No external dependencies for browser build

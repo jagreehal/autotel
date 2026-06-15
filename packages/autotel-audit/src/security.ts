@@ -3,7 +3,8 @@ import {
   AUTOTEL_SAMPLING_TAIL_EVALUATED,
   AUTOTEL_SAMPLING_TAIL_KEEP,
   REDACTOR_PATTERNS,
-  getRequestLogger,
+  createNoopRequestLogger,
+  getRequestLoggerSafe,
 } from 'autotel';
 import type { RequestLogger } from 'autotel';
 import {
@@ -12,7 +13,15 @@ import {
   escalateSecuritySeverity,
 } from 'autotel/security-schema';
 import type { SecuritySeverity } from 'autotel/security-schema';
-import { resolveContext, toAttributeValue, type AuditContext } from './context';
+import {
+  MISSING_CONTEXT_MESSAGE,
+  noopAuditContext,
+  resolveContextSafe,
+  toAttributeValue,
+  warnMissingContextOnce,
+  type AuditContext,
+  type OnMissingContext,
+} from './context';
 import { lazyCounter } from './lazy-counter';
 
 export type { SecuritySeverity };
@@ -105,6 +114,12 @@ export interface SecurityEventOptions {
    * to a stable catalogue, never interpolate user input into them.
    */
   metrics?: boolean;
+  /**
+   * Behaviour when no trace context can be resolved. Defaults to `warn`
+   * (best-effort: record nothing, warn once). A dropped security event is still
+   * better than a crashed request — but the warning makes the gap visible.
+   */
+  onMissingContext?: OnMissingContext;
 }
 
 export type WithSecurityOptions = SecurityEventOptions;
@@ -201,7 +216,24 @@ export function securityEvent(
   metadata: SecurityEventMetadata,
   options: SecurityEventOptions = {},
 ): void {
-  const traceCtx = resolveContext(options.ctx);
+  const traceCtx = resolveContextSafe(options.ctx);
+
+  // Counters are independent of trace context — always record the security signal
+  // even when there's no span to attach attributes to.
+  if (options.metrics !== false) {
+    countSecurityEvent(metadata);
+  }
+
+  if (!traceCtx) {
+    const mode = options.onMissingContext ?? 'warn';
+    if (mode === 'throw') {
+      throw new Error(MISSING_CONTEXT_MESSAGE);
+    }
+    if (mode === 'warn') {
+      warnMissingContextOnce(metadata.name);
+    }
+    return;
+  }
 
   if (options.forceKeep !== false) {
     traceCtx.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
@@ -211,11 +243,7 @@ export function securityEvent(
 
   traceCtx.setAttributes(flattenSecurityAttributes(metadata));
 
-  if (options.metrics !== false) {
-    countSecurityEvent(metadata);
-  }
-
-  const logger = options.logger ?? getRequestLogger();
+  const logger = options.logger ?? getRequestLoggerSafe() ?? createNoopRequestLogger();
   logger.set({
     security: {
       name: metadata.name,
@@ -250,12 +278,14 @@ export async function withSecurity<T>(
   fn: (ctx: AuditContext, logger: RequestLogger) => T | Promise<T>,
   options: WithSecurityOptions = {},
 ): Promise<T> {
-  const traceCtx = resolveContext(options.ctx);
-  const logger = options.logger ?? getRequestLogger();
+  const traceCtx = resolveContextSafe(options.ctx);
+  const logger =
+    options.logger ?? getRequestLoggerSafe() ?? createNoopRequestLogger();
+  const ctx = traceCtx ?? noopAuditContext();
 
   try {
-    const result = await fn(traceCtx, logger);
-    securityEvent(metadata, { ...options, ctx: traceCtx, logger });
+    const result = await fn(ctx, logger);
+    securityEvent(metadata, { ...options, ctx: traceCtx ?? undefined, logger });
     return result;
   } catch (error) {
     const asError = error instanceof Error ? error : new Error(String(error));
@@ -267,7 +297,7 @@ export async function withSecurity<T>(
         // but an explicit `critical` stays critical.
         severity: escalateSecuritySeverity(metadata.severity ?? 'info', 'error'),
       },
-      { ...options, ctx: traceCtx, logger },
+      { ...options, ctx: traceCtx ?? undefined, logger },
     );
     logger.error(asError, {
       security: {

@@ -1,6 +1,8 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from 'tsdown';
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 
 export default defineConfig({
+  outExtensions: tsupCompatOutExtensions,
   tsconfig: 'tsconfig.build.json',
   entry: {
     index: 'src/index.ts',
@@ -14,5 +16,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   treeshake: true,
-  splitting: false,
+  target: false,
 });

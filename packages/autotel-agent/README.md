@@ -162,6 +162,53 @@ The factory `(ctx) => (...args) => result` mirrors `trace()`: `ctx` is the audit
 | `withAgentAction` / `withAgentToolCall` | One-shot, inline inside a handler |
 | `defineAgentAction` / `defineAgentToolCall` | Declared once at module scope, called repeatedly |
 
+## LLM cost & token usage
+
+When an agent step *is* an LLM call, attach `ai` metadata. autotel-agent then
+records the OpenTelemetry GenAI semantic attributes on the span — reusing the
+cost model in the main `autotel` package, so you don't reinvent token/cost
+tracking:
+
+- `gen_ai.request.model`, `gen_ai.operation.name`
+- `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`
+- `gen_ai.usage.cost.usd` (estimated via `estimateLLMCost` / `MODEL_PRICING`)
+
+Token usage is usually known only after the call, so pass `options.extractUsage`
+to pull it from the handler's result:
+
+```ts
+import { withAgentToolCall } from 'autotel-agent';
+
+const chat = await withAgentToolCall(
+  {
+    action: 'agent.research.chat',
+    agent: { id: 'researcher' },
+    tool: { name: 'openai.chat' },
+    ai: { model: 'gpt-4o', operation: 'chat' },
+  },
+  async () => openai.chat.completions.create({ model: 'gpt-4o', messages }),
+  {
+    extractUsage: (res) => ({
+      inputTokens: (res as ChatCompletion).usage?.prompt_tokens,
+      outputTokens: (res as ChatCompletion).usage?.completion_tokens,
+    }),
+  },
+);
+// span now carries gen_ai.request.model, gen_ai.usage.*_tokens, gen_ai.usage.cost.usd
+```
+
+If you know usage up front (or override pricing), set it on the metadata
+directly: `ai: { model, usage: { inputTokens, outputTokens }, pricing }`.
+
+## Works in any OpenTelemetry setup
+
+The audit context resolves from the **active OpenTelemetry span** — so the
+wrappers attach attributes whether you're inside autotel's `trace()`,
+`@effect/opentelemetry`, a vanilla NodeSDK, or an `autotel-cloudflare`
+instrumented handler. When no span is active, instrumentation degrades per
+`options.onMissingContext` (`'warn'` by default, `'throw'`, or `'skip'`) and
+never crashes the wrapped work.
+
 ## Canonical Schema
 
 `autotel-agent` normalizes a stricter schema for governance and traceability work:

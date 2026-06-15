@@ -37,11 +37,14 @@ vi.mock('autotel', () => ({
       /^(password|passwd|pwd|secret|token|api[_-]?key|auth|credential|private[_-]?key|authorization)$/i,
   },
   getRequestLogger: vi.fn(() => logger),
+  getRequestLoggerSafe: vi.fn(() => logger),
+  createNoopRequestLogger: vi.fn(() => logger),
   getTraceContext: vi.fn(() => mockCtx),
   otelTrace: {
     getActiveSpan: vi.fn(() => ({
       setAttribute,
       setAttributes,
+      spanContext: () => ({ traceId: 'trace-1', spanId: 'span-1' }),
     })),
   },
 }));
