@@ -1,6 +1,6 @@
 {
   "name": "autotel-eventcatalog",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "description": "Diff your autotel architecture snapshot against an EventCatalog and report drift. Same model as Pact, for event architectures.",
   "type": "module",
   "main": "./dist/index.js",

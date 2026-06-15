@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 4.0.0
+
+### Patch Changes
+
+- Updated dependencies [140fc76]
+  - autotel@3.7.0
+
 ## 3.0.0
 
 ### Patch Changes

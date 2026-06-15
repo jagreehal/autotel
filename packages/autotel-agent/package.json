@@ -1,6 +1,6 @@
 {
   "name": "autotel-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agent identity and audit helpers for Autotel",
   "type": "module",
   "main": "./dist/index.js",
