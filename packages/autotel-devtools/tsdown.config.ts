@@ -1,6 +1,8 @@
-import { defineConfig } from 'tsup'
+import { defineConfig } from 'tsdown'
+import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
 
 export default defineConfig({
+  outExtensions: tsupCompatOutExtensions,
   tsconfig: 'tsconfig.build.json',
   entry: {
     index: 'src/index.ts',
@@ -15,9 +17,9 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   treeshake: true,
-  splitting: false,
   minify: false,
-  external: [
+  deps: {
+    neverBundle: [
     'ws',
     '@opentelemetry/api',
     '@opentelemetry/sdk-trace-base',
@@ -25,4 +27,7 @@ export default defineConfig({
     '@opentelemetry/core',
     'autotel',
   ],
+  },
+  clean: false,
+  target: false,
 })

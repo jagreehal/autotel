@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { otelTrace } from 'autotel';
 import {
   forceKeepAuditEvent,
   setAuditAttributes,
@@ -56,10 +57,13 @@ vi.mock('autotel', () => ({
   },
   getTraceContext: vi.fn(() => mockCtx),
   getRequestLogger: vi.fn(() => logger),
+  getRequestLoggerSafe: vi.fn(() => logger),
+  createNoopRequestLogger: vi.fn(() => logger),
   otelTrace: {
     getActiveSpan: vi.fn(() => ({
       setAttribute,
       setAttributes,
+      spanContext: () => ({ traceId: 'trace-1', spanId: 'span-1' }),
     })),
   },
 }));
@@ -129,5 +133,51 @@ describe('autotel-audit', () => {
       }),
     );
     expect(logger.error).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('autotel-audit best-effort (onMissingContext)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('runs the handler un-audited and warns once by default when no context', async () => {
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined as never);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await withAudit(
+      { action: 'missing.default' },
+      async () => 'ran',
+    );
+
+    expect(result).toBe('ran');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(setAttributes).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('throws when onMissingContext is "throw"', async () => {
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined as never);
+
+    await expect(
+      withAudit({ action: 'missing.throw' }, async () => 'x', {
+        onMissingContext: 'throw',
+      }),
+    ).rejects.toThrow('No active trace context');
+  });
+
+  it('runs silently when onMissingContext is "skip"', async () => {
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined as never);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await withAudit(
+      { action: 'missing.skip' },
+      async () => 'ran',
+      { onMissingContext: 'skip' },
+    );
+
+    expect(result).toBe('ran');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

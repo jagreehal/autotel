@@ -11,6 +11,7 @@ import { Buffer } from 'node:buffer';
 //@ts-ignore
 globalThis.Buffer = Buffer;
 
-
-
-export {Buffer} from 'node:buffer';
+// Re-export the single imported binding. Importing AND re-exporting `Buffer`
+// from 'node:buffer' separately makes rolldown (tsdown) emit a dangling
+// `Buffer$1` reference, so keep exactly one binding.
+export { Buffer };

@@ -19,8 +19,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "type-check": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vitest run",
@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
-    "tsup": "^8.5.1",
+    "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   },

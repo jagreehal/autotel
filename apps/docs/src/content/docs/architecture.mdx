@@ -190,7 +190,7 @@ const content = fs.readFileSync('file.txt', 'utf8');
 - `init()` and other core functions must remain **synchronous**
 - `await import()` makes functions async, breaking the API contract
 - The `node-require` helper uses `createRequire()` pattern for ESM compatibility
-- Works in both CJS and ESM builds (tsup handles the differences)
+- Works in both CJS and ESM builds (tsdown handles the differences)
 - Consistent, synchronous module loading across the codebase
 
 **Implementation:** See `packages/autotel/src/node-require.ts` for details.
@@ -321,4 +321,4 @@ OpenTelemetry's ESM instrumentation uses `import-in-the-middle` to hook into mod
 - ESM-first with CJS fallback for index.ts only
 - Type definitions (.d.ts) generated from ESM build
 - Source maps enabled for debugging
-- Use `tsup` for bundling (not tsc directly)
+- Use `tsdown` for bundling (not tsc directly)

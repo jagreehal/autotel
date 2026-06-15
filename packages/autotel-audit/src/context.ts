@@ -10,23 +10,91 @@ export interface AuditContext {
   ): void;
 }
 
-export function resolveContext(ctx?: AuditContext): AuditContext {
+const MISSING_CONTEXT_MESSAGE =
+  '[autotel-audit] No active trace context. Wrap the call in trace()/instrument(), pass options.ctx, ' +
+  'or set options.onMissingContext to "warn"/"skip" to degrade gracefully instead of throwing.';
+
+/**
+ * Resolve an audit context without throwing. Returns `null` when no trace context
+ * is available, so callers can degrade gracefully (best-effort instrumentation).
+ */
+const INVALID_TRACE_ID = '00000000000000000000000000000000';
+
+export function resolveContextSafe(ctx?: AuditContext): AuditContext | null {
   if (ctx) return ctx;
 
-  const ids = getTraceContext();
   const span = otelTrace.getActiveSpan();
-  if (ids && span) {
-    return {
-      traceId: ids.traceId,
-      spanId: ids.spanId,
-      correlationId: ids.correlationId,
-      setAttribute: (key, value) => span.setAttribute(key, value),
-      setAttributes: (attrs) => span.setAttributes(attrs),
-    };
-  }
+  if (!span) return null;
 
-  throw new Error(
-    '[autotel-audit] No active trace context. Wrap your handler with trace() or pass options.ctx.',
+  // Resolve trace ids from autotel's context when available, otherwise from the
+  // active OTel span itself, so audit works in any OTel setup — not only inside
+  // autotel's own `trace()`.
+  const ids = getTraceContext();
+  const sc = span.spanContext();
+  const traceId = ids?.traceId ?? sc.traceId;
+  if (!traceId || traceId === INVALID_TRACE_ID) return null;
+
+  return {
+    traceId,
+    spanId: ids?.spanId ?? sc.spanId,
+    correlationId: ids?.correlationId ?? traceId.slice(0, 16),
+    setAttribute: (key, value) => span.setAttribute(key, value),
+    setAttributes: (attrs) => span.setAttributes(attrs),
+  };
+}
+
+export function resolveContext(ctx?: AuditContext): AuditContext {
+  const resolved = resolveContextSafe(ctx);
+  if (resolved) return resolved;
+  throw new Error(MISSING_CONTEXT_MESSAGE);
+}
+
+export { MISSING_CONTEXT_MESSAGE };
+
+/**
+ * How instrumentation should behave when no trace context is available.
+ *
+ * - `throw` — fail fast (original behaviour). Use when telemetry is mandatory.
+ * - `warn` — run the wrapped handler un-audited and log one warning per action (default).
+ * - `skip` — run the wrapped handler un-audited, silently.
+ *
+ * Telemetry is observability: a missing context should never crash the business
+ * logic it wraps, so the default is best-effort (`warn`).
+ */
+export type OnMissingContext = 'throw' | 'warn' | 'skip';
+
+/** A no-op {@link AuditContext} whose attribute setters do nothing. */
+export function noopAuditContext(): AuditContext {
+  return {
+    traceId: '',
+    spanId: '',
+    correlationId: '',
+    setAttribute() {},
+    setAttributes() {},
+  };
+}
+
+const warnedMissingContext = new Set<string>();
+const warnedMissingLogger = new Set<string>();
+
+/** Warn (once per action) that instrumentation is running without a trace context. */
+export function warnMissingContextOnce(action: string): void {
+  if (warnedMissingContext.has(action)) return;
+  warnedMissingContext.add(action);
+  console.warn(
+    `[autotel-audit] No active trace context for "${action}" — running un-audited. ` +
+      'Wrap the call in trace()/instrument() or pass options.ctx to capture telemetry. ' +
+      '(set options.onMissingContext: "throw" to fail fast, or "skip" to silence this warning)',
+  );
+}
+
+/** Warn (once per action) that attributes were recorded but no canonical log line emitted. */
+export function warnMissingLoggerOnce(action: string): void {
+  if (warnedMissingLogger.has(action)) return;
+  warnedMissingLogger.add(action);
+  console.warn(
+    `[autotel-audit] No request logger for "${action}" — attributes were recorded on the span, ` +
+      'but no canonical log line was emitted. Pass options.logger or run inside runWithRequestContext().',
   );
 }
 

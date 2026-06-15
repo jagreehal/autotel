@@ -282,3 +282,61 @@ export function getRequestLogger(
     },
   };
 }
+
+/**
+ * Returns `true` when a request-logger context can be resolved without throwing —
+ * i.e. an explicit `ctx` was provided, a `runWithRequestContext()` scope is active,
+ * or there is an active OpenTelemetry span.
+ *
+ * Use this to branch on observability availability instead of wrapping
+ * {@link getRequestLogger} in try/catch.
+ */
+export function hasRequestContext(ctx?: TraceContext): boolean {
+  if (ctx) return true;
+  if (requestContextStore.getStore()) return true;
+  return otelTrace.getActiveSpan() != null;
+}
+
+/**
+ * Like {@link getRequestLogger}, but returns `null` instead of throwing when no
+ * request context is available. Intended for best-effort instrumentation where a
+ * missing telemetry context must never crash business logic.
+ */
+export function getRequestLoggerSafe(
+  ctx?: TraceContext,
+  options?: RequestLoggerOptions,
+): RequestLogger | null {
+  if (!hasRequestContext(ctx)) return null;
+  return getRequestLogger(ctx, options);
+}
+
+/**
+ * A no-op {@link RequestLogger} whose methods do nothing. Used as a fallback by
+ * best-effort instrumentation so wrapped handlers can run un-instrumented without
+ * branching on logger presence.
+ */
+export function createNoopRequestLogger(): RequestLogger {
+  const snapshot = (): RequestLogSnapshot => ({
+    timestamp: new Date().toISOString(),
+    traceId: '',
+    spanId: '',
+    correlationId: '',
+    context: {},
+  });
+
+  return {
+    set() {},
+    info() {},
+    warn() {},
+    error() {},
+    getContext() {
+      return {};
+    },
+    emitNow() {
+      return snapshot();
+    },
+    fork(_label, fn) {
+      void Promise.resolve().then(() => fn());
+    },
+  };
+}

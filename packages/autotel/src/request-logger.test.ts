@@ -1,6 +1,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { trace as otelTrace } from '@opentelemetry/api';
-import { getRequestLogger, runWithRequestContext } from './request-logger';
+import {
+  createNoopRequestLogger,
+  getRequestLogger,
+  getRequestLoggerSafe,
+  hasRequestContext,
+  runWithRequestContext,
+} from './request-logger';
 import type { TraceContext } from './trace-context';
 
 function createMockContext(): TraceContext {
@@ -489,5 +495,51 @@ describe('getRequestLogger', () => {
     expect(activeSpan.setAttributes).toHaveBeenCalledWith({
       'order.id': 'o-1',
     });
+  });
+});
+
+describe('best-effort helpers', () => {
+  it('hasRequestContext is false with no ctx, ALS, or active span', () => {
+    vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue(undefined);
+    expect(hasRequestContext()).toBe(false);
+  });
+
+  it('hasRequestContext is true when an explicit ctx is passed', () => {
+    vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue(undefined);
+    expect(hasRequestContext(createMockContext())).toBe(true);
+  });
+
+  it('hasRequestContext is true inside runWithRequestContext', () => {
+    vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue(undefined);
+    runWithRequestContext(createMockContext(), () => {
+      expect(hasRequestContext()).toBe(true);
+    });
+  });
+
+  it('getRequestLoggerSafe returns null when no context is available', () => {
+    vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue(undefined);
+    expect(getRequestLoggerSafe()).toBeNull();
+  });
+
+  it('getRequestLoggerSafe returns a working logger when ctx is provided', () => {
+    const ctx = createMockContext();
+    const log = getRequestLoggerSafe(ctx);
+    expect(log).not.toBeNull();
+    log?.set({ user: { id: 'safe-user' } });
+    expect(ctx.setAttributes).toHaveBeenCalledWith({ 'user.id': 'safe-user' });
+  });
+
+  it('createNoopRequestLogger never throws and emits an empty snapshot', () => {
+    const log = createNoopRequestLogger();
+    expect(() => {
+      log.set({ a: 1 });
+      log.info('hi', { b: 2 });
+      log.warn('careful');
+      log.error(new Error('boom'));
+    }).not.toThrow();
+    expect(log.getContext()).toEqual({});
+    const snapshot = log.emitNow();
+    expect(snapshot.traceId).toBe('');
+    expect(snapshot.context).toEqual({});
   });
 });

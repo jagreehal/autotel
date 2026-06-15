@@ -108,7 +108,9 @@ const generateText = trace(
     attributesFromResult: (result) => ({ 'ai.has_response': !!result }),
   },
   async function generateText(prompt: string, ai: Ai) {
-    const result = await ai.run('@cf/meta/llama-2-7b-chat-int8', {
+    // Workers AI model IDs are deprecated periodically — run `wrangler ai models`
+    // (or see https://developers.cloudflare.com/workers-ai/models/) for current IDs.
+    const result = await ai.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
       messages: [{ role: 'user', content: prompt }],
     });
     return result;

@@ -10,24 +10,68 @@ export interface AgentContext {
   ): void;
 }
 
-export function resolveContext(ctx?: AgentContext): AgentContext {
+export const MISSING_CONTEXT_MESSAGE =
+  '[autotel-agent] No active trace context. Wrap the call in trace()/instrument(), pass options.ctx, ' +
+  'or set options.onMissingContext to "warn"/"skip" to degrade gracefully instead of throwing.';
+
+/**
+ * Resolve an agent context without throwing. Returns `null` when no trace context
+ * is available, so callers can degrade gracefully (best-effort instrumentation).
+ */
+const INVALID_TRACE_ID = '00000000000000000000000000000000';
+
+export function resolveContextSafe(ctx?: AgentContext): AgentContext | null {
   if (ctx) return ctx;
 
-  const ids = getTraceContext();
   const span = otelTrace.getActiveSpan();
-  if (ids && span) {
-    return {
-      traceId: ids.traceId,
-      spanId: ids.spanId,
-      correlationId: ids.correlationId,
-      setAttribute: (key, value) => span.setAttribute(key, value),
-      setAttributes: (attrs) => span.setAttributes(attrs),
-    };
-  }
+  if (!span) return null;
 
-  throw new Error(
-    '[autotel-agent] No active trace context. Wrap your handler with trace() or pass options.ctx.',
+  // Resolve trace ids from autotel's context when available, otherwise from the
+  // active OTel span itself. This makes agent audit work in *any* OTel setup —
+  // @effect/opentelemetry, a vanilla NodeSDK, autotel-cloudflare's instrumented
+  // fetch handler — not just inside autotel's own `trace()`.
+  const ids = getTraceContext();
+  const sc = span.spanContext();
+  const traceId = ids?.traceId ?? sc.traceId;
+  if (!traceId || traceId === INVALID_TRACE_ID) return null;
+
+  return {
+    traceId,
+    spanId: ids?.spanId ?? sc.spanId,
+    correlationId: ids?.correlationId ?? traceId.slice(0, 16),
+    setAttribute: (key, value) => span.setAttribute(key, value),
+    setAttributes: (attrs) => span.setAttributes(attrs),
+  };
+}
+
+export function resolveContext(ctx?: AgentContext): AgentContext {
+  const resolved = resolveContextSafe(ctx);
+  if (resolved) return resolved;
+  throw new Error(MISSING_CONTEXT_MESSAGE);
+}
+
+const warnedMissingContext = new Set<string>();
+
+/** Warn (once per action) that an agent action is running without a trace context. */
+export function warnMissingContextOnce(action: string): void {
+  if (warnedMissingContext.has(action)) return;
+  warnedMissingContext.add(action);
+  console.warn(
+    `[autotel-agent] No active trace context for "${action}" — running un-audited. ` +
+      'Wrap the call in trace()/instrument() or pass options.ctx to capture agent audit telemetry. ' +
+      '(set options.onMissingContext: "throw" to fail fast, or "skip" to silence this warning)',
   );
+}
+
+/** A no-op {@link AgentContext} whose attribute setters do nothing. */
+export function noopAgentContext(): AgentContext {
+  return {
+    traceId: '',
+    spanId: '',
+    correlationId: '',
+    setAttribute() {},
+    setAttributes() {},
+  };
 }
 
 export function toAttributeValue(

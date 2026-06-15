@@ -2,11 +2,16 @@
  * Tracer provider for edge environments
  */
 
-import { trace } from '@opentelemetry/api';
+import { context, trace } from '@opentelemetry/api';
 import type { Resource } from '@opentelemetry/resources';
 import type { SpanProcessor, TracerConfig } from '@opentelemetry/sdk-trace-base';
 import { WorkerTracer } from './tracer';
 import { AsyncLocalStorageContextManager } from './context';
+
+// `context.setGlobalContextManager()` is a one-shot global; guard so repeated
+// `register()` calls (e.g. per-request worker init) don't spam OTel's
+// "already registered" diagnostic.
+let globalContextManagerRegistered = false;
 
 /**
  * WorkerTracerProvider - Registers tracer globally
@@ -33,6 +38,18 @@ export class WorkerTracerProvider {
   register(): void {
     // Enable context manager
     this.contextManager.enable();
+
+    // Register it with the global OTel API so context — and the active span —
+    // propagates across `await` boundaries. Without this the API uses a no-op
+    // context manager, so `trace.getActiveSpan()` returns undefined after the
+    // first await inside a handler/workflow step. That breaks any consumer that
+    // resolves trace context from the active span (e.g. autotel-agent/audit
+    // composing inside an instrumented fetch handler or Workflow step).
+    if (!globalContextManagerRegistered) {
+      globalContextManagerRegistered = context.setGlobalContextManager(
+        this.contextManager,
+      );
+    }
 
     // Set tracer provider
     const provider = {

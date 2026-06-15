@@ -1,12 +1,22 @@
 import {
   AUTOTEL_SAMPLING_TAIL_EVALUATED,
   AUTOTEL_SAMPLING_TAIL_KEEP,
-  getRequestLogger,
+  createNoopRequestLogger,
+  getRequestLoggerSafe,
 } from 'autotel';
 import type { RequestLogger } from 'autotel';
-import { resolveContext, toAttributeValue, type AuditContext } from './context';
+import {
+  MISSING_CONTEXT_MESSAGE,
+  noopAuditContext,
+  resolveContextSafe,
+  toAttributeValue,
+  warnMissingContextOnce,
+  warnMissingLoggerOnce,
+  type AuditContext,
+  type OnMissingContext,
+} from './context';
 
-export type { AuditContext } from './context';
+export type { AuditContext, OnMissingContext } from './context';
 export * from './security';
 export * from './security-signals';
 export * from './security-heartbeat';
@@ -25,6 +35,11 @@ export interface WithAuditOptions {
   emitNow?: boolean;
   forceKeep?: boolean;
   logger?: RequestLogger;
+  /**
+   * Behaviour when no trace context can be resolved. Defaults to `warn`
+   * (best-effort: run un-audited, warn once). See {@link OnMissingContext}.
+   */
+  onMissingContext?: OnMissingContext;
 }
 
 function flattenAuditAttributes(
@@ -48,7 +63,8 @@ function flattenAuditAttributes(
 }
 
 export function forceKeepAuditEvent(ctx?: AuditContext): void {
-  const traceCtx = resolveContext(ctx);
+  const traceCtx = resolveContextSafe(ctx);
+  if (!traceCtx) return;
   traceCtx.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
   traceCtx.setAttribute(AUTOTEL_SAMPLING_TAIL_KEEP, true);
   traceCtx.setAttribute('autotel.audit.force_keep', true);
@@ -58,7 +74,8 @@ export function setAuditAttributes(
   metadata: AuditMetadata,
   ctx?: AuditContext,
 ): void {
-  const traceCtx = resolveContext(ctx);
+  const traceCtx = resolveContextSafe(ctx);
+  if (!traceCtx) return;
   traceCtx.setAttributes(flattenAuditAttributes(metadata));
 }
 
@@ -67,7 +84,20 @@ export async function withAudit<T>(
   fn: (ctx: AuditContext, logger: RequestLogger) => T | Promise<T>,
   options: WithAuditOptions = {},
 ): Promise<T> {
-  const traceCtx = resolveContext(options.ctx);
+  const traceCtx = resolveContextSafe(options.ctx);
+
+  // No trace context: degrade per onMissingContext instead of throwing into
+  // business logic. Audit is observability — it must never crash the caller.
+  if (!traceCtx) {
+    const mode = options.onMissingContext ?? 'warn';
+    if (mode === 'throw') {
+      throw new Error(MISSING_CONTEXT_MESSAGE);
+    }
+    if (mode === 'warn') {
+      warnMissingContextOnce(metadata.action);
+    }
+    return fn(noopAuditContext(), options.logger ?? createNoopRequestLogger());
+  }
 
   if (options.forceKeep !== false) {
     forceKeepAuditEvent(traceCtx);
@@ -75,7 +105,16 @@ export async function withAudit<T>(
 
   setAuditAttributes(metadata, traceCtx);
 
-  const logger = options.logger ?? getRequestLogger();
+  // A trace context may exist (e.g. caller-supplied options.ctx) without a
+  // resolvable request logger. Record span attributes regardless and only skip
+  // the canonical log line — never throw.
+  let logger = options.logger ?? getRequestLoggerSafe() ?? undefined;
+  if (!logger) {
+    if ((options.onMissingContext ?? 'warn') === 'warn') {
+      warnMissingLoggerOnce(metadata.action);
+    }
+    logger = createNoopRequestLogger();
+  }
   logger.set({
     audit: {
       ...metadata,

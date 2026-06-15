@@ -1,5 +1,9 @@
-import type { RequestLogger } from 'autotel';
+import type { ModelPricing, RequestLogger, TokenUsage } from 'autotel';
+import type { OnMissingContext } from 'autotel-audit';
 import type { AgentContext } from './context.js';
+
+export type { OnMissingContext } from 'autotel-audit';
+export type { ModelPricing, TokenUsage } from 'autotel';
 
 export type PolicyDecision =
   | 'permit'
@@ -68,6 +72,28 @@ export interface ToolCallMetadata {
   executionMs?: number;
 }
 
+/**
+ * LLM call metadata for an agent action. When present on a tool call or action,
+ * autotel-agent records OpenTelemetry GenAI semantic attributes on the span —
+ * `gen_ai.request.model`, `gen_ai.usage.{input,output,total}_tokens`, and the
+ * estimated `gen_ai.usage.cost.usd` — reusing the cost model in the main
+ * `autotel` package. Token usage is usually known only after the call; supply
+ * it via `usage` if known up front, or via the `extractUsage` option to pull it
+ * from the handler's result.
+ */
+export interface AgentAiMetadata {
+  /** Model id, e.g. `gpt-4o`, `claude-sonnet-4`, `@cf/meta/llama-3.1-8b-instruct-fp8`. */
+  model: string;
+  /** Operation kind: `chat` | `completion` | `embedding` | custom. */
+  operation?: string;
+  /** Token counts, if known up front (otherwise use `AgentActionOptions.extractUsage`). */
+  usage?: TokenUsage;
+  /** Provider finish reasons, e.g. `['stop']`. */
+  finishReasons?: string[];
+  /** Per-call pricing override/extension for cost estimation. */
+  pricing?: Record<string, ModelPricing>;
+}
+
 export interface PolicyMetadata {
   decision: PolicyDecision;
   policyId?: string;
@@ -116,6 +142,7 @@ export interface AgentActionMetadata {
   agent: AgentIdentity;
   delegation?: DelegationContext;
   tool?: ToolCallMetadata;
+  ai?: AgentAiMetadata;
   policy?: PolicyMetadata;
   governance?: GovernanceMetadata;
   session?: AgentSessionMetadata;
@@ -128,6 +155,20 @@ export interface AgentActionOptions {
   emitNow?: boolean;
   forceKeep?: boolean;
   logger?: RequestLogger;
+  /**
+   * Behaviour when no trace context can be resolved. Defaults to `warn`
+   * (best-effort: run the action un-audited, warn once). Agent audit is
+   * observability — a missing context must never crash the wrapped tool call.
+   * See {@link OnMissingContext}.
+   */
+  onMissingContext?: OnMissingContext;
+  /**
+   * Pull token usage from the handler's result, for actions carrying
+   * {@link AgentAiMetadata}. Called once after the handler resolves; the
+   * returned usage drives the recorded GenAI token + cost attributes. Most LLM
+   * SDKs expose this on the response (e.g. `res.usage`).
+   */
+  extractUsage?: (result: unknown) => TokenUsage | undefined;
 }
 
 export interface AgentToolCallOptions extends AgentActionOptions {

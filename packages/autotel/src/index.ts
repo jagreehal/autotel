@@ -136,6 +136,9 @@ export { flush, shutdown } from './shutdown';
 // Request logger
 export {
   getRequestLogger,
+  getRequestLoggerSafe,
+  createNoopRequestLogger,
+  hasRequestContext,
   runWithRequestContext,
   type RequestLogger,
   type RequestLogSnapshot,

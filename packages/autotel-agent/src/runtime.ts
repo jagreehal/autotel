@@ -1,4 +1,11 @@
-import { getRequestLogger, type RequestLogger } from 'autotel';
+import {
+  GEN_AI_COST_ATTRIBUTE,
+  createNoopRequestLogger,
+  estimateLLMCost,
+  getRequestLoggerSafe,
+  type RequestLogger,
+  type TokenUsage,
+} from 'autotel';
 import { forceKeepAuditEvent, withAudit } from 'autotel-audit';
 import { setAgentAttributes, setAgentOutcome } from './attributes.js';
 import {
@@ -7,11 +14,17 @@ import {
   buildAuditMetadata,
   normalizeMetadata,
 } from './metadata.js';
-import { resolveContext, type AgentContext } from './context.js';
+import {
+  MISSING_CONTEXT_MESSAGE,
+  resolveContextSafe,
+  warnMissingContextOnce,
+  type AgentContext,
+} from './context.js';
 import { hashPayload } from './hash.js';
 import type {
   AgentActionFactory,
   AgentActionMetadata,
+  AgentAiMetadata,
   AgentActionOptions,
   AgentHandler,
   AgentMetadataInput,
@@ -19,6 +32,54 @@ import type {
   AgentToolCallOptions,
   ToolCallMetadata,
 } from './types.js';
+
+// OpenTelemetry GenAI semantic-convention attribute keys.
+const GEN_AI_REQUEST_MODEL = 'gen_ai.request.model';
+const GEN_AI_OPERATION_NAME = 'gen_ai.operation.name';
+const GEN_AI_USAGE_INPUT_TOKENS = 'gen_ai.usage.input_tokens';
+const GEN_AI_USAGE_OUTPUT_TOKENS = 'gen_ai.usage.output_tokens';
+const GEN_AI_USAGE_TOTAL_TOKENS = 'gen_ai.usage.total_tokens';
+const GEN_AI_RESPONSE_FINISH_REASONS = 'gen_ai.response.finish_reasons';
+
+/**
+ * Record OpenTelemetry GenAI semantic attributes for an LLM-backed agent action,
+ * reusing the cost model in the main `autotel` package. Best-effort: anything
+ * unknown is simply omitted. `gen_ai.request.model` is always recorded; token
+ * counts and the estimated `gen_ai.usage.cost.usd` are recorded when `usage` is
+ * available (up front via metadata, or post-call via `options.extractUsage`).
+ */
+function recordAiTelemetry(
+  ctx: AgentContext,
+  ai: AgentAiMetadata,
+  usage?: TokenUsage,
+): void {
+  const attrs: Record<string, string | number | boolean | string[]> = {
+    [GEN_AI_REQUEST_MODEL]: ai.model,
+  };
+  if (ai.operation) attrs[GEN_AI_OPERATION_NAME] = ai.operation;
+  if (ai.finishReasons?.length) {
+    attrs[GEN_AI_RESPONSE_FINISH_REASONS] = ai.finishReasons;
+  }
+  if (usage) {
+    if (usage.inputTokens !== undefined) {
+      attrs[GEN_AI_USAGE_INPUT_TOKENS] = usage.inputTokens;
+    }
+    if (usage.outputTokens !== undefined) {
+      attrs[GEN_AI_USAGE_OUTPUT_TOKENS] = usage.outputTokens;
+    }
+    if (usage.inputTokens !== undefined || usage.outputTokens !== undefined) {
+      attrs[GEN_AI_USAGE_TOTAL_TOKENS] =
+        (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+    }
+    const cost = estimateLLMCost(
+      ai.model,
+      usage,
+      ai.pricing ? { pricing: ai.pricing } : undefined,
+    );
+    if (cost !== undefined) attrs[GEN_AI_COST_ATTRIBUTE] = cost;
+  }
+  ctx.setAttributes(attrs);
+}
 
 export async function withAgentAction<T>(
   metadata: AgentActionMetadata,
@@ -38,10 +99,18 @@ export async function withAgentAction<T>(
         const outcome = normalized.outcome ?? 'success';
         setAgentOutcome(outcome, ctx);
         logger.set({ agent: { outcome } });
+        if (normalized.ai) {
+          recordAiTelemetry(
+            ctx,
+            normalized.ai,
+            options.extractUsage?.(result) ?? normalized.ai.usage,
+          );
+        }
         return result;
       } catch (error) {
         setAgentOutcome('failure', ctx);
         logger.set({ agent: { outcome: 'failure' } });
+        if (normalized.ai) recordAiTelemetry(ctx, normalized.ai);
         throw error;
       }
     },
@@ -54,8 +123,23 @@ export function recordPolicyDecision(
   options: AgentActionOptions = {},
 ): void {
   const normalized = normalizeMetadata(metadata);
-  const traceCtx = resolveContext(options.ctx);
-  const logger = options.logger ?? getRequestLogger();
+  const traceCtx = resolveContextSafe(options.ctx);
+
+  // No trace context: degrade per onMissingContext instead of throwing into
+  // business logic. A policy decision we couldn't record is not worth a crash.
+  if (!traceCtx) {
+    const mode = options.onMissingContext ?? 'warn';
+    if (mode === 'throw') {
+      throw new Error(MISSING_CONTEXT_MESSAGE);
+    }
+    if (mode === 'warn') {
+      warnMissingContextOnce(normalized.action);
+    }
+    return;
+  }
+
+  const logger =
+    options.logger ?? getRequestLoggerSafe() ?? createNoopRequestLogger();
 
   if (options.forceKeep !== false) {
     forceKeepAuditEvent(traceCtx);

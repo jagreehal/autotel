@@ -48,8 +48,8 @@
     "widget"
   ],
   "scripts": {
-    "build": "tsup && vite build --config vite.widget.config.ts",
-    "dev": "tsup --watch",
+    "build": "tsdown && vite build --config vite.widget.config.ts",
+    "dev": "tsdown --watch",
     "type-check": "svelte-check --tsconfig ./tsconfig.json && tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run --config vitest.config.ts --project server && vitest run --config vitest.config.ts --project widget && vitest run --config vitest.storybook.config.ts",
@@ -95,7 +95,7 @@
     "storybook": "^10.4.2",
     "svelte-check": "^4.6.0",
     "tailwindcss": "^4.3.0",
-    "tsup": "^8.5.1",
+    "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8",
