@@ -1,5 +1,12 @@
 # autotel-mongoose
 
+## 9.0.0
+
+### Patch Changes
+
+- Updated dependencies [140fc76]
+  - autotel@3.7.0
+
 ## 8.1.0
 
 ### Minor Changes

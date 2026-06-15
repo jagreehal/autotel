@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.36
+
+### Patch Changes
+
+- Updated dependencies [140fc76]
+  - autotel@3.7.0
+
 ## 0.4.35
 
 ### Patch Changes
