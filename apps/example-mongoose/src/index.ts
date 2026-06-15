@@ -331,6 +331,36 @@ export const createUserWithSave = trace('createUserWithSave', (ctx) => async (
   return user;
 });
 
+// Example: User-defined statics, instance methods, and query helpers.
+// These are traced automatically by autotel-mongoose — note there are NO
+// trace() calls on findByEmail/describe/countByDomain/byEmailDomain themselves.
+export const demoCustomMethods = trace('demoCustomMethods', (ctx) => async (email: string) => {
+  console.log(`\n🧩 Exercising custom statics/methods/query helpers for: ${email}`);
+
+  const domain = email.split('@')[1] ?? 'example.com';
+  ctx.setAttribute('search.email', email);
+  ctx.setAttribute('search.domain', domain);
+
+  // Static (returns a Query → span covers the exec)
+  const user = await User.findByEmail(email);
+  if (user) {
+    // Instance method (synchronous)
+    console.log(`  👤 describe(): ${user.describe()}`);
+  }
+
+  // Static returning a Promise<number>
+  const count = await User.countByDomain(domain);
+  console.log(`  🔢 countByDomain(${domain}): ${count}`);
+
+  // Query helper (chainable)
+  const sameDomain = await User.find().byEmailDomain(domain).limit(5);
+  console.log(`  🔍 byEmailDomain(${domain}) found: ${sameDomain.length}`);
+
+  console.log(`📊 Trace ID: ${ctx.traceId}`);
+
+  return { user, count, sameDomainCount: sameDomain.length };
+});
+
 // Single parent span that wraps the entire sample workflow so every helper span
 // (and auto-instrumented Mongoose span) becomes a child of one trace.
 const runScenario = trace('runScenario', (ctx) => async () => {
@@ -367,6 +397,9 @@ const runScenario = trace('runScenario', (ctx) => async () => {
 
   // Find user
   await findUserByEmail(aliceEmail);
+
+  // Custom statics / instance methods / query helpers (auto-traced)
+  await demoCustomMethods(aliceEmail);
 
   // Find posts with populate
   await findUserPosts(alice._id);

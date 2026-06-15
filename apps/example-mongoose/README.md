@@ -30,7 +30,14 @@ The official [@opentelemetry/instrumentation-mongoose](https://github.com/open-t
 - **Post hooks**: `post('save')`, `post('remove')`, etc.
 - **Built-in hooks**: `post('init')` (document hydration)
 
-### 3. Custom Business Logic (Manual with trace())
+### 3. Custom Statics, Methods & Query Helpers (Automatic - No Manual trace() Needed!)
+- **Statics**: `userSchema.statics.findByEmail` → span `mongoose.User.findByEmail`
+- **Instance methods**: `userSchema.methods.describe` → span `mongoose.User.describe`
+- **Query helpers**: `userSchema.query.byEmailDomain` → span `mongoose.User.byEmailDomain`
+- Wrapped automatically as the model compiles, with `mongoose.method.*` attributes and **redacted** call parameters (`mongoose.method.parameters`)
+- On by default; scope with `customMethods` (see `init-mongoose.ts`)
+
+### 4. Custom Business Logic (Manual with trace())
 - API endpoint handlers
 - Background jobs
 - Custom validation logic
@@ -139,6 +146,37 @@ All operations are automatically traced with OpenTelemetry!
 ✅ User created with doc.save(): 6970e2e1b200e3eee674d2e9
 ✓ createUserWithSave                     28ms [app]
      user.email=Charlie.Example-da38dcb9..., operation.name=createUserWithSave
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CUSTOM STATICS / INSTANCE METHODS / QUERY HELPERS (Automatic)
+# Defined in schema.ts with NO trace() calls — wrapped at model compile time.
+# Note: a static that returns a Query (findByEmail) becomes the PARENT of the
+# underlying operation span (findOne), and call parameters are redacted.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+🧩 Exercising custom statics/methods/query helpers for: Alice_Example-dbca4ba6-...@hotmail.com
+
+✓ findOne users                           1ms [autotel-mongoose]
+     db.system.name=mongodb, db.operation.name=findOne, db.collection.name=users, db.query.text={"condition":{"email":"A***@***.com"},...
+✓ mongoose.User.findByEmail               2ms [autotel-mongoose]
+     db.system.name=mongodb, code.function.name=findByEmail, mongoose.method.name=findByEmail, mongoose.method.type=static, mongoose.method.model=User, db.collection.name=users, mongoose.method.parameter_count=1, mongoose.method.parameters=["A***@***.com"]
+
+✓ mongoose.User.describe                 27µs [autotel-mongoose]
+     db.system.name=mongodb, code.function.name=describe, mongoose.method.name=describe, mongoose.method.type=instance, mongoose.method.model=User, db.collection.name=users, mongoose.method.parameter_count=0
+  👤 describe(): Alice <alice_example-dbca4ba6-...@hotmail.com>
+
+✓ countDocuments users                    2ms [autotel-mongoose]
+     db.system.name=mongodb, db.operation.name=countDocuments, db.collection.name=users, db.query.text={"condition":{"email":{}},"options":{}}
+✓ mongoose.User.countByDomain             2ms [autotel-mongoose]
+     db.system.name=mongodb, code.function.name=countByDomain, mongoose.method.name=countByDomain, mongoose.method.type=static, mongoose.method.model=User, db.collection.name=users, mongoose.method.parameter_count=1, mongoose.method.parameters=["hotmail.com"]
+  🔢 countByDomain(hotmail.com): 6
+
+✓ mongoose.User.byEmailDomain            82µs [autotel-mongoose]
+     db.system.name=mongodb, code.function.name=byEmailDomain, mongoose.method.name=byEmailDomain, mongoose.method.type=query, mongoose.method.model=User, db.collection.name=users, mongoose.method.parameter_count=1, mongoose.method.parameters=["hotmail.com"]
+  🔍 byEmailDomain(hotmail.com) found: 5
+
+✓ demoCustomMethods                        6ms [app]
+     search.email=Alice_Example-dbca4ba6-..., search.domain=hotmail.com, operation.name=demoCustomMethods, operation.success=true
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # FIND & UPDATE with hooks
@@ -375,15 +413,43 @@ tsx src/index.ts
 }
 ```
 
+### Automatic Custom-Function Spans
+
+Statics, instance methods, and query helpers are wrapped automatically. Call
+parameters are captured and redacted by default:
+
+```json
+{
+  "name": "mongoose.User.findByEmail",
+  "kind": "INTERNAL",
+  "instrumentationScope": { "name": "autotel-mongoose" },
+  "attributes": {
+    "db.system.name": "mongodb",
+    "code.function.name": "findByEmail",
+    "mongoose.method.name": "findByEmail",
+    "mongoose.method.type": "static",
+    "mongoose.method.model": "User",
+    "db.collection.name": "users",
+    "mongoose.method.parameter_count": 1,
+    "mongoose.method.parameters": "[\"A***@***.com\"]"
+  }
+}
+```
+
 ### Parent-Child Relationships
 
-Hooks are automatically nested under their parent operation:
+Hooks are automatically nested under their parent operation, and a custom static
+that returns a Query becomes the parent of the underlying operation span:
 
 ```
 createUser (custom span)
 └─ mongoose.users.create (operation span)
    ├─ mongoose.users.pre.save (hook span)
    └─ mongoose.users.post.save (hook span)
+
+demoCustomMethods (custom span)
+└─ mongoose.User.findByEmail (custom static span)
+   └─ findOne users (operation span)
 ```
 
 ## Configuration Options
@@ -402,6 +468,16 @@ instrumentMongoose(mongoose, {
 
   // Custom tracer name (default: 'autotel-plugins/mongoose')
   tracerName: 'my-custom-tracer',
+
+  // Trace user-defined statics/methods/query helpers (default: true).
+  // Scope it down for privacy/compliance — anything not disabled stays on:
+  customMethods: {
+    statics: { exclude: ['chargeCard'] }, // opt-out specific statics
+    methods: ['describe'], //               opt-in: only these instance methods
+    query: false, //                        no query helpers
+    captureParameters: false, //            trace calls without serializing args
+  },
+  // Or disable entirely: customMethods: false
 });
 ```
 
