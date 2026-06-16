@@ -10,6 +10,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.76.0",
     "@opentelemetry/instrumentation-winston": "^0.62.0",
     "autotel": "workspace:*",
+    "autotel-devtools": "workspace:*",
     "autotel-subscribers": "workspace:*",
     "dotenv": "^17.4.2",
     "winston": "^3.19.0"

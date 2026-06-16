@@ -48,6 +48,7 @@ const INSTRUMENTED_FLAG = '__autotelMongooseInstrumented' as const;
 const WRAPPED_HOOK_FLAG = '__autotelWrappedHook' as const;
 const WRAPPED_METHOD_FLAG = '__autotelWrappedMethod' as const;
 const MODEL_PATCHED_FLAG = '__autotelModelPatched' as const;
+const PROXIED_COLLECTION_FLAG = '__autotelProxiedCollection' as const;
 
 /**
  * Per-Mongoose-instance registry of the resolved tracer + config.
@@ -162,6 +163,124 @@ function createSpan(
 // ---------------------------------------------------------------------------
 
 /**
+ * Returns an idempotent finalizer for a span. Every wrapper invocation may try
+ * to close its span from more than one place — a callback, an `exec()`
+ * continuation, a promise settlement, a synchronous return, or a thrown error —
+ * and the span must be ended exactly once. The first call wins; later calls are
+ * no-ops. A non-Error rejection is normalized to an `Error`.
+ */
+function createSpanFinalizer(span: Span): (error?: unknown) => void {
+  let done = false;
+  return (error?: unknown): void => {
+    if (done) {
+      return;
+    }
+    done = true;
+    finalizeSpan(
+      span,
+      error === undefined || error === null
+        ? undefined
+        : error instanceof Error
+          ? error
+          : new Error(String(error)),
+    );
+  };
+}
+
+/**
+ * Closes `finalize` over whatever async shape an operation returns:
+ *
+ * - a Mongoose Query/Aggregate (`exec()`) → wrap `exec()` so the span spans the
+ *   real DB round-trip, and return the Query unchanged for further chaining;
+ * - a Promise → finalize when it settles, and return the chained promise;
+ * - a synchronous value → finalize now, and return it.
+ *
+ * This is the single settlement ladder shared by every wrapper, so the rule
+ * "the span ends when the work ends" lives in exactly one place.
+ */
+function settleSpan(result: any, finalize: (error?: unknown) => void): any {
+  if (result && typeof result.exec === 'function') {
+    const originalExec = result.exec.bind(result);
+    result.exec = function wrappedExec(): Promise<any> {
+      try {
+        return Promise.resolve(originalExec()).then(
+          (value: any) => {
+            finalize();
+            return value;
+          },
+          (error: unknown) => {
+            finalize(error);
+            throw error;
+          },
+        );
+      } catch (error) {
+        finalize(error);
+        throw error;
+      }
+    };
+    return result;
+  }
+
+  if (result && typeof result.then === 'function') {
+    return Promise.resolve(result as Promise<any>).then(
+      (value) => {
+        finalize();
+        return value;
+      },
+      (error: unknown) => {
+        finalize(error);
+        throw error;
+      },
+    );
+  }
+
+  finalize();
+  return result;
+}
+
+/**
+ * Node-convention callback support for custom methods: if the last argument is
+ * a function, replace it with one that (a) runs the original callback inside the
+ * span's context — so any DB calls the callback makes nest under this span — and
+ * (b) finalizes the span when the callback fires, treating a truthy first
+ * argument as the error. Older Mongoose code returns synchronously and does its
+ * real work in such a callback (e.g. `doc.checkValidationErrors(cb)`), so the
+ * span must outlive the synchronous return.
+ *
+ * Returns the args to call with and whether finalization was handed to a
+ * callback. If there is no trailing callback, the args pass through unchanged.
+ *
+ * NOTE: This is the Node trailing-callback convention. Mongoose *hooks* use a
+ * different convention — kareem's positional `next` — handled separately in
+ * wrapHookHandler. The two are intentionally not merged: a single "find the
+ * callback" rule across both would hide two genuinely different calling shapes.
+ */
+function deferFinalizeToCallback(
+  args: any[],
+  span: Span,
+  finalize: (error?: unknown) => void,
+): { callArgs: any[]; deferred: boolean } {
+  const lastIndex = args.length - 1;
+  const maybeCallback = lastIndex >= 0 ? args[lastIndex] : undefined;
+  if (typeof maybeCallback !== 'function') {
+    return { callArgs: args, deferred: false };
+  }
+
+  const callArgs = [...args];
+  callArgs[lastIndex] = function tracedCallback(
+    this: any,
+    ...callbackArgs: any[]
+  ): any {
+    try {
+      return runWithSpan(span, () => maybeCallback.apply(this, callbackArgs));
+    } finally {
+      finalize(callbackArgs[0]);
+    }
+  };
+  return { callArgs, deferred: true };
+}
+
+/**
  * Wraps Model methods that return Query objects (find, findOne, findById,
  * findOneAndUpdate, findOneAndDelete, findOneAndReplace, deleteOne, deleteMany,
  * updateOne, updateMany, countDocuments, estimatedDocumentCount).
@@ -195,11 +314,12 @@ function wrapQueryReturningMethod(
       config,
     );
 
+    const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
       try {
         const result = original.apply(this, args);
 
-        // Extract payload from the returned Query object
+        // Extract the query payload from the returned Query before it executes.
         if (result && typeof result.exec === 'function') {
           try {
             const payload: SerializerPayload = {};
@@ -222,44 +342,12 @@ function wrapQueryReturningMethod(
           } catch {
             // Ignore errors in payload extraction
           }
-
-          // Wrap exec() to finalize span
-          const originalExec = result.exec.bind(result);
-          result.exec = function wrappedExec(): Promise<any> {
-            try {
-              const execPromise = originalExec();
-              return Promise.resolve(execPromise)
-                .then((value: any) => {
-                  finalizeSpan(span);
-                  return value;
-                })
-                .catch((error: unknown) => {
-                  finalizeSpan(
-                    span,
-                    error instanceof Error ? error : new Error(String(error)),
-                  );
-                  throw error;
-                });
-            } catch (error) {
-              finalizeSpan(
-                span,
-                error instanceof Error ? error : new Error(String(error)),
-              );
-              throw error;
-            }
-          };
-
-          return result; // Return Query, not Promise
         }
 
-        // Fallback for unexpected non-query results
-        finalizeSpan(span);
-        return result;
+        // settleSpan wraps exec() (Query) or finalizes a non-query result.
+        return settleSpan(result, finalize);
       } catch (error) {
-        finalizeSpan(
-          span,
-          error instanceof Error ? error : new Error(String(error)),
-        );
+        finalize(error);
         throw error;
       }
     });
@@ -337,62 +425,13 @@ function wrapStaticMethod(
       // Ignore serialization errors
     }
 
+    const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
       try {
-        const result = original.apply(this, args);
-
-        // If result has exec() (e.g., aggregate), wrap it
-        if (result && typeof result.exec === 'function') {
-          const originalExec = result.exec.bind(result);
-          result.exec = function wrappedExec(): Promise<any> {
-            try {
-              const execPromise = originalExec();
-              return Promise.resolve(execPromise)
-                .then((value: any) => {
-                  finalizeSpan(span);
-                  return value;
-                })
-                .catch((error: unknown) => {
-                  finalizeSpan(
-                    span,
-                    error instanceof Error ? error : new Error(String(error)),
-                  );
-                  throw error;
-                });
-            } catch (error) {
-              finalizeSpan(
-                span,
-                error instanceof Error ? error : new Error(String(error)),
-              );
-              throw error;
-            }
-          };
-          return result;
-        }
-
-        // For direct promise results (e.g., create, insertMany)
-        if (result && typeof result.then === 'function') {
-          return Promise.resolve(result as Promise<any>)
-            .then((value) => {
-              finalizeSpan(span);
-              return value;
-            })
-            .catch((error: unknown) => {
-              finalizeSpan(
-                span,
-                error instanceof Error ? error : new Error(String(error)),
-              );
-              throw error;
-            });
-        }
-
-        finalizeSpan(span);
-        return result;
+        // exec() (e.g. aggregate), promise (create/insertMany), or sync value.
+        return settleSpan(original.apply(this, args), finalize);
       } catch (error) {
-        finalizeSpan(
-          span,
-          error instanceof Error ? error : new Error(String(error)),
-        );
+        finalize(error);
         throw error;
       }
     });
@@ -452,33 +491,13 @@ function wrapInstanceMethod(
       // Ignore serialization errors
     }
 
+    const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
       try {
-        const result = original.apply(this, args);
-
-        // Instance methods return promises
-        if (result && typeof result.then === 'function') {
-          return Promise.resolve(result as Promise<any>)
-            .then((value) => {
-              finalizeSpan(span);
-              return value;
-            })
-            .catch((error: unknown) => {
-              finalizeSpan(
-                span,
-                error instanceof Error ? error : new Error(String(error)),
-              );
-              throw error;
-            });
-        }
-
-        finalizeSpan(span);
-        return result;
+        // Instance methods (save/deleteOne) return promises; sync is tolerated.
+        return settleSpan(original.apply(this, args), finalize);
       } catch (error) {
-        finalizeSpan(
-          span,
-          error instanceof Error ? error : new Error(String(error)),
-        );
+        finalize(error);
         throw error;
       }
     });
@@ -991,71 +1010,48 @@ function wrapCustomFunction(
       }
     }
 
+    const finalize = createSpanFinalizer(span);
     return runWithSpan(span, () => {
+      // Query helpers return a chainable Query; the DB call is traced on exec().
+      // Finalize immediately so we don't hold the span open across the chain.
+      if (methodType === 'query') {
+        try {
+          const result = original.apply(this, args);
+          finalize();
+          return result;
+        } catch (error) {
+          finalize(error);
+          throw error;
+        }
+      }
+
+      // Statics/instance methods may be callback-style (older Mongoose code).
+      const { callArgs, deferred } = deferFinalizeToCallback(
+        args,
+        span,
+        finalize,
+      );
       try {
-        const result = original.apply(this, args);
+        const result = original.apply(this, callArgs);
 
-        // Query helpers return the Query for further chaining; the DB call is
-        // traced separately on exec(). Finalize now so we don't hold the span
-        // open across an arbitrary chain.
-        if (methodType === 'query') {
-          finalizeSpan(span);
-          return result;
+        // A Query/Aggregate or Promise settles the span on its own completion,
+        // even when a callback was also supplied (idempotent finalize dedupes).
+        if (
+          result &&
+          (typeof result.exec === 'function' ||
+            typeof result.then === 'function')
+        ) {
+          return settleSpan(result, finalize);
         }
 
-        // Statics/instance methods returning a Query/Aggregate: finalize when
-        // exec() settles so the span spans the real DB work.
-        if (result && typeof result.exec === 'function') {
-          const originalExec = result.exec.bind(result);
-          result.exec = function wrappedExec(): Promise<any> {
-            try {
-              return Promise.resolve(originalExec())
-                .then((value: any) => {
-                  finalizeSpan(span);
-                  return value;
-                })
-                .catch((error: unknown) => {
-                  finalizeSpan(
-                    span,
-                    error instanceof Error ? error : new Error(String(error)),
-                  );
-                  throw error;
-                });
-            } catch (error) {
-              finalizeSpan(
-                span,
-                error instanceof Error ? error : new Error(String(error)),
-              );
-              throw error;
-            }
-          };
-          return result;
+        // Synchronous return: a deferred callback owns finalization; otherwise
+        // finalize now.
+        if (!deferred) {
+          finalize();
         }
-
-        // Promise-returning (async statics / instance methods).
-        if (result && typeof result.then === 'function') {
-          return Promise.resolve(result as Promise<any>)
-            .then((value) => {
-              finalizeSpan(span);
-              return value;
-            })
-            .catch((error: unknown) => {
-              finalizeSpan(
-                span,
-                error instanceof Error ? error : new Error(String(error)),
-              );
-              throw error;
-            });
-        }
-
-        // Synchronous value.
-        finalizeSpan(span);
         return result;
       } catch (error) {
-        finalizeSpan(
-          span,
-          error instanceof Error ? error : new Error(String(error)),
-        );
+        finalize(error);
         throw error;
       }
     });
@@ -1102,33 +1098,96 @@ function isMongooseInternalFunctionName(name: string): boolean {
   return name.startsWith('$') || MONGOOSE_INTERNAL_FUNCTION_NAMES.has(name);
 }
 
+/**
+ * Detects a compiled Mongoose Model assigned onto a schema collection — e.g.
+ * the `Patches` model attached to `schema.statics` by history/audit plugins
+ * (`schema.statics.Patches = mongoose.model(...)`). A Model is a constructor
+ * function carrying its own statics (`find`, `create`, …); wrapping it in a
+ * plain tracing function would drop those and break callers, so it must be
+ * skipped — both at the compile-time scan and on later assignment.
+ */
+function isMongooseModelLike(fn: any): boolean {
+  try {
+    return (
+      typeof fn === 'function' &&
+      typeof fn.modelName === 'string' &&
+      fn.schema != null
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a value assigned to a schema collection should be wrapped. */
+function shouldWrapCustomFunction(name: string, value: any): boolean {
+  return (
+    typeof value === 'function' &&
+    !isMongooseInternalFunctionName(name) &&
+    !(value as any)[WRAPPED_METHOD_FLAG] &&
+    !isMongooseModelLike(value)
+  );
+}
+
 function instrumentSchemaCustomFunctions(schema: any): void {
   if (!schema) {
     return;
   }
 
+  // Wraps the functions already present on a collection, then replaces it with
+  // a write-trapping Proxy so anything added *later* is wrapped as it is
+  // assigned. This makes tracing independent of the order in which custom
+  // functions are attached relative to `instrumentMongoose()`.
+  //
+  // Scope note: the common case (e.g. a model that attaches all its statics
+  // before its single `mongoose.model()` call) is already covered by the
+  // up-front scan below — Mongoose copies those at compile time. The Proxy is
+  // the defensive path for functions added *after* the first compile: a late
+  // plugin, or a schema compiled into more than one model. Mongoose does not
+  // back-propagate post-compile `schema.statics` writes to an already-compiled
+  // model, so the Proxy matters when the schema is compiled again afterwards.
   const wrapCollection = (
     collection: any,
     methodType: CustomMethodType,
-  ): void => {
-    if (!collection) {
-      return;
+  ): any => {
+    if (!collection || collection[PROXIED_COLLECTION_FLAG]) {
+      return collection;
     }
+
     for (const name of Object.keys(collection)) {
-      if (isMongooseInternalFunctionName(name)) {
-        continue;
-      }
       const fn = collection[name];
-      if (typeof fn !== 'function' || (fn as any)[WRAPPED_METHOD_FLAG]) {
+      if (isMongooseModelLike(fn)) {
         continue;
       }
-      collection[name] = wrapCustomFunction(fn, name, methodType);
+      if (shouldWrapCustomFunction(name, fn)) {
+        collection[name] = wrapCustomFunction(fn, name, methodType);
+      }
     }
+
+    try {
+      Object.defineProperty(collection, PROXIED_COLLECTION_FLAG, {
+        value: true,
+        enumerable: false,
+        configurable: true,
+      });
+    } catch {
+      // Can't mark it — fall back to the (already wrapped) plain object.
+      return collection;
+    }
+
+    return new Proxy(collection, {
+      set(target, prop, value): boolean {
+        (target as any)[prop] =
+          typeof prop === 'string' && shouldWrapCustomFunction(prop, value)
+            ? wrapCustomFunction(value, prop, methodType)
+            : value;
+        return true;
+      },
+    });
   };
 
-  wrapCollection(schema.statics, 'static');
-  wrapCollection(schema.methods, 'instance');
-  wrapCollection(schema.query, 'query');
+  schema.statics = wrapCollection(schema.statics, 'static');
+  schema.methods = wrapCollection(schema.methods, 'instance');
+  schema.query = wrapCollection(schema.query, 'query');
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   ATTR_MONGOOSE_METHOD_NAME,
   ATTR_MONGOOSE_METHOD_PARAMETERS,
   ATTR_MONGOOSE_METHOD_PARAMETER_COUNT,
+  ATTR_DB_OPERATION_NAME,
 } from './constants';
 import type { InstrumentMongooseConfig } from './types';
 import { canListenOnLoopback } from './test-support';
@@ -339,6 +340,168 @@ describe('custom method instrumentation', () => {
     } finally {
       await a.disconnect();
       await b.disconnect();
+    }
+  });
+
+  // Callback-style methods (e.g. curve's `doc.checkValidationErrors(cb)`) return
+  // synchronously and do their real work via the callback. The span must stay
+  // open and active across the callback so DB calls made inside it nest under
+  // the method span, instead of finalizing immediately on the sync return.
+  it('keeps callback-style method spans open so callback work nests under them', async () => {
+    const m = new mongoose.Mongoose();
+    instrumentMongoose(m);
+    await m.connect(uri);
+
+    const schema = new m.Schema({ email: { type: String } });
+    // Node-convention callback-style instance method: sync return, async cb.
+    schema.methods.refresh = function refresh(
+      this: any,
+      cb: (err: unknown) => void,
+    ): void {
+      setImmediate(() => cb(null));
+    };
+    const Model = m.model(`CB_${(modelCounter += 1)}`, schema) as any;
+
+    try {
+      const doc = await Model.create({ email: 'cb@example.com' });
+      exporter.reset();
+
+      await new Promise<void>((resolve, reject) => {
+        doc.refresh(async (err: unknown) => {
+          if (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
+            return;
+          }
+          try {
+            // A DB op issued from inside the callback must nest under refresh.
+            await (doc.constructor as any).countDocuments({});
+            resolve();
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
+        });
+      });
+
+      const refreshSpan = spanByMethod('refresh');
+      expect(refreshSpan).toBeDefined();
+      expect(refreshSpan!.attributes[ATTR_MONGOOSE_METHOD_TYPE]).toBe(
+        'instance',
+      );
+
+      // A countDocuments span nests directly under the refresh span. Match by
+      // parent linkage (not the first countDocuments span) so concurrent tests
+      // sharing the global exporter can't fool the assertion.
+      const parentId = refreshSpan!.spanContext().spanId;
+      const nested = exporter
+        .getFinishedSpans()
+        .some(
+          (s) =>
+            s.attributes[ATTR_DB_OPERATION_NAME] === 'countDocuments' &&
+            ((s as any).parentSpanContext?.spanId ??
+              (s as any).parentSpanId) === parentId,
+        );
+      expect(nested).toBe(true);
+    } finally {
+      await m.disconnect();
+    }
+  });
+
+  // A callback-style method that errors must mark the span as failed.
+  it('records errors reported through a callback', async () => {
+    const m = new mongoose.Mongoose();
+    instrumentMongoose(m);
+    await m.connect(uri);
+
+    const schema = new m.Schema({ email: { type: String } });
+    schema.methods.validateThing = function validateThing(
+      this: any,
+      cb: (err: unknown) => void,
+    ): void {
+      setImmediate(() => cb(new Error('boom')));
+    };
+    const Model = m.model(`CBErr_${(modelCounter += 1)}`, schema) as any;
+
+    try {
+      const doc = await Model.create({ email: 'err@example.com' });
+      exporter.reset();
+
+      await new Promise<void>((resolve) => {
+        doc.validateThing(() => resolve());
+      });
+
+      const span = spanByMethod('validateThing');
+      expect(span).toBeDefined();
+      // ERROR status code === 2 in the OTel API.
+      expect(span!.status.code).toBe(2);
+    } finally {
+      await m.disconnect();
+    }
+  });
+
+  // History/audit plugins attach a compiled Model as a static
+  // (`schema.statics.Patches = mongoose.model(...)`). Wrapping it in a tracing
+  // function would drop the Model's own statics (find/create/…) and break it.
+  it('does not wrap a Model assigned to schema.statics (history-plugin pattern)', async () => {
+    const m = new mongoose.Mongoose();
+    instrumentMongoose(m);
+    await m.connect(uri);
+
+    const patchSchema = new m.Schema({ note: { type: String } });
+    const PatchModel = m.model(`Patch_${(modelCounter += 1)}`, patchSchema);
+
+    const schema = new m.Schema({ email: { type: String } });
+    schema.statics.Patches = PatchModel; // plugin-style attachment
+    const Model = m.model(`Hist_${(modelCounter += 1)}`, schema) as any;
+
+    try {
+      // The Model survives intact — not replaced by a wrapper.
+      expect(Model.Patches).toBe(PatchModel);
+      expect(typeof Model.Patches.find).toBe('function');
+      expect(typeof Model.Patches.create).toBe('function');
+
+      // And still behaves as a Model.
+      const created = await Model.Patches.create({ note: 'hi' });
+      expect(created.note).toBe('hi');
+
+      // No method span is emitted for the attached Model.
+      expect(spanByMethod('Patches')).toBeUndefined();
+    } finally {
+      await m.disconnect();
+    }
+  });
+
+  // Statics added to a schema *after* it was first instrumented (a late plugin,
+  // or an extension module) must still be traced — the write-trapping Proxy
+  // wraps them on assignment, independent of ordering.
+  it('wraps statics added dynamically after first instrumentation', async () => {
+    const m = new mongoose.Mongoose();
+    instrumentMongoose(m);
+    await m.connect(uri);
+
+    const schema = new m.Schema({ email: { type: String } });
+    // First compile installs the write-trapping proxy on schema.statics.
+    m.model(`Dyn_${(modelCounter += 1)}`, schema);
+
+    // Add a static dynamically, as a late plugin / extension would.
+    schema.statics.lateStatic = function lateStatic(this: any): any {
+      return this.countDocuments({});
+    };
+
+    // A model compiled afterwards traces the dynamically added static.
+    const Second = m.model(`Dyn_${(modelCounter += 1)}`, schema) as any;
+
+    try {
+      await Second.create({ email: 'dyn@example.com' });
+      exporter.reset();
+
+      const n = await Second.lateStatic();
+      expect(n).toBe(1);
+
+      const span = spanByMethod('lateStatic');
+      expect(span).toBeDefined();
+      expect(span!.attributes[ATTR_MONGOOSE_METHOD_TYPE]).toBe('static');
+    } finally {
+      await m.disconnect();
     }
   });
 });

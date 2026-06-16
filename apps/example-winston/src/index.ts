@@ -16,15 +16,24 @@
 
 import 'dotenv/config';
 import { init, trace, span, Metric, track, shutdown, type TraceContext } from 'autotel';
+import { createDevtools } from 'autotel-devtools';
 
-// Initialize autotel FIRST - this sets up Winston instrumentation
+// Start devtools OTLP receiver in-process (no separate terminal needed)
+const devtools = createDevtools({
+  port: 4318,
+  verbose: true,
+});
+
+// Initialize autotel - points traces + logs at the in-process devtools
 init({
   service: 'example-winston-service',
   debug: true,
   // Enable Winston auto-instrumentation to inject trace context into logs
   autoInstrumentations: ['winston'],
-  // OTLP endpoint for Grafana (set via OTLP_ENDPOINT env var)
-  endpoint: process.env.OTLP_ENDPOINT || 'http://localhost:4318',
+  // Send OTLP traces + logs to the in-process devtools receiver
+  endpoint: `http://localhost:${devtools.port}`,
+  // Must explicitly enable OTLP log export (disabled by default)
+  logs: true,
 });
 
 // Create Winston logger AFTER init() - instrumentation will hook into it
@@ -155,7 +164,8 @@ export const createOrder = trace((ctx: TraceContext) => async (userId: string, i
 // ============================================================================
 
 async function main() {
-  logger.info('🚀 Starting autotel Winston example...\n');
+  logger.info('🚀 Starting autotel Winston example...');
+  logger.info(`🔍 Devtools UI: http://localhost:${devtools.port}\n`);
 
   try {
     // TEST: Verify trace() with nested span() doesn't create orphan spans
@@ -214,6 +224,7 @@ async function main() {
   
   // Gracefully shutdown
   await shutdown();
+  await devtools.close();
   process.exit(0);
 }
 

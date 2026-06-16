@@ -54,6 +54,18 @@ first-party, canonical control (and for cost, metric buckets, agents); enable
 OpenLLMetry to auto-instrument LLM SDK calls you don't wrap yourself. Both emit
 `gen_ai.*` and share the same trace tree.
 
+The package splits into focused subpath exports, so you import only what you use:
+
+| Subpath | Provides |
+| --- | --- |
+| `autotel-genai/trace` | `traceGenAI()`, `recordGenAiResponse()`, `recordGenAiUsage()` |
+| `autotel-genai/cost` | `estimateLLMCost()`, `recordLLMCost()`, `MODEL_PRICING` (cache-read/write aware) |
+| `autotel-genai/metrics` | `genAiMetricViews()` to re-bucket the canonical histograms |
+| `autotel-genai/events` | opt-in content events, `inference.operation.details`, `evaluation.result` |
+| `autotel-genai/ai-sdk` | Vercel AI SDK `ai.*` to `gen_ai.*` mapping plus cost |
+| `autotel-genai/agent` | agent identity, delegation, policy, audit, privacy, non-repudiation |
+| `autotel-genai/semconv` | `GEN_AI_*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()` |
+
 :::note[Key Insight]
 For **workflow orchestration** (the steps, agents, and business logic _around_
 the model call), plain `trace()` is all you need — no AI-specific API. Reach for

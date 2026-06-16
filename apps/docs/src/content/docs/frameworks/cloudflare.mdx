@@ -183,6 +183,51 @@ export const CounterDO = wrapDurableObject(
 );
 ```
 
+## Cloudflare Agents
+
+For the [Agents SDK](https://developers.cloudflare.com/agents/), set the agent's
+`observability` field. `createOtelObservability` produces spans for RPC calls,
+scheduled tasks, and MCP operations.
+
+```typescript
+import { Agent } from 'agents';
+import { createOtelObservability } from 'autotel-cloudflare/agents';
+
+class MyAgent extends Agent<Env> {
+  observability = createOtelObservability({
+    service: { name: 'my-agent' },
+    exporter: { url: env.OTLP_ENDPOINT },
+  });
+}
+```
+
+`createOtelObservabilityFromEnv()` reads `OTEL_*` variables when you would rather
+not pass config inline.
+
+## Cloudflare Actors
+
+For the [Actors](https://developers.cloudflare.com/actors/) model, `tracedHandler`
+wraps the class, sets up telemetry, and opens a root span per request.
+
+```typescript
+import { Actor } from '@cloudflare/actors';
+import { tracedHandler } from 'autotel-cloudflare/actors';
+
+class MyActor extends Actor<Env> {
+  protected onRequest(request: Request) {
+    return new Response('Hello');
+  }
+}
+
+export default tracedHandler(MyActor, (env) => ({
+  service: { name: 'my-actor-service' },
+  exporter: { url: env.OTLP_ENDPOINT },
+}));
+```
+
+`instrumentActorStorage`, `instrumentActorAlarms`, and `instrumentActorSockets`
+trace storage reads/writes, alarms, and sockets when you want finer control.
+
 ## Queues, scheduled, email handlers
 
 `wrapModule` instruments every handler defined on the module. No extra setup
@@ -365,6 +410,8 @@ export default wrapModule(
 | `autotel-cloudflare/logger`     | `createEdgeLogger`, `createWorkersLogger`, `runWithLogLevel` |
 | `autotel-cloudflare/sampling`   | `SamplingPresets`, `createCustomTailSampler`, etc. |
 | `autotel-cloudflare/events`     | `getEdgeSubscribers`, `createEdgeSubscribers` |
+| `autotel-cloudflare/agents`     | `createOtelObservability`, `createOtelObservabilityFromEnv` for the Agents SDK |
+| `autotel-cloudflare/actors`     | `tracedHandler`, `instrumentActor`, and storage/alarm/socket instrumenters |
 | `autotel-cloudflare/testing`    | Placeholder entrypoint (currently no runtime helpers) |
 
 `autotel-cloudflare` now uses shared route-matching utilities from

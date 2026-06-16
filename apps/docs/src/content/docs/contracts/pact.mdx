@@ -1,0 +1,127 @@
+---
+title: Pact Evidence
+description: Runtime evidence for your Pact contracts. Audit which contracted interactions ran in the last N days of test runs, and which are stale confidence.
+---
+
+A green Pact suite proves compatibility. It does not prove relevance. Most teams
+have plenty of the former and little of the latter: contracts that pass because
+they still match, long after the code that exercised them was deleted.
+
+`autotel-pact` is the bridge between [Pact](https://docs.pact.io) and autotel. It
+records, with every contract test run, which interactions were exercised, and
+answers a question Pact alone cannot:
+
+> Of the contracts your test suite claims to verify, which ones did
+> autotel-pact observe in the last N days of runs?
+
+With [Telemetry Schema](/autotel/contracts/schema/) it forms autotel's
+observability-contract pair. Both use telemetry to answer a contract question.
+
+## Evidence quality
+
+The package records evidence, not guesses. Every finding states what was
+observed or verified, and what you had to configure to earn it.
+
+| Evidence | What it means | What you configure |
+| --- | --- | --- |
+| **Seen in test** | A consumer exercised the interaction in CI | `withPactInteraction` or auto-wrap |
+| **Seen in production** | A span tagged with `pact.*` was recorded at runtime | `tagPactInteraction()` + `PactLedgerSpanProcessor` |
+| **Provider verified** | `verifyProvider()` succeeded and interactions came from the pact file | `withProviderVerification` |
+| **Broker verified** | The latest broker verification for the consumer-provider pair succeeded | Broker URL/token at audit time |
+
+> [!NOTE]
+> Broker verification proves the latest pact between a consumer and provider
+> passed. It does not prove autotel-pact observed each interaction. Broker
+> results sit at the pact-pair level, not the per-interaction level.
+
+## Install
+
+```bash
+npm install -D autotel-pact
+# autotel and @pact-foundation/pact are peer dependencies
+```
+
+## Record consumer interactions
+
+Wrap your existing message Pact verification. autotel-pact records that the
+interaction ran, with the trace id, and stays out of Pact's way.
+
+```typescript
+import { MessageConsumerPact } from '@pact-foundation/pact';
+import { withPactInteraction } from 'autotel-pact';
+import { orderHandler } from './handlers/order';
+
+const pact = new MessageConsumerPact({
+  consumer: 'OrderShipper',
+  provider: 'OrderService',
+  dir: './pacts',
+});
+
+pact
+  .given('an order has been created')
+  .expectsToReceive('an OrderCreated event')
+  .withContent({ orderId: 'ord-123', total: 99.5 });
+
+await withPactInteraction(pact, (message) => orderHandler(message.contents));
+```
+
+For HTTP contracts, `withHttpPactInteraction` mirrors the same shape onto
+`PactV3.executeTest()`. For provider runs, `withProviderVerification` wraps the
+verifier and enumerates the interactions from the pact file.
+
+## Observe interactions in production
+
+To earn "seen in production" evidence, tag the active span at runtime and add
+the ledger span processor to your OpenTelemetry setup.
+
+```typescript
+import { tagPactInteraction } from 'autotel-pact/tag';
+
+tagPactInteraction({
+  consumer: 'OrderShipper',
+  provider: 'OrderService',
+  interaction: 'an OrderCreated event',
+});
+```
+
+Production observation needs explicit `pact.*` tags. The package does not infer
+interactions from routes.
+
+## Run the audit
+
+The audit reconciles three inputs: the interactions in your pact files, the
+ledger of observations inside a time window (14 days by default), and optional
+broker status. It produces a matrix with the counts a CI gate keys off.
+
+```typescript
+import { runAudit } from 'autotel-pact/audit';
+
+const matrix = await runAudit({ pactsDir: './pacts', windowDays: 14 });
+```
+
+| Count | Meaning |
+| --- | --- |
+| `contracted_and_test_seen` | Contracts with test evidence in the window. Good coverage. |
+| `contracted_not_test_seen` | Contracts with no test evidence. Stale confidence. |
+| `test_or_prod_seen_not_contracted` | Observed flows with no contract. Ungoverned. |
+
+The bundled `autotel-pact` CLI runs the same audit and fails the build when a
+"verified" contract has not been exercised recently.
+
+## What this package does NOT do
+
+- **Does not replace Pact.** Pact still owns matching and `can-i-deploy`. This
+  adds complementary evidence.
+- **Does not infer interactions from routes.** Production observation needs
+  explicit `pact.*` span tags.
+- **Does not write or modify pact files.** It records that interactions ran or
+  were verified.
+- **Does not record request or response bodies.** The ledger holds metadata
+  only: consumer, provider, description, states, trace ids.
+
+## See also
+
+- [Telemetry Schema](/autotel/contracts/schema/) for the other half of the
+  observability-contract pair.
+- [Message Contracts](/autotel/contracts/message-contract/) for serialized
+  payload compatibility across versions.

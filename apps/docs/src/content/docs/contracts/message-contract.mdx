@@ -1,0 +1,160 @@
+---
+title: Message Contracts
+description: Pin the serialized shape of your events, commands, and messages, and prove old and new versions stay compatible, as ordinary unit tests with the contract committed beside the test.
+---
+
+`autotel-message-contract` is contract testing for the messages your code sends
+and stores: events, commands, queue payloads, HTTP bodies, and anything else you
+serialize for someone else to read.
+
+You write a small unit test that locks down a message's serialized format. Later
+you rename a field or change a type. The code still compiles and your other
+tests pass, but this one fails and points at what changed. You fix it in the
+same pull request, before a consumer or a stored event has hit the old format in
+production.
+
+It is an optional, standalone, test-time package adjacent to autotel's
+observability-contract pair ([Telemetry Schema](/autotel/contracts/schema/) and
+[Pact Evidence](/autotel/contracts/pact/)). It extends the idea beyond telemetry
+to serialized payloads, and needs no runtime observability to be useful.
+
+## Why
+
+When you change how a message serializes, the change is easy to miss. The code
+compiles and the tests pass, because they write and read the message with the
+same code. The mismatch surfaces later, when something holding the old format
+reads it: a stored event, a message waiting on a queue, or another service.
+
+The checks are ordinary unit tests in your existing suite. No broker, no schema
+registry, no mock service, and nothing to start in Docker. The contract is the
+serialized output committed next to the test, so a format change shows up in a
+normal diff.
+
+## Install
+
+```bash
+npm install -D autotel-message-contract
+# autotel is an optional peer dependency; this package works standalone
+```
+
+## Snapshot check: pin the serialized shape
+
+A snapshot check confirms a message still serializes to the bytes you approved,
+so nothing reading it downstream breaks. The first run writes the approved file
+and passes; you review and commit it. From then on the check compares against it.
+
+```typescript
+import { messageContract } from 'autotel-message-contract';
+import { OrderPlaced } from './events';
+
+it('OrderPlaced serialization is unchanged', () => {
+  messageContract({ snapshot: 'OrderPlaced' })
+    .given(new OrderPlaced('ord-1', 'Alice', placedAt))
+    .whenSerialized()
+    .thenContractIsUnchanged();
+});
+```
+
+The approved file lands in a `__contracts__/` directory beside the test
+(`OrderPlaced.approved.txt`). When the format drifts, the failure shows you what
+moved:
+
+```
+Message contract drifted from its approved snapshot.
+  serializer: json
+  snapshot:   .../__contracts__/OrderPlaced.approved.txt
+
+  {
+-   "customer": "Alice",
++   "customerName": "Alice",
+    "orderId": "ord-1"
+  }
+```
+
+### Use your application's serializer
+
+The default serializer is JSON with deterministic key ordering, good enough to
+pin most events. The snapshot is only meaningful if it matches the shape your
+consumers see. Pass your app's real serializer so the snapshot records the exact
+bytes you ship (snake_case, custom date formats, omitted nulls, `superjson`,
+`devalue`, protobuf):
+
+```typescript
+import { messageContract } from 'autotel-message-contract';
+
+messageContract({ serializer: mySnakeCaseSerializer, snapshot: 'OrderPlaced' })
+  .given(new OrderPlaced('ord-1', 'Alice', placedAt))
+  .whenSerialized()
+  .thenContractIsUnchanged();
+```
+
+A `MessageSerializer` is `{ name, serialize, deserialize }`.
+
+## Compatibility check: prove versions still read each other
+
+A compatibility check is for the version you evolve on purpose, so changing a
+message doesn't strand the ones already in your store or on the wire. TypeScript
+erases types at runtime, so instead of a class you hand over a reader: a
+[Standard Schema](https://standardschema.dev) (Zod ≥3.24, Valibot, ArkType) or a
+plain parse function.
+
+**Backward compatible**: confirm a newer reader still reads what an older writer
+produced (events you stored last year, a request already sent):
+
+```typescript
+import { messageContract } from 'autotel-message-contract';
+import { OrderPlacedV2 } from './events'; // a Zod schema
+
+await messageContract()
+  .given(orderPlacedV1) // bytes an old version wrote
+  .whenDeserializedAs(OrderPlacedV2)
+  .thenBackwardCompatible((v2) => {
+    expect(v2.coupon).toBeUndefined(); // newly-added field defaults sensibly
+  });
+```
+
+**Forward compatible**: confirm a consumer that hasn't upgraded yet still reads
+what the newer writer produces, so you can ship the new shape before the readers
+have caught up:
+
+```typescript
+await messageContract()
+  .given(orderPlacedV2) // bytes the new version writes
+  .whenDeserializedAs(OrderPlacedV1)
+  .thenForwardCompatible();
+```
+
+The check goes past parse-success. After the target reader accepts the payload,
+the package re-serializes the parsed value and confirms shared fields still mean
+the same thing. A silent field rename or a lossy transform fails the check even
+when the reader does not throw.
+
+## Updating snapshots
+
+When a change is on purpose, re-run with the update flag set, review the diff,
+and commit:
+
+```bash
+AUTOTEL_CONTRACT_UPDATE=1 pnpm test
+# UPDATE_CONTRACTS / UPDATE_SNAPSHOTS also work
+```
+
+Per-check: `messageContract({ snapshot: 'X', update: true })`.
+
+## What this package does NOT do
+
+- **Does not replace Pact.** It checks serialized shape and version
+  compatibility, not a live exchange between running services. For evidence that
+  Pact interactions ran, see [Pact Evidence](/autotel/contracts/pact/).
+- **Does not infer your serializer.** Pass your app's serializer to pin the
+  bytes you ship; the default is deterministic JSON.
+- **Does not pin API or type surface.** Single-purpose by design. For
+  type-surface pinning use a dedicated tool like
+  [`@microsoft/api-extractor`](https://api-extractor.com).
+
+## See also
+
+- [Telemetry Schema](/autotel/contracts/schema/) for the telemetry surface as a
+  contract.
+- [Pact Evidence](/autotel/contracts/pact/) for runtime evidence that
+  contracted interactions ran.

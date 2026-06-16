@@ -283,3 +283,151 @@ export const orderSaga = traceWorkflow({
 - Compensations run in reverse order on failure
 - `ctx.getWorkflowId()`, `ctx.getWorkflowName()`, `ctx.getStepIndex()` context methods
 - WeakMap-based state isolation tied to span lifecycle
+
+## Distributed Workflows Across Services
+
+`autotel/workflow` uses AsyncLocalStorage, so it stays inside one process. When a
+workflow spans microservices, `autotel/workflow-distributed` carries the workflow
+identity over W3C baggage instead.
+
+```typescript
+import {
+  traceDistributedWorkflow,
+  traceDistributedStep,
+} from 'autotel/workflow-distributed';
+
+// Service A starts the workflow
+export const createOrder = traceDistributedWorkflow({
+  name: 'OrderFulfillment',
+  workflowIdFrom: (order) => order.id,
+})((ctx) => async (order) => {
+  await publishToInventory(order); // workflow baggage rides the outbound headers
+  return { workflowId: ctx.workflowId };
+});
+
+// Service B continues it
+export const reserveInventory = traceDistributedStep({
+  name: 'ReserveInventory',
+  extractBaggage: true,
+})((ctx) => async (message) => {
+  await reserveItems(message.items); // ctx.workflowId matches Service A
+});
+```
+
+`createWorkflowHeaders()` and `parseWorkflowFromBaggage()` give you manual control
+when the transport is not HTTP. `getWorkflowProgress()` and
+`isInDistributedWorkflow()` read the current state.
+
+## Async Callbacks: the Parking Lot
+
+A webhook or payment callback can land hours after the request that triggered it.
+`autotel/webhook` stores the originating trace context under a correlation key and
+links the later callback span back to it.
+
+```typescript
+import { trace } from 'autotel';
+import { createParkingLot, InMemoryTraceContextStore } from 'autotel/webhook';
+
+const parkingLot = createParkingLot({
+  store: new InMemoryTraceContextStore(),
+  defaultTTLMs: 24 * 60 * 60 * 1000,
+});
+
+export const initiatePayment = trace((ctx) => async (orderId: string) => {
+  await parkingLot.park(`payment:${orderId}`);
+  await stripe.createPaymentIntent({ metadata: { orderId } });
+});
+
+export const handleStripeWebhook = parkingLot.traceCallback({
+  name: 'stripe.webhook.payment_intent.succeeded',
+  correlationKeyFrom: (event) => `payment:${event.data.object.metadata.orderId}`,
+})((ctx) => async (event) => {
+  // ctx.elapsedMs reports how long the callback took to arrive
+  await fulfillOrder(event.data.object);
+});
+```
+
+Swap `InMemoryTraceContextStore` for a Redis-backed store in production so parked
+context survives a restart.
+
+## Correlation IDs
+
+A correlation id is a stable 16-character join key that ties fragmented traces
+together. `autotel/correlation-id` generates one at a request boundary and reads
+it back anywhere in the same async scope.
+
+```typescript
+import {
+  generateCorrelationId,
+  getCorrelationId,
+  runWithCorrelationId,
+} from 'autotel/correlation-id';
+
+await runWithCorrelationId(generateCorrelationId(), async () => {
+  getCorrelationId(); // available to every call in this async scope
+  await handleRequest();
+});
+```
+
+See [Configuration](/autotel/configuration/) for wiring correlation ids into
+`init()`.
+
+## Class Method Decorators
+
+`autotel/decorators` wraps class methods with tracing using TypeScript 5 decorator
+syntax. The span takes the method name by default.
+
+```typescript
+import { Trace } from 'autotel/decorators';
+
+class OrderService {
+  @Trace('order.create', { withMetrics: true })
+  async createOrder(data: OrderData) {
+    return db.orders.create(data);
+  }
+
+  @Trace() // span name: processPayment
+  async processPayment(orderId: string) {
+    return stripe.charge(orderId);
+  }
+}
+```
+
+## Request Enrichers
+
+`autotel/enrichers` parses request and response headers into normalized span
+attributes for user agent, geolocation, and body size.
+
+```typescript
+import { userAgent, geo, requestSize } from 'autotel/enrichers';
+
+const ua = userAgent(req.headers);
+if (ua) ctx.setAttribute('user_agent.browser', ua['user_agent.browser']);
+
+const location = geo(req.headers);
+if (location?.['geo.country']) {
+  ctx.setAttribute('geo.country', location['geo.country']);
+}
+```
+
+## Drain Pipeline
+
+`autotel/drain-pipeline` batches async work, retries with backoff, and flushes on
+an interval. Subscribers and exporters use it internally; reach for it when you
+build your own sink.
+
+```typescript
+import { createDrainPipeline } from 'autotel/drain-pipeline';
+
+const send = createDrainPipeline<LogEvent>({
+  batch: { size: 50, intervalMs: 5000 },
+  retry: { maxAttempts: 3, backoff: 'exponential' },
+  maxBufferSize: 1000,
+})(async (batch) => {
+  await logService.send(batch);
+});
+
+send(event);
+await send.flush();
+await send.shutdown();
+```
