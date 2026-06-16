@@ -43,6 +43,8 @@ pnpm changeset          # Create a changeset
 - `packages/autotel-tanstack` - TanStack Start (see `packages/autotel-tanstack/CLAUDE.md`)
 - `packages/autotel-subscribers` - Event subscribers (see `packages/autotel-subscribers/CLAUDE.md`)
 - `packages/autotel-genai` - GenAI/LLM instrumentation: canonical `gen_ai.*` semconv, cost, metrics, events, agents (see `packages/autotel-genai/CLAUDE.md`)
+- `packages/autotel-schema` - Telemetry surface as a typed, versioned contract: declare spans/attributes, validate live spans, diff for breaking changes (see `packages/autotel-schema/CLAUDE.md`)
+- `packages/autotel-message-contract` - Optional, standalone, test-time adjacent: brokerless message contract testing — pin serialized message shape + backward/forward version compatibility as unit tests (see `packages/autotel-message-contract/CLAUDE.md`)
 
 ## Documentation
 

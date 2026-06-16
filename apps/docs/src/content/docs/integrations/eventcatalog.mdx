@@ -1,20 +1,37 @@
 ---
 title: EventCatalog
-description: Keep your EventCatalog honest about what the code actually does at runtime — drift detection from autotel telemetry.
+description: Keep your EventCatalog honest about what your code does at runtime, with drift detection from autotel telemetry.
 ---
 
 `autotel-eventcatalog` diffs an [EventCatalog](https://www.eventcatalog.dev)
-against an autotel snapshot of what your tests actually emit, and fails the
+against an autotel snapshot of what your tests emit, and fails the
 PR when the catalog and the runtime disagree.
 
 Two pieces:
 
-| Piece | Lives in | Role |
-| --- | --- | --- |
-| `ArchitectureSnapshotSubscriber` | `autotel-subscribers` | Records every event your tests emit, with field paths, runtime types and sample values |
-| `autotel-eventcatalog` | this package | Reads the snapshot, diffs it against the catalog, reports drift |
+<table>
+  <thead>
+    <tr>
+      <th>Piece</th>
+      <th>Lives in</th>
+      <th>Role</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ArchitectureSnapshotSubscriber</code></td>
+      <td><code>autotel-subscribers</code></td>
+      <td>Records every event your tests emit, with field paths, runtime types and sample values</td>
+    </tr>
+    <tr>
+      <td><code>autotel-eventcatalog</code></td>
+      <td>this package</td>
+      <td>Reads the snapshot, diffs it against the catalog, reports drift</td>
+    </tr>
+  </tbody>
+</table>
 
-Same model as [Pact](https://docs.pact.io/) — for event architectures.
+It uses the same model as [Pact](https://docs.pact.io/), applied to event architectures.
 
 ## What gets caught
 
@@ -101,8 +118,8 @@ autotel-eventcatalog drift \
   --fail-on-drift
 ```
 
-Real output from the `example-eventcatalog` app (which deliberately ships
-with two drift conditions so the CLI has something genuine to catch):
+Real output from the `example-eventcatalog` app, which ships with two
+intentional drift conditions so the CLI has something to catch:
 
 ```
 # Architecture drift report
@@ -122,7 +139,7 @@ with two drift conditions so the CLI has something genuine to catch):
 Drift detected in current snapshot.
 ```
 
-Exit code 1, CI fails. Two genuine findings, zero noise.
+Exit code 1 fails the build. Both findings are real, with no noise.
 
 ## Wire it into CI
 
@@ -206,13 +223,13 @@ To keep the scope tight:
 
 ## Examples
 
-- [`example-eventcatalog`](https://github.com/jagreehal/autotel/tree/main/apps/example-eventcatalog) —
-  four-service e-commerce catalog, deliberate drift, live dashboard, mock
-  PR view, recorded replay for talks.
+- [`example-eventcatalog`](https://github.com/jagreehal/autotel/tree/main/apps/example-eventcatalog):
+  a four-service e-commerce catalog with built-in drift, a live dashboard, a
+  mock PR view, and a recorded replay for talks.
 
 ## See also
 
-- [Event Subscribers](/autotel/integrations/subscribers/) — including
+- [Event Subscribers](/autotel/integrations/subscribers/), including
   `ArchitectureSnapshotSubscriber`, which produces the input snapshot.
-- [Architecture](/autotel/architecture/) — how `track()`, `traceProducer`
+- [Architecture](/autotel/architecture/) for how `track()`, `traceProducer`,
   and `traceConsumer` produce the signal this package consumes.

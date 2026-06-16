@@ -1,10 +1,16 @@
 import { defineConfig } from 'astro/config';
+import { unified } from '@astrojs/markdown-remark';
 import preact from '@astrojs/preact';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   site: 'https://jagreehal.github.io',
   base: '/autotel',
+  markdown: {
+    processor: unified({
+      gfm: true,
+    }),
+  },
   integrations: [
     preact({ devtools: false }),
     starlight({
@@ -87,6 +93,14 @@ export default defineConfig({
             { label: 'Datadog', slug: 'integrations/datadog' },
             { label: 'Event Subscribers', slug: 'integrations/subscribers' },
             { label: 'EventCatalog', slug: 'integrations/eventcatalog' },
+          ],
+        },
+        {
+          label: 'Contracts',
+          items: [
+            { label: 'Telemetry Schema', slug: 'contracts/schema' },
+            { label: 'Pact Evidence', slug: 'contracts/pact' },
+            { label: 'Message Contracts', slug: 'contracts/message-contract' },
           ],
         },
         {

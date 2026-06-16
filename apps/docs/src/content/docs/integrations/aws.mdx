@@ -238,6 +238,41 @@ export const uploadFile = traceS3({
 });
 ```
 
+## Attribute builders
+
+When you instrument an AWS call by hand, `autotel-aws/attributes` builds the
+canonical span attributes for you. `AWS_ATTRS` holds the semantic-convention
+keys; the `build*` helpers turn a service operation into the attribute object.
+
+```typescript
+import { buildLambdaAttributes, buildDynamoDBAttributes } from 'autotel-aws/attributes';
+
+span.setAttributes(
+  buildLambdaAttributes({
+    functionName: 'my-handler',
+    functionVersion: '$LATEST',
+    awsRequestId: context.awsRequestId,
+    coldStart: true,
+  }),
+);
+```
+
+Builders exist for Lambda, the SDK, DynamoDB, S3, SQS, SNS, Kinesis, Step
+Functions, and EventBridge.
+
+## Testing
+
+`autotel-aws/testing` runs Lambda handlers against a mock context and helps you
+assert on the spans they produce, with optional LocalStack helpers.
+
+```typescript
+import { createLambdaTestHarness } from 'autotel-aws/testing';
+
+const harness = createLambdaTestHarness();
+const result = await harness.invoke(handler, mockEvent, mockContext);
+expect(result.statusCode).toBe(200);
+```
+
 ## Examples
 
 - [`example-aws-lambda`](https://github.com/jagreehal/autotel/tree/main/apps/example-aws-lambda) — Lambda with `wrapHandler()`, AWS SDK v3 auto-instrumentation, S3/DynamoDB/SQS helpers, and LocalStack support.
@@ -254,4 +289,5 @@ export const uploadFile = traceS3({
 - `autotel-aws/eventbridge` — EventBridge publisher
 - `autotel-aws/xray` — X-Ray compatibility
 - `autotel-aws/cloudwatch` — SigV4-signed OTLP exporters for CloudWatch's native endpoints
+- `autotel-aws/attributes` — Attribute builders for hand-rolled instrumentation
 - `autotel-aws/testing` — Test utilities

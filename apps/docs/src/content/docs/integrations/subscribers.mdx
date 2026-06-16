@@ -89,7 +89,63 @@ class MySubscriber extends EventSubscriber {
 }
 ```
 
+## Factories
+
+`autotel-subscribers/factories` builds the built-in subscribers from a config
+object, so you skip the `new` and the import of each class. `composeSubscribers`
+combines several into one with a strategy (parallel, failover, round-robin, race,
+mirrored).
+
+```typescript
+import {
+  createPostHogSubscriber,
+  createWebhookSubscriber,
+} from 'autotel-subscribers/factories';
+
+init({
+  service: 'my-service',
+  subscribers: [
+    createPostHogSubscriber({ apiKey: 'phc_...' }),
+    createWebhookSubscriber({ url: 'https://example.com/events' }),
+  ],
+});
+```
+
+Factories: `createPostHogSubscriber`, `createMixpanelSubscriber`,
+`createAmplitudeSubscriber`, `createSegmentSubscriber`, `createWebhookSubscriber`,
+`createSlackSubscriber`, `createMockSubscriber`, and `composeSubscribers`.
+
+## Streaming subscriber
+
+For Kafka, Kinesis, or Pub/Sub, extend `StreamingEventSubscriber` instead of
+`EventSubscriber`. It adds batching, partitioning, buffer-overflow strategies
+(drop, block, disk), and backpressure.
+
+```typescript
+import { StreamingEventSubscriber } from 'autotel-subscribers';
+
+class KafkaSubscriber extends StreamingEventSubscriber {
+  protected getPartitionKey(payload) {
+    return payload.attributes?.userId ?? 'default';
+  }
+
+  protected async sendBatch(events) {
+    await this.producer.send({
+      topic: 'events',
+      messages: events.map((e) => ({
+        key: this.getPartitionKey(e),
+        value: JSON.stringify(e),
+      })),
+    });
+  }
+}
+```
+
 ## Middleware
+
+`autotel-subscribers/middleware` wraps a subscriber with cross-cutting behavior.
+`applyMiddleware` takes the subscriber and an **array** of middlewares, applied in
+order.
 
 ```typescript
 import {
@@ -99,13 +155,30 @@ import {
   enrichmentMiddleware,
 } from 'autotel-subscribers/middleware';
 
-const subscriber = applyMiddleware(
-  new MySubscriber(),
+const subscriber = applyMiddleware(new MySubscriber(), [
   retryMiddleware({ maxRetries: 3 }),
-  samplingMiddleware({ rate: 0.5 }),
-  enrichmentMiddleware({ region: 'us-east-1' }),
-);
+  samplingMiddleware(0.5), // keep 50% of events
+  enrichmentMiddleware((event) => ({
+    ...event,
+    attributes: { ...event.attributes, region: 'us-east-1' },
+  })),
+]);
 ```
+
+Available middleware:
+
+| Middleware | Purpose |
+| --- | --- |
+| `retryMiddleware({ maxRetries, delayMs })` | Retry failed sends with backoff. |
+| `samplingMiddleware(rate)` | Keep a fraction of events (`0`–`1`). |
+| `enrichmentMiddleware(fn)` | Add or rewrite event data before sending. |
+| `filterMiddleware(predicate)` | Drop events that fail the predicate. |
+| `transformMiddleware(fn)` | Replace the event shape. |
+| `batchingMiddleware({ ... })` | Group events for bulk dispatch. |
+| `rateLimitMiddleware({ requestsPerSecond })` | Cap throughput. |
+| `circuitBreakerMiddleware({ ... })` | Stop sending past an error threshold. |
+| `timeoutMiddleware({ timeoutMs })` | Reject sends that run too long. |
+| `loggingMiddleware({ prefix })` | Log event flow for debugging. |
 
 ## Examples
 
@@ -122,5 +195,9 @@ const subscriber = applyMiddleware(
 - `autotel-subscribers/slack` — Slack
 - `autotel-subscribers/security` — Forward `security.*` events to a webhook/SIEM/pager ([Security Observability](/autotel/integrations/security/))
 - `autotel-subscribers/architecture-snapshot` — Architecture snapshot for drift detection
+- `autotel-subscribers/factories` — `create*Subscriber` builders + `composeSubscribers`
 - `autotel-subscribers/middleware` — Middleware composition
 - `autotel-subscribers/testing` — Test harnesses
+
+`StreamingEventSubscriber` is re-exported from the package root
+(`autotel-subscribers`) alongside the base `EventSubscriber`.

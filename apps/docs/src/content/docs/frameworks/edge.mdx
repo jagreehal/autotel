@@ -298,6 +298,40 @@ assertTraceCreated(collector, 'myFunction');
 - **`AsyncLocalStorage` required.** Some runtimes need it enabled (e.g.
   Cloudflare's `compatibility_flags = ["nodejs_compat"]`).
 
+## Route matching helpers
+
+The toolkit exports three functions for building your own middleware. They drive
+the route controls above and are useful when you wire instrumentation by hand.
+
+```typescript
+import {
+  shouldInstrumentPath,
+  getServiceForPath,
+  runMiddlewareFinishPipeline,
+} from 'autotel-edge';
+
+// Skip noisy paths before opening a span.
+const trace = shouldInstrumentPath('/api/users', { exclude: ['/health', '/metrics'] });
+
+// Name the span's service from the route.
+const service = getServiceForPath('/users/123', {
+  '/users/**': { service: 'users-api' },
+  '/admin/**': { service: 'admin-api' },
+});
+
+// After the handler runs, enrich the span and drain async work.
+await runMiddlewareFinishPipeline(
+  { event: request, status: 200 },
+  {
+    enrichers: [(ctx) => span.setAttributes({ 'http.status_code': ctx.status })],
+    drains: [(ctx) => analytics.record(ctx)],
+  },
+);
+```
+
+Each enricher and drain runs inside its own try/catch, so one failure does not
+cascade into the others.
+
 ## Entry points
 
 | Import                          | Contents                                |

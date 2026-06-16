@@ -1,0 +1,73 @@
+{
+  "name": "autotel-message-contract",
+  "version": "0.1.0",
+  "description": "Brokerless message contract testing for autotel — pin the serialized shape of your events/commands/messages and prove old and new versions stay compatible, as ordinary unit tests.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./serializer": {
+      "types": "./dist/serializer.d.ts",
+      "import": "./dist/serializer.js",
+      "require": "./dist/serializer.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "autotel",
+    "contract-testing",
+    "serialization",
+    "snapshot",
+    "approval-testing",
+    "backward-compatibility",
+    "forward-compatibility",
+    "event-sourcing",
+    "schema-evolution",
+    "messages"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "peerDependencies": {
+    "autotel": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "autotel": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "rimraf": "^6.1.3",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-message-contract"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel/tree/main/packages/autotel-message-contract#readme"
+}
