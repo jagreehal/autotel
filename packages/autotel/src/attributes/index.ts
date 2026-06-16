@@ -70,7 +70,6 @@ export type {
   K8sAttrs,
   FaaSAttrs,
   ThreadAttrs,
-  GenAIAttrs,
   RPCAttrs,
   GraphQLAttrs,
   ClientAttrs,

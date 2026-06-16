@@ -42,6 +42,7 @@ pnpm changeset          # Create a changeset
 - `packages/autotel-mcp-instrumentation` - MCP instrumentation (see `packages/autotel-mcp-instrumentation/CLAUDE.md`)
 - `packages/autotel-tanstack` - TanStack Start (see `packages/autotel-tanstack/CLAUDE.md`)
 - `packages/autotel-subscribers` - Event subscribers (see `packages/autotel-subscribers/CLAUDE.md`)
+- `packages/autotel-genai` - GenAI/LLM instrumentation: canonical `gen_ai.*` semconv, cost, metrics, events, agents (see `packages/autotel-genai/CLAUDE.md`)
 
 ## Documentation
 

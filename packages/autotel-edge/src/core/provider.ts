@@ -43,7 +43,7 @@ export class WorkerTracerProvider {
     // propagates across `await` boundaries. Without this the API uses a no-op
     // context manager, so `trace.getActiveSpan()` returns undefined after the
     // first await inside a handler/workflow step. That breaks any consumer that
-    // resolves trace context from the active span (e.g. autotel-agent/audit
+    // resolves trace context from the active span (e.g. autotel-genai/audit
     // composing inside an instrumented fetch handler or Workflow step).
     if (!globalContextManagerRegistered) {
       globalContextManagerRegistered = context.setGlobalContextManager(

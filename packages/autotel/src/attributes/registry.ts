@@ -155,15 +155,8 @@ export const MessagingAttributes = {
   consumerGroup: 'messaging.consumer.group' as const,
 } as const;
 
-export const GenAIAttributes = {
-  system: 'gen.ai.system' as const,
-  requestModel: 'gen.ai.request.model' as const,
-  responseModel: 'gen.ai.response.model' as const,
-  operationName: 'gen.ai.operation.name' as const,
-  usagePromptTokens: 'gen.ai.usage.prompt_tokens' as const,
-  usageCompletionTokens: 'gen.ai.usage.completion_tokens' as const,
-  provider: 'gen.ai.provider' as const,
-} as const;
+// GenAI attribute registry moved to the `autotel-genai` package, which uses the
+// canonical `gen_ai.*` namespace (these legacy `gen.ai.*` keys were non-spec).
 
 export const RPCAttributes = {
   system: 'rpc.system' as const,

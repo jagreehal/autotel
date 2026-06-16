@@ -376,6 +376,7 @@ init({
 | Package | Role |
 |---------|------|
 | `autotel` | Node.js core: init, trace, span, track, event-queue, correlation-id. Also provides `autotel/workers` and `autotel/cloudflare` for Cloudflare Workers |
+| `autotel-genai` | GenAI/LLM instrumentation: `traceGenAI`, cost, metrics, events, semconv, ai-sdk bridge, and agent governance (`autotel-genai/agent`) |
 | `autotel-edge` | Edge runtime foundation (alternative to workers for vendor-agnostic edge) |
 | `autotel-cloudflare` | Cloudflare Workers implementation (re-exported via `autotel/workers`) |
 | `autotel-adapters` | Framework adapters (Next.js, Hono, Nitro) |
@@ -388,11 +389,19 @@ Each package has a `CLAUDE.md` for local conventions.
 ## Semantic Helpers
 
 ```typescript
-import { traceLLM, traceDB, traceHTTP, traceMessaging } from 'autotel/semantic-helpers';
+import { traceDB, traceHTTP, traceMessaging } from 'autotel/semantic-helpers';
+import { traceGenAI, recordGenAiUsage } from 'autotel-genai/trace';
 
-export const generateText = traceLLM({
+// GenAI helpers live in the autotel-genai package (not core autotel)
+export const generateText = traceGenAI({
   model: 'gpt-4-turbo', operation: 'chat', provider: 'openai',
-})((ctx) => async (prompt) => { /* ... */ });
+})((ctx) => async (prompt) => {
+  const response = await openai.chat.completions.create({ /* ... */ });
+  recordGenAiUsage(ctx, 'gpt-4-turbo', {
+    inputTokens: response.usage.prompt_tokens,
+    outputTokens: response.usage.completion_tokens,
+  });
+});
 
 export const getUser = traceDB({
   system: 'postgresql', operation: 'SELECT', collection: 'users',

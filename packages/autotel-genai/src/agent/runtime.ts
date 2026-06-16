@@ -1,12 +1,16 @@
 import {
-  GEN_AI_COST_ATTRIBUTE,
   createNoopRequestLogger,
-  estimateLLMCost,
   getRequestLoggerSafe,
   type RequestLogger,
-  type TokenUsage,
 } from 'autotel';
 import { forceKeepAuditEvent, withAudit } from 'autotel-audit';
+import { estimateLLMCost, type TokenUsage } from '../cost.js';
+import {
+  genAiRequestAttributes,
+  genAiResponseAttributes,
+  genAiUsageAttributes,
+  type GenAiAttributeMap,
+} from '../attributes.js';
 import { setAgentAttributes, setAgentOutcome } from './attributes.js';
 import {
   buildLoggerContext,
@@ -33,50 +37,40 @@ import type {
   ToolCallMetadata,
 } from './types.js';
 
-// OpenTelemetry GenAI semantic-convention attribute keys.
-const GEN_AI_REQUEST_MODEL = 'gen_ai.request.model';
-const GEN_AI_OPERATION_NAME = 'gen_ai.operation.name';
-const GEN_AI_USAGE_INPUT_TOKENS = 'gen_ai.usage.input_tokens';
-const GEN_AI_USAGE_OUTPUT_TOKENS = 'gen_ai.usage.output_tokens';
-const GEN_AI_USAGE_TOTAL_TOKENS = 'gen_ai.usage.total_tokens';
-const GEN_AI_RESPONSE_FINISH_REASONS = 'gen_ai.response.finish_reasons';
-
 /**
- * Record OpenTelemetry GenAI semantic attributes for an LLM-backed agent action,
- * reusing the cost model in the main `autotel` package. Best-effort: anything
- * unknown is simply omitted. `gen_ai.request.model` is always recorded; token
- * counts and the estimated `gen_ai.usage.cost.usd` are recorded when `usage` is
- * available (up front via metadata, or post-call via `options.extractUsage`).
+ * Record canonical OpenTelemetry GenAI semantic attributes for an LLM-backed
+ * agent action, reusing the local cost model. Best-effort: anything unknown is
+ * simply omitted. `gen_ai.request.model` is always recorded; token counts and
+ * the estimated `gen_ai.usage.cost.usd` are recorded when `usage` is available
+ * (up front via metadata, or post-call via `options.extractUsage`).
+ *
+ * Emits canonical v1.42.0 keys only — no `gen_ai.usage.total_tokens` (not a
+ * registry attribute) and no legacy `gen.ai.*` names.
  */
 function recordAiTelemetry(
   ctx: AgentContext,
   ai: AgentAiMetadata,
   usage?: TokenUsage,
 ): void {
-  const attrs: Record<string, string | number | boolean | string[]> = {
-    [GEN_AI_REQUEST_MODEL]: ai.model,
+  const attrs: GenAiAttributeMap = {
+    ...genAiRequestAttributes({
+      operation: ai.operation,
+      provider: ai.provider,
+      model: ai.model,
+    }),
+    ...genAiResponseAttributes({
+      model: ai.responseModel,
+      id: ai.responseId,
+      finishReasons: ai.finishReasons,
+    }),
   };
-  if (ai.operation) attrs[GEN_AI_OPERATION_NAME] = ai.operation;
-  if (ai.finishReasons?.length) {
-    attrs[GEN_AI_RESPONSE_FINISH_REASONS] = ai.finishReasons;
-  }
   if (usage) {
-    if (usage.inputTokens !== undefined) {
-      attrs[GEN_AI_USAGE_INPUT_TOKENS] = usage.inputTokens;
-    }
-    if (usage.outputTokens !== undefined) {
-      attrs[GEN_AI_USAGE_OUTPUT_TOKENS] = usage.outputTokens;
-    }
-    if (usage.inputTokens !== undefined || usage.outputTokens !== undefined) {
-      attrs[GEN_AI_USAGE_TOTAL_TOKENS] =
-        (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
-    }
     const cost = estimateLLMCost(
       ai.model,
       usage,
       ai.pricing ? { pricing: ai.pricing } : undefined,
     );
-    if (cost !== undefined) attrs[GEN_AI_COST_ATTRIBUTE] = cost;
+    Object.assign(attrs, genAiUsageAttributes({ ...usage, costUsd: cost }));
   }
   ctx.setAttributes(attrs);
 }
@@ -159,7 +153,7 @@ export function recordDecisionBasis(
 ): void {
   if (!metadata.decision && !metadata.reasoningSummary) {
     throw new Error(
-      '[autotel-agent] recordDecisionBasis requires metadata.decision or metadata.reasoningSummary.',
+      '[autotel-genai] recordDecisionBasis requires metadata.decision or metadata.reasoningSummary.',
     );
   }
 

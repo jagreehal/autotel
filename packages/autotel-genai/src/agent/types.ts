@@ -1,9 +1,11 @@
-import type { ModelPricing, RequestLogger, TokenUsage } from 'autotel';
+import type { RequestLogger } from 'autotel';
 import type { OnMissingContext } from 'autotel-audit';
+import type { ModelPricing, TokenUsage } from '../cost.js';
+import type { GenAiProviderName } from '../semconv.js';
 import type { AgentContext } from './context.js';
 
 export type { OnMissingContext } from 'autotel-audit';
-export type { ModelPricing, TokenUsage } from 'autotel';
+export type { ModelPricing, TokenUsage } from '../cost.js';
 
 export type PolicyDecision =
   | 'permit'
@@ -74,18 +76,26 @@ export interface ToolCallMetadata {
 
 /**
  * LLM call metadata for an agent action. When present on a tool call or action,
- * autotel-agent records OpenTelemetry GenAI semantic attributes on the span —
- * `gen_ai.request.model`, `gen_ai.usage.{input,output,total}_tokens`, and the
- * estimated `gen_ai.usage.cost.usd` — reusing the cost model in the main
- * `autotel` package. Token usage is usually known only after the call; supply
- * it via `usage` if known up front, or via the `extractUsage` option to pull it
- * from the handler's result.
+ * autotel-genai records canonical OpenTelemetry GenAI attributes on the span —
+ * `gen_ai.request.model`, `gen_ai.usage.input_tokens` / `output_tokens`, and the
+ * estimated `gen_ai.usage.cost.usd`. Token usage is usually known only after the
+ * call; supply it via `usage` if known up front, or via the `extractUsage`
+ * option to pull it from the handler's result.
  */
 export interface AgentAiMetadata {
   /** Model id, e.g. `gpt-4o`, `claude-sonnet-4`, `@cf/meta/llama-3.1-8b-instruct-fp8`. */
   model: string;
-  /** Operation kind: `chat` | `completion` | `embedding` | custom. */
+  /**
+   * `gen_ai.operation.name` — `chat` | `text_completion` | `embeddings` |
+   * `invoke_agent` | `execute_tool` | custom.
+   */
   operation?: string;
+  /** `gen_ai.provider.name` — e.g. `openai`, `anthropic`, `gcp.gemini`. */
+  provider?: GenAiProviderName;
+  /** Model the provider actually served (`gen_ai.response.model`). */
+  responseModel?: string;
+  /** Provider response id (`gen_ai.response.id`). */
+  responseId?: string;
   /** Token counts, if known up front (otherwise use `AgentActionOptions.extractUsage`). */
   usage?: TokenUsage;
   /** Provider finish reasons, e.g. `['stop']`. */

@@ -108,7 +108,12 @@ const tail = new TailSamplingProcessor({
 
     // 4. Always keep AI traces (rare + expensive — full visibility helps)
     if (
-      trace.spans.some((s) => typeof s.attributes['gen_ai.system'] === 'string')
+      trace.spans.some(
+        (s) =>
+          typeof s.attributes['gen_ai.provider.name'] === 'string' ||
+          // legacy: third-party instrumentations may still emit gen_ai.system
+          typeof s.attributes['gen_ai.system'] === 'string',
+      )
     )
       return true;
 
@@ -142,8 +147,8 @@ keep: (trace) => {
   const cost = trace.spans.reduce(
     (acc, s) =>
       acc +
-      (typeof s.attributes['gen_ai.cost.usd'] === 'number'
-        ? (s.attributes['gen_ai.cost.usd'] as number)
+      (typeof s.attributes['gen_ai.usage.cost.usd'] === 'number'
+        ? (s.attributes['gen_ai.usage.cost.usd'] as number)
         : 0),
     0,
   );

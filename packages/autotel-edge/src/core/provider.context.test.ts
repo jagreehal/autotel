@@ -15,7 +15,7 @@ const noopProcessor: SpanProcessor = {
  * Regression guard for Issue 1.1: register() must register the context manager
  * with the global OTel API, otherwise the active span is lost after the first
  * `await` and consumers that resolve trace context from the active span
- * (autotel-agent / autotel-audit inside a handler or Workflow step) break.
+ * (autotel-genai / autotel-audit inside a handler or Workflow step) break.
  *
  * NOTE: this test registers a global context manager, so it lives in its own
  * file to avoid leaking that global state into other suites.

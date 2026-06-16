@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  traceLLM,
-  traceDB,
-  traceHTTP,
-  traceMessaging,
-} from './semantic-helpers';
+import { traceDB, traceHTTP, traceMessaging } from './semantic-helpers';
 import { createTraceCollector } from './testing';
 
 describe('Semantic Helpers', () => {
@@ -18,69 +13,7 @@ describe('Semantic Helpers', () => {
     collector = createTraceCollector();
   });
 
-  describe('traceLLM', () => {
-    it('should add Gen AI semantic convention attributes', async () => {
-      const generateText = traceLLM({
-        model: 'gpt-4',
-        operation: 'chat',
-        provider: 'openai',
-      })((_ctx) => async (prompt: string) => {
-        return `Response to: ${prompt}`;
-      });
-
-      await generateText('Hello');
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(1);
-
-      const span = spans[0];
-      expect(span.attributes['gen.ai.request.model']).toBe('gpt-4');
-      expect(span.attributes['gen.ai.operation.name']).toBe('chat');
-      expect(span.attributes['gen.ai.system']).toBe('openai');
-    });
-
-    it('should use default operation when not specified', async () => {
-      const generateText = traceLLM({
-        model: 'claude-3',
-      })((_ctx) => async () => 'result');
-
-      await generateText();
-
-      const spans = collector.getSpans();
-      expect(spans[0].attributes['gen.ai.operation.name']).toBe('chat');
-    });
-
-    it('should support embedding operation', async () => {
-      const embed = traceLLM({
-        model: 'text-embedding-3-small',
-        operation: 'embedding',
-        provider: 'openai',
-      })((_ctx) => async (_text: string) => [0.1, 0.2, 0.3]);
-
-      await embed('test text');
-
-      const spans = collector.getSpans();
-      expect(spans[0].attributes['gen.ai.operation.name']).toBe('embedding');
-    });
-
-    it('should support additional custom attributes', async () => {
-      const generateText = traceLLM({
-        model: 'gpt-4',
-        attributes: {
-          'custom.attribute': 'custom-value',
-          'custom.number': 123,
-        },
-      })((_ctx) => async () => 'result');
-
-      await generateText();
-
-      const spans = collector.getSpans();
-      const span = spans[0];
-      expect(span.attributes['gen.ai.request.model']).toBe('gpt-4');
-      expect(span.attributes['custom.attribute']).toBe('custom-value');
-      expect(span.attributes['custom.number']).toBe(123);
-    });
-  });
+  // GenAI/LLM helpers (`traceLLM`) moved to the `autotel-genai` package.
 
   describe('traceDB', () => {
     it('should add DB semantic convention attributes', async () => {
@@ -273,24 +206,6 @@ describe('Semantic Helpers', () => {
   });
 
   describe('Attribute merging', () => {
-    it('should merge custom attributes with semantic attributes in traceLLM', async () => {
-      const fn = traceLLM({
-        model: 'gpt-4',
-        attributes: {
-          'gen.ai.request.temperature': 0.7,
-          'custom.attr': 'value',
-        },
-      })((_ctx) => async () => 'result');
-
-      await fn();
-
-      const spans = collector.getSpans();
-      const span = spans[0];
-      expect(span.attributes['gen.ai.request.model']).toBe('gpt-4');
-      expect(span.attributes['gen.ai.request.temperature']).toBe(0.7);
-      expect(span.attributes['custom.attr']).toBe('value');
-    });
-
     it('should allow custom attributes to override semantic defaults', async () => {
       const fn = traceDB({
         system: 'postgresql',

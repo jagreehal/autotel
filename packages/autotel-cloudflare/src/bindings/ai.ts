@@ -31,7 +31,9 @@ export function instrumentAI<T extends Ai>(ai: T, bindingName?: string): T {
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
-                  'gen_ai.system': 'cloudflare-workers-ai',
+                  // Canonical GenAI provider attribute (replaces deprecated
+                  // `gen_ai.system`).
+                  'gen_ai.provider.name': 'cloudflare-workers-ai',
                   'gen_ai.operation.name': 'run',
                   'gen_ai.request.model': model,
                 },

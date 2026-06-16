@@ -5,14 +5,60 @@ description: How to instrument AI/LLM applications with Autotel.
 
 Autotel provides all the building blocks for comprehensive AI/LLM observability:
 
+- **Canonical `gen_ai.*` instrumentation** via the [`autotel-genai`](https://www.npmjs.com/package/autotel-genai) package — `traceGenAI()`, token usage, cost, metric views, content/evaluation events, and an agent governance layer
 - **Automatic LLM instrumentation** via OpenLLMetry integration
 - **Workflow orchestration** via nested `trace()` calls
 - **Context propagation** via AsyncLocalStorage (correlation IDs, user context, etc.)
 - **Business event tracking** via `ctx.setAttribute()` and `track()`
 - **Multi-destination events** via adapters (PostHog, Mixpanel, etc.)
 
+## The `autotel-genai` package
+
+GenAI/LLM instrumentation lives in a dedicated package, `autotel-genai` — the
+core `autotel` package is generic and AI-free. It emits the **canonical
+OpenTelemetry GenAI semantic conventions** (`gen_ai.*`, semconv v1.42.0), so any
+OTLP backend renders token usage, cost, and model info without custom mapping.
+
+```bash
+npm install autotel autotel-genai
+```
+
+```typescript
+import { traceGenAI, recordGenAiResponse, recordGenAiUsage } from 'autotel-genai/trace';
+
+// Span named `chat gpt-4o`; canonical gen_ai.* request attributes set up front.
+export const chat = traceGenAI({
+  provider: 'openai',
+  model: 'gpt-4o',
+  operation: 'chat',
+})((ctx) => async (prompt: string) => {
+  const res = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: prompt }],
+  });
+  recordGenAiResponse(ctx, {
+    model: res.model,
+    finishReasons: res.choices.map((c) => c.finish_reason),
+  });
+  // gen_ai.usage.input_tokens / output_tokens + estimated gen_ai.usage.cost.usd
+  recordGenAiUsage(ctx, 'gpt-4o', {
+    inputTokens: res.usage?.prompt_tokens,
+    outputTokens: res.usage?.completion_tokens,
+  });
+  return res.choices[0].message.content;
+});
+```
+
+`autotel-genai` and OpenLLMetry are complementary: use `autotel-genai` for
+first-party, canonical control (and for cost, metric buckets, agents); enable
+OpenLLMetry to auto-instrument LLM SDK calls you don't wrap yourself. Both emit
+`gen_ai.*` and share the same trace tree.
+
 :::note[Key Insight]
-Autotel's functional API patterns work perfectly for AI workflows - no special "AI-specific" APIs needed!
+For **workflow orchestration** (the steps, agents, and business logic _around_
+the model call), plain `trace()` is all you need — no AI-specific API. Reach for
+`autotel-genai` at the model boundary to get canonical `gen_ai.*` attributes,
+cost, and metrics.
 :::
 
 ## When to Use OpenLLMetry
@@ -147,26 +193,26 @@ const result = await generateText({ model: openai('gpt-4o'), prompt: 'test' });
 If you're using custom LLM integrations or direct HTTP calls:
 
 ```typescript
-import { trace } from 'autotel';
+import { traceGenAI, recordGenAiUsage } from 'autotel-genai/trace';
 
-const callCustomLLM = trace('llm.custom_model', (ctx) => async (prompt: string) => {
-  ctx.setAttributes({
-    'llm.model': 'my-custom-model-v2',
-    'llm.provider': 'self-hosted',
-    'llm.prompt': prompt,
-  });
-
+const callCustomLLM = traceGenAI({
+  provider: 'self-hosted',
+  model: 'my-custom-model-v2',
+  operation: 'chat',
+})((ctx) => async (prompt: string) => {
   const response = await fetch('https://my-llm-api.com/generate', {
     method: 'POST',
     body: JSON.stringify({ prompt }),
   });
 
   const data = await response.json();
-  ctx.setAttributes({
-    'llm.completion': data.text,
-    'llm.tokens': data.usage.totalTokens,
-  });
-
+  // Canonical gen_ai.usage.* tokens + cost — supply a pricing map for custom models
+  recordGenAiUsage(
+    ctx,
+    'my-custom-model-v2',
+    { inputTokens: data.usage.inputTokens, outputTokens: data.usage.outputTokens },
+    { pricing: { 'my-custom-model-v2': { inputPer1M: 0, outputPer1M: 0 } } },
+  );
   return data.text;
 });
 ```
@@ -209,22 +255,22 @@ Are you using LLM SDKs (OpenAI, Anthropic, Vercel AI SDK, Langchain)?
 ## Basic AI Operation
 
 ```typescript
-import { trace } from 'autotel';
+import { traceGenAI, recordGenAiUsage } from 'autotel-genai/trace';
 
-const generateResponse = trace(
-  'ai.generate',
-  (ctx) => async (prompt: string) => {
-    ctx.setAttributes({
-      'ai.model': 'gpt-4o',
-      'ai.provider': 'openai',
-    });
-
-    const response = await llm.generate(prompt);
-    ctx.setAttribute('ai.tokens', response.usage.totalTokens);
-
-    return response;
-  },
-);
+// Span named `chat gpt-4o`, with canonical gen_ai.* request attributes.
+const generateResponse = traceGenAI({
+  provider: 'openai',
+  model: 'gpt-4o',
+  operation: 'chat',
+})((ctx) => async (prompt: string) => {
+  const response = await llm.generate(prompt);
+  // gen_ai.usage.input_tokens / output_tokens + estimated gen_ai.usage.cost.usd
+  recordGenAiUsage(ctx, 'gpt-4o', {
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
+  });
+  return response;
+});
 ```
 
 ## Core Concepts
@@ -794,30 +840,56 @@ export const generateWithQualityCheck = trace(
 
 ## Semantic Conventions
 
-Following OpenTelemetry semantic conventions ensures consistency across your AI applications.
+Following the OpenTelemetry **GenAI** semantic conventions (`gen_ai.*`, semconv
+v1.42.0) ensures any OTLP backend renders your AI telemetry without custom
+mapping. Let `autotel-genai` emit the canonical names rather than inventing
+`llm.*` / `ai.*` attributes by hand.
 
-**LLM attributes:**
+**LLM attributes — use `traceGenAI` + `recordGenAiUsage` (canonical `gen_ai.*`):**
 
 ```typescript
-ctx.setAttributes({
-  'llm.model': 'gpt-4o',
-  'llm.provider': 'openai',
-  'llm.temperature': 0.7,
-  'llm.max_tokens': 4096,
-  'llm.response_tokens': 250,
-  'llm.prompt_tokens': 100,
-  'llm.total_tokens': 350,
+import { traceGenAI, recordGenAiResponse, recordGenAiUsage } from 'autotel-genai/trace';
+
+const generate = traceGenAI({
+  provider: 'openai', // gen_ai.provider.name (NOT gen_ai.system)
+  model: 'gpt-4o', // gen_ai.request.model
+  operation: 'chat', // gen_ai.operation.name
+  temperature: 0.7, // gen_ai.request.temperature
+  maxTokens: 4096, // gen_ai.request.max_tokens
+})((ctx) => async (prompt: string) => {
+  const res = await llm.generate(prompt);
+  recordGenAiResponse(ctx, { model: res.model, finishReasons: res.finishReasons });
+  // gen_ai.usage.input_tokens / output_tokens (NOT prompt_tokens / total_tokens)
+  // + estimated gen_ai.usage.cost.usd
+  recordGenAiUsage(ctx, 'gpt-4o', {
+    inputTokens: res.usage.inputTokens,
+    outputTokens: res.usage.outputTokens,
+  });
+  return res.text;
 });
 ```
 
-**Agent attributes:**
+If you set attributes directly, build canonical maps instead of literals:
+
+```typescript
+import { genAiRequestAttributes, genAiUsageAttributes } from 'autotel-genai';
+
+ctx.setAttributes({
+  ...genAiRequestAttributes({ operation: 'chat', provider: 'openai', model: 'gpt-4o' }),
+  ...genAiUsageAttributes({ inputTokens: 100, outputTokens: 250 }),
+});
+```
+
+**Agent attributes** — for agent identity, delegation, policy, and audit, use the
+governance layer (`autotel-genai/agent`), which emits `gen_ai.agent.*` plus
+`agent.*` / `delegation.*` / `policy.*`. For a plain agent span, set the canonical
+agent name/operation:
 
 ```typescript
 ctx.setAttributes({
-  'agent.role': 'specialist',
-  'agent.model': 'gpt-4o',
-  'agent.provider': 'openai',
-  'agent.temperature': 0.7,
+  'gen_ai.operation.name': 'invoke_agent',
+  'gen_ai.agent.name': 'specialist',
+  'gen_ai.provider.name': 'openai',
 });
 ```
 

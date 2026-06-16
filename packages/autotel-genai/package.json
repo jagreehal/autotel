@@ -1,0 +1,113 @@
+{
+  "name": "autotel-genai",
+  "version": "0.1.0",
+  "description": "Gold-standard OpenTelemetry GenAI semantic-convention instrumentation for LLM calls, tools, and agents — cost, tokens, metrics, events, and agent governance.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./semconv": {
+      "types": "./dist/semconv.d.ts",
+      "import": "./dist/semconv.js",
+      "require": "./dist/semconv.cjs"
+    },
+    "./cost": {
+      "types": "./dist/cost.d.ts",
+      "import": "./dist/cost.js",
+      "require": "./dist/cost.cjs"
+    },
+    "./metrics": {
+      "types": "./dist/metrics.d.ts",
+      "import": "./dist/metrics.js",
+      "require": "./dist/metrics.cjs"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js",
+      "require": "./dist/events.cjs"
+    },
+    "./trace": {
+      "types": "./dist/trace.d.ts",
+      "import": "./dist/trace.js",
+      "require": "./dist/trace.cjs"
+    },
+    "./ai-sdk": {
+      "types": "./dist/ai-sdk-bridge.d.ts",
+      "import": "./dist/ai-sdk-bridge.js",
+      "require": "./dist/ai-sdk-bridge.cjs"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js",
+      "require": "./dist/agent/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "autotel",
+    "opentelemetry",
+    "otel",
+    "gen-ai",
+    "genai",
+    "llm",
+    "ai-agents",
+    "semantic-conventions",
+    "observability",
+    "token-usage",
+    "cost"
+  ],
+  "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
+  "license": "MIT",
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-audit": "workspace:*"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "*",
+    "@opentelemetry/sdk-metrics": "*"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/sdk-metrics": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/sdk-metrics": "^2.7.1",
+    "@types/node": "^25.9.2",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-unicorn": "^64.0.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.1",
+    "vitest": "^4.1.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-genai"
+  },
+  "bugs": {
+    "url": "https://github.com/jagreehal/autotel/issues"
+  },
+  "homepage": "https://github.com/jagreehal/autotel#readme"
+}

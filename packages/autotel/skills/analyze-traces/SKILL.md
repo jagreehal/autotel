@@ -90,7 +90,7 @@ Key conventions to recognise:
    - **Sequential awaits that should be parallel** — sibling spans run end-to-end instead of overlapping.
    - **N+1 queries** — many short same-named spans (`SELECT * FROM …`) under one parent.
    - **Cold starts** — `faas.coldstart=true` in Workers or Lambda.
-   - **Tool retries** — gen-ai spans with `gen_ai.response.finish_reason = error` followed by another call.
+   - **Tool retries** — gen-ai spans with `gen_ai.response.finish_reasons` containing `error` followed by another call.
 
 ### "Follow this user across services"
 
@@ -137,21 +137,23 @@ init({ service: 'my-app', debug: 'pretty', spanDumpPath: '.autotel/spans' });
 
 LLM calls produce a parent span (kind `CLIENT`) with children for each tool call:
 
-| Attribute                                                  | Meaning                                  |
-| ---------------------------------------------------------- | ---------------------------------------- |
-| `gen_ai.system`                                            | Provider (`openai`, `anthropic`, …)      |
-| `gen_ai.request.model`                                     | Model id                                 |
-| `gen_ai.usage.input_tokens` / `output_tokens`              | Token count                              |
-| `gen_ai.usage.cache_read_tokens` / `cache_creation_tokens` | Cache hits                               |
-| `gen_ai.response.finish_reason`                            | `stop`, `tool_calls`, `length`, `error`  |
-| `gen_ai.tool.name`                                         | Tool invoked (on tool-call child spans)  |
-| `gen_ai.cost.usd`                                          | Estimated cost (if pricing map provided) |
+| Attribute                                                              | Meaning                                  |
+| ---------------------------------------------------------------------- | ---------------------------------------- |
+| `gen_ai.provider.name` (legacy: `gen_ai.system`)                       | Provider (`openai`, `anthropic`, …)      |
+| `gen_ai.request.model`                                                 | Model id                                 |
+| `gen_ai.usage.input_tokens` / `output_tokens`                          | Token count                              |
+| `gen_ai.usage.cache_read.input_tokens` / `cache_creation.input_tokens` | Cache hits                               |
+| `gen_ai.response.finish_reasons`                                       | `stop`, `tool_calls`, `length`, `error`  |
+| `gen_ai.tool.name`                                                     | Tool invoked (on tool-call child spans)  |
+| `gen_ai.usage.cost.usd`                                                | Estimated cost (if pricing map provided) |
+
+These canonical `gen_ai.*` attributes are emitted by the `autotel-genai` package (third-party instrumentations may still emit the deprecated `gen_ai.system`).
 
 Common findings:
 
-- High `gen_ai.usage.input_tokens` with low `cache_read_tokens` → enable prompt caching.
+- High `gen_ai.usage.input_tokens` with low `gen_ai.usage.cache_read.input_tokens` → enable prompt caching.
 - Many sequential tool-call spans → consider parallel tool calls if the model supports it.
-- `gen_ai.response.finish_reason = length` → bump `max_tokens`.
+- `gen_ai.response.finish_reasons` contains `length` → bump `max_tokens`.
 
 ## When the trace is missing
 

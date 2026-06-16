@@ -93,15 +93,11 @@ setAutotelTracerProvider(provider);
 Pre-configured trace helpers following OpenTelemetry semantic conventions:
 
 ```typescript
-import {
-  traceLLM,
-  traceDB,
-  traceHTTP,
-  traceMessaging,
-} from 'autotel/semantic-helpers';
+import { traceDB, traceHTTP, traceMessaging } from 'autotel/semantic-helpers';
+import { traceGenAI, recordGenAiUsage } from 'autotel-genai/trace';
 
-// LLM operations (Gen AI semantic conventions)
-export const generateText = traceLLM({
+// LLM operations (Gen AI semantic conventions) — live in autotel-genai
+export const generateText = traceGenAI({
   model: 'gpt-4-turbo',
   operation: 'chat',
   provider: 'openai',
@@ -109,10 +105,11 @@ export const generateText = traceLLM({
   const response = await openai.chat.completions.create({
     /* ... */
   });
-  ctx.setAttribute(
-    'gen.ai.usage.completion_tokens',
-    response.usage.completion_tokens,
-  );
+  // Records gen_ai.usage.input_tokens / gen_ai.usage.output_tokens
+  recordGenAiUsage(ctx, 'gpt-4-turbo', {
+    inputTokens: response.usage.prompt_tokens,
+    outputTokens: response.usage.completion_tokens,
+  });
   return response.choices[0].message.content;
 });
 
@@ -158,7 +155,7 @@ export const publishEvent = traceMessaging({
 
 **Available helpers:**
 
-- `traceLLM()` - Gen AI operations (chat, completion, embedding)
+- `traceGenAI()` (from `autotel-genai/trace`) - Gen AI operations (chat, completion, embedding)
 - `traceDB()` - Database operations (SQL, NoSQL, Redis)
 - `traceHTTP()` - HTTP client requests
 - `traceMessaging()` - Queue/messaging operations (Kafka, RabbitMQ, SQS)
