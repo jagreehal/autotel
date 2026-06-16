@@ -11,6 +11,7 @@
     "@jagreehal/example-basic",
     "@jagreehal/example-http",
     "cloudflare-example",
-    "autotel-vscode"
+    "autotel-vscode",
+    "autotel-genai"
   ]
 }

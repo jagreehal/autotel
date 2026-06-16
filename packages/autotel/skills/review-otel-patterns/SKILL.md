@@ -385,7 +385,9 @@ Compose them at build time with `composeSpanProcessors([...])` — no boilerplat
 
 ## AI SDK integration (gen-ai semantic conventions)
 
-autotel implements the **OTel gen-ai semantic conventions** out of the box. Token usage, tool calls, model info, latency, cost — captured as standard attributes (`gen_ai.usage.input_tokens`, `gen_ai.tool.name`, `gen_ai.response.finish_reason`, …) so any backend that understands OTel can render LLM telemetry without custom mapping.
+autotel implements the **OTel gen-ai semantic conventions** out of the box. Token usage, tool calls, model info, latency, cost — captured as standard attributes (`gen_ai.usage.input_tokens`, `gen_ai.tool.name`, `gen_ai.response.finish_reasons`, …) so any backend that understands OTel can render LLM telemetry without custom mapping.
+
+> Node.js apps get the same canonical `gen_ai.*` conventions (plus cost, metric views, and agent governance) from the `autotel-genai` package — `traceGenAI` / `recordGenAiUsage` from `autotel-genai/trace` and `genAiMetricViews` from `autotel-genai/metrics`. `withAiTelemetry` below is the edge-runtime entry point.
 
 ```typescript
 import { trace } from 'autotel';
@@ -402,7 +404,7 @@ const handler = trace(async (req) => {
 });
 ```
 
-Captured attributes per call: `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.{input,output,reasoning,cache_read}_tokens`, `gen_ai.response.finish_reason`, `gen_ai.response.id`, plus per-tool spans with `gen_ai.tool.name`, `gen_ai.tool.duration`. Cost estimation comes for free if you pass a pricing map to `withAiTelemetry`.
+Captured attributes per call: `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` / `output_tokens` / `reasoning.output_tokens` / `cache_read.input_tokens`, `gen_ai.response.finish_reasons`, `gen_ai.response.id`, plus per-tool spans with `gen_ai.tool.name`. Cost estimation (`gen_ai.usage.cost.usd`) comes for free if you pass a pricing map to `withAiTelemetry`.
 
 Anti-patterns to detect:
 

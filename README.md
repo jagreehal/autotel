@@ -86,8 +86,8 @@ Core library providing ergonomic OpenTelemetry instrumentation with:
 - Production hardening (rate limiting, circuit breakers, redaction)
 - Auto trace context enrichment
 - Typed error and audit catalogs (`defineErrorCatalog`, `defineAuditCatalog`)
-- LLM observability via OpenLLMetry, plus per-model cost estimation (`recordLLMCost`)
-- AI workflow patterns (multi-agent, RAG, evaluation loops)
+
+GenAI/LLM observability lives in the separate [`autotel-genai`](./packages/autotel-genai) package: canonical `gen_ai.*` tracing (`traceGenAI`), per-model cost estimation (`recordLLMCost` from `autotel-genai/cost`), metrics, events, an AI-SDK bridge, and agent governance (`autotel-genai/agent`).
 
 **[→ View full documentation](./packages/autotel/README.md)**
 

@@ -38,7 +38,6 @@ import {
   FaaSAttributes,
   FeatureFlagAttributes,
   MessagingAttributes,
-  GenAIAttributes,
   RPCAttributes,
   GraphQLAttributes,
   OTelAttributes,
@@ -477,25 +476,8 @@ export const attrs = {
     },
   },
 
-  genAI: {
-    system: (value: string) => ({ [GenAIAttributes.system]: value }),
-    requestModel: (value: string) => ({
-      [GenAIAttributes.requestModel]: value,
-    }),
-    responseModel: (value: string) => ({
-      [GenAIAttributes.responseModel]: value,
-    }),
-    operationName: (value: 'chat' | 'completion' | 'embedding') => ({
-      [GenAIAttributes.operationName]: value,
-    }),
-    usagePromptTokens: (value: number) => ({
-      [GenAIAttributes.usagePromptTokens]: value,
-    }),
-    usageCompletionTokens: (value: number) => ({
-      [GenAIAttributes.usageCompletionTokens]: value,
-    }),
-    provider: (value: string) => ({ [GenAIAttributes.provider]: value }),
-  },
+  // GenAI/LLM attribute builders moved to the `autotel-genai` package
+  // (canonical `gen_ai.*` semantic conventions).
 
   rpc: {
     system: (value: string) => ({ [RPCAttributes.system]: value }),

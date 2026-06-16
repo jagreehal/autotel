@@ -1,0 +1,149 @@
+# autotel-genai
+
+> Gold-standard OpenTelemetry **GenAI** instrumentation for LLM calls, tools, and agents.
+
+`autotel-genai` is the AI layer for [autotel](https://github.com/jagreehal/autotel).
+It emits the **canonical `gen_ai.*` semantic conventions** (OpenTelemetry semconv
+**v1.42.0**) for everything from a single `chat` call to a multi-agent workflow —
+token usage, cost, latency metrics, content/evaluation events, and an agent
+identity / delegation / policy / audit governance layer.
+
+Canonical-only by design: no legacy `gen.ai.*`, no `prompt_tokens` /
+`completion_tokens`, no non-registry `total_tokens`. What you record is exactly
+what backends (Grafana, Langfuse, Arize, Honeycomb, Jaeger, …) expect.
+
+## Install
+
+```bash
+pnpm add autotel autotel-genai
+```
+
+`autotel` is the peer core (trace/span/init). `@opentelemetry/sdk-metrics` is an
+optional peer, needed only for `genAiMetricViews()`.
+
+## Quick start
+
+```ts
+import { traceGenAI, recordGenAiResponse, recordGenAiUsage } from 'autotel-genai/trace';
+import OpenAI from 'openai';
+
+const openai = new OpenAI();
+
+// Span name → `chat gpt-4o`; request attributes set up front.
+export const chat = traceGenAI({
+  provider: 'openai',
+  model: 'gpt-4o',
+  operation: 'chat',
+  temperature: 0.2,
+})((ctx) => async (prompt: string) => {
+  const res = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  recordGenAiResponse(ctx, {
+    model: res.model,
+    id: res.id,
+    finishReasons: res.choices.map((c) => c.finish_reason),
+  });
+  // Sets gen_ai.usage.input_tokens / output_tokens + gen_ai.usage.cost.usd
+  recordGenAiUsage(ctx, 'gpt-4o', {
+    inputTokens: res.usage?.prompt_tokens,
+    outputTokens: res.usage?.completion_tokens,
+  });
+
+  return res.choices[0].message.content;
+});
+```
+
+## What you get
+
+| Area | Import | Highlights |
+| --- | --- | --- |
+| **Semconv** | `autotel-genai/semconv` | `GEN_AI.*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()` |
+| **Cost** | `autotel-genai/cost` | `estimateLLMCost`, `recordLLMCost`, `MODEL_PRICING` (cache-read/write aware) |
+| **Metrics** | `autotel-genai/metrics` | `genAiMetricViews()` re-buckets the canonical histograms |
+| **Attributes** | `autotel-genai` | typed builders → canonical attribute maps |
+| **Events** | `autotel-genai/events` | opt-in content + `inference.operation.details` / `evaluation.result` |
+| **Trace** | `autotel-genai/trace` | `traceGenAI()`, `recordGenAiResponse/Usage` |
+| **AI SDK** | `autotel-genai/ai-sdk` | Vercel `ai.*` → `gen_ai.*` mapping + cost |
+| **Agents** | `autotel-genai/agent` | identity, delegation, policy, audit, privacy, non-repudiation |
+
+### Cost
+
+```ts
+import { estimateLLMCost, recordLLMCost } from 'autotel-genai/cost';
+
+estimateLLMCost('gpt-4o', { inputTokens: 1000, outputTokens: 500 }); // 0.0075
+recordLLMCost(ctx, 'claude-sonnet-4', {
+  inputTokens: 4000,
+  cacheReadInputTokens: 3500, // priced at the cached rate
+});
+```
+
+### Metrics
+
+```ts
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { genAiMetricViews } from 'autotel-genai/metrics';
+
+const sdk = new NodeSDK({ serviceName: 'my-agent', views: [...genAiMetricViews()] });
+```
+
+Re-buckets `gen_ai.client.operation.duration`, `…time_to_first_chunk`,
+`…time_per_output_chunk`, `gen_ai.client.token.usage`, and the autotel
+`gen_ai.client.cost.usd` extension for LLM-shaped distributions.
+
+### Agents & tools
+
+```ts
+import { withScopedTool } from 'autotel-genai/agent';
+
+await withScopedTool(
+  {
+    action: 'agent.refund.execute',
+    agent: { id: 'refund-specialist' },
+    tool: { name: 'stripe_refund_v3' },
+    requiredScopes: ['refund:write'],
+    delegation: { parentIdentity: 'usr_99824', scope: ['refund:write'] },
+    policy: { decision: 'permit', policyId: 'refund-scope-v2' },
+    ai: { model: 'gpt-4o', operation: 'execute_tool' },
+  },
+  { refundId: 're_123' },
+  async () => stripe.refunds.create(req),
+);
+```
+
+The agent layer records `agent.*`, `delegation.*`, `tool.*`, `policy.*`
+governance attributes **and** canonical `gen_ai.*` when `ai` metadata is present.
+It honours spec breaking change #242 (`gen_ai.agent.id` is dropped on internal
+`invoke_agent` spans via `genAiAgentAttributes(…, { internal: true })`).
+
+### Vercel AI SDK
+
+The current AI SDK (`@ai-sdk/otel`'s `OpenTelemetry` integration) already emits
+`gen_ai.*` — nothing to map. For `LegacyOpenTelemetry`/older versions, or to add
+cost:
+
+```ts
+import { mapAiSdkAttributes, recordAiSdkCost } from 'autotel-genai/ai-sdk';
+
+const canonical = mapAiSdkAttributes(span.attributes); // ai.* → gen_ai.*
+recordAiSdkCost(ctx, span.attributes);                 // sets gen_ai.usage.cost.usd
+```
+
+## Semantic conventions
+
+Aligned to the `semantic-conventions-genai` snapshot. Span names follow the
+operation-specific upstream rules: inference and embeddings use
+`{operation} {request.model}`, retrieval uses `retrieval {data_source.id}`,
+`execute_tool` uses `execute_tool {tool.name}`, agent spans use
+`... {agent.name}` when available, workflow spans use
+`invoke_workflow {workflow.name}`, and memory spans are just the bare
+operation. Usage is `input_tokens` / `output_tokens` with `cache_read` /
+`cache_creation` / `reasoning.output_tokens`; providers use the
+`gen_ai.provider.name` enum.
+
+## License
+
+MIT © Jag Reehal

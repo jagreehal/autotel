@@ -43,7 +43,7 @@ Use OTel-spec attribute names — never invent your own. The right namespace dep
 | Message queue / pubsub | `messaging.*` | `messaging.system=rabbitmq`, `messaging.operation.name=publish`, `messaging.destination.name` |
 | RPC / gRPC | `rpc.*` | `rpc.system=grpc`, `rpc.service`, `rpc.method` |
 | HTTP client | `http.*` + `url.*` | `http.request.method`, `url.full`, `http.response.status_code` |
-| AI / LLM | `gen_ai.*` | `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` |
+| AI / LLM | `gen_ai.*` | `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` |
 | Cache (Redis, Memcached) | `db.system=redis` + `db.operation.name` | (cache is modelled as a key-value DB in OTel) |
 | Browser | `browser.*`, `device.*` | `browser.name`, `browser.version` |
 | FaaS | `faas.*` | `faas.trigger`, `faas.coldstart`, `faas.cron` |

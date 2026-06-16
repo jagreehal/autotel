@@ -241,43 +241,9 @@ export {
   createObservableGauge,
 } from './metric-helpers';
 
-// LLM-tuned histogram buckets — pass genAiMetricViews() to your
-// MeterProvider so gen_ai.* histograms have useful resolution.
-export {
-  GEN_AI_DURATION_BUCKETS_SECONDS,
-  GEN_AI_TOKEN_USAGE_BUCKETS,
-  GEN_AI_COST_USD_BUCKETS,
-  genAiMetricViews,
-  llmHistogramAdvice,
-} from './gen-ai-metrics';
-
-// OTel GenAI span event helpers — record prompt-sent / response-received
-// / retry / tool-call / stream-first-token as timestamped events aligned
-// with the published GenAI semantic conventions.
-export {
-  recordPromptSent,
-  recordResponseReceived,
-  recordRetry,
-  recordToolCall,
-  recordStreamFirstToken,
-  type PromptSentEvent,
-  type ResponseReceivedEvent,
-  type RetryEvent,
-  type ToolCallEvent,
-  type StreamFirstTokenEvent,
-} from './gen-ai-events';
-
-// Per-model LLM cost estimation — estimate USD cost from token usage and
-// record it as the gen_ai.usage.cost.usd span attribute.
-export {
-  estimateLLMCost,
-  recordLLMCost,
-  MODEL_PRICING,
-  GEN_AI_COST_ATTRIBUTE,
-  type ModelPricing,
-  type TokenUsage,
-  type EstimateCostOptions,
-} from './gen-ai-cost';
+// GenAI / LLM instrumentation (cost, token usage, metric buckets, span event
+// helpers, traceLLM) lives in the dedicated `autotel-genai` package — canonical
+// `gen_ai.*` semantic conventions. Core stays generic and AI-free.
 
 // Tracer helpers for custom spans
 export {
@@ -303,13 +269,11 @@ export {
   getAutotelTracer,
 } from './tracer-provider';
 
-// Semantic convention helpers
+// Semantic convention helpers (GenAI/LLM helpers moved to `autotel-genai`).
 export {
-  traceLLM,
   traceDB,
   traceHTTP,
   traceMessaging,
-  type LLMConfig,
   type DBConfig,
   type HTTPConfig,
   type MessagingConfig,
@@ -389,7 +353,6 @@ export {
   type K8sAttrs,
   type FaaSAttrs,
   type ThreadAttrs,
-  type GenAIAttrs,
   type RPCAttrs,
   type GraphQLAttrs,
   type ClientAttrs,

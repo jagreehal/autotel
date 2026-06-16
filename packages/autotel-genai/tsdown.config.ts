@@ -3,7 +3,16 @@ import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 
 export default defineConfig({
   tsconfig: 'tsconfig.build.json',
-  entry: ['src/index.ts'],
+  entry: [
+    'src/index.ts',
+    'src/semconv.ts',
+    'src/cost.ts',
+    'src/metrics.ts',
+    'src/events.ts',
+    'src/trace.ts',
+    'src/ai-sdk-bridge.ts',
+    'src/agent/index.ts',
+  ],
   format: ['esm', 'cjs'],
   dts: true,
   sourcemap: true,
@@ -13,8 +22,6 @@ export default defineConfig({
   treeshake: true,
   outExtensions: tsupCompatOutExtensions,
   // Keep the `node:` prefix on built-ins (e.g. `node:crypto`) so the published
-  // bundle is explicit about its runtime requirement and Workers-idiomatic — no
-  // silent reliance on `nodejs_compat` aliasing bare `crypto` → `node:crypto`.
-  // (`false` = keep imports as-is; this is tsdown's default, set explicitly.)
+  // bundle is explicit about its runtime requirement and Workers-idiomatic.
   nodeProtocol: false,
 });

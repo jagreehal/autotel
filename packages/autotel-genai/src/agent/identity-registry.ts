@@ -81,7 +81,7 @@ export function createAgentIdentityRegistry(
       const existing = records.get(agentId);
       if (!existing) {
         throw new Error(
-          `[autotel-agent] Cannot rotate unknown agent identity "${agentId}".`,
+          `[autotel-genai] Cannot rotate unknown agent identity "${agentId}".`,
         );
       }
 
@@ -107,7 +107,7 @@ export function createAgentIdentityRegistry(
       const existing = records.get(agentId);
       if (!existing) {
         throw new Error(
-          `[autotel-agent] Cannot revoke unknown agent identity "${agentId}".`,
+          `[autotel-genai] Cannot revoke unknown agent identity "${agentId}".`,
         );
       }
 
@@ -133,7 +133,7 @@ export function createAgentIdentityRegistry(
       const record = records.get(agentId);
       if (!record) {
         throw new Error(
-          `[autotel-agent] Unknown agent identity "${agentId}". Provision it before use.`,
+          `[autotel-genai] Unknown agent identity "${agentId}". Provision it before use.`,
         );
       }
 
@@ -143,7 +143,7 @@ export function createAgentIdentityRegistry(
 
       if (status !== 'active' && status !== 'rotated') {
         throw new Error(
-          `[autotel-agent] Agent identity "${agentId}" is ${status} and cannot execute delegated work.`,
+          `[autotel-genai] Agent identity "${agentId}" is ${status} and cannot execute delegated work.`,
         );
       }
 
@@ -157,7 +157,7 @@ export function createAgentIdentityRegistry(
 
       if (missing.length > 0) {
         throw new Error(
-          `[autotel-agent] Agent identity "${agentId}" is missing delegated scopes: ${missing.join(', ')}.`,
+          `[autotel-genai] Agent identity "${agentId}" is missing delegated scopes: ${missing.join(', ')}.`,
         );
       }
 

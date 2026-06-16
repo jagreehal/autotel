@@ -62,7 +62,7 @@ describe('AI Binding Instrumentation', () => {
       const [spanName, options] = mockTracer.startActiveSpan.mock.calls[0];
       expect(spanName).toBe('AI my-ai: run @cf/meta/llama-2-7b-chat-int8');
       expect(options.kind).toBe(SpanKind.CLIENT);
-      expect(options.attributes['gen_ai.system']).toBe('cloudflare-workers-ai');
+      expect(options.attributes['gen_ai.provider.name']).toBe('cloudflare-workers-ai');
       expect(options.attributes['gen_ai.operation.name']).toBe('run');
       expect(options.attributes['gen_ai.request.model']).toBe('@cf/meta/llama-2-7b-chat-int8');
     });

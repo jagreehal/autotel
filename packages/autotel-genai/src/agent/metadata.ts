@@ -113,19 +113,19 @@ export function createAgentAuditMetadata(
 
   if (eventKind === 'tool_call' && !metadata.tool) {
     throw new Error(
-      '[autotel-agent] eventKind "tool_call" requires metadata.tool.',
+      '[autotel-genai] eventKind "tool_call" requires metadata.tool.',
     );
   }
 
   if (eventKind === 'policy_decision' && !metadata.policy) {
     throw new Error(
-      '[autotel-agent] eventKind "policy_decision" requires metadata.policy.',
+      '[autotel-genai] eventKind "policy_decision" requires metadata.policy.',
     );
   }
 
   if (eventKind === 'handoff' && !metadata.delegation) {
     throw new Error(
-      '[autotel-agent] eventKind "handoff" requires metadata.delegation.',
+      '[autotel-genai] eventKind "handoff" requires metadata.delegation.',
     );
   }
 

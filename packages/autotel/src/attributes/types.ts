@@ -155,14 +155,6 @@ export interface ThreadAttrs {
   name?: string;
 }
 
-export interface GenAIAttrs {
-  system?: string;
-  requestModel?: string;
-  responseModel?: string;
-  operationName?: 'chat' | 'completion' | 'embedding';
-  provider?: string;
-}
-
 export interface RPCAttrs {
   system?: string;
   service?: string;

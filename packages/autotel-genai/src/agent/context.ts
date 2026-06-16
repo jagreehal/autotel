@@ -11,7 +11,7 @@ export interface AgentContext {
 }
 
 export const MISSING_CONTEXT_MESSAGE =
-  '[autotel-agent] No active trace context. Wrap the call in trace()/instrument(), pass options.ctx, ' +
+  '[autotel-genai] No active trace context. Wrap the call in trace()/instrument(), pass options.ctx, ' +
   'or set options.onMissingContext to "warn"/"skip" to degrade gracefully instead of throwing.';
 
 /**
@@ -57,7 +57,7 @@ export function warnMissingContextOnce(action: string): void {
   if (warnedMissingContext.has(action)) return;
   warnedMissingContext.add(action);
   console.warn(
-    `[autotel-agent] No active trace context for "${action}" — running un-audited. ` +
+    `[autotel-genai] No active trace context for "${action}" — running un-audited. ` +
       'Wrap the call in trace()/instrument() or pass options.ctx to capture agent audit telemetry. ' +
       '(set options.onMissingContext: "throw" to fail fast, or "skip" to silence this warning)',
   );

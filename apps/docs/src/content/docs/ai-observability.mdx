@@ -5,6 +5,10 @@ description: Let AI assistants query and analyze your OpenTelemetry traces via M
 
 Instead of manually searching through trace dashboards, you can ask Claude (or any MCP-compatible AI) natural language questions about your application's traces. The AI uses the OpenTelemetry MCP server to query your observability backend and returns insights.
 
+:::note[Emitting GenAI telemetry]
+This page is about **querying** traces. To **emit** GenAI telemetry — `gen_ai.*` attributes, token usage, and cost — applications use the [`autotel-genai`](https://github.com/jagreehal/autotel/tree/main/packages/autotel-genai) package: `traceGenAI` and `recordGenAiUsage` from `autotel-genai/trace`, plus `genAiMetricViews` from `autotel-genai/metrics`. That instrumentation is what makes the `get_llm_usage` and `list_llm_models` MCP tools below return data.
+:::
+
 ## How It Works
 
 ```

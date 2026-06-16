@@ -97,7 +97,7 @@ vi.mock('autotel-audit', () => ({
   withAudit: mocked.withAudit,
 }));
 
-describe('autotel-agent', () => {
+describe('autotel-genai', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -375,8 +375,8 @@ describe('autotel-agent', () => {
         'gen_ai.response.finish_reasons': ['stop'],
         'gen_ai.usage.input_tokens': 1000,
         'gen_ai.usage.output_tokens': 500,
-        'gen_ai.usage.total_tokens': 1500,
-        'gen_ai.usage.cost.usd': 1.5,
+        // Real cost from MODEL_PRICING['gpt-4o']: 1000@2.5/1M + 500@10/1M.
+        'gen_ai.usage.cost.usd': 0.0075,
       }),
     );
   });
@@ -396,7 +396,6 @@ describe('autotel-agent', () => {
       expect.objectContaining({
         'gen_ai.request.model': 'text-embedding-3-small',
         'gen_ai.usage.input_tokens': 200,
-        'gen_ai.usage.total_tokens': 200,
       }),
     );
   });
