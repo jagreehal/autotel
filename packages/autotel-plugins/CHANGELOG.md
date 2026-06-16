@@ -1,5 +1,12 @@
 # autotel-plugins
 
+## 0.19.31
+
+### Patch Changes
+
+- Updated dependencies [db0cce2]
+  - autotel@4.0.0
+
 ## 0.19.30
 
 ### Patch Changes

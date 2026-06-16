@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 39.0.0
+
+### Patch Changes
+
+- Updated dependencies [db0cce2]
+  - autotel@4.0.0
+
 ## 38.0.0
 
 ### Patch Changes

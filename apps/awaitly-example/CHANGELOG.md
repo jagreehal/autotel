@@ -1,5 +1,12 @@
 # @jagreehal/awaitly-example
 
+## 1.0.48
+
+### Patch Changes
+
+- Updated dependencies [db0cce2]
+  - autotel@4.0.0
+
 ## 1.0.47
 
 ### Patch Changes
