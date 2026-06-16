@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 27.0.0
+
+### Patch Changes
+
+- Updated dependencies [db0cce2]
+  - autotel@4.0.0
+
 ## 26.0.0
 
 ### Patch Changes
