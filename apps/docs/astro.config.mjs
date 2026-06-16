@@ -1,5 +1,4 @@
 import { defineConfig } from 'astro/config';
-import { unified } from '@astrojs/markdown-remark';
 import preact from '@astrojs/preact';
 import starlight from '@astrojs/starlight';
 
@@ -7,9 +6,8 @@ export default defineConfig({
   site: 'https://jagreehal.github.io',
   base: '/autotel',
   markdown: {
-    processor: unified({
-      gfm: true,
-    }),
+    // GFM is enabled by default; keep it explicit so tables/strikethrough render.
+    gfm: true,
   },
   integrations: [
     preact({ devtools: false }),
