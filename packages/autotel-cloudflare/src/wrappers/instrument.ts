@@ -41,10 +41,14 @@ import {
   getActiveConfig,
   getServiceForPath,
   shouldInstrumentPath,
+  withNativeTracer,
+  ensureGlobalContextManager,
   type Initialiser,
+  type NativeTracer,
   WorkerTracerProvider,
   WorkerTracer,
 } from 'autotel-edge';
+import { getNativeTracerFromCtx } from '../native/native-tracing';
 import { proxyExecutionContext, unwrap, wrap, type PromiseTracker } from '../bindings/common';
 import { instrumentGlobalFetch } from '../global/fetch';
 import { instrumentGlobalCache } from '../global/cache';
@@ -528,6 +532,68 @@ function createHandlerFlow<T extends Trigger, E, R>(
   };
 }
 
+let warnedMissingNative = false;
+
+/**
+ * Resolve whether this invocation should use Cloudflare's native tracer.
+ *
+ * - `nativeTracing: 'off'` → never use native (always autotel's OTLP pipeline).
+ * - `nativeTracing: 'on'`  → require native; warn once and fall back if absent.
+ * - `nativeTracing: 'auto'` (default) → use native when `ctx.tracing` exists.
+ */
+function resolveNativeTracer(
+  config: ResolvedEdgeConfig,
+  ctx: ExecutionContext,
+  trigger: Trigger,
+): NativeTracer | null {
+  const mode = config.nativeTracing ?? 'auto';
+  if (mode === 'off') {
+    return null;
+  }
+  // Correlation id: prefer Cloudflare's ray id (also stamped on the native root
+  // span + carried by the workers logger), so logs/spans/dashboard share a key.
+  // Fall back to a per-invocation uuid for non-fetch triggers.
+  const rayId = trigger instanceof Request ? trigger.headers.get('cf-ray') : null;
+  const correlationId = rayId ?? crypto.randomUUID();
+  const nativeTracer = getNativeTracerFromCtx(ctx, correlationId);
+  if (!nativeTracer && mode === 'on' && !warnedMissingNative) {
+    warnedMissingNative = true;
+    console.warn(
+      "[autotel-cloudflare] nativeTracing is 'on' but Cloudflare native tracing was not detected. " +
+        'Enable observability.traces in your Wrangler config (and use a recent compatibility_date). ' +
+        'Falling back to the autotel OTLP exporter.',
+    );
+  }
+  return nativeTracer;
+}
+
+/**
+ * Run a handler in native-tracing mode.
+ *
+ * Cloudflare already creates the root handler span and instruments platform
+ * operations (fetch / KV / R2 / D1 / DO), so autotel defers entirely: no
+ * binding proxies (avoids duplicate spans), no provider/exporter, no manual
+ * flush. We install the native tracer into the active context so that the
+ * user's `span()` / `trace()` / `enterSpan()` calls nest inside Cloudflare's
+ * native waterfall and are exported by the platform.
+ */
+function runWithNativeTracing<T extends Trigger, E, R>(
+  handlerFn: (trigger: T, env: E, ctx: ExecutionContext) => R | Promise<R>,
+  trigger: T,
+  env: E,
+  ctx: ExecutionContext,
+  config: ResolvedEdgeConfig,
+  nativeTracer: NativeTracer,
+): R | Promise<R> {
+  // Register the context manager (we skip initProvider in native mode) so the
+  // native tracer propagates through OTel context into span()/trace() — without
+  // it, getActiveNativeTracer() returns null and custom spans never route to
+  // enterSpan. Bindings are NOT proxied: Cloudflare instruments them natively.
+  ensureGlobalContextManager();
+  const nativeContext = withNativeTracer(nativeTracer, setConfig(config));
+  return api_context.with(nativeContext, () => handlerFn(trigger, env, ctx));
+}
+
 /**
  * Create handler proxy
  */
@@ -539,16 +605,22 @@ function createHandlerProxy<T extends Trigger, E, R>(
 ): (trigger: T, env: E, ctx: ExecutionContext) => ReturnType<typeof handlerFn> {
   return (trigger: T, env: E, ctx: ExecutionContext) => {
     const config = initialiser(env, trigger);
-    
+
     // Check if instrumentation is disabled (useful for local dev)
     if (config.instrumentation.disabled) {
       // Return handler as-is without instrumentation
       return handlerFn(trigger, env, ctx);
     }
-    
+
+    // Prefer Cloudflare native tracing when available — defer to the platform.
+    const nativeTracer = resolveNativeTracer(config, ctx, trigger);
+    if (nativeTracer) {
+      return runWithNativeTracing(handlerFn, trigger, env, ctx, config, nativeTracer);
+    }
+
     // Auto-instrument Cloudflare bindings in the environment
     const instrumentedEnv = instrumentBindings(env as Record<string, any>) as E;
-    
+
     const configContext = setConfig(config);
 
     // Initialize provider on first call
@@ -593,10 +665,16 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
         return handlerFn(trigger, env, ctx) as ReturnType<typeof handlerFn>;
       }
     }
-    
+
+    // Prefer Cloudflare native tracing when available — defer to the platform.
+    const nativeTracer = resolveNativeTracer(config, ctx, trigger);
+    if (nativeTracer) {
+      return runWithNativeTracing(handlerFn, trigger, env, ctx, config, nativeTracer) as ReturnType<typeof handlerFn>;
+    }
+
     // Auto-instrument Cloudflare bindings in the environment
     const instrumentedEnv = instrumentBindings(env as Record<string, any>) as E;
-    
+
     const configContext = setConfig(config);
 
     // Initialize provider on first call

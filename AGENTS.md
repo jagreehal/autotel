@@ -29,6 +29,7 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 - Keep `trace(..., (ctx) => ...)` as the main user-facing instrumentation pattern for Cloudflare business logic.
 - Prefer span attributes plus one execution-scoped snapshot over scattered `logger.info(...)` calls in Cloudflare examples.
 - If Cloudflare needs request-logger-style DX, implement it in `autotel-edge` first using edge-safe context primitives. Do not copy the Node `AsyncLocalStorage` implementation from core `autotel`.
+- **Native tracing**: `trace()`/`span()`/`enterSpan()` auto-nest in Cloudflare's native trace waterfall when `observability.traces` is enabled (autotel detects `ctx.tracing`); it defers binding instrumentation + export to the platform and falls back to autotel's OTLP pipeline otherwise. The runtime-agnostic seam is in `autotel-edge` (`src/core/native-bridge.ts`); the CF adapter is in `autotel-cloudflare` (`src/native/native-tracing.ts`). Config: `nativeTracing: 'auto'|'on'|'off'`. Don't add CF imports to autotel-edge. See `docs/CLOUDFLARE-NATIVE-TRACING.md`.
 
 ---
 

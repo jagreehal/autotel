@@ -8,6 +8,7 @@
 
 ## Features
 
+- ✅ **Cloudflare native tracing (automatic)** - `trace()`/`span()` nest inside Cloudflare's native trace waterfall when enabled; no duplicate spans, no exporter code
 - ✅ **Native Cloudflare OTel integration** - Works with `wrangler.toml` destinations
 - ✅ **Complete bindings coverage** - KV, R2, D1, DO, AI, Vectorize, Hyperdrive, and more
 - ✅ **Multiple API styles** - `instrument()`, `wrapModule()`, `wrapDurableObject()`, functional
@@ -26,6 +27,46 @@ The package direction is to make Cloudflare observability feel the same across W
 - prefer span attributes and one execution snapshot over scattered info logs
 
 See [docs/CLOUDFLARE-DX.md](../../docs/CLOUDFLARE-DX.md) for the design target and review rules.
+
+## Cloudflare native tracing (automatic)
+
+Cloudflare Workers ship [native tracing](https://developers.cloudflare.com/workers/observability/traces/): enable it in Wrangler and Cloudflare instruments fetch/KV/R2/D1/handlers and exports OTLP to any backend — no exporter code. autotel integrates **automatically**: the same `trace()`/`span()`/`enterSpan()` code nests inside Cloudflare's native waterfall when native tracing is on, and falls back to autotel's own OTLP pipeline everywhere else (other edge runtimes, native off, local `wrangler dev`).
+
+```toml
+# wrangler.toml — that's the only setup
+[observability.traces]
+enabled = true
+```
+
+When native tracing is active, autotel **defers to the platform**: it does not proxy-instrument bindings (no duplicate spans) and does not run its own exporter. It routes your custom spans to `tracing.enterSpan()` and surfaces the `cf-ray` id as `ctx.correlationId` + a `correlation.id` span attribute. Controlled by `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`).
+
+### Same code, both modes — captured evidence
+
+This is real output from [`apps/cloudflare-example`](../../apps/cloudflare-example) (`node scripts/capture-evidence.mjs`). Identical business logic, two runtimes:
+
+```text
+# autotel OTLP pipeline (local dev / non-Workers / nativeTracing:'off')
+• GET /orders
+  • order.price            order.id=ORD-1 order.total=120
+    • order.subtotal       order.subtotal=100
+      • KV MY_KV: get       db.system=cloudflare-kv db.operation=get   ← autotel-instrumented
+    • order.total          order.total=120
+  • user.create            user.duplicate=true
+    • db.checkDuplicate
+  • payment.charge [ERROR]  exception.message="card declined"
+
+# Cloudflare native tracing (autotel → ctx.tracing.enterSpan)
+• order.price [OK]       correlation.id=8f1c2d3e…-LHR  order.id=ORD-1 order.total=120
+  • order.subtotal       correlation.id=8f1c2d3e…-LHR  order.subtotal=100
+  • order.total          correlation.id=8f1c2d3e…-LHR  order.total=120
+• user.create            correlation.id=8f1c2d3e…-LHR  user.duplicate=true
+  • db.checkDuplicate
+• payment.charge [ERROR] error=true exception.message="card declined"  correlation.id=8f1c2d3e…-LHR
+```
+
+Note the native tree has **no `KV MY_KV: get` span** — Cloudflare emits that natively (your custom spans nest above it on deploy), so there are no duplicates.
+
+Full details, degradation map, and the forward-compatible trace-id story: [docs/CLOUDFLARE-NATIVE-TRACING.md](../../docs/CLOUDFLARE-NATIVE-TRACING.md).
 
 ## Installation
 

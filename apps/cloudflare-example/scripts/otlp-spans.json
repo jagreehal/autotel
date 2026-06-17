@@ -1,0 +1,300 @@
+[
+  {
+    "name": "order.subtotal",
+    "spanId": "8c0ad87f38c03b51",
+    "parentSpanId": "0eda42c33e7968aa",
+    "kind": 1,
+    "status": 1,
+    "attributes": {
+      "order.subtotal": 42,
+      "code.function": "order.subtotal"
+    }
+  },
+  {
+    "name": "order.total",
+    "spanId": "359957754d4c3cf2",
+    "parentSpanId": "0eda42c33e7968aa",
+    "kind": 1,
+    "status": 1,
+    "attributes": {
+      "order.total": 50,
+      "code.function": "order.total"
+    }
+  },
+  {
+    "name": "order.handle",
+    "spanId": "0eda42c33e7968aa",
+    "parentSpanId": "650178af6695206f",
+    "kind": 1,
+    "status": 1,
+    "attributes": {
+      "order.id": "demo",
+      "code.function": "order.handle"
+    }
+  },
+  {
+    "name": "GET /native",
+    "spanId": "650178af6695206f",
+    "parentSpanId": null,
+    "kind": 2,
+    "status": 1,
+    "attributes": {
+      "http.request.method": "GET",
+      "url.full": "http://127.0.0.1:8787/native",
+      "cloudflare.colo": "LHR",
+      "cloudflare.country": "GB",
+      "cloudflare.city": "London",
+      "cloudflare.region": "England",
+      "cloudflare.continent": "EU",
+      "cloudflare.timezone": "Europe/London",
+      "cloudflare.latitude": "51.50853",
+      "cloudflare.longitude": "-0.12574",
+      "cloudflare.asn": 213671,
+      "cloudflare.as_organization": "4TH UTILITY HOLDINGS LIMITED",
+      "cloudflare.http_protocol": "HTTP/1.1",
+      "cloudflare.tls_version": "TLSv1.3",
+      "cloudflare.client_tcp_rtt": 43,
+      "faas.coldstart": true,
+      "http.response.status_code": 200
+    }
+  },
+  {
+    "name": "order.subtotal",
+    "spanId": "8c0ad87f38c03b51",
+    "parentSpanId": "0eda42c33e7968aa",
+    "kind": 1,
+    "status": 1,
+    "attributes": {
+      "order.subtotal": 42,
+      "code.function": "order.subtotal"
+    }
+  },
+  {
+    "name": "order.total",
+    "spanId": "359957754d4c3cf2",
+    "parentSpanId": "0eda42c33e7968aa",
+    "kind": 1,
+    "status": 1,
+    "attributes": {
+      "order.total": 50,
+      "code.function": "order.total"
+    }
+  },
+  {
+    "name": "order.handle",
+    "spanId": "0eda42c33e7968aa",
+    "parentSpanId": "650178af6695206f",
+    "kind": 1,
+    "status": 1,
+    "attributes": {
+      "order.id": "demo",
+      "code.function": "order.handle"
+    }
+  },
+  {
+    "name": "GET /native",
+    "spanId": "650178af6695206f",
+    "parentSpanId": null,
+    "kind": 2,
+    "status": 1,
+    "attributes": {
+      "http.request.method": "GET",
+      "url.full": "http://127.0.0.1:8787/native",
+      "cloudflare.colo": "LHR",
+      "cloudflare.country": "GB",
+      "cloudflare.city": "London",
+      "cloudflare.region": "England",
+      "cloudflare.continent": "EU",
+      "cloudflare.timezone": "Europe/London",
+      "cloudflare.latitude": "51.50853",
+      "cloudflare.longitude": "-0.12574",
+      "cloudflare.asn": 213671,
+      "cloudflare.as_organization": "4TH UTILITY HOLDINGS LIMITED",
+      "cloudflare.http_protocol": "HTTP/1.1",
+      "cloudflare.tls_version": "TLSv1.3",
+      "cloudflare.client_tcp_rtt": 43,
+      "faas.coldstart": true,
+      "http.response.status_code": 200
+    }
+  },
+  {
+    "name": "payment.process",
+    "spanId": "742d2c657f038037",
+    "parentSpanId": "b481f757972997e9",
+    "kind": 1,
+    "status": 1,
+    "attributes": {
+      "payment.amount": 50,
+      "payment.user_id": "u1",
+      "payment.transaction_id": "107d8282-0b60-430f-9531-4a2ab18d67ed",
+      "code.function": "payment.process"
+    }
+  },
+  {
+    "name": "POST /payment",
+    "spanId": "b481f757972997e9",
+    "parentSpanId": null,
+    "kind": 2,
+    "status": 1,
+    "attributes": {
+      "http.request.method": "POST",
+      "url.full": "http://127.0.0.1:8787/payment",
+      "cloudflare.colo": "LHR",
+      "cloudflare.country": "GB",
+      "cloudflare.city": "London",
+      "cloudflare.region": "England",
+      "cloudflare.continent": "EU",
+      "cloudflare.timezone": "Europe/London",
+      "cloudflare.latitude": "51.50853",
+      "cloudflare.longitude": "-0.12574",
+      "cloudflare.asn": 213671,
+      "cloudflare.as_organization": "4TH UTILITY HOLDINGS LIMITED",
+      "cloudflare.http_protocol": "HTTP/1.1",
+      "cloudflare.tls_version": "TLSv1.3",
+      "cloudflare.client_tcp_rtt": 43,
+      "faas.coldstart": false,
+      "http.response.status_code": 200
+    }
+  },
+  {
+    "name": "payment.process",
+    "spanId": "742d2c657f038037",
+    "parentSpanId": "b481f757972997e9",
+    "kind": 1,
+    "status": 1,
+    "attributes": {
+      "payment.amount": 50,
+      "payment.user_id": "u1",
+      "payment.transaction_id": "107d8282-0b60-430f-9531-4a2ab18d67ed",
+      "code.function": "payment.process"
+    }
+  },
+  {
+    "name": "POST /payment",
+    "spanId": "b481f757972997e9",
+    "parentSpanId": null,
+    "kind": 2,
+    "status": 1,
+    "attributes": {
+      "http.request.method": "POST",
+      "url.full": "http://127.0.0.1:8787/payment",
+      "cloudflare.colo": "LHR",
+      "cloudflare.country": "GB",
+      "cloudflare.city": "London",
+      "cloudflare.region": "England",
+      "cloudflare.continent": "EU",
+      "cloudflare.timezone": "Europe/London",
+      "cloudflare.latitude": "51.50853",
+      "cloudflare.longitude": "-0.12574",
+      "cloudflare.asn": 213671,
+      "cloudflare.as_organization": "4TH UTILITY HOLDINGS LIMITED",
+      "cloudflare.http_protocol": "HTTP/1.1",
+      "cloudflare.tls_version": "TLSv1.3",
+      "cloudflare.client_tcp_rtt": 43,
+      "faas.coldstart": false,
+      "http.response.status_code": 200
+    }
+  },
+  {
+    "name": "payment.process",
+    "spanId": "e82538f5da4044f4",
+    "parentSpanId": "c4b6cfb49f28cbb0",
+    "kind": 1,
+    "status": 2,
+    "attributes": {
+      "payment.amount": -5,
+      "payment.user_id": "u1",
+      "code.function": "payment.process"
+    }
+  },
+  {
+    "name": "POST /payment",
+    "spanId": "c4b6cfb49f28cbb0",
+    "parentSpanId": null,
+    "kind": 2,
+    "status": 1,
+    "attributes": {
+      "http.request.method": "POST",
+      "url.full": "http://127.0.0.1:8787/payment",
+      "cloudflare.colo": "LHR",
+      "cloudflare.country": "GB",
+      "cloudflare.city": "London",
+      "cloudflare.region": "England",
+      "cloudflare.continent": "EU",
+      "cloudflare.timezone": "Europe/London",
+      "cloudflare.latitude": "51.50853",
+      "cloudflare.longitude": "-0.12574",
+      "cloudflare.asn": 213671,
+      "cloudflare.as_organization": "4TH UTILITY HOLDINGS LIMITED",
+      "cloudflare.http_protocol": "HTTP/1.1",
+      "cloudflare.tls_version": "TLSv1.3",
+      "cloudflare.client_tcp_rtt": 43,
+      "faas.coldstart": false,
+      "http.response.status_code": 400
+    }
+  },
+  {
+    "name": "payment.process",
+    "spanId": "e82538f5da4044f4",
+    "parentSpanId": "c4b6cfb49f28cbb0",
+    "kind": 1,
+    "status": 2,
+    "attributes": {
+      "payment.amount": -5,
+      "payment.user_id": "u1",
+      "code.function": "payment.process"
+    }
+  },
+  {
+    "name": "POST /payment",
+    "spanId": "c4b6cfb49f28cbb0",
+    "parentSpanId": null,
+    "kind": 2,
+    "status": 1,
+    "attributes": {
+      "http.request.method": "POST",
+      "url.full": "http://127.0.0.1:8787/payment",
+      "cloudflare.colo": "LHR",
+      "cloudflare.country": "GB",
+      "cloudflare.city": "London",
+      "cloudflare.region": "England",
+      "cloudflare.continent": "EU",
+      "cloudflare.timezone": "Europe/London",
+      "cloudflare.latitude": "51.50853",
+      "cloudflare.longitude": "-0.12574",
+      "cloudflare.asn": 213671,
+      "cloudflare.as_organization": "4TH UTILITY HOLDINGS LIMITED",
+      "cloudflare.http_protocol": "HTTP/1.1",
+      "cloudflare.tls_version": "TLSv1.3",
+      "cloudflare.client_tcp_rtt": 43,
+      "faas.coldstart": false,
+      "http.response.status_code": 400
+    }
+  },
+  {
+    "name": "GET /",
+    "spanId": "3c88c77469d5901a",
+    "parentSpanId": null,
+    "kind": 2,
+    "status": 1,
+    "attributes": {
+      "http.request.method": "GET",
+      "url.full": "https://x/",
+      "faas.coldstart": true,
+      "http.response.status_code": 200
+    }
+  },
+  {
+    "name": "GET /",
+    "spanId": "3c88c77469d5901a",
+    "parentSpanId": null,
+    "kind": 2,
+    "status": 1,
+    "attributes": {
+      "http.request.method": "GET",
+      "url.full": "https://x/",
+      "faas.coldstart": true,
+      "http.response.status_code": 200
+    }
+  }
+]

@@ -54,6 +54,15 @@ describe('Edge Logger', () => {
       expect(logOutput.timestamp).toBeDefined();
     });
 
+    it('serializes an Error in the error key instead of {}', () => {
+      const logger = createEdgeLogger('test-service');
+      logger.info({ err: new Error('boom') }, 'failed');
+
+      const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
+      expect(logOutput.err).toMatchObject({ message: 'boom', type: 'Error' });
+      expect(typeof logOutput.err.stack).toBe('string');
+    });
+
     it('should support pino-style object-first info calls', () => {
       const logger = createEdgeLogger('test-service');
       logger.info({ userId: '123' }, 'User created');

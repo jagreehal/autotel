@@ -1,10 +1,35 @@
 name = "cloudflare-example"
 main = "src/worker.ts"
-compatibility_date = "2024-10-11"
+# Cloudflare native tracing + custom spans (ctx.tracing) require a recent compatibility_date.
+compatibility_date = "2026-06-16"
 compatibility_flags = ["nodejs_compat"]
 
+# Cloudflare native tracing (beta). When enabled, autotel auto-detects it and
+# defers to the platform: trace()/span() calls nest in the native waterfall and
+# Cloudflare exports them. Traces are viewable in the Cloudflare dashboard, and
+# (optionally) exported to any OTLP backend via a `destinations` entry.
+# Comment this block out to use autotel's own OTLP exporter instead.
+[observability.traces]
+enabled = true
+# head_sampling_rate = 0.1               # sample 10% of requests (default 1 = 100%)
+# destinations = ["my-otlp-traces"]      # name of a destination you create in the
+#   Cloudflare dashboard (Workers Observability → Add destination), pointing at
+#   any OTLP traces endpoint. Exports the native waterfall incl. autotel spans.
+
+# Logs pipeline (separate from traces). Captures console.* output (incl.
+# autotel's structured logger) into Workers Logs. Under native tracing each log
+# line is auto-attributed to the active span. Add a logs `destinations` entry to
+# export them to any OTLP logs endpoint too.
+[observability.logs]
+enabled = true
+# head_sampling_rate = 1.0
+# destinations = ["my-otlp-logs"]
+
 [vars]
+# Used only when native tracing is OFF (local dev / nativeTracing:'off') — point
+# at autotel-devtools or any OTLP collector.
 OTLP_ENDPOINT = "http://localhost:4318/v1/traces"
+# NATIVE_TRACING = "off"   # force the autotel OTLP exporter (e.g. for devtools)
 # ENVIRONMENT = "production"
 # DISABLE_INSTRUMENTATION = "true"
 

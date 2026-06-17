@@ -215,6 +215,20 @@ export interface DataSafetyConfig {
   emailHeaderAllowlist?: string[];
 }
 
+/**
+ * Controls whether `span()` / `trace()` route to a platform-native tracer
+ * (e.g. Cloudflare's `tracing.enterSpan()`) instead of autotel's own OTLP
+ * pipeline.
+ *
+ * - `'auto'` (default): use the native tracer when one is detected at runtime,
+ *   otherwise fall back to autotel's OTLP exporter.
+ * - `'on'`: always prefer the native tracer (the adapter warns once if none is
+ *   available and falls back).
+ * - `'off'`: never use a native tracer — always use autotel's OTLP pipeline.
+ *   Useful for local `wrangler dev` streaming to autotel-devtools.
+ */
+export type NativeTracingMode = 'auto' | 'on' | 'off';
+
 interface EdgeConfigBase {
   service: ServiceConfig;
   handlers?: HandlerConfig;
@@ -226,6 +240,11 @@ interface EdgeConfigBase {
   subscribers?: EdgeSubscriber[];
   /** Opt-in data safety controls for sensitive attribute capture */
   dataSafety?: DataSafetyConfig;
+  /**
+   * Native platform tracing mode. Defaults to `'auto'`.
+   * @see NativeTracingMode
+   */
+  nativeTracing?: NativeTracingMode;
 }
 
 interface EdgeConfigExporter extends EdgeConfigBase {
@@ -253,6 +272,7 @@ export interface ResolvedEdgeConfig extends EdgeConfigBase {
   propagator: TextMapPropagator;
   instrumentation: InstrumentationOptions;
   subscribers: EdgeSubscriber[];
+  nativeTracing: NativeTracingMode;
 }
 
 /**

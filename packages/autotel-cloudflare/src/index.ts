@@ -81,3 +81,11 @@ export {
 
 // Global instrumentations
 export { instrumentGlobalFetch, instrumentGlobalCache } from './global';
+
+// Cloudflare native tracing helpers (auto-wired by the handler wrappers;
+// exported for manual detection). `enterSpan` is re-exported from autotel-edge
+// above via `export * from 'autotel-edge'`.
+export {
+  isNativeTracingAvailable,
+  getNativeTracerFromCtx,
+} from './native/native-tracing';

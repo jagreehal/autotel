@@ -125,6 +125,7 @@ export function parseConfig(config: EdgeConfig): ResolvedEdgeConfig {
     },
     subscribers: config.subscribers ?? [],
     dataSafety: config.dataSafety,
+    nativeTracing: config.nativeTracing ?? 'auto',
   };
 
   return resolved;

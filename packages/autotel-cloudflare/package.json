@@ -43,6 +43,10 @@
       "types": "./dist/agents.d.ts",
       "import": "./dist/agents.js"
     },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "import": "./dist/native.js"
+    },
     "./parse-error": {
       "types": "./dist/parse-error.d.ts",
       "import": "./dist/parse-error.js"

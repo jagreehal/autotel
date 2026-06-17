@@ -32,6 +32,7 @@ Use this package directly if you're:
 - ✅ **Tree-shakeable** - Import only what you need
 - ✅ **Bundle size optimized** - ~20KB minified (~8KB gzipped)
 - ✅ **OpenTelemetry compliant** - Works with any OTLP backend
+- ✅ **Native-tracing bridge** - `trace()`/`span()` can route to a platform-native tracer (e.g. Cloudflare's `tracing.enterSpan()`) instead of OTLP, automatically
 - ✅ **TypeScript native** - Full type safety
 
 ## Installation
@@ -330,6 +331,22 @@ init({
   sampling: { tailSampler: SamplingPresets.production() }
 })
 ```
+
+## Native tracing bridge
+
+`trace()` / `span()` / `enterSpan()` can transparently emit *platform-native*
+spans instead of going through autotel's OTLP exporter. A runtime adapter (e.g.
+[autotel-cloudflare](../autotel-cloudflare), wrapping Cloudflare's
+`tracing.enterSpan()`) installs a `NativeTracer` into the active context with
+`withNativeTracer()`; the functional API reads it via `getActiveNativeTracer()`
+and routes to it when present. autotel-edge never imports any runtime module —
+the seam (`NativeTracer` / `NativeSpanHandle`, degradation adapters) only depends
+on `@opentelemetry/api` and is tree-shaken away when unused.
+
+This is what lets the *same* instrumented code light up Cloudflare's native
+trace waterfall in production and export over OTLP locally. Config:
+`nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`). See
+[docs/CLOUDFLARE-NATIVE-TRACING.md](../../docs/CLOUDFLARE-NATIVE-TRACING.md).
 
 ## Bundle Size
 
