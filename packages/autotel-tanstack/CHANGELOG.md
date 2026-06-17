@@ -1,5 +1,13 @@
 # autotel-tanstack
 
+## 1.13.33
+
+### Patch Changes
+
+- Updated dependencies [ae90c02]
+- Updated dependencies [ae90c02]
+  - autotel-edge@3.17.0
+
 ## 1.13.32
 
 ### Patch Changes

@@ -1,5 +1,39 @@
 # autotel-edge
 
+## 3.17.0
+
+### Minor Changes
+
+- ae90c02: feat(cloudflare): seamless integration with Cloudflare native tracing
+
+  `trace()` / `span()` / `enterSpan()` now automatically nest inside Cloudflare's
+  native trace waterfall when a Worker has native tracing enabled
+  (`observability.traces.enabled`), and Cloudflare exports them to your configured
+  destination — no exporter code, no duplicate binding spans. autotel falls back
+  to its own OTLP pipeline on other runtimes, when native tracing is off, or
+  locally (e.g. streaming to autotel-devtools).
+  - **autotel-edge**: new runtime-agnostic native-tracing seam
+    (`withNativeTracer` / `getActiveNativeTracer`, `NativeTracer` /
+    `NativeSpanHandle`), a new `enterSpan(name, cb)` convenience, and a
+    `nativeTracing: 'auto' | 'on' | 'off'` config option (default `'auto'`).
+  - **autotel-cloudflare**: auto-detects `ctx.tracing`, wires it into the handler
+    wrappers (`instrument` / `wrapModule` / `defineWorkerFetch` /
+    `wrapDurableObject`), and defers binding instrumentation + export to the
+    platform when native tracing is active. New `autotel-cloudflare/native` entry
+    exporting `isNativeTracingAvailable` / `getNativeTracerFromCtx`.
+
+  See `docs/CLOUDFLARE-NATIVE-TRACING.md`.
+
+### Patch Changes
+
+- ae90c02: fix(logger): serialize Error objects in the error key
+
+  Logging an Error inside the configured error key — e.g. `log.error({ err }, 'msg')`
+  — previously JSON-stringified the Error to `{}`, dropping the message and stack.
+  The edge logger now registers a default serializer for `errorKey` (default
+  `'err'`) that emits `{ message, type, stack }`, mirroring the first-argument
+  Error shape. Overridable via `options.serializers`.
+
 ## 3.16.15
 
 ### Patch Changes
