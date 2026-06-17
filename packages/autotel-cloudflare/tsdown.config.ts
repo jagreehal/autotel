@@ -22,6 +22,7 @@ export default defineConfig({
     testing: 'src/testing.ts',
     actors: 'src/actors.ts',
     agents: 'src/agents.ts',
+    native: 'src/native.ts',
     'parse-error': 'src/parse-error.ts',
   },
   format: ['esm'], // ESM-only for edge runtimes

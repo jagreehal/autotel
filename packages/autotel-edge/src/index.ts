@@ -25,7 +25,7 @@
 export { SpanImpl } from './core/span';
 export { WorkerTracer, withNextSpan } from './core/tracer';
 export { OTLPExporter } from './core/exporter';
-export { AsyncLocalStorageContextManager } from './core/context';
+export { AsyncLocalStorageContextManager, ensureGlobalContextManager } from './core/context';
 export { WorkerTracerProvider } from './core/provider';
 export { Buffer } from './core/buffer';
 export {
@@ -42,10 +42,23 @@ export {
   withTracing,
   instrument as instrumentFunctions,
   span,
+  enterSpan,
   type traceOptions,
   type TraceContext,
   type InstrumentOptions,
 } from './functional';
+
+// Native span bridge (seam for platform-native tracers, e.g. Cloudflare).
+// Runtime adapter packages install a NativeTracer; span()/trace() route to it.
+export {
+  withNativeTracer,
+  getActiveNativeTracer,
+  createNativeTraceContext,
+  createNativeSpanShim,
+  type NativeTracer,
+  type NativeSpanHandle,
+} from './core/native-bridge';
+export type { NativeTracingMode } from './types';
 
 export {
   getExecutionLogger,

@@ -14,6 +14,12 @@ import {
 import type { Sampler } from '@opentelemetry/sdk-trace-base';
 import type { TraceContext } from './core/trace-context';
 import { createTraceContext, setSpanName } from './core/trace-context';
+import {
+  getActiveNativeTracer,
+  createNativeTraceContext,
+  createNativeSpanShim,
+  type NativeTracer,
+} from './core/native-bridge';
 
 // Re-export for convenience
 export type { TraceContext } from './core/trace-context';
@@ -216,6 +222,68 @@ function truncateErrorMessage(message: string): string {
   return `${message.slice(0, MAX_ERROR_MESSAGE_LENGTH)}... (truncated)`;
 }
 
+/**
+ * Record an error onto a native trace context (status + exception) and rethrow.
+ * Shared by every native-span code path so the error degradation is identical.
+ */
+function failNativeContext(ctx: TraceContext, error: unknown): never {
+  ctx.setStatus({
+    code: SpanStatusCode.ERROR,
+    message: truncateErrorMessage(
+      error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    ),
+  });
+  ctx.recordException(error instanceof Error ? error : new Error(String(error)));
+  throw error;
+}
+
+/**
+ * Run a factory-produced function inside a native span, applying the same
+ * options (attributes / attributesFromArgs / attributesFromResult / code.function)
+ * and error degradation as the OTel path. Handles both sync and async functions
+ * by branching on the returned value, so async/sync callers share one impl.
+ */
+function runFactoryInNativeSpan<TArgs extends any[], TReturn>(
+  nativeTracer: NativeTracer,
+  spanName: string,
+  fnFactory: (ctx: TraceContext) => (...args: TArgs) => TReturn | Promise<TReturn>,
+  options: traceOptions<TArgs, TReturn>,
+  args: TArgs,
+): TReturn | Promise<TReturn> {
+  return nativeTracer.enterSpan(spanName, (nativeSpan) => {
+    const ctx = createNativeTraceContext(nativeSpan, spanName, nativeTracer.correlationId);
+    const actualFn = fnFactory(ctx);
+
+    if (options.attributes) {
+      ctx.setAttributes(options.attributes as Record<string, AttributeValue>);
+    }
+    if (options.attributesFromArgs) {
+      ctx.setAttributes(options.attributesFromArgs(args) as Record<string, AttributeValue>);
+    }
+
+    const onSuccess = (result: TReturn): TReturn => {
+      if (options.attributesFromResult) {
+        ctx.setAttributes(options.attributesFromResult(result) as Record<string, AttributeValue>);
+      }
+      ctx.setAttribute('code.function', spanName);
+      return result;
+    };
+    const onError = (error: unknown): never => {
+      ctx.setAttribute('code.function', spanName);
+      return failNativeContext(ctx, error);
+    };
+
+    try {
+      const result = actualFn(...args);
+      return result instanceof Promise
+        ? (result.then(onSuccess, onError) as Promise<TReturn>)
+        : onSuccess(result as TReturn);
+    } catch (error) {
+      return onError(error);
+    }
+  });
+}
+
 type InstrumentableFunction<TArgs extends any[] = any[], TReturn = any> = ((
   ...args: TArgs
 ) => TReturn | Promise<TReturn>) & {
@@ -280,6 +348,11 @@ function wrapWithTracingAsync<TArgs extends any[], TReturn>(
   const spanName = getSpanName(options, tempFn, variableName);
 
   const wrappedFunction = async function wrappedFunction(this: unknown, ...args: TArgs): Promise<TReturn> {
+    const nativeTracer = getActiveNativeTracer();
+    if (nativeTracer) {
+      return runFactoryInNativeSpan(nativeTracer, spanName, fnFactory, options, args) as Promise<TReturn>;
+    }
+
     const tracer = otelTrace.getTracer('autotel-edge');
     const spanOptions: Record<string, unknown> = options.sampler ? { sampler: options.sampler } : {};
 
@@ -341,6 +414,11 @@ function wrapWithTracingSync<TArgs extends any[], TReturn>(
   const spanName = getSpanName(options, tempFn, variableName);
 
   const wrappedFunction = function wrappedFunction(this: unknown, ...args: TArgs): TReturn {
+    const nativeTracer = getActiveNativeTracer();
+    if (nativeTracer) {
+      return runFactoryInNativeSpan(nativeTracer, spanName, fnFactory, options, args) as TReturn;
+    }
+
     const tracer = otelTrace.getTracer('autotel-edge');
     const spanOptions: Record<string, unknown> = options.sampler ? { sampler: options.sampler } : {};
 
@@ -427,8 +505,35 @@ function executeImmediately<TReturn = any>(
   fn: (ctx: TraceContext) => TReturn | Promise<TReturn>,
   options: traceOptions<any[], any>,
 ): TReturn | Promise<TReturn> {
-  const tracer = otelTrace.getTracer('@autotel/edge');
   const spanName = options.name || 'anonymous';
+
+  const nativeTracer = getActiveNativeTracer();
+  if (nativeTracer) {
+    return nativeTracer.enterSpan(spanName, (nativeSpan) => {
+      const ctxValue = createNativeTraceContext(nativeSpan, spanName, nativeTracer.correlationId);
+
+      const onSuccess = (result: TReturn) => {
+        if (options.attributes) {
+          ctxValue.setAttributes(options.attributes as Record<string, AttributeValue>);
+        }
+        return result;
+      };
+
+      const onError = (error: unknown): never => failNativeContext(ctxValue, error);
+
+      try {
+        const result = fn(ctxValue);
+        if (result instanceof Promise) {
+          return result.then(onSuccess, onError);
+        }
+        return onSuccess(result);
+      } catch (error) {
+        return onError(error);
+      }
+    });
+  }
+
+  const tracer = otelTrace.getTracer('@autotel/edge');
 
   return tracer.startActiveSpan(spanName, (span) => {
     try {
@@ -854,6 +959,17 @@ export function span<T = unknown>(
     }
   };
 
+  const nativeTracer = getActiveNativeTracer();
+  if (nativeTracer) {
+    const nativeResult = nativeTracer.enterSpan(options.name, (nativeSpan) =>
+      execute(createNativeSpanShim(nativeSpan, nativeTracer.correlationId)),
+    );
+    if (nativeResult instanceof Promise) {
+      return nativeResult;
+    }
+    return nativeResult as T;
+  }
+
   const result = tracer.startActiveSpan(options.name, execute);
 
   if (result instanceof Promise) {
@@ -861,4 +977,26 @@ export function span<T = unknown>(
   }
 
   return result as T;
+}
+
+/**
+ * `enterSpan(name, callback)` — a Cloudflare-familiar alias for {@link span}.
+ *
+ * Mirrors the shape of Cloudflare's `tracing.enterSpan()` so CF users can keep
+ * the API they know, but with autotel superpowers: it works on every runtime
+ * (not just Workers), supports `span.setAttributes()` bulk-set, and falls back
+ * to autotel's OTLP pipeline when no native tracer is active. When a native
+ * tracer *is* active (e.g. on a Worker with tracing enabled), the span nests
+ * inside Cloudflare's native waterfall.
+ */
+export function enterSpan<T = unknown>(name: string, fn: (span: Span) => T): T;
+export function enterSpan<T = unknown>(
+  name: string,
+  fn: (span: Span) => Promise<T>,
+): Promise<T>;
+export function enterSpan<T = unknown>(
+  name: string,
+  fn: (span: Span) => T | Promise<T>,
+): T | Promise<T> {
+  return span(name, fn as (span: Span) => T);
 }

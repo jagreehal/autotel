@@ -518,6 +518,15 @@ export function createEdgeLogger(
   const errorKey = options?.errorKey ?? 'err';
   const nestedKey = options?.nestedKey;
   const serializers = { ...options?.serializers };
+  // Default serializer for the error key, so `log.error({ err }, msg)` keeps the
+  // message/stack instead of JSON-stringifying an Error to `{}`. Mirrors the
+  // first-arg Error shape (toErrorAttrs). Overridable via options.serializers.
+  if (!(errorKey in serializers)) {
+    serializers[errorKey] = (value: unknown) =>
+      value instanceof Error
+        ? { message: value.message, type: value.name, stack: value.stack }
+        : value;
+  }
   const bindingsFormatter = options?.formatters?.bindings;
   const levelFormatter = options?.formatters?.level;
   const logFormatter = options?.formatters?.log;

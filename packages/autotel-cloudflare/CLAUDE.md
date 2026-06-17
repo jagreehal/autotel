@@ -16,6 +16,7 @@ You are working on the Cloudflare Workers package. You understand Cloudflare Wor
 
 ## Key Concepts
 
+- **Cloudflare Native Tracing (auto)**: When a Worker enables `observability.traces` and exposes `ctx.tracing`, the handler wrappers auto-detect it and `trace()`/`span()`/`enterSpan()` route to Cloudflare's native `tracing.enterSpan()` — nesting in the platform waterfall and exported by Cloudflare. autotel defers to the platform: no proxy binding instrumentation (no duplicate spans), no own provider/exporter. Falls back to autotel's OTLP pipeline when native is off / on other runtimes / local dev. Controlled by `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`). Concrete adapter: `src/native/native-tracing.ts`; seam lives in autotel-edge (`src/core/native-bridge.ts`). See `docs/CLOUDFLARE-NATIVE-TRACING.md`.
 - **Native CF OTel Integration**: Works with Cloudflare's native observability (wrangler.toml destinations)
 - **Complete Bindings Coverage**: Auto-instruments KV, R2, D1, Durable Objects, Workflows, Workers AI, Vectorize, Hyperdrive, Service Bindings, Queue, Analytics Engine, and Email
 - **Multiple API Styles**:
@@ -37,6 +38,7 @@ You are working on the Cloudflare Workers package. You understand Cloudflare Wor
 - `autotel-cloudflare/events` - Re-export from autotel-edge
 - `autotel-cloudflare/logger` - Re-export from autotel-edge
 - `autotel-cloudflare/testing` - Re-export from autotel-edge
+- `autotel-cloudflare/native` - Native-tracing detection helpers (`isNativeTracingAvailable`, `getNativeTracerFromCtx`); normally auto-wired by the handler wrappers
 
 ## Commands
 

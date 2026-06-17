@@ -1,0 +1,154 @@
+{
+  "otlp": [
+    {
+      "name": "KV MY_KV: get",
+      "spanId": "d8b0c98e18c5a3b4",
+      "parentSpanId": "05a83fa81a668c91",
+      "status": "OK",
+      "attributes": {
+        "db.system": "cloudflare-kv",
+        "db.operation": "get",
+        "db.namespace": "MY_KV",
+        "db.key": "pricing",
+        "db.cache_hit": false,
+        "db.result.type": "string"
+      }
+    },
+    {
+      "name": "order.subtotal",
+      "spanId": "05a83fa81a668c91",
+      "parentSpanId": "86e11fd75761a16a",
+      "status": "OK",
+      "attributes": {
+        "order.subtotal": 100,
+        "code.function": "order.subtotal"
+      }
+    },
+    {
+      "name": "order.total",
+      "spanId": "65b6cd4b3773de94",
+      "parentSpanId": "86e11fd75761a16a",
+      "status": "OK",
+      "attributes": {
+        "order.total": 120,
+        "code.function": "order.total"
+      }
+    },
+    {
+      "name": "order.price",
+      "spanId": "86e11fd75761a16a",
+      "parentSpanId": "09abe11364e67357",
+      "status": "OK",
+      "attributes": {
+        "order.id": "ORD-1",
+        "order.correlation": "c1cd4ec2380e157a",
+        "order.total": 120,
+        "code.function": "order.price"
+      }
+    },
+    {
+      "name": "db.checkDuplicate",
+      "spanId": "a509b39f53206749",
+      "parentSpanId": "384724d552c27cbb",
+      "status": "OK",
+      "attributes": {
+        "code.function": "db.checkDuplicate"
+      }
+    },
+    {
+      "name": "user.create",
+      "spanId": "384724d552c27cbb",
+      "parentSpanId": "09abe11364e67357",
+      "status": "OK",
+      "attributes": {
+        "user.duplicate": true,
+        "code.function": "user.create"
+      }
+    },
+    {
+      "name": "payment.charge",
+      "spanId": "30c7db8dc41bdf4f",
+      "parentSpanId": "09abe11364e67357",
+      "status": "ERROR",
+      "attributes": {
+        "code.function": "payment.charge"
+      }
+    },
+    {
+      "name": "GET /orders",
+      "spanId": "09abe11364e67357",
+      "parentSpanId": null,
+      "status": "OK",
+      "attributes": {}
+    }
+  ],
+  "native": [
+    {
+      "name": "order.price",
+      "attributes": {
+        "correlation.id": "8f1c2d3e4a5b6c7d-LHR",
+        "order.id": "ORD-1",
+        "order.correlation": "8f1c2d3e4a5b6c7d-LHR",
+        "order.total": 120,
+        "code.function": "order.price"
+      },
+      "children": [
+        {
+          "name": "order.subtotal",
+          "attributes": {
+            "correlation.id": "8f1c2d3e4a5b6c7d-LHR",
+            "order.subtotal": 100,
+            "code.function": "order.subtotal"
+          },
+          "children": [],
+          "status": "OK"
+        },
+        {
+          "name": "order.total",
+          "attributes": {
+            "correlation.id": "8f1c2d3e4a5b6c7d-LHR",
+            "order.total": 120,
+            "code.function": "order.total"
+          },
+          "children": [],
+          "status": "OK"
+        }
+      ],
+      "status": "OK"
+    },
+    {
+      "name": "user.create",
+      "attributes": {
+        "correlation.id": "8f1c2d3e4a5b6c7d-LHR",
+        "user.duplicate": true,
+        "code.function": "user.create"
+      },
+      "children": [
+        {
+          "name": "db.checkDuplicate",
+          "attributes": {
+            "correlation.id": "8f1c2d3e4a5b6c7d-LHR",
+            "code.function": "db.checkDuplicate"
+          },
+          "children": [],
+          "status": "OK"
+        }
+      ],
+      "status": "OK"
+    },
+    {
+      "name": "payment.charge",
+      "attributes": {
+        "correlation.id": "8f1c2d3e4a5b6c7d-LHR",
+        "code.function": "payment.charge",
+        "otel.status_code": "ERROR",
+        "error": true,
+        "otel.status_description": "card declined",
+        "exception.type": "Error",
+        "exception.message": "card declined"
+      },
+      "children": [],
+      "status": "ERROR"
+    }
+  ]
+}

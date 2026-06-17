@@ -18,6 +18,7 @@ You are working on the edge runtime foundation package. You understand edge runt
 
 - **Core Functionality**: TracerProvider, OTLP exporter, context management
 - **Functional API**: Same `trace()`, `span()`, `instrument()` API as Node.js version
+- **Native Tracing Bridge**: `core/native-bridge.ts` is a runtime-agnostic seam letting `span()`/`trace()` route to a platform-native tracer (e.g. Cloudflare's `tracing.enterSpan()`) instead of the OTLP pipeline. Adapter packages install a `NativeTracer` via `withNativeTracer()`; the functional API reads it via `getActiveNativeTracer()`. Edge never imports any runtime module. Config: `nativeTracing: 'auto' | 'on' | 'off'`. See `docs/CLOUDFLARE-NATIVE-TRACING.md`.
 - **Fetch Route Controls**: `handlers.fetch.include` / `exclude` / `routes` for path filtering and route-level service mapping in edge handler wrappers
 - **Sampling Strategies**: Adaptive, error-only, slow-only, custom samplers
 - **Events System**: Product analytics with trace correlation

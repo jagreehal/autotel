@@ -29,8 +29,41 @@ curl -X POST http://localhost:8787/payment -H 'Content-Type: application/json' -
 | `/external` | GET    | Distributed tracing with auto context propagation |
 | `/payment`  | POST   | Error handling with proper span status codes      |
 | `/users`    | POST   | Nested spans — validation + DB operations         |
+| `/native`   | GET    | Nested `span()` demo — nests in CF's native waterfall when deployed |
 
 Endpoints like `/kv`, `/r2`, `/d1`, `/ai`, `/queue` work when the corresponding binding is uncommented in `wrangler.toml`.
+
+## Native tracing (deployed) vs OTLP (local)
+
+This worker uses the **same** `trace()`/`span()` code in both modes — autotel
+auto-detects which to use:
+
+- **Deployed** with `[observability.traces] enabled = true` (set in
+  `wrangler.toml`): Cloudflare's **native tracing** is detected automatically.
+  Your custom spans nest inside Cloudflare's native waterfall (fetch/KV/D1/
+  handler spans). View them in the Cloudflare dashboard, or add a `destinations`
+  entry (any OTLP backend, configured in the dashboard) to export them. No
+  exporter runs and bindings are not double-instrumented.
+
+  ```bash
+  pnpm deploy
+  curl https://<your-worker>.workers.dev/native
+  # → see the trace in the Cloudflare dashboard (Workers → Traces)
+  ```
+
+- **Local** (`pnpm dev`): native tracing isn't exported locally, so autotel
+  falls back to its **OTLP exporter** → point it at
+  [`autotel-devtools`](../../packages/autotel-devtools) or any collector:
+
+  ```bash
+  npx autotel-devtools          # OTLP receiver + UI on :4318
+  pnpm dev                       # OTLP_ENDPOINT defaults to localhost:4318
+  curl http://localhost:8787/native
+  ```
+
+  Set `NATIVE_TRACING = "off"` in `wrangler.toml [vars]` to force the OTLP
+  exporter even when the runtime exposes native tracing. See
+  [`docs/CLOUDFLARE-NATIVE-TRACING.md`](../../docs/CLOUDFLARE-NATIVE-TRACING.md).
 
 ## What Gets Traced
 

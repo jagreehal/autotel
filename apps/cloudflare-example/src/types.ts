@@ -4,6 +4,8 @@ export interface WorkerEnv {
   OTLP_HEADERS?: string;
   ENVIRONMENT?: string;
   DISABLE_INSTRUMENTATION?: string;
+  /** 'auto' (default) | 'on' | 'off' — controls Cloudflare native tracing. */
+  NATIVE_TRACING?: string;
 
   // Bindings (all optional — endpoints check before use)
   MY_KV?: KVNamespace;

@@ -6,7 +6,7 @@
  */
 
 import type { ContextManager, Context } from '@opentelemetry/api';
-import { ROOT_CONTEXT } from '@opentelemetry/api';
+import { ROOT_CONTEXT, context as otelContext } from '@opentelemetry/api';
 
 //@ts-ignore - node:async_hooks available in CF Workers with nodejs_compat
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -221,4 +221,25 @@ export class AsyncLocalStorageContextManager extends AbstractAsyncHooksContextMa
     this._asyncLocalStorage.disable();
     return this;
   }
+}
+
+// Single canonical AsyncLocalStorage context manager for the whole runtime.
+// `context.setGlobalContextManager()` is a one-shot global, so we register once
+// and reuse. Both the OTLP provider and the native-tracing path depend on this
+// being registered — otherwise OTel context (the active span, the native
+// tracer) does not propagate across `await` boundaries.
+let globalContextManager: AsyncLocalStorageContextManager | undefined;
+
+/**
+ * Ensure a global AsyncLocalStorage context manager is registered, returning it.
+ * Idempotent.
+ */
+export function ensureGlobalContextManager(): AsyncLocalStorageContextManager {
+  if (!globalContextManager) {
+    const manager = new AsyncLocalStorageContextManager();
+    manager.enable();
+    otelContext.setGlobalContextManager(manager);
+    globalContextManager = manager;
+  }
+  return globalContextManager;
 }

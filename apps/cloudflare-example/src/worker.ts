@@ -3,6 +3,8 @@ import {
   wrapModule,
   trace,
   span,
+  isNativeTracingAvailable,
+  getActiveNativeTracer,
   instrumentRateLimiter,
   instrumentBrowserRendering,
 } from 'autotel-cloudflare';
@@ -223,7 +225,9 @@ const processPayment = trace(
           code: SpanStatusCode.ERROR,
           message: error instanceof Error ? error.message : 'Unknown error',
         });
-        ctx.recordError(error);
+        ctx.recordException(
+          error instanceof Error ? error : new Error(String(error)),
+        );
         log.error(
           {
             amount,
@@ -311,6 +315,15 @@ const handler: ExportedHandler<WorkerEnv> = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    // Health check: is Cloudflare native tracing active, and is autotel routing
+    // span()/trace() to it? Both should be true when observability.traces is on.
+    if (url.pathname === '/__native') {
+      return Response.json({
+        nativeAvailable: isNativeTracingAvailable(ctx),
+        nativeTracerActive: getActiveNativeTracer() !== null,
+      });
+    }
+
     // Child logger — inherits parent bindings, adds request-scoped context
     // Like pino's child(): every log from reqLog includes these fields
     const reqLog = log.child({
@@ -393,6 +406,35 @@ const handler: ExportedHandler<WorkerEnv> = {
         env.VECTORIZE,
         env.MY_QUEUE,
       );
+      return Response.json(result);
+    }
+
+    // Native tracing showcase — the SAME trace()/span() code that exports via
+    // OTLP locally nests inside Cloudflare's native waterfall when deployed with
+    // observability.traces enabled. KV reads below appear as native platform
+    // spans (not autotel proxies) under these custom spans.
+    if (url.pathname === '/native') {
+      const result = await span('order.handle', async (root) => {
+        root.setAttribute('order.id', url.searchParams.get('id') || 'demo');
+
+        const subtotal = await span('order.subtotal', async (s) => {
+          // If MY_KV is bound, this read is a *native* KV span on deploy.
+          if (env.MY_KV) await env.MY_KV.get('pricing');
+          const amount = 42;
+          s.setAttribute('order.subtotal', amount);
+          return amount;
+        });
+
+        const total = span('order.total', (s) => {
+          const withTax = Math.round(subtotal * 1.2);
+          s.setAttribute('order.total', withTax);
+          return withTax;
+        });
+
+        reqLog.info({ subtotal, total }, 'Order computed');
+        return { subtotal, total };
+      });
+
       return Response.json(result);
     }
 
@@ -518,6 +560,23 @@ async function processMessage(message: Message) {
 }
 
 // Export instrumented handler with all features enabled
+//
+// Tracing backends — fully automatic, fully configurable:
+//
+//   • Deployed with `observability.traces.enabled = true` (see wrangler.toml):
+//     Cloudflare's NATIVE tracing is detected automatically. autotel defers to
+//     the platform — your trace()/span() calls nest inside Cloudflare's native
+//     waterfall (fetch/KV/D1/handler spans), exported by Cloudflare to whatever
+//     destination you configure in the dashboard (Honeycomb, Grafana, Axiom…).
+//     No exporter code runs; bindings are NOT double-instrumented.
+//
+//   • Local `wrangler dev` (no native tracing): autotel automatically falls
+//     back to its own OTLP exporter → stream to autotel-devtools or any
+//     collector via OTLP_ENDPOINT (defaults to http://localhost:4318/v1/traces).
+//
+// `nativeTracing` lets you override the auto-detection:
+//   'auto' (default) · 'on' (force native) · 'off' (force autotel OTLP — handy
+//   to keep using devtools locally even if the runtime exposes native tracing).
 export default wrapModule((env: WorkerEnv) => ({
   exporter: {
     url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
@@ -527,6 +586,8 @@ export default wrapModule((env: WorkerEnv) => ({
     name: 'cloudflare-example',
     version: '1.0.1',
   },
+  // 'auto' | 'on' | 'off' — omit for the default ('auto').
+  nativeTracing: env.NATIVE_TRACING as 'auto' | 'on' | 'off' | undefined,
   // Adaptive sampling: 10% baseline, all errors, all slow requests (>1s)
   // Use SamplingPresets.highTraffic() for high-volume services
   // Use SamplingPresets.debugging() for active debugging

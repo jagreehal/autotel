@@ -9,6 +9,7 @@
     "dev": "wrangler dev",
     "dev:alchemy": "alchemy dev",
     "deploy": "wrangler deploy",
+    "capture": "node scripts/capture-evidence.mjs",
     "type-check": "tsc --noEmit"
   },
   "keywords": [],
