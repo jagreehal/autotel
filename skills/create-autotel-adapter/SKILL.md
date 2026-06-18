@@ -29,14 +29,13 @@ feat: add {name} adapter
 | 4 | `packages/autotel-{name}/src/index.test.ts` | Unit tests |
 | 5 | `packages/autotel-{name}/package.json` | Name, exports, peerDependency |
 | 6 | `packages/autotel-{name}/tsconfig.json` | Extends `../../tsconfig.base.json` |
-| 7 | `packages/autotel-{name}/tsup.config.ts` | Build entry |
+| 7 | `packages/autotel-{name}/tsdown.config.ts` | Build entry |
 | 8 | `packages/autotel-{name}/skills/autotel-{name}/SKILL.md` | Per-adapter skill |
 | 9 | `packages/autotel/skills/autotel-frameworks/SKILL.md` | Add to framework list |
-| 10 | `skills/index.json` | Add to skills manifest |
-| 11 | `pnpm-workspace.yaml` | Confirm `packages/*` is included (usually no edit needed) |
-| 12 | `bundle-size-baseline.json` | Run `pnpm bundle-size:update` once green |
+| 10 | `pnpm-workspace.yaml` | Confirm `packages/*` is included (usually no edit needed) |
+| 11 | `bundle-size-baseline.json` | Run `pnpm bundle-size:update` once green |
 
-**Important**: Do NOT consider the task complete until all 12 touchpoints pass.
+**Important**: Do NOT consider the task complete until all 11 touchpoints pass.
 
 ## Naming conventions
 
@@ -98,8 +97,9 @@ Read [references/test-template.md](references/test-template.md). Cover:
       "require": "./dist/index.cjs"
     }
   },
+  "files": ["dist", "src", "README.md", "skills"],
   "scripts": {
-    "build": "tsup",
+    "build": "tsdown",
     "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
@@ -109,25 +109,33 @@ Read [references/test-template.md](references/test-template.md). Cover:
     "{framework-package}": "*"
   },
   "devDependencies": {
-    "tsup": "*",
+    "tsdown": "*",
     "vitest": "*",
     "{framework-package}": "*"
   }
 }
 ```
 
-## Step 4: tsup.config.ts
+`files` MUST include `skills` — otherwise the per-adapter skill never publishes
+to npm and spec-compliant agents can't discover it from `node_modules`.
+
+## Step 4: tsdown.config.ts
 
 ```typescript
-import { defineConfig } from 'tsup'
+import { defineConfig } from 'tsdown';
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  outExtensions: tsupCompatOutExtensions,
+  tsconfig: 'tsconfig.build.json',
+  entry: { index: 'src/index.ts' },
   format: ['esm', 'cjs'],
   dts: true,
-  splitting: false,
+  sourcemap: true,
   clean: true,
-})
+  treeshake: true,
+  target: false,
+});
 ```
 
 ## Step 5: Per-adapter skill
@@ -137,7 +145,9 @@ Create `packages/autotel-{name}/skills/autotel-{name}/SKILL.md`. Use the existin
 ## Step 6: Register in monorepo
 
 - Add a row to `packages/autotel/skills/autotel-frameworks/SKILL.md` framework table.
-- Add the new package to `skills/index.json` so `npx skills add` discovers it.
+- Confirm `skills` is in the package's `files` array — discovery is automatic
+  per the Agent Skills spec (agents scan `node_modules/autotel-{name}/skills/`);
+  there is no central manifest to update.
 - Run `pnpm install` to relink.
 
 ## Step 7: Verify

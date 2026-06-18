@@ -10,6 +10,8 @@ export default defineConfig({
     'src/metrics.ts',
     'src/events.ts',
     'src/trace.ts',
+    'src/guard.ts',
+    'src/streaming.ts',
     'src/ai-sdk-bridge.ts',
     'src/agent/index.ts',
   ],

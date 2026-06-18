@@ -25,12 +25,48 @@ import type { TraceContext } from 'autotel';
 import {
   GEN_AI,
   GEN_AI_EVENT,
+  GEN_AI_EXT_EVENT,
   type GenAiOperationName,
   type GenAiProviderName,
 } from './semconv.js';
 
 /** Minimal sink: just what these helpers touch on a trace context. */
 export type GenAiContentSink = Pick<TraceContext, 'setAttributes' | 'track'>;
+
+/**
+ * Recursively replace binary data with a base64 marker so it survives JSON
+ * serialisation. `JSON.stringify(new Uint8Array([1,2]))` yields `{"0":1,"1":2}`
+ * — useless and huge for multimodal (image/audio/file) content. This swaps any
+ * typed array / `ArrayBuffer` for `{ "__type": "base64", data: "…" }`.
+ */
+function toBase64(bytes: Uint8Array): string {
+  // Runtime-agnostic (Node + edge/Workers expose `btoa`); avoids `Buffer` so
+  // the bundle stays edge-safe. Chunked to keep the argument list bounded.
+  let binary = '';
+  const chunk = 0x80_00;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function replaceBinary(value: unknown): unknown {
+  if (value instanceof Uint8Array) {
+    return { __type: 'base64', data: toBase64(value) };
+  }
+  if (value instanceof ArrayBuffer) {
+    return { __type: 'base64', data: toBase64(new Uint8Array(value)) };
+  }
+  if (Array.isArray(value)) return value.map(replaceBinary);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = replaceBinary(v);
+    }
+    return out;
+  }
+  return value;
+}
 
 /** A single content part within a message (text, tool_call, tool_call_response, …). */
 export interface GenAiMessagePart {
@@ -46,7 +82,21 @@ export interface GenAiMessage {
 }
 
 function serialize(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value);
+  if (typeof value === 'string') return value;
+  return JSON.stringify(replaceBinary(value));
+}
+
+/**
+ * Gate for opt-in content capture, mirroring the AI SDK's
+ * `experimental_telemetry`. Input and output are gated independently so you can
+ * keep prompts out of telemetry while still recording completions, or vice
+ * versa. A flag left `undefined` defaults to captured.
+ */
+export interface ContentCaptureSettings {
+  /** Capture input-side content (`gen_ai.input.messages`, system instructions). */
+  recordInputs?: boolean;
+  /** Capture output-side content (`gen_ai.output.messages`). */
+  recordOutputs?: boolean;
 }
 
 /** Assign `value` under `key` unless it's absent (undefined or empty array). */
@@ -72,21 +122,51 @@ export function setGenAiContent(
     systemInstructions?: GenAiMessagePart[] | string;
     toolDefinitions?: unknown;
   },
+  settings?: ContentCaptureSettings,
 ): void {
+  const recordInputs = settings?.recordInputs ?? true;
+  const recordOutputs = settings?.recordOutputs ?? true;
   const attrs: Record<string, string> = {};
-  if (content.inputMessages !== undefined) {
+  if (recordInputs && content.inputMessages !== undefined) {
     attrs[GEN_AI.INPUT_MESSAGES] = serialize(content.inputMessages);
   }
-  if (content.outputMessages !== undefined) {
+  if (recordOutputs && content.outputMessages !== undefined) {
     attrs[GEN_AI.OUTPUT_MESSAGES] = serialize(content.outputMessages);
   }
-  if (content.systemInstructions !== undefined) {
+  if (recordInputs && content.systemInstructions !== undefined) {
     attrs[GEN_AI.SYSTEM_INSTRUCTIONS] = serialize(content.systemInstructions);
   }
-  if (content.toolDefinitions !== undefined) {
+  if (recordInputs && content.toolDefinitions !== undefined) {
     attrs[GEN_AI.TOOL_DEFINITIONS] = serialize(content.toolDefinitions);
   }
   if (Object.keys(attrs).length > 0) ctx.setAttributes(attrs);
+}
+
+/** A single provider warning. */
+export interface GenAiWarning {
+  /** Warning kind, e.g. `unsupported-setting`, `unsupported-tool`, `other`. */
+  type?: string;
+  /** The setting that triggered the warning, when `type` is a setting issue. */
+  setting?: string;
+  /** Human-readable detail. */
+  message?: string;
+}
+
+/**
+ * Record provider warnings (e.g. an unsupported setting the provider silently
+ * dropped) as a `gen_ai.client.warnings` event. Vendors and the AI SDK only
+ * _log_ these, so they vanish from traces — recording them keeps the signal
+ * where you debug. No-op for an empty list.
+ */
+export function recordModelWarnings(
+  ctx: Pick<TraceContext, 'track'>,
+  warnings: readonly GenAiWarning[],
+): void {
+  if (warnings.length === 0) return;
+  ctx.track(GEN_AI_EXT_EVENT.CLIENT_WARNINGS, {
+    'gen_ai.warnings.count': warnings.length,
+    'gen_ai.warnings': serialize(warnings),
+  });
 }
 
 /** Payload for the `gen_ai.client.inference.operation.details` event. */

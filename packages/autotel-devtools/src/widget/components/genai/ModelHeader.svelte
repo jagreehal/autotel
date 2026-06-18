@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { Cpu, Clock, Coins, Hash, Bot } from '@lucide/svelte';
+  import { Cpu, Clock, Coins, Hash, Bot, Gauge, ShieldAlert, TriangleAlert } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
   import CopyButton from '../CopyButton.svelte';
   import {
     formatInputTokens,
     formatOutputTokens,
     formatCostUsd,
+    formatTokensPerSecond,
+    formatSeconds,
   } from '../../utils/genaiFormat';
   import { formatDuration } from '../../utils';
   import type { GenAiSpan } from '../../genai/types';
@@ -50,6 +52,28 @@
       .join(' · ');
   });
 
+  // Streaming throughput: prefer time-to-first-chunk + tok/s when present.
+  const streamingLabel = $derived.by(() => {
+    const s = span.streaming;
+    if (!s) return null;
+    const parts: string[] = [];
+    if (s.timeToFirstChunkS !== undefined)
+      parts.push(`TTFC ${formatSeconds(s.timeToFirstChunkS)}`);
+    if (s.outputTokensPerSecond !== undefined)
+      parts.push(formatTokensPerSecond(s.outputTokensPerSecond));
+    return parts.length > 0 ? parts.join(' · ') : null;
+  });
+
+  const costKnown = $derived(
+    span.cost?.source === 'table' || span.cost?.source === 'reported',
+  );
+
+  // Base classes shared by every status chip (provider, agent, guard, warning).
+  const CHIP =
+    'inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium';
+  const AMBER = 'bg-amber-500/15 text-amber-600 border-amber-500/30';
+  const RED = 'bg-red-500/15 text-red-600 border-red-500/30';
+
   const providerLabel = $derived(
     span.provider === 'unknown' && span.agent?.name ? null : span.provider,
   );
@@ -68,26 +92,36 @@
   )}
 >
   {#if showAgentChip}
-    <span
-      class={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5',
-        'rounded border text-xs font-medium',
-        'bg-violet-500/15 text-violet-600 border-violet-500/30',
-      )}
-    >
+    <span class={cn(CHIP, 'bg-violet-500/15 text-violet-600 border-violet-500/30')}>
       <Bot size={12} />
       agent: {span.agent!.name}
     </span>
   {:else}
-    <span
-      class={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5',
-        'rounded border text-xs font-medium',
-        providerClass,
-      )}
-    >
+    <span class={cn(CHIP, providerClass)}>
       <Cpu size={12} />
       {providerLabel}
+    </span>
+  {/if}
+  {#if span.guard}
+    <span
+      class={cn(CHIP, span.guard.stopped || span.guard.action === 'stop' ? RED : AMBER)}
+      title={span.guard.message ??
+        (span.guard.stopped ? 'Guard stopped the run' : 'Guard warning')}
+    >
+      <ShieldAlert size={12} />
+      guard{span.guard.rule ? `: ${span.guard.rule}` : ''}
+    </span>
+  {/if}
+  {#if span.warnings && span.warnings.length > 0}
+    <span
+      class={cn(CHIP, AMBER)}
+      title={span.warnings
+        .map((w) => w.message ?? w.setting ?? w.type)
+        .filter(Boolean)
+        .join('\n')}
+    >
+      <TriangleAlert size={12} />
+      {span.warnings.length} warning{span.warnings.length === 1 ? '' : 's'}
     </span>
   {/if}
   {#if modelLabel !== 'unknown'}
@@ -115,6 +149,15 @@
     <span class="text-fg-subtle font-mono text-xs">{paramText}</span>
   {/if}
   <span class="ml-auto flex items-center gap-3 text-fg-muted">
+    {#if streamingLabel}
+      <span
+        class="inline-flex items-center gap-1 font-mono text-xs"
+        title="Streaming: time to first chunk · output throughput"
+      >
+        <Gauge size={12} />
+        {streamingLabel}
+      </span>
+    {/if}
     <span class="inline-flex items-center gap-1" title="Latency">
       <Clock size={12} />
       {latency}
@@ -131,14 +174,16 @@
     <span
       class={cn(
         'inline-flex items-center gap-1',
-        span.cost?.source === 'unknown' ? 'text-fg-subtle' : 'text-fg',
+        costKnown ? 'text-fg' : 'text-fg-subtle',
       )}
-      title={span.cost?.source === 'unknown'
-        ? `No price for ${span.provider}/${span.requestModel}`
-        : 'Estimated cost'}
+      title={span.cost?.source === 'reported'
+        ? 'Reported cost (gen_ai.usage.cost.usd)'
+        : span.cost?.source === 'table'
+          ? 'Estimated cost'
+          : `No price for ${span.provider}/${span.requestModel}`}
     >
       <Coins size={12} />
-      {formatCostUsd(span.cost?.total, span.cost?.source === 'table')}
+      {formatCostUsd(span.cost?.total, costKnown)}
     </span>
   </span>
 </div>

@@ -62,7 +62,47 @@ export interface GenAiCost {
   cacheRead: number
   cacheWrite: number
   total: number
-  source: 'table' | 'unknown'
+  // `reported`: the instrumentation emitted `gen_ai.usage.cost.usd` directly
+  // (e.g. autotel-genai's recordLLMCost) — authoritative, preferred over the
+  // client-side `table` estimate. `unknown`: no price found.
+  source: 'table' | 'reported' | 'unknown'
+}
+
+// Streaming performance, from autotel-genai's `gen_ai.response.*` timing
+// attributes. All durations in **seconds** (the attribute unit).
+export interface GenAiStreaming {
+  timeToFirstChunkS?: number
+  timeToFinishS?: number
+  outputTokensPerSecond?: number
+  timePerOutputChunkS?: number
+}
+
+// An inline guard / budget rule that fired during the run (autotel-genai
+// `gen_ai.guard.*`). `stopped` means the run was halted.
+export interface GenAiGuard {
+  stopped?: boolean
+  rule?: string
+  action?: 'warn' | 'stop' | (string & {})
+  message?: string
+  observed?: number
+  limit?: number
+}
+
+// Running session totals accumulated by the guard (`gen_ai.session.*`).
+export interface GenAiSession {
+  costUsd?: number
+  inputTokens?: number
+  outputTokens?: number
+  stepCount?: number
+  toolCallCount?: number
+  errorCount?: number
+}
+
+// A provider warning surfaced via the `gen_ai.client.warnings` event.
+export interface GenAiWarning {
+  type?: string
+  setting?: string
+  message?: string
 }
 
 export interface GenAiSpan {
@@ -102,6 +142,13 @@ export interface GenAiSpan {
 
   usage: GenAiUsage
   cost?: GenAiCost
+
+  // Streaming timing, guard activity, session accumulators, and provider
+  // warnings — all autotel-genai extensions. Present only when emitted.
+  streaming?: GenAiStreaming
+  guard?: GenAiGuard
+  session?: GenAiSession
+  warnings?: GenAiWarning[]
 
   finishReasons?: string[]
   responseId?: string

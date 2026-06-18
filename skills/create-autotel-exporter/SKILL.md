@@ -30,12 +30,11 @@ feat: add {vendor} exporter
 | 1 | `packages/autotel-{vendor}/src/index.ts` | `{Vendor}SpanExporter` class |
 | 2 | `packages/autotel-{vendor}/src/encode.ts` | Span → vendor envelope conversion |
 | 3 | `packages/autotel-{vendor}/src/index.test.ts` | Unit tests (encoding, retry, error) |
-| 4 | `packages/autotel-{vendor}/package.json` | Name, exports, peerDeps |
-| 5 | `packages/autotel-{vendor}/tsup.config.ts` | Build entry |
-| 6 | `packages/autotel-{vendor}/skills/autotel-{vendor}/SKILL.md` | Per-vendor skill |
+| 4 | `packages/autotel-{vendor}/package.json` | Name, exports, peerDeps, `files` includes `skills` |
+| 5 | `packages/autotel-{vendor}/tsdown.config.ts` | Build entry |
+| 6 | `packages/autotel-{vendor}/skills/autotel-{vendor}/SKILL.md` | Per-vendor skill (auto-discovered via the `files` `skills` entry) |
 | 7 | `packages/autotel-backends/skills/autotel-backends/SKILL.md` | Add vendor row |
-| 8 | `skills/index.json` | Register skill |
-| 9 | `bundle-size-baseline.json` | Update on green CI |
+| 8 | `bundle-size-baseline.json` | Update on green CI |
 
 ## Cross-runtime constraint
 

@@ -1,0 +1,55 @@
+{
+  "_source": "autotel-genai — chat span with recordLLMCost (reported cost), streaming timing, guard session accumulators, a guard stop event, and a client.warnings event",
+  "traceId": "aa11bb22cc33dd44ee55ff6677889900",
+  "spanId": "abcdef0123456789",
+  "name": "chat gpt-4o",
+  "kind": "INTERNAL",
+  "startTime": 1716100000000.0,
+  "endTime": 1716100002000.0,
+  "duration": 2000.0,
+  "attributes": {
+    "gen_ai.operation.name": "chat",
+    "gen_ai.provider.name": "openai",
+    "gen_ai.request.model": "gpt-4o",
+    "gen_ai.response.model": "gpt-4o-2024-08-06",
+    "gen_ai.response.finish_reasons": ["stop"],
+    "gen_ai.usage.input_tokens": 1000,
+    "gen_ai.usage.output_tokens": 500,
+    "gen_ai.usage.cost.usd": 0.0075,
+    "gen_ai.response.time_to_first_chunk": 0.2,
+    "gen_ai.response.time_to_finish": 2,
+    "gen_ai.response.output_tokens_per_second": 250,
+    "gen_ai.response.time_per_output_chunk": 0.0036,
+    "gen_ai.session.cost.usd": 12.5,
+    "gen_ai.session.input_tokens": 200000,
+    "gen_ai.session.output_tokens": 50000,
+    "gen_ai.session.step.count": 8,
+    "gen_ai.session.tool_call.count": 5,
+    "gen_ai.session.error.count": 1,
+    "gen_ai.guard.stopped": true
+  },
+  "events": [
+    {
+      "name": "gen_ai.guard.stop",
+      "timestamp": 1716100001999.0,
+      "attributes": {
+        "gen_ai.guard.rule": "cost-ceiling:$10",
+        "gen_ai.guard.action": "stop",
+        "gen_ai.guard.message": "session cost $12.5 exceeds $10",
+        "gen_ai.guard.observed": 12.5,
+        "gen_ai.guard.limit": 10
+      }
+    },
+    {
+      "name": "gen_ai.client.warnings",
+      "timestamp": 1716100000500.0,
+      "attributes": {
+        "gen_ai.warnings.count": 1,
+        "gen_ai.warnings": "[{\"type\":\"unsupported-setting\",\"setting\":\"topK\",\"message\":\"topK is not supported by this model and was ignored\"}]"
+      }
+    }
+  ],
+  "status": {
+    "code": "OK"
+  }
+}

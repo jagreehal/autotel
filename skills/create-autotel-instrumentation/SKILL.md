@@ -27,11 +27,10 @@ feat: add {library} instrumentation
 | 2 | `packages/autotel-{library}/src/wrappers.ts` | Method-level wrapping using `Proxy` |
 | 3 | `packages/autotel-{library}/src/attributes.ts` | OTel semantic-attribute mappers |
 | 4 | `packages/autotel-{library}/src/index.test.ts` | Unit tests with `InMemorySpanExporter` |
-| 5 | `packages/autotel-{library}/package.json` | Name, exports, peerDependency |
-| 6 | `packages/autotel-{library}/tsup.config.ts` | Build entry |
-| 7 | `packages/autotel-{library}/skills/autotel-{library}/SKILL.md` | Usage skill |
-| 8 | `skills/index.json` | Add to skills manifest |
-| 9 | `bundle-size-baseline.json` | Run `pnpm bundle-size:update` once green |
+| 5 | `packages/autotel-{library}/package.json` | Name, exports, peerDependency, `files` includes `skills` |
+| 6 | `packages/autotel-{library}/tsdown.config.ts` | Build entry |
+| 7 | `packages/autotel-{library}/skills/autotel-{library}/SKILL.md` | Usage skill (auto-discovered via the `files` `skills` entry) |
+| 8 | `bundle-size-baseline.json` | Run `pnpm bundle-size:update` once green |
 
 ## Pick the right semantic conventions
 

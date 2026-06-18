@@ -28,7 +28,7 @@ export interface RunSummary {
   cachedTokens: number
 
   totalCostUsd: number
-  /** At least one span carried a table-priced cost. */
+  /** At least one span carried a priced cost (reported or table-estimated). */
   costKnown: boolean
   /** Every model call was priced — totals are exact, not a lower bound. */
   costComplete: boolean
@@ -138,7 +138,9 @@ export function summarizeRun(spans: GenAiSpan[]): RunSummary {
       summary.reasoningTokens += u.reasoningOutputTokens ?? 0
       summary.cachedTokens += u.cacheReadInputTokens ?? 0
 
-      if (span.cost && span.cost.source === 'table') {
+      // `reported` (instrumentation-emitted) and `table` (client estimate) are
+      // both real prices; only `unknown`/absent leaves the total a lower bound.
+      if (span.cost && span.cost.source !== 'unknown') {
         summary.totalCostUsd += span.cost.total
         modelCallsPriced++
       } else {
