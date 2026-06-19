@@ -212,6 +212,57 @@ const canonical = mapAiSdkAttributes(span.attributes); // ai.* → gen_ai.*
 recordAiSdkCost(ctx, span.attributes);                 // sets gen_ai.usage.cost.usd
 ```
 
+### Observer (event-stream → spans)
+
+When you instrument a framework that emits its own lifecycle stream (agent
+runtimes, durable workflows) rather than wrapping calls with `traceGenAI`,
+subscribe an observer and feed every event through it. It rebuilds the span
+tree, estimates cost, and force-closes any child whose end never arrives:
+
+```ts
+import { createGenAiObserver } from 'autotel-genai/observer';
+
+const observe = createGenAiObserver({
+  // Content (messages, tool args/results) is omitted unless you opt in here.
+  exportContent: (event) => redact(event),
+});
+
+observe({ type: 'agent.start', id: 'a1', agent: { name: 'planner' } });
+observe({ type: 'chat.start', id: 'c1', parentId: 'a1',
+          request: { provider: 'openai', model: 'gpt-4o' } });
+observe({ type: 'chat.end', id: 'c1', response: { model: 'gpt-4o' },
+          usage: { inputTokens: 412, outputTokens: 87 } });
+observe({ type: 'agent.end', id: 'a1' }); // closes c1 too if it never ended
+```
+
+Token usage lands on leaf `chat` spans only — aggregate `agent`/`workflow`
+spans never carry `gen_ai.usage.*`, so summing usage across a trace counts each
+call exactly once.
+
+**Framework glue** ships with the observer:
+
+```ts
+import {
+  createGenAiObserver,
+  createLangChainObserver, // LangChain / LangGraph callback handler
+  observeAiSdkResult,      // Vercel AI SDK result walker
+} from 'autotel-genai/observer';
+
+const observe = createGenAiObserver();
+
+// LangChain / LangGraph — one handler, runId/parentRunId → span tree:
+await graph.invoke(input, { callbacks: [createLangChainObserver(observe)] });
+
+// Vercel AI SDK — walk a generateText/streamText result:
+observeAiSdkResult(observe, await generateText({ model, prompt }), {
+  id: 'gen-1',
+  provider: 'openai',
+  model: 'gpt-4o',
+});
+```
+
+See `apps/example-langchain-observer` for a runnable LangGraph + Ollama demo.
+
 ## Semantic conventions
 
 Aligned to the `semantic-conventions-genai` snapshot. Span names follow the

@@ -8,7 +8,7 @@
  *
  * Subpath entry points are available for tree-shaking:
  * `autotel-genai/semconv`, `/cost`, `/metrics`, `/events`, `/trace`,
- * `/guard`, `/ai-sdk`, `/agent`.
+ * `/guard`, `/streaming`, `/ai-sdk`, `/observer`, `/agent`.
  */
 
 // --- Semantic conventions (source of truth) --------------------------------
@@ -157,6 +157,40 @@ export {
   estimateAiSdkCost,
   recordAiSdkCost,
 } from './ai-sdk-bridge.js';
+
+// --- Event-stream observer adapter -----------------------------------------
+export {
+  createGenAiObserver,
+  SpanRegistry,
+  observeAiSdkResult,
+  createLangChainObserver,
+} from './observer/index.js';
+export type {
+  AiSdkResult,
+  AiSdkStep,
+  AiSdkToolCall,
+  AiSdkToolResult,
+  AiSdkUsage,
+  ObserveAiSdkOptions,
+  LangChainObserverHandler,
+  LangChainObserverOptions,
+} from './observer/index.js';
+export type {
+  AgentEndEvent,
+  AgentStartEvent,
+  ChatEndEvent,
+  ChatStartEvent,
+  GenAiObserver,
+  GenAiObserverEvent,
+  GenAiObserverOptions,
+  GenAiToolIdentity,
+  SpanEnd,
+  SpanStart,
+  ToolEndEvent,
+  ToolStartEvent,
+  WorkflowEndEvent,
+  WorkflowStartEvent,
+} from './observer/index.js';
 
 // --- Agent governance ------------------------------------------------------
 // (Re-exported from the `./agent` subpath. `ModelPricing` / `TokenUsage` are

@@ -52,6 +52,11 @@
       "import": "./dist/ai-sdk-bridge.js",
       "require": "./dist/ai-sdk-bridge.cjs"
     },
+    "./observer": {
+      "types": "./dist/observer/index.d.ts",
+      "import": "./dist/observer/index.js",
+      "require": "./dist/observer/index.cjs"
+    },
     "./agent": {
       "types": "./dist/agent/index.d.ts",
       "import": "./dist/agent/index.js",
@@ -102,6 +107,7 @@
   "devDependencies": {
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/sdk-metrics": "^2.7.1",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@types/node": "^25.9.2",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",

@@ -35,6 +35,15 @@ exactly aligned with them.
   `GEN_AI_GUARD_STOP` structured error; emits `gen_ai.guard.*` events +
   `gen_ai.session.*` accumulators (all marked autotel extensions in semconv.ts).
 - `src/ai-sdk-bridge.ts` — Vercel AI SDK interop (`ai.*` → `gen_ai.*`, cost).
+- `src/observer/` — `createGenAiObserver()`: an event-stream → `gen_ai.*` span
+  adapter (subpath `autotel-genai/observer`). Complements `traceGenAI` for
+  frameworks that emit their own lifecycle stream. Reconstructs the span tree
+  from flat `*.start`/`*.end` events, force-closes abandoned children, gates
+  sensitive content behind an `exportContent` privacy callback, and keeps token
+  usage on leaf `chat` spans only so aggregate `agent`/`workflow` spans never
+  double-count `gen_ai.usage.*`. Ships framework glue: `createLangChainObserver`
+  (LangChain/LangGraph callback handler) and `observeAiSdkResult` (Vercel AI SDK
+  result walker), both dependency-free / structurally typed.
 - `src/agent/` — agent identity / delegation / policy / audit governance
   (absorbed from the former `autotel-agent` package).
 

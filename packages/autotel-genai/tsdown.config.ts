@@ -13,6 +13,7 @@ export default defineConfig({
     'src/guard.ts',
     'src/streaming.ts',
     'src/ai-sdk-bridge.ts',
+    'src/observer/index.ts',
     'src/agent/index.ts',
   ],
   format: ['esm', 'cjs'],
