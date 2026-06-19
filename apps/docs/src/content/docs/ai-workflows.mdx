@@ -65,6 +65,7 @@ The package splits into focused subpath exports, so you import only what you use
 | `autotel-genai/guard` | inline cost/token/loop kill-switch: `createGenAiBudget()`, `createGenAiGuard()`, `parseGuardRules()` |
 | `autotel-genai/streaming` | streaming performance: `createStreamTimer()`, `recordStreamTiming()` (TTFC, throughput, inter-chunk distribution) |
 | `autotel-genai/ai-sdk` | Vercel AI SDK `ai.*` to `gen_ai.*` mapping plus cost |
+| `autotel-genai/observer` | `createGenAiObserver()` event-stream adapter, with `createLangChainObserver()` and `observeAiSdkResult()` glue |
 | `autotel-genai/agent` | agent identity, delegation, policy, audit, privacy, non-repudiation |
 | `autotel-genai/semconv` | `GEN_AI_*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()` |
 
@@ -74,6 +75,45 @@ the model call), plain `trace()` is all you need — no AI-specific API. Reach f
 `autotel-genai` at the model boundary to get canonical `gen_ai.*` attributes,
 cost, and metrics.
 :::
+
+## Capturing framework event streams
+
+`traceGenAI()` wraps code you own. When a framework emits its own telemetry
+stream, subscribe `createGenAiObserver` and feed every event through it. It
+rebuilds the `gen_ai.*` span tree and force-closes any child whose terminal
+event never arrives.
+
+Token usage and cost land on leaf `chat` spans. Aggregate `agent` and
+`workflow` spans carry no `gen_ai.usage.*`, so a backend that sums usage across
+a trace counts each call once.
+
+Two adapters ship with the observer:
+
+```typescript
+import {
+  createGenAiObserver,
+  createLangChainObserver,
+  observeAiSdkResult,
+} from 'autotel-genai/observer';
+
+const observe = createGenAiObserver();
+
+// LangChain / LangGraph: one callback handler turns runId/parentRunId into the tree.
+await graph.invoke(input, { callbacks: [createLangChainObserver(observe)] });
+
+// Vercel AI SDK: walk a generateText/streamText result.
+observeAiSdkResult(observe, await generateText({ model, prompt }), {
+  id: 'gen-1',
+  provider: 'openai',
+  model: 'gpt-4o',
+});
+```
+
+Prompts, tool arguments, and tool results stay off spans by default. Pass an
+`exportContent` callback to opt in and redact what reaches each span.
+
+The `example-langchain-observer` app runs a LangGraph agent on a local Ollama
+model and prints the captured tree, token counts, and tool arguments.
 
 ## When to Use OpenLLMetry
 
