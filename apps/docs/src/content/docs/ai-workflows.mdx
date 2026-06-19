@@ -61,7 +61,9 @@ The package splits into focused subpath exports, so you import only what you use
 | `autotel-genai/trace` | `traceGenAI()`, `recordGenAiResponse()`, `recordGenAiUsage()` |
 | `autotel-genai/cost` | `estimateLLMCost()`, `recordLLMCost()`, `MODEL_PRICING` (cache-read/write aware) |
 | `autotel-genai/metrics` | `genAiMetricViews()` to re-bucket the canonical histograms |
-| `autotel-genai/events` | opt-in content events, `inference.operation.details`, `evaluation.result` |
+| `autotel-genai/events` | opt-in content events (input/output gating), `inference.operation.details`, `evaluation.result`, `recordModelWarnings()` |
+| `autotel-genai/guard` | inline cost/token/loop kill-switch: `createGenAiBudget()`, `createGenAiGuard()`, `parseGuardRules()` |
+| `autotel-genai/streaming` | streaming performance: `createStreamTimer()`, `recordStreamTiming()` (TTFC, throughput, inter-chunk distribution) |
 | `autotel-genai/ai-sdk` | Vercel AI SDK `ai.*` to `gen_ai.*` mapping plus cost |
 | `autotel-genai/agent` | agent identity, delegation, policy, audit, privacy, non-repudiation |
 | `autotel-genai/semconv` | `GEN_AI_*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()` |
@@ -693,59 +695,97 @@ rag.pipeline (parent)
 
 ## Pattern: Streaming Responses
 
-Track streaming LLM responses with progress events and final metrics.
+Streaming latency is two numbers, not one: **time to first chunk** (the wait
+before anything appears) and **throughput** (how fast tokens then arrive). A
+single duration hides both. `createStreamTimer` from `autotel-genai/streaming`
+captures the full picture and records the headline values as canonical
+`gen_ai.response.*` attributes.
 
 ```typescript
-import { trace } from 'autotel';
+import { traceGenAI, recordGenAiUsage } from 'autotel-genai/trace';
+import { createStreamTimer, recordStreamTiming } from 'autotel-genai/streaming';
 import { streamText } from 'ai';
 
-export const generateStreamingResponse = trace(
-  'ai.stream',
-  (ctx) => async (prompt: string) => {
-    ctx.setAttributes({
-      'stream.model': 'gpt-4o',
-      'stream.prompt_length': prompt.length,
-    });
+export const generateStreamingResponse = traceGenAI({
+  provider: 'openai',
+  model: 'gpt-4o',
+  operation: 'chat',
+})((ctx) => async (prompt: string) => {
+  const timer = createStreamTimer();
+  const stream = await streamText({ model: openai('gpt-4o'), prompt });
 
-    const stream = await streamText({
-      model: openai('gpt-4o'),
-      prompt,
-    });
+  const chunks: string[] = [];
+  for await (const chunk of stream.textStream) {
+    timer.chunk(); // first call also marks time-to-first-chunk
+    chunks.push(chunk);
+  }
 
-    let chunkCount = 0;
-    let totalLength = 0;
+  const usage = await stream.usage;
+  // gen_ai.response.time_to_first_chunk / .time_to_finish /
+  // .output_tokens_per_second / .time_per_output_chunk (seconds)
+  recordStreamTiming(ctx, timer.finish({ outputTokens: usage.outputTokens }));
+  recordGenAiUsage(ctx, 'gpt-4o', {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+  });
 
-    const chunks: string[] = [];
-    for await (const chunk of stream.textStream) {
-      chunkCount++;
-      totalLength += chunk.length;
-      chunks.push(chunk);
-
-      // Add event for significant milestones
-      if (chunkCount % 10 === 0) {
-        ctx.track('streaming_progress', {
-          chunks_received: chunkCount,
-          total_length: totalLength,
-        });
-      }
-    }
-
-    ctx.setAttributes({
-      'stream.chunks_count': chunkCount,
-      'stream.total_length': totalLength,
-      'stream.avg_chunk_size': Math.round(totalLength / chunkCount),
-    });
-
-    track('ai.stream_completed', {
-      model: 'gpt-4o',
-      chunks: chunkCount,
-      total_length: totalLength,
-    });
-
-    return chunks.join('');
-  },
-);
+  return chunks.join('');
+});
 ```
+
+`computeStreamTiming` is the pure function underneath — it also returns the
+inter-chunk gap distribution `{ min, p10, median, avg, p90, max }` (seconds) for
+diagnosing token-arrival jitter.
+
+## Pattern: Budgets & Guardrails
+
+A guard runs _during_ a run, not after the bill. Feed it each step (an LLM call,
+a tool call, a delegation) and it accumulates cost / tokens / loop state, then
+halts the run when a rule crosses its threshold — aborting an `AbortSignal` and
+(by default) throwing a `GEN_AI_GUARD_STOP` structured error. All deterministic,
+no LLM in the loop.
+
+```typescript
+import { createGenAiBudget } from 'autotel-genai/guard';
+import { estimateLLMCost } from 'autotel-genai/cost';
+
+const budget = createGenAiBudget({ maxCostUsd: 5, warnAtUsd: 4 });
+
+for (const task of tasks) {
+  if (budget.stopped) break;
+  const res = await model.chat(task);
+  budget.record(
+    {
+      kind: 'llm',
+      usage: {
+        costUsd: estimateLLMCost('gpt-4o', {
+          inputTokens: res.usage.input,
+          outputTokens: res.usage.output,
+        }),
+      },
+    },
+    ctx, // optional TraceContext → records gen_ai.guard.* + gen_ai.session.* telemetry
+  ); // throws once total cost > $5
+}
+```
+
+Rules can also come from a shorthand string — cost/token ceilings, spin-loop
+detection (`N identical calls in a window of M`), error loops, tool-call/step
+caps, wall-clock timeouts, and context-window budgets:
+
+```typescript
+import { createGenAiGuard, parseGuardRules } from 'autotel-genai/guard';
+
+const guard = createGenAiGuard({
+  rules: parseGuardRules('budget:$2,loop:3/10,max-tools:50,timeout:5m'),
+  onStop: 'abort', // 'throw' (default) | 'abort' (signal only) | 'silent'
+});
+
+guard.record({ kind: 'tool', name: 'search', signature: JSON.stringify(args) });
+```
+
+Each rule fires once. Thread `guard.signal` into your model/tool calls for
+cooperative cancellation, or catch `GEN_AI_GUARD_STOP` to wind the run down.
 
 ## Pattern: Evaluation Loops
 

@@ -66,6 +66,8 @@ export const chat = traceGenAI({
 | **Attributes** | `autotel-genai` | typed builders → canonical attribute maps |
 | **Events** | `autotel-genai/events` | opt-in content + `inference.operation.details` / `evaluation.result` |
 | **Trace** | `autotel-genai/trace` | `traceGenAI()`, `recordGenAiResponse/Usage` |
+| **Guard** | `autotel-genai/guard` | inline cost/token/loop kill-switch — `createGenAiBudget`, `createGenAiGuard`, `parseGuardRules` |
+| **Streaming** | `autotel-genai/streaming` | TTFC, throughput, inter-chunk distribution — `createStreamTimer`, `recordStreamTiming` |
 | **AI SDK** | `autotel-genai/ai-sdk` | Vercel `ai.*` → `gen_ai.*` mapping + cost |
 | **Agents** | `autotel-genai/agent` | identity, delegation, policy, audit, privacy, non-repudiation |
 
@@ -93,6 +95,84 @@ const sdk = new NodeSDK({ serviceName: 'my-agent', views: [...genAiMetricViews()
 Re-buckets `gen_ai.client.operation.duration`, `…time_to_first_chunk`,
 `…time_per_output_chunk`, `gen_ai.client.token.usage`, and the autotel
 `gen_ai.client.cost.usd` extension for LLM-shaped distributions.
+
+### Guard / budget (kill-switch)
+
+Most tracing tells you what an agent _did_, after the bill. A **guard** runs
+_during_ the run: feed it each step, it accumulates cost / tokens / loop state,
+and halts the run when a rule crosses its threshold — aborting an `AbortSignal`
+and (by default) throwing a `GEN_AI_GUARD_STOP` structured error.
+
+```ts
+import { createGenAiBudget } from 'autotel-genai/guard';
+import { estimateLLMCost } from 'autotel-genai/cost';
+
+const budget = createGenAiBudget({ maxCostUsd: 5, warnAtUsd: 4 });
+
+for (const task of tasks) {
+  if (budget.stopped) break;
+  const res = await model.chat(task);
+  budget.record(
+    { kind: 'llm', usage: { costUsd: estimateLLMCost('gpt-4o', res.usage) } },
+    ctx, // optional TraceContext → records gen_ai.guard.* + gen_ai.session.* telemetry
+  ); // throws once total cost > $5
+}
+```
+
+Rules can also come from a shorthand string — cost ceilings, token ceilings,
+spin-loop detection (`N identical calls in a window of M`), error loops,
+tool-call / step caps, wall-clock timeouts, and context-window budgets:
+
+```ts
+import { createGenAiGuard, parseGuardRules } from 'autotel-genai/guard';
+
+const guard = createGenAiGuard({
+  rules: parseGuardRules('budget:$2,loop:3/10,max-tools:50,timeout:5m'),
+});
+
+guard.record({ kind: 'tool', name: 'search', signature: JSON.stringify(args) });
+```
+
+Each rule fires once; `onStop` chooses `throw` (default), `abort` (signal only),
+or `silent` (record only). All logic is deterministic — no LLM in the loop.
+
+### Streaming performance
+
+Streaming latency is two numbers: **time to first chunk** (the wait before
+anything appears) and **throughput** (how fast tokens then arrive). A single
+duration hides both. `createStreamTimer` captures the full picture and records
+the headline values as `gen_ai.response.*` attributes.
+
+```ts
+import { createStreamTimer, recordStreamTiming } from 'autotel-genai/streaming';
+
+const timer = createStreamTimer();
+let text = '';
+for await (const chunk of stream) {
+  timer.chunk(); // first call also marks time-to-first-chunk
+  text += chunk;
+}
+recordStreamTiming(ctx, timer.finish({ outputTokens: countTokens(text) }));
+// → gen_ai.response.time_to_first_chunk / .time_to_finish /
+//   .output_tokens_per_second / .time_per_output_chunk (seconds)
+```
+
+`computeStreamTiming` is the pure function underneath (TTFC, total time, steady
+throughput, and an inter-chunk gap distribution `{min,p10,median,avg,p90,max}`).
+
+### Content capture & warnings
+
+`setGenAiContent` now gates input/output independently and base64-encodes binary
+(image/audio/file) parts instead of letting `JSON.stringify` corrupt them:
+
+```ts
+import { setGenAiContent, recordModelWarnings } from 'autotel-genai';
+
+setGenAiContent(ctx, { inputMessages, outputMessages },
+  { recordInputs: false, recordOutputs: true }); // keep prompts out of telemetry
+
+recordModelWarnings(ctx, result.warnings); // surface provider warnings vendors only log
+```
 
 ### Agents & tools
 

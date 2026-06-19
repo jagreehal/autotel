@@ -8,13 +8,15 @@
  *
  * Subpath entry points are available for tree-shaking:
  * `autotel-genai/semconv`, `/cost`, `/metrics`, `/events`, `/trace`,
- * `/ai-sdk`, `/agent`.
+ * `/guard`, `/ai-sdk`, `/agent`.
  */
 
 // --- Semantic conventions (source of truth) --------------------------------
 export {
   GEN_AI,
   GEN_AI_EVENT,
+  GEN_AI_EXT_EVENT,
+  GEN_AI_GUARD_EVENT,
   GEN_AI_OPERATION,
   GEN_AI_PROVIDER,
   GEN_AI_TOKEN_TYPE,
@@ -80,15 +82,32 @@ export {
   recordInferenceDetails,
   recordEvaluationResult,
   recordOperationException,
+  recordModelWarnings,
 } from './events.js';
 export type {
   GenAiContentSink,
+  ContentCaptureSettings,
   GenAiMessage,
   GenAiMessagePart,
+  GenAiWarning,
   InferenceDetailsEvent,
   EvaluationResultEvent,
   GenAiOperationExceptionEvent,
 } from './events.js';
+
+// --- Streaming performance -------------------------------------------------
+export {
+  computeStreamTiming,
+  chunkIntervalStats,
+  recordStreamTiming,
+  createStreamTimer,
+} from './streaming.js';
+export type {
+  StreamTiming,
+  ChunkIntervalStats,
+  ComputeStreamTimingInput,
+  StreamTimer,
+} from './streaming.js';
 
 // --- Trace wrapper ---------------------------------------------------------
 export {
@@ -98,6 +117,35 @@ export {
   recordGenAiUsage,
 } from './trace.js';
 export type { TraceGenAIConfig } from './trace.js';
+
+// --- Guard / budget runtime ------------------------------------------------
+export {
+  createGenAiGuard,
+  createGenAiBudget,
+  parseGuardRules,
+  costCeiling,
+  tokenCeiling,
+  maxToolCalls,
+  maxSteps,
+  maxDuration,
+  spinLoop,
+  errorLoop,
+  contextBudget,
+  CONTEXT_LIMITS,
+} from './guard.js';
+export type {
+  GuardAction,
+  GuardUsage,
+  GenAiGuardStep,
+  GuardState,
+  GuardViolation,
+  GenAiGuardRule,
+  GuardSink,
+  GuardStopBehavior,
+  GenAiGuardOptions,
+  GenAiGuard,
+  GenAiBudgetOptions,
+} from './guard.js';
 
 // --- Vercel AI SDK bridge --------------------------------------------------
 export {

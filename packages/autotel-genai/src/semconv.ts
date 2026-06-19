@@ -110,6 +110,38 @@ export const GEN_AI = {
    * the `gen_ai.usage.*` prefix so it sits beside the spec usage attributes.
    */
   USAGE_COST_USD: 'gen_ai.usage.cost.usd',
+
+  // --- Session accumulators (autotel extension — not part of the spec) ------
+  // Running totals for an in-process agent run, accumulated by the guard /
+  // budget runtime (see `./guard`). Spec attributes describe a single call;
+  // these describe the whole session the guard supervises.
+  SESSION_COST_USD: 'gen_ai.session.cost.usd',
+  SESSION_INPUT_TOKENS: 'gen_ai.session.input_tokens',
+  SESSION_OUTPUT_TOKENS: 'gen_ai.session.output_tokens',
+  SESSION_STEP_COUNT: 'gen_ai.session.step.count',
+  SESSION_TOOL_CALL_COUNT: 'gen_ai.session.tool_call.count',
+  SESSION_ERROR_COUNT: 'gen_ai.session.error.count',
+
+  // --- Guard / budget (autotel extension — not part of the spec) ------------
+  // Attributes describing a guard rule that fired. Set on the supervised span
+  // and carried on the `gen_ai.guard.*` events below.
+  GUARD_RULE: 'gen_ai.guard.rule',
+  GUARD_ACTION: 'gen_ai.guard.action',
+  GUARD_MESSAGE: 'gen_ai.guard.message',
+  GUARD_OBSERVED: 'gen_ai.guard.observed',
+  GUARD_LIMIT: 'gen_ai.guard.limit',
+  GUARD_STOPPED: 'gen_ai.guard.stopped',
+
+  // --- Streaming performance (autotel extension — not part of the spec) ------
+  // `RESPONSE_TIME_TO_FIRST_CHUNK` above is the spec attribute (seconds). These
+  // are derived throughput / timing summaries the spec only exposes as metrics.
+  /** Seconds from request start to the final streamed chunk. */
+  RESPONSE_TIME_TO_FINISH: 'gen_ai.response.time_to_finish',
+  /** Output tokens divided by total response time (tokens/second). */
+  RESPONSE_OUTPUT_TOKENS_PER_SECOND:
+    'gen_ai.response.output_tokens_per_second',
+  /** Mean seconds between streamed output chunks. */
+  RESPONSE_TIME_PER_OUTPUT_CHUNK: 'gen_ai.response.time_per_output_chunk',
 } as const;
 
 /** Union of every canonical `gen_ai.*` attribute key. */
@@ -215,6 +247,30 @@ export const GEN_AI_EVENT = {
   INFERENCE_OPERATION_DETAILS: 'gen_ai.client.inference.operation.details',
   EVALUATION_RESULT: 'gen_ai.evaluation.result',
   CLIENT_OPERATION_EXCEPTION: 'gen_ai.client.operation.exception',
+} as const;
+
+/**
+ * Guard / budget event names (autotel extension — not part of the published
+ * GenAI spec). Emitted by the `./guard` runtime when a rule crosses a warn or
+ * stop threshold during an in-process agent run.
+ */
+export const GEN_AI_GUARD_EVENT = {
+  /** A `warn`-action rule crossed its threshold; the run continues. */
+  WARNING: 'gen_ai.guard.warning',
+  /** A `stop`-action rule crossed its threshold; the run is halted. */
+  STOP: 'gen_ai.guard.stop',
+} as const;
+
+/**
+ * Event names that are autotel extensions (not in the published GenAI spec).
+ */
+export const GEN_AI_EXT_EVENT = {
+  /**
+   * Provider warnings surfaced for a call (e.g. an unsupported setting silently
+   * dropped). Vendors and the AI SDK only log these; recording them keeps the
+   * signal in your traces.
+   */
+  CLIENT_WARNINGS: 'gen_ai.client.warnings',
 } as const;
 
 /**

@@ -1,11 +1,15 @@
 import type { SpanData } from '../types'
 import type {
+  GenAiGuard,
   GenAiMessage,
   GenAiMessagePart,
+  GenAiSession,
   GenAiSpan,
+  GenAiStreaming,
   GenAiToolCall,
   GenAiToolDef,
   GenAiUsage,
+  GenAiWarning,
 } from './types'
 import { priceCall } from './prices'
 
@@ -263,6 +267,90 @@ function readUsage(attrs: Attrs): GenAiUsage {
   }
 }
 
+// autotel-genai streaming-performance attributes (`gen_ai.response.*`, seconds).
+function readStreaming(attrs: Attrs): GenAiStreaming | undefined {
+  const timeToFirstChunkS = num(attrs['gen_ai.response.time_to_first_chunk'])
+  const timeToFinishS = num(attrs['gen_ai.response.time_to_finish'])
+  const outputTokensPerSecond = num(attrs['gen_ai.response.output_tokens_per_second'])
+  const timePerOutputChunkS = num(attrs['gen_ai.response.time_per_output_chunk'])
+  if (
+    timeToFirstChunkS === undefined &&
+    timeToFinishS === undefined &&
+    outputTokensPerSecond === undefined &&
+    timePerOutputChunkS === undefined
+  ) {
+    return undefined
+  }
+  return { timeToFirstChunkS, timeToFinishS, outputTokensPerSecond, timePerOutputChunkS }
+}
+
+// autotel-genai guard session accumulators (`gen_ai.session.*`).
+function readSession(attrs: Attrs): GenAiSession | undefined {
+  const costUsd = num(attrs['gen_ai.session.cost.usd'])
+  const inputTokens = num(attrs['gen_ai.session.input_tokens'])
+  const outputTokens = num(attrs['gen_ai.session.output_tokens'])
+  const stepCount = num(attrs['gen_ai.session.step.count'])
+  const toolCallCount = num(attrs['gen_ai.session.tool_call.count'])
+  const errorCount = num(attrs['gen_ai.session.error.count'])
+  if (
+    costUsd === undefined &&
+    inputTokens === undefined &&
+    outputTokens === undefined &&
+    stepCount === undefined &&
+    toolCallCount === undefined &&
+    errorCount === undefined
+  ) {
+    return undefined
+  }
+  return { costUsd, inputTokens, outputTokens, stepCount, toolCallCount, errorCount }
+}
+
+// Guard activity + provider warnings. The `gen_ai.guard.stopped` flag is a span
+// attribute; the firing rule's details (`gen_ai.guard.*`) ride on the
+// `gen_ai.guard.stop` / `.warning` events, and provider warnings on the
+// `gen_ai.client.warnings` event. A `stop` always wins over a `warn`.
+// Read the guard rule details from one attribute bag (span attributes or an
+// event's attributes — the keys are identical). A `stop` always wins over a
+// `warn`, so a later warn never overwrites a recorded stop.
+function readGuardDetails(a: Attrs, defaultAction?: GenAiGuard['action']): GenAiGuard | undefined {
+  const rule = str(a['gen_ai.guard.rule'])
+  if (!rule) return undefined
+  return {
+    rule,
+    action: (str(a['gen_ai.guard.action']) as GenAiGuard['action']) ?? defaultAction,
+    message: str(a['gen_ai.guard.message']),
+    observed: num(a['gen_ai.guard.observed']),
+    limit: num(a['gen_ai.guard.limit']),
+  }
+}
+
+function readGuardAndWarnings(
+  attrs: Attrs,
+  events: SpanEvent[] | undefined,
+): { guard?: GenAiGuard; warnings?: GenAiWarning[] } {
+  const stopped = bool(attrs['gen_ai.guard.stopped'])
+  const warnings: GenAiWarning[] = []
+  let guard = readGuardDetails(attrs)
+
+  const apply = (next?: GenAiGuard) => {
+    if (next && (!guard || next.action === 'stop')) guard = next
+  }
+  for (const ev of events ?? []) {
+    const a = ev.attributes ?? {}
+    if (ev.name === 'gen_ai.guard.stop') apply(readGuardDetails(a, 'stop'))
+    else if (ev.name === 'gen_ai.guard.warning') apply(readGuardDetails(a, 'warn'))
+    else if (ev.name === 'gen_ai.client.warnings') {
+      const parsed = parseJson<GenAiWarning[]>(a['gen_ai.warnings'])
+      if (Array.isArray(parsed)) warnings.push(...parsed)
+    }
+  }
+
+  if (stopped !== undefined || guard) {
+    guard = { ...guard, stopped: stopped ?? guard?.action === 'stop' }
+  }
+  return { guard, warnings: warnings.length > 0 ? warnings : undefined }
+}
+
 function normalizeProviderName(raw: string): string {
   const p = raw.toLowerCase()
   if (p === 'az.ai.openai' || p === 'azure_openai') return 'openai'
@@ -303,6 +391,23 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   'gen_ai.usage.reasoning.output_tokens',
   'gen_ai.usage.cache_read.input_tokens',
   'gen_ai.usage.cache_creation.input_tokens',
+  'gen_ai.usage.cost.usd',
+  'gen_ai.response.time_to_first_chunk',
+  'gen_ai.response.time_to_finish',
+  'gen_ai.response.output_tokens_per_second',
+  'gen_ai.response.time_per_output_chunk',
+  'gen_ai.guard.stopped',
+  'gen_ai.guard.rule',
+  'gen_ai.guard.action',
+  'gen_ai.guard.message',
+  'gen_ai.guard.observed',
+  'gen_ai.guard.limit',
+  'gen_ai.session.cost.usd',
+  'gen_ai.session.input_tokens',
+  'gen_ai.session.output_tokens',
+  'gen_ai.session.step.count',
+  'gen_ai.session.tool_call.count',
+  'gen_ai.session.error.count',
   'gen_ai.input.messages',
   'gen_ai.output.messages',
   'gen_ai.input.messages.ref',
@@ -526,7 +631,7 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
   }
 
   const usage = readUsage(attrs)
-  const cost = priceCall({
+  const tableCost = priceCall({
     provider,
     model: responseModel ?? requestModel,
     inputTokens: usage.inputTokens,
@@ -534,6 +639,26 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
     cacheReadInputTokens: usage.cacheReadInputTokens,
     cacheCreationInputTokens: usage.cacheCreationInputTokens,
   })
+  // Prefer the instrumentation-reported cost (`gen_ai.usage.cost.usd`, e.g.
+  // autotel-genai's recordLLMCost) over our client-side table estimate; keep
+  // the table's per-bucket breakdown for context where we have it.
+  const reportedCost = num(attrs['gen_ai.usage.cost.usd'])
+  const cost =
+    reportedCost !== undefined
+      ? {
+          currency: 'USD' as const,
+          input: tableCost?.input ?? 0,
+          output: tableCost?.output ?? 0,
+          cacheRead: tableCost?.cacheRead ?? 0,
+          cacheWrite: tableCost?.cacheWrite ?? 0,
+          total: reportedCost,
+          source: 'reported' as const,
+        }
+      : tableCost
+
+  const streaming = readStreaming(attrs)
+  const session = readSession(attrs)
+  const { guard, warnings } = readGuardAndWarnings(attrs, span.events)
 
   const finishReasons = strArray(attrs['gen_ai.response.finish_reasons'])
 
@@ -600,6 +725,10 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
 
     usage,
     cost,
+    streaming,
+    guard,
+    session,
+    warnings,
 
     finishReasons,
     responseId: str(attrs['gen_ai.response.id']),

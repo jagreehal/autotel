@@ -9,12 +9,16 @@ export { buildToolResultIndex, hydrateToolResults } from './stitch'
 export { lookupPrice, priceCall } from './prices'
 export type {
   GenAiCost,
+  GenAiGuard,
   GenAiMessage,
   GenAiMessagePart,
   GenAiOperation,
   GenAiRole,
+  GenAiSession,
   GenAiSpan,
+  GenAiStreaming,
   GenAiToolCall,
   GenAiToolDef,
   GenAiUsage,
+  GenAiWarning,
 } from './types'

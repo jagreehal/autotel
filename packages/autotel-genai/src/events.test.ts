@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   recordEvaluationResult,
   recordInferenceDetails,
+  recordModelWarnings,
   recordOperationException,
   setGenAiContent,
 } from './events.js';
@@ -78,5 +79,61 @@ describe('recordOperationException', () => {
       'exception.type': 'timeout',
       'exception.message': 'timed out',
     });
+  });
+});
+
+describe('setGenAiContent gating', () => {
+  it('honours recordInputs / recordOutputs', () => {
+    const setAttributes = vi.fn();
+    setGenAiContent(
+      { setAttributes, track: vi.fn() },
+      {
+        inputMessages: 'secret prompt',
+        systemInstructions: 'system',
+        outputMessages: 'safe completion',
+      },
+      { recordInputs: false, recordOutputs: true },
+    );
+    const attrs = setAttributes.mock.calls[0][0];
+    expect(attrs).not.toHaveProperty('gen_ai.input.messages');
+    expect(attrs).not.toHaveProperty('gen_ai.system_instructions');
+    expect(attrs).toHaveProperty('gen_ai.output.messages', 'safe completion');
+  });
+
+  it('base64-encodes binary content instead of corrupting it', () => {
+    const setAttributes = vi.fn();
+    setGenAiContent(
+      { setAttributes, track: vi.fn() },
+      {
+        inputMessages: [
+          {
+            role: 'user',
+            parts: [{ type: 'file', data: new Uint8Array([1, 2, 3]) }],
+          },
+        ],
+      },
+    );
+    const serialized = setAttributes.mock.calls[0][0]['gen_ai.input.messages'];
+    expect(serialized).toContain('"__type":"base64"');
+    expect(serialized).not.toContain('"0":1'); // not the JSON.stringify corruption
+  });
+});
+
+describe('recordModelWarnings', () => {
+  it('emits a warnings event with a count', () => {
+    const track = vi.fn();
+    recordModelWarnings({ track }, [
+      { type: 'unsupported-setting', setting: 'topK', message: 'ignored' },
+    ]);
+    expect(track).toHaveBeenCalledWith(
+      'gen_ai.client.warnings',
+      expect.objectContaining({ 'gen_ai.warnings.count': 1 }),
+    );
+  });
+
+  it('is a no-op for an empty list', () => {
+    const track = vi.fn();
+    recordModelWarnings({ track }, []);
+    expect(track).not.toHaveBeenCalled();
   });
 });

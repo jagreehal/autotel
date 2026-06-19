@@ -37,6 +37,16 @@
       "import": "./dist/trace.js",
       "require": "./dist/trace.cjs"
     },
+    "./guard": {
+      "types": "./dist/guard.d.ts",
+      "import": "./dist/guard.js",
+      "require": "./dist/guard.cjs"
+    },
+    "./streaming": {
+      "types": "./dist/streaming.d.ts",
+      "import": "./dist/streaming.js",
+      "require": "./dist/streaming.cjs"
+    },
     "./ai-sdk": {
       "types": "./dist/ai-sdk-bridge.d.ts",
       "import": "./dist/ai-sdk-bridge.js",
@@ -51,7 +61,8 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "skills"
   ],
   "scripts": {
     "build": "tsdown",

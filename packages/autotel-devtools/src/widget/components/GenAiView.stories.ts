@@ -11,6 +11,7 @@ import aisdkTools from '../genai/__fixtures__/aisdk-ollama-tools-real.json'
 import pydanticAi from '../genai/__fixtures__/pydantic-ai-ollama-real.json'
 import gemini from '../genai/__fixtures__/gemini-pydantic-real.json'
 import langchain from '../genai/__fixtures__/langchain-ollama-real.json'
+import genaiGuard from '../genai/__fixtures__/autotel-genai-guard.json'
 
 // `GenAiView.svelte` takes no props — it derives its rows from `tracesSignal`
 // (via the `genAiRowsSignal` computed). The Preact stories passed a `raw` span
@@ -168,6 +169,24 @@ export const TraceMode: Story = {
     await expect(
       (await canvas.findAllByText(/Tool: lookupTraveler/i)).length,
     ).toBeGreaterThan(0)
+  },
+}
+
+// autotel-genai: reported cost, streaming throughput (TTFC + tok/s), a guard
+// that stopped the run on a cost ceiling, and a provider warning — all surfaced
+// in the model header.
+export const GenAiGuardAndStreaming: Story = {
+  beforeEach: () => seedTraces([[genaiGuard as unknown as SpanData]]),
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('openai')).toBeInTheDocument()
+    // Guard chip shows the firing rule.
+    await expect(
+      await canvas.findByText(/guard: cost-ceiling:\$10/i),
+    ).toBeInTheDocument()
+    // Streaming throughput chip (output tokens/second).
+    await expect(canvas.getByText(/tok\/s/i)).toBeInTheDocument()
+    // Provider warning chip.
+    await expect(canvas.getByText(/1 warning/i)).toBeInTheDocument()
   },
 }
 

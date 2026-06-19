@@ -688,3 +688,69 @@ describe('toGenAiSpan — OpenLLMetry legacy llm.* keys', () => {
     expect(out.messages[1].finishReason).toBe('stop')
   })
 })
+
+describe('toGenAiSpan — autotel-genai guard / streaming / cost', () => {
+  const span = toGenAiSpan(loadFixture('autotel-genai-guard'))
+
+  it('is detected as a GenAI span', () => {
+    expect(isGenAiSpan(loadFixture('autotel-genai-guard'))).toBe(true)
+  })
+
+  it('prefers the reported gen_ai.usage.cost.usd over the table estimate', () => {
+    expect(span.cost?.source).toBe('reported')
+    expect(span.cost?.total).toBe(0.0075)
+  })
+
+  it('reads streaming performance attributes (seconds)', () => {
+    expect(span.streaming).toEqual({
+      timeToFirstChunkS: 0.2,
+      timeToFinishS: 2,
+      outputTokensPerSecond: 250,
+      timePerOutputChunkS: 0.0036,
+    })
+  })
+
+  it('reads the session accumulators', () => {
+    expect(span.session).toEqual({
+      costUsd: 12.5,
+      inputTokens: 200000,
+      outputTokens: 50000,
+      stepCount: 8,
+      toolCallCount: 5,
+      errorCount: 1,
+    })
+  })
+
+  it('reads guard stop from the attribute flag and the event details', () => {
+    expect(span.guard?.stopped).toBe(true)
+    expect(span.guard?.action).toBe('stop')
+    expect(span.guard?.rule).toBe('cost-ceiling:$10')
+    expect(span.guard?.observed).toBe(12.5)
+    expect(span.guard?.limit).toBe(10)
+  })
+
+  it('reads provider warnings from the gen_ai.client.warnings event', () => {
+    expect(span.warnings).toHaveLength(1)
+    expect(span.warnings?.[0]).toMatchObject({
+      type: 'unsupported-setting',
+      setting: 'topK',
+    })
+  })
+
+  it('does not leak recognized keys into extras.raw', () => {
+    expect(span.extras.raw).not.toHaveProperty('gen_ai.usage.cost.usd')
+    expect(span.extras.raw).not.toHaveProperty('gen_ai.guard.stopped')
+    expect(span.extras.raw).not.toHaveProperty('gen_ai.session.cost.usd')
+    expect(span.extras.raw).not.toHaveProperty('gen_ai.response.time_to_finish')
+  })
+})
+
+describe('summarizeRun — reported cost counts as priced', () => {
+  it('includes reported-source cost in the run total and marks it complete', async () => {
+    const { summarizeRun } = await import('./summary')
+    const summary = summarizeRun([toGenAiSpan(loadFixture('autotel-genai-guard'))])
+    expect(summary.totalCostUsd).toBeCloseTo(0.0075, 9)
+    expect(summary.costKnown).toBe(true)
+    expect(summary.costComplete).toBe(true)
+  })
+})

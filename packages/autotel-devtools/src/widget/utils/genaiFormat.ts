@@ -34,6 +34,19 @@ export function formatOutputTokens(total?: number, reasoning?: number): string {
     : String(total);
 }
 
+/** Compact streaming throughput label: `52 tok/s`, or `—` when unknown. */
+export function formatTokensPerSecond(tokensPerSecond?: number): string {
+  if (tokensPerSecond == null) return '—';
+  return `${tokensPerSecond >= 10 ? Math.round(tokensPerSecond) : tokensPerSecond.toFixed(1)} tok/s`;
+}
+
+/** A duration given in seconds rendered compactly: `820ms`, `2.4s`. */
+export function formatSeconds(seconds?: number): string {
+  if (seconds == null) return '—';
+  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
+  return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`;
+}
+
 /**
  * Compact label for a list of tool-call names, collapsing repeats: a single
  * tool → `getWeather`; repeats → `getWeather (x3)`; many → `a, b, …` with the

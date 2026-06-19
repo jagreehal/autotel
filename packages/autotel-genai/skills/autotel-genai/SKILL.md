@@ -107,15 +107,71 @@ Builders omit absent fields, coerce int-typed attributes (`top_k`, `seed`,
 ### Content + evaluation events
 
 ```typescript
-import { setGenAiContent, recordInferenceDetails, recordEvaluationResult } from 'autotel-genai/events';
+import {
+  setGenAiContent,
+  recordInferenceDetails,
+  recordEvaluationResult,
+  recordModelWarnings,
+} from 'autotel-genai/events';
 
-// Opt-in content on the span (may carry PII — gate behind your own capture flag)
-setGenAiContent(ctx, { inputMessages, outputMessages });
+// Opt-in content on the span. Gate input/output independently; binary parts
+// (image/audio/file) are base64-encoded, not corrupted by JSON.stringify.
+setGenAiContent(ctx, { inputMessages, outputMessages }, { recordInputs: false });
 // gen_ai.client.inference.operation.details event (decoupled from the span)
 recordInferenceDetails(ctx, { operation: 'chat', requestModel: 'gpt-4o', inputTokens: 412 });
 // gen_ai.evaluation.result event
 recordEvaluationResult(ctx, { name: 'relevance', scoreValue: 0.92 });
+// gen_ai.client.warnings event — surface provider warnings vendors only log
+recordModelWarnings(ctx, [{ type: 'unsupported-setting', setting: 'topK' }]);
 ```
+
+### Streaming performance — `autotel-genai/streaming`
+
+Streaming latency is two numbers: **time to first chunk** (the wait) and
+**throughput** (how fast tokens then arrive). `createStreamTimer` captures both.
+
+```typescript
+import { createStreamTimer, recordStreamTiming } from 'autotel-genai/streaming';
+
+const timer = createStreamTimer();
+let text = '';
+for await (const chunk of stream) {
+  timer.chunk(); // first call also marks time-to-first-chunk
+  text += chunk;
+}
+// gen_ai.response.time_to_first_chunk (spec) + .time_to_finish /
+// .output_tokens_per_second / .time_per_output_chunk (autotel extensions, seconds)
+recordStreamTiming(ctx, timer.finish({ outputTokens }));
+```
+
+`computeStreamTiming(...)` is the pure function underneath; it also returns the
+inter-chunk gap distribution `{ min, p10, median, avg, p90, max }`.
+
+### Budgets & guardrails — `autotel-genai/guard`
+
+An inline kill-switch that runs _during_ a run. Feed it each step; it accumulates
+cost / tokens / loop state and halts when a rule crosses its threshold — aborting
+an `AbortSignal` and (by default) throwing a `GEN_AI_GUARD_STOP` structured
+error. Deterministic, no LLM in the loop.
+
+```typescript
+import { createGenAiBudget, createGenAiGuard, parseGuardRules } from 'autotel-genai/guard';
+
+// Preset: cost / token / tool-call / duration ceilings
+const budget = createGenAiBudget({ maxCostUsd: 5, warnAtUsd: 4 });
+budget.record({ kind: 'llm', usage: { costUsd } }, ctx); // throws once cost > $5
+
+// Or build rules from a shorthand string (or typed factories)
+const guard = createGenAiGuard({
+  rules: parseGuardRules('budget:$2,loop:3/10,max-tools:50,timeout:5m'),
+  onStop: 'abort', // 'throw' (default) | 'abort' (signal only) | 'silent'
+});
+guard.record({ kind: 'tool', name: 'search', signature: JSON.stringify(args) });
+```
+
+Rule factories: `costCeiling`, `tokenCeiling`, `maxToolCalls`, `maxSteps`,
+`maxDuration`, `spinLoop`, `errorLoop`, `contextBudget`. Each fires once. Records
+`gen_ai.guard.*` events + `gen_ai.session.*` accumulators when given a `ctx`.
 
 ### Vercel AI SDK bridge
 
@@ -161,6 +217,10 @@ await withScopedTool(
   `prompt_tokens` / `completion_tokens` / `total_tokens`.
 - Finish reasons: `gen_ai.response.finish_reasons` (plural, string array).
 - Cost (autotel extension): `gen_ai.usage.cost.usd`.
+- Other autotel extensions (clearly non-spec, namespaced under `gen_ai.*`):
+  `gen_ai.guard.*` + `gen_ai.session.*` (guard), `gen_ai.response.time_to_finish`
+  / `output_tokens_per_second` / `time_per_output_chunk` (streaming),
+  `gen_ai.client.warnings` (event). `gen_ai.response.time_to_first_chunk` is spec.
 - `gen_ai.request.top_k` is an int; `gen_ai.agent.id` is dropped on internal
   `invoke_agent`/`plan` spans (spec breaking change #242 — `traceGenAI` handles
   this automatically).
