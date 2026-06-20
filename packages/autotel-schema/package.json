@@ -1,6 +1,6 @@
 {
   "name": "autotel-schema",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Your telemetry surface as a typed, versioned contract — declare the spans and attributes your service emits, validate live spans against them, and diff the surface across commits to catch breaking trace changes before they ship.",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "autotel-tanstack",
-  "version": "1.13.36",
+  "version": "1.13.37",
   "description": "OpenTelemetry instrumentation for TanStack Start - automatic tracing for server functions, middleware, and route loaders",
   "type": "module",
   "main": "./dist/index.js",
