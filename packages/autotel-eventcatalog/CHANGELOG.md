@@ -1,5 +1,11 @@
 # Changelog
 
+## 10.0.0
+
+### Patch Changes
+
+- autotel-subscribers@40.0.0
+
 ## 9.0.0
 
 ### Patch Changes
