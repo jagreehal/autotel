@@ -45,7 +45,11 @@ exactly aligned with them.
   (LangChain/LangGraph callback handler) and `observeAiSdkResult` (Vercel AI SDK
   result walker), both dependency-free / structurally typed.
 - `src/agent/` — agent identity / delegation / policy / audit governance
-  (absorbed from the former `autotel-agent` package).
+  (absorbed from the former `autotel-agent` package). Includes Google SAIF-aligned
+  security attrs (`AGENT_SECURITY_ATTR`, `recordHumanApproval`, `recordInputProvenance`,
+  plan/memory/render helpers) and pluggable plan-risk classifiers
+  (`AgentPlanClassifier`, `runAgentPlanClassifier`, `heuristicPlanRiskClassifier`).
+  See [`docs/AGENT-SECURITY-OBSERVABILITY.md`](../../docs/AGENT-SECURITY-OBSERVABILITY.md).
 
 ## Invariants
 

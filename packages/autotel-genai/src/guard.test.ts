@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('autotel-audit', () => ({
+  securityEvent: vi.fn(),
+}));
+
 import {
   CONTEXT_LIMITS,
   contextBudget,
@@ -197,10 +202,12 @@ describe('onStop behaviour', () => {
 
 describe('telemetry sink', () => {
   it('records session attributes and a stop event', () => {
+    const setAttribute = vi.fn();
     const setAttributes = vi.fn();
     const track = vi.fn();
     const guard = createGenAiGuard({ rules: [costCeiling(1)], onStop: 'abort' });
     guard.record({ kind: 'tool', usage: { costUsd: 2, inputTokens: 10 } }, {
+      setAttribute,
       setAttributes,
       track,
     });

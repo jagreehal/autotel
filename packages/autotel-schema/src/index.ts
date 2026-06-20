@@ -86,3 +86,5 @@ export {
   highCardinalityKeys,
   isHighCardinalityKey,
 } from './redaction.js';
+
+export { AGENT_SECURITY_TELEMETRY_CONTRACT } from './contracts/agent-security.js';

@@ -34,6 +34,41 @@ import { recordSecurityEvent } from './metrics';
 // subpath alongside the helpers that use them.
 export { MCP_CHAR_BUDGETS } from './semantic-conventions';
 
+/** Minimal bridge sink — maps MCP boundary signals to unified `security.*` events. */
+export interface SecurityEventBridgeLike {
+  (metadata: {
+    name: string;
+    category: 'llm';
+    outcome: 'success' | 'failure' | 'denied' | 'blocked' | 'error';
+    severity?: 'info' | 'warning' | 'error' | 'critical';
+    reason?: string;
+    toolName?: string;
+    verdict?: string;
+    source?: string;
+    [key: string]: unknown;
+  }): void;
+}
+
+export interface McpSecurityBridgeOptions {
+  bridge?: SecurityEventBridgeLike;
+  toolName?: string;
+}
+
+function emitBridgedSecurityEvent(
+  options: McpSecurityBridgeOptions | undefined,
+  metadata: Parameters<SecurityEventBridgeLike>[0],
+): void {
+  if (!options?.bridge) return;
+  try {
+    options.bridge({
+      ...metadata,
+      ...(options.toolName !== undefined && { toolName: options.toolName }),
+    });
+  } catch {
+    // Bridge failures must never break traced MCP operations.
+  }
+}
+
 /** Minimal telemetry sink — the subset of autotel's `TraceContext` we use. */
 export interface SecuritySink {
   setAttribute(key: string, value: string | number | boolean): void;
@@ -244,6 +279,7 @@ export function enforceOutputBudget(
   size: number,
   limit: number,
   attrs: Attributes = {},
+  bridge?: McpSecurityBridgeOptions,
 ): boolean {
   const exceeded = size > limit;
   sink.setAttribute(MCP_SEMCONV.SECURITY_BUDGET_LIMIT, limit);
@@ -256,6 +292,17 @@ export function enforceOutputBudget(
     ...attrs,
   });
   recordSecurityEvent({ event: 'budget_exceeded', ...stringAttrs(attrs) });
+  const toolName = attrs[MCP_SEMCONV.TOOL_NAME];
+  emitBridgedSecurityEvent(bridge, {
+    name: 'llm.output.budget_exceeded',
+    category: 'llm',
+    outcome: 'blocked',
+    severity: 'warning',
+    reason: 'output_char_budget_exceeded',
+    ...(typeof toolName === 'string' && { toolName }),
+    observed: size,
+    limit,
+  });
   return true;
 }
 
@@ -338,6 +385,7 @@ export function applyManifestAssessment(
   sink: SecuritySink,
   assessment: ManifestAssessment | undefined,
   attrs: Attributes = {},
+  bridge?: McpSecurityBridgeOptions,
 ): void {
   if (!assessment) return;
 
@@ -374,6 +422,22 @@ export function applyManifestAssessment(
         event: 'manifest_suspected',
         verdict: assessment.verdict.verdict,
         ...stringAttrs(attrs),
+      });
+      const toolName = attrs[MCP_SEMCONV.TOOL_NAME];
+      emitBridgedSecurityEvent(bridge, {
+        name: 'llm.manifest.suspicious',
+        category: 'llm',
+        outcome:
+          assessment.verdict.verdict === 'malicious' ? 'blocked' : 'denied',
+        severity:
+          assessment.verdict.verdict === 'malicious' ? 'error' : 'warning',
+        reason:
+          assessment.verdict.categories?.join(',') ?? 'manifest_suspected',
+        ...(typeof toolName === 'string' && { toolName }),
+        verdict: assessment.verdict.verdict,
+        ...(typeof assessment.verdict.score === 'number' && {
+          score: assessment.verdict.score,
+        }),
       });
     }
   }
@@ -444,6 +508,7 @@ export async function runClassifier(
   sink: SecuritySink,
   classifier: McpSecurityClassifier,
   input: ClassifierInput,
+  bridge?: McpSecurityBridgeOptions,
 ): Promise<ClassifierVerdict | undefined> {
   let verdict: ClassifierVerdict | undefined;
   try {
@@ -483,6 +548,17 @@ export async function runClassifier(
       event: 'injection_suspected',
       verdict: verdict.verdict,
       source: input.source,
+    });
+    emitBridgedSecurityEvent(bridge, {
+      name: 'llm.prompt_injection.detected',
+      category: 'llm',
+      outcome: verdict.verdict === 'malicious' ? 'blocked' : 'denied',
+      severity: verdict.verdict === 'malicious' ? 'error' : 'warning',
+      reason: verdict.categories?.join(',') ?? 'injection_suspected',
+      toolName: input.name,
+      verdict: verdict.verdict,
+      source: input.source,
+      ...(typeof verdict.score === 'number' && { score: verdict.score }),
     });
   }
   return verdict;

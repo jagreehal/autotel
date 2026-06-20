@@ -95,6 +95,7 @@ vi.mock('autotel', () => ({
 vi.mock('autotel-audit', () => ({
   forceKeepAuditEvent: mocked.forceKeepAuditEvent,
   withAudit: mocked.withAudit,
+  securityEvent: vi.fn(),
 }));
 
 describe('autotel-genai', () => {

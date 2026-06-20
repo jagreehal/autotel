@@ -1,0 +1,238 @@
+{
+  "spec": "autotel-schema-snapshot/v1",
+  "service": "autotel-agent-security",
+  "version": "1.0.0",
+  "commonAttributes": {
+    "agent.action.risk_class": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "read",
+        "write",
+        "destructive",
+        "financial",
+        "exfiltration_capable"
+      ]
+    },
+    "agent.consent.outcome": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "approved",
+        "denied",
+        "timeout",
+        "revoked"
+      ]
+    },
+    "agent.consent.required": {
+      "type": "boolean",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "agent.controller.id": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": true,
+      "description": "Hashed controlling human user id"
+    },
+    "agent.input.provenance": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "user_direct",
+        "user_voice",
+        "rag",
+        "memory",
+        "tool_result",
+        "external_untrusted"
+      ]
+    },
+    "agent.memory.isolation_key": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": true
+    },
+    "agent.memory.operation": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "read",
+        "write",
+        "delete",
+        "search"
+      ]
+    },
+    "agent.plan.risk.categories": {
+      "type": "string[]",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "agent.plan.risk.score": {
+      "type": "number",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "agent.plan.risk.verdict": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "agent.plan.step_index": {
+      "type": "number",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "agent.plan.tool_intents": {
+      "type": "string[]",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "agent.scope.active": {
+      "type": "string[]",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "autotel.agent": {
+      "type": "boolean",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "description": "Agent audit marker"
+    },
+    "mcp.security.injection.verdict": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "clean",
+        "suspicious",
+        "malicious"
+      ]
+    },
+    "mcp.tool.destructive": {
+      "type": "boolean",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "mcp.tool.untrusted_content": {
+      "type": "boolean",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "policy.decision": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "permit",
+        "deny",
+        "challenge",
+        "observe",
+        "error"
+      ]
+    },
+    "security.category": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "security.event": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "security.outcome": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "security.severity": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ]
+    },
+    "tool.input_hash": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    },
+    "tool.output_hash": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false
+    }
+  },
+  "spans": {
+    "agent.action": {
+      "stability": "stable",
+      "additionalAttributes": false,
+      "attributes": {
+        "agent.id": {
+          "type": "string",
+          "stability": "stable",
+          "required": true,
+          "highCardinality": false
+        },
+        "tool.name": {
+          "type": "string",
+          "stability": "stable",
+          "required": false,
+          "highCardinality": false
+        }
+      },
+      "description": "Scoped agent action or tool call with audit metadata"
+    },
+    "tools/call": {
+      "stability": "stable",
+      "additionalAttributes": false,
+      "attributes": {
+        "mcp.tool.name": {
+          "type": "string",
+          "stability": "stable",
+          "required": true,
+          "highCardinality": false
+        }
+      },
+      "description": "MCP tool invocation with boundary security signals"
+    }
+  }
+}

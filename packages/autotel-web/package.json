@@ -22,7 +22,6 @@
   },
   "files": [
     "dist",
-    "src",
     "README.md",
     "skills"
   ],

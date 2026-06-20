@@ -46,6 +46,13 @@ import {
 import { estimateLLMCost } from '../cost.js';
 import { setGenAiContent, type GenAiContentSink } from '../events.js';
 import { GEN_AI, GEN_AI_OPERATION, genAiSpanName } from '../semconv.js';
+import {
+  recordInputProvenance,
+  recordMemoryAccess,
+  recordPlanStep,
+  recordRenderOutput,
+} from '../agent/agent-security.js';
+import { agentContextFromSpan } from '../agent/context.js';
 import { SpanRegistry } from './span-registry.js';
 import type {
   ChatEndEvent,
@@ -54,6 +61,10 @@ import type {
   GenAiObserverEvent,
   GenAiObserverOptions,
   SpanEnd,
+  InputProvenanceEvent,
+  MemoryAccessEvent,
+  PlanStepEvent,
+  RenderOutputEvent,
   ToolEndEvent,
   ToolStartEvent,
 } from './types.js';
@@ -176,6 +187,15 @@ export function createGenAiObserver(
     span.setAttributes(genAiToolAttributes({ callResult: content.callResult }));
   }
 
+  function stampOnParent(
+    parentId: string,
+    apply: (ctx: ReturnType<typeof agentContextFromSpan>) => void,
+  ): void {
+    const parent = registry.spanFor(parentId);
+    if (!parent) return;
+    apply(agentContextFromSpan(parent));
+  }
+
   return (event: GenAiObserverEvent): void => {
     switch (event.type) {
       case 'workflow.start': {
@@ -244,6 +264,46 @@ export function createGenAiObserver(
       }
       case 'tool.end': {
         end(event, (span) => applyToolEnd(span, event));
+        return;
+      }
+      case 'plan.step': {
+        stampOnParent(event.parentId, (ctx) =>
+          recordPlanStep({
+            ctx,
+            stepIndex: event.stepIndex,
+            toolIntents: event.toolIntents,
+            policyIds: event.policyIds,
+            summary: event.summary,
+          }),
+        );
+        return;
+      }
+      case 'input.provenance': {
+        stampOnParent(event.parentId, (ctx) =>
+          recordInputProvenance({ ctx, provenance: event.provenance }),
+        );
+        return;
+      }
+      case 'memory.access': {
+        stampOnParent(event.parentId, (ctx) =>
+          recordMemoryAccess({
+            ctx,
+            operation: event.operation,
+            isolationKey: event.isolationKey,
+            contentHash: event.contentHash,
+          }),
+        );
+        return;
+      }
+      case 'render.output': {
+        stampOnParent(event.parentId, (ctx) =>
+          recordRenderOutput({
+            ctx,
+            format: event.format,
+            containsUrl: event.containsUrl,
+            urlCount: event.urlCount,
+          }),
+        );
         return;
       }
       default: {

@@ -9,6 +9,7 @@ import {
   SECURITY_METRICS,
 } from 'autotel/security-schema';
 import { lazyCounter } from './lazy-counter';
+import { applySecurityEventAttributes } from './security.js';
 
 /**
  * Zero-code security signal derivation from spans you already have.
@@ -49,11 +50,13 @@ type AttributeValue =
 
 interface MutableSpanLike {
   attributes: Record<string, AttributeValue | undefined>;
+  spanContext?: { traceId: string };
   setAttribute(key: string, value: AttributeValue): unknown;
 }
 
 interface ReadableSpanLike {
   attributes: Record<string, AttributeValue | undefined>;
+  spanContext?: { traceId: string };
 }
 
 export interface SecuritySignalProcessor {
@@ -99,11 +102,23 @@ export interface LlmTokenBudgetSignal {
   windowMs: number;
 }
 
+export interface LlmActionChainSuspiciousSignal {
+  signal: 'llm_action_chain_suspicious';
+  /** Trace where the suspicious chain was observed. */
+  traceId: string;
+  /** Tool that followed untrusted-content processing. */
+  toolName?: string;
+  /** Milliseconds since the untrusted tool call on the same trace. */
+  elapsedMs: number;
+  untrustedTool?: string;
+}
+
 export type SecuritySignal =
   | SuspiciousRequestSignal
   | AuthFailureBurstSignal
   | LlmExcessiveTokensSignal
-  | LlmTokenBudgetSignal;
+  | LlmTokenBudgetSignal
+  | LlmActionChainSuspiciousSignal;
 
 export interface BurstOptions {
   /** HTTP statuses counted toward a burst. Default `[401, 403]`. */
@@ -162,6 +177,14 @@ export interface SecuritySignalProcessorOptions {
    * Enabled with the per-call ceiling by default; pass `false` to disable.
    */
   llm?: LlmSignalOptions | false;
+  /**
+   * Detect destructive MCP tool calls that follow untrusted-content tool usage
+   * on the same trace (Google's "read email then send externally" pattern).
+   * Default true.
+   */
+  detectSuspiciousActionChains?: boolean;
+  /** Max ms between untrusted and destructive tool calls on one trace. Default 300_000. */
+  actionChainWindowMs?: number;
   /** Emit `autotel.security.*` metrics. Default true. */
   metrics?: boolean;
   /** Called whenever a signal fires. Keep it fast and non-throwing. */
@@ -298,6 +321,42 @@ function resolveLlmConfig(
   };
 }
 
+const MCP_TOOL_UNTRUSTED = 'mcp.tool.untrusted_content';
+const MCP_TOOL_DESTRUCTIVE = 'mcp.tool.destructive';
+const MCP_TOOL_NAME = 'mcp.tool.name';
+
+interface UntrustedToolHit {
+  toolName?: string;
+  timestamp: number;
+}
+
+function pruneExpiredUntrustedTraces(
+  hits: Map<string, UntrustedToolHit>,
+  cutoff: number,
+): void {
+  for (const [traceId, hit] of hits) {
+    if (hit.timestamp < cutoff) {
+      hits.delete(traceId);
+    }
+  }
+}
+
+function readTraceId(span: ReadableSpanLike): string | undefined {
+  const fromContext = span.spanContext?.traceId;
+  if (typeof fromContext === 'string' && fromContext.length > 0) {
+    return fromContext;
+  }
+  const fromAttr = readAttribute(span.attributes, ['trace_id']);
+  return typeof fromAttr === 'string' && fromAttr.length > 0 ? fromAttr : undefined;
+}
+
+function readBooleanAttribute(
+  attributes: Record<string, AttributeValue | undefined>,
+  key: string,
+): boolean {
+  return readAttribute(attributes, [key]) === true;
+}
+
 export function createSecuritySignalProcessor(
   options: SecuritySignalProcessorOptions = {},
 ): SecuritySignalProcessor {
@@ -316,6 +375,9 @@ export function createSecuritySignalProcessor(
 
   const burst = resolveBurstConfig(options.burst);
   const llm = resolveLlmConfig(options.llm);
+  const detectActionChains = options.detectSuspiciousActionChains !== false;
+  const actionChainWindowMs = options.actionChainWindowMs ?? 300_000;
+  const untrustedByTrace = new Map<string, UntrustedToolHit>();
 
   const counters = {
     suspicious: lazyCounter(
@@ -433,8 +495,66 @@ export function createSecuritySignalProcessor(
     }
   }
 
+  function checkSuspiciousActionChain(span: MutableSpanLike): void {
+    if (!detectActionChains) return;
+
+    const traceId = readTraceId(span);
+    if (!traceId) return;
+
+    const nowMs = now();
+    const cutoff = nowMs - actionChainWindowMs;
+    pruneExpiredUntrustedTraces(untrustedByTrace, cutoff);
+
+    if (readBooleanAttribute(span.attributes, MCP_TOOL_UNTRUSTED)) {
+      const toolName = readAttribute(span.attributes, [MCP_TOOL_NAME]);
+      untrustedByTrace.set(traceId, {
+        timestamp: nowMs,
+        ...(typeof toolName === 'string' && { toolName }),
+      });
+      return;
+    }
+
+    if (!readBooleanAttribute(span.attributes, MCP_TOOL_DESTRUCTIVE)) {
+      return;
+    }
+
+    const prior = untrustedByTrace.get(traceId);
+    if (!prior) {
+      return;
+    }
+    untrustedByTrace.delete(traceId);
+
+    const toolName = readAttribute(span.attributes, [MCP_TOOL_NAME]);
+    const elapsedMs = nowMs - prior.timestamp;
+    count('anomaly', { signal: 'llm_action_chain_suspicious' });
+    emit({
+      signal: 'llm_action_chain_suspicious',
+      traceId,
+      elapsedMs,
+      ...(typeof toolName === 'string' && { toolName }),
+      ...(prior.toolName !== undefined && { untrustedTool: prior.toolName }),
+    });
+    applySecurityEventAttributes(
+      span,
+      {
+        name: 'llm.action_chain.suspicious',
+        category: 'llm',
+        outcome: 'denied',
+        severity: 'warning',
+        reason: 'untrusted_then_destructive',
+        targetType: 'trace',
+        targetId: traceId,
+        ...(typeof toolName === 'string' && { destructiveTool: toolName }),
+        ...(prior.toolName !== undefined && { untrustedTool: prior.toolName }),
+        elapsedMs,
+      },
+      { forceKeep: true, metrics: false },
+    );
+  }
+
   return {
     onStart(span) {
+      checkSuspiciousActionChain(span);
       if (!detect) return;
 
       const target = readAttribute(span.attributes, TARGET_ATTRIBUTES);

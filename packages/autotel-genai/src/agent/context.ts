@@ -74,6 +74,24 @@ export function noopAgentContext(): AgentContext {
   };
 }
 
+/** Adapt an OpenTelemetry span (or span-like object) to {@link AgentContext}. */
+export function agentContextFromSpan(span: {
+  spanContext(): { traceId: string; spanId: string };
+  setAttribute(key: string, value: string | number | boolean): void;
+  setAttributes(
+    attrs: Record<string, string | number | boolean | string[] | number[] | boolean[]>,
+  ): void;
+}): AgentContext {
+  const sc = span.spanContext();
+  return {
+    traceId: sc.traceId,
+    spanId: sc.spanId,
+    correlationId: sc.traceId.slice(0, 16),
+    setAttribute: (key, value) => span.setAttribute(key, value),
+    setAttributes: (attrs) => span.setAttributes(attrs),
+  };
+}
+
 export function toAttributeValue(
   value: unknown,
 ): string | number | boolean | string[] | number[] | boolean[] | undefined {

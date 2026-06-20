@@ -76,7 +76,12 @@ export type SuggestedSecurityEventName =
   | 'dependency.scan.failed'
   | 'llm.prompt_injection.detected'
   | 'llm.tool_call.denied'
-  | 'llm.output.blocked';
+  | 'llm.output.blocked'
+  | 'llm.output.budget_exceeded'
+  | 'llm.guard.triggered'
+  | 'llm.action_chain.suspicious'
+  | 'llm.manifest.suspicious'
+  | 'llm.plan.risk.elevated';
 
 export interface SecurityEventMetadata {
   /** Stable, dot-separated event name, e.g. `auth.login.failed`. */
@@ -123,6 +128,19 @@ export interface SecurityEventOptions {
 }
 
 export type WithSecurityOptions = SecurityEventOptions;
+
+interface SecurityAttributeSink {
+  setAttribute(
+    key: string,
+    value:
+      | string
+      | number
+      | boolean
+      | string[]
+      | number[]
+      | boolean[],
+  ): unknown;
+}
 
 /**
  * Standard metadata fields and the schema attribute each maps to.
@@ -193,6 +211,26 @@ function countSecurityEvent(metadata: SecurityEventMetadata): void {
   });
 }
 
+export function applySecurityEventAttributes(
+  sink: SecurityAttributeSink,
+  metadata: SecurityEventMetadata,
+  options: Pick<SecurityEventOptions, 'forceKeep' | 'metrics'> = {},
+): void {
+  if (options.metrics !== false) {
+    countSecurityEvent(metadata);
+  }
+
+  if (options.forceKeep !== false) {
+    sink.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
+    sink.setAttribute(AUTOTEL_SAMPLING_TAIL_KEEP, true);
+    sink.setAttribute(SECURITY_ATTR.forceKeep, true);
+  }
+
+  for (const [key, value] of Object.entries(flattenSecurityAttributes(metadata))) {
+    sink.setAttribute(key, value);
+  }
+}
+
 /**
  * Record a security event on the active trace and request logger.
  *
@@ -240,7 +278,6 @@ export function securityEvent(
     traceCtx.setAttribute(AUTOTEL_SAMPLING_TAIL_KEEP, true);
     traceCtx.setAttribute(SECURITY_ATTR.forceKeep, true);
   }
-
   traceCtx.setAttributes(flattenSecurityAttributes(metadata));
 
   const logger = options.logger ?? getRequestLoggerSafe() ?? createNoopRequestLogger();

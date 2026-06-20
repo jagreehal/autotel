@@ -20,6 +20,7 @@ export type { AuditContext, OnMissingContext } from './context';
 export * from './security';
 export * from './security-signals';
 export * from './security-heartbeat';
+export * from './mcp-bridge';
 
 export interface AuditMetadata {
   action: string;

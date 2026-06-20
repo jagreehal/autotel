@@ -1,7 +1,11 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { trace, SpanKind, type TraceContext } from 'autotel';
 import { injectOtelContextToMeta } from './context';
-import { type McpInstrumentationConfig, resolveConfig } from './types';
+import {
+  type McpInstrumentationConfig,
+  resolveConfig,
+  resolveSecurityEventBridge,
+} from './types';
 import { MCP_SEMCONV, MCP_METHODS } from './semantic-conventions';
 import { recordClientOperationDuration } from './metrics';
 import {
@@ -13,6 +17,20 @@ import {
 } from './security';
 
 type ResolvedConfig = ReturnType<typeof resolveConfig>;
+
+function securityBridge(
+  config: ResolvedConfig,
+  toolName?: string,
+):
+  | {
+      bridge: NonNullable<ReturnType<typeof resolveSecurityEventBridge>>;
+      toolName?: string;
+    }
+  | undefined {
+  const bridge = resolveSecurityEventBridge(config);
+  if (!bridge) return undefined;
+  return { bridge, toolName };
+}
 
 /** Run the configured classifier over one payload, swallowing absence/errors. */
 async function classifyClient(
@@ -27,13 +45,18 @@ async function classifyClient(
   if (source === 'arguments' && !config.classifyArguments) return;
   if (source === 'result' && !config.classifyResults) return;
   if (value === undefined) return;
-  await runClassifier(ctx, config.securityClassifier, {
-    source,
-    type,
-    name,
-    text: safeStringify(value),
-    value,
-  });
+  await runClassifier(
+    ctx,
+    config.securityClassifier,
+    {
+      source,
+      type,
+      name,
+      text: safeStringify(value),
+      value,
+    },
+    securityBridge(config, name),
+  );
 }
 
 function getPayloadSizeAttribute(
@@ -298,6 +321,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                       resultSize,
                       mergedConfig.outputCharBudget,
                       { [MCP_SEMCONV.TOOL_NAME]: name },
+                      securityBridge(mergedConfig, name),
                     );
                   }
                   await classifyClient(
@@ -480,6 +504,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                       resultSize,
                       mergedConfig.outputCharBudget,
                       getEntityAttributes('resource', uri),
+                      securityBridge(mergedConfig, uri),
                     );
                   }
                   await classifyClient(
@@ -615,6 +640,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                       resultSize,
                       mergedConfig.outputCharBudget,
                       getEntityAttributes('prompt', name),
+                      securityBridge(mergedConfig, name),
                     );
                   }
                   await classifyClient(

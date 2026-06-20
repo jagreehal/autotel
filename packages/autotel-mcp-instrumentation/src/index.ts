@@ -23,7 +23,7 @@ export { instrumentMcpClient } from './client';
 
 export type { McpInstrumentationConfig, McpTraceMeta } from './types';
 
-export { DEFAULT_CONFIG } from './types';
+export { DEFAULT_CONFIG, resolveSecurityEventBridge } from './types';
 
 export {
   MCP_SEMCONV,
@@ -65,6 +65,8 @@ export {
   type ManifestTextSurface,
   type McpSecurityClassifier,
   type McpToolAnnotations,
+  type SecurityEventBridgeLike,
+  type McpSecurityBridgeOptions,
   type SecuritySink,
   type SecuritySource,
   type SpotlightMethod,
