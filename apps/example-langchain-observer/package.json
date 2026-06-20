@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-langchain-observer",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "type": "module",
   "description": "Capture LangChain/LangGraph + Ollama runs as canonical gen_ai.* spans via autotel-genai's createGenAiObserver.",
