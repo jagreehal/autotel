@@ -687,6 +687,9 @@ importers:
       autotel:
         specifier: workspace:*
         version: link:../../packages/autotel
+      autotel-genai:
+        specifier: workspace:*
+        version: link:../../packages/autotel-genai
       autotel-mcp-instrumentation:
         specifier: workspace:*
         version: link:../../packages/autotel-mcp-instrumentation

@@ -286,6 +286,25 @@ init({
 
 init({
   service: 'my-app',
+  // Multi-backend OTLP fan-out without manual exporter wiring
+  logs: true,
+  destinations: [
+    {
+      endpoint: 'https://otlp-gateway-prod.grafana.net/otlp',
+      headers: 'Authorization=Basic ...',
+    },
+    {
+      endpoint: 'https://api.honeycomb.io',
+      headers: {
+        'x-honeycomb-team': process.env.HONEYCOMB_API_KEY!,
+      },
+      signals: ['traces'],
+    },
+  ],
+});
+
+init({
+  service: 'my-app',
   // Custom pipeline with your own exporters/readers
   spanProcessor: new BatchSpanProcessor(
     new JaegerExporter({ endpoint: 'http://otel:14268/api/traces' }),
@@ -2037,7 +2056,13 @@ init({
     port?: number;
     verbose?: boolean;
   };
-  endpoint?: string;
+  endpoint?: string; // single OTLP destination shorthand
+  destinations?: Array<{
+    endpoint: string;
+    protocol?: 'http' | 'grpc';
+    headers?: Record<string, string> | string;
+    signals?: Array<'traces' | 'metrics' | 'logs'>;
+  }>;
   protocol?: 'http' | 'grpc'; // OTLP protocol (default: 'http')
   metrics?: boolean | 'auto';
   sampler?: Sampler; // explicit sampler, highest precedence

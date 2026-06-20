@@ -74,7 +74,7 @@ export function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     init({
       service: 'my-app',
-      exporter: { url: process.env.OTLP_ENDPOINT! },
+      endpoint: process.env.OTLP_ENDPOINT!,
       sampling: { rates: { server: 25, client: 5 } },
       attributeRedactor: 'default',
     });
@@ -201,7 +201,7 @@ export const handler = withLambda(async (event) => {
 ```typescript
 import { init, trace } from 'autotel';
 
-init({ service: 'my-worker', exporter: { url: process.env.OTLP_ENDPOINT! } });
+init({ service: 'my-worker', endpoint: process.env.OTLP_ENDPOINT! });
 
 const processJob = trace(async (job: Job) => {
   // span auto-named after the function
@@ -219,7 +219,8 @@ All options work with `init()`, framework adapters, and `wrapModule` / `defineWo
 | Option                                  | Type                                                            | Default           | Description                                                     |
 | --------------------------------------- | --------------------------------------------------------------- | ----------------- | --------------------------------------------------------------- |
 | `service` / `service.name`              | `string`                                                        | `'app'`           | Service name in `service.name` resource attribute               |
-| `exporter`                              | `{ url, headers?, protocol? }`                                  | —                 | OTLP HTTP/JSON or HTTP/protobuf endpoint                        |
+| `endpoint`                              | `string`                                                        | —                 | Single OTLP destination shorthand                               |
+| `destinations`                          | `Array<{ endpoint, headers?, protocol?, signals? }>`            | —                 | Declarative OTLP fan-out to multiple backends                   |
 | `spanProcessors`                        | `SpanProcessor[]`                                               | —                 | Use **instead of** `exporter` for full control                  |
 | `sampling.rates`                        | `{ server?: number, client?: number, internal?: number }`       | `100%`            | Head sampling per span kind (0–100%)                            |
 | `sampling.tail`                         | `TailSampleFn`                                                  | —                 | Keep traces matching predicate (e.g. errors, slow)              |
@@ -291,7 +292,7 @@ Switch backends with **no code changes** — autotel speaks OTLP HTTP/JSON and H
 | New Relic                        | `https://otlp.nr-data.net/v1/traces`                       | `{ 'api-key': '<key>' }`              |
 | Local Jaeger / Tempo / Collector | `http://localhost:4318/v1/traces`                          | —                                     |
 
-Use `init({ exporter: { url, headers } })`. Multiple destinations? Use `composeSpanProcessors([batchA, batchB])` (see Composition below).
+Use `init({ endpoint, headers })` for one backend. For multiple OTLP backends, prefer `init({ destinations: [...] })`. Drop to `composeSpanProcessors([batchA, batchB])` only when you need custom processor-level control.
 
 ---
 

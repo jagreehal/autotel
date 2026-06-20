@@ -126,6 +126,33 @@ type OTLPExporterConfig = {
   concurrencyLimit?: number;
 };
 
+export type OtlpSignal = 'traces' | 'metrics' | 'logs';
+
+export interface OtlpDestinationConfig {
+  /**
+   * Base OTLP endpoint for this destination.
+   * HTTP destinations may omit `/v1/{signal}`; autotel appends it automatically.
+   * gRPC destinations should point at the collector host:port.
+   */
+  endpoint: string;
+
+  /**
+   * Headers for this destination. Falls back to top-level `headers`.
+   */
+  headers?: Record<string, string> | string;
+
+  /**
+   * Protocol for this destination. Falls back to top-level `protocol`.
+   */
+  protocol?: 'http' | 'grpc';
+
+  /**
+   * Signals to send to this destination.
+   * Defaults to all signals supported by the current init() config.
+   */
+  signals?: OtlpSignal[];
+}
+
 // Lazy-load gRPC exporters (optional peer dependencies)
 let OTLPTraceExporterGRPC:
   | (new (config: OTLPExporterConfig) => SpanExporter)
@@ -415,10 +442,44 @@ export interface AutotelConfig {
 
   /**
    * OTLP endpoint for traces/metrics/logs
+   * Single-destination shorthand. For multi-backend OTLP fan-out, use
+   * `destinations` instead.
    * Only used if you don't provide custom exporters/processors
    * @default process.env.OTLP_ENDPOINT || 'http://localhost:4318'
    */
   endpoint?: string;
+
+  /**
+   * Declarative OTLP multi-destination config.
+   * Each destination can override endpoint, headers, protocol, and signals.
+   *
+   * This is the high-level alternative to wiring `spanExporters`,
+   * `spanProcessors`, `metricReaders`, and `logRecordProcessors` manually when
+   * you want to fan telemetry out to multiple OTLP backends.
+   *
+   * When provided, `destinations` takes precedence over the single `endpoint`
+   * shorthand for built-in OTLP exporters/readers/processors.
+   *
+   * @example Grafana + Honeycomb for traces, Grafana only for metrics/logs
+   * ```typescript
+   * init({
+   *   service: 'my-app',
+   *   logs: true,
+   *   destinations: [
+   *     {
+   *       endpoint: 'https://otlp-gateway-prod-eu-west-2.grafana.net/otlp',
+   *       headers: { Authorization: 'Basic ...' },
+   *     },
+   *     {
+   *       endpoint: 'https://api.honeycomb.io',
+   *       headers: { 'x-honeycomb-team': '...' },
+   *       signals: ['traces'],
+   *     },
+   *   ],
+   * })
+   * ```
+   */
+  destinations?: OtlpDestinationConfig[];
 
   /**
    * Custom span processors for traces (supports multiple processors)
@@ -1406,6 +1467,45 @@ function normalizeOtlpHeaders(
   return parsed;
 }
 
+type ResolvedOtlpDestination = {
+  endpoint: string;
+  protocol: 'http' | 'grpc';
+  headers?: Record<string, string>;
+  signals?: Set<OtlpSignal>;
+};
+
+function resolveOtlpDestinations(
+  config: AutotelConfig,
+  fallbackEndpoint?: string,
+): ResolvedOtlpDestination[] {
+  const rawDestinations =
+    config.destinations !== undefined
+      ? config.destinations
+      : fallbackEndpoint
+        ? [
+            {
+              endpoint: fallbackEndpoint,
+              headers: config.headers,
+              protocol: config.protocol,
+            },
+          ]
+        : [];
+
+  return rawDestinations.map((destination) => ({
+    endpoint: destination.endpoint,
+    protocol: resolveProtocol(destination.protocol ?? config.protocol),
+    headers: normalizeOtlpHeaders(destination.headers ?? config.headers),
+    signals: destination.signals ? new Set(destination.signals) : undefined,
+  }));
+}
+
+function destinationSupportsSignal(
+  destination: ResolvedOtlpDestination,
+  signal: OtlpSignal,
+): boolean {
+  return destination.signals ? destination.signals.has(signal) : true;
+}
+
 /**
  * Initialize autotel - Write Once, Observe Everywhere
  *
@@ -1533,7 +1633,6 @@ export function init(cfg: AutotelConfig): void {
   // Initialize OpenTelemetry
   // Only use endpoint if explicitly configured (no default fallback)
   let endpoint = mergedConfig.endpoint ?? devtoolsConfig.endpoint;
-  const otlpHeaders = normalizeOtlpHeaders(mergedConfig.headers);
   const version = mergedConfig.version || detectVersion();
   const environment =
     mergedConfig.environment || process.env.NODE_ENV || 'development';
@@ -1600,8 +1699,7 @@ export function init(cfg: AutotelConfig): void {
     );
   }
 
-  // Resolve OTLP protocol (http or grpc)
-  const protocol = resolveProtocol(mergedConfig.protocol);
+  const otlpDestinations = resolveOtlpDestinations(mergedConfig, endpoint);
 
   // Backward-compatible singular aliases. Plural forms take precedence when both are provided.
   const configuredSpanProcessors =
@@ -1643,16 +1741,23 @@ export function init(cfg: AutotelConfig): void {
         new TailSamplingSpanProcessor(new BatchSpanProcessor(exporter)),
       );
     }
-  } else if (endpoint) {
-    // Default: OTLP with tail sampling (only if endpoint is configured)
-    const traceExporter = createTraceExporter(protocol, {
-      url: formatEndpointUrl(endpoint, 'traces', protocol),
-      headers: otlpHeaders,
-    });
+  } else {
+    for (const destination of otlpDestinations) {
+      if (!destinationSupportsSignal(destination, 'traces')) continue;
 
-    spanProcessors.push(
-      new TailSamplingSpanProcessor(new BatchSpanProcessor(traceExporter)),
-    );
+      const traceExporter = createTraceExporter(destination.protocol, {
+        url: formatEndpointUrl(
+          destination.endpoint,
+          'traces',
+          destination.protocol,
+        ),
+        headers: destination.headers,
+      });
+
+      spanProcessors.push(
+        new TailSamplingSpanProcessor(new BatchSpanProcessor(traceExporter)),
+      );
+    }
   }
   // If no endpoint and no custom processors/exporters, array remains empty
   // SDK will still work but won't export traces
@@ -1760,18 +1865,25 @@ export function init(cfg: AutotelConfig): void {
   if (configuredMetricReaders && configuredMetricReaders.length > 0) {
     // User provided custom metric readers
     metricReaders.push(...configuredMetricReaders);
-  } else if (metricsEnabled && endpoint) {
-    // Default: OTLP metrics exporter (only if endpoint is configured)
-    const metricExporter = createMetricExporter(protocol, {
-      url: formatEndpointUrl(endpoint, 'metrics', protocol),
-      headers: otlpHeaders,
-    });
+  } else if (metricsEnabled) {
+    for (const destination of otlpDestinations) {
+      if (!destinationSupportsSignal(destination, 'metrics')) continue;
 
-    metricReaders.push(
-      new PeriodicExportingMetricReader({
-        exporter: metricExporter,
-      }),
-    );
+      const metricExporter = createMetricExporter(destination.protocol, {
+        url: formatEndpointUrl(
+          destination.endpoint,
+          'metrics',
+          destination.protocol,
+        ),
+        headers: destination.headers,
+      });
+
+      metricReaders.push(
+        new PeriodicExportingMetricReader({
+          exporter: metricExporter,
+        }),
+      );
+    }
   }
 
   let logRecordProcessors: LogRecordProcessor[] | undefined;
@@ -1782,24 +1894,39 @@ export function init(cfg: AutotelConfig): void {
     logRecordProcessors = [...configuredLogRecordProcessors];
   }
 
-  // Auto-configure OTLP log exporter when logs are enabled and endpoint is set
-  if (logsEnabled && endpoint) {
-    const logExporter = createLogExporter(protocol, {
-      url: formatEndpointUrl(endpoint, 'logs', protocol),
-      headers: otlpHeaders,
-    });
+  // Auto-configure OTLP log exporters when logs are enabled.
+  if (logsEnabled) {
+    for (const destination of otlpDestinations) {
+      if (!destinationSupportsSignal(destination, 'logs')) continue;
 
-    let processor: LogRecordProcessor = new BatchLogRecordProcessor(
-      logExporter,
-    );
-    if (_stringRedactor) {
-      processor = new RedactingLogRecordProcessor(processor, _stringRedactor);
+      const logExporter = createLogExporter(destination.protocol, {
+        url: formatEndpointUrl(
+          destination.endpoint,
+          'logs',
+          destination.protocol,
+        ),
+        headers: destination.headers,
+      });
+
+      let processor: LogRecordProcessor = new BatchLogRecordProcessor(
+        logExporter,
+      );
+      if (_stringRedactor) {
+        processor = new RedactingLogRecordProcessor(processor, _stringRedactor);
+      }
+      if (!logRecordProcessors) {
+        logRecordProcessors = [];
+      }
+      logRecordProcessors.push(processor);
     }
-    if (!logRecordProcessors) {
-      logRecordProcessors = [];
+
+    if (
+      otlpDestinations.some((destination) =>
+        destinationSupportsSignal(destination, 'logs'),
+      )
+    ) {
+      logger.info({}, '[autotel] OTLP log exporter configured');
     }
-    logRecordProcessors.push(processor);
-    logger.info({}, '[autotel] OTLP log exporter configured');
   }
 
   // PostHog OTLP logs integration

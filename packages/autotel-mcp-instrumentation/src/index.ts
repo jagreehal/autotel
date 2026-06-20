@@ -30,9 +30,44 @@ export {
   MCP_METHODS,
   MCP_METRICS,
   MCP_DURATION_BUCKETS,
+  MCP_SECURITY_EVENT,
+  MCP_CHAR_BUDGETS,
 } from './semantic-conventions';
 
 export {
   recordClientOperationDuration,
   recordServerOperationDuration,
+  recordSecurityEvent,
 } from './metrics';
+
+// Security observability — annotations, payload sizing, char budgets,
+// pluggable injection classifier, and spotlighting helpers.
+export {
+  applyManifestAssessment,
+  applyToolAnnotations,
+  assessManifest,
+  enforceOutputBudget,
+  extractManifestTextSurface,
+  heuristicInjectionClassifier,
+  recordGuardStep,
+  recordPayloadSize,
+  runClassifier,
+  safeStringify,
+  spotlight,
+  validateToolBudget,
+  type BudgetViolation,
+  type ClassifierInput,
+  type ClassifierVerdict,
+  type GuardLike,
+  type GuardStepLike,
+  type HeuristicClassifierOptions,
+  type ManifestAssessment,
+  type ManifestTextSurface,
+  type McpSecurityClassifier,
+  type McpToolAnnotations,
+  type SecuritySink,
+  type SecuritySource,
+  type SpotlightMethod,
+  type SpotlightOptions,
+  type ToolBudgetInput,
+} from './security';

@@ -68,7 +68,7 @@ import { init } from 'autotel';
 
 init({
   service: 'my-app',
-  exporter: { url: process.env.OTEL_ENDPOINT! },
+  endpoint: process.env.OTEL_ENDPOINT!,
 });
 ```
 
@@ -78,7 +78,7 @@ init({
 
 - `useLogger().set({ … })` flattens onto the active span — no more `span.setAttribute('user.id', id)` boilerplate.
 - `attributeRedactor: 'default'` — PII masking for free in production.
-- `composeSpanProcessors([…])` for multi-backend tee.
+- `destinations: [...]` for straightforward OTLP multi-backend fan-out.
 - Cloudflare Workers + Edge support out of the box (`defineWorkerFetch`).
 
 ### What stays the same
@@ -121,19 +121,26 @@ init({
 
 ### Step 3: Decide on errors-only vs full tracing
 
-Sentry shines at errors; for tracing you may want to fan out to Honeycomb or Grafana Tempo. Use `composeSpanProcessors`:
+Sentry shines at errors; for tracing you may want to fan out to Honeycomb or Grafana Tempo. If both targets are plain OTLP backends, prefer `destinations`:
 
 ```typescript
-spanProcessors: composeSpanProcessors([
-  new BatchSpanProcessor(new SentrySpanExporter({ dsn })),
-  new BatchSpanProcessor(
-    new OTLPHttpJsonExporter({
-      url: honeycombUrl,
+init({
+  service: 'my-app',
+  destinations: [
+    {
+      endpoint: grafanaUrl,
+      headers: 'Authorization=Basic ...',
+    },
+    {
+      endpoint: honeycombUrl,
       headers: { 'x-honeycomb-team': key },
-    }),
-  ),
-]);
+      signals: ['traces'],
+    },
+  ],
+});
 ```
+
+If one destination needs a non-OTLP exporter or custom filtering, drop to `composeSpanProcessors`.
 
 ## From Datadog APM
 
@@ -150,10 +157,8 @@ import { init } from 'autotel';
 
 init({
   service: 'my-app',
-  exporter: {
-    url: 'https://trace.agent.datadoghq.com/api/v0.4/traces',
-    headers: { 'dd-api-key': process.env.DD_API_KEY! },
-  },
+  endpoint: 'https://trace.agent.datadoghq.com/api/v0.4/traces',
+  headers: { 'dd-api-key': process.env.DD_API_KEY! },
 });
 ```
 
@@ -191,10 +196,8 @@ Drop it from `start` script and `NODE_OPTIONS`.
 ```typescript
 init({
   service: 'my-app',
-  exporter: {
-    url: 'https://otlp.nr-data.net/v1/traces',
-    headers: { 'api-key': process.env.NEW_RELIC_LICENSE_KEY! },
-  },
+  endpoint: 'https://otlp.nr-data.net/v1/traces',
+  headers: { 'api-key': process.env.NEW_RELIC_LICENSE_KEY! },
 });
 ```
 
@@ -216,10 +219,8 @@ Beelines for Node was Honeycomb's pre-OTel SDK. Migration is straightforward —
 ```typescript
 init({
   service: 'my-app',
-  exporter: {
-    url: 'https://api.honeycomb.io/v1/traces',
-    headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY! },
-  },
+  endpoint: 'https://api.honeycomb.io',
+  headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY! },
 });
 ```
 

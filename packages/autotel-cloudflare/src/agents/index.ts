@@ -17,7 +17,8 @@
  *
  *   @callable()
  *   async doSomething() {
- *     // This RPC call will be automatically traced
+ *     // RPC, chat recovery, queue/schedule, workflow, MCP, and lifecycle
+ *     // events emitted by the Agents SDK will be converted into spans.
  *     return 'done'
  *   }
  * }
@@ -31,12 +32,15 @@ export {
   createOtelObservabilityFromEnv,
   OtelObservability,
 } from './otel-observability';
+export { channels, genericObservability, subscribe } from './observability';
 export type {
+  BaseEvent,
   OtelObservabilityConfig,
   AgentObservabilityEvent,
   MCPObservabilityEvent,
   ObservabilityEvent,
   Observability,
+  ChannelEventMap,
   AgentInstrumentationOptions,
   AgentSpanAttributes,
 } from './types';

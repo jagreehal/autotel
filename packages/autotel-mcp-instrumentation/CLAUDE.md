@@ -21,6 +21,7 @@ You are working on the MCP instrumentation package. You understand MCP protocol,
 - **Transport-Agnostic**: Works with stdio, HTTP, SSE, or any MCP transport (context in JSON payload, not headers)
 - **Proxy-Based Pattern**: Similar to autotel-cloudflare bindings instrumentation (no MCP SDK modifications)
 - **Runtime Support**: Both Node.js (autotel) and Edge (autotel-edge)
+- **Security Observability** (`src/security.ts`): protocol-boundary signals for the agentic-web threat model — annotation hints (`mcp.tool.*`), payload sizes, output char budgets, a pluggable `securityClassifier` (`mcp.security.injection.*` + events), `spotlight()` and `validateToolBudget()` helpers. **This package observes and signals; it does NOT enforce.** Deterministic kill-switches live in `autotel-genai/guard`; identity/scope/policy in `autotel-genai/agent`. Do not duplicate those here.
 
 ## Entry Points
 
@@ -45,6 +46,7 @@ pnpm lint               # Lint package
 - `src/server.ts` - Server instrumentation (wraps registerTool, registerResource, registerPrompt)
 - `src/client.ts` - Client instrumentation (wraps callTool, getResource, getPrompt)
 - `src/context.ts` - Context utilities (extractOtelContextFromMeta, injectOtelContextToMeta)
+- `src/security.ts` - Security observability (annotations, payload sizing, char budgets, injection classifier, spotlighting)
 - `src/runtime.ts` - Runtime detection (auto-imports from autotel or autotel-edge)
 
 ## Code Patterns

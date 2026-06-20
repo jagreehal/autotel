@@ -244,6 +244,87 @@ export async function runSecurityEvents(
   });
 }
 
+/**
+ * `autotel security mcp` — MCP protocol-boundary security signals emitted by
+ * `autotel-mcp-instrumentation`:
+ * - `mcp.security.injection.*` — pluggable classifier verdicts on tool args/results
+ * - `mcp.security.budget.exceeded` — tool output over the configured char budget
+ * - `mcp.tool.untrusted_content` — tools flagged via the WebMCP untrustedContentHint
+ *
+ * Keep these field literals in sync with `MCP_SEMCONV` in
+ * `autotel-mcp-instrumentation/semantic-conventions`.
+ */
+const MCP_TOOL_NAME = 'gen_ai.tool.name';
+const MCP_INJECTION_VERDICT = 'mcp.security.injection.verdict';
+const MCP_INJECTION_SOURCE = 'mcp.security.injection.source';
+const MCP_BUDGET_EXCEEDED = 'mcp.security.budget.exceeded';
+const MCP_UNTRUSTED_CONTENT = 'mcp.tool.untrusted_content';
+
+export async function runSecurityMcp(
+  flags: SecurityWindowFlags,
+): Promise<void> {
+  await runInvestigate('security mcp', flags, async (backend) => {
+    const base = toSpanSearchQuery({
+      serviceName: flags.serviceName,
+      lookbackMinutes: flags.lookbackMinutes,
+      from: flags.from,
+      to: flags.to,
+      limit: flags.limit ?? DEFAULT_LIMIT,
+    });
+
+    const [injection, budget, untrusted] = await Promise.all([
+      backend.searchSpans({
+        ...base,
+        filters: [{ field: MCP_INJECTION_VERDICT, operator: 'exists' }],
+      }),
+      backend.searchSpans({
+        ...base,
+        filters: [{ field: MCP_BUDGET_EXCEEDED, operator: 'exists' }],
+      }),
+      backend.searchSpans({
+        ...base,
+        filters: [{ field: MCP_UNTRUSTED_CONTENT, operator: 'exists' }],
+      }),
+    ]);
+
+    const suspected = injection.items.filter(
+      (span) =>
+        span.tags[MCP_INJECTION_VERDICT] !== undefined &&
+        String(span.tags[MCP_INJECTION_VERDICT]) !== 'clean',
+    );
+    const untrustedTrue = untrusted.items.filter(
+      (span) => String(span.tags[MCP_UNTRUSTED_CONTENT]) === 'true',
+    );
+
+    return {
+      window: {
+        lookbackMinutes: flags.lookbackMinutes ?? 60,
+        from: flags.from,
+        to: flags.to,
+        limitPerQuery: flags.limit ?? DEFAULT_LIMIT,
+      },
+      injection: {
+        scanned: injection.items.length,
+        suspected: suspected.length,
+        byVerdict: countBy(injection.items, MCP_INJECTION_VERDICT),
+        bySource: countBy(suspected, MCP_INJECTION_SOURCE),
+        byTool: topEntries(countBy(suspected, MCP_TOOL_NAME), 10),
+        sampleTraceIds: sampleTraceIds(suspected),
+      },
+      budgetBreaches: {
+        total: budget.items.length,
+        byTool: topEntries(countBy(budget.items, MCP_TOOL_NAME), 10),
+        byService: countByService(budget.items),
+        sampleTraceIds: sampleTraceIds(budget.items),
+      },
+      untrustedContent: {
+        toolCalls: untrustedTrue.length,
+        byTool: topEntries(countBy(untrustedTrue, MCP_TOOL_NAME), 10),
+      },
+    };
+  });
+}
+
 function csvIntArg(value: string): number[] {
   return value
     .split(',')
@@ -288,8 +369,21 @@ export function registerSecurityCommands(program: Command): void {
       });
     });
 
+  const mcpCmd = addTimeWindowFlags(new Command('mcp'))
+    .description(
+      'MCP protocol-boundary security: prompt-injection verdicts, output-budget breaches, untrusted-content tool calls',
+    )
+    .action(async function (this: Command) {
+      const o = this.optsWithGlobals();
+      await runSecurityMcp({
+        ...backendFlagsFromOpts(o),
+        ...windowFlagsFromOpts(o),
+      });
+    });
+
   addBackendFlags(securityCmd);
   securityCmd.addCommand(summaryCmd);
   securityCmd.addCommand(eventsCmd);
+  securityCmd.addCommand(mcpCmd);
   program.addCommand(securityCmd);
 }

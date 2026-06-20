@@ -69,6 +69,31 @@ init({
 });
 ```
 
+**Single backend vs multi-backend OTLP:**
+
+```typescript
+init({
+  service: 'my-api',
+  endpoint: 'https://otlp-gateway-prod.grafana.net/otlp', // single destination
+});
+
+init({
+  service: 'my-api',
+  logs: true,
+  destinations: [
+    {
+      endpoint: 'https://otlp-gateway-prod.grafana.net/otlp',
+      headers: 'Authorization=Basic ...',
+    },
+    {
+      endpoint: 'https://api.honeycomb.io',
+      headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY! },
+      signals: ['traces'],
+    },
+  ],
+});
+```
+
 ## Common Mistakes
 
 ### HIGH Forget to call init() before using trace/span

@@ -1,336 +1,269 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import {
   createOtelObservability,
   createOtelObservabilityFromEnv,
   OtelObservability,
 } from './otel-observability';
-import type { AgentObservabilityEvent, MCPObservabilityEvent } from './types';
+import { channels, genericObservability, subscribe } from './observability';
+import type { ObservabilityEvent } from './types';
 
-// Helper to create mock events
-function createRpcEvent(method: string, streaming = false): AgentObservabilityEvent {
+type CapturingProcessor = SpanProcessor & { spans: ReadableSpan[] };
+
+function createCapturingProcessor(): CapturingProcessor {
   return {
-    type: 'rpc',
-    id: `rpc-${Date.now()}`,
-    displayMessage: `RPC call: ${method}`,
-    payload: { method, streaming },
-    timestamp: Date.now(),
+    spans: [],
+    forceFlush: vi.fn(async () => undefined),
+    onEnd(span) {
+      this.spans.push(span);
+    },
+    onStart: vi.fn(),
+    shutdown: vi.fn(async () => undefined),
   };
 }
 
-function createConnectEvent(connectionId: string): AgentObservabilityEvent {
+function createObservabilityEvent<T extends ObservabilityEvent['type']>(
+  type: T,
+  payload: Extract<ObservabilityEvent, { type: T }>['payload'],
+  extra: Partial<Extract<ObservabilityEvent, { type: T }>> = {},
+): Extract<ObservabilityEvent, { type: T }> {
   return {
-    type: 'connect',
-    id: `connect-${Date.now()}`,
-    displayMessage: `Connection: ${connectionId}`,
-    payload: { connectionId },
+    type,
+    payload,
     timestamp: Date.now(),
-  };
-}
-
-function createScheduleEvent(
-  eventType: 'schedule:create' | 'schedule:execute' | 'schedule:cancel',
-  callback: string,
-  id: string,
-): AgentObservabilityEvent {
-  return {
-    type: eventType,
-    id: `schedule-${Date.now()}`,
-    displayMessage: `Schedule ${eventType}: ${callback}`,
-    payload: { callback, id },
-    timestamp: Date.now(),
-  };
-}
-
-function createMcpConnectEvent(
-  url: string,
-  transport: string,
-  state: string,
-): MCPObservabilityEvent {
-  return {
-    type: 'mcp:client:connect',
-    id: `mcp-${Date.now()}`,
-    displayMessage: `MCP connect: ${url}`,
-    payload: { url, transport, state },
-    timestamp: Date.now(),
-  };
+    ...extra,
+  } as Extract<ObservabilityEvent, { type: T }>;
 }
 
 describe('OtelObservability', () => {
+  const processor = createCapturingProcessor();
+
   beforeEach(() => {
     vi.clearAllMocks();
-    // Prevent real fetch calls during span export — avoids floating promise rejections
-    // that cause EnvironmentTeardownError when vitest tears down the worker environment.
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+    processor.spans.length = 0;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  describe('createOtelObservability', () => {
-    it('should create an OtelObservability instance', () => {
+  describe('constructors', () => {
+    it('creates an OtelObservability instance', () => {
       const obs = createOtelObservability({
         service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
+        spanProcessors: [processor],
       });
 
       expect(obs).toBeInstanceOf(OtelObservability);
     });
 
-    it('should accept custom agent options', () => {
-      const obs = createOtelObservability({
-        service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
-        agents: {
-          traceRpc: true,
-          traceSchedule: false,
-          traceMcp: true,
-        },
-      });
-
-      expect(obs).toBeInstanceOf(OtelObservability);
-    });
-  });
-
-  describe('createOtelObservabilityFromEnv', () => {
-    it('should create instance from environment variables', () => {
-      const env = {
+    it('creates an instance from OTEL_* env vars', () => {
+      const obs = createOtelObservabilityFromEnv({
         OTEL_SERVICE_NAME: 'my-agent',
-        OTEL_EXPORTER_OTLP_ENDPOINT: 'https://api.honeycomb.io',
-        OTEL_EXPORTER_OTLP_HEADERS: 'x-honeycomb-team=test-key',
-      };
-
-      const obs = createOtelObservabilityFromEnv(env);
-
-      expect(obs).toBeInstanceOf(OtelObservability);
-    });
-
-    it('should use defaults when env vars not set', () => {
-      const obs = createOtelObservabilityFromEnv({});
-
-      expect(obs).toBeInstanceOf(OtelObservability);
-    });
-
-    it('should parse multiple headers', () => {
-      const env = {
-        OTEL_EXPORTER_OTLP_HEADERS: 'key1=value1,key2=value2,key3=value3',
-      };
-
-      const obs = createOtelObservabilityFromEnv(env);
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'https://collector.example/v1/traces',
+        OTEL_EXPORTER_OTLP_HEADERS: 'x-api-key=test,key2=value2',
+      });
 
       expect(obs).toBeInstanceOf(OtelObservability);
     });
   });
 
   describe('emit', () => {
-    it('should emit RPC events', () => {
+    it('records rpc spans with agent metadata', () => {
       const obs = createOtelObservability({
         service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
+        spanProcessors: [processor],
       });
 
-      const event = createRpcEvent('doSomething', false);
+      obs.emit(
+        createObservabilityEvent(
+          'rpc',
+          { method: 'doSomething', streaming: true },
+          {
+            id: 'rpc-1',
+            agent: 'TaskAgent',
+            name: 'agent-instance-1',
+            displayMessage: 'RPC doSomething',
+          },
+        ),
+      );
 
-      // Should not throw
-      expect(() => obs.emit(event)).not.toThrow();
+      expect(processor.spans).toHaveLength(1);
+      expect(processor.spans[0]?.name).toBe('agent.rpc doSomething');
+      expect(processor.spans[0]?.attributes).toMatchObject({
+        'agent.event.type': 'rpc',
+        'agent.event.id': 'rpc-1',
+        'agent.class': 'TaskAgent',
+        'agent.instance.name': 'agent-instance-1',
+        'gen_ai.agent.name': 'TaskAgent',
+        'agent.rpc.method': 'doSomething',
+        'agent.rpc.streaming': true,
+      });
     });
 
-    it('should emit connect events', () => {
+    it('records chat recovery events from the full agent event surface', () => {
       const obs = createOtelObservability({
         service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
+        spanProcessors: [processor],
       });
 
-      const event = createConnectEvent('conn-123');
+      obs.emit(
+        createObservabilityEvent('chat:recovery:detected', {
+          incidentId: 'inc-1',
+          requestId: 'req-1',
+          attempt: 2,
+          maxAttempts: 5,
+          recoveryKind: 'retry',
+        }),
+      );
 
-      expect(() => obs.emit(event)).not.toThrow();
+      expect(processor.spans).toHaveLength(1);
+      expect(processor.spans[0]?.name).toBe('agent.chat.recovery.detected');
+      expect(processor.spans[0]?.attributes).toMatchObject({
+        'agent.event.type': 'chat:recovery:detected',
+        'agent.payload.incidentId': 'inc-1',
+        'agent.payload.requestId': 'req-1',
+        'agent.payload.attempt': 2,
+        'agent.payload.maxAttempts': 5,
+        'agent.payload.recoveryKind': 'retry',
+      });
     });
 
-    it('should emit schedule events', () => {
+    it('marks error spans when the event signals failure', () => {
       const obs = createOtelObservability({
         service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
+        spanProcessors: [processor],
       });
 
-      const event = createScheduleEvent('schedule:create', 'myCallback', 'schedule-123');
+      obs.emit(
+        createObservabilityEvent('rpc:error', {
+          method: 'doSomething',
+          error: 'boom',
+        }),
+      );
 
-      expect(() => obs.emit(event)).not.toThrow();
+      expect(processor.spans).toHaveLength(1);
+      expect(processor.spans[0]?.status.code).toBe(2);
+      expect(processor.spans[0]?.status.message).toBe('boom');
+      expect(processor.spans[0]?.attributes).toMatchObject({
+        error: true,
+        'exception.message': 'boom',
+      });
     });
 
-    it('should emit MCP events', () => {
+    it('records MCP close events from the reference event model', () => {
       const obs = createOtelObservability({
         service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
+        spanProcessors: [processor],
       });
 
-      const event = createMcpConnectEvent('http://mcp-server.local', 'stdio', 'connected');
+      obs.emit(
+        createObservabilityEvent('mcp:client:close', {
+          url: 'https://mcp.example',
+          transport: 'http',
+          state: 'closed',
+          phase: 'client-close',
+        }),
+      );
 
-      expect(() => obs.emit(event)).not.toThrow();
+      expect(processor.spans).toHaveLength(1);
+      expect(processor.spans[0]?.name).toBe('mcp.client.close https://mcp.example');
+      expect(processor.spans[0]?.attributes).toMatchObject({
+        'agent.mcp.url': 'https://mcp.example',
+        'agent.mcp.transport': 'http',
+        'agent.mcp.state': 'closed',
+        'agent.payload.phase': 'client-close',
+      });
     });
 
-    it('should respect traceStateUpdates option', () => {
+    it('allows noisy categories to be disabled', () => {
       const obs = createOtelObservability({
         service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
+        spanProcessors: [processor],
         agents: {
           traceStateUpdates: false,
         },
       });
 
-      const event: AgentObservabilityEvent = {
-        type: 'state:update',
-        id: 'state-123',
-        displayMessage: 'State updated',
-        payload: {},
-        timestamp: Date.now(),
-      };
+      obs.emit(createObservabilityEvent('state:update', {}));
 
-      // Should not throw and should be a no-op due to traceStateUpdates: false
-      expect(() => obs.emit(event)).not.toThrow();
+      expect(processor.spans).toHaveLength(0);
     });
 
-    it('should use custom spanNameFormatter', () => {
-      const customFormatter = vi.fn((event) => `custom-${event.type}`);
+    it('uses custom formatters and attribute extractors', () => {
+      const spanNameFormatter = vi.fn(() => 'custom.span');
+      const attributeExtractor = vi.fn(() => ({
+        'custom.attr': 'value',
+      }));
 
       const obs = createOtelObservability({
         service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
+        spanProcessors: [processor],
         agents: {
-          spanNameFormatter: customFormatter,
+          spanNameFormatter,
+          attributeExtractor,
         },
       });
 
-      const event = createRpcEvent('testMethod');
-      obs.emit(event);
-
-      expect(customFormatter).toHaveBeenCalledWith(event);
-    });
-
-    it('should use custom attributeExtractor', () => {
-      const customExtractor = vi.fn(() => ({ 'custom.attr': 'value' }));
-
-      const obs = createOtelObservability({
-        service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
-        agents: {
-          attributeExtractor: customExtractor,
-        },
+      const event = createObservabilityEvent('workflow:approved', {
+        workflowId: 'wf-1',
+        reason: 'approved',
       });
 
-      const event = createRpcEvent('testMethod');
       obs.emit(event);
 
-      expect(customExtractor).toHaveBeenCalledWith(event);
+      expect(spanNameFormatter).toHaveBeenCalledWith(event);
+      expect(attributeExtractor).toHaveBeenCalledWith(event);
+      expect(processor.spans[0]?.name).toBe('custom.span');
+      expect(processor.spans[0]?.attributes['custom.attr']).toBe('value');
     });
 
-    it('should emit with DurableObjectState context', () => {
+    it('uses waitUntil when an execution context is provided', () => {
       const obs = createOtelObservability({
         service: { name: 'test-agent' },
-        exporter: { url: 'http://localhost:4318/v1/traces' },
+        spanProcessors: [processor],
       });
+      const waitUntil = vi.fn();
 
-      const mockCtx = {
-        waitUntil: vi.fn(),
-      } as unknown as DurableObjectState;
+      obs.emit(
+        createObservabilityEvent('queue:create', {
+          callback: 'process',
+          id: 'queue-1',
+        }),
+        { waitUntil } as unknown as ExecutionContext,
+      );
 
-      const event = createRpcEvent('testMethod');
-
-      expect(() => obs.emit(event, mockCtx)).not.toThrow();
+      expect(waitUntil).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('event types', () => {
-    const obs = createOtelObservability({
-      service: { name: 'test-agent' },
-      exporter: { url: 'http://localhost:4318/v1/traces' },
+  describe('generic observability channels', () => {
+    it('routes events through typed subscriptions', () => {
+      const callback = vi.fn();
+      const unsubscribe = subscribe('rpc', callback);
+      const event = createObservabilityEvent('rpc', { method: 'lookup' });
+
+      genericObservability.emit(event);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(event);
+
+      unsubscribe();
+      genericObservability.emit(event);
+      expect(callback).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle message:request events', () => {
-      const event: AgentObservabilityEvent = {
-        type: 'message:request',
-        id: 'msg-req-123',
-        displayMessage: 'Message request',
-        payload: {},
-        timestamp: Date.now(),
-      };
+    it('publishes directly on exported channels', () => {
+      const callback = vi.fn();
+      const unsubscribe = subscribe('mcp', callback);
+      const event = createObservabilityEvent('mcp:client:preconnect', {
+        serverId: 'server-1',
+      });
 
-      expect(() => obs.emit(event)).not.toThrow();
-    });
+      channels.mcp.publish(event);
 
-    it('should handle message:response events', () => {
-      const event: AgentObservabilityEvent = {
-        type: 'message:response',
-        id: 'msg-res-123',
-        displayMessage: 'Message response',
-        payload: {},
-        timestamp: Date.now(),
-      };
-
-      expect(() => obs.emit(event)).not.toThrow();
-    });
-
-    it('should handle message:clear events', () => {
-      const event: AgentObservabilityEvent = {
-        type: 'message:clear',
-        id: 'msg-clr-123',
-        displayMessage: 'Messages cleared',
-        payload: {},
-        timestamp: Date.now(),
-      };
-
-      expect(() => obs.emit(event)).not.toThrow();
-    });
-
-    it('should handle destroy events', () => {
-      const event: AgentObservabilityEvent = {
-        type: 'destroy',
-        id: 'destroy-123',
-        displayMessage: 'Agent destroyed',
-        payload: {},
-        timestamp: Date.now(),
-      };
-
-      expect(() => obs.emit(event)).not.toThrow();
-    });
-
-    it('should handle mcp:client:preconnect events', () => {
-      const event: MCPObservabilityEvent = {
-        type: 'mcp:client:preconnect',
-        id: 'mcp-pre-123',
-        displayMessage: 'MCP preconnect',
-        payload: { serverId: 'server-1' },
-        timestamp: Date.now(),
-      };
-
-      expect(() => obs.emit(event)).not.toThrow();
-    });
-
-    it('should handle mcp:client:authorize events', () => {
-      const event: MCPObservabilityEvent = {
-        type: 'mcp:client:authorize',
-        id: 'mcp-auth-123',
-        displayMessage: 'MCP authorize',
-        payload: {
-          serverId: 'server-1',
-          authUrl: 'https://auth.example.com',
-          clientId: 'client-123',
-        },
-        timestamp: Date.now(),
-      };
-
-      expect(() => obs.emit(event)).not.toThrow();
-    });
-
-    it('should handle mcp:client:discover events', () => {
-      const event: MCPObservabilityEvent = {
-        type: 'mcp:client:discover',
-        id: 'mcp-disc-123',
-        displayMessage: 'MCP discover',
-        payload: {},
-        timestamp: Date.now(),
-      };
-
-      expect(() => obs.emit(event)).not.toThrow();
+      expect(callback).toHaveBeenCalledWith(event);
+      unsubscribe();
     });
   });
 });

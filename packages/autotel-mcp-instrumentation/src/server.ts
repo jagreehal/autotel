@@ -4,8 +4,90 @@ import { extractOtelContextFromMeta } from './context';
 import { type McpInstrumentationConfig, resolveConfig } from './types';
 import { MCP_SEMCONV, MCP_METHODS } from './semantic-conventions';
 import { recordServerOperationDuration } from './metrics';
+import {
+  applyManifestAssessment,
+  applyToolAnnotations,
+  assessManifest,
+  enforceOutputBudget,
+  extractManifestTextSurface,
+  recordPayloadSize,
+  runClassifier,
+  safeStringify,
+  type ManifestAssessment,
+  type McpToolAnnotations,
+} from './security';
 
 type ResolvedConfig = ReturnType<typeof resolveConfig>;
+
+/** Run the configured classifier over one payload, swallowing absence/errors. */
+async function classify(
+  ctx: TraceContext,
+  config: ResolvedConfig,
+  source: 'arguments' | 'result',
+  type: 'tool' | 'resource' | 'prompt',
+  name: string,
+  value: unknown,
+): Promise<void> {
+  if (!config.securityClassifier) return;
+  if (source === 'arguments' && !config.classifyArguments) return;
+  if (source === 'result' && !config.classifyResults) return;
+  if (value === undefined) return;
+  await runClassifier(ctx, config.securityClassifier, {
+    source,
+    type,
+    name,
+    text: safeStringify(value),
+    value,
+  });
+}
+
+function getPayloadSizeAttribute(
+  type: 'tool' | 'resource' | 'prompt',
+  phase: 'arguments' | 'result',
+): string {
+  if (type === 'tool') {
+    return phase === 'arguments'
+      ? MCP_SEMCONV.TOOL_ARGUMENTS_SIZE
+      : MCP_SEMCONV.TOOL_RESULT_SIZE;
+  }
+  return phase === 'arguments'
+    ? MCP_SEMCONV.PAYLOAD_ARGUMENTS_SIZE
+    : MCP_SEMCONV.PAYLOAD_RESULT_SIZE;
+}
+
+function getEntityAttributes(
+  type: 'tool' | 'resource' | 'prompt',
+  name: string,
+  resourceUri?: string,
+): Record<string, string> {
+  switch (type) {
+    case 'tool': {
+      return { [MCP_SEMCONV.TOOL_NAME]: name };
+    }
+    case 'resource': {
+      return { [MCP_SEMCONV.RESOURCE_URI]: resourceUri ?? name };
+    }
+    case 'prompt': {
+      return { [MCP_SEMCONV.PROMPT_NAME]: name };
+    }
+  }
+}
+
+function getManifestAssessmentPromise(
+  type: 'tool' | 'resource' | 'prompt',
+  name: string,
+  configObject: unknown,
+  config: ResolvedConfig,
+): Promise<ManifestAssessment | undefined> | undefined {
+  if (!config.classifyDescriptions && !config.validateToolBudgets) {
+    return undefined;
+  }
+  return assessManifest(
+    config.classifyDescriptions ? config.securityClassifier : undefined,
+    extractManifestTextSurface(type, name, configObject),
+    { validateToolBudgets: config.validateToolBudgets },
+  );
+}
 
 /** Map operation type to MCP method name */
 function getMethodName(type: 'tool' | 'resource' | 'prompt'): string {
@@ -42,6 +124,8 @@ function wrapHandler<T extends (...args: any[]) => any>(
   handler: T,
   config: ResolvedConfig,
   resourceUri?: string,
+  annotations?: McpToolAnnotations,
+  manifestAssessmentPromise?: Promise<ManifestAssessment | undefined>,
 ): T {
   const methodName = getMethodName(type);
   const spanName = getSpanName(type, name);
@@ -91,6 +175,31 @@ function wrapHandler<T extends (...args: any[]) => any>(
             ctx.setAttribute(MCP_SEMCONV.SESSION_ID, config.sessionId);
           }
 
+          if (manifestAssessmentPromise) {
+            applyManifestAssessment(
+              ctx,
+              await manifestAssessmentPromise,
+              getEntityAttributes(type, name, resourceUri),
+            );
+          }
+
+          // Security: annotation hints (tool trust profile / malicious-manifest vector)
+          if (type === 'tool' && config.captureToolAnnotations) {
+            applyToolAnnotations(ctx, annotations);
+          }
+
+          // Security: argument size signal + classifier (inbound vector)
+          if (args[0] !== undefined) {
+            if (config.recordPayloadSize) {
+              recordPayloadSize(
+                ctx,
+                getPayloadSizeAttribute(type, 'arguments'),
+                args[0],
+              );
+            }
+            await classify(ctx, config, 'arguments', type, name, args[0]);
+          }
+
           // Opt-in: tool arguments
           if (
             type === 'tool' &&
@@ -124,6 +233,23 @@ function wrapHandler<T extends (...args: any[]) => any>(
 
           try {
             const result = await handler(...args);
+
+            // Security: result size signal, output budget, classifier (contaminated-output vector)
+            if (result !== undefined) {
+              const resultSize = config.recordPayloadSize
+                ? recordPayloadSize(
+                    ctx,
+                    getPayloadSizeAttribute(type, 'result'),
+                    result,
+                  )
+                : safeStringify(result).length;
+              if (config.outputCharBudget !== undefined) {
+                enforceOutputBudget(ctx, resultSize, config.outputCharBudget, {
+                  ...getEntityAttributes(type, name, resourceUri),
+                });
+              }
+              await classify(ctx, config, 'result', type, name, result);
+            }
 
             // Opt-in: tool results
             if (
@@ -293,11 +419,20 @@ export function instrumentMcpServer<T extends Record<string, any>>(
           toolConfig: any,
           handler: any,
         ) {
+          const manifestAssessmentPromise = getManifestAssessmentPromise(
+            'tool',
+            name,
+            toolConfig,
+            mergedConfig,
+          );
           const wrappedHandler = wrapHandler(
             'tool',
             name,
             handler,
             mergedConfig,
+            undefined,
+            toolConfig?.annotations as McpToolAnnotations | undefined,
+            manifestAssessmentPromise,
           );
 
           return Reflect.apply(value, target, [
@@ -318,12 +453,20 @@ export function instrumentMcpServer<T extends Record<string, any>>(
           readCallback: any,
         ) {
           const uri = typeof uriOrTemplate === 'string' ? uriOrTemplate : name;
+          const manifestAssessmentPromise = getManifestAssessmentPromise(
+            'resource',
+            name,
+            resourceConfig,
+            mergedConfig,
+          );
           const wrappedCallback = wrapHandler(
             'resource',
             name,
             readCallback,
             mergedConfig,
             uri,
+            undefined,
+            manifestAssessmentPromise,
           );
 
           return Reflect.apply(value, target, [
@@ -343,7 +486,21 @@ export function instrumentMcpServer<T extends Record<string, any>>(
           promptConfig: any,
           cb: any,
         ) {
-          const wrappedCallback = wrapHandler('prompt', name, cb, mergedConfig);
+          const manifestAssessmentPromise = getManifestAssessmentPromise(
+            'prompt',
+            name,
+            promptConfig,
+            mergedConfig,
+          );
+          const wrappedCallback = wrapHandler(
+            'prompt',
+            name,
+            cb,
+            mergedConfig,
+            undefined,
+            undefined,
+            manifestAssessmentPromise,
+          );
 
           return Reflect.apply(value, target, [
             name,

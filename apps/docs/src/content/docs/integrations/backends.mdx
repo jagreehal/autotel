@@ -5,6 +5,8 @@ description: Simplified setup helpers for Honeycomb, Datadog, Google Cloud, and 
 
 `autotel-backends` provides vendor-specific configuration helpers that simplify `init()` for popular observability platforms.
 
+If you want to send telemetry to more than one OTLP backend at once, use Autotel's `destinations` config in addition to these helpers. Keep `endpoint` for one destination; use `destinations` for explicit fan-out.
+
 ## Installation
 
 ```bash
@@ -58,6 +60,32 @@ init(
 | Datadog      | `autotel-backends/datadog`      |
 | Google Cloud | `autotel-backends/google-cloud` |
 | Grafana      | `autotel-backends/grafana`      |
+
+## Multi-backend fan-out
+
+Use `destinations` when you want one app to ship to multiple OTLP backends without manually constructing exporters:
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  logs: true,
+  destinations: [
+    {
+      endpoint: 'https://otlp-gateway-prod.grafana.net/otlp',
+      headers: 'Authorization=Basic ...',
+    },
+    {
+      endpoint: 'https://api.honeycomb.io',
+      headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY! },
+      signals: ['traces'],
+    },
+  ],
+});
+```
+
+Use the backend helpers when you want vendor-specific defaults for one destination. Use `destinations` when you want one service to fan out to several OTLP backends.
 
 ## Examples
 

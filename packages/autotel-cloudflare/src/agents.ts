@@ -47,12 +47,20 @@
  * const observability = createOtelObservability({
  *   service: { name: 'my-agent' },
  *   agents: {
- *     traceRpc: true,           // Trace RPC calls (default: true)
- *     traceSchedule: true,      // Trace scheduled tasks (default: true)
- *     traceMcp: true,           // Trace MCP operations (default: true)
- *     traceStateUpdates: false, // Skip state updates (default: false, can be noisy)
- *     traceMessages: true,      // Trace message events (default: true)
- *     traceLifecycle: true,     // Trace connect/destroy (default: true)
+ *     traceRpc: true,            // RPC and rpc:error
+ *     traceSchedule: true,       // schedule:* events
+ *     traceQueue: true,          // queue:* events
+ *     traceSubmissions: true,    // submission:* events
+ *     traceMcp: true,            // mcp:* events
+ *     traceStateUpdates: false,  // state:update (off by default; noisy)
+ *     traceMessages: true,       // message:* and tool:* events
+ *     traceChat: true,           // chat:* recovery/stream/context events
+ *     traceTranscripts: true,    // chat:transcript:* events
+ *     traceFibers: true,         // fiber:* events
+ *     traceToolRecovery: true,   // agent_tool:* recovery events
+ *     traceWorkflow: true,       // workflow:* events
+ *     traceEmail: true,          // email:* events
+ *     traceLifecycle: true,      // connect/disconnect/destroy
  *   }
  * })
  * ```
@@ -65,12 +73,15 @@ export {
   createOtelObservabilityFromEnv,
   OtelObservability,
 } from './agents/otel-observability';
+export { channels, genericObservability, subscribe } from './agents/observability';
 export type {
+  BaseEvent,
   OtelObservabilityConfig,
   AgentObservabilityEvent,
   MCPObservabilityEvent,
   ObservabilityEvent,
   Observability,
+  ChannelEventMap,
   AgentInstrumentationOptions,
   AgentSpanAttributes,
 } from './agents/types';

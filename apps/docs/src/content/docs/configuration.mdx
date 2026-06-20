@@ -31,7 +31,27 @@ Autotel supports standard OpenTelemetry environment variables for configuration.
 ```typescript
 init({
   service: 'my-service', // Overrides YAML and OTEL_SERVICE_NAME
-  endpoint: 'http://localhost:4318', // Overrides YAML and OTEL_EXPORTER_OTLP_ENDPOINT
+  endpoint: 'http://localhost:4318', // Single OTLP destination shorthand
+});
+```
+
+For multi-backend OTLP fan-out, use `destinations` instead of overloading `endpoint`:
+
+```typescript
+init({
+  service: 'my-service',
+  logs: true,
+  destinations: [
+    {
+      endpoint: 'https://otlp-gateway-prod.grafana.net/otlp',
+      headers: 'Authorization=Basic ...',
+    },
+    {
+      endpoint: 'https://api.honeycomb.io',
+      headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY! },
+      signals: ['traces'],
+    },
+  ],
 });
 ```
 
@@ -76,6 +96,7 @@ init({
 ```
 
 **Presets:**
+
 - `default` — Emails, phone numbers, SSNs, credit cards (last 4), sensitive keys (password, token, etc.)
 - `strict` — All of default plus JWTs, Bearer tokens, IBANs, API keys in values
 - `pci-dss` — Focused on payment card data
@@ -89,7 +110,7 @@ init({
     keyPatterns: [/password/i, /secret/i], // Keys to redact entirely
     valuePatterns: [
       // Custom patterns with smart masking
-      { name: 'customerId', pattern: /CUST-\d{8}/g, replacement: 'CUST-***' }
+      { name: 'customerId', pattern: /CUST-\d{8}/g, replacement: 'CUST-***' },
     ],
     builtins: ['email', 'creditCard'], // Enable specific built-in patterns
     replacement: '[REDACTED]', // Default replacement (default)
@@ -115,6 +136,16 @@ exporter:
   protocol: http
   headers:
     x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+  # Optional OTLP fan-out
+  # destinations:
+  #   - endpoint: https://otlp-gateway-prod.grafana.net/otlp
+  #     headers:
+  #       Authorization: Basic ${env:GRAFANA_OTLP_BASIC_AUTH}
+  #   - endpoint: https://api.honeycomb.io
+  #     headers:
+  #       x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+  #     signals:
+  #       - traces
 
 resource:
   deployment.environment: ${env:NODE_ENV:-development}
@@ -179,6 +210,26 @@ export OTEL_SERVICE_NAME=my-app
 export OTEL_EXPORTER_OTLP_ENDPOINT=https://http-intake.logs.datadoghq.com
 export OTEL_EXPORTER_OTLP_HEADERS=DD-API-KEY=YOUR_API_KEY
 export OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production,team=backend
+```
+
+**Production (Grafana + Honeycomb fan-out via `init()`):**
+
+```typescript
+init({
+  service: 'my-app',
+  logs: true,
+  destinations: [
+    {
+      endpoint: 'https://otlp-gateway-prod.grafana.net/otlp',
+      headers: 'Authorization=Basic ...',
+    },
+    {
+      endpoint: 'https://api.honeycomb.io',
+      headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY! },
+      signals: ['traces'],
+    },
+  ],
+});
 ```
 
 See `packages/autotel/.env.example` for a complete template.

@@ -153,6 +153,87 @@ const instrumented = instrumentMcpServer(server, {
 });
 ```
 
+### Security observability
+
+MCP is where untrusted data crosses into your agent. The
+[agentic-web threat model](https://developer.chrome.com/docs/agents/security)
+(Chrome/Google, June 2026) has two vectors: **malicious manifests** (hidden
+instructions in a tool's name/description/annotations) and **contaminated
+outputs** (injection smuggled inside legitimate tool results). Detecting these
+in production is an observability problem — and this package makes it observable
+at the MCP boundary.
+
+:::note[Where this fits]
+This package **observes and signals**. Enforcement lives elsewhere in the
+monorepo: deterministic kill-switches (cost/token/tool-call ceilings, loop
+detection) in [`autotel-genai/guard`](/integrations/security/), and
+identity/scope/policy in `autotel-genai/agent`. The two compose — see the guard
+bridge below.
+:::
+
+**On by default** (no extra config), every tool span carries:
+
+- Annotation hints → `mcp.tool.read_only`, `mcp.tool.destructive`,
+  `mcp.tool.idempotent`, `mcp.tool.open_world`, `mcp.tool.untrusted_content`
+- Payload sizes → `mcp.tool.arguments.size`, `mcp.tool.result.size` (sizes only,
+  no content) — a token-exhaustion / contaminated-output tell
+
+**Opt-in** — a pluggable classifier (Model Armor, Promptfoo, an LLM critic, or
+the built-in heuristic) plus output budgets:
+
+```typescript
+import {
+  instrumentMcpServer,
+  heuristicInjectionClassifier,
+  MCP_CHAR_BUDGETS,
+} from 'autotel-mcp-instrumentation';
+
+instrumentMcpServer(server, {
+  securityClassifier: heuristicInjectionClassifier(), // or your own (sync/async)
+  outputCharBudget: MCP_CHAR_BUDGETS.TOOL_OUTPUT, // 1500 (WebMCP recommendation)
+});
+```
+
+The classifier scans tool **arguments** (server + client) and **results** (the
+contaminated-output vector the agent receives), recording `mcp.security.injection.*`
+and emitting a `mcp.security.injection_suspected` event on non-clean verdicts.
+Classifier failures never break the traced call. The built-in heuristic is a
+cheap tripwire — feed its signal to a real classifier, don't gate actions on it.
+
+**Helpers** (`autotel-mcp-instrumentation/security`, runtime-agnostic — works in
+Workers/edge):
+
+```typescript
+import { spotlight, validateToolBudget } from 'autotel-mcp-instrumentation/security';
+
+const safe = spotlight(userComment); // <untrusted>…</untrusted> (or { method: 'base64' })
+const violations = validateToolBudget({ name, description, parameters }); // WebMCP char limits
+```
+
+**Guard bridge — detection → enforcement.** Pass an `autotel-genai` guard and
+every tool call is recorded as a step; a `stop` rule throws to halt a runaway run:
+
+```typescript
+import { createGenAiBudget } from 'autotel-genai/guard';
+
+const guard = createGenAiBudget({ maxToolCalls: 50, maxCostUsd: 5 });
+instrumentMcpClient(client, { guard }); // duck-typed — no genai dependency added
+```
+
+**Signals reference**
+
+| Signal | Kind | Meaning |
+| --- | --- | --- |
+| `mcp.tool.*` (hints) | span attr | tool trust profile / manifest vector |
+| `mcp.tool.{arguments,result}.size` | span attr | payload size (token-exhaustion tell) |
+| `mcp.security.injection.*` | span attr | classifier verdict / score / categories |
+| `mcp.security.injection_suspected` | event | non-clean classifier verdict |
+| `mcp.security.budget_exceeded` | event | output over `outputCharBudget` |
+| `mcp.security.events` | counter | aggregate security-signal count |
+
+Query them in production with `autotel security mcp` (see the
+[investigate CLI](/tools/cli/)).
+
 ### Entry points
 
 | Import                                       | Contents                          | Size |
@@ -161,6 +242,7 @@ const instrumented = instrumentMcpServer(server, {
 | `autotel-mcp-instrumentation/server`         | `instrumentMcpServer`             | ~5KB |
 | `autotel-mcp-instrumentation/client`         | `instrumentMcpClient`             | ~4KB |
 | `autotel-mcp-instrumentation/context`        | `inject*`/`extract*`/`activate*`  | ~2KB |
+| `autotel-mcp-instrumentation/security`       | classifier, spotlight, budgets    | ~2KB |
 
 ### Examples
 

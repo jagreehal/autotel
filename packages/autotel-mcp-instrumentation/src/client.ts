@@ -4,8 +4,68 @@ import { injectOtelContextToMeta } from './context';
 import { type McpInstrumentationConfig, resolveConfig } from './types';
 import { MCP_SEMCONV, MCP_METHODS } from './semantic-conventions';
 import { recordClientOperationDuration } from './metrics';
+import {
+  enforceOutputBudget,
+  recordGuardStep,
+  recordPayloadSize,
+  runClassifier,
+  safeStringify,
+} from './security';
 
 type ResolvedConfig = ReturnType<typeof resolveConfig>;
+
+/** Run the configured classifier over one payload, swallowing absence/errors. */
+async function classifyClient(
+  ctx: TraceContext,
+  config: ResolvedConfig,
+  source: 'arguments' | 'result',
+  type: 'tool' | 'resource' | 'prompt',
+  name: string,
+  value: unknown,
+): Promise<void> {
+  if (!config.securityClassifier) return;
+  if (source === 'arguments' && !config.classifyArguments) return;
+  if (source === 'result' && !config.classifyResults) return;
+  if (value === undefined) return;
+  await runClassifier(ctx, config.securityClassifier, {
+    source,
+    type,
+    name,
+    text: safeStringify(value),
+    value,
+  });
+}
+
+function getPayloadSizeAttribute(
+  type: 'tool' | 'resource' | 'prompt',
+  phase: 'arguments' | 'result',
+): string {
+  if (type === 'tool') {
+    return phase === 'arguments'
+      ? MCP_SEMCONV.TOOL_ARGUMENTS_SIZE
+      : MCP_SEMCONV.TOOL_RESULT_SIZE;
+  }
+  return phase === 'arguments'
+    ? MCP_SEMCONV.PAYLOAD_ARGUMENTS_SIZE
+    : MCP_SEMCONV.PAYLOAD_RESULT_SIZE;
+}
+
+function getEntityAttributes(
+  type: 'tool' | 'resource' | 'prompt',
+  name: string,
+): Record<string, string> {
+  switch (type) {
+    case 'tool': {
+      return { [MCP_SEMCONV.TOOL_NAME]: name };
+    }
+    case 'resource': {
+      return { [MCP_SEMCONV.RESOURCE_URI]: name };
+    }
+    case 'prompt': {
+      return { [MCP_SEMCONV.PROMPT_NAME]: name };
+    }
+  }
+}
 
 /**
  * Create a traced wrapper for a discovery operation (listTools, listResources, etc.)
@@ -162,6 +222,21 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 );
               }
 
+              // Security: argument size signal + classifier (outbound vector)
+              if (args !== undefined) {
+                if (mergedConfig.recordPayloadSize) {
+                  recordPayloadSize(ctx, MCP_SEMCONV.TOOL_ARGUMENTS_SIZE, args);
+                }
+                await classifyClient(
+                  ctx,
+                  mergedConfig,
+                  'arguments',
+                  'tool',
+                  name,
+                  args,
+                );
+              }
+
               // Opt-in: tool arguments
               if (mergedConfig.captureToolArgs && args !== undefined) {
                 try {
@@ -189,6 +264,10 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 );
               }
 
+              // Tracks whether the tool itself returned, so a guard `stop`
+              // thrown on the success path is not re-recorded as a tool error.
+              let toolSucceeded = false;
+
               try {
                 // Inject trace context into _meta field
                 const meta = injectOtelContextToMeta();
@@ -202,6 +281,43 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                   resultSchema,
                   options,
                 ]);
+                toolSucceeded = true;
+
+                // Security: result size, output budget, classifier (contaminated-output vector)
+                if (result !== undefined) {
+                  const resultSize = mergedConfig.recordPayloadSize
+                    ? recordPayloadSize(
+                        ctx,
+                        MCP_SEMCONV.TOOL_RESULT_SIZE,
+                        result,
+                      )
+                    : safeStringify(result).length;
+                  if (mergedConfig.outputCharBudget !== undefined) {
+                    enforceOutputBudget(
+                      ctx,
+                      resultSize,
+                      mergedConfig.outputCharBudget,
+                      { [MCP_SEMCONV.TOOL_NAME]: name },
+                    );
+                  }
+                  await classifyClient(
+                    ctx,
+                    mergedConfig,
+                    'result',
+                    'tool',
+                    name,
+                    result,
+                  );
+                }
+
+                // Enforcement: feed the genai guard. A `stop` rule throws here.
+                if (mergedConfig.guard) {
+                  recordGuardStep(
+                    mergedConfig.guard,
+                    { name, signature: safeStringify(args), error: false },
+                    ctx,
+                  );
+                }
 
                 // Opt-in: tool results
                 if (mergedConfig.captureToolResults && result !== undefined) {
@@ -260,6 +376,16 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                   });
                 }
 
+                // Enforcement: record a failed step (error-loop detection) only
+                // when the tool itself failed — not when the guard stopped us.
+                if (mergedConfig.guard && !toolSucceeded) {
+                  recordGuardStep(
+                    mergedConfig.guard,
+                    { name, signature: safeStringify(args), error: true },
+                    ctx,
+                  );
+                }
+
                 throw error;
               }
             },
@@ -302,9 +428,28 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 const customAttrs = mergedConfig.customAttributes({
                   type: 'resource',
                   name: uri,
+                  args: params,
                 });
                 ctx.setAttributes(
                   customAttrs as Record<string, string | number | boolean>,
+                );
+              }
+
+              if (params !== undefined) {
+                if (mergedConfig.recordPayloadSize) {
+                  recordPayloadSize(
+                    ctx,
+                    getPayloadSizeAttribute('resource', 'arguments'),
+                    params,
+                  );
+                }
+                await classifyClient(
+                  ctx,
+                  mergedConfig,
+                  'arguments',
+                  'resource',
+                  uri,
+                  params,
                 );
               }
 
@@ -320,6 +465,32 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                   paramsWithMeta,
                   options,
                 ]);
+
+                if (result !== undefined) {
+                  const resultSize = mergedConfig.recordPayloadSize
+                    ? recordPayloadSize(
+                        ctx,
+                        getPayloadSizeAttribute('resource', 'result'),
+                        result,
+                      )
+                    : safeStringify(result).length;
+                  if (mergedConfig.outputCharBudget !== undefined) {
+                    enforceOutputBudget(
+                      ctx,
+                      resultSize,
+                      mergedConfig.outputCharBudget,
+                      getEntityAttributes('resource', uri),
+                    );
+                  }
+                  await classifyClient(
+                    ctx,
+                    mergedConfig,
+                    'result',
+                    'resource',
+                    uri,
+                    result,
+                  );
+                }
 
                 ctx.setStatus({ code: SpanStatusCode.OK });
 
@@ -399,6 +570,24 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 );
               }
 
+              if (params !== undefined) {
+                if (mergedConfig.recordPayloadSize) {
+                  recordPayloadSize(
+                    ctx,
+                    getPayloadSizeAttribute('prompt', 'arguments'),
+                    params,
+                  );
+                }
+                await classifyClient(
+                  ctx,
+                  mergedConfig,
+                  'arguments',
+                  'prompt',
+                  name,
+                  params,
+                );
+              }
+
               try {
                 // Inject trace context
                 const meta = injectOtelContextToMeta();
@@ -411,6 +600,32 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                   paramsWithMeta,
                   options,
                 ]);
+
+                if (result !== undefined) {
+                  const resultSize = mergedConfig.recordPayloadSize
+                    ? recordPayloadSize(
+                        ctx,
+                        getPayloadSizeAttribute('prompt', 'result'),
+                        result,
+                      )
+                    : safeStringify(result).length;
+                  if (mergedConfig.outputCharBudget !== undefined) {
+                    enforceOutputBudget(
+                      ctx,
+                      resultSize,
+                      mergedConfig.outputCharBudget,
+                      getEntityAttributes('prompt', name),
+                    );
+                  }
+                  await classifyClient(
+                    ctx,
+                    mergedConfig,
+                    'result',
+                    'prompt',
+                    name,
+                    result,
+                  );
+                }
 
                 ctx.setStatus({ code: SpanStatusCode.OK });
 

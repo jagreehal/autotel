@@ -349,6 +349,10 @@ const INVESTIGATE_COMMANDS: CommandSpec[] = [
     'Security posture: events by severity/category, probe signals, denied responses',
   ),
   investigateCmd('security events', 'List spans carrying security.* events'),
+  investigateCmd(
+    'security mcp',
+    'MCP protocol-boundary security: injection verdicts, output-budget breaches, untrusted-content tool calls',
+  ),
 
   investigateCmd('semconv', 'Semantic conventions lookup (parent)', { static: true }),
   investigateCmd('semconv list', 'List semconv namespaces', { static: true, network: true }),

@@ -22,6 +22,8 @@ init({
 });
 ```
 
+`endpoint` is the simple single-backend path. If you need Grafana + Honeycomb or any other OTLP fan-out, switch to `destinations` in the full [Configuration](/autotel/configuration/) guide.
+
 Import it **first** in your entry point:
 
 ```typescript
