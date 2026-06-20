@@ -1,4 +1,5 @@
 import { createStructuredError } from 'autotel';
+import { securityEvent } from 'autotel-audit';
 import { sanitizeAuditPayload, type PrivacyProfileInput } from './privacy.js';
 import { recordDecisionBasis, recordPolicyDecision, withAgentToolCall } from './runtime.js';
 import { hashPayload } from './hash.js';
@@ -157,6 +158,20 @@ export async function withScopedTool<TInput, TOutput>(
         ),
       },
       options,
+    );
+
+    securityEvent(
+      {
+        name: 'llm.tool_call.denied',
+        category: 'llm',
+        outcome: 'denied',
+        severity: 'warning',
+        reason: denial.reason,
+        targetType: 'tool',
+        targetId: definition.tool.name,
+        policyId: definition.policyId,
+      },
+      { ctx: options.ctx, onMissingContext: options.onMissingContext ?? 'warn' },
     );
 
     throw createStructuredError({

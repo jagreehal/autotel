@@ -1,0 +1,23 @@
+{
+  "name": "@jagreehal/example-agent-security",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Google SAIF-aligned agent security observability: guard, scoped tools, MCP bridge, observer lifecycle events.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "autotel": "workspace:*",
+    "autotel-audit": "workspace:*",
+    "autotel-genai": "workspace:*",
+    "autotel-mcp-instrumentation": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

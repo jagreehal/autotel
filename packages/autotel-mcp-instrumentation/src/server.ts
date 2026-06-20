@@ -1,7 +1,11 @@
 import { context, SpanStatusCode } from '@opentelemetry/api';
 import { trace, SpanKind, type TraceContext } from 'autotel';
 import { extractOtelContextFromMeta } from './context';
-import { type McpInstrumentationConfig, resolveConfig } from './types';
+import {
+  type McpInstrumentationConfig,
+  resolveConfig,
+  resolveSecurityEventBridge,
+} from './types';
 import { MCP_SEMCONV, MCP_METHODS } from './semantic-conventions';
 import { recordServerOperationDuration } from './metrics';
 import {
@@ -19,6 +23,20 @@ import {
 
 type ResolvedConfig = ReturnType<typeof resolveConfig>;
 
+function securityBridge(
+  config: ResolvedConfig,
+  toolName?: string,
+):
+  | {
+      bridge: NonNullable<ReturnType<typeof resolveSecurityEventBridge>>;
+      toolName?: string;
+    }
+  | undefined {
+  const bridge = resolveSecurityEventBridge(config);
+  if (!bridge) return undefined;
+  return { bridge, toolName };
+}
+
 /** Run the configured classifier over one payload, swallowing absence/errors. */
 async function classify(
   ctx: TraceContext,
@@ -32,13 +50,18 @@ async function classify(
   if (source === 'arguments' && !config.classifyArguments) return;
   if (source === 'result' && !config.classifyResults) return;
   if (value === undefined) return;
-  await runClassifier(ctx, config.securityClassifier, {
-    source,
-    type,
-    name,
-    text: safeStringify(value),
-    value,
-  });
+  await runClassifier(
+    ctx,
+    config.securityClassifier,
+    {
+      source,
+      type,
+      name,
+      text: safeStringify(value),
+      value,
+    },
+    securityBridge(config, name),
+  );
 }
 
 function getPayloadSizeAttribute(
@@ -180,6 +203,7 @@ function wrapHandler<T extends (...args: any[]) => any>(
               ctx,
               await manifestAssessmentPromise,
               getEntityAttributes(type, name, resourceUri),
+              securityBridge(config, type === 'tool' ? name : undefined),
             );
           }
 
@@ -244,9 +268,15 @@ function wrapHandler<T extends (...args: any[]) => any>(
                   )
                 : safeStringify(result).length;
               if (config.outputCharBudget !== undefined) {
-                enforceOutputBudget(ctx, resultSize, config.outputCharBudget, {
-                  ...getEntityAttributes(type, name, resourceUri),
-                });
+                enforceOutputBudget(
+                  ctx,
+                  resultSize,
+                  config.outputCharBudget,
+                  {
+                    ...getEntityAttributes(type, name, resourceUri),
+                  },
+                  securityBridge(config, name),
+                );
               }
               await classify(ctx, config, 'result', type, name, result);
             }

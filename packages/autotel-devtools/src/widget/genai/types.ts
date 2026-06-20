@@ -105,6 +105,18 @@ export interface GenAiWarning {
   message?: string
 }
 
+/** Google SAIF-aligned agent security signals extracted from span attributes. */
+export interface AgentSecuritySignals {
+  consentOutcome?: string
+  policyDecision?: string
+  injectionVerdict?: string
+  guardStopped?: boolean
+  actionRiskClass?: string
+  inputProvenance?: string
+  planStepIndex?: number
+  securityEvent?: string
+}
+
 export interface GenAiSpan {
   traceId: string
   spanId: string
@@ -160,6 +172,7 @@ export interface GenAiSpan {
   handoff?: { fromAgent?: string; toAgent?: string }
   guardrail?: { name?: string; triggered?: boolean }
   conversationId?: string
+  agentSecurity?: AgentSecuritySignals
   evaluation?: {
     name?: string
     scoreValue?: number

@@ -52,6 +52,7 @@
  */
 
 import { createStructuredError, type TraceContext } from 'autotel';
+import { securityEvent } from 'autotel-audit';
 import { GEN_AI, GEN_AI_GUARD_EVENT } from './semconv.js';
 
 /** What a rule does when it crosses its threshold. */
@@ -555,6 +556,21 @@ function recordTelemetry(
         [GEN_AI.GUARD_LIMIT]: violation.limit,
       },
     );
+    if (violation.action === 'stop') {
+      securityEvent(
+        {
+          name: 'llm.guard.triggered',
+          category: 'llm',
+          outcome: 'blocked',
+          severity: 'error',
+          reason: violation.rule,
+          rule: violation.rule,
+          observed: violation.observed,
+          limit: violation.limit,
+        },
+        { onMissingContext: 'warn' },
+      );
+    }
   }
 }
 

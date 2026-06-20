@@ -27,7 +27,7 @@
   },
   "files": [
     "dist",
-    "src",
+    "snapshots",
     "README.md"
   ],
   "scripts": {

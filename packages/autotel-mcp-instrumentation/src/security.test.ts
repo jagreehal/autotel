@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
+  applyManifestAssessment,
   applyToolAnnotations,
   enforceOutputBudget,
   heuristicInjectionClassifier,
@@ -203,6 +204,34 @@ describe('heuristicInjectionClassifier', () => {
       value: {},
     });
     expect(v?.categories).toContain('encoded_blob');
+  });
+});
+
+describe('applyManifestAssessment', () => {
+  it('bridges suspicious manifests to security events', () => {
+    const sink = makeSink();
+    const bridge = vi.fn();
+    applyManifestAssessment(
+      sink,
+      {
+        verdict: {
+          verdict: 'suspicious',
+          score: 0.6,
+          categories: ['instruction_override'],
+        },
+      },
+      { [MCP_SEMCONV.TOOL_NAME]: 'evil_tool' },
+      { bridge },
+    );
+
+    expect(sink.attrs[MCP_SEMCONV.SECURITY_MANIFEST_SUSPECTED]).toBe(true);
+    expect(bridge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'llm.manifest.suspicious',
+        toolName: 'evil_tool',
+        verdict: 'suspicious',
+      }),
+    );
   });
 });
 

@@ -11,11 +11,15 @@ vi.mock('autotel', () => ({
   createCounter: vi.fn(() => ({ add: counterAdd })),
   AUTOTEL_SAMPLING_TAIL_EVALUATED: 'autotel.sampling.tail.evaluated',
   AUTOTEL_SAMPLING_TAIL_KEEP: 'autotel.sampling.tail.keep',
+  REDACTOR_PATTERNS: {
+    sensitiveKey: /(token|secret|password|api[-_]?key)$/i,
+  },
 }));
 
 function makeSpan(attributes: Record<string, unknown>) {
   const span = {
     attributes: attributes as never,
+    spanContext: attributes.spanContext as { traceId: string } | undefined,
     setAttribute: vi.fn((key: string, value: unknown) => {
       (span.attributes as Record<string, unknown>)[key] = value;
     }),
@@ -486,5 +490,133 @@ describe('SUSPICIOUS_REQUEST_PATTERNS', () => {
         expect(pattern.test(path), `${name} flagged ${path}`).toBe(false);
       }
     }
+  });
+});
+
+describe('createSecuritySignalProcessor — suspicious action chains', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('emits llm_action_chain_suspicious and stamps security attrs on the destructive span', () => {
+    let clock = 1_000_000;
+    const signals: SecuritySignal[] = [];
+    const processor = createSecuritySignalProcessor({
+      onSignal: (s) => signals.push(s),
+      now: () => clock,
+    });
+
+    processor.onStart(
+      makeSpan({
+        'mcp.tool.untrusted_content': true,
+        'mcp.tool.name': 'read_inbox',
+        spanContext: { traceId: 'trace-abc' },
+      }),
+    );
+
+    clock += 5000;
+    const destructive = makeSpan({
+        'mcp.tool.destructive': true,
+        'mcp.tool.name': 'send_email',
+        spanContext: { traceId: 'trace-abc' },
+      });
+    processor.onStart(destructive);
+
+    expect(signals).toEqual([
+      expect.objectContaining({
+        signal: 'llm_action_chain_suspicious',
+        traceId: 'trace-abc',
+        untrustedTool: 'read_inbox',
+        toolName: 'send_email',
+      }),
+    ]);
+    expect(destructive.setAttribute).toHaveBeenCalledWith(
+      'security.event',
+      'llm.action_chain.suspicious',
+    );
+    expect(destructive.setAttribute).toHaveBeenCalledWith(
+      'security.category',
+      'llm',
+    );
+    expect(destructive.setAttribute).toHaveBeenCalledWith(
+      'security.untrustedTool',
+      'read_inbox',
+    );
+    expect(destructive.setAttribute).toHaveBeenCalledWith(
+      'security.destructiveTool',
+      'send_email',
+    );
+    expect(destructive.setAttribute).toHaveBeenCalledWith(
+      'autotel.sampling.tail.keep',
+      true,
+    );
+  });
+
+  it('does not re-emit for later destructive spans unless another untrusted span appears', () => {
+    let clock = 1_000_000;
+    const signals: SecuritySignal[] = [];
+    const processor = createSecuritySignalProcessor({
+      onSignal: (s) => signals.push(s),
+      now: () => clock,
+    });
+
+    processor.onStart(
+      makeSpan({
+        'mcp.tool.untrusted_content': true,
+        'mcp.tool.name': 'read_inbox',
+        spanContext: { traceId: 'trace-repeat' },
+      }),
+    );
+
+    clock += 1000;
+    processor.onStart(
+      makeSpan({
+        'mcp.tool.destructive': true,
+        'mcp.tool.name': 'send_email',
+        spanContext: { traceId: 'trace-repeat' },
+      }),
+    );
+
+    clock += 1000;
+    processor.onStart(
+      makeSpan({
+        'mcp.tool.destructive': true,
+        'mcp.tool.name': 'delete_message',
+        spanContext: { traceId: 'trace-repeat' },
+      }),
+    );
+
+    expect(
+      signals.filter((signal) => signal.signal === 'llm_action_chain_suspicious'),
+    ).toHaveLength(1);
+  });
+
+  it('expires stale untrusted traces before evaluating destructive spans', () => {
+    let clock = 1_000_000;
+    const signals: SecuritySignal[] = [];
+    const processor = createSecuritySignalProcessor({
+      actionChainWindowMs: 10_000,
+      onSignal: (s) => signals.push(s),
+      now: () => clock,
+    });
+
+    processor.onStart(
+      makeSpan({
+        'mcp.tool.untrusted_content': true,
+        'mcp.tool.name': 'read_inbox',
+        spanContext: { traceId: 'trace-expire' },
+      }),
+    );
+
+    clock += 20_000;
+    processor.onStart(
+      makeSpan({
+        'mcp.tool.destructive': true,
+        'mcp.tool.name': 'send_email',
+        spanContext: { traceId: 'trace-expire' },
+      }),
+    );
+
+    expect(signals).toHaveLength(0);
   });
 });

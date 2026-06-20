@@ -18,7 +18,6 @@
   },
   "files": [
     "dist",
-    "src",
     "bin",
     "fixtures",
     "skills",

@@ -1,8 +1,9 @@
 import { defineConfig } from 'tsdown'
-import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
 
 export default defineConfig({
-  outExtensions: tsupCompatOutExtensions,
+  // package.json `main` is dist/extension.js (matching the published VSIX layout),
+  // so emit `.js` here rather than the shared cjs -> `.cjs` naming.
+  outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   entry: { extension: 'src/extension.ts' },
   outDir: 'dist',
   format: ['cjs'],

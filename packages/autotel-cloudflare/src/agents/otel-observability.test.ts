@@ -235,6 +235,27 @@ describe('OtelObservability', () => {
 
       expect(waitUntil).toHaveBeenCalledTimes(1);
     });
+
+    it('records human approval via recordHumanApproval on tool:approval', () => {
+      const obs = createOtelObservability({
+        service: { name: 'test-agent' },
+        spanProcessors: [processor],
+      });
+
+      obs.emit(
+        createObservabilityEvent('tool:approval', {
+          toolCallId: 'tc-42',
+          approved: true,
+        }),
+      );
+
+      expect(processor.spans).toHaveLength(1);
+      expect(processor.spans[0]?.attributes).toMatchObject({
+        'agent.consent.required': true,
+        'agent.consent.outcome': 'approved',
+        'tool.call.id': 'tc-42',
+      });
+    });
   });
 
   describe('generic observability channels', () => {

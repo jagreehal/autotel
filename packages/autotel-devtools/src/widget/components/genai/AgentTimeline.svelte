@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Bot, ArrowRight, Cpu, AlertTriangle } from '@lucide/svelte';
+  import { Bot, ArrowRight, Cpu, AlertTriangle, Shield } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
   import { formatDuration } from '../../utils';
   import type { GenAiSpan } from '../../genai/types';
@@ -115,6 +115,23 @@
     return { laneOrder, laneMap, wrapperIdsByLane, durationMs };
   }
 
+  function securityBadges(group: Group): string[] {
+    const badges = new Set<string>();
+    for (const span of group.spans) {
+      const sec = span.agentSecurity;
+      if (!sec) continue;
+      if (sec.consentOutcome) badges.add(`consent:${sec.consentOutcome}`);
+      if (sec.policyDecision === 'deny') badges.add('policy:deny');
+      if (sec.injectionVerdict && sec.injectionVerdict !== 'clean') {
+        badges.add(`injection:${sec.injectionVerdict}`);
+      }
+      if (sec.guardStopped) badges.add('guard:stop');
+      if (sec.securityEvent) badges.add(sec.securityEvent);
+      if (sec.planStepIndex !== undefined) badges.add(`plan:#${sec.planStepIndex}`);
+    }
+    return [...badges];
+  }
+
   const groups = $derived.by(() => groupByConversation(rows));
 </script>
 
@@ -133,7 +150,16 @@
           ? `trace ${group.conversationId.slice(6, 14)}…`
           : `conversation ${group.conversationId.slice(0, 12)}…`}
       </span>
-      <span class="text-xs text-fg-subtle ml-auto">
+      <span class="text-xs text-fg-subtle ml-auto flex items-center gap-1.5 flex-wrap justify-end">
+        {#each securityBadges(group) as badge (badge)}
+          <span
+            class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/20 font-mono"
+            title="Agent security signal"
+          >
+            <Shield size={10} />
+            {badge}
+          </span>
+        {/each}
         {group.spans.length} span{group.spans.length === 1 ? '' : 's'} · {formatDuration(
           lanes.durationMs,
         )} · {group.service}

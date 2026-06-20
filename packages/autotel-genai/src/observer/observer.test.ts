@@ -286,6 +286,50 @@ describe('createGenAiObserver — lifecycle and errors', () => {
     expect(seconds).toBeCloseTo(1, 5);
     expect(chat.duration[0]).toBe(2);
   });
+
+  it('stamps agent security attrs for plan, memory, provenance, and render events', () => {
+    const observe = createGenAiObserver({ tracer });
+    observe({ type: 'agent.start', id: 'a', agent: { name: 'planner' } });
+    observe({
+      type: 'input.provenance',
+      parentId: 'a',
+      provenance: 'external_untrusted',
+    });
+    observe({
+      type: 'plan.step',
+      parentId: 'a',
+      stepIndex: 1,
+      toolIntents: ['search'],
+      summary: 'Find docs',
+    });
+    observe({
+      type: 'memory.access',
+      parentId: 'a',
+      operation: 'read',
+      isolationKey: 'user:7',
+      contentHash: 'abc',
+    });
+    observe({
+      type: 'render.output',
+      parentId: 'a',
+      format: 'markdown',
+      containsUrl: true,
+      urlCount: 2,
+    });
+    observe({ type: 'agent.end', id: 'a' });
+
+    const agent = one('invoke_agent planner');
+    expect(agent.attributes).toMatchObject({
+      'agent.input.provenance': 'external_untrusted',
+      'agent.plan.step_index': 1,
+      'agent.plan.tool_intents': ['search'],
+      'agent.memory.operation': 'read',
+      'agent.memory.isolation_key': 'user:7',
+      'agent.output.format': 'markdown',
+      'agent.output.contains_url': true,
+      'agent.output.url_count': 2,
+    });
+  });
 });
 
 describe('createGenAiObserver — agent id (#242)', () => {

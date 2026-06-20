@@ -11,6 +11,10 @@ import {
   type Attributes,
   type Span,
 } from '@opentelemetry/api';
+import {
+  agentContextFromSpan,
+  recordHumanApproval,
+} from 'autotel-genai/agent';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   WorkerTracer,
@@ -508,6 +512,15 @@ export class OtelObservability implements Observability {
       attributes: { ...defaultAttrs, ...customAttrs },
       startTime: event.timestamp,
     });
+
+    if (event.type === 'tool:approval') {
+      recordHumanApproval({
+        ctx: agentContextFromSpan(span),
+        toolCallId: event.payload.toolCallId,
+        approved: event.payload.approved,
+        required: true,
+      });
+    }
 
     applyEventStatus(span, event);
     span.end(event.timestamp + 1);

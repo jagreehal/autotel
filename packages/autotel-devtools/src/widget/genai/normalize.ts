@@ -683,6 +683,36 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
   const transcriptionText = str(attrs['gen_ai.transcription.text'])
   const embeddingDims = num(attrs['gen_ai.embeddings.dimension.count'])
 
+  const consentOutcome = str(attrs['agent.consent.outcome'])
+  const policyDecision = str(attrs['policy.decision'])
+  const injectionVerdict = str(attrs['mcp.security.injection.verdict'])
+  const actionRiskClass = str(attrs['agent.action.risk_class'])
+  const inputProvenance = str(attrs['agent.input.provenance'])
+  const planStepIndex = num(attrs['agent.plan.step_index'])
+  const securityEvent = str(attrs['security.event'])
+  const guardStoppedAttr = bool(attrs['gen_ai.guard.stopped'])
+  const agentSecurity =
+    consentOutcome ||
+    policyDecision ||
+    injectionVerdict ||
+    actionRiskClass ||
+    inputProvenance ||
+    planStepIndex !== undefined ||
+    securityEvent ||
+    guardStoppedAttr !== undefined ||
+    guard?.stopped
+      ? {
+          ...(consentOutcome && { consentOutcome }),
+          ...(policyDecision && { policyDecision }),
+          ...(injectionVerdict && { injectionVerdict }),
+          ...(actionRiskClass && { actionRiskClass }),
+          ...(inputProvenance && { inputProvenance }),
+          ...(planStepIndex !== undefined && { planStepIndex }),
+          ...(securityEvent && { securityEvent }),
+          guardStopped: guard?.stopped ?? guardStoppedAttr,
+        }
+      : undefined
+
   const raw: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(attrs)) {
     if (KNOWN_TOP_LEVEL_KEYS.has(k)) continue
@@ -742,6 +772,7 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
       ? { name: guardrailName, triggered: guardrailTriggered }
       : undefined,
     conversationId: str(attrs['gen_ai.conversation.id']),
+    agentSecurity,
     evaluation:
       evalName || evalScoreValue !== undefined || evalScoreLabel || evalExplanation
         ? {

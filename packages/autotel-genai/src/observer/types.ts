@@ -20,6 +20,11 @@ import type {
 import type { TokenUsage } from '../cost.js';
 import type { GenAiMessage, GenAiMessagePart } from '../events.js';
 import type { GenAiProviderName } from '../semconv.js';
+import type {
+  AgentInputProvenance,
+  AgentMemoryOperation,
+  AgentOutputFormat,
+} from '../agent/agent-security.js';
 
 /** Tool identity (name/type/description/call id) without the content fields. */
 export type GenAiToolIdentity = Omit<
@@ -115,6 +120,41 @@ export interface ToolEndEvent extends SpanEnd {
   callResult?: unknown;
 }
 
+/** Record a bounded plan-step snapshot on the parent span (no chain-of-thought). */
+export interface PlanStepEvent {
+  type: 'plan.step';
+  parentId: string;
+  stepIndex: number;
+  toolIntents?: string[];
+  policyIds?: string[];
+  summary?: string;
+}
+
+/** Stamp input provenance on the parent span. */
+export interface InputProvenanceEvent {
+  type: 'input.provenance';
+  parentId: string;
+  provenance: AgentInputProvenance;
+}
+
+/** Record agent memory access without logging raw content. */
+export interface MemoryAccessEvent {
+  type: 'memory.access';
+  parentId: string;
+  operation: AgentMemoryOperation;
+  isolationKey: string;
+  contentHash?: string;
+}
+
+/** Characterize rendered output for XSS/exfil triage (no raw output). */
+export interface RenderOutputEvent {
+  type: 'render.output';
+  parentId: string;
+  format?: AgentOutputFormat;
+  containsUrl?: boolean;
+  urlCount?: number;
+}
+
 /** Discriminated union of every event the observer understands. */
 export type GenAiObserverEvent =
   | WorkflowStartEvent
@@ -124,7 +164,11 @@ export type GenAiObserverEvent =
   | ChatStartEvent
   | ChatEndEvent
   | ToolStartEvent
-  | ToolEndEvent;
+  | ToolEndEvent
+  | PlanStepEvent
+  | InputProvenanceEvent
+  | MemoryAccessEvent
+  | RenderOutputEvent;
 
 /** The subscriber returned by {@link createGenAiObserver}. */
 export type GenAiObserver = (event: GenAiObserverEvent) => void;

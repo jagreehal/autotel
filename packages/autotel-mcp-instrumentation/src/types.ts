@@ -1,5 +1,9 @@
 import type { Attributes } from '@opentelemetry/api';
-import type { GuardLike, McpSecurityClassifier } from './security';
+import type {
+  GuardLike,
+  McpSecurityClassifier,
+  SecurityEventBridgeLike,
+} from './security';
 
 /**
  * Configuration options for MCP instrumentation
@@ -137,6 +141,20 @@ export interface McpInstrumentationConfig {
    */
   guard?: GuardLike;
 
+  /**
+   * Bridge MCP boundary signals to the unified `security.*` schema via
+   * {@link securityEventBridge}. Off by default. Pair with
+   * `createMcpSecurityEventBridge()` from `autotel-audit`.
+   * @default false
+   */
+  bridgeSecurityEvents?: boolean;
+
+  /**
+   * Callback invoked when `bridgeSecurityEvents` is true. Maps injection
+   * verdicts and output-budget breaches to `securityEvent()`-compatible metadata.
+   */
+  securityEventBridge?: SecurityEventBridgeLike;
+
   // === Deprecated aliases (backward compatibility) ===
 
   /**
@@ -188,6 +206,8 @@ export function resolveConfig(config?: McpInstrumentationConfig): Required<
     | 'outputCharBudget'
     | 'securityClassifier'
     | 'guard'
+    | 'bridgeSecurityEvents'
+    | 'securityEventBridge'
   >
 > & {
   customAttributes?: McpInstrumentationConfig['customAttributes'];
@@ -196,6 +216,8 @@ export function resolveConfig(config?: McpInstrumentationConfig): Required<
   outputCharBudget?: number;
   securityClassifier?: McpSecurityClassifier;
   guard?: GuardLike;
+  bridgeSecurityEvents?: boolean;
+  securityEventBridge?: SecurityEventBridgeLike;
 } {
   return {
     captureToolArgs:
@@ -228,7 +250,22 @@ export function resolveConfig(config?: McpInstrumentationConfig): Required<
     outputCharBudget: config?.outputCharBudget,
     securityClassifier: config?.securityClassifier,
     guard: config?.guard,
+    bridgeSecurityEvents: config?.bridgeSecurityEvents ?? false,
+    securityEventBridge: config?.securityEventBridge,
   };
+}
+
+/** Resolve an active security-event bridge from resolved MCP config. */
+export function resolveSecurityEventBridge(
+  config: Pick<
+    ReturnType<typeof resolveConfig>,
+    'bridgeSecurityEvents' | 'securityEventBridge'
+  >,
+): SecurityEventBridgeLike | undefined {
+  if (!config.bridgeSecurityEvents || !config.securityEventBridge) {
+    return undefined;
+  }
+  return config.securityEventBridge;
 }
 
 /**
