@@ -186,8 +186,9 @@ export const CounterDO = wrapDurableObject(
 ## Cloudflare Agents
 
 For the [Agents SDK](https://developers.cloudflare.com/agents/), set the agent's
-`observability` field. `createOtelObservability` produces spans for RPC calls,
-scheduled tasks, and MCP operations.
+`observability` field. `createOtelObservability` converts the full Agents SDK
+event stream into spans: RPC, chat recovery/transcript events, queue/schedule,
+workflow, email, lifecycle, and MCP operations.
 
 ```typescript
 import { Agent } from 'agents';

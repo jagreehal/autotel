@@ -95,6 +95,57 @@
           }
         }
       ]
+    },
+    {
+      "traceId": "sec-trace-5",
+      "serviceName": "mcp-gateway",
+      "startTimeUnixMs": 5000,
+      "durationMs": 30,
+      "statusCode": "OK",
+      "spans": [
+        {
+          "traceId": "sec-trace-5",
+          "spanId": "s5",
+          "operationName": "tools/call search_web",
+          "serviceName": "mcp-gateway",
+          "startTimeUnixMs": 5000,
+          "durationMs": 30,
+          "tags": {
+            "mcp.method.name": "tools/call",
+            "gen_ai.tool.name": "search_web",
+            "mcp.tool.untrusted_content": true,
+            "mcp.security.injection.verdict": "malicious",
+            "mcp.security.injection.source": "result",
+            "mcp.security.injection.score": 0.9
+          }
+        }
+      ]
+    },
+    {
+      "traceId": "sec-trace-6",
+      "serviceName": "mcp-gateway",
+      "startTimeUnixMs": 6000,
+      "durationMs": 25,
+      "statusCode": "OK",
+      "spans": [
+        {
+          "traceId": "sec-trace-6",
+          "spanId": "s6",
+          "operationName": "tools/call read_file",
+          "serviceName": "mcp-gateway",
+          "startTimeUnixMs": 6000,
+          "durationMs": 25,
+          "tags": {
+            "mcp.method.name": "tools/call",
+            "gen_ai.tool.name": "read_file",
+            "mcp.tool.untrusted_content": true,
+            "mcp.security.injection.verdict": "clean",
+            "mcp.security.budget.exceeded": true,
+            "mcp.security.budget.observed": 4096,
+            "mcp.security.budget.limit": 1500
+          }
+        }
+      ]
     }
   ],
   "metrics": [],

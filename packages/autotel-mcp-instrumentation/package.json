@@ -32,6 +32,11 @@
       "import": "./dist/metrics.js",
       "require": "./dist/metrics.cjs"
     },
+    "./security": {
+      "types": "./dist/security.d.ts",
+      "import": "./dist/security.js",
+      "require": "./dist/security.cjs"
+    },
     "./semantic-conventions": {
       "types": "./dist/semantic-conventions.d.ts",
       "import": "./dist/semantic-conventions.js",

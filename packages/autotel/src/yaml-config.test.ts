@@ -70,6 +70,42 @@ exporter:
       });
     });
 
+    it('should parse exporter destinations configuration', () => {
+      const yaml = `
+exporter:
+  destinations:
+    - endpoint: https://otlp-gateway.grafana.net/otlp
+      headers:
+        Authorization: Basic grafana
+    - endpoint: https://api.honeycomb.io
+      protocol: grpc
+      headers:
+        x-honeycomb-team: secret-key
+      signals:
+        - traces
+`;
+      const filePath = path.join(testDir, 'exporter-destinations.yaml');
+      writeFileSync(filePath, yaml);
+
+      const config = loadYamlConfigFromFile(filePath);
+      expect(config.destinations).toEqual([
+        {
+          endpoint: 'https://otlp-gateway.grafana.net/otlp',
+          headers: {
+            Authorization: 'Basic grafana',
+          },
+        },
+        {
+          endpoint: 'https://api.honeycomb.io',
+          protocol: 'grpc',
+          headers: {
+            'x-honeycomb-team': 'secret-key',
+          },
+          signals: ['traces'],
+        },
+      ]);
+    });
+
     it('should parse resource attributes', () => {
       const yaml = `
 resource:

@@ -3,6 +3,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { instrumentMcpServer } from 'autotel-mcp-instrumentation/server';
+import {
+  heuristicInjectionClassifier,
+  MCP_CHAR_BUDGETS,
+} from 'autotel-mcp-instrumentation/security';
 import { init } from 'autotel';
 import { ConsoleSpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
@@ -37,6 +41,12 @@ const instrumented = instrumentMcpServer(server, {
   captureToolArgs: true,
   captureToolResults: true, // Enabled for demo purposes
   captureErrors: true,
+  // --- Security observability (agentic-web threat model) ---
+  // Annotation hints (mcp.tool.*) and payload sizes are captured automatically.
+  // Add a prompt-injection classifier (swap for Model Armor / an LLM critic in prod):
+  securityClassifier: heuristicInjectionClassifier(),
+  // Flag tool outputs that overflow the WebMCP-recommended 1500-char budget:
+  outputCharBudget: MCP_CHAR_BUDGETS.TOOL_OUTPUT,
 });
 
 // Simulated weather data
@@ -57,6 +67,14 @@ instrumented.registerTool(
     inputSchema: z.object({
       location: z.string().describe('City name (e.g., "New York", "London")'),
     }),
+    // Annotation hints surface the tool's trust profile on every span
+    // (mcp.tool.read_only, mcp.tool.open_world). autotel also reads the WebMCP
+    // `untrustedContentHint` once present — the MCP SDK type doesn't list it yet,
+    // so set it via a cast in real code until the SDK catches up.
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: true, // returns externally sourced data
+    },
   },
   async (args) => {
     const location = (args.location as string).toLowerCase();
@@ -99,6 +117,10 @@ instrumented.registerTool(
       location: z.string().describe('City name'),
       days: z.number().min(1).max(7).describe('Number of days (1-7)'),
     }),
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: true,
+    },
   },
   async (args) => {
     const location = args.location as string;

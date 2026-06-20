@@ -29,6 +29,17 @@ exporter:
     # DD-API-KEY: ${env:DD_API_KEY}
     # Generic OTLP auth
     # Authorization: Bearer ${env:OTLP_AUTH_TOKEN}
+  # Optional multi-backend fan-out. When set, this takes precedence over the
+  # single endpoint above for built-in OTLP traces / metrics / logs.
+  # destinations:
+  #   - endpoint: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
+  #     headers:
+  #       Authorization: Basic ${env:GRAFANA_OTLP_BASIC_AUTH}
+  #   - endpoint: https://api.honeycomb.io
+  #     headers:
+  #       x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+  #     signals:
+  #       - traces
 
 # Resource attributes (appear on all traces/metrics)
 resource:

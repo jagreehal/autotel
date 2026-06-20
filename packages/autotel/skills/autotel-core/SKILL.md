@@ -24,6 +24,8 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 
 Request logger requires an active span. Wrap HTTP handlers with `trace()` or framework middleware that creates a span, then call `getRequestLogger()` inside.
 
+Backend config rule of thumb: use `endpoint` for one OTLP destination, `destinations` for explicit OTLP fan-out, and `spanProcessors` / `spanExporters` only when you need full manual control.
+
 ## Setup
 
 ```typescript

@@ -3,6 +3,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { instrumentMcpClient } from 'autotel-mcp-instrumentation/client'
+import { heuristicInjectionClassifier } from 'autotel-mcp-instrumentation/security'
+import { createGenAiBudget } from 'autotel-genai/guard'
 import { init, trace, shutdown } from 'autotel'
 import { ConsoleSpanExporter } from 'autotel/exporters'
 import { SimpleSpanProcessor } from 'autotel/processors'
@@ -26,12 +28,22 @@ const client = new Client(
   }
 )
 
+// A genai guard enforces a ceiling on tool calls. Detection (below) feeds this
+// kill-switch: a `stop` rule throws to halt a runaway agent. Set low to demo.
+const guard = createGenAiBudget({ maxToolCalls: 6, onStop: 'throw' })
+
 // Instrument the client with autotel-mcp-instrumentation (OTel MCP semantic conventions)
 const instrumented = instrumentMcpClient(client, {
   networkTransport: 'pipe',
   captureToolArgs: true,
   captureToolResults: true, // Enabled for demo
   captureErrors: true,
+  // --- Security observability (agentic-web threat model) ---
+  // Scan tool results the agent receives for prompt injection (contaminated
+  // outputs). Swap heuristicInjectionClassifier() for Model Armor / an LLM critic.
+  securityClassifier: heuristicInjectionClassifier(),
+  // Feed every tool call to the guard — detection → enforcement.
+  guard,
 })
 
 // Connect to the server via stdio
@@ -97,7 +109,24 @@ const runExamples = trace((ctx) => async () => {
 
   console.log('\nError result:', JSON.stringify(errorResult, null, 2))
   if (errorResult.isError) {
-    console.log('Server returned error (server still running):', errorResult.content[0].text)
+    const content = errorResult.content as Array<{ text?: string }>
+    console.log('Server returned error (server still running):', content[0]?.text)
+  }
+
+  // Example 5: Guard enforcement — keep calling until the kill-switch fires.
+  // Each callTool is recorded as a step; once maxToolCalls is exceeded the guard
+  // throws GEN_AI_GUARD_STOP, halting the run (detection → enforcement).
+  console.log('\n--- Example 5: Guard Enforcement (runaway protection) ---')
+  try {
+    for (let i = 0; i < 10; i++) {
+      await instrumented.callTool({
+        name: 'get_weather',
+        arguments: { location: 'Tokyo' },
+      })
+      console.log(`Tool call ${i + 1} ok (tool calls so far: ${guard.state.toolCallCount})`)
+    }
+  } catch (error) {
+    console.log(`Guard halted the run: ${(error as Error).message}`)
   }
 
   console.log('\n=== Distributed Tracing Demo Complete ===')

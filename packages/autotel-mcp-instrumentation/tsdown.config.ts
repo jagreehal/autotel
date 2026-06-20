@@ -10,6 +10,7 @@ export default defineConfig({
     client: 'src/client.ts',
     context: 'src/context.ts',
     metrics: 'src/metrics.ts',
+    security: 'src/security.ts',
     'semantic-conventions': 'src/semantic-conventions.ts',
   },
   format: ['esm', 'cjs'],

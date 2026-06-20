@@ -119,7 +119,7 @@ To bisect, temporarily strip post-processors:
 ```typescript
 init({
   service: 'my-app',
-  exporter: { url: process.env.OTLP_ENDPOINT! },
+  endpoint: process.env.OTLP_ENDPOINT!,
   // no postProcessor, no tail sampler, no filter
 });
 ```
@@ -246,3 +246,5 @@ There should be exactly one resolved version. If there are two, dedup via `pnpm.
 | Single `OTLP_ENDPOINT` env var with `?` chars URL-encoded | Auth gets parsed as part of the path                               |
 | Importing both `@sentry/tracing` and `autotel`            | Double-instrumentation eats spans                                  |
 | `process.exit(0)` immediately after the work              | The exporter never flushed; call `await provider.shutdown()` first |
+
+If spans reach one backend but not another in a fan-out setup, bisect with `destinations`: keep one destination at a time, then re-add the others until the failing backend is isolated.

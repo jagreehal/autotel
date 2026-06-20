@@ -12,6 +12,7 @@ Automatically instrument MCP servers and clients with OpenTelemetry tracing. Use
 - **Node.js runtime** - Full support for Node.js applications with `autotel`
 - **Tree-shakeable** - Import only what you need (~7KB total, 2-5KB per module)
 - **Zero MCP modifications** - Uses Proxy pattern, no changes to MCP SDK required
+- **Security observability** - Annotation hints, payload-size & character-budget signals, a pluggable prompt-injection classifier, and spotlighting helpers — the protocol-boundary half of the agentic-web defense-in-depth model ([see below](#security-observability))
 
 ## Installation
 
@@ -312,6 +313,130 @@ const instrumented = instrumentMcpServer(server, {
   },
 });
 ```
+
+## Security Observability
+
+MCP is where untrusted data crosses into your agent. The
+[agentic-web threat model](https://developer.chrome.com/docs/agents/security)
+has two vectors: **malicious manifests** (hidden instructions in a tool's
+name/description/annotations) and **contaminated outputs** (injection smuggled
+inside otherwise-legitimate tool results). Detecting these in production is an
+_observability_ problem — and this package makes it observable at the MCP edge.
+
+> **Where this fits.** Deterministic kill-switches (cost/token/tool-call
+> ceilings, loop detection) live in
+> [`autotel-genai/guard`](../autotel-genai); identity/scope/policy lives in
+> [`autotel-genai/agent`](../autotel-genai). This package **observes and
+> signals** at the protocol boundary so those layers — and your backend's
+> alerting — have the data they need. It does not replace your agent runtime's
+> guardrails.
+
+### What you get for free
+
+With no extra config, every instrumented tool span now carries:
+
+- **Annotation hints** → `mcp.tool.read_only`, `mcp.tool.destructive`,
+  `mcp.tool.idempotent`, `mcp.tool.open_world`, `mcp.tool.untrusted_content`
+  (read off the tool's `annotations` block).
+- **Payload sizes** → `mcp.tool.arguments.size` / `mcp.tool.result.size` (sizes
+  only — no content). A tool whose output suddenly balloons is a classic
+  injection / token-exhaustion tell.
+
+```typescript
+instrumentMcpServer(server); // annotation hints + payload sizes are on by default
+
+server.registerTool(
+  'search_web',
+  {
+    description: 'Search the web',
+    annotations: { openWorldHint: true, untrustedContentHint: true },
+  },
+  async (args) => {
+    /* ... */
+  },
+);
+```
+
+### Detect prompt injection with a classifier
+
+Plug in [Model Armor](https://cloud.google.com/security/products/model-armor),
+[Promptfoo](https://www.promptfoo.dev/), an LLM critic, or the built-in
+heuristic detector. It scans manifest text at registration time
+(name/description/parameter descriptions), then request/response payloads at
+runtime for tools, resources, and prompts, recording `mcp.security.*`
+attributes and emitting security events on non-clean verdicts. Classifier
+failures never break the traced call.
+
+```typescript
+import {
+  instrumentMcpServer,
+  heuristicInjectionClassifier,
+  MCP_CHAR_BUDGETS,
+} from 'autotel-mcp-instrumentation';
+
+instrumentMcpServer(server, {
+  // First-pass heuristic, or supply your own (sync or async):
+  securityClassifier: heuristicInjectionClassifier(),
+  // Custom example:
+  // securityClassifier: async ({ source, text }) => {
+  //   const r = await modelArmor.scan(text);
+  //   return { verdict: r.malicious ? 'malicious' : 'clean', score: r.score };
+  // },
+
+  // Emit mcp.security.budget_exceeded when output overflows (WebMCP: 1500 chars):
+  outputCharBudget: MCP_CHAR_BUDGETS.TOOL_OUTPUT,
+});
+```
+
+> The built-in `heuristicInjectionClassifier()` is a cheap tripwire, not ground
+> truth — it produces false positives and misses novel attacks. Treat its signal
+> as input to a critic / Model Armor, not as a verdict.
+
+### Spotlight untrusted content before an LLM reads it
+
+[Spotlighting](https://arxiv.org/abs/2403.14720) demarcates untrusted data so a
+model treats it as data, not instructions.
+
+```typescript
+import { spotlight } from 'autotel-mcp-instrumentation/security';
+
+const safe = spotlight(userComment); // <untrusted>\n…\n</untrusted>
+const robust = spotlight(userComment, { method: 'base64' }); // resists structural evasion
+```
+
+### Validate tool descriptions against WebMCP budgets
+
+```typescript
+import { validateToolBudget } from 'autotel-mcp-instrumentation/security';
+
+const violations = validateToolBudget({
+  name: 'search_web',
+  description: 'Search the web for…',
+  parameters: { query: { description: 'The search query' } },
+});
+// violations: [] when within the recommended 30/150/500-char limits
+```
+
+### Workers / edge
+
+The `autotel-mcp-instrumentation/security` toolkit (classifier, `spotlight`,
+`validateToolBudget`, annotation/size/budget helpers) is **runtime-agnostic** —
+it depends only on `@opentelemetry/api`, with a `Buffer`→`btoa` base64 fallback —
+so it runs unchanged in Cloudflare Workers and other edge runtimes. Use it
+directly in an edge MCP server, or alongside `autotel-cloudflare`. The same
+`mcp.security.*` signals are emitted, so `autotel security mcp` queries work
+across Node and Workers deployments.
+
+### Security signals reference
+
+| Signal                             | Where     | Meaning                                 |
+| ---------------------------------- | --------- | --------------------------------------- |
+| `mcp.tool.*` (hints)               | span attr | tool trust profile / manifest vector    |
+| `mcp.tool.{arguments,result}.size` | span attr | payload size (token-exhaustion tell)    |
+| `mcp.security.injection.*`         | span attr | classifier verdict / score / categories |
+| `mcp.security.injection_suspected` | event     | non-clean classifier verdict            |
+| `mcp.security.budget_exceeded`     | event     | output over `outputCharBudget`          |
+| `mcp.security.events`              | counter   | aggregate security-signal count         |
 
 ## Security Considerations
 

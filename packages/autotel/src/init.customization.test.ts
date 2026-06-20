@@ -325,6 +325,77 @@ describe('init() customization', () => {
     });
   });
 
+  it('supports declarative multi-destination OTLP fan-out', async () => {
+    const {
+      init,
+      traceExporterOptions,
+      metricExporterOptions,
+      logExporterOptions,
+      metricReaderOptions,
+    } = await loadInitWithMocks();
+
+    init({
+      service: 'fanout-app',
+      logs: true,
+      destinations: [
+        {
+          endpoint: 'https://otlp-gateway.grafana.net/otlp',
+          headers: { Authorization: 'Basic grafana' },
+        },
+        {
+          endpoint: 'https://api.honeycomb.io',
+          headers: { 'x-honeycomb-team': 'hny' },
+          signals: ['traces'],
+        },
+      ],
+    });
+
+    expect(traceExporterOptions).toHaveLength(2);
+    expect(traceExporterOptions[0]).toMatchObject({
+      url: 'https://otlp-gateway.grafana.net/otlp/v1/traces',
+      headers: { Authorization: 'Basic grafana' },
+    });
+    expect(traceExporterOptions[1]).toMatchObject({
+      url: 'https://api.honeycomb.io/v1/traces',
+      headers: { 'x-honeycomb-team': 'hny' },
+    });
+
+    expect(metricExporterOptions).toHaveLength(1);
+    expect(metricExporterOptions[0]).toMatchObject({
+      url: 'https://otlp-gateway.grafana.net/otlp/v1/metrics',
+    });
+    expect(metricReaderOptions).toHaveLength(1);
+
+    expect(logExporterOptions).toHaveLength(1);
+    expect(logExporterOptions[0]).toMatchObject({
+      url: 'https://otlp-gateway.grafana.net/otlp/v1/logs',
+    });
+  });
+
+  it('lets destinations inherit top-level protocol and headers', async () => {
+    const { init, traceExporterOptions, metricExporterOptions } =
+      await loadInitWithMocks();
+
+    init({
+      service: 'fanout-inherited',
+      protocol: 'http',
+      headers: 'Authorization=Bearer shared',
+      destinations: [
+        { endpoint: 'https://grafana.example.com/otlp' },
+        { endpoint: 'https://honeycomb.example.com' },
+      ],
+    });
+
+    expect(traceExporterOptions).toHaveLength(2);
+    expect(traceExporterOptions[0]).toMatchObject({
+      headers: { Authorization: 'Bearer shared' },
+    });
+    expect(traceExporterOptions[1]).toMatchObject({
+      headers: { Authorization: 'Bearer shared' },
+    });
+    expect(metricExporterOptions).toHaveLength(2);
+  });
+
   it('resolves sampling preset shorthand to a sampler instance', async () => {
     const { init, getDefaultSampler } = await loadInitWithMocks();
 

@@ -23,7 +23,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import type { AutotelConfig } from './init';
+import type { AutotelConfig, OtlpSignal } from './init';
 import {
   AdaptiveSampler,
   AlwaysSampler,
@@ -61,6 +61,12 @@ export interface YamlConfig {
     endpoint?: string;
     protocol?: 'http' | 'grpc';
     headers?: Record<string, string>;
+    destinations?: Array<{
+      endpoint: string;
+      protocol?: 'http' | 'grpc';
+      headers?: Record<string, string>;
+      signals?: OtlpSignal[];
+    }>;
   };
   resource?: Record<string, string | number | boolean>;
   sampling?: {
@@ -179,6 +185,9 @@ function yamlToAutotelConfig(yaml: YamlConfig): Partial<AutotelConfig> {
   if (yaml.exporter?.endpoint) config.endpoint = yaml.exporter.endpoint;
   if (yaml.exporter?.protocol) config.protocol = yaml.exporter.protocol;
   if (yaml.exporter?.headers) config.headers = yaml.exporter.headers;
+  if (yaml.exporter?.destinations) {
+    config.destinations = yaml.exporter.destinations;
+  }
 
   // Resource attributes (flattened)
   if (yaml.resource) config.resourceAttributes = yaml.resource;

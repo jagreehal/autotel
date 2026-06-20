@@ -35,6 +35,8 @@ Environment variables work too (`AUTOTEL_BACKEND`, `JAEGER_BASE_URL`, …). Flag
 6. **"How much are we spending on LLMs?"** → `autotel llm usage`, then `autotel llm expensive` for top traces
 7. **"What services / ops / fields exist?"** → `autotel discover services` / `autotel topology services` / `autotel discover trace-fields`
 8. **"Are we meeting SLOs?"** → `autotel diagnose slos --service X --p99-latency-ms 500 --max-error-rate 0.01`
+9. **"Are we under attack / any security signals?"** → `autotel security summary` (auth events, probes, denied responses)
+10. **"Any MCP prompt-injection / tool abuse?"** → `autotel security mcp` (injection verdicts, output-budget breaches, untrusted-content tool calls)
 
 ## Reference — every command
 
@@ -78,6 +80,11 @@ Common filters for `query traces` / `query spans`:
 ### Correlation
 - `autotel correlate trace <traceId>` — trace + metrics + logs in one call
 - `autotel correlate explain-slowdown --service X` — anomalies enriched with root cause + signals
+
+### Security
+- `autotel security summary` — posture: events by severity/category, probe signals, denied responses (401/403/429) with top clients
+- `autotel security events [--category X] [--severity Y]` — spans carrying `security.*` events
+- `autotel security mcp` — MCP protocol-boundary signals from `autotel-mcp-instrumentation`: prompt-injection verdicts (`mcp.security.injection.*`), output-budget breaches (`mcp.security.budget.exceeded`), untrusted-content tool calls (`mcp.tool.untrusted_content`). Returns `injection` (scanned/suspected/byVerdict/bySource/byTool), `budgetBreaches`, `untrustedContent`.
 
 ### LLM analytics
 - `autotel llm usage` — tokens + USD by model and service

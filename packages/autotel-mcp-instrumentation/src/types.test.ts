@@ -8,6 +8,12 @@ describe('DEFAULT_CONFIG', () => {
     expect(DEFAULT_CONFIG.captureErrors).toBe(true);
     expect(DEFAULT_CONFIG.enableMetrics).toBe(true);
     expect(DEFAULT_CONFIG.captureDiscoveryOperations).toBe(true);
+    expect(DEFAULT_CONFIG.captureToolAnnotations).toBe(true);
+    expect(DEFAULT_CONFIG.recordPayloadSize).toBe(true);
+    expect(DEFAULT_CONFIG.classifyDescriptions).toBe(true);
+    expect(DEFAULT_CONFIG.classifyArguments).toBe(true);
+    expect(DEFAULT_CONFIG.classifyResults).toBe(true);
+    expect(DEFAULT_CONFIG.validateToolBudgets).toBe(true);
   });
 
   it('should not have customAttributes in defaults', () => {
@@ -23,6 +29,8 @@ describe('resolveConfig', () => {
     expect(resolved.captureErrors).toBe(true);
     expect(resolved.enableMetrics).toBe(true);
     expect(resolved.captureDiscoveryOperations).toBe(true);
+    expect(resolved.classifyDescriptions).toBe(true);
+    expect(resolved.validateToolBudgets).toBe(true);
     expect(resolved.networkTransport).toBeUndefined();
     expect(resolved.sessionId).toBeUndefined();
   });

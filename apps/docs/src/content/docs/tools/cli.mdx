@@ -89,11 +89,17 @@ npx autotel correlate trace <traceId>
 # security triage (security.* schema)
 npx autotel security summary --lookback-minutes 60
 npx autotel security events --severity critical --lookback-minutes 240
+
+# MCP protocol-boundary security (mcp.security.* / mcp.tool.*)
+npx autotel security mcp --lookback-minutes 60
 ```
 
-The `security` commands read the stable `security.*` schema emitted by
-`autotel-audit` — see [Security Observability](/autotel/integrations/security/)
-for the full picture.
+The `security summary` / `security events` commands read the stable `security.*`
+schema emitted by `autotel-audit` — see
+[Security Observability](/autotel/integrations/security/) for the full picture.
+`security mcp` aggregates the MCP signals emitted by
+`autotel-mcp-instrumentation` (prompt-injection verdicts, output-budget
+breaches, untrusted-content tool calls) — see [MCP](/autotel/integrations/mcp/).
 
 All backend-touching commands accept:
 

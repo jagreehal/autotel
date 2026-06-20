@@ -1,6 +1,10 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'node:path';
-import { runSecuritySummary, runSecurityEvents } from './security';
+import {
+  runSecuritySummary,
+  runSecurityEvents,
+  runSecurityMcp,
+} from './security';
 import { resetJsonOutput } from '../../lib/json-output';
 
 const FIXTURE = path.resolve(__dirname, 'security-fixture.json');
@@ -144,5 +148,51 @@ describe('security commands (fixture backend)', () => {
     };
     expect(data.items).toHaveLength(1);
     expect(data.items[0]?.event).toBe('auth.login.failed');
+  });
+
+  it('security mcp: aggregates injection, budget, and untrusted-content signals', async () => {
+    await runSecurityMcp({
+      ...flags,
+      from: '1970-01-01T00:00:00.000Z',
+      to: '1970-01-01T01:00:00.000Z',
+    });
+
+    const env = capturedEnvelope();
+    expect(env.ok).toBe(true);
+    expect(env.command).toBe('security mcp');
+
+    const data = env.data as {
+      injection: {
+        scanned: number;
+        suspected: number;
+        byVerdict: Record<string, number>;
+        bySource: Record<string, number>;
+        byTool: Array<{ value: string; count: number }>;
+        sampleTraceIds: string[];
+      };
+      budgetBreaches: {
+        total: number;
+        byTool: Array<{ value: string; count: number }>;
+      };
+      untrustedContent: { toolCalls: number };
+    };
+
+    // Two tool calls carried a verdict; one was non-clean (malicious).
+    expect(data.injection.scanned).toBe(2);
+    expect(data.injection.suspected).toBe(1);
+    expect(data.injection.byVerdict).toEqual({ malicious: 1, clean: 1 });
+    expect(data.injection.bySource).toEqual({ result: 1 });
+    expect(data.injection.byTool[0]).toEqual({
+      value: 'search_web',
+      count: 1,
+    });
+
+    expect(data.budgetBreaches.total).toBe(1);
+    expect(data.budgetBreaches.byTool[0]).toEqual({
+      value: 'read_file',
+      count: 1,
+    });
+
+    expect(data.untrustedContent.toolCalls).toBe(2);
   });
 });

@@ -2,66 +2,52 @@
  * OpenTelemetry-based Observability implementation for Cloudflare Agents SDK
  *
  * Converts Agent events into OpenTelemetry spans for distributed tracing.
- *
- * @example
- * ```typescript
- * import { Agent } from 'agents'
- * import { createOtelObservability } from 'autotel-cloudflare/agents'
- *
- * class MyAgent extends Agent<Env> {
- *   observability = createOtelObservability({
- *     service: { name: 'my-agent' },
- *     exporter: { url: env.OTLP_ENDPOINT }
- *   })
- *
- *   @callable()
- *   async doSomething() {
- *     // This RPC call will be automatically traced
- *     return 'done'
- *   }
- * }
- * ```
  */
 
 import {
-  trace,
-  SpanStatusCode,
   SpanKind,
-  type Span,
+  SpanStatusCode,
+  trace,
   type Attributes,
+  type Span,
 } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
-  createInitialiser,
-  WorkerTracerProvider,
   WorkerTracer,
+  WorkerTracerProvider,
+  createInitialiser,
   type ResolvedEdgeConfig,
 } from 'autotel-edge';
 import type {
+  AgentInstrumentationOptions,
+  MCPObservabilityEvent,
   Observability,
   ObservabilityEvent,
+  ObservabilityExecutionContext,
   OtelObservabilityConfig,
-  AgentInstrumentationOptions,
 } from './types';
 
-/**
- * Map of active spans keyed by event ID
- * Used to correlate start/end events
- */
-const activeSpans = new Map<string, Span>();
-
-/**
- * Whether the provider has been initialized
- */
 let providerInitialized = false;
 
-/**
- * Initialize the tracer provider for Agents
- */
+type EventCategory =
+  | 'state'
+  | 'rpc'
+  | 'schedule'
+  | 'queue'
+  | 'submission'
+  | 'message'
+  | 'chat'
+  | 'transcript'
+  | 'fiber'
+  | 'agentTool'
+  | 'lifecycle'
+  | 'workflow'
+  | 'mcp'
+  | 'email';
+
 function initProvider(config: ResolvedEdgeConfig): void {
   if (providerInitialized) return;
 
-  // Create resource with agent-specific attributes
   const resource = resourceFromAttributes({
     'service.name': config.service.name,
     'service.version': config.service.version,
@@ -73,156 +59,334 @@ function initProvider(config: ResolvedEdgeConfig): void {
     'agent.framework': 'cloudflare-agents',
   });
 
-  // Create and register provider
   const provider = new WorkerTracerProvider(config.spanProcessors, resource);
   provider.register();
 
-  // Set head sampler on tracer
   const tracer = trace.getTracer('autotel-cloudflare/agents') as WorkerTracer;
   tracer.setHeadSampler(config.sampling.headSampler);
 
   providerInitialized = true;
 }
 
-/**
- * Get default span name for an event
- */
-function getDefaultSpanName(event: ObservabilityEvent): string {
-  switch (event.type) {
+function classifyEvent(type: ObservabilityEvent['type']): EventCategory {
+  if (type.startsWith('mcp:')) return 'mcp';
+  if (type.startsWith('workflow:')) return 'workflow';
+  if (type.startsWith('fiber:')) return 'fiber';
+  if (type.startsWith('agent_tool:')) return 'agentTool';
+  if (type.startsWith('chat:transcript:')) return 'transcript';
+  if (type.startsWith('chat:')) return 'chat';
+  if (type.startsWith('submission:')) return 'submission';
+  if (type.startsWith('queue:')) return 'queue';
+  if (type.startsWith('schedule:')) return 'schedule';
+  if (
+    type.startsWith('message:') ||
+    type.startsWith('tool:') ||
+    type === 'rpc:error'
+  ) {
+    return 'message';
+  }
+  if (type === 'rpc') return 'rpc';
+  if (type.startsWith('state:')) return 'state';
+  if (type.startsWith('email:')) return 'email';
+  if (type === 'connect' || type === 'disconnect' || type === 'destroy') {
+    return 'lifecycle';
+  }
+  return 'message';
+}
+
+function shouldTraceEvent(
+  event: ObservabilityEvent,
+  options: AgentInstrumentationOptions,
+): boolean {
+  const opts: Required<
+    Pick<
+      AgentInstrumentationOptions,
+      | 'traceRpc'
+      | 'traceSchedule'
+      | 'traceQueue'
+      | 'traceSubmissions'
+      | 'traceMcp'
+      | 'traceStateUpdates'
+      | 'traceMessages'
+      | 'traceLifecycle'
+      | 'traceChat'
+      | 'traceTranscripts'
+      | 'traceFibers'
+      | 'traceToolRecovery'
+      | 'traceWorkflow'
+      | 'traceEmail'
+    >
+  > = {
+    traceRpc: true,
+    traceSchedule: true,
+    traceQueue: true,
+    traceSubmissions: true,
+    traceMcp: true,
+    traceStateUpdates: false,
+    traceMessages: true,
+    traceLifecycle: true,
+    traceChat: true,
+    traceTranscripts: true,
+    traceFibers: true,
+    traceToolRecovery: true,
+    traceWorkflow: true,
+    traceEmail: true,
+  };
+  const merged = { ...opts, ...options };
+
+  switch (classifyEvent(event.type)) {
     case 'rpc': {
-      return `agent.rpc ${event.payload.method}`;
+      return merged.traceRpc;
     }
-    case 'schedule:create': {
-      return `agent.schedule.create ${event.payload.callback}`;
+    case 'schedule': {
+      return merged.traceSchedule;
     }
-    case 'schedule:execute': {
-      return `agent.schedule.execute ${event.payload.callback}`;
+    case 'queue': {
+      return merged.traceQueue;
     }
-    case 'schedule:cancel': {
-      return `agent.schedule.cancel ${event.payload.callback}`;
+    case 'submission': {
+      return merged.traceSubmissions;
     }
-    case 'connect': {
-      return `agent.connect`;
+    case 'mcp': {
+      return merged.traceMcp;
     }
-    case 'destroy': {
-      return `agent.destroy`;
+    case 'state': {
+      return merged.traceStateUpdates;
     }
-    case 'state:update': {
-      return `agent.state.update`;
+    case 'message': {
+      return merged.traceMessages;
     }
-    case 'message:request': {
-      return `agent.message.request`;
+    case 'lifecycle': {
+      return merged.traceLifecycle;
     }
-    case 'message:response': {
-      return `agent.message.response`;
+    case 'chat': {
+      return merged.traceChat;
     }
-    case 'message:clear': {
-      return `agent.message.clear`;
+    case 'transcript': {
+      return merged.traceTranscripts;
     }
-    case 'mcp:client:preconnect': {
-      return `mcp.preconnect ${event.payload.serverId}`;
+    case 'fiber': {
+      return merged.traceFibers;
     }
-    case 'mcp:client:connect': {
-      return `mcp.connect ${event.payload.url}`;
+    case 'agentTool': {
+      return merged.traceToolRecovery;
     }
-    case 'mcp:client:authorize': {
-      return `mcp.authorize ${event.payload.serverId}`;
+    case 'workflow': {
+      return merged.traceWorkflow;
     }
-    case 'mcp:client:discover': {
-      return `mcp.discover`;
-    }
-    default: {
-      return `agent.${(event as ObservabilityEvent).type}`;
+    case 'email': {
+      return merged.traceEmail;
     }
   }
 }
 
-/**
- * Get default attributes for an event
- */
+function formatTypeSegment(value: string): string {
+  return value.replaceAll(/[:_]/g, '.');
+}
+
+function getPayloadName(
+  payload: Record<string, unknown>,
+  ...keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'string' && value.length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function getDefaultSpanName(event: ObservabilityEvent): string {
+  const payload = event.payload;
+
+  switch (event.type) {
+    case 'rpc':
+    case 'rpc:error': {
+      return `agent.rpc ${(payload as { method: string }).method}`;
+    }
+    case 'schedule:create':
+    case 'schedule:execute':
+    case 'schedule:cancel':
+    case 'schedule:retry':
+    case 'schedule:error':
+    case 'schedule:duplicate_warning': {
+      return `agent.${formatTypeSegment(event.type)} ${getPayloadName(payload, 'callback') ?? 'unknown'}`;
+    }
+    case 'queue:create':
+    case 'queue:retry':
+    case 'queue:error': {
+      return `agent.${formatTypeSegment(event.type)} ${getPayloadName(payload, 'callback') ?? 'unknown'}`;
+    }
+    case 'submission:create':
+    case 'submission:status':
+    case 'submission:error': {
+      return `agent.${formatTypeSegment(event.type)} ${getPayloadName(payload, 'submissionId') ?? 'unknown'}`;
+    }
+    case 'connect':
+    case 'disconnect': {
+      return `agent.${event.type} ${getPayloadName(payload, 'connectionId') ?? 'unknown'}`;
+    }
+    case 'mcp:client:preconnect': {
+      return `mcp.client.preconnect ${getPayloadName(payload, 'serverId') ?? 'unknown'}`;
+    }
+    case 'mcp:client:authorize': {
+      return `mcp.client.authorize ${getPayloadName(payload, 'serverId') ?? 'unknown'}`;
+    }
+    case 'mcp:client:connect':
+    case 'mcp:client:discover':
+    case 'mcp:client:close': {
+      return `mcp.client.${formatTypeSegment(event.type).split('.').slice(-1)[0]} ${
+        getPayloadName(payload, 'url', 'capability', 'state') ?? 'unknown'
+      }`;
+    }
+    case 'workflow:start':
+    case 'workflow:event':
+    case 'workflow:approved':
+    case 'workflow:rejected':
+    case 'workflow:terminated':
+    case 'workflow:paused':
+    case 'workflow:resumed':
+    case 'workflow:restarted': {
+      return `agent.${formatTypeSegment(event.type)} ${
+        getPayloadName(payload, 'workflowName', 'workflowId', 'eventType') ?? 'unknown'
+      }`;
+    }
+    case 'email:receive':
+    case 'email:reply':
+    case 'email:send': {
+      return `agent.${formatTypeSegment(event.type)} ${getPayloadName(payload, 'subject') ?? 'message'}`;
+    }
+    case 'destroy': {
+      return 'agent.destroy';
+    }
+    default: {
+      return `agent.${formatTypeSegment(event.type)}`;
+    }
+  }
+}
+
+function isPrimitiveAttributeValue(
+  value: unknown,
+): value is string | number | boolean | string[] | number[] | boolean[] {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return true;
+  }
+
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return value.every(
+    (entry) =>
+      typeof entry === 'string' ||
+      typeof entry === 'number' ||
+      typeof entry === 'boolean',
+  );
+}
+
+function setIfPresent(
+  attrs: Attributes,
+  key: string,
+  value: unknown,
+): void {
+  if (value === undefined || value === null) return;
+  if (isPrimitiveAttributeValue(value)) {
+    attrs[key] = value;
+  }
+}
+
 function getDefaultAttributes(event: ObservabilityEvent): Attributes {
   const attrs: Attributes = {
     'agent.event.type': event.type,
-    'agent.event.id': event.id,
   };
 
-  // Add type-specific attributes
+  setIfPresent(attrs, 'agent.event.id', event.id);
+  setIfPresent(attrs, 'agent.display_message', event.displayMessage);
+  setIfPresent(attrs, 'agent.class', event.agent);
+  setIfPresent(attrs, 'agent.instance.name', event.name);
+  setIfPresent(attrs, 'gen_ai.agent.name', event.agent);
+
   switch (event.type) {
     case 'rpc': {
       attrs['agent.rpc.method'] = event.payload.method;
-      if (event.payload.streaming !== undefined) {
-        attrs['agent.rpc.streaming'] = event.payload.streaming;
-      }
+      setIfPresent(attrs, 'agent.rpc.streaming', event.payload.streaming);
       break;
     }
-
+    case 'rpc:error': {
+      attrs['agent.rpc.method'] = event.payload.method;
+      break;
+    }
     case 'schedule:create':
     case 'schedule:execute':
-    case 'schedule:cancel': {
-      attrs['agent.schedule.callback'] = event.payload.callback;
-      attrs['agent.schedule.id'] = event.payload.id;
+    case 'schedule:cancel':
+    case 'schedule:retry':
+    case 'schedule:error':
+    case 'queue:create':
+    case 'queue:retry':
+    case 'queue:error': {
+      setIfPresent(attrs, 'agent.schedule.callback', event.payload.callback);
+      setIfPresent(attrs, 'agent.schedule.id', event.payload.id);
       break;
     }
-
-    case 'connect': {
-      attrs['agent.connection.id'] = event.payload.connectionId;
+    case 'schedule:duplicate_warning': {
+      setIfPresent(attrs, 'agent.schedule.callback', event.payload.callback);
       break;
     }
-
+    case 'connect':
+    case 'disconnect': {
+      setIfPresent(attrs, 'agent.connection.id', event.payload.connectionId);
+      break;
+    }
     case 'mcp:client:preconnect': {
-      attrs['agent.mcp.server_id'] = event.payload.serverId;
+      setIfPresent(attrs, 'agent.mcp.server_id', event.payload.serverId);
       break;
     }
-
-    case 'mcp:client:connect': {
-      attrs['agent.mcp.url'] = event.payload.url;
-      attrs['agent.mcp.transport'] = event.payload.transport;
-      attrs['agent.mcp.state'] = event.payload.state;
-      if (event.payload.error) {
-        attrs['agent.mcp.error'] = event.payload.error;
-      }
+    case 'mcp:client:connect':
+    case 'mcp:client:close': {
+      setIfPresent(attrs, 'agent.mcp.url', event.payload.url);
+      setIfPresent(attrs, 'agent.mcp.transport', event.payload.transport);
+      setIfPresent(attrs, 'agent.mcp.state', event.payload.state);
       break;
     }
-
     case 'mcp:client:authorize': {
-      attrs['agent.mcp.server_id'] = event.payload.serverId;
-      attrs['agent.mcp.auth_url'] = event.payload.authUrl;
-      if (event.payload.clientId) {
-        attrs['agent.mcp.client_id'] = event.payload.clientId;
-      }
+      setIfPresent(attrs, 'agent.mcp.server_id', event.payload.serverId);
+      setIfPresent(attrs, 'agent.mcp.auth_url', event.payload.authUrl);
+      setIfPresent(attrs, 'agent.mcp.client_id', event.payload.clientId);
+      break;
+    }
+    case 'mcp:client:discover': {
+      setIfPresent(attrs, 'agent.mcp.url', event.payload.url);
+      setIfPresent(attrs, 'agent.mcp.state', event.payload.state);
+      setIfPresent(attrs, 'agent.mcp.capability', event.payload.capability);
       break;
     }
   }
 
-  // Add any additional payload properties as attributes
   for (const [key, value] of Object.entries(event.payload)) {
-    if (
-      attrs[`agent.${key}`] === undefined &&
-      (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
-    ) {
-      attrs[`agent.payload.${key}`] = value;
-    }
+    setIfPresent(attrs, `agent.payload.${key}`, value);
   }
 
   return attrs;
 }
 
-/**
- * Determine span kind based on event type
- */
 function getSpanKind(event: ObservabilityEvent): SpanKind {
-  switch (event.type) {
-    case 'rpc': {
+  switch (classifyEvent(event.type)) {
+    case 'rpc':
+    case 'lifecycle':
+    case 'email': {
       return SpanKind.SERVER;
     }
-    case 'connect': {
-      return SpanKind.SERVER;
-    }
-    case 'mcp:client:connect':
-    case 'mcp:client:preconnect':
-    case 'mcp:client:authorize':
-    case 'mcp:client:discover': {
+    case 'mcp': {
       return SpanKind.CLIENT;
+    }
+    case 'schedule':
+    case 'queue': {
+      return SpanKind.CONSUMER;
     }
     default: {
       return SpanKind.INTERNAL;
@@ -230,89 +394,74 @@ function getSpanKind(event: ObservabilityEvent): SpanKind {
   }
 }
 
-/**
- * Check if an event type should be traced based on options
- */
-function shouldTraceEvent(
-  event: ObservabilityEvent,
-  options: AgentInstrumentationOptions,
-): boolean {
-  const defaults: AgentInstrumentationOptions = {
-    traceRpc: true,
-    traceSchedule: true,
-    traceMcp: true,
-    traceStateUpdates: false,
-    traceMessages: true,
-    traceLifecycle: true,
-  };
+function inferErrorMessage(event: ObservabilityEvent): string | undefined {
+  const payload = event.payload as Record<string, unknown>;
+  const direct = payload.error;
+  if (typeof direct === 'string' && direct.length > 0) {
+    return direct;
+  }
 
-  const opts = { ...defaults, ...options };
-
-  switch (event.type) {
-    case 'rpc': {
-      return opts.traceRpc ?? true;
+  if (event.type === 'workflow:rejected') {
+    const reason = payload.reason;
+    if (typeof reason === 'string' && reason.length > 0) {
+      return reason;
     }
+    return 'workflow rejected';
+  }
 
-    case 'schedule:create':
-    case 'schedule:execute':
-    case 'schedule:cancel': {
-      return opts.traceSchedule ?? true;
-    }
+  if (event.type.endsWith(':failed') || event.type.endsWith(':error')) {
+    return event.type;
+  }
 
-    case 'mcp:client:preconnect':
-    case 'mcp:client:connect':
-    case 'mcp:client:authorize':
-    case 'mcp:client:discover': {
-      return opts.traceMcp ?? true;
-    }
+  return undefined;
+}
 
-    case 'state:update': {
-      return opts.traceStateUpdates ?? false;
-    }
+function isErrorEvent(event: ObservabilityEvent): boolean {
+  if (event.type === 'workflow:rejected') return true;
+  if (event.type.endsWith(':error') || event.type.endsWith(':failed')) return true;
 
-    case 'message:request':
-    case 'message:response':
-    case 'message:clear': {
-      return opts.traceMessages ?? true;
-    }
+  if ('error' in event.payload) {
+    return typeof (event.payload as Record<string, unknown>).error === 'string';
+  }
 
-    case 'connect':
-    case 'destroy': {
-      return opts.traceLifecycle ?? true;
-    }
+  return false;
+}
 
-    default: {
-      return true;
-    }
+function applyEventStatus(span: Span, event: ObservabilityEvent): void {
+  if (!isErrorEvent(event)) {
+    span.setStatus({ code: SpanStatusCode.OK });
+    return;
+  }
+
+  const message = inferErrorMessage(event);
+  span.setStatus({
+    code: SpanStatusCode.ERROR,
+    message,
+  });
+  span.setAttribute('error', true);
+
+  if (message) {
+    span.setAttribute('exception.message', message);
   }
 }
 
-/**
- * Export spans asynchronously
- */
 async function exportSpans(
   traceId: string,
-  ctx?: DurableObjectState | ExecutionContext,
+  ctx?: ObservabilityExecutionContext,
 ): Promise<void> {
   const tracer = trace.getTracer('autotel-cloudflare/agents');
   if (tracer instanceof WorkerTracer) {
     try {
-      // scheduler is only available on ExecutionContext, not DurableObjectState
-      if (ctx && 'scheduler' in ctx) {
-        const ctxWithScheduler = ctx as ExecutionContext & { scheduler?: { wait(ms: number): Promise<void> } };
-        if (ctxWithScheduler.scheduler) {
-          await ctxWithScheduler.scheduler.wait(1);
-        }
+      const scheduler = ctx && 'scheduler' in ctx
+        ? (ctx.scheduler as { wait?: (ms: number) => Promise<void> } | undefined)
+        : undefined;
+      if (scheduler?.wait) {
+        await scheduler.wait(1);
       }
       await tracer.forceFlush(traceId);
     } catch (error) {
       console.error('[autotel-cloudflare/agents] Failed to export spans:', error);
     }
-  }
-
-  // If we have a DurableObject context, use waitUntil for export
-  if (ctx && 'waitUntil' in ctx) {
-    // Already exported above, but could defer more work here
   }
 }
 
@@ -323,133 +472,69 @@ async function exportSpans(
  * events into OpenTelemetry spans.
  */
 export class OtelObservability implements Observability {
-  private config: ResolvedEdgeConfig;
-  private options: AgentInstrumentationOptions;
+  private readonly config: ResolvedEdgeConfig;
+  private readonly options: AgentInstrumentationOptions;
   private initialized = false;
 
   constructor(config: OtelObservabilityConfig) {
-    // Use createInitialiser to resolve the config
     const initialiser = createInitialiser(config);
     this.config = initialiser({}, undefined);
     this.options = config.agents ?? {};
   }
 
-  /**
-   * Initialize the tracer provider (called lazily on first emit)
-   */
   private initialize(): void {
     if (this.initialized) return;
     initProvider(this.config);
     this.initialized = true;
   }
 
-  /**
-   * Emit an observability event
-   *
-   * Converts the event to an OpenTelemetry span based on the event type.
-   */
-  emit(event: ObservabilityEvent, ctx?: DurableObjectState): void {
-    // Initialize provider on first emit
+  emit(event: ObservabilityEvent, ctx?: ObservabilityExecutionContext): void {
     this.initialize();
 
-    // Check if this event type should be traced
     if (!shouldTraceEvent(event, this.options)) {
       return;
     }
 
     const tracer = trace.getTracer('autotel-cloudflare/agents');
-
-    // Get span name (custom or default)
     const spanName = this.options.spanNameFormatter
       ? this.options.spanNameFormatter(event)
       : getDefaultSpanName(event);
-
-    // Get attributes (custom + default)
     const defaultAttrs = getDefaultAttributes(event);
     const customAttrs = this.options.attributeExtractor
       ? this.options.attributeExtractor(event)
       : {};
-    const attributes = { ...defaultAttrs, ...customAttrs };
-
-    // Determine span kind
-    const kind = getSpanKind(event);
-
-    // Create span with event timestamp
     const span = tracer.startSpan(spanName, {
-      kind,
-      attributes,
+      kind: getSpanKind(event),
+      attributes: { ...defaultAttrs, ...customAttrs },
       startTime: event.timestamp,
     });
 
-    // For short-lived events, end immediately
-    // For events that have duration (like RPC), we would ideally track start/end
-    // But the Agents SDK emits single events, so we create point-in-time spans
-    span.setStatus({ code: SpanStatusCode.OK });
-    span.end(event.timestamp + 1); // End 1ms after start
+    applyEventStatus(span, event);
+    span.end(event.timestamp + 1);
 
-    // Store span for potential correlation
-    activeSpans.set(event.id, span);
-
-    // Schedule span export
     const traceId = span.spanContext().traceId;
-    if (ctx && 'waitUntil' in ctx && typeof (ctx as any).waitUntil === 'function') {
-      (ctx as any).waitUntil(exportSpans(traceId, ctx));
-    } else {
-      // In environments without waitUntil, export synchronously-ish
-      void exportSpans(traceId, ctx);
+    if (ctx && 'waitUntil' in ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(exportSpans(traceId, ctx));
+      return;
     }
+
+    void exportSpans(traceId, ctx);
   }
 }
 
-/**
- * Create an OtelObservability instance
- *
- * @example
- * ```typescript
- * import { Agent } from 'agents'
- * import { createOtelObservability } from 'autotel-cloudflare/agents'
- *
- * class MyAgent extends Agent<Env> {
- *   observability = createOtelObservability({
- *     service: { name: 'my-agent' },
- *     exporter: { url: env.OTLP_ENDPOINT }
- *   })
- * }
- * ```
- */
-export function createOtelObservability(config: OtelObservabilityConfig): OtelObservability {
+export function createOtelObservability(
+  config: OtelObservabilityConfig,
+): OtelObservability {
   return new OtelObservability(config);
 }
 
-/**
- * Create an OtelObservability instance with environment-based config
- *
- * Use this when you need to access environment variables for configuration.
- *
- * @example
- * ```typescript
- * import { Agent } from 'agents'
- * import { createOtelObservabilityFromEnv } from 'autotel-cloudflare/agents'
- *
- * class MyAgent extends Agent<Env> {
- *   observability?: OtelObservability
- *
- *   constructor(state: DurableObjectState, env: Env) {
- *     super(state, env)
- *     this.observability = createOtelObservabilityFromEnv(env)
- *   }
- * }
- * ```
- */
 export function createOtelObservabilityFromEnv(
   env: Record<string, unknown>,
   options?: AgentInstrumentationOptions,
 ): OtelObservability {
-  // Extract standard OTLP env vars
   const endpoint = (env.OTEL_EXPORTER_OTLP_ENDPOINT as string) || undefined;
   const serviceName = (env.OTEL_SERVICE_NAME as string) || 'cloudflare-agent';
 
-  // Parse headers if present
   let headers: Record<string, string> | undefined;
   const headersStr = env.OTEL_EXPORTER_OTLP_HEADERS as string;
   if (headersStr) {
@@ -462,13 +547,11 @@ export function createOtelObservabilityFromEnv(
     }
   }
 
-  // If no endpoint is configured, use a default localhost endpoint
-  // In production, users should set OTEL_EXPORTER_OTLP_ENDPOINT
-  const exporterUrl = endpoint || 'http://localhost:4318/v1/traces';
-
   return createOtelObservability({
     service: { name: serviceName },
-    exporter: { url: exporterUrl, headers },
+    exporter: { url: endpoint || 'http://localhost:4318/v1/traces', headers },
     agents: options,
   });
 }
+
+export type { MCPObservabilityEvent };

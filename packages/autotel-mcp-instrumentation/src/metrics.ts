@@ -4,11 +4,17 @@
  * Provides lazy-initialized histograms for client and server operation durations.
  */
 
-import { metrics, type Histogram, type Attributes } from '@opentelemetry/api';
+import {
+  metrics,
+  type Counter,
+  type Histogram,
+  type Attributes,
+} from '@opentelemetry/api';
 import { MCP_METRICS, MCP_DURATION_BUCKETS } from './semantic-conventions';
 
 let clientDuration: Histogram | undefined;
 let serverDuration: Histogram | undefined;
+let securityEvents: Counter | undefined;
 
 function getClientDuration(): Histogram {
   if (!clientDuration) {
@@ -54,4 +60,21 @@ export function recordServerOperationDuration(
   attrs: Attributes,
 ): void {
   getServerDuration().record(durationS, attrs);
+}
+
+function getSecurityEvents(): Counter {
+  if (!securityEvents) {
+    const meter = metrics.getMeter('autotel-mcp');
+    securityEvents = meter.createCounter(MCP_METRICS.SECURITY_EVENTS, {
+      description:
+        'Count of MCP security signals (injection suspicions, budget breaches)',
+      unit: '{event}',
+    });
+  }
+  return securityEvents;
+}
+
+/** Increment the security-events counter (injection / budget signals). */
+export function recordSecurityEvent(attrs: Attributes): void {
+  getSecurityEvents().add(1, attrs);
 }
