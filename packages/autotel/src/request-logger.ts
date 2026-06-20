@@ -1,4 +1,5 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+// namespace import for browser-bundler compat — see node-require.ts
+import * as nodeAsyncHooks from 'node:async_hooks';
 import { trace as otelTrace } from '@opentelemetry/api';
 import type { TraceContext } from './trace-context';
 import { createTraceContext } from './trace-context';
@@ -43,7 +44,8 @@ function mergeInto(
   }
 }
 
-const requestContextStore = new AsyncLocalStorage<TraceContext>();
+const requestContextStore =
+  new nodeAsyncHooks.AsyncLocalStorage<TraceContext>();
 
 export function runWithRequestContext<T>(ctx: TraceContext, fn: () => T): T {
   return requestContextStore.run(ctx, fn);
@@ -111,7 +113,7 @@ export function getRequestLogger(
   options?: RequestLoggerOptions,
 ): RequestLogger {
   const activeContext = resolveContext(ctx);
-  let contextState: Record<string, unknown> = {};
+  const contextState: Record<string, unknown> = {};
   let emitted = false;
   let lastSnapshot: RequestLogSnapshot | null = null;
 
@@ -123,7 +125,7 @@ export function getRequestLogger(
     const attrs = fields ? flattenToAttributes(fields) : undefined;
     emitCorrelatedEvent(activeContext, `log.${level}`, {
       message,
-      ...(attrs ?? {}),
+      ...attrs,
     });
   };
 
@@ -131,7 +133,7 @@ export function getRequestLogger(
     if (emitted) {
       warnPostEmit(
         method,
-        `Keys dropped: ${keys.length ? keys.join(', ') : '(empty)'}.`,
+        `Keys dropped: ${keys.length > 0 ? keys.join(', ') : '(empty)'}.`,
       );
     }
   };
@@ -198,7 +200,7 @@ export function getRequestLogger(
 
       const mergedContext = {
         ...contextState,
-        ...(overrides ?? {}),
+        ...overrides,
       };
       const flattened = flattenToAttributes(mergedContext);
       activeContext.setAttributes(flattened);
@@ -261,8 +263,9 @@ export function getRequestLogger(
             .then(() => {
               childLog.emitNow();
             })
-            .catch((err: unknown) => {
-              const error = err instanceof Error ? err : new Error(String(err));
+            .catch((error_: unknown) => {
+              const error =
+                error_ instanceof Error ? error_ : new Error(String(error_));
               childLog.error(error);
               childLog.emitNow();
             })

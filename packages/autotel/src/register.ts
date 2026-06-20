@@ -30,8 +30,9 @@
  * @see https://nodejs.org/api/module.html#moduleregisterspecifier-parenturl-options
  */
 
-import { register } from 'node:module';
+// namespace import for browser-bundler compat — see node-require.ts
+import * as nodeModule from 'node:module';
 
 // Use the official OpenTelemetry instrumentation hook which wraps import-in-the-middle
 // This ensures proper integration with OTel's instrumentation system
-register('@opentelemetry/instrumentation/hook.mjs', import.meta.url);
+nodeModule.register('@opentelemetry/instrumentation/hook.mjs', import.meta.url);

@@ -8,7 +8,8 @@
  * so we maintain our own async context storage.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
+// namespace import for browser-bundler compat — see node-require.ts
+import * as nodeAsyncHooks from 'node:async_hooks';
 
 /**
  * Operation context that flows through async operations
@@ -24,7 +25,8 @@ export interface OperationContext {
 /**
  * AsyncLocalStorage instance for tracking operation context
  */
-const operationStorage = new AsyncLocalStorage<OperationContext>();
+const operationStorage =
+  new nodeAsyncHooks.AsyncLocalStorage<OperationContext>();
 
 /**
  * Get the current operation context (if any)

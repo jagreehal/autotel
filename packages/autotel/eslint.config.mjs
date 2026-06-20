@@ -48,6 +48,17 @@ export default defineConfig(
           message:
             'Enums are not allowed. Use union types or const assertions instead.',
         },
+        {
+          // Named *value* imports of Node builtins break browser bundlers:
+          // Vite rewrites `node:*` to a stub that exports nothing, and Rollup
+          // hard-errors on the unresolved named binding, failing the consumer's
+          // build. Use a namespace import (`import * as nodeFs from 'node:fs'`)
+          // for values, or `import type` for type-only usage (which is erased).
+          selector:
+            'ImportDeclaration[importKind!="type"][source.value=/^node:/] ImportSpecifier[importKind!="type"]',
+          message:
+            "Don't use a named import for a Node builtin — it breaks browser bundlers. Use `import * as ns from 'node:...'` for values, or `import type` for types. See node-require.ts.",
+        },
       ],
     },
   },

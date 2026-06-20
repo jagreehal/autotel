@@ -23,7 +23,9 @@
  */
 
 import { trace, propagation, context } from '@opentelemetry/api';
-import { AsyncLocalStorage } from 'node:async_hooks';
+// namespace import for browser-bundler compat; `import type` is erased — see node-require.ts
+import type { AsyncLocalStorage } from 'node:async_hooks';
+import * as nodeAsyncHooks from 'node:async_hooks';
 import { enterOrRun } from './trace-context';
 
 type CorrelationStore = {
@@ -34,7 +36,8 @@ type CorrelationStore = {
  * AsyncLocalStorage for storing correlation ID
  * This allows correlation IDs to persist across async boundaries
  */
-const correlationStorage = new AsyncLocalStorage<CorrelationStore>();
+const correlationStorage =
+  new nodeAsyncHooks.AsyncLocalStorage<CorrelationStore>();
 
 /**
  * Baggage key for correlation ID propagation

@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+// namespace import for browser-bundler compat — see node-require.ts
+import * as nodeCrypto from 'node:crypto';
 
 /**
  * Deterministic JSON stringify with sorted object keys, so two structurally
@@ -23,5 +24,8 @@ export function stableStringify(value: unknown): string {
 
 /** Stable sha256 of any JSON-serializable value. */
 export function hashJson(value: unknown): string {
-  return createHash('sha256').update(stableStringify(value)).digest('hex');
+  return nodeCrypto
+    .createHash('sha256')
+    .update(stableStringify(value))
+    .digest('hex');
 }

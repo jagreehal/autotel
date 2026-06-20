@@ -9,7 +9,15 @@
  * to work synchronously in both module formats.
  */
 
-import { createRequire } from 'node:module';
+// Namespace import, not `import { createRequire }`. A static *named* import of a
+// Node builtin breaks browser bundlers: tools like Vite rewrite `node:module`
+// to a stub (`__vite-browser-external`) that exports nothing, and Rollup hard-
+// errors on the unresolved named binding ("createRequire is not exported by
+// __vite-browser-external") — failing the consumer's build even though this
+// code never runs in the browser. A namespace import has no named binding to
+// resolve, so it bundles cleanly; `.createRequire` is read lazily below and is
+// only ever touched in a real Node runtime.
+import * as nodeModule from 'node:module';
 
 // `__filename` is provided by CJS and by esbuild's CJS output wrapper, but
 // is undefined under pure ESM. `import.meta.url` is provided by ESM. Pick
@@ -44,7 +52,7 @@ function getNodeRequire(): NodeRequire {
       { code: 'MODULE_NOT_FOUND' },
     );
   }
-  cachedRequire = createRequire(base);
+  cachedRequire = nodeModule.createRequire(base);
   return cachedRequire;
 }
 
@@ -110,8 +118,8 @@ export function requireModule<T = unknown>(id: string): T {
  * forwarded. The live, mutable members of a real `require` — `.cache`,
  * `.main`, `.extensions` — are intentionally NOT exposed: a lazy wrapper
  * can't mirror that shared state without resolving eagerly, which would
- * reintroduce the workerd crash. Use `createRequire` directly if you need
- * them.
+ * reintroduce the workerd crash. Use `nodeModule.createRequire` directly if
+ * you need them.
  */
 const nodeRequire = ((id: string) => getNodeRequire()(id)) as NodeRequire;
 const lazyResolve = ((id: string, options?: { paths?: string[] }) =>
