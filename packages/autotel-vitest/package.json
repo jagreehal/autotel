@@ -1,6 +1,6 @@
 {
   "name": "autotel-vitest",
-  "version": "0.4.33",
+  "version": "0.4.34",
   "description": "Vitest fixture for OpenTelemetry: one span per test so all instrumented code is filterable by test run",
   "license": "MIT",
   "type": "module",
