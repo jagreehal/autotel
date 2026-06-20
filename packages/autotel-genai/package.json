@@ -1,6 +1,6 @@
 {
   "name": "autotel-genai",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Gold-standard OpenTelemetry GenAI semantic-convention instrumentation for LLM calls, tools, and agents — cost, tokens, metrics, events, and agent governance.",
   "type": "module",
   "main": "./dist/index.js",

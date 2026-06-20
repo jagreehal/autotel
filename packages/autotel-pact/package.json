@@ -1,6 +1,6 @@
 {
   "name": "autotel-pact",
-  "version": "7.0.0",
+  "version": "7.0.1",
   "description": "Runtime evidence for Pact contracts — autotel bridge that records which contract interactions were actually exercised, and audits 'contracted but never observed'.",
   "type": "module",
   "main": "./dist/index.js",
