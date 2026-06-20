@@ -10,7 +10,9 @@ import type {
   Link,
 } from '@opentelemetry/api';
 import { context, propagation } from '@opentelemetry/api';
-import { AsyncLocalStorage } from 'node:async_hooks';
+// namespace import for browser-bundler compat; `import type` is erased — see node-require.ts
+import type { AsyncLocalStorage } from 'node:async_hooks';
+import * as nodeAsyncHooks from 'node:async_hooks';
 import { recordStructuredError } from './structured-error';
 import { track } from './track';
 
@@ -22,7 +24,9 @@ type AsyncLocalBox<T> = {
  * AsyncLocalStorage for storing the active context with baggage
  * This allows setters to update the context and have it persist
  */
-const contextStorage = new AsyncLocalStorage<AsyncLocalBox<Context>>();
+const contextStorage = new nodeAsyncHooks.AsyncLocalStorage<
+  AsyncLocalBox<Context>
+>();
 
 /**
  * Get the context storage instance (for initialization in functional.ts)

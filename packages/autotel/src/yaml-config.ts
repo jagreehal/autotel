@@ -21,7 +21,8 @@
  * ```
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+// namespace import for browser-bundler compat — see node-require.ts
+import * as nodeFs from 'node:fs';
 import path from 'node:path';
 import type { AutotelConfig, OtlpSignal } from './init';
 import {
@@ -151,18 +152,18 @@ function findConfigFile(): string | null {
   const envPath = process.env.AUTOTEL_CONFIG_FILE;
   if (envPath) {
     const resolved = path.resolve(envPath);
-    if (existsSync(resolved)) return resolved;
+    if (nodeFs.existsSync(resolved)) return resolved;
     console.warn(`[autotel] Config file not found: ${envPath}`);
     return null;
   }
 
   // Auto-discover autotel.yaml in cwd
   const conventionPath = path.resolve(process.cwd(), 'autotel.yaml');
-  if (existsSync(conventionPath)) return conventionPath;
+  if (nodeFs.existsSync(conventionPath)) return conventionPath;
 
   // Also check .yml extension
   const altPath = path.resolve(process.cwd(), 'autotel.yml');
-  if (existsSync(altPath)) return altPath;
+  if (nodeFs.existsSync(altPath)) return altPath;
 
   return null;
 }
@@ -300,7 +301,7 @@ export function loadYamlConfig(): Partial<AutotelConfig> | null {
   if (!filePath) return null;
 
   try {
-    const content = readFileSync(filePath, 'utf8');
+    const content = nodeFs.readFileSync(filePath, 'utf8');
     const parseYaml = loadYamlParser();
     const rawYaml = parseYaml(content) as YamlConfig;
     const substituted = substituteEnvVarsDeep(rawYaml) as YamlConfig;
@@ -334,7 +335,7 @@ export function loadYamlConfigFromFile(
   filePath: string,
 ): Partial<AutotelConfig> {
   const resolved = path.resolve(filePath);
-  const content = readFileSync(resolved, 'utf8');
+  const content = nodeFs.readFileSync(resolved, 'utf8');
   const parseYaml = loadYamlParser();
   const rawYaml = parseYaml(content) as YamlConfig;
   const substituted = substituteEnvVarsDeep(rawYaml) as YamlConfig;

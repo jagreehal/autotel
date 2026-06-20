@@ -8,8 +8,9 @@
  * fails for any reason, it returns undefined without breaking the application.
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+// namespace imports for browser-bundler compat — see node-require.ts
+import * as nodeFs from 'node:fs';
+import * as nodeUrl from 'node:url';
 
 interface CallLocation {
   file: string;
@@ -79,7 +80,7 @@ function parseCallLocation(stack: string): CallLocation | undefined {
       // Handle file:// URLs (convert to paths)
       if (filePath.startsWith('file://')) {
         try {
-          filePath = fileURLToPath(filePath);
+          filePath = nodeUrl.fileURLToPath(filePath);
         } catch {
           continue;
         }
@@ -112,11 +113,11 @@ function readSourceLine(
 ): string | undefined {
   try {
     // Check if we can access the file system (not available in edge runtimes)
-    if (typeof readFileSync !== 'function') {
+    if (typeof nodeFs.readFileSync !== 'function') {
       return undefined;
     }
 
-    const content = readFileSync(filePath, 'utf8');
+    const content = nodeFs.readFileSync(filePath, 'utf8');
     const lines = content.split('\n');
 
     // Line numbers are 1-based

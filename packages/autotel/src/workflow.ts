@@ -53,7 +53,8 @@
  * @module
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
+// namespace import for browser-bundler compat — see node-require.ts
+import * as nodeAsyncHooks from 'node:async_hooks';
 import type { Attributes, Link, SpanContext } from '@opentelemetry/api';
 import { emitCorrelatedEvent } from './correlated-events';
 import { trace } from './functional';
@@ -252,7 +253,8 @@ const workflowStates = new WeakMap<
  * concurrent workflows. AsyncLocalStorage ensures each async execution chain
  * has its own isolated workflow context.
  */
-const workflowContextStorage = new AsyncLocalStorage<WorkflowContext>();
+const workflowContextStorage =
+  new nodeAsyncHooks.AsyncLocalStorage<WorkflowContext>();
 
 // ============================================================================
 // Workflow Helper
