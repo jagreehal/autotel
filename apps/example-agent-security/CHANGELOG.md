@@ -1,5 +1,12 @@
 # @jagreehal/example-agent-security
 
+## 0.0.5
+
+### Patch Changes
+
+- Updated dependencies [e2ed007]
+  - autotel-genai@0.3.3
+
 ## 0.0.4
 
 ### Patch Changes

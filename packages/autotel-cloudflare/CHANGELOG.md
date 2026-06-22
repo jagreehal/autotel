@@ -1,5 +1,12 @@
 # autotel-cloudflare
 
+## 4.0.3
+
+### Patch Changes
+
+- Updated dependencies [e2ed007]
+  - autotel-genai@0.3.3
+
 ## 4.0.2
 
 ### Patch Changes
