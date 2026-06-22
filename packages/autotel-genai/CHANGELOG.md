@@ -1,5 +1,19 @@
 # autotel-genai
 
+## 0.3.2
+
+### Patch Changes
+
+- 0b1e332: Refresh the AI SDK guidance across published skills and docs.
+  - document `autotelTelemetry()` as the primary Vercel AI SDK integration
+  - document `subscribeAiTelemetry()` as the zero-config fallback
+  - move `observeAiSdkResult()` and `autotel-genai/ai-sdk` guidance into the legacy/enrichment path
+  - update review skills to stop recommending `experimental_telemetry`
+
+- Updated dependencies [0b1e332]
+  - autotel@4.2.2
+  - autotel-audit@0.4.2
+
 ## 0.3.1
 
 ### Patch Changes

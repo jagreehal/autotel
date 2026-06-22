@@ -1,6 +1,6 @@
 {
   "name": "autotel-drizzle",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "description": "OpenTelemetry instrumentation for Drizzle ORM",
   "type": "module",
   "main": "./dist/drizzle.js",
