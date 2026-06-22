@@ -64,8 +64,8 @@ The package splits into focused subpath exports, so you import only what you use
 | `autotel-genai/events` | opt-in content events (input/output gating), `inference.operation.details`, `evaluation.result`, `recordModelWarnings()` |
 | `autotel-genai/guard` | inline cost/token/loop kill-switch: `createGenAiBudget()`, `createGenAiGuard()`, `parseGuardRules()` |
 | `autotel-genai/streaming` | streaming performance: `createStreamTimer()`, `recordStreamTiming()` (TTFC, throughput, inter-chunk distribution) |
-| `autotel-genai/ai-sdk` | Vercel AI SDK `ai.*` to `gen_ai.*` mapping plus cost |
-| `autotel-genai/observer` | `createGenAiObserver()` event-stream adapter, with `createLangChainObserver()` and `observeAiSdkResult()` glue |
+| `autotel-genai/observer` | `autotelTelemetry()` for `registerTelemetry()`, `subscribeAiTelemetry()` for the `ai:telemetry` channel, plus `createGenAiObserver()`, `createLangChainObserver()`, and `observeAiSdkResult()` |
+| `autotel-genai/ai-sdk` | legacy Vercel AI SDK `ai.*` to `gen_ai.*` mapping plus cost, and `autotelEnrich()` for `@ai-sdk/otel` |
 | `autotel-genai/agent` | agent identity, delegation, policy, audit, privacy, non-repudiation |
 | `autotel-genai/semconv` | `GEN_AI_*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()` |
 
@@ -87,7 +87,25 @@ Token usage and cost land on leaf `chat` spans. Aggregate `agent` and
 `workflow` spans carry no `gen_ai.usage.*`, so a backend that sums usage across
 a trace counts each call once.
 
-Two adapters ship with the observer:
+For the Vercel AI SDK, the primary path is the live `Telemetry` integration:
+
+```typescript
+import { registerTelemetry } from 'ai';
+import { autotelTelemetry, subscribeAiTelemetry } from 'autotel-genai/observer';
+
+registerTelemetry(autotelTelemetry()); // preferred: live spans + cost + streaming timing
+
+const unsubscribe = subscribeAiTelemetry(); // fallback: zero-config ai:telemetry channel
+```
+
+`autotelTelemetry()` emits canonical `gen_ai.*` spans as calls run, prices every
+model call, records streaming timing, and nests provider HTTP spans plus nested
+tool-triggered `generateText()` calls under the right parent. The channel
+subscriber gives you the same tree with usage and cost, but not per-call
+streaming timing.
+
+The event-stream adapters are still useful when you already have a finished AI
+SDK result or another framework lifecycle stream:
 
 ```typescript
 import {
@@ -101,7 +119,7 @@ const observe = createGenAiObserver();
 // LangChain / LangGraph: one callback handler turns runId/parentRunId into the tree.
 await graph.invoke(input, { callbacks: [createLangChainObserver(observe)] });
 
-// Vercel AI SDK: walk a generateText/streamText result.
+// Vercel AI SDK legacy/result-walker path: walk a finished generateText/streamText result.
 observeAiSdkResult(observe, await generateText({ model, prompt }), {
   id: 'gen-1',
   provider: 'openai',

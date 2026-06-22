@@ -25,8 +25,8 @@
 
 import type { TimeInput } from '@opentelemetry/api';
 import { normalizeAiSdkProvider } from '../ai-sdk-bridge.js';
-import type { TokenUsage } from '../cost.js';
 import type { GenAiProviderName } from '../semconv.js';
+import { toTokenUsage } from './ai-sdk-shapes.js';
 import type { GenAiObserver } from './types.js';
 
 /** AI SDK usage object — canonical (v5) or legacy (v4) field names. */
@@ -149,7 +149,7 @@ function emitChat(
       id: step.response?.id,
       finishReasons: step.finishReason ? [step.finishReason] : undefined,
     },
-    usage: aiSdkUsage(step.usage),
+    usage: toTokenUsage(step.usage),
     costModel: ctx.model ?? responseModel,
     endTime: asTimeInput(step.response?.timestamp),
   });
@@ -180,19 +180,6 @@ function emitTools(
       callResult: result?.output ?? result?.result,
     });
   });
-}
-
-function aiSdkUsage(usage?: AiSdkUsage): TokenUsage | undefined {
-  if (!usage) return undefined;
-  const tokenUsage: TokenUsage = {
-    inputTokens: usage.inputTokens ?? usage.promptTokens,
-    outputTokens: usage.outputTokens ?? usage.completionTokens,
-    reasoningOutputTokens: usage.reasoningTokens,
-    cacheReadInputTokens: usage.cachedInputTokens,
-  };
-  return Object.values(tokenUsage).some((v) => v !== undefined)
-    ? tokenUsage
-    : undefined;
 }
 
 function asTimeInput(value: Date | number | undefined): TimeInput | undefined {

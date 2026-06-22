@@ -54,7 +54,7 @@ vi.mock('vscode', () => {
     workspace: {
       getConfiguration: vi.fn(() => ({
         get: vi.fn((key: string, fallback: unknown) => {
-          if (key === 'receiver.enabled') return true
+          if (key === 'receiver.autoStart') return 'always'
           if (key === 'receiver.host') return '127.0.0.1'
           if (key === 'receiver.port') return state.port
           if (key === 'buffer.maxSpans') return 10000

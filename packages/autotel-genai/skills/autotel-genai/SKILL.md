@@ -175,15 +175,37 @@ Rule factories: `costCeiling`, `tokenCeiling`, `maxToolCalls`, `maxSteps`,
 
 ### Vercel AI SDK bridge
 
-The current `@ai-sdk/otel` `OpenTelemetry` integration already emits `gen_ai.*` —
-nothing to map. For `LegacyOpenTelemetry`/older versions, or to add cost:
+The primary AI SDK path is `autotelTelemetry()` from `autotel-genai/observer`.
+Register it once and every `generateText` / `streamText` / `embed` call emits a
+live canonical `gen_ai.*` span tree with cost, streaming timing, nested tool
+execution, and nested provider HTTP spans:
 
 ```typescript
-import { mapAiSdkAttributes, recordAiSdkCost } from 'autotel-genai/ai-sdk';
+import { registerTelemetry } from 'ai';
+import { autotelTelemetry, subscribeAiTelemetry } from 'autotel-genai/observer';
+
+registerTelemetry(autotelTelemetry());
+
+const unsubscribe = subscribeAiTelemetry(); // fallback: zero-config ai:telemetry channel
+```
+
+Use `subscribeAiTelemetry()` when you cannot add a registration call. It emits
+the same `invoke_agent > chat > execute_tool` tree with usage and cost, but not
+the per-call streaming timing that only the lifecycle integration sees.
+
+For `LegacyOpenTelemetry`/older versions, or to enrich spans another
+integration already emitted, use the legacy bridge:
+
+```typescript
+import { autotelEnrich, mapAiSdkAttributes, recordAiSdkCost } from 'autotel-genai/ai-sdk';
 
 const canonical = mapAiSdkAttributes(span.attributes); // ai.* → gen_ai.*
 recordAiSdkCost(ctx, span.attributes);                 // sets gen_ai.usage.cost.usd
 ```
+
+`autotelEnrich()` is for `@ai-sdk/otel`'s `enrichSpan` hook when you want
+autotel provenance and `runtimeContext` fields on spans, but it cannot add
+cost because the hook gets no usage/model payload.
 
 ### Agent governance — `autotel-genai/agent`
 

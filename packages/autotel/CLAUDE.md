@@ -37,6 +37,11 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
 - `autotel/messaging` - Producer/consumer helpers for Kafka, SQS, RabbitMQ
 - `autotel/business-baggage` - Safe baggage propagation with guardrails
 - `autotel/workflow` - Workflow and saga tracing
+- `autotel/diagnostics` - `diagnostics_channel` bridges: `subscribeChannel` /
+  `subscribeTracingChannel` (edge-safe primitive), `captureConsole` (console.\* →
+  correlated log records, patch-free), `instrumentHttp` (HTTP server/client
+  spans + W3C propagation, opt-in, no `import-in-the-middle`). All degrade to a
+  no-op where the underlying Node channels are unavailable.
 - And more (see package.json exports)
 
 ## Commands

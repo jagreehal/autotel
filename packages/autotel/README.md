@@ -1880,6 +1880,56 @@ try {
 }
 ```
 
+## Diagnostics Channels
+
+`autotel/diagnostics` bridges Node's built-in
+[`diagnostics_channel`](https://nodejs.org/api/diagnostics_channel.html) into
+autotel spans and events — no monkey-patching, no `import-in-the-middle`. Every
+entry point is opt-in and degrades to a no-op on runtimes (edge, old Node) that
+lack the underlying channels.
+
+**Capture `console.*` as correlated wide events** (the patch-free way to get
+`console.log` into your traces):
+
+```ts
+import { captureConsole } from 'autotel/diagnostics';
+
+const stop = captureConsole(); // every console.* → an OTel log record,
+// correlated to the active span by trace context
+```
+
+Each call becomes a log record (severity mapped from the method, printf-formatted
+body, `log.source`/`log.method` attributes). Pass `{ target: 'span-event' }` to
+add events to the active span instead, or `{ target: 'both' }`. Nothing patches
+the global `console`, so there's no load-order fragility.
+
+**Lightweight HTTP spans + W3C propagation** without `import-in-the-middle`:
+
+```ts
+import { instrumentHttp } from 'autotel/diagnostics';
+
+const stop = instrumentHttp(); // SERVER span per inbound request (parented to the
+// incoming traceparent) + CLIENT span per outbound
+// request (injects traceparent downstream)
+```
+
+This is an opt-in alternative to `@opentelemetry/instrumentation-http` for span
+coverage and propagation. Limitation: a plain channel can't wrap the request
+handler, so it does **not** set an ambient context for the handler's duration —
+application spans created inside a handler won't auto-nest under the SERVER span.
+Use `@opentelemetry/instrumentation-http` if you need that nesting.
+
+**Bridge any channel** with the shared primitive (also used by
+`autotel-genai`'s `ai:telemetry` subscriber):
+
+```ts
+import { subscribeChannel, subscribeTracingChannel } from 'autotel/diagnostics';
+
+const off = subscribeChannel('my-lib:event', (message) => {
+  /* turn message into a span/event */
+});
+```
+
 ## Auto Instrumentation & Advanced Configuration
 
 - `autoInstrumentations` : Enable OpenTelemetry auto-instrumentations (HTTP, Express, Fastify, Prisma, Pino…). Requires `@opentelemetry/auto-instrumentations-node`.

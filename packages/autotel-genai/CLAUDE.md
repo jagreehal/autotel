@@ -42,8 +42,27 @@ exactly aligned with them.
   sensitive content behind an `exportContent` privacy callback, and keeps token
   usage on leaf `chat` spans only so aggregate `agent`/`workflow` spans never
   double-count `gen_ai.usage.*`. Ships framework glue: `createLangChainObserver`
-  (LangChain/LangGraph callback handler) and `observeAiSdkResult` (Vercel AI SDK
-  result walker), both dependency-free / structurally typed.
+  (LangChain/LangGraph callback handler), `observeAiSdkResult` (Vercel AI SDK
+  result walker, pull-based), and `autotelTelemetry` (Vercel AI SDK `Telemetry`
+  integration for `registerTelemetry()`, push-based / live) — all dependency-free
+  / structurally typed. `autotelTelemetry()` is the keystone AI SDK path: it
+  anchors the `chat` span on `onLanguageModelCallStart/End` (both carry `callId`,
+  so it is concurrency-safe), tools become siblings under the `invoke_agent`
+  root, and it adds cost + streaming timing the built-in `@ai-sdk/otel` omits.
+  It also implements the `executeTool`/`executeLanguageModelCall` context runners
+  (nested traces — needs an ambient OTel ContextManager, which real Node apps
+  have) and opt-in content capture (`captureContent`, off by default; maps AI SDK
+  messages → GenAI SemConv format via `ai-sdk-messages.ts`). `subscribeAiTelemetry`
+  (`ai-sdk-channel.ts`) is the zero-config path: it subscribes to the `ai:telemetry`
+  Node tracing channel (loaded edge-safely via `process.getBuiltinModule`, no
+  static `node:` import), pairs `start`↔`asyncEnd` by message-object identity, and
+  emits the same tree with usage+cost but no streaming timing. `autotelEnrich`
+  (in `ai-sdk-bridge.ts`) is an `@ai-sdk/otel` `enrichSpan` helper — provenance +
+  runtimeContext mapping only; it **cannot** add cost (the SDK gives `enrichSpan`
+  no usage/model and its own attrs win). `rerank` is intentionally unmapped
+  (no canonical `gen_ai` operation in v1.42.0). When changing any of these, keep
+  them assignable to the real `ai` `Telemetry` interface (compile-check against
+  `/Users/jreehal/dev/ai/ai/packages/ai/dist`).
 - `src/agent/` — agent identity / delegation / policy / audit governance
   (absorbed from the former `autotel-agent` package). Includes Google SAIF-aligned
   security attrs (`AGENT_SECURITY_ATTR`, `recordHumanApproval`, `recordInputProvenance`,
