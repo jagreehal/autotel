@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 41.0.2
+
+### Patch Changes
+
+- Updated dependencies [0b1e332]
+  - autotel@4.2.2
+
 ## 41.0.1
 
 ### Patch Changes

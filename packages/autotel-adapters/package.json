@@ -1,6 +1,6 @@
 {
   "name": "autotel-adapters",
-  "version": "0.3.14",
+  "version": "0.3.15",
   "description": "Framework adapters and composable DX helpers for autotel",
   "license": "MIT",
   "type": "module",

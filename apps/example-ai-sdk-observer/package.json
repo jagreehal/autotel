@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-ai-sdk-observer",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "description": "Capture Vercel AI SDK + Ollama runs as canonical gen_ai.* spans via autotel-genai's autotelTelemetry() telemetry integration.",
