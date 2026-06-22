@@ -4,5 +4,18 @@ packages:
   - 'examples/*'
   - 'docs'
 
+# Allow the fast-moving AI SDK betas used by apps/example-ai-sdk-observer past
+# the release-age gate (they publish daily; the example pins exact versions).
+minimumReleaseAgeExclude:
+  - ai
+  - ai-sdk-ollama
+  - ollama
+  - '@ai-sdk/*'
+
 overrides:
-  'vite': '^8.0.0'
+  # Astro 6.x requires Vite 7 (vite ^7.3.2). Allowing Vite 8 here breaks the
+  # docs build — per-route component CSS chunks are emitted but never linked
+  # into the page <head>, so the landing page renders unstyled. Cap below 8.
+  'vite': '>=7.1.11 <8'
+  # plugin-react 6 requires Vite 8; keep on 5.x while the workspace is on Vite 7.
+  '@vitejs/plugin-react': '^5.2.0'

@@ -24,6 +24,9 @@ const {
   createWebviewPanel,
   receiverConfig,
   createFileSystemWatcher,
+  findFiles,
+  readFile,
+  detection,
 } =
   vi.hoisted(() => {
     const fakeServer = {
@@ -39,11 +42,20 @@ const {
     }
     return {
       receiverConfig: {
-        enabled: true,
+        autoStart: 'always',
         host: '127.0.0.1',
         port: 4318,
         maxSpans: 10000,
         maxLogs: 10000,
+      },
+      // Controls what workspaceUsesAutotel() detects in the package.json scan.
+      // `files` is the list findFiles returns; when `autotelPath` is set only
+      // that file carries the dependency, otherwise `hasAutotelDep` applies to
+      // every file.
+      detection: {
+        hasAutotelDep: true,
+        files: ['/workspace/package.json'] as string[],
+        autotelPath: null as string | null,
       },
       registerCommand: vi.fn(),
       createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), dispose: vi.fn() })),
@@ -59,9 +71,22 @@ const {
       openTextDocument: vi.fn(async (uri: { fsPath: string }) => ({ uri })),
       showTextDocument: vi.fn(async () => undefined),
       showInputBox: vi.fn(),
+      findFiles: vi.fn(async () => detection.files.map((fsPath) => ({ fsPath }))),
+      readFile: vi.fn(async (uri: { fsPath: string }) => {
+        const has = detection.autotelPath
+          ? uri.fsPath === detection.autotelPath
+          : detection.hasAutotelDep
+        return new TextEncoder().encode(
+          JSON.stringify(
+            has
+              ? { dependencies: { autotel: '^1.0.0' } }
+              : { dependencies: { express: '^4.0.0' } },
+          ),
+        )
+      }),
       getConfiguration: vi.fn(() => ({
         get: vi.fn((key: string, fallback: unknown) => {
-          if (key === 'receiver.enabled') return receiverConfig.enabled
+          if (key === 'receiver.autoStart') return receiverConfig.autoStart
           if (key === 'receiver.host') return receiverConfig.host
           if (key === 'receiver.port') return receiverConfig.port
           if (key === 'buffer.maxSpans') return receiverConfig.maxSpans
@@ -158,6 +183,8 @@ vi.mock('vscode', () => {
       createFileSystemWatcher,
       workspaceFolders: [{ uri: { fsPath: '/workspace' } }],
       openTextDocument,
+      findFiles,
+      fs: { readFile },
     },
     env: {
       clipboard: {
@@ -231,7 +258,12 @@ describe('activate', () => {
     resolveTelemetryLimits.mockClear()
     createdDisposables.length = 0
     commandHandlers.clear()
-    receiverConfig.enabled = true
+    findFiles.mockClear()
+    readFile.mockClear()
+    detection.hasAutotelDep = true
+    detection.files = ['/workspace/package.json']
+    detection.autotelPath = null
+    receiverConfig.autoStart = 'always'
     receiverConfig.host = '127.0.0.1'
     receiverConfig.port = 4318
     receiverConfig.maxSpans = 10000
@@ -277,7 +309,8 @@ describe('activate', () => {
     expect(context.subscriptions.length).toBeGreaterThanOrEqual(7)
   })
 
-  it('starts receiver on activate when enabled', async () => {
+  it('starts receiver on activate when autoStart is "always"', async () => {
+    receiverConfig.autoStart = 'always'
     const context = { subscriptions: [] as { dispose(): void }[] }
 
     activate(context as never)
@@ -285,6 +318,57 @@ describe('activate', () => {
 
     expect(createServer).toHaveBeenCalledTimes(1)
     expect(fakeServer.listen).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not start receiver on activate when autoStart is "off"', async () => {
+    receiverConfig.autoStart = 'off'
+    const context = { subscriptions: [] as { dispose(): void }[] }
+
+    activate(context as never)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(createServer).not.toHaveBeenCalled()
+    expect(fakeServer.listen).not.toHaveBeenCalled()
+  })
+
+  it('auto-starts on "onAutotelProject" when the workspace depends on autotel', async () => {
+    receiverConfig.autoStart = 'onAutotelProject'
+    detection.hasAutotelDep = true
+    const context = { subscriptions: [] as { dispose(): void }[] }
+
+    activate(context as never)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(createServer).toHaveBeenCalledTimes(1)
+    expect(fakeServer.listen).toHaveBeenCalledTimes(1)
+  })
+
+  it('detects autotel in a large monorepo regardless of scan position', async () => {
+    // Regression guard: detection must not be capped to the first N package.json
+    // files, or auto-start becomes nondeterministic in big monorepos.
+    receiverConfig.autoStart = 'onAutotelProject'
+    const files = Array.from({ length: 250 }, (_, i) => `/workspace/packages/p${i}/package.json`)
+    detection.files = files
+    detection.autotelPath = files[200] // well past any small cap
+    const context = { subscriptions: [] as { dispose(): void }[] }
+
+    activate(context as never)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(createServer).toHaveBeenCalledTimes(1)
+    expect(fakeServer.listen).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays stopped on "onAutotelProject" when no autotel dependency is present', async () => {
+    receiverConfig.autoStart = 'onAutotelProject'
+    detection.hasAutotelDep = false
+    const context = { subscriptions: [] as { dispose(): void }[] }
+
+    activate(context as never)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(createServer).not.toHaveBeenCalled()
+    expect(fakeServer.listen).not.toHaveBeenCalled()
   })
 
   it('deactivate disposes registered command disposables', () => {
@@ -341,12 +425,27 @@ describe('activate', () => {
   // unit-test here. The HTTP ingest path is covered end-to-end in
   // extension.integration.test.ts against a real server.
 
-  it('does not start receiver on non-loopback host without consent', async () => {
+  it('auto-start on a non-loopback host blocks silently without a modal prompt', async () => {
+    // Auto-start must never nag: opening a window where host is set to 0.0.0.0
+    // should not pop a modal on every activation — it blocks and logs instead.
     receiverConfig.host = '0.0.0.0'
-    showWarningMessage.mockResolvedValue(undefined)
     const context = { subscriptions: [] as { dispose(): void }[] }
 
     activate(context as never)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(showWarningMessage).not.toHaveBeenCalled()
+    expect(createServer).not.toHaveBeenCalled()
+  })
+
+  it('manual start prompts on a non-loopback host and does not start without consent', async () => {
+    receiverConfig.autoStart = 'off'
+    receiverConfig.host = '0.0.0.0'
+    showWarningMessage.mockResolvedValue(undefined)
+    const context = { subscriptions: [] as { dispose(): void }[] }
+    activate(context as never)
+
+    await commandHandlers.get('autotel.start')?.()
     await new Promise((resolve) => setImmediate(resolve))
 
     expect(showWarningMessage).toHaveBeenCalledWith(
@@ -357,15 +456,32 @@ describe('activate', () => {
     expect(createServer).not.toHaveBeenCalled()
   })
 
-  it('starts receiver on non-loopback host when consent is granted', async () => {
+  it('manual start binds a non-loopback host once consent is granted', async () => {
+    receiverConfig.autoStart = 'off'
     receiverConfig.host = '0.0.0.0'
     showWarningMessage.mockResolvedValue('Start anyway')
+    const context = { subscriptions: [] as { dispose(): void }[] }
+    activate(context as never)
+
+    await commandHandlers.get('autotel.start')?.()
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(createServer).toHaveBeenCalledTimes(1)
+    expect(fakeServer.listen).toHaveBeenCalledTimes(1)
+  })
+
+  it('auto-start stays silent when the port is already in use', async () => {
+    // Simulate EADDRINUSE: the error handler fires instead of listen succeeding.
+    fakeServer.listen.mockImplementation(() => fakeServer)
+    fakeServer.once.mockImplementation((event: string, cb: (err: NodeJS.ErrnoException) => void) => {
+      if (event === 'error') cb(Object.assign(new Error('in use'), { code: 'EADDRINUSE' }))
+      return fakeServer
+    })
     const context = { subscriptions: [] as { dispose(): void }[] }
 
     activate(context as never)
     await new Promise((resolve) => setImmediate(resolve))
 
-    expect(createServer).toHaveBeenCalledTimes(1)
-    expect(fakeServer.listen).toHaveBeenCalledTimes(1)
+    expect(showWarningMessage).not.toHaveBeenCalled()
   })
 })

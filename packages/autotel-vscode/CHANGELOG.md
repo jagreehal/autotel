@@ -1,5 +1,13 @@
 # autotel-vscode
 
+## 1.1.0
+
+### Minor Changes
+
+- Manual-by-default receiver start. The OTLP receiver no longer binds port 4318 in every window on activation. A new `autotel.receiver.autoStart` setting (`off` | `onAutotelProject` | `always`, default `onAutotelProject`) replaces `autotel.receiver.enabled`: it auto-starts only in workspaces that depend on `autotel`, and stays dormant elsewhere until you run **Autotel: Start Receiver** (or click the status bar item). This keeps the extension from fighting a local collector or a second VS Code window over 4318. Detection scans every workspace `package.json` (no result cap), so auto-start is deterministic in large monorepos.
+- Status bar now shows receiver state and the configured port at a glance — `Autotel :4318 (12)` when running (port + buffered span count), `Autotel off :4318` when stopped, and a `busy` warning when the port can't bind. Clicking it starts when stopped and stops when running.
+- Auto-start is quiet; manual start is loud. When the port is already in use, or the host is non-loopback and needs consent, auto-start just reflects that in the status bar and logs to the **Autotel** output channel — no pop-ups. Starting by hand still shows a notification if it can't bind, because you explicitly asked.
+
 ## 4.0.0
 
 ### Minor Changes

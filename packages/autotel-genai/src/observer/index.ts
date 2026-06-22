@@ -16,6 +16,18 @@ export type {
   AiSdkUsage,
   ObserveAiSdkOptions,
 } from './ai-sdk.js';
+export { autotelTelemetry } from './ai-sdk-telemetry.js';
+export type {
+  AutotelTelemetryIntegration,
+  AutotelTelemetryOptions,
+} from './ai-sdk-telemetry.js';
+export { subscribeAiTelemetry } from './ai-sdk-channel.js';
+export type { SubscribeAiTelemetryOptions } from './ai-sdk-channel.js';
+export {
+  promptToGenAiMessages,
+  contentToGenAiMessage,
+} from './ai-sdk-messages.js';
+export type { ConvertedPrompt } from './ai-sdk-messages.js';
 export { createLangChainObserver } from './langchain.js';
 export type {
   LangChainObserverHandler,
@@ -26,6 +38,7 @@ export type {
   AgentStartEvent,
   ChatEndEvent,
   ChatStartEvent,
+  ChatStreamTiming,
   GenAiObserver,
   GenAiObserverEvent,
   GenAiObserverOptions,

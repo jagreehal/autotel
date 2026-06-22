@@ -9,7 +9,7 @@
  * boundaries, queues, or a resumed run.
  */
 
-import type { Context, Link, TimeInput, Tracer } from '@opentelemetry/api';
+import type { Context, Link, Span, TimeInput, Tracer } from '@opentelemetry/api';
 import type {
   GenAiAgentInput,
   GenAiRequestInput,
@@ -104,6 +104,25 @@ export interface ChatEndEvent extends SpanEnd {
   costModel?: string;
   /** Opt-in content — written only when `exportContent` returns it. */
   outputMessages?: GenAiMessage[] | string;
+  /**
+   * Streaming-performance extensions for this model call. `timeToFirstChunk`
+   * belongs on {@link ChatEndEvent.response} (it is the spec attribute); the
+   * fields here are the autotel extensions recorded on finish.
+   */
+  streaming?: ChatStreamTiming;
+}
+
+/**
+ * Streaming-performance fields written on a `chat.end` span (all seconds /
+ * tokens-per-second). All are autotel extensions — see `streaming.ts`.
+ */
+export interface ChatStreamTiming {
+  /** Total response time, seconds → `gen_ai.response.time_to_finish`. */
+  timeToFinish?: number;
+  /** Throughput → `gen_ai.response.output_tokens_per_second`. */
+  outputTokensPerSecond?: number;
+  /** Mean inter-chunk gap, seconds → `gen_ai.response.time_per_output_chunk`. */
+  timePerOutputChunk?: number;
 }
 
 /** Start of a tool execution. */
@@ -194,4 +213,12 @@ export interface GenAiObserverOptions {
    * it a root.
    */
   resolveParentContext?: (event: GenAiObserverEvent) => Context | undefined;
+  /**
+   * Called with the live {@link Span} immediately after each `*.start` event
+   * opens it, keyed by the event `id`. Lets a caller enter the span's context
+   * later — e.g. to make provider HTTP calls or a tool's nested `generateText`
+   * children of the span — without the observer keeping it active on the
+   * ambient context.
+   */
+  onSpanStart?: (id: string, span: Span) => void;
 }

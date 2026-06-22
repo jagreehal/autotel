@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AUTOTEL_ENRICHED_ATTR,
+  autotelEnrich,
   estimateAiSdkCost,
   extractAiSdkModel,
   extractAiSdkUsage,
@@ -92,5 +94,30 @@ describe('cost from AI SDK attributes', () => {
     expect(
       extractAiSdkModel({ 'gen_ai.request.model': 'a', 'ai.model.id': 'b' }),
     ).toBe('a');
+  });
+});
+
+describe('autotelEnrich', () => {
+  it('stamps a provenance marker and merges mapped attributes', () => {
+    const enrich = autotelEnrich({
+      attributes: (ctx) => ({ 'app.session': String(ctx.runtimeContext?.sessionId) }),
+    });
+    const attrs = enrich({
+      spanType: 'languageModel',
+      operationId: 'ai.generateText',
+      callId: 'c1',
+      runtimeContext: { sessionId: 's1' },
+    });
+    expect(attrs[AUTOTEL_ENRICHED_ATTR]).toBe(true);
+    expect(attrs['app.session']).toBe('s1');
+  });
+
+  it('works with no attributes mapper', () => {
+    const attrs = autotelEnrich()({
+      spanType: 'operation',
+      operationId: 'ai.streamText',
+      callId: 'c2',
+    });
+    expect(attrs).toEqual({ [AUTOTEL_ENRICHED_ATTR]: true });
   });
 });

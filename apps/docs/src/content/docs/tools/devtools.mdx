@@ -94,10 +94,11 @@ Call `close()` on shutdown to release the port and WebSocket clients.
 
 ## GenAI runs
 
-When your app emits OpenTelemetry GenAI spans — any of `gen_ai.system`,
-`gen_ai.provider.name`, or `gen_ai.operation.name` — the **GenAI** tab turns
+When your app emits OpenTelemetry GenAI spans — for example spans with
+`gen_ai.provider.name` and `gen_ai.operation.name` — the **GenAI** tab turns
 them into a readable view of each LLM and agent run. It works with anything that
-follows the spec, including the Vercel AI SDK (`experimental_telemetry`),
+follows the spec, including the Vercel AI SDK via
+`registerTelemetry(autotelTelemetry())` or `subscribeAiTelemetry()`,
 Pydantic AI + Logfire, OpenAI Agents, Anthropic, Google GenAI, LangChain and
 OpenLLMetry.
 

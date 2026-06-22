@@ -108,6 +108,7 @@ export function createGenAiObserver(
     };
     const span = tracer.startSpan(name, spanOptions, parent);
     registry.add(event.id, span, event.parentId);
+    options.onSpanStart?.(event.id, span);
     return span;
   }
 
@@ -164,6 +165,23 @@ export function createGenAiObserver(
         ? estimateLLMCost(costModel, event.usage)
         : undefined;
       span.setAttributes(genAiUsageAttributes({ ...event.usage, costUsd }));
+    }
+    if (event.streaming) {
+      const { timeToFinish, outputTokensPerSecond, timePerOutputChunk } =
+        event.streaming;
+      const streamingAttrs: GenAiAttributeMap = {};
+      if (timeToFinish !== undefined) {
+        streamingAttrs[GEN_AI.RESPONSE_TIME_TO_FINISH] = timeToFinish;
+      }
+      if (outputTokensPerSecond !== undefined) {
+        streamingAttrs[GEN_AI.RESPONSE_OUTPUT_TOKENS_PER_SECOND] =
+          outputTokensPerSecond;
+      }
+      if (timePerOutputChunk !== undefined) {
+        streamingAttrs[GEN_AI.RESPONSE_TIME_PER_OUTPUT_CHUNK] =
+          timePerOutputChunk;
+      }
+      span.setAttributes(streamingAttrs);
     }
     const content = approvedContent(event);
     if (content?.type === 'chat.end') {

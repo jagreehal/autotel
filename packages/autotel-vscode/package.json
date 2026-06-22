@@ -1,6 +1,6 @@
 {
   "name": "autotel-vscode",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "displayName": "Autotel",
   "description": "OpenTelemetry observability inside VSCode — receives OTLP, navigates traces, jumps to source.",
@@ -127,10 +127,20 @@
     "configuration": {
       "title": "Autotel",
       "properties": {
-        "autotel.receiver.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Boot the OTLP receiver on extension activation."
+        "autotel.receiver.autoStart": {
+          "type": "string",
+          "enum": [
+            "off",
+            "onAutotelProject",
+            "always"
+          ],
+          "enumDescriptions": [
+            "Never start automatically. Run \"Autotel: Start Receiver\" or click the status bar item to start.",
+            "Start automatically only when the workspace depends on autotel; otherwise stay dormant until started manually.",
+            "Start automatically in every workspace on activation (the pre-1.1 behaviour)."
+          ],
+          "default": "onAutotelProject",
+          "description": "When the OTLP receiver should start. By default it only auto-starts in projects that depend on autotel; elsewhere start it manually."
         },
         "autotel.receiver.port": {
           "type": "number",

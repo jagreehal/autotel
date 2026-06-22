@@ -150,12 +150,19 @@ export type {
 // --- Vercel AI SDK bridge --------------------------------------------------
 export {
   AI_SDK_ATTR,
+  AUTOTEL_ENRICHED_ATTR,
   normalizeAiSdkProvider,
   extractAiSdkUsage,
   extractAiSdkModel,
   mapAiSdkAttributes,
   estimateAiSdkCost,
   recordAiSdkCost,
+  autotelEnrich,
+} from './ai-sdk-bridge.js';
+export type {
+  AiSdkSpanType,
+  AiSdkEnrichContext,
+  AutotelEnrichOptions,
 } from './ai-sdk-bridge.js';
 
 // --- Event-stream observer adapter -----------------------------------------
@@ -163,6 +170,10 @@ export {
   createGenAiObserver,
   SpanRegistry,
   observeAiSdkResult,
+  autotelTelemetry,
+  subscribeAiTelemetry,
+  promptToGenAiMessages,
+  contentToGenAiMessage,
   createLangChainObserver,
 } from './observer/index.js';
 export type {
@@ -172,6 +183,10 @@ export type {
   AiSdkToolResult,
   AiSdkUsage,
   ObserveAiSdkOptions,
+  AutotelTelemetryIntegration,
+  AutotelTelemetryOptions,
+  SubscribeAiTelemetryOptions,
+  ConvertedPrompt,
   LangChainObserverHandler,
   LangChainObserverOptions,
 } from './observer/index.js';
@@ -180,6 +195,7 @@ export type {
   AgentStartEvent,
   ChatEndEvent,
   ChatStartEvent,
+  ChatStreamTiming,
   GenAiObserver,
   GenAiObserverEvent,
   GenAiObserverOptions,

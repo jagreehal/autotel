@@ -207,3 +207,66 @@ export function recordAiSdkCost(
   if (cost !== undefined) ctx.setAttribute(GEN_AI.USAGE_COST_USD, cost);
   return cost;
 }
+
+// --- `@ai-sdk/otel` enrichSpan interop -------------------------------------
+
+/** Marks a span as having passed through an autotel-aware `enrichSpan`. */
+export const AUTOTEL_ENRICHED_ATTR = 'autotel.enriched';
+
+/** Span kinds the `@ai-sdk/otel` `OpenTelemetry` integration emits. */
+export type AiSdkSpanType =
+  | 'operation'
+  | 'step'
+  | 'languageModel'
+  | 'tool'
+  | 'embedding'
+  | 'reranking';
+
+/** The context `@ai-sdk/otel` passes to an `enrichSpan` callback. */
+export interface AiSdkEnrichContext {
+  spanType: AiSdkSpanType;
+  operationId: string;
+  callId: string;
+  runtimeContext?: Record<string, unknown>;
+}
+
+export interface AutotelEnrichOptions {
+  /**
+   * Map the enrich context to extra span attributes — e.g. promote
+   * `runtimeContext` fields (sessionId, tenantId) onto the span. Returns
+   * `undefined` to add nothing for that span.
+   */
+  attributes?: (
+    ctx: AiSdkEnrichContext,
+  ) => Record<string, string | number | boolean> | undefined;
+}
+
+/**
+ * Build an `enrichSpan` callback for the `@ai-sdk/otel` `OpenTelemetry`
+ * integration. It stamps an autotel provenance marker and merges any attributes
+ * your `attributes` mapper returns:
+ *
+ * ```ts
+ * import { registerTelemetry } from 'ai';
+ * import { OpenTelemetry } from '@ai-sdk/otel';
+ * import { autotelEnrich } from 'autotel-genai/ai-sdk';
+ *
+ * registerTelemetry(new OpenTelemetry({ enrichSpan: autotelEnrich() }));
+ * ```
+ *
+ * Important: `enrichSpan` **cannot add cost**. The AI SDK only passes
+ * `{ spanType, operationId, callId, runtimeContext }` to the callback — no token
+ * usage and no resolved model — and its own attributes override custom keys. For
+ * `gen_ai.usage.cost.usd` on the model span, use `autotelTelemetry()` from
+ * `autotel-genai/observer` (it owns span creation), or price spans after the
+ * fact with {@link estimateAiSdkCost}. `autotel-devtools` also prices `gen_ai`
+ * spans on render regardless of which integration emitted them.
+ */
+export function autotelEnrich(
+  options: AutotelEnrichOptions = {},
+): (ctx: AiSdkEnrichContext) => Record<string, string | number | boolean> {
+  return (ctx) => ({
+    [AUTOTEL_ENRICHED_ATTR]: true,
+    ...options.attributes?.(ctx),
+  });
+}

@@ -69,6 +69,6 @@
   },
   "homepage": "https://github.com/jagreehal/autotel#readme",
   "overrides": {
-    "vite": ">=7.1.11"
+    "vite": ">=7.1.11 <8"
   }
 }

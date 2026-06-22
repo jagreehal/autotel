@@ -18,6 +18,9 @@ export default defineConfig({
       configDir: path.join(dirname, '.storybook'),
     }),
   ],
+  optimizeDeps: {
+    exclude: ['@storybook/svelte'],
+  },
   test: {
     name: 'storybook',
     browser: {

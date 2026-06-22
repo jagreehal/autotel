@@ -123,10 +123,9 @@ function registerCommands(context: vscode.ExtensionContext): void {
   }
 }
 
-function getReceiverConfig(): { enabled: boolean; host: string; port: number; maxSpans: number; maxLogs: number } {
+function getReceiverConfig(): { host: string; port: number; maxSpans: number; maxLogs: number } {
   const config = vscode.workspace.getConfiguration('autotel')
   return {
-    enabled: config.get<boolean>('receiver.enabled', true),
     host: config.get<string>('receiver.host', '127.0.0.1'),
     port: config.get<number>('receiver.port', 4318),
     maxSpans: config.get<number>('buffer.maxSpans', 10000),
@@ -134,23 +133,97 @@ function getReceiverConfig(): { enabled: boolean; host: string; port: number; ma
   }
 }
 
+// When the receiver should boot. Default is "onAutotelProject": stay dormant
+// (no port bound) unless the workspace actually depends on autotel — the user
+// starts it manually elsewhere. "off" never auto-starts; "always" restores the
+// pre-1.1 behaviour of binding in every window on activation.
+type AutoStartMode = 'off' | 'onAutotelProject' | 'always'
+
+function getAutoStartMode(): AutoStartMode {
+  const mode = vscode.workspace
+    .getConfiguration('autotel')
+    .get<AutoStartMode>('receiver.autoStart', 'onAutotelProject')
+  return mode === 'off' || mode === 'always' ? mode : 'onAutotelProject'
+}
+
+async function packageDependsOnAutotel(uri: vscode.Uri): Promise<boolean> {
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri)
+    const pkg = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
+      const deps = pkg[field]
+      if (deps && typeof deps === 'object') {
+        const names = Object.keys(deps as Record<string, string>)
+        if (names.some((name) => name === 'autotel' || name.startsWith('autotel-'))) {
+          return true
+        }
+      }
+    }
+  } catch {
+    // Missing or invalid package.json — skip it.
+  }
+  return false
+}
+
+// Detection mirrors Wallaby's "Smart Start": only wake up where it's wanted.
+// Scans every workspace package.json (skipping node_modules) for an autotel
+// dependency. No result cap — in a large monorepo the autotel-dependent package
+// can be anywhere in the list, and capping would make auto-start
+// nondeterministic. Reads are batched with early exit so the common case stays
+// fast and we never read more files than needed.
+async function workspaceUsesAutotel(): Promise<boolean> {
+  const pkgFiles = await vscode.workspace.findFiles(
+    '**/package.json',
+    '**/node_modules/**',
+  )
+  const BATCH_SIZE = 24
+  for (let i = 0; i < pkgFiles.length; i += BATCH_SIZE) {
+    const batch = pkgFiles.slice(i, i + BATCH_SIZE)
+    const results = await Promise.all(batch.map(packageDependsOnAutotel))
+    if (results.some(Boolean)) return true
+  }
+  return false
+}
+
+async function maybeAutoStart(): Promise<void> {
+  const mode = getAutoStartMode()
+  if (mode === 'off') {
+    outputChannel?.appendLine(
+      'Receiver auto-start disabled (autotel.receiver.autoStart = "off"). Run "Autotel: Start Receiver" or click the status bar item to start.',
+    )
+    return
+  }
+  if (mode === 'onAutotelProject' && !(await workspaceUsesAutotel())) {
+    outputChannel?.appendLine(
+      'No autotel dependency found in the workspace; receiver left stopped. Run "Autotel: Start Receiver" to start manually.',
+    )
+    return
+  }
+  await startReceiver(true)
+}
+
 function updateStatusBar(state: ReceiverState): void {
   if (!statusBarItem) return
+  const { host, port } = getReceiverConfig()
   const spanCount = traces.length
   if (state === 'running') {
-    statusBarItem.text = `$(radio-tower) Autotel ${spanCount}`
+    // Show the bound port so the receiver endpoint is always visible at a glance.
+    statusBarItem.text = `$(radio-tower) Autotel :${port} (${spanCount})`
     statusBarItem.tooltip = droppedTraceCount || droppedLogCount
-      ? `Receiver running. Spans: ${traces.length}, logs: ${logs.length}, dropped spans: ${droppedTraceCount}, dropped logs: ${droppedLogCount}`
-      : `Receiver running. Spans: ${traces.length}, logs: ${logs.length}`
+      ? `Receiver running on ${host}:${port}. Spans: ${traces.length}, logs: ${logs.length}, dropped spans: ${droppedTraceCount}, dropped logs: ${droppedLogCount}. Click to stop.`
+      : `Receiver running on ${host}:${port}. Spans: ${traces.length}, logs: ${logs.length}. Click to stop.`
+    statusBarItem.command = 'autotel.stop'
     return
   }
   if (state === 'port-busy') {
-    statusBarItem.text = '$(warning) Autotel port busy'
-    statusBarItem.tooltip = 'Receiver could not bind to configured host/port.'
+    statusBarItem.text = `$(warning) Autotel :${port} busy`
+    statusBarItem.tooltip = `Receiver could not bind to ${host}:${port} — the port is already in use. Click to retry, or run "Autotel: Set Receiver Port".`
+    statusBarItem.command = 'autotel.start'
     return
   }
-  statusBarItem.text = '$(primitive-square) Autotel stopped'
-  statusBarItem.tooltip = 'Receiver is stopped.'
+  statusBarItem.text = `$(circle-slash) Autotel off :${port}`
+  statusBarItem.tooltip = `Receiver stopped (would bind ${host}:${port}). Click to start.`
+  statusBarItem.command = 'autotel.start'
 }
 
 
@@ -609,8 +682,20 @@ function rebuildSpanIndex(): void {
   )
 }
 
-async function ensureReceiverHostAllowed(host: string): Promise<ReceiverStartGuard> {
+async function ensureReceiverHostAllowed(
+  host: string,
+  silent: boolean,
+): Promise<ReceiverStartGuard> {
   if (host === '127.0.0.1' || host === 'localhost') return 'ok'
+  // Never auto-bind a non-loopback host without explicit consent, and never nag
+  // with a modal on every window open — block silently and leave a breadcrumb.
+  if (silent) {
+    outputChannel?.appendLine(
+      `Receiver not auto-started: host ${host} is non-loopback. Run "Autotel: Start Receiver" to start it (you'll be asked to confirm).`,
+    )
+    updateStatusBar('stopped')
+    return 'blocked'
+  }
   const allow = await vscode.window.showWarningMessage(
     `Autotel receiver host is set to ${host}. This exposes telemetry beyond loopback. Start anyway?`,
     { modal: true },
@@ -622,13 +707,16 @@ async function ensureReceiverHostAllowed(host: string): Promise<ReceiverStartGua
   return 'blocked'
 }
 
-async function startReceiver(): Promise<void> {
+// `silent` suppresses user-facing popups — used for auto-start so opening a
+// window in an autotel project where 4318 is already taken (e.g. a real
+// collector) doesn't nag. Manual starts stay loud: you asked, so you're told.
+async function startReceiver(silent = false): Promise<void> {
   if (receiverServer) {
     updateStatusBar('running')
     return
   }
   const { host, port, maxSpans, maxLogs } = getReceiverConfig()
-  const guard = await ensureReceiverHostAllowed(host)
+  const guard = await ensureReceiverHostAllowed(host, silent)
   if (guard === 'blocked') return
   const server = createServer()
   // DevtoolsServer attaches its WebSocket (/ws) to this http server;
@@ -650,9 +738,11 @@ async function startReceiver(): Promise<void> {
       outputChannel?.appendLine(`Receiver failed to start: ${error.message}`)
       if (error.code === 'EADDRINUSE') {
         updateStatusBar('port-busy')
-        void vscode.window.showWarningMessage(
-          `Autotel receiver could not start on ${host}:${port}. Port is already in use.`,
-        )
+        if (!silent) {
+          void vscode.window.showWarningMessage(
+            `Autotel receiver could not start on ${host}:${port}. Port is already in use.`,
+          )
+        }
       } else {
         updateStatusBar('stopped')
       }
@@ -1123,24 +1213,26 @@ export function activate(context: vscode.ExtensionContext): void {
   extensionDisposables.push(codeLensSub, hoverSub)
 
   const configSub = vscode.workspace.onDidChangeConfiguration((event) => {
-    if (!event.affectsConfiguration('autotel.receiver.enabled') &&
-        !event.affectsConfiguration('autotel.receiver.port') &&
-        !event.affectsConfiguration('autotel.receiver.host')) {
-      return
+    // autoStart only governs activation, so don't disturb the current session —
+    // just refresh the status bar in case the displayed state should change.
+    if (event.affectsConfiguration('autotel.receiver.autoStart')) {
+      updateStatusBar(receiverServer ? 'running' : 'stopped')
     }
-    const { enabled } = getReceiverConfig()
-    if (!enabled) {
-      void stopReceiver()
-      return
+    // Host/port changes rebind a running receiver; while stopped, just reflect
+    // the new port in the status bar so the displayed endpoint stays accurate.
+    if (event.affectsConfiguration('autotel.receiver.port') ||
+        event.affectsConfiguration('autotel.receiver.host')) {
+      if (receiverServer) {
+        void stopReceiver().then(() => startReceiver())
+      } else {
+        updateStatusBar('stopped')
+      }
     }
-    void stopReceiver().then(() => startReceiver())
   })
   context.subscriptions.push(configSub)
   extensionDisposables.push(configSub)
 
-  if (getReceiverConfig().enabled) {
-    void startReceiver()
-  }
+  void maybeAutoStart()
 }
 
 export function deactivate(): void {

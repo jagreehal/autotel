@@ -49,6 +49,7 @@ export default defineConfig({
     'parse-error': 'src/parse-error.ts',
     'drain-pipeline': 'src/drain-pipeline.ts',
     enrichers: 'src/enrichers.ts',
+    diagnostics: 'src/diagnostics/index.ts',
   },
   format: ['esm', 'cjs'], // Build both ESM and CJS formats
   tsconfig: 'tsconfig.build.json',

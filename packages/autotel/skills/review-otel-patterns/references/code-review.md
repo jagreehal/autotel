@@ -49,10 +49,11 @@ Run through this list when adding observability to a new service or auditing an 
 
 ## AI / LLM
 
-- [ ] **`withAiTelemetry()` from `autotel-edge`.** Captures `gen_ai.*` semantic attributes automatically.
+- [ ] **Node/server runtimes register `autotelTelemetry()`.** `registerTelemetry(autotelTelemetry())` captures canonical `gen_ai.*`, tool spans, cost, and streaming timing.
+- [ ] **Edge runtimes use `withAiTelemetry()` from `autotel-edge`.** Captures `gen_ai.*` semantic attributes automatically.
 - [ ] **No bespoke `ai.tokens` attributes.** Use `gen_ai.usage.input_tokens`, etc.
-- [ ] **Cost tracking via the `cost` option** — outputs `gen_ai.cost.usd` on the span.
-- [ ] **Tool-call spans enabled.** `experimental_telemetry: { isEnabled: true }`.
+- [ ] **Cost tracking is canonical.** Use `gen_ai.usage.cost.usd`, not custom cost keys.
+- [ ] **Tool-call spans are emitted by the integration.** No plain log-only tool activity.
 
 ## Testing
 
