@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite';
-import { expect } from 'storybook/test';
+import { expect, userEvent } from 'storybook/test';
 import SpanDetailPanel from './SpanDetailPanel.svelte';
 import type { SpanData, TraceData } from '../types';
 
@@ -85,5 +85,39 @@ export const Dark: Story = {
     await expect(
       await canvas.findByText('datadog.host.name'),
     ).toBeInTheDocument();
+  },
+};
+
+// A span with a cross-trace link (`span.links`). The linked Trace ID / Span ID
+// render as buttons that navigate to the linked span in the Traces waterfall.
+const linkedSpan: SpanData = {
+  ...span,
+  spanId: '99aa99aa99aa99aa',
+  name: 'consume order.created',
+  kind: 'CONSUMER',
+  links: [
+    {
+      traceId: 'ffeeffeeffeeffeeffeeffeeffeeffee',
+      spanId: 'abcabcabcabcabca',
+      attributes: { 'messaging.operation': 'publish' },
+    },
+  ],
+};
+
+export const WithLinks: Story = {
+  args: {
+    span: linkedSpan,
+    trace: { ...trace, rootSpan: linkedSpan, spans: [linkedSpan] },
+    onClose: () => {},
+  },
+  play: async ({ canvas }) => {
+    // Expand the collapsed Links section, then assert the linked IDs render as
+    // navigable buttons (not plain text).
+    await userEvent.click(await canvas.findByText('Links (1)'));
+    const links = await canvas.findAllByTitle(
+      'Open linked span in the Traces waterfall',
+    );
+    await expect(links.length).toBeGreaterThan(0);
+    await expect(links[0].tagName).toBe('BUTTON');
   },
 };

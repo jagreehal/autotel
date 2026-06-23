@@ -35,9 +35,10 @@ export const pipActiveSignal = signal(false);
 
 export const selectedTabSignal = signal<TabType>('traces');
 export const selectedTraceIdSignal = signal<string | null>(null);
-// One-shot deep-link target: when set, the trace detail view selects this span
-// on open, then clears it. Lets any view (Flow, GenAI, Errors) say "open trace
-// X focused on span Y" without each managing its own selection plumbing.
+// Persistent selected-span source of truth. `TraceDetailView` derives the
+// selected span object from this signal (and writes it back on user clicks), so
+// any view (Flow, GenAI, Errors) can say "open trace X focused on span Y" by
+// setting it, and full-page mode can reflect it in the shareable URL.
 export const selectedSpanIdSignal = signal<string | null>(null);
 
 // External deep-link request (e.g. the VS Code extension opens the widget at a
@@ -236,6 +237,16 @@ export const traceSortSignal = signal<{ key: TraceSortKey; dir: SortDir }>({
   key: 'time',
   dir: 'desc',
 });
+
+// Traces-list filters. Global (not local component state) so the full-page UI
+// can reflect them in the shareable URL — see `url-sync.ts` / `Widget.svelte`.
+export type TraceStatusFilter = 'all' | 'error' | 'ok';
+export const traceQuerySignal = signal('');
+export const traceStatusFilterSignal = signal<TraceStatusFilter>('all');
+export const traceMinDurationSignal = signal(0);
+
+// GenAI-list filter — also global for the same shareable-URL reason.
+export const genaiQuerySignal = signal('');
 
 // Default direction when first switching to a key: numeric/time keys descend
 // (biggest/newest first), text/status keys ascend.

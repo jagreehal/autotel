@@ -116,61 +116,133 @@ interface AiSdkContentPart {
   output?: { type?: string; value?: unknown } | unknown
 }
 
+// Canonical gen_ai semconv part (autotel-genai): tool calls/results live in
+// `name`/`arguments`/`response`, not `content`.
+interface CanonicalPart {
+  type?: string
+  content?: unknown
+  id?: string
+  name?: string
+  arguments?: unknown
+  response?: { type?: string; value?: unknown } | unknown
+}
+
+// A tool-loop part, classified into the shape `buildToolMessage` consumes. The
+// two raw encodings (Vercel `tool-call`/`tool-result` and canonical
+// `tool_call`/`tool_call_response`) differ only in field names; each has a
+// classifier that maps its parts onto this union, then shares the builder.
+type ToolPart =
+  | { kind: 'call'; call: GenAiToolCall }
+  | { kind: 'result'; result: { id?: string; value: unknown } }
+  | { kind: 'text'; text: string }
+
+// Unwrap a tool-result payload: both encodings may wrap the value as
+// `{ type, value }`, so pull `.value` out when present, else use it as-is.
+function unwrapToolResult(payload: unknown): unknown {
+  return payload && typeof payload === 'object' && 'value' in (payload as object)
+    ? (payload as { value: unknown }).value
+    : payload
+}
+
+function classifyAiSdkPart(part: AiSdkContentPart): ToolPart | null {
+  if (part.type === 'tool-call')
+    return {
+      kind: 'call',
+      call: {
+        id: part.toolCallId,
+        name: part.toolName ?? '',
+        arguments: parseJson(part.input) ?? part.input ?? {},
+      },
+    }
+  if (part.type === 'tool-result')
+    return {
+      kind: 'result',
+      result: { id: part.toolCallId, value: unwrapToolResult(part.output) },
+    }
+  if (part.type === 'text' || part.text !== undefined)
+    return { kind: 'text', text: String(part.text ?? '') }
+  return null
+}
+
+function classifyCanonicalPart(part: CanonicalPart): ToolPart | null {
+  if (part.type === 'tool_call')
+    return {
+      kind: 'call',
+      call: {
+        id: part.id,
+        name: part.name ?? '',
+        arguments: parseJson(part.arguments) ?? part.arguments ?? {},
+      },
+    }
+  if (part.type === 'tool_call_response')
+    return {
+      kind: 'result',
+      result: { id: part.id, value: unwrapToolResult(part.response) },
+    }
+  if (part.type === 'text' || part.type == null)
+    return { kind: 'text', text: String(part.content ?? '') }
+  return null
+}
+
+// Build a GenAiMessage from classified tool-loop parts. Tool calls and results
+// move into the structured fields so they render as tool chips/results instead
+// of empty or raw-JSON bubbles. When a tool message bundles MULTIPLE results,
+// return the `_toolResults` expansion sentinel — `expandMessage` (below) splits
+// it into one synthetic tool message per result so each lines up with its call.
+function buildToolMessage(
+  role: GenAiMessage['role'],
+  classified: ToolPart[],
+  finishReason: string | undefined,
+): GenAiMessage {
+  const toolCalls: GenAiToolCall[] = []
+  const textParts: GenAiMessagePart[] = []
+  const toolResults: Array<{ id?: string; value: unknown }> = []
+  for (const part of classified) {
+    if (part.kind === 'call') toolCalls.push(part.call)
+    else if (part.kind === 'result') toolResults.push(part.result)
+    else textParts.push({ kind: 'text', text: part.text })
+  }
+  if (toolResults.length > 1) {
+    const msg: GenAiMessage = { role, parts: [] }
+    ;(msg as GenAiMessage & { _toolResults?: typeof toolResults })._toolResults = toolResults
+    return msg
+  }
+  const msg: GenAiMessage = { role, parts: textParts }
+  if (toolCalls.length > 0) msg.toolCalls = toolCalls
+  if (toolResults.length === 1) {
+    msg.toolCallId = toolResults[0].id
+    msg.parts = [{ kind: 'json', value: toolResults[0].value }]
+  }
+  if (finishReason) msg.finishReason = finishReason
+  return msg
+}
+
 function normalizeMessage(raw: RawMessage): GenAiMessage {
   const role = (raw.role as GenAiMessage['role']) ?? 'user'
 
-  // Vercel AI SDK encodes tool calls and results as content parts with
-  // `type: 'tool-call'` / `type: 'tool-result'`. Pull those out into the
-  // structured GenAiMessage fields so they render in the dedicated UI
-  // instead of dumping raw JSON into the message body.
-  //
-  // When a single tool-role message bundles MULTIPLE tool-results, we expand
-  // into one synthetic tool message per result so each lines up with its
-  // matching assistant call (and each shows its own tool_call_id chip).
-  // Callers must check `_expanded` and splice the array of returned messages
-  // — see `expandMessage` below.
+  // Vercel AI SDK encodes tool calls and results as `content[]` parts with
+  // `type: 'tool-call'` / `type: 'tool-result'`; canonical gen_ai semconv
+  // (autotel-genai) uses `parts[]` with `type: 'tool_call'` /
+  // `type: 'tool_call_response'`. Both get classified onto the shared `ToolPart`
+  // union and built by `buildToolMessage`, so tool turns render as chips/results
+  // rather than raw-JSON or empty bubbles.
   if (Array.isArray(raw.content)) {
     const content = raw.content as AiSdkContentPart[]
-    const hasToolPart = content.some(
-      (p) => p.type === 'tool-call' || p.type === 'tool-result',
-    )
-    if (hasToolPart) {
-      const toolCalls: GenAiToolCall[] = []
-      const parts: GenAiMessagePart[] = []
-      const toolResults: Array<{ id?: string; value: unknown }> = []
-      for (const part of content) {
-        if (part.type === 'tool-call') {
-          toolCalls.push({
-            id: part.toolCallId,
-            name: part.toolName ?? '',
-            arguments: parseJson(part.input) ?? part.input ?? {},
-          })
-        } else if (part.type === 'tool-result') {
-          const out = part.output
-          const value =
-            out && typeof out === 'object' && 'value' in (out as object)
-              ? (out as { value: unknown }).value
-              : out
-          toolResults.push({ id: part.toolCallId, value })
-        } else if (part.type === 'text' || part.text !== undefined) {
-          parts.push({ kind: 'text', text: String(part.text ?? '') })
-        }
-      }
-      if (toolResults.length > 1) {
-        // Encode multiple tool results as an expansion sentinel — the caller
-        // (expandMessage) will produce one GenAiMessage per result.
-        const msg: GenAiMessage = { role, parts: [] }
-        ;(msg as GenAiMessage & { _toolResults?: typeof toolResults })._toolResults = toolResults
-        return msg
-      }
-      const msg: GenAiMessage = { role, parts }
-      if (toolCalls.length > 0) msg.toolCalls = toolCalls
-      if (toolResults.length === 1) {
-        msg.toolCallId = toolResults[0].id
-        msg.parts = [{ kind: 'json', value: toolResults[0].value }]
-      }
-      if (raw.finish_reason) msg.finishReason = raw.finish_reason
-      return msg
+    if (content.some((p) => p.type === 'tool-call' || p.type === 'tool-result')) {
+      const classified = content
+        .map(classifyAiSdkPart)
+        .filter((p): p is ToolPart => p !== null)
+      return buildToolMessage(role, classified, raw.finish_reason)
+    }
+  }
+
+  if (Array.isArray(raw.parts)) {
+    const parts = raw.parts as CanonicalPart[]
+    if (parts.some((p) => p.type === 'tool_call' || p.type === 'tool_call_response')) {
+      const classified = parts
+        .map(classifyCanonicalPart)
+        .filter((p): p is ToolPart => p !== null)
+      return buildToolMessage(role, classified, raw.finish_reason)
     }
   }
 

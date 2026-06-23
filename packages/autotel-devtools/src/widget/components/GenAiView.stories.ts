@@ -214,3 +214,15 @@ export const RunSummaryAndGuidedTour: Story = {
     await expect(canvas.getByRole('button', { name: /Exit tour/i })).toBeInTheDocument()
   },
 }
+
+// The `trace …` reference in the model header is a button that opens the trace
+// in the Traces waterfall (DX: jump straight from a generation to its trace).
+export const TraceReferenceIsClickable: Story = {
+  beforeEach: () => seedTraces([[openaiChat as unknown as SpanData]]),
+  play: async ({ canvas }) => {
+    const traceLink = await canvas.findByTitle('Open trace in waterfall')
+    await expect(traceLink).toBeInTheDocument()
+    await expect(traceLink.tagName).toBe('BUTTON')
+    await expect(traceLink.textContent).toMatch(/^trace /)
+  },
+}

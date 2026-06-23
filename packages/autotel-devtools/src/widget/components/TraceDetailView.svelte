@@ -38,7 +38,16 @@
   let { trace }: Props = $props();
 
   let viewMode = $state<ViewMode>('waterfall');
-  let selectedSpan = $state<SpanData | null>(null);
+
+  // The selected span is the persistent source of truth: it lives in
+  // `selectedSpanIdSignal` (set by deep-links, cross-view navigation, and user
+  // clicks) and is reflected in the URL by Widget in full-page mode. Derive the
+  // span object from the signal; write the signal to (de)select.
+  const selectedSpan = $derived(
+    trace.spans.find((s) => s.spanId === selectedSpanIdSignal.value) ?? null,
+  );
+  const selectSpan = (s: SpanData | null) =>
+    (selectedSpanIdSignal.value = s?.spanId ?? null);
 
   // Per-span search inside the waterfall. The query highlights matching rows
   // (by span name / service) while dimming the rest so the tree stays intact;
@@ -60,16 +69,6 @@
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  // Consume a one-shot deep-link: when another view asked to open a specific
-  // span (Flow/GenAI/Errors → "open in waterfall"), select it here, then clear
-  // the signal so it doesn't override the user's subsequent clicks.
-  $effect(() => {
-    const targetId = selectedSpanIdSignal.value;
-    if (!targetId) return;
-    const match = trace.spans.find((s) => s.spanId === targetId);
-    if (match) selectedSpan = match;
-    selectedSpanIdSignal.value = null;
-  });
   let copied = $state(false);
   let contentRef: HTMLDivElement | undefined = $state();
 
@@ -109,7 +108,7 @@
       if (helpShortcutsSignal.value) return; // help modal open
       if (e.key === 'Escape') {
         if (selectedSpan) {
-          selectedSpan = null;
+          selectSpan(null);
         } else {
           setSelectedTrace(null);
         }
@@ -128,11 +127,11 @@
       } else if (e.key === 'e' && !e.shiftKey) {
         e.preventDefault();
         const next = stepErrorSpan(trace.spans, selectedSpan, 1);
-        if (next) selectedSpan = next;
+        if (next) selectSpan(next);
       } else if (e.key === 'E' && e.shiftKey) {
         e.preventDefault();
         const next = stepErrorSpan(trace.spans, selectedSpan, -1);
-        if (next) selectedSpan = next;
+        if (next) selectSpan(next);
       }
     };
     window.addEventListener('keydown', handleKeydown);
@@ -312,7 +311,7 @@
       {#if viewMode === 'waterfall'}
         <WaterfallView
           {trace}
-          onSpanSelect={(s) => (selectedSpan = s)}
+          onSpanSelect={selectSpan}
           selectedSpanId={selectedSpan?.spanId}
           query={spanQuery}
           onMatchCount={(n) => (spanMatchCount = n)}
@@ -320,7 +319,7 @@
       {:else if viewMode === 'flame'}
         <FlameGraphView
           {trace}
-          onSpanSelect={(s) => (selectedSpan = s)}
+          onSpanSelect={selectSpan}
           selectedSpanId={selectedSpan?.spanId}
         />
       {:else}
@@ -331,7 +330,7 @@
                 {span}
                 {trace}
                 isSelected={selectedSpan?.spanId === span.spanId}
-                onSelect={() => (selectedSpan = span)}
+                onSelect={() => selectSpan(span)}
               />
             {/each}
           </div>
@@ -353,7 +352,7 @@
         <SpanDetailPanel
           span={selectedSpan}
           {trace}
-          onClose={() => (selectedSpan = null)}
+          onClose={() => selectSpan(null)}
         />
       </div>
     {/if}

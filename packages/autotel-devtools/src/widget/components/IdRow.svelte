@@ -4,8 +4,16 @@
   interface Props {
     label: string;
     value: string;
+    /**
+     * When provided, the value renders as a clickable link that runs this
+     * callback (e.g. navigate to the parent span / focus the trace). The copy
+     * button is always available regardless.
+     */
+    onActivate?: () => void;
+    /** Tooltip for the link (e.g. "Go to parent span"). */
+    activateTitle?: string;
   }
-  let { label, value }: Props = $props();
+  let { label, value, onActivate, activateTitle }: Props = $props();
 
   let copied = $state(false);
 
@@ -18,7 +26,18 @@
 
 <div class="flex items-center gap-2">
   <span class="text-fg-subtle w-24 flex-shrink-0">{label}:</span>
-  <code class="font-mono text-fg-muted truncate flex-1">{value}</code>
+  {#if onActivate}
+    <button
+      type="button"
+      onclick={onActivate}
+      title={activateTitle ?? 'Open'}
+      class="font-mono text-accent hover:underline truncate flex-1 text-left cursor-pointer"
+    >
+      {value}
+    </button>
+  {:else}
+    <code class="font-mono text-fg-muted truncate flex-1">{value}</code>
+  {/if}
   <button
     onclick={handleCopy}
     class="p-1 hover:bg-hover rounded transition-colors flex-shrink-0"

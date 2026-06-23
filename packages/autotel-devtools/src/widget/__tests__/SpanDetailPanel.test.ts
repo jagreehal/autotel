@@ -3,8 +3,13 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, render, screen, fireEvent } from '@testing-library/svelte';
 import SpanDetailPanel from '../components/SpanDetailPanel.svelte';
+import {
+  selectedTraceIdSignal,
+  selectedSpanIdSignal,
+  selectedTabSignal,
+} from '../store.svelte';
 import type { SpanData, TraceData } from '../types';
 
 function makeSpan(overrides: Partial<SpanData> = {}): SpanData {
@@ -63,6 +68,65 @@ describe('SpanDetailPanel — code location', () => {
       props: { span, trace: makeTrace(span), onClose: () => {} },
     });
     expect(screen.queryByText('Code Location')).toBeNull();
+  });
+});
+
+describe('SpanDetailPanel — navigable IDs', () => {
+  afterEach(() => {
+    cleanup();
+    selectedTraceIdSignal.value = null;
+    selectedSpanIdSignal.value = null;
+    selectedTabSignal.value = 'traces';
+  });
+
+  it('navigates to the parent span when the Parent Span ID link is clicked', () => {
+    const parent = makeSpan({ spanId: 'parent-1', name: 'parent' });
+    const child = makeSpan({
+      spanId: 'child-1',
+      parentSpanId: 'parent-1',
+      name: 'child',
+    });
+    const trace = makeTrace(parent);
+    trace.spans = [parent, child];
+    render(SpanDetailPanel, {
+      props: { span: child, trace, onClose: () => {} },
+    });
+
+    const link = screen.getByTitle('Go to parent span');
+    expect(link.tagName).toBe('BUTTON');
+    link.click();
+    expect(selectedTraceIdSignal.value).toBe(trace.traceId);
+    expect(selectedSpanIdSignal.value).toBe('parent-1');
+  });
+
+  it('leaves Parent Span ID as plain text when the parent is not in the trace', () => {
+    const child = makeSpan({ spanId: 'child-1', parentSpanId: 'remote-parent' });
+    render(SpanDetailPanel, {
+      props: { span: child, trace: makeTrace(child), onClose: () => {} },
+    });
+    // The value renders, but not as an activatable link.
+    expect(screen.getByText('remote-parent').tagName).toBe('CODE');
+  });
+
+  it('opens a linked span in the waterfall when a cross-trace link is clicked', async () => {
+    const span = makeSpan({
+      links: [{ traceId: 'other-trace', spanId: 'other-span' }],
+    });
+    render(SpanDetailPanel, {
+      props: { span, trace: makeTrace(span), onClose: () => {} },
+    });
+
+    // The Links section is collapsed by default — expand it first.
+    await fireEvent.click(screen.getByText('Links (1)'));
+
+    const link = (
+      await screen.findAllByTitle('Open linked span in the Traces waterfall')
+    )[0];
+    expect(link.tagName).toBe('BUTTON');
+    await fireEvent.click(link);
+    expect(selectedTraceIdSignal.value).toBe('other-trace');
+    expect(selectedSpanIdSignal.value).toBe('other-span');
+    expect(selectedTabSignal.value).toBe('traces');
   });
 });
 
