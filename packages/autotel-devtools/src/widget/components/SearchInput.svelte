@@ -24,6 +24,12 @@
     inputClass?: string;
     /** The underlying `<input>`, e.g. for imperative focus. */
     ref?: HTMLInputElement | null;
+    /**
+     * Controlled mode: called on every change (typing + clear). Use with a
+     * one-way `value` (no `bind:`) when the source of truth is external, e.g. a
+     * store signal reflected in the URL.
+     */
+    onValue?: (value: string) => void;
   }
   let {
     value = $bindable(),
@@ -33,7 +39,13 @@
     class: wrapperClass = 'flex-1',
     inputClass = 'border-line focus:border-line',
     ref = $bindable(null),
+    onValue,
   }: Props = $props();
+
+  function setValue(v: string) {
+    value = v;
+    onValue?.(v);
+  }
 </script>
 
 <div class={cn('relative', wrapperClass)}>
@@ -43,7 +55,8 @@
   />
   <input
     bind:this={ref}
-    bind:value
+    {value}
+    oninput={(e) => setValue((e.currentTarget as HTMLInputElement).value)}
     {placeholder}
     aria-label={ariaLabel}
     class={cn(
@@ -54,7 +67,7 @@
   {#if value}
     <button
       type="button"
-      onclick={() => (value = '')}
+      onclick={() => setValue('')}
       class="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-fg-subtle hover:text-fg-muted"
       title={clearTitle}
     >

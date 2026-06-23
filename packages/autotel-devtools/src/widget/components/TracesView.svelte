@@ -34,8 +34,11 @@
     openHelp,
     traceSortSignal,
     setTraceSort,
+    traceQuerySignal,
+    traceStatusFilterSignal,
+    traceMinDurationSignal,
   } from '../store.svelte';
-  import type { TraceSortKey } from '../store.svelte';
+  import type { TraceSortKey, TraceStatusFilter } from '../store.svelte';
   import { serviceColor } from '../utils/serviceColor';
   import { TRACE_LIST_SHORTCUTS } from '../shortcuts';
   import { formatDuration, formatTimestamp } from '../utils';
@@ -54,12 +57,10 @@
   } from '../export-import';
   import type { TraceData } from '../types';
 
-  type StatusFilter = 'all' | 'error' | 'ok';
-
   function traceMatches(
     trace: TraceData,
     query: string,
-    status: StatusFilter,
+    status: TraceStatusFilter,
     minDurationMs: number,
   ): boolean {
     if (status === 'error' && trace.status !== 'ERROR') return false;
@@ -82,9 +83,11 @@
   const selectedIds = $derived(selectedTraceIdsSignal.value);
   const selectedCount = $derived(selectedTraceCountSignal.value);
 
-  let query = $state('');
-  let statusFilter = $state<StatusFilter>('all');
-  let minDuration = $state(0);
+  // Filters live in global signals so the full-page UI can reflect them in the
+  // shareable URL. Derive locals for reading; write the signals on input.
+  const query = $derived(traceQuerySignal.value);
+  const statusFilter = $derived(traceStatusFilterSignal.value);
+  const minDuration = $derived(traceMinDurationSignal.value);
   let searchRef: HTMLInputElement | null = $state(null);
   let showImport = $state(false);
 
@@ -104,7 +107,7 @@
         if (hasSelection) {
           clearTraceSelection();
         } else if (document.activeElement === searchRef) {
-          query = '';
+          traceQuerySignal.value = '';
         }
       }
       if (e.key === 'a' && (e.metaKey || e.ctrlKey) && !isInputFocused()) {
@@ -377,15 +380,17 @@
     <!-- Filter bar -->
     <div class="px-4 py-2 border-b border-line flex items-center gap-2">
       <SearchInput
-        bind:value={query}
+        value={query}
+        onValue={(v) => (traceQuerySignal.value = v)}
         bind:ref={searchRef}
         placeholder="Filter by service, span, trace id…"
       />
       <select
         value={statusFilter}
         onchange={(event) =>
-          (statusFilter = (event.currentTarget as HTMLSelectElement)
-            .value as StatusFilter)}
+          (traceStatusFilterSignal.value = (
+            event.currentTarget as HTMLSelectElement
+          ).value as TraceStatusFilter)}
         class="text-xs border border-line rounded px-1.5 py-1 bg-surface text-fg-muted"
       >
         <option value="all">All</option>
@@ -405,7 +410,7 @@
           value={minDuration || ''}
           placeholder="0"
           oninput={(event) =>
-            (minDuration =
+            (traceMinDurationSignal.value =
               Number((event.currentTarget as HTMLInputElement).value) || 0)}
           class="w-14 px-1 py-1 rounded border border-line bg-surface text-fg-muted focus:outline-none"
         />

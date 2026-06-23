@@ -76,6 +76,8 @@
     logsSignal,
     editorSchemeSignal,
     setEditorScheme,
+    setSelectedTrace,
+    openSpanInWaterfall,
     type EditorSchemeValue,
   } from '../store.svelte';
   import { buildCodeLocation } from '../utils/codeLocation';
@@ -174,6 +176,14 @@
   const childSpans = $derived(
     trace.spans.filter((s) => s.parentSpanId === span.spanId),
   );
+
+  // Root span of this trace (for the "Trace ID" jump-to-top link).
+  const rootSpan = $derived(trace.spans.find((s) => !s.parentSpanId));
+
+  // Navigate the open trace detail to another span in the same trace. Writing
+  // the store signal re-selects the span live — TraceDetailView derives its
+  // selected span from `selectedSpanIdSignal` (no tab switch, no panel resize).
+  const navigateToSpan = (spanId: string) => setSelectedTrace(trace.traceId, spanId);
 
   // Correlated logs
   const logs = $derived(logsSignal.value);
@@ -375,9 +385,25 @@
     <div class="px-4 py-3 border-b border-line-subtle">
       <div class="space-y-2 text-xs">
         <IdRow label="Span ID" value={span.spanId} />
-        <IdRow label="Trace ID" value={span.traceId} />
+        <IdRow
+          label="Trace ID"
+          value={span.traceId}
+          onActivate={rootSpan && rootSpan.spanId !== span.spanId
+            ? () => navigateToSpan(rootSpan.spanId)
+            : undefined}
+          activateTitle="Go to root span"
+        />
         {#if span.parentSpanId}
-          <IdRow label="Parent Span ID" value={span.parentSpanId} />
+          <IdRow
+            label="Parent Span ID"
+            value={span.parentSpanId}
+            onActivate={parentSpan
+              ? () => navigateToSpan(span.parentSpanId!)
+              : undefined}
+            activateTitle={parentSpan
+              ? 'Go to parent span'
+              : 'Parent span not captured in this trace'}
+          />
         {/if}
       </div>
     </div>
@@ -616,18 +642,28 @@
             <div class="bg-subtle rounded p-2.5 border border-line">
               <div class="flex items-center gap-2 text-xs mb-1">
                 <span class="text-fg-subtle">Trace:</span>
-                <code class="font-mono text-fg-muted text-[11px] truncate">
+                <button
+                  type="button"
+                  onclick={() => openSpanInWaterfall(link.traceId, link.spanId)}
+                  title="Open linked span in the Traces waterfall"
+                  class="font-mono text-accent hover:underline text-[11px] truncate text-left cursor-pointer"
+                >
                   {link.traceId}
-                </code>
+                </button>
                 <Copyable content={link.traceId}>
                   <span></span>
                 </Copyable>
               </div>
               <div class="flex items-center gap-2 text-xs">
                 <span class="text-fg-subtle">Span:</span>
-                <code class="font-mono text-fg-muted text-[11px] truncate">
+                <button
+                  type="button"
+                  onclick={() => openSpanInWaterfall(link.traceId, link.spanId)}
+                  title="Open linked span in the Traces waterfall"
+                  class="font-mono text-accent hover:underline text-[11px] truncate text-left cursor-pointer"
+                >
                   {link.spanId}
-                </code>
+                </button>
                 <Copyable content={link.spanId}>
                   <span></span>
                 </Copyable>

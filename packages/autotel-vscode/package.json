@@ -29,7 +29,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "package": "vsce package --no-dependencies",
-    "vsce:publish": "vsce publish --no-dependencies"
+    "vsce:publish": "vsce publish --no-dependencies",
+    "ovsx:publish": "ovsx publish --no-dependencies"
   },
   "activationEvents": [
     "onView:autotel.services",

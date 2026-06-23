@@ -58,7 +58,11 @@
     ArrowLeft,
   } from '@lucide/svelte';
   import { Sparkles } from '@lucide/svelte';
-  import { genAiRowsSignal, openSpanInWaterfall } from '../store.svelte';
+  import {
+    genAiRowsSignal,
+    openSpanInWaterfall,
+    genaiQuerySignal,
+  } from '../store.svelte';
   import ModelHeader from './genai/ModelHeader.svelte';
   import ConversationPanel from './genai/ConversationPanel.svelte';
   import AgentTimeline from './genai/AgentTimeline.svelte';
@@ -76,7 +80,8 @@
   const rows = $derived(genAiRowsSignal.value);
   let selectedSpanId = $state<string | null>(null);
   let mode = $state<Mode>('list');
-  let query = $state('');
+  // Global so the full-page UI reflects it in the shareable URL.
+  const query = $derived(genaiQuerySignal.value);
   const filtered = $derived.by(() =>
     rows.filter((row) => rowMatches(row, query)),
   );
@@ -327,7 +332,11 @@
           {#if runSummary.spanCount > 0}
             <RunSummaryBar summary={runSummary} />
           {/if}
-          <ModelHeader span={selected.normalized} />
+          <ModelHeader
+            span={selected.normalized}
+            onOpenTrace={() =>
+              openSpanInWaterfall(selected.traceId, selected.normalized.spanId)}
+          />
           <ConversationPanel span={selected.normalized} />
         {/if}
       </div>
@@ -344,7 +353,8 @@
       <span>{runCount} run{runCount === 1 ? '' : 's'}</span>
     </div>
     <SearchInput
-      bind:value={query}
+      value={query}
+      onValue={(v) => (genaiQuerySignal.value = v)}
       class=""
       inputClass="border-line bg-subtle text-fg focus:border-line focus:ring-1 focus:ring-accent"
       placeholder="Filter by model, operation, agent…"

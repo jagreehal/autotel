@@ -7,14 +7,18 @@
 import { mount, unmount } from 'svelte'
 import Widget from './Widget.svelte'
 import { connectionStatusSignal } from './store.svelte'
+import type { NavState } from './url-sync'
 
 export { connectionStatusSignal }
 
 export interface WidgetProps {
   mode: 'widget' | 'fullpage'
   wsUrl: string
-  /** Optional deep-link: select this trace/span once it arrives over the wire. */
-  deepLink?: { traceId: string; spanId?: string }
+  /**
+   * Optional initial navigation from the URL hash: switch to `tab` immediately,
+   * and select `trace`/`span` once the trace arrives over the wire.
+   */
+  deepLink?: NavState
 }
 
 export function mountWidget(

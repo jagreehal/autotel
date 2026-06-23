@@ -6,11 +6,13 @@ packages:
 
 # Allow the fast-moving AI SDK betas used by apps/example-ai-sdk-observer past
 # the release-age gate (they publish daily; the example pins exact versions).
+# The Langfuse SDK (apps/example-langfuse) also publishes very frequently.
 minimumReleaseAgeExclude:
   - ai
   - ai-sdk-ollama
   - ollama
   - '@ai-sdk/*'
+  - '@langfuse/*'
 
 overrides:
   # Astro 6.x requires Vite 7 (vite ^7.3.2). Allowing Vite 8 here breaks the

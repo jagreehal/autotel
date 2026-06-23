@@ -1,5 +1,6 @@
 import { mountWidget } from './mount'
 import { registerElement } from './element'
+import { parseNavHash, type NavState } from './url-sync'
 import cssText from './styles.css?inline'
 
 // Capture script element synchronously — it's null after IIFE finishes
@@ -8,19 +9,18 @@ const _currentScript = document.currentScript as HTMLScriptElement | null
 interface ScriptParams {
   mode: 'widget' | 'fullpage'
   wsUrl: string
-  deepLink?: { traceId: string; spanId?: string }
+  deepLink?: NavState
 }
 
-// A deep-link is carried on the page URL hash (`#trace=<id>&span=<id>`) rather
-// than the script src, so an embedder (e.g. the VS Code extension) can point an
-// iframe at `/#trace=...` and have the widget open focused on that span.
-function getDeepLink(): { traceId: string; spanId?: string } | undefined {
-  const hash = location.hash.startsWith('#') ? location.hash.slice(1) : ''
-  if (!hash) return undefined
-  const params = new URLSearchParams(hash)
-  const traceId = params.get('trace')
-  if (!traceId) return undefined
-  return { traceId, spanId: params.get('span') || undefined }
+// Initial navigation is carried on the page URL hash
+// (`#tab=<tab>&trace=<id>&span=<id>`) rather than the script src, so an embedder
+// (e.g. the VS Code extension) can point an iframe at `/#trace=...` and have the
+// widget open focused on that span — and so the full-page UI can be shared by
+// copying its URL (see Widget.svelte for the write-back side).
+function getDeepLink(): NavState | undefined {
+  const nav = parseNavHash(location.hash)
+  // Any meaningful field (tab, trace/span, or a filter) is worth restoring.
+  return Object.keys(nav).length > 0 ? nav : undefined
 }
 
 function getScriptParams(): ScriptParams {

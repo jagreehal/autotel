@@ -1,0 +1,75 @@
+name: Publish autotel-vscode to Open VSX
+
+# Publishes the autotel-vscode extension to Open VSX (Cursor / Windsurf /
+# VSCodium). It is deliberately separate from release.yml: that workflow
+# publishes npm packages via changesets, and autotel-vscode is private:true so
+# changesets skips it. This is the only path that ships the extension.
+#
+# Trigger by pushing a tag that matches the package version, e.g. for 1.1.0:
+#   git tag autotel-vscode-v1.1.0 && git push origin autotel-vscode-v1.1.0
+# or run it manually from the Actions tab (workflow_dispatch).
+on:
+  push:
+    tags:
+      - 'autotel-vscode-v*'
+  workflow_dispatch:
+
+# Default-deny: this workflow only reads the repo and uploads to Open VSX via
+# OVSX_PAT. It never needs GitHub write scopes.
+permissions:
+  contents: read
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  publish:
+    name: Publish to Open VSX
+    runs-on: ubuntu-latest
+    # Never run in a fork or under another owner.
+    if: github.repository_owner == 'jagreehal'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install pnpm
+        run: corepack prepare pnpm@latest --activate
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Guard against publishing a tag whose version doesn't match package.json.
+      - name: Verify tag matches package version
+        if: github.event_name == 'push'
+        run: |
+          PKG_VERSION="$(node -p "require('./packages/autotel-vscode/package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#autotel-vscode-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME (version $TAG_VERSION) does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      # tsdown bundles the workspace dependency (autotel-devtools) into dist,
+      # so --no-dependencies in ovsx:publish is correct. autotel-devtools
+      # resolves through its `dist` exports, so it must be built first — turbo's
+      # `dependsOn: ["^build"]` builds dependencies in topological order.
+      - name: Build extension (and workspace deps)
+        run: pnpm turbo build --filter=autotel-vscode
+
+      - name: Publish to Open VSX
+        run: pnpm --filter autotel-vscode ovsx:publish
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}

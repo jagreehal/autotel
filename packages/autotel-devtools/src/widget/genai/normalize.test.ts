@@ -347,6 +347,65 @@ describe('toGenAiSpan — tool-call result hydration', () => {
   })
 })
 
+describe('toGenAiSpan — canonical gen_ai tool parts (autotel-genai)', () => {
+  // autotel-genai encodes the tool loop in parts[] with `type: 'tool_call'` /
+  // `type: 'tool_call_response'` (no `content` field) — these used to render as
+  // empty transcript bubbles. They must hydrate into structured tool fields.
+  const span: SpanData = {
+    traceId: 't',
+    spanId: 's',
+    name: 'chat granite4',
+    kind: 'CLIENT',
+    startTime: 0,
+    endTime: 0,
+    duration: 0,
+    attributes: {
+      'gen_ai.provider.name': 'ollama',
+      'gen_ai.operation.name': 'chat',
+      'gen_ai.request.model': 'granite4',
+      'gen_ai.input.messages': JSON.stringify([
+        { role: 'user', parts: [{ type: 'text', content: 'What is 23 * 19?' }] },
+        {
+          role: 'assistant',
+          parts: [
+            { type: 'tool_call', id: 'tc1', name: 'multiply', arguments: { a: 23, b: 19 } },
+          ],
+        },
+        {
+          role: 'tool',
+          parts: [
+            { type: 'tool_call_response', id: 'tc1', response: { type: 'json', value: 437 } },
+          ],
+        },
+      ]),
+      'gen_ai.output.messages': JSON.stringify([
+        { role: 'assistant', parts: [{ type: 'text', content: 'It is 437.' }], finish_reason: 'stop' },
+      ]),
+    },
+    status: { code: 'OK' },
+  }
+
+  it('hydrates the assistant tool_call into a tool chip, not an empty bubble', () => {
+    const out = toGenAiSpan(span)
+    const assistantCall = out.messages.find((m) => m.toolCalls && m.toolCalls.length > 0)
+    expect(assistantCall).toBeDefined()
+    expect(assistantCall!.toolCalls![0]).toMatchObject({
+      id: 'tc1',
+      name: 'multiply',
+      arguments: { a: 23, b: 19 },
+    })
+    // No empty text bubble left behind for the tool-call turn.
+    expect(assistantCall!.parts).toHaveLength(0)
+  })
+
+  it('renders the tool_call_response value instead of an empty bubble', () => {
+    const out = toGenAiSpan(span)
+    const toolMsg = out.messages.find((m) => m.role === 'tool')
+    expect(toolMsg).toBeDefined()
+    expect(toolMsg!.parts).toEqual([{ kind: 'json', value: 437 }])
+  })
+})
+
 describe('toGenAiSpan — real Vercel AI SDK v6 + Ollama capture', () => {
   // Captured from /Users/jreehal/dev/ai/ai-workshop/vercel-ai-sdk via
   // generateText({ experimental_telemetry: { isEnabled: true, ... } }).

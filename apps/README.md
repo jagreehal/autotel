@@ -181,6 +181,14 @@ pnpm start:rag          # RAG pipeline
 
 **Documentation:** See [docs/AI_WORKFLOWS.md](../docs/AI_WORKFLOWS.md) for comprehensive AI workflow patterns.
 
+#### Vercel AI SDK as canonical `gen_ai.*` spans
+
+**`example-ai-sdk-observer`** - Capture Vercel AI SDK + Ollama runs as canonical `gen_ai.*` spans (token usage, cost, streaming timing) via `autotel-genai`'s `autotelTelemetry()`. See [example-ai-sdk-observer/README.md](./example-ai-sdk-observer/README.md).
+
+#### Langfuse + autotel-devtools
+
+**`example-langfuse`** - Instrument once with `autotel-genai` and fan the same canonical `gen_ai.*` spans to [Langfuse](https://langfuse.com), [autotel-devtools](../packages/autotel-devtools), and your console — using autotel's native OTLP `destinations`, with **no `@langfuse/otel` and no `@opentelemetry/*` exporter packages**. Langfuse is a destination, not a span source; the semconv is the integration. See [example-langfuse/README.md](./example-langfuse/README.md).
+
 ## Verifying in Grafana
 
 1. **Open Grafana Cloud** (or your Grafana instance)

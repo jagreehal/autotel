@@ -14,8 +14,11 @@
 
   interface Props {
     span: GenAiSpan;
+    /** When provided, the `trace …` reference becomes a link that opens the
+     * trace in the Traces waterfall, focused on this span. */
+    onOpenTrace?: () => void;
   }
-  let { span }: Props = $props();
+  let { span, onOpenTrace }: Props = $props();
 
   const PROVIDER_COLORS: Record<string, string> = {
     openai: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
@@ -136,9 +139,20 @@
   {/if}
   <span class="text-fg-subtle">{span.operation}</span>
   <span class="group inline-flex items-center gap-0.5">
-    <span class="font-mono text-[11px] text-fg-subtle" title={span.traceId}>
-      trace {span.traceId.slice(0, 8)}…
-    </span>
+    {#if onOpenTrace}
+      <button
+        type="button"
+        onclick={onOpenTrace}
+        class="font-mono text-[11px] text-accent hover:underline cursor-pointer"
+        title="Open trace in waterfall"
+      >
+        trace {span.traceId.slice(0, 8)}…
+      </button>
+    {:else}
+      <span class="font-mono text-[11px] text-fg-subtle" title={span.traceId}>
+        trace {span.traceId.slice(0, 8)}…
+      </span>
+    {/if}
     <CopyButton
       value={span.traceId}
       label="Copy trace ID"
