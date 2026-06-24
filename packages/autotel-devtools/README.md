@@ -150,6 +150,7 @@ process — point them at the bound port, or free the original.
 - ✅ Service map visualization
 - ✅ Resources view (derived from telemetry)
 - ✅ GenAI run summaries + narrated walkthrough
+- ✅ **Agents view** — observe coding agents (Claude Code, opencode) from their OTel metrics + log events
 - ✅ Search with debounce (300ms)
 - ✅ Configurable telemetry limits (env vars)
 - ✅ Widget position persistence (localStorage)
@@ -172,6 +173,35 @@ on top of the per-span detail:
   Useful for showing a teammate or a client exactly what the agent did, which
   tools it called, and where the cost went.
 
+### Agents: observe Claude Code (and other coding agents)
+
+Coding agents like **Claude Code** emit OpenTelemetry **metrics and log events**
+(no traces). The **Agents** tab reconstructs them into a session-centric view —
+powered by the [`autotel-agents`](../autotel-agents) package, which also handles
+opencode and is one adapter away from Codex.
+
+One command starts the receiver _and_ launches Claude Code wired to it:
+
+```bash
+npx autotel-devtools claude
+```
+
+This sets the telemetry env for a live local view — OTLP **`http/protobuf`** to
+this receiver (not the gRPC setup in most guides, which this receiver doesn't
+speak), 1s export intervals, and `session.id` kept on metrics. Then open the UI
+and switch to **Agents**.
+
+- `--print-env` — print the env block instead of launching (for managed-settings
+  / MDM / VS Code), e.g. `npx autotel-devtools claude --print-env`.
+- `--log-prompts` — capture prompt _text_ (default is private: length only).
+
+What you get per session: a **timeline** (prompts → tool calls → API requests →
+decisions), a **rollup** (cost, tokens, requests, lines changed), and breakdowns
+by **tool category**, **MCP server** (`mcp__server__tool`), **sub-agent** (`Task`)
+and **skill** (`Skill`) — plus an aggregate strip across all sessions. Cost uses
+the agent's reported `cost_usd`, falling back to a token estimate (badged). MCP
+protocol internals are out of scope here — that's `autotel-mcp-instrumentation`.
+
 ## Configuration
 
 ### Environment Variables
@@ -190,11 +220,17 @@ AUTOTEL_DEVTOOLS_TITLE="My App"  # Dashboard title (optional)
 ```bash
 npx autotel-devtools 4319                      # port as a bare positional
 npx autotel-devtools --port 4319 --host 0.0.0.0
+npx autotel-devtools claude                     # receiver + launch Claude Code wired to it
+npx autotel-devtools claude --print-env         # print the telemetry env, don't launch
 ```
 
 Arguments:
 
 - `[port]` - Port to listen on, shorthand for `--port` (an explicit `--port` always wins)
+
+Subcommands:
+
+- `claude [claude args]` - Start the receiver and launch Claude Code wired to it (open the **Agents** tab). `--print-env` prints the env block instead; `--log-prompts` opts into prompt-text capture (default: private). `--port`/`--host` apply to the receiver; anything else is passed through to `claude`.
 
 Options:
 

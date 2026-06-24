@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // src/cli.ts
 import { createServer } from 'node:http'
+import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,6 +22,15 @@ function printHelp(): void {
     `autotel-devtools - Standalone OTLP receiver with web devtools UI
 
 Usage: autotel-devtools [port] [options]
+       autotel-devtools claude [claude args] [--print-env] [--log-prompts]
+
+Subcommands:
+  claude               Start the receiver AND launch Claude Code wired to it
+                       (HTTP/protobuf → this receiver, 1s intervals, session id on).
+                       Open the "Agents" tab to watch sessions, tokens, cost,
+                       tool / MCP / sub-agent / skill usage live.
+                         --print-env    Print the telemetry env block and exit (don't launch)
+                         --log-prompts  Capture prompt text (default: length only / private)
 
 Arguments:
   port                 Port to listen on (shorthand for --port; must be a positive integer)
@@ -49,6 +59,8 @@ Examples:
   npx autotel-devtools
   npx autotel-devtools 4319
   npx autotel-devtools -p 4319 -H 0.0.0.0
+  npx autotel-devtools claude                 # watch Claude Code in the Agents tab
+  npx autotel-devtools claude --print-env     # just print the env (for MDM / VS Code)
 
 Then point your app:
   OTEL_EXPORTER_OTLP_PROTOCOL=http/json OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node app.js
@@ -113,10 +125,16 @@ function parsePort(value: string): number {
   return n
 }
 
-async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2))
-  if (!options) { process.exit(0) }
+interface RunningReceiver {
+  wsServer: DevtoolsServer
+  closeAll: () => Promise<void>
+  addresses: string[]
+  warnings: string[]
+  boundPort: number
+  uiBase: string
+}
 
+async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
   const httpServer = createServer()
   const loopbackOnly = hostHeaderIsLoopback(options.host)
   const wsServer = new DevtoolsServer({ server: httpServer, host: options.host, verbose: true })
@@ -153,6 +171,130 @@ async function main(): Promise<void> {
   }
 
   const uiBase = `http://${options.host === 'localhost' ? '127.0.0.1' : options.host}:${boundPort}`
+  return {
+    wsServer,
+    closeAll: () => Promise.all([wsServer.close(), listeners.closeSibling()]).then(() => undefined),
+    addresses,
+    warnings,
+    boundPort,
+    uiBase,
+  }
+}
+
+// Telemetry env that wires Claude Code (and any OTel-via-env CLI) to this
+// receiver for a *live* local view: HTTP/protobuf (NOT gRPC — this receiver
+// speaks HTTP only), 1s export intervals so events show up promptly, and
+// session.id kept on metrics so metric-only signals join their session.
+function buildAgentEnv(uiBase: string, logPrompts: boolean): Record<string, string> {
+  const env: Record<string, string> = {
+    CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+    OTEL_METRICS_EXPORTER: 'otlp',
+    OTEL_LOGS_EXPORTER: 'otlp',
+    OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+    OTEL_EXPORTER_OTLP_ENDPOINT: uiBase,
+    OTEL_METRIC_EXPORT_INTERVAL: '1000',
+    OTEL_LOGS_EXPORT_INTERVAL: '1000',
+    OTEL_METRICS_INCLUDE_SESSION_ID: 'true',
+  }
+  // Private by default: prompt *text* only flows when explicitly opted in.
+  if (logPrompts) env.OTEL_LOG_USER_PROMPTS = '1'
+  return env
+}
+
+function printEnvBlock(env: Record<string, string>): void {
+  for (const [key, value] of Object.entries(env)) {
+    process.stdout.write(`export ${key}=${value}\n`)
+  }
+}
+
+interface ClaudeOptions {
+  port: number
+  host: string
+  printEnv: boolean
+  logPrompts: boolean
+  claudeArgs: string[]
+}
+
+function parseClaudeArgs(argv: string[]): ClaudeOptions {
+  const opts: ClaudeOptions = {
+    port: parsePort(process.env.AUTOTEL_DEVTOOLS_PORT || '4318'),
+    host: process.env.AUTOTEL_DEVTOOLS_HOST || '127.0.0.1',
+    printEnv: false,
+    logPrompts: false,
+    claudeArgs: [],
+  }
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    const next = argv[i + 1]
+    if (arg === '--') { opts.claudeArgs.push(...argv.slice(i + 1)); break }
+    if (arg === '--print-env') { opts.printEnv = true; continue }
+    if (arg === '--log-prompts') { opts.logPrompts = true; continue }
+    if ((arg === '--port' || arg === '-p') && next) { opts.port = parsePort(next); i++; continue }
+    if ((arg === '--host' || arg === '-H') && next) { opts.host = next; i++; continue }
+    // Anything else is passed straight through to `claude`.
+    opts.claudeArgs.push(arg)
+  }
+  return opts
+}
+
+async function runClaudeSubcommand(argv: string[]): Promise<void> {
+  const opts = parseClaudeArgs(argv)
+
+  // --print-env needs no running server: emit the block for the configured
+  // port so users can paste it into a shell / managed-settings file.
+  if (opts.printEnv) {
+    const uiBase = `http://${opts.host === 'localhost' ? '127.0.0.1' : opts.host}:${opts.port}`
+    printEnvBlock(buildAgentEnv(uiBase, opts.logPrompts))
+    return
+  }
+
+  const receiver = await startReceiver({ port: opts.port, host: opts.host })
+  const env = buildAgentEnv(receiver.uiBase, opts.logPrompts)
+
+  process.stdout.write(`\n  autotel-devtools — Claude Code\n\n`)
+  process.stdout.write(`  Receiver:  ${receiver.uiBase}\n`)
+  process.stdout.write(`  UI:        ${receiver.uiBase}   → open the "Agents" tab\n`)
+  if (!opts.logPrompts) {
+    process.stdout.write(`  Prompts:   private (length only) — add --log-prompts to capture text\n`)
+  }
+  for (const w of receiver.warnings) process.stdout.write(`  ⚠ ${w}\n`)
+  process.stdout.write(`\n  Launching claude…\n\n`)
+
+  const child = spawn('claude', opts.claudeArgs, {
+    stdio: 'inherit',
+    env: { ...process.env, ...env },
+  })
+
+  const shutdown = () => { receiver.closeAll().then(() => process.exit(0)) }
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+
+  child.on('error', (err) => {
+    const reason = (err as NodeJS.ErrnoException).code === 'ENOENT'
+      ? `'claude' not found on PATH. Install Claude Code, or run the receiver alone with 'npx autotel-devtools' and point claude at ${receiver.uiBase} using --print-env.`
+      : err.message
+    process.stderr.write(`[autotel-devtools] ${reason}\n`)
+    receiver.closeAll().then(() => process.exit(1))
+  })
+  child.on('exit', (code) => {
+    receiver.closeAll().then(() => process.exit(code ?? 0))
+  })
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2)
+
+  // Subcommand: `autotel-devtools claude [claude args] [--print-env] [--log-prompts]`
+  if (argv[0] === 'claude') {
+    await runClaudeSubcommand(argv.slice(1))
+    return
+  }
+
+  const options = parseArgs(argv)
+  if (!options) { process.exit(0) }
+
+  const receiver = await startReceiver(options)
+  const { addresses, warnings, uiBase } = receiver
   const title = options.title || 'autotel-devtools'
   process.stdout.write(`\n  ${title}\n\n`)
   process.stdout.write(`  Listening: ${addresses.join('  +  ')}\n`)
@@ -185,9 +327,7 @@ async function main(): Promise<void> {
   if (warnings.length > 0) process.stdout.write('\n')
 
   const shutdown = () => {
-    Promise.all([wsServer.close(), listeners.closeSibling()]).then(() =>
-      process.exit(0),
-    )
+    receiver.closeAll().then(() => process.exit(0))
   }
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)

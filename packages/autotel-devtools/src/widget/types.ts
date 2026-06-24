@@ -2,6 +2,10 @@
  * Core data types for Autotel Devtools Widget
  */
 
+import type { AgentSession } from 'autotel-agents';
+
+export type { AgentSession } from 'autotel-agents';
+
 export interface SpanData {
   traceId: string;
   spanId: string;
@@ -78,6 +82,7 @@ export interface WidgetData {
   health: HealthStatus;
   errors?: ErrorGroup[];
   logs?: LogData[];
+  agents?: AgentSession[];
 }
 
 /**
@@ -110,6 +115,7 @@ export interface ErrorGroup {
 
 export type TabType =
   | 'traces'
+  | 'agents'
   | 'resources'
   | 'service-map'
   | 'metrics'

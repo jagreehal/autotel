@@ -8,6 +8,7 @@
    */
   import { selectedTabSignal } from '../store.svelte';
   import TracesView from './TracesView.svelte';
+  import AgentsView from './AgentsView.svelte';
   import GenAiView from './GenAiView.svelte';
   import FlowView from './FlowView.svelte';
   import ResourcesView from './ResourcesView.svelte';
@@ -20,7 +21,9 @@
   const selected = $derived(selectedTabSignal.value);
 </script>
 
-{#if selected === 'genai'}
+{#if selected === 'agents'}
+  <AgentsView />
+{:else if selected === 'genai'}
   <GenAiView />
 {:else if selected === 'flow'}
   <FlowView />

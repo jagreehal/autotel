@@ -22,6 +22,11 @@ import { buildToolResultIndex, hydrateToolResults } from './genai/stitch';
 import type { GenAiSpan } from './genai/types';
 import type { SpanData } from './types';
 import type { Shortcut } from './shortcuts';
+import {
+  summarizeSessions,
+  type AgentSession,
+  type AgentAggregate,
+} from 'autotel-agents';
 
 // ===== Widget UI State =====
 export const widgetExpandedSignal = signal(false);
@@ -319,6 +324,34 @@ export const sortedLogsSignal = computed(() =>
   [...logsSignal.value].sort((a, b) => b.timestamp - a.timestamp),
 );
 
+// ===== Coding agents (Claude Code, opencode, …) =====
+// Full-state from the server on each broadcast (reconstructed sessions). The
+// reducers run server-side; the widget just renders.
+export const agentSessionsSignal = signal<AgentSession[]>([]);
+export const selectedAgentSessionIdSignal = signal<string | null>(null);
+
+/** Sessions newest-active first. */
+export const sortedAgentSessionsSignal = computed(() =>
+  [...agentSessionsSignal.value].sort((a, b) => b.lastSeen - a.lastSeen),
+);
+
+/** Aggregate strip across all current sessions. */
+export const agentAggregateSignal = computed<AgentAggregate>(() =>
+  summarizeSessions(agentSessionsSignal.value),
+);
+
+/** The session selected in the Agents tab (defaults to most recently active). */
+export const selectedAgentSessionSignal = computed<AgentSession | null>(() => {
+  const sessions = sortedAgentSessionsSignal.value;
+  if (sessions.length === 0) return null;
+  const id = selectedAgentSessionIdSignal.value;
+  return sessions.find((s) => s.id === id) ?? sessions[0];
+});
+
+export function selectAgentSession(id: string): void {
+  selectedAgentSessionIdSignal.value = id;
+}
+
 export const resourceSummariesSignal = computed(() =>
   buildResourceSummaries({
     traces: tracesSignal.value,
@@ -610,6 +643,11 @@ export function updateWidgetData(data: Partial<WidgetData>) {
   if (data.errors) {
     errorGroupsSignal.value = data.errors;
   }
+
+  // Agent sessions are full-state (server replaces, not appends) — like errors.
+  if (data.agents) {
+    agentSessionsSignal.value = data.agents;
+  }
 }
 
 export function setPaused(paused: boolean) {
@@ -704,6 +742,8 @@ export function clearAllData() {
   metricsSignal.value = [];
   errorGroupsSignal.value = [];
   logsSignal.value = [];
+  agentSessionsSignal.value = [];
+  selectedAgentSessionIdSignal.value = null;
   pendingTracesSignal.value = [];
   pendingLogsSignal.value = [];
   pendingMetricsSignal.value = [];

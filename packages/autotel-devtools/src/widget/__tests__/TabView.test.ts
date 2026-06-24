@@ -15,6 +15,7 @@ import type { TabType } from '../types';
 
 const CASES: Array<{ tab: TabType; marker: RegExp }> = [
   { tab: 'traces', marker: /No traces yet/ },
+  { tab: 'agents', marker: /Waiting for coding-agent telemetry/ },
   { tab: 'genai', marker: /No GenAI spans yet/ },
   { tab: 'flow', marker: /No flow to show yet/ },
   { tab: 'resources', marker: /No resources derived yet/ },
