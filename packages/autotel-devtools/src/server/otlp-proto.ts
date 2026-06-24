@@ -196,13 +196,20 @@ message ExportLogsServiceRequest {
 }
 `
 
-// Minimal metrics schema: the receiver only counts metrics, it never inspects data
-// points. Decoding the structural envelope (resource -> scope -> metric name) is
-// enough; the data-point oneof and other Metric fields are skipped as unknown fields.
+// Metrics schema. Decodes the structural envelope AND the Sum/Gauge/Histogram
+// data points (number + histogram), so coding-agent counters
+// (token/cost/lines/…) and their attributes survive — not just the metric name.
+// Field numbers match the frozen OTLP v1 spec; unread fields (exemplars, flags,
+// exponential histogram, summary) are skipped as unknown fields.
 const METRICS_PROTO = `
 syntax = "proto3";
 package opentelemetry.proto.metrics.v1;
 
+enum AggregationTemporality {
+  AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+  AGGREGATION_TEMPORALITY_DELTA = 1;
+  AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+}
 message ResourceMetrics {
   opentelemetry.proto.resource.v1.Resource resource = 1;
   repeated ScopeMetrics scope_metrics = 2;
@@ -217,6 +224,41 @@ message Metric {
   string name = 1;
   string description = 2;
   string unit = 3;
+  oneof data {
+    Gauge gauge = 5;
+    Sum sum = 7;
+    Histogram histogram = 9;
+  }
+}
+message Gauge {
+  repeated NumberDataPoint data_points = 1;
+}
+message Sum {
+  repeated NumberDataPoint data_points = 1;
+  AggregationTemporality aggregation_temporality = 2;
+  bool is_monotonic = 3;
+}
+message Histogram {
+  repeated HistogramDataPoint data_points = 1;
+  AggregationTemporality aggregation_temporality = 2;
+}
+message NumberDataPoint {
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 7;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  oneof value {
+    double as_double = 4;
+    sfixed64 as_int = 6;
+  }
+}
+message HistogramDataPoint {
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 9;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  fixed64 count = 4;
+  double sum = 5;
+  repeated fixed64 bucket_counts = 6;
+  repeated double explicit_bounds = 7;
 }
 message ExportMetricsServiceRequest {
   repeated ResourceMetrics resource_metrics = 1;

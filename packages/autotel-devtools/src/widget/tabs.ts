@@ -9,6 +9,7 @@
 
 import {
   Database,
+  Bot,
   Sparkles,
   Workflow,
   Boxes,
@@ -28,6 +29,7 @@ export interface TabDef {
 
 export const TAB_DEFS: readonly TabDef[] = [
   { id: 'traces', label: 'Traces', icon: Database },
+  { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'genai', label: 'GenAI', icon: Sparkles },
   { id: 'flow', label: 'Flow', icon: Workflow },
   { id: 'resources', label: 'Resources', icon: Boxes },

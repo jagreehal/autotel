@@ -27,9 +27,16 @@ pnpm storybook          # Launch Storybook for widget components
 ## Key Files
 
 - `src/index.ts` — Main entry, `createDevtools()` factory
-- `src/cli.ts` — CLI binary (`npx autotel-devtools`)
+- `src/cli.ts` — CLI binary (`npx autotel-devtools`); includes the `claude` subcommand that starts the receiver and launches Claude Code wired to it
 - `src/server/` — WebSocket server, HTTP routes, OTLP parsing, exporters (`exporter.ts`, `log-exporter.ts`, `remote-exporter.ts`), error aggregation, telemetry limits, resource utils
 - `src/widget/` — Svelte 5 UI components, runes-backed signal store, WebSocket client, custom element
+
+## Coding-agent observability (Agents tab)
+
+- Claude Code / opencode emit OTel **metrics + log events** (no traces). `src/server/otlp.ts` `parseOtlpMetrics` (data points, Sum/Gauge/Histogram) and `parseOtlpAgentEvents` decode them; `src/server/otlp-proto.ts` METRICS_PROTO now decodes data points too (protobuf parity).
+- The server folds them into an `AgentSessionStore` via the **`autotel-agents`** package (workspace dep) and broadcasts `agents` over WS (full-state, like `errors`). The widget renders them in `AgentsView.svelte` (`src/widget/components/`); store signals live in `store.svelte.ts` (`agentSessionsSignal`, `selectedAgentSession…`, `agentAggregateSignal`).
+- `autotel-agents` is browser-safe (no `node:*`); all session reduction logic lives there, not in the widget. Add a new agent (e.g. Codex) by adding one adapter in that package — no devtools change.
+- Test data: `src/widget/components/__fixtures__/agents.ts` builds realistic sessions through the real reducers (used by `AgentsView.stories.ts` + `__tests__/AgentsView.test.ts`).
 
 ## Boundaries
 

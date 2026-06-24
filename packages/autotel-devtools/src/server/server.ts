@@ -3,6 +3,13 @@ import { WebSocketServer, WebSocket } from 'ws'
 import type { Server as HTTPServer, IncomingMessage } from 'node:http'
 import { createServer } from 'node:http'
 import { ErrorAggregator } from './error-aggregator'
+import {
+  ingestAgentEvents,
+  ingestAgentMetrics,
+  type AgentSessionStore,
+  type AgentRawEvent,
+  type OtelMetricRecord,
+} from 'autotel-agents'
 import type {
   TraceData,
   LogData,
@@ -47,6 +54,10 @@ export class DevtoolsServer {
   private traces: TraceData[] = []
   private logs: LogData[] = []
   private metrics: MetricData[] = []
+  // Canonical agent-session store. Rollups are kept indefinitely; the package's
+  // reducers ring-buffer each session's raw timeline. We broadcast the full set
+  // (full-state, like errors) so late/reconnecting clients converge.
+  private agentSessions: AgentSessionStore = new Map()
   private errorAggregator = new ErrorAggregator()
   private limits: TelemetryLimits
   private verbose: boolean
@@ -87,7 +98,12 @@ export class DevtoolsServer {
 
       // Send history to late-connecting clients
       const data = this.getCurrentData()
-      if (data.traces.length > 0 || data.logs.length > 0 || data.errors.length > 0) {
+      if (
+        data.traces.length > 0 ||
+        data.logs.length > 0 ||
+        data.errors.length > 0 ||
+        (data.agents?.length ?? 0) > 0
+      ) {
         ws.send(JSON.stringify(data))
       }
 
@@ -184,12 +200,37 @@ export class DevtoolsServer {
     this.broadcast({ traces: [], metrics: [metric], logs: [], errors: this.errorAggregator.getErrorGroups() })
   }
 
+  /** Fold decoded agent log events into sessions and broadcast the full set. */
+  ingestAgentEvents(records: AgentRawEvent[]): void {
+    if (records.length === 0) return
+    ingestAgentEvents(this.agentSessions, records)
+    this.broadcastAgents()
+  }
+
+  /** Fold decoded agent metric records into sessions and broadcast the full set. */
+  ingestAgentMetrics(records: OtelMetricRecord[]): void {
+    if (records.length === 0) return
+    ingestAgentMetrics(this.agentSessions, records)
+    this.broadcastAgents()
+  }
+
+  private broadcastAgents(): void {
+    this.broadcast({
+      traces: [],
+      metrics: [],
+      logs: [],
+      errors: this.errorAggregator.getErrorGroups(),
+      agents: [...this.agentSessions.values()],
+    })
+  }
+
   getCurrentData(): DevtoolsData {
     return {
       traces: this.traces,
       metrics: this.metrics,
       logs: this.logs,
       errors: this.errorAggregator.getErrorGroups(),
+      agents: [...this.agentSessions.values()],
     }
   }
 
@@ -197,6 +238,7 @@ export class DevtoolsServer {
     this.traces = []
     this.logs = []
     this.metrics = []
+    this.agentSessions.clear()
     this.errorAggregator.clear()
   }
 

@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseOtlpTraces, parseOtlpLogs, countOtlpMetrics, readJsonBody, readRawBody, isProtobufContentType, sendJson } from './otlp'
+import { parseOtlpTraces, parseOtlpLogs, parseOtlpMetrics, parseOtlpAgentEvents, countOtlpMetrics, readJsonBody, readRawBody, isProtobufContentType, sendJson } from './otlp'
 import { decodeOtlpTraceRequest, decodeOtlpLogsRequest, decodeOtlpMetricsRequest } from './otlp-proto'
 import { DEVTOOLS_IDENTITY } from './identity'
 import { allowSensitiveRequest } from './origin-guard'
@@ -213,6 +213,8 @@ export function attachDevtoolsRoutes(
         const payload = await readOtlpPayload(req, 'logs')
         const logs = parseOtlpLogs(payload)
         devtools.addLogs(logs)
+        // Coding-agent events arrive as logs too — fold them into agent sessions.
+        devtools.ingestAgentEvents(parseOtlpAgentEvents(payload))
         sendJson(res, 200, { acceptedLogs: logs.length })
       } catch (e) {
         sendOtlpError(res, req, e)
@@ -224,8 +226,9 @@ export function attachDevtoolsRoutes(
     if (req.method === 'POST' && url === '/v1/metrics') {
       try {
         const payload = await readOtlpPayload(req, 'metrics')
-        const count = countOtlpMetrics(payload)
-        sendJson(res, 200, { acceptedMetrics: count })
+        // Fold coding-agent metric-only signals (lines, commits, active time, …).
+        devtools.ingestAgentMetrics(parseOtlpMetrics(payload))
+        sendJson(res, 200, { acceptedMetrics: countOtlpMetrics(payload) })
       } catch (e) {
         sendOtlpError(res, req, e)
       }

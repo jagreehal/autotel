@@ -7,6 +7,7 @@ import type { TabType } from '../types';
 // so a new tab can't ship missing from the Panel / Layout tab bars.
 const EVERY_TAB = {
   traces: true,
+  agents: true,
   genai: true,
   flow: true,
   resources: true,

@@ -1,6 +1,7 @@
 // src/server/otlp.ts
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SpanData, TraceData, LogData } from './types'
+import type { OtelMetricRecord, OtelDataPoint, AgentRawEvent, Attributes, MetricTemporality } from 'autotel-agents'
 import { getResourceName } from './resource-utils'
 
 type OtlpAnyValue = {
@@ -201,6 +202,119 @@ export function countOtlpMetrics(payload: unknown): number {
     }
   }
   return count
+}
+
+// Pull numeric data points out of a Metric. OTLP wraps points in a per-type
+// oneof (`gauge`/`sum` carry NumberDataPoints; `histogram` carries
+// HistogramDataPoints). Coding-agent instruments are all counters (Sum) so the
+// NumberDataPoint path covers token/cost/lines/etc.; histograms (e.g. request
+// duration) fall back to their `count`.
+function extractDataPoints(metric: any): OtelDataPoint[] {
+  const points: OtelDataPoint[] = []
+  const numberPoints = metric.sum?.dataPoints ?? metric.gauge?.dataPoints
+  if (Array.isArray(numberPoints)) {
+    for (const dp of numberPoints) {
+      const value =
+        dp.asDouble !== undefined ? Number(dp.asDouble)
+        : dp.asInt !== undefined ? Number(dp.asInt)
+        : 0
+      points.push({
+        value,
+        attributes: flattenAttributes(dp.attributes) as Attributes,
+        timestamp: nanoToMs(dp.timeUnixNano || dp.startTimeUnixNano),
+      })
+    }
+  }
+  const histPoints = metric.histogram?.dataPoints
+  if (Array.isArray(histPoints)) {
+    for (const dp of histPoints) {
+      points.push({
+        value: dp.count !== undefined ? Number(dp.count) : 0,
+        attributes: flattenAttributes(dp.attributes) as Attributes,
+        timestamp: nanoToMs(dp.timeUnixNano || dp.startTimeUnixNano),
+      })
+    }
+  }
+  return points
+}
+
+/**
+ * Parse OTLP metrics into structured records with data points + attributes,
+ * for the agent layer (and richer metric views). Works for both OTLP/JSON and
+ * decoded OTLP/protobuf — they share the same camelCase shape.
+ */
+// OTLP aggregation temporality: 1 = DELTA, 2 = CUMULATIVE (numeric in protobuf
+// and most JSON; the string enum is handled too). Only Sum/Histogram carry it.
+function readTemporality(metric: any): MetricTemporality | undefined {
+  const raw = metric.sum?.aggregationTemporality ?? metric.histogram?.aggregationTemporality
+  if (raw === 2 || raw === 'AGGREGATION_TEMPORALITY_CUMULATIVE') return 'cumulative'
+  if (raw === 1 || raw === 'AGGREGATION_TEMPORALITY_DELTA') return 'delta'
+  return undefined
+}
+
+export function parseOtlpMetrics(payload: unknown): OtelMetricRecord[] {
+  if (!payload || typeof payload !== 'object') return []
+  const { resourceMetrics } = payload as any
+  if (!Array.isArray(resourceMetrics)) return []
+
+  const records: OtelMetricRecord[] = []
+  for (const rm of resourceMetrics) {
+    const resource = flattenAttributes(rm.resource?.attributes) as Attributes
+    for (const sm of rm.scopeMetrics || []) {
+      const scope = sm.scope?.name
+        ? { name: sm.scope.name, version: sm.scope.version || undefined }
+        : undefined
+      for (const metric of sm.metrics || []) {
+        records.push({
+          name: metric.name,
+          unit: metric.unit || undefined,
+          description: metric.description || undefined,
+          temporality: readTemporality(metric),
+          dataPoints: extractDataPoints(metric),
+          resource,
+          scope,
+        })
+      }
+    }
+  }
+  return records
+}
+
+/**
+ * Parse OTLP logs into `AgentRawEvent`s for the agent layer. Keeps the
+ * instrumentation scope and event name (Claude Code emits its events as logs,
+ * with the unprefixed name in the `event.name` attribute). Distinct from
+ * `parseOtlpLogs`, which feeds the generic Logs tab.
+ */
+export function parseOtlpAgentEvents(payload: unknown): AgentRawEvent[] {
+  if (!payload || typeof payload !== 'object') return []
+  const { resourceLogs } = payload as any
+  if (!Array.isArray(resourceLogs)) return []
+
+  const events: AgentRawEvent[] = []
+  for (const rl of resourceLogs) {
+    const resource = flattenAttributes(rl.resource?.attributes) as Attributes
+    for (const sl of rl.scopeLogs || []) {
+      const scope = sl.scope?.name
+        ? { name: sl.scope.name, version: sl.scope.version || undefined }
+        : undefined
+      for (const rec of sl.logRecords || []) {
+        const attributes = flattenAttributes(rec.attributes) as Attributes
+        const eventName =
+          (typeof rec.eventName === 'string' && rec.eventName) ||
+          String(attributes['event.name'] ?? '')
+        events.push({
+          eventName,
+          timestamp: nanoToMs(rec.timeUnixNano || rec.observedTimeUnixNano),
+          body: rec.body ? resolveOtlpValue(rec.body) : undefined,
+          attributes,
+          resource,
+          scope,
+        })
+      }
+    }
+  }
+  return events
 }
 
 export async function readJsonBody(req: IncomingMessage): Promise<unknown> {

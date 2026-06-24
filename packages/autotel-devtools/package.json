@@ -61,6 +61,7 @@
     "prepublishOnly": "pnpm build && pnpm test:dist"
   },
   "dependencies": {
+    "autotel-agents": "workspace:*",
     "clsx": "^2.1.1",
     "@lucide/svelte": "^1.17.0",
     "protobufjs": "^8.6.1",

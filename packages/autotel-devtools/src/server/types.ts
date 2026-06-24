@@ -1,4 +1,6 @@
 // src/server/types.ts
+import type { AgentSession } from 'autotel-agents'
+
 export interface SpanData {
   traceId: string
   spanId: string
@@ -78,4 +80,7 @@ export interface DevtoolsData {
   metrics: MetricData[]
   logs: LogData[]
   errors: ErrorGroup[]
+  /** Full-state on every broadcast (client replaces, like `errors`). Coding-agent
+   *  sessions reconstructed from agent metrics + log events. */
+  agents?: AgentSession[]
 }
