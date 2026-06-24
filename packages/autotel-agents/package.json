@@ -1,6 +1,6 @@
 {
   "name": "autotel-agents",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Browser-safe domain layer for observing coding agents (Claude Code, opencode, Codex) from their OpenTelemetry metrics and log events — adapter registry + session reducers, no I/O.",
   "type": "module",
   "main": "./dist/index.js",
