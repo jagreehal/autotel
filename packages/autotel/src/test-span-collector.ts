@@ -2,20 +2,39 @@
  * TestSpanCollector — SpanExporter that groups finished spans by traceId
  * and drains per-trace for embedding in test metadata.
  *
+ * Wire it to a tracer provider, register that provider with autotel, then
+ * create spans through autotel's tracer so finished spans reach the collector.
+ *
  * @example
  * ```typescript
  * import { TestSpanCollector } from 'autotel/test-span-collector';
  * import { SimpleSpanProcessor } from 'autotel/processors';
- * import { getAutotelTracerProvider } from 'autotel';
+ * import { setAutotelTracerProvider, getAutotelTracer } from 'autotel';
+ * import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
  *
  * const collector = new TestSpanCollector();
- * const provider = getAutotelTracerProvider();
- * provider.addSpanProcessor(new SimpleSpanProcessor(collector));
  *
- * // After a test span ends:
- * const spans = collector.drainTrace(traceId, rootSpanId);
- * // spans contains only descendants of rootSpanId
+ * // OTel SDK v2: pass processors at construction, then register the provider.
+ * const provider = new NodeTracerProvider({
+ *   spanProcessors: [new SimpleSpanProcessor(collector)],
+ * });
+ * setAutotelTracerProvider(provider);
+ *
+ * const tracer = getAutotelTracer('test');
+ * const root = tracer.startSpan('operation');
+ * // ...work, child spans...
+ * root.end();
+ *
+ * const spans = collector.drainTrace(
+ *   root.spanContext().traceId,
+ *   root.spanContext().spanId,
+ * );
+ * // spans contains the root span and its descendants
  * ```
+ *
+ * For high-level instrumentation written with `span()` / `track()`, prefer
+ * `createTraceCollector()` from `autotel/testing`. For a plain low-level
+ * exporter, use `InMemorySpanExporter` from `autotel/exporters`.
  */
 
 import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace-base';
