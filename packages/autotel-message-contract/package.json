@@ -1,6 +1,6 @@
 {
   "name": "autotel-message-contract",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Brokerless message contract testing for autotel — pin the serialized shape of your events/commands/messages and prove old and new versions stay compatible, as ordinary unit tests.",
   "type": "module",
   "main": "./dist/index.js",
