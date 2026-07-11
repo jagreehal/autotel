@@ -98,17 +98,17 @@
     }
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.18.3",
+    "@arethetypeswrong/cli": "^0.18.4",
     "@google-cloud/bigquery": "^8.3.1",
     "@opentelemetry/core": "^2.7.1",
-    "@types/node": "^25.9.2",
-    "@typescript-eslint/eslint-plugin": "^8.60.1",
-    "@typescript-eslint/parser": "^8.60.1",
+    "@types/node": "^26.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^8.63.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^64.0.0",
-    "tsdown": "^0.22.2",
+    "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.10"
   },
   "repository": {
     "type": "git",

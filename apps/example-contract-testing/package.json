@@ -14,14 +14,14 @@
     "pact:audit:broker": "autotel-pact audit --pacts pacts --ledger .autotel-pact --gate=broker"
   },
   "dependencies": {
-    "@pact-foundation/pact": "^16.5.0",
+    "@pact-foundation/pact": "^17.0.1",
     "autotel": "workspace:*",
     "autotel-pact": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
-    "tsx": "^4.22.4",
+    "@types/node": "^26.1.0",
+    "tsx": "^4.23.0",
     "typescript": "^6.0.3"
   },
   "keywords": [
