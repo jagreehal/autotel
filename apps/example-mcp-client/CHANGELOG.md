@@ -1,5 +1,14 @@
 # @jagreehal/example-mcp-client
 
+## 0.1.71
+
+### Patch Changes
+
+- Updated dependencies [4b7ad78]
+  - autotel@4.2.4
+  - autotel-genai@0.3.5
+  - autotel-mcp-instrumentation@40.0.0
+
 ## 0.1.70
 
 ### Patch Changes
