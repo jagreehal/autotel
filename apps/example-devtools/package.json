@@ -14,8 +14,8 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.4",
-    "@libsql/client": "^0.17.3",
+    "@hono/node-server": "^2.0.8",
+    "@libsql/client": "^0.17.4",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "autotel-devtools": "workspace:*",
@@ -24,13 +24,13 @@
     "autotel-web": "workspace:*",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.23",
+    "hono": "^4.12.28",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
+    "@types/node": "^26.1.0",
     "drizzle-kit": "^0.31.10",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.0",
     "typescript": "^6.0.3"
   }
 }

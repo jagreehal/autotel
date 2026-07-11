@@ -37,7 +37,7 @@
     "autotel": "workspace:*"
   },
   "peerDependencies": {
-    "@playwright/test": ">=1.60.0"
+    "@playwright/test": ">=1.61.1"
   },
   "peerDependenciesMeta": {
     "@playwright/test": {
@@ -45,11 +45,11 @@
     }
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
-    "@types/node": "^25.9.2",
-    "tsdown": "^0.22.2",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.0",
+    "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.10"
   },
   "repository": {
     "type": "git",

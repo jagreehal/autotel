@@ -12,13 +12,13 @@
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "autotel-web": "workspace:*",
-    "next": "16.2.7",
+    "next": "16.2.10",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^25",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",

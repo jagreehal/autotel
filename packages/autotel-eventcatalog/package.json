@@ -64,14 +64,14 @@
     "autotel-subscribers": "*"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
+    "@types/node": "^26.1.0",
     "autotel-subscribers": "workspace:*",
     "rimraf": "^6.1.3",
-    "tsdown": "^0.22.2",
+    "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@eventcatalog/sdk": "^2.24.1"
+    "@eventcatalog/sdk": "^2.25.0"
   }
 }

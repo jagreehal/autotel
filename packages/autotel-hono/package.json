@@ -32,7 +32,7 @@
     "autotel-adapters": "workspace:*"
   },
   "peerDependencies": {
-    "hono": ">=4.12.23"
+    "hono": ">=4.12.28"
   },
   "peerDependenciesMeta": {
     "hono": {
@@ -40,11 +40,11 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
-    "hono": "^4.12.23",
-    "tsdown": "^0.22.2",
+    "@types/node": "^26.1.0",
+    "hono": "^4.12.28",
+    "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.10"
   },
   "repository": {
     "type": "git",

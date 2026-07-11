@@ -264,12 +264,12 @@ export async function initInstrumentation(
       }),
     }),
     logRecordProcessors: [
-      new BatchLogRecordProcessor(
-        new OTLPLogExporter({
+      new BatchLogRecordProcessor({
+        exporter: new OTLPLogExporter({
           url: `${config.otlpEndpoint || 'http://localhost:4318'}/v1/logs`,
           headers: otlpHeaders,
         }),
-      ),
+      }),
     ],
     instrumentations,
   });

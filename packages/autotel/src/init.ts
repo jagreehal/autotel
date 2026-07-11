@@ -1908,9 +1908,9 @@ export function init(cfg: AutotelConfig): void {
         headers: destination.headers,
       });
 
-      let processor: LogRecordProcessor = new BatchLogRecordProcessor(
-        logExporter,
-      );
+      let processor: LogRecordProcessor = new BatchLogRecordProcessor({
+        exporter: logExporter,
+      });
       if (_stringRedactor) {
         processor = new RedactingLogRecordProcessor(processor, _stringRedactor);
       }

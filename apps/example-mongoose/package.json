@@ -10,15 +10,15 @@
     "docker:down": "docker compose down"
   },
   "dependencies": {
-    "@faker-js/faker": "^10.4.0",
+    "@faker-js/faker": "^10.5.0",
     "autotel": "workspace:*",
     "autotel-mongoose": "workspace:*",
     "dotenv": "^17.4.2",
-    "mongoose": "^9.6.3"
+    "mongoose": "^9.7.4"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
-    "tsx": "^4.22.4",
+    "@types/node": "^26.1.0",
+    "tsx": "^4.23.0",
     "typescript": "^6.0.3"
   }
 }

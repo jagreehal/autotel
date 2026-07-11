@@ -10,11 +10,11 @@
     "@effect/opentelemetry": "^0.63.0",
     "autotel": "workspace:*",
     "dotenv": "^17.4.2",
-    "effect": "^3.21.3"
+    "effect": "^3.21.4"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
-    "tsx": "^4.22.4",
+    "@types/node": "^26.1.0",
+    "tsx": "^4.23.0",
     "typescript": "^6.0.3"
   }
 }

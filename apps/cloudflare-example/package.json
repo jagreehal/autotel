@@ -19,15 +19,15 @@
   "dependencies": {
     "@cloudflare/actors": "0.0.1-beta.6",
     "@opentelemetry/api": "^1.9.1",
-    "agents": "^0.14.4",
-    "alchemy": "^0.93.11",
+    "agents": "^0.17.3",
+    "alchemy": "^0.93.12",
     "autotel-adapters": "workspace:*",
     "autotel-cloudflare": "workspace:*",
     "autotel-edge": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260607.1",
+    "@cloudflare/workers-types": "^5.20260707.1",
     "typescript": "^6.0.3",
-    "wrangler": "^4.98.0"
+    "wrangler": "^4.108.0"
   }
 }

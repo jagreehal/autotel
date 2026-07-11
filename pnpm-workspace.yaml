@@ -4,6 +4,10 @@ packages:
   - 'examples/*'
   - 'docs'
 
+# Release-age gate: only install versions at least this old (minutes). Set to
+# 3 days to match the `ncu --cooldown 3` dependency-update policy.
+minimumReleaseAge: 4320
+
 # Allow the fast-moving AI SDK betas used by apps/example-ai-sdk-observer past
 # the release-age gate (they publish daily; the example pins exact versions).
 # The Langfuse SDK (apps/example-langfuse) also publishes very frequently.
