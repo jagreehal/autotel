@@ -1,5 +1,13 @@
 # @jagreehal/example-ai-agent
 
+## 1.0.79
+
+### Patch Changes
+
+- Updated dependencies [4b7ad78]
+  - autotel@4.2.4
+  - autotel-subscribers@41.0.4
+
 ## 1.0.78
 
 ### Patch Changes

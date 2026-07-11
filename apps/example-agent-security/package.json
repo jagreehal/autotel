@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-agent-security",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "type": "module",
   "description": "Google SAIF-aligned agent security observability: guard, scoped tools, MCP bridge, observer lifecycle events.",
