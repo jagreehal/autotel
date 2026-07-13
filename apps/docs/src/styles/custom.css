@@ -435,8 +435,11 @@ header.header .site-title * {
 }
 
 /* ================================================================
-   Landing (splash) — austere, dark-only, mono. Scoped to [data-has-hero],
-   the body attribute Starlight sets on the splash route.
+   Landing (splash) — austere, mono, dark by default but fully theme-aware:
+   every component ships light overrides so the toggle works here too. The
+   trace island stays dark in both themes (it reads as a product screenshot).
+   Scoped to [data-has-hero], the body attribute Starlight sets on the splash
+   route.
    ================================================================ */
 
 /* Mono-everything: remap the sans token so every landing component's
@@ -466,11 +469,6 @@ header.header .site-title * {
 /* Monochrome focus ring on the landing — keep blue out of the chrome. */
 [data-has-hero] :focus-visible {
   outline-color: var(--color-porcelain);
-}
-
-/* Landing is dark-only: the theme toggle is a no-op here, so hide it. */
-[data-has-hero] starlight-theme-select {
-  display: none;
 }
 
 /* Keep blue out of the landing chrome — social icons stay quiet grey. */

@@ -148,8 +148,16 @@ log.emitNow();`,
     transition: background var(--sl-transition);
   }
 
+  :root[data-theme='light'] .card {
+    background: #ffffff;
+  }
+
   .card:hover {
     background: var(--color-deep-slate);
+  }
+
+  :root[data-theme='light'] .card:hover {
+    background: var(--sl-color-gray-6);
   }
 
   .card__top {
@@ -202,6 +210,10 @@ log.emitNow();`,
     font-variant-numeric: tabular-nums;
   }
 
+  :root[data-theme='light'] .card__index {
+    color: var(--sl-color-gray-3);
+  }
+
   .card__name {
     font-family: var(--sl-font-mono);
     font-size: 0.875rem;
@@ -211,6 +223,10 @@ log.emitNow();`,
     padding: 0;
     letter-spacing: -0.005em;
     font-weight: 400;
+  }
+
+  :root[data-theme='light'] .card__name {
+    color: var(--sl-color-gray-2);
   }
 
   .card__title {
