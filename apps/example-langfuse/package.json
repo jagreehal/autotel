@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-langfuse",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "type": "module",
   "description": "Instrument once with autotel-genai's canonical gen_ai.* spans and fan them out to Langfuse and autotel-devtools using autotel's native OTLP destinations — no extra OpenTelemetry libs.",

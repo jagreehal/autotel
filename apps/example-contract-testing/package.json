@@ -1,6 +1,6 @@
 {
   "name": "@jagreehal/example-contract-testing",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "description": "Runtime evidence for Pact contracts using autotel-pact. Demonstrates the 'contracted but never observed' audit on a real MessageConsumerPact flow.",
   "private": true,
   "type": "module",

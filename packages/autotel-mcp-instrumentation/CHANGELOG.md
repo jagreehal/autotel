@@ -1,5 +1,13 @@
 # autotel-mcp
 
+## 40.0.1
+
+### Patch Changes
+
+- 3d9e31c: Relicense from MIT to Apache-2.0. The `license` field now reads `Apache-2.0`, and the package ships the Apache-2.0 `LICENSE`. This changes the licence only; there are no API changes. Prior releases remain available under their original MIT terms. See `NOTICE` and `TRADEMARKS.md` in the repository root for attribution and the "autotel" trademark policy.
+- Updated dependencies [3d9e31c]
+  - autotel@4.2.5
+
 ## 40.0.0
 
 ### Minor Changes
