@@ -116,5 +116,5 @@
     "url": "https://github.com/jagreehal/autotel",
     "directory": "packages/autotel-devtools"
   },
-  "license": "MIT"
+  "license": "Apache-2.0"
 }

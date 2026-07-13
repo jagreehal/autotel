@@ -272,3 +272,55 @@ describe('summarizeSessions', () => {
     expect(agg.mcpServers['github']).toBe(1);
   });
 });
+
+describe('runtime environment (mcp / plugin / hook events)', () => {
+  it('tracks MCP server connect/disconnect lifecycle', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(store, event('claude_code.mcp_server_connection', {
+      server_name: 'plugin:context7:context7',
+      transport_type: 'stdio',
+      status: 'connected',
+      duration_ms: 1373,
+    }));
+    ingestEventRecord(store, event('claude_code.mcp_server_connection', {
+      server_name: 'plugin:context7:context7',
+      transport_type: 'stdio',
+      status: 'disconnected',
+      duration_ms: 13011,
+    }));
+    const info = store.get(SESSION)!.rollup.mcpConnections['plugin:context7:context7'];
+    expect(info?.transport).toBe('stdio');
+    expect(info?.connects).toBe(1);
+    expect(info?.disconnects).toBe(1);
+    expect(info?.connected).toBe(false); // last event was a disconnect
+  });
+
+  it('records loaded plugins (deduped by name) and hook executions', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(store, event('claude_code.plugin_loaded', { 'plugin.name': 'context7', 'plugin.version': '1.2.0' }));
+    ingestEventRecord(store, event('claude_code.plugin_loaded', { 'plugin.name': 'context7', 'plugin.version': '1.2.0' }));
+    ingestEventRecord(store, event('claude_code.hook_execution_complete', {
+      hook_event: 'PreToolUse',
+      num_success: 2,
+      num_blocking: 1,
+      num_non_blocking_error: 0,
+      num_cancelled: 0,
+    }));
+    const r = store.get(SESSION)!.rollup;
+    expect(Object.keys(r.plugins)).toEqual(['context7']);
+    expect(r.plugins['context7']?.version).toBe('1.2.0');
+    expect(r.hooks.runs).toBe(1);
+    expect(r.hooks.blocked).toBe(1);
+  });
+
+  it('surfaces environment data in summarizeSessions', () => {
+    const store: AgentSessionStore = new Map();
+    ingestEventRecord(store, event('claude_code.mcp_server_connection', { server_name: 'ctx7', status: 'connected' }));
+    ingestEventRecord(store, event('claude_code.plugin_loaded', { 'plugin.name': 'ctx7' }));
+    ingestEventRecord(store, event('claude_code.hook_execution_complete', { num_cancelled: 1 }));
+    const agg = summarizeSessions(store.values());
+    expect(agg.mcpConnections['ctx7']?.connected).toBe(true);
+    expect(agg.plugins['ctx7']).toBeDefined();
+    expect(agg.hooks.cancelled).toBe(1);
+  });
+});

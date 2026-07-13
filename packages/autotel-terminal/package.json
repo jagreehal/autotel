@@ -51,7 +51,7 @@
     "observability"
   ],
   "author": "Jag Reehal<jag@jagreehal.com> (https://jagreehal.com)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/openai": "^4.0.8",
     "@ai-sdk/openai-compatible": "^3.0.5",

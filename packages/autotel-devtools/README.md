@@ -315,4 +315,4 @@ The embedded widget keeps working — it connects from a loopback origin
 
 ## License
 
-MIT
+Apache-2.0

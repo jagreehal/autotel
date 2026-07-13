@@ -281,4 +281,4 @@ Popular backends we'd love to support:
 
 ## License
 
-MIT
+Apache-2.0

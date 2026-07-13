@@ -51,11 +51,11 @@ export const checkout = trace((ctx) =>
     <header class="compare__head">
       <p class="compare__eyebrow">Before / after</p>
       <h2 id="compare-title" class="compare__title">
-        Same telemetry. A fraction of the surface area.
+        Same telemetry. Under a quarter of the code.
       </h2>
       <p class="compare__sub">
-        Autotel keeps OpenTelemetry compatibility intact. You just stop writing
-        the plumbing.
+        Autotel stays fully OpenTelemetry-compatible. You stop writing the
+        plumbing.
       </p>
     </header>
 
@@ -85,7 +85,7 @@ export const checkout = trace((ctx) =>
 <style>
   .compare {
     border-top: 1px solid var(--color-charcoal-grey);
-    padding-block: clamp(3rem, 6vw, 5rem);
+    padding-block: var(--section-pad, clamp(3rem, 6vw, 5rem));
   }
 
   :root[data-theme='light'] .compare {
@@ -100,7 +100,7 @@ export const checkout = trace((ctx) =>
 
   .compare__head {
     max-width: 48rem;
-    margin-bottom: 2.25rem;
+    margin-bottom: 3rem;
   }
 
   .compare__eyebrow {
@@ -186,8 +186,8 @@ export const checkout = trace((ctx) =>
     position: absolute;
     inset: 0 0 auto 0;
     height: 1px;
-    background: var(--color-aether-blue);
-    opacity: 0.95;
+    background: var(--color-porcelain);
+    opacity: 0.9;
     z-index: 1;
   }
 
@@ -229,8 +229,7 @@ export const checkout = trace((ctx) =>
     width: 0.375rem;
     height: 0.375rem;
     border-radius: 999px;
-    background: var(--color-aether-blue);
-    box-shadow: 0 0 8px color-mix(in oklch, var(--color-aether-blue) 50%, transparent);
+    background: var(--color-porcelain);
   }
 
   .panel__count {

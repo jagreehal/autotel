@@ -378,4 +378,4 @@ operation. Usage is `input_tokens` / `output_tokens` with `cache_read` /
 
 ## License
 
-MIT © Jag Reehal
+Apache-2.0 © Jag Reehal

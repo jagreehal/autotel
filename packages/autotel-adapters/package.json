@@ -2,7 +2,7 @@
   "name": "autotel-adapters",
   "version": "0.3.17",
   "description": "Framework adapters and composable DX helpers for autotel",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

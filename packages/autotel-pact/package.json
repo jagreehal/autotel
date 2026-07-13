@@ -76,7 +76,7 @@
     "async"
   ],
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "peerDependencies": {
     "@pact-foundation/pact": ">=17",
     "autotel": "workspace:*"

@@ -37,7 +37,7 @@
     "otlp"
   ],
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@types/node": "^26.1.0",
     "rimraf": "^6.1.3",

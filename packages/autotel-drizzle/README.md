@@ -142,4 +142,4 @@ instrumentDrizzleClient(db, {
 
 ## License
 
-MIT
+Apache-2.0

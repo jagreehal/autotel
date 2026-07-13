@@ -261,4 +261,4 @@ instrumentMongoose(mongoose, {
 
 ## License
 
-MIT
+Apache-2.0

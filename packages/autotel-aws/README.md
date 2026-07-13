@@ -681,4 +681,4 @@ LOCALSTACK_ENDPOINT=http://localhost:4566 pnpm test:integration
 
 ## License
 
-MIT
+Apache-2.0

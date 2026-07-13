@@ -89,7 +89,7 @@
     "cost"
   ],
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "autotel": "workspace:*",
     "autotel-audit": "workspace:*"

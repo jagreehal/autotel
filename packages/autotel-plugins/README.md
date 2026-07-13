@@ -195,4 +195,4 @@ Found a database/ORM without official OpenTelemetry instrumentation? Please [ope
 
 ## License
 
-MIT
+Apache-2.0

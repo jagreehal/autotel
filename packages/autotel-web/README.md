@@ -1257,7 +1257,7 @@ pnpm add -D typescript@^5.0.0 @types/node
 
 ## License
 
-MIT © Jag Reehal
+Apache-2.0 © Jag Reehal
 
 ## Related Packages
 

@@ -4,7 +4,7 @@
 
 [![npm version](https://badge.fury.io/js/autotel-cloudflare.svg)](https://www.npmjs.com/package/autotel-cloudflare)
 [![Bundle Size](https://img.shields.io/bundlephobia/minzip/autotel-cloudflare)](https://bundlephobia.com/package/autotel-cloudflare)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ## Features
 
@@ -571,7 +571,7 @@ See [apps/cloudflare-example](../../apps/cloudflare-example) for a complete work
 
 ## License
 
-MIT © [Jag Reehal](https://github.com/jagreehal)
+Apache-2.0 © [Jag Reehal](https://github.com/jagreehal)
 
 ## Links
 

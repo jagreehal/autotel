@@ -50,7 +50,7 @@
     "telemetry"
   ],
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/instrumentation": "^0.218.0",

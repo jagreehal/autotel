@@ -2,4 +2,9 @@
 import Hero from './landing/Hero.astro';
 ---
 
+{/* Landing is dark-only. Force the theme before paint; docs keep the toggle. */}
+<script is:inline>
+  document.documentElement.dataset.theme = 'dark';
+</script>
+
 <Hero />

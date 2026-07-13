@@ -35,6 +35,9 @@ export default defineConfig({
       customCss: [
         '@fontsource-variable/inter',
         '@fontsource/jetbrains-mono',
+        '@fontsource/jetbrains-mono/500.css',
+        '@fontsource/jetbrains-mono/600.css',
+        '@fontsource/jetbrains-mono/700.css',
         './src/styles/custom.css',
       ],
       sidebar: [

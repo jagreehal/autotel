@@ -37,6 +37,9 @@
     traceQuerySignal,
     traceStatusFilterSignal,
     traceMinDurationSignal,
+    traceServiceFilterSignal,
+    toggleTraceServiceFilter,
+    clearTraceServiceFilter,
   } from '../store.svelte';
   import type { TraceSortKey, TraceStatusFilter } from '../store.svelte';
   import { serviceColor } from '../utils/serviceColor';
@@ -48,6 +51,8 @@
   import TraceDetailView from './TraceDetailView.svelte';
   import CopyButton from './CopyButton.svelte';
   import SearchInput from './SearchInput.svelte';
+  import FacetFilter from './FacetFilter.svelte';
+  import type { Facet } from './facetFilter.types';
   import { useListKeyboardNav } from './listNav.svelte';
   import { matchesNeedle } from '../utils/textMatch';
   import {
@@ -62,10 +67,13 @@
     query: string,
     status: TraceStatusFilter,
     minDurationMs: number,
+    services: Set<string>,
   ): boolean {
     if (status === 'error' && trace.status !== 'ERROR') return false;
     if (status === 'ok' && trace.status === 'ERROR') return false;
     if (minDurationMs > 0 && trace.duration < minDurationMs) return false;
+    if (services.size > 0 && !services.has(trace.service || 'unknown'))
+      return false;
     return matchesNeedle(query.toLowerCase(), [
       trace.service,
       trace.rootSpan?.name,
@@ -88,6 +96,28 @@
   const query = $derived(traceQuerySignal.value);
   const statusFilter = $derived(traceStatusFilterSignal.value);
   const minDuration = $derived(traceMinDurationSignal.value);
+  const serviceFilter = $derived(traceServiceFilterSignal.value);
+
+  // Service facet options with live counts over the full trace list, so the
+  // dropdown always shows every service even while a subset is selected.
+  const serviceFacet = $derived.by<Facet>(() => {
+    const counts = new Map<string, number>();
+    for (const t of traces) {
+      const s = t.service || 'unknown';
+      counts.set(s, (counts.get(s) ?? 0) + 1);
+    }
+    return {
+      key: 'service',
+      label: 'Service',
+      options: [...counts.entries()].map(([value, count]) => ({
+        value,
+        count,
+      })),
+      selected: serviceFilter,
+      onToggle: toggleTraceServiceFilter,
+    };
+  });
+  const showFacets = $derived(serviceFacet.options.length > 1);
   let searchRef: HTMLInputElement | null = $state(null);
   let showImport = $state(false);
 
@@ -121,7 +151,7 @@
 
   const filtered = $derived.by(() =>
     traces.filter((trace) =>
-      traceMatches(trace, query, statusFilter, minDuration),
+      traceMatches(trace, query, statusFilter, minDuration, serviceFilter),
     ),
   );
 
@@ -148,7 +178,10 @@
   }
 
   const isFiltered = $derived(
-    query.length > 0 || statusFilter !== 'all' || minDuration > 0,
+    query.length > 0 ||
+      statusFilter !== 'all' ||
+      minDuration > 0 ||
+      serviceFilter.size > 0,
   );
   const allFilteredSelected = $derived(
     filtered.length > 0 && filtered.every((t) => selectedIds.has(t.traceId)),
@@ -220,14 +253,23 @@
       />
     </label>
 
-    <!-- Service pill -->
-    <span
-      class="text-[11px] font-medium px-2 py-0.5 rounded truncate"
+    <!-- Service pill — click to toggle the service facet filter. -->
+    <button
+      type="button"
+      onclick={(e) => {
+        e.stopPropagation();
+        toggleTraceServiceFilter(trace.service || 'unknown');
+      }}
+      class={cn(
+        'text-[11px] font-medium px-2 py-0.5 rounded truncate text-left transition-shadow',
+        serviceFilter.has(trace.service || 'unknown') &&
+          'ring-1 ring-inset ring-accent',
+      )}
       style="background-color: {sc.fill}; color: {sc.stroke};"
-      title={trace.service || 'unknown'}
+      title={`Filter by ${trace.service || 'unknown'}`}
     >
       {trace.service || 'unknown'}
-    </span>
+    </button>
 
     <!-- Operation -->
     <div class="flex items-center gap-1.5 min-w-0">
@@ -397,6 +439,12 @@
         <option value="error">Errors</option>
         <option value="ok">OK</option>
       </select>
+      {#if showFacets}
+        <FacetFilter
+          facets={[serviceFacet]}
+          onClearAll={clearTraceServiceFilter}
+        />
+      {/if}
       <!-- Min duration -->
       <div
         class="flex items-center text-xs text-fg-subtle flex-shrink-0"

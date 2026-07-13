@@ -163,4 +163,4 @@ Or per-check: `messageContract({ snapshot: 'X', update: true })`.
 
 ## License
 
-MIT © Jag Reehal
+Apache-2.0 © Jag Reehal

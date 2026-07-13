@@ -25,7 +25,7 @@ const year = new Date().getFullYear();
     <div class="foot__inner">
       <span class="foot__name">autotel</span>
       <span class="foot__sep" aria-hidden="true">·</span>
-      <span>MIT licensed</span>
+      <span>Apache-2.0 licensed</span>
       <span class="foot__sep" aria-hidden="true">·</span>
       <a href="https://github.com/jagreehal/autotel">GitHub</a>
       <span class="foot__sep" aria-hidden="true">·</span>
@@ -40,7 +40,7 @@ const year = new Date().getFullYear();
 <style>
   .cta {
     border-top: 1px solid var(--color-charcoal-grey);
-    padding-block: clamp(3rem, 6vw, 5rem) 0;
+    padding-block: var(--section-pad, clamp(3rem, 6vw, 5rem)) 0;
   }
 
   :root[data-theme='light'] .cta {
@@ -96,14 +96,8 @@ const year = new Date().getFullYear();
     border: 1px solid var(--color-charcoal-grey);
     border-radius: 4px;
     padding: 0.05em 0.35em;
-    color: var(--color-aether-blue);
+    color: var(--color-porcelain);
     letter-spacing: -0.005em;
-  }
-
-  :root[data-theme='light'] .cta__title code {
-    background: var(--sl-color-bg-inline-code);
-    border-color: var(--sl-color-gray-5);
-    color: var(--sl-color-accent);
   }
 
   .cta__actions {
@@ -130,27 +124,14 @@ const year = new Date().getFullYear();
   }
 
   .cta__btn--primary {
-    background: var(--color-aether-blue);
-    color: var(--color-porcelain);
-    border: 1px solid var(--color-aether-blue);
-    box-shadow:
-      0 1px 0 0 rgba(255, 255, 255, 0.18) inset,
-      0 6px 24px -8px color-mix(in oklch, var(--color-aether-blue) 40%, transparent);
+    background: var(--color-porcelain);
+    color: var(--color-pitch-black);
+    border: 1px solid var(--color-porcelain);
   }
 
   .cta__btn--primary:hover {
-    background: var(--color-aether-blue-soft);
-    border-color: var(--color-aether-blue-soft);
-  }
-
-  :root[data-theme='light'] .cta__btn--primary {
-    background: var(--sl-color-accent);
-    border-color: var(--sl-color-accent);
-  }
-
-  :root[data-theme='light'] .cta__btn--primary:hover {
-    background: var(--sl-color-accent-high);
-    border-color: var(--sl-color-accent-high);
+    background: var(--color-alabaster);
+    border-color: var(--color-alabaster);
   }
 
   .cta__btn--ghost {
@@ -225,7 +206,7 @@ const year = new Date().getFullYear();
   }
 
   .foot a:hover {
-    color: var(--color-aether-blue);
+    color: var(--color-porcelain);
   }
 
   .foot__year {

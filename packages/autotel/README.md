@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/autotel.svg?label=autotel)](https://www.npmjs.com/package/autotel)
 [![npm subscribers](https://img.shields.io/npm/v/autotel-subscribers.svg?label=subscribers)](https://www.npmjs.com/package/autotel-subscribers)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
 **Write once, observe everywhere.** Instrument your Node.js code a single time, keep the DX you love, and stream traces, metrics, logs, and product events to **any** observability stack without vendor lock-in.
 
