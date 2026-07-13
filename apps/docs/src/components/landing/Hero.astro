@@ -87,8 +87,16 @@ const installCmd = 'npm install autotel';
     font-weight: 510;
   }
 
+  :root[data-theme='light'] .eyebrow {
+    color: var(--sl-color-gray-3);
+  }
+
   .eyebrow__sep {
     color: var(--color-fog-grey);
+  }
+
+  :root[data-theme='light'] .eyebrow__sep {
+    color: var(--sl-color-gray-4);
   }
 
   .wordmark {
@@ -102,12 +110,20 @@ const installCmd = 'npm install autotel';
     border: 0;
   }
 
-  /* White blinking cursor — the terminal motif, kept monochrome. */
+  :root[data-theme='light'] .wordmark {
+    color: var(--color-pitch-black);
+  }
+
+  /* Blinking cursor — the terminal motif, tracks the wordmark colour. */
   .cursor {
     display: inline-block;
     color: var(--color-porcelain);
     margin-left: 0.03em;
     animation: blink 1.05s steps(1) infinite;
+  }
+
+  :root[data-theme='light'] .cursor {
+    color: var(--color-pitch-black);
   }
 
   @keyframes blink {
@@ -124,6 +140,10 @@ const installCmd = 'npm install autotel';
     max-width: 46ch;
     margin: 0 0 2rem;
     letter-spacing: -0.005em;
+  }
+
+  :root[data-theme='light'] .tagline {
+    color: var(--sl-color-gray-2);
   }
 
   .install {
@@ -184,7 +204,8 @@ const installCmd = 'npm install autotel';
     transform: translateX(2px);
   }
 
-  /* Primary is white-on-black — the strongest monochrome move, no blue needed. */
+  /* Primary is the strongest monochrome move — the highest-contrast solid.
+     White-on-black in dark, black-on-white in light. */
   .btn--primary {
     background: var(--color-porcelain);
     color: var(--color-pitch-black);
@@ -196,6 +217,17 @@ const installCmd = 'npm install autotel';
     border-color: var(--color-alabaster);
   }
 
+  :root[data-theme='light'] .btn--primary {
+    background: var(--color-pitch-black);
+    color: var(--color-porcelain);
+    border-color: var(--color-pitch-black);
+  }
+
+  :root[data-theme='light'] .btn--primary:hover {
+    background: var(--color-charcoal-grey);
+    border-color: var(--color-charcoal-grey);
+  }
+
   .btn--ghost {
     background: transparent;
     color: var(--color-porcelain);
@@ -205,6 +237,16 @@ const installCmd = 'npm install autotel';
   .btn--ghost:hover {
     border-color: var(--color-gunmetal);
     background: var(--color-graphite);
+  }
+
+  :root[data-theme='light'] .btn--ghost {
+    color: var(--color-pitch-black);
+    border-color: var(--sl-color-gray-5);
+  }
+
+  :root[data-theme='light'] .btn--ghost:hover {
+    border-color: var(--sl-color-gray-4);
+    background: var(--sl-color-gray-6);
   }
 
   .hero__trace {

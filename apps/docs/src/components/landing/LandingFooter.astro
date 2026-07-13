@@ -100,6 +100,12 @@ const year = new Date().getFullYear();
     letter-spacing: -0.005em;
   }
 
+  :root[data-theme='light'] .cta__title code {
+    background: var(--sl-color-bg-inline-code);
+    border-color: var(--sl-color-gray-5);
+    color: var(--color-pitch-black);
+  }
+
   .cta__actions {
     display: flex;
     flex-wrap: wrap;
@@ -132,6 +138,17 @@ const year = new Date().getFullYear();
   .cta__btn--primary:hover {
     background: var(--color-alabaster);
     border-color: var(--color-alabaster);
+  }
+
+  :root[data-theme='light'] .cta__btn--primary {
+    background: var(--color-pitch-black);
+    color: var(--color-porcelain);
+    border-color: var(--color-pitch-black);
+  }
+
+  :root[data-theme='light'] .cta__btn--primary:hover {
+    background: var(--color-charcoal-grey);
+    border-color: var(--color-charcoal-grey);
   }
 
   .cta__btn--ghost {
