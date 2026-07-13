@@ -21,7 +21,10 @@ import type {
   AgentSession,
   AgentSessionRollup,
   AgentSessionStore,
+  HookStats,
+  McpConnectionInfo,
   OtelMetricRecord,
+  PluginInfo,
   ToolCategory,
   ToolUsage,
 } from './types';
@@ -63,6 +66,9 @@ function emptyRollup(): AgentSessionRollup {
     toolCategories: emptyToolCategories(),
     subAgents: {},
     skills: {},
+    mcpConnections: {},
+    plugins: {},
+    hooks: { runs: 0, blocked: 0, errored: 0, cancelled: 0 },
   };
 }
 
@@ -193,6 +199,39 @@ export function foldEvent(
         if (event.decision === 'accept') usage.accepted += 1;
         if (event.decision === 'reject') usage.rejected += 1;
       }
+      break;
+    }
+    case 'mcp_connection': {
+      const name = event.mcpServerName;
+      if (name) {
+        const info = rollup.mcpConnections[name] ?? {
+          name,
+          connected: false,
+          connects: 0,
+          disconnects: 0,
+        };
+        if (event.mcpTransport) info.transport = event.mcpTransport;
+        if (event.mcpStatus === 'connected') {
+          info.connects += 1;
+          info.connected = true;
+        } else if (event.mcpStatus === 'disconnected') {
+          info.disconnects += 1;
+          info.connected = false;
+        }
+        rollup.mcpConnections[name] = info;
+      }
+      break;
+    }
+    case 'plugin_loaded': {
+      const name = event.pluginName;
+      if (name) rollup.plugins[name] = { name, version: event.pluginVersion };
+      break;
+    }
+    case 'hook_execution': {
+      rollup.hooks.runs += 1;
+      rollup.hooks.blocked += event.hookBlocked ?? 0;
+      rollup.hooks.errored += event.hookErrored ?? 0;
+      rollup.hooks.cancelled += event.hookCancelled ?? 0;
       break;
     }
     default:
@@ -336,6 +375,12 @@ export interface AgentAggregate {
   subAgents: Record<string, number>;
   /** skill name (or `"skill"`) → invocation count. */
   skills: Record<string, number>;
+  /** MCP server name → connection info, merged across sessions. */
+  mcpConnections: Record<string, McpConnectionInfo>;
+  /** plugin name → info, merged across sessions. */
+  plugins: Record<string, PluginInfo>;
+  /** Hook-execution tallies, summed across sessions. */
+  hooks: HookStats;
 }
 
 export function summarizeSessions(sessions: Iterable<AgentSession>): AgentAggregate {
@@ -354,6 +399,9 @@ export function summarizeSessions(sessions: Iterable<AgentSession>): AgentAggreg
     mcpServers: {},
     subAgents: {},
     skills: {},
+    mcpConnections: {},
+    plugins: {},
+    hooks: { runs: 0, blocked: 0, errored: 0, cancelled: 0 },
   };
   for (const session of sessions) {
     agg.sessions += 1;
@@ -383,6 +431,27 @@ export function summarizeSessions(sessions: Iterable<AgentSession>): AgentAggreg
     for (const [name, count] of Object.entries(rollup.skills)) {
       agg.skills[name] = (agg.skills[name] ?? 0) + count;
     }
+    for (const info of Object.values(rollup.mcpConnections)) {
+      const merged = agg.mcpConnections[info.name] ?? {
+        name: info.name,
+        transport: info.transport,
+        connected: false,
+        connects: 0,
+        disconnects: 0,
+      };
+      merged.connects += info.connects;
+      merged.disconnects += info.disconnects;
+      merged.connected = merged.connected || info.connected;
+      if (info.transport) merged.transport = info.transport;
+      agg.mcpConnections[info.name] = merged;
+    }
+    for (const info of Object.values(rollup.plugins)) {
+      agg.plugins[info.name] = info;
+    }
+    agg.hooks.runs += rollup.hooks.runs;
+    agg.hooks.blocked += rollup.hooks.blocked;
+    agg.hooks.errored += rollup.hooks.errored;
+    agg.hooks.cancelled += rollup.hooks.cancelled;
   }
   return agg;
 }

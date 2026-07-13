@@ -24,6 +24,9 @@ export type {
   CostSource,
   AgentEvent,
   ToolUsage,
+  McpConnectionInfo,
+  PluginInfo,
+  HookStats,
   AgentSessionRollup,
   AgentSession,
   AgentSessionStore,
@@ -43,8 +46,12 @@ export {
   isAgentMetric,
   isAgentEvent,
 } from './adapters/registry';
-export { createPrefixAdapter } from './adapters/prefix-adapter';
-export { claudeCodeAdapter } from './adapters/claude-code';
+export { createPrefixAdapter, HANDLED_EVENT_NAMES } from './adapters/prefix-adapter';
+export {
+  claudeCodeAdapter,
+  CLAUDE_CODE_EVENT_CONTRACT,
+  CLAUDE_CODE_KNOWN_EVENT_NAMES,
+} from './adapters/claude-code';
 export { opencodeAdapter } from './adapters/opencode';
 
 export {

@@ -719,6 +719,6 @@ See the [autotel-examples](https://github.com/jagreehal/autotel/tree/main/packag
 
 ## License
 
-MIT © [Jag Reehal](https://jagreehal.com)
+Apache-2.0 © [Jag Reehal](https://jagreehal.com)
 
 

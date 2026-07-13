@@ -65,4 +65,4 @@ No credentials live in settings. When remote-export support lands in v0.2, secre
 
 ## License
 
-MIT. See `LICENSE`.
+Apache-2.0. See `LICENSE`.

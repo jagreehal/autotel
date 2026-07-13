@@ -21,6 +21,9 @@
     EyeOff,
     Check,
     X,
+    Plug,
+    Blocks,
+    Webhook,
   } from '@lucide/svelte';
   import {
     sortedAgentSessionsSignal,
@@ -75,6 +78,12 @@
         return e.tool?.name ?? 'tool';
       case 'user_prompt':
         return 'prompt';
+      case 'mcp_connection':
+        return e.mcpServerName ?? 'mcp server';
+      case 'plugin_loaded':
+        return e.pluginName ?? 'plugin';
+      case 'hook_execution':
+        return e.hookName ?? 'hook';
       default:
         return e.rawEventName;
     }
@@ -100,6 +109,15 @@
     } else if (e.type === 'api_error') {
       if (e.statusCode) parts.push(String(e.statusCode));
       if (e.errorMessage) parts.push(e.errorMessage);
+    } else if (e.type === 'mcp_connection') {
+      if (e.mcpStatus) parts.push(e.mcpStatus);
+      if (e.mcpTransport) parts.push(e.mcpTransport);
+      if (e.durationMs) parts.push(formatDuration(e.durationMs));
+    } else if (e.type === 'plugin_loaded') {
+      if (e.pluginVersion) parts.push(`v${e.pluginVersion}`);
+    } else if (e.type === 'hook_execution') {
+      if (e.hookBlocked) parts.push(`${e.hookBlocked} blocked`);
+      if (e.hookErrored) parts.push(`${e.hookErrored} errored`);
     }
     return parts.join(' · ');
   }
@@ -112,6 +130,15 @@
   const timeline = $derived(selected ? [...selected.timeline].reverse().slice(0, 200) : []);
   const sessionTools = $derived(
     selected ? Object.values(selected.rollup.tools).sort((a, b) => b.count - a.count) : [],
+  );
+
+  // Runtime environment: MCP server connections, loaded plugins, hook runs —
+  // modeled from mcp_server_connection / plugin_loaded / hook_execution events.
+  const mcpConns = $derived(selected ? Object.values(selected.rollup.mcpConnections) : []);
+  const plugins = $derived(selected ? Object.values(selected.rollup.plugins) : []);
+  const hooks = $derived(selected?.rollup.hooks);
+  const hasEnv = $derived(
+    mcpConns.length > 0 || plugins.length > 0 || (hooks !== undefined && hooks.runs > 0),
   );
 </script>
 
@@ -275,6 +302,57 @@
                     </span>
                   </div>
                 {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Runtime environment: MCP servers, plugins, hooks -->
+          {#if hasEnv}
+            <div class="p-3 border-b border-line">
+              <div class="text-[11px] font-semibold text-fg-muted uppercase mb-2">
+                Runtime environment
+              </div>
+              <div class="flex flex-col gap-1">
+                {#each mcpConns as m (m.name)}
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="font-mono text-fg truncate flex items-center gap-1.5">
+                      <Plug size={11} class="text-sky-500 flex-shrink-0" />
+                      {m.name}
+                    </span>
+                    <span class="text-fg-muted flex items-center gap-2 flex-shrink-0">
+                      <span
+                        class="w-1.5 h-1.5 rounded-full {m.connected
+                          ? 'bg-emerald-500'
+                          : 'bg-fg-subtle'}"
+                        title={m.connected ? 'connected' : 'disconnected'}
+                      ></span>
+                      {#if m.transport}<span>{m.transport}</span>{/if}
+                      {#if m.disconnects > 0}<span>{m.connects}↑/{m.disconnects}↓</span>{/if}
+                    </span>
+                  </div>
+                {/each}
+                {#each plugins as p (p.name)}
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="font-mono text-fg truncate flex items-center gap-1.5">
+                      <Blocks size={11} class="text-fuchsia-500 flex-shrink-0" />
+                      {p.name}
+                    </span>
+                    {#if p.version}<span class="text-fg-muted flex-shrink-0">v{p.version}</span>{/if}
+                  </div>
+                {/each}
+                {#if hooks && hooks.runs > 0}
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="font-mono text-fg flex items-center gap-1.5">
+                      <Webhook size={11} class="text-amber-500 flex-shrink-0" />
+                      hooks
+                    </span>
+                    <span class="text-fg-muted flex items-center gap-2 flex-shrink-0">
+                      <span>×{hooks.runs}</span>
+                      {#if hooks.blocked > 0}<span class="text-amber-600">{hooks.blocked} blocked</span>{/if}
+                      {#if hooks.errored > 0}<span class="text-red-500">{hooks.errored} err</span>{/if}
+                    </span>
+                  </div>
+                {/if}
               </div>
             </div>
           {/if}

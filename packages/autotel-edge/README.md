@@ -4,7 +4,7 @@
 
 [![npm version](https://badge.fury.io/js/autotel-edge.svg)](https://www.npmjs.com/package/autotel-edge)
 [![Bundle Size](https://img.shields.io/bundlephobia/minzip/autotel-edge)](https://bundlephobia.com/package/autotel-edge)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ## Overview
 
@@ -368,7 +368,7 @@ trace waterfall in production and export over OTLP locally. Config:
 
 ## License
 
-MIT © [Jag Reehal](https://github.com/jagreehal)
+Apache-2.0 © [Jag Reehal](https://github.com/jagreehal)
 
 ## Links
 

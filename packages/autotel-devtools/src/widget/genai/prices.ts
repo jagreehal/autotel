@@ -5,6 +5,8 @@
 // Anthropic cache rates follow public published ratios:
 //   cache_read = 0.1x input rate, cache_write = 1.25x input rate.
 
+import { makeProviderModelLookup } from './providerModel'
+
 export interface PriceEntry {
   inputPerMTok: number
   outputPerMTok: number
@@ -33,33 +35,9 @@ const TABLE: Record<string, PriceEntry> = {
   'deepseek/deepseek-chat': { inputPerMTok: 0.27, outputPerMTok: 1.1 },
 }
 
-function normalizeProvider(provider: string): string {
-  const p = provider.toLowerCase()
-  if (p === 'az.ai.openai' || p === 'azure_openai') return 'openai'
-  if (p === 'vertex_ai' || p === 'gcp.vertex_ai' || p === 'gcp.gemini') return 'google'
-  return p
-}
-
-// Match by longest-prefix so `gpt-4o-mini-2024-07-18` resolves to
-// `gpt-4o-mini`, not the shorter `gpt-4o`. Cache the sorted index per table
-// since the table is module-local and effectively immutable at runtime.
-const SORTED_KEYS = Object.keys(TABLE).sort((a, b) => {
-  const am = a.split('/')[1] ?? ''
-  const bm = b.split('/')[1] ?? ''
-  return bm.length - am.length
-})
-
-export function lookupPrice(provider: string, model: string): PriceEntry | undefined {
-  const normalizedProvider = normalizeProvider(provider)
-  const normalizedModel = model.toLowerCase()
-  for (const key of SORTED_KEYS) {
-    const [tableProvider, tableModel] = key.split('/')
-    if (tableProvider === normalizedProvider && normalizedModel.startsWith(tableModel)) {
-      return TABLE[key]
-    }
-  }
-  return undefined
-}
+/** Longest-model-prefix lookup, matched by normalized provider (see helper). */
+export const lookupPrice: (provider: string, model: string) => PriceEntry | undefined =
+  makeProviderModelLookup(TABLE)
 
 interface PriceInputs {
   provider: string

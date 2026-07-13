@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Wrench, ChevronRight } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
+  import { humanizeName } from '../../utils/humanize';
   import JsonField from '../JsonField.svelte';
   import type { GenAiToolCall } from '../../genai/types';
 
@@ -8,6 +9,13 @@
     call: GenAiToolCall;
   }
   let { call }: Props = $props();
+
+  // Keep the exact tool id as the visible label (devs match it to code), but
+  // surface a readable Title Case form as a tooltip when it differs.
+  const readableName = $derived(humanizeName(call.name));
+  const nameTitle = $derived(
+    readableName && readableName !== call.name ? readableName : undefined,
+  );
 
   let open = $state(false);
 
@@ -64,7 +72,9 @@
       )}
     />
     <Wrench size={12} class="text-violet-600 shrink-0" />
-    <span class="font-mono font-medium text-violet-600">{call.name}</span>
+    <span class="font-mono font-medium text-violet-600" title={nameTitle}
+      >{call.name}</span
+    >
     {#if !open && paramSummary}
       <span class="font-mono text-[11px] text-violet-600/70 truncate">
         ({paramSummary})

@@ -410,4 +410,4 @@ MCP resources give agents context without burning tool calls:
 
 ## License
 
-MIT
+Apache-2.0

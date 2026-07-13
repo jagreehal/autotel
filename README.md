@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/autotel.svg?label=autotel)](https://www.npmjs.com/package/autotel)
 [![npm subscribers](https://img.shields.io/npm/v/autotel-subscribers.svg?label=adapters)](https://www.npmjs.com/package/autotel-subscribers)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 **Write once, observe everywhere.**
 
@@ -406,4 +406,9 @@ Having issues seeing your traces? Use `ConsoleSpanExporter` for visual debugging
 
 ## License
 
-MIT - See [LICENSE](./LICENSE) for details.
+The Apache License, Version 2.0 applies to the source code. See
+[LICENSE](./LICENSE) and [NOTICE](./NOTICE) for details.
+
+"autotel" is a trademark of Jag Reehal and is not granted for use by the
+software licence. See [TRADEMARKS.md](./TRADEMARKS.md) for what you can and
+cannot do with the name.

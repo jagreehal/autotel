@@ -10,6 +10,8 @@
     formatSeconds,
   } from '../../utils/genaiFormat';
   import { formatDuration } from '../../utils';
+  import { lookupContextWindow } from '../../genai/contextWindows';
+  import ContextWindowGauge from './ContextWindowGauge.svelte';
   import type { GenAiSpan } from '../../genai/types';
 
   interface Props {
@@ -41,6 +43,15 @@
       span.usage.outputTokens,
       span.usage.reasoningOutputTokens,
     ),
+  );
+
+  // Context-window fill: input tokens vs the model's total budget. Only shown
+  // when we know both the window size (seed table) and the prompt size.
+  const contextWindow = $derived(
+    lookupContextWindow(span.provider, span.responseModel ?? span.requestModel),
+  );
+  const showContextGauge = $derived(
+    contextWindow != null && span.usage.inputTokens != null,
   );
 
   const paramText = $derived.by(() => {
@@ -185,6 +196,12 @@
       <span class="text-fg-subtle">→</span>
       {outputTokensLabel}
     </span>
+    {#if showContextGauge}
+      <ContextWindowGauge
+        used={span.usage.inputTokens ?? 0}
+        total={contextWindow ?? 0}
+      />
+    {/if}
     <span
       class={cn(
         'inline-flex items-center gap-1',

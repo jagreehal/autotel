@@ -382,4 +382,4 @@ The `pact.*` namespace is currently unclaimed in OTel semantic conventions; we p
 
 ## License
 
-MIT
+Apache-2.0

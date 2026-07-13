@@ -128,4 +128,4 @@ init({
 
 ## License
 
-MIT © Jag Reehal
+Apache-2.0 © Jag Reehal

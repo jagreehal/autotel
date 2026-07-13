@@ -27,7 +27,7 @@ const integrations = [
     <header class="frameworks__head">
       <p class="frameworks__eyebrow">Surface coverage</p>
       <h2 id="frameworks-title" class="frameworks__title">
-        Wire it once. Run it anywhere Node, Bun, or the edge runs.
+        Wire it once. Run it wherever Node, Bun, or the edge runs.
       </h2>
     </header>
 
@@ -70,7 +70,7 @@ const integrations = [
 <style>
   .frameworks {
     border-top: 1px solid var(--color-charcoal-grey);
-    padding-block: clamp(3rem, 6vw, 5rem);
+    padding-block: var(--section-pad, clamp(3rem, 6vw, 5rem));
   }
 
   :root[data-theme='light'] .frameworks {
@@ -85,7 +85,7 @@ const integrations = [
 
   .frameworks__head {
     max-width: 48rem;
-    margin-bottom: 2.25rem;
+    margin-bottom: 3rem;
   }
 
   .frameworks__eyebrow {
@@ -195,11 +195,7 @@ const integrations = [
   }
 
   .chip:hover .chip__arrow {
-    color: var(--color-aether-blue);
+    color: var(--color-porcelain);
     transform: translateX(2px);
-  }
-
-  :root[data-theme='light'] .chip:hover .chip__arrow {
-    color: var(--sl-color-accent);
   }
 </style>

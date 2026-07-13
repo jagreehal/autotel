@@ -3,7 +3,7 @@
 **Terminal trace viewer for autotel** :  Ink (React-for-CLI) powered dashboard for live trace inspection during development. Zero setup, trace-first, autotel-only.
 
 [![npm version](https://badge.fury.io/js/autotel-terminal.svg)](https://www.npmjs.com/package/autotel-terminal)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ## Overview
 
@@ -515,7 +515,7 @@ See the [autotel examples](../../apps/) directory for complete working examples:
 
 ## License
 
-MIT © [Jag Reehal](https://github.com/jagreehal)
+Apache-2.0 © [Jag Reehal](https://github.com/jagreehal)
 
 ## Links
 

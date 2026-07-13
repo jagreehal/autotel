@@ -90,6 +90,15 @@ export function sampleAgentSessions(): AgentSession[] {
       duration_ms: 4100,
     }),
     event(a, 'api_error', tick(), { model: 'claude-opus-4', status_code: 529, error: 'overloaded', duration_ms: 800 }),
+    // Runtime environment: an MCP server connecting, a plugin loading, hooks firing.
+    event(a, 'mcp_server_connection', tick(), {
+      server_name: 'plugin:context7:context7',
+      transport_type: 'stdio',
+      status: 'connected',
+      duration_ms: 1373,
+    }),
+    event(a, 'plugin_loaded', tick(), { 'plugin.name': 'context7', 'plugin.version': '1.2.0' }),
+    event(a, 'hook_execution_complete', tick(), { hook_event: 'PreToolUse', num_success: 3, num_blocking: 1 }),
   ]);
   ingestAgentMetrics(store, [linesMetric(a, 86, 14)]);
 

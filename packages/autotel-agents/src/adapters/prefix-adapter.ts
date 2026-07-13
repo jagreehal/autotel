@@ -41,7 +41,18 @@ const EVENT_SUFFIXES: Record<string, AgentEventType> = {
   api_error: 'api_error',
   tool_result: 'tool_result',
   tool_decision: 'tool_decision',
+  mcp_server_connection: 'mcp_connection',
+  plugin_loaded: 'plugin_loaded',
+  hook_execution_complete: 'hook_execution',
 };
+
+/**
+ * Event-name suffixes this adapter family models (drives the drift guard: an
+ * agent event whose suffix is neither here nor on a per-agent "ignored" list is
+ * an unhandled signal to triage). Prefix-shaped agents (Claude Code / opencode)
+ * share these names.
+ */
+export const HANDLED_EVENT_NAMES: readonly string[] = Object.keys(EVENT_SUFFIXES);
 
 /** Compose a full ToolRef: MCP split + category + (defensive) sub-agent/skill id. */
 function buildToolRef(name: string, attrs: Attributes): ToolRef {
@@ -168,6 +179,26 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
           event.promptLength = num(attrs, 'prompt_length', 'prompt.length');
           const text = str(attrs, 'prompt');
           if (text) event.promptText = text;
+          break;
+        }
+        case 'mcp_connection': {
+          event.mcpServerName = str(attrs, 'server_name', 'name');
+          event.mcpTransport = str(attrs, 'transport_type', 'transport');
+          event.mcpStatus = str(attrs, 'status');
+          event.durationMs = num(attrs, 'duration_ms');
+          break;
+        }
+        case 'plugin_loaded': {
+          event.pluginName = str(attrs, 'plugin.name', 'plugin_name', 'name');
+          event.pluginVersion = str(attrs, 'plugin.version', 'plugin_version');
+          break;
+        }
+        case 'hook_execution': {
+          event.hookName = str(attrs, 'hook_event', 'hook_name', 'name');
+          event.hookSuccess = num(attrs, 'num_success');
+          event.hookBlocked = num(attrs, 'num_blocking');
+          event.hookErrored = num(attrs, 'num_non_blocking_error');
+          event.hookCancelled = num(attrs, 'num_cancelled');
           break;
         }
         default: {

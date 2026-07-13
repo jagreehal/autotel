@@ -117,7 +117,7 @@
     "sns"
   ],
   "author": "Jag Reehal <jag@jagreehal.com> (https://jagreehal.com)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "peerDependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",
     "@aws-sdk/client-dynamodb": "^3.1081.0",

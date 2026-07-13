@@ -283,7 +283,17 @@ Be respectful, inclusive, and constructive. We're all here to build something gr
 
 ## License
 
-By contributing to Autotel, you agree that your contributions will be licensed under the MIT License.
+By contributing to Autotel, you agree that your contributions will be licensed under the Apache License, Version 2.0.
+
+### Developer Certificate of Origin (DCO)
+
+We use the [Developer Certificate of Origin](https://developercertificate.org/). Every commit must be signed off, which certifies that you wrote the contribution or otherwise have the right to submit it under the project's licence. Add a sign-off line to your commit message:
+
+```
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+Run `git commit -s` to add it automatically.
 
 ---
 

@@ -64,4 +64,4 @@ Register it in `src/adapters/registry.ts`. No reducer or UI changes.
 
 ## License
 
-MIT
+Apache-2.0

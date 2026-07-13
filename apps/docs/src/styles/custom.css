@@ -433,3 +433,51 @@ header.header .site-title * {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ================================================================
+   Landing (splash) — austere, dark-only, mono. Scoped to [data-has-hero],
+   the body attribute Starlight sets on the splash route.
+   ================================================================ */
+
+/* Mono-everything: remap the sans token so every landing component's
+   var(--sl-font) resolves to JetBrains Mono, and lock the mono stack to a
+   font we actually ship so rendering is identical for every visitor. */
+[data-has-hero] main {
+  --sl-font-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+  --sl-font: var(--sl-font-mono);
+  /* Shared vertical rhythm — generous negative space between sections. */
+  --section-pad: clamp(4.25rem, 8.5vw, 7.5rem);
+}
+
+/* Grain across the whole landing — faint, non-interactive, sits on top. */
+[data-has-hero]::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  pointer-events: none;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+
+/* Monochrome focus ring on the landing — keep blue out of the chrome. */
+[data-has-hero] :focus-visible {
+  outline-color: var(--color-porcelain);
+}
+
+/* Landing is dark-only: the theme toggle is a no-op here, so hide it. */
+[data-has-hero] starlight-theme-select {
+  display: none;
+}
+
+/* Keep blue out of the landing chrome — social icons stay quiet grey. */
+[data-has-hero] header .social-icons a {
+  color: var(--color-storm-cloud);
+}
+
+[data-has-hero] header .social-icons a:hover {
+  color: var(--color-porcelain);
+}

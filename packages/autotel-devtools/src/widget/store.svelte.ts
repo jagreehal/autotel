@@ -177,6 +177,63 @@ export const logsSignal = signal<LogData[]>([]);
 
 export const connectionStatusSignal = signal<string>('disconnected');
 
+// ===== Live activity / ingest throughput =====
+// A monotonic counter bumped every time new telemetry lands, so indicators can
+// pulse on arrival (distinct from "connected", which says nothing about flow).
+// Paired with a short rolling buffer of per-batch counts to derive an ingest
+// rate (items/sec) — a throughput meter for the OTLP receiver.
+export const activityTickSignal = signal(0);
+
+interface IngestSample {
+  t: number;
+  traces: number;
+  logs: number;
+  metrics: number;
+}
+const INGEST_WINDOW_MS = 15_000;
+let ingestSamples: IngestSample[] = [];
+
+/** Record a batch arrival: bumps the activity tick and feeds the rate window. */
+export function recordIngest(traces: number, logs: number, metrics: number) {
+  if (traces + logs + metrics === 0) return;
+  const now = Date.now();
+  ingestSamples.push({ t: now, traces, logs, metrics });
+  const cutoff = now - INGEST_WINDOW_MS;
+  if (ingestSamples.length > 1024 || ingestSamples[0].t < cutoff) {
+    ingestSamples = ingestSamples.filter((s) => s.t >= cutoff);
+  }
+  activityTickSignal.value = activityTickSignal.value + 1;
+}
+
+/**
+ * Per-type ingest rate (items/sec) over the trailing `windowMs`. Pure over the
+ * buffer + `now`, so callers on an interval decay the rate to zero when data
+ * stops (no fresh samples ⇒ empty window ⇒ 0/s).
+ */
+export function ingestRatePerSecond(
+  windowMs = 5000,
+  now: number = Date.now(),
+): { traces: number; logs: number; metrics: number; total: number } {
+  const cutoff = now - windowMs;
+  let traces = 0;
+  let logs = 0;
+  let metrics = 0;
+  for (const s of ingestSamples) {
+    if (s.t >= cutoff) {
+      traces += s.traces;
+      logs += s.logs;
+      metrics += s.metrics;
+    }
+  }
+  const secs = windowMs / 1000;
+  return {
+    traces: traces / secs,
+    logs: logs / secs,
+    metrics: metrics / secs,
+    total: (traces + logs + metrics) / secs,
+  };
+}
+
 // ===== Live tail pause buffer =====
 // Exported so stories and tests can drive these states without going through
 // a paused live socket; mirrors how other data signals are exposed.
@@ -249,6 +306,20 @@ export type TraceStatusFilter = 'all' | 'error' | 'ok';
 export const traceQuerySignal = signal('');
 export const traceStatusFilterSignal = signal<TraceStatusFilter>('all');
 export const traceMinDurationSignal = signal(0);
+// Multi-select service facet — empty set means "all services" (no constraint).
+export const traceServiceFilterSignal = signal<Set<string>>(new Set());
+
+export function toggleTraceServiceFilter(service: string) {
+  const next = new Set(traceServiceFilterSignal.value);
+  if (next.has(service)) next.delete(service);
+  else next.add(service);
+  traceServiceFilterSignal.value = next;
+}
+
+export function clearTraceServiceFilter() {
+  if (traceServiceFilterSignal.value.size > 0)
+    traceServiceFilterSignal.value = new Set();
+}
 
 // GenAI-list filter — also global for the same shareable-URL reason.
 export const genaiQuerySignal = signal('');
@@ -634,6 +705,14 @@ export function updateWidgetData(data: Partial<WidgetData>) {
   if (data.metrics && data.metrics.length > 0) {
     metricsStream.ingest(data.metrics.map(withMetricId), paused);
   }
+
+  // Arrival drives the live-activity pulse + ingest-rate meter regardless of
+  // pause (data still arrived; it's just buffered).
+  recordIngest(
+    data.traces?.length ?? 0,
+    data.logs?.length ?? 0,
+    data.metrics?.length ?? 0,
+  );
 
   if (data.health) {
     healthSignal.value = data.health;

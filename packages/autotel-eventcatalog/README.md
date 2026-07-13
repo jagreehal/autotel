@@ -405,4 +405,4 @@ covers**, which is the property a green pipeline should buy you.
 
 ## License
 
-MIT.
+Apache-2.0.

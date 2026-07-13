@@ -80,6 +80,9 @@ export type AgentEventType =
   | 'api_error'
   | 'tool_result'
   | 'tool_decision'
+  | 'mcp_connection'
+  | 'plugin_loaded'
+  | 'hook_execution'
   | 'other';
 
 export type ToolDecision = 'accept' | 'reject';
@@ -141,7 +144,49 @@ export interface AgentEvent {
   errorMessage?: string;
   statusCode?: number;
 
+  // mcp_connection (mcp_server_connection)
+  mcpServerName?: string;
+  mcpTransport?: string;
+  /** `"connected"` | `"disconnected"` — the connection state this event reports. */
+  mcpStatus?: string;
+
+  // plugin_loaded
+  pluginName?: string;
+  pluginVersion?: string;
+
+  // hook_execution (hook_execution_complete)
+  hookName?: string;
+  hookSuccess?: number;
+  hookBlocked?: number;
+  hookErrored?: number;
+  hookCancelled?: number;
+
   attributes: Attributes;
+}
+
+/** MCP server the agent connected to (from `mcp_server_connection` events). */
+export interface McpConnectionInfo {
+  name: string;
+  /** Transport, e.g. `"stdio"` or `"sse"`. */
+  transport?: string;
+  /** Whether the last event left it connected. */
+  connected: boolean;
+  connects: number;
+  disconnects: number;
+}
+
+/** A plugin the agent loaded (from `plugin_loaded` events). */
+export interface PluginInfo {
+  name: string;
+  version?: string;
+}
+
+/** Hook-execution tallies (from `hook_execution_complete` events). */
+export interface HookStats {
+  runs: number;
+  blocked: number;
+  errored: number;
+  cancelled: number;
 }
 
 /** Per-tool usage tally within a session. */
@@ -193,6 +238,13 @@ export interface AgentSessionRollup {
   subAgents: Record<string, number>;
   /** skill name (or `"skill"` when name unknown) → invocation count. */
   skills: Record<string, number>;
+  // ── Runtime environment (from mcp_server_connection / plugin_loaded / hook events) ──
+  /** MCP server name → connection info (distinct from tool-call-derived `tools`). */
+  mcpConnections: Record<string, McpConnectionInfo>;
+  /** plugin name → info. */
+  plugins: Record<string, PluginInfo>;
+  /** Hook-execution tallies. */
+  hooks: HookStats;
 }
 
 export interface AgentSession {

@@ -5,7 +5,7 @@
   "displayName": "Autotel",
   "description": "OpenTelemetry observability inside VSCode — receives OTLP, navigates traces, jumps to source.",
   "publisher": "jagreehal",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/jagreehal/autotel",

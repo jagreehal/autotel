@@ -5,7 +5,7 @@ const items = [
     name: 'trace',
     title: 'Trace any function',
     blurb:
-      'Wrap a handler. Spans, error recording, and request context come automatically.',
+      'Wrap a handler. Autotel records the spans, the errors, and the request context.',
     code: `import { trace } from 'autotel';
 
 export const checkout = trace((ctx) =>
@@ -34,7 +34,7 @@ track('order.created', {
     name: 'log',
     title: 'One canonical log line',
     blurb:
-      'Build context across the request, then emit one structured event at the end.',
+      'Add context through the request, then emit one structured event when it ends.',
     code: `import { getRequestLogger } from 'autotel';
 
 const log = getRequestLogger(ctx);
@@ -49,7 +49,7 @@ log.emitNow();`,
     <header class="primitives__head">
       <p class="primitives__eyebrow">Three primitives</p>
       <h2 id="primitives-title" class="primitives__title">
-        Everything you need from a single import.
+        Three functions. That's it.
       </h2>
     </header>
 
@@ -78,7 +78,7 @@ log.emitNow();`,
 <style>
   .primitives {
     border-top: 1px solid var(--color-charcoal-grey);
-    padding-block: clamp(3rem, 6vw, 5rem);
+    padding-block: var(--section-pad, clamp(3rem, 6vw, 5rem));
   }
 
   :root[data-theme='light'] .primitives {
@@ -92,7 +92,7 @@ log.emitNow();`,
   }
 
   .primitives__head {
-    margin-bottom: 2.25rem;
+    margin-bottom: 3rem;
     max-width: 48rem;
   }
 
@@ -145,10 +145,11 @@ log.emitNow();`,
     display: grid;
     grid-template-rows: subgrid;
     grid-row: span 2;
+    transition: background var(--sl-transition);
   }
 
-  :root[data-theme='light'] .card {
-    background: #ffffff;
+  .card:hover {
+    background: var(--color-deep-slate);
   }
 
   .card__top {
@@ -204,16 +205,12 @@ log.emitNow();`,
   .card__name {
     font-family: var(--sl-font-mono);
     font-size: 0.875rem;
-    color: var(--color-aether-blue);
+    color: var(--color-light-steel);
     background: transparent;
     border: 0;
     padding: 0;
     letter-spacing: -0.005em;
     font-weight: 400;
-  }
-
-  :root[data-theme='light'] .card__name {
-    color: var(--sl-color-accent);
   }
 
   .card__title {
