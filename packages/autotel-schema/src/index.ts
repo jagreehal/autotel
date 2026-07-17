@@ -83,6 +83,31 @@ export type {
 } from './diff.js';
 
 export {
+  parseCardinality,
+  validateScenarioSpec,
+  isScenarioClosed,
+  evaluateScenario,
+  checkScenario,
+  formatScenarioResult,
+  proposeScenario,
+} from './scenario.js';
+export type {
+  ScenarioSpan,
+  Cardinality,
+  ScenarioEventSpec,
+  CompletionBoundary,
+  ScenarioSpec,
+  ScenarioOutcome,
+  ScenarioViolationCode,
+  ScenarioViolation,
+  ScenarioAddition,
+  ScenarioResult,
+  EvaluateScenarioOptions,
+  CheckScenarioOptions,
+  ScenarioProposal,
+} from './scenario.js';
+
+export {
   highCardinalityKeys,
   isHighCardinalityKey,
 } from './redaction.js';

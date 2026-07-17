@@ -121,10 +121,69 @@ init({
 });
 ```
 
+## 5. Scenario conformance: contract one exercised flow
+
+Spans and attributes contract your telemetry *surface*. A **scenario** contracts the *behaviour* of one exercised flow: which events must fire, how many times, in what topology — and, for async flows, **when the observation is complete**, because without a completion boundary a missing event and an event that hasn't fired *yet* are indistinguishable.
+
+```ts
+export const contract = defineContract({
+  service: 'transfer',
+  version: '1.3.0',
+  spans: { /* ... */ },
+  scenarios: {
+    'transfer.accept': {
+      completion: { mode: 'terminal-event', event: 'transfer.queued', observationBudgetMs: 5000 },
+      events: {
+        'transfer.request': { cardinality: 'exactly 1' },
+        'transfer.validate': { cardinality: 'exactly 1' },
+        'transfer.queued': { cardinality: 'exactly 1' },
+        'transfer.retry': { cardinality: 'at most 3' },
+      },
+      edges: [['transfer.request', 'transfer.validate']], // ancestor→descendant, infra spans in between are fine
+    },
+  },
+});
+```
+
+Checking yields **three** outcomes, not two — infrastructure slowness is not reported as behavioural regression:
+
+```ts
+import { checkScenario, formatScenarioResult } from 'autotel-schema';
+
+const result = await checkScenario(
+  contract.scenarios!['transfer.accept'],
+  () => collector.peekTrace(traceId), // TestSpanCollector from autotel — or any ScenarioSpan[] source
+  { name: 'transfer.accept' },
+);
+// result.outcome:
+//   'conformant'     — boundary closed, signature satisfied
+//   'non-conformant' — required behaviour missing or invalid (definitive)
+//   'incomplete'     — boundary didn't close within the observation budget
+if (result.outcome !== 'conformant') throw new Error(formatScenarioResult(result));
+```
+
+Semantics worth knowing:
+
+- **Absence is definitive only after closure** (closed-world). Excess is definitive immediately: an unexpected error span or an exceeded `max` cardinality fails fast while the flow is still open.
+- **Undeclared events are additive** — reported in `result.additions`, never a failure. Improving instrumentation must not break CI.
+- **The observation budget bounds how long the checker waits.** It is not a business SLO — assert deadlines separately on `result.spans`.
+- An `externally-reconciled` boundary never closes in-process: use it for phases verified by a deferred job keyed by a durable business ID.
+
+Don't hand-write the first draft — record it:
+
+```ts
+import { proposeScenario } from 'autotel-schema';
+
+const { scenario, notes } = proposeScenario(runs); // runs: ScenarioSpan[][] from N controlled executions
+// notes: 'transfer.validate: exactly 1 (20/20 runs)', 'notification.send: 0..1 (14/20 runs) — review: variable', ...
+```
+
+Stable events become required cardinality, variable ones get ranges flagged for review, and the completion boundary + budget are suggested from observed timings. Review, trim, commit.
+
 ## What this is / isn't
 
-- **Is**: a contract for your telemetry surface: span names, attribute keys, types, enums, stability, and breaking-vs-additive evolution.
-- **Isn't**: a contract for application message payloads (use [`autotel-message-contract`](../autotel-message-contract)) or evidence that interactions ran (use [`autotel-pact`](../autotel-pact)). It does not require the OpenTelemetry SDK. The processor works against structural span types.
+- **Is**: a contract for your telemetry surface: span names, attribute keys, types, enums, stability, and breaking-vs-additive evolution — and, per scenario, the behavioural signature of one exercised flow (events, cardinality, topology, completion).
+- **Isn't**: a contract for application message payloads (use [`autotel-message-contract`](../autotel-message-contract)) or evidence that contracted interactions ran (use [`autotel-pact`](../autotel-pact)). It does not require the OpenTelemetry SDK. The processor works against structural span types.
 
 ## License
 

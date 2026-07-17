@@ -231,4 +231,57 @@ describe('TestSpanCollector', () => {
     expect(collector.drainTrace('t', 's')).toHaveLength(1);
     expect(collector.drainTrace('t', 's')).toEqual([]);
   });
+
+  it('peekTrace reads without removing, so a poller can watch a trace grow', () => {
+    const collector = new TestSpanCollector();
+
+    collector.export(
+      [makeSpan({ traceId: 't', spanId: 'root', name: 'op1' })],
+      vi.fn(),
+    );
+    expect(collector.peekTrace('t')).toHaveLength(1);
+
+    // More spans arrive after the first peek (async flow still running).
+    collector.export(
+      [
+        makeSpan({
+          traceId: 't',
+          spanId: 'child',
+          parentSpanId: 'root',
+          name: 'op2',
+        }),
+      ],
+      vi.fn(),
+    );
+    expect(collector.peekTrace('t')).toHaveLength(2);
+    expect(collector.peekTrace('t')).toHaveLength(2); // still there
+
+    // Draining afterwards still works and empties the trace.
+    expect(collector.drainTrace('t', 'root')).toHaveLength(2);
+    expect(collector.peekTrace('t')).toEqual([]);
+  });
+
+  it('peekTrace filters to the rootSpanId subtree when given one', () => {
+    const collector = new TestSpanCollector();
+
+    collector.export(
+      [
+        makeSpan({ traceId: 't', spanId: 'root', name: 'test-root' }),
+        makeSpan({
+          traceId: 't',
+          spanId: 'child',
+          parentSpanId: 'root',
+          name: 'op',
+        }),
+        makeSpan({ traceId: 't', spanId: 'stray', name: 'other-test' }),
+      ],
+      vi.fn(),
+    );
+
+    expect(collector.peekTrace('t', 'root').map((s) => s.name)).toEqual(
+      expect.arrayContaining(['test-root', 'op']),
+    );
+    expect(collector.peekTrace('t', 'root')).toHaveLength(2);
+    expect(collector.peekTrace('t')).toHaveLength(3);
+  });
 });
