@@ -114,8 +114,6 @@ export interface ScenarioEventSpec {
 export type CompletionBoundary =
   | { mode: 'root-span-closed'; observationBudgetMs: number }
   | { mode: 'terminal-event'; event: string; observationBudgetMs: number }
-  | { mode: 'workflow-completed'; workflow: string; observationBudgetMs: number }
-  | { mode: 'phase-completed'; phase: string; observationBudgetMs: number }
   | { mode: 'externally-reconciled'; reconciliationDeadlineMs: number };
 
 /** The flow-level contract for one exercised scenario (or one phase of one). */
@@ -179,8 +177,6 @@ function assert(condition: unknown, message: string): asserts condition {
 const COMPLETION_MODES = [
   'root-span-closed',
   'terminal-event',
-  'workflow-completed',
-  'phase-completed',
   'externally-reconciled',
 ] as const;
 
@@ -211,18 +207,6 @@ export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
       assert(
         typeof spec.completion.event === 'string' && spec.completion.event.length > 0,
         `${scope} terminal-event completion must declare a non-empty event`,
-      );
-      break;
-    case 'workflow-completed':
-      assert(
-        typeof spec.completion.workflow === 'string' && spec.completion.workflow.length > 0,
-        `${scope} workflow-completed completion must declare a non-empty workflow`,
-      );
-      break;
-    case 'phase-completed':
-      assert(
-        typeof spec.completion.phase === 'string' && spec.completion.phase.length > 0,
-        `${scope} phase-completed completion must declare a non-empty phase`,
       );
       break;
   }
@@ -257,36 +241,21 @@ export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
   }
 }
 
-/** The span name that signals closure, or `undefined` for external boundaries. */
-function closureSignal(boundary: CompletionBoundary): string | undefined {
-  switch (boundary.mode) {
-    case 'terminal-event': {
-      return boundary.event;
-    }
-    case 'workflow-completed': {
-      return boundary.workflow;
-    }
-    case 'phase-completed': {
-      return boundary.phase;
-    }
-    default: {
-      return undefined;
-    }
-  }
-}
-
 /** Whether the scenario's completion boundary has closed for these spans. */
 export function isScenarioClosed(
   spec: ScenarioSpec,
   spans: readonly ScenarioSpan[],
 ): boolean {
-  if (spec.completion.mode === 'externally-reconciled') return false;
-  if (spec.completion.mode === 'root-span-closed') {
-    // Only finished spans reach a collector, so a present root = a closed root.
-    return spans.some((s) => !s.parentSpanId);
+  const { completion } = spec;
+  switch (completion.mode) {
+    case 'externally-reconciled':
+      return false;
+    case 'root-span-closed':
+      // Only finished spans reach a collector, so a present root = a closed root.
+      return spans.some((s) => !s.parentSpanId);
+    case 'terminal-event':
+      return spans.some((s) => s.name === completion.event);
   }
-  const signal = closureSignal(spec.completion);
-  return spans.some((s) => s.name === signal);
 }
 
 /** True when `span` has an ancestor named `ancestorName` within `byId`. */
@@ -520,6 +489,9 @@ export function proposeScenario(
   options?: { name?: string },
 ): ScenarioProposal {
   assert(runs.length > 0, 'proposeScenario needs at least one recorded run');
+  for (const [index, run] of runs.entries()) {
+    assert(run.length > 0, `proposeScenario run ${index + 1} has no recorded spans`);
+  }
   const name = options?.name ?? 'scenario';
   const notes: string[] = [];
   const total = runs.length;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { defineContract } from './contract.js';
 import {
@@ -111,18 +111,8 @@ describe('validateScenarioSpec / defineContract integration', () => {
     expect(() =>
       validateScenarioSpec('bad', {
         completion: {
-          mode: 'workflow-completed',
-          workflow: '',
-          observationBudgetMs: 100,
-        },
-        events: { a: {} },
-      }),
-    ).toThrowError(/non-empty workflow/);
-    expect(() =>
-      validateScenarioSpec('bad', {
-        completion: {
-          mode: 'phase-completed',
-          phase: 'settle',
+          mode: 'terminal-event',
+          event: 'settle',
           observationBudgetMs: Number.POSITIVE_INFINITY,
         },
         events: { a: {} },
@@ -175,18 +165,6 @@ describe('isScenarioClosed', () => {
     expect(isScenarioClosed(spec, [span('a')])).toBe(false);
   });
 
-  it('treats workflow/phase completion as named closure signals', () => {
-    const wf: ScenarioSpec = {
-      completion: { mode: 'workflow-completed', workflow: 'payout', observationBudgetMs: 100 },
-      events: { payout: {} },
-    };
-    expect(isScenarioClosed(wf, [span('payout')])).toBe(true);
-    const phase: ScenarioSpec = {
-      completion: { mode: 'phase-completed', phase: 'settle', observationBudgetMs: 100 },
-      events: { settle: {} },
-    };
-    expect(isScenarioClosed(phase, [span('other')])).toBe(false);
-  });
 });
 
 describe('evaluateScenario — three-state outcomes', () => {
@@ -348,43 +326,56 @@ describe('checkScenario — polling with an observation budget', () => {
   });
 
   it('enforces the budget while an async span source is still pending', async () => {
-    const start = Date.now();
-    const result = await checkScenario(
-      transferAccept,
-      () =>
-        new Promise<ScenarioSpan[]>((resolve) => {
-          setTimeout(() => resolve(happyPath()), 100);
-        }),
-      { budgetMs: 20, pollIntervalMs: 100 },
-    );
-    expect(result.outcome).toBe('incomplete');
-    expect(result.closed).toBe(false);
-    expect(Date.now() - start).toBeLessThan(80);
+    vi.useFakeTimers();
+    try {
+      const resultPromise = checkScenario(
+        transferAccept,
+        () =>
+          new Promise<ScenarioSpan[]>((resolve) => {
+            setTimeout(() => resolve(happyPath()), 100);
+          }),
+        { budgetMs: 20, pollIntervalMs: 100 },
+      );
+      await vi.advanceTimersByTimeAsync(20);
+      const result = await resultPromise;
+      expect(result.outcome).toBe('incomplete');
+      expect(result.closed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not let a poll interval overrun the remaining budget', async () => {
-    const start = Date.now();
-    const result = await checkScenario(
-      transferAccept,
-      () => [span('transfer.request', { spanId: 'root' })],
-      { budgetMs: 20, pollIntervalMs: 100 },
-    );
-    expect(result.outcome).toBe('incomplete');
-    expect(Date.now() - start).toBeLessThan(80);
+    vi.useFakeTimers();
+    try {
+      const resultPromise = checkScenario(
+        transferAccept,
+        () => [span('transfer.request', { spanId: 'root' })],
+        { budgetMs: 20, pollIntervalMs: 100 },
+      );
+      await vi.advanceTimersByTimeAsync(20);
+      expect((await resultPromise).outcome).toBe('incomplete');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('propagates a span-source failure without waiting for the budget timer', async () => {
-    const start = Date.now();
-    await expect(
-      checkScenario(
-        transferAccept,
-        () => {
-          throw new Error('collector unavailable');
-        },
-        { budgetMs: 100, pollIntervalMs: 100 },
-      ),
-    ).rejects.toThrowError('collector unavailable');
-    expect(Date.now() - start).toBeLessThan(80);
+    vi.useFakeTimers();
+    try {
+      await expect(
+        checkScenario(
+          transferAccept,
+          () => {
+            throw new Error('collector unavailable');
+          },
+          { budgetMs: 100, pollIntervalMs: 100 },
+        ),
+      ).rejects.toThrowError('collector unavailable');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails fast on a definitive violation without waiting out the budget', async () => {
@@ -504,5 +495,9 @@ describe('proposeScenario — record → propose → commit', () => {
 
   it('requires at least one run', () => {
     expect(() => proposeScenario([])).toThrowError(/at least one/);
+  });
+
+  it('rejects an empty recorded run rather than proposing an uncloseable scenario', () => {
+    expect(() => proposeScenario([[], run(false)])).toThrowError(/run 1 has no recorded spans/);
   });
 });
