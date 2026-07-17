@@ -702,7 +702,14 @@ function wrapHookHandler(
   // Kareem (Mongoose's hook library) checks fn.length to decide whether to
   // pass a `next` callback. Rest params (...args) give length=0, so we must
   // preserve the original arity.
-  const expectsCallback = handler.length > 0;
+  //
+  // `init` is documented by Mongoose as always synchronous — it never
+  // supports callback-style middleware, regardless of arity. Without this
+  // carve-out, a single-parameter data hook like
+  // `post('init', (doc) => {...})` is indistinguishable by arity alone from
+  // a single-parameter callback hook like `pre('validate', (next) => {...})`,
+  // and we'd inject a synthetic callback into the `doc` position.
+  const expectsCallback = hookName !== 'init' && handler.length > 0;
 
   const startHookSpan = (self: any) => {
     let modelName: string | undefined;
@@ -794,11 +801,6 @@ function wrapHookHandler(
             ? undefined
             : (runtimeArgs[callbackIndex] as (...args: any[]) => void);
 
-        const callArgs =
-          callbackIndex === -1
-            ? runtimeArgs
-            : runtimeArgs.filter((_, index) => index !== callbackIndex);
-
         const wrappedNext = function wrappedNext(
           this: any,
           ...nextArgs: any[]
@@ -818,7 +820,35 @@ function wrapHookHandler(
           return;
         };
 
-        return invokeHook(this, span, [wrappedNext, ...callArgs], true);
+        // Replace the callback in its original position so non-callback
+        // arguments (e.g. `doc` in `post('findOneAndUpdate', (doc, next) => ...)`)
+        // keep the same positional order the original handler expects.
+        //
+        // Some hooks never receive a real callback in the runtime args at all
+        // (e.g. document pre('save') is invoked by Kareem as
+        // `fn.apply(doc, [options])`, and post('findOneAndUpdate', (doc, next)
+        // => ...) is invoked as `fn.apply(query, [doc])`) — Kareem itself awaits
+        // a returned promise instead of a callback in these cases. For those we
+        // must synthesize the callback ourselves. `next` is always the *last*
+        // declared parameter by convention, never the first (a bare
+        // `function (next) {}` hook is the one-parameter case where "first" and
+        // "last" coincide) — so place the synthetic callback at
+        // `handler.length - 1`, carrying over whatever leading real args Kareem
+        // did supply, rather than always prepending it at index 0.
+        let callArgs: any[];
+        if (callbackIndex === -1) {
+          const nextIndex = Math.max(handler.length - 1, 0);
+          callArgs = runtimeArgs.slice(0, nextIndex);
+          while (callArgs.length < nextIndex) {
+            callArgs.push(undefined);
+          }
+          callArgs.push(wrappedNext);
+        } else {
+          callArgs = [...runtimeArgs];
+          callArgs[callbackIndex] = wrappedNext;
+        }
+
+        return invokeHook(this, span, callArgs, true);
       }
     : function wrappedHookPromise(this: any, ...args: any[]): any {
         const span = startHookSpan(this);

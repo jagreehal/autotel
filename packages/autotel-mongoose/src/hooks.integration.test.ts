@@ -126,4 +126,58 @@ describe('instrumentHooks: true with timestamps', () => {
     const hookSpan = spans.find((s) => s.name.includes('pre.save'));
     expect(hookSpan).toBeDefined();
   });
+
+  it('does not scramble positional args for post(query, (doc, next) => ...) hooks', async () => {
+    // Mongoose invokes this shape without a real callback in the runtime
+    // args (it awaits a returned promise instead) — the wrapper must still
+    // place `doc` first and the synthetic callback last.
+    let receivedDoc: any;
+    let receivedNextType: string | undefined;
+
+    const schema = new mongooseInstance.Schema({
+      value: { type: Number, required: true },
+    });
+
+    schema.post('findOneAndUpdate', function (doc: any, next: any) {
+      receivedDoc = doc;
+      receivedNextType = typeof next;
+      next();
+    });
+
+    const PostHookModel = mongooseInstance.model('PostFindOneAndUpdateHookTest', schema);
+
+    const doc = await PostHookModel.create({ value: 1 });
+    await PostHookModel.findOneAndUpdate({ _id: doc._id }, { value: 2 }, { new: true });
+
+    // If args were scrambled, `receivedDoc` would be a function (the
+    // synthetic callback) and `receivedNextType` would be 'object'.
+    expect(typeof receivedDoc).not.toBe('function');
+    expect(receivedDoc?.value).toBe(2);
+    expect(receivedNextType).toBe('function');
+  });
+
+  it('does not treat a single-arg post(init, (doc) => ...) hook as callback-style', async () => {
+    // `init` is always synchronous and never supports a `next` callback, even
+    // though `(doc) => {...}` has the same arity (1) as a callback-only hook
+    // like `pre('validate', (next) => {...})`.
+    let receivedDoc: any;
+
+    const schema = new mongooseInstance.Schema({
+      value: { type: Number, required: true },
+    });
+
+    schema.post('init', (doc: any) => {
+      receivedDoc = doc;
+    });
+
+    const InitHookModel = mongooseInstance.model('PostInitHookTest', schema);
+
+    const created = await InitHookModel.create({ value: 7 });
+    await InitHookModel.findById(created._id);
+
+    // If treated as callback-style, `receivedDoc` would be the synthetic
+    // wrappedNext function instead of the real document.
+    expect(typeof receivedDoc).not.toBe('function');
+    expect(receivedDoc?.value).toBe(7);
+  });
 });
