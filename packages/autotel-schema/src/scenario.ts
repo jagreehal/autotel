@@ -203,9 +203,29 @@ export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
       ? spec.completion.reconciliationDeadlineMs
       : spec.completion.observationBudgetMs;
   assert(
-    typeof budget === 'number' && budget > 0,
+    typeof budget === 'number' && Number.isFinite(budget) && budget > 0,
     `${scope} completion budget must be a positive number of milliseconds`,
   );
+  switch (spec.completion.mode) {
+    case 'terminal-event':
+      assert(
+        typeof spec.completion.event === 'string' && spec.completion.event.length > 0,
+        `${scope} terminal-event completion must declare a non-empty event`,
+      );
+      break;
+    case 'workflow-completed':
+      assert(
+        typeof spec.completion.workflow === 'string' && spec.completion.workflow.length > 0,
+        `${scope} workflow-completed completion must declare a non-empty workflow`,
+      );
+      break;
+    case 'phase-completed':
+      assert(
+        typeof spec.completion.phase === 'string' && spec.completion.phase.length > 0,
+        `${scope} phase-completed completion must declare a non-empty phase`,
+      );
+      break;
+  }
   assert(
     spec.events &&
       typeof spec.events === 'object' &&
@@ -430,14 +450,46 @@ export async function checkScenario(
   }
   const budgetMs = options?.budgetMs ?? spec.completion.observationBudgetMs;
   const pollIntervalMs = options?.pollIntervalMs ?? 25;
+  assert(
+    Number.isFinite(budgetMs) && budgetMs > 0,
+    'checkScenario budgetMs must be a positive number of milliseconds',
+  );
+  assert(
+    Number.isFinite(pollIntervalMs) && pollIntervalMs >= 0,
+    'checkScenario pollIntervalMs must be a non-negative number of milliseconds',
+  );
   const deadline = Date.now() + budgetMs;
+  let lastResult = evaluateScenario(spec, [], { name });
 
   for (;;) {
-    const spans = await getSpans();
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) return lastResult;
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let next:
+      | { kind: 'spans'; spans: readonly ScenarioSpan[] }
+      | { kind: 'timeout' };
+    try {
+      next = await Promise.race([
+        Promise.resolve()
+          .then(getSpans)
+          .then((spans) => ({ kind: 'spans' as const, spans })),
+        new Promise<{ kind: 'timeout' }>((resolve) => {
+          timeout = setTimeout(() => resolve({ kind: 'timeout' }), remainingMs);
+        }),
+      ]);
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+    }
+    if (next.kind === 'timeout') return lastResult;
+
+    const { spans } = next;
     const result = evaluateScenario(spec, spans, { name });
+    lastResult = result;
     if (result.closed || result.outcome === 'non-conformant') return result;
-    if (Date.now() >= deadline) return result; // incomplete
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    const waitMs = Math.min(pollIntervalMs, deadline - Date.now());
+    if (waitMs <= 0) return result; // incomplete
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 }
 
