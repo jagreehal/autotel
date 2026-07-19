@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-07-13T21:04:50.716Z",
+  "generatedAt": "2026-07-19T17:42:20.014Z",
   "sizes": {
-    "autotel": 4152106,
+    "autotel": 4159426,
     "autotel-adapters": 176423,
     "autotel-agents": 192149,
     "autotel-audit": 196483,
@@ -22,7 +22,7 @@
     "autotel-pact": 372169,
     "autotel-playwright": 80167,
     "autotel-plugins": 822043,
-    "autotel-schema": 225913,
+    "autotel-schema": 343107,
     "autotel-sentry": 13467,
     "autotel-subscribers": 5819264,
     "autotel-tanstack": 505908,
