@@ -16,6 +16,8 @@
  * import anywhere (browser, edge, CLI) without pulling in the OpenTelemetry SDK.
  */
 
+import { validateScenarioSpec, type ScenarioSpec } from './scenario.js';
+
 /** Scalar and array attribute types permitted on a span (OTLP value shapes). */
 export type AttributeType =
   | 'string'
@@ -106,6 +108,12 @@ export interface TelemetryContract {
    * Defaults to `false` (declared-only — the stricter, agent-friendlier mode).
    */
   additionalAttributes?: boolean;
+  /**
+   * Flow-level scenario contracts, keyed by scenario name: which events one
+   * exercised flow must emit, their cardinality and topology, and when the
+   * observation is complete. Checked with `checkScenario` ({@link ./scenario}).
+   */
+  scenarios?: Record<string, ScenarioSpec>;
 }
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[\w.]+)?$/;
@@ -197,6 +205,9 @@ export function defineContract(contract: TelemetryContract): TelemetryContract {
   }
   for (const [key, spec] of Object.entries(contract.commonAttributes ?? {})) {
     validateAttribute('common', key, spec);
+  }
+  for (const [name, spec] of Object.entries(contract.scenarios ?? {})) {
+    validateScenarioSpec(name, spec);
   }
 
   return Object.freeze(contract);

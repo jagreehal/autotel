@@ -95,9 +95,22 @@ export class TestSpanCollector implements SpanExporter {
    * Removes the entire traceId entry from the collector.
    */
   drainTrace(traceId: string, rootSpanId: string): SerializedSpan[] {
-    const allSpans = this.traces.get(traceId);
+    const spans = this.peekTrace(traceId, rootSpanId);
     this.traces.delete(traceId);
+    return spans;
+  }
+
+  /**
+   * Serialize the finished spans of `traceId` without removing them — safe to
+   * call repeatedly while a trace is still growing (e.g. a scenario checker
+   * polling until an async flow's completion boundary closes).
+   *
+   * With `rootSpanId`, filters to that span's subtree like {@link drainTrace}.
+   */
+  peekTrace(traceId: string, rootSpanId?: string): SerializedSpan[] {
+    const allSpans = this.traces.get(traceId);
     if (!allSpans?.length) return [];
+    if (rootSpanId === undefined) return allSpans.map((s) => serializeSpan(s));
 
     // Build spanId → span index for efficient parent-chain walking
     const byId = new Map<string, ReadableSpan>();

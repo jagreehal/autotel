@@ -42,6 +42,7 @@ import {
 } from '@opentelemetry/api';
 import { getConfig } from './config';
 import { getConfig as getInitConfig, getSdk } from './init';
+import { getForceFlushableProvider } from './tracer-provider';
 import {
   type Sampler,
   type SamplingContext,
@@ -832,24 +833,13 @@ function wrapWithTracing<TArgs extends unknown[], TReturn>(
 
         // Flush OpenTelemetry spans if enabled
         if (shouldAutoFlushSpans) {
-          const sdk = getSdk();
-          if (sdk) {
-            try {
-              // Type assertion needed as getTracerProvider is not in the public NodeSDK interface
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const sdkAny = sdk as any;
-              if (typeof sdkAny.getTracerProvider === 'function') {
-                const tracerProvider = sdkAny.getTracerProvider();
-                if (
-                  tracerProvider &&
-                  typeof tracerProvider.forceFlush === 'function'
-                ) {
-                  await tracerProvider.forceFlush();
-                }
-              }
-            } catch {
-              // Ignore errors when accessing tracer provider (may not be available in test mocks)
+          try {
+            const tracerProvider = getForceFlushableProvider(getSdk());
+            if (tracerProvider) {
+              await tracerProvider.forceFlush();
             }
+          } catch {
+            // Ignore errors when accessing tracer provider (may not be available in test mocks)
           }
         }
       } catch (error) {
@@ -1152,35 +1142,24 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
 
       // Flush OpenTelemetry spans if enabled
       if (shouldAutoFlushSpans) {
-        const sdk = getSdk();
-        if (sdk) {
-          try {
-            // Type assertion needed as getTracerProvider is not in the public NodeSDK interface
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const sdkAny = sdk as any;
-            if (typeof sdkAny.getTracerProvider === 'function') {
-              const tracerProvider = sdkAny.getTracerProvider();
-              if (
-                tracerProvider &&
-                typeof tracerProvider.forceFlush === 'function'
-              ) {
-                void tracerProvider.forceFlush().catch((error: unknown) => {
-                  const initConfig = getInitConfig();
-                  const logger = initConfig?.logger;
-                  if (logger?.error) {
-                    logger.error(
-                      {
-                        err: error instanceof Error ? error : undefined,
-                      },
-                      `[autotel] Span flush failed${error instanceof Error ? '' : `: ${String(error)}`}`,
-                    );
-                  }
-                });
+        try {
+          const tracerProvider = getForceFlushableProvider(getSdk());
+          if (tracerProvider) {
+            void tracerProvider.forceFlush().catch((error: unknown) => {
+              const initConfig = getInitConfig();
+              const logger = initConfig?.logger;
+              if (logger?.error) {
+                logger.error(
+                  {
+                    err: error instanceof Error ? error : undefined,
+                  },
+                  `[autotel] Span flush failed${error instanceof Error ? '' : `: ${String(error)}`}`,
+                );
               }
-            }
-          } catch {
-            // Ignore errors when accessing tracer provider (may not be available in test mocks)
+            });
           }
+        } catch {
+          // Ignore errors when accessing tracer provider (may not be available in test mocks)
         }
       }
     };
@@ -1424,24 +1403,13 @@ function executeImmediately<TReturn = unknown>(
 
       // Flush OpenTelemetry spans if enabled
       if (shouldAutoFlushSpans) {
-        const sdk = getSdk();
-        if (sdk) {
-          try {
-            // Type assertion needed as getTracerProvider is not in the public NodeSDK interface
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const sdkAny = sdk as any;
-            if (typeof sdkAny.getTracerProvider === 'function') {
-              const tracerProvider = sdkAny.getTracerProvider();
-              if (
-                tracerProvider &&
-                typeof tracerProvider.forceFlush === 'function'
-              ) {
-                await tracerProvider.forceFlush();
-              }
-            }
-          } catch {
-            // Ignore errors when accessing tracer provider (may not be available in test mocks)
+        try {
+          const tracerProvider = getForceFlushableProvider(getSdk());
+          if (tracerProvider) {
+            await tracerProvider.forceFlush();
           }
+        } catch {
+          // Ignore errors when accessing tracer provider (may not be available in test mocks)
         }
       }
     } catch (error) {

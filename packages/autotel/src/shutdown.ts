@@ -6,6 +6,7 @@ import { getSdk, getLogger, _closeEmbeddedDevtools } from './init';
 import { getEventQueue, resetEventQueue } from './track';
 import { resetEvents } from './event';
 import { resetMetrics } from './metric';
+import { getForceFlushableProvider } from './tracer-provider';
 
 /**
  * Flush all pending telemetry
@@ -54,25 +55,16 @@ export async function flush(options?: {
     }
 
     // Flush OpenTelemetry spans
-    // This ensures spans are exported immediately, critical for serverless
-    const sdk = getSdk();
-    if (sdk) {
-      try {
-        // Type assertion needed as getTracerProvider is not in the public NodeSDK interface
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sdkAny = sdk as any;
-        if (typeof sdkAny.getTracerProvider === 'function') {
-          const tracerProvider = sdkAny.getTracerProvider();
-          if (
-            tracerProvider &&
-            typeof tracerProvider.forceFlush === 'function'
-          ) {
-            await tracerProvider.forceFlush();
-          }
-        }
-      } catch {
-        // Ignore errors when accessing tracer provider (may not be available in test mocks)
+    // This ensures spans are exported immediately, critical for serverless.
+    // NodeSDK.getTracerProvider() returns undefined on sdk-node 0.220+, so
+    // resolve a force-flushable provider from the global registry too.
+    try {
+      const tracerProvider = getForceFlushableProvider(getSdk());
+      if (tracerProvider) {
+        await tracerProvider.forceFlush();
       }
+    } catch {
+      // Ignore errors when accessing tracer provider (may not be available in test mocks)
     }
   };
 

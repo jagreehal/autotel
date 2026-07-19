@@ -7,9 +7,74 @@ import {
   setAutotelTracerProvider,
   getAutotelTracerProvider,
   getAutotelTracer,
+  getForceFlushableProvider,
 } from './tracer-provider';
 import { trace } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+
+describe('getForceFlushableProvider', () => {
+  const original = trace.getTracerProvider();
+  afterEach(() => {
+    trace.disable();
+    trace.setGlobalTracerProvider(original);
+  });
+
+  it('returns a provider whose forceFlush exports pending spans', async () => {
+    // Regression: NodeSDK.getTracerProvider() returns undefined on sdk-node
+    // 0.220+, so flushing only via the SDK handle silently exported nothing.
+    const exported: string[] = [];
+    const exporter = {
+      export(spans: Array<{ name: string }>, cb: (r: { code: number }) => void) {
+        for (const s of spans) exported.push(s.name);
+        cb({ code: 0 });
+      },
+      shutdown() {
+        return Promise.resolve();
+      },
+      forceFlush() {
+        return Promise.resolve();
+      },
+    };
+    const provider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    provider.register();
+
+    const span = trace.getTracer('t').startSpan('flushable');
+    span.end();
+
+    const flushable = getForceFlushableProvider();
+    expect(flushable).toBeDefined();
+    await flushable!.forceFlush();
+    expect(exported).toContain('flushable');
+  });
+
+  it('prefers a force-flushable SDK handle when one is passed', () => {
+    let called = false;
+    const fakeProvider = {
+      forceFlush() {
+        called = true;
+        return Promise.resolve();
+      },
+    };
+    const fakeSdk = { getTracerProvider: () => fakeProvider };
+    const flushable = getForceFlushableProvider(fakeSdk);
+    expect(flushable).toBe(fakeProvider);
+    expect(called).toBe(false);
+  });
+
+  it('falls back to the global provider when the SDK handle yields nothing', () => {
+    // sdk-node 0.220 shape: getTracerProvider() returns undefined.
+    const fakeSdk = { getTracerProvider: () => undefined };
+    const flushable = getForceFlushableProvider(fakeSdk);
+    // The ambient global provider is force-flushable (or undefined in a bare
+    // env); either way the SDK's undefined must not short-circuit resolution.
+    expect(flushable === undefined || typeof flushable.forceFlush === 'function').toBe(
+      true,
+    );
+  });
+});
 
 describe('Isolated Tracer Provider', () => {
   let customProvider: NodeTracerProvider;

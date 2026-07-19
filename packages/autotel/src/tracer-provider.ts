@@ -229,6 +229,54 @@ export function getAutotelTracerProvider(): TracerProvider {
   return trace.getTracerProvider();
 }
 
+/** A tracer provider that can be force-flushed (SDK providers implement this). */
+interface ForceFlushable {
+  forceFlush(): Promise<void>;
+}
+
+function isForceFlushable(value: unknown): value is ForceFlushable {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as ForceFlushable).forceFlush === 'function'
+  );
+}
+
+/**
+ * Resolve a tracer provider that can be `forceFlush()`ed, so `flush()` and
+ * flush-on-shutdown actually export pending spans.
+ *
+ * `NodeSDK.getTracerProvider()` returns `undefined` on `@opentelemetry/sdk-node`
+ * 0.220+ (OpenTelemetry 2.x), so code that force-flushes only via the SDK
+ * handle silently exports nothing. This falls back to the globally registered
+ * provider and unwraps the API's `ProxyTracerProvider` to reach the real
+ * delegate, which is where `forceFlush` actually lives.
+ *
+ * @param sdk - Optional NodeSDK handle to try first.
+ * @returns Something with `forceFlush()`, or `undefined` if none is registered.
+ */
+export function getForceFlushableProvider(
+  sdk?: unknown,
+): ForceFlushable | undefined {
+  const candidates: unknown[] = [];
+
+  const sdkAny = sdk as { getTracerProvider?: () => unknown } | undefined;
+  if (sdkAny && typeof sdkAny.getTracerProvider === 'function') {
+    candidates.push(sdkAny.getTracerProvider());
+  }
+
+  const globalProvider = trace.getTracerProvider() as unknown;
+  candidates.push(globalProvider);
+  // The API hands back a ProxyTracerProvider; the real provider (with
+  // forceFlush) sits behind getDelegate().
+  const proxy = globalProvider as { getDelegate?: () => unknown };
+  if (proxy && typeof proxy.getDelegate === 'function') {
+    candidates.push(proxy.getDelegate());
+  }
+
+  return candidates.find(isForceFlushable);
+}
+
 /**
  * Gets the OpenTelemetry tracer instance for Autotel.
  *
