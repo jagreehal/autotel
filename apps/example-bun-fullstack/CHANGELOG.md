@@ -1,5 +1,13 @@
 # @jagreehal/example-bun-fullstack
 
+## 1.0.45
+
+### Patch Changes
+
+- Updated dependencies [4f4f074]
+- Updated dependencies [4f4f074]
+  - autotel@4.3.0
+
 ## 1.0.44
 
 ### Patch Changes
