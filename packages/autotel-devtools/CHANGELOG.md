@@ -1,5 +1,54 @@
 # autotel-devtools
 
+## 13.1.0
+
+### Minor Changes
+
+- 100cfad: Framework adapter DX overhaul, consolidation, and correctness fixes.
+
+  **New adapters + toolkit (`autotel-adapters`).** Adds NestJS, SvelteKit, and Elysia
+  subpaths built on a shared integration toolkit: deferred drain, streaming
+  `finishResponse`, `waitUntil` wiring for serverless, and route exclusion that now
+  bypasses span creation as well as wide-event emission.
+
+  **One adapter mechanism (breaking).** The parallel per-framework factory/bundle
+  layer is removed in favour of the direct handler wrappers, which were always the
+  primary API:
+
+  - **Removed** `createNextAdapter`, `createNitroAdapter`, `createCloudflareAdapter`,
+    `createExpressAdapter`, `createFastifyAdapter`, `createNestAdapter`,
+    `createSvelteKitAdapter`, `createElysiaAdapter`, every `*Toolkit` export
+    (`honoToolkit`, `tanstackToolkit`, `nextToolkit`, …), and the underlying
+    `createAdapterToolkit` / `createStandardAdapterExports` / `AdapterToolkit`
+    helpers from `autotel-adapters/core`.
+  - **Use instead** the direct exports — `withAutotel` / `withAutotelFetch` /
+    `withAutotelEventHandler` / `autotelMiddleware` / `autotelHandle` /
+    `new AutotelInterceptor(options)`, plus `useLogger`. Pass options per call site
+    instead of pre-binding through a factory. `createUseLogger` and
+    `createRequestRunner` remain for building custom adapters.
+  - Migration: replace `const { withAutotel, useLogger } = createNextAdapter(opts)`
+    with `import { withAutotel, useLogger } from 'autotel-adapters/next'` and
+    `withAutotel(handler, opts)`; replace `honoToolkit.useLogger(c)` /
+    `tanstackToolkit.useLogger(ctx)` with the module `useLogger`.
+
+  **Correctness fixes.** `AutotelInterceptor.intercept()` now subscribes to the
+  NestJS handler `Observable` inside the trace + request-context scope, proxying
+  every value and preserving cancellation — so context propagation, span nesting,
+  error capture, status/timing, and streaming semantics all work together (adds
+  `rxjs` as an optional peer dependency on the NestJS subpath). Elysia now accepts
+  the real context shape.
+
+  **CLI telemetry (`autotel-cli`).** Adds opt-in usage telemetry (bundled into the
+  CLI). Consent defaults to **off** — telemetry stays off until the user runs
+  `autotel telemetry enable` or sets `AUTOTEL_TELEMETRY=1` — and delivery honours
+  async context, rechecks consent, and retains the outbox on failed drains.
+
+  **Devtools (`autotel-devtools`).** Adds a **Clear** button to the "Local data"
+  bar that wipes all captured traces, logs, metrics and errors so you can watch
+  only new activity, and a relative trace **time-range filter** (`Any time` /
+  `Last 5m` / `Last 15m` / `Last 1h`) that is reflected in the shareable URL hash
+  (`#range=5m`).
+
 ## 13.0.0
 
 ### Patch Changes

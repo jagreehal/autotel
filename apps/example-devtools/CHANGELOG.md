@@ -1,5 +1,14 @@
 # @jagreehal/example-devtools
 
+## 1.0.15
+
+### Patch Changes
+
+- Updated dependencies [100cfad]
+  - autotel-adapters@1.0.0
+  - autotel-devtools@13.1.0
+  - autotel-hono@0.4.41
+
 ## 1.0.14
 
 ### Patch Changes
