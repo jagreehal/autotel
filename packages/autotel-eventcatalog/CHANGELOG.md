@@ -1,5 +1,11 @@
 # Changelog
 
+## 12.0.0
+
+### Patch Changes
+
+- autotel-subscribers@42.0.0
+
 ## 11.0.2
 
 ### Patch Changes

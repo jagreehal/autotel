@@ -1,5 +1,21 @@
 # autotel
 
+## 4.3.0
+
+### Minor Changes
+
+- 4f4f074: Scenario conformance: flow-level contracts with completion boundaries.
+
+  `autotel-schema` gains a `scenarios` section in `defineContract()` — declare which events one exercised flow must emit, their cardinality (`'exactly 1'`, `'at most 3'`, ranges), required ancestor→descendant topology edges, and a first-class completion boundary (`terminal-event`, `root-span-closed`, `externally-reconciled`). `checkScenario()` polls collected spans until the boundary closes, a definitive violation appears, or the observation budget is spent, and returns one of **three** outcomes: `conformant`, `non-conformant`, or `incomplete` — so infrastructure slowness is never reported as behavioural regression. Absence is definitive only after closure; unexpected errors and exceeded `max` cardinality fail fast while the flow is still open; undeclared events are additive (reported, never failing). `proposeScenario()` drafts a contract from N recorded runs (record → propose → commit).
+
+  `autotel` gains `TestSpanCollector.peekTrace(traceId, rootSpanId?)` — a non-destructive read of a trace's finished spans, so a scenario checker can poll while an async flow is still emitting. Its `SerializedSpan` output feeds `checkScenario()` directly.
+
+### Patch Changes
+
+- 4f4f074: Fix `flush()` silently exporting nothing on `@opentelemetry/sdk-node` 0.220+.
+
+  `flush()` and flush-on-shutdown force-flushed spans via `sdk.getTracerProvider()`, which returns `undefined` on sdk-node 0.220+ (OpenTelemetry 2.x). The guard treated `undefined` as "nothing to flush", so pending spans were never exported — breaking flush-before-return in serverless and any synchronous read of a span collector right after a traced call. A new `getForceFlushableProvider()` helper falls back to the globally registered provider and unwraps the API's `ProxyTracerProvider` to reach the delegate that actually implements `forceFlush`. Applied to `flush()` and all three auto-flush sites in the functional API.
+
 ## 4.2.5
 
 ### Patch Changes
