@@ -2309,6 +2309,9 @@ importers:
       autotel:
         specifier: workspace:*
         version: link:../autotel
+      kareem:
+        specifier: ^3.3.0
+        version: 3.3.0
       mongodb-memory-server:
         specifier: ^11.2.0
         version: 11.2.0(@aws-sdk/credential-providers@3.1081.0)(@mongodb-js/zstd@7.0.0)
