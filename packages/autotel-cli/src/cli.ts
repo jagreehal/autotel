@@ -26,6 +26,13 @@ import { registerSemconvCommands } from './commands/investigate/semconv';
 import { registerScoreCommands } from './commands/investigate/instrumentation';
 import { registerCollectorCommands } from './commands/investigate/collector';
 import { registerSecurityCommands } from './commands/investigate/security';
+import {
+  runTelemetryDisable,
+  runTelemetryDisclosure,
+  runTelemetryEnable,
+  runTelemetryStatus,
+} from './commands/telemetry';
+import { withCommanderTelemetry } from 'autotel-telemetry';
 
 /**
  * Create the CLI program
@@ -272,6 +279,34 @@ export function createProgram(): Command {
   registerCollectorCommands(program);
   registerSecurityCommands(program);
 
+  const telemetryCmd = new Command('telemetry')
+    .description('Manage opt-in CLI usage telemetry');
+  telemetryCmd
+    .command('status')
+    .description('Show telemetry consent status')
+    .action(async () => {
+      await runTelemetryStatus('autotel');
+    });
+  telemetryCmd
+    .command('enable')
+    .description('Enable telemetry for this tool')
+    .action(async () => {
+      await runTelemetryEnable('autotel');
+    });
+  telemetryCmd
+    .command('disable')
+    .description('Disable telemetry and purge undelivered events')
+    .action(async () => {
+      await runTelemetryDisable('autotel');
+    });
+  telemetryCmd
+    .command('disclosure')
+    .description('Print telemetry disclosure markdown')
+    .action(() => {
+      runTelemetryDisclosure('autotel', program.version());
+    });
+  program.addCommand(telemetryCmd);
+
   return program;
 }
 
@@ -285,7 +320,11 @@ export function createProgram(): Command {
  * which the top-level handler in `index.ts` converts to an envelope.
  */
 export async function run(): Promise<void> {
-  const program = createProgram();
+  const base = createProgram();
+  const program = withCommanderTelemetry(base, {
+    name: 'autotel',
+    version: base.version(),
+  });
   program.exitOverride();
   // Investigate / JSON-only commands need their failure path to be
   // single-document JSON. Commander defaults to writing an `error: ...`

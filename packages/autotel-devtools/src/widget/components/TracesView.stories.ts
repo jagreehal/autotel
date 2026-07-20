@@ -7,6 +7,7 @@ import {
   setPaused,
   pendingTracesSignal,
   setSelectedTrace,
+  traceTimeRangeFilterSignal,
 } from '../store.svelte';
 import type { TraceData, SpanData } from '../types';
 
@@ -53,6 +54,7 @@ const meta = {
     clearAllData();
     setPaused(false);
     setSelectedTrace(null);
+    traceTimeRangeFilterSignal.value = 'all';
   },
 } satisfies Meta<typeof TracesView>;
 
@@ -248,6 +250,39 @@ export const Dark: Story = {
     });
     await expect(await canvas.findByText('GET /api/users')).toBeInTheDocument();
     await expect(canvas.getByText('ERROR')).toBeInTheDocument();
+  },
+};
+
+export const TimeRangeFilter: Story = {
+  play: async ({ canvas, userEvent }) => {
+    const now = Date.now();
+    const twoHoursAgo = now - 2 * 60 * 60 * 1000;
+    updateWidgetData({
+      traces: [
+        makeTrace({
+          traceId: 'fresh',
+          startTime: now,
+          rootSpan: makeSpan({ name: 'fresh op', startTime: now }),
+        }),
+        makeTrace({
+          traceId: 'old',
+          startTime: twoHoursAgo,
+          rootSpan: makeSpan({ name: 'old op', startTime: twoHoursAgo }),
+        }),
+      ],
+    });
+    // Both visible under the default "Any time".
+    await expect(await canvas.findByText('fresh op')).toBeInTheDocument();
+    await expect(canvas.getByText('old op')).toBeInTheDocument();
+
+    // Narrow to the last 5 minutes — the 2h-old trace drops out.
+    const timeSelect = canvas.getByTitle(
+      'Only show traces that started within this window',
+    );
+    await userEvent.selectOptions(timeSelect, '5m');
+
+    await expect(canvas.queryByText('old op')).not.toBeInTheDocument();
+    await expect(canvas.getByText('fresh op')).toBeInTheDocument();
   },
 };
 

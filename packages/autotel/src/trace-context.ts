@@ -120,12 +120,7 @@ export interface TraceContextBase {
  * Supports primitive values and arrays of homogeneous primitives.
  */
 export type AttributeValue =
-  | string
-  | number
-  | boolean
-  | string[]
-  | number[]
-  | boolean[];
+  string | number | boolean | string[] | number[] | boolean[];
 
 /**
  * Span methods available on trace context

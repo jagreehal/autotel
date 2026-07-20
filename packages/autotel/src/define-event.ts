@@ -3,8 +3,7 @@ import { hashJson } from './stable-hash';
 import type { EventSchemaMetadata } from './event-subscriber';
 
 type SafeParseResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: unknown };
+  { success: true; data: T } | { success: false; error: unknown };
 
 export interface SchemaLike<T> {
   safeParse(input: unknown): SafeParseResult<T>;

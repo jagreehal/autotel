@@ -81,12 +81,7 @@ export type WorkflowStatus =
  * Step status
  */
 export type StepStatus =
-  | 'pending'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'skipped'
-  | 'compensated';
+  'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'compensated';
 
 /**
  * Configuration for workflow tracing

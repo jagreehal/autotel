@@ -15,6 +15,7 @@
     traceQuerySignal,
     traceStatusFilterSignal,
     traceMinDurationSignal,
+    traceTimeRangeFilterSignal,
     traceSortSignal,
     genaiQuerySignal,
   } from './store.svelte';
@@ -47,6 +48,7 @@
     traceQuerySignal.value = nav.q ?? '';
     traceStatusFilterSignal.value = nav.status ?? 'all';
     traceMinDurationSignal.value = nav.minDuration ?? 0;
+    traceTimeRangeFilterSignal.value = nav.timeRange ?? 'all';
     traceSortSignal.value = nav.sort ?? DEFAULT_SORT;
     genaiQuerySignal.value = nav.genaiQuery ?? '';
     if (nav.traceId) requestDeepLink(nav.traceId, nav.spanId);
@@ -80,6 +82,7 @@
       q: traceQuerySignal.value || undefined,
       status: traceStatusFilterSignal.value,
       minDuration: traceMinDurationSignal.value,
+      timeRange: traceTimeRangeFilterSignal.value,
       sort: traceSortSignal.value,
       genaiQuery: genaiQuerySignal.value || undefined,
     };

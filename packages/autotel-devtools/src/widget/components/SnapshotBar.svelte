@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Camera, Upload, X } from '@lucide/svelte';
+  import { Camera, Trash2, Upload, X } from '@lucide/svelte';
   import {
     tracesSignal,
     logsSignal,
@@ -8,6 +8,7 @@
     snapshotModeSignal,
     loadSnapshot,
     exitSnapshotMode,
+    clearAllData,
   } from '../store.svelte';
   import {
     downloadSnapshotAsJson,
@@ -33,6 +34,12 @@
 
   const onPickFile = () => {
     fileInputEl?.click();
+  };
+
+  const onClear = () => {
+    error = null;
+    warning = null;
+    clearAllData();
   };
 
   const onFileChange = async (event: Event) => {
@@ -89,6 +96,14 @@
     >
       <Upload size={12} />
       Load snapshot
+    </button>
+    <button
+      onclick={onClear}
+      class="inline-flex items-center gap-1 px-2 py-0.5 rounded hover:bg-hover hover:text-danger transition-colors"
+      title="Clear all captured data — traces, logs, metrics and errors"
+    >
+      <Trash2 size={12} />
+      Clear
     </button>
   {/if}
   <input

@@ -306,8 +306,7 @@ interface TestSpanExporter {
 
 function getExporter(): TestSpanExporter | undefined {
   return (globalThis as Record<string, unknown>).__testSpanExporter as
-    | TestSpanExporter
-    | undefined;
+    TestSpanExporter | undefined;
 }
 
 function e2eGuard(): Response | null {

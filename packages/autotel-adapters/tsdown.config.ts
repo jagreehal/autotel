@@ -14,6 +14,11 @@ export default defineConfig({
     cloudflare: 'src/cloudflare.ts',
     express: 'src/express.ts',
     fastify: 'src/fastify.ts',
+    nestjs: 'src/nestjs.ts',
+    sveltekit: 'src/sveltekit.ts',
+    elysia: 'src/elysia.ts',
+    'toolkit/index': 'src/toolkit/index.ts',
+    'toolkit/storage': 'src/toolkit/storage.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
@@ -23,4 +28,5 @@ export default defineConfig({
   treeshake: true,
   minify: false,
   target: false,
+  external: ['autotel-edge'],
 });

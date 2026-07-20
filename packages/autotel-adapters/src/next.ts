@@ -1,19 +1,22 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   createDrainPipeline,
-  getRequestLogger,
   parseError,
-  trace,
   createStructuredError,
   type RequestLogger,
   type RequestLoggerOptions,
-  type ParsedError,
-  type DrainPipelineOptions,
-  type PipelineDrainFn,
-  type StructuredError,
-  type StructuredErrorInput,
 } from 'autotel';
-import { createAdapterToolkit, createUseLogger, getHeader } from './core';
+import {
+  createUseLogger,
+  getHeader,
+  type FrameworkHandlerOptions,
+} from './core';
+import { createLoggerStorage } from './toolkit/storage';
+import {
+  applyLoggerEnrichment,
+  defineFrameworkIntegration,
+  runWithIntegratedHandle,
+  buildTracedOptions,
+} from './toolkit/integration';
 
 export interface NextRequestLike {
   method?: string;
@@ -23,15 +26,15 @@ export interface NextRequestLike {
     | Record<string, string | undefined>;
 }
 
-export interface NextWithAutotelOptions {
+export interface NextWithAutotelOptions extends Omit<FrameworkHandlerOptions, 'spanName'> {
   spanName?: string | ((request?: NextRequestLike) => string);
-  requestLoggerOptions?: RequestLoggerOptions;
-  enrich?: (request?: NextRequestLike) => Record<string, unknown> | undefined;
-  /** Emit one wide event automatically when the handler settles. Default `true`. */
-  autoEmit?: boolean;
+  enrichRequest?: (
+    request?: NextRequestLike,
+  ) => Record<string, unknown> | undefined;
 }
 
-const nextLoggerStorage = new AsyncLocalStorage<RequestLogger>();
+const { storage: nextLoggerStorage, useLogger: storageUseLogger } =
+  createLoggerStorage('request context. Wrap handlers with withAutotel() first.');
 
 function enrichFromRequest(
   request?: NextRequestLike,
@@ -65,9 +68,42 @@ export function useLogger(
   request?: NextRequestLike,
   requestLoggerOptions?: RequestLoggerOptions,
 ): RequestLogger {
-  const logger = nextLoggerStorage.getStore();
-  if (logger) return logger;
-  return baseUseLogger(request, requestLoggerOptions);
+  try {
+    return storageUseLogger();
+  } catch {
+    return baseUseLogger(request, requestLoggerOptions);
+  }
+}
+
+function resolvePath(request?: NextRequestLike): string {
+  if (!request?.url) return '/';
+  try {
+    return new URL(request.url).pathname;
+  } catch {
+    return request.url;
+  }
+}
+
+const integration = defineFrameworkIntegration<NextRequestLike | undefined>({
+  name: 'next',
+  storage: nextLoggerStorage,
+  extractRequest: (request) => ({
+    method: request?.method ?? 'GET',
+    path: resolvePath(request),
+    headers: request?.headers,
+    requestId: getHeader(request?.headers, 'x-request-id'),
+  }),
+  attachLogger: () => {},
+});
+
+function resolveSpanName(
+  request: NextRequestLike | undefined,
+  options?: NextWithAutotelOptions,
+): string {
+  if (typeof options?.spanName === 'function') {
+    return options.spanName(request);
+  }
+  return options?.spanName ?? 'next.request';
 }
 
 export function withAutotel<TArgs extends unknown[], TReturn>(
@@ -76,62 +112,21 @@ export function withAutotel<TArgs extends unknown[], TReturn>(
 ): (...args: TArgs) => Promise<TReturn> {
   return async (...args: TArgs): Promise<TReturn> => {
     const request = args[0] as NextRequestLike | undefined;
-    const spanName =
-      typeof options?.spanName === 'function'
-        ? options.spanName(request)
-        : (options?.spanName ?? 'next.request');
 
-    const wrapped = trace(
-      { name: spanName },
-      (ctx) => async (...innerArgs: TArgs) => {
-        const innerRequest = innerArgs[0] as NextRequestLike | undefined;
-        const log = getRequestLogger(ctx, options?.requestLoggerOptions);
-        const auto = enrichFromRequest(innerRequest);
-        if (auto && Object.keys(auto).length > 0) {
-          log.set(auto);
-        }
-        const custom = options?.enrich?.(innerRequest);
-        if (custom && Object.keys(custom).length > 0) {
-          log.set(custom);
-        }
-        try {
-          return await nextLoggerStorage.run(log, async () =>
-            handler(...innerArgs),
+    return integration.runTraced(
+      request,
+      buildTracedOptions(options, resolveSpanName(request, options)),
+      async (handle) =>
+        runWithIntegratedHandle(handle, options, async () => {
+          applyLoggerEnrichment(
+            handle.logger,
+            enrichFromRequest(request),
+            options?.enrichRequest?.(request),
           );
-        } finally {
-          if (options?.autoEmit !== false) {
-            log.emitNow();
-          }
-        }
-      },
+          return handler(...args);
+        }),
     );
-    return await wrapped(...args);
   };
 }
-
-export function createNextAdapter(options?: NextWithAutotelOptions) {
-  return {
-    withAutotel: <TArgs extends unknown[], TReturn>(
-      handler: (...args: TArgs) => TReturn | Promise<TReturn>,
-    ) => withAutotel(handler, options),
-    useLogger: (
-      request?: NextRequestLike,
-      requestLoggerOptions?: RequestLoggerOptions,
-    ): RequestLogger => useLogger(request, requestLoggerOptions),
-    parseError: (error: unknown): ParsedError => parseError(error),
-    createStructuredError: (
-      input: StructuredErrorInput,
-    ): StructuredError => createStructuredError(input),
-    createDrainPipeline: <T = unknown>(
-      drainOptions?: DrainPipelineOptions<T>,
-    ): ((batchDrain: (batch: T[]) => void | Promise<void>) => PipelineDrainFn<T>) =>
-      createDrainPipeline(drainOptions),
-  };
-}
-
-export const nextToolkit = createAdapterToolkit<NextRequestLike>({
-  adapterName: 'next',
-  enrich: enrichFromRequest,
-});
 
 export { parseError, createDrainPipeline, createStructuredError };

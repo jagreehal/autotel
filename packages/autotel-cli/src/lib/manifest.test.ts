@@ -31,7 +31,7 @@ describe('manifest drift', () => {
     // Allow commander internals + parent groups that have no own action,
     // only subcommands (those subcommands carry their own manifest entries
     // like "codemod trace" and "schema errors").
-    const allowMissing = new Set(['help', 'codemod']);
+    const allowMissing = new Set(['help', 'codemod', 'telemetry']);
     const undocumented = [...dispatchedNames].filter(
       (n) => !manifestNames.has(n) && !allowMissing.has(n)
     );

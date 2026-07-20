@@ -1,14 +1,14 @@
 export * from './core';
-export { createNextAdapter, withAutotel } from './next';
-export { createNitroAdapter, withAutotelEventHandler } from './nitro';
-export { createCloudflareAdapter, withAutotelFetch } from './cloudflare';
+export { withAutotel } from './next';
+export { withAutotelEventHandler } from './nitro';
+export { withAutotelFetch } from './cloudflare';
+export { withAutotel as withAutotelExpress } from './express';
+export { withAutotel as withAutotelFastify } from './fastify';
+export { autotelHandle, useLogger as useSvelteKitLogger } from './sveltekit';
 export {
-  createExpressAdapter,
-  withAutotel as withAutotelExpress,
-} from './express';
-export {
-  createFastifyAdapter,
-  withAutotel as withAutotelFastify,
-} from './fastify';
-export { honoToolkit } from './hono';
-export { tanstackToolkit } from './tanstack';
+  autotel,
+  withAutotelHandler,
+  useLogger as useElysiaLogger,
+} from './elysia';
+export { autotelMiddleware, useLogger, useLoggerFromContext } from './hono';
+export { useLogger as useTanstackLogger } from './tanstack';

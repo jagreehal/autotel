@@ -9,9 +9,7 @@
  * Type representing values that can be used to initialize Headers
  */
 export type HeadersInitType =
-  | Headers
-  | Record<string, string>
-  | [string, string][];
+  Headers | Record<string, string> | [string, string][];
 
 /**
  * Browser stub: Returns root context (no parent)

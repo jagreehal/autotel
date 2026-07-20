@@ -53,9 +53,7 @@ const yamlConfig = loadYamlConfig();
 // Parse auto-instrumentations from environment variable (fallback if not in YAML)
 const autoInstrumentationsEnv = process.env.AUTOTEL_INTEGRATIONS;
 const autoInstrumentations:
-  | string[]
-  | boolean
-  | Record<string, { enabled?: boolean }> =
+  string[] | boolean | Record<string, { enabled?: boolean }> =
   autoInstrumentationsEnv === 'true'
     ? true // Enable all auto-instrumentations
     : autoInstrumentationsEnv

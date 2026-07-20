@@ -85,9 +85,7 @@ export interface InstrumentMongooseConfig {
  *   privacy/compliance while still instrumenting everything else.
  */
 export type MethodSelector =
-  | boolean
-  | string[]
-  | { include?: string[]; exclude?: string[] };
+  boolean | string[] | { include?: string[]; exclude?: string[] };
 
 /**
  * Controls capture of arguments passed to instrumented custom functions.

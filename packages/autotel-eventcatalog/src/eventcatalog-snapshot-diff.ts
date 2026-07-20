@@ -2,12 +2,7 @@ import type { DriftReport } from './diff';
 import type { DriftDelta, DriftEntries } from './diff-vs-base';
 
 export type SnapshotResourceType =
-  | 'event'
-  | 'command'
-  | 'query'
-  | 'service'
-  | 'domain'
-  | 'channel';
+  'event' | 'command' | 'query' | 'service' | 'domain' | 'channel';
 
 export type ResourceChangeType = 'added' | 'removed' | 'modified' | 'versioned';
 

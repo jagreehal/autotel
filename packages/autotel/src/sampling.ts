@@ -509,10 +509,7 @@ export class FeatureFlagSampler implements Sampler {
  * Use with `init({ sampling: 'production' })` or directly via factories.
  */
 export type SamplingPreset =
-  | 'development'
-  | 'errors-only'
-  | 'production'
-  | 'off';
+  'development' | 'errors-only' | 'production' | 'off';
 
 /**
  * Sampling preset factories.

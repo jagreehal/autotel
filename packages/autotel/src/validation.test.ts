@@ -130,8 +130,7 @@ describe('validateAttributes()', () => {
     };
 
     const result = validateAttributes(attrs) as
-      | Record<string, Record<string, unknown>>
-      | undefined;
+      Record<string, Record<string, unknown>> | undefined;
 
     expect(result?.user?.password).toBe('[REDACTED]');
     expect(result?.user?.apiKey).toBe('[REDACTED]');

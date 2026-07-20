@@ -48,10 +48,7 @@ export interface EventData {
  * LOW CARDINALITY: Only these 4 values allowed in metric labels
  */
 export type EventDropReason =
-  | 'rate_limit'
-  | 'circuit_open'
-  | 'payload_invalid'
-  | 'shutdown';
+  'rate_limit' | 'circuit_open' | 'payload_invalid' | 'shutdown';
 
 export interface QueueConfig {
   maxSize: number; // Max events in queue (default: 50,000)

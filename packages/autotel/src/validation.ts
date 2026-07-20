@@ -147,9 +147,7 @@ export function validateAttributes(
     }
 
     sanitized[key] = sanitizeValue(value, config, 1) as
-      | string
-      | number
-      | boolean;
+      string | number | boolean;
   }
 
   return sanitized;

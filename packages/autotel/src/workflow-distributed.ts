@@ -218,8 +218,7 @@ export interface DistributedStepConfig {
    * @default true
    */
   extractBaggage?:
-    | boolean
-    | ((args: unknown[]) => WorkflowBaggageValues | null);
+    boolean | ((args: unknown[]) => WorkflowBaggageValues | null);
 
   /** Override step index (otherwise uses baggage or auto-increments) */
   stepIndex?: number;

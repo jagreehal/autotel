@@ -40,8 +40,14 @@
     traceServiceFilterSignal,
     toggleTraceServiceFilter,
     clearTraceServiceFilter,
+    traceTimeRangeFilterSignal,
+    traceTimeRangeCutoff,
   } from '../store.svelte';
-  import type { TraceSortKey, TraceStatusFilter } from '../store.svelte';
+  import type {
+    TraceSortKey,
+    TraceStatusFilter,
+    TraceTimeRangeFilter,
+  } from '../store.svelte';
   import { serviceColor } from '../utils/serviceColor';
   import { TRACE_LIST_SHORTCUTS } from '../shortcuts';
   import { formatDuration, formatTimestamp } from '../utils';
@@ -68,10 +74,12 @@
     status: TraceStatusFilter,
     minDurationMs: number,
     services: Set<string>,
+    startCutoff: number,
   ): boolean {
     if (status === 'error' && trace.status !== 'ERROR') return false;
     if (status === 'ok' && trace.status === 'ERROR') return false;
     if (minDurationMs > 0 && trace.duration < minDurationMs) return false;
+    if (startCutoff > 0 && trace.startTime < startCutoff) return false;
     if (services.size > 0 && !services.has(trace.service || 'unknown'))
       return false;
     return matchesNeedle(query.toLowerCase(), [
@@ -97,6 +105,7 @@
   const statusFilter = $derived(traceStatusFilterSignal.value);
   const minDuration = $derived(traceMinDurationSignal.value);
   const serviceFilter = $derived(traceServiceFilterSignal.value);
+  const timeRange = $derived(traceTimeRangeFilterSignal.value);
 
   // Service facet options with live counts over the full trace list, so the
   // dropdown always shows every service even while a subset is selected.
@@ -149,11 +158,21 @@
     return () => window.removeEventListener('keydown', handleKeydown);
   });
 
-  const filtered = $derived.by(() =>
-    traces.filter((trace) =>
-      traceMatches(trace, query, statusFilter, minDuration, serviceFilter),
-    ),
-  );
+  const filtered = $derived.by(() => {
+    // Recomputes as traces stream in, so the relative window stays fresh without
+    // a dedicated timer.
+    const startCutoff = traceTimeRangeCutoff(timeRange, Date.now());
+    return traces.filter((trace) =>
+      traceMatches(
+        trace,
+        query,
+        statusFilter,
+        minDuration,
+        serviceFilter,
+        startCutoff,
+      ),
+    );
+  });
 
   // Keyboard row navigation over the filtered list.
   let listRef: HTMLDivElement | undefined = $state();
@@ -181,7 +200,8 @@
     query.length > 0 ||
       statusFilter !== 'all' ||
       minDuration > 0 ||
-      serviceFilter.size > 0,
+      serviceFilter.size > 0 ||
+      timeRange !== 'all',
   );
   const allFilteredSelected = $derived(
     filtered.length > 0 && filtered.every((t) => selectedIds.has(t.traceId)),
@@ -438,6 +458,20 @@
         <option value="all">All</option>
         <option value="error">Errors</option>
         <option value="ok">OK</option>
+      </select>
+      <select
+        value={timeRange}
+        onchange={(event) =>
+          (traceTimeRangeFilterSignal.value = (
+            event.currentTarget as HTMLSelectElement
+          ).value as TraceTimeRangeFilter)}
+        class="text-xs border border-line rounded px-1.5 py-1 bg-surface text-fg-muted"
+        title="Only show traces that started within this window"
+      >
+        <option value="all">Any time</option>
+        <option value="5m">Last 5m</option>
+        <option value="15m">Last 15m</option>
+        <option value="1h">Last 1h</option>
       </select>
       {#if showFacets}
         <FacetFilter

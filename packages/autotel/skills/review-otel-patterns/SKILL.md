@@ -149,14 +149,13 @@ export const Route = createRootRoute({
 
 ```typescript
 import { Hono } from 'hono';
-import { honoToolkit } from 'autotel-adapters';
+import { autotelMiddleware, useLogger } from 'autotel-adapters/hono';
 
-const { useLogger, withAutotel } = honoToolkit;
 const app = new Hono();
-app.use('*', withAutotel({ service: 'my-api' }));
+app.use('*', autotelMiddleware());
 
 app.get('/api/users', (c) => {
-  const log = useLogger(c);
+  const log = useLogger();
   log.set({ users: { count: 42 } });
   return c.json({ users: [] });
 });

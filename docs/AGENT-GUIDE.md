@@ -321,10 +321,13 @@ server.on('request', (req, res) => {
 
 When adding Autotel support for a new framework (e.g. a new web framework):
 
-1. **New package or entry in existing package**  
-   Create middleware/plugin that: (a) creates a span per request, (b) optionally runs in AsyncLocalStorage so `getRequestLogger()` can be called with no args.
+1. **Prefer `autotel-adapters/toolkit`**
+   Use `defineFrameworkIntegration()` and `createLoggerStorage()` from `autotel-adapters/toolkit` (edge-safe storage: `autotel-adapters/toolkit/storage`). Wire route `include`/`exclude`, serverless `waitUntil`, and streaming `finishResponse` when the framework returns SSE/AI streams. See `examples/community-framework-skeleton/`.
 
-2. **Touchpoints to update**  
+2. **Built-in subpaths**
+   `autotel-adapters/{express,fastify,next,nitro,cloudflare,hono,nestjs,sveltekit,elysia}` and `autotel-nuxt` for Nuxt apps.
+
+3. **Touchpoints to update**
    - New source, e.g. `packages/autotel-<name>/src/index.ts`, or a new package.  
    - Build: add entry in `tsup.config.ts` / package build.  
    - Exports: add in `package.json` exports and typesVersions.  

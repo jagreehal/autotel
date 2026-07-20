@@ -256,8 +256,7 @@ describe('drift report JSON envelope (autotel-eventcatalog-report/v0.2.0)', () =
     // contract changes silently. Pin it to the schema's const here.
     const schemaConst = (
       (schema.oneOf ?? [])[0]?.properties?.spec as
-        | { const?: string }
-        | undefined
+        { const?: string } | undefined
     )?.const;
     expect(REPORT_SPEC).toBe(schemaConst);
   });

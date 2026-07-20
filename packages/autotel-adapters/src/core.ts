@@ -1,9 +1,6 @@
 import type { AsyncLocalStorage } from 'node:async_hooks';
 import {
-  createDrainPipeline,
-  createStructuredError,
   getRequestLogger,
-  parseError,
   trace,
   type ParsedError,
   type RequestLogger,
@@ -14,22 +11,28 @@ import {
   type StructuredError,
   type StructuredErrorInput,
 } from 'autotel';
+import {
+  mergeRequestLoggerOptions,
+  shouldInstrumentPath,
+  type RouteAdapterOptions,
+} from './toolkit/middleware';
+import {
+  toRouteAdapterOptions,
+  type FrameworkHandlerOptions,
+  type IntegratedCompletionOptions,
+} from './toolkit/integration';
+
+export { toRouteAdapterOptions };
+export type {
+  RouteAdapterOptions,
+  FrameworkHandlerOptions,
+  IntegratedCompletionOptions,
+};
+export type BaseAdapterOptions = RouteAdapterOptions;
 
 export interface AdapterUseLoggerOptions<TContext> {
   adapterName: string;
   enrich?: (context: TContext) => Record<string, unknown> | undefined;
-}
-
-export interface AdapterToolkit<TContext> {
-  useLogger: (
-    context?: TContext,
-    options?: RequestLoggerOptions,
-  ) => RequestLogger;
-  parseError: (error: unknown) => ParsedError;
-  createStructuredError: (input: StructuredErrorInput) => StructuredError;
-  createDrainPipeline: <T = unknown>(
-    options?: DrainPipelineOptions<T>,
-  ) => (drain: (batch: T[]) => void | Promise<void>) => PipelineDrainFn<T>;
 }
 
 export function createUseLogger<TContext = unknown>(
@@ -60,8 +63,10 @@ export function createUseLogger<TContext = unknown>(
   };
 }
 
-export interface RequestRunnerOptions {
+export interface RequestRunnerOptions extends RouteAdapterOptions {
   requestLoggerOptions?: RequestLoggerOptions;
+  /** HTTP route used for include/exclude filtering. */
+  path?: string;
   /** Emit one wide event automatically when the handler settles. Default `true`. */
   autoEmit?: boolean;
   /** Fields merged into the wide event at emit time (e.g. response status). */
@@ -81,10 +86,19 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
     handler: () => T | Promise<T>,
     options?: RequestRunnerOptions,
   ): Promise<T> {
+    if (options?.path && !shouldInstrumentPath(options.path, options)) {
+      return Promise.resolve(handler());
+    }
+
+    const loggerOptions = mergeRequestLoggerOptions(
+      options?.requestLoggerOptions,
+      options?.waitUntil,
+    );
+
     const wrapped = trace(
       { name: spanName },
       (ctx) => async (): Promise<T> => {
-        const log = getRequestLogger(ctx, options?.requestLoggerOptions);
+        const log = getRequestLogger(ctx, loggerOptions);
         enrich(log);
         try {
           return await storage.run(log, () => handler());
@@ -99,17 +113,6 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
       },
     );
     return wrapped();
-  };
-}
-
-export function createAdapterToolkit<TContext = unknown>(
-  options: AdapterUseLoggerOptions<TContext>,
-): AdapterToolkit<TContext> {
-  return {
-    useLogger: createUseLogger(options),
-    parseError,
-    createStructuredError,
-    createDrainPipeline,
   };
 }
 

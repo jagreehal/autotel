@@ -64,9 +64,7 @@ function renderReport(report: DriftReport): string {
 function renderDelta(delta: DriftDelta): string {
   // For PR-mode runs, emit results only for `delta.introduced`.
   // ... similar shape ...
-  return JSON.stringify({
-    /* ... */
-  });
+  return JSON.stringify({/* ... */});
 }
 
 export const sarifRenderer: Renderer = {

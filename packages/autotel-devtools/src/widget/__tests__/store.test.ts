@@ -4,6 +4,7 @@ import {
   clearAllData,
   sortedTracesSignal,
   sortedLogsSignal,
+  traceTimeRangeCutoff,
 } from '../store.svelte';
 import {
   makeTrace,
@@ -161,6 +162,19 @@ describe('Widget Store', () => {
 
       expect(sortedTracesSignal.value).toHaveLength(0);
       expect(sortedLogsSignal.value).toHaveLength(0);
+    });
+  });
+
+  describe('traceTimeRangeCutoff', () => {
+    it('returns 0 for the "all" range (no lower bound)', () => {
+      expect(traceTimeRangeCutoff('all', 1_000_000)).toBe(0);
+    });
+
+    it('subtracts the window from now for bounded ranges', () => {
+      const now = 10_000_000;
+      expect(traceTimeRangeCutoff('5m', now)).toBe(now - 5 * 60 * 1000);
+      expect(traceTimeRangeCutoff('15m', now)).toBe(now - 15 * 60 * 1000);
+      expect(traceTimeRangeCutoff('1h', now)).toBe(now - 60 * 60 * 1000);
     });
   });
 });
