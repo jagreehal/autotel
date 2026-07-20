@@ -321,6 +321,32 @@ export function clearTraceServiceFilter() {
     traceServiceFilterSignal.value = new Set();
 }
 
+// Relative time-window filter for the traces list — global (like the other
+// trace filters) so the full-page UI can reflect it in the shareable URL.
+export type TraceTimeRangeFilter = 'all' | '5m' | '15m' | '1h';
+export const traceTimeRangeFilterSignal = signal<TraceTimeRangeFilter>('all');
+
+const TRACE_TIME_RANGE_MS: Record<
+  Exclude<TraceTimeRangeFilter, 'all'>,
+  number
+> = {
+  '5m': 5 * 60 * 1000,
+  '15m': 15 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+};
+
+/**
+ * Lower-bound start time (ms epoch) for a time-range filter: traces that started
+ * before it are hidden. Returns 0 for `'all'` (no constraint). Pure — `now` is
+ * passed in so it is deterministic to test.
+ */
+export function traceTimeRangeCutoff(
+  range: TraceTimeRangeFilter,
+  now: number,
+): number {
+  return range === 'all' ? 0 : now - TRACE_TIME_RANGE_MS[range];
+}
+
 // GenAI-list filter — also global for the same shareable-URL reason.
 export const genaiQuerySignal = signal('');
 

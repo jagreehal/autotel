@@ -14,6 +14,7 @@ import type {
   TraceSortKey,
   SortDir,
   TraceStatusFilter,
+  TraceTimeRangeFilter,
 } from './store.svelte';
 
 export const TAB_VALUES: readonly TabType[] = [
@@ -44,6 +45,7 @@ const SORT_KEYS: readonly TraceSortKey[] = [
   'status',
 ];
 const STATUS_VALUES: readonly TraceStatusFilter[] = ['error', 'ok'];
+const TIME_RANGE_VALUES: readonly TraceTimeRangeFilter[] = ['5m', '15m', '1h'];
 /** Default trace sort — omitted from the hash to keep clean URLs. */
 export const DEFAULT_SORT: { key: TraceSortKey; dir: SortDir } = {
   key: 'time',
@@ -58,6 +60,7 @@ export interface NavState {
   q?: string;
   status?: TraceStatusFilter;
   minDuration?: number;
+  timeRange?: TraceTimeRangeFilter;
   sort?: { key: TraceSortKey; dir: SortDir };
   // GenAI-list filter.
   genaiQuery?: string;
@@ -85,6 +88,7 @@ export function parseNavHash(hash: string): NavState {
   const status = params.get('status');
   const minRaw = params.get('min');
   const min = minRaw != null ? Number(minRaw) : NaN;
+  const range = params.get('range');
   const sort = parseSort(params.get('sort'));
   const genaiQuery = params.get('gq') || undefined;
   return {
@@ -97,6 +101,9 @@ export function parseNavHash(hash: string): NavState {
       ? { status: status as TraceStatusFilter }
       : {}),
     ...(Number.isFinite(min) && min > 0 ? { minDuration: min } : {}),
+    ...((TIME_RANGE_VALUES as readonly string[]).includes(range ?? '')
+      ? { timeRange: range as TraceTimeRangeFilter }
+      : {}),
     ...(sort ? { sort } : {}),
     ...(genaiQuery ? { genaiQuery } : {}),
   };
@@ -115,6 +122,8 @@ export function formatNavHash(state: NavState): string {
   if (state.status && state.status !== 'all') params.set('status', state.status);
   if (state.minDuration && state.minDuration > 0)
     params.set('min', String(state.minDuration));
+  if (state.timeRange && state.timeRange !== 'all')
+    params.set('range', state.timeRange);
   if (
     state.sort &&
     !(state.sort.key === DEFAULT_SORT.key && state.sort.dir === DEFAULT_SORT.dir)

@@ -1,0 +1,17 @@
+{
+  "name": "@jagreehal/example-elysia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --experimental-strip-types src/index.ts"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-adapters": "workspace:*",
+    "elysia": "^1.2.25"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

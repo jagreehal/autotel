@@ -52,6 +52,31 @@
       "types": "./dist/fastify.d.ts",
       "import": "./dist/fastify.js",
       "require": "./dist/fastify.cjs"
+    },
+    "./toolkit": {
+      "types": "./dist/toolkit/index.d.ts",
+      "import": "./dist/toolkit/index.js",
+      "require": "./dist/toolkit/index.cjs"
+    },
+    "./toolkit/storage": {
+      "types": "./dist/toolkit/storage.d.ts",
+      "import": "./dist/toolkit/storage.js",
+      "require": "./dist/toolkit/storage.cjs"
+    },
+    "./nestjs": {
+      "types": "./dist/nestjs.d.ts",
+      "import": "./dist/nestjs.js",
+      "require": "./dist/nestjs.cjs"
+    },
+    "./sveltekit": {
+      "types": "./dist/sveltekit.d.ts",
+      "import": "./dist/sveltekit.js",
+      "require": "./dist/sveltekit.cjs"
+    },
+    "./elysia": {
+      "types": "./dist/elysia.d.ts",
+      "import": "./dist/elysia.js",
+      "require": "./dist/elysia.cjs"
     }
   },
   "files": [
@@ -68,7 +93,8 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "autotel": "workspace:*"
+    "autotel": "workspace:*",
+    "autotel-edge": "workspace:*"
   },
   "peerDependencies": {
     "hono": ">=4.12.28",
@@ -76,9 +102,13 @@
     "@tanstack/solid-start": "^1.168.27",
     "next": ">=16.2.10",
     "h3": "^2.0.0",
-    "nitropack": "^2.13.4"
+    "nitropack": "^2.13.4",
+    "rxjs": ">=7.0.0"
   },
   "peerDependenciesMeta": {
+    "rxjs": {
+      "optional": true
+    },
     "hono": {
       "optional": true
     },
@@ -102,6 +132,7 @@
     "@types/node": "^26.1.0",
     "hono": "^4.12.28",
     "rimraf": "^6.1.3",
+    "rxjs": "^7.8.2",
     "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"

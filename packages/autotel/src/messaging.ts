@@ -611,11 +611,7 @@ export interface PartitionLag {
  * DLQ failure category types
  */
 export type DLQReasonCategory =
-  | 'validation'
-  | 'processing'
-  | 'timeout'
-  | 'poison'
-  | 'unknown';
+  'validation' | 'processing' | 'timeout' | 'poison' | 'unknown';
 
 /**
  * Options for enhanced DLQ recording

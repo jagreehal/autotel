@@ -1,18 +1,21 @@
 import {
   createDrainPipeline,
   createStructuredError,
-  getRequestLogger,
   parseError,
-  trace,
-  type DrainPipelineOptions,
-  type ParsedError,
-  type PipelineDrainFn,
   type RequestLogger,
   type RequestLoggerOptions,
-  type StructuredError,
-  type StructuredErrorInput,
 } from 'autotel';
-import { createAdapterToolkit, createUseLogger, getHeader } from './core';
+import {
+  createUseLogger,
+  getHeader,
+  type FrameworkHandlerOptions,
+} from './core';
+import {
+  applyLoggerEnrichment,
+  defineFrameworkIntegration,
+  runWithIntegratedHandle,
+  buildTracedOptions,
+} from './toolkit/integration';
 
 export interface CloudflareRequestLike {
   method?: string;
@@ -28,16 +31,24 @@ export interface CloudflareExecutionContextLike {
   passThroughOnException?: () => void;
 }
 
-export interface CloudflareWithAutotelOptions<TEnv = unknown> {
+export interface CloudflareHandlerContext<
+  TEnv,
+  TRequest extends CloudflareRequestLike,
+  TContext extends CloudflareExecutionContextLike,
+> {
+  request: TRequest;
+  env: TEnv;
+  executionContext: TContext;
+}
+
+export interface CloudflareWithAutotelOptions<TEnv = unknown>
+  extends Omit<FrameworkHandlerOptions, 'spanName'> {
   spanName?: string | ((request: CloudflareRequestLike, env: TEnv) => string);
-  requestLoggerOptions?: RequestLoggerOptions;
-  enrich?: (
+  enrichRequest?: (
     request: CloudflareRequestLike,
     env: TEnv,
     ctx: CloudflareExecutionContextLike,
   ) => Record<string, unknown> | undefined;
-  /** Emit one wide event automatically when the handler settles. Default `true`. */
-  autoEmit?: boolean;
 }
 
 const requestLoggers = new WeakMap<object, RequestLogger>();
@@ -87,6 +98,54 @@ export function useLogger(
   return baseUseLogger(request, requestLoggerOptions);
 }
 
+function resolvePath(request: CloudflareRequestLike): string {
+  if (!request.url) return '/';
+  try {
+    return new URL(request.url).pathname;
+  } catch {
+    return request.url;
+  }
+}
+
+function createIntegration<TEnv>() {
+  return defineFrameworkIntegration<
+    CloudflareHandlerContext<TEnv, CloudflareRequestLike, CloudflareExecutionContextLike>
+  >({
+    name: 'cloudflare',
+    extractRequest: ({ request }) => ({
+      method: request.method ?? 'GET',
+      path: resolvePath(request),
+      headers: request.headers,
+      requestId:
+        getHeader(request.headers, 'x-request-id') ??
+        getHeader(request.headers, 'cf-ray'),
+    }),
+    attachLogger: ({ request }, logger) => {
+      requestLoggers.set(request as object, logger);
+    },
+    extractWaitUntil: ({ executionContext }) => {
+      const waitUntil =
+        typeof executionContext.waitUntil === 'function'
+          ? executionContext.waitUntil.bind(executionContext)
+          : undefined;
+      return waitUntil;
+    },
+  });
+}
+
+const integration = createIntegration<unknown>();
+
+function resolveSpanName<TEnv>(
+  request: CloudflareRequestLike,
+  env: TEnv,
+  options?: CloudflareWithAutotelOptions<TEnv>,
+): string {
+  if (typeof options?.spanName === 'function') {
+    return options.spanName(request, env);
+  }
+  return options?.spanName ?? `cloudflare.${request.method ?? 'request'}`;
+}
+
 export function withAutotelFetch<
   TEnv,
   TRequest extends CloudflareRequestLike,
@@ -109,78 +168,25 @@ export function withAutotelFetch<
     env: TEnv,
     executionContext: TContext,
   ): Promise<TReturn> => {
-    const spanName =
-      typeof options?.spanName === 'function'
-        ? options.spanName(request, env)
-        : (options?.spanName ?? `cloudflare.${request.method ?? 'request'}`);
-
-    const wrapped = trace(
-      { name: spanName },
-      (ctx) => async (
-        innerRequest: TRequest,
-        innerEnv: TEnv,
-        innerExecutionContext: TContext,
-      ) => {
-        const log = getRequestLogger(ctx, options?.requestLoggerOptions);
-        const auto = enrichFromRequest(innerRequest);
-        if (auto && Object.keys(auto).length > 0) {
-          log.set(auto);
-        }
-        const custom = options?.enrich?.(
-          innerRequest,
-          innerEnv,
-          innerExecutionContext,
-        );
-        if (custom && Object.keys(custom).length > 0) {
-          log.set(custom);
-        }
-
-        requestLoggers.set(innerRequest as object, log);
-        try {
-          return await handler(innerRequest, innerEnv, innerExecutionContext);
-        } finally {
-          if (options?.autoEmit !== false) {
-            log.emitNow();
-          }
-          requestLoggers.delete(innerRequest as object);
-        }
-      },
-    );
-
-    return await wrapped(request, env, executionContext);
+    const ctx = { request, env, executionContext };
+    try {
+      return await integration.runTraced(
+        ctx,
+        buildTracedOptions(options, resolveSpanName(request, env, options)),
+        async (handle) =>
+          runWithIntegratedHandle(handle, options, async () => {
+            applyLoggerEnrichment(
+              handle.logger,
+              enrichFromRequest(request),
+              options?.enrichRequest?.(request, env, executionContext),
+            );
+            return handler(request, env, executionContext);
+          }),
+      );
+    } finally {
+      requestLoggers.delete(request as object);
+    }
   };
 }
-
-export function createCloudflareAdapter<TEnv = unknown>(
-  options?: CloudflareWithAutotelOptions<TEnv>,
-) {
-  return {
-    withAutotelFetch: <
-      TRequest extends CloudflareRequestLike,
-      TContext extends CloudflareExecutionContextLike,
-      TReturn,
-    >(
-      handler: (
-        request: TRequest,
-        env: TEnv,
-        ctx: TContext,
-      ) => TReturn | Promise<TReturn>,
-    ) => withAutotelFetch(handler, options),
-    useLogger,
-    parseError: (error: unknown): ParsedError => parseError(error),
-    createStructuredError: (
-      input: StructuredErrorInput,
-    ): StructuredError => createStructuredError(input),
-    createDrainPipeline: <T = unknown>(
-      drainOptions?: DrainPipelineOptions<T>,
-    ): ((batchDrain: (batch: T[]) => void | Promise<void>) => PipelineDrainFn<T>) =>
-      createDrainPipeline(drainOptions),
-  };
-}
-
-export const cloudflareToolkit = createAdapterToolkit<CloudflareRequestLike>({
-  adapterName: 'cloudflare',
-  enrich: enrichFromRequest,
-});
 
 export { parseError, createDrainPipeline, createStructuredError };

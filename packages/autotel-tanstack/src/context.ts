@@ -10,9 +10,7 @@ import {
  * This is equivalent to the DOM's HeadersInit type but works in Node.js
  */
 export type HeadersInitType =
-  | Headers
-  | Record<string, string>
-  | [string, string][];
+  Headers | Record<string, string> | [string, string][];
 
 /**
  * Extract OpenTelemetry context from HTTP request headers

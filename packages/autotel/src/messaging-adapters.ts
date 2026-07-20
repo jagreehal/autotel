@@ -160,8 +160,7 @@ export const natsAdapter: MessagingAdapter = {
   producer: {
     customAttributes: (_ctx, args) => {
       const msg = args[0] as
-        | { subject?: string; replyTo?: string; stream?: string }
-        | undefined;
+        { subject?: string; replyTo?: string; stream?: string } | undefined;
       const attrs: Record<string, AttributeValue> = {};
 
       if (msg?.subject) attrs['nats.subject'] = msg.subject;

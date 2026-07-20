@@ -45,12 +45,7 @@ const ExportResultCode = { SUCCESS: 0, FAILED: 1 } as const;
 
 /** Attribute value types that survive serialization */
 type SerializableValue =
-  | string
-  | number
-  | boolean
-  | string[]
-  | number[]
-  | boolean[];
+  string | number | boolean | string[] | number[] | boolean[];
 
 /**
  * Portable serialized span for embedding in test metadata.

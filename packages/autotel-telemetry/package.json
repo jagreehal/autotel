@@ -1,0 +1,42 @@
+{
+  "name": "autotel-telemetry",
+  "version": "0.1.0",
+  "description": "Opt-in CLI usage telemetry for Autotel-powered tools",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./ingest": {
+      "types": "./dist/ingest.d.ts",
+      "import": "./dist/ingest.js",
+      "require": "./dist/ingest.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "tsdown": "^0.22.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-telemetry"
+  }
+}

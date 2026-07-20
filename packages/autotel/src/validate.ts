@@ -203,8 +203,7 @@ export interface DefineValidatorOptions<S> {
 }
 
 export type ValidatorResult<T> =
-  | { success: true; data: T }
-  | { success: false; issues: ValidationIssue[] };
+  { success: true; data: T } | { success: false; issues: ValidationIssue[] };
 
 export interface Validator<T> {
   readonly name: string;

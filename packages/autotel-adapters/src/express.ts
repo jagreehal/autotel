@@ -3,18 +3,14 @@ import {
   createDrainPipeline,
   createStructuredError,
   parseError,
-  type DrainPipelineOptions,
-  type ParsedError,
-  type PipelineDrainFn,
   type RequestLogger,
   type RequestLoggerOptions,
-  type StructuredError,
-  type StructuredErrorInput,
 } from 'autotel';
 import {
-  createAdapterToolkit,
   createRequestRunner,
   createUseLogger,
+  toRouteAdapterOptions,
+  type RouteAdapterOptions,
 } from './core';
 
 export interface ExpressRequestLike {
@@ -32,11 +28,10 @@ export interface ExpressResponseLike {
 
 export type ExpressNext = (err?: unknown) => void;
 
-export interface ExpressWithAutotelOptions {
+export interface ExpressWithAutotelOptions extends RouteAdapterOptions {
   spanName?: string | ((request: ExpressRequestLike) => string);
   requestLoggerOptions?: RequestLoggerOptions;
-  enrich?: (request: ExpressRequestLike) => Record<string, unknown> | undefined;
-  /** Emit one wide event automatically when the handler settles. Default `true`. */
+  enrichRequest?: (request: ExpressRequestLike) => Record<string, unknown> | undefined;
   autoEmit?: boolean;
 }
 
@@ -108,17 +103,21 @@ export function withAutotel<
         ? options.spanName(req)
         : (options?.spanName ?? `express.${req.method ?? 'request'}`);
 
+    const route = req.route?.path ?? req.path ?? req.originalUrl ?? req.url ?? '/';
+
     try {
       return await runRequest<TReturn>(
         spanName,
         (log) => {
           const auto = enrichFromRequest(req);
           if (auto && Object.keys(auto).length > 0) log.set(auto);
-          const custom = options?.enrich?.(req);
+          const custom = options?.enrichRequest?.(req);
           if (custom && Object.keys(custom).length > 0) log.set(custom);
         },
         () => handler(req, res, next),
         {
+          ...toRouteAdapterOptions(options),
+          path: route,
           requestLoggerOptions: options?.requestLoggerOptions,
           autoEmit: options?.autoEmit,
           finalize: () =>
@@ -136,34 +135,5 @@ export function withAutotel<
     }
   };
 }
-
-export function createExpressAdapter(options?: ExpressWithAutotelOptions) {
-  return {
-    withAutotel: <
-      TReq extends ExpressRequestLike,
-      TRes extends ExpressResponseLike,
-      TReturn,
-    >(
-      handler: (
-        req: TReq,
-        res: TRes,
-        next?: ExpressNext,
-      ) => TReturn | Promise<TReturn>,
-    ) => withAutotel(handler, options),
-    useLogger,
-    parseError: (error: unknown): ParsedError => parseError(error),
-    createStructuredError: (input: StructuredErrorInput): StructuredError =>
-      createStructuredError(input),
-    createDrainPipeline: <T = unknown>(
-      drainOptions?: DrainPipelineOptions<T>,
-    ): ((batchDrain: (batch: T[]) => void | Promise<void>) => PipelineDrainFn<T>) =>
-      createDrainPipeline(drainOptions),
-  };
-}
-
-export const expressToolkit = createAdapterToolkit<ExpressRequestLike>({
-  adapterName: 'express',
-  enrich: enrichFromRequest,
-});
 
 export { parseError, createDrainPipeline, createStructuredError };

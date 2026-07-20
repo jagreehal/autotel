@@ -47,8 +47,7 @@ export type SpanNameNormalizerPreset = 'rest-api' | 'graphql' | 'minimal';
  * Normalizer config - either a function or a preset name
  */
 export type SpanNameNormalizerConfig =
-  | SpanNameNormalizerFn
-  | SpanNameNormalizerPreset;
+  SpanNameNormalizerFn | SpanNameNormalizerPreset;
 
 export interface SpanNameNormalizingProcessorOptions {
   /**

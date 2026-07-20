@@ -44,6 +44,10 @@ export type PresetSlug =
   | 'hono'
   | 'mcp'
   | 'tanstack'
+  | 'nestjs'
+  | 'sveltekit'
+  | 'elysia'
+  | 'nuxt'
   // platforms
   | 'aws-lambda'
   | 'cloudflare'
@@ -96,6 +100,10 @@ const DEP_TO_PRESET: Record<string, PresetSlug | 'auto-instr'> = {
   '@tanstack/start': 'tanstack',
   '@tanstack/start-server': 'tanstack',
   '@tanstack/start-client': 'tanstack',
+  '@nestjs/core': 'nestjs',
+  '@sveltejs/kit': 'sveltekit',
+  elysia: 'elysia',
+  nuxt: 'nuxt',
 
   // Subscribers
   'posthog-node': 'posthog',
@@ -113,7 +121,6 @@ const DEP_TO_PRESET: Record<string, PresetSlug | 'auto-instr'> = {
   // Auto-instrumented (no first-party preset needed)
   express: 'auto-instr',
   fastify: 'auto-instr',
-  '@nestjs/core': 'auto-instr',
   next: 'auto-instr',
   pg: 'auto-instr',
   mysql: 'auto-instr',

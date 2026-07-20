@@ -12,7 +12,20 @@ Composable framework adapters and DX helpers for `autotel`.
 - `autotel-adapters/next`
 - `autotel-adapters/nitro`
 - `autotel-adapters/cloudflare`
+- `autotel-adapters/express`
+- `autotel-adapters/fastify`
+- `autotel-adapters/nestjs`
+- `autotel-adapters/sveltekit`
+- `autotel-adapters/elysia`
+- `autotel-adapters/toolkit` (custom framework integrations)
+- `autotel-adapters/toolkit/storage` (edge-safe ALS helper)
 - `autotel-adapters/core` (build your own adapter)
+
+## Custom frameworks
+
+Use `defineFrameworkIntegration()` from `autotel-adapters/toolkit` to wire a new HTTP framework. See `examples/community-framework-skeleton/` for a minimal skeleton.
+
+Toolkit options include route `include` / `exclude`, per-route `service`, serverless `waitUntil`, streaming `finishResponse`, and request-level `keep` callbacks.
 
 ## When to use `withAutotel` vs `useLogger` alone
 

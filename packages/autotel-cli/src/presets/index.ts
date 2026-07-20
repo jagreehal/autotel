@@ -21,6 +21,10 @@ import { sentry } from './plugins/sentry';
 import { hono } from './plugins/hono';
 import { mcp } from './plugins/mcp';
 import { tanstack } from './plugins/tanstack';
+import { nestjs } from './plugins/nestjs';
+import { sveltekit } from './plugins/sveltekit';
+import { elysia } from './plugins/elysia';
+import { nuxt } from './plugins/nuxt';
 import { awsLambda, cloudflare, edge } from './platforms/aws';
 
 /**
@@ -58,6 +62,10 @@ export const plugins = new Map<string, PluginPreset>([
   ['hono', hono],
   ['mcp', mcp],
   ['tanstack', tanstack],
+  ['nestjs', nestjs],
+  ['sveltekit', sveltekit],
+  ['elysia', elysia],
+  ['nuxt', nuxt],
 ]);
 
 /**

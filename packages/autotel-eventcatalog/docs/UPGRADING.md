@@ -186,9 +186,9 @@ npm release runs:
 ```yaml
 - uses: jagreehal/autotel-eventcatalog@v0
   with:
-    package-version: '0.1.0'   # exact pin
+    package-version: '0.1.0' # exact pin
     # OR
-    package-version: '^0.1'    # minor-range
+    package-version: '^0.1' # minor-range
 ```
 
 ## When in doubt

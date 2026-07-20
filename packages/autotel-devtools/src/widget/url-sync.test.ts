@@ -80,6 +80,17 @@ describe('filters', () => {
     expect(parseNavHash('#min=-5')).toEqual({});
   });
 
+  it('parses a valid time-range filter and ignores invalid ones', () => {
+    expect(parseNavHash('#range=15m')).toEqual({ timeRange: '15m' });
+    expect(parseNavHash('#range=all')).toEqual({});
+    expect(parseNavHash('#range=99m')).toEqual({});
+  });
+
+  it('serializes a non-default time range and omits the default', () => {
+    expect(formatNavHash({ timeRange: '5m' })).toBe('#range=5m');
+    expect(formatNavHash({ timeRange: 'all' })).toBe('');
+  });
+
   it('omits default-valued filters from the hash', () => {
     expect(
       formatNavHash({
@@ -112,6 +123,8 @@ describe('round-trip', () => {
       { traceId: 'abc', spanId: 'def' },
       { tab: 'genai', traceId: 'abc', spanId: 'def' },
       { q: 'checkout', status: 'error', minDuration: 250 },
+      { timeRange: '5m' },
+      { status: 'ok', timeRange: '1h' },
       { sort: { key: 'duration', dir: 'asc' }, genaiQuery: 'gpt' },
     ];
     for (const s of states) {

@@ -55,8 +55,7 @@ const LOG_LEVEL_KEY = createContextKey('autotel-log-level');
  */
 export function getActiveLogLevel(): BuiltinLogLevel | undefined {
   return api_context.active().getValue(LOG_LEVEL_KEY) as
-    | BuiltinLogLevel
-    | undefined;
+    BuiltinLogLevel | undefined;
 }
 
 /**

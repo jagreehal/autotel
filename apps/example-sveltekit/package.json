@@ -1,0 +1,17 @@
+{
+  "name": "@jagreehal/example-sveltekit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --experimental-strip-types src/hooks.server.ts"
+  },
+  "dependencies": {
+    "@sveltejs/kit": "^2.20.2",
+    "autotel": "workspace:*",
+    "autotel-adapters": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

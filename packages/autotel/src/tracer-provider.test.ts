@@ -25,7 +25,10 @@ describe('getForceFlushableProvider', () => {
     // 0.220+, so flushing only via the SDK handle silently exported nothing.
     const exported: string[] = [];
     const exporter = {
-      export(spans: Array<{ name: string }>, cb: (r: { code: number }) => void) {
+      export(
+        spans: Array<{ name: string }>,
+        cb: (r: { code: number }) => void,
+      ) {
         for (const s of spans) exported.push(s.name);
         cb({ code: 0 });
       },
@@ -70,9 +73,9 @@ describe('getForceFlushableProvider', () => {
     const flushable = getForceFlushableProvider(fakeSdk);
     // The ambient global provider is force-flushable (or undefined in a bare
     // env); either way the SDK's undefined must not short-circuit resolution.
-    expect(flushable === undefined || typeof flushable.forceFlush === 'function').toBe(
-      true,
-    );
+    expect(
+      flushable === undefined || typeof flushable.forceFlush === 'function',
+    ).toBe(true);
   });
 });
 

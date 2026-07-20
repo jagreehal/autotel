@@ -420,6 +420,41 @@ const INVESTIGATE_COMMANDS: CommandSpec[] = [
 
 COMMANDS.push(...INVESTIGATE_COMMANDS);
 
+const TELEMETRY_COMMANDS: CommandSpec[] = [
+  {
+    name: 'telemetry',
+    description: 'Manage opt-in CLI usage telemetry (parent)',
+    mutating: false,
+    flags: [],
+  },
+  {
+    name: 'telemetry status',
+    description: 'Show telemetry consent status',
+    mutating: false,
+    flags: [],
+  },
+  {
+    name: 'telemetry enable',
+    description: 'Enable telemetry for this tool',
+    mutating: true,
+    flags: [],
+  },
+  {
+    name: 'telemetry disable',
+    description: 'Disable telemetry and purge undelivered events',
+    mutating: true,
+    flags: [],
+  },
+  {
+    name: 'telemetry disclosure',
+    description: 'Print telemetry disclosure markdown',
+    mutating: false,
+    flags: [],
+  },
+];
+
+COMMANDS.push(...TELEMETRY_COMMANDS);
+
 export function getCommand(name: string): CommandSpec | undefined {
   return COMMANDS.find((c) => c.name === name);
 }

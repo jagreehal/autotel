@@ -1,0 +1,11 @@
+{
+  "name": "telemetry-playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "smoke": "node --experimental-strip-types smoke.ts"
+  },
+  "dependencies": {
+    "autotel-telemetry": "workspace:*"
+  }
+}

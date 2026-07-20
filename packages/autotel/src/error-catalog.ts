@@ -93,9 +93,7 @@ export type ErrorCatalog<T extends Record<string, ErrorCatalogEntry>> = {
 function readCatalogCode(error: unknown): string | number | undefined {
   if (error === null || typeof error !== 'object') return undefined;
   return (error as Record<symbol, unknown>)[catalogCodeKey] as
-    | string
-    | number
-    | undefined;
+    string | number | undefined;
 }
 
 /** True when `error` was produced by any autotel error catalog. */
@@ -132,8 +130,7 @@ export function defineErrorCatalog<
     ): StructuredError => {
       const params = usesParams ? paramsOrOptions : undefined;
       const options = (usesParams ? maybeOptions : paramsOrOptions) as
-        | ErrorBuildOptions
-        | undefined;
+        ErrorBuildOptions | undefined;
 
       const message =
         typeof entry.message === 'function'

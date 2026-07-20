@@ -10,7 +10,10 @@ Framework-specific wrappers around autotel's core tracing primitives. Each adapt
 
 - A handler wrapper that opens a span and binds a request-scoped `RequestLogger`
 - A `useLogger()` function that retrieves the logger from within the handler
-- A toolkit object (`*Toolkit`) bundling `useLogger`, `parseError`, `createStructuredError`, and `createDrainPipeline`
+- Direct re-exports of the utilities `parseError`, `createStructuredError`, and `createDrainPipeline`
+
+Options are passed per call site (e.g. `withAutotel(handler, options)`) — there are no
+`create*Adapter` factories or `*Toolkit` bundles.
 
 All adapters use `AsyncLocalStorage` (or a `WeakMap` for Cloudflare) internally so logger access is implicit — you never pass a logger through call chains manually.
 
@@ -44,16 +47,18 @@ export const GET = withAutotel(async (request) => {
 });
 ```
 
-**Option B — create a shared adapter with defaults:**
+**Option B — share defaults by passing options at each wrap:**
 
 ```typescript
 // lib/autotel.ts
-import { createNextAdapter } from 'autotel-adapters/next';
+import { withAutotel } from 'autotel-adapters/next';
 
-export const { withAutotel, useLogger, parseError } = createNextAdapter({
+const autotelOptions = {
   spanName: (req) => `api ${new URL(req?.url ?? '/').pathname}`,
-  enrich: (req) => ({ 'tenant.id': req?.headers?.get('x-tenant-id') }),
-});
+  enrichRequest: (req) => ({ 'tenant.id': req?.headers?.get('x-tenant-id') }),
+};
+
+export const withTracing = (handler) => withAutotel(handler, autotelOptions);
 ```
 
 `withAutotel` accepts any function whose first argument is `NextRequestLike`. The `spanName` option can be a static string or a function receiving the request. The auto-enrichment sets `http.request.method`, `url.full`, `http.route`, and `http.request.header.x-request-id`.
@@ -73,7 +78,7 @@ export default defineEventHandler(
 );
 ```
 
-`withAutotelEventHandler` reads `event.method`, `event.path`, and `event.context.requestId` automatically. Use `createNitroAdapter` to share options across handlers.
+`withAutotelEventHandler` reads `event.method`, `event.path`, and `event.context.requestId` automatically. Pass options as the second argument to share config across handlers.
 
 ### Cloudflare Workers
 
@@ -95,46 +100,50 @@ Cloudflare stores the logger in a `WeakMap` keyed on the request object (no `Asy
 
 ```typescript
 import { Hono } from 'hono';
-import { honoToolkit } from 'autotel-adapters/hono';
+import { autotelMiddleware, useLogger } from 'autotel-adapters/hono';
 
 const app = new Hono();
+app.use('*', autotelMiddleware());
 
 app.get('/', (c) => {
-  const log = honoToolkit.useLogger(c);
+  const log = useLogger();
   log.info('hello hono');
   return c.json({ ok: true });
 });
 ```
 
-`honoToolkit` is a pre-built `AdapterToolkit<Context>`. There is no handler wrapper for Hono — use autotel's `trace()` directly if you need a span.
+Register `autotelMiddleware()` before your routes; it opens a span per request and
+binds the logger to `AsyncLocalStorage`, so `useLogger()` (no argument) resolves
+inside any downstream handler.
 
 ### TanStack Start
 
 ```typescript
-import { tanstackToolkit } from 'autotel-adapters/tanstack';
+import { useLogger } from 'autotel-adapters/tanstack';
 
-// Inside a server function or API route:
-const log = tanstackToolkit.useLogger({ pathname: '/api/data', method: 'GET' });
+// Inside a server function or API route already running in an autotel trace:
+const log = useLogger({ pathname: '/api/data', method: 'GET' });
 log.info('handling request');
 ```
 
-### AdapterToolkit interface
+### Utilities
 
-Every toolkit (and `createNextAdapter`/`createNitroAdapter`/`createCloudflareAdapter`) exposes:
+Each subpath re-exports `parseError`, `createStructuredError`, and
+`createDrainPipeline` directly (they also live in `autotel`):
 
-| Member | Description |
+| Export | Description |
 |---|---|
 | `useLogger(ctx?, opts?)` | Get the request-scoped `RequestLogger` |
 | `parseError(error)` | Normalise any thrown value into `ParsedError` |
 | `createStructuredError(input)` | Build a `StructuredError` for consistent API error shapes |
 | `createDrainPipeline(opts?)` | Create a batching drain pipeline |
 
-### Custom adapter (createAdapterToolkit)
+### Custom adapter (createUseLogger)
 
 ```typescript
-import { createAdapterToolkit } from 'autotel-adapters/core';
+import { createUseLogger } from 'autotel-adapters/core';
 
-const myToolkit = createAdapterToolkit<MyContext>({
+const useLogger = createUseLogger<MyContext>({
   adapterName: 'my-framework',
   enrich: (ctx) => ({ 'tenant.id': ctx.tenantId }),
 });
@@ -165,13 +174,12 @@ export const GET = withAutotel(async (request) => {
 
 ```typescript
 // WRONG
-import { honoToolkit } from 'autotel-adapters'; // barrel re-exports do exist, but...
-import { useLogger } from 'autotel-adapters';    // this is the Next.js useLogger, not Hono's
+import { useLogger } from 'autotel-adapters'; // this is Hono's useLogger from the barrel, not Next's
 ```
 
 ```typescript
 // CORRECT: use framework-specific subpaths
-import { honoToolkit } from 'autotel-adapters/hono';
+import { autotelMiddleware, useLogger } from 'autotel-adapters/hono';
 import { useLogger } from 'autotel-adapters/next';
 import { withAutotelEventHandler } from 'autotel-adapters/nitro';
 ```
@@ -190,7 +198,7 @@ const log = useLogger(request);
 
 The request argument is optional only when you are certain the `AsyncLocalStorage` store is already populated (i.e., called from code deeply nested inside a `withAutotel`-wrapped handler).
 
-### MEDIUM — Using createCloudflareAdapter without passing request to useLogger
+### MEDIUM — Not passing request to useLogger on Cloudflare
 
 In Cloudflare Workers, the logger is stored per-request in a `WeakMap`. If you call `useLogger()` without the request object, you always get a new logger with no stored enrichment.
 

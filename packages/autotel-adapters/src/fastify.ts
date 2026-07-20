@@ -3,18 +3,14 @@ import {
   createDrainPipeline,
   createStructuredError,
   parseError,
-  type DrainPipelineOptions,
-  type ParsedError,
-  type PipelineDrainFn,
   type RequestLogger,
   type RequestLoggerOptions,
-  type StructuredError,
-  type StructuredErrorInput,
 } from 'autotel';
 import {
-  createAdapterToolkit,
   createRequestRunner,
   createUseLogger,
+  toRouteAdapterOptions,
+  type RouteAdapterOptions,
 } from './core';
 
 export interface FastifyRequestLike {
@@ -30,11 +26,10 @@ export interface FastifyReplyLike {
   statusCode?: number;
 }
 
-export interface FastifyWithAutotelOptions {
+export interface FastifyWithAutotelOptions extends RouteAdapterOptions {
   spanName?: string | ((request: FastifyRequestLike) => string);
   requestLoggerOptions?: RequestLoggerOptions;
-  enrich?: (request: FastifyRequestLike) => Record<string, unknown> | undefined;
-  /** Emit one wide event automatically when the handler settles. Default `true`. */
+  enrichRequest?: (request: FastifyRequestLike) => Record<string, unknown> | undefined;
   autoEmit?: boolean;
 }
 
@@ -102,16 +97,21 @@ export function withAutotel<
         ? options.spanName(request)
         : (options?.spanName ?? `fastify.${request.method ?? 'request'}`);
 
+    const route =
+      request.routeOptions?.url ?? request.routerPath ?? request.url ?? '/';
+
     return runRequest<TReturn>(
       spanName,
       (log) => {
         const auto = enrichFromRequest(request);
         if (auto && Object.keys(auto).length > 0) log.set(auto);
-        const custom = options?.enrich?.(request);
+        const custom = options?.enrichRequest?.(request);
         if (custom && Object.keys(custom).length > 0) log.set(custom);
       },
       () => handler(request, reply),
       {
+        ...toRouteAdapterOptions(options),
+        path: route,
         requestLoggerOptions: options?.requestLoggerOptions,
         autoEmit: options?.autoEmit,
         finalize: () =>
@@ -122,30 +122,5 @@ export function withAutotel<
     );
   };
 }
-
-export function createFastifyAdapter(options?: FastifyWithAutotelOptions) {
-  return {
-    withAutotel: <
-      TReq extends FastifyRequestLike,
-      TRes extends FastifyReplyLike,
-      TReturn,
-    >(
-      handler: (request: TReq, reply: TRes) => TReturn | Promise<TReturn>,
-    ) => withAutotel(handler, options),
-    useLogger,
-    parseError: (error: unknown): ParsedError => parseError(error),
-    createStructuredError: (input: StructuredErrorInput): StructuredError =>
-      createStructuredError(input),
-    createDrainPipeline: <T = unknown>(
-      drainOptions?: DrainPipelineOptions<T>,
-    ): ((batchDrain: (batch: T[]) => void | Promise<void>) => PipelineDrainFn<T>) =>
-      createDrainPipeline(drainOptions),
-  };
-}
-
-export const fastifyToolkit = createAdapterToolkit<FastifyRequestLike>({
-  adapterName: 'fastify',
-  enrich: enrichFromRequest,
-});
 
 export { parseError, createDrainPipeline, createStructuredError };

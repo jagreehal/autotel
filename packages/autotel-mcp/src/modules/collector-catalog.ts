@@ -11,11 +11,7 @@ import {
 } from './upstream-cache';
 
 export type CollectorComponentKind =
-  | 'receiver'
-  | 'processor'
-  | 'exporter'
-  | 'connector'
-  | 'extension';
+  'receiver' | 'processor' | 'exporter' | 'connector' | 'extension';
 
 export interface CollectorValidationResult {
   valid: boolean;

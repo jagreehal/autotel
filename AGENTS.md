@@ -105,12 +105,17 @@ When the user wants observability, suggest these entry points. All from `autotel
 
 | Framework              | Where to look / what to suggest                                                                             |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Hono**               | `autotel-hono`: middleware that creates span per request; use `trace()` or request logger inside handlers.  |
-| **Fastify**            | Example: `apps/example-fastify`; init + span per request (or middleware); `getRequestLogger()` in handlers. |
+| **Hono**               | `autotel-hono` + `autotel-adapters/hono` (`autotelMiddleware`, `useLogger`).                                |
+| **Fastify**            | `autotel-adapters/fastify` (`withAutotel`, `useLogger`).                                                  |
+| **Express**            | `autotel-adapters/express` (`withAutotel`, `useLogger`).                                                    |
+| **NestJS**             | `autotel-adapters/nestjs` (`AutotelInterceptor`, `useLogger`).                                              |
+| **SvelteKit**          | `autotel-adapters/sveltekit` (`autotelHandle`, `useLogger`).                                                |
+| **Elysia**             | `autotel-adapters/elysia` (`withAutotelHandler`, `useLogger`).                                              |
+| **Nuxt**               | `autotel-nuxt` module + `autotel-adapters/nitro`.                                                           |
 | **TanStack Start**     | `autotel-tanstack`: middleware, env; see package CLAUDE and `apps/example-tanstack-start`.                  |
-| **Cloudflare Workers** | `autotel-cloudflare`: init and wrap handlers; see package CLAUDE.                                           |
-| **Next.js**            | Use `autotel` init and `trace()`/request logger in API routes / server components.                          |
-| **Express**            | Middleware that creates a span per request; then `getRequestLogger()` in route handlers.                    |
+| **Cloudflare Workers** | `autotel-cloudflare` + `autotel-adapters/cloudflare` (`withAutotelFetch`, `waitUntil`).                      |
+| **Next.js**            | `autotel-adapters/next` (`withAutotel`, streaming-aware emit).                                              |
+| **Custom HTTP**        | `autotel-adapters/toolkit` (`defineFrameworkIntegration`); see `examples/community-framework-skeleton/`.    |
 | **Browser / SPA**      | `autotel-web`: `init()` auto-injects `traceparent`. For per-tenant tracing, call `setBaggage({ 'tenant.id': id })` after login — it propagates as a W3C `baggage` header (same-origin/fail-closed) and the backend's `BaggageSpanProcessor` tags server spans. Do **not** hand-roll a fetch wrapper for this. |
 
 Always suggest `init()` (or instrumentation) once at app entry; then spans + request logger or `trace()` in handlers.

@@ -40,6 +40,7 @@
     "@types/eslint-config-prettier": "^6.11.3",
     "@types/node": "^26.1.0",
     "@types/semver": "^7.7.1",
+    "autotel-telemetry": "workspace:*",
     "eslint": "^10.6.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^64.0.0",

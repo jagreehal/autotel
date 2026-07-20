@@ -45,6 +45,8 @@ tsup.config.bundled_*.mjs
 # Playwright
 examples/browser/playwright-report
 examples/browser/test-results
+**/test-results/
+**/playwright-report/
 .playwright-cli
 
 # Changesets release artifacts

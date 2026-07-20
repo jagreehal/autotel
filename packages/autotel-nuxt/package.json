@@ -1,0 +1,53 @@
+{
+  "name": "autotel-nuxt",
+  "version": "0.1.0",
+  "description": "Nuxt module for Autotel observability via Nitro adapters",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/module.d.ts",
+      "import": "./dist/module.js",
+      "require": "./dist/module.cjs"
+    },
+    "./runtime/nitro": {
+      "types": "./dist/runtime/nitro.d.ts",
+      "import": "./dist/runtime/nitro.js",
+      "require": "./dist/runtime/nitro.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "skills"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "autotel-adapters": "workspace:*"
+  },
+  "peerDependencies": {
+    "autotel": "workspace:*",
+    "nuxt": "^3.15.0",
+    "nitropack": "^2.13.4"
+  },
+  "devDependencies": {
+    "@nuxt/kit": "^3.15.4",
+    "@types/node": "^26.1.0",
+    "autotel": "workspace:*",
+    "nuxt": "^3.15.4",
+    "tsdown": "^0.22.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-nuxt"
+  }
+}

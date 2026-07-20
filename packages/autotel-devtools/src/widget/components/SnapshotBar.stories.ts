@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite'
-import { expect } from 'storybook/test'
+import { expect, userEvent } from 'storybook/test'
 import SnapshotBar from './SnapshotBar.svelte'
 import {
   clearAllData,
   loadSnapshot,
   updateWidgetData,
   exitSnapshotMode,
+  tracesSignal,
 } from '../store.svelte'
 import type { TraceData } from '../types'
 
@@ -53,6 +54,20 @@ export const LiveEmpty: Story = {
     await expect(canvas.getByText('Download snapshot')).toBeInTheDocument()
     await expect(canvas.getByText('Load snapshot')).toBeInTheDocument()
     await expect(canvas.getByText('Local data')).toBeInTheDocument()
+    await expect(
+      canvas.getByRole('button', { name: /Clear/i }),
+    ).toBeInTheDocument()
+  },
+}
+
+export const ClearsData: Story = {
+  play: async ({ canvas }) => {
+    updateWidgetData({ traces: [makeTrace('t1'), makeTrace('t2', 'ERROR')] })
+    await expect(tracesSignal.value).toHaveLength(2)
+
+    await userEvent.click(canvas.getByRole('button', { name: /Clear/i }))
+
+    await expect(tracesSignal.value).toHaveLength(0)
   },
 }
 

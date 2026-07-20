@@ -155,14 +155,11 @@ export interface OtlpDestinationConfig {
 
 // Lazy-load gRPC exporters (optional peer dependencies)
 let OTLPTraceExporterGRPC:
-  | (new (config: OTLPExporterConfig) => SpanExporter)
-  | undefined;
+  (new (config: OTLPExporterConfig) => SpanExporter) | undefined;
 let OTLPMetricExporterGRPC:
-  | (new (config: OTLPExporterConfig) => PushMetricExporter)
-  | undefined;
+  (new (config: OTLPExporterConfig) => PushMetricExporter) | undefined;
 let OTLPLogExporterGRPC:
-  | (new (config: OTLPExporterConfig) => LogRecordExporter)
-  | undefined;
+  (new (config: OTLPExporterConfig) => LogRecordExporter) | undefined;
 
 /**
  * Helper: Lazy-load gRPC trace exporter
@@ -436,9 +433,7 @@ export interface AutotelConfig {
    * ```
    */
   autoInstrumentations?:
-    | string[]
-    | boolean
-    | Record<string, { enabled?: boolean }>;
+    string[] | boolean | Record<string, { enabled?: boolean }>;
 
   /**
    * OTLP endpoint for traces/metrics/logs
@@ -1337,10 +1332,7 @@ function wrapLogger(
  */
 export function resolveAttributeRedactor(
   explicit:
-    | AttributeRedactorConfig
-    | AttributeRedactorPreset
-    | false
-    | undefined,
+    AttributeRedactorConfig | AttributeRedactorPreset | false | undefined,
   environment: string,
 ): AttributeRedactorConfig | AttributeRedactorPreset | undefined {
   if (explicit === false) return undefined;
@@ -2426,8 +2418,7 @@ export async function _closeEmbeddedDevtools(): Promise<void> {
  * @internal Get embedded devtools close handle.
  */
 export function _getEmbeddedDevtoolsCloseForTesting():
-  | (() => Promise<void> | void)
-  | null {
+  (() => Promise<void> | void) | null {
   return _devtoolsClose;
 }
 
