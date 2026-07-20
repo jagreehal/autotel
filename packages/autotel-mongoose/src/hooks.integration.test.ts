@@ -144,10 +144,17 @@ describe('instrumentHooks: true with timestamps', () => {
       next();
     });
 
-    const PostHookModel = mongooseInstance.model('PostFindOneAndUpdateHookTest', schema);
+    const PostHookModel = mongooseInstance.model(
+      'PostFindOneAndUpdateHookTest',
+      schema,
+    );
 
     const doc = await PostHookModel.create({ value: 1 });
-    await PostHookModel.findOneAndUpdate({ _id: doc._id }, { value: 2 }, { new: true });
+    await PostHookModel.findOneAndUpdate(
+      { _id: doc._id },
+      { value: 2 },
+      { new: true },
+    );
 
     // If args were scrambled, `receivedDoc` would be a function (the
     // synthetic callback) and `receivedNextType` would be 'object'.

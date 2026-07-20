@@ -681,8 +681,11 @@ function isMongooseInternalHook(handler: any): boolean {
 /**
  * Wraps a hook handler to trace its execution.
  * Handles both callback-style (with next) and promise-style hooks.
+ *
+ * Exported for unit testing against Kareem directly; not part of the public
+ * package API (`index.ts` does not re-export it).
  */
-function wrapHookHandler(
+export function wrapHookHandler(
   handler: any,
   hookName: string,
   hookType: 'pre' | 'post',
@@ -697,19 +700,6 @@ function wrapHookHandler(
   if ((handler as any)[WRAPPED_HOOK_FLAG]) {
     return handler;
   }
-
-  // Check if the original handler uses callback-style (expects `next` param).
-  // Kareem (Mongoose's hook library) checks fn.length to decide whether to
-  // pass a `next` callback. Rest params (...args) give length=0, so we must
-  // preserve the original arity.
-  //
-  // `init` is documented by Mongoose as always synchronous — it never
-  // supports callback-style middleware, regardless of arity. Without this
-  // carve-out, a single-parameter data hook like
-  // `post('init', (doc) => {...})` is indistinguishable by arity alone from
-  // a single-parameter callback hook like `pre('validate', (next) => {...})`,
-  // and we'd inject a synthetic callback into the `doc` position.
-  const expectsCallback = hookName !== 'init' && handler.length > 0;
 
   const startHookSpan = (self: any) => {
     let modelName: string | undefined;
@@ -789,71 +779,87 @@ function wrapHookHandler(
       }
     });
 
-  const wrappedHook = expectsCallback
-    ? function wrappedHookCallback(this: any, arg0: any, ...args: any[]): any {
-        const span = startHookSpan(this);
-        const runtimeArgs = [arg0, ...args];
-        const callbackIndex = runtimeArgs.findIndex(
-          (arg) => typeof arg === 'function',
-        );
-        const originalNext =
-          callbackIndex === -1
-            ? undefined
-            : (runtimeArgs[callbackIndex] as (...args: any[]) => void);
+  const wrappedHook = function wrappedHook(
+    this: any,
+    ...runtimeArgs: any[]
+  ): any {
+    const span = startHookSpan(this);
 
-        const wrappedNext = function wrappedNext(
-          this: any,
-          ...nextArgs: any[]
-        ) {
-          const err = nextArgs[0];
-          if (err) {
-            finalizeSpan(
-              span,
-              err instanceof Error ? err : new Error(String(err)),
-            );
-          } else {
-            finalizeSpan(span);
-          }
-          if (typeof originalNext === 'function') {
-            return originalNext.apply(this, nextArgs);
-          }
-          return;
-        };
+    // Whether this invocation is callback-style is decided at *call* time, and
+    // `next` — by Mongoose convention — is always the handler's *last* declared
+    // parameter, i.e. `handler.length - 1`. But `pre` and `post` reach Kareem
+    // through different calling conventions, so detection differs:
+    //
+    //   - `post` hooks: Kareem *always* appends a real `next`
+    //     (`kareem/index.js` `newArgs.push(nextCallback)`). The hook is
+    //     callback-style only if the handler's declared slot is the one Kareem
+    //     filled with a function. Checking that exact slot (rather than
+    //     scanning) matters both ways: scanning from the front would grab a
+    //     leading Model/Document (Mongoose Models are functions); accepting a
+    //     function *anywhere* would grab the appended `next` even for a data
+    //     hook like `post('save', (doc) => {})` that never reads it — deferring
+    //     finalization to a callback the handler never calls, leaking the span.
+    //     Pinning to the declared slot also subsumes the old `init` carve-out:
+    //     `post('init', (doc))` is handed `[doc]` with no callback, so it is
+    //     simply promise/sync-style.
+    //
+    //   - `pre` hooks: Kareem's `execPre` calls the handler with the operation
+    //     args and *never* passes a callback. So a declared parameter means the
+    //     handler is callback-style and we must synthesize `next` ourselves;
+    //     there is no downstream callback to forward to.
+    //
+    // Restoring the original arity on this wrapper (see `defineProperty` below)
+    // is what lets Kareem's own exact-arity checks line up in the `post` case.
+    const expectedIndex = handler.length - 1;
+    const realCallback =
+      expectedIndex >= 0 && typeof runtimeArgs[expectedIndex] === 'function'
+        ? (runtimeArgs[expectedIndex] as (...args: any[]) => void)
+        : undefined;
+    const isCallbackStyle =
+      hookType === 'pre' ? handler.length > 0 : realCallback !== undefined;
 
-        // Replace the callback in its original position so non-callback
-        // arguments (e.g. `doc` in `post('findOneAndUpdate', (doc, next) => ...)`)
-        // keep the same positional order the original handler expects.
-        //
-        // Some hooks never receive a real callback in the runtime args at all
-        // (e.g. document pre('save') is invoked by Kareem as
-        // `fn.apply(doc, [options])`, and post('findOneAndUpdate', (doc, next)
-        // => ...) is invoked as `fn.apply(query, [doc])`) — Kareem itself awaits
-        // a returned promise instead of a callback in these cases. For those we
-        // must synthesize the callback ourselves. `next` is always the *last*
-        // declared parameter by convention, never the first (a bare
-        // `function (next) {}` hook is the one-parameter case where "first" and
-        // "last" coincide) — so place the synthetic callback at
-        // `handler.length - 1`, carrying over whatever leading real args Kareem
-        // did supply, rather than always prepending it at index 0.
-        let callArgs: any[];
-        if (callbackIndex === -1) {
-          const nextIndex = Math.max(handler.length - 1, 0);
-          callArgs = runtimeArgs.slice(0, nextIndex);
-          while (callArgs.length < nextIndex) {
-            callArgs.push(undefined);
-          }
-          callArgs.push(wrappedNext);
-        } else {
-          callArgs = [...runtimeArgs];
-          callArgs[callbackIndex] = wrappedNext;
-        }
+    if (!isCallbackStyle) {
+      // Promise- or sync-style: pass Kareem's args through untouched and let
+      // `invokeHook` finalize on the returned promise, or synchronously.
+      return invokeHook(this, span, runtimeArgs, false);
+    }
 
-        return invokeHook(this, span, callArgs, true);
+    const wrappedNext = function wrappedNext(this: any, ...nextArgs: any[]) {
+      const err = nextArgs[0];
+      if (err) {
+        finalizeSpan(span, err instanceof Error ? err : new Error(String(err)));
+      } else {
+        finalizeSpan(span);
       }
-    : function wrappedHookPromise(this: any, ...args: any[]): any {
-        const span = startHookSpan(this);
-        return invokeHook(this, span, args, false);
-      };
+      // Forward to Kareem's real callback (post); a synthesized `pre` callback
+      // has nothing downstream to call.
+      if (typeof realCallback === 'function') {
+        return realCallback.apply(this, nextArgs);
+      }
+      return;
+    };
+
+    // Put `next` at the handler's declared position. For `post` this replaces
+    // Kareem's real callback in place, keeping surrounding args (e.g. `doc` in
+    // `post('findOneAndUpdate', (doc, next))`) in the order the handler
+    // declared. For `pre` it fills the slot Mongoose left empty.
+    const callArgs = [...runtimeArgs];
+    callArgs[expectedIndex] = wrappedNext;
+    return invokeHook(this, span, callArgs, true);
+  };
+
+  // Kareem inspects `fn.length` with *exact* comparisons — e.g.
+  // `post.fn.length === numArgs + 2` to detect error-handling middleware, and
+  // `post.length === numArgs + 1` to decide whether to await the callback.
+  // Our `...runtimeArgs` wrapper reports length 0, which would collapse every
+  // handler's arity and silently break both checks, so restore the original.
+  // Same idiom as `packages/autotel-edge/src/core/context.ts`.
+  Object.defineProperty(wrappedHook, 'length', {
+    enumerable: false,
+    configurable: true,
+    writable: false,
+    value: handler.length,
+  });
 
   // Mark as wrapped to prevent double-wrapping
   (wrappedHook as any)[WRAPPED_HOOK_FLAG] = true;
@@ -1091,6 +1097,17 @@ function wrapCustomFunction(
   try {
     Object.defineProperty(wrapped, 'name', {
       value: original.name || methodName,
+      configurable: true,
+    });
+  } catch {
+    // Ignore — non-fatal.
+  }
+  // Preserve arity too. Mongoose doesn't inspect it for statics/methods/query
+  // helpers today, but the `...args` wrapper otherwise reports length 0 — the
+  // same latent footgun the hook wrapper's `defineProperty` guards against.
+  try {
+    Object.defineProperty(wrapped, 'length', {
+      value: original.length,
       configurable: true,
     });
   } catch {
