@@ -41,7 +41,7 @@ afterEach(() => {
 describe('DevtoolsWebSocketClient reconnect', () => {
   it('keeps retrying past 10 attempts with backoff capped at 15s', () => {
     const client = new DevtoolsWebSocketClient('ws://localhost:4318/ws')
-    void client.connect()
+    client.connect()
 
     // Drop the connection 20 times; each close must schedule another attempt.
     for (let i = 0; i < 20; i++) {
@@ -55,7 +55,7 @@ describe('DevtoolsWebSocketClient reconnect', () => {
 
   it('does not reconnect after an intentional disconnect()', () => {
     const client = new DevtoolsWebSocketClient('ws://localhost:4318/ws')
-    void client.connect()
+    client.connect()
 
     client.disconnect()
     vi.advanceTimersByTime(60_000)
@@ -65,7 +65,7 @@ describe('DevtoolsWebSocketClient reconnect', () => {
 
   it('resets backoff after a successful connection', () => {
     const client = new DevtoolsWebSocketClient('ws://localhost:4318/ws')
-    void client.connect()
+    client.connect()
 
     // Fail a few times to grow the backoff…
     for (let i = 0; i < 5; i++) {
@@ -81,5 +81,26 @@ describe('DevtoolsWebSocketClient reconnect', () => {
     socket.fire('close')
     vi.advanceTimersByTime(1000)
     expect(FakeWebSocket.instances.length).toBe(7)
+  })
+
+  it('reports connected/disconnected through onStatusChange, but not after disconnect()', () => {
+    const client = new DevtoolsWebSocketClient('ws://localhost:4318/ws')
+    const statuses: string[] = []
+    client.onStatusChange((status) => statuses.push(status))
+    client.connect()
+
+    const socket = FakeWebSocket.instances.at(-1)!
+    socket.fire('open')
+    socket.fire('close')
+    expect(statuses).toEqual(['connected', 'disconnected'])
+
+    // Reconnect succeeds → connected again.
+    vi.advanceTimersByTime(1000)
+    FakeWebSocket.instances.at(-1)!.fire('open')
+    expect(statuses).toEqual(['connected', 'disconnected', 'connected'])
+
+    // Tearing down must not emit a spurious status.
+    client.disconnect()
+    expect(statuses).toEqual(['connected', 'disconnected', 'connected'])
   })
 })

@@ -1,11 +1,14 @@
 import type { DevtoolsData } from '../server/types'
 
 export type MessageHandler = (data: DevtoolsData) => void
+export type ConnectionStatus = 'connected' | 'disconnected'
+export type StatusHandler = (status: ConnectionStatus) => void
 
 export class DevtoolsWebSocketClient {
   private ws: WebSocket | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private messageHandlers = new Set<MessageHandler>()
+  private statusHandlers = new Set<StatusHandler>()
   private reconnectAttempts = 0
   private closed = false
   private reconnectDelay = 1000
@@ -16,35 +19,36 @@ export class DevtoolsWebSocketClient {
 
   constructor(private url: string) {}
 
-  connect(): Promise<boolean> {
+  connect(): void {
     this.closed = false
-    return new Promise((resolve) => {
-      try {
-        this.ws = new WebSocket(this.url)
+    try {
+      this.ws = new WebSocket(this.url)
 
-        this.ws.addEventListener('open', () => {
-          this.reconnectAttempts = 0
-          resolve(true)
-        })
+      this.ws.addEventListener('open', () => {
+        this.reconnectAttempts = 0
+        this.emitStatus('connected')
+      })
 
-        this.ws.addEventListener('message', (event) => {
-          try {
-            const data = JSON.parse(event.data as string)
-            for (const handler of this.messageHandlers) handler(data)
-          } catch { /* ignore parse errors */ }
-        })
+      this.ws.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data as string)
+          for (const handler of this.messageHandlers) handler(data)
+        } catch { /* ignore parse errors */ }
+      })
 
-        this.ws.addEventListener('close', () => {
-          this.scheduleReconnect()
-        })
+      this.ws.addEventListener('close', () => {
+        this.emitStatus('disconnected')
+        this.scheduleReconnect()
+      })
+    } catch {
+      this.emitStatus('disconnected')
+      this.scheduleReconnect()
+    }
+  }
 
-        this.ws.addEventListener('error', () => {
-          resolve(false)
-        })
-      } catch {
-        resolve(false)
-      }
-    })
+  private emitStatus(status: ConnectionStatus): void {
+    if (this.closed) return
+    for (const handler of this.statusHandlers) handler(status)
   }
 
   private scheduleReconnect(): void {
@@ -70,6 +74,11 @@ export class DevtoolsWebSocketClient {
     return () => this.messageHandlers.delete(handler)
   }
 
+  onStatusChange(handler: StatusHandler): () => void {
+    this.statusHandlers.add(handler)
+    return () => this.statusHandlers.delete(handler)
+  }
+
   disconnect(): void {
     this.closed = true
     if (this.reconnectTimer) {
@@ -81,6 +90,7 @@ export class DevtoolsWebSocketClient {
       this.ws = null
     }
     this.messageHandlers.clear()
+    this.statusHandlers.clear()
   }
 
   isConnected(): boolean {

@@ -112,17 +112,15 @@
     const wsClient = new DevtoolsWebSocketClient(wsUrl);
     connectionStatusSignal.value = 'connecting';
 
-    wsClient.connect().then((connected) => {
-      connectionStatusSignal.value = connected ? 'connected' : 'disconnected';
+    const unsubscribeStatus = wsClient.onStatusChange((status) => {
+      connectionStatusSignal.value = status;
     });
-
-    const unsubscribe = wsClient.onMessage((data) => {
-      updateWidgetData(data);
-      connectionStatusSignal.value = 'connected';
-    });
+    const unsubscribe = wsClient.onMessage(updateWidgetData);
+    wsClient.connect();
 
     return () => {
       unsubscribe();
+      unsubscribeStatus();
       wsClient.disconnect();
     };
   });
