@@ -55,6 +55,7 @@
     "@types/node": "^26.1.0",
     "autotel": "workspace:*",
     "kareem": "^3.3.0",
+    "kareem2": "npm:kareem@^2.6.3",
     "mongodb-memory-server": "^11.2.0",
     "mongoose": "^9.7.4",
     "rimraf": "^6.1.3",

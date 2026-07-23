@@ -3,7 +3,7 @@
 // Mongoose is a devDependency so we type-check against the real API; consumers use the peer.
 
 import type { Mongoose } from 'mongoose';
-import { otelTrace as trace, SpanKind } from 'autotel';
+import { otelTrace as trace, context, SpanKind } from 'autotel';
 import type { Span, Tracer } from 'autotel';
 import {
   runWithSpan,
@@ -783,6 +783,11 @@ export function wrapHookHandler(
     this: any,
     ...runtimeArgs: any[]
   ): any {
+    // Captured before the span becomes active, so it points at the true
+    // parent (the operation span / prior sibling's parent) — not at this
+    // hook's own span. Used to fence off the span's context when we hand
+    // control back to Kareem via `next()` below.
+    const parentContext = context.active();
     const span = startHookSpan(this);
 
     // Whether this invocation is callback-style is decided at *call* time, and
@@ -833,8 +838,17 @@ export function wrapHookHandler(
       }
       // Forward to Kareem's real callback (post); a synthesized `pre` callback
       // has nothing downstream to call.
+      //
+      // Restore the parent context first. Under Kareem's callback protocol
+      // (Mongoose < 8 / kareem v2), `next()` is often invoked from inside a
+      // hook's own async continuation (e.g. `Model.findById(...).then(next)`),
+      // which still runs with this hook's span active. Kareem advances the
+      // chain synchronously from within that callback, so the *next* sibling
+      // hook — and the query spans it opens — would otherwise be parented to
+      // this already-ended span. Fencing the handoff keeps siblings siblings.
       if (typeof realCallback === 'function') {
-        return realCallback.apply(this, nextArgs);
+        const cb = realCallback;
+        return context.with(parentContext, () => cb.apply(this, nextArgs));
       }
       return;
     };
