@@ -808,10 +808,13 @@ export function wrapHookHandler(
     //     `post('init', (doc))` is handed `[doc]` with no callback, so it is
     //     simply promise/sync-style.
     //
-    //   - `pre` hooks: Kareem's `execPre` calls the handler with the operation
-    //     args and *never* passes a callback. So a declared parameter means the
-    //     handler is callback-style and we must synthesize `next` ourselves;
-    //     there is no downstream callback to forward to.
+    //   - `pre` hooks: under kareem v3 (Mongoose 8+), `execPre` calls the
+    //     handler with the operation args and *never* passes a callback — a
+    //     declared parameter means we must synthesize `next` ourselves, with
+    //     nothing downstream to forward to. Under kareem v2 (Mongoose < 8),
+    //     `execPre` *does* pass a real `next` at the declared slot, so
+    //     `realCallback` is found and `wrappedNext` forwards to it. Both
+    //     protocols land on the same `handler.length > 0` test.
     //
     // Restoring the original arity on this wrapper (see `defineProperty` below)
     // is what lets Kareem's own exact-arity checks line up in the `post` case.
@@ -836,8 +839,9 @@ export function wrapHookHandler(
       } else {
         finalizeSpan(span);
       }
-      // Forward to Kareem's real callback (post); a synthesized `pre` callback
-      // has nothing downstream to call.
+      // Forward to Kareem's real callback (`post` on v2/v3, `pre` on kareem
+      // v2 only); a synthesized v3 `pre` callback has nothing downstream to
+      // call.
       //
       // Restore the parent context first. Under Kareem's callback protocol
       // (Mongoose < 8 / kareem v2), `next()` is often invoked from inside a

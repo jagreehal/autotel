@@ -84,19 +84,32 @@ describe('wrapHookHandler — span context isolation (kareem v2 callbacks)', () 
       ),
     );
 
-    await new Promise<void>((resolve, reject) => {
-      k.execPre('save', {}, [{}], (err: unknown) =>
-        err ? reject(err) : resolve(),
-      );
-    });
+    // Run the chain inside an enclosing operation span, mirroring the real
+    // shape (`mongoose.save` wrapping its pre-hooks) and making the shared
+    // parent a concrete spanId rather than a trivially-equal `undefined`.
+    const operationSpan = tracer.startSpan('operation');
+    await context.with(
+      otelTrace.setSpan(context.active(), operationSpan),
+      () =>
+        new Promise<void>((resolve, reject) => {
+          k.execPre('save', {}, [{}], (err: unknown) =>
+            err ? reject(err) : resolve(),
+          );
+        }),
+    );
+    operationSpan.end();
 
     const spans = exporter.getFinishedSpans();
-    expect(spans).toHaveLength(2);
+    expect(spans).toHaveLength(3);
     const [hook1Span, hook2Span] = spans;
 
-    // The sibling must not be nested under hook 1's (already-ended) span.
-    expect(hook2Span?.parentSpanContext?.spanId).not.toBe(
-      hook1Span?.spanContext().spanId,
+    // The sibling must not be nested under hook 1's (already-ended) span —
+    // both hooks must be direct children of the operation span.
+    expect(hook1Span?.parentSpanContext?.spanId).toBe(
+      operationSpan.spanContext().spanId,
+    );
+    expect(hook2Span?.parentSpanContext?.spanId).toBe(
+      operationSpan.spanContext().spanId,
     );
   });
 });
