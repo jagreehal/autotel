@@ -129,6 +129,15 @@ userSchema.pre(
   }
 );
 
+// Callback-style hook: `next()` is called from an async continuation. The
+// sibling post-save below must appear as a *sibling* span in the trace, not
+// as a child of this hook's already-ended span (autotel-mongoose restores the
+// parent context when handing control back to the hook chain).
+userSchema.post('save', function (doc, next) {
+  console.log(`🪝 [user post-save/callback] auditing ${doc.email}`);
+  wait(15).then(() => next());
+});
+
 userSchema.post('save', function (doc) {
   // Automatically traced with attributes: hook.type, hook.operation, hook.model
   console.log(`🪝 [user post-save] persisted ${doc.email}`);
