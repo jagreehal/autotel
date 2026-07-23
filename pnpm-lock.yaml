@@ -2312,6 +2312,9 @@ importers:
       kareem:
         specifier: ^3.3.0
         version: 3.3.0
+      kareem2:
+        specifier: npm:kareem@^2.6.3
+        version: kareem@2.6.3
       mongodb-memory-server:
         specifier: ^11.2.0
         version: 11.2.0(@aws-sdk/credential-providers@3.1081.0)(@mongodb-js/zstd@7.0.0)
@@ -14078,6 +14081,10 @@ packages:
   jwt-decode@4.0.0:
     resolution: {integrity: sha512-+KJGIyHgkGuIq3IEBNftfhW/LfWhXUIY6OmyVWjliu5KH1y0fw7VQ8YndE2O4qZdMSd9SqbnC8GOcZEy0Om7sA==}
     engines: {node: '>=18'}
+
+  kareem@2.6.3:
+    resolution: {integrity: sha512-C3iHfuGUXK2u8/ipq9LfjFfXFxAZMQJJq7vLS45r3D9Y2xQ/m4S8zaR4zMLFWh9AsNPXmcFfUDhTEO8UIC/V6Q==}
+    engines: {node: '>=12.0.0'}
 
   kareem@3.3.0:
     resolution: {integrity: sha512-kpSuLD3/7RenBnjnJdOHXCKC8dTd1JzeOiJhN0necWWci6cC+qX+VuwPnMVgb+a4+KNJSfgqahpnfWaeDXCimw==}
@@ -31860,6 +31867,8 @@ snapshots:
       safe-buffer: 5.2.1
 
   jwt-decode@4.0.0: {}
+
+  kareem@2.6.3: {}
 
   kareem@3.3.0: {}
 
