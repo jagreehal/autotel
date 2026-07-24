@@ -295,6 +295,79 @@ last hour?"* or *"Show traces with errors for `service.name=api`"*. The agent
 will discover services, query traces, correlate logs, and return a written
 investigation.
 
+### Run alongside autotel-devtools
+
+`autotel-mcp` and [`autotel-devtools`](/autotel/tools/devtools/) both bind port
+4318 by default, because each starts its own OTLP collector. Start both with
+their defaults and the second one falls forward to a different port, so your app
+sends telemetry to one receiver while the other stays empty.
+
+Point `autotel-mcp` at the devtools receiver instead of starting a second
+collector. One process owns 4318, the browser dashboard and the agent read the
+same data:
+
+```bash
+# 1. devtools owns port 4318: receives OTLP, serves the dashboard
+npx autotel-devtools
+
+# 2. MCP reads through devtools and binds no OTLP port of its own
+AUTOTEL_BACKEND=devtools npx autotel-mcp
+```
+
+```bash
+# 3. your app exports once, to devtools
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+node app.js
+```
+
+Your app streams telemetry to devtools. The dashboard renders it live, and the
+agent queries the same traces over the devtools HTTP read API. On startup the
+`devtools` backend probes `/healthz` and refuses to run if a foreign process
+holds the port, so a wrong answer never masquerades as your data. Set
+`DEVTOOLS_BASE_URL` (default `http://localhost:4318`) when you moved devtools to
+another port.
+
+:::caution[The `devtools` backend serves traces only]
+autotel-devtools exposes traces over HTTP but streams logs and metrics to its UI
+over WebSocket, so through this backend the agent reads traces and gets an
+explicit *unsupported* answer for metric and log queries. When you need the
+agent to query all three signals, run `autotel-mcp` on its own with the default
+`collector` backend as the single receiver on 4318 (you drop the browser
+dashboard), or give each tool a separate port and export from your app to both.
+:::
+
+### Backends
+
+`autotel-mcp` reads from one telemetry source, chosen with `AUTOTEL_BACKEND`
+(default `collector`):
+
+| Backend      | Reads from                          | Env                          |
+| ------------ | ----------------------------------- | ---------------------------- |
+| `collector`  | Its own built-in OTLP receiver      | `AUTOTEL_COLLECTOR_PORT` (`4318`) |
+| `devtools`   | A running autotel-devtools instance | `DEVTOOLS_BASE_URL` (`http://localhost:4318`) |
+| `jaeger`     | Jaeger query API                    | `JAEGER_BASE_URL` (`http://localhost:16686`) |
+| `tempo`      | Grafana Tempo                       | `TEMPO_BASE_URL` (`http://localhost:3200`) |
+| `prometheus` | Prometheus                          | `PROMETHEUS_BASE_URL` (`http://localhost:9090`) |
+| `loki`       | Grafana Loki                        | `LOKI_BASE_URL` (`http://localhost:3100`) |
+| `stack`      | Tempo/Jaeger + Prometheus + Loki, composed from whichever `*_BASE_URL` you set | the base URLs above |
+| `auto`       | Probes Tempo, Jaeger, Prometheus and Loki, then reads from whatever answers (falls back to `fixture`) | the base URLs above |
+| `fixture`    | A JSON file, for demos and tests    | `AUTOTEL_FIXTURE_PATH` (`./fixtures/telemetry.json`) |
+
+To pass a backend through the MCP client config, add it to `args` or `env`:
+
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp"],
+      "env": { "AUTOTEL_BACKEND": "devtools" }
+    }
+  }
+}
+```
+
 ### Related
 
 - [AI-Assisted Observability](/autotel/ai-observability/) — patterns for letting
