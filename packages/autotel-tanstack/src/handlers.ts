@@ -1,6 +1,7 @@
 import { context, SpanStatusCode } from '@opentelemetry/api';
 import { trace, init, type TraceContext } from 'autotel';
 import { extractContextFromRequest } from './context';
+import { isControlFlowSignal } from './control-flow';
 import { isExcludedPath } from './route-filter';
 import {
   type WrapStartHandlerConfig,
@@ -166,6 +167,11 @@ export function wrapStartHandler(
               duration,
             );
 
+            if (isControlFlowSignal(error)) {
+              ctx.setStatus({ code: SpanStatusCode.OK });
+              throw error;
+            }
+
             if (mergedConfig.captureErrors) {
               ctx.recordError(error);
             }
@@ -292,6 +298,11 @@ export function createTracedHandler(
               SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
               duration,
             );
+
+            if (isControlFlowSignal(error)) {
+              ctx.setStatus({ code: SpanStatusCode.OK });
+              throw error;
+            }
 
             if (mergedConfig.captureErrors) {
               ctx.recordError(error);

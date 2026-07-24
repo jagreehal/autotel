@@ -2,6 +2,7 @@ import { context, SpanStatusCode, type Attributes } from '@opentelemetry/api';
 import { trace, type TraceContext } from 'autotel';
 import { extractContextFromRequest } from './context';
 import { isServerSide } from './env';
+import { isControlFlowSignal } from './control-flow';
 import { isExcludedPath } from './route-filter';
 import {
   type TracingMiddlewareConfig,
@@ -194,6 +195,10 @@ export function createTracingMiddleware<TContext = unknown>(
           ctx.setStatus({ code: SpanStatusCode.OK });
           return result;
         } catch (error) {
+          if (isControlFlowSignal(error)) {
+            ctx.setStatus({ code: SpanStatusCode.OK });
+            throw error;
+          }
           if (mergedConfig.captureErrors) {
             if ('recordError' in ctx && typeof ctx.recordError === 'function') {
               ctx.recordError(error);
@@ -292,6 +297,11 @@ export function createTracingMiddleware<TContext = unknown>(
             SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
             duration,
           );
+
+          if (isControlFlowSignal(error)) {
+            ctx.setStatus({ code: SpanStatusCode.OK });
+            throw error;
+          }
 
           if (mergedConfig.captureErrors) {
             if ('recordError' in ctx && typeof ctx.recordError === 'function') {
