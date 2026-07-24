@@ -223,12 +223,12 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.1.1",
     "@types/vscode": "^1.125.0",
     "@vscode/test-electron": "^3.0.0",
     "@vscode/vsce": "^3.9.2",
     "ovsx": "^1.0.2",
-    "tsdown": "^0.22.3",
+    "tsdown": "^0.22.12",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },

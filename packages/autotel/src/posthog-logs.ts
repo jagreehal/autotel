@@ -56,7 +56,9 @@ export function buildPostHogLogProcessors(
   if (!url) return [];
 
   const sdkLogs = safeRequire<{
-    BatchLogRecordProcessor: new (exporter: unknown) => LogRecordProcessor;
+    BatchLogRecordProcessor: new (options: {
+      exporter: unknown;
+    }) => LogRecordProcessor;
   }>('@opentelemetry/sdk-logs');
 
   const exporterModule = safeRequire<{
@@ -66,9 +68,9 @@ export function buildPostHogLogProcessors(
   if (!sdkLogs || !exporterModule) return [];
 
   const exporter = new exporterModule.OTLPLogExporter({ url });
-  let processor: LogRecordProcessor = new sdkLogs.BatchLogRecordProcessor(
+  let processor: LogRecordProcessor = new sdkLogs.BatchLogRecordProcessor({
     exporter,
-  );
+  });
   if (stringRedactor) {
     processor = new RedactingLogRecordProcessor(processor, stringRedactor);
   }

@@ -26,26 +26,26 @@
     "lambda:list": "dotenv -e .env.local -- sh -c 'aws --endpoint-url=http://localhost:4566 lambda list-functions --query \"Functions[].FunctionName\" --output table'"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1081.0",
-    "@aws-sdk/client-s3": "^3.1081.0",
-    "@aws-sdk/client-sqs": "^3.1081.0",
-    "@opentelemetry/sdk-logs": "^0.218.0",
-    "@opentelemetry/sdk-metrics": "^2.7.1",
+    "@aws-sdk/client-dynamodb": "^3.1091.0",
+    "@aws-sdk/client-s3": "^3.1091.0",
+    "@aws-sdk/client-sqs": "^3.1091.0",
+    "@opentelemetry/sdk-logs": "^0.220.0",
+    "@opentelemetry/sdk-metrics": "^2.9.0",
     "autotel": "workspace:*",
     "autotel-aws": "workspace:*",
     "aws-cdk-lib": "^2.261.0",
-    "constructs": "^10.6.0",
+    "constructs": "^10.7.1",
     "dotenv": "^17.4.2",
     "source-map-support": "^0.5.21"
   },
   "devDependencies": {
-    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
     "@types/aws-lambda": "^8.10.162",
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.1.1",
     "aws-cdk": "^3.0.0",
     "dotenv-cli": "^11.0.0",
     "esbuild": "^0.28.1",
-    "tsx": "^4.23.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3"
   }
 }

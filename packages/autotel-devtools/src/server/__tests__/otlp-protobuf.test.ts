@@ -67,7 +67,7 @@ function traceRequestBytes(): Buffer {
 // Real OTel SDK log record -> real OTLP/protobuf bytes.
 function logsRequestBytes(): Buffer {
   const exporter = new InMemoryLogRecordExporter()
-  const provider = new LoggerProvider({ processors: [new SimpleLogRecordProcessor(exporter)] })
+  const provider = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter })] })
   provider.getLogger('test').emit({
     severityNumber: 9, // INFO
     severityText: 'INFO',

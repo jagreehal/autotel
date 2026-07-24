@@ -77,14 +77,14 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/instrumentation": "^0.218.0",
-    "@opentelemetry/semantic-conventions": "^1.41.1",
+    "@opentelemetry/instrumentation": "^0.220.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "autotel": "workspace:*"
   },
   "peerDependencies": {
     "@google-cloud/bigquery": ">=8.3.1",
-    "@opentelemetry/instrumentation-amqplib": ">=0.65.0",
-    "@opentelemetry/instrumentation-kafkajs": ">=0.27.0"
+    "@opentelemetry/instrumentation-amqplib": ">=0.67.0",
+    "@opentelemetry/instrumentation-kafkajs": ">=0.29.0"
   },
   "peerDependenciesMeta": {
     "@google-cloud/bigquery": {
@@ -98,15 +98,15 @@
     }
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.18.4",
+    "@arethetypeswrong/cli": "^0.18.5",
     "@google-cloud/bigquery": "^8.3.1",
-    "@opentelemetry/core": "^2.7.1",
-    "@types/node": "^26.1.0",
-    "@typescript-eslint/eslint-plugin": "^8.63.0",
-    "@typescript-eslint/parser": "^8.63.0",
+    "@opentelemetry/core": "^2.9.0",
+    "@types/node": "^26.1.1",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-unicorn": "^64.0.0",
-    "tsdown": "^0.22.3",
+    "eslint-plugin-unicorn": "^72.0.0",
+    "tsdown": "^0.22.12",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },
