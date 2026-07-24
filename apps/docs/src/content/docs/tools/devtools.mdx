@@ -187,6 +187,16 @@ const holder = await probePortHolder('127.0.0.1', 4318);
 receiver is ready, or in tooling that needs to decide whether to start a new
 instance.
 
+## Use with autotel-mcp
+
+[`autotel-mcp`](/autotel/integrations/mcp/) also binds port 4318 by default,
+because it starts its own OTLP collector. Rather than run two collectors, let
+the agent read through devtools: start devtools on 4318 and run the MCP server
+with `AUTOTEL_BACKEND=devtools`. One receiver owns the port, the dashboard and
+the agent read the same traces. The
+[Run alongside autotel-devtools](/autotel/integrations/mcp/#run-alongside-autotel-devtools)
+recipe has the full setup and the traces-only caveat.
+
 ## Devtools vs. Terminal Viewer
 
 Both ship as local OTLP receivers. Pick by surface:

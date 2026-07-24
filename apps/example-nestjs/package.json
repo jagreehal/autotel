@@ -10,10 +10,10 @@
     "start:dev": "tsx --import ./instrumentation.ts src/main.ts"
   },
   "dependencies": {
-    "@nestjs/common": "^11.1.27",
-    "@nestjs/core": "^11.1.27",
-    "@nestjs/platform-express": "^11.1.27",
-    "@opentelemetry/auto-instrumentations-node": "^0.76.0",
+    "@nestjs/common": "^11.1.28",
+    "@nestjs/core": "^11.1.28",
+    "@nestjs/platform-express": "^11.1.28",
+    "@opentelemetry/auto-instrumentations-node": "^0.78.0",
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
     "dotenv": "^17.4.2",
@@ -21,8 +21,8 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
-    "tsx": "^4.23.0",
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3"
   }
 }

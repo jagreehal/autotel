@@ -38,16 +38,16 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/eslint-config-prettier": "^6.11.3",
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.1.1",
     "@types/semver": "^7.7.1",
     "autotel-telemetry": "workspace:*",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-unicorn": "^64.0.0",
-    "tsdown": "^0.22.3",
-    "tsx": "^4.23.0",
+    "eslint-plugin-unicorn": "^72.0.0",
+    "tsdown": "^0.22.12",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.63.0",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
   },
   "engines": {

@@ -1,6 +1,7 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { trace, type TraceContext } from 'autotel';
 import { isServerSide } from './env';
+import { isControlFlowSignal } from './control-flow';
 import { type TraceLoaderConfig, SPAN_ATTRIBUTES } from './types';
 
 // Re-export types from @tanstack/react-router for consumers who need them
@@ -149,6 +150,10 @@ export function traceLoader<TLoaderFn extends (ctx: any) => any>(
         ctx.setStatus({ code: SpanStatusCode.OK });
         return asyncResult;
       } catch (error) {
+        if (isControlFlowSignal(error)) {
+          ctx.setStatus({ code: SpanStatusCode.OK });
+          throw error;
+        }
         if ('recordError' in ctx && typeof ctx.recordError === 'function') {
           ctx.recordError(error);
         } else if (
@@ -273,10 +278,8 @@ export function traceBeforeLoad<TBeforeLoadFn extends (opts: any) => any>(
         ctx.setStatus({ code: SpanStatusCode.OK });
         return asyncResult;
       } catch (error) {
-        // Check if this is a redirect or notFound (expected control flow)
-        const errorName = (error as Error).name;
-        if (errorName === 'RedirectError' || errorName === 'NotFoundError') {
-          // Mark as OK since these are expected control flow
+        // redirect()/notFound() are expected control flow, not errors.
+        if (isControlFlowSignal(error)) {
           ctx.setAttribute('tanstack.beforeLoad.redirect', true);
           ctx.setStatus({ code: SpanStatusCode.OK });
         } else {

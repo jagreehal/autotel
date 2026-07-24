@@ -324,14 +324,14 @@ export function createDatadogConfig(
         );
 
         cloudConfig.logRecordProcessors = [
-          new BatchLogRecordProcessor(
-            new OTLPLogExporter({
+          new BatchLogRecordProcessor({
+            exporter: new OTLPLogExporter({
               url: `${otlpEndpoint}/v1/logs`,
               headers: {
                 'dd-api-key': apiKey,
               },
             }),
-          ),
+          }),
         ];
       } catch {
         throw new Error(

@@ -1,6 +1,7 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import { trace, type TraceContext } from 'autotel';
 import { isServerSide } from './env';
+import { isControlFlowSignal } from './control-flow';
 import { type TraceServerFnConfig, SPAN_ATTRIBUTES } from './types';
 
 /**
@@ -107,6 +108,10 @@ export function traceServerFn<T extends (...args: any[]) => any>(
           ctx.setStatus({ code: SpanStatusCode.OK });
           return result;
         } catch (error) {
+          if (isControlFlowSignal(error)) {
+            ctx.setStatus({ code: SpanStatusCode.OK });
+            throw error;
+          }
           if ('recordError' in ctx && typeof ctx.recordError === 'function') {
             ctx.recordError(error);
           } else if (

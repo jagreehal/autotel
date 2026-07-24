@@ -7,8 +7,8 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.76.0",
-    "@opentelemetry/instrumentation-winston": "^0.62.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.78.0",
+    "@opentelemetry/instrumentation-winston": "^0.64.0",
     "autotel": "workspace:*",
     "autotel-devtools": "workspace:*",
     "autotel-subscribers": "workspace:*",
@@ -16,8 +16,8 @@
     "winston": "^3.19.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
-    "tsx": "^4.23.0",
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3"
   }
 }
