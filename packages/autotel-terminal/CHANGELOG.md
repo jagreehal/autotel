@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 31.0.0
+
+### Patch Changes
+
+- Updated dependencies [9030f83]
+  - autotel@5.0.0
+
 ## 30.0.0
 
 ### Patch Changes

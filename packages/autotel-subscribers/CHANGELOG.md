@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 43.0.0
+
+### Patch Changes
+
+- Updated dependencies [9030f83]
+  - autotel@5.0.0
+
 ## 42.0.0
 
 ### Patch Changes

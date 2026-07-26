@@ -1,5 +1,12 @@
 # autotel-message-contract
 
+## 4.0.0
+
+### Patch Changes
+
+- Updated dependencies [9030f83]
+  - autotel@5.0.0
+
 ## 3.0.0
 
 ### Patch Changes
