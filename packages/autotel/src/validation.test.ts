@@ -64,7 +64,6 @@ describe('validateAttributes()', () => {
   });
 
   it('should handle undefined attributes', () => {
-    // eslint-disable-next-line unicorn/no-useless-undefined
     expect(validateAttributes(undefined)).toBeUndefined();
   });
 

@@ -17,10 +17,10 @@ You are working on the MCP investigation server. This is NOT the instrumentation
 
 ## Architecture
 
-- `src/backends/` — TelemetryBackend interface + implementations (collector, jaeger, fixture)
-- `src/tools/` — MCP tool registrations, split by investigation domain
-- `src/modules/` — Pure logic (no MCP dependency), testable in isolation
-- `src/resources/` — MCP resource registrations
+- `src/backends/`: TelemetryBackend interface + implementations (collector, jaeger, fixture)
+- `src/tools/`: MCP tool registrations, split by investigation domain
+- `src/modules/`: Pure logic (no MCP dependency), testable in isolation
+- `src/resources/`: MCP resource registrations
 
 ## Commands
 

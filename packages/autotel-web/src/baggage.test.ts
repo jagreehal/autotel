@@ -24,7 +24,9 @@ describe('baggage module', () => {
 
     it('rejects empty or non-string keys', () => {
       expect(validateBaggageEntry('', 'x')).toMatch(/non-empty string/);
-      expect(validateBaggageEntry(123 as unknown, 'x')).toMatch(/non-empty string/);
+      expect(validateBaggageEntry(123 as unknown, 'x')).toMatch(
+        /non-empty string/,
+      );
     });
 
     it('rejects keys with characters outside the W3C token set', () => {
@@ -34,8 +36,12 @@ describe('baggage module', () => {
     });
 
     it('rejects non-string values', () => {
-      expect(validateBaggageEntry('tenant.id', 42 as unknown)).toMatch(/must be a string/);
-      expect(validateBaggageEntry('tenant.id', null as unknown)).toMatch(/must be a string/);
+      expect(validateBaggageEntry('tenant.id', 42 as unknown)).toMatch(
+        /must be a string/,
+      );
+      expect(validateBaggageEntry('tenant.id', null as unknown)).toMatch(
+        /must be a string/,
+      );
     });
   });
 
@@ -43,7 +49,10 @@ describe('baggage module', () => {
     it('merges entries additively', () => {
       setBaggage({ 'tenant.id': 'acme' });
       setBaggage({ 'user.id': 'u1' });
-      expect(getBaggageEntries()).toEqual({ 'tenant.id': 'acme', 'user.id': 'u1' });
+      expect(getBaggageEntries()).toEqual({
+        'tenant.id': 'acme',
+        'user.id': 'u1',
+      });
     });
 
     it('overwrites an existing key', () => {
@@ -53,7 +62,11 @@ describe('baggage module', () => {
     });
 
     it('drops invalid entries but keeps valid ones', () => {
-      setBaggage({ 'tenant.id': 'acme', 'bad key': 'x', other: 5 as unknown as string });
+      setBaggage({
+        'tenant.id': 'acme',
+        'bad key': 'x',
+        other: 5 as unknown as string,
+      });
       expect(getBaggageEntries()).toEqual({ 'tenant.id': 'acme' });
     });
 
@@ -76,7 +89,9 @@ describe('baggage module', () => {
     });
 
     it('never throws on a non-object argument', () => {
-      expect(() => setBaggage(undefined as unknown as Record<string, string>)).not.toThrow();
+      expect(() =>
+        setBaggage(undefined as unknown as Record<string, string>),
+      ).not.toThrow();
       expect(getBaggageEntries()).toEqual({});
     });
   });
@@ -117,7 +132,9 @@ describe('baggage module', () => {
     const origin = 'https://app.example.com';
 
     it('allows same-origin absolute URLs', () => {
-      expect(isBaggageDestinationAllowed('https://app.example.com/api', origin)).toBe(true);
+      expect(
+        isBaggageDestinationAllowed('https://app.example.com/api', origin),
+      ).toBe(true);
     });
 
     it('allows relative URLs (resolve to same origin)', () => {
@@ -125,21 +142,31 @@ describe('baggage module', () => {
     });
 
     it('blocks cross-origin by default', () => {
-      expect(isBaggageDestinationAllowed('https://analytics.google.com/c', origin)).toBe(false);
-      expect(isBaggageDestinationAllowed('https://api.example.com/x', origin)).toBe(false);
+      expect(
+        isBaggageDestinationAllowed('https://analytics.google.com/c', origin),
+      ).toBe(false);
+      expect(
+        isBaggageDestinationAllowed('https://api.example.com/x', origin),
+      ).toBe(false);
     });
 
     it('allows cross-origin only when explicitly allowlisted', () => {
       expect(
-        isBaggageDestinationAllowed('https://api.example.com/x', origin, ['api.example.com']),
+        isBaggageDestinationAllowed('https://api.example.com/x', origin, [
+          'api.example.com',
+        ]),
       ).toBe(true);
       expect(
-        isBaggageDestinationAllowed('https://analytics.google.com/c', origin, ['api.example.com']),
+        isBaggageDestinationAllowed('https://analytics.google.com/c', origin, [
+          'api.example.com',
+        ]),
       ).toBe(false);
     });
 
     it('fails closed on an unparseable URL', () => {
-      expect(isBaggageDestinationAllowed('http://[bad', origin, ['anything'])).toBe(false);
+      expect(
+        isBaggageDestinationAllowed('http://[bad', origin, ['anything']),
+      ).toBe(false);
     });
   });
 });

@@ -21,7 +21,7 @@ describe('project helpers', () => {
     const instrumentationPath = getInstrumentationPath(tempDir, false);
 
     expect(instrumentationPath).toBe(
-      path.join(tempDir, 'src', 'instrumentation.mjs')
+      path.join(tempDir, 'src', 'instrumentation.mjs'),
     );
   });
 });

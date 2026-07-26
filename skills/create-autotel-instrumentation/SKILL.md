@@ -11,7 +11,7 @@ license: MIT
 
 # Create autotel instrumentation
 
-Wrap a third-party library so every call it makes is captured as a span without users having to think about tracing. Patterns differ between database, messaging, RPC, and HTTP-style libraries — this skill covers all four.
+Wrap a third-party library so every call it makes is captured as a span without users having to think about tracing. Patterns differ between database, messaging, RPC, and HTTP-style libraries. This skill covers all four.
 
 ## PR title
 
@@ -21,31 +21,31 @@ feat: add {library} instrumentation
 
 ## Touchpoints checklist
 
-| # | File | Action |
-| --- | --- | --- |
-| 1 | `packages/autotel-{library}/src/index.ts` | Public API — `instrument{Library}(client)` |
-| 2 | `packages/autotel-{library}/src/wrappers.ts` | Method-level wrapping using `Proxy` |
-| 3 | `packages/autotel-{library}/src/attributes.ts` | OTel semantic-attribute mappers |
-| 4 | `packages/autotel-{library}/src/index.test.ts` | Unit tests with `InMemorySpanExporter` |
-| 5 | `packages/autotel-{library}/package.json` | Name, exports, peerDependency, `files` includes `skills` |
-| 6 | `packages/autotel-{library}/tsdown.config.ts` | Build entry |
-| 7 | `packages/autotel-{library}/skills/autotel-{library}/SKILL.md` | Usage skill (auto-discovered via the `files` `skills` entry) |
-| 8 | `bundle-size-baseline.json` | Run `pnpm bundle-size:update` once green |
+| #   | File                                                           | Action                                                       |
+| --- | -------------------------------------------------------------- | ------------------------------------------------------------ |
+| 1   | `packages/autotel-{library}/src/index.ts`                      | Public API: `instrument{Library}(client)`                    |
+| 2   | `packages/autotel-{library}/src/wrappers.ts`                   | Method-level wrapping using `Proxy`                          |
+| 3   | `packages/autotel-{library}/src/attributes.ts`                 | OTel semantic-attribute mappers                              |
+| 4   | `packages/autotel-{library}/src/index.test.ts`                 | Unit tests with `InMemorySpanExporter`                       |
+| 5   | `packages/autotel-{library}/package.json`                      | Name, exports, peerDependency, `files` includes `skills`     |
+| 6   | `packages/autotel-{library}/tsdown.config.ts`                  | Build entry                                                  |
+| 7   | `packages/autotel-{library}/skills/autotel-{library}/SKILL.md` | Usage skill (auto-discovered via the `files` `skills` entry) |
+| 8   | `bundle-size-baseline.json`                                    | Run `pnpm bundle-size:update` once green                     |
 
 ## Pick the right semantic conventions
 
-Use OTel-spec attribute names — never invent your own. The right namespace depends on the library kind:
+Use OTel-spec attribute names. Never invent your own. The right namespace depends on the library kind:
 
-| Kind | Namespace | Examples |
-| --- | --- | --- |
-| Database / ORM | `db.*` | `db.system=postgresql`, `db.statement`, `db.collection.name`, `db.operation.name` |
-| Message queue / pubsub | `messaging.*` | `messaging.system=rabbitmq`, `messaging.operation.name=publish`, `messaging.destination.name` |
-| RPC / gRPC | `rpc.*` | `rpc.system=grpc`, `rpc.service`, `rpc.method` |
-| HTTP client | `http.*` + `url.*` | `http.request.method`, `url.full`, `http.response.status_code` |
-| AI / LLM | `gen_ai.*` | `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` |
-| Cache (Redis, Memcached) | `db.system=redis` + `db.operation.name` | (cache is modelled as a key-value DB in OTel) |
-| Browser | `browser.*`, `device.*` | `browser.name`, `browser.version` |
-| FaaS | `faas.*` | `faas.trigger`, `faas.coldstart`, `faas.cron` |
+| Kind                     | Namespace                               | Examples                                                                                      |
+| ------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Database / ORM           | `db.*`                                  | `db.system=postgresql`, `db.statement`, `db.collection.name`, `db.operation.name`             |
+| Message queue / pubsub   | `messaging.*`                           | `messaging.system=rabbitmq`, `messaging.operation.name=publish`, `messaging.destination.name` |
+| RPC / gRPC               | `rpc.*`                                 | `rpc.system=grpc`, `rpc.service`, `rpc.method`                                                |
+| HTTP client              | `http.*` + `url.*`                      | `http.request.method`, `url.full`, `http.response.status_code`                                |
+| AI / LLM                 | `gen_ai.*`                              | `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`                   |
+| Cache (Redis, Memcached) | `db.system=redis` + `db.operation.name` | (cache is modelled as a key-value DB in OTel)                                                 |
+| Browser                  | `browser.*`, `device.*`                 | `browser.name`, `browser.version`                                                             |
+| FaaS                     | `faas.*`                                | `faas.trigger`, `faas.coldstart`, `faas.cron`                                                 |
 
 When in doubt, search [opentelemetry-specification/semantic-conventions](https://github.com/open-telemetry/semantic-conventions) for the exact key. **Never** invent `library.thing` keys when an OTel-spec key exists.
 
@@ -93,12 +93,12 @@ export function instrument{Library}<T extends object>(client: T): T {
 
 Span name format: `<library>.<operation>` for low-level methods, `<library>.<entity>.<verb>` for ORMs:
 
-| Library | Span name |
-| --- | --- |
-| `redis` | `redis.GET`, `redis.SET`, `redis.HSET` |
-| `mongoose` | `mongoose.User.find`, `mongoose.User.findOne` |
-| `drizzle` | `drizzle.select`, `drizzle.insert`, `drizzle.update` |
-| `bullmq` | `bullmq.Queue.add`, `bullmq.Worker.process` |
+| Library    | Span name                                            |
+| ---------- | ---------------------------------------------------- |
+| `redis`    | `redis.GET`, `redis.SET`, `redis.HSET`               |
+| `mongoose` | `mongoose.User.find`, `mongoose.User.findOne`        |
+| `drizzle`  | `drizzle.select`, `drizzle.insert`, `drizzle.update` |
+| `bullmq`   | `bullmq.Queue.add`, `bullmq.Worker.process`          |
 
 Attributes always include:
 
@@ -106,19 +106,19 @@ Attributes always include:
 - `<namespace>.operation.name` (e.g. `db.operation.name=SELECT`)
 - The library version: `db.client.connections.{library_name=...}` or a `library.version` resource attribute
 
-## Step 3: Sensitive data — three levels
+## Step 3: Sensitive data: three levels
 
 Database statements / queue payloads / HTTP bodies routinely contain PII. Honour `dataSafety.captureDbStatement`:
 
 ```typescript
-import { getActiveConfig } from 'autotel-edge'
-import { obfuscateSql } from 'autotel/db'
+import { getActiveConfig } from 'autotel-edge';
+import { obfuscateSql } from 'autotel/db';
 
 function captureStatement(raw: string): string | undefined {
-  const mode = getActiveConfig()?.dataSafety?.captureDbStatement ?? 'full'
-  if (mode === 'off') return undefined
-  if (mode === 'obfuscated') return obfuscateSql(raw)
-  return raw
+  const mode = getActiveConfig()?.dataSafety?.captureDbStatement ?? 'full';
+  if (mode === 'off') return undefined;
+  if (mode === 'obfuscated') return obfuscateSql(raw);
+  return raw;
 }
 ```
 
@@ -183,12 +183,12 @@ describe('autotel-{library}', () => {
 
 ## Anti-patterns
 
-| Anti-pattern | Fix |
-| --- | --- |
-| Inventing new attribute namespaces (`drizzle.query`) | Use `db.statement`, `db.operation.name` |
-| Recording raw bodies / SQL by default | Honour `dataSafety.captureDbStatement` |
-| Subclassing the library client | `Proxy` instead — keeps generics intact |
-| Spanning private methods | Stick to public surface; users don't expect spans for `_internal()` |
-| Spanning every getter | Only methods; getters are property reads |
-| Forgetting `recordException` + `ERROR` status | Wrap the call in `try/catch/finally` and call both on failure |
-| Re-instrumenting on every request | Stamp with a `Symbol.for(...)` and short-circuit |
+| Anti-pattern                                         | Fix                                                                 |
+| ---------------------------------------------------- | ------------------------------------------------------------------- |
+| Inventing new attribute namespaces (`drizzle.query`) | Use `db.statement`, `db.operation.name`                             |
+| Recording raw bodies / SQL by default                | Honour `dataSafety.captureDbStatement`                              |
+| Subclassing the library client                       | `Proxy` instead: keeps generics intact                              |
+| Spanning private methods                             | Stick to public surface; users don't expect spans for `_internal()` |
+| Spanning every getter                                | Only methods; getters are property reads                            |
+| Forgetting `recordException` + `ERROR` status        | Wrap the call in `try/catch/finally` and call both on failure       |
+| Re-instrumenting on every request                    | Stamp with a `Symbol.for(...)` and short-circuit                    |

@@ -8,7 +8,7 @@ description: >
 
 Gold-standard OpenTelemetry **GenAI** instrumentation: canonical `gen_ai.*`
 semantic conventions (semconv **v1.42.0**) for LLM calls, tools, and agents.
-Canonical-only — there is no legacy `gen.ai.*`, `prompt_tokens`/`completion_tokens`,
+Canonical-only. There is no legacy `gen.ai.*`, `prompt_tokens`/`completion_tokens`,
 or non-registry `total_tokens` surface.
 
 Core `autotel` provides `trace()`/`span()`/`init()`. `autotel-genai` adds the AI
@@ -26,24 +26,31 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { genAiMetricViews } from 'autotel-genai/metrics';
 
 // Re-bucket the GenAI histograms (duration, time-to-first-chunk, token usage, cost)
-const sdk = new NodeSDK({ serviceName: 'my-agent', views: [...genAiMetricViews()] });
+const sdk = new NodeSDK({
+  serviceName: 'my-agent',
+  views: [...genAiMetricViews()],
+});
 sdk.start();
 ```
 
 ## Core Patterns
 
-### Trace an LLM call — `traceGenAI`
+### Trace an LLM call: `traceGenAI`
 
 Names the span per spec (`{operation} {model}` → `chat gpt-4o`) and sets the
 request attributes up front. Record the response + usage when the call returns.
 
 ```typescript
-import { traceGenAI, recordGenAiResponse, recordGenAiUsage } from 'autotel-genai/trace';
+import {
+  traceGenAI,
+  recordGenAiResponse,
+  recordGenAiUsage,
+} from 'autotel-genai/trace';
 
 export const chat = traceGenAI({
-  provider: 'openai',          // gen_ai.provider.name
-  model: 'gpt-4o',             // gen_ai.request.model + span name
-  operation: 'chat',           // gen_ai.operation.name
+  provider: 'openai', // gen_ai.provider.name
+  model: 'gpt-4o', // gen_ai.request.model + span name
+  operation: 'chat', // gen_ai.operation.name
   temperature: 0.2,
 })((ctx) => async (prompt: string) => {
   const res = await openai.chat.completions.create({
@@ -80,7 +87,10 @@ import { estimateLLMCost, recordLLMCost } from 'autotel-genai/cost';
 
 estimateLLMCost('gpt-4o', { inputTokens: 1000, outputTokens: 500 }); // 0.0075
 // recordLLMCost sets ONLY gen_ai.usage.cost.usd (use when tokens are already on the span)
-recordLLMCost(ctx, 'claude-sonnet-4', { inputTokens: 4000, cacheReadInputTokens: 3500 });
+recordLLMCost(ctx, 'claude-sonnet-4', {
+  inputTokens: 4000,
+  cacheReadInputTokens: 3500,
+});
 ```
 
 Override/extend pricing per call with `{ pricing: { 'my-model': { inputPer1M, outputPer1M } } }`.
@@ -93,7 +103,12 @@ When you control the span directly, build canonical maps and merge them:
 import { genAiRequestAttributes, genAiUsageAttributes } from 'autotel-genai';
 
 ctx.setAttributes({
-  ...genAiRequestAttributes({ operation: 'chat', provider: 'openai', model: 'gpt-4o', topK: 40 }),
+  ...genAiRequestAttributes({
+    operation: 'chat',
+    provider: 'openai',
+    model: 'gpt-4o',
+    topK: 40,
+  }),
   ...genAiUsageAttributes({ inputTokens: 412, outputTokens: 87 }),
 });
 ```
@@ -116,16 +131,24 @@ import {
 
 // Opt-in content on the span. Gate input/output independently; binary parts
 // (image/audio/file) are base64-encoded, not corrupted by JSON.stringify.
-setGenAiContent(ctx, { inputMessages, outputMessages }, { recordInputs: false });
+setGenAiContent(
+  ctx,
+  { inputMessages, outputMessages },
+  { recordInputs: false },
+);
 // gen_ai.client.inference.operation.details event (decoupled from the span)
-recordInferenceDetails(ctx, { operation: 'chat', requestModel: 'gpt-4o', inputTokens: 412 });
+recordInferenceDetails(ctx, {
+  operation: 'chat',
+  requestModel: 'gpt-4o',
+  inputTokens: 412,
+});
 // gen_ai.evaluation.result event
 recordEvaluationResult(ctx, { name: 'relevance', scoreValue: 0.92 });
 // gen_ai.client.warnings event — surface provider warnings vendors only log
 recordModelWarnings(ctx, [{ type: 'unsupported-setting', setting: 'topK' }]);
 ```
 
-### Streaming performance — `autotel-genai/streaming`
+### Streaming performance: `autotel-genai/streaming`
 
 Streaming latency is two numbers: **time to first chunk** (the wait) and
 **throughput** (how fast tokens then arrive). `createStreamTimer` captures both.
@@ -147,15 +170,19 @@ recordStreamTiming(ctx, timer.finish({ outputTokens }));
 `computeStreamTiming(...)` is the pure function underneath; it also returns the
 inter-chunk gap distribution `{ min, p10, median, avg, p90, max }`.
 
-### Budgets & guardrails — `autotel-genai/guard`
+### Budgets & guardrails: `autotel-genai/guard`
 
 An inline kill-switch that runs _during_ a run. Feed it each step; it accumulates
-cost / tokens / loop state and halts when a rule crosses its threshold — aborting
+cost / tokens / loop state and halts when a rule crosses its threshold. Aborting
 an `AbortSignal` and (by default) throwing a `GEN_AI_GUARD_STOP` structured
 error. Deterministic, no LLM in the loop.
 
 ```typescript
-import { createGenAiBudget, createGenAiGuard, parseGuardRules } from 'autotel-genai/guard';
+import {
+  createGenAiBudget,
+  createGenAiGuard,
+  parseGuardRules,
+} from 'autotel-genai/guard';
 
 // Preset: cost / token / tool-call / duration ceilings
 const budget = createGenAiBudget({ maxCostUsd: 5, warnAtUsd: 4 });
@@ -197,17 +224,21 @@ For `LegacyOpenTelemetry`/older versions, or to enrich spans another
 integration already emitted, use the legacy bridge:
 
 ```typescript
-import { autotelEnrich, mapAiSdkAttributes, recordAiSdkCost } from 'autotel-genai/ai-sdk';
+import {
+  autotelEnrich,
+  mapAiSdkAttributes,
+  recordAiSdkCost,
+} from 'autotel-genai/ai-sdk';
 
 const canonical = mapAiSdkAttributes(span.attributes); // ai.* → gen_ai.*
-recordAiSdkCost(ctx, span.attributes);                 // sets gen_ai.usage.cost.usd
+recordAiSdkCost(ctx, span.attributes); // sets gen_ai.usage.cost.usd
 ```
 
 `autotelEnrich()` is for `@ai-sdk/otel`'s `enrichSpan` hook when you want
 autotel provenance and `runtimeContext` fields on spans, but it cannot add
 cost because the hook gets no usage/model payload.
 
-### Agent governance — `autotel-genai/agent`
+### Agent governance: `autotel-genai/agent`
 
 Identity, delegation, policy, and audit for agentic workflows (the former
 `autotel-agent` package). Records `agent.*`/`delegation.*`/`tool.*`/`policy.*`
@@ -233,9 +264,9 @@ await withScopedTool(
 
 ## Canonical attribute reference (don't deviate)
 
-- Provider: `gen_ai.provider.name` — **not** the deprecated `gen_ai.system`.
+- Provider: `gen_ai.provider.name`: **not** the deprecated `gen_ai.system`.
 - Tokens: `gen_ai.usage.input_tokens` / `output_tokens` / `reasoning.output_tokens`
-  / `cache_read.input_tokens` / `cache_creation.input_tokens` — **never**
+  / `cache_read.input_tokens` / `cache_creation.input_tokens`. **never**
   `prompt_tokens` / `completion_tokens` / `total_tokens`.
 - Finish reasons: `gen_ai.response.finish_reasons` (plural, string array).
 - Cost (autotel extension): `gen_ai.usage.cost.usd`.
@@ -244,11 +275,11 @@ await withScopedTool(
   / `output_tokens_per_second` / `time_per_output_chunk` (streaming),
   `gen_ai.client.warnings` (event). `gen_ai.response.time_to_first_chunk` is spec.
 - `gen_ai.request.top_k` is an int; `gen_ai.agent.id` is dropped on internal
-  `invoke_agent`/`plan` spans (spec breaking change #242 — `traceGenAI` handles
+  `invoke_agent`/`plan` spans (spec breaking change #242. `traceGenAI` handles
   this automatically).
 
 The `GEN_AI` / `GEN_AI_OPERATION` / `GEN_AI_PROVIDER` constants in
-`autotel-genai/semconv` are the source of truth — use them instead of string
+`autotel-genai/semconv` are the source of truth. Use them instead of string
 literals.
 
 ## Boundaries

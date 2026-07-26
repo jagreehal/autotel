@@ -25,7 +25,10 @@
  */
 import type { ConfigurationOption } from 'autotel-edge';
 import { instrument } from './instrument';
-import { createWorkersLogger, type WorkersLoggerOptions } from '../execution-logger';
+import {
+  createWorkersLogger,
+  type WorkersLoggerOptions,
+} from '../execution-logger';
 import type { ExecutionLogger } from '../execution-logger';
 
 export type DefineWorkerFetchOptions = WorkersLoggerOptions;
@@ -46,7 +49,9 @@ export function defineWorkerFetch<E = unknown>(
   config: ConfigurationOption,
   handler: WorkerFetchHandler<E>,
   loggerOptions: DefineWorkerFetchOptions = {},
-): { fetch: (request: Request, env: E, ctx: ExecutionContext) => Promise<Response> } {
+): {
+  fetch: (request: Request, env: E, ctx: ExecutionContext) => Promise<Response>;
+} {
   const wrapped = instrument(
     {
       fetch(request: Request, env: E, ctx: ExecutionContext) {
@@ -60,11 +65,13 @@ export function defineWorkerFetch<E = unknown>(
   return {
     fetch(request, env, ctx) {
       return Promise.resolve(
-        (wrapped.fetch as unknown as (
-          req: Request,
-          env: E,
-          ctx: ExecutionContext,
-        ) => Response | Promise<Response>)(request, env, ctx),
+        (
+          wrapped.fetch as unknown as (
+            req: Request,
+            env: E,
+            ctx: ExecutionContext,
+          ) => Response | Promise<Response>
+        )(request, env, ctx),
       );
     },
   };

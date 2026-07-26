@@ -38,21 +38,21 @@ track('user.signup', { userId: '123', plan: 'pro' });
 
 ## Built-in Subscribers
 
-| Subscriber              | Import                                       |
-| ----------------------- | -------------------------------------------- |
-| PostHog                 | `autotel-subscribers/posthog`                |
-| Mixpanel                | `autotel-subscribers/mixpanel`               |
-| Segment                 | `autotel-subscribers/segment`                |
-| Amplitude               | `autotel-subscribers/amplitude`              |
-| Webhook                 | `autotel-subscribers/webhook`                |
-| Slack                   | `autotel-subscribers/slack`                  |
-| Security                | `autotel-subscribers/security`               |
-| ArchitectureSnapshot    | `autotel-subscribers/architecture-snapshot`  |
+| Subscriber           | Import                                      |
+| -------------------- | ------------------------------------------- |
+| PostHog              | `autotel-subscribers/posthog`               |
+| Mixpanel             | `autotel-subscribers/mixpanel`              |
+| Segment              | `autotel-subscribers/segment`               |
+| Amplitude            | `autotel-subscribers/amplitude`             |
+| Webhook              | `autotel-subscribers/webhook`               |
+| Slack                | `autotel-subscribers/slack`                 |
+| Security             | `autotel-subscribers/security`              |
+| ArchitectureSnapshot | `autotel-subscribers/architecture-snapshot` |
 
 ## ArchitectureSnapshotSubscriber
 
-Records every event your code emits — names, field paths, runtime types,
-sample values, producer/consumer edges — into a single snapshot. The
+Records every event your code emits. Names, field paths, runtime types,
+sample values, producer/consumer edges. Into a single snapshot. The
 output feeds [`autotel-eventcatalog`](/autotel/integrations/eventcatalog/)
 to diff what production does against what your EventCatalog says it does.
 
@@ -65,11 +65,14 @@ const snapshot = new ArchitectureSnapshotSubscriber({ service: 'my-app' });
 init({ service: 'my-app', subscribers: [snapshot] });
 
 // ...run integration tests, then persist the snapshot...
-await writeFile('snapshot.json', JSON.stringify(snapshot.toSnapshot(), null, 2));
+await writeFile(
+  'snapshot.json',
+  JSON.stringify(snapshot.toSnapshot(), null, 2),
+);
 ```
 
-For each tracked event the snapshot includes `fieldStats` — observed
-runtime types and sampled primitive values per dotted field path — which
+For each tracked event the snapshot includes `fieldStats`. Observed
+runtime types and sampled primitive values per dotted field path. Which
 powers type-drift and value-drift detection downstream.
 
 ## Custom Subscriber
@@ -167,37 +170,37 @@ const subscriber = applyMiddleware(new MySubscriber(), [
 
 Available middleware:
 
-| Middleware | Purpose |
-| --- | --- |
-| `retryMiddleware({ maxRetries, delayMs })` | Retry failed sends with backoff. |
-| `samplingMiddleware(rate)` | Keep a fraction of events (`0`–`1`). |
-| `enrichmentMiddleware(fn)` | Add or rewrite event data before sending. |
-| `filterMiddleware(predicate)` | Drop events that fail the predicate. |
-| `transformMiddleware(fn)` | Replace the event shape. |
-| `batchingMiddleware({ ... })` | Group events for bulk dispatch. |
-| `rateLimitMiddleware({ requestsPerSecond })` | Cap throughput. |
-| `circuitBreakerMiddleware({ ... })` | Stop sending past an error threshold. |
-| `timeoutMiddleware({ timeoutMs })` | Reject sends that run too long. |
-| `loggingMiddleware({ prefix })` | Log event flow for debugging. |
+| Middleware                                   | Purpose                                   |
+| -------------------------------------------- | ----------------------------------------- |
+| `retryMiddleware({ maxRetries, delayMs })`   | Retry failed sends with backoff.          |
+| `samplingMiddleware(rate)`                   | Keep a fraction of events (`0`–`1`).      |
+| `enrichmentMiddleware(fn)`                   | Add or rewrite event data before sending. |
+| `filterMiddleware(predicate)`                | Drop events that fail the predicate.      |
+| `transformMiddleware(fn)`                    | Replace the event shape.                  |
+| `batchingMiddleware({ ... })`                | Group events for bulk dispatch.           |
+| `rateLimitMiddleware({ requestsPerSecond })` | Cap throughput.                           |
+| `circuitBreakerMiddleware({ ... })`          | Stop sending past an error threshold.     |
+| `timeoutMiddleware({ timeoutMs })`           | Reject sends that run too long.           |
+| `loggingMiddleware({ prefix })`              | Log event flow for debugging.             |
 
 ## Examples
 
-- [`example-subscribers`](https://github.com/jagreehal/autotel/tree/main/apps/example-subscribers) — PostHog, Slack, and webhook subscribers with event filtering and funnel tracking.
+- [`example-subscribers`](https://github.com/jagreehal/autotel/tree/main/apps/example-subscribers): PostHog, Slack, and webhook subscribers with event filtering and funnel tracking.
 
 ## Entry Points
 
-- `autotel-subscribers` — Base class + re-exports
-- `autotel-subscribers/posthog` — PostHog
-- `autotel-subscribers/mixpanel` — Mixpanel
-- `autotel-subscribers/segment` — Segment
-- `autotel-subscribers/amplitude` — Amplitude
-- `autotel-subscribers/webhook` — Webhook
-- `autotel-subscribers/slack` — Slack
-- `autotel-subscribers/security` — Forward `security.*` events to a webhook/SIEM/pager ([Security Observability](/autotel/integrations/security/))
-- `autotel-subscribers/architecture-snapshot` — Architecture snapshot for drift detection
-- `autotel-subscribers/factories` — `create*Subscriber` builders + `composeSubscribers`
-- `autotel-subscribers/middleware` — Middleware composition
-- `autotel-subscribers/testing` — Test harnesses
+- `autotel-subscribers`: Base class + re-exports
+- `autotel-subscribers/posthog`: PostHog
+- `autotel-subscribers/mixpanel`: Mixpanel
+- `autotel-subscribers/segment`: Segment
+- `autotel-subscribers/amplitude`: Amplitude
+- `autotel-subscribers/webhook`: Webhook
+- `autotel-subscribers/slack`: Slack
+- `autotel-subscribers/security`: Forward `security.*` events to a webhook/SIEM/pager ([Security Observability](/autotel/integrations/security/))
+- `autotel-subscribers/architecture-snapshot`: Architecture snapshot for drift detection
+- `autotel-subscribers/factories`: `create*Subscriber` builders + `composeSubscribers`
+- `autotel-subscribers/middleware`: Middleware composition
+- `autotel-subscribers/testing`: Test harnesses
 
 `StreamingEventSubscriber` is re-exported from the package root
 (`autotel-subscribers`) alongside the base `EventSubscriber`.

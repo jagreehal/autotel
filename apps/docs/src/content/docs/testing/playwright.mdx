@@ -41,7 +41,7 @@ API_BASE_URL=http://localhost:3000
 
 ### 3. Use the Fixture
 
-**Browser tests** — page requests to your API get trace context:
+**Browser tests**. Page requests to your API get trace context:
 
 ```typescript
 import { test, expect } from 'autotel-playwright';
@@ -52,7 +52,7 @@ test('health check', async ({ page }) => {
 });
 ```
 
-**API tests** — use `requestWithTrace` for Node-side API calls:
+**API tests**. Use `requestWithTrace` for Node-side API calls:
 
 ```typescript
 import { test, expect } from 'autotel-playwright';
@@ -67,7 +67,7 @@ test('create user via API', async ({ requestWithTrace }) => {
 
 ## Examples
 
-- [`example-playwright-e2e`](https://github.com/jagreehal/autotel/tree/main/apps/example-playwright-e2e) — Kitchen-sink Playwright project with `page` + `requestWithTrace` fixtures, `step()` helper, and `OtelReporter`.
+- [`example-playwright-e2e`](https://github.com/jagreehal/autotel/tree/main/apps/example-playwright-e2e): Kitchen-sink Playwright project with `page` + `requestWithTrace` fixtures, `step()` helper, and `OtelReporter`.
 
 ## How It Works
 
@@ -95,7 +95,7 @@ test('server function is traced', async ({ page, request }) => {
   await page.getByTestId('send-button').click();
 
   const spans = await spansClient.getSpans(request);
-  const handler = spans.find(s => s.name === 'sendMoney.handler');
+  const handler = spans.find((s) => s.name === 'sendMoney.handler');
   expect(handler).toBeDefined();
   expect(handler?.attributes?.['transfer.amount']).toBe(100);
 });
@@ -103,8 +103,8 @@ test('server function is traced', async ({ page, request }) => {
 
 `createTestSpansClient(baseUrl, options?)` options:
 
-| Option | Default | Description |
-|--------|---------|-------------|
+| Option | Default           | Description                     |
+| ------ | ----------------- | ------------------------------- |
 | `path` | `/api/test-spans` | Path of the test-spans endpoint |
 
 Each span in the returned array is a `SerializedSpan`:

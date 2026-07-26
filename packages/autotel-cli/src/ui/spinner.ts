@@ -47,7 +47,7 @@ export async function withSpinner<T>(
   options?: {
     successText?: string | ((result: T) => string);
     failText?: string;
-  }
+  },
 ): Promise<T> {
   const spinner = createSpinner(text);
   spinner.start();

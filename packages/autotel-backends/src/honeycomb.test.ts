@@ -5,8 +5,8 @@ describe('createHoneycombConfig()', () => {
   describe('validation', () => {
     it('should throw if apiKey is missing', () => {
       expect(() => {
+        // @ts-expect-error - testing missing apiKey
         createHoneycombConfig({
-          // @ts-expect-error - testing missing apiKey
           service: 'test-service',
         });
       }).toThrow('Honeycomb API key is required');
@@ -118,8 +118,12 @@ describe('createHoneycombConfig()', () => {
         sampleRate: 50,
       });
 
-      expect(typeof config.headers?.['x-honeycomb-samplerate']).toBe('string');
-      expect(config.headers?.['x-honeycomb-samplerate']).toBe('50');
+      const { headers } = config;
+      if (typeof headers !== 'object') {
+        throw new TypeError('expected headers to be a Record');
+      }
+      expect(typeof headers['x-honeycomb-samplerate']).toBe('string');
+      expect(headers['x-honeycomb-samplerate']).toBe('50');
     });
   });
 

@@ -17,10 +17,7 @@ import {
 } from '../lib/code-builder';
 import { generateEnvExample } from '../lib/env-generator';
 import { atomicWrite, fileExists, readFileSafe } from '../lib/fs';
-import {
-  detectInProject,
-  envFilesRequireConsent,
-} from '../lib/dep-detector';
+import { detectInProject, envFilesRequireConsent } from '../lib/dep-detector';
 import { buildPlanFromDetection } from '../lib/plan-builder';
 import { parsePlan, type InitPlan } from '../lib/plan';
 import {
@@ -29,23 +26,10 @@ import {
   diffAutoInstrumentations,
 } from '../lib/instrumentation-parser';
 import { confirmOrEditPlan } from '../ui/preview';
-import {
-  AutotelError,
-  AutotelErrorCodes,
-  toAutotelError,
-} from '../lib/errors';
-import {
-  configureJsonOutput,
-  printJson,
-} from '../lib/json-output';
-import {
-  getQuickPreset,
-  getPreset,
-} from '../presets/index';
-import {
-  promptConfirm,
-  promptExistingConfigAction,
-} from '../ui/prompts';
+import { AutotelError, AutotelErrorCodes, toAutotelError } from '../lib/errors';
+import { configureJsonOutput, printJson } from '../lib/json-output';
+import { getQuickPreset, getPreset } from '../presets/index';
+import { promptConfirm, promptExistingConfigAction } from '../ui/prompts';
 import * as output from '../ui/output';
 import { isCI } from '../ui/spinner';
 
@@ -117,8 +101,7 @@ export async function runInit(options: InitOptions): Promise<void> {
     throw new AutotelError({
       type: 'validation',
       code: AutotelErrorCodes.E_INVALID_FLAG,
-      message:
-        'No plan source available (--no-detect disables detection)',
+      message: 'No plan source available (--no-detect disables detection)',
       fix: 'Drop --no-detect or pass --plan / --input / --preset',
     });
   }
@@ -228,7 +211,7 @@ async function readPlanFromInput(input: string): Promise<InitPlan> {
 
 function planFromQuickPreset(
   slug: string,
-  project: ReturnType<typeof discoverProject>
+  project: ReturnType<typeof discoverProject>,
 ): InitPlan {
   if (project === null) {
     throw new AutotelError({
@@ -247,7 +230,7 @@ function planFromQuickPreset(
     });
   }
   // Synthesise a DetectionResult-equivalent and reuse the plan builder.
-  const presets: string[] = [ quick.backend];
+  const presets: string[] = [quick.backend];
   if (quick.subscribers) presets.push(...quick.subscribers);
   if (quick.plugins) presets.push(...quick.plugins);
 
@@ -255,9 +238,7 @@ function planFromQuickPreset(
     project,
     detection: {
       packages: [],
-      presets: presets as ReturnType<
-        typeof detectInProject
-      >['presets'],
+      presets: presets as ReturnType<typeof detectInProject>['presets'],
       primaryLogger: quick.logging === 'pino' ? 'pino' : null,
       autoInstrumentLoggers: [],
       autoInstrumentedDeps: [],
@@ -270,7 +251,7 @@ function planFromQuickPreset(
 
 async function planFromDetection(
   project: ReturnType<typeof discoverProject>,
-  options: InitOptions
+  options: InitOptions,
 ): Promise<InitPlan> {
   if (project === null) {
     throw new AutotelError({
@@ -291,7 +272,7 @@ async function planFromDetection(
   ) {
     envConsent = await promptConfirm(
       `Found a .env file. Read its keys to help detect the backend? (values are never read)`,
-      false
+      false,
     );
   }
 
@@ -400,11 +381,11 @@ function applyPlan(args: {
         ...codeFile.pluginImports,
         ...codeFile.subscriberImports,
         ...codeFile.loggerImports,
-      ].map((i) => i.source)
+      ].map((i) => i.source),
     );
     const addedAuto = diffAutoInstrumentations(
       parsed,
-      codeFile.autoInstrumentations
+      codeFile.autoInstrumentations,
     );
     const contentChanged = existing !== newContent;
     if (
@@ -415,7 +396,7 @@ function applyPlan(args: {
     ) {
       // Nothing new — skip the write entirely.
       result.wroteFiles.push(
-        `${path.relative(project.cwd, instrumentationPath)} (no changes)`
+        `${path.relative(project.cwd, instrumentationPath)} (no changes)`,
       );
     } else {
       atomicWrite(instrumentationPath, newContent, {
@@ -452,12 +433,12 @@ function applyPlan(args: {
     if (options.noInstall || options.printInstallCmd) {
       if (prod.length > 0) {
         result.printedInstalls.push(
-          getInstallCommand(project.packageManager, prod)
+          getInstallCommand(project.packageManager, prod),
         );
       }
       if (dev.length > 0) {
         result.printedInstalls.push(
-          getInstallCommand(project.packageManager, dev, { dev: true })
+          getInstallCommand(project.packageManager, dev, { dev: true }),
         );
       }
     } else {
@@ -488,7 +469,7 @@ function applyPlan(args: {
 }
 
 function resolveInstrumentationPath(
-  project: NonNullable<ReturnType<typeof discoverProject>>
+  project: NonNullable<ReturnType<typeof discoverProject>>,
 ): string {
   // Re-use existing logic from project.ts. Local import-free version:
   const srcDir = path.join(project.packageRoot, 'src');
@@ -537,9 +518,16 @@ function printApplySummary(args: {
   const pmInfo = project.workspace.isMonorepo
     ? `${project.packageManager} workspace, package root ${project.packageRoot}`
     : project.packageManager;
-  console.log(`\n${output.formatPackageManagerInfo
-    ? output.formatPackageManagerInfo(project.packageManager, project.lockfilePath)
-    : pmInfo}`);
+  console.log(
+    `\n${
+      output.formatPackageManagerInfo
+        ? output.formatPackageManagerInfo(
+            project.packageManager,
+            project.lockfilePath,
+          )
+        : pmInfo
+    }`,
+  );
 }
 
 // Re-export for tests / external callers (existing public surface).

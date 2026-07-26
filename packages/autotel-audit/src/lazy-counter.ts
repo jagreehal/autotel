@@ -1,7 +1,10 @@
 import { createCounter } from 'autotel';
 
 export interface LazyCounter {
-  add(value: number, attributes?: Record<string, string | number | boolean>): void;
+  add(
+    value: number,
+    attributes?: Record<string, string | number | boolean>,
+  ): void;
 }
 
 /**

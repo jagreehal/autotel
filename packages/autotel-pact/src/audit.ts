@@ -115,7 +115,11 @@ export function computeAuditMatrix(input: {
 
   const rows: AuditRow[] = [];
 
-  function pushRow(parts: PactInteractionKey, k: string, isContracted: boolean): void {
+  function pushRow(
+    parts: PactInteractionKey,
+    k: string,
+    isContracted: boolean,
+  ): void {
     const testObs = testSeenByKey.get(k) ?? [];
     const prodObs = prodSeenByKey.get(k) ?? [];
     const providerObs = providerVerifiedByKey.get(k) ?? [];
@@ -163,18 +167,21 @@ export function computeAuditMatrix(input: {
     );
   }
 
-  rows.sort((a, b) =>
-    a.consumer.localeCompare(b.consumer) ||
-    a.provider.localeCompare(b.provider) ||
-    a.interaction.localeCompare(b.interaction),
+  rows.sort(
+    (a, b) =>
+      a.consumer.localeCompare(b.consumer) ||
+      a.provider.localeCompare(b.provider) ||
+      a.interaction.localeCompare(b.interaction),
   );
 
   const counts = {
     total: rows.length,
     contracted: rows.filter((r) => r.contracted).length,
     observed: rows.filter((r) => r.observed).length,
-    contracted_and_test_seen: rows.filter((r) => r.contracted && r.test_seen).length,
-    contracted_not_test_seen: rows.filter((r) => r.contracted && !r.test_seen).length,
+    contracted_and_test_seen: rows.filter((r) => r.contracted && r.test_seen)
+      .length,
+    contracted_not_test_seen: rows.filter((r) => r.contracted && !r.test_seen)
+      .length,
     test_or_prod_seen_not_contracted: rows.filter(
       (r) => !r.contracted && (r.test_seen || r.prod_seen),
     ).length,
@@ -200,7 +207,10 @@ export function computeAuditMatrix(input: {
 }
 
 export async function runAudit(opts: AuditOptions = {}): Promise<AuditMatrix> {
-  const pactsDir = path.resolve(process.cwd(), opts.pactsDir ?? DEFAULT_PACTS_DIR);
+  const pactsDir = path.resolve(
+    process.cwd(),
+    opts.pactsDir ?? DEFAULT_PACTS_DIR,
+  );
   const contracted: PactInteractionKey[] = [];
   const pairs = new Set<string>();
 
@@ -220,10 +230,13 @@ export async function runAudit(opts: AuditOptions = {}): Promise<AuditMatrix> {
 
   let brokerVerifications: BrokerVerification[] | undefined;
   if (opts.broker) {
-    brokerVerifications = await fetchBrokerVerifications(opts.broker, [...pairs].map((p) => {
-      const [consumer, provider] = p.split('::');
-      return { consumer: consumer!, provider: provider! };
-    }));
+    brokerVerifications = await fetchBrokerVerifications(
+      opts.broker,
+      [...pairs].map((p) => {
+        const [consumer, provider] = p.split('::');
+        return { consumer: consumer!, provider: provider! };
+      }),
+    );
   }
 
   return computeAuditMatrix({
@@ -235,8 +248,13 @@ export async function runAudit(opts: AuditOptions = {}): Promise<AuditMatrix> {
 }
 
 /** Sync audit without broker (backward compatible for tests). */
-export function runAuditSync(opts: Omit<AuditOptions, 'broker'> = {}): AuditMatrix {
-  const pactsDir = path.resolve(process.cwd(), opts.pactsDir ?? DEFAULT_PACTS_DIR);
+export function runAuditSync(
+  opts: Omit<AuditOptions, 'broker'> = {},
+): AuditMatrix {
+  const pactsDir = path.resolve(
+    process.cwd(),
+    opts.pactsDir ?? DEFAULT_PACTS_DIR,
+  );
   const contracted: PactInteractionKey[] = [];
   for (const file of listPactFiles(pactsDir)) {
     const pact = parsePactFile(file);

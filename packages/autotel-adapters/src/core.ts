@@ -1,7 +1,6 @@
 import type { AsyncLocalStorage } from 'node:async_hooks';
 import {
   getRequestLogger,
-  trace,
   type ParsedError,
   type RequestLogger,
   type RequestLoggerOptions,
@@ -10,6 +9,7 @@ import {
   type PipelineDrainFn,
   type StructuredError,
   type StructuredErrorInput,
+  withTracing,
 } from 'autotel';
 import {
   mergeRequestLoggerOptions,
@@ -95,8 +95,7 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
       options?.waitUntil,
     );
 
-    const wrapped = trace(
-      { name: spanName },
+    const wrapped = withTracing({ name: spanName })(
       (ctx) => async (): Promise<T> => {
         const log = getRequestLogger(ctx, loggerOptions);
         enrich(log);
@@ -112,7 +111,8 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
         }
       },
     );
-    return wrapped();
+    // The wrapped factory is async, so the call always yields a Promise.
+    return wrapped() as Promise<T>;
   };
 }
 
@@ -190,18 +190,14 @@ export async function resolveAdapterConfig<T>(
   const config: Record<string, unknown> = {};
   for (const { key, env } of fields) {
     config[key] =
-      overrides?.[key] ??
-      autotelNs?.[key] ??
-      rootNs?.[key] ??
-      resolveEnv(env);
+      overrides?.[key] ?? autotelNs?.[key] ?? rootNs?.[key] ?? resolveEnv(env);
   }
 
   return config as Partial<T>;
 }
 
 export type HeadersLike =
-  | { get(name: string): string | null }
-  | Record<string, string | undefined>;
+  { get(name: string): string | null } | Record<string, string | undefined>;
 
 export function getHeader(
   headers: HeadersLike | undefined,

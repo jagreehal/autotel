@@ -1,6 +1,6 @@
 # example-langfuse
 
-**Instrument once with autotel — observe in Langfuse, autotel-devtools, and your
+**Instrument once with autotel. Observe in Langfuse, autotel-devtools, and your
 console, all from one canonical span stream.**
 
 The key insight: **Langfuse is a destination, not a span source.** You already
@@ -9,7 +9,7 @@ Langfuse ingests plain OTLP (its `LangfuseSpanProcessor` is just an
 `OTLPTraceExporter` pointed at `…/api/public/otel/v1/traces` with a Basic-auth
 header), and [`autotel-devtools`](../../packages/autotel-devtools) is an OTLP
 receiver too. So autotel's **native `destinations`** config fans the same spans
-to both — **no `@langfuse/otel`, no `@opentelemetry/*` exporter packages, no
+to both. **no `@langfuse/otel`, no `@opentelemetry/*` exporter packages, no
 hand-rolled span processors.**
 
 ```ts
@@ -21,7 +21,7 @@ import { trace } from '@opentelemetry/api';
 
 init({
   service: 'example-langfuse',
-  debug: 'pretty',            // zero-infra local console view
+  debug: 'pretty', // zero-infra local console view
   destinations: [
     // Langfuse — plain OTLP + Basic auth (what LangfuseSpanProcessor does inside)
     {
@@ -36,21 +36,24 @@ init({
 
 // Instrument the AI SDK once. Everything downstream is a consumer.
 registerTelemetry(
-  autotelTelemetry({ tracer: trace.getTracer('example-langfuse'), captureContent: true }),
+  autotelTelemetry({
+    tracer: trace.getTracer('example-langfuse'),
+    captureContent: true,
+  }),
 );
 ```
 
 After that, every `generateText` / `streamText` / `embed` call is a canonical
-`gen_ai.*` span tree — model, prompt/response, token usage, **cost**, streaming
-timing — and it lands in **every** destination at once.
+`gen_ai.*` span tree. Model, prompt/response, token usage, **cost**, streaming
+timing. And it lands in **every** destination at once.
 
 ## Why this works
 
 `autotel-genai` emits the canonical `gen_ai.*` semconv (`gen_ai.input.messages`,
 `gen_ai.output.messages`, `gen_ai.usage.*`, `gen_ai.usage.cost.usd`, …). Both
-Langfuse and autotel-devtools recognise and map those exact attributes — Langfuse
+Langfuse and autotel-devtools recognise and map those exact attributes. Langfuse
 into generations/tool-calls/embeddings, devtools into its GenAI view. The
-semantic convention *is* the integration: there's no glue code, and the AI SDK
+semantic convention _is_ the integration: there's no glue code, and the AI SDK
 call is instrumented exactly once.
 
 ## Run
@@ -70,24 +73,24 @@ npx autotel-devtools             # in another terminal → http://127.0.0.1:4318
 DEVTOOLS=1 pnpm --filter @jagreehal/example-langfuse start
 ```
 
-Nothing enabled? It still runs and prints the spans locally — the pipeline is
+Nothing enabled? It still runs and prints the spans locally. The pipeline is
 identical, it just doesn't forward. Set Langfuse keys and/or `DEVTOOLS=1` to fan
 them out.
 
-> Default model is `granite4` — it drives the Demo 2 tool loop reliably.
+> Default model is `granite4`: it drives the Demo 2 tool loop reliably.
 > Override with `OLLAMA_MODEL` / `OLLAMA_EMBED_MODEL`. (`llama3.2` tends to
 > mangle tool arguments.)
 
 ## What it shows
 
-1. **`generateText`** — `invoke_agent › chat` with token usage + cost.
-2. **`propagateAttributes`** — the one Langfuse-aware line: wrap a call to attach
+1. **`generateText`**: `invoke_agent › chat` with token usage + cost.
+2. **`propagateAttributes`**: the one Langfuse-aware line: wrap a call to attach
    `traceName` / `userId` / `sessionId` / `tags` so the run is a named,
    user-scoped trace in Langfuse. The model call itself is a stock autotel-genai
    tool loop.
-3. **`streamText`** — `time_to_first_chunk` / `output_tokens_per_second` ride
+3. **`streamText`**: `time_to_first_chunk` / `output_tokens_per_second` ride
    along as generation metadata.
-4. **`embed`** — a standalone `embeddings` span with token usage.
+4. **`embed`**: a standalone `embeddings` span with token usage.
 
 Each appears identically in Langfuse and in the devtools GenAI view.
 
@@ -99,11 +102,11 @@ Each appears identically in Langfuse and in the devtools GenAI view.
   the `endpoint`, so it's an alternative to listing devtools in `destinations`.)
 
 - **Add a real OTLP backend.** Append another entry to `destinations` (Grafana,
-  Datadog, Honeycomb, Jaeger…) — same spans, more consumers.
+  Datadog, Honeycomb, Jaeger…). Same spans, more consumers.
 
 - **Official Langfuse integration.** This example uses autotel's native OTLP for
-  zero extra deps. For Langfuse's richer features — media handling (base64 →
-  Langfuse media refs), masking, and a `gen_ai`-only export filter — use the
+  zero extra deps. For Langfuse's richer features. Media handling (base64 →
+  Langfuse media refs), masking, and a `gen_ai`-only export filter. Use the
   official [`LangfuseSpanProcessor`](https://www.npmjs.com/package/@langfuse/otel)
   in `spanProcessors` instead. For prompt-version linking
   (`runtimeContext.langfusePrompt`), add the

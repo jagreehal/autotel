@@ -36,7 +36,9 @@ describe('commanderErrorToAutotel', () => {
     });
     expect(err).toBeInstanceOf(AutotelError);
     expect(err!.type).toBe('validation');
-    expect(err!.expected).toEqual({ commanderCode: 'commander.unknownCommand' });
+    expect(err!.expected).toEqual({
+      commanderCode: 'commander.unknownCommand',
+    });
   });
 
   it('exits 0 when commander signals help was printed', () => {

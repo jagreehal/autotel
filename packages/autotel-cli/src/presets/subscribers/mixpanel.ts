@@ -9,14 +9,9 @@ export const mixpanel: SubscriberPreset = {
   type: 'subscriber',
   description: 'Send events to Mixpanel for product analytics',
   packages: {
-    required: [
-      'autotel-subscribers',
-      'mixpanel',
-    ],
+    required: ['autotel-subscribers', 'mixpanel'],
     optional: [],
-    devOnly: [
-      '@types/mixpanel',
-    ],
+    devOnly: ['@types/mixpanel'],
   },
   env: {
     required: [
@@ -64,10 +59,7 @@ export const amplitude: SubscriberPreset = {
   type: 'subscriber',
   description: 'Send events to Amplitude for product analytics',
   packages: {
-    required: [
-      'autotel-subscribers',
-      '@amplitude/analytics-node',
-    ],
+    required: ['autotel-subscribers', '@amplitude/analytics-node'],
     optional: [],
     devOnly: [],
   },
@@ -117,10 +109,7 @@ export const segment: SubscriberPreset = {
   type: 'subscriber',
   description: 'Send events to Segment for routing to destinations',
   packages: {
-    required: [
-      'autotel-subscribers',
-      '@segment/analytics-node',
-    ],
+    required: ['autotel-subscribers', '@segment/analytics-node'],
     optional: [],
     devOnly: [],
   },
@@ -163,10 +152,7 @@ export const slack: SubscriberPreset = {
   type: 'subscriber',
   description: 'Send event notifications to Slack',
   packages: {
-    required: [
-      'autotel-subscribers',
-      '@slack/web-api',
-    ],
+    required: ['autotel-subscribers', '@slack/web-api'],
     optional: [],
     devOnly: [],
   },
@@ -217,9 +203,7 @@ export const webhook: SubscriberPreset = {
   type: 'subscriber',
   description: 'Send events to a custom webhook endpoint',
   packages: {
-    required: [
-      'autotel-subscribers',
-    ],
+    required: ['autotel-subscribers'],
     optional: [],
     devOnly: [],
   },

@@ -46,7 +46,12 @@
  * ```
  */
 
-import { trace, type TraceContext } from 'autotel';
+import {
+  trace,
+  type TraceContext,
+  withTracing,
+  getActiveTraceContext,
+} from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import { buildSNSAttributes } from '../attributes';
 import { wrapSDKClient } from '../common/sdk-wrapper';
@@ -95,8 +100,7 @@ export function traceSNS(config: TraceSNSConfig) {
     fn: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): (...args: TArgs) => Promise<TReturn> {
     // Use autotel's trace() which properly handles the factory pattern
-    return trace(
-      `sns.${operation}`,
+    return withTracing({ name: `sns.${operation}` })(
       (ctx: TraceContext) =>
         async (...args: TArgs): Promise<TReturn> => {
           // Set SNS semantic attributes
@@ -106,7 +110,7 @@ export function traceSNS(config: TraceSNSConfig) {
           const handler = fn(ctx);
           return handler(...args);
         },
-    );
+    ) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 
@@ -240,11 +244,11 @@ export interface SNSPublishMessage {
  * ```
  */
 export class SNSPublisher<
-   
   TClient extends { send: (command: any) => Promise<any> } = any,
 > {
   private client: TClient;
-  private config: Required<Pick<SNSPublisherConfig, 'topicArn'>> & SNSPublisherConfig;
+  private config: Required<Pick<SNSPublisherConfig, 'topicArn'>> &
+    SNSPublisherConfig;
   private topicName: string;
 
   constructor(client: TClient, config: SNSPublisherConfig) {
@@ -273,10 +277,16 @@ export class SNSPublisher<
     const result = { ...attributes };
 
     if (carrier.traceparent) {
-      result.traceparent = { StringValue: carrier.traceparent, DataType: 'String' };
+      result.traceparent = {
+        StringValue: carrier.traceparent,
+        DataType: 'String',
+      };
     }
     if (carrier.tracestate) {
-      result.tracestate = { StringValue: carrier.tracestate, DataType: 'String' };
+      result.tracestate = {
+        StringValue: carrier.tracestate,
+        DataType: 'String',
+      };
     }
     if (carrier.baggage) {
       result.baggage = { StringValue: carrier.baggage, DataType: 'String' };
@@ -295,7 +305,8 @@ export class SNSPublisher<
     messageId?: string;
     sequenceNumber?: string;
   }> {
-    return trace(`sns.publish`, async (ctx: TraceContext) => {
+    return trace(`sns.publish`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(buildSNSAttributes({ topicArn: this.config.topicArn }));
       ctx.setAttribute('messaging.destination.name', this.topicName);
 
@@ -307,7 +318,9 @@ export class SNSPublisher<
         Subject: message.subject,
         MessageAttributes: this.injectContext(message.attributes),
         MessageStructure: message.messageStructure,
-        ...(message.messageGroupId && { MessageGroupId: message.messageGroupId }),
+        ...(message.messageGroupId && {
+          MessageGroupId: message.messageGroupId,
+        }),
         ...(message.messageDeduplicationId && {
           MessageDeduplicationId: message.messageDeduplicationId,
         }),
@@ -334,7 +347,7 @@ export class SNSPublisher<
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -344,10 +357,15 @@ export class SNSPublisher<
    * @returns Promise with successful and failed message results
    */
   async publishBatch(messages: SNSPublishMessage[]): Promise<{
-    successful: Array<{ id: string; messageId?: string; sequenceNumber?: string }>;
+    successful: Array<{
+      id: string;
+      messageId?: string;
+      sequenceNumber?: string;
+    }>;
     failed: Array<{ id: string; code?: string; message?: string }>;
   }> {
-    return trace(`sns.publishBatch`, async (ctx: TraceContext) => {
+    return trace(`sns.publishBatch`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(buildSNSAttributes({ topicArn: this.config.topicArn }));
       ctx.setAttribute('messaging.batch.message_count', messages.length);
 
@@ -373,18 +391,26 @@ export class SNSPublisher<
         );
 
         const successful =
-          result.Successful?.map((s: { Id?: string; MessageId?: string; SequenceNumber?: string }) => ({
-            id: s.Id!,
-            messageId: s.MessageId,
-            sequenceNumber: s.SequenceNumber,
-          })) || [];
+          result.Successful?.map(
+            (s: {
+              Id?: string;
+              MessageId?: string;
+              SequenceNumber?: string;
+            }) => ({
+              id: s.Id!,
+              messageId: s.MessageId,
+              sequenceNumber: s.SequenceNumber,
+            }),
+          ) || [];
 
         const failed =
-          result.Failed?.map((f: { Id?: string; Code?: string; Message?: string }) => ({
-            id: f.Id!,
-            code: f.Code,
-            message: f.Message,
-          })) || [];
+          result.Failed?.map(
+            (f: { Id?: string; Code?: string; Message?: string }) => ({
+              id: f.Id!,
+              code: f.Code,
+              message: f.Message,
+            }),
+          ) || [];
 
         ctx.setAttribute('messaging.sns.successful_count', successful.length);
         ctx.setAttribute('messaging.sns.failed_count', failed.length);
@@ -402,11 +428,12 @@ export class SNSPublisher<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'Batch publish failed',
+          message:
+            error instanceof Error ? error.message : 'Batch publish failed',
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -418,7 +445,8 @@ export class SNSPublisher<
   async publishToEndpoint(
     message: Omit<SNSPublishMessage, 'targetArn'> & { targetArn: string },
   ): Promise<{ messageId?: string }> {
-    return trace(`sns.publishToEndpoint`, async (ctx: TraceContext) => {
+    return trace(`sns.publishToEndpoint`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttribute('messaging.system', 'aws_sns');
       ctx.setAttribute('aws.sns.target_arn', message.targetArn);
 
@@ -444,10 +472,11 @@ export class SNSPublisher<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'Endpoint publish failed',
+          message:
+            error instanceof Error ? error.message : 'Endpoint publish failed',
         });
         throw error;
       }
-    });
+    })();
   }
 }

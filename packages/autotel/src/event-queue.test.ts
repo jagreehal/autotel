@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EventQueue, type EventDropReason } from './event-queue';
+import { EventQueue } from './event-queue';
 import { configure, resetConfig } from './config';
 
 // Mock adapter for testing
@@ -837,7 +837,7 @@ describe('EventQueue', () => {
 
       // Only first event should be delivered
       expect(adapter.events.length).toBe(1);
-      expect(adapter.events[0].name).toBe('test1');
+      expect(adapter.events[0]!.name).toBe('test1');
     });
   });
 

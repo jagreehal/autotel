@@ -33,7 +33,7 @@
  * ```
  */
 
-import { trace, type TraceContext } from 'autotel';
+import { withTracing, type TraceContext } from 'autotel';
 import {
   genAiAgentAttributes,
   genAiRequestAttributes,
@@ -135,16 +135,29 @@ export function traceGenAI(config: TraceGenAIConfig) {
   return <TArgs extends unknown[], TReturn>(
     factory: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>(spanName, (ctx: TraceContext) => {
-      ctx.setAttributes({
-        ...requestAttributes,
-        ...agentAttributes,
-        ...toolAttributes,
-        ...workflowAttributes,
-        ...(config.attributes ?? {}),
-      });
-      return factory(ctx);
-    });
+    if (typeof factory !== 'function') {
+      throw new TypeError(
+        'traceGenAI: expected a factory (ctx) => (...args) => result',
+      );
+    }
+    return withTracing<TArgs, TReturn>({ name: spanName })(
+      (ctx: TraceContext) => {
+        ctx.setAttributes({
+          ...requestAttributes,
+          ...agentAttributes,
+          ...toolAttributes,
+          ...workflowAttributes,
+          ...(config.attributes ?? {}),
+        });
+        const handler = factory(ctx);
+        if (typeof handler !== 'function') {
+          throw new TypeError(
+            'traceGenAI: factory must return a function; expected (ctx) => (...args) => result',
+          );
+        }
+        return handler;
+      },
+    ) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 

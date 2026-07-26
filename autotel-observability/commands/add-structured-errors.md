@@ -1,6 +1,6 @@
 ---
 description: Replace generic Error throws with autotel createStructuredError and add parseError on client
-argument-hint: "<file-or-directory> — e.g. src/ or src/routes/"
+argument-hint: '<file-or-directory> — e.g. src/ or src/routes/'
 ---
 
 # Add Structured Errors
@@ -9,7 +9,7 @@ You are an autotel structured error specialist. Upgrade generic error handling t
 
 ## Context
 
-The user wants to replace `new Error()` / `throw new Error()` with `createStructuredError()` on the server, and add `parseError()` on the client, so that error responses carry `message`, `why`, `fix`, `link` — giving users and AI agents actionable context.
+The user wants to replace `new Error()` / `throw new Error()` with `createStructuredError()` on the server, and add `parseError()` on the client, so that error responses carry `message`, `why`, `fix`, `link`. Giving users and AI agents actionable context.
 
 ## Requirements
 
@@ -32,6 +32,7 @@ new Response('...', { status: 4xx })
 ```
 
 For each throw/error response site, determine:
+
 1. What HTTP status code applies (400, 401, 403, 404, 409, 422, 500, 502, etc.)
 2. Why the error happens (the human-readable cause)
 3. How to fix it (the actionable step for the user)
@@ -40,6 +41,7 @@ For each throw/error response site, determine:
 ### Step 2: Replace with createStructuredError
 
 **Before:**
+
 ```typescript
 if (!user) {
   throw new Error('User not found');
@@ -47,6 +49,7 @@ if (!user) {
 ```
 
 **After:**
+
 ```typescript
 import { createStructuredError } from 'autotel';
 
@@ -79,6 +82,7 @@ createStructuredError({
 Apply these patterns based on the error type:
 
 **Validation errors (400/422):**
+
 ```typescript
 throw createStructuredError({
   message: 'Invalid request',
@@ -89,6 +93,7 @@ throw createStructuredError({
 ```
 
 **Authentication errors (401):**
+
 ```typescript
 throw createStructuredError({
   message: 'Authentication required',
@@ -100,6 +105,7 @@ throw createStructuredError({
 ```
 
 **Authorization errors (403):**
+
 ```typescript
 throw createStructuredError({
   message: 'Permission denied',
@@ -110,6 +116,7 @@ throw createStructuredError({
 ```
 
 **Not found errors (404):**
+
 ```typescript
 throw createStructuredError({
   message: 'Resource not found',
@@ -120,6 +127,7 @@ throw createStructuredError({
 ```
 
 **Conflict errors (409):**
+
 ```typescript
 throw createStructuredError({
   message: 'Conflict',
@@ -130,17 +138,22 @@ throw createStructuredError({
 ```
 
 **External service errors (502):**
+
 ```typescript
 throw createStructuredError({
   message: 'Payment processing failed',
   status: 502,
-  why: error instanceof Error ? error.message : 'Payment provider returned an error',
+  why:
+    error instanceof Error
+      ? error.message
+      : 'Payment provider returned an error',
   fix: 'Try again in a few minutes or use a different payment method',
   cause: error,
 });
 ```
 
 **Catch-rethrow pattern:**
+
 ```typescript
 try {
   await externalService.call(data);
@@ -170,6 +183,7 @@ alert('Error')
 ### Step 5: Add parseError on Client
 
 **Before:**
+
 ```typescript
 try {
   const res = await fetch('/api/checkout', {
@@ -184,6 +198,7 @@ try {
 ```
 
 **After:**
+
 ```typescript
 import { parseError } from 'autotel';
 
@@ -212,6 +227,7 @@ try {
 ```
 
 **parseError return type:**
+
 ```typescript
 {
   message: string,     // Always present
@@ -228,12 +244,14 @@ try {
 Adapt the error display to your UI framework:
 
 **Toast notification:**
+
 ```typescript
 const error = parseError(err);
 toast.error(error.message, { description: error.why });
 ```
 
 **Error banner:**
+
 ```tsx
 const error = parseError(err);
 <ErrorBanner
@@ -241,10 +259,11 @@ const error = parseError(err);
   description={error.why}
   action={error.fix}
   helpLink={error.link}
-/>
+/>;
 ```
 
 **Form validation:**
+
 ```typescript
 const error = parseError(err);
 if (error.status === 422) {
@@ -278,4 +297,4 @@ Present changes:
 - **Don't force structured errors everywhere**: Simple internal assertions (`assert(x)`) and programmer errors don't need `createStructuredError`. Focus on errors that reach users or cross API boundaries.
 - **Always include `cause`**: When catching and rethrowing, pass the original error as `cause` for full error chain visibility.
 - **`why` should be specific**: "Database connection failed" is better than "Internal error". Include IDs, field names, or service names when helpful.
-- **`fix` should be actionable**: "Try again in 5 minutes" or "Check your API key" — not "Contact support" unless that's genuinely the only option.
+- **`fix` should be actionable**: "Try again in 5 minutes" or "Check your API key": not "Contact support" unless that's genuinely the only option.

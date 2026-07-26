@@ -25,11 +25,13 @@ Quick-start guide for wiring autotel into each supported framework. Covers packa
 **Package:** `autotel-hono`
 
 **Install:**
+
 ```bash
 pnpm add autotel autotel-hono
 ```
 
 **Setup:**
+
 ```typescript
 import { Hono } from 'hono';
 import { init, getRequestLogger } from 'autotel';
@@ -55,6 +57,7 @@ export default app;
 ```
 
 **Key points:**
+
 - Register `otel()` middleware once with `app.use()`, not per-route
 - `getRequestLogger()` needs no args inside handlers (middleware sets up AsyncLocalStorage)
 - Optional config: `captureRequestHeaders`, `captureResponseHeaders`, `spanNameFactory`
@@ -66,11 +69,13 @@ export default app;
 **Package:** `autotel-tanstack`
 
 **Install:**
+
 ```bash
 pnpm add autotel autotel-tanstack
 ```
 
-**Setup — Middleware approach (recommended):**
+**Setup, Middleware approach (recommended):**
+
 ```typescript
 // app/ssr.tsx or server entry
 import { wrapStartHandler } from 'autotel-tanstack/handlers';
@@ -110,12 +115,14 @@ export const Route = createFileRoute('/users/$userId')({
 ```
 
 **Zero-config alternative:**
+
 ```typescript
 import 'autotel-tanstack/auto';
 // Set OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS
 ```
 
 **Key points:**
+
 - Use `tracingMiddleware()` for server functions and request middleware
 - Use `traceLoader()` for route loaders
 - Use `wrapStartHandler()` for the start handler
@@ -128,11 +135,13 @@ import 'autotel-tanstack/auto';
 **Package:** `autotel-cloudflare`
 
 **Install:**
+
 ```bash
 pnpm add autotel-cloudflare
 ```
 
-**Setup — instrument() style:**
+**Setup, instrument() style:**
+
 ```typescript
 import { instrument, getRequestLogger } from 'autotel-cloudflare';
 
@@ -150,11 +159,12 @@ export default instrument(
   {
     service: 'my-worker',
     endpoint: 'https://api.honeycomb.io',
-  }
+  },
 );
 ```
 
-**Setup — wrapModule() style:**
+**Setup, wrapModule() style:**
+
 ```typescript
 import { wrapModule } from 'autotel-cloudflare';
 
@@ -165,7 +175,7 @@ export default wrapModule(
       // handler logic
       return new Response('OK');
     },
-  }
+  },
 );
 ```
 
@@ -173,6 +183,7 @@ export default wrapModule(
 Cloudflare bindings (KV, R2, D1, Durable Objects, Workers AI, Vectorize, etc.) are automatically instrumented when using `instrument()` or `wrapModule()`. All binding operations get spans.
 
 **Key points:**
+
 - Uses `autotel-cloudflare`, not `autotel` (edge-compatible, ~45KB bundle)
 - `instrument()` is compatible with @microlabs/otel-cf-workers API
 - `wrapModule()` is compatible with workers-honeycomb-logger API
@@ -186,11 +197,13 @@ Cloudflare bindings (KV, R2, D1, Durable Objects, Workers AI, Vectorize, etc.) a
 **Package:** `autotel-mcp-instrumentation`
 
 **Install:**
+
 ```bash
 pnpm add autotel-mcp-instrumentation
 ```
 
 **Server setup:**
+
 ```typescript
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { instrumentMCPServer } from 'autotel-mcp-instrumentation/server';
@@ -212,6 +225,7 @@ server.registerTool('my-tool', async (params) => {
 ```
 
 **Client setup:**
+
 ```typescript
 import { instrumentMCPClient } from 'autotel-mcp-instrumentation/client';
 
@@ -222,8 +236,9 @@ instrumentMCPClient(client);
 ```
 
 **Key points:**
+
 - Proxy-based: instruments without modifying the MCP SDK
-- Context propagation via `_meta` field (not headers) — works with all transports
+- Context propagation via `_meta` field (not headers): works with all transports
 - Supports both Node.js and edge runtimes
 - Bundle: ~7KB total
 
@@ -234,11 +249,13 @@ instrumentMCPClient(client);
 **Package:** `autotel` (no framework-specific package needed)
 
 **Install:**
+
 ```bash
 pnpm add autotel
 ```
 
 **Setup:**
+
 ```typescript
 import express from 'express';
 import { init, trace, getRequestLogger, createStructuredError } from 'autotel';
@@ -264,6 +281,7 @@ app.listen(3000);
 ```
 
 **Key points:**
+
 - Wrap each handler with `trace()` (no middleware package yet)
 - Pass `ctx` to `getRequestLogger(ctx)` since there's no middleware to set up AsyncLocalStorage
 - Call `init()` before `app.listen()`
@@ -276,11 +294,13 @@ app.listen(3000);
 **Package:** `autotel` (no framework-specific package needed)
 
 **Install:**
+
 ```bash
 pnpm add autotel
 ```
 
 **Setup:**
+
 ```typescript
 import Fastify from 'fastify';
 import { init, trace, getRequestLogger } from 'autotel';
@@ -309,11 +329,13 @@ await app.listen({ port: 3000 });
 **Package:** `autotel` (no framework-specific package needed)
 
 **Install:**
+
 ```bash
 pnpm add autotel
 ```
 
-**Setup — API Routes:**
+**Setup, API Routes:**
+
 ```typescript
 // app/api/checkout/route.ts
 import { trace, getRequestLogger, createStructuredError } from 'autotel';
@@ -330,7 +352,8 @@ export const POST = trace((ctx) => async (request: Request) => {
 });
 ```
 
-**Setup — Init (instrumentation.ts):**
+**Setup, Init (instrumentation.ts):**
+
 ```typescript
 // instrumentation.ts (Next.js instrumentation hook)
 export async function register() {
@@ -340,6 +363,7 @@ export async function register() {
 ```
 
 **Key points:**
+
 - Use `instrumentation.ts` for init in Next.js 13.4+
 - Wrap API route handlers with `trace()`
 - For Server Components, use `trace()` around data fetching functions
@@ -351,11 +375,13 @@ export async function register() {
 **Package:** `autotel-edge`
 
 **Install:**
+
 ```bash
 pnpm add autotel-edge
 ```
 
 **Setup:**
+
 ```typescript
 import { trace, getRequestLogger } from 'autotel-edge';
 
@@ -369,7 +395,8 @@ export default trace(async (request: Request) => {
 ```
 
 **Key points:**
-- No Node.js APIs — uses Web APIs (fetch, crypto.subtle)
+
+- No Node.js APIs: uses Web APIs (fetch, crypto.subtle)
 - Bundle optimized: ~20KB vs ~700KB for Node.js autotel
 - Same `trace()`, `span()`, `getRequestLogger()` API
 - Use `autotel-edge/sampling` for custom sampling strategies
@@ -382,6 +409,6 @@ export default trace(async (request: Request) => {
 1. **Always call `init()` once** at the application entry point, before any middleware or handler
 2. **Use the framework-specific package** when one exists (Hono, TanStack, Cloudflare, MCP, edge)
 3. **Use `getRequestLogger()` with no args** when framework middleware creates the span; pass `ctx` otherwise
-4. **Use `createStructuredError()`** for all API errors — it works across all frameworks
+4. **Use `createStructuredError()`** for all API errors: it works across all frameworks
 5. **Use env vars for production config**: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`
-6. **Never use `await import()` for init** — `init()` must be synchronous
+6. **Never use `await import()` for init**: `init()` must be synchronous

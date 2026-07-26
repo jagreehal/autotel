@@ -5,10 +5,10 @@
  *
  * @example Basic usage
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
  *
- * const events = new Events('checkout', {
+ * const events = new Event('checkout', {
  *   subscribers: [
  *     new PostHogSubscriber({
  *       apiKey: process.env.POSTHOG_API_KEY!,
@@ -86,9 +86,15 @@
  * ```
  */
 
-import type { EventAttributes, EventAttributesInput } from 'autotel/event-subscriber';
+import type {
+  EventAttributes,
+  EventAttributesInput,
+} from 'autotel/event-subscriber';
 import { EventSubscriber, type EventPayload } from './event-subscriber-base';
-import { formatExceptionForPostHog, errorToExceptionList } from './posthog-error-formatter';
+import {
+  formatExceptionForPostHog,
+  errorToExceptionList,
+} from './posthog-error-formatter';
 import slowRedact from 'slow-redact';
 
 // Type-only import to avoid runtime dependency
@@ -279,7 +285,8 @@ export class PostHogSubscriber extends EventSubscriber {
   private initPromise: Promise<void> | null = null;
   /** True when using browser's window.posthog (different API signature) */
   private isBrowserClient = false;
-  private pathRedactor: ((obj: Record<string, unknown>) => Record<string, unknown>) | null = null;
+  private pathRedactor:
+    ((obj: Record<string, unknown>) => Record<string, unknown>) | null = null;
   private stringRedactor: StringRedactor | null = null;
 
   constructor(config: PostHogConfig) {
@@ -329,7 +336,10 @@ export class PostHogSubscriber extends EventSubscriber {
     try {
       // Option 1: Use global browser client (window.posthog)
       if (this.config.useGlobalClient) {
-        const globalWindow = typeof globalThis === 'undefined' ? undefined : (globalThis as Record<string, unknown>);
+        const globalWindow =
+          typeof globalThis === 'undefined'
+            ? undefined
+            : (globalThis as Record<string, unknown>);
         if (globalWindow?.posthog) {
           this.posthog = globalWindow.posthog as PostHog;
           this.isBrowserClient = true;
@@ -393,7 +403,9 @@ export class PostHogSubscriber extends EventSubscriber {
     return (attributes?.userId || attributes?.user_id || 'anonymous') as string;
   }
 
-  private redactProperties(properties: Record<string, unknown>): Record<string, unknown> {
+  private redactProperties(
+    properties: Record<string, unknown>,
+  ): Record<string, unknown> {
     let result = properties;
     if (this.pathRedactor) {
       result = this.pathRedactor(properties) as Record<string, unknown>;
@@ -404,7 +416,9 @@ export class PostHogSubscriber extends EventSubscriber {
     return result;
   }
 
-  private redactStringValues(obj: Record<string, unknown>): Record<string, unknown> {
+  private redactStringValues(
+    obj: Record<string, unknown>,
+  ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
       if (typeof value === 'string') {
@@ -494,7 +508,8 @@ export class PostHogSubscriber extends EventSubscriber {
       }
       // Batch/fan-in context
       if (payload.autotel.linked_trace_id_count !== undefined) {
-        properties.$linked_trace_id_count = payload.autotel.linked_trace_id_count;
+        properties.$linked_trace_id_count =
+          payload.autotel.linked_trace_id_count;
       }
       if (payload.autotel.linked_trace_id_hash) {
         properties.$linked_trace_id_hash = payload.autotel.linked_trace_id_hash;
@@ -508,7 +523,9 @@ export class PostHogSubscriber extends EventSubscriber {
 
     if (payload.attributes?.['exception.list']) {
       try {
-        const exceptionList = JSON.parse(payload.attributes['exception.list'] as string);
+        const exceptionList = JSON.parse(
+          payload.attributes['exception.list'] as string,
+        );
         const formatted = formatExceptionForPostHog(
           exceptionList,
           undefined,
@@ -585,7 +602,13 @@ export class PostHogSubscriber extends EventSubscriber {
     await this.ensureInitialized();
 
     try {
-      return await this.posthog?.isFeatureEnabled(flagKey, distinctId, options as any) ?? false;
+      return (
+        (await this.posthog?.isFeatureEnabled(
+          flagKey,
+          distinctId,
+          options as any,
+        )) ?? false
+      );
     } catch (error) {
       this.config.onError?.(error as Error);
       return false;
@@ -620,7 +643,11 @@ export class PostHogSubscriber extends EventSubscriber {
     await this.ensureInitialized();
 
     try {
-      return await this.posthog?.getFeatureFlag(flagKey, distinctId, options as any);
+      return await this.posthog?.getFeatureFlag(
+        flagKey,
+        distinctId,
+        options as any,
+      );
     } catch (error) {
       this.config.onError?.(error as Error);
       return undefined;
@@ -703,7 +730,10 @@ export class PostHogSubscriber extends EventSubscriber {
    * });
    * ```
    */
-  async identify(distinctId: string, properties?: PersonProperties): Promise<void> {
+  async identify(
+    distinctId: string,
+    properties?: PersonProperties,
+  ): Promise<void> {
     if (!this.enabled) return;
     await this.ensureInitialized();
 
@@ -784,7 +814,9 @@ export class PostHogSubscriber extends EventSubscriber {
     if (!this.enabled) return;
     await this.ensureInitialized();
 
-    const eventAttributes: EventAttributes = { ...attributes } as EventAttributes;
+    const eventAttributes: EventAttributes = {
+      ...attributes,
+    } as EventAttributes;
     if (groups) {
       (eventAttributes as any).groups = groups;
     }
@@ -817,8 +849,15 @@ export class PostHogSubscriber extends EventSubscriber {
         return;
       }
 
-      const exceptionList = errorToExceptionList(error, this.stringRedactor ?? undefined);
-      const formatted = formatExceptionForPostHog(exceptionList, 'node:javascript', this.stringRedactor ?? undefined);
+      const exceptionList = errorToExceptionList(
+        error,
+        this.stringRedactor ?? undefined,
+      );
+      const formatted = formatExceptionForPostHog(
+        exceptionList,
+        'node:javascript',
+        this.stringRedactor ?? undefined,
+      );
 
       const properties = {
         ...formatted,

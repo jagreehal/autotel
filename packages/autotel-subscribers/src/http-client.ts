@@ -36,9 +36,7 @@ export type HttpStatusError<E = unknown> = {
 };
 
 export type HttpResult<T = unknown, E = unknown> =
-  | HttpSuccess<T>
-  | HttpNetworkError
-  | HttpStatusError<E>;
+  HttpSuccess<T> | HttpNetworkError | HttpStatusError<E>;
 
 export type HttpRequestOptions = {
   method?: string;

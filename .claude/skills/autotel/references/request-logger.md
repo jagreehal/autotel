@@ -7,7 +7,7 @@ Creates a request-scoped logger that writes to the active span. All fields accum
 ```typescript
 import { trace, getRequestLogger } from 'autotel';
 
-export const handleOrder = trace(ctx => async (req: OrderRequest) => {
+export const handleOrder = trace((ctx) => async (req: OrderRequest) => {
   const log = getRequestLogger(ctx);
 
   log.set({ feature: 'checkout', tier: req.user.tier });
@@ -106,6 +106,7 @@ log.fork('async-email', async () => {
 ```
 
 **Key behavior:**
+
 - Creates a new child span with a new correlationId
 - Inherits the parent's traceId for distributed tracing links
 - Waits for `fn()` to complete before ending the child span
@@ -113,6 +114,7 @@ log.fork('async-email', async () => {
 - Handles errors and calls `childLog.error(error)` before emit
 
 **Use for:**
+
 - Async work that outlives the request (webhooks, emails, background jobs)
 - Fire-and-forget operations that need observability
 - Operations that might fail after the main request completes

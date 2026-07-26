@@ -197,7 +197,7 @@ describe('getEdgeSubscribers', () => {
     });
     const configContext = setConfig(resolved);
 
-    const mockCtx = { waitUntil } as ExecutionContext;
+    const mockCtx = { waitUntil };
 
     await otelContext.with(configContext, async () => {
       const Subscribers = getEdgeSubscribers(mockCtx);
@@ -225,7 +225,9 @@ describe('getEdgeSubscribers', () => {
     await otelContext.with(configContext, async () => {
       const Subscribers = getEdgeSubscribers();
       expect(Subscribers).not.toBeNull();
-      await Subscribers!.trackEvent('user.signup', undefined, { delivery: 'await' });
+      await Subscribers!.trackEvent('user.signup', undefined, {
+        delivery: 'await',
+      });
     });
 
     expect(successAdapter).toHaveBeenCalledTimes(1);
@@ -233,10 +235,12 @@ describe('getEdgeSubscribers', () => {
     expect(consoleSpy).toHaveBeenCalledWith(
       '[autotel-edge] Subscribers subscriber failed',
       expect.any(Error),
-      expect.objectContaining({ subscriberIndex: expect.any(Number), eventType: 'event' }),
+      expect.objectContaining({
+        subscriberIndex: expect.any(Number),
+        eventType: 'event',
+      }),
     );
 
     consoleSpy.mockRestore();
   });
 });
-

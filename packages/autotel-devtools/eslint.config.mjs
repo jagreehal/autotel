@@ -1,5 +1,5 @@
 // For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
-import storybook from "eslint-plugin-storybook";
+import storybook from 'eslint-plugin-storybook';
 
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
@@ -25,7 +25,10 @@ export default tseslint.config(
       },
     },
     rules: {
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
     },
   },
   {
@@ -44,7 +47,10 @@ export default tseslint.config(
       // Dynamic OTLP telemetry data is shaped at runtime — `any` is intentional
       // in the UI layer.
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       // TS (lang="ts") already checks for undefined identifiers; the base
       // no-undef rule otherwise flags every DOM global (window, document, File,
       // ResizeObserver, …). This is the standard typescript-eslint guidance.
@@ -76,10 +82,15 @@ export default tseslint.config(
   },
   {
     // Server OTLP parsing uses `any` for unknown JSON payloads by design.
-    files: ['src/server/otlp.ts', 'src/server/types.ts', 'src/server/remote-exporter.ts', 'src/server/exporter.ts'],
+    files: [
+      'src/server/otlp.ts',
+      'src/server/types.ts',
+      'src/server/remote-exporter.ts',
+      'src/server/exporter.ts',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
-  storybook.configs["flat/recommended"],
+  storybook.configs['flat/recommended'],
 );

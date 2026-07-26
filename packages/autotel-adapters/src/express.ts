@@ -31,7 +31,9 @@ export type ExpressNext = (err?: unknown) => void;
 export interface ExpressWithAutotelOptions extends RouteAdapterOptions {
   spanName?: string | ((request: ExpressRequestLike) => string);
   requestLoggerOptions?: RequestLoggerOptions;
-  enrichRequest?: (request: ExpressRequestLike) => Record<string, unknown> | undefined;
+  enrichRequest?: (
+    request: ExpressRequestLike,
+  ) => Record<string, unknown> | undefined;
   autoEmit?: boolean;
 }
 
@@ -90,7 +92,11 @@ export function withAutotel<
   TRes extends ExpressResponseLike,
   TReturn,
 >(
-  handler: (req: TReq, res: TRes, next?: ExpressNext) => TReturn | Promise<TReturn>,
+  handler: (
+    req: TReq,
+    res: TRes,
+    next?: ExpressNext,
+  ) => TReturn | Promise<TReturn>,
   options?: ExpressWithAutotelOptions,
 ): (req: TReq, res: TRes, next?: ExpressNext) => Promise<TReturn | undefined> {
   return async (
@@ -103,7 +109,8 @@ export function withAutotel<
         ? options.spanName(req)
         : (options?.spanName ?? `express.${req.method ?? 'request'}`);
 
-    const route = req.route?.path ?? req.path ?? req.originalUrl ?? req.url ?? '/';
+    const route =
+      req.route?.path ?? req.path ?? req.originalUrl ?? req.url ?? '/';
 
     try {
       return await runRequest<TReturn>(

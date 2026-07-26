@@ -19,7 +19,11 @@
  */
 
 import { test as base } from '@playwright/test';
-import type { Page, APIRequestContext, Request as PlaywrightRequest } from '@playwright/test';
+import type {
+  Page,
+  APIRequestContext,
+  Request as PlaywrightRequest,
+} from '@playwright/test';
 import type { TestInfo } from '@playwright/test';
 import type { AutotelConfig } from 'autotel';
 import {
@@ -74,7 +78,10 @@ function getApiBaseUrls(): string[] {
  * whose path starts with that path segment match; same-origin but different path
  * (e.g. /health) must not match to avoid leaking trace context to unrelated endpoints.
  */
-function urlMatchesApiOrigin(requestUrl: string, apiBaseUrls: string[]): boolean {
+function urlMatchesApiOrigin(
+  requestUrl: string,
+  apiBaseUrls: string[],
+): boolean {
   if (apiBaseUrls.length === 0) return false;
   try {
     const u = new URL(requestUrl);
@@ -87,7 +94,8 @@ function urlMatchesApiOrigin(requestUrl: string, apiBaseUrls: string[]): boolean
         const basePathname = b.pathname.replace(/\/$/, '') || '/';
         if (basePathname === '/') return true;
         return (
-          requestPathname === basePathname || requestPathname.startsWith(basePathname + '/')
+          requestPathname === basePathname ||
+          requestPathname.startsWith(basePathname + '/')
         );
       } catch {
         return requestUrl.startsWith(base);
@@ -120,7 +128,9 @@ function setAttributesFromAnnotations(
 }
 
 /** Internal: options for get/post/put/patch/delete/head/fetch that may include headers. */
-type RequestOptions = Record<string, unknown> & { headers?: Record<string, string> };
+type RequestOptions = Record<string, unknown> & {
+  headers?: Record<string, string>;
+};
 
 function mergeTraceHeaders(
   url: string,
@@ -133,7 +143,11 @@ function mergeTraceHeaders(
   if (!urlMatchesApiOrigin(url, apiBaseUrls)) return opts;
   return {
     ...opts,
-    headers: { ...(opts.headers as Record<string, string>), ...carrier, 'x-test-name': testName },
+    headers: {
+      ...(opts.headers as Record<string, string>),
+      ...carrier,
+      'x-test-name': testName,
+    },
   };
 }
 
@@ -148,15 +162,31 @@ function createRequestWithTrace(
     mergeTraceHeaders(url, options, apiBaseUrls, carrier, testInfo.title);
 
   return {
-    get: (url: string, options?: RequestOptions) => request.get(url, merge(url, options)),
-    post: (url: string, options?: RequestOptions) => request.post(url, merge(url, options)),
-    put: (url: string, options?: RequestOptions) => request.put(url, merge(url, options)),
-    patch: (url: string, options?: RequestOptions) => request.patch(url, merge(url, options)),
-    delete: (url: string, options?: RequestOptions) => request.delete(url, merge(url, options)),
-    head: (url: string, options?: RequestOptions) => request.head(url, merge(url, options)),
-    fetch: (urlOrRequest: string | PlaywrightRequest, options?: RequestOptions) =>
-      request.fetch(urlOrRequest, merge(typeof urlOrRequest === 'string' ? urlOrRequest : urlOrRequest.url(), options)),
-    storageState: (options?: { path?: string }) => request.storageState(options),
+    get: (url: string, options?: RequestOptions) =>
+      request.get(url, merge(url, options)),
+    post: (url: string, options?: RequestOptions) =>
+      request.post(url, merge(url, options)),
+    put: (url: string, options?: RequestOptions) =>
+      request.put(url, merge(url, options)),
+    patch: (url: string, options?: RequestOptions) =>
+      request.patch(url, merge(url, options)),
+    delete: (url: string, options?: RequestOptions) =>
+      request.delete(url, merge(url, options)),
+    head: (url: string, options?: RequestOptions) =>
+      request.head(url, merge(url, options)),
+    fetch: (
+      urlOrRequest: string | PlaywrightRequest,
+      options?: RequestOptions,
+    ) =>
+      request.fetch(
+        urlOrRequest,
+        merge(
+          typeof urlOrRequest === 'string' ? urlOrRequest : urlOrRequest.url(),
+          options,
+        ),
+      ),
+    storageState: (options?: { path?: string }) =>
+      request.storageState(options),
     dispose: () => request.dispose(),
   } as APIRequestContext;
 }
@@ -194,10 +224,17 @@ export const test = base.extend<{
         propagation.inject(otelContext.active(), carrier);
       });
       try {
-        await otelContext.with(ctx, () => use({ carrier, apiBaseUrls, testInfo }));
+        await otelContext.with(ctx, () =>
+          use({ carrier, apiBaseUrls, testInfo }),
+        );
       } catch (error) {
-        span.setStatus({ code: SpanStatusCode.ERROR, message: error instanceof Error ? error.message : 'Unknown error' });
-        span.recordException(error instanceof Error ? error : new Error(String(error)));
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
+        span.recordException(
+          error instanceof Error ? error : new Error(String(error)),
+        );
         throw error;
       } finally {
         span.end();
@@ -279,10 +316,18 @@ export async function step<T>(name: string, fn: () => Promise<T>): Promise<T> {
     attributes: { 'step.name': name },
   });
   try {
-    return await otelContext.with(otelTrace.setSpan(otelContext.active(), span), fn);
+    return await otelContext.with(
+      otelTrace.setSpan(otelContext.active(), span),
+      fn,
+    );
   } catch (error) {
-    span.setStatus({ code: SpanStatusCode.ERROR, message: error instanceof Error ? error.message : 'Unknown error' });
-    span.recordException(error instanceof Error ? error : new Error(String(error)));
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+    span.recordException(
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   } finally {
     span.end();
@@ -293,7 +338,9 @@ export async function step<T>(name: string, fn: () => Promise<T>): Promise<T> {
  * Returns a function suitable for Playwright globalSetup that inits autotel.
  * Call autotel.init() with the given options (or defaults) so test spans are exported.
  */
-export function createGlobalSetup(initOptions?: AutotelConfig): () => Promise<void> {
+export function createGlobalSetup(
+  initOptions?: AutotelConfig,
+): () => Promise<void> {
   return async () => {
     const { init } = await import('autotel');
     init({
@@ -355,7 +402,7 @@ export function createTestSpansClient(
       if (!res.ok()) {
         throw new Error(`GET ${path} failed: ${res.status()}`);
       }
-      const body = await res.json() as { spans: SerializedSpan[] };
+      const body = (await res.json()) as { spans: SerializedSpan[] };
       return body.spans;
     },
 

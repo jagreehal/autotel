@@ -1,6 +1,6 @@
 # autotel-cli
 
-CLI for autotel — setup wizard, diagnostics, and incremental features.
+CLI for autotel. Setup wizard, diagnostics, and incremental features.
 
 Designed for **both humans and AI agents**: every command supports `--json`,
 errors are returned as a structured envelope with stable `AUTOTEL_E_*` codes,
@@ -46,34 +46,35 @@ individually.
 
 **Options:**
 
-| Flag | What it does |
-| --- | --- |
-| `--yes, -y` | Auto-apply detected items; no prompts |
-| `--preset <name>` | Use a named quick preset (skips detection) |
-| `--dry-run` | Print plan; write nothing |
-| `--no-install` | Generate files only; print install command |
-| `--force` | Overwrite a hand-edited instrumentation file (backup written) |
-| `--no-detect` | Skip auto-detection; requires `--plan`, `--input`, or `--preset` |
-| `--detect-only` | Print the detected plan and exit |
-| `--plan <path>` | Apply a pre-built `InitPlan` JSON file |
-| `--input -` / `--input <path>` | Read `InitPlan` JSON from stdin or a file |
-| `--scan-env` | Consent to reading `.env` / `.env.local` for backend detection |
-| `--json` | Machine-readable JSON instead of human output |
-| `--output-file <path>` | Persist JSON output to a file |
-| `--no-secrets-in-output` | Redact secret-shaped values (`*KEY*`, `*TOKEN*`, etc.) |
-| `--no-interactive` | Fail fast instead of prompting |
+| Flag                           | What it does                                                     |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `--yes, -y`                    | Auto-apply detected items; no prompts                            |
+| `--preset <name>`              | Use a named quick preset (skips detection)                       |
+| `--dry-run`                    | Print plan; write nothing                                        |
+| `--no-install`                 | Generate files only; print install command                       |
+| `--force`                      | Overwrite a hand-edited instrumentation file (backup written)    |
+| `--no-detect`                  | Skip auto-detection; requires `--plan`, `--input`, or `--preset` |
+| `--detect-only`                | Print the detected plan and exit                                 |
+| `--plan <path>`                | Apply a pre-built `InitPlan` JSON file                           |
+| `--input -` / `--input <path>` | Read `InitPlan` JSON from stdin or a file                        |
+| `--scan-env`                   | Consent to reading `.env` / `.env.local` for backend detection   |
+| `--json`                       | Machine-readable JSON instead of human output                    |
+| `--output-file <path>`         | Persist JSON output to a file                                    |
+| `--no-secrets-in-output`       | Redact secret-shaped values (`*KEY*`, `*TOKEN*`, etc.)           |
+| `--no-interactive`             | Fail fast instead of prompting                                   |
 
 **Detection coverage:**
 
 - **Frameworks (auto-wired):** Hono, MCP servers/clients, TanStack Start
 - **Frameworks (via `auto-instrumentations-node`):** Express, Fastify, NestJS, Next.js, pg, mysql/2, redis, ioredis, GraphQL, AWS SDK
-- **Loggers:** Pino (first-class — `init({ logger })`), Winston/Bunyan (auto-instrumented)
+- **Loggers:** Pino (first-class: `init({ logger })`), Winston/Bunyan (auto-instrumented)
 - **Subscribers:** PostHog, Mixpanel, Amplitude, Segment, Slack
 - **Plugins:** Mongoose, Drizzle, Sentry
 - **Platforms:** Cloudflare (from `wrangler.toml`), AWS Lambda, Edge
 - **Backends from env vars:** `DD_API_KEY` → Datadog, `HONEYCOMB_API_KEY` → Honeycomb, `OTEL_EXPORTER_OTLP_ENDPOINT` → OTLP
 
 **Quick presets:**
+
 - `node-datadog-pino` - Node.js + Datadog + Pino logging
 - `node-datadog-agent` - Node.js + Datadog Agent (local development)
 - `node-honeycomb` - Node.js + Honeycomb
@@ -128,12 +129,14 @@ npx autotel doctor --list-checks
 ```
 
 **Options:**
+
 - `--json` - Output machine-readable JSON
 - `--fix` - Auto-fix resolvable issues
 - `--list-checks` - List all available checks
 - `--env-file <path>` - Specify env file to check
 
 **Exit codes:**
+
 - `0` - All checks passed
 - `1` - Warnings found
 - `2` - Errors found
@@ -163,12 +166,14 @@ npx autotel add backend datadog --help
 ```
 
 **Types:**
+
 - `backend` - Telemetry backends (Datadog, Honeycomb, OTLP, etc.)
 - `subscriber` - Event subscribers (PostHog, Mixpanel, Segment, Slack, etc.)
 - `plugin` - Database/ORM plugins (Mongoose, Drizzle, etc.)
 - `platform` - Platform support (AWS Lambda, Cloudflare Workers, etc.)
 
 **Options:**
+
 - `--list` - List available presets
 - `--dry-run` - Skip installation and print what would be done
 - `--force` - Overwrite non-CLI-owned config (creates backup first)

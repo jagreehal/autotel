@@ -24,8 +24,8 @@
 // that shipped in 5.0.1). The default import binds to protobufjs's `module.exports`, so
 // the constructors resolve in both the ESM and CJS bundles. Guarded by the dist ESM
 // smoke test in `__tests__/otlp-proto.dist.test.ts`.
-import protobuf from 'protobufjs'
-import type { IConversionOptions, Root } from 'protobufjs'
+import protobuf from 'protobufjs';
+import type { IConversionOptions, Root } from 'protobufjs';
 
 const COMMON_PROTO = `
 syntax = "proto3";
@@ -54,7 +54,7 @@ message InstrumentationScope {
   repeated KeyValue attributes = 3;
   uint32 dropped_attributes_count = 4;
 }
-`
+`;
 
 const RESOURCE_PROTO = `
 syntax = "proto3";
@@ -64,7 +64,7 @@ message Resource {
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 1;
   uint32 dropped_attributes_count = 2;
 }
-`
+`;
 
 const TRACE_PROTO = `
 syntax = "proto3";
@@ -135,7 +135,7 @@ message Status {
 message ExportTraceServiceRequest {
   repeated ResourceSpans resource_spans = 1;
 }
-`
+`;
 
 const LOGS_PROTO = `
 syntax = "proto3";
@@ -194,7 +194,7 @@ message LogRecord {
 message ExportLogsServiceRequest {
   repeated ResourceLogs resource_logs = 1;
 }
-`
+`;
 
 // Metrics schema. Decodes the structural envelope AND the Sum/Gauge/Histogram
 // data points (number + histogram), so coding-agent counters
@@ -263,7 +263,7 @@ message HistogramDataPoint {
 message ExportMetricsServiceRequest {
   repeated ResourceMetrics resource_metrics = 1;
 }
-`
+`;
 
 // Mirror the OTLP/JSON encoding so the existing parsers handle protobuf input
 // identically: 64-bit ints as decimal strings, bytes as base64 (IDs are then
@@ -272,38 +272,65 @@ const TO_OBJECT_OPTIONS: IConversionOptions = {
   longs: String,
   bytes: String,
   defaults: false,
-}
+};
 
-let cachedRoot: Root | null = null
+let cachedRoot: Root | null = null;
 
 function getRoot(): Root {
-  if (cachedRoot) return cachedRoot
-  const root = new protobuf.Root()
-  for (const source of [COMMON_PROTO, RESOURCE_PROTO, TRACE_PROTO, LOGS_PROTO, METRICS_PROTO]) {
-    protobuf.parse(source, root, { keepCase: false })
+  if (cachedRoot) return cachedRoot;
+  const root = new protobuf.Root();
+  for (const source of [
+    COMMON_PROTO,
+    RESOURCE_PROTO,
+    TRACE_PROTO,
+    LOGS_PROTO,
+    METRICS_PROTO,
+  ]) {
+    protobuf.parse(source, root, { keepCase: false });
   }
-  root.resolveAll()
-  cachedRoot = root
-  return root
+  root.resolveAll();
+  cachedRoot = root;
+  return root;
 }
 
-function decodeRequest(typeName: string, body: Uint8Array): Record<string, unknown> {
-  const messageType = getRoot().lookupType(typeName)
-  const message = messageType.decode(body)
-  return messageType.toObject(message, TO_OBJECT_OPTIONS) as Record<string, unknown>
+function decodeRequest(
+  typeName: string,
+  body: Uint8Array,
+): Record<string, unknown> {
+  const messageType = getRoot().lookupType(typeName);
+  const message = messageType.decode(body);
+  return messageType.toObject(message, TO_OBJECT_OPTIONS) as Record<
+    string,
+    unknown
+  >;
 }
 
 /** Decode an OTLP/protobuf `ExportTraceServiceRequest` into the OTLP/JSON object shape. */
-export function decodeOtlpTraceRequest(body: Uint8Array): Record<string, unknown> {
-  return decodeRequest('opentelemetry.proto.trace.v1.ExportTraceServiceRequest', body)
+export function decodeOtlpTraceRequest(
+  body: Uint8Array,
+): Record<string, unknown> {
+  return decodeRequest(
+    'opentelemetry.proto.trace.v1.ExportTraceServiceRequest',
+    body,
+  );
 }
 
 /** Decode an OTLP/protobuf `ExportLogsServiceRequest` into the OTLP/JSON object shape. */
-export function decodeOtlpLogsRequest(body: Uint8Array): Record<string, unknown> {
-  return decodeRequest('opentelemetry.proto.logs.v1.ExportLogsServiceRequest', body)
+export function decodeOtlpLogsRequest(
+  body: Uint8Array,
+): Record<string, unknown> {
+  return decodeRequest(
+    'opentelemetry.proto.logs.v1.ExportLogsServiceRequest',
+    body,
+  );
 }
 
 /** Decode an OTLP/protobuf `ExportMetricsServiceRequest` into the OTLP/JSON object shape. */
-export function decodeOtlpMetricsRequest(body: Uint8Array): Record<string, unknown> {
-  return decodeRequest('opentelemetry.proto.metrics.v1.ExportMetricsServiceRequest', body)
+export function decodeOtlpMetricsRequest(
+  body: Uint8Array,
+): Record<string, unknown> {
+  return decodeRequest(
+    'opentelemetry.proto.metrics.v1.ExportMetricsServiceRequest',
+    body,
+  );
 }

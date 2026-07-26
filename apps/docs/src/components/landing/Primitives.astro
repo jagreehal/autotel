@@ -8,12 +8,10 @@ const items = [
       'Wrap a handler. Autotel records the spans, the errors, and the request context.',
     code: `import { trace } from 'autotel';
 
-export const checkout = trace((ctx) =>
-  async (req, res) => {
-    const result = await charge(req.body);
-    return res.json(result);
-  },
-);`,
+export const checkout = trace(async (req, res) => {
+  const result = await charge(req.body);
+  return res.json(result);
+});`,
   },
   {
     label: '02',

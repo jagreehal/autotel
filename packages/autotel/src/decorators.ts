@@ -108,7 +108,6 @@ export function Trace(
   const name =
     typeof nameOrOptions === 'string' ? nameOrOptions : nameOrOptions?.name;
   // Options are used in the returned decorator function, not here
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _options: TraceDecoratorOptions =
     typeof nameOrOptions === 'string'
       ? maybeOptions || {}

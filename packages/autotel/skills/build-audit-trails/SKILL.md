@@ -17,9 +17,9 @@ license: MIT
 
 # Build audit trails
 
-An _audit trail_ is a record of who did what to which resource, when, and whether it was permitted — durable, tamper-evident, and admissible. Operational telemetry (latency, errors, span shapes) is for engineers; audit trails are for compliance, security, and forensics. They overlap technically but differ on every other axis.
+An _audit trail_ is a record of who did what to which resource, when, and whether it was permitted. Durable, tamper-evident, and admissible. Operational telemetry (latency, errors, span shapes) is for engineers; audit trails are for compliance, security, and forensics. They overlap technically but differ on every other axis.
 
-autotel lets you express both with the same primitive — a span — but you should keep them on **separate processors** so an audit event never gets dropped by sampling, never gets redacted by a debug rule, and never goes to the same backend as your ops data.
+autotel lets you express both with the same primitive, a span, but you should keep them on **separate processors** so an audit event never gets dropped by sampling, never gets redacted by a debug rule, and never goes to the same backend as your ops data.
 
 ## When to use
 
@@ -251,14 +251,14 @@ Verify on the read side: recompute the HMAC over the same sorted attribute set (
 
 For multi-tenant or extra-strict (HIPAA), use Ed25519 with per-environment keys and rotate.
 
-## Step 5: Redaction — what stays and what goes
+## Step 5: Redaction: what stays and what goes
 
 | Field                    | In audit span? | Notes                                                                                 |
 | ------------------------ | -------------- | ------------------------------------------------------------------------------------- |
 | `enduser.id`             | ✅             | Internal user id; never the email                                                     |
 | `audit.resource.id`      | ✅             | Required for forensics                                                                |
 | `client.address`         | ✅             | Last-octet redaction acceptable for IPv4                                              |
-| Free-form payload bodies | ❌             | Never inline raw input — link by id (`audit.evidence.id`)                             |
+| Free-form payload bodies | ❌             | Never inline raw input: link by id (`audit.evidence.id`)                              |
 | Secret values            | ❌             | Use `audit.action=secret.read` + `audit.resource.id=sec_abc`, never the secret itself |
 | Authorization headers    | ❌             | Token names ok (`bearer.*`), values never                                             |
 
@@ -356,7 +356,7 @@ app.post('/secrets/:id/read', async (c) => {
 
 ### Cloudflare Workers
 
-`audit()` from inside `defineWorkerFetch` — `ctx.waitUntil` makes sure the audit span is exported before the response returns:
+`audit()` from inside `defineWorkerFetch`. `ctx.waitUntil` makes sure the audit span is exported before the response returns:
 
 ```typescript
 export default defineWorkerFetch(
@@ -452,9 +452,9 @@ To query the trail (denials, per-actor history, tamper detection) across Honeyco
 
 ## Glossary
 
-- **Audit span** — an OpenTelemetry span that records who did what to which resource, marked `audit` / `autotel.audit` so it is routed and retained separately from ops telemetry.
-- **Force-keep** — opting a span out of tail sampling so it is always exported; `forceKeepAuditEvent()` sets the autotel tail-keep flags.
-- **Denial** — an authorization decision that blocked an action; recorded with `audit.outcome = 'deny'` and a reason. Logging denials is as important as logging successes.
-- **Hash-chain** — linking each audit record to the hash of the previous one so removing or reordering records is detectable.
-- **Crypto-shredding** — satisfying an erasure request by destroying the per-subject encryption key rather than deleting the immutable record.
-- **Append-only store** — a backend that rejects updates and deletes (S3 Object Lock, immutable bucket, WORM storage), the destination for audit spans.
+- **Audit span**: an OpenTelemetry span that records who did what to which resource, marked `audit` / `autotel.audit` so it is routed and retained separately from ops telemetry.
+- **Force-keep**: opting a span out of tail sampling so it is always exported; `forceKeepAuditEvent()` sets the autotel tail-keep flags.
+- **Denial**: an authorization decision that blocked an action; recorded with `audit.outcome = 'deny'` and a reason. Logging denials is as important as logging successes.
+- **Hash-chain**: linking each audit record to the hash of the previous one so removing or reordering records is detectable.
+- **Crypto-shredding**: satisfying an erasure request by destroying the per-subject encryption key rather than deleting the immutable record.
+- **Append-only store**: a backend that rejects updates and deletes (S3 Object Lock, immutable bucket, WORM storage), the destination for audit spans.

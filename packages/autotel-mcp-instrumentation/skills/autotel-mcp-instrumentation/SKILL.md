@@ -24,11 +24,11 @@ instrumentMCPServer(server);
 
 ## Entry points
 
-- `autotel-mcp-instrumentation` — all exports
-- `autotel-mcp-instrumentation/server` — server instrumentation only
-- `autotel-mcp-instrumentation/client` — client instrumentation only
-- `autotel-mcp-instrumentation/context` — extract/inject context from `_meta`
-- `autotel-mcp-instrumentation/security` — classifier, spotlighting, budget helpers
+- `autotel-mcp-instrumentation`: all exports
+- `autotel-mcp-instrumentation/server`: server instrumentation only
+- `autotel-mcp-instrumentation/client`: client instrumentation only
+- `autotel-mcp-instrumentation/context`: extract/inject context from `_meta`
+- `autotel-mcp-instrumentation/security`: classifier, spotlighting, budget helpers
 
 ## Core patterns
 
@@ -38,7 +38,7 @@ Context is carried in the JSON payload `_meta` field (traceparent, tracestate, b
 
 The MCP boundary is where untrusted data enters an agent. This package makes the
 agentic-web threat model (Chrome/Google WebMCP guidance) observable at that edge.
-It **observes and signals** — it does NOT enforce. Deterministic kill-switches
+It **observes and signals**. It does NOT enforce. Deterministic kill-switches
 (cost/token/tool-call ceilings, loop detection) live in `autotel-genai/guard`;
 identity/scope/policy in `autotel-genai/agent`. Recommend those for enforcement,
 this for detection.
@@ -84,7 +84,7 @@ Source: packages/autotel-mcp-instrumentation/CLAUDE.md
 
 ### MEDIUM Treat the built-in heuristic classifier as ground truth
 
-`heuristicInjectionClassifier()` is a cheap tripwire — false positives and missed novel attacks are expected. Use it as a signal feeding a real classifier (Model Armor) or an LLM critic; never gate destructive actions on it alone.
+`heuristicInjectionClassifier()` is a cheap tripwire. False positives and missed novel attacks are expected. Use it as a signal feeding a real classifier (Model Armor) or an LLM critic; never gate destructive actions on it alone.
 
 Source: packages/autotel-mcp-instrumentation/security.ts
 

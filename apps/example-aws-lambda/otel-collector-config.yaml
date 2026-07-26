@@ -15,7 +15,7 @@ exporters:
   # Console exporter for debugging
   debug:
     verbosity: detailed
-  
+
   # Logging exporter
   logging:
     loglevel: info

@@ -1,5 +1,5 @@
 import { SpanStatusCode } from '@opentelemetry/api';
-import { trace, SpanKind, type TraceContext } from 'autotel';
+import { withTracing, SpanKind, type TraceContext } from 'autotel';
 import { injectOtelContextToMeta } from './context';
 import {
   type McpInstrumentationConfig,
@@ -105,59 +105,59 @@ function wrapDiscoveryMethod(
     params?: any,
     options?: any,
   ) {
-    return await trace(
-      { name: spanName, spanKind: SpanKind.CLIENT },
-      async (ctx: TraceContext) => {
-        const startTime = performance.now();
+    return await withTracing({
+      name: spanName,
+      spanKind: SpanKind.CLIENT,
+    })((ctx: TraceContext) => async () => {
+      const startTime = performance.now();
 
-        ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+      ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
 
-        if (config.networkTransport) {
+      if (config.networkTransport) {
+        ctx.setAttribute(
+          MCP_SEMCONV.NETWORK_TRANSPORT,
+          config.networkTransport,
+        );
+      }
+      if (config.sessionId) {
+        ctx.setAttribute(MCP_SEMCONV.SESSION_ID, config.sessionId);
+      }
+
+      try {
+        const result = await Reflect.apply(originalFn, target, [
+          params,
+          options,
+        ]);
+        ctx.setStatus({ code: SpanStatusCode.OK });
+
+        if (config.enableMetrics) {
+          const durationS = (performance.now() - startTime) / 1000;
+          recordClientOperationDuration(durationS, {
+            [MCP_SEMCONV.METHOD_NAME]: methodName,
+          });
+        }
+
+        return result;
+      } catch (error) {
+        if (config.captureErrors) {
+          ctx.recordError(error);
           ctx.setAttribute(
-            MCP_SEMCONV.NETWORK_TRANSPORT,
-            config.networkTransport,
+            MCP_SEMCONV.ERROR_TYPE,
+            (error as Error).name || 'Error',
           );
         }
-        if (config.sessionId) {
-          ctx.setAttribute(MCP_SEMCONV.SESSION_ID, config.sessionId);
+
+        if (config.enableMetrics) {
+          const durationS = (performance.now() - startTime) / 1000;
+          recordClientOperationDuration(durationS, {
+            [MCP_SEMCONV.METHOD_NAME]: methodName,
+            [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+          });
         }
 
-        try {
-          const result = await Reflect.apply(originalFn, target, [
-            params,
-            options,
-          ]);
-          ctx.setStatus({ code: SpanStatusCode.OK });
-
-          if (config.enableMetrics) {
-            const durationS = (performance.now() - startTime) / 1000;
-            recordClientOperationDuration(durationS, {
-              [MCP_SEMCONV.METHOD_NAME]: methodName,
-            });
-          }
-
-          return result;
-        } catch (error) {
-          if (config.captureErrors) {
-            ctx.recordError(error);
-            ctx.setAttribute(
-              MCP_SEMCONV.ERROR_TYPE,
-              (error as Error).name || 'Error',
-            );
-          }
-
-          if (config.enableMetrics) {
-            const durationS = (performance.now() - startTime) / 1000;
-            recordClientOperationDuration(durationS, {
-              [MCP_SEMCONV.METHOD_NAME]: methodName,
-              [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
-            });
-          }
-
-          throw error;
-        }
-      },
-    );
+        throw error;
+      }
+    })();
   };
 }
 
@@ -219,201 +219,194 @@ export function instrumentMcpClient<T extends Record<string, any>>(
           const { name, arguments: args } = params;
           const methodName = MCP_METHODS.TOOLS_CALL;
 
-          return await trace(
-            { name: `${methodName} ${name}`, spanKind: SpanKind.CLIENT },
-            async (ctx: TraceContext) => {
-              const startTime = performance.now();
+          return await withTracing({
+            name: `${methodName} ${name}`,
+            spanKind: SpanKind.CLIENT,
+          })((ctx: TraceContext) => async () => {
+            const startTime = performance.now();
 
-              // Required
-              ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+            // Required
+            ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
 
-              // Conditionally required
-              ctx.setAttribute(MCP_SEMCONV.TOOL_NAME, name);
+            // Conditionally required
+            ctx.setAttribute(MCP_SEMCONV.TOOL_NAME, name);
 
-              // Recommended
-              ctx.setAttribute(MCP_SEMCONV.OPERATION_NAME, 'execute_tool');
-              if (mergedConfig.networkTransport) {
+            // Recommended
+            ctx.setAttribute(MCP_SEMCONV.OPERATION_NAME, 'execute_tool');
+            if (mergedConfig.networkTransport) {
+              ctx.setAttribute(
+                MCP_SEMCONV.NETWORK_TRANSPORT,
+                mergedConfig.networkTransport,
+              );
+            }
+            if (mergedConfig.sessionId) {
+              ctx.setAttribute(MCP_SEMCONV.SESSION_ID, mergedConfig.sessionId);
+            }
+
+            // Security: argument size signal + classifier (outbound vector)
+            if (args !== undefined) {
+              if (mergedConfig.recordPayloadSize) {
+                recordPayloadSize(ctx, MCP_SEMCONV.TOOL_ARGUMENTS_SIZE, args);
+              }
+              await classifyClient(
+                ctx,
+                mergedConfig,
+                'arguments',
+                'tool',
+                name,
+                args,
+              );
+            }
+
+            // Opt-in: tool arguments
+            if (mergedConfig.captureToolArgs && args !== undefined) {
+              try {
                 ctx.setAttribute(
-                  MCP_SEMCONV.NETWORK_TRANSPORT,
-                  mergedConfig.networkTransport,
+                  MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+                  JSON.stringify(args),
+                );
+              } catch {
+                ctx.setAttribute(
+                  MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+                  '[Circular or non-serializable]',
                 );
               }
-              if (mergedConfig.sessionId) {
-                ctx.setAttribute(
-                  MCP_SEMCONV.SESSION_ID,
-                  mergedConfig.sessionId,
-                );
-              }
+            }
 
-              // Security: argument size signal + classifier (outbound vector)
-              if (args !== undefined) {
-                if (mergedConfig.recordPayloadSize) {
-                  recordPayloadSize(ctx, MCP_SEMCONV.TOOL_ARGUMENTS_SIZE, args);
+            // Custom attributes (pre-call)
+            if (mergedConfig.customAttributes) {
+              const customAttrs = mergedConfig.customAttributes({
+                type: 'tool',
+                name,
+                args,
+              });
+              ctx.setAttributes(
+                customAttrs as Record<string, string | number | boolean>,
+              );
+            }
+
+            // Tracks whether the tool itself returned, so a guard `stop`
+            // thrown on the success path is not re-recorded as a tool error.
+            let toolSucceeded = false;
+
+            try {
+              // Inject trace context into _meta field
+              const meta = injectOtelContextToMeta();
+              const paramsWithMeta = {
+                ...params,
+                _meta: { ...params._meta, ...meta },
+              };
+
+              const result = await Reflect.apply(value, target, [
+                paramsWithMeta,
+                resultSchema,
+                options,
+              ]);
+              toolSucceeded = true;
+
+              // Security: result size, output budget, classifier (contaminated-output vector)
+              if (result !== undefined) {
+                const resultSize = mergedConfig.recordPayloadSize
+                  ? recordPayloadSize(ctx, MCP_SEMCONV.TOOL_RESULT_SIZE, result)
+                  : safeStringify(result).length;
+                if (mergedConfig.outputCharBudget !== undefined) {
+                  enforceOutputBudget(
+                    ctx,
+                    resultSize,
+                    mergedConfig.outputCharBudget,
+                    { [MCP_SEMCONV.TOOL_NAME]: name },
+                    securityBridge(mergedConfig, name),
+                  );
                 }
                 await classifyClient(
                   ctx,
                   mergedConfig,
-                  'arguments',
+                  'result',
                   'tool',
                   name,
-                  args,
+                  result,
                 );
               }
 
-              // Opt-in: tool arguments
-              if (mergedConfig.captureToolArgs && args !== undefined) {
+              // Enforcement: feed the genai guard. A `stop` rule throws here.
+              if (mergedConfig.guard) {
+                recordGuardStep(
+                  mergedConfig.guard,
+                  { name, signature: safeStringify(args), error: false },
+                  ctx,
+                );
+              }
+
+              // Opt-in: tool results
+              if (mergedConfig.captureToolResults && result !== undefined) {
                 try {
                   ctx.setAttribute(
-                    MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
-                    JSON.stringify(args),
+                    MCP_SEMCONV.TOOL_CALL_RESULT,
+                    JSON.stringify(result),
                   );
                 } catch {
                   ctx.setAttribute(
-                    MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+                    MCP_SEMCONV.TOOL_CALL_RESULT,
                     '[Circular or non-serializable]',
                   );
                 }
               }
 
-              // Custom attributes (pre-call)
+              // Custom attributes (post-call with result)
               if (mergedConfig.customAttributes) {
                 const customAttrs = mergedConfig.customAttributes({
                   type: 'tool',
                   name,
                   args,
+                  result,
                 });
                 ctx.setAttributes(
                   customAttrs as Record<string, string | number | boolean>,
                 );
               }
 
-              // Tracks whether the tool itself returned, so a guard `stop`
-              // thrown on the success path is not re-recorded as a tool error.
-              let toolSucceeded = false;
+              ctx.setStatus({ code: SpanStatusCode.OK });
 
-              try {
-                // Inject trace context into _meta field
-                const meta = injectOtelContextToMeta();
-                const paramsWithMeta = {
-                  ...params,
-                  _meta: { ...params._meta, ...meta },
-                };
-
-                const result = await Reflect.apply(value, target, [
-                  paramsWithMeta,
-                  resultSchema,
-                  options,
-                ]);
-                toolSucceeded = true;
-
-                // Security: result size, output budget, classifier (contaminated-output vector)
-                if (result !== undefined) {
-                  const resultSize = mergedConfig.recordPayloadSize
-                    ? recordPayloadSize(
-                        ctx,
-                        MCP_SEMCONV.TOOL_RESULT_SIZE,
-                        result,
-                      )
-                    : safeStringify(result).length;
-                  if (mergedConfig.outputCharBudget !== undefined) {
-                    enforceOutputBudget(
-                      ctx,
-                      resultSize,
-                      mergedConfig.outputCharBudget,
-                      { [MCP_SEMCONV.TOOL_NAME]: name },
-                      securityBridge(mergedConfig, name),
-                    );
-                  }
-                  await classifyClient(
-                    ctx,
-                    mergedConfig,
-                    'result',
-                    'tool',
-                    name,
-                    result,
-                  );
-                }
-
-                // Enforcement: feed the genai guard. A `stop` rule throws here.
-                if (mergedConfig.guard) {
-                  recordGuardStep(
-                    mergedConfig.guard,
-                    { name, signature: safeStringify(args), error: false },
-                    ctx,
-                  );
-                }
-
-                // Opt-in: tool results
-                if (mergedConfig.captureToolResults && result !== undefined) {
-                  try {
-                    ctx.setAttribute(
-                      MCP_SEMCONV.TOOL_CALL_RESULT,
-                      JSON.stringify(result),
-                    );
-                  } catch {
-                    ctx.setAttribute(
-                      MCP_SEMCONV.TOOL_CALL_RESULT,
-                      '[Circular or non-serializable]',
-                    );
-                  }
-                }
-
-                // Custom attributes (post-call with result)
-                if (mergedConfig.customAttributes) {
-                  const customAttrs = mergedConfig.customAttributes({
-                    type: 'tool',
-                    name,
-                    args,
-                    result,
-                  });
-                  ctx.setAttributes(
-                    customAttrs as Record<string, string | number | boolean>,
-                  );
-                }
-
-                ctx.setStatus({ code: SpanStatusCode.OK });
-
-                if (mergedConfig.enableMetrics) {
-                  const durationS = (performance.now() - startTime) / 1000;
-                  recordClientOperationDuration(durationS, {
-                    [MCP_SEMCONV.METHOD_NAME]: methodName,
-                    [MCP_SEMCONV.TOOL_NAME]: name,
-                  });
-                }
-
-                return result;
-              } catch (error) {
-                if (mergedConfig.captureErrors) {
-                  ctx.recordError(error);
-                  ctx.setAttribute(
-                    MCP_SEMCONV.ERROR_TYPE,
-                    (error as Error).name || 'Error',
-                  );
-                }
-
-                if (mergedConfig.enableMetrics) {
-                  const durationS = (performance.now() - startTime) / 1000;
-                  recordClientOperationDuration(durationS, {
-                    [MCP_SEMCONV.METHOD_NAME]: methodName,
-                    [MCP_SEMCONV.TOOL_NAME]: name,
-                    [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
-                  });
-                }
-
-                // Enforcement: record a failed step (error-loop detection) only
-                // when the tool itself failed — not when the guard stopped us.
-                if (mergedConfig.guard && !toolSucceeded) {
-                  recordGuardStep(
-                    mergedConfig.guard,
-                    { name, signature: safeStringify(args), error: true },
-                    ctx,
-                  );
-                }
-
-                throw error;
+              if (mergedConfig.enableMetrics) {
+                const durationS = (performance.now() - startTime) / 1000;
+                recordClientOperationDuration(durationS, {
+                  [MCP_SEMCONV.METHOD_NAME]: methodName,
+                  [MCP_SEMCONV.TOOL_NAME]: name,
+                });
               }
-            },
-          );
+
+              return result;
+            } catch (error) {
+              if (mergedConfig.captureErrors) {
+                ctx.recordError(error);
+                ctx.setAttribute(
+                  MCP_SEMCONV.ERROR_TYPE,
+                  (error as Error).name || 'Error',
+                );
+              }
+
+              if (mergedConfig.enableMetrics) {
+                const durationS = (performance.now() - startTime) / 1000;
+                recordClientOperationDuration(durationS, {
+                  [MCP_SEMCONV.METHOD_NAME]: methodName,
+                  [MCP_SEMCONV.TOOL_NAME]: name,
+                  [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                });
+              }
+
+              // Enforcement: record a failed step (error-loop detection) only
+              // when the tool itself failed — not when the guard stopped us.
+              if (mergedConfig.guard && !toolSucceeded) {
+                recordGuardStep(
+                  mergedConfig.guard,
+                  { name, signature: safeStringify(args), error: true },
+                  ctx,
+                );
+              }
+
+              throw error;
+            }
+          })();
         };
       }
 
@@ -427,129 +420,126 @@ export function instrumentMcpClient<T extends Record<string, any>>(
           const uri = params.uri;
           const methodName = MCP_METHODS.RESOURCES_READ;
 
-          return await trace(
-            { name: methodName, spanKind: SpanKind.CLIENT },
-            async (ctx: TraceContext) => {
-              const startTime = performance.now();
+          return await withTracing({
+            name: methodName,
+            spanKind: SpanKind.CLIENT,
+          })((ctx: TraceContext) => async () => {
+            const startTime = performance.now();
 
-              ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
-              ctx.setAttribute(MCP_SEMCONV.RESOURCE_URI, uri);
+            ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+            ctx.setAttribute(MCP_SEMCONV.RESOURCE_URI, uri);
 
-              if (mergedConfig.networkTransport) {
-                ctx.setAttribute(
-                  MCP_SEMCONV.NETWORK_TRANSPORT,
-                  mergedConfig.networkTransport,
+            if (mergedConfig.networkTransport) {
+              ctx.setAttribute(
+                MCP_SEMCONV.NETWORK_TRANSPORT,
+                mergedConfig.networkTransport,
+              );
+            }
+            if (mergedConfig.sessionId) {
+              ctx.setAttribute(MCP_SEMCONV.SESSION_ID, mergedConfig.sessionId);
+            }
+
+            if (mergedConfig.customAttributes) {
+              const customAttrs = mergedConfig.customAttributes({
+                type: 'resource',
+                name: uri,
+                args: params,
+              });
+              ctx.setAttributes(
+                customAttrs as Record<string, string | number | boolean>,
+              );
+            }
+
+            if (params !== undefined) {
+              if (mergedConfig.recordPayloadSize) {
+                recordPayloadSize(
+                  ctx,
+                  getPayloadSizeAttribute('resource', 'arguments'),
+                  params,
                 );
               }
-              if (mergedConfig.sessionId) {
-                ctx.setAttribute(
-                  MCP_SEMCONV.SESSION_ID,
-                  mergedConfig.sessionId,
-                );
-              }
+              await classifyClient(
+                ctx,
+                mergedConfig,
+                'arguments',
+                'resource',
+                uri,
+                params,
+              );
+            }
 
-              if (mergedConfig.customAttributes) {
-                const customAttrs = mergedConfig.customAttributes({
-                  type: 'resource',
-                  name: uri,
-                  args: params,
-                });
-                ctx.setAttributes(
-                  customAttrs as Record<string, string | number | boolean>,
-                );
-              }
+            try {
+              // Inject trace context into params._meta
+              const meta = injectOtelContextToMeta();
+              const paramsWithMeta = {
+                ...params,
+                _meta: { ...params._meta, ...meta },
+              };
 
-              if (params !== undefined) {
-                if (mergedConfig.recordPayloadSize) {
-                  recordPayloadSize(
+              const result = await Reflect.apply(value, target, [
+                paramsWithMeta,
+                options,
+              ]);
+
+              if (result !== undefined) {
+                const resultSize = mergedConfig.recordPayloadSize
+                  ? recordPayloadSize(
+                      ctx,
+                      getPayloadSizeAttribute('resource', 'result'),
+                      result,
+                    )
+                  : safeStringify(result).length;
+                if (mergedConfig.outputCharBudget !== undefined) {
+                  enforceOutputBudget(
                     ctx,
-                    getPayloadSizeAttribute('resource', 'arguments'),
-                    params,
+                    resultSize,
+                    mergedConfig.outputCharBudget,
+                    getEntityAttributes('resource', uri),
+                    securityBridge(mergedConfig, uri),
                   );
                 }
                 await classifyClient(
                   ctx,
                   mergedConfig,
-                  'arguments',
+                  'result',
                   'resource',
                   uri,
-                  params,
+                  result,
                 );
               }
 
-              try {
-                // Inject trace context into params._meta
-                const meta = injectOtelContextToMeta();
-                const paramsWithMeta = {
-                  ...params,
-                  _meta: { ...params._meta, ...meta },
-                };
+              ctx.setStatus({ code: SpanStatusCode.OK });
 
-                const result = await Reflect.apply(value, target, [
-                  paramsWithMeta,
-                  options,
-                ]);
-
-                if (result !== undefined) {
-                  const resultSize = mergedConfig.recordPayloadSize
-                    ? recordPayloadSize(
-                        ctx,
-                        getPayloadSizeAttribute('resource', 'result'),
-                        result,
-                      )
-                    : safeStringify(result).length;
-                  if (mergedConfig.outputCharBudget !== undefined) {
-                    enforceOutputBudget(
-                      ctx,
-                      resultSize,
-                      mergedConfig.outputCharBudget,
-                      getEntityAttributes('resource', uri),
-                      securityBridge(mergedConfig, uri),
-                    );
-                  }
-                  await classifyClient(
-                    ctx,
-                    mergedConfig,
-                    'result',
-                    'resource',
-                    uri,
-                    result,
-                  );
-                }
-
-                ctx.setStatus({ code: SpanStatusCode.OK });
-
-                if (mergedConfig.enableMetrics) {
-                  const durationS = (performance.now() - startTime) / 1000;
-                  recordClientOperationDuration(durationS, {
-                    [MCP_SEMCONV.METHOD_NAME]: methodName,
-                    [MCP_SEMCONV.RESOURCE_URI]: uri,
-                  });
-                }
-
-                return result;
-              } catch (error) {
-                if (mergedConfig.captureErrors) {
-                  ctx.recordError(error);
-                  ctx.setAttribute(
-                    MCP_SEMCONV.ERROR_TYPE,
-                    (error as Error).name || 'Error',
-                  );
-                }
-
-                if (mergedConfig.enableMetrics) {
-                  const durationS = (performance.now() - startTime) / 1000;
-                  recordClientOperationDuration(durationS, {
-                    [MCP_SEMCONV.METHOD_NAME]: methodName,
-                    [MCP_SEMCONV.RESOURCE_URI]: uri,
-                    [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
-                  });
-                }
-
-                throw error;
+              if (mergedConfig.enableMetrics) {
+                const durationS = (performance.now() - startTime) / 1000;
+                recordClientOperationDuration(durationS, {
+                  [MCP_SEMCONV.METHOD_NAME]: methodName,
+                  [MCP_SEMCONV.RESOURCE_URI]: uri,
+                });
               }
-            },
-          );
+
+              return result;
+            } catch (error) {
+              if (mergedConfig.captureErrors) {
+                ctx.recordError(error);
+                ctx.setAttribute(
+                  MCP_SEMCONV.ERROR_TYPE,
+                  (error as Error).name || 'Error',
+                );
+              }
+
+              if (mergedConfig.enableMetrics) {
+                const durationS = (performance.now() - startTime) / 1000;
+                recordClientOperationDuration(durationS, {
+                  [MCP_SEMCONV.METHOD_NAME]: methodName,
+                  [MCP_SEMCONV.RESOURCE_URI]: uri,
+                  [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                });
+              }
+
+              throw error;
+            }
+          })();
         };
       }
 
@@ -563,129 +553,126 @@ export function instrumentMcpClient<T extends Record<string, any>>(
           const { name, arguments: args } = params;
           const methodName = MCP_METHODS.PROMPTS_GET;
 
-          return await trace(
-            { name: `${methodName} ${name}`, spanKind: SpanKind.CLIENT },
-            async (ctx: TraceContext) => {
-              const startTime = performance.now();
+          return await withTracing({
+            name: `${methodName} ${name}`,
+            spanKind: SpanKind.CLIENT,
+          })((ctx: TraceContext) => async () => {
+            const startTime = performance.now();
 
-              ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
-              ctx.setAttribute(MCP_SEMCONV.PROMPT_NAME, name);
+            ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+            ctx.setAttribute(MCP_SEMCONV.PROMPT_NAME, name);
 
-              if (mergedConfig.networkTransport) {
-                ctx.setAttribute(
-                  MCP_SEMCONV.NETWORK_TRANSPORT,
-                  mergedConfig.networkTransport,
+            if (mergedConfig.networkTransport) {
+              ctx.setAttribute(
+                MCP_SEMCONV.NETWORK_TRANSPORT,
+                mergedConfig.networkTransport,
+              );
+            }
+            if (mergedConfig.sessionId) {
+              ctx.setAttribute(MCP_SEMCONV.SESSION_ID, mergedConfig.sessionId);
+            }
+
+            if (mergedConfig.customAttributes) {
+              const customAttrs = mergedConfig.customAttributes({
+                type: 'prompt',
+                name,
+                args,
+              });
+              ctx.setAttributes(
+                customAttrs as Record<string, string | number | boolean>,
+              );
+            }
+
+            if (params !== undefined) {
+              if (mergedConfig.recordPayloadSize) {
+                recordPayloadSize(
+                  ctx,
+                  getPayloadSizeAttribute('prompt', 'arguments'),
+                  params,
                 );
               }
-              if (mergedConfig.sessionId) {
-                ctx.setAttribute(
-                  MCP_SEMCONV.SESSION_ID,
-                  mergedConfig.sessionId,
-                );
-              }
+              await classifyClient(
+                ctx,
+                mergedConfig,
+                'arguments',
+                'prompt',
+                name,
+                params,
+              );
+            }
 
-              if (mergedConfig.customAttributes) {
-                const customAttrs = mergedConfig.customAttributes({
-                  type: 'prompt',
-                  name,
-                  args,
-                });
-                ctx.setAttributes(
-                  customAttrs as Record<string, string | number | boolean>,
-                );
-              }
+            try {
+              // Inject trace context
+              const meta = injectOtelContextToMeta();
+              const paramsWithMeta = {
+                ...params,
+                _meta: { ...params._meta, ...meta },
+              };
 
-              if (params !== undefined) {
-                if (mergedConfig.recordPayloadSize) {
-                  recordPayloadSize(
+              const result = await Reflect.apply(value, target, [
+                paramsWithMeta,
+                options,
+              ]);
+
+              if (result !== undefined) {
+                const resultSize = mergedConfig.recordPayloadSize
+                  ? recordPayloadSize(
+                      ctx,
+                      getPayloadSizeAttribute('prompt', 'result'),
+                      result,
+                    )
+                  : safeStringify(result).length;
+                if (mergedConfig.outputCharBudget !== undefined) {
+                  enforceOutputBudget(
                     ctx,
-                    getPayloadSizeAttribute('prompt', 'arguments'),
-                    params,
+                    resultSize,
+                    mergedConfig.outputCharBudget,
+                    getEntityAttributes('prompt', name),
+                    securityBridge(mergedConfig, name),
                   );
                 }
                 await classifyClient(
                   ctx,
                   mergedConfig,
-                  'arguments',
+                  'result',
                   'prompt',
                   name,
-                  params,
+                  result,
                 );
               }
 
-              try {
-                // Inject trace context
-                const meta = injectOtelContextToMeta();
-                const paramsWithMeta = {
-                  ...params,
-                  _meta: { ...params._meta, ...meta },
-                };
+              ctx.setStatus({ code: SpanStatusCode.OK });
 
-                const result = await Reflect.apply(value, target, [
-                  paramsWithMeta,
-                  options,
-                ]);
-
-                if (result !== undefined) {
-                  const resultSize = mergedConfig.recordPayloadSize
-                    ? recordPayloadSize(
-                        ctx,
-                        getPayloadSizeAttribute('prompt', 'result'),
-                        result,
-                      )
-                    : safeStringify(result).length;
-                  if (mergedConfig.outputCharBudget !== undefined) {
-                    enforceOutputBudget(
-                      ctx,
-                      resultSize,
-                      mergedConfig.outputCharBudget,
-                      getEntityAttributes('prompt', name),
-                      securityBridge(mergedConfig, name),
-                    );
-                  }
-                  await classifyClient(
-                    ctx,
-                    mergedConfig,
-                    'result',
-                    'prompt',
-                    name,
-                    result,
-                  );
-                }
-
-                ctx.setStatus({ code: SpanStatusCode.OK });
-
-                if (mergedConfig.enableMetrics) {
-                  const durationS = (performance.now() - startTime) / 1000;
-                  recordClientOperationDuration(durationS, {
-                    [MCP_SEMCONV.METHOD_NAME]: methodName,
-                    [MCP_SEMCONV.PROMPT_NAME]: name,
-                  });
-                }
-
-                return result;
-              } catch (error) {
-                if (mergedConfig.captureErrors) {
-                  ctx.recordError(error);
-                  ctx.setAttribute(
-                    MCP_SEMCONV.ERROR_TYPE,
-                    (error as Error).name || 'Error',
-                  );
-                }
-
-                if (mergedConfig.enableMetrics) {
-                  const durationS = (performance.now() - startTime) / 1000;
-                  recordClientOperationDuration(durationS, {
-                    [MCP_SEMCONV.METHOD_NAME]: methodName,
-                    [MCP_SEMCONV.PROMPT_NAME]: name,
-                    [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
-                  });
-                }
-
-                throw error;
+              if (mergedConfig.enableMetrics) {
+                const durationS = (performance.now() - startTime) / 1000;
+                recordClientOperationDuration(durationS, {
+                  [MCP_SEMCONV.METHOD_NAME]: methodName,
+                  [MCP_SEMCONV.PROMPT_NAME]: name,
+                });
               }
-            },
-          );
+
+              return result;
+            } catch (error) {
+              if (mergedConfig.captureErrors) {
+                ctx.recordError(error);
+                ctx.setAttribute(
+                  MCP_SEMCONV.ERROR_TYPE,
+                  (error as Error).name || 'Error',
+                );
+              }
+
+              if (mergedConfig.enableMetrics) {
+                const durationS = (performance.now() - startTime) / 1000;
+                recordClientOperationDuration(durationS, {
+                  [MCP_SEMCONV.METHOD_NAME]: methodName,
+                  [MCP_SEMCONV.PROMPT_NAME]: name,
+                  [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                });
+              }
+
+              throw error;
+            }
+          })();
         };
       }
 

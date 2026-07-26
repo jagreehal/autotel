@@ -8,7 +8,7 @@ description: >
 
 MCP server AI agents connect to for querying OpenTelemetry telemetry. Ships with multiple backends, capability-aware tool registration, and first-class LLM analytics (USD cost attribution, token stats, expensive/slow trace ranking).
 
-## Quick Start — pick a backend
+## Quick Start: pick a backend
 
 Add to your MCP client config (e.g. `.mcp.json` for Claude Code):
 
@@ -69,7 +69,7 @@ Probes well-known endpoints and picks what responds. Falls back to fixture data 
 
 ## Tool Catalog
 
-Tools are registered per backend capability — agents only see tools the backend can actually serve.
+Tools are registered per backend capability. Agents only see tools the backend can actually serve.
 
 | Group                     | Tools                                                                                                                                                                                 |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -133,11 +133,11 @@ Where `prices.json` is `{ "model-name": { "inputPerMtok": N, "outputPerMtok": N 
 | `http`    | `POST /mcp`                              | Streamable HTTP MCP clients                      |
 | `sse`     | `GET /sse`, `POST /messages?sessionId=…` | Legacy SSE MCP clients                           |
 
-`GET /health` is always exposed when HTTP/SSE is active — returns `{ status, backend, transport, signals, detail, version }` for k8s readiness probes.
+`GET /health` is always exposed when HTTP/SSE is active. Returns `{ status, backend, transport, signals, detail, version }` for k8s readiness probes.
 
 ## Common Mistakes
 
-- Do NOT expect trace tools to register against a Prometheus-only backend — capability-aware registration hides them, and runtime probing hides tools whose backends are configured-but-unreachable. Check `otel://backend/capabilities` for the live view.
-- Do NOT confuse `autotel-mcp` (the query server) with `autotel-mcp-instrumentation` (the OTel plugin for instrumenting MCP servers themselves) — they're separate packages.
-- Do NOT guess at backend endpoints — `AUTOTEL_BACKEND=auto` probes them for you and composes a `CompositeBackend` automatically.
-- Use `get_llm_expensive_traces` over `get_llm_slow_traces` when answering cost questions — slow traces are ranked by latency, expensive traces by USD spend.
+- Do NOT expect trace tools to register against a Prometheus-only backend: capability-aware registration hides them, and runtime probing hides tools whose backends are configured-but-unreachable. Check `otel://backend/capabilities` for the live view.
+- Do NOT confuse `autotel-mcp` (the query server) with `autotel-mcp-instrumentation` (the OTel plugin for instrumenting MCP servers themselves): they're separate packages.
+- Do NOT guess at backend endpoints: `AUTOTEL_BACKEND=auto` probes them for you and composes a `CompositeBackend` automatically.
+- Use `get_llm_expensive_traces` over `get_llm_slow_traces` when answering cost questions: slow traces are ranked by latency, expensive traces by USD spend.

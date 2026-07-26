@@ -59,7 +59,10 @@ const STABILITY_TRANSITIONS: Record<
   'experimental->stable': { kind: 'neutral', type: 'stability_advanced' },
   'experimental->deprecated': { kind: 'additive', type: 'deprecated' },
   'deprecated->stable': { kind: 'neutral', type: 'stability_advanced' },
-  'deprecated->experimental': { kind: 'breaking', type: 'stability_downgraded' },
+  'deprecated->experimental': {
+    kind: 'breaking',
+    type: 'stability_downgraded',
+  },
 };
 
 function stabilityMessage(
@@ -77,10 +80,7 @@ function stabilityMessage(
   return `attribute "${attribute}" promoted ${prev.stability} → ${next.stability}`;
 }
 
-function push(
-  diff: SnapshotDiff,
-  change: SnapshotChange,
-): void {
+function push(diff: SnapshotDiff, change: SnapshotChange): void {
   if (change.kind === 'breaking') diff.breaking.push(change);
   else if (change.kind === 'additive') diff.additive.push(change);
   else diff.neutral.push(change);
@@ -174,7 +174,9 @@ function diffAttributeMaps(
       // migration (still breaking — but reported as such with the pointer).
       push(diff, {
         kind: 'breaking',
-        type: prevAttr.replacedBy ? 'replacement_documented' : 'attribute_removed',
+        type: prevAttr.replacedBy
+          ? 'replacement_documented'
+          : 'attribute_removed',
         span,
         attribute: key,
         message: prevAttr.replacedBy
@@ -220,7 +222,12 @@ export function diffSnapshots(
     neutral: [],
   };
 
-  diffAttributeMaps(diff, '*', previous.commonAttributes, next.commonAttributes);
+  diffAttributeMaps(
+    diff,
+    '*',
+    previous.commonAttributes,
+    next.commonAttributes,
+  );
 
   for (const [name, prevSpan] of Object.entries(previous.spans)) {
     const nextSpan = next.spans[name];
@@ -256,14 +263,17 @@ export function hasBreakingChanges(diff: SnapshotDiff): boolean {
 
 /** Markdown rendering of a diff — for CI logs and PR comments. */
 export function formatDiff(diff: SnapshotDiff): string {
-  const lines: string[] = [ 
+  const lines: string[] = [
     `# Telemetry contract diff: ${diff.service} ${diff.previousVersion} → ${diff.nextVersion}`,
-    ''];
+    '',
+  ];
   const section = (title: string, changes: SnapshotChange[]) => {
     if (changes.length === 0) return;
     lines.push(`## ${title} (${changes.length})`, '');
     for (const c of changes) {
-      const where = c.attribute ? `\`${c.span}.${c.attribute}\`` : `\`${c.span}\``;
+      const where = c.attribute
+        ? `\`${c.span}.${c.attribute}\``
+        : `\`${c.span}\``;
       lines.push(`- ${where}: ${c.message}`);
     }
     lines.push('');

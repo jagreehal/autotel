@@ -30,6 +30,7 @@ All from `import { ... } from 'autotel'` unless noted.
 Wraps a function with an automatic span. The span starts when the function is called and ends when it returns (or throws).
 
 **Direct pattern** (no span context needed):
+
 ```typescript
 import { trace } from 'autotel';
 
@@ -39,6 +40,7 @@ export const getUser = trace(async (id: string) => {
 ```
 
 **Factory pattern** (access span context to set attributes):
+
 ```typescript
 export const postCheckout = trace((ctx) => async (req: Request) => {
   ctx.setAttribute('user.id', req.userId);
@@ -47,6 +49,7 @@ export const postCheckout = trace((ctx) => async (req: Request) => {
 ```
 
 **Explicit name** (override name inference):
+
 ```typescript
 export const handler = trace('checkout', async (req: Request) => {
   return await processCheckout(req.body);
@@ -54,6 +57,7 @@ export const handler = trace('checkout', async (req: Request) => {
 ```
 
 **Name inference rules** (highest to lowest priority):
+
 1. Explicit name passed to `trace('name', fn)` or `instrument({ key: 'name' })`
 2. Named function: `trace(async function getUser() { ... })` → `getUser`
 3. Const/let/var assignment: `const getUser = trace(async () => { ... })` → `getUser`
@@ -91,7 +95,7 @@ export const handler = instrument({
 
 Returns a request-scoped logger that accumulates attributes and events on the active span. Emits one coherent snapshot per request.
 
-**Requires an active span** — call inside a `trace()` wrapper or after framework middleware creates a span.
+**Requires an active span.** Call inside a `trace()` wrapper or after framework middleware creates a span.
 
 ```typescript
 import { trace, getRequestLogger } from 'autotel';
@@ -114,16 +118,18 @@ export const handler = trace((ctx) => async (req) => {
 ```
 
 When framework middleware creates the span (Hono `otel()`, TanStack `tracingMiddleware()`), call with no args:
+
 ```typescript
 const log = getRequestLogger(); // uses active span from AsyncLocalStorage
 ```
 
 **Methods:**
-- `.set(attributes)` — merge attributes into the snapshot (nested objects OK)
-- `.info(message, attributes?)` — add an info-level log event
-- `.warn(message, attributes?)` — add a warning-level log event
-- `.error(error | message, attributes?)` — add an error-level log event
-- `.emitNow()` — flush the snapshot (all attributes + events) as a span event
+
+- `.set(attributes)`: merge attributes into the snapshot (nested objects OK)
+- `.info(message, attributes?)`: add an info-level log event
+- `.warn(message, attributes?)`: add a warning-level log event
+- `.error(error | message, attributes?)`: add an error-level log event
+- `.emitNow()`: flush the snapshot (all attributes + events) as a span event
 
 ### createStructuredError(options)
 
@@ -133,13 +139,13 @@ Creates an Error with structured fields for machine-parseable diagnostics.
 import { createStructuredError } from 'autotel';
 
 throw createStructuredError({
-  message: 'Payment failed',           // Required — human-readable
-  status: 402,                          // HTTP status code
-  why: 'Card declined by issuer',       // Why it happened
+  message: 'Payment failed', // Required — human-readable
+  status: 402, // HTTP status code
+  why: 'Card declined by issuer', // Why it happened
   fix: 'Try a different payment method', // How to fix
   link: 'https://docs.example.com/pay', // Docs URL
-  code: 'PAYMENT_DECLINED',            // Custom error code
-  cause: originalError,                 // Error chain
+  code: 'PAYMENT_DECLINED', // Custom error code
+  cause: originalError, // Error chain
 });
 ```
 
@@ -221,10 +227,10 @@ init({
 
 ### Configuration Precedence (highest to lowest)
 
-1. **Explicit `init()` parameters** — code config
-2. **YAML file** — `autotel.yaml` or `AUTOTEL_CONFIG_FILE` env var
-3. **Environment variables** — `OTEL_*`, `AUTOTEL_*`
-4. **Built-in defaults** — sensible dev defaults
+1. **Explicit `init()` parameters**: code config
+2. **YAML file**: `autotel.yaml` or `AUTOTEL_CONFIG_FILE` env var
+3. **Environment variables**: `OTEL_*`, `AUTOTEL_*`
+4. **Built-in defaults**: sensible dev defaults
 
 ### YAML Configuration
 
@@ -249,47 +255,56 @@ autoInstrumentations:
 
 ### Environment Variables
 
-- `OTEL_SERVICE_NAME` — service name
-- `OTEL_EXPORTER_OTLP_ENDPOINT` — OTLP collector URL
-- `OTEL_EXPORTER_OTLP_PROTOCOL` — `http` or `grpc`
-- `OTEL_EXPORTER_OTLP_HEADERS` — comma-separated `key=value` pairs
-- `OTEL_RESOURCE_ATTRIBUTES` — comma-separated `key=value` resource attributes
+- `OTEL_SERVICE_NAME`: service name
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP collector URL
+- `OTEL_EXPORTER_OTLP_PROTOCOL`: `http` or `grpc`
+- `OTEL_EXPORTER_OTLP_HEADERS`: comma-separated `key=value` pairs
+- `OTEL_RESOURCE_ATTRIBUTES`: comma-separated `key=value` resource attributes
 
 ## Valid Import Paths
 
 Only import from these public entry points:
 
-| Import Path | What It Contains |
-|-------------|-----------------|
-| `autotel` | Core: trace, span, instrument, init, getRequestLogger, createStructuredError, parseError, track |
-| `autotel/event` | Event class for advanced event creation |
-| `autotel/testing` | createTraceCollector() for test assertions |
-| `autotel/exporters` | InMemorySpanExporter for low-level testing |
-| `autotel/logger` | Pino integration |
-| `autotel/metrics` | Metrics helpers |
-| `autotel/messaging` | Kafka, SQS, RabbitMQ producer/consumer helpers |
-| `autotel/business-baggage` | Safe cross-service context propagation |
-| `autotel/workflow` | Workflow and saga tracing |
-| `autotel/yaml` | loadYamlConfigFromFile() |
-| `autotel/correlation-id` | Correlation ID utilities |
-| `autotel/auto` | Zero-config auto-instrumentation |
-| `autotel-hono` | Hono middleware (otel()) |
-| `autotel-tanstack` | TanStack Start middleware and wrappers |
-| `autotel-tanstack/middleware` | tracingMiddleware() |
-| `autotel-tanstack/server-functions` | traceServerFn() |
-| `autotel-tanstack/loaders` | traceLoader() |
-| `autotel-tanstack/handlers` | wrapStartHandler() |
-| `autotel-tanstack/auto` | Zero-config TanStack Start |
-| `autotel-cloudflare` | Cloudflare Workers wrappers |
-| `autotel-cloudflare/bindings` | Bindings instrumentation |
-| `autotel-mcp-instrumentation` | MCP instrumentation |
-| `autotel-mcp-instrumentation/server` | instrumentMCPServer() |
-| `autotel-mcp-instrumentation/client` | Client instrumentation |
-| `autotel-mcp-instrumentation/context` | MCP context propagation |
-| `autotel-edge` | Edge runtime core |
-| `autotel-edge/sampling` | Sampling strategies |
-| `autotel-edge/events` | Edge events system |
-| `autotel-edge/testing` | Edge testing utilities |
+| Import Path                           | What It Contains                                                                                |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `autotel`                             | Core: trace, span, instrument, init, getRequestLogger, createStructuredError, parseError, track |
+| `autotel/event`                       | Event class for advanced event creation                                                         |
+| `autotel/testing`                     | createTraceCollector() for test assertions                                                      |
+| `autotel/exporters`                   | InMemorySpanExporter for low-level testing                                                      |
+| `autotel/logger`                      | Pino integration                                                                                |
+| `autotel/metric`                      | Metrics helpers (counters, histograms, gauges)                                                  |
+| `autotel/slo`                         | createSloTracker(), evaluateBurnRateAlert()                                                     |
+| `autotel/analysis`                    | compareCohorts(): ranks the fields separating an outlier group from a baseline                  |
+| `autotel/sampling`                    | Sampler implementations and hashUnitInterval()                                                  |
+| `autotel/validate`                    | defineValidator() for boundary validation telemetry                                             |
+| `autotel/attributes`                  | Attribute builders and safeSetAttributes()                                                      |
+| `autotel/messaging`                   | Kafka, SQS, RabbitMQ producer/consumer helpers                                                  |
+| `autotel/business-baggage`            | Safe cross-service context propagation                                                          |
+| `autotel/workflow`                    | Workflow and saga tracing                                                                       |
+| `autotel/yaml`                        | loadYamlConfigFromFile()                                                                        |
+| `autotel/correlation-id`              | Correlation ID utilities                                                                        |
+| `autotel/auto`                        | Zero-config auto-instrumentation                                                                |
+| `autotel-hono`                        | Hono middleware (otel())                                                                        |
+| `autotel-tanstack`                    | TanStack Start middleware and wrappers                                                          |
+| `autotel-tanstack/middleware`         | tracingMiddleware()                                                                             |
+| `autotel-tanstack/server-functions`   | traceServerFn()                                                                                 |
+| `autotel-tanstack/loaders`            | traceLoader()                                                                                   |
+| `autotel-tanstack/handlers`           | wrapStartHandler()                                                                              |
+| `autotel-tanstack/auto`               | Zero-config TanStack Start                                                                      |
+| `autotel-cloudflare`                  | Cloudflare Workers wrappers                                                                     |
+| `autotel-cloudflare/bindings`         | Bindings instrumentation                                                                        |
+| `autotel-mcp-instrumentation`         | MCP instrumentation                                                                             |
+| `autotel-mcp-instrumentation/server`  | instrumentMCPServer()                                                                           |
+| `autotel-mcp-instrumentation/client`  | Client instrumentation                                                                          |
+| `autotel-mcp-instrumentation/context` | MCP context propagation                                                                         |
+| `autotel-edge`                        | Edge runtime core                                                                               |
+| `autotel-edge/sampling`               | Sampling strategies                                                                             |
+| `autotel-edge/events`                 | Edge events system                                                                              |
+| `autotel-edge/testing`                | Edge testing utilities                                                                          |
+
+The `exports` field in `packages/autotel/package.json` is the authoritative
+list; this table covers the entry points you reach for most. Check there before
+concluding an import path is unavailable.
 
 Never import from `autotel/src/...` or internal paths.
 

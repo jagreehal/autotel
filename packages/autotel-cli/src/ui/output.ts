@@ -44,10 +44,16 @@ export function formatSummary(summary: CheckSummary): string {
     parts.push(chalk.green(`${summary.ok} passed`));
   }
   if (summary.warnings > 0) {
-    parts.push(chalk.yellow(`${summary.warnings} warning${summary.warnings > 1 ? 's' : ''}`));
+    parts.push(
+      chalk.yellow(
+        `${summary.warnings} warning${summary.warnings > 1 ? 's' : ''}`,
+      ),
+    );
   }
   if (summary.errors > 0) {
-    parts.push(chalk.red(`${summary.errors} error${summary.errors > 1 ? 's' : ''}`));
+    parts.push(
+      chalk.red(`${summary.errors} error${summary.errors > 1 ? 's' : ''}`),
+    );
   }
   if (summary.skipped > 0) {
     parts.push(chalk.gray(`${summary.skipped} skipped`));
@@ -86,7 +92,7 @@ export function formatFooter(options: {
  */
 export function formatPackageManagerInfo(
   pm: PackageManager,
-  lockfilePath: string | null
+  lockfilePath: string | null,
 ): string {
   if (lockfilePath) {
     return `${pm} (via ${chalk.dim(lockfilePath)})`;
@@ -100,7 +106,7 @@ export function formatPackageManagerInfo(
 export function formatWorkspaceInfo(
   isMonorepo: boolean,
   workspaceRoot: string | null,
-  packageRoot: string
+  packageRoot: string,
 ): string {
   if (!isMonorepo) {
     return `package root ${chalk.dim(packageRoot)}`;

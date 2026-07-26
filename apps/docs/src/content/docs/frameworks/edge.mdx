@@ -11,10 +11,10 @@ Vercel Edge, Netlify Edge, Deno Deploy, and any runtime with `fetch()` and
 libraries. The core SDK ships with sampling, events, logger, and testing
 helpers.
 
-| Bundle                     | Size                       |
-| -------------------------- | -------------------------- |
-| Core (`autotel-edge`)      | ~20KB minified, ~8KB gz    |
-| All entry points combined  | ~25KB minified, ~10KB gz   |
+| Bundle                    | Size                     |
+| ------------------------- | ------------------------ |
+| Core (`autotel-edge`)     | ~20KB minified, ~8KB gz  |
+| All entry points combined | ~25KB minified, ~10KB gz |
 
 > **Cloudflare Workers users:** use [`autotel-cloudflare`](https://www.npmjs.com/package/autotel-cloudflare) instead. It builds on this same foundation and adds complete bindings instrumentation.
 
@@ -35,7 +35,7 @@ npm install autotel-edge
 ## Quick start
 
 ```typescript
-import { trace, init } from 'autotel-edge';
+import { trace, span, withTracing, init } from 'autotel-edge';
 
 init({
   service: { name: 'my-edge-function' },
@@ -69,7 +69,7 @@ const handler = trace(
 );
 
 // Factory pattern — receives ctx, returns the handler
-const handler = trace((ctx) => async (request: Request) => {
+const handler = withTracing({})((ctx) => async (request: Request) => {
   ctx.setAttribute('custom.attr', 'value');
   return new Response('OK');
 });
@@ -157,12 +157,12 @@ init({
 });
 ```
 
-| Preset                             | Behaviour                                |
-| ---------------------------------- | ---------------------------------------- |
-| `SamplingPresets.development()`    | 100% sampling                            |
-| `SamplingPresets.production()`     | 10% baseline + 100% errors + slow >1s    |
-| `SamplingPresets.highTraffic()`    | 1% baseline + 100% errors + slow >1s     |
-| `SamplingPresets.debugging()`      | Errors only                              |
+| Preset                          | Behaviour                             |
+| ------------------------------- | ------------------------------------- |
+| `SamplingPresets.development()` | 100% sampling                         |
+| `SamplingPresets.production()`  | 10% baseline + 100% errors + slow >1s |
+| `SamplingPresets.highTraffic()` | 1% baseline + 100% errors + slow >1s  |
+| `SamplingPresets.debugging()`   | Errors only                           |
 
 ### Custom sampler
 
@@ -172,7 +172,8 @@ import { SpanStatusCode } from '@opentelemetry/api';
 
 const sampler = createCustomTailSampler((trace) => {
   const span = trace.localRootSpan;
-  if (span.attributes['http.route']?.toString().startsWith('/api/')) return true;
+  if (span.attributes['http.route']?.toString().startsWith('/api/'))
+    return true;
   if (span.status.code === SpanStatusCode.ERROR) return true;
   return false;
 });
@@ -198,7 +199,7 @@ request, then emit once. Supports `fork()` for background work that should keep
 its own snapshot:
 
 ```typescript
-import { getExecutionLogger, trace } from 'autotel-edge';
+import { getExecutionLogger, trace, span, withTracing } from 'autotel-edge';
 
 export const handler = trace(async (request) => {
   const log = getExecutionLogger();
@@ -235,7 +236,7 @@ await publishEvent({
 
 ```typescript
 // app/api/route.ts (or middleware.ts)
-import { trace, init } from 'autotel-edge';
+import { trace, span, withTracing, init } from 'autotel-edge';
 
 init({
   service: { name: 'vercel-edge' },
@@ -253,7 +254,7 @@ export const GET = trace(async (request: Request) => {
 
 ```typescript
 // netlify/edge-functions/hello.ts
-import { trace, init } from 'autotel-edge';
+import { trace, span, withTracing, init } from 'autotel-edge';
 
 init({
   service: { name: 'netlify-edge' },
@@ -268,7 +269,7 @@ export default trace(async (request: Request) => {
 ### Deno Deploy
 
 ```typescript
-import { trace, init } from 'https://esm.sh/autotel-edge';
+import { trace, span, withTracing, init } from 'https://esm.sh/autotel-edge';
 
 init({
   service: { name: 'deno-deploy' },
@@ -311,7 +312,9 @@ import {
 } from 'autotel-edge';
 
 // Skip noisy paths before opening a span.
-const trace = shouldInstrumentPath('/api/users', { exclude: ['/health', '/metrics'] });
+const trace = shouldInstrumentPath('/api/users', {
+  exclude: ['/health', '/metrics'],
+});
 
 // Name the span's service from the route.
 const service = getServiceForPath('/users/123', {
@@ -323,7 +326,9 @@ const service = getServiceForPath('/users/123', {
 await runMiddlewareFinishPipeline(
   { event: request, status: 200 },
   {
-    enrichers: [(ctx) => span.setAttributes({ 'http.status_code': ctx.status })],
+    enrichers: [
+      (ctx) => span.setAttributes({ 'http.status_code': ctx.status }),
+    ],
     drains: [(ctx) => analytics.record(ctx)],
   },
 );
@@ -334,21 +339,21 @@ cascade into the others.
 
 ## Entry points
 
-| Import                          | Contents                                |
-| ------------------------------- | --------------------------------------- |
-| `autotel-edge`                  | Core + toolkit: `trace`, `span`, `init`, `definePlugin`, `createPluginRunner`, `shouldInstrumentPath`, `getServiceForPath`, `runMiddlewareFinishPipeline` |
-| `autotel-edge/sampling`         | Presets and custom samplers             |
-| `autotel-edge/events`           | `publishEvent`, subscribers             |
-| `autotel-edge/logger`           | `createEdgeLogger`, execution logger    |
-| `autotel-edge/testing`          | Trace collectors and assertions         |
+| Import                  | Contents                                                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autotel-edge`          | Core + toolkit: `trace`, `span`, `init`, `definePlugin`, `createPluginRunner`, `shouldInstrumentPath`, `getServiceForPath`, `runMiddlewareFinishPipeline` |
+| `autotel-edge/sampling` | Presets and custom samplers                                                                                                                               |
+| `autotel-edge/events`   | `publishEvent`, subscribers                                                                                                                               |
+| `autotel-edge/logger`   | `createEdgeLogger`, execution logger                                                                                                                      |
+| `autotel-edge/testing`  | Trace collectors and assertions                                                                                                                           |
 
 ## Vendor packages
 
-- [`autotel-cloudflare`](/autotel/frameworks/cloudflare/) — Cloudflare Workers
+- [`autotel-cloudflare`](/autotel/frameworks/cloudflare/): Cloudflare Workers
   with full bindings coverage
-- `autotel-vercel` — coming soon
-- `autotel-netlify` — coming soon
+- `autotel-vercel`: coming soon
+- `autotel-netlify`: coming soon
 
 ## Examples
 
-- [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example) — Cloudflare Workers built on autotel-edge.
+- [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example): Cloudflare Workers built on autotel-edge.

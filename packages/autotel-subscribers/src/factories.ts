@@ -8,7 +8,7 @@
  * ```typescript
  * import { createPostHogSubscriber, createWebhookSubscriber } from 'autotel-subscribers/factories'
  *
- * const events = new Events('my-service', {
+ * const events = new Event('my-service', {
  *   subscribers: [
  *     createPostHogSubscriber({ apiKey: 'phc_...' }),
  *     createWebhookSubscriber({ url: 'https://...' })
@@ -111,12 +111,7 @@ export function createMockSubscriber(): MockEventSubscriber {
  * - `mirrored`: Send to primary, mirror to others (primary failure fails all)
  */
 export type ComposeSubscriberStrategy =
-  | 'parallel'
-  | 'failover'
-  | 'round-robin'
-  | 'random'
-  | 'race'
-  | 'mirrored';
+  'parallel' | 'failover' | 'round-robin' | 'random' | 'race' | 'mirrored';
 
 /** Configuration options for composing multiple subscribers */
 export type ComposeSubscribersOptions = {
@@ -130,21 +125,25 @@ export type ComposeSubscribersOptions = {
 };
 
 type SubscriberMethod =
-  | 'trackEvent'
-  | 'trackFunnelStep'
-  | 'trackOutcome'
-  | 'trackValue';
+  'trackEvent' | 'trackFunnelStep' | 'trackOutcome' | 'trackValue';
 
 type MethodCall = {
   method: SubscriberMethod;
   args: unknown[];
 };
 
-function backoffDelay(attempt: number, initialMs: number, maxMs: number): number {
+function backoffDelay(
+  attempt: number,
+  initialMs: number,
+  maxMs: number,
+): number {
   return Math.min(maxMs, initialMs * 2 ** (attempt - 1));
 }
 
-async function callSubscriber(subscriber: EventSubscriber, call: MethodCall): Promise<void> {
+async function callSubscriber(
+  subscriber: EventSubscriber,
+  call: MethodCall,
+): Promise<void> {
   switch (call.method) {
     case 'trackEvent': {
       await subscriber.trackEvent(
@@ -214,7 +213,10 @@ export function composeSubscribers(
   const logger = options.logger ?? console;
   let rrCounter = 0;
 
-  const sendOne = async (subscriber: EventSubscriber, call: MethodCall): Promise<void> => {
+  const sendOne = async (
+    subscriber: EventSubscriber,
+    call: MethodCall,
+  ): Promise<void> => {
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -234,12 +236,15 @@ export function composeSubscribers(
 
         if (!retryable || attempt >= maxAttempts) break;
         await new Promise((resolve) =>
-          setTimeout(resolve, backoffDelay(attempt, initialRetryDelayMs, maxRetryDelayMs)),
+          setTimeout(
+            resolve,
+            backoffDelay(attempt, initialRetryDelayMs, maxRetryDelayMs),
+          ),
         );
       }
     }
 
-    throw (lastError instanceof Error ? lastError : new Error(String(lastError)));
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   };
 
   const orderForSequential = (): number[] => {
@@ -260,7 +265,9 @@ export function composeSubscribers(
     if (subscribers.length === 0) return;
 
     if (strategy === 'parallel') {
-      await Promise.all(subscribers.map((subscriber) => sendOne(subscriber, call)));
+      await Promise.all(
+        subscribers.map((subscriber) => sendOne(subscriber, call)),
+      );
       return;
     }
 
@@ -312,13 +319,16 @@ export function composeSubscribers(
       }
     }
 
-    throw (lastError instanceof Error ? lastError : new Error(String(lastError)));
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   };
 
   return {
     name,
     async trackEvent(name_, attributes, options_) {
-      await execute({ method: 'trackEvent', args: [name_, attributes, options_] });
+      await execute({
+        method: 'trackEvent',
+        args: [name_, attributes, options_],
+      });
     },
     async trackFunnelStep(funnel, step, attributes, options_) {
       await execute({
@@ -333,10 +343,15 @@ export function composeSubscribers(
       });
     },
     async trackValue(name_, value, attributes, options_) {
-      await execute({ method: 'trackValue', args: [name_, value, attributes, options_] });
+      await execute({
+        method: 'trackValue',
+        args: [name_, value, attributes, options_],
+      });
     },
     async shutdown() {
-      await Promise.all(subscribers.map(async (subscriber) => subscriber.shutdown?.()));
+      await Promise.all(
+        subscribers.map(async (subscriber) => subscriber.shutdown?.()),
+      );
     },
   };
 }

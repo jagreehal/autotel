@@ -15,11 +15,13 @@ const GLOB_META = /[*?[\]]/;
  */
 export async function resolveCodemodFiles(
   pathArg: string,
-  cwd: string
+  cwd: string,
 ): Promise<string[]> {
   const isGlob = GLOB_META.test(pathArg);
   if (!isGlob) {
-    const absolute = path.isAbsolute(pathArg) ? pathArg : path.resolve(cwd, pathArg);
+    const absolute = path.isAbsolute(pathArg)
+      ? pathArg
+      : path.resolve(cwd, pathArg);
     if (fileExists(absolute)) {
       const ext = path.extname(absolute);
       if (CODEMOD_EXTENSIONS.has(ext) && !absolute.endsWith('.d.ts')) {
@@ -45,8 +47,19 @@ export async function resolveCodemodFiles(
 /**
  * Run the codemod trace command: resolve files, transform each, write or dry-run.
  */
-export async function runCodemodTrace(options: CodemodTraceOptions): Promise<void> {
-  const { path: pathArg, cwd, dryRun, namePattern, skip, printFiles, verbose, quiet } = options;
+export async function runCodemodTrace(
+  options: CodemodTraceOptions,
+): Promise<void> {
+  const {
+    path: pathArg,
+    cwd,
+    dryRun,
+    namePattern,
+    skip,
+    printFiles,
+    verbose,
+    quiet,
+  } = options;
 
   const files = await resolveCodemodFiles(pathArg, cwd);
   if (files.length === 0) {
@@ -58,7 +71,10 @@ export async function runCodemodTrace(options: CodemodTraceOptions): Promise<voi
   }
 
   const skipRegExps = skip?.map((s) => new RegExp(s)) ?? [];
-  const transformOptions = { namePattern, skip: skipRegExps.length > 0 ? skipRegExps : undefined };
+  const transformOptions = {
+    namePattern,
+    skip: skipRegExps.length > 0 ? skipRegExps : undefined,
+  };
 
   let totalWrapped = 0;
   let totalChanged = 0;
@@ -75,13 +91,15 @@ export async function runCodemodTrace(options: CodemodTraceOptions): Promise<voi
       result = transformFile(content, filePath, transformOptions);
     } catch (error) {
       if (!quiet) {
-        output.error(`Failed to transform ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed to transform ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
-      if (verbose && error instanceof Error && error.stack) output.dim(error.stack);
+      if (verbose && error instanceof Error && error.stack)
+        output.dim(error.stack);
       process.exitCode = 1;
       continue;
     }
-
 
     const relativePath = path.relative(cwd, filePath);
 
@@ -99,7 +117,9 @@ export async function runCodemodTrace(options: CodemodTraceOptions): Promise<voi
       if (result.changed) {
         console.log(`✔ ${relativePath} (${result.wrappedCount} wrapped)`);
       } else if (result.skipped.length > 0) {
-        const reasons = [...new Set(result.skipped.map((s) => s.reason))].join('; ');
+        const reasons = [...new Set(result.skipped.map((s) => s.reason))].join(
+          '; ',
+        );
         console.log(`↷ ${relativePath} (skipped: ${reasons})`);
       }
     }
@@ -107,6 +127,8 @@ export async function runCodemodTrace(options: CodemodTraceOptions): Promise<voi
 
   if (dryRun && totalChanged > 0 && !quiet) {
     console.log('');
-    output.dim(`Dry run: ${totalChanged} file(s) would be updated, ${totalWrapped} function(s) wrapped.`);
+    output.dim(
+      `Dry run: ${totalChanged} file(s) would be updated, ${totalWrapped} function(s) wrapped.`,
+    );
   }
 }

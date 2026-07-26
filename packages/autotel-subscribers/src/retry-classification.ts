@@ -5,11 +5,7 @@
  */
 
 export type ProviderErrorCode =
-  | 'VALIDATION'
-  | 'CONFIG'
-  | 'RATE_LIMITED'
-  | 'PROVIDER'
-  | 'NETWORK';
+  'VALIDATION' | 'CONFIG' | 'RATE_LIMITED' | 'PROVIDER' | 'NETWORK';
 
 /**
  * Structured error for event subscriber failures
@@ -28,7 +24,10 @@ export class SubscriberProviderError extends Error {
     details?: unknown;
     cause?: unknown;
   }) {
-    super(options.message, options.cause ? { cause: options.cause } : undefined);
+    super(
+      options.message,
+      options.cause ? { cause: options.cause } : undefined,
+    );
     this.name = 'SubscriberProviderError';
     this.code = options.code;
     this.retriable = options.retriable;

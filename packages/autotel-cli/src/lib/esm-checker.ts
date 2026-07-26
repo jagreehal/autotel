@@ -28,12 +28,21 @@ export function checkRegisterImportOrder(content: string): {
     const line = lines[i]?.trim() ?? '';
 
     // Skip empty lines and comments
-    if (line === '' || line.startsWith('//') || line.startsWith('/*') || line.startsWith('*')) {
+    if (
+      line === '' ||
+      line.startsWith('//') ||
+      line.startsWith('/*') ||
+      line.startsWith('*')
+    ) {
       continue;
     }
 
     // Check for imports
-    if (line.startsWith('import ') || line.startsWith("import'") || line.startsWith('import"')) {
+    if (
+      line.startsWith('import ') ||
+      line.startsWith("import'") ||
+      line.startsWith('import"')
+    ) {
       if (firstImportLine === null) {
         firstImportLine = i + 1;
       }
@@ -130,7 +139,7 @@ export function checkEsmHook(project: ProjectContext): EsmCheckResult {
  */
 export function getRecommendedStartupCommand(
   project: ProjectContext,
-  instrumentationPath: string
+  instrumentationPath: string,
 ): string {
   const relPath = path.relative(project.packageRoot, instrumentationPath);
 
@@ -157,7 +166,7 @@ export function getRecommendedStartupCommand(
  */
 export function checkScriptsUseImport(
   scripts: Record<string, string> | undefined,
-  _instrumentationPath: string
+  _instrumentationPath: string,
 ): { found: boolean; scriptName: string | null } {
   if (!scripts) {
     return { found: false, scriptName: null };

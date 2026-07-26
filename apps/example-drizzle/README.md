@@ -11,7 +11,7 @@ pnpm db:push            # once, to create the schema
 pnpm start              # runs until Ctrl-C
 ```
 
-Point an observability backend at `http://localhost:4318` (the default OTLP endpoint — override with `OTLP_ENDPOINT`). Any OTLP receiver works: Jaeger, Tempo, or `autotel-mcp`'s built-in collector.
+Point an observability backend at `http://localhost:4318` (the default OTLP endpoint. Override with `OTLP_ENDPOINT`). Any OTLP receiver works: Jaeger, Tempo, or `autotel-mcp`'s built-in collector.
 
 Once traces are flowing, investigate through `autotel-mcp`:
 
@@ -26,10 +26,9 @@ find_root_cause traceId=<one of the anomaly trace IDs>
 # → points to the slow CTE span
 ```
 
-The slow path is in `src/index.ts` as `slowSearch` — a real `WITH RECURSIVE` CTE that SQLite executes, so span duration and `db.statement` reflect actual work, not `setTimeout` fakery.
+The slow path is in `src/index.ts` as `slowSearch`. A real `WITH RECURSIVE` CTE that SQLite executes, so span duration and `db.statement` reflect actual work, not `setTimeout` fakery.
 
 ---
-
 
 > **Note**: Autotel is a third-party package that wraps the standard OpenTelemetry SDK. It simplifies the setup process and produces the same trace output as manual OpenTelemetry setup.
 
@@ -87,13 +86,10 @@ const pool = new Pool({
 });
 
 // Create and instrument the Drizzle client
-const db = instrumentDrizzleClient(
-  drizzle({ client: pool }),
-  {
-    dbSystem: 'postgresql',
-    dbName: 'myapp',
-  }
-);
+const db = instrumentDrizzleClient(drizzle({ client: pool }), {
+  dbSystem: 'postgresql',
+  dbName: 'myapp',
+});
 
 // Your application code...
 ```
@@ -104,13 +100,13 @@ That's it. Drizzle operations are now traced and sent to your configured OTLP en
 
 When you call `init()`, autotel automatically configures:
 
-| Component | Manual Setup | Autotel Configuration |
-|-----------|--------------|---------------------------|
-| Resource attributes | `resourceFromAttributes()` with `ATTR_SERVICE_NAME`, `ATTR_SERVICE_VERSION` | Automatically configured from `service`, `version`, and `environment` options |
-| Span processor | `SimpleSpanProcessor` or `BatchSpanProcessor` | `BatchSpanProcessor` in production, `SimpleSpanProcessor` in development |
-| Trace exporter | `OTLPTraceExporter` | Configured from `endpoint` option |
-| Sampling | Head sampling (sample before execution) | Tail sampling (sample after execution, 10% baseline, 100% errors) |
-| Provider registration | `provider.register()` | Automatic |
+| Component             | Manual Setup                                                                | Autotel Configuration                                                         |
+| --------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Resource attributes   | `resourceFromAttributes()` with `ATTR_SERVICE_NAME`, `ATTR_SERVICE_VERSION` | Automatically configured from `service`, `version`, and `environment` options |
+| Span processor        | `SimpleSpanProcessor` or `BatchSpanProcessor`                               | `BatchSpanProcessor` in production, `SimpleSpanProcessor` in development      |
+| Trace exporter        | `OTLPTraceExporter`                                                         | Configured from `endpoint` option                                             |
+| Sampling              | Head sampling (sample before execution)                                     | Tail sampling (sample after execution, 10% baseline, 100% errors)             |
+| Provider registration | `provider.register()`                                                       | Automatic                                                                     |
 
 All of these defaults can be overridden by passing custom configuration to `init()`.
 
@@ -124,12 +120,15 @@ Following a standard OpenTelemetry approach, you would need to set up tracing ma
 
 ```typescript
 // Imports
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
-import { Resource } from '@opentelemetry/resources'
-import { trace } from '@opentelemetry/api'
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+} from '@opentelemetry/semantic-conventions';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { Resource } from '@opentelemetry/resources';
+import { trace, withTracing } from '@opentelemetry/api';
 
 // Configure the trace exporter
 const otlpTraceExporter = new OTLPTraceExporter({
@@ -178,10 +177,9 @@ init({
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
-const db = instrumentDrizzleClient(
-  drizzle({ client: pool }),
-  { dbSystem: 'postgresql' }
-);
+const db = instrumentDrizzleClient(drizzle({ client: pool }), {
+  dbSystem: 'postgresql',
+});
 ```
 
 This reduces the setup significantly while providing the same tracing functionality.
@@ -214,11 +212,11 @@ Attributes:
 Autotel includes a `trace()` function for wrapping your application logic with tracing:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 import { eq } from 'drizzle-orm';
 import { users } from './schema';
 
-export const getUser = trace(ctx => async (id: number) => {
+export const getUser = withTracing({})((ctx) => async (id: number) => {
   // Set custom attributes
   ctx.setAttribute('user.id', id);
 
@@ -238,19 +236,17 @@ The `trace()` function automatically creates a span, manages its lifecycle, and 
 Nested `trace()` calls automatically create child spans:
 
 ```typescript
-export const createUserAndPost = trace(ctx => async (
-  email: string,
-  name: string,
-  postTitle: string
-) => {
-  ctx.setAttribute('user.email', email);
+export const createUserAndPost = withTracing({})(
+  (ctx) => async (email: string, name: string, postTitle: string) => {
+    ctx.setAttribute('user.email', email);
 
-  // Child spans created automatically
-  const user = await createUser(email, name);
-  const post = await createPost(user.id, postTitle);
+    // Child spans created automatically
+    const user = await createUser(email, name);
+    const post = await createPost(user.id, postTitle);
 
-  return { user, post };
-});
+    return { user, post };
+  },
+);
 ```
 
 This creates a hierarchical trace structure:
@@ -268,15 +264,19 @@ createUserAndPost
 You can override the default span processor for environment-specific behavior:
 
 ```typescript
-import { SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
+import {
+  SimpleSpanProcessor,
+  ConsoleSpanExporter,
+} from '@opentelemetry/sdk-trace-base';
 import { init } from 'autotel';
 
 init({
   service: 'my-app',
   // Use console exporter in development, OTLP in production
-  spanProcessor: process.env.NODE_ENV === 'production'
-    ? undefined  // Use default BatchSpanProcessor
-    : new SimpleSpanProcessor(new ConsoleSpanExporter()),
+  spanProcessor:
+    process.env.NODE_ENV === 'production'
+      ? undefined // Use default BatchSpanProcessor
+      : new SimpleSpanProcessor(new ConsoleSpanExporter()),
 });
 ```
 
@@ -292,15 +292,16 @@ import { init, AdaptiveSampler } from 'autotel';
 init({
   service: 'my-app',
   sampler: new AdaptiveSampler({
-    baselineSampleRate: 0.1,    // Sample 10% of normal requests
-    slowThresholdMs: 1000,       // Requests >1s are "slow"
-    alwaysSampleErrors: true,    // Sample 100% of errors
-    alwaysSampleSlow: true,      // Sample 100% of slow requests
+    baselineSampleRate: 0.1, // Sample 10% of normal requests
+    slowThresholdMs: 1000, // Requests >1s are "slow"
+    alwaysSampleErrors: true, // Sample 100% of errors
+    alwaysSampleSlow: true, // Sample 100% of slow requests
   }),
 });
 ```
 
 This configuration samples:
+
 - 10% of normal requests (baseline)
 - 100% of requests that fail with an error
 - 100% of requests that take longer than 1 second
@@ -334,7 +335,7 @@ Ensure you import your tracing configuration before creating the Drizzle client:
 
 ```typescript
 // ✅ Correct order
-import './tracing';  // First
+import './tracing'; // First
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
@@ -344,7 +345,7 @@ const db = drizzle({ client: pool });
 // ❌ Incorrect order
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import './tracing';  // Too late - Pool already imported
+import './tracing'; // Too late - Pool already imported
 ```
 
 Also verify that you're instrumenting the Drizzle instance:
@@ -355,7 +356,7 @@ import { Pool } from 'pg';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle({ client: pool });
-instrumentDrizzleClient(db, { dbSystem: 'postgresql' });  // Don't forget this!
+instrumentDrizzleClient(db, { dbSystem: 'postgresql' }); // Don't forget this!
 ```
 
 ### Traces work locally but not in production
@@ -379,12 +380,12 @@ Make sure you're using the instrumented database instance consistently throughou
 // ❌ Creating new uninstrumented instance
 function someFunction() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const newDb = drizzle({ client: pool });  // Not instrumented!
+  const newDb = drizzle({ client: pool }); // Not instrumented!
   return newDb.select().from(users);
 }
 
 // ✅ Use the instrumented instance
-import { db } from './db';  // Instrumented instance exported from centralized location
+import { db } from './db'; // Instrumented instance exported from centralized location
 
 function someFunction() {
   return db.select().from(users);
@@ -400,7 +401,7 @@ This can happen if you instrument the same instance multiple times. The `instrum
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle({ client: pool });
 instrumentDrizzleClient(db);
-instrumentDrizzleClient(db);  // Safe but unnecessary
+instrumentDrizzleClient(db); // Safe but unnecessary
 
 // ✅ Instrument once
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });

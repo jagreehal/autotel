@@ -345,10 +345,17 @@ describe('PostHogSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const isEnabled = await adapter.isFeatureEnabled('new-checkout', 'user-123');
+      const isEnabled = await adapter.isFeatureEnabled(
+        'new-checkout',
+        'user-123',
+      );
 
       expect(isEnabled).toBe(true);
-      expect(mockIsFeatureEnabled).toHaveBeenCalledWith('new-checkout', 'user-123', undefined);
+      expect(mockIsFeatureEnabled).toHaveBeenCalledWith(
+        'new-checkout',
+        'user-123',
+        undefined,
+      );
     });
 
     it('should check feature with options', async () => {
@@ -367,7 +374,11 @@ describe('PostHogSubscriber', () => {
 
       await adapter.isFeatureEnabled('beta-features', 'user-123', options);
 
-      expect(mockIsFeatureEnabled).toHaveBeenCalledWith('beta-features', 'user-123', options);
+      expect(mockIsFeatureEnabled).toHaveBeenCalledWith(
+        'beta-features',
+        'user-123',
+        options,
+      );
     });
 
     it('should return false when feature check fails', async () => {
@@ -381,7 +392,10 @@ describe('PostHogSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const isEnabled = await adapter.isFeatureEnabled('new-checkout', 'user-123');
+      const isEnabled = await adapter.isFeatureEnabled(
+        'new-checkout',
+        'user-123',
+      );
 
       expect(isEnabled).toBe(false);
       expect(onError).toHaveBeenCalled();
@@ -399,7 +413,11 @@ describe('PostHogSubscriber', () => {
       const variant = await adapter.getFeatureFlag('experiment', 'user-123');
 
       expect(variant).toBe('test-variant');
-      expect(mockGetFeatureFlag).toHaveBeenCalledWith('experiment', 'user-123', undefined);
+      expect(mockGetFeatureFlag).toHaveBeenCalledWith(
+        'experiment',
+        'user-123',
+        undefined,
+      );
     });
 
     it('should get all flags', async () => {
@@ -571,7 +589,9 @@ describe('PostHogSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      await adapter.identify('user-123', { $set: { email: 'test@example.com' } });
+      await adapter.identify('user-123', {
+        $set: { email: 'test@example.com' },
+      });
 
       expect(onError).toHaveBeenCalled();
     });
@@ -582,7 +602,9 @@ describe('PostHogSubscriber', () => {
         enabled: false,
       });
 
-      await adapter.identify('user-123', { $set: { email: 'test@example.com' } });
+      await adapter.identify('user-123', {
+        $set: { email: 'test@example.com' },
+      });
       await adapter.groupIdentify('company', 'acme-corp', {});
 
       expect(mockIdentify).not.toHaveBeenCalled();

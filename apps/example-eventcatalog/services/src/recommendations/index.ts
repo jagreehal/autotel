@@ -14,8 +14,16 @@ const openai = {
           {
             message: {
               content: JSON.stringify([
-                { sku: 'sku-rec-1', score: 0.91, reason: 'frequently bought together' },
-                { sku: 'sku-rec-2', score: 0.78, reason: 'matches style profile' },
+                {
+                  sku: 'sku-rec-1',
+                  score: 0.91,
+                  reason: 'frequently bought together',
+                },
+                {
+                  sku: 'sku-rec-2',
+                  score: 0.78,
+                  reason: 'matches style profile',
+                },
                 { sku: 'sku-rec-3', score: 0.62, reason: 'completes the set' },
               ]),
             },
@@ -29,8 +37,14 @@ const openai = {
 
 function buildPrompt(msg: OrderPlacedMessage) {
   return [
-    { role: 'system', content: 'Suggest 3 SKUs the customer is likely to buy next.' },
-    { role: 'user', content: JSON.stringify({ skus: msg.items.map((i) => i.sku) }) },
+    {
+      role: 'system',
+      content: 'Suggest 3 SKUs the customer is likely to buy next.',
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({ skus: msg.items.map((i) => i.sku) }),
+    },
   ];
 }
 

@@ -24,7 +24,11 @@ import {
 } from '@opentelemetry/core';
 import type { Resource } from '@opentelemetry/resources';
 import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base';
-import { SEMATTRS_EXCEPTION_MESSAGE, SEMATTRS_EXCEPTION_STACKTRACE, SEMATTRS_EXCEPTION_TYPE } from '@opentelemetry/semantic-conventions';
+import {
+  SEMATTRS_EXCEPTION_MESSAGE,
+  SEMATTRS_EXCEPTION_STACKTRACE,
+  SEMATTRS_EXCEPTION_TYPE,
+} from '@opentelemetry/semantic-conventions';
 
 type OnSpanEnd = (span: Span) => void;
 

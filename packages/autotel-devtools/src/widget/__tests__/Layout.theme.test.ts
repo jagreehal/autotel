@@ -20,10 +20,7 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import Layout from '../components/Layout.svelte';
-import {
-  themeSignal,
-  type ThemeValue,
-} from '../store.svelte';
+import { themeSignal, type ThemeValue } from '../store.svelte';
 
 function mountInShadow(): { host: HTMLElement; root: ShadowRoot } {
   const host = document.createElement('div');

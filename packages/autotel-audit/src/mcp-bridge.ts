@@ -51,7 +51,10 @@ export function createMcpSecurityEventBridge(
       {
         ...rest,
         category: 'llm',
-        ...(toolName !== undefined && { targetType: 'tool', targetId: toolName }),
+        ...(toolName !== undefined && {
+          targetType: 'tool',
+          targetId: toolName,
+        }),
         ...(verdict !== undefined && { verdict }),
         ...(source !== undefined && { source }),
       },

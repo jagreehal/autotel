@@ -3,10 +3,10 @@
 // prices/types so external consumers can pull the pure-TS layer from one path.
 // Widget-internal code imports the individual modules directly, not this barrel.
 
-export { isGenAiSpan } from './detect'
-export { toGenAiSpan } from './normalize'
-export { buildToolResultIndex, hydrateToolResults } from './stitch'
-export { lookupPrice, priceCall } from './prices'
+export { isGenAiSpan } from './detect';
+export { toGenAiSpan } from './normalize';
+export { buildToolResultIndex, hydrateToolResults } from './stitch';
+export { lookupPrice, priceCall } from './prices';
 export type {
   GenAiCost,
   GenAiGuard,
@@ -21,4 +21,4 @@ export type {
   GenAiToolDef,
   GenAiUsage,
   GenAiWarning,
-} from './types'
+} from './types';

@@ -70,16 +70,16 @@ The `otel()` middleware accepts options for customizing tracing behavior:
 
 HTTP request spans include:
 
-- `http.request.method` — GET, POST, etc.
-- `url.path` — Request path
-- `http.response.status_code` — Response status
-- `http.request.duration_ms` — Request duration
+- `http.request.method`: GET, POST, etc.
+- `url.path`: Request path
+- `http.response.status_code`: Response status
+- `http.request.duration_ms`: Request duration
 
 ## Examples
 
-- [`example-hono`](https://github.com/jagreehal/autotel/tree/main/apps/example-hono) — Hono with `otel()` middleware, `useLogger()` request-scoped logging, and manual `trace()` in handlers.
+- [`example-hono`](https://github.com/jagreehal/autotel/tree/main/apps/example-hono): Hono with `otel()` middleware, `useLogger()` request-scoped logging, and manual `trace()` in handlers.
 
 ## Related
 
-- [autotel-adapters](/autotel/frameworks/adapters/) — DX helpers (`useLogger`, `withAutotel`)
-- [Agent Guide](/autotel/agent-guide/) — Framework setup snippets
+- [autotel-adapters](/autotel/frameworks/adapters/): DX helpers (`useLogger`, `withAutotel`)
+- [Agent Guide](/autotel/agent-guide/): Framework setup snippets

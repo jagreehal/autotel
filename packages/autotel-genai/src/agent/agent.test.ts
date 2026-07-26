@@ -57,19 +57,26 @@ const mocked = vi.hoisted(() => {
     withAudit: vi.fn(
       async (
         _metadata: unknown,
-        fn: (ctx: typeof mockCtx, logger: typeof logger) => unknown,
+        fn: (ctx: typeof mockCtx, log: typeof logger) => unknown,
         options?: { ctx?: typeof mockCtx },
       ) => fn(options?.ctx ?? mockCtx, logger),
     ),
   };
 });
 
-const { forceKeepAuditEvent, logger, mockCtx, setAttribute, setAttributes, withAudit } =
-  mocked;
+const {
+  forceKeepAuditEvent,
+  logger,
+  mockCtx,
+  setAttribute,
+  setAttributes,
+  withAudit,
+} = mocked;
 
 vi.mock('autotel', () => ({
-  createStructuredError: vi.fn((input: { message: string } & Record<string, unknown>) =>
-    Object.assign(new Error(input.message), input),
+  createStructuredError: vi.fn(
+    (input: { message: string } & Record<string, unknown>) =>
+      Object.assign(new Error(input.message), input),
   ),
   getTraceContext: vi.fn(() => mocked.mockCtx),
   getRequestLogger: vi.fn(() => mocked.logger),
@@ -268,7 +275,10 @@ describe('autotel-genai', () => {
     // must be untouched.
     ctx.delegation.authorityLineage.push('mutated');
     expect(lineage).toEqual(['user_123', 'router']);
-    expect(metadata.delegation?.authorityLineage).toEqual(['user_123', 'router']);
+    expect(metadata.delegation?.authorityLineage).toEqual([
+      'user_123',
+      'router',
+    ]);
   });
 
   it('buildLifecycleUpdateContext sends only the domain delta, omitting request-level arrays', () => {
@@ -361,11 +371,15 @@ describe('autotel-genai', () => {
         tool: { name: 'gpt-4o' },
         ai: { model: 'gpt-4o', operation: 'chat', finishReasons: ['stop'] },
       },
-      async () => ({ text: 'ok', usage: { inputTokens: 1000, outputTokens: 500 } }),
+      async () => ({
+        text: 'ok',
+        usage: { inputTokens: 1000, outputTokens: 500 },
+      }),
       {
         ctx: mockCtx,
         extractUsage: (result) =>
-          (result as { usage: { inputTokens: number; outputTokens: number } }).usage,
+          (result as { usage: { inputTokens: number; outputTokens: number } })
+            .usage,
       },
     );
 
@@ -409,7 +423,9 @@ describe('autotel-genai', () => {
     );
 
     const sawGenAi = setAttributes.mock.calls.some(([attrs]) =>
-      Object.keys(attrs as Record<string, unknown>).some((k) => k.startsWith('gen_ai.')),
+      Object.keys(attrs as Record<string, unknown>).some((k) =>
+        k.startsWith('gen_ai.'),
+      ),
     );
     expect(sawGenAi).toBe(false);
   });
@@ -781,7 +797,9 @@ describe('autotel-genai', () => {
     const refusal =
       'TripMate: I can only help with safe travel and trip planning.';
 
-    type Responder = { generate(options: { prompt: string }): Promise<{ text: string }> };
+    type Responder = {
+      generate(options: { prompt: string }): Promise<{ text: string }>;
+    };
 
     function fakeAgent(text: string): Responder {
       return { generate: vi.fn(async () => ({ text })) };
@@ -807,7 +825,8 @@ describe('autotel-genai', () => {
         },
         async () => {
           const guardrail = agents.guardrail ?? fakeAgent('0');
-          const tripmate = agents.tripmate ?? fakeAgent('real network should not happen');
+          const tripmate =
+            agents.tripmate ?? fakeAgent('real network should not happen');
           const check = await guardrail.generate({ prompt: query });
 
           if (!check.text.trim().startsWith('1')) {

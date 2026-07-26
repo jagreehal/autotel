@@ -4,7 +4,7 @@ description: >
   trace(), span(), instrument(), init(). Factory vs direct pattern, name inference. Sync init; use node-require for optional deps. Load when wrapping handlers or functions with spans.
 ---
 
-# Autotel — Instrumentation
+# Autotel: Instrumentation
 
 Wrap functions and handlers with `trace()`, `span()`, or `instrument()`. Call `init()` once at app startup. Keep init synchronous; use `safeRequire`/`requireModule` for optional dependencies.
 
@@ -13,7 +13,7 @@ For new event emission, prefer correlated logs (OTel Logs API path) over adding 
 ## Setup
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, trace, withTracing } from 'autotel';
 
 init({ service: 'my-app' });
 
@@ -25,12 +25,14 @@ const handler = trace(async (req: Request) => {
 With span context (attributes, request logger):
 
 ```typescript
-const handler = trace((ctx) => async (req: Request) => {
-  ctx.setAttribute('http.route', '/api/checkout');
-  const log = getRequestLogger(ctx);
-  log.set({ path: req.url });
-  return processRequest(req);
-});
+const handler = withTracing({ name: 'http.request' })(
+  (ctx) => async (req: Request) => {
+    ctx.setAttribute('http.route', '/api/checkout');
+    const log = getRequestLogger(ctx);
+    log.set({ path: req.url });
+    return processRequest(req);
+  },
+);
 ```
 
 ## Core Patterns
@@ -142,4 +144,7 @@ Source: packages/autotel/package.json exports
 
 Targets autotel v2.23.x.
 
-See also: autotel-core/SKILL.md — when to use what. autotel-request-logging/SKILL.md — getRequestLogger requires active span.
+See also:
+
+- `autotel-core/SKILL.md` for when to use what
+- `autotel-request-logging/SKILL.md`, since `getRequestLogger` requires an active span

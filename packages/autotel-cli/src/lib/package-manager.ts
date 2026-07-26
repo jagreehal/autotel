@@ -15,7 +15,12 @@ const LOCKFILE_MAP: Record<string, PackageManager> = {
 /**
  * All lockfile names in priority order
  */
-const LOCKFILES = ['pnpm-lock.yaml', 'bun.lockb', 'yarn.lock', 'package-lock.json'];
+const LOCKFILES = [
+  'pnpm-lock.yaml',
+  'bun.lockb',
+  'yarn.lock',
+  'package-lock.json',
+];
 
 /**
  * Priority order when multiple lockfiles at same level (pnpm > bun > yarn > npm)
@@ -50,7 +55,8 @@ export function detectPackageManager(startDir: string): {
     // Deeper path = closer to startDir (wins), or same depth with higher priority
     if (
       depth > closestDepth ||
-      (depth === closestDepth && PM_PRIORITY.indexOf(pm) < PM_PRIORITY.indexOf(closestPM))
+      (depth === closestDepth &&
+        PM_PRIORITY.indexOf(pm) < PM_PRIORITY.indexOf(closestPM))
     ) {
       closestDepth = depth;
       closestLockfile = lockfilePath;
@@ -70,7 +76,7 @@ export function detectPackageManager(startDir: string): {
 export function getInstallCommand(
   pm: PackageManager,
   packages: string[],
-  options: { dev?: boolean; workspaceRoot?: boolean } = {}
+  options: { dev?: boolean; workspaceRoot?: boolean } = {},
 ): string {
   const pkgList = packages.join(' ');
   const { dev = false, workspaceRoot = false } = options;

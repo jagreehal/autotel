@@ -16,68 +16,71 @@
  */
 
 import 'dotenv/config';
-import { init, trace, type TraceContext } from 'autotel';
+import { init, withTracing, type TraceContext } from 'autotel';
 import { PrismaInstrumentation } from '@prisma/instrumentation';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from '@prisma/client';
 
 // Initialize autotel with PrismaInstrumentation
 init({
   service: 'prisma-example',
   endpoint: process.env.OTLP_ENDPOINT || 'http://localhost:4318',
-  instrumentations: [
-    new PrismaInstrumentation(),
-  ],
+  instrumentations: [new PrismaInstrumentation()],
 });
 
 // Create Prisma client
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaBetterSqlite3({ url: 'file:./prisma/dev.db' }),
+});
 
 // Example: Create a user with autotel tracing
-export const createUser = trace(ctx => async (email: string, name?: string) => {
-  console.log(`Creating user: ${email}`);
+export const createUser = withTracing({ name: 'prisma.createUser' })(
+  (ctx) => async (email: string, name?: string) => {
+    console.log(`Creating user: ${email}`);
 
-  // Set custom attributes for better observability
-  ctx.setAttribute('user.email', email);
-  if (name) {
-    ctx.setAttribute('user.name', name);
-  }
+    // Set custom attributes for better observability
+    ctx.setAttribute('user.email', email);
+    if (name) {
+      ctx.setAttribute('user.name', name);
+    }
 
-  const user = await prisma.user.create({
-    data: { email, name },
-  });
+    const user = await prisma.user.create({
+      data: { email, name },
+    });
 
-  console.log(`✅ User created with ID: ${user.id}`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
+    console.log(`✅ User created with ID: ${user.id}`);
+    console.log(`📊 Trace ID: ${ctx.traceId}`);
 
-  return user;
-});
+    return user;
+  },
+);
 
 // Example: Create a post for a user
-export const createPost = trace(ctx => async (
-  userId: number,
-  title: string,
-  content?: string
-) => {
-  console.log(`Creating post for user ${userId}: ${title}`);
+export const createPost = withTracing({ name: 'prisma.createPost' })(
+  (ctx) => async (userId: number, title: string, content?: string) => {
+    console.log(`Creating post for user ${userId}: ${title}`);
 
-  ctx.setAttribute('post.userId', userId);
-  ctx.setAttribute('post.title', title);
+    ctx.setAttribute('post.userId', userId);
+    ctx.setAttribute('post.title', title);
 
-  const post = await prisma.post.create({
-    data: {
-      title,
-      content,
-      authorId: userId,
-    },
-  });
+    const post = await prisma.post.create({
+      data: {
+        title,
+        content,
+        authorId: userId,
+      },
+    });
 
-  console.log(`✅ Post created with ID: ${post.id}`);
+    console.log(`✅ Post created with ID: ${post.id}`);
 
-  return post;
-});
+    return post;
+  },
+);
 
 // Example: Get user with posts (demonstrates nested queries)
-export const getUserWithPosts = trace(ctx => async (userId: number) => {
+export const getUserWithPosts = withTracing({
+  name: 'prisma.getUserWithPosts',
+})((ctx) => async (userId: number) => {
   console.log(`Fetching user ${userId} with posts`);
 
   ctx.setAttribute('user.id', userId);
@@ -100,44 +103,45 @@ export const getUserWithPosts = trace(ctx => async (userId: number) => {
 });
 
 // Example: Update post status
-export const publishPost = trace(ctx => async (postId: number) => {
-  console.log(`Publishing post ${postId}`);
+export const publishPost = withTracing({ name: 'prisma.publishPost' })(
+  (ctx) => async (postId: number) => {
+    console.log(`Publishing post ${postId}`);
 
-  ctx.setAttribute('post.id', postId);
+    ctx.setAttribute('post.id', postId);
 
-  const post = await prisma.post.update({
-    where: { id: postId },
-    data: { published: true },
-  });
+    const post = await prisma.post.update({
+      where: { id: postId },
+      data: { published: true },
+    });
 
-  console.log(`✅ Post published`);
+    console.log(`✅ Post published`);
 
-  return post;
-});
+    return post;
+  },
+);
 
 // Example: Complex operation with multiple database calls
-export const createUserWithPosts = trace((ctx: TraceContext) => async (
-  email: string,
-  name: string,
-  postTitles: string[]
-) => {
-  console.log(`Creating user ${email} with ${postTitles.length} posts`);
+export const createUserWithPosts = withTracing({})(
+  (ctx: TraceContext) =>
+    async (email: string, name: string, postTitles: string[]) => {
+      console.log(`Creating user ${email} with ${postTitles.length} posts`);
 
-  ctx.setAttribute('user.email', email);
-  ctx.setAttribute('user.postCount', postTitles.length);
+      ctx.setAttribute('user.email', email);
+      ctx.setAttribute('user.postCount', postTitles.length);
 
-  // Create user (traced automatically as child span)
-  const user = await createUser(email, name);
+      // Create user (traced automatically as child span)
+      const user = await createUser(email, name);
 
-  // Create posts (each traced automatically as child span)
-  const posts = await Promise.all(
-    postTitles.map(title => createPost(user.id, title))
-  );
+      // Create posts (each traced automatically as child span)
+      const posts = await Promise.all(
+        postTitles.map((title) => createPost(user.id, title)),
+      );
 
-  console.log(`✅ Created user with ${posts.length} posts`);
+      console.log(`✅ Created user with ${posts.length} posts`);
 
-  return { user, posts };
-});
+      return { user, posts };
+    },
+);
 
 // Main function
 async function main() {
@@ -166,12 +170,14 @@ async function main() {
     console.log('');
 
     // Example 5: Complex operation - create user with multiple posts
-    console.log('🎯 Example 5: Creating user with multiple posts (nested traces)');
-    const result = await createUserWithPosts(
-      'bob@example.com',
-      'Bob',
-      ['First Post', 'Second Post', 'Third Post']
+    console.log(
+      '🎯 Example 5: Creating user with multiple posts (nested traces)',
     );
+    const result = await createUserWithPosts('bob@example.com', 'Bob', [
+      'First Post',
+      'Second Post',
+      'Third Post',
+    ]);
     console.log('Result:', {
       userId: result.user.id,
       postCount: result.posts.length,
@@ -180,12 +186,13 @@ async function main() {
 
     // Wait for traces to be exported
     console.log('⏳ Waiting 2 seconds for traces to be exported...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     console.log('✅ Examples completed!');
     console.log('📊 Check your observability backend to see the traces.');
-    console.log('\n💡 Tip: Each Prisma operation is automatically traced with detailed span information.');
-
+    console.log(
+      '\n💡 Tip: Each Prisma operation is automatically traced with detailed span information.',
+    );
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {

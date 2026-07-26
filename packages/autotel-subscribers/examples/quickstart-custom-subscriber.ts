@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { MyFirstSubscriber } from './my-first-subscriber';
  *
  * const event =new Event('my-app', {
@@ -17,7 +17,12 @@
  * ```
  */
 
-import type { EventSubscriber, EventAttributes, FunnelStatus, OutcomeStatus } from '../src/event-subscriber-base';
+import type {
+  EventSubscriber,
+  EventAttributes,
+  FunnelStatus,
+  OutcomeStatus,
+} from '../src/event-subscriber-base';
 
 export class MyFirstSubscriber implements EventSubscriber {
   // Required: Subscriber name (shows up in logs)
@@ -47,7 +52,7 @@ export class MyFirstSubscriber implements EventSubscriber {
   async trackFunnelStep(
     funnel: string,
     step: FunnelStatus,
-    attributes?: EventAttributes
+    attributes?: EventAttributes,
   ): Promise<void> {
     console.log('🔄 FUNNEL:', funnel, step, attributes);
 
@@ -62,7 +67,7 @@ export class MyFirstSubscriber implements EventSubscriber {
   async trackOutcome(
     operation: string,
     outcome: OutcomeStatus,
-    attributes?: EventAttributes
+    attributes?: EventAttributes,
   ): Promise<void> {
     console.log('✅ OUTCOME:', operation, outcome, attributes);
 
@@ -76,7 +81,7 @@ export class MyFirstSubscriber implements EventSubscriber {
   async trackValue(
     name: string,
     value: number,
-    attributes?: EventAttributes
+    attributes?: EventAttributes,
   ): Promise<void> {
     console.log('💰 VALUE:', name, value, attributes);
 
@@ -103,9 +108,9 @@ export class MyFirstSubscriber implements EventSubscriber {
 // ============================================================================
 
 // Uncomment to test:
-// import { Events } from 'autotel/events';
+// import { Event } from 'autotel/event';
 //
-// const events = new Events('my-app', {
+// const events = new Event('my-app', {
 //   subscribers: [new MyFirstSubscriber()]
 // });
 //

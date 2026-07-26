@@ -28,7 +28,9 @@ describe('listPactFiles', () => {
     writeFileSync(path.join(dir, 'a.json'), '{}');
     writeFileSync(path.join(dir, 'b.json'), '{}');
     writeFileSync(path.join(dir, 'ignore.txt'), 'no');
-    const files = listPactFiles(dir).map((f) => path.basename(f)).toSorted();
+    const files = listPactFiles(dir)
+      .map((f) => path.basename(f))
+      .toSorted();
     expect(files).toEqual(['a.json', 'b.json']);
   });
 
@@ -36,7 +38,9 @@ describe('listPactFiles', () => {
     mkdirSync(path.join(dir, 'nested'));
     writeFileSync(path.join(dir, 'nested', 'c.json'), '{}');
     writeFileSync(path.join(dir, 'top.json'), '{}');
-    const files = listPactFiles(dir).map((f) => path.basename(f)).toSorted();
+    const files = listPactFiles(dir)
+      .map((f) => path.basename(f))
+      .toSorted();
     expect(files).toEqual(['c.json', 'top.json']);
   });
 });
@@ -44,7 +48,10 @@ describe('listPactFiles', () => {
 describe('parsePactFile', () => {
   it('returns parsed object for valid JSON', () => {
     const file = path.join(dir, 'p.json');
-    writeFileSync(file, JSON.stringify({ consumer: { name: 'A' }, provider: { name: 'B' } }));
+    writeFileSync(
+      file,
+      JSON.stringify({ consumer: { name: 'A' }, provider: { name: 'B' } }),
+    );
     expect(parsePactFile(file)?.consumer.name).toBe('A');
   });
 
@@ -70,8 +77,20 @@ describe('interactionsFromPactFile', () => {
       ],
     });
     expect(keys).toEqual([
-      { consumer: 'A', provider: 'B', interaction: 'evt1', kind: 'message', interactionId: undefined },
-      { consumer: 'A', provider: 'B', interaction: 'evt2', kind: 'message', interactionId: undefined },
+      {
+        consumer: 'A',
+        provider: 'B',
+        interaction: 'evt1',
+        kind: 'message',
+        interactionId: undefined,
+      },
+      {
+        consumer: 'A',
+        provider: 'B',
+        interaction: 'evt2',
+        kind: 'message',
+        interactionId: undefined,
+      },
     ]);
   });
 
@@ -82,7 +101,13 @@ describe('interactionsFromPactFile', () => {
       interactions: [{ description: 'GET /orders' }],
     });
     expect(keys).toEqual([
-      { consumer: 'A', provider: 'B', interaction: 'GET /orders', kind: 'http', interactionId: undefined },
+      {
+        consumer: 'A',
+        provider: 'B',
+        interaction: 'GET /orders',
+        kind: 'http',
+        interactionId: undefined,
+      },
     ]);
   });
 
@@ -100,9 +125,7 @@ describe('interactionsFromPactFile', () => {
     const keys = interactionsFromPactFile({
       consumer: { name: 'A' },
       provider: { name: 'B' },
-      messages: [
-        { description: 'evt', metadata: { interactionId: 'iid-1' } },
-      ],
+      messages: [{ description: 'evt', metadata: { interactionId: 'iid-1' } }],
     });
     expect(keys[0]?.interactionId).toBe('iid-1');
   });

@@ -7,7 +7,10 @@ import type {
 } from '../types/index';
 import { discoverProject } from '../lib/project';
 import { detectConfig } from '../lib/config-detector';
-import { getAutotelInfo, checkAutotelVersions } from '../lib/dependency-auditor';
+import {
+  getAutotelInfo,
+  checkAutotelVersions,
+} from '../lib/dependency-auditor';
 import { checkEsmHook } from '../lib/esm-checker';
 import { checkEnvVarsPresent } from '../lib/env-generator';
 import { getInstallCommand } from '../lib/package-manager';
@@ -20,13 +23,41 @@ import { createSpinner } from '../ui/spinner';
  * All available check definitions
  */
 const CHECK_DEFINITIONS = [
-  { id: 'autotel-installed', title: 'Autotel installed', description: 'Check if autotel is installed' },
-  { id: 'peer-deps', title: 'Peer dependencies', description: 'Check if required peer dependencies are installed' },
-  { id: 'esm-hook', title: 'ESM hook setup', description: 'Check if autotel/register is imported correctly' },
-  { id: 'env-vars', title: 'Environment variables', description: 'Check if required env vars are present' },
-  { id: 'version-compat', title: 'Version compatibility', description: 'Check autotel package versions match' },
-  { id: 'config-found', title: 'Configuration found', description: 'Check if instrumentation config exists' },
-  { id: 'logger-instrumentation', title: 'Logger instrumentation', description: 'Check if logger instrumentation packages are installed' },
+  {
+    id: 'autotel-installed',
+    title: 'Autotel installed',
+    description: 'Check if autotel is installed',
+  },
+  {
+    id: 'peer-deps',
+    title: 'Peer dependencies',
+    description: 'Check if required peer dependencies are installed',
+  },
+  {
+    id: 'esm-hook',
+    title: 'ESM hook setup',
+    description: 'Check if autotel/register is imported correctly',
+  },
+  {
+    id: 'env-vars',
+    title: 'Environment variables',
+    description: 'Check if required env vars are present',
+  },
+  {
+    id: 'version-compat',
+    title: 'Version compatibility',
+    description: 'Check autotel package versions match',
+  },
+  {
+    id: 'config-found',
+    title: 'Configuration found',
+    description: 'Check if instrumentation config exists',
+  },
+  {
+    id: 'logger-instrumentation',
+    title: 'Logger instrumentation',
+    description: 'Check if logger instrumentation packages are installed',
+  },
 ];
 
 /**
@@ -34,7 +65,7 @@ const CHECK_DEFINITIONS = [
  */
 async function inferBackend(
   packageRoot: string,
-  deps: Record<string, string>
+  deps: Record<string, string>,
 ): Promise<Preset | null> {
   // Check for known backend packages
   if (deps['autotel-backends']) {
@@ -45,7 +76,10 @@ async function inferBackend(
     // Check for http exporter - could be Datadog or generic
     if (deps['@opentelemetry/exporter-trace-otlp-http']) {
       // Check env files for DD_ prefix
-      const ddVars = await checkEnvVarsPresent(packageRoot, ['DATADOG_API_KEY', 'DD_API_KEY']);
+      const ddVars = await checkEnvVarsPresent(packageRoot, [
+        'DATADOG_API_KEY',
+        'DD_API_KEY',
+      ]);
       for (const [, result] of ddVars) {
         if (result.found) {
           return getPreset('backend', 'datadog') ?? null;
@@ -63,21 +97,26 @@ async function inferBackend(
  */
 async function runChecks(
   options: DoctorOptions,
-  projectRoot: string
+  projectRoot: string,
 ): Promise<Check[]> {
   const project = discoverProject(projectRoot);
   if (!project) {
-    return [{
-      id: 'project',
-      title: 'Project discovery',
-      level: 'error',
-      status: 'error',
-      message: 'No package.json found',
-    }];
+    return [
+      {
+        id: 'project',
+        title: 'Project discovery',
+        level: 'error',
+        status: 'error',
+        message: 'No package.json found',
+      },
+    ];
   }
 
   const checks: Check[] = [];
-  const deps = { ...project.packageJson.dependencies, ...project.packageJson.devDependencies };
+  const deps = {
+    ...project.packageJson.dependencies,
+    ...project.packageJson.devDependencies,
+  };
 
   // Check 1: Autotel installed
   const autotelInfo = getAutotelInfo(project.packageJson);
@@ -148,7 +187,8 @@ async function runChecks(
 
   // Infer backend for preset-aware checks
   const inferredBackend = await inferBackend(project.packageRoot, deps);
-  const canInferPreset = inferredBackend !== null || config.type === 'cli-owned';
+  const canInferPreset =
+    inferredBackend !== null || config.type === 'cli-owned';
 
   // Check 3: Peer dependencies (preset-aware)
   if (canInferPreset && inferredBackend) {
@@ -196,12 +236,16 @@ async function runChecks(
   }
 
   // Check 4: Env vars (preset-aware)
-  if (canInferPreset && inferredBackend && inferredBackend.env.required.length > 0) {
+  if (
+    canInferPreset &&
+    inferredBackend &&
+    inferredBackend.env.required.length > 0
+  ) {
     const requiredVarNames = inferredBackend.env.required.map((v) => v.name);
     const envResults = await checkEnvVarsPresent(
       project.packageRoot,
       requiredVarNames,
-      options.envFile
+      options.envFile,
     );
 
     const missingVars: string[] = [];
@@ -287,9 +331,14 @@ async function runChecks(
     id: 'esm-hook',
     title: 'ESM hook setup',
     level: esmCheck.status === 'warn' ? 'warning' : 'info',
-    status: esmCheck.status === 'ok' ? 'ok' :
-            esmCheck.status === 'warn' ? 'warn' :
-            esmCheck.status === 'error' ? 'error' : 'skip',
+    status:
+      esmCheck.status === 'ok'
+        ? 'ok'
+        : esmCheck.status === 'warn'
+          ? 'warn'
+          : esmCheck.status === 'error'
+            ? 'error'
+            : 'skip',
     message: esmCheck.message,
     details: esmCheck.details,
   });
@@ -309,7 +358,9 @@ async function runChecks(
           `Install it: ${getInstallCommand(project.packageManager, [loggerCheck.instrumentationPackage!])}`,
         ],
         fix: {
-          cmd: getInstallCommand(project.packageManager, [loggerCheck.instrumentationPackage!]),
+          cmd: getInstallCommand(project.packageManager, [
+            loggerCheck.instrumentationPackage!,
+          ]),
           description: `Install ${loggerCheck.instrumentationPackage}`,
         },
       });
@@ -321,7 +372,10 @@ async function runChecks(
         status: 'ok',
         message: `${loggerCheck.logger} instrumentation is properly configured`,
       });
-    } else if (loggerCheck.hasInstrumentation && !loggerCheck.configuredInCode) {
+    } else if (
+      loggerCheck.hasInstrumentation &&
+      !loggerCheck.configuredInCode
+    ) {
       checks.push({
         id: 'logger-instrumentation',
         title: 'Logger instrumentation',
@@ -412,7 +466,9 @@ export async function runDoctor(options: DoctorOptions): Promise<void> {
 
   if (!project) {
     spinner.fail('No package.json found');
-    output.error('Run this command in a directory with a package.json, or use --cwd');
+    output.error(
+      'Run this command in a directory with a package.json, or use --cwd',
+    );
     process.exit(2);
   }
 
@@ -466,13 +522,18 @@ export async function runDoctor(options: DoctorOptions): Promise<void> {
           output.info(`Running: ${check.fix.cmd}`);
           try {
             const { execSync } = await import('node:child_process');
-            execSync(check.fix.cmd, { cwd: project.packageRoot, stdio: 'inherit' });
+            execSync(check.fix.cmd, {
+              cwd: project.packageRoot,
+              stdio: 'inherit',
+            });
             output.success(`Fixed: ${check.title}`);
           } catch {
             output.error(`Failed to fix: ${check.title}`);
           }
         } else {
-          output.dim(`Skipping auto-fix for ${check.id} (not safe to auto-fix)`);
+          output.dim(
+            `Skipping auto-fix for ${check.id} (not safe to auto-fix)`,
+          );
           output.dim(`Manual fix: ${check.fix.cmd}`);
         }
       }

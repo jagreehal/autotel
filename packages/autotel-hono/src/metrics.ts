@@ -68,10 +68,12 @@ export function createRequestDurationTracker(config: HttpMetricsConfig): {
   };
 }
 
-export function createActiveRequestsTracker(config: HttpMetricsConfig): {
-  increment: (attrs: Attributes) => void;
-  decrement: (attrs: Attributes) => void;
-} | undefined {
+export function createActiveRequestsTracker(config: HttpMetricsConfig):
+  | {
+      increment: (attrs: Attributes) => void;
+      decrement: (attrs: Attributes) => void;
+    }
+  | undefined {
   if (config.captureActiveRequests === false) {
     return undefined;
   }

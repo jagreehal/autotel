@@ -162,7 +162,9 @@ export const WithTraceLink: Story = {
       ],
     });
     await expect(await canvas.findByText('db.query')).toBeInTheDocument();
-    await expect(canvas.getByText('query: SELECT * FROM users')).toBeInTheDocument();
+    await expect(
+      canvas.getByText('query: SELECT * FROM users'),
+    ).toBeInTheDocument();
   },
 };
 

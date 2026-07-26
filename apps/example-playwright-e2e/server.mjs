@@ -4,19 +4,27 @@
  * Uses autotel so test → request is one trace.
  */
 import { createServer } from 'node:http';
-import { init, getTracer, context as otelContext, trace } from 'autotel';
+import { init, getTracer, context as otelContext, withTracing } from 'autotel';
 import { extractTraceContext } from 'autotel/http';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 
-init({ service: 'playwright-e2e-server', debug: true, endpoint: process.env.OTLP_ENDPOINT });
+init({
+  service: 'playwright-e2e-server',
+  debug: true,
+  endpoint: process.env.OTLP_ENDPOINT,
+});
 
 const tracer = getTracer('playwright-e2e-server', '1.0.0');
 
-const fetchUser = trace((ctx) => async (userId) => {
+const fetchUser = withTracing({})((ctx) => async (userId) => {
   ctx.setAttribute('db.userId', userId);
-  return { id: userId, name: `User ${userId}`, email: `user${userId}@example.com` };
+  return {
+    id: userId,
+    name: `User ${userId}`,
+    email: `user${userId}@example.com`,
+  };
 });
 
 function headersToRecord(req) {
@@ -32,8 +40,11 @@ function readBody(req) {
     let body = '';
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
-      try { resolve(JSON.parse(body)); }
-      catch { resolve({}); }
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        resolve({});
+      }
     });
   });
 }
@@ -54,7 +65,9 @@ createServer(async (req, res) => {
     await otelContext.with(otelContext.active(), async () => {
       if (pathname === '/health') {
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+        res.end(
+          JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }),
+        );
         return;
       }
 

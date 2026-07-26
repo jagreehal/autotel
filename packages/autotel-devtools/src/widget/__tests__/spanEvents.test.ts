@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { packEventLanes, classifyEvent } from '../utils/spanEvents';
 
-type Ev = { name: string; timestamp: number; attributes?: Record<string, unknown> };
+type Ev = {
+  name: string;
+  timestamp: number;
+  attributes?: Record<string, unknown>;
+};
 
 describe('packEventLanes', () => {
   it('places a single event in one lane at its relative position', () => {
@@ -53,12 +57,18 @@ describe('packEventLanes', () => {
 
 describe('classifyEvent', () => {
   it('classifies an OTel exception event as an exception', () => {
-    expect(classifyEvent({ name: 'exception', timestamp: 1 })).toBe('exception');
+    expect(classifyEvent({ name: 'exception', timestamp: 1 })).toBe(
+      'exception',
+    );
   });
 
   it('classifies an error-severity event as an exception', () => {
     expect(
-      classifyEvent({ name: 'log', timestamp: 1, attributes: { level: 'error' } }),
+      classifyEvent({
+        name: 'log',
+        timestamp: 1,
+        attributes: { level: 'error' },
+      }),
     ).toBe('exception');
   });
 

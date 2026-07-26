@@ -1,6 +1,6 @@
 # Designing wide spans
 
-A wide span is a single span per logical unit of work (request, job, message, fork) carrying _all_ the fields you'd ever want to filter or group by. autotel lets you build them with `useLogger().set({ … })` — fields are flattened to OTel attributes with stable dotted keys.
+A wide span is a single span per logical unit of work (request, job, message, fork) carrying _all_ the fields you'd ever want to filter or group by. autotel lets you build them with `useLogger().set({ … })`. Fields are flattened to OTel attributes with stable dotted keys.
 
 ## Anatomy
 
@@ -50,7 +50,7 @@ payment.authCode=auth_x
 2. **Group with objects.** `{ user: { id, plan } }` not `userId` / `userPlan`. The flatten step keeps the key shape stable.
 3. **Capture decisions, not just inputs.** Which branch ran, which promo applied, which fallback fired.
 4. **Keep cardinality bounded.** Don't put per-request UUIDs in `span.name`; use `SpanNameNormalizingProcessor`. Free-text labels go in attributes.
-5. **Avoid raw bodies.** Pick the shape: `{ user: { id, plan } }` — never `log.set({ user: requestBody })`.
+5. **Avoid raw bodies.** Pick the shape: `{ user: { id, plan } }`: never `log.set({ user: requestBody })`.
 6. **Trust the redactor.** PII you forgot to think about (emails, JWTs, cards) gets masked in production. See `attributeRedactor: 'default'`.
 
 ## When you need correlated child spans

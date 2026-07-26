@@ -1,11 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   HttpInstrumented,
   traceHttpRequest,
   injectTraceContext,
   extractTraceContext,
 } from './http';
+import { withTracing } from './functional';
 import { configure, resetConfig } from './config';
+import { propagation, context as otelContext } from '@opentelemetry/api';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { init } from './init';
+import { shutdown } from './shutdown';
+import { InMemorySpanExporter } from './exporters';
+import { SimpleSpanProcessor } from './processors';
 
 describe('HttpInstrumented', () => {
   beforeEach(() => {
@@ -308,7 +315,6 @@ describe('injectTraceContext', () => {
 
   afterEach(async () => {
     // Clean up any SDK that might have been initialized
-    const { shutdown } = await import('./shutdown');
     await shutdown().catch(() => {
       // Ignore errors if SDK wasn't initialized
     });
@@ -316,8 +322,6 @@ describe('injectTraceContext', () => {
   });
 
   it('should inject trace headers using propagation.inject', async () => {
-    const { propagation } = await import('@opentelemetry/api');
-
     // Mock propagation.inject to simulate W3C trace context injection
     const injectSpy = vi
       .spyOn(propagation, 'inject')
@@ -339,7 +343,6 @@ describe('injectTraceContext', () => {
   });
 
   it('should work with empty headers', async () => {
-    const { propagation } = await import('@opentelemetry/api');
     const injectSpy = vi.spyOn(propagation, 'inject');
 
     const headers = injectTraceContext();
@@ -349,8 +352,6 @@ describe('injectTraceContext', () => {
   });
 
   it('should inject baggage header when baggage is present', async () => {
-    const { propagation } = await import('@opentelemetry/api');
-
     // Mock propagation.inject to simulate baggage propagation
     const injectSpy = vi
       .spyOn(propagation, 'inject')
@@ -368,16 +369,6 @@ describe('injectTraceContext', () => {
   });
 
   it('should inject baggage set via ctx.setBaggage()', async () => {
-    const { trace } = await import('./functional');
-    const { propagation, context: otelContext } =
-      await import('@opentelemetry/api');
-    const { init } = await import('./init');
-    const { shutdown } = await import('./shutdown');
-    const { InMemorySpanExporter } = await import('./exporters');
-    const { SimpleSpanProcessor } = await import('./processors');
-    const { AsyncLocalStorageContextManager } =
-      await import('@opentelemetry/context-async-hooks');
-
     // Clean up any existing SDK first
     await shutdown().catch(() => {
       // Ignore errors if SDK wasn't initialized
@@ -416,7 +407,7 @@ describe('injectTraceContext', () => {
           }
         });
 
-      const testFn = trace((ctx) => async () => {
+      const testFn = withTracing({})((ctx) => async () => {
         // Set baggage via ctx.setBaggage()
         ctx.setBaggage('tenant.id', 't1');
         ctx.setBaggage('user.id', 'u1');

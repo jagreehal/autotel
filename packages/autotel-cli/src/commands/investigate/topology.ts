@@ -1,10 +1,6 @@
 import { Command } from 'commander';
 import { runInvestigate, type InvestigateFlags } from './runtime';
-import {
-  addBackendFlags,
-  backendFlagsFromOpts,
-  intArg,
-} from './cli-helpers';
+import { addBackendFlags, backendFlagsFromOpts, intArg } from './cli-helpers';
 
 export async function runListServices(flags: InvestigateFlags): Promise<void> {
   await runInvestigate('topology services', flags, async (backend) =>

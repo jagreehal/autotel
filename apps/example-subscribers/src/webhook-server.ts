@@ -22,9 +22,8 @@ import type { AddressInfo } from 'node:net';
 import 'dotenv/config';
 import pino from 'pino';
 
-import { init, shutdown } from 'autotel';
+import { init, shutdown, span } from 'autotel';
 import { Event } from 'autotel/event';
-import { trace } from 'autotel/functional';
 import { WebhookSubscriber } from 'autotel-subscribers/webhook';
 
 const logger = pino({
@@ -162,7 +161,7 @@ const triggerServer = createServer(async (req, res) => {
 
   if (method === 'POST' && url === triggerPath) {
     // Wrap in traced function to automatically capture traceId/spanId in events events
-    await trace('webhook.trigger', async () => {
+    await span('webhook.trigger', async () => {
       const payload = (await parseJson<TriggerPayload>(req)) ?? {};
       const name =
         typeof payload.name === 'string'
@@ -242,7 +241,7 @@ triggerServer.listen(triggerPort, () => {
 
   // Kick off an initial demo event after both servers are ready
   setTimeout(() => {
-    void trace('webhook.demo.init', async () => {
+    void span('webhook.demo.init', async () => {
       logger.info('📤 Sending initial demo events event...');
       events.trackEvent('webhook.demo.started', {
         startedAt: new Date().toISOString(),
@@ -280,4 +279,3 @@ async function closeGracefully(signal: NodeJS.Signals): Promise<void> {
 
 process.once('SIGINT', closeGracefully);
 process.once('SIGTERM', closeGracefully);
-

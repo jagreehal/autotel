@@ -4,7 +4,7 @@ description: >
   createStructuredError, parseError, recordStructuredError. API errors with message, why, fix, link; client parsing for UI. Use in API routes and client catch blocks.
 ---
 
-# Autotel — Structured Errors
+# Autotel: Structured Errors
 
 Throw errors with `createStructuredError({ message, why?, fix?, link?, status?, cause? })` in API routes and services. On the client, use `parseError(caught)` to get `message`, `status`, `why`, `fix`, `link` for toasts and UI.
 
@@ -122,4 +122,4 @@ Source: docs/AGENT-GUIDE.md
 
 Targets autotel v2.23.x.
 
-See also: autotel-request-logging/SKILL.md — use .error() to record errors in the request snapshot.
+See also: autotel-request-logging/SKILL.md. Use .error() to record errors in the request snapshot.

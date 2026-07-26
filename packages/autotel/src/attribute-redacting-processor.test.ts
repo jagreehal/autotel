@@ -730,11 +730,11 @@ describe('normalizeAttributeRedactorConfig', () => {
   it('should normalize regex-like values from serialized config', () => {
     const normalized = normalizeAttributeRedactorConfig({
       keyPatterns: ['password'],
-      patterns: [{ source: 'Bearer\\s+\\w+', flags: 'gi' }],
+      patterns: [{ source: String.raw`Bearer\s+\w+`, flags: 'gi' }],
       valuePatterns: [
         {
           name: 'customerId',
-          pattern: { source: 'CUST-\\d{4}', flags: 'g' },
+          pattern: { source: String.raw`CUST-\d{4}`, flags: 'g' },
           replacement: 'CUST-***',
         },
       ],

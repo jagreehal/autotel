@@ -57,7 +57,8 @@ describe('buildExceptionList', () => {
 
   describe('buildExceptionList with redactor', () => {
     it('redacts PII from error message', () => {
-      const mockRedactor = (v: string) => v.replace(/john@example\.com/g, '[REDACTED]');
+      const mockRedactor = (v: string) =>
+        v.replace(/john@example\.com/g, '[REDACTED]');
       const error = new Error('User john@example.com not found');
       const result = buildExceptionList(error, 'manual', mockRedactor);
       expect(result[0].value).toBe('User [REDACTED] not found');

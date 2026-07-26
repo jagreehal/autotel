@@ -38,7 +38,8 @@ import { EventSubscriber, type EventPayload } from './event-subscriber-base';
  * target this spec. Bumping the spec version is a breaking change for
  * downstream consumers, so add fields rather than rename existing ones.
  */
-export const ARCHITECTURE_SNAPSHOT_SPEC = 'autotel-architecture/v0.1.0' as const;
+export const ARCHITECTURE_SNAPSHOT_SPEC =
+  'autotel-architecture/v0.1.0' as const;
 
 export type ArchitectureSnapshot = {
   spec: typeof ARCHITECTURE_SNAPSHOT_SPEC;
@@ -141,7 +142,10 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
     existing.observedCount += 1;
     existing.lastSeen = now;
     existing.fieldPaths = mergeUnique(existing.fieldPaths, fieldPaths);
-    existing.fieldStats = mergeFieldStats(existing.fieldStats ?? {}, fieldStats);
+    existing.fieldStats = mergeFieldStats(
+      existing.fieldStats ?? {},
+      fieldStats,
+    );
 
     if (
       traceId &&
@@ -153,7 +157,10 @@ export class ArchitectureSnapshotSubscriber extends EventSubscriber {
 
     existing.channel ??= autotelMeta.channel;
     existing.producer ??= autotelMeta.producer;
-    existing.consumers = mergeUnique(existing.consumers ?? [], autotelMeta.consumers ?? []);
+    existing.consumers = mergeUnique(
+      existing.consumers ?? [],
+      autotelMeta.consumers ?? [],
+    );
     existing.schema ??= payload.schema
       ? {
           source: payload.schema.source,
@@ -264,7 +271,9 @@ const AUTOTEL_INJECTED_KEYS = new Set([
   'service.name',
 ]);
 
-function stripAutotelMeta(attrs: Record<string, unknown>): Record<string, unknown> {
+function stripAutotelMeta(
+  attrs: Record<string, unknown>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attrs)) {
     if (AUTOTEL_INJECTED_KEYS.has(key)) continue;
@@ -308,8 +317,14 @@ function mergeUnique(a: string[], b: string[]): string[] {
   return [...set];
 }
 
-function extractFieldStats(value: unknown, prefix = ''): Record<string, FieldStats> {
-  const out = new Map<string, { types: Set<string>; sampleValues: Set<string | number | boolean | null> }>();
+function extractFieldStats(
+  value: unknown,
+  prefix = '',
+): Record<string, FieldStats> {
+  const out = new Map<
+    string,
+    { types: Set<string>; sampleValues: Set<string | number | boolean | null> }
+  >();
   walkFieldStats(value, prefix, out);
   const obj: Record<string, FieldStats> = {};
   for (const [path, stats] of out) {
@@ -324,7 +339,10 @@ function extractFieldStats(value: unknown, prefix = ''): Record<string, FieldSta
 function walkFieldStats(
   value: unknown,
   prefix: string,
-  out: Map<string, { types: Set<string>; sampleValues: Set<string | number | boolean | null> }>,
+  out: Map<
+    string,
+    { types: Set<string>; sampleValues: Set<string | number | boolean | null> }
+  >,
 ): void {
   if (value === null || value === undefined) return;
   if (Array.isArray(value)) {
@@ -344,9 +362,15 @@ function walkFieldStats(
 function addPathValue(
   path: string,
   value: unknown,
-  out: Map<string, { types: Set<string>; sampleValues: Set<string | number | boolean | null> }>,
+  out: Map<
+    string,
+    { types: Set<string>; sampleValues: Set<string | number | boolean | null> }
+  >,
 ): void {
-  const existing = out.get(path) ?? { types: new Set<string>(), sampleValues: new Set<string | number | boolean | null>() };
+  const existing = out.get(path) ?? {
+    types: new Set<string>(),
+    sampleValues: new Set<string | number | boolean | null>(),
+  };
   const t = classifyValueType(value);
   existing.types.add(t);
   if (

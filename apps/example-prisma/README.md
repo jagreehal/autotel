@@ -13,16 +13,19 @@ This example demonstrates how to use autotel with Prisma ORM for automatic OpenT
 ## Setup
 
 1. **Install dependencies**:
+
    ```bash
    pnpm install
    ```
 
 2. **Generate Prisma Client**:
+
    ```bash
    pnpm db:generate
    ```
 
 3. **Push database schema** (creates SQLite database):
+
    ```bash
    pnpm db:push
    ```

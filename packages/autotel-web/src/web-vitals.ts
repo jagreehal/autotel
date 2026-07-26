@@ -49,7 +49,11 @@ function ensureSpanAndSetMetric(metric: Metric, config: WebVitalsConfig): void {
   webVitalsSpan.setAttribute(key, metric.value);
   webVitalsSpan.setAttribute(`${key}.rating`, metric.rating);
   if (config.debug) {
-    console.debug(`[autotel-web] Web Vital ${name}:`, metric.value, metric.rating);
+    console.debug(
+      `[autotel-web] Web Vital ${name}:`,
+      metric.value,
+      metric.rating,
+    );
   }
 }
 
@@ -58,16 +62,18 @@ export function setupWebVitals(config: WebVitalsConfig): void {
 
   const opts = { reportAllChanges: config.reportAllChanges ?? false };
 
-  import('web-vitals').then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
-    const report = (metric: Metric) => ensureSpanAndSetMetric(metric, config);
-    onCLS(report, opts);
-    onINP(report, opts);
-    onLCP(report, opts);
-    onFCP(report, opts);
-    onTTFB(report, opts);
-  }).catch((err) => {
-    if (config.debug) {
-      console.warn('[autotel-web] web-vitals failed to load:', err);
-    }
-  });
+  import('web-vitals')
+    .then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
+      const report = (metric: Metric) => ensureSpanAndSetMetric(metric, config);
+      onCLS(report, opts);
+      onINP(report, opts);
+      onLCP(report, opts);
+      onFCP(report, opts);
+      onTTFB(report, opts);
+    })
+    .catch((err) => {
+      if (config.debug) {
+        console.warn('[autotel-web] web-vitals failed to load:', err);
+      }
+    });
 }

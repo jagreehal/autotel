@@ -12,7 +12,7 @@ Instrumentation plugins for libraries that have no official OTel support or wher
 | -------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | BigQuery | `autotel-plugins/bigquery` | No official OTel instrumentation exists                                                                                                       |
 | Kafka    | `autotel-plugins/kafka`    | Official `@opentelemetry/instrumentation-kafkajs` only traces produce/consume; this adds processing spans, batch lineage, and correlation IDs |
-| RabbitMQ | `autotel-plugins/rabbitmq` | Composition layer on top of `@opentelemetry/instrumentation-amqplib` — adds consume/publish spans, ack tracking, batch lineage                |
+| RabbitMQ | `autotel-plugins/rabbitmq` | Composition layer on top of `@opentelemetry/instrumentation-amqplib`: adds consume/publish spans, ack tracking, batch lineage                 |
 
 All three are also re-exported from the root `autotel-plugins` entry point.
 
@@ -33,7 +33,7 @@ pnpm add autotel-plugins @opentelemetry/instrumentation-amqplib
 
 ## Configuration / Core Patterns
 
-### BigQuery — `instrumentBigQuery`
+### BigQuery: `instrumentBigQuery`
 
 Wraps a `BigQuery` instance to create spans for `query()`, `createQueryJob()`, dataset operations, and table operations. No official OTel plugin exists for BigQuery so this is the only tracing path.
 
@@ -54,9 +54,9 @@ const [rows] = await bq.query('SELECT 1');
 
 `BigQueryInstrumentation` class is also exported for programmatic use, but `instrumentBigQuery(instance, config)` is the primary API.
 
-### Kafka — processing spans
+### Kafka: processing spans
 
-Use `withProcessingSpan` to wrap each message handler. This is the core primitive — it creates a CONSUMER-kind span with proper messaging attributes and context propagation.
+Use `withProcessingSpan` to wrap each message handler. This is the core primitive. It creates a CONSUMER-kind span with proper messaging attributes and context propagation.
 
 ```ts
 import { withProcessingSpan } from 'autotel-plugins/kafka';
@@ -95,7 +95,7 @@ Feature flag pattern:
 contextMode: process.env.KAFKA_PROPAGATE_TRACE !== 'false' ? 'inherit' : 'none',
 ```
 
-### Kafka — producer spans
+### Kafka: producer spans
 
 ```ts
 import { withProducerSpan, injectTraceHeaders } from 'autotel-plugins/kafka';
@@ -116,7 +116,7 @@ await withProducerSpan(
 );
 ```
 
-### Kafka — batch processing
+### Kafka: batch processing
 
 For `eachBatch` handlers, `withBatchConsumer` creates a batch-level span and optionally per-message child spans:
 
@@ -140,7 +140,7 @@ await consumer.run({
 });
 ```
 
-### Kafka — batch lineage (fan-in)
+### Kafka: batch lineage (fan-in)
 
 When a single downstream span is the result of many upstream messages (e.g., settlement batching), use `extractBatchLineage` to create span links for each upstream trace:
 
@@ -177,7 +177,7 @@ await withProcessingSpan(
 );
 ```
 
-### Kafka — Map-based headers (e.g., @platformatic/kafka)
+### Kafka: Map-based headers (e.g., @platformatic/kafka)
 
 ```ts
 import { normalizeHeaders, withProcessingSpan } from 'autotel-plugins/kafka';
@@ -193,7 +193,7 @@ await withProcessingSpan(
 );
 ```
 
-### RabbitMQ — consume and publish spans
+### RabbitMQ: consume and publish spans
 
 RabbitMQ mirrors the Kafka API surface but for AMQP:
 
@@ -246,7 +246,7 @@ await withPublishSpan(
 
 ### Semantic attribute constants
 
-All plugins export semantic attribute name constants — use these instead of string literals:
+All plugins export semantic attribute name constants. Use these instead of string literals:
 
 ```ts
 import {
@@ -260,7 +260,7 @@ import {
 
 ### HIGH: Injecting trace headers outside the producer span
 
-Headers must be injected while the producer span is active. Calling `injectTraceHeaders` before `withProducerSpan` captures whatever span is active at call time — not the producer span.
+Headers must be injected while the producer span is active. Calling `injectTraceHeaders` before `withProducerSpan` captures whatever span is active at call time. Not the producer span.
 
 Wrong:
 

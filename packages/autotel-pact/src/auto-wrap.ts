@@ -40,7 +40,11 @@ import { span as autotelSpan, getActiveSpan } from 'autotel';
 import { createRequire } from 'node:module';
 import { buildPactAttributes, outcomeAttribute } from './attrs.js';
 import { appendLedgerEntry } from './ledger.js';
-import { LEDGER_ENTRY_SPEC, type InteractionLedgerEntry, type PactInteractionMeta } from './types.js';
+import {
+  LEDGER_ENTRY_SPEC,
+  type InteractionLedgerEntry,
+  type PactInteractionMeta,
+} from './types.js';
 import type { HttpInteraction } from './wrapper-http.js';
 import type { ReifiedMessage } from './wrapper.js';
 
@@ -165,7 +169,10 @@ function patchHttpPact(mod: PactJsModule): void {
   const tracked = new WeakMap<object, HttpInteraction[]>();
 
   const originalAdd = proto.addInteraction as (i: HttpInteraction) => unknown;
-  proto.addInteraction = function patchedAddInteraction(this: object, interaction: HttpInteraction) {
+  proto.addInteraction = function patchedAddInteraction(
+    this: object,
+    interaction: HttpInteraction,
+  ) {
     const list = tracked.get(this) ?? [];
     list.push(interaction);
     tracked.set(this, list);

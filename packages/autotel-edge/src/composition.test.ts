@@ -5,10 +5,26 @@ import {
   composeSubscribers,
   defineConfig,
 } from './composition';
-import type { EdgeEvent, EdgeSubscriber, PostProcessorFn, ReadableSpan } from './types';
+import type {
+  EdgeEvent,
+  EdgeSubscriber,
+  PostProcessorFn,
+  ReadableSpan,
+} from './types';
 
 function makeSpan(name: string): ReadableSpan {
   return { name } as unknown as ReadableSpan;
+}
+
+function makeEvent(): EdgeEvent {
+  return {
+    type: 'event',
+    event: 'test',
+    service: 'svc',
+    timestamp: 0,
+    attributes: {},
+    name: 'test',
+  };
 }
 
 describe('defineConfig', () => {
@@ -31,7 +47,7 @@ describe('composeSubscribers', () => {
       calls.push('b');
     };
 
-    await composeSubscribers([a, b])({ kind: 'span.start' } as EdgeEvent);
+    await composeSubscribers([a, b])(makeEvent());
     expect(calls).toEqual(['a', 'b']);
   });
 
@@ -46,7 +62,7 @@ describe('composeSubscribers', () => {
       calls.push('b');
     };
 
-    await composeSubscribers([a, b])({ kind: 'span.start' } as EdgeEvent);
+    await composeSubscribers([a, b])(makeEvent());
 
     expect(calls).toEqual(['b']);
     expect(consoleSpy).toHaveBeenCalled();
@@ -57,8 +73,9 @@ describe('composeSubscribers', () => {
 describe('composePostProcessors', () => {
   it('threads spans through each processor', () => {
     const tag: PostProcessorFn = (spans) =>
-      spans.map((s) => ({ ...s, name: `${s.name}!` } as ReadableSpan));
-    const drop: PostProcessorFn = (spans) => spans.filter((s) => s.name !== 'b!');
+      spans.map((s) => ({ ...s, name: `${s.name}!` }) as ReadableSpan);
+    const drop: PostProcessorFn = (spans) =>
+      spans.filter((s) => s.name !== 'b!');
 
     const result = composePostProcessors([tag, drop])([
       makeSpan('a'),

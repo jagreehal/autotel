@@ -25,7 +25,10 @@ function makeFakeMessagePact() {
 function makeFakePactV3() {
   return class FakePactV3 {
     opts = { consumer: 'Web', provider: 'Catalog' };
-    added: Array<{ uponReceiving: string; states?: Array<{ description: string }> }> = [];
+    added: Array<{
+      uponReceiving: string;
+      states?: Array<{ description: string }>;
+    }> = [];
     addInteraction(interaction: {
       uponReceiving: string;
       states?: Array<{ description: string }>;
@@ -61,7 +64,9 @@ describe('auto-wrap', () => {
     process.env.AUTOTEL_PACT_RUN_ID = 'r-auto-msg';
     const Pact = makeFakeMessagePact();
     installAutoWrap({
-      MessageConsumerPact: Pact as unknown as { prototype: Record<string | symbol, unknown> },
+      MessageConsumerPact: Pact as unknown as {
+        prototype: Record<string | symbol, unknown>;
+      },
     });
 
     const pact = new Pact();
@@ -83,7 +88,9 @@ describe('auto-wrap', () => {
     process.env.AUTOTEL_PACT_RUN_ID = 'r-auto-http';
     const Pact = makeFakePactV3();
     installAutoWrap({
-      PactV3: Pact as unknown as { prototype: Record<string | symbol, unknown> },
+      PactV3: Pact as unknown as {
+        prototype: Record<string | symbol, unknown>;
+      },
     });
 
     const pact = new Pact();
@@ -109,7 +116,9 @@ describe('auto-wrap', () => {
     process.env.AUTOTEL_PACT_RUN_ID = 'r-auto-fail';
     const Pact = makeFakePactV3();
     installAutoWrap({
-      PactV3: Pact as unknown as { prototype: Record<string | symbol, unknown> },
+      PactV3: Pact as unknown as {
+        prototype: Record<string | symbol, unknown>;
+      },
     });
 
     const pact = new Pact();
@@ -122,17 +131,24 @@ describe('auto-wrap', () => {
     ).rejects.toThrow('assertion failed');
 
     const entries = readLedger({ runId: 'r-auto-fail' });
-    expect(entries[0]).toMatchObject({ outcome: 'failed', error: 'assertion failed' });
+    expect(entries[0]).toMatchObject({
+      outcome: 'failed',
+      error: 'assertion failed',
+    });
   });
 
   it('is idempotent — installing twice on the same prototype does not double-wrap', async () => {
     process.env.AUTOTEL_PACT_RUN_ID = 'r-auto-idem';
     const Pact = makeFakeMessagePact();
     installAutoWrap({
-      MessageConsumerPact: Pact as unknown as { prototype: Record<string | symbol, unknown> },
+      MessageConsumerPact: Pact as unknown as {
+        prototype: Record<string | symbol, unknown>;
+      },
     });
     installAutoWrap({
-      MessageConsumerPact: Pact as unknown as { prototype: Record<string | symbol, unknown> },
+      MessageConsumerPact: Pact as unknown as {
+        prototype: Record<string | symbol, unknown>;
+      },
     });
 
     const pact = new Pact();

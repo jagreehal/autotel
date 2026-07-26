@@ -8,6 +8,7 @@
  * @example Stripe payment webhook
  * ```typescript
  * import { createParkingLot, InMemoryTraceContextStore } from 'autotel/webhook';
+ * import { withTracing } from 'autotel';
  *
  * const parkingLot = createParkingLot({
  *   store: new InMemoryTraceContextStore(),
@@ -15,7 +16,7 @@
  * });
  *
  * // When initiating payment
- * export const initiatePayment = trace(ctx => async (orderId: string) => {
+ * export const initiatePayment = withTracing({})(ctx => async (orderId: string) => {
  *   await parkingLot.park(`payment:${orderId}`, { orderId });
  *   await stripeClient.createPaymentIntent({ metadata: { orderId } });
  * });
@@ -37,7 +38,7 @@
 import { SpanKind, trace as otelTrace } from '@opentelemetry/api';
 import type { SpanContext, Link } from '@opentelemetry/api';
 import { emitCorrelatedEvent } from './correlated-events';
-import { trace } from './functional';
+import { withTracing } from './functional';
 import type { AttributeValue, TraceContext } from './trace-context';
 import { recordStructuredError } from './structured-error';
 
@@ -214,9 +215,9 @@ export interface ParkingLot {
    * });
    * ```
    */
-  traceCallback<TArgs extends unknown[], TReturn>(
+  traceCallback(
     config: CallbackConfig,
-  ): (
+  ): <TArgs extends unknown[], TReturn>(
     fnFactory: (ctx: CallbackContext) => (...args: TArgs) => Promise<TReturn>,
   ) => (...args: TArgs) => Promise<TReturn>;
 
@@ -472,104 +473,98 @@ export function createParkingLot(config: ParkingLotConfig): ParkingLot {
       return storedContext;
     },
 
-    traceCallback<TArgs extends unknown[], TReturn>(
+    traceCallback(
       callbackConfig: CallbackConfig,
-    ): (
+    ): <TArgs extends unknown[], TReturn>(
       fnFactory: (ctx: CallbackContext) => (...args: TArgs) => Promise<TReturn>,
     ) => (...args: TArgs) => Promise<TReturn> {
-      return (
+      return <TArgs extends unknown[], TReturn>(
         fnFactory: (
           ctx: CallbackContext,
         ) => (...args: TArgs) => Promise<TReturn>,
       ): ((...args: TArgs) => Promise<TReturn>) => {
-        return trace<TArgs, TReturn>(
-          {
-            name: callbackConfig.name,
-            spanKind: SpanKind.SERVER,
-          },
-          (baseCtx) => {
-            return async (...args: TArgs) => {
-              // Extract correlation key from arguments
-              const correlationKey = callbackConfig.correlationKeyFrom(args);
+        return withTracing<TArgs, TReturn>({
+          name: callbackConfig.name,
+          spanKind: SpanKind.SERVER,
+        })((baseCtx) => {
+          return async (...args: TArgs) => {
+            // Extract correlation key from arguments
+            const correlationKey = callbackConfig.correlationKeyFrom(args);
 
-              // Retrieve parked context
-              const parkedContext = await parkingLot.retrieve(correlationKey);
+            // Retrieve parked context
+            const parkedContext = await parkingLot.retrieve(correlationKey);
 
-              // Calculate elapsed time
-              const elapsedMs = parkedContext
-                ? Date.now() - parkedContext.parkedAt
-                : null;
+            // Calculate elapsed time
+            const elapsedMs = parkedContext
+              ? Date.now() - parkedContext.parkedAt
+              : null;
 
-              // Set span attributes
+            // Set span attributes
+            baseCtx.setAttribute('parking_lot.correlation_key', correlationKey);
+
+            if (parkedContext) {
+              baseCtx.setAttribute('parking_lot.elapsed_ms', elapsedMs!);
               baseCtx.setAttribute(
-                'parking_lot.correlation_key',
-                correlationKey,
+                'parking_lot.original_trace_id',
+                parkedContext.traceId,
+              );
+              baseCtx.setAttribute(
+                'parking_lot.original_span_id',
+                parkedContext.spanId,
               );
 
-              if (parkedContext) {
-                baseCtx.setAttribute('parking_lot.elapsed_ms', elapsedMs!);
-                baseCtx.setAttribute(
-                  'parking_lot.original_trace_id',
-                  parkedContext.traceId,
-                );
-                baseCtx.setAttribute(
-                  'parking_lot.original_span_id',
-                  parkedContext.spanId,
-                );
-
-                // Add metadata as attributes
-                if (parkedContext.metadata) {
-                  for (const [key, value] of Object.entries(
-                    parkedContext.metadata,
-                  )) {
-                    baseCtx.setAttribute(`parking_lot.metadata.${key}`, value);
-                  }
-                }
-
-                // Create span link to original trace
-                const link = parkingLot.createLink(parkedContext);
-                baseCtx.addLinks([link]);
-
-                emitCorrelatedEvent(baseCtx, 'parked_context_retrieved', {
-                  'parking_lot.correlation_key': correlationKey,
-                  'parking_lot.elapsed_ms': elapsedMs!,
-                  'parking_lot.original_trace_id': parkedContext.traceId,
-                });
-              } else {
-                baseCtx.setAttribute('parking_lot.context_found', false);
-
-                if (callbackConfig.requireParkedContext) {
-                  const error = new Error(
-                    `Required parked context not found for key: ${correlationKey}`,
-                  );
-                  recordStructuredError(baseCtx, error);
-                  throw error;
-                }
-              }
-
-              // Apply custom attributes
-              if (callbackConfig.attributes) {
+              // Add metadata as attributes
+              if (parkedContext.metadata) {
                 for (const [key, value] of Object.entries(
-                  callbackConfig.attributes,
+                  parkedContext.metadata,
                 )) {
-                  baseCtx.setAttribute(key, value);
+                  baseCtx.setAttribute(`parking_lot.metadata.${key}`, value);
                 }
               }
 
-              // Create extended context
-              const callbackCtx: CallbackContext = {
-                ...baseCtx,
-                parkedContext,
-                elapsedMs,
-                correlationKey,
-              };
+              // Create span link to original trace
+              const link = parkingLot.createLink(parkedContext);
+              baseCtx.addLinks([link]);
 
-              // Execute user's function
-              const userFn = fnFactory(callbackCtx);
-              return userFn(...args);
+              emitCorrelatedEvent(baseCtx, 'parked_context_retrieved', {
+                'parking_lot.correlation_key': correlationKey,
+                'parking_lot.elapsed_ms': elapsedMs!,
+                'parking_lot.original_trace_id': parkedContext.traceId,
+              });
+            } else {
+              baseCtx.setAttribute('parking_lot.context_found', false);
+
+              if (callbackConfig.requireParkedContext) {
+                const error = new Error(
+                  `Required parked context not found for key: ${correlationKey}`,
+                );
+                recordStructuredError(baseCtx, error);
+                throw error;
+              }
+            }
+
+            // Apply custom attributes
+            if (callbackConfig.attributes) {
+              for (const [key, value] of Object.entries(
+                callbackConfig.attributes,
+              )) {
+                baseCtx.setAttribute(key, value);
+              }
+            }
+
+            // Create extended context
+            const callbackCtx: CallbackContext = {
+              ...baseCtx,
+              parkedContext,
+              elapsedMs,
+              correlationKey,
             };
-          },
-        );
+
+            // Execute user's function
+            const userFn = fnFactory(callbackCtx);
+            return userFn(...args);
+          };
+        }) as (...args: TArgs) => Promise<TReturn>; // async factory always returns a Promise
       };
     },
 

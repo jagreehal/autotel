@@ -22,12 +22,12 @@ observability-contract pair. Both use telemetry to answer a contract question.
 The package records evidence, not guesses. Every finding states what was
 observed or verified, and what you had to configure to earn it.
 
-| Evidence | What it means | What you configure |
-| --- | --- | --- |
-| **Seen in test** | A consumer exercised the interaction in CI | `withPactInteraction` or auto-wrap |
-| **Seen in production** | A span tagged with `pact.*` was recorded at runtime | `tagPactInteraction()` + `PactLedgerSpanProcessor` |
-| **Provider verified** | `verifyProvider()` succeeded and interactions came from the pact file | `withProviderVerification` |
-| **Broker verified** | The latest broker verification for the consumer-provider pair succeeded | Broker URL/token at audit time |
+| Evidence               | What it means                                                           | What you configure                                 |
+| ---------------------- | ----------------------------------------------------------------------- | -------------------------------------------------- |
+| **Seen in test**       | A consumer exercised the interaction in CI                              | `withPactInteraction` or auto-wrap                 |
+| **Seen in production** | A span tagged with `pact.*` was recorded at runtime                     | `tagPactInteraction()` + `PactLedgerSpanProcessor` |
+| **Provider verified**  | `verifyProvider()` succeeded and interactions came from the pact file   | `withProviderVerification`                         |
+| **Broker verified**    | The latest broker verification for the consumer-provider pair succeeded | Broker URL/token at audit time                     |
 
 > [!NOTE]
 > Broker verification proves the latest pact between a consumer and provider
@@ -99,11 +99,11 @@ import { runAudit } from 'autotel-pact/audit';
 const matrix = await runAudit({ pactsDir: './pacts', windowDays: 14 });
 ```
 
-| Count | Meaning |
-| --- | --- |
-| `contracted_and_test_seen` | Contracts with test evidence in the window. Good coverage. |
-| `contracted_not_test_seen` | Contracts with no test evidence. Stale confidence. |
-| `test_or_prod_seen_not_contracted` | Observed flows with no contract. Ungoverned. |
+| Count                              | Meaning                                                    |
+| ---------------------------------- | ---------------------------------------------------------- |
+| `contracted_and_test_seen`         | Contracts with test evidence in the window. Good coverage. |
+| `contracted_not_test_seen`         | Contracts with no test evidence. Stale confidence.         |
+| `test_or_prod_seen_not_contracted` | Observed flows with no contract. Ungoverned.               |
 
 The bundled `autotel-pact` CLI runs the same audit and fails the build when a
 "verified" contract has not been exercised recently.

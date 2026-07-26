@@ -1,5 +1,14 @@
 <script lang="ts">
-  import { Cpu, Clock, Coins, Hash, Bot, Gauge, ShieldAlert, TriangleAlert } from '@lucide/svelte';
+  import {
+    Cpu,
+    Clock,
+    Coins,
+    Hash,
+    Bot,
+    Gauge,
+    ShieldAlert,
+    TriangleAlert,
+  } from '@lucide/svelte';
   import { cn } from '../../utils/cn';
   import CopyButton from '../CopyButton.svelte';
   import {
@@ -106,7 +115,9 @@
   )}
 >
   {#if showAgentChip}
-    <span class={cn(CHIP, 'bg-violet-500/15 text-violet-600 border-violet-500/30')}>
+    <span
+      class={cn(CHIP, 'bg-violet-500/15 text-violet-600 border-violet-500/30')}
+    >
       <Bot size={12} />
       agent: {span.agent!.name}
     </span>
@@ -118,7 +129,10 @@
   {/if}
   {#if span.guard}
     <span
-      class={cn(CHIP, span.guard.stopped || span.guard.action === 'stop' ? RED : AMBER)}
+      class={cn(
+        CHIP,
+        span.guard.stopped || span.guard.action === 'stop' ? RED : AMBER,
+      )}
       title={span.guard.message ??
         (span.guard.stopped ? 'Guard stopped the run' : 'Guard warning')}
     >

@@ -1,9 +1,5 @@
 import { Command } from 'commander';
-import {
-  detectAnomalies,
-  findRootCause,
-  pickErrorMessage,
-} from 'autotel-mcp';
+import { detectAnomalies, findRootCause, pickErrorMessage } from 'autotel-mcp';
 import { runInvestigate, type InvestigateFlags } from './runtime';
 import {
   addBackendFlags,
@@ -152,11 +148,9 @@ export async function runDiagnoseSlos(flags: DiagnoseSlosFlags): Promise<void> {
       };
     }
 
-    const durations = spans
-      .map((s) => s.durationMs)
-      .toSorted((a, b) => a - b);
+    const durations = spans.map((s) => s.durationMs).toSorted((a, b) => a - b);
     const p99Index = Math.floor(durations.length * 0.99);
-    const actualP99 = durations[Math.min(p99Index, durations.length - 1)];
+    const actualP99 = durations[Math.min(p99Index, durations.length - 1)]!;
 
     if (flags.p99LatencyMs !== undefined && actualP99 > flags.p99LatencyMs) {
       violations.push({
@@ -170,7 +164,10 @@ export async function runDiagnoseSlos(flags: DiagnoseSlosFlags): Promise<void> {
     const errorCount = spans.filter((s) => s.hasError).length;
     const actualErrorRate = errorCount / spans.length;
 
-    if (flags.maxErrorRate !== undefined && actualErrorRate > flags.maxErrorRate) {
+    if (
+      flags.maxErrorRate !== undefined &&
+      actualErrorRate > flags.maxErrorRate
+    ) {
       violations.push({
         type: 'error_rate',
         target: flags.maxErrorRate,

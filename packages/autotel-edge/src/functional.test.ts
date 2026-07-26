@@ -47,7 +47,9 @@ describe('Functional API', () => {
       }),
     };
 
-    getTracerSpy = vi.spyOn(otelTrace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(otelTrace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {
@@ -90,7 +92,9 @@ describe('Functional API', () => {
 
       await testFunction();
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -136,11 +140,48 @@ describe('Functional API', () => {
         expect.any(Function),
       );
     });
+
+    it('waits for a Promise returned by a non-async function', async () => {
+      let reject!: (error: Error) => void;
+      const pending = new Promise<string>((_resolve, rejectPromise) => {
+        reject = rejectPromise;
+      });
+      const testFunction = trace('promise-returning', () => pending);
+      const result = testFunction();
+
+      expect(mockSpan.end).not.toHaveBeenCalled();
+
+      const failure = new Error('late failure');
+      reject(failure);
+      await expect(result).rejects.toBe(failure);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'late failure',
+      });
+      expect(mockSpan.recordException).toHaveBeenCalledWith(failure);
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('passes the resolved value to attributesFromResult for a non-async Promise', async () => {
+      const attributesFromResult = vi.fn((value: string) => ({
+        'result.value': value,
+      }));
+      const testFunction = trace(
+        { name: 'promise-result', attributesFromResult },
+        () => Promise.resolve('resolved'),
+      );
+
+      await expect(testFunction()).resolves.toBe('resolved');
+      expect(attributesFromResult).toHaveBeenCalledWith('resolved');
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'result.value': 'resolved',
+      });
+    });
   });
 
   describe('trace() - Named Spans', () => {
     it('should use custom span name', async () => {
-      const testFunction = trace('user.create', async function(email: string) {
+      const testFunction = trace('user.create', async function (email: string) {
         return { id: '123', email };
       });
 
@@ -170,25 +211,33 @@ describe('Functional API', () => {
 
   describe('trace() - Full Options', () => {
     it('should extract attributes from arguments', async () => {
-      const testFunction = trace({
-        name: 'user.create',
-        attributesFromArgs: ([email]: [string]) => ({ 'user.email': email }),
-      }, async function(email: string) {
-        return { id: '123', email };
-      });
+      const testFunction = trace(
+        {
+          name: 'user.create',
+          attributesFromArgs: ([email]: [string]) => ({ 'user.email': email }),
+        },
+        async function (email: string) {
+          return { id: '123', email };
+        },
+      );
 
       await testFunction('test@example.com');
 
-      expect(mockSpan.setAttributes).toHaveBeenCalledWith({ 'user.email': 'test@example.com' });
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'user.email': 'test@example.com',
+      });
     });
 
     it('should extract attributes from result', async () => {
-      const testFunction = trace({
-        name: 'user.create',
-        attributesFromResult: (user: any) => ({ 'user.id': user.id }),
-      }, async function(email: string) {
-        return { id: '123', email };
-      });
+      const testFunction = trace(
+        {
+          name: 'user.create',
+          attributesFromResult: (user: any) => ({ 'user.id': user.id }),
+        },
+        async function (email: string) {
+          return { id: '123', email };
+        },
+      );
 
       await testFunction('test@example.com');
 
@@ -196,39 +245,52 @@ describe('Functional API', () => {
     });
 
     it('should extract attributes from both args and result', async () => {
-      const testFunction = trace({
-        name: 'user.create',
-        attributesFromArgs: ([email]: [string]) => ({ 'user.email': email }),
-        attributesFromResult: (user: any) => ({ 'user.id': user.id }),
-      }, async function(email: string) {
-        return { id: '123', email };
-      });
+      const testFunction = trace(
+        {
+          name: 'user.create',
+          attributesFromArgs: ([email]: [string]) => ({ 'user.email': email }),
+          attributesFromResult: (user: any) => ({ 'user.id': user.id }),
+        },
+        async function (email: string) {
+          return { id: '123', email };
+        },
+      );
 
       await testFunction('test@example.com');
 
-      expect(mockSpan.setAttributes).toHaveBeenCalledWith({ 'user.email': 'test@example.com' });
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'user.email': 'test@example.com',
+      });
       expect(mockSpan.setAttributes).toHaveBeenCalledWith({ 'user.id': '123' });
     });
 
     it('should add static attributes', async () => {
-      const testFunction = trace({
-        name: 'user.create',
-        attributes: { 'service.type': 'user-management' },
-      }, async function(email: string) {
-        return { id: '123', email };
-      });
+      const testFunction = trace(
+        {
+          name: 'user.create',
+          attributes: { 'service.type': 'user-management' },
+        },
+        async function (email: string) {
+          return { id: '123', email };
+        },
+      );
 
       await testFunction('test@example.com');
 
-      expect(mockSpan.setAttributes).toHaveBeenCalledWith({ 'service.type': 'user-management' });
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'service.type': 'user-management',
+      });
     });
 
     it('should use serviceName to prefix function name', async () => {
-      const testFunction = trace({
-        serviceName: 'user',
-      }, async function createUser(email: string) {
-        return { id: '123', email };
-      });
+      const testFunction = trace(
+        {
+          serviceName: 'user',
+        },
+        async function createUser(email: string) {
+          return { id: '123', email };
+        },
+      );
 
       await testFunction('test@example.com');
 
@@ -250,12 +312,15 @@ describe('Functional API', () => {
         toString: () => 'MockSampler',
       };
 
-      const testFunction = trace({
-        name: 'test.function',
-        sampler: mockSampler as any,
-      }, async function() {
-        return 'success';
-      });
+      const testFunction = trace(
+        {
+          name: 'test.function',
+          sampler: mockSampler as any,
+        },
+        async function () {
+          return 'success';
+        },
+      );
 
       await testFunction();
 
@@ -268,11 +333,14 @@ describe('Functional API', () => {
     });
 
     it('should NOT pass options when sampler is not provided', async () => {
-      const testFunction = trace({
-        name: 'test.function',
-      }, async function() {
-        return 'success';
-      });
+      const testFunction = trace(
+        {
+          name: 'test.function',
+        },
+        async function () {
+          return 'success';
+        },
+      );
 
       await testFunction();
 
@@ -293,12 +361,15 @@ describe('Functional API', () => {
         toString: () => 'RejectSampler',
       };
 
-      const testFunction = trace({
-        name: 'test.function',
-        sampler: rejectSampler as any,
-      }, async function() {
-        return 'success';
-      });
+      const testFunction = trace(
+        {
+          name: 'test.function',
+          sampler: rejectSampler as any,
+        },
+        async function () {
+          return 'success';
+        },
+      );
 
       const result = await testFunction();
 
@@ -319,14 +390,17 @@ describe('Functional API', () => {
         toString: () => 'MockSampler',
       };
 
-      const testFunction = (trace as any)({
-        name: 'test.function',
-        sampler: mockSampler as any,
-        attributes: { 'custom.tag': 'value' },
-        attributesFromArgs: ([arg]: [string]) => ({ 'arg.value': arg }),
-      }, async function(arg: string) {
-        return 'success';
-      }) as any;
+      const testFunction = (trace as any)(
+        {
+          name: 'test.function',
+          sampler: mockSampler as any,
+          attributes: { 'custom.tag': 'value' },
+          attributesFromArgs: ([arg]: [string]) => ({ 'arg.value': arg }),
+        },
+        async function (arg: string) {
+          return 'success';
+        },
+      ) as any;
 
       await testFunction('test-arg');
 
@@ -338,8 +412,12 @@ describe('Functional API', () => {
       );
 
       // Verify attributes are still added
-      expect(mockSpan.setAttributes).toHaveBeenCalledWith({ 'custom.tag': 'value' });
-      expect(mockSpan.setAttributes).toHaveBeenCalledWith({ 'arg.value': 'test-arg' });
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'custom.tag': 'value',
+      });
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'arg.value': 'test-arg',
+      });
     });
   });
 
@@ -355,27 +433,38 @@ describe('Functional API', () => {
   describe('withTracing() - Composable Middleware', () => {
     it('should create prefixed middleware', async () => {
       const withUserTracing = withTracing({ serviceName: 'user' });
-      const createUserFn = withUserTracing(async function myCreateUser(email: string) {
-        return { id: '123', email };
-      });
+      const createUserFn = withUserTracing(
+        (_ctx) =>
+          async function myCreateUser(email: string) {
+            return { id: '123', email };
+          },
+      );
 
       await createUserFn('test@example.com');
 
       const spanName = mockTracer.startActiveSpan.mock.calls[0][0];
       expect(spanName).toMatch(/^user\./);
-      expect(typeof mockTracer.startActiveSpan.mock.calls[0][2]).toBe('function');
+      expect(typeof mockTracer.startActiveSpan.mock.calls[0][2]).toBe(
+        'function',
+      );
     });
 
     it('should work with multiple functions', async () => {
       const withUserTracing = withTracing({ serviceName: 'user' });
 
-      const createUserFn = withUserTracing(async function createUserAction(email: string) {
-        return { id: '123', email };
-      });
+      const createUserFn = withUserTracing(
+        (_ctx) =>
+          async function createUserAction(email: string) {
+            return { id: '123', email };
+          },
+      );
 
-      const updateUserFn = withUserTracing(async function updateUserAction(id: string, data: any) {
-        return { id, ...data };
-      });
+      const updateUserFn = withUserTracing(
+        (_ctx) =>
+          async function updateUserAction(id: string, data: any) {
+            return { id, ...data };
+          },
+      );
 
       await createUserFn('test@example.com');
       await updateUserFn('123', { name: 'Test' });
@@ -395,13 +484,18 @@ describe('Functional API', () => {
         attributesFromArgs: ([email]: [string]) => ({ 'user.email': email }),
       });
 
-      const createUser = withUserTracing(async function createUser(email: string) {
-        return { id: '123', email };
-      });
+      const createUser = withUserTracing(
+        (_ctx) =>
+          async function createUser(email: string) {
+            return { id: '123', email };
+          },
+      );
 
       await createUser('test@example.com');
 
-      expect(mockSpan.setAttributes).toHaveBeenCalledWith({ 'user.email': 'test@example.com' });
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'user.email': 'test@example.com',
+      });
     });
   });
 
@@ -498,7 +592,9 @@ describe('Functional API', () => {
       const result = await voidFunction();
 
       expect(result).toBeUndefined();
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
     });
 
     it('should handle functions with no arguments', async () => {
@@ -509,15 +605,20 @@ describe('Functional API', () => {
       const result = await noArgsFunction();
 
       expect(typeof result).toBe('number');
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
     });
 
     it('should handle functions with many arguments', async () => {
-      const manyArgsFunction = trace(
-        async function complexFunction(a: number, b: string, c: boolean, d: object) {
-          return { a, b, c, d };
-        },
-      );
+      const manyArgsFunction = trace(async function complexFunction(
+        a: number,
+        b: string,
+        c: boolean,
+        d: object,
+      ) {
+        return { a, b, c, d };
+      });
 
       const result = await manyArgsFunction(1, 'test', true, { key: 'value' });
 
@@ -576,174 +677,93 @@ describe('Functional API', () => {
     });
 
     it('should support span helper for async code blocks', async () => {
-      const result = await span({ name: 'child', attributes: { level: 1 } }, async (childSpan) => {
-        childSpan.setAttribute('test', true);
-        return 42;
-      });
+      const result = await span(
+        { name: 'child', attributes: { level: 1 } },
+        async (childSpan) => {
+          childSpan.setAttribute('test', true);
+          return 42;
+        },
+      );
 
       expect(result).toBe(42);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('test', true);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
     });
 
     it('should support span helper for synchronous code blocks', () => {
-      const value = span({ name: 'sync-child', attributes: { level: 2 } }, () => 7);
+      const value = span(
+        { name: 'sync-child', attributes: { level: 2 } },
+        () => 7,
+      );
 
       expect(value).toBe(7);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
     });
 
     it('should accept a string name as first argument (sync)', () => {
       const value = span('sync-name-shorthand', () => 11);
       expect(value).toBe(11);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
     });
 
     it('should accept a string name as first argument (async)', async () => {
       const value = await span('async-name-shorthand', async () => 13);
       expect(value).toBe(13);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
     });
   });
 
-  describe('Immediate execution pattern', () => {
-    it('should execute async function immediately with context', async () => {
-      const result = await trace(async (ctx: any) => {
-        ctx.setAttribute('test.key', 'value');
-        return { data: 'test' };
-      });
-
-      expect(result).toEqual({ data: 'test' });
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('test.key', 'value');
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
-      expect(mockSpan.end).toHaveBeenCalled();
-    });
-
-    it('should execute sync function immediately with context', () => {
-      const result = trace((ctx: any) => {
-        ctx.setAttribute('test.key', 'sync-value');
-        return 42;
-      });
-
-      expect(result).toBe(42);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('test.key', 'sync-value');
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
-      expect(mockSpan.end).toHaveBeenCalled();
-    });
-
-    it('should support custom name with immediate execution', async () => {
-      const result = await trace('custom.operation', async (ctx: any) => {
-        ctx.setAttribute('operation.id', '123');
-        return 'success';
-      });
-
-      expect(result).toBe('success');
-      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
-        'custom.operation',
-        expect.any(Function),
-      );
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('operation.id', '123');
-    });
-
-    it('should support options with immediate execution', async () => {
-      const result = await trace(
-        { name: 'options.test', attributes: { test: 'enabled' } },
-        async (ctx: any) => {
-          ctx.setAttribute('test.option', 'enabled');
-          return 100;
-        },
-      );
-
-      expect(result).toBe(100);
-      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
-        'options.test',
-        expect.any(Function),
-      );
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('test.option', 'enabled');
-    });
-
-    it('should distinguish between factory and immediate execution', async () => {
-      // Factory pattern - returns a function
-      const factory = trace((ctx: any) => async (name: string) => {
-        ctx.setAttribute('user.name', name);
-        return { name };
-      });
-
-      // Immediate execution - returns result directly
-      const immediate = await trace(async (ctx: any) => {
-        ctx.setAttribute('immediate', true);
-        return 'done';
-      });
-
-      expect(typeof factory).toBe('function');
-      expect(immediate).toBe('done');
-
-      // Now call the factory
-      const factoryResult = await factory('Alice');
-      expect(factoryResult).toEqual({ name: 'Alice' });
-    });
-
-    it('should work with wrapper function pattern from feedback', async () => {
-      // The exact use case from the feedback
-      function timed<T>(
-        requestId: string,
-        operation: string,
-        fn: () => Promise<T>,
-      ): Promise<T> {
-        return trace(operation, async (ctx: any) => {
-          ctx.setAttribute('request.id', requestId);
-          ctx.setAttribute('operation.name', operation);
-          return await fn();
-        });
-      }
-
-      // Test it
-      const mockFn = async () => {
-        return { userId: '123', status: 'active' };
-      };
-
-      const result = await timed('req-456', 'fetchUser', mockFn);
-
-      expect(result).toEqual({ userId: '123', status: 'active' });
-      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
-        'fetchUser',
-        expect.any(Function),
-      );
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('request.id', 'req-456');
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('operation.name', 'fetchUser');
-    });
-  });
-
+  // The `(ctx) => (...args) => result` factory form now lives on withTracing();
+  // reach the span via the injected ctx (or ambient getActiveTraceContext()).
   describe('Array attribute support', () => {
     it('should support string array attributes', async () => {
-      await trace(async (ctx) => {
+      await withTracing({})((ctx) => async () => {
         ctx.setAttribute('tags', ['qa', 'test', 'automated']);
         return 'done';
-      });
+      })();
 
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tags', ['qa', 'test', 'automated']);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tags', [
+        'qa',
+        'test',
+        'automated',
+      ]);
     });
 
     it('should support number array attributes', async () => {
-      await trace(async (ctx) => {
+      await withTracing({})((ctx) => async () => {
         ctx.setAttribute('scores', [95, 87, 92]);
         return 'done';
-      });
+      })();
 
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('scores', [95, 87, 92]);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'scores',
+        [95, 87, 92],
+      );
     });
 
     it('should support boolean array attributes', async () => {
-      await trace(async (ctx) => {
+      await withTracing({})((ctx) => async () => {
         ctx.setAttribute('flags', [true, false, true]);
         return 'done';
-      });
+      })();
 
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('flags', [true, false, true]);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('flags', [
+        true,
+        false,
+        true,
+      ]);
     });
 
     it('should support mixed attributes including arrays via setAttributes', async () => {
-      await trace(async (ctx) => {
+      await withTracing({})((ctx) => async () => {
         ctx.setAttributes({
           'user.id': 'user_123',
           environment: 'development',
@@ -751,7 +771,7 @@ describe('Functional API', () => {
           scores: [1, 2, 3],
         });
         return 'done';
-      });
+      })();
 
       expect(mockSpan.setAttributes).toHaveBeenCalledWith({
         'user.id': 'user_123',
@@ -764,21 +784,25 @@ describe('Functional API', () => {
 
   describe('Full OTel Span API', () => {
     it('should support addEvent for span events', async () => {
-      await trace(async (ctx) => {
+      await withTracing({})((ctx) => async () => {
         ctx.addEvent('order.started', { 'order.id': '123' });
         ctx.addEvent('items.fetched', { 'item.count': 5 });
         return 'done';
-      });
+      })();
 
-      expect(mockSpan.addEvent).toHaveBeenCalledWith('order.started', { 'order.id': '123' });
-      expect(mockSpan.addEvent).toHaveBeenCalledWith('items.fetched', { 'item.count': 5 });
+      expect(mockSpan.addEvent).toHaveBeenCalledWith('order.started', {
+        'order.id': '123',
+      });
+      expect(mockSpan.addEvent).toHaveBeenCalledWith('items.fetched', {
+        'item.count': 5,
+      });
     });
 
     it('should support updateName for dynamic span naming', async () => {
-      await trace('initial.name', async (ctx) => {
+      await withTracing({ name: 'initial.name' })((ctx) => async () => {
         ctx.updateName('updated.name');
         return 'done';
-      });
+      })();
 
       expect(mockSpan.updateName).toHaveBeenCalledWith('updated.name');
     });
@@ -786,10 +810,10 @@ describe('Functional API', () => {
     it('should support isRecording', async () => {
       let wasRecording = false;
 
-      await trace(async (ctx) => {
+      await withTracing({})((ctx) => async () => {
         wasRecording = ctx.isRecording();
         return 'done';
-      });
+      })();
 
       expect(wasRecording).toBe(true);
       expect(mockSpan.isRecording).toHaveBeenCalled();
@@ -802,10 +826,10 @@ describe('Functional API', () => {
         traceFlags: 1,
       };
 
-      await trace(async (ctx) => {
+      await withTracing({})((ctx) => async () => {
         ctx.addLink({ context: linkContext });
         return 'done';
-      });
+      })();
 
       expect(mockSpan.addLink).toHaveBeenCalledWith({ context: linkContext });
     });
@@ -816,10 +840,10 @@ describe('Functional API', () => {
         { context: { traceId: 'trace-2', spanId: 'span-2', traceFlags: 1 } },
       ];
 
-      await trace(async (ctx) => {
+      await withTracing({})((ctx) => async () => {
         ctx.addLinks(links);
         return 'done';
-      });
+      })();
 
       expect(mockSpan.addLinks).toHaveBeenCalledWith(links);
     });

@@ -11,7 +11,13 @@
  */
 
 import 'dotenv/config';
-import { init, trace, shutdown, Metric, type TraceContext } from 'autotel';
+import {
+  init,
+  shutdown,
+  Metric,
+  type TraceContext,
+  withTracing,
+} from 'autotel';
 import { createBuiltinLogger, LOG_LEVEL, type LogLevel } from 'autotel/logger';
 import { type DatadogSite } from 'autotel-backends/datadog';
 
@@ -50,7 +56,9 @@ function loadConfig(): AppConfig {
   if (!apiKey) {
     console.error('❌ Error: DATADOG_API_KEY environment variable is required');
     console.error('   Copy .env.example to .env and add your API key');
-    console.error('   Get your key from: https://app.datadoghq.com/organization-settings/api-keys');
+    console.error(
+      '   Get your key from: https://app.datadoghq.com/organization-settings/api-keys',
+    );
     process.exit(1);
   }
 
@@ -81,11 +89,11 @@ console.log('');
 
 /** Simulate async delay (e.g., API calls, processing time) */
 const delay = (ms: number): Promise<void> =>
-  new Promise(resolve => setTimeout(resolve, ms));
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Simulate random failures for testing error handling */
 const shouldSimulateFailure = (probability: number): boolean =>
-  Math.random() > (1 - probability);
+  Math.random() > 1 - probability;
 
 // ============================================================================
 // Initialize Autotel with Debug Proxy
@@ -109,7 +117,9 @@ init({
 });
 
 logger.info('✅ Autotel initialized with DEBUG PROXY');
-logger.info('   All telemetry will be logged by the proxy before forwarding to Datadog');
+logger.info(
+  '   All telemetry will be logged by the proxy before forwarding to Datadog',
+);
 
 // Create metrics instance for tracking business metrics
 const metrics = new Metric('datadog-debug', { logger });
@@ -121,83 +131,104 @@ const metrics = new Metric('datadog-debug', { logger });
 /**
  * Simple traced function for testing
  */
-const processOrder = trace((ctx: TraceContext) => async function processOrder(orderId: string, amount: number) {
-  logger.info('Processing order', { orderId, amount });
+const processOrder = withTracing({})(
+  (ctx: TraceContext) =>
+    async function processOrder(orderId: string, amount: number) {
+      logger.info('Processing order', { orderId, amount });
 
-  // Add custom attributes to the trace
-  ctx.setAttribute('order.id', orderId);
-  ctx.setAttribute('order.amount', amount);
-  ctx.setAttribute('order.currency', DEFAULT_CURRENCY);
+      // Add custom attributes to the trace
+      ctx.setAttribute('order.id', orderId);
+      ctx.setAttribute('order.amount', amount);
+      ctx.setAttribute('order.currency', DEFAULT_CURRENCY);
 
-  // Simulate processing
-  await delay(SIMULATION_DELAYS.ORDER_PROCESSING);
+      // Simulate processing
+      await delay(SIMULATION_DELAYS.ORDER_PROCESSING);
 
-  // Track business metric
-  metrics.trackEvent('order.processed', {
-    currency: DEFAULT_CURRENCY,
-    environment: config.environment,
-  });
+      // Track business metric
+      metrics.trackEvent('order.processed', {
+        currency: DEFAULT_CURRENCY,
+        environment: config.environment,
+      });
 
-  logger.info('Order processed successfully', { orderId, traceId: ctx.traceId });
+      logger.info('Order processed successfully', {
+        orderId,
+        traceId: ctx.traceId,
+      });
 
-  return { orderId, status: 'completed' as const, amount };
-});
+      return { orderId, status: 'completed' as const, amount };
+    },
+);
 
-const validatePayment = trace((ctx: TraceContext) => async function validatePayment(orderId: string, amount: number) {
-  logger.info('Validating payment', { orderId });
+const validatePayment = withTracing({})(
+  (ctx: TraceContext) =>
+    async function validatePayment(orderId: string, amount: number) {
+      logger.info('Validating payment', { orderId });
 
-  ctx.setAttribute('payment.amount', amount);
+      ctx.setAttribute('payment.amount', amount);
 
-  await delay(SIMULATION_DELAYS.PAYMENT_VALIDATION);
+      await delay(SIMULATION_DELAYS.PAYMENT_VALIDATION);
 
-  if (amount < 0) {
-    throw new Error('Invalid payment amount');
-  }
+      if (amount < 0) {
+        throw new Error('Invalid payment amount');
+      }
 
-  return { valid: true };
-});
+      return { valid: true };
+    },
+);
 
-const chargeCard = trace((ctx: TraceContext) => async function chargeCard(orderId: string) {
-  logger.info('Charging card', { orderId });
+const chargeCard = withTracing({})(
+  (ctx: TraceContext) =>
+    async function chargeCard(orderId: string) {
+      logger.info('Charging card', { orderId });
 
-  ctx.setAttribute('payment.method', 'credit_card');
+      ctx.setAttribute('payment.method', 'credit_card');
 
-  await delay(SIMULATION_DELAYS.CARD_CHARGING);
+      await delay(SIMULATION_DELAYS.CARD_CHARGING);
 
-  return { transactionId: `txn_${Date.now()}` };
-});
+      return { transactionId: `txn_${Date.now()}` };
+    },
+);
 
-const processPayment = trace((ctx: TraceContext) => async function processPayment(orderId: string, amount: number) {
-  logger.info('Processing payment', { orderId, amount });
+const processPayment = withTracing({})(
+  (ctx: TraceContext) =>
+    async function processPayment(orderId: string, amount: number) {
+      logger.info('Processing payment', { orderId, amount });
 
-  ctx.setAttribute('order.id', orderId);
-  ctx.setAttribute('payment.amount', amount);
+      ctx.setAttribute('order.id', orderId);
+      ctx.setAttribute('payment.amount', amount);
 
-  await validatePayment(orderId, amount);
-  const charge = await chargeCard(orderId);
+      await validatePayment(orderId, amount);
+      const charge = await chargeCard(orderId);
 
-  logger.info('Payment completed', { orderId, transactionId: charge.transactionId });
+      logger.info('Payment completed', {
+        orderId,
+        transactionId: charge.transactionId,
+      });
 
-  return charge;
-});
+      return charge;
+    },
+);
 
-const processRefund = trace((ctx: TraceContext) => async function processRefund(orderId: string) {
-  logger.info('Processing refund', { orderId });
+const processRefund = withTracing({})(
+  (ctx: TraceContext) =>
+    async function processRefund(orderId: string) {
+      logger.info('Processing refund', { orderId });
 
-  ctx.setAttribute('refund.order_id', orderId);
+      ctx.setAttribute('refund.order_id', orderId);
 
-  if (shouldSimulateFailure(REFUND_FAILURE_PROBABILITY)) {
-    const error = new Error('Refund failed: insufficient funds');
-    logger.error('Refund failed: insufficient funds', error, { orderId });
-    throw error;
-  }
+      if (shouldSimulateFailure(REFUND_FAILURE_PROBABILITY)) {
+        const error = new Error('Refund failed: insufficient funds');
+        logger.error('Refund failed: insufficient funds', error, { orderId });
+        throw error;
+      }
 
-  await delay(SIMULATION_DELAYS.REFUND_PROCESSING);
+      await delay(SIMULATION_DELAYS.REFUND_PROCESSING);
 
-  logger.info('Refund processed successfully', { orderId });
+      logger.info('Refund processed successfully', { orderId });
 
-  return { orderId, status: 'refunded' as const };
-});
+      return { orderId, status: 'refunded' as const };
+    },
+);
 
 // ============================================================================
 // Main Execution
@@ -205,7 +236,9 @@ const processRefund = trace((ctx: TraceContext) => async function processRefund(
 
 async function main() {
   console.log('🚀 Starting DEBUG version of Datadog integration examples...\n');
-  console.log('👁️  Watch the debug proxy terminal for detailed request/response logs\n');
+  console.log(
+    '👁️  Watch the debug proxy terminal for detailed request/response logs\n',
+  );
 
   try {
     // Just run a simple test to generate some telemetry
@@ -226,9 +259,11 @@ async function main() {
     console.log('   - What requests were sent');
     console.log('   - What Datadog responded with');
     console.log('   - Any error messages\n');
-
   } catch (error) {
-    logger.error('Application error', error instanceof Error ? error : new Error(String(error)));
+    logger.error(
+      'Application error',
+      error instanceof Error ? error : new Error(String(error)),
+    );
     console.error('❌ Error:', error);
   } finally {
     console.log('🔄 Shutting down and flushing data...');

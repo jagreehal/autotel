@@ -22,11 +22,11 @@ const handler = trace(async (request: Request) => {
 
 ## Entry points
 
-- `autotel-edge` — core (trace, span, instrument, init)
-- `autotel-edge/sampling` — sampling strategies
-- `autotel-edge/events` — events with trace correlation
-- `autotel-edge/logger` — trace-aware logger
-- `autotel-edge/testing` — test utilities
+- `autotel-edge`: core (trace, span, instrument, init)
+- `autotel-edge/sampling`: sampling strategies
+- `autotel-edge/events`: events with trace correlation
+- `autotel-edge/logger`: trace-aware logger
+- `autotel-edge/testing`: test utilities
 
 ## Core patterns
 

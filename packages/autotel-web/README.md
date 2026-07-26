@@ -4,7 +4,7 @@ Ultra-lightweight browser SDK for distributed tracing (**1.6KB gzipped**)
 
 **Purpose:** Enable distributed tracing between browser and backend applications. The browser propagates W3C `traceparent` headers, and your backend (using [Autotel](../autotel)) automatically continues the trace.
 
-**Core Philosophy:** The backend does all the real tracing :  timing, spans, errors, export :  while the browser only propagates the trace context via headers.
+**Core Philosophy:** The backend does all the real tracing : timing, spans, errors, export : while the browser only propagates the trace context via headers.
 
 **No OpenTelemetry dependencies. No exporters. No collectors. No CORS. Just header injection.**
 
@@ -38,7 +38,7 @@ yarn add autotel-web
 
 ### Lean vs Full mode
 
-- **Lean (default)** :  `import { init } from 'autotel-web'`. Zero dependencies, ~1.6KB gzipped. Only injects W3C `traceparent` on fetch/XHR; no real spans in the browser. Backend does the real tracing.
+- **Lean (default)** : `import { init } from 'autotel-web'`. Zero dependencies, ~1.6KB gzipped. Only injects W3C `traceparent` on fetch/XHR; no real spans in the browser. Backend does the real tracing.
 - **Full**: `import { initFull } from 'autotel-web/full'`. Real spans (navigation, fetch/XHR, optional user interaction), optional `http.client.network_timing` events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB), **unhandled error capture**, optional long-task capture, sampling, and OTLP export. No Zone.js; bundle size is larger (~40-50KB gzipped). Use when you need client-side spans and export from the browser.
 
 Use lean mode by default; use full mode when you need real browser spans and network timing. You can use dynamic import to load full mode only when needed: `import('autotel-web/full').then(({ initFull }) => initFull(config))`.
@@ -48,13 +48,13 @@ Use lean mode by default; use full mode when you need real browser spans and net
 ### 1. Initialize in Browser
 
 ```typescript
-import { init } from 'autotel-web'
+import { init } from 'autotel-web';
 
 // Call once, client-side only
-init({ service: 'my-frontend-app' })
+init({ service: 'my-frontend-app' });
 
 // That's it! All fetch/XHR calls now include traceparent headers
-fetch('/api/users')  // <-- traceparent header automatically injected!
+fetch('/api/users'); // <-- traceparent header automatically injected!
 ```
 
 ### 2. Backend Receives Trace
@@ -63,22 +63,22 @@ Your backend using Autotel automatically extracts the `traceparent` header and c
 
 ```typescript
 // Backend (Express + Autotel)
-import { init, trace } from 'autotel'
+import { init, trace } from 'autotel';
 
 init({
   service: 'my-api',
-  endpoint: 'http://localhost:4318'  // Your OTel collector
-})
+  endpoint: 'http://localhost:4318', // Your OTel collector
+});
 
 app.get('/api/users', async (req, res) => {
   // Autotel automatically extracts traceparent from req.headers
   // and creates a child span
   const users = await trace(async () => {
-    return db.users.findAll()
-  })()
+    return db.users.findAll();
+  })();
 
-  res.json(users)
-})
+  res.json(users);
+});
 ```
 
 ### 3. View Distributed Trace
@@ -87,7 +87,7 @@ Open your observability platform (Honeycomb, Datadog, Jaeger, etc.) and see the 
 
 ## Browser Span Export (lean mode)
 
-By default, lean mode only injects `traceparent` headers — no spans are exported from the browser. This means trace UIs like Jaeger may show "missing parent span" because the browser's spanId doesn't exist in the collector.
+By default, lean mode only injects `traceparent` headers. No spans are exported from the browser. This means trace UIs like Jaeger may show "missing parent span" because the browser's spanId doesn't exist in the collector.
 
 To fix this, set the `endpoint` option. autotel-web will export a lightweight span via `navigator.sendBeacon` for each fetch, so the browser span appears in your collector as the trace root:
 
@@ -95,7 +95,7 @@ To fix this, set the `endpoint` option. autotel-web will export a lightweight sp
 init({
   service: 'my-frontend',
   endpoint: '', // same-origin — requires /v1/traces proxy (see below)
-})
+});
 ```
 
 ### Collector Proxy
@@ -106,27 +106,31 @@ Browsers can't send directly to most collectors (CORS). Add a simple proxy route
 
 ```typescript
 app.post('/v1/traces', async (c) => {
-  const body = await c.req.arrayBuffer()
+  const body = await c.req.arrayBuffer();
   await fetch(`${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
-  })
-  return c.json({ ok: true })
-})
+  });
+  return c.json({ ok: true });
+});
 ```
 
 **Express:**
 
 ```typescript
-app.post('/v1/traces', express.raw({ type: 'application/json' }), async (req, res) => {
-  await fetch(`${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: req.body,
-  })
-  res.json({ ok: true })
-})
+app.post(
+  '/v1/traces',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    await fetch(`${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: req.body,
+    });
+    res.json({ ok: true });
+  },
+);
 ```
 
 If using Vite in dev, proxy `/v1/traces` to your API:
@@ -147,35 +151,43 @@ If you use PostHog for analytics, route events through the same API to bypass ad
 **Hono:**
 
 ```typescript
-const POSTHOG_HOST = process.env.POSTHOG_HOST || 'https://eu.i.posthog.com'
+const POSTHOG_HOST = process.env.POSTHOG_HOST || 'https://eu.i.posthog.com';
 
 app.post('/ingest/*', async (c) => {
-  const path = c.req.path.replace('/ingest', '')
-  const body = await c.req.arrayBuffer()
+  const path = c.req.path.replace('/ingest', '');
+  const body = await c.req.arrayBuffer();
   const resp = await fetch(`${POSTHOG_HOST}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': c.req.header('content-type') || 'application/json' },
+    headers: {
+      'Content-Type': c.req.header('content-type') || 'application/json',
+    },
     body,
-  })
-  return new Response(resp.body, { status: resp.status, headers: resp.headers })
-})
+  });
+  return new Response(resp.body, {
+    status: resp.status,
+    headers: resp.headers,
+  });
+});
 
 app.get('/ingest/decide*', async (c) => {
-  const url = new URL(c.req.url)
-  const resp = await fetch(`${POSTHOG_HOST}/decide${url.search}`)
-  return new Response(resp.body, { status: resp.status, headers: resp.headers })
-})
+  const url = new URL(c.req.url);
+  const resp = await fetch(`${POSTHOG_HOST}/decide${url.search}`);
+  return new Response(resp.body, {
+    status: resp.status,
+    headers: resp.headers,
+  });
+});
 ```
 
 **Browser (posthog-js):**
 
 ```typescript
-import posthog from 'posthog-js'
+import posthog from 'posthog-js';
 
 posthog.init('phc_your_key', {
-  api_host: '/ingest',                  // same-origin proxy
-  ui_host: 'https://eu.i.posthog.com',  // keep toolbar working
-})
+  api_host: '/ingest', // same-origin proxy
+  ui_host: 'https://eu.i.posthog.com', // keep toolbar working
+});
 ```
 
 **Vite proxy (dev):**
@@ -204,20 +216,20 @@ browser /api/transfer (CLIENT, root)        ← autotel-web
 When you need real browser spans, network timing events, and optional export from the client, use full mode. Same install: `autotel-web`. No Zone.js.
 
 ```typescript
-import { initFull } from 'autotel-web/full'
+import { initFull } from 'autotel-web/full';
 
 initFull({
   service: 'my-app',
-  endpoint: 'https://your-collector.example.com/v1/traces',  // OTLP HTTP
-  sampleRate: 0.1,                    // e.g. 10% in production
-  captureNavigation: true,            // document load spans (default: true)
+  endpoint: 'https://your-collector.example.com/v1/traces', // OTLP HTTP
+  sampleRate: 0.1, // e.g. 10% in production
+  captureNavigation: true, // document load spans (default: true)
   captureFetch: true,
   captureXHR: true,
-  captureNetworkTiming: true,         // http.client.network_timing events (semantic-conventions#3385)
-  captureErrors: true,                // unhandled errors → span.recordException (default: true)
-  captureWebVitals: true,             // LCP, INP, CLS, FCP, TTFB as web_vitals span (default: true)
-  webVitals: { reportAllChanges: false },  // pass through to web-vitals (default: false)
-  captureLongTasks: false,            // long-task spans (main thread >= 50ms); opt-in, can be noisy
+  captureNetworkTiming: true, // http.client.network_timing events (semantic-conventions#3385)
+  captureErrors: true, // unhandled errors → span.recordException (default: true)
+  captureWebVitals: true, // LCP, INP, CLS, FCP, TTFB as web_vitals span (default: true)
+  webVitals: { reportAllChanges: false }, // pass through to web-vitals (default: false)
+  captureLongTasks: false, // long-task spans (main thread >= 50ms); opt-in, can be noisy
   copyHttpSpanAttributesToEvent: false,
   userInteraction: {
     enabled: true,
@@ -225,7 +237,7 @@ initFull({
   },
   privacy: { allowedOrigins: ['api.myapp.com'], respectDoNotTrack: true },
   debug: false,
-})
+});
 ```
 
 With sensible defaults, **one `initFull()`** gives you: **navigation spans**, **fetch/XHR spans** with W3C propagation, **http.client.network_timing** events, **Web Vitals** (LCP, INP, CLS, FCP, TTFB) as a single `web_vitals` span per page, and **unhandled error capture** (window errors and unhandled promise rejections). Optional: **user interaction** spans (clicks on configurable selectors), **long-task** spans (opt-in via `captureLongTasks: true`), **sampling** (`sampleRate` or custom `sampler`), and **setAttribute** / **addEvent** / **span()** on the active span. Async context propagation is best-effort (no Zone.js).
@@ -323,13 +335,13 @@ startTransition(() => {
 
 ```typescript
 // src/main.ts
-import { createApp } from 'vue'
-import { init } from 'autotel-web'
-import App from './App.vue'
+import { createApp } from 'vue';
+import { init } from 'autotel-web';
+import App from './App.vue';
 
-init({ service: 'my-vue-app' })
+init({ service: 'my-vue-app' });
 
-createApp(App).mount('#app')
+createApp(App).mount('#app');
 ```
 
 ### Vanilla JavaScript
@@ -337,14 +349,14 @@ createApp(App).mount('#app')
 ```html
 <!-- index.html -->
 <script type="module">
-  import { init } from 'autotel-web'
+  import { init } from 'autotel-web';
 
-  init({ service: 'my-vanilla-app' })
+  init({ service: 'my-vanilla-app' });
 
   // Now all fetch calls include traceparent headers
   fetch('/api/data')
-    .then(res => res.json())
-    .then(data => console.log(data))
+    .then((res) => res.json())
+    .then((data) => console.log(data));
 </script>
 ```
 
@@ -359,6 +371,7 @@ traceparent: 00-{trace-id}-{span-id}-{trace-flags}
 ```
 
 **Example:**
+
 ```
 traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
 ```
@@ -384,24 +397,24 @@ You can verify the header is being sent using browser DevTools:
 Autotel automatically extracts `traceparent` from incoming requests:
 
 ```typescript
-import express from 'express'
-import { init, trace } from 'autotel'
+import express from 'express';
+import { init, trace } from 'autotel';
 
 init({
   service: 'my-api',
-  endpoint: 'http://localhost:4318'
-})
+  endpoint: 'http://localhost:4318',
+});
 
-const app = express()
+const app = express();
 
 app.get('/api/users/:id', async (req, res) => {
   // Parent context is automatically extracted from req.headers.traceparent
   const user = await trace(async () => {
-    return db.users.findById(req.params.id)
-  })()
+    return db.users.findById(req.params.id);
+  })();
 
-  res.json(user)
-})
+  res.json(user);
+});
 ```
 
 ### Manual Extraction (Next.js API Routes)
@@ -410,41 +423,37 @@ For frameworks where automatic extraction doesn't work, use `extractTraceContext
 
 ```typescript
 // app/api/users/route.ts (Next.js App Router)
-import { init } from 'autotel'
-import { context, trace as otelTrace } from '@opentelemetry/api'
-import { W3CTraceContextPropagator } from '@opentelemetry/core'
+import { init } from 'autotel';
+import { context, trace as otelTrace } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 
-init({ service: 'my-api', endpoint: 'http://localhost:4318' })
+init({ service: 'my-api', endpoint: 'http://localhost:4318' });
 
-const propagator = new W3CTraceContextPropagator()
+const propagator = new W3CTraceContextPropagator();
 
 export async function GET(request: Request) {
   // Extract parent context from headers
-  const parentContext = propagator.extract(
-    context.active(),
-    request.headers,
-    {
-      get: (headers, key) => headers.get(key) ?? undefined,
-      keys: (headers) => Array.from(headers.keys()),
-    }
-  )
+  const parentContext = propagator.extract(context.active(), request.headers, {
+    get: (headers, key) => headers.get(key) ?? undefined,
+    keys: (headers) => Array.from(headers.keys()),
+  });
 
   // Run in extracted context
   return context.with(parentContext, async () => {
-    const tracer = otelTrace.getTracer('my-api')
+    const tracer = otelTrace.getTracer('my-api');
 
     return tracer.startActiveSpan('fetchUsers', async (span) => {
       try {
-        const users = await db.users.findAll()
-        span.end()
-        return Response.json(users)
+        const users = await db.users.findAll();
+        span.end();
+        return Response.json(users);
       } catch (error) {
-        span.recordException(error)
-        span.end()
-        throw error
+        span.recordException(error);
+        span.end();
+        throw error;
       }
-    })
-  })
+    });
+  });
 }
 ```
 
@@ -457,16 +466,16 @@ Initialize the browser SDK. Call once, client-side only.
 ```typescript
 interface AutotelWebConfig {
   /** Service name for the browser application */
-  service: string
+  service: string;
 
   /** Enable fetch instrumentation (default: true) */
-  instrumentFetch?: boolean
+  instrumentFetch?: boolean;
 
   /** Enable XMLHttpRequest instrumentation (default: true) */
-  instrumentXHR?: boolean
+  instrumentXHR?: boolean;
 
   /** Enable debug logging (default: false) */
-  debug?: boolean
+  debug?: boolean;
 
   /**
    * OTLP endpoint for exporting browser spans.
@@ -474,10 +483,10 @@ interface AutotelWebConfig {
    * so the traceparent spanId exists in the collector.
    * Use '' for same-origin (requires /v1/traces proxy).
    */
-  endpoint?: string
+  endpoint?: string;
 
   /** Privacy controls for traceparent header injection */
-  privacy?: PrivacyConfig
+  privacy?: PrivacyConfig;
 
   /**
    * Business-context baggage propagated end-to-end as a W3C `baggage` header.
@@ -485,24 +494,24 @@ interface AutotelWebConfig {
    */
   baggage?: {
     /** Initial entries applied at init() (e.g. tenant from the subdomain) */
-    initial?: Record<string, string>
+    initial?: Record<string, string>;
     /** Cross-origin destinations allowed to receive baggage (same-origin always allowed) */
-    allowedOrigins?: string[]
-  }
+    allowedOrigins?: string[];
+  };
 }
 
 interface PrivacyConfig {
   /** Only inject traceparent on these origins (whitelist) */
-  allowedOrigins?: string[]
+  allowedOrigins?: string[];
 
   /** Never inject traceparent on these origins (blacklist) */
-  blockedOrigins?: string[]
+  blockedOrigins?: string[];
 
   /** Respect Do Not Track browser setting */
-  respectDoNotTrack?: boolean
+  respectDoNotTrack?: boolean;
 
   /** Respect Global Privacy Control signal */
-  respectGPC?: boolean
+  respectGPC?: boolean;
 }
 ```
 
@@ -514,44 +523,44 @@ init({
   debug: false,
   privacy: {
     allowedOrigins: ['api.myapp.com'],
-    respectDoNotTrack: true
-  }
-})
+    respectDoNotTrack: true,
+  },
+});
 ```
 
 ### `setBaggage(record)` / `clearBaggage(key?)`
 
-Attach business context (e.g. `tenant.id`) that propagates **end-to-end**. Every subsequent instrumented request carries it as a W3C `baggage` header, and every browser-recorded span is tagged with it. On the backend, autotel's `BaggageSpanProcessor` copies the entries onto server spans — so a single attribute appears on browser **and** server spans in the same trace.
+Attach business context (e.g. `tenant.id`) that propagates **end-to-end**. Every subsequent instrumented request carries it as a W3C `baggage` header, and every browser-recorded span is tagged with it. On the backend, autotel's `BaggageSpanProcessor` copies the entries onto server spans, so a single attribute appears on browser**and** server spans in the same trace.
 
 `setBaggage()` merges additively (like Sentry `setTags` / Datadog `setGlobalContextProperty`); tenant is just a key, so the same API later carries `user.id`, plan tier, region, etc.
 
 ```typescript
-import { init, setBaggage, clearBaggage } from 'autotel-web'
+import { init, setBaggage, clearBaggage } from 'autotel-web';
 
-init({ service: 'my-spa', endpoint: 'https://collector.example.com' })
+init({ service: 'my-spa', endpoint: 'https://collector.example.com' });
 
 // After login or a tenant switch — values known at runtime, not at init():
-setBaggage({ 'tenant.id': 'acme' })
+setBaggage({ 'tenant.id': 'acme' });
 
 // On logout:
-clearBaggage()              // clear everything
-clearBaggage('tenant.id')   // or remove a single key
+clearBaggage(); // clear everything
+clearBaggage('tenant.id'); // or remove a single key
 ```
 
-**Backend (autotel Node) — pick the attribute key you want:**
+**Backend (autotel Node), pick the attribute key you want:**
 
 ```typescript
-init({ service: 'my-api', endpoint: '...', baggage: '' })   // → bare `tenant.id` on server spans
-init({ service: 'my-api', endpoint: '...', baggage: true }) // → `baggage.tenant.id` (prefixed)
+init({ service: 'my-api', endpoint: '...', baggage: '' }); // → bare `tenant.id` on server spans
+init({ service: 'my-api', endpoint: '...', baggage: true }); // → `baggage.tenant.id` (prefixed)
 ```
 
-**Security — fail-closed:** baggage is sent **only to same-origin** requests unless you list a destination in `baggage.allowedOrigins`. This keeps customer-identifying values (e.g. `tenant.id`) from leaking to third-party origins (analytics, CDNs). Baggage also never travels wider than `traceparent` — it inherits all `privacy` suppression (DNT/GPC/blocked origins). Local browser spans are always tagged regardless of destination (that telemetry is yours and never leaves your collector).
+**Security, fail-closed:** baggage is sent **only to same-origin** requests unless you list a destination in `baggage.allowedOrigins`. This keeps customer-identifying values (e.g. `tenant.id`) from leaking to third-party origins (analytics, CDNs). Baggage also never travels wider than `traceparent`, it inherits all `privacy` suppression (DNT/GPC/blocked origins). Local browser spans are always tagged regardless of destination (that telemetry is yours and never leaves your collector).
 
 ```typescript
 init({
   service: 'my-spa',
   baggage: { allowedOrigins: ['api.example.com'] }, // cross-origin opt-in
-})
+});
 ```
 
 ### `initFull(config)` (full mode)
@@ -560,23 +569,23 @@ Initialize full browser tracing. Import from `autotel-web/full`. Call once, clie
 
 ```typescript
 interface AutotelWebFullConfig {
-  service: string
-  endpoint?: string                    // OTLP traces URL (e.g. https://api.example.com/v1/traces)
-  spanProcessor?: SpanProcessor        // Custom processor instead of endpoint
-  sampleRate?: number                  // 0-1, e.g. 0.1 in production
-  sampler?: Sampler                    // Custom sampler (overrides sampleRate)
-  captureNavigation?: boolean          // default true
-  captureFetch?: boolean               // default true
-  captureXHR?: boolean                 // default true
-  captureNetworkTiming?: boolean       // http.client.network_timing events (default true)
-  captureErrors?: boolean              // unhandled errors → span.recordException (default true)
-  captureWebVitals?: boolean          // LCP, INP, CLS, FCP, TTFB as web_vitals span (default true)
-  webVitals?: { reportAllChanges?: boolean }  // pass through to web-vitals (default false)
-  captureLongTasks?: boolean          // long-task spans (main thread >= 50ms); opt-in (default false)
-  copyHttpSpanAttributesToEvent?: boolean
-  userInteraction?: { enabled: boolean; selectors?: string[] }
-  privacy?: PrivacyConfig
-  debug?: boolean
+  service: string;
+  endpoint?: string; // OTLP traces URL (e.g. https://api.example.com/v1/traces)
+  spanProcessor?: SpanProcessor; // Custom processor instead of endpoint
+  sampleRate?: number; // 0-1, e.g. 0.1 in production
+  sampler?: Sampler; // Custom sampler (overrides sampleRate)
+  captureNavigation?: boolean; // default true
+  captureFetch?: boolean; // default true
+  captureXHR?: boolean; // default true
+  captureNetworkTiming?: boolean; // http.client.network_timing events (default true)
+  captureErrors?: boolean; // unhandled errors → span.recordException (default true)
+  captureWebVitals?: boolean; // LCP, INP, CLS, FCP, TTFB as web_vitals span (default true)
+  webVitals?: { reportAllChanges?: boolean }; // pass through to web-vitals (default false)
+  captureLongTasks?: boolean; // long-task spans (main thread >= 50ms); opt-in (default false)
+  copyHttpSpanAttributesToEvent?: boolean;
+  userInteraction?: { enabled: boolean; selectors?: string[] };
+  privacy?: PrivacyConfig;
+  debug?: boolean;
 }
 ```
 
@@ -587,28 +596,28 @@ Wrap functions with automatic tracing.
 **Direct Pattern (no context access):**
 
 ```typescript
-import { trace } from 'autotel-web'
+import { trace } from 'autotel-web';
 
 export const fetchUser = trace(async (id: string) => {
-  const response = await fetch(`/api/users/${id}`)
-  return response.json()
-})
+  const response = await fetch(`/api/users/${id}`);
+  return response.json();
+});
 
 // Usage
-const user = await fetchUser('123')
+const user = await fetchUser('123');
 ```
 
 **Factory Pattern (with context access):**
 
 ```typescript
-export const fetchUser = trace(ctx => async (id: string) => {
+export const fetchUser = trace((ctx) => async (id: string) => {
   // ctx.traceId, ctx.spanId available (lean mode)
-  const response = await fetch(`/api/users/${id}`)
-  return response.json()
-})
+  const response = await fetch(`/api/users/${id}`);
+  return response.json();
+});
 
 // Usage
-const user = await fetchUser('123')
+const user = await fetchUser('123');
 ```
 
 For **custom attributes and real spans** in the browser, use **full mode** (`autotel-web/full`): `setAttribute`, `addEvent`, and `span()` operate on the active OTel span.
@@ -618,14 +627,14 @@ For **custom attributes and real spans** in the browser, use **full mode** (`aut
 Create a manual span. Import from `autotel-web/full`:
 
 ```typescript
-import { span } from 'autotel-web/full'
+import { span } from 'autotel-web/full';
 
 const result = await span('processData', (s) => {
-  s.setAttribute('data.size', data.length)
-  const out = processData(data)
-  s.end()
-  return out
-})
+  s.setAttribute('data.size', data.length);
+  const out = processData(data);
+  s.end();
+  return out;
+});
 ```
 
 ### `setAttribute(key, value)` / `addEvent(name, attributes)` (full mode only)
@@ -637,12 +646,12 @@ Set attributes or add events on the active span. Import from `autotel-web/full`.
 Get the current active trace context:
 
 ```typescript
-import { getActiveContext } from 'autotel-web'
+import { getActiveContext } from 'autotel-web';
 
-const ctx = getActiveContext()
+const ctx = getActiveContext();
 if (ctx) {
-  console.log('Trace ID:', ctx.traceId)
-  console.log('Span ID:', ctx.spanId)
+  console.log('Trace ID:', ctx.traceId);
+  console.log('Span ID:', ctx.spanId);
 }
 ```
 
@@ -655,16 +664,16 @@ autotel-web includes built-in privacy controls to ensure compliance with GDPR, C
 ```typescript
 interface PrivacyConfig {
   /** Only inject traceparent on these origins (whitelist) */
-  allowedOrigins?: string[]
+  allowedOrigins?: string[];
 
   /** Never inject traceparent on these origins (blacklist) */
-  blockedOrigins?: string[]
+  blockedOrigins?: string[];
 
   /** Respect Do Not Track browser setting */
-  respectDoNotTrack?: boolean
+  respectDoNotTrack?: boolean;
 
   /** Respect Global Privacy Control signal */
-  respectGPC?: boolean
+  respectGPC?: boolean;
 }
 ```
 
@@ -676,15 +685,15 @@ Only inject `traceparent` on your own API endpoints:
 init({
   service: 'my-app',
   privacy: {
-    allowedOrigins: ['api.myapp.com', 'myapp.com']
-  }
-})
+    allowedOrigins: ['api.myapp.com', 'myapp.com'],
+  },
+});
 
 // ✅ Injects traceparent
-fetch('https://api.myapp.com/users')
+fetch('https://api.myapp.com/users');
 
 // ❌ Does NOT inject traceparent (not in allowlist)
-fetch('https://external-api.com/data')
+fetch('https://external-api.com/data');
 ```
 
 ### Example: Block Third-Party Analytics
@@ -699,16 +708,16 @@ init({
       'analytics.google.com',
       'facebook.com',
       'mixpanel.com',
-      'segment.io'
-    ]
-  }
-})
+      'segment.io',
+    ],
+  },
+});
 
 // ✅ Injects traceparent (not blocked)
-fetch('https://api.myapp.com/users')
+fetch('https://api.myapp.com/users');
 
 // ❌ Does NOT inject traceparent (blocked)
-fetch('https://analytics.google.com/collect')
+fetch('https://analytics.google.com/collect');
 ```
 
 ### Example: Respect User Privacy Signals
@@ -719,10 +728,10 @@ Respect Do Not Track (DNT) and Global Privacy Control (GPC):
 init({
   service: 'my-app',
   privacy: {
-    respectDoNotTrack: true,  // Disable tracing if user has DNT enabled
-    respectGPC: true           // Disable tracing if user has GPC enabled
-  }
-})
+    respectDoNotTrack: true, // Disable tracing if user has DNT enabled
+    respectGPC: true, // Disable tracing if user has GPC enabled
+  },
+});
 
 // If user has DNT or GPC enabled:
 // ❌ NO traceparent headers injected on ANY requests
@@ -744,9 +753,9 @@ init({
 
     // AND respect user's privacy preferences
     respectDoNotTrack: true,
-    respectGPC: true
-  }
-})
+    respectGPC: true,
+  },
+});
 ```
 
 ### Decision Priority
@@ -766,17 +775,17 @@ Origins are matched using **substring matching** for flexibility:
 ```typescript
 init({
   privacy: {
-    allowedOrigins: ['myapp.com']
-  }
-})
+    allowedOrigins: ['myapp.com'],
+  },
+});
 
 // ✅ Matches (contains "myapp.com")
-fetch('https://myapp.com/api')
-fetch('https://api.myapp.com/users')
-fetch('https://admin.myapp.com/dashboard')
+fetch('https://myapp.com/api');
+fetch('https://api.myapp.com/users');
+fetch('https://admin.myapp.com/dashboard');
 
 // ❌ Does NOT match
-fetch('https://otherapp.com/api')
+fetch('https://otherapp.com/api');
 ```
 
 **Case-insensitive:** Origins are normalized to lowercase before matching.
@@ -786,30 +795,28 @@ fetch('https://otherapp.com/api')
 When handling EU or California users, consider these configurations:
 
 **Strict Compliance (Recommended):**
+
 ```typescript
 init({
   service: 'my-app',
   privacy: {
-    allowedOrigins: ['myapp.com'],        // First-party only
-    respectDoNotTrack: true,               // Honor DNT
-    respectGPC: true                       // Honor GPC
-  }
-})
+    allowedOrigins: ['myapp.com'], // First-party only
+    respectDoNotTrack: true, // Honor DNT
+    respectGPC: true, // Honor GPC
+  },
+});
 ```
 
 **Balanced Approach:**
+
 ```typescript
 init({
   service: 'my-app',
   privacy: {
-    blockedOrigins: [
-      'analytics.google.com',
-      'facebook.com',
-      'doubleclick.net'
-    ],
-    respectGPC: true  // Respect explicit privacy request
-  }
-})
+    blockedOrigins: ['analytics.google.com', 'facebook.com', 'doubleclick.net'],
+    respectGPC: true, // Respect explicit privacy request
+  },
+});
 ```
 
 ### Debug Logging
@@ -819,11 +826,11 @@ Enable debug logging to see privacy decisions:
 ```typescript
 init({
   service: 'my-app',
-  debug: true,  // <-- Enable debug logging
+  debug: true, // <-- Enable debug logging
   privacy: {
-    blockedOrigins: ['analytics.google.com']
-  }
-})
+    blockedOrigins: ['analytics.google.com'],
+  },
+});
 
 // Console output:
 // [autotel-web] Initialized successfully { service: 'my-app', privacyEnabled: true, ... }
@@ -850,12 +857,12 @@ init({
 
 ```typescript
 // For unit tests, you can access the privacy manager
-import { getPrivacyManager } from 'autotel-web'
+import { getPrivacyManager } from 'autotel-web';
 
-const manager = getPrivacyManager()
+const manager = getPrivacyManager();
 if (manager) {
-  const shouldInject = manager.shouldInjectTraceparent('https://api.myapp.com')
-  console.log('Should inject:', shouldInject)
+  const shouldInject = manager.shouldInjectTraceparent('https://api.myapp.com');
+  console.log('Should inject:', shouldInject);
 }
 ```
 
@@ -863,10 +870,10 @@ if (manager) {
 
 ```javascript
 // Check if Do Not Track is enabled
-console.log('DNT:', navigator.doNotTrack) // '1' = enabled, '0' = disabled
+console.log('DNT:', navigator.doNotTrack); // '1' = enabled, '0' = disabled
 
 // Check if Global Privacy Control is enabled
-console.log('GPC:', navigator.globalPrivacyControl) // true/false/undefined
+console.log('GPC:', navigator.globalPrivacyControl); // true/false/undefined
 ```
 
 ### Advanced: Custom Privacy Logic
@@ -874,21 +881,23 @@ console.log('GPC:', navigator.globalPrivacyControl) // true/false/undefined
 For advanced use cases, you can import and use the `PrivacyManager` directly:
 
 ```typescript
-import { PrivacyManager } from 'autotel-web/privacy'
+import { PrivacyManager } from 'autotel-web/privacy';
 
 const manager = new PrivacyManager({
   allowedOrigins: ['myapp.com'],
-  respectDoNotTrack: true
-})
+  respectDoNotTrack: true,
+});
 
 // Check if injection should happen for a specific URL
-const shouldInject = manager.shouldInjectTraceparent('https://api.myapp.com/users')
-console.log('Should inject:', shouldInject)
+const shouldInject = manager.shouldInjectTraceparent(
+  'https://api.myapp.com/users',
+);
+console.log('Should inject:', shouldInject);
 
 // Get denial reason (for debugging)
-import { getDenialReason } from 'autotel-web/privacy'
-const reason = getDenialReason(manager, 'https://blocked.com/api')
-console.log('Denial reason:', reason)
+import { getDenialReason } from 'autotel-web/privacy';
+const reason = getDenialReason(manager, 'https://blocked.com/api');
+console.log('Denial reason:', reason);
 // Output: "Origin https://blocked.com is not in allowedOrigins list"
 ```
 
@@ -901,17 +910,17 @@ autotel-web and Sentry can coexist. Both will instrument fetch/XHR.
 **Recommendation:** Initialize Sentry first, then autotel-web.
 
 ```typescript
-import * as Sentry from '@sentry/browser'
-import { init } from 'autotel-web'
+import * as Sentry from '@sentry/browser';
+import { init } from 'autotel-web';
 
 // 1. Initialize Sentry first
 Sentry.init({
   dsn: 'YOUR_SENTRY_DSN',
   tracesSampleRate: 1.0,
-})
+});
 
 // 2. Then initialize autotel-web
-init({ service: 'my-app' })
+init({ service: 'my-app' });
 ```
 
 Sentry's instrumentation typically preserves existing `traceparent` headers, so both should work together.
@@ -921,8 +930,8 @@ Sentry's instrumentation typically preserves existing `traceparent` headers, so 
 Similar to Sentry, initialize Datadog RUM first:
 
 ```typescript
-import { datadogRum } from '@datadog/browser-rum'
-import { init } from 'autotel-web'
+import { datadogRum } from '@datadog/browser-rum';
+import { init } from 'autotel-web';
 
 // 1. Initialize Datadog RUM first
 datadogRum.init({
@@ -935,10 +944,10 @@ datadogRum.init({
   trackUserInteractions: true,
   trackResources: true,
   trackLongTasks: true,
-})
+});
 
 // 2. Then initialize autotel-web
-init({ service: 'my-app' })
+init({ service: 'my-app' });
 ```
 
 ### Conflicts
@@ -946,6 +955,7 @@ init({ service: 'my-app' })
 If you experience conflicts (e.g., duplicate instrumentation or missing headers):
 
 **Option 1:** Choose one SDK for distributed tracing
+
 - For full RUM (errors, session replay, performance): Use vendor SDK only
 - For distributed tracing only: Use autotel-web only
 
@@ -955,22 +965,22 @@ If you experience conflicts (e.g., duplicate instrumentation or missing headers)
 init({
   service: 'my-app',
   instrumentFetch: false,
-  instrumentXHR: false
-})
+  instrumentXHR: false,
+});
 ```
 
 Then manually inject `traceparent` headers:
 
 ```typescript
-import { getActiveContext } from 'autotel-web'
+import { getActiveContext } from 'autotel-web';
 
-const ctx = getActiveContext()
+const ctx = getActiveContext();
 if (ctx) {
   fetch('/api/data', {
     headers: {
-      traceparent: `00-${ctx.traceId}-${ctx.spanId}-01`
-    }
-  })
+      traceparent: `00-${ctx.traceId}-${ctx.spanId}-01`,
+    },
+  });
 }
 ```
 
@@ -983,15 +993,15 @@ autotel-web is **SSR-safe** by design. All browser APIs (WebTracerProvider, Zone
 ```typescript
 // ✅ Safe: init() called in useEffect (client-side only)
 useEffect(() => {
-  init({ service: 'my-app' })
-}, [])
+  init({ service: 'my-app' });
+}, []);
 
 // ✅ Safe: init() called in entry.client.tsx (Remix)
-init({ service: 'my-app' })
+init({ service: 'my-app' });
 
 // ✅ Safe: init() called in 'use client' component (Next.js)
-'use client'
-init({ service: 'my-app' })
+('use client');
+init({ service: 'my-app' });
 ```
 
 ### Unsafe: ❌
@@ -1013,11 +1023,13 @@ export default function MyComponent() { ... }
 autotel-web takes a **minimalist approach** to browser tracing:
 
 ### What it DOES:
+
 ✅ Generates W3C `traceparent` headers (`00-{traceId}-{spanId}-01`)
 ✅ Automatically injects headers on fetch/XHR calls
 ✅ Provides a nice DX with `trace()` wrappers
 
 ### What it DOESN'T do:
+
 ❌ Create real spans in the browser
 ❌ Measure timing/duration
 ❌ Export to collectors
@@ -1028,6 +1040,7 @@ autotel-web takes a **minimalist approach** to browser tracing:
 The browser's job is **trace propagation only**. Your backend (using Autotel) receives the `traceparent` header and creates the real spans with timing, errors, and full context.
 
 This approach:
+
 - Keeps bundle size tiny (1.6KB vs 55KB for full OTel)
 - Avoids CORS issues (no exporter endpoints)
 - Eliminates Zone.js conflicts (Angular, etc.)
@@ -1038,6 +1051,7 @@ The backend does all the real work, which is where you want detailed telemetry a
 ## Why Not Use OpenTelemetry in the Browser?
 
 The official OpenTelemetry browser SDK (`@opentelemetry/sdk-trace-web`) is a **full-featured tracing implementation** with:
+
 - Real span creation and lifecycle management
 - Context propagation via Zone.js (~15KB)
 - Span processors and exporters
@@ -1073,11 +1087,13 @@ autotel-web has **effectively zero performance overhead**:
 ✅ **Header-only** - Just adds one HTTP header per request
 
 **What it does:**
+
 - Patches `window.fetch` and `XMLHttpRequest.prototype.open` at initialization
 - Generates a 32-byte header value using `crypto.getRandomValues()`
 - Adds the header to outgoing requests
 
 **Benchmark:**
+
 - Header generation: ~0.01ms
 - Network overhead: +45 bytes per request (traceparent header)
 - Memory: ~2KB for the SDK code
@@ -1169,13 +1185,13 @@ Because the entire flow is inside a single `trace()` call, the fetch call runs "
 
 ### Summary: Zone.js vs autotel-web
 
-| Need | Zone.js | autotel-web approach |
-|------|--------|------------------------|
-| Trace from browser to backend | Not required | Lean mode: inject `traceparent`; backend continues trace. |
-| Real browser spans (navigation, fetch, Web Vitals) | Not required for the common path | Full mode: instrument fetch/XHR and document load so context is preserved on the wire and in the main async chain. |
-| Context across arbitrary async (setTimeout, third‑party callbacks) | Helps | Explicit `trace()` around the whole flow; or accept best-effort. |
-| Small bundle, no global patching | N/A | Lean mode is ~1.6 KB; full mode avoids Zone. |
-| Fewer framework/tooling issues | N/A | No Zone dependency. |
+| Need                                                               | Zone.js                          | autotel-web approach                                                                                               |
+| ------------------------------------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Trace from browser to backend                                      | Not required                     | Lean mode: inject `traceparent`; backend continues trace.                                                          |
+| Real browser spans (navigation, fetch, Web Vitals)                 | Not required for the common path | Full mode: instrument fetch/XHR and document load so context is preserved on the wire and in the main async chain. |
+| Context across arbitrary async (setTimeout, third‑party callbacks) | Helps                            | Explicit `trace()` around the whole flow; or accept best-effort.                                                   |
+| Small bundle, no global patching                                   | N/A                              | Lean mode is ~1.6 KB; full mode avoids Zone.                                                                       |
+| Fewer framework/tooling issues                                     | N/A                              | No Zone dependency.                                                                                                |
 
 **Bottom line:** You might need Zone.js if you want "current span" to follow **every** async boundary with no explicit wrapping. autotel-web avoids Zone by: (1) not creating real browser spans in lean mode, (2) in full mode, instrumenting the boundaries that matter for tracing (fetch, XHR, load), and (3) offering an explicit `trace()` so you can wrap critical paths once. That covers most real-world needs without Zone's pitfalls.
 
@@ -1186,6 +1202,7 @@ See the `apps/` directory at the repository root for complete working examples:
 - **example-web-vanilla** - Simple HTML + script tag example showing traceparent header injection
 
 More examples coming soon:
+
 - React + Vite - Client-side React app
 - Next.js - App Router with SSR
 - Remix - Full-stack Remix app
@@ -1196,8 +1213,9 @@ More examples coming soon:
 ### Headers not appearing
 
 1. Check that `init()` was called:
+
 ```typescript
-init({ service: 'my-app', debug: true })  // Enable debug logging
+init({ service: 'my-app', debug: true }); // Enable debug logging
 ```
 
 2. Verify in DevTools:
@@ -1206,23 +1224,27 @@ init({ service: 'my-app', debug: true })  // Enable debug logging
    - Check "Request Headers" for `traceparent`
 
 3. Ensure fetch/XHR instrumentation is enabled:
+
 ```typescript
 init({
   service: 'my-app',
-  instrumentFetch: true,  // default: true
-  instrumentXHR: true,    // default: true
-})
+  instrumentFetch: true, // default: true
+  instrumentXHR: true, // default: true
+});
 ```
 
 ### Backend not receiving context
 
 1. Check that backend is using Autotel or OpenTelemetry
 2. Verify CORS headers allow `traceparent`:
+
 ```javascript
 // Express CORS config
-app.use(cors({
-  exposedHeaders: ['traceparent', 'tracestate']
-}))
+app.use(
+  cors({
+    exposedHeaders: ['traceparent', 'tracestate'],
+  }),
+);
 ```
 
 3. For custom frameworks, manually extract context (see "Backend Integration" above)
@@ -1233,7 +1255,7 @@ If you've set `endpoint` but spans don't appear:
 
 1. Check the proxy is working: `curl -X POST http://localhost:8787/v1/traces -H 'Content-Type: application/json' -d '{}'`
 2. Verify Vite proxy config includes `/v1/traces`
-3. Enable `debug: true` — you should see `[autotel-web] flushSpans: sending N span(s)` in the console
+3. Enable `debug: true`: you should see `[autotel-web] flushSpans: sending N span(s)` in the console
 
 ### Vite dev server caching stale autotel-web
 

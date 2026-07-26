@@ -9,12 +9,15 @@ describe('ts-morph default export (diagnostic)', () => {
     const project = new Project({ useInMemoryFileSystem: true });
     const sourceFile = project.createSourceFile(
       'example.ts',
-      'export default function createUser() { return 1; }'
+      'export default function createUser() { return 1; }',
     );
     const defaultDecls = sourceFile.getExportedDeclarations().get('default');
     const fns = sourceFile.getFunctions();
     expect(defaultDecls?.length, 'default export declarations').toBe(1);
-    expect(fns.length, 'getFunctions should return 1 for single default export fn').toBe(1);
+    expect(
+      fns.length,
+      'getFunctions should return 1 for single default export fn',
+    ).toBe(1);
   });
 });
 
@@ -27,8 +30,12 @@ describe('transformFile', () => {
     const result = transformFile(input, FIXTURE_PATH, {});
     expect(result.changed).toBe(true);
     expect(result.wrappedCount).toBe(1);
-    expect(result.modified).toMatch(/import\s*\{\s*trace\s*\}\s*from\s*['"]autotel['"]/);
-    expect(result.modified).toContain("const createUser = trace('createUser', function createUser(data: string)");
+    expect(result.modified).toMatch(
+      /import\s*\{\s*trace\s*\}\s*from\s*['"]autotel['"]/,
+    );
+    expect(result.modified).toContain(
+      "const createUser = trace('createUser', function createUser(data: string)",
+    );
     expect(result.modified).toContain('return data;');
   });
 
@@ -51,7 +58,9 @@ describe('transformFile', () => {
     const result = transformFile(input, FIXTURE_PATH, {});
     expect(result.changed).toBe(true);
     expect(result.wrappedCount).toBe(1);
-    expect(result.modified).toContain("trace('createUser', async (data: string) =>");
+    expect(result.modified).toContain(
+      "trace('createUser', async (data: string) =>",
+    );
   });
 
   it('skips already wrapped function', () => {
@@ -63,7 +72,9 @@ const createUser = trace('createUser', async (data: string) => {
     const result = transformFile(input, FIXTURE_PATH, {});
     expect(result.changed).toBe(false);
     expect(result.wrappedCount).toBe(0);
-    expect(result.skipped.some((s) => s.reason === 'already wrapped')).toBe(true);
+    expect(result.skipped.some((s) => s.reason === 'already wrapped')).toBe(
+      true,
+    );
   });
 
   it('skips function when name matches --skip regex', () => {
@@ -82,7 +93,9 @@ const createUser = trace('createUser', async (data: string) => {
   return 1;
 }
 `;
-    const result = transformFile(input, FIXTURE_PATH, { namePattern: '{file}.{name}' });
+    const result = transformFile(input, FIXTURE_PATH, {
+      namePattern: '{file}.{name}',
+    });
     expect(result.changed).toBe(true);
     expect(result.modified).toContain("trace('example.createUser'");
   });
@@ -150,7 +163,9 @@ export default x;
 `;
     const result = transformFile(input, FIXTURE_PATH, {});
     expect(result.changed).toBe(false);
-    expect(result.skipped.some((s) => s.reason === 'anonymous default export')).toBe(true);
+    expect(
+      result.skipped.some((s) => s.reason === 'anonymous default export'),
+    ).toBe(true);
   });
 
   it('wraps default export and other named functions without double-editing default', () => {
@@ -170,7 +185,9 @@ function helper() {
     expect(result.wrappedCount).toBe(2);
 
     // Must contain exactly one "export default createUser" (no duplicate or missing)
-    const exportDefaultCount = (result.modified.match(/export\s+default\s+createUser/g) ?? []).length;
+    const exportDefaultCount = (
+      result.modified.match(/export\s+default\s+createUser/g) ?? []
+    ).length;
     expect(exportDefaultCount).toBe(1);
 
     expect(result.modified).toContain('const createUser = trace');

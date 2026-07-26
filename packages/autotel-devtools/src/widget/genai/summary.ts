@@ -3,45 +3,45 @@
 // Pure function over normalized spans so it can be unit-tested and reused by
 // any view (GenAiView summary strip, timeline headers, future exports).
 
-import { MODEL_OPS, AGENT_OPS } from './operations'
-import type { GenAiSpan } from './types'
+import { MODEL_OPS, AGENT_OPS } from './operations';
+import type { GenAiSpan } from './types';
 
 export interface RunSummary {
-  spanCount: number
+  spanCount: number;
   /** LLM requests (chat / text_completion / generate_content / embeddings),
    *  excluding aggregate/parent spans that just wrap their children. */
-  modelCalls: number
+  modelCalls: number;
   /** Tool executions. Counted from `execute_tool` spans when present, else from
    *  inlined `toolCalls` on model spans (providers that don't emit a dedicated
    *  tool span), deduped by tool-call id. Aggregate/parent spans are excluded so
    *  a wrapping span and per-turn history replay don't double-count. */
-  toolCalls: number
+  toolCalls: number;
   /** Agent invocations — a proxy for "sub-agents" when more than one. */
-  agentInvocations: number
-  handoffs: number
-  errors: number
+  agentInvocations: number;
+  handoffs: number;
+  errors: number;
 
-  inputTokens: number
-  outputTokens: number
-  totalTokens: number
-  reasoningTokens: number
-  cachedTokens: number
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  reasoningTokens: number;
+  cachedTokens: number;
 
-  totalCostUsd: number
+  totalCostUsd: number;
   /** At least one span carried a priced cost (reported or table-estimated). */
-  costKnown: boolean
+  costKnown: boolean;
   /** Every model call was priced — totals are exact, not a lower bound. */
-  costComplete: boolean
+  costComplete: boolean;
 
-  durationMs: number
+  durationMs: number;
   /** Distinct response/request models seen, in first-appearance order. */
-  models: string[]
+  models: string[];
   /** Distinct providers seen, in first-appearance order. */
-  providers: string[]
+  providers: string[];
 }
 
 function isHandoff(span: GenAiSpan): boolean {
-  return span.operation === 'execute_handoff' || span.handoff != null
+  return span.operation === 'execute_handoff' || span.handoff != null;
 }
 
 /** Span ids that strictly time-contain another span in the run — i.e. parent /
@@ -51,19 +51,19 @@ function isHandoff(span: GenAiSpan): boolean {
  *  calls, tokens and tools, so we exclude aggregates from those tallies. (Same
  *  "wrapper" notion AgentTimeline uses.) */
 function findAggregateSpanIds(spans: GenAiSpan[]): Set<string> {
-  const ids = new Set<string>()
+  const ids = new Set<string>();
   for (const a of spans) {
-    const aDur = a.endMs - a.startMs
+    const aDur = a.endMs - a.startMs;
     for (const b of spans) {
-      if (b === a) continue
-      const bDur = b.endMs - b.startMs
+      if (b === a) continue;
+      const bDur = b.endMs - b.startMs;
       if (b.startMs >= a.startMs && b.endMs <= a.endMs && bDur < aDur) {
-        ids.add(a.spanId)
-        break
+        ids.add(a.spanId);
+        break;
       }
     }
   }
-  return ids
+  return ids;
 }
 
 export function summarizeRun(spans: GenAiSpan[]): RunSummary {
@@ -87,83 +87,84 @@ export function summarizeRun(spans: GenAiSpan[]): RunSummary {
     durationMs: 0,
     models: [],
     providers: [],
-  }
+  };
   if (spans.length === 0) {
-    summary.costComplete = false
-    return summary
+    summary.costComplete = false;
+    return summary;
   }
 
-  const aggregateIds = findAggregateSpanIds(spans)
-  let minStart = Infinity
-  let maxEnd = -Infinity
-  let executeToolSpans = 0
-  let modelCallsPriced = 0
-  const modelSet = new Set<string>()
-  const providerSet = new Set<string>()
+  const aggregateIds = findAggregateSpanIds(spans);
+  let minStart = Infinity;
+  let maxEnd = -Infinity;
+  let executeToolSpans = 0;
+  let modelCallsPriced = 0;
+  const modelSet = new Set<string>();
+  const providerSet = new Set<string>();
   // Inline tool calls deduped by id: some frameworks replay the full message
   // history each turn, so the same tool call surfaces on several spans. Calls
   // without an id can't be deduped, so each counts.
-  const inlineToolCallIds = new Set<string>()
-  let inlineToolCallsNoId = 0
+  const inlineToolCallIds = new Set<string>();
+  let inlineToolCallsNoId = 0;
 
   for (const span of spans) {
-    minStart = Math.min(minStart, span.startMs)
-    maxEnd = Math.max(maxEnd, span.endMs)
-    if (span.status === 'error') summary.errors++
+    minStart = Math.min(minStart, span.startMs);
+    maxEnd = Math.max(maxEnd, span.endMs);
+    if (span.status === 'error') summary.errors++;
 
-    const op = span.operation
+    const op = span.operation;
     // Aggregate/parent spans duplicate their children's model+tool data; agent
     // and handoff spans (which are legitimately parents) are counted separately
     // below and are never model/tool leaves, so the skip only affects tallies.
-    const isAggregate = aggregateIds.has(span.spanId)
-    if (op === 'execute_tool' && !isAggregate) executeToolSpans++
+    const isAggregate = aggregateIds.has(span.spanId);
+    if (op === 'execute_tool' && !isAggregate) executeToolSpans++;
     if (!isAggregate) {
       for (const tc of span.toolCalls) {
-        if (tc.id) inlineToolCallIds.add(tc.id)
-        else inlineToolCallsNoId++
+        if (tc.id) inlineToolCallIds.add(tc.id);
+        else inlineToolCallsNoId++;
       }
     }
-    if (AGENT_OPS.has(op)) summary.agentInvocations++
-    if (isHandoff(span)) summary.handoffs++
+    if (AGENT_OPS.has(op)) summary.agentInvocations++;
+    if (isHandoff(span)) summary.handoffs++;
 
     if (MODEL_OPS.has(op) && !isAggregate) {
-      summary.modelCalls++
-      const model = span.responseModel ?? span.requestModel
-      if (model && model !== 'unknown') modelSet.add(model)
-      if (span.provider && span.provider !== 'unknown') providerSet.add(span.provider)
+      summary.modelCalls++;
+      const model = span.responseModel ?? span.requestModel;
+      if (model && model !== 'unknown') modelSet.add(model);
+      if (span.provider && span.provider !== 'unknown')
+        providerSet.add(span.provider);
 
-      const u = span.usage
-      summary.inputTokens += u.inputTokens ?? 0
-      summary.outputTokens += u.outputTokens ?? 0
-      summary.reasoningTokens += u.reasoningOutputTokens ?? 0
-      summary.cachedTokens += u.cacheReadInputTokens ?? 0
+      const u = span.usage;
+      summary.inputTokens += u.inputTokens ?? 0;
+      summary.outputTokens += u.outputTokens ?? 0;
+      summary.reasoningTokens += u.reasoningOutputTokens ?? 0;
+      summary.cachedTokens += u.cacheReadInputTokens ?? 0;
 
       // `reported` (instrumentation-emitted) and `table` (client estimate) are
       // both real prices; only `unknown`/absent leaves the total a lower bound.
       if (span.cost && span.cost.source !== 'unknown') {
-        summary.totalCostUsd += span.cost.total
-        modelCallsPriced++
+        summary.totalCostUsd += span.cost.total;
+        modelCallsPriced++;
       } else {
-        summary.costComplete = false
+        summary.costComplete = false;
       }
     }
   }
 
-  summary.totalTokens = summary.inputTokens + summary.outputTokens
+  summary.totalTokens = summary.inputTokens + summary.outputTokens;
   // Prefer dedicated tool spans; fall back to inlined tool calls so providers
   // that don't emit `execute_tool` spans still get a meaningful count.
   summary.toolCalls =
     executeToolSpans > 0
       ? executeToolSpans
-      : inlineToolCallIds.size + inlineToolCallsNoId
-  summary.costKnown = modelCallsPriced > 0
+      : inlineToolCallIds.size + inlineToolCallsNoId;
+  summary.costKnown = modelCallsPriced > 0;
   // No model calls at all → "complete" is vacuously true but uninformative; a
   // run with zero priced model calls is not "exactly priced".
-  if (summary.modelCalls === 0) summary.costComplete = false
-  summary.durationMs = maxEnd > minStart ? maxEnd - minStart : 0
-  summary.models = [...modelSet]
-  summary.providers = [...providerSet]
-  return summary
+  if (summary.modelCalls === 0) summary.costComplete = false;
+  summary.durationMs = maxEnd > minStart ? maxEnd - minStart : 0;
+  summary.models = [...modelSet];
+  summary.providers = [...providerSet];
+  return summary;
 }
 
 /** Group rows into runs keyed by conversation id, falling back to trace id so
@@ -174,15 +175,21 @@ export function groupRuns<T extends { normalized: GenAiSpan; traceId: string }>(
 ): Array<{ key: string; conversationId?: string; traceId: string; rows: T[] }> {
   const byKey = new Map<
     string,
-    { key: string; conversationId?: string; traceId: string; rows: T[]; latest: number }
-  >()
+    {
+      key: string;
+      conversationId?: string;
+      traceId: string;
+      rows: T[];
+      latest: number;
+    }
+  >();
   for (const row of rows) {
-    const conversation = row.normalized.conversationId
-    const key = conversation ?? `trace:${row.traceId}`
-    const existing = byKey.get(key)
+    const conversation = row.normalized.conversationId;
+    const key = conversation ?? `trace:${row.traceId}`;
+    const existing = byKey.get(key);
     if (existing) {
-      existing.rows.push(row)
-      existing.latest = Math.max(existing.latest, row.normalized.startMs)
+      existing.rows.push(row);
+      existing.latest = Math.max(existing.latest, row.normalized.startMs);
     } else {
       byKey.set(key, {
         key,
@@ -190,8 +197,8 @@ export function groupRuns<T extends { normalized: GenAiSpan; traceId: string }>(
         traceId: row.traceId,
         rows: [row],
         latest: row.normalized.startMs,
-      })
+      });
     }
   }
-  return [...byKey.values()].sort((a, b) => b.latest - a.latest)
+  return [...byKey.values()].sort((a, b) => b.latest - a.latest);
 }

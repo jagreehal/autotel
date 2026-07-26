@@ -106,6 +106,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 ### Step 4: Verify
 
 1. Start your app:
+
    ```bash
    npm start
    ```
@@ -146,7 +147,7 @@ async function createUser(data) {
 }
 
 // NEW: Automatic lifecycle
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 const createUser = trace(async (data) => {
   return await db.users.create(data);
 });
@@ -208,12 +209,12 @@ See sections below for pattern-by-pattern migrations, custom sampling, and edge 
 
 ## Quick Reference
 
-| OpenTelemetry Pattern                                                         | Autotel Equivalent                   | What Changes                        |
+| OpenTelemetry Pattern                                                         | Autotel Equivalent                       | What Changes                        |
 | ----------------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------- |
 | `NODE_OPTIONS="--require @opentelemetry/auto-instrumentations-node/register"` | `init({ integrations: true })`           | Programmatic configuration          |
 | `new NodeSDK({ ... })`                                                        | `init({ ... })`                          | Reduced boilerplate (30+ → 5 lines) |
 | `tracer.startSpan()` + `span.end()`                                           | `trace(fn)`                              | Automatic span lifecycle            |
-| Manual log correlation                                                        | `autotel/logger`                     | Automatic trace context injection   |
+| Manual log correlation                                                        | `autotel/logger`                         | Automatic trace context injection   |
 | Head sampling                                                                 | Tail sampling (default)                  | Sample 100% of errors/slow requests |
 | Custom span processor                                                         | Built-in rate limiters, circuit breakers | Rate limiting, circuit breakers     |
 
@@ -377,7 +378,7 @@ init({
 **Before**:
 
 ```typescript
-import { trace } from '@opentelemetry/api';
+import { trace, withTracing } from '@opentelemetry/api';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 const tracer = trace.getTracer('my-app');
@@ -415,10 +416,10 @@ const user = await createUser({ email: 'user@example.com', id: '123' });
 **After**:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 // Factory pattern (receives context parameter)
-const createUser = trace((ctx) => async (data) => {
+const createUser = withTracing({})((ctx) => async (data) => {
   // Span automatically created with function name as operation
   ctx.setAttribute('user.email', data.email);
   ctx.setAttribute('user.id', data.id);
@@ -436,14 +437,14 @@ const user = await createUser({ email: 'user@example.com', id: '123' });
 **Alternative**: Direct pattern (when you don't need context)
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 // Direct pattern (no context needed)
 const getUser = trace(async (id) => {
   return await db.users.findById(id);
 });
 
-// Autotel auto-detects the pattern and handles lifecycle
+// Autotel wraps the plain function and handles lifecycle
 const user = await getUser('123');
 ```
 
@@ -455,14 +456,13 @@ const user = await getUser('123');
 - Context propagation handled automatically
 - Function name used as span name (customizable via `@operationName` decorator)
 
-
 ### Pattern 4: Logger Integration
 
 **Before**:
 
 ```typescript
 import pino from 'pino';
-import { trace, context } from '@opentelemetry/api';
+import { trace, withTracing, context } from '@opentelemetry/api';
 
 const logger = pino();
 
@@ -487,7 +487,7 @@ async function handleRequest(req) {
 
 ```typescript
 import { createLogger } from 'autotel/logger';
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 const logger = createLogger({ name: 'my-service' });
 
@@ -517,7 +517,6 @@ const handleRequest = trace(async (req) => {
 - No manual span context extraction
 - Works with structured logging (JSON)
 - Supports pino and winston
-
 
 ### Pattern 5: Custom Sampling
 
@@ -591,7 +590,6 @@ init({
 - Inspect function inputs (args/metadata) plus duration before deciding
 - Adaptive sampling based on conditions
 
-
 ### Pattern 6: Metrics and Logs
 
 **Before**:
@@ -615,7 +613,7 @@ function handleRequest(req) {
 **After**:
 
 ```typescript
-import { createCounter } from 'autotel/metrics';
+import { createCounter } from 'autotel';
 
 const requestCounter = createCounter('http.requests', {
   description: 'Total HTTP requests',
@@ -642,12 +640,18 @@ function handleRequest(req) {
 **Before** (Vanilla Prisma OpenTelemetry - ~50 lines):
 
 ```typescript
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
-import { PrismaInstrumentation, registerInstrumentations } from '@prisma/instrumentation'
-import { resourceFromAttributes } from '@opentelemetry/resources'
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+} from '@opentelemetry/semantic-conventions';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  PrismaInstrumentation,
+  registerInstrumentations,
+} from '@prisma/instrumentation';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 
 // Configure the trace provider
 const provider = new NodeTracerProvider({
@@ -655,26 +659,24 @@ const provider = new NodeTracerProvider({
     [ATTR_SERVICE_NAME]: 'my-app',
     [ATTR_SERVICE_VERSION]: '1.0.0',
   }),
-  spanProcessors: [
-    new SimpleSpanProcessor(new OTLPTraceExporter()),
-  ],
+  spanProcessors: [new SimpleSpanProcessor(new OTLPTraceExporter())],
 });
 
 // Register Prisma instrumentations
 registerInstrumentations({
   tracerProvider: provider,
   instrumentations: [new PrismaInstrumentation()],
-})
+});
 
 // Register the provider globally
-provider.register()
+provider.register();
 
 // Import Prisma AFTER instrumentation setup
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 // Manual span management for business logic
-import { trace } from '@opentelemetry/api';
+import { trace, withTracing } from '@opentelemetry/api';
 const tracer = trace.getTracer('my-app');
 
 async function createUser(email: string) {
@@ -695,7 +697,7 @@ async function createUser(email: string) {
 **After** (Autotel - ~10 lines):
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, trace, withTracing } from 'autotel';
 import { PrismaInstrumentation } from '@prisma/instrumentation';
 import { PrismaClient } from '@prisma/client';
 
@@ -708,7 +710,7 @@ init({
 const prisma = new PrismaClient();
 
 // Functional API - automatic span lifecycle
-const createUser = trace(ctx => async (email: string) => {
+const createUser = withTracing({})((ctx) => async (email: string) => {
   ctx.setAttribute('user.email', email);
   return await prisma.user.create({ data: { email } });
 });
@@ -717,6 +719,7 @@ const createUser = trace(ctx => async (email: string) => {
 **What You Get:**
 
 Autotel automatically captures detailed Prisma spans:
+
 - `prisma:client:operation` - Full Prisma operation (e.g., `User.create`)
 - `prisma:client:serialize` - Query serialization time
 - `prisma:engine:query` - Query engine execution
@@ -749,6 +752,7 @@ createUser                           (your function)
 **Full Working Example:**
 
 See [apps/example-prisma](../apps/example-prisma) for a complete example with:
+
 - SQLite database setup
 - User and Post models
 - Nested queries and transactions
@@ -771,7 +775,7 @@ pnpm start
 **Before** (Manual OpenTelemetry Setup - ~60 lines):
 
 ```typescript
-import { trace, SpanKind } from '@opentelemetry/api';
+import { trace, withTracing, SpanKind } from '@opentelemetry/api';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -827,7 +831,7 @@ async function createUser(email: string) {
 **After** (Autotel + Drizzle Plugin - ~10 lines):
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, trace, withTracing } from 'autotel';
 import { instrumentDrizzleClient } from 'autotel-plugins/drizzle';
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
@@ -840,7 +844,7 @@ const client = createClient({ url: 'file:./dev.db' });
 const db = instrumentDrizzleClient(drizzle({ client }), { dbSystem: 'sqlite' });
 
 // Automatic tracing - SQL queries captured automatically!
-const createUser = trace(ctx => async (email: string) => {
+const createUser = withTracing({})((ctx) => async (email: string) => {
   ctx.setAttribute('user.email', email);
   return await db.insert(users).values({ email }).returning();
 });
@@ -849,12 +853,14 @@ const createUser = trace(ctx => async (email: string) => {
 **What You Get:**
 
 Autotel's Drizzle plugin automatically captures:
+
 - `drizzle.insert` - INSERT operations
 - `drizzle.select` - SELECT operations
 - `drizzle.update` - UPDATE operations
 - `drizzle.delete` - DELETE operations
 
 Each span includes:
+
 - **SQL statement** (the actual SQL query executed)
 - **Database system** (sqlite, postgresql, mysql)
 - **Operation type** (INSERT, SELECT, UPDATE, DELETE)
@@ -882,10 +888,13 @@ const result = await db.transaction(async (tx) => {
   const [user] = await tx.insert(users).values({ email }).returning();
   // ↑ Span includes db.transaction: true
 
-  const [post] = await tx.insert(posts).values({
-    title: 'Hello',
-    authorId: user.id
-  }).returning();
+  const [post] = await tx
+    .insert(posts)
+    .values({
+      title: 'Hello',
+      authorId: user.id,
+    })
+    .returning();
   // ↑ Also marked with db.transaction: true
 
   return { user, post };
@@ -932,6 +941,7 @@ const db = instrumentDrizzleClient(drizzle({ client }), {
 **Full Working Example:**
 
 See [apps/example-drizzle](../apps/example-drizzle) for a complete example with:
+
 - SQLite database setup
 - User and Post models
 - Nested queries
@@ -951,19 +961,19 @@ pnpm start
 
 ## Feature Mapping Reference
 
-| OpenTelemetry API/SDK               | Autotel Equivalent  | Notes                       |
-| ----------------------------------- | ----------------------- | --------------------------- |
-| `new NodeSDK({...})`                | `init({...})`           | Simplified configuration    |
-| `tracer.startSpan()` + `span.end()` | `trace(fn)`             | Automatic lifecycle         |
-| `span.setAttribute()`               | `ctx.setAttribute()`    | Same API, different context |
-| `span.setStatus()`                  | Automatic               | Based on exception/return   |
-| `span.recordException()`            | Automatic               | All errors auto-recorded    |
+| OpenTelemetry API/SDK               | Autotel Equivalent               | Notes                       |
+| ----------------------------------- | -------------------------------- | --------------------------- |
+| `new NodeSDK({...})`                | `init({...})`                    | Simplified configuration    |
+| `tracer.startSpan()` + `span.end()` | `trace(fn)`                      | Automatic lifecycle         |
+| `span.setAttribute()`               | `ctx.setAttribute()`             | Same API, different context |
+| `span.setStatus()`                  | Automatic                        | Based on exception/return   |
+| `span.recordException()`            | Automatic                        | All errors auto-recorded    |
 | `ParentBasedSampler`                | `sampler: new AdaptiveSampler()` | Tail sampling instead       |
-| `getNodeAutoInstrumentations()`     | `integrations: true`    | Same libraries instrumented |
-| `sdk.shutdown()`                    | `shutdown()`            | Graceful shutdown           |
-| Manual log correlation              | `autotel/logger`    | Built-in correlation        |
-| Manual context propagation          | Automatic               | Works out of the box        |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`       | `endpoint`              | Config over env vars        |
+| `getNodeAutoInstrumentations()`     | `integrations: true`             | Same libraries instrumented |
+| `sdk.shutdown()`                    | `shutdown()`                     | Graceful shutdown           |
+| Manual log correlation              | `autotel/logger`                 | Built-in correlation        |
+| Manual context propagation          | Automatic                        | Works out of the box        |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`       | `endpoint`                       | Config over env vars        |
 
 ---
 
@@ -1052,7 +1062,7 @@ registerInstrumentations({
 **Before**:
 
 ```typescript
-import { context, trace } from '@opentelemetry/api';
+import { context, trace, withTracing } from '@opentelemetry/api';
 
 const span = tracer.startSpan('parent');
 const ctx = trace.setSpan(context.active(), span);
@@ -1068,7 +1078,7 @@ span.end();
 **After**:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 const parent = trace(async () => {
   // Context propagation automatic
@@ -1242,7 +1252,7 @@ const sdk = new opentelemetry.NodeSDK({
 sdk.start();
 
 // File: user-service.ts (25+ lines for a single function)
-import { trace } from '@opentelemetry/api';
+import { trace, withTracing } from '@opentelemetry/api';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 const tracer = trace.getTracer('user-service');
@@ -1280,9 +1290,9 @@ init({
 });
 
 // File: user-service.ts (7 lines)
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
-const createUser = trace((ctx) => async (data) => {
+const createUser = withTracing({})((ctx) => async (data) => {
   ctx.setAttribute('user.email', data.email);
   return await db.users.create(data);
 });

@@ -9,7 +9,7 @@ describe('new first-party presets', () => {
       expect(p, `expected plugin preset "${slug}" to exist`).toBeDefined();
       expect(p?.type).toBe('plugin');
       expect(p?.packages.required.length).toBeGreaterThan(0);
-    }
+    },
   );
 
   it('plugin slug list includes the new presets and the existing ones', () => {
@@ -22,7 +22,7 @@ describe('new first-party presets', () => {
         'hono',
         'mcp',
         'tanstack',
-      ])
+      ]),
     );
   });
 

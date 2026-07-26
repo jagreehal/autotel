@@ -17,7 +17,7 @@ pnpm add autotel autotel-vitest
 pnpm add -D vitest
 ```
 
-### 2. globalSetup.ts — call init() before tests run
+### 2. globalSetup.ts: call init() before tests run
 
 ```typescript
 // globalSetup.ts
@@ -26,12 +26,12 @@ import { init } from 'autotel';
 export default function globalSetup() {
   init({
     service: 'unit-tests',
-    endpoint: 'http://localhost:4318',  // Your OTLP collector
+    endpoint: 'http://localhost:4318', // Your OTLP collector
   });
 }
 ```
 
-### 3. vitest.config.ts — register globalSetup
+### 3. vitest.config.ts: register globalSetup
 
 ```typescript
 // vitest.config.ts
@@ -56,7 +56,7 @@ test('creates user', async () => {
 });
 ```
 
-The fixture is `auto: true` — every test gets a parent span automatically with no extra code.
+The fixture is `auto: true`. Every test gets a parent span automatically with no extra code.
 
 ## Configuration / Core Patterns
 
@@ -64,9 +64,9 @@ The fixture is `auto: true` — every test gets a parent span automatically with
 
 Each test span is named `test:${task.name}` and carries these attributes automatically:
 
-- `test.name` — the test name string
-- `test.file` — file path from `task.file.name`
-- `test.suite` — suite name from `task.suite.name` (if in a describe block)
+- `test.name`: the test name string
+- `test.file`: file path from `task.file.name`
+- `test.suite`: suite name from `task.suite.name` (if in a describe block)
 
 If a test throws, the span is marked `ERROR` and records the exception.
 
@@ -87,6 +87,7 @@ export default defineConfig({
 ```
 
 Reporter creates:
+
 - `test:<name>` spans for each test case
 - `suite:<name>` spans for each describe block
 
@@ -117,7 +118,12 @@ test('traces user creation', async () => {
 ### Trace context helpers (re-exported from autotel)
 
 ```typescript
-import { getTraceContext, resolveTraceUrl, isTracing, enrichWithTraceContext } from 'autotel-vitest';
+import {
+  getTraceContext,
+  resolveTraceUrl,
+  isTracing,
+  enrichWithTraceContext,
+} from 'autotel-vitest';
 ```
 
 ### Cross-process tracing (test → HTTP server)
@@ -139,9 +145,10 @@ test('traces across HTTP', async () => {
 
 ## Common Mistakes
 
-### HIGH — Importing test from vitest instead of autotel-vitest
+### HIGH: Importing test from vitest instead of autotel-vitest
 
 Wrong:
+
 ```typescript
 import { test } from 'vitest'; // base test — no OTel fixture
 
@@ -152,21 +159,24 @@ test('creates user', async () => {
 ```
 
 Correct:
+
 ```typescript
 import { test } from 'autotel-vitest'; // extended test with auto fixture
 ```
 
 Explanation: Only the extended `test` from `autotel-vitest` has the `_otelTestSpan` fixture registered. Using the base `vitest` `test` means no parent context is active and child spans appear as disconnected traces.
 
-### HIGH — Not calling init() in globalSetup
+### HIGH: Not calling init() in globalSetup
 
 Wrong:
+
 ```typescript
 // vitest.config.ts — no globalSetup
 // Spans are created but never exported (no tracer provider configured)
 ```
 
 Correct:
+
 ```typescript
 // globalSetup.ts
 import { init } from 'autotel';
@@ -177,9 +187,10 @@ export default function globalSetup() {
 
 Explanation: `init()` must run in `globalSetup` (not in a `beforeAll` or test file) so the provider is available before any worker process starts executing tests.
 
-### MEDIUM — Adding the reporter without globalSetup
+### MEDIUM: Adding the reporter without globalSetup
 
 Wrong:
+
 ```typescript
 // vitest.config.ts
 export default defineConfig({
@@ -194,9 +205,9 @@ Correct: Always pair the reporter with `globalSetup` that calls `init()`.
 
 Explanation: The reporter runs in the Vitest runner process and calls `getTracer()`. If `init()` was never called, there is no configured tracer provider and spans silently go nowhere.
 
-### MEDIUM — Calling describe/beforeEach from vitest directly when using autotel-vitest
+### MEDIUM: Calling describe/beforeEach from vitest directly when using autotel-vitest
 
-These are safe to mix — `autotel-vitest` re-exports `describe`, `beforeEach`, `afterEach`, `beforeAll`, `afterAll` directly from `vitest`, so you can import everything from one place:
+These are safe to mix. `autotel-vitest` re-exports `describe`, `beforeEach`, `afterEach`, `beforeAll`, `afterAll` directly from `vitest`, so you can import everything from one place:
 
 ```typescript
 import { test, expect, describe, beforeEach } from 'autotel-vitest';

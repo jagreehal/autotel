@@ -9,13 +9,13 @@
 // from a foreign OTLP collector squatting on the same port.
 
 /** Value of the `x-autotel-devtools` response header and the /healthz `service` field. */
-export const DEVTOOLS_IDENTITY = 'autotel-devtools'
+export const DEVTOOLS_IDENTITY = 'autotel-devtools';
 
 /** Who is holding a TCP port, as far as we can tell over HTTP:
  *  - `autotel-devtools` — another instance of us (benign; the user has two running)
  *  - `foreign`          — an HTTP server that is NOT us (e.g. an IDE's OTLP collector)
  *  - `none`             — nothing answered HTTP (refused, timed out, or non-HTTP listener) */
-export type PortHolder = 'autotel-devtools' | 'foreign' | 'none'
+export type PortHolder = 'autotel-devtools' | 'foreign' | 'none';
 
 /**
  * Probe `host:port` over HTTP and classify what is listening. Used when our
@@ -30,29 +30,29 @@ export async function probePortHolder(
   timeoutMs = 500,
 ): Promise<PortHolder> {
   // Bracket IPv6 literals for the URL authority (e.g. [::1]:4318).
-  const authority = host.includes(':') ? `[${host}]` : host
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const authority = host.includes(':') ? `[${host}]` : host;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`http://${authority}:${port}/healthz`, {
       signal: controller.signal,
-    })
+    });
     // The header is the fast, body-independent signal (present on every route).
-    if (res.headers.get('x-autotel-devtools')) return 'autotel-devtools'
+    if (res.headers.get('x-autotel-devtools')) return 'autotel-devtools';
     // Fall back to the body in case a proxy stripped the header.
     try {
-      const body = (await res.json()) as { service?: unknown }
-      if (body && body.service === DEVTOOLS_IDENTITY) return 'autotel-devtools'
+      const body = (await res.json()) as { service?: unknown };
+      if (body && body.service === DEVTOOLS_IDENTITY) return 'autotel-devtools';
     } catch {
       // Not JSON — that's fine, it just isn't us.
     }
-    return 'foreign'
+    return 'foreign';
   } catch {
     // Connection refused / timeout / non-HTTP listener. When the caller only
     // probes after a confirmed EADDRINUSE, `none` means "occupied by something
     // that doesn't speak HTTP" — still not us.
-    return 'none'
+    return 'none';
   } finally {
-    clearTimeout(timer)
+    clearTimeout(timer);
   }
 }

@@ -53,7 +53,7 @@ let currentContext: TraceContext | undefined;
  * ```
  */
 export function trace<T extends (...args: any[]) => any>(
-  fn: T | ((ctx: TraceContext) => T)
+  fn: T | ((ctx: TraceContext) => T),
 ): T {
   // Check if function expects a context parameter (factory pattern)
   const expectsContext = isFactoryPattern(fn);
@@ -90,7 +90,9 @@ function isFactoryPattern(fn: unknown): boolean {
 
   return contextHints.some((hint) => {
     // Match parameter name at start of function
-    const regex = new RegExp(`^\\s*(?:async\\s+)?(?:function\\s*)?\\(?\\s*${hint}\\s*[,)]`);
+    const regex = new RegExp(
+      `^\\s*(?:async\\s+)?(?:function\\s*)?\\(?\\s*${hint}\\s*[,)]`,
+    );
     return regex.test(fnStr);
   });
 }

@@ -7,6 +7,7 @@ Subscribers for [autotel](https://github.com/jagreehal/autotel) to send events t
 ## Why Use This?
 
 **Track once, send everywhere:**
+
 - Primary metrics → **OpenTelemetry** (infrastructure monitoring)
 - Product events → **PostHog / Mixpanel / Amplitude**
 - Customer data → **Segment**
@@ -42,7 +43,7 @@ class MySubscriber extends EventSubscriber {
     // Send to your platform
     await fetch('https://api.example.com/events', {
       method: 'POST',
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
   }
 }
@@ -63,7 +64,7 @@ class KafkaSubscriber extends StreamingEventSubscriber {
   protected async sendBatch(events: EventPayload[]): Promise<void> {
     await this.producer.send({
       topic: 'events',
-      messages: events.map(e => ({ value: JSON.stringify(e) }))
+      messages: events.map((e) => ({ value: JSON.stringify(e) })),
     });
   }
 }
@@ -96,15 +97,15 @@ pnpm add @amplitude/events-node  # For Amplitude
 Import subscribers directly from their entry points:
 
 ```typescript
-import { Events } from 'autotel/events';
+import { Event } from 'autotel/event';
 import { PostHogSubscriber } from 'autotel-subscribers/posthog';
 import { WebhookSubscriber } from 'autotel-subscribers/webhook';
 
 const events = new Event('checkout', {
   subscribers: [
     new PostHogSubscriber({ apiKey: process.env.POSTHOG_API_KEY! }),
-    new WebhookSubscriber({ url: 'https://your-webhook.com' })
-  ]
+    new WebhookSubscriber({ url: 'https://your-webhook.com' }),
+  ],
 });
 
 // Sent to: OpenTelemetry + PostHog + Webhook
@@ -129,17 +130,17 @@ class MySubscriber extends EventSubscriber {
     await fetch('https://your-api.com/events', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
   }
 }
 
 // Use it!
 const events = new Event('my-app', {
-  subscribers: [new MySubscriber('your-api-key')]
+  subscribers: [new MySubscriber('your-api-key')],
 });
 ```
 
@@ -160,15 +161,16 @@ AdapterTestHarness.printResults(results);
 ### Add Middleware (Retry, Sampling, etc.)
 
 ```typescript
-import { applyMiddleware, retryMiddleware, samplingMiddleware } from 'autotel-subscribers/middleware';
+import {
+  applyMiddleware,
+  retryMiddleware,
+  samplingMiddleware,
+} from 'autotel-subscribers/middleware';
 
-const subscriber = applyMiddleware(
-  new MySubscriber('api-key'),
-  [
-    retryMiddleware({ maxRetries: 3 }),  // Retry failed requests
-    samplingMiddleware(0.1)               // Only send 10% of events
-  ]
-);
+const subscriber = applyMiddleware(new MySubscriber('api-key'), [
+  retryMiddleware({ maxRetries: 3 }), // Retry failed requests
+  samplingMiddleware(0.1), // Only send 10% of events
+]);
 ```
 
 ---
@@ -178,22 +180,22 @@ const subscriber = applyMiddleware(
 ### PostHog
 
 ```typescript
-import { Events } from 'autotel/events';
+import { Event } from 'autotel/event';
 import { PostHogSubscriber } from 'autotel-subscribers/posthog';
 
 const events = new Event('checkout', {
   subscribers: [
     new PostHogSubscriber({
       apiKey: process.env.POSTHOG_API_KEY!,
-      host: 'https://us.i.posthog.com' // optional
-    })
-  ]
+      host: 'https://us.i.posthog.com', // optional
+    }),
+  ],
 });
 
 // Sent to: OpenTelemetry + PostHog
 events.trackEvent('order.completed', {
   userId: '123',
-  amount: 99.99
+  amount: 99.99,
 });
 ```
 
@@ -202,7 +204,7 @@ events.trackEvent('order.completed', {
 ```typescript
 const subscriber = new PostHogSubscriber({
   apiKey: 'phc_...',
-  serverless: true,  // Auto-configures for serverless (flushAt: 1, flushInterval: 0)
+  serverless: true, // Auto-configures for serverless (flushAt: 1, flushInterval: 0)
 });
 ```
 
@@ -211,7 +213,7 @@ const subscriber = new PostHogSubscriber({
 ```typescript
 // When PostHog is already loaded via script tag
 const subscriber = new PostHogSubscriber({
-  useGlobalClient: true,  // Uses window.posthog
+  useGlobalClient: true, // Uses window.posthog
 });
 ```
 
@@ -222,7 +224,7 @@ const subscriber = new PostHogSubscriber({
   apiKey: 'phc_...',
 
   // Automatic filtering (enabled by default)
-  filterUndefinedValues: true,  // Removes undefined/null from attributes
+  filterUndefinedValues: true, // Removes undefined/null from attributes
 
   // Enhanced error handling
   onErrorWithContext: (ctx) => {
@@ -249,9 +251,9 @@ import { MixpanelSubscriber } from 'autotel-subscribers/mixpanel';
 const events = new Event('checkout', {
   subscribers: [
     new MixpanelSubscriber({
-      token: process.env.MIXPANEL_TOKEN!
-    })
-  ]
+      token: process.env.MIXPANEL_TOKEN!,
+    }),
+  ],
 });
 ```
 
@@ -263,9 +265,9 @@ import { SegmentSubscriber } from 'autotel-subscribers/segment';
 const events = new Event('checkout', {
   subscribers: [
     new SegmentSubscriber({
-      writeKey: process.env.SEGMENT_WRITE_KEY!
-    })
-  ]
+      writeKey: process.env.SEGMENT_WRITE_KEY!,
+    }),
+  ],
 });
 ```
 
@@ -277,9 +279,9 @@ import { AmplitudeSubscriber } from 'autotel-subscribers/amplitude';
 const events = new Event('checkout', {
   subscribers: [
     new AmplitudeSubscriber({
-      apiKey: process.env.AMPLITUDE_API_KEY!
-    })
-  ]
+      apiKey: process.env.AMPLITUDE_API_KEY!,
+    }),
+  ],
 });
 ```
 
@@ -293,9 +295,9 @@ const events = new Event('checkout', {
     new WebhookSubscriber({
       url: 'https://hooks.zapier.com/hooks/catch/...',
       headers: { 'X-API-Key': 'secret' },
-      maxRetries: 3
-    })
-  ]
+      maxRetries: 3,
+    }),
+  ],
 });
 ```
 
@@ -306,7 +308,7 @@ const events = new Event('checkout', {
 Send to **multiple platforms simultaneously**:
 
 ```typescript
-import { Events } from 'autotel/events';
+import { Event } from 'autotel/event';
 import { PostHogSubscriber } from 'autotel-subscribers/posthog';
 import { MixpanelSubscriber } from 'autotel-subscribers/mixpanel';
 import { SegmentSubscriber } from 'autotel-subscribers/segment';
@@ -315,15 +317,15 @@ const events = new Event('checkout', {
   subscribers: [
     new PostHogSubscriber({ apiKey: 'phc_...' }),
     new MixpanelSubscriber({ token: '...' }),
-    new SegmentSubscriber({ writeKey: '...' })
-  ]
+    new SegmentSubscriber({ writeKey: '...' }),
+  ],
 });
 
 // Sent to: OpenTelemetry + PostHog + Mixpanel + Segment
-events.trackEvent('order.completed', { 
-  userId: '123', 
+events.trackEvent('order.completed', {
+  userId: '123',
   amount: 99.99,
-  currency: 'USD'
+  currency: 'USD',
 });
 ```
 
@@ -339,27 +341,30 @@ Autotel-subscribers provides **direct subscribers** (fire-and-forget) - events a
 
 ```typescript
 const events = new Event('app', {
-  subscribers: [new PostHogSubscriber({ apiKey: '...' })]
-})
+  subscribers: [new PostHogSubscriber({ apiKey: '...' })],
+});
 
 // Events sent immediately, real-time
-events.trackEvent('user.signup', { userId: '123' })
-events.trackEvent('page.viewed', { path: '/checkout' })
+events.trackEvent('user.signup', { userId: '123' });
+events.trackEvent('page.viewed', { path: '/checkout' });
 ```
 
 **Use for:**
+
 - Page views, button clicks, feature usage
 - User behavior tracking
 - High-volume, non-critical events
 - Real-time events dashboards
 
 **Benefits:**
+
 - Simple, zero infrastructure
 - Real-time delivery
 - No database overhead
 - Fire-and-forget
 
 **Trade-offs:**
+
 - Events can be lost if adapter/network fails
 - No atomicity with database transactions
 
@@ -368,6 +373,7 @@ events.trackEvent('page.viewed', { path: '/checkout' })
 **For guaranteed delivery with atomicity**, use the separate [`autotel-outbox`](https://github.com/jagreehal/autotel/tree/main/packages/autotel-outbox) package.
 
 This provides:
+
 - Guaranteed delivery (retries on failure)
 - Atomicity with database state changes
 - Fan-out to multiple destinations
@@ -375,20 +381,20 @@ This provides:
 - Adds latency (1+ minute delay)
 
 **Install:**
+
 ```bash
 npm install autotel-outbox
 ```
 
 **Usage:**
+
 ```typescript
 import { OutboxEventSubscriber } from 'autotel-outbox';
 import { PostHogSubscriber } from 'autotel-subscribers/posthog';
 
 const outbox = new DrizzleD1OutboxStorage(env.DB);
 const events = new Event('checkout', {
-  subscribers: [
-    new OutboxEventSubscriber(outbox, { aggregateType: 'Order' })
-  ]
+  subscribers: [new OutboxEventSubscriber(outbox, { aggregateType: 'Order' })],
 });
 ```
 
@@ -407,29 +413,29 @@ interface EventSubscriber {
   trackFunnelStep(
     funnelName: string,
     step: 'started' | 'completed' | 'abandoned' | 'failed',
-    attributes?: Record<string, any>
+    attributes?: Record<string, any>,
   ): Promise<void>;
 
   // Track funnel progression (custom step names)
   trackFunnelProgression?(
     funnelName: string,
-    stepName: string,         // Any string, not limited to enum
-    stepNumber?: number,      // Optional numeric position
-    attributes?: Record<string, any>
+    stepName: string, // Any string, not limited to enum
+    stepNumber?: number, // Optional numeric position
+    attributes?: Record<string, any>,
   ): Promise<void>;
 
   // Track business outcomes
   trackOutcome(
     operationName: string,
     outcome: 'success' | 'failure' | 'partial',
-    attributes?: Record<string, any>
+    attributes?: Record<string, any>,
   ): Promise<void>;
 
   // Track business values (revenue, counts, etc.)
   trackValue(
     name: string,
     value: number,
-    attributes?: Record<string, any>
+    attributes?: Record<string, any>,
   ): Promise<void>;
 
   // Flush and clean up resources
@@ -444,25 +450,25 @@ interface EventSubscriber {
 Create your own adapter for any platform:
 
 ```typescript
-import { EventSubscriber } from 'autotel/events-adapter';
+import { EventSubscriber } from 'autotel/event-subscriber';
 
 class MyCustomSubscriber implements EventSubscriber {
   trackEvent(name: string, attributes?: Record<string, any>): void {
     // Send to your platform
     fetch('https://api.myplatform.com/events', {
       method: 'POST',
-      body: JSON.stringify({ event: name, ...attributes })
+      body: JSON.stringify({ event: name, ...attributes }),
     });
   }
-  
+
   trackFunnelStep(funnel: string, step: string, attributes?: any): void {
     // Implement funnel tracking
   }
-  
+
   trackOutcome(operation: string, outcome: string, attributes?: any): void {
     // Implement outcome tracking
   }
-  
+
   trackValue(name: string, value: number, attributes?: any): void {
     // Implement value tracking
   }
@@ -470,7 +476,7 @@ class MyCustomSubscriber implements EventSubscriber {
 
 // Use it
 const events = new Event('app', {
-  subscribers: [new MyCustomSubscriber()]
+  subscribers: [new MyCustomSubscriber()],
 });
 ```
 
@@ -483,15 +489,15 @@ const events = new Event('app', {
 ```typescript
 const events = new Event('checkout', {
   subscribers: [
-    new PostHogSubscriber({ 
+    new PostHogSubscriber({
       apiKey: 'phc_...',
-      enabled: process.env.NODE_ENV === 'production' // Only in prod
+      enabled: process.env.NODE_ENV === 'production', // Only in prod
     }),
-    new MixpanelSubscriber({ 
+    new MixpanelSubscriber({
       token: '...',
-      enabled: false // Temporarily disabled
-    })
-  ]
+      enabled: false, // Temporarily disabled
+    }),
+  ],
 });
 ```
 
@@ -518,6 +524,7 @@ import { PostHogSubscriber } from 'autotel-subscribers/posthog';
 ```
 
 Bundle sizes (gzipped):
+
 - PostHog: ~8KB
 - Mixpanel: ~6KB
 - Segment: ~12KB
@@ -529,10 +536,12 @@ Bundle sizes (gzipped):
 ## Performance
 
 **Zero overhead when not used:**
+
 - If `subscribers: []` (empty), no adapter code runs
 - Tree-shaken out in production builds
 
 **Minimal overhead when used:**
+
 - Adapters only fire if added to the array
 - Non-blocking (fire-and-forget)
 - No impact on primary OpenTelemetry metrics
@@ -548,64 +557,60 @@ Add behaviors without modifying adapter code:
 ```typescript
 import {
   applyMiddleware,
-  retryMiddleware,          // Exponential backoff retry
-  samplingMiddleware,       // Send only X% of events
-  enrichmentMiddleware,     // Add fields to events
-  loggingMiddleware,        // Debug events
-  filterMiddleware,         // Only send matching events
-  transformMiddleware,      // Transform events
-  batchingMiddleware,       // Batch for efficiency
-  rateLimitMiddleware,      // Throttle requests
+  retryMiddleware, // Exponential backoff retry
+  samplingMiddleware, // Send only X% of events
+  enrichmentMiddleware, // Add fields to events
+  loggingMiddleware, // Debug events
+  filterMiddleware, // Only send matching events
+  transformMiddleware, // Transform events
+  batchingMiddleware, // Batch for efficiency
+  rateLimitMiddleware, // Throttle requests
   circuitBreakerMiddleware, // Prevent cascading failures
-  timeoutMiddleware         // Add timeouts
+  timeoutMiddleware, // Add timeouts
 } from 'autotel-subscribers/middleware';
 ```
 
 ### Examples
 
 **Retry with Circuit Breaker:**
+
 ```typescript
-const subscriber = applyMiddleware(
-  new PostHogSubscriber({ apiKey: '...' }),
-  [
-    retryMiddleware({ maxRetries: 3, delayMs: 1000 }),
-    circuitBreakerMiddleware({ failureThreshold: 5, timeout: 60000 })
-  ]
-);
+const subscriber = applyMiddleware(new PostHogSubscriber({ apiKey: '...' }), [
+  retryMiddleware({ maxRetries: 3, delayMs: 1000 }),
+  circuitBreakerMiddleware({ failureThreshold: 5, timeout: 60000 }),
+]);
 ```
 
 **Sample Events (Reduce Costs):**
+
 ```typescript
 // Only send 10% of events
-const subscriber = applyMiddleware(
-  new WebhookSubscriber({ url: '...' }),
-  [samplingMiddleware(0.1)]
-);
+const subscriber = applyMiddleware(new WebhookSubscriber({ url: '...' }), [
+  samplingMiddleware(0.1),
+]);
 ```
 
 **Enrich Events:**
+
 ```typescript
-const subscriber = applyMiddleware(
-  adapter,
-  [
-    enrichmentMiddleware((event) => ({
-      ...event,
-      attributes: {
-        ...event.attributes,
-        environment: process.env.NODE_ENV,
-        timestamp: Date.now()
-      }
-    }))
-  ]
-);
+const subscriber = applyMiddleware(adapter, [
+  enrichmentMiddleware((event) => ({
+    ...event,
+    attributes: {
+      ...event.attributes,
+      environment: process.env.NODE_ENV,
+      timestamp: Date.now(),
+    },
+  })),
+]);
 ```
 
 **Batch Events:**
+
 ```typescript
-const subscriber = applyMiddleware(
-  adapter,
-  [batchingMiddleware({ batchSize: 100, flushInterval: 5000 })]
-);
+const subscriber = applyMiddleware(adapter, [
+  batchingMiddleware({ batchSize: 100, flushInterval: 5000 }),
+]);
 ```
 
 ---
@@ -633,6 +638,7 @@ AdapterTestHarness.printResults(results);
 ```
 
 Tests include:
+
 - Basic event tracking
 - Funnel tracking
 - Outcome tracking
@@ -693,7 +699,7 @@ import {
 import {
   AdapterTestHarness,
   MockWebhookServer,
-  MockEventSubscriber
+  MockEventSubscriber,
 } from 'autotel-subscribers/testing';
 
 // For outbox pattern, see autotel-outbox package
@@ -720,5 +726,3 @@ See the [autotel-examples](https://github.com/jagreehal/autotel/tree/main/packag
 ## License
 
 Apache-2.0 © [Jag Reehal](https://jagreehal.com)
-
-

@@ -69,7 +69,8 @@ export function instrumentActorSockets(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -82,7 +83,10 @@ export function instrumentActorSockets(
 
       // Instrument broadcast method
       if (prop === 'broadcast' && typeof value === 'function') {
-        return function instrumentedBroadcast(this: unknown, message: unknown): void {
+        return function instrumentedBroadcast(
+          this: unknown,
+          message: unknown,
+        ): void {
           const tracer = getTracer();
           const spanName = `Actor ${actorName}: sockets.broadcast`;
 
@@ -111,7 +115,8 @@ export function instrumentActorSockets(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -124,7 +129,11 @@ export function instrumentActorSockets(
 
       // Instrument send method
       if (prop === 'send' && typeof value === 'function') {
-        return function instrumentedSend(this: unknown, ws: WebSocket, message: unknown): void {
+        return function instrumentedSend(
+          this: unknown,
+          ws: WebSocket,
+          message: unknown,
+        ): void {
           const tracer = getTracer();
           const spanName = `Actor ${actorName}: sockets.send`;
 
@@ -153,7 +162,8 @@ export function instrumentActorSockets(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -185,7 +195,10 @@ export function instrumentActorSockets(
                 const result = value.call(target);
                 // Try to capture connection count if result is array-like
                 if (Array.isArray(result)) {
-                  span.setAttribute('websocket.connections.count', result.length);
+                  span.setAttribute(
+                    'websocket.connections.count',
+                    result.length,
+                  );
                 }
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
@@ -193,7 +206,8 @@ export function instrumentActorSockets(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {

@@ -1,13 +1,13 @@
 import type { CanonicalLogLineEvent } from './processors/canonical-log-line-processor';
 
-const RESET = '\x1b[0m';
-const DIM = '\x1b[2m';
-const BOLD = '\x1b[1m';
-const RED = '\x1b[31m';
-const YELLOW = '\x1b[33m';
-const GREEN = '\x1b[32m';
-const CYAN = '\x1b[36m';
-const GRAY = '\x1b[90m';
+const RESET = '\u001B[0m';
+const DIM = '\u001B[2m';
+const BOLD = '\u001B[1m';
+const RED = '\u001B[31m';
+const YELLOW = '\u001B[33m';
+const GREEN = '\u001B[32m';
+const CYAN = '\u001B[36m';
+const GRAY = '\u001B[90m';
 
 const LEVEL_COLORS: Record<string, string> = {
   debug: GRAY,
@@ -122,7 +122,7 @@ function groupAttributes(
         }
         current = current[part] as Record<string, unknown>;
       }
-      current[parts[parts.length - 1]!] = value;
+      current[parts.at(-1)!] = value;
     }
   }
 
@@ -137,9 +137,9 @@ function renderTree(
   const lines: string[] = [];
   const entries = Object.entries(obj);
 
-  entries.forEach(([key, value], idx) => {
+  for (const [idx, [key, value]] of entries.entries()) {
     const last = idx === entries.length - 1;
-    const connector = last ? '\u2514\u2500' : '\u251c\u2500';
+    const connector = last ? '\u2514\u2500' : '\u251C\u2500';
     const prefix = indent + connector + ' ';
 
     if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -164,7 +164,7 @@ function renderTree(
     } else {
       lines.push(`${prefix}${c(CYAN, key)}: ${c(DIM, formatValue(value))}`);
     }
-  });
+  }
 
   return lines;
 }
@@ -173,7 +173,7 @@ function renderTree(
  * Format a canonical log line event as a pretty tree for development output.
  */
 export function formatPrettyLogLine(ctx: CanonicalLogLineEvent): string {
-  const { event, level, message } = ctx;
+  const { event, level } = ctx;
 
   const timestamp = formatTime(String(event.timestamp ?? ''));
   const service = event['service.name'] || event.service || '';

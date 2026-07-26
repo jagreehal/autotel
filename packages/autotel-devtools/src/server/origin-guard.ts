@@ -17,28 +17,28 @@
 // Requests with no Origin and a loopback Host (curl, Node `fetch` in tests, the
 // UI's own same-origin calls) pass — exactly the legitimate read paths.
 
-const LOOPBACK_IPV6 = new Set(['::1', '0:0:0:0:0:0:0:1'])
+const LOOPBACK_IPV6 = new Set(['::1', '0:0:0:0:0:0:0:1']);
 
 /** True for `localhost`, any `127.x.x.x`, and IPv6 loopback. Case-insensitive. */
 export function isLoopbackHostname(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '')
-  return h === 'localhost' || /^127\./.test(h) || LOOPBACK_IPV6.has(h)
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return h === 'localhost' || /^127\./.test(h) || LOOPBACK_IPV6.has(h);
 }
 
 /** Hostname from a `Host` header (`host`, `host:port`, `[::1]:port`). */
 function hostnameFromHostHeader(host: string): string {
-  const h = host.trim()
+  const h = host.trim();
   if (h.startsWith('[')) {
-    const end = h.indexOf(']')
-    return end > 0 ? h.slice(1, end) : h
+    const end = h.indexOf(']');
+    return end > 0 ? h.slice(1, end) : h;
   }
-  const colon = h.indexOf(':')
-  return colon === -1 ? h : h.slice(0, colon)
+  const colon = h.indexOf(':');
+  return colon === -1 ? h : h.slice(0, colon);
 }
 
 /** True when the `Host` header names a loopback host. */
 export function hostHeaderIsLoopback(host: string): boolean {
-  return isLoopbackHostname(hostnameFromHostHeader(host))
+  return isLoopbackHostname(hostnameFromHostHeader(host));
 }
 
 /** True when an `Origin` header names a loopback origin. A malformed or opaque
@@ -46,15 +46,15 @@ export function hostHeaderIsLoopback(host: string): boolean {
  *  non-loopback. */
 export function originIsLoopback(origin: string): boolean {
   try {
-    return isLoopbackHostname(new URL(origin).hostname)
+    return isLoopbackHostname(new URL(origin).hostname);
   } catch {
-    return false
+    return false;
   }
 }
 
 export interface GuardHeaders {
-  origin?: string
-  host?: string
+  origin?: string;
+  host?: string;
 }
 
 /**
@@ -67,10 +67,10 @@ export function allowSensitiveRequest(
   headers: GuardHeaders,
   loopbackOnly: boolean,
 ): boolean {
-  const { origin, host } = headers
-  if (origin && origin.length > 0 && !originIsLoopback(origin)) return false
+  const { origin, host } = headers;
+  if (origin && origin.length > 0 && !originIsLoopback(origin)) return false;
   if (loopbackOnly && host && host.length > 0 && !hostHeaderIsLoopback(host)) {
-    return false
+    return false;
   }
-  return true
+  return true;
 }

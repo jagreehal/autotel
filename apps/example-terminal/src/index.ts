@@ -21,7 +21,7 @@
  */
 
 import 'dotenv/config';
-import { init, trace, span } from 'autotel';
+import { init, span, withTracing } from 'autotel';
 import {
   renderTerminal,
   StreamingSpanProcessor,
@@ -76,116 +76,128 @@ const logStream = getTerminalLogStream();
 await new Promise((resolve) => setTimeout(resolve, 500));
 
 // Example traced functions
-const fetchUser = trace({ name: 'fetchUser' }, (ctx) => async (userId: string) => {
-  ctx.setAttribute('user.id', userId);
-  ctx.setAttribute('http.method', 'GET');
-  ctx.setAttribute('http.route', '/api/users/:id');
-  ctx.setAttribute('service.name', 'example-terminal');
+const fetchUser = withTracing({ name: 'fetchUser' })(
+  (ctx) => async (userId: string) => {
+    ctx.setAttribute('user.id', userId);
+    ctx.setAttribute('http.method', 'GET');
+    ctx.setAttribute('http.route', '/api/users/:id');
+    ctx.setAttribute('service.name', 'example-terminal');
 
-  // Simulate API call
-  await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+    // Simulate API call
+    await new Promise((resolve) =>
+      setTimeout(resolve, 50 + Math.random() * 100),
+    );
 
-  logStream.emit({
-    time: Date.now(),
-    level: 'info',
-    message: `fetchUser(${userId})`,
-    attributes: {
-      'service.name': 'example-terminal',
-      'http.route': '/api/users/:id',
-      kind: 'fetchUser',
-    },
-  });
-
-  return {
-    id: userId,
-    name: `User ${userId}`,
-    email: `user${userId}@example.com`,
-  };
-});
-
-const processOrder = trace({ name: 'processOrder' }, (ctx) => async (orderId: string, items: string[]) => {
-  ctx.setAttribute('order.id', orderId);
-  ctx.setAttribute('order.itemCount', items.length);
-  ctx.setAttribute('service.name', 'example-terminal');
-
-  // Nested span: validate inventory
-  await span({ name: 'validate.inventory' }, async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-
-  // Nested span: calculate total
-  const total = await span({ name: 'calculate.total' }, async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    return items.length * 10;
-  });
-
-  ctx.setAttribute('order.total', total);
-
-  // Simulate processing
-  await new Promise((resolve) => setTimeout(resolve, 100 + Math.random() * 200));
-
-  logStream.emit({
-    time: Date.now(),
-    level: 'info',
-    message: `processOrder(${orderId})`,
-    attributes: {
-      'service.name': 'example-terminal',
-      'http.route': '/orders/:id',
-      orderId,
-      itemCount: items.length,
-      total,
-    },
-  });
-
-  return { orderId, items, total };
-});
-
-const processPayment = trace({ name: 'processPayment' }, (ctx) => async (amount: number, userId: string) => {
-  ctx.setAttribute('payment.amount', amount);
-  ctx.setAttribute('payment.userId', userId);
-  ctx.setAttribute('payment.currency', 'USD');
-  ctx.setAttribute('http.route', '/payments');
-  ctx.setAttribute('service.name', 'example-terminal');
-
-  // Simulate payment processing
-  await new Promise((resolve) => setTimeout(resolve, 80 + Math.random() * 120));
-
-  // Randomly fail to demonstrate error tracking
-  if (Math.random() > 0.75) {
-    ctx.setStatus({ code: 2, message: 'Payment failed' });
-    ctx.recordError(new Error('Insufficient funds'));
-    ctx.setAttribute('http.status_code', 500);
     logStream.emit({
       time: Date.now(),
-      level: 'error',
-      message: `processPayment(${userId}) failed`,
+      level: 'info',
+      message: `fetchUser(${userId})`,
+      attributes: {
+        'service.name': 'example-terminal',
+        'http.route': '/api/users/:id',
+        kind: 'fetchUser',
+      },
+    });
+
+    return {
+      id: userId,
+      name: `User ${userId}`,
+      email: `user${userId}@example.com`,
+    };
+  },
+);
+
+const processOrder = withTracing({ name: 'processOrder' })(
+  (ctx) => async (orderId: string, items: string[]) => {
+    ctx.setAttribute('order.id', orderId);
+    ctx.setAttribute('order.itemCount', items.length);
+    ctx.setAttribute('service.name', 'example-terminal');
+
+    // Nested span: validate inventory
+    await span({ name: 'validate.inventory' }, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    // Nested span: calculate total
+    const total = await span({ name: 'calculate.total' }, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return items.length * 10;
+    });
+
+    ctx.setAttribute('order.total', total);
+
+    // Simulate processing
+    await new Promise((resolve) =>
+      setTimeout(resolve, 100 + Math.random() * 200),
+    );
+
+    logStream.emit({
+      time: Date.now(),
+      level: 'info',
+      message: `processOrder(${orderId})`,
+      attributes: {
+        'service.name': 'example-terminal',
+        'http.route': '/orders/:id',
+        orderId,
+        itemCount: items.length,
+        total,
+      },
+    });
+
+    return { orderId, items, total };
+  },
+);
+
+const processPayment = withTracing({ name: 'processPayment' })(
+  (ctx) => async (amount: number, userId: string) => {
+    ctx.setAttribute('payment.amount', amount);
+    ctx.setAttribute('payment.userId', userId);
+    ctx.setAttribute('payment.currency', 'USD');
+    ctx.setAttribute('http.route', '/payments');
+    ctx.setAttribute('service.name', 'example-terminal');
+
+    // Simulate payment processing
+    await new Promise((resolve) =>
+      setTimeout(resolve, 80 + Math.random() * 120),
+    );
+
+    // Randomly fail to demonstrate error tracking
+    if (Math.random() > 0.75) {
+      ctx.setStatus({ code: 2, message: 'Payment failed' });
+      ctx.recordError(new Error('Insufficient funds'));
+      ctx.setAttribute('http.status_code', 500);
+      logStream.emit({
+        time: Date.now(),
+        level: 'error',
+        message: `processPayment(${userId}) failed`,
+        attributes: {
+          'service.name': 'example-terminal',
+          'http.route': '/payments',
+          'http.status_code': 500,
+          amount,
+          userId,
+        },
+      });
+      throw new Error('Payment processing failed');
+    }
+
+    ctx.setAttribute('http.status_code', 200);
+    ctx.setStatus({ code: 1 }); // OK
+    logStream.emit({
+      time: Date.now(),
+      level: 'info',
+      message: `processPayment(${userId}) ok`,
       attributes: {
         'service.name': 'example-terminal',
         'http.route': '/payments',
-        'http.status_code': 500,
+        'http.status_code': 200,
         amount,
         userId,
       },
     });
-    throw new Error('Payment processing failed');
-  }
-
-  ctx.setAttribute('http.status_code', 200);
-  ctx.setStatus({ code: 1 }); // OK
-  logStream.emit({
-    time: Date.now(),
-    level: 'info',
-    message: `processPayment(${userId}) ok`,
-    attributes: {
-      'service.name': 'example-terminal',
-      'http.route': '/payments',
-      'http.status_code': 200,
-      amount,
-      userId,
-    },
-  });
-  return { transactionId: `tx-${Date.now()}`, amount, userId };
-});
+    return { transactionId: `tx-${Date.now()}`, amount, userId };
+  },
+);
 
 // Generate traces continuously
 async function generateTraces() {

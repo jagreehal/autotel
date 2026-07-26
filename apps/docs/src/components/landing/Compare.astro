@@ -38,12 +38,10 @@ const after = `import { init, trace } from 'autotel';
 
 init({ service: 'my-api', endpoint: 'http://localhost:4318' });
 
-export const checkout = trace((ctx) =>
-  async (req, res) => {
-    const result = await processCheckout(req.body);
-    return res.json(result);
-  },
-);`;
+export const checkout = trace(async (req, res) => {
+  const result = await processCheckout(req.body);
+  return res.json(result);
+});`;
 ---
 
 <section class="compare" aria-labelledby="compare-title">

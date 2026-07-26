@@ -15,7 +15,10 @@ function getCompiledRegex(pattern: string): RegExp | null {
   }
 }
 
-function matchesRule(exception: ExceptionRecord, rule: SuppressionRule): boolean {
+function matchesRule(
+  exception: ExceptionRecord,
+  rule: SuppressionRule,
+): boolean {
   const fieldValue = rule.key === 'type' ? exception.type : exception.value;
 
   switch (rule.operator) {
@@ -32,6 +35,9 @@ function matchesRule(exception: ExceptionRecord, rule: SuppressionRule): boolean
   }
 }
 
-export function isSuppressed(exception: ExceptionRecord, rules: SuppressionRule[]): boolean {
+export function isSuppressed(
+  exception: ExceptionRecord,
+  rules: SuppressionRule[],
+): boolean {
   return rules.some((rule) => matchesRule(exception, rule));
 }

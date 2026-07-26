@@ -23,7 +23,9 @@ type TestSpanFixtureFn = (
 const state: { fixtures?: Fixtures } = {};
 let spanIdCounter = 0;
 let mockDrainResult: unknown[] = [];
-const contextWithSpy = vi.fn((_ctx: unknown, fn: () => Promise<unknown>) => fn());
+const contextWithSpy = vi.fn((_ctx: unknown, fn: () => Promise<unknown>) =>
+  fn(),
+);
 const createdSpans: Array<{
   end: ReturnType<typeof vi.fn>;
   recordException: ReturnType<typeof vi.fn>;
@@ -199,23 +201,21 @@ describe('autotel-playwright annotations', () => {
     await import('./index');
 
     const spanFixture = state.fixtures?._otelTestSpan;
-    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    const spanFixtureFn = Array.isArray(spanFixture)
+      ? spanFixture[0]
+      : spanFixture;
     expect(spanFixtureFn).toBeTypeOf('function');
 
-    await spanFixtureFn?.(
-      {},
-      async () => {},
-      {
-        annotations: [
-          {
-            type: 'autotel.attribute',
-            description: 'team=checkout;flow=signup',
-          },
-        ],
-        project: { name: 'chromium' },
-        title: 'annotation parsing',
-      },
-    );
+    await spanFixtureFn?.({}, async () => {}, {
+      annotations: [
+        {
+          type: 'autotel.attribute',
+          description: 'team=checkout;flow=signup',
+        },
+      ],
+      project: { name: 'chromium' },
+      title: 'annotation parsing',
+    });
 
     const span = createdSpans[0];
     expect(span).toBeDefined();
@@ -225,29 +225,39 @@ describe('autotel-playwright annotations', () => {
 
   it('attaches otel-spans annotation to testInfo when collector returns spans', async () => {
     mockDrainResult = [
-      { spanId: 's1', name: 'e2e:test', startTimeMs: 1000, durationMs: 100, status: 'ok' },
+      {
+        spanId: 's1',
+        name: 'e2e:test',
+        startTimeMs: 1000,
+        durationMs: 100,
+        status: 'ok',
+      },
     ];
 
     await import('./index');
 
     const spanFixture = state.fixtures?._otelTestSpan;
-    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    const spanFixtureFn = Array.isArray(spanFixture)
+      ? spanFixture[0]
+      : spanFixture;
 
     const annotations: Array<{ type: string; description?: string }> = [];
-    await spanFixtureFn?.(
-      {},
-      async () => {},
-      {
-        annotations,
-        project: { name: 'chromium' },
-        title: 'otel-spans test',
-      },
-    );
+    await spanFixtureFn?.({}, async () => {}, {
+      annotations,
+      project: { name: 'chromium' },
+      title: 'otel-spans test',
+    });
 
     const spansAnnotation = annotations.find((a) => a.type === 'otel-spans');
     expect(spansAnnotation).toBeDefined();
     expect(JSON.parse(spansAnnotation!.description!)).toEqual([
-      { spanId: 's1', name: 'e2e:test', startTimeMs: 1000, durationMs: 100, status: 'ok' },
+      {
+        spanId: 's1',
+        name: 'e2e:test',
+        startTimeMs: 1000,
+        durationMs: 100,
+        status: 'ok',
+      },
     ]);
   });
 
@@ -255,7 +265,9 @@ describe('autotel-playwright annotations', () => {
     await import('./index');
 
     const spanFixture = state.fixtures?._otelTestSpan;
-    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    const spanFixtureFn = Array.isArray(spanFixture)
+      ? spanFixture[0]
+      : spanFixture;
     expect(spanFixtureFn).toBeTypeOf('function');
 
     const testError = new Error('fixture blew up');
@@ -283,18 +295,16 @@ describe('autotel-playwright annotations', () => {
     await import('./index');
 
     const spanFixture = state.fixtures?._otelTestSpan;
-    const spanFixtureFn = Array.isArray(spanFixture) ? spanFixture[0] : spanFixture;
+    const spanFixtureFn = Array.isArray(spanFixture)
+      ? spanFixture[0]
+      : spanFixture;
     expect(spanFixtureFn).toBeTypeOf('function');
 
-    await spanFixtureFn?.(
-      {},
-      async () => {},
-      {
-        annotations: [],
-        project: { name: 'chromium' },
-        title: 'context propagation test',
-      },
-    );
+    await spanFixtureFn?.({}, async () => {}, {
+      annotations: [],
+      project: { name: 'chromium' },
+      title: 'context propagation test',
+    });
 
     // Once to build carrier, once to run the test body under the span context.
     expect(contextWithSpy).toHaveBeenCalledTimes(2);
@@ -311,7 +321,9 @@ describe('autotel-playwright step', () => {
     const { step } = await import('./index');
     const err = new Error('step failed');
 
-    await expect(step('boom', async () => Promise.reject(err))).rejects.toThrow('step failed');
+    await expect(step('boom', async () => Promise.reject(err))).rejects.toThrow(
+      'step failed',
+    );
 
     const stepSpan = createdSpans.at(-1);
     expect(stepSpan).toBeDefined();
@@ -373,7 +385,9 @@ describe('createTestSpansClient', () => {
     const req = makeRequest({ spans: [mockSpan] });
     const client = createTestSpansClient('http://localhost:3100');
     const spans = await client.getSpans(req as any);
-    expect(req.get).toHaveBeenCalledWith('http://localhost:3100/api/test-spans');
+    expect(req.get).toHaveBeenCalledWith(
+      'http://localhost:3100/api/test-spans',
+    );
     expect(spans).toHaveLength(1);
     expect(spans[0].name).toBe('sendMoney.handler');
   });
@@ -381,7 +395,9 @@ describe('createTestSpansClient', () => {
   it('getSpans uses custom path when provided', async () => {
     const { createTestSpansClient } = await import('./index');
     const req = makeRequest({ spans: [] });
-    const client = createTestSpansClient('http://localhost:3100', { path: '/custom/spans' });
+    const client = createTestSpansClient('http://localhost:3100', {
+      path: '/custom/spans',
+    });
     await client.getSpans(req as any);
     expect(req.get).toHaveBeenCalledWith('http://localhost:3100/custom/spans');
   });
@@ -390,7 +406,9 @@ describe('createTestSpansClient', () => {
     const { createTestSpansClient } = await import('./index');
     const req = makeRequest({ error: 'not found' }, 404);
     const client = createTestSpansClient('http://localhost:3100');
-    await expect(client.getSpans(req as any)).rejects.toThrow('GET /api/test-spans failed: 404');
+    await expect(client.getSpans(req as any)).rejects.toThrow(
+      'GET /api/test-spans failed: 404',
+    );
   });
 
   it('clearSpans calls DELETE /api/test-spans', async () => {
@@ -398,22 +416,30 @@ describe('createTestSpansClient', () => {
     const req = makeRequest({ ok: true });
     const client = createTestSpansClient('http://localhost:3100');
     await client.clearSpans(req as any);
-    expect(req.delete).toHaveBeenCalledWith('http://localhost:3100/api/test-spans');
+    expect(req.delete).toHaveBeenCalledWith(
+      'http://localhost:3100/api/test-spans',
+    );
   });
 
   it('clearSpans uses custom path when provided', async () => {
     const { createTestSpansClient } = await import('./index');
     const req = makeRequest({ ok: true });
-    const client = createTestSpansClient('http://localhost:3100', { path: '/custom/spans' });
+    const client = createTestSpansClient('http://localhost:3100', {
+      path: '/custom/spans',
+    });
     await client.clearSpans(req as any);
-    expect(req.delete).toHaveBeenCalledWith('http://localhost:3100/custom/spans');
+    expect(req.delete).toHaveBeenCalledWith(
+      'http://localhost:3100/custom/spans',
+    );
   });
 
   it('clearSpans throws when response not ok', async () => {
     const { createTestSpansClient } = await import('./index');
     const req = makeRequest({ error: 'not found' }, 404);
     const client = createTestSpansClient('http://localhost:3100');
-    await expect(client.clearSpans(req as any)).rejects.toThrow('DELETE /api/test-spans failed: 404');
+    await expect(client.clearSpans(req as any)).rejects.toThrow(
+      'DELETE /api/test-spans failed: 404',
+    );
   });
 
   it('strips trailing slash from baseUrl', async () => {
@@ -421,6 +447,8 @@ describe('createTestSpansClient', () => {
     const req = makeRequest({ spans: [] });
     const client = createTestSpansClient('http://localhost:3100/');
     await client.getSpans(req as any);
-    expect(req.get).toHaveBeenCalledWith('http://localhost:3100/api/test-spans');
+    expect(req.get).toHaveBeenCalledWith(
+      'http://localhost:3100/api/test-spans',
+    );
   });
 });

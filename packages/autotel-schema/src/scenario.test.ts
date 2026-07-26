@@ -18,7 +18,12 @@ function span(
   name: string,
   overrides: Partial<ScenarioSpan> = {},
 ): ScenarioSpan {
-  return { spanId: `id-${name}-${overrides.spanId ?? '0'}`, name, status: 'ok', ...overrides };
+  return {
+    spanId: `id-${name}-${overrides.spanId ?? '0'}`,
+    name,
+    status: 'ok',
+    ...overrides,
+  };
 }
 
 const transferAccept: ScenarioSpec = {
@@ -104,7 +109,10 @@ describe('validateScenarioSpec / defineContract integration', () => {
     ).toThrowError(/positive number/);
     expect(() =>
       validateScenarioSpec('bad', {
-        completion: { mode: 'terminal-event', observationBudgetMs: 100 } as never,
+        completion: {
+          mode: 'terminal-event',
+          observationBudgetMs: 100,
+        } as never,
         events: { a: {} },
       }),
     ).toThrowError(/non-empty event/);
@@ -143,9 +151,9 @@ describe('validateScenarioSpec / defineContract integration', () => {
 describe('isScenarioClosed', () => {
   it('closes on the terminal event', () => {
     expect(isScenarioClosed(transferAccept, happyPath())).toBe(true);
-    expect(
-      isScenarioClosed(transferAccept, [span('transfer.request')]),
-    ).toBe(false);
+    expect(isScenarioClosed(transferAccept, [span('transfer.request')])).toBe(
+      false,
+    );
   });
 
   it('closes on a finished root span for root-span-closed', () => {
@@ -153,18 +161,22 @@ describe('isScenarioClosed', () => {
       completion: { mode: 'root-span-closed', observationBudgetMs: 100 },
       events: { a: {} },
     };
-    expect(isScenarioClosed(spec, [span('a', { parentSpanId: 'p' })])).toBe(false);
+    expect(isScenarioClosed(spec, [span('a', { parentSpanId: 'p' })])).toBe(
+      false,
+    );
     expect(isScenarioClosed(spec, [span('a')])).toBe(true);
   });
 
   it('never closes in-process for externally-reconciled', () => {
     const spec: ScenarioSpec = {
-      completion: { mode: 'externally-reconciled', reconciliationDeadlineMs: 100 },
+      completion: {
+        mode: 'externally-reconciled',
+        reconciliationDeadlineMs: 100,
+      },
       events: { a: {} },
     };
     expect(isScenarioClosed(spec, [span('a')])).toBe(false);
   });
-
 });
 
 describe('evaluateScenario — three-state outcomes', () => {
@@ -193,7 +205,10 @@ describe('evaluateScenario — three-state outcomes', () => {
     expect(result.outcome).toBe('non-conformant');
     // The absent event and its now-unsatisfiable edge are both reported.
     expect(result.violations).toEqual([
-      expect.objectContaining({ code: 'missing_event', event: 'transfer.validate' }),
+      expect.objectContaining({
+        code: 'missing_event',
+        event: 'transfer.validate',
+      }),
       expect.objectContaining({
         code: 'missing_edge',
         edge: ['transfer.request', 'transfer.validate'],
@@ -203,20 +218,27 @@ describe('evaluateScenario — three-state outcomes', () => {
 
   it('absence is NOT reported while the boundary is open (closed-world only after closure)', () => {
     const result = evaluateScenario(transferAccept, [span('transfer.request')]);
-    expect(
-      result.violations.filter((v) => v.code === 'missing_event'),
-    ).toEqual([]);
+    expect(result.violations.filter((v) => v.code === 'missing_event')).toEqual(
+      [],
+    );
   });
 
   it('unexpected error is definitive even while open', () => {
     const result = evaluateScenario(transferAccept, [
       span('transfer.request', { spanId: 'root' }),
-      span('transfer.validate', { spanId: 'v1', parentSpanId: 'root', status: 'error' }),
+      span('transfer.validate', {
+        spanId: 'v1',
+        parentSpanId: 'root',
+        status: 'error',
+      }),
     ]);
     expect(result.outcome).toBe('non-conformant');
     expect(result.closed).toBe(false);
     expect(result.violations).toEqual([
-      expect.objectContaining({ code: 'unexpected_error', event: 'transfer.validate' }),
+      expect.objectContaining({
+        code: 'unexpected_error',
+        event: 'transfer.validate',
+      }),
     ]);
   });
 
@@ -230,7 +252,11 @@ describe('evaluateScenario — three-state outcomes', () => {
     };
     const result = evaluateScenario(spec, [
       ...happyPath(),
-      span('transfer.retry', { spanId: 'r1', parentSpanId: 'root', status: 'error' }),
+      span('transfer.retry', {
+        spanId: 'r1',
+        parentSpanId: 'root',
+        status: 'error',
+      }),
     ]);
     expect(result.outcome).toBe('conformant');
   });
@@ -255,11 +281,17 @@ describe('evaluateScenario — three-state outcomes', () => {
   it('min cardinality below target after closure is a violation with the count', () => {
     const spec: ScenarioSpec = {
       ...transferAccept,
-      events: { ...transferAccept.events, 'transfer.validate': { cardinality: 'exactly 2' } },
+      events: {
+        ...transferAccept.events,
+        'transfer.validate': { cardinality: 'exactly 2' },
+      },
     };
     const result = evaluateScenario(spec, happyPath());
     expect(result.violations).toEqual([
-      expect.objectContaining({ code: 'cardinality_violation', event: 'transfer.validate' }),
+      expect.objectContaining({
+        code: 'cardinality_violation',
+        event: 'transfer.validate',
+      }),
     ]);
   });
 
@@ -270,7 +302,9 @@ describe('evaluateScenario — three-state outcomes', () => {
       span('transfer.validate', { spanId: 'v1', parentSpanId: 'infra' }),
       span('transfer.queued', { spanId: 'q1', parentSpanId: 'root' }),
     ]);
-    expect(result.violations.filter((v) => v.code === 'missing_edge')).toEqual([]);
+    expect(result.violations.filter((v) => v.code === 'missing_edge')).toEqual(
+      [],
+    );
   });
 
   it('a required edge missing after closure is a violation', () => {
@@ -294,14 +328,20 @@ describe('evaluateScenario — three-state outcomes', () => {
     ]);
     expect(result.outcome).toBe('conformant');
     expect(result.additions).toEqual([
-      expect.objectContaining({ code: 'undeclared_event', event: 'fraud.check', count: 1 }),
+      expect.objectContaining({
+        code: 'undeclared_event',
+        event: 'fraud.check',
+        count: 1,
+      }),
     ]);
   });
 });
 
 describe('checkScenario — polling with an observation budget', () => {
   it('waits for an async flow to close, then reports conformant', async () => {
-    const spans: ScenarioSpan[] = [span('transfer.request', { spanId: 'root' })];
+    const spans: ScenarioSpan[] = [
+      span('transfer.request', { spanId: 'root' }),
+    ];
     setTimeout(() => {
       spans.push(
         span('transfer.validate', { spanId: 'v1', parentSpanId: 'root' }),
@@ -384,7 +424,11 @@ describe('checkScenario — polling with an observation budget', () => {
       transferAccept,
       () => [
         span('transfer.request', { spanId: 'root' }),
-        span('transfer.validate', { spanId: 'v1', parentSpanId: 'root', status: 'error' }),
+        span('transfer.validate', {
+          spanId: 'v1',
+          parentSpanId: 'root',
+          status: 'error',
+        }),
       ],
       { budgetMs: 5000, pollIntervalMs: 5 },
     );
@@ -394,7 +438,10 @@ describe('checkScenario — polling with an observation budget', () => {
 
   it('evaluates externally-reconciled boundaries once, as incomplete', async () => {
     const spec: ScenarioSpec = {
-      completion: { mode: 'externally-reconciled', reconciliationDeadlineMs: 1 },
+      completion: {
+        mode: 'externally-reconciled',
+        reconciliationDeadlineMs: 1,
+      },
       events: { 'payout.settled': {} },
     };
     const result = await checkScenario(spec, () => [span('payout.submitted')]);
@@ -425,31 +472,64 @@ describe('proposeScenario — record → propose → commit', () => {
   /** Build a timed run; `withNotification` exercises the variable path. */
   function run(withNotification: boolean): ScenarioSpan[] {
     const spans = [
-      span('transfer.request', { spanId: 'root', startTimeMs: 0, durationMs: 100 }),
-      span('transfer.validate', { spanId: 'v1', parentSpanId: 'root', startTimeMs: 5, durationMs: 20 }),
-      span('transfer.queued', { spanId: 'q1', parentSpanId: 'root', startTimeMs: 30, durationMs: 80 }),
+      span('transfer.request', {
+        spanId: 'root',
+        startTimeMs: 0,
+        durationMs: 100,
+      }),
+      span('transfer.validate', {
+        spanId: 'v1',
+        parentSpanId: 'root',
+        startTimeMs: 5,
+        durationMs: 20,
+      }),
+      span('transfer.queued', {
+        spanId: 'q1',
+        parentSpanId: 'root',
+        startTimeMs: 30,
+        durationMs: 80,
+      }),
     ];
     if (withNotification) {
       spans.push(
-        span('notification.send', { spanId: 'n1', parentSpanId: 'root', startTimeMs: 40, durationMs: 10 }),
+        span('notification.send', {
+          spanId: 'n1',
+          parentSpanId: 'root',
+          startTimeMs: 40,
+          durationMs: 10,
+        }),
       );
     }
     return spans;
   }
 
   it('stable events become exact cardinality, variable ones a range with a note', () => {
-    const { scenario, notes } = proposeScenario([run(true), run(false), run(true)]);
-    expect(scenario.events['transfer.validate']).toEqual({ cardinality: 'exactly 1' });
+    const { scenario, notes } = proposeScenario([
+      run(true),
+      run(false),
+      run(true),
+    ]);
+    expect(scenario.events['transfer.validate']).toEqual({
+      cardinality: 'exactly 1',
+    });
     expect(scenario.events['notification.send']).toEqual({
       cardinality: { min: 0, max: 1 },
     });
-    expect(notes.join('\n')).toMatch(/notification\.send: 0\.\.1 \(2\/3 runs\)/);
+    expect(notes.join('\n')).toMatch(
+      /notification\.send: 0\.\.1 \(2\/3 runs\)/,
+    );
   });
 
   it('edges present in every run are required; sometimes-present are optional', () => {
     const { scenario } = proposeScenario([run(true), run(false)]);
-    expect(scenario.edges).toContainEqual(['transfer.request', 'transfer.validate']);
-    expect(scenario.optionalEdges).toContainEqual(['transfer.request', 'notification.send']);
+    expect(scenario.edges).toContainEqual([
+      'transfer.request',
+      'transfer.validate',
+    ]);
+    expect(scenario.optionalEdges).toContainEqual([
+      'transfer.request',
+      'notification.send',
+    ]);
   });
 
   it('suggests a terminal-event completion from the consistent last-ending span', () => {
@@ -489,15 +569,21 @@ describe('proposeScenario — record → propose → commit', () => {
 
   it('flags events observed with error status for review', () => {
     const { notes } = proposeScenario([
-      [span('a', { spanId: 'root' }), span('b', { spanId: 'b1', parentSpanId: 'root', status: 'error' })],
+      [
+        span('a', { spanId: 'root' }),
+        span('b', { spanId: 'b1', parentSpanId: 'root', status: 'error' }),
+      ],
     ]);
-    expect(notes.join('\n')).toMatch(/b: observed with status error/);  });
+    expect(notes.join('\n')).toMatch(/b: observed with status error/);
+  });
 
   it('requires at least one run', () => {
     expect(() => proposeScenario([])).toThrowError(/at least one/);
   });
 
   it('rejects an empty recorded run rather than proposing an uncloseable scenario', () => {
-    expect(() => proposeScenario([[], run(false)])).toThrowError(/run 1 has no recorded spans/);
+    expect(() => proposeScenario([[], run(false)])).toThrowError(
+      /run 1 has no recorded spans/,
+    );
   });
 });

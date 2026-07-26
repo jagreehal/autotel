@@ -130,13 +130,21 @@ export class SubscriberTestHarness {
     const startTime = performance.now();
 
     try {
-      await this.subscriber.trackFunnelStep('test_funnel', 'started' as FunnelStatus, {
-        cartValue: 99.99,
-      });
+      await this.subscriber.trackFunnelStep(
+        'test_funnel',
+        'started' as FunnelStatus,
+        {
+          cartValue: 99.99,
+        },
+      );
 
-      await this.subscriber.trackFunnelStep('test_funnel', 'completed' as FunnelStatus, {
-        cartValue: 99.99,
-      });
+      await this.subscriber.trackFunnelStep(
+        'test_funnel',
+        'completed' as FunnelStatus,
+        {
+          cartValue: 99.99,
+        },
+      );
 
       return {
         name: 'Funnel Tracking',
@@ -161,13 +169,21 @@ export class SubscriberTestHarness {
     const startTime = performance.now();
 
     try {
-      await this.subscriber.trackOutcome('test_operation', 'success' as OutcomeStatus, {
-        duration: 100,
-      });
+      await this.subscriber.trackOutcome(
+        'test_operation',
+        'success' as OutcomeStatus,
+        {
+          duration: 100,
+        },
+      );
 
-      await this.subscriber.trackOutcome('test_operation', 'failure' as OutcomeStatus, {
-        error: 'Test error',
-      });
+      await this.subscriber.trackOutcome(
+        'test_operation',
+        'failure' as OutcomeStatus,
+        {
+          error: 'Test error',
+        },
+      );
 
       return {
         name: 'Outcome Tracking',
@@ -227,7 +243,7 @@ export class SubscriberTestHarness {
         this.subscriber.trackEvent(`concurrent_event_${i}`, {
           index: i,
           timestamp: Date.now(),
-        })
+        }),
       );
 
       await Promise.all(promises);
@@ -302,7 +318,7 @@ export class SubscriberTestHarness {
       const results = await Promise.allSettled(promises);
 
       const allSettled = results.every(
-        (r) => r.status === 'fulfilled' || r.status === 'rejected'
+        (r) => r.status === 'fulfilled' || r.status === 'rejected',
       );
 
       if (!allSettled) {

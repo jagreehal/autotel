@@ -85,7 +85,6 @@ export class BaggageSpanProcessor implements SpanProcessor {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onEnd(_span: ReadableSpan): void {
     // No-op - required by SpanProcessor interface
   }

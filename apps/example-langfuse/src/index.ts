@@ -12,10 +12,7 @@
  * LANGFUSE_SECRET_KEY / LANGFUSE_BASEURL (see `.env.example`).
  */
 
-import {
-  devtoolsEnabled,
-  langfuseEnabled,
-} from './instrumentation.js'; // side-effect: pipeline + telemetry, must be first
+import { devtoolsEnabled, langfuseEnabled } from './instrumentation.js'; // side-effect: pipeline + telemetry, must be first
 
 import { propagateAttributes } from '@langfuse/tracing';
 import { embed, stepCountIs, tool } from 'ai';
@@ -55,7 +52,9 @@ async function main(): Promise<void> {
   // user, session and tags to every span produced inside the callback, so the
   // run shows up as a named, user-scoped trace in the Langfuse UI. The model
   // call is still a stock autotel-genai tool loop.
-  console.log(`\n=== Demo 2 · generateText + tool, wrapped in propagateAttributes ===`);
+  console.log(
+    `\n=== Demo 2 · generateText + tool, wrapped in propagateAttributes ===`,
+  );
   const agent = await propagateAttributes(
     {
       traceName: 'support-chat',

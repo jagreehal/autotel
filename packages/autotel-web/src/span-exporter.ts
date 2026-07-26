@@ -19,7 +19,11 @@ export function setRawFetch(fn: typeof globalThis.fetch): void {
   rawFetch = fn;
 }
 
-export function configureExporter(service: string, endpoint: string, enableDebug = false): void {
+export function configureExporter(
+  service: string,
+  endpoint: string,
+  enableDebug = false,
+): void {
   debug = enableDebug;
   serviceName = service;
   exportEndpoint = endpoint.replace(/\/$/, '');
@@ -40,11 +44,15 @@ export function recordSpan(
   attrs?: Record<string, string | number>,
 ): void {
   if (!exportEndpoint) return;
-  if (debug) console.log(`[autotel-web] recordSpan: ${name} (${traceId.slice(0, 8)}…)`);
+  if (debug)
+    console.log(`[autotel-web] recordSpan: ${name} (${traceId.slice(0, 8)}…)`);
   const attributes = attrs
     ? Object.entries(attrs).map(([key, value]) => ({
         key,
-        value: typeof value === 'number' ? { intValue: String(value) } : { stringValue: value },
+        value:
+          typeof value === 'number'
+            ? { intValue: String(value) }
+            : { stringValue: value },
       }))
     : undefined;
   pendingSpans.push({
@@ -62,17 +70,28 @@ export function recordSpan(
 
 export function flushSpans(): void {
   if (!exportEndpoint || pendingSpans.length === 0) return;
-  if (debug) console.log(`[autotel-web] flushSpans: sending ${pendingSpans.length} span(s) to ${exportEndpoint}`);
+  if (debug)
+    console.log(
+      `[autotel-web] flushSpans: sending ${pendingSpans.length} span(s) to ${exportEndpoint}`,
+    );
   const spans = pendingSpans;
   pendingSpans = [];
   const payload = JSON.stringify({
-    resourceSpans: [{
-      resource: { attributes: [{ key: 'service.name', value: { stringValue: serviceName } }] },
-      scopeSpans: [{ scope: { name: 'autotel-web' }, spans }],
-    }],
+    resourceSpans: [
+      {
+        resource: {
+          attributes: [
+            { key: 'service.name', value: { stringValue: serviceName } },
+          ],
+        },
+        scopeSpans: [{ scope: { name: 'autotel-web' }, spans }],
+      },
+    ],
   });
   const blob = new Blob([payload], { type: 'application/json' });
-  const sent = typeof navigator?.sendBeacon === 'function' && navigator.sendBeacon(exportEndpoint, blob);
+  const sent =
+    typeof navigator?.sendBeacon === 'function' &&
+    navigator.sendBeacon(exportEndpoint, blob);
   if (!sent && rawFetch) {
     rawFetch(exportEndpoint, {
       method: 'POST',
@@ -90,5 +109,8 @@ export function isConfigured(): boolean {
 export function resetForTesting(): void {
   exportEndpoint = undefined;
   pendingSpans = [];
-  if (flushTimer) { clearInterval(flushTimer); flushTimer = undefined; }
+  if (flushTimer) {
+    clearInterval(flushTimer);
+    flushTimer = undefined;
+  }
 }

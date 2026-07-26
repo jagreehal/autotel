@@ -43,13 +43,13 @@ Autotel provides the building blocks for AI/LLM observability:
 
 ### Decision Criteria
 
-| Use Case | Recommendation | Why |
-|----------|---------------|-----|
-| **Using LLM SDKs** (OpenAI, Anthropic, Langchain, Vercel AI SDK, etc.) | ✅ **Enable OpenLLMetry** | Automatic capture of prompts, completions, tokens, model params without manual instrumentation |
-| **Custom LLM integrations** (direct HTTP calls, custom models) | ⚠️ **Manual `trace()` only** | OpenLLMetry won't detect custom integrations. Use `trace()` with AI semantic conventions |
-| **Workflow orchestration** (multi-agent, RAG pipelines, evaluation loops) | ✅ **Always use `trace()`** | Tracks workflow steps, handoffs, and business logic that OpenLLMetry doesn't capture |
-| **Business metrics** (user engagement, escalations, feedback loops) | ✅ **Always use `trace()` + `track()`** | Domain events require explicit instrumentation regardless of LLM library |
-| **Production applications** | ✅ **Use both together** | OpenLLMetry handles LLM internals, `trace()` handles everything else |
+| Use Case                                                                  | Recommendation                          | Why                                                                                            |
+| ------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Using LLM SDKs** (OpenAI, Anthropic, Langchain, Vercel AI SDK, etc.)    | ✅ **Enable OpenLLMetry**               | Automatic capture of prompts, completions, tokens, model params without manual instrumentation |
+| **Custom LLM integrations** (direct HTTP calls, custom models)            | ⚠️ **Manual `trace()` only**            | OpenLLMetry won't detect custom integrations. Use `trace()` with AI semantic conventions       |
+| **Workflow orchestration** (multi-agent, RAG pipelines, evaluation loops) | ✅ **Always use `trace()`**             | Tracks workflow steps, handoffs, and business logic that OpenLLMetry doesn't capture           |
+| **Business metrics** (user engagement, escalations, feedback loops)       | ✅ **Always use `trace()` + `track()`** | Domain events require explicit instrumentation regardless of LLM library                       |
+| **Production applications**                                               | ✅ **Use both together**                | OpenLLMetry handles LLM internals, `trace()` handles everything else                           |
 
 ### What Each Approach Provides
 
@@ -99,28 +99,30 @@ const result = await generateText({
 Autotel's `trace()` function gives you full control over observability:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing } from 'autotel';
 
-const triageAgent = trace('agent.triage', ctx => async (input: string) => {
-  // Business context
-  ctx.setAttributes({
-    'agent.role': 'triage',
-    'agent.purpose': 'route_to_specialist',
-    'workflow.step': 1,
-  });
+const triageAgent = withTracing({ name: 'agent.triage' })(
+  (ctx) => async (input: string) => {
+    // Business context
+    ctx.setAttributes({
+      'agent.role': 'triage',
+      'agent.purpose': 'route_to_specialist',
+      'workflow.step': 1,
+    });
 
-  // Call LLM (OpenLLMetry will auto-instrument this call)
-  const result = await generateText({
-    model: openai('gpt-4o-mini'),
-    prompt: `Triage this request: ${input}`,
-  });
+    // Call LLM (OpenLLMetry will auto-instrument this call)
+    const result = await generateText({
+      model: openai('gpt-4o-mini'),
+      prompt: `Triage this request: ${input}`,
+    });
 
-  // Business metrics
-  const requiresEscalation = result.text.includes('ESCALATE');
-  ctx.setAttribute('triage.escalation_required', requiresEscalation);
+    // Business metrics
+    const requiresEscalation = result.text.includes('ESCALATE');
+    ctx.setAttribute('triage.escalation_required', requiresEscalation);
 
-  return { decision: result.text, escalate: requiresEscalation };
-});
+    return { decision: result.text, escalate: requiresEscalation };
+  },
+);
 ```
 
 **What you get with `trace()`:**
@@ -137,7 +139,7 @@ const triageAgent = trace('agent.triage', ctx => async (input: string) => {
 Combine OpenLLMetry's automatic LLM instrumentation with autotel's workflow orchestration:
 
 ```typescript
-import { init, trace, track } from 'autotel';
+import { init, trace, span, withTracing, track } from 'autotel';
 
 // 1. Enable both at initialization
 init({
@@ -152,48 +154,50 @@ init({
 });
 
 // 2. Use trace() for workflow orchestration
-const handleCustomerQuery = trace('workflow.customer_query', ctx => async (query: string, userId: string) => {
-  // Workflow-level context
-  ctx.setAttributes({
-    'workflow.type': 'customer_support',
-    'user.id': userId,
-  });
-
-  // Step 1: Triage (trace() creates span, OpenLLMetry instruments LLM call inside)
-  const triage = await trace('step.triage', async () => {
-    // OpenLLMetry automatically instruments this generateText() call
-    return await generateText({
-      model: openai('gpt-4o-mini'),
-      prompt: `Triage: ${query}`,
+const handleCustomerQuery = withTracing({ name: 'workflow.customer_query' })(
+  (ctx) => async (query: string, userId: string) => {
+    // Workflow-level context
+    ctx.setAttributes({
+      'workflow.type': 'customer_support',
+      'user.id': userId,
     });
-  });
 
-  ctx.setAttribute('triage.category', triage.text);
-
-  // Business logic decides next step
-  const needsEscalation = triage.text.includes('ESCALATE');
-
-  if (needsEscalation) {
-    // Step 2: Specialist (another span with auto-instrumented LLM)
-    const specialist = await trace('step.specialist', async () => {
+    // Step 1: Triage (trace() creates span, OpenLLMetry instruments LLM call inside)
+    const triage = await span('step.triage', async () => {
+      // OpenLLMetry automatically instruments this generateText() call
       return await generateText({
-        model: openai('gpt-4o'), // More capable model
-        prompt: `Expert response needed: ${query}`,
+        model: openai('gpt-4o-mini'),
+        prompt: `Triage: ${query}`,
       });
     });
 
-    // Track business event
-    track('escalation_occurred', {
-      category: triage.text,
-      userId,
-      correlationId: ctx.correlationId,
-    });
+    ctx.setAttribute('triage.category', triage.text);
 
-    return { response: specialist.text, escalated: true };
-  }
+    // Business logic decides next step
+    const needsEscalation = triage.text.includes('ESCALATE');
 
-  return { response: triage.text, escalated: false };
-});
+    if (needsEscalation) {
+      // Step 2: Specialist (another span with auto-instrumented LLM)
+      const specialist = await span('step.specialist', async () => {
+        return await generateText({
+          model: openai('gpt-4o'), // More capable model
+          prompt: `Expert response needed: ${query}`,
+        });
+      });
+
+      // Track business event
+      track('escalation_occurred', {
+        category: triage.text,
+        userId,
+        correlationId: ctx.correlationId,
+      });
+
+      return { response: specialist.text, escalated: true };
+    }
+
+    return { response: triage.text, escalated: false };
+  },
+);
 ```
 
 **What you get with both:**
@@ -260,28 +264,30 @@ const result = await generateText({ model: openai('gpt-4o'), prompt: 'test' });
 For custom LLM integrations or direct HTTP calls:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing } from 'autotel';
 
-const callCustomLLM = trace('llm.custom_model', ctx => async (prompt: string) => {
-  ctx.setAttributes({
-    'llm.model': 'my-custom-model-v2',
-    'llm.provider': 'self-hosted',
-    'llm.prompt': prompt,
-  });
+const callCustomLLM = withTracing({ name: 'llm.custom_model' })(
+  (ctx) => async (prompt: string) => {
+    ctx.setAttributes({
+      'llm.model': 'my-custom-model-v2',
+      'llm.provider': 'self-hosted',
+      'llm.prompt': prompt,
+    });
 
-  const response = await fetch('https://my-llm-api.com/generate', {
-    method: 'POST',
-    body: JSON.stringify({ prompt }),
-  });
+    const response = await fetch('https://my-llm-api.com/generate', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
 
-  const data = await response.json();
-  ctx.setAttributes({
-    'llm.completion': data.text,
-    'llm.tokens': data.usage.totalTokens,
-  });
+    const data = await response.json();
+    ctx.setAttributes({
+      'llm.completion': data.text,
+      'llm.tokens': data.usage.totalTokens,
+    });
 
-  return data.text;
-});
+    return data.text;
+  },
+);
 ```
 
 #### Option 3: Both Together (Recommended)
@@ -289,7 +295,7 @@ const callCustomLLM = trace('llm.custom_model', ctx => async (prompt: string) =>
 For production applications using LLM SDKs:
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, trace, span, withTracing } from 'autotel';
 
 init({
   service: 'production-ai-app',
@@ -297,11 +303,13 @@ init({
 });
 
 // Your workflow code uses trace() for business logic
-const workflow = trace('workflow.main', ctx => async (input: string) => {
-  // OpenLLMetry will auto-instrument any LLM calls inside
-  // trace() provides workflow context and business metrics
-  // Both appear as child spans in the same trace tree
-});
+const workflow = withTracing({ name: 'workflow.main' })(
+  (ctx) => async (input: string) => {
+    // OpenLLMetry will auto-instrument any LLM calls inside
+    // trace() provides workflow context and business metrics
+    // Both appear as child spans in the same trace tree
+  },
+);
 ```
 
 ### Quick Decision Tree
@@ -369,87 +377,95 @@ init({
 #### 1. Basic AI Operation
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing } from 'autotel';
 
-const generateResponse = trace('ai.generate', ctx => async (prompt: string) => {
-  ctx.setAttributes({
-    'ai.model': 'gpt-4o',
-    'ai.provider': 'openai',
-  });
+const generateResponse = withTracing({ name: 'ai.generate' })(
+  (ctx) => async (prompt: string) => {
+    ctx.setAttributes({
+      'ai.model': 'gpt-4o',
+      'ai.provider': 'openai',
+    });
 
-  const response = await llm.generate(prompt);
-  ctx.setAttribute('ai.tokens', response.usage.totalTokens);
+    const response = await llm.generate(prompt);
+    ctx.setAttribute('ai.tokens', response.usage.totalTokens);
 
-  return response;
-});
+    return response;
+  },
+);
 ```
 
 #### 2. Multi-Step Workflow
 
 ```typescript
-const workflow = trace('ai.workflow', ctx => async (input: string) => {
-  // Step 1: Creates child span automatically
-  const analysis = await trace('step1.analyze', async () => {
-    return await analyzeInput(input);
-  });
+const workflow = withTracing({ name: 'ai.workflow' })(
+  (ctx) => async (input: string) => {
+    // Step 1: Creates child span automatically
+    const analysis = await span('step1.analyze', async () => {
+      return await analyzeInput(input);
+    });
 
-  // Step 2: Creates another child span
-  const response = await trace('step2.generate', async () => {
-    return await generateResponse(analysis);
-  });
+    // Step 2: Creates another child span
+    const response = await span('step2.generate', async () => {
+      return await generateResponse(analysis);
+    });
 
-  return response;
-});
+    return response;
+  },
+);
 ```
 
 #### 3. Agent Handoffs
 
 ```typescript
-const runAgentWorkflow = trace('workflow.agents', ctx => async (input: string) => {
-  // Set workflow context
-  ctx.setAttributes({
-    'workflow.type': 'multi_agent',
-    'workflow.correlation_id': ctx.correlationId, // Auto-generated!
-  });
+const runAgentWorkflow = withTracing({ name: 'workflow.agents' })(
+  (ctx) => async (input: string) => {
+    // Set workflow context
+    ctx.setAttributes({
+      'workflow.type': 'multi_agent',
+      'workflow.correlation_id': ctx.correlationId, // Auto-generated!
+    });
 
-  // Agent 1
-  const triageResult = await triageAgent(input);
-  ctx.setAttribute('handoff.from', 'triage');
+    // Agent 1
+    const triageResult = await triageAgent(input);
+    ctx.setAttribute('handoff.from', 'triage');
 
-  // Agent 2
-  const specialistResult = await specialistAgent(triageResult);
+    // Agent 2
+    const specialistResult = await specialistAgent(triageResult);
 
-  return specialistResult;
-});
+    return specialistResult;
+  },
+);
 ```
 
 #### 4. RAG Pipeline
 
 ```typescript
-const ragQuery = trace('rag.query', ctx => async (query: string) => {
-  // Step 1: Embeddings
-  const embedding = await trace('rag.embed', async () => {
-    return await generateEmbedding(query);
-  });
+const ragQuery = withTracing({ name: 'rag.query' })(
+  (ctx) => async (query: string) => {
+    // Step 1: Embeddings
+    const embedding = await span('rag.embed', async () => {
+      return await generateEmbedding(query);
+    });
 
-  // Step 2: Search
-  const results = await trace('rag.search', async () => {
-    return await vectorDb.search(embedding, 5);
-  });
+    // Step 2: Search
+    const results = await span('rag.search', async () => {
+      return await vectorDb.search(embedding, 5);
+    });
 
-  // Step 3: Generate
-  const response = await trace('rag.generate', async () => {
-    return await llm.generate({ query, context: results });
-  });
+    // Step 3: Generate
+    const response = await span('rag.generate', async () => {
+      return await llm.generate({ query, context: results });
+    });
 
-  return response;
-});
+    return response;
+  },
+);
 ```
 
 #### 5. Correlation IDs (Automatic)
 
 ```typescript
-const operation = trace('operation', ctx => async () => {
+const operation = withTracing({ name: 'operation' })((ctx) => async () => {
   // Automatically available - no setup required!
   const correlationId = ctx.correlationId;
 
@@ -465,6 +481,7 @@ const operation = trace('operation', ctx => async () => {
 ### Semantic Conventions
 
 #### Agent Attributes
+
 ```typescript
 ctx.setAttributes({
   'agent.role': 'specialist',
@@ -475,6 +492,7 @@ ctx.setAttributes({
 ```
 
 #### LLM Attributes
+
 ```typescript
 ctx.setAttributes({
   'llm.model': 'gpt-4o',
@@ -486,6 +504,7 @@ ctx.setAttributes({
 ```
 
 #### Workflow Attributes
+
 ```typescript
 ctx.setAttributes({
   'workflow.type': 'multi_agent_escalation',
@@ -495,6 +514,7 @@ ctx.setAttributes({
 ```
 
 #### RAG Attributes
+
 ```typescript
 ctx.setAttributes({
   'rag.embedding_model': 'text-embedding-3-small',
@@ -504,6 +524,7 @@ ctx.setAttributes({
 ```
 
 #### Business Events
+
 ```typescript
 // Span attributes
 ctx.setAttribute('specialist.engaged', true);
@@ -536,29 +557,32 @@ track('workflow.completed', {
 Correlation IDs propagate through your entire workflow, so you can trace requests across multiple agents, services, and LLM calls.
 
 ```typescript
-import { trace, track } from 'autotel';
+import { trace, span, withTracing, track } from 'autotel';
 
-export const processUserRequest = trace('ai.user_request', ctx => async (userId: string, message: string) => {
-  // Correlation ID is automatically available
-  console.log('Trace ID:', ctx.traceId);
-  console.log('Correlation ID:', ctx.correlationId); // First 16 chars of traceId
+export const processUserRequest = withTracing({ name: 'ai.user_request' })(
+  (ctx) => async (userId: string, message: string) => {
+    // Correlation ID is automatically available
+    console.log('Trace ID:', ctx.traceId);
+    console.log('Correlation ID:', ctx.correlationId); // First 16 chars of traceId
 
-  // All nested operations inherit this correlation context
-  const analysis = await analyzeIntent(message);
-  const response = await generateResponse(analysis);
+    // All nested operations inherit this correlation context
+    const analysis = await analyzeIntent(message);
+    const response = await generateResponse(analysis);
 
-  // Events events automatically include correlation IDs
-  track('ai.request_completed', {
-    userId,
-    intent: analysis.intent,
-    // correlationId, traceId, spanId are auto-added!
-  });
+    // Events events automatically include correlation IDs
+    track('ai.request_completed', {
+      userId,
+      intent: analysis.intent,
+      // correlationId, traceId, spanId are auto-added!
+    });
 
-  return response;
-});
+    return response;
+  },
+);
 ```
 
 **What you get automatically:**
+
 - ✅ `ctx.traceId` - Full OpenTelemetry trace ID
 - ✅ `ctx.correlationId` - Short correlation ID (first 16 chars)
 - ✅ `ctx.spanId` - Current span ID
@@ -571,35 +595,38 @@ export const processUserRequest = trace('ai.user_request', ctx => async (userId:
 Create parent-child span hierarchies with nested `trace()` calls. Each step becomes a child span with automatic error handling and lifecycle management.
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing } from 'autotel';
 
 // Each nested trace() call creates a child span
-export const processDocument = trace('document.processing', ctx => async (docId: string) => {
-  // Set workflow-level attributes
-  ctx.setAttribute('document.id', docId);
-  ctx.setAttribute('workflow.type', 'document_processing');
+export const processDocument = withTracing({ name: 'document.processing' })(
+  (ctx) => async (docId: string) => {
+    // Set workflow-level attributes
+    ctx.setAttribute('document.id', docId);
+    ctx.setAttribute('workflow.type', 'document_processing');
 
-  // Step 1: Load document (creates child span)
-  const document = await trace('document.load', async () => {
-    return await loadDocument(docId);
-  });
+    // Step 1: Load document (creates child span)
+    const document = await span('document.load', async () => {
+      return await loadDocument(docId);
+    });
 
-  // Step 2: Analyze with LLM (creates child span, OpenLLMetry auto-instruments LLM call)
-  const analysis = await trace('document.analyze', async () => {
-    const result = await llm.analyze(document.content);
-    return result;
-  });
+    // Step 2: Analyze with LLM (creates child span, OpenLLMetry auto-instruments LLM call)
+    const analysis = await span('document.analyze', async () => {
+      const result = await llm.analyze(document.content);
+      return result;
+    });
 
-  // Step 3: Store results (creates child span)
-  const stored = await trace('document.store', async () => {
-    return await storeAnalysis(docId, analysis);
-  });
+    // Step 3: Store results (creates child span)
+    const stored = await span('document.store', async () => {
+      return await storeAnalysis(docId, analysis);
+    });
 
-  return stored;
-});
+    return stored;
+  },
+);
 ```
 
 **Span Hierarchy Created:**
+
 ```
 document.processing (parent)
 ├── document.load (child)
@@ -613,32 +640,34 @@ document.processing (parent)
 Track business-level events alongside technical telemetry using `ctx.setAttribute()` for span attributes and `track()` for events events.
 
 ```typescript
-import { trace, track } from 'autotel';
+import { trace, span, withTracing, track } from 'autotel';
 
-export const handleAgentHandoff = trace('agent.handoff', ctx => async (task: Task) => {
-  const startTime = performance.now();
+export const handleAgentHandoff = withTracing({ name: 'agent.handoff' })(
+  (ctx) => async (task: Task) => {
+    const startTime = performance.now();
 
-  // Set domain-specific span attributes
-  ctx.setAttributes({
-    'agent.from': 'triage',
-    'agent.to': 'specialist',
-    'task.priority': task.priority,
-    'task.category': task.category,
-  });
+    // Set domain-specific span attributes
+    ctx.setAttributes({
+      'agent.from': 'triage',
+      'agent.to': 'specialist',
+      'task.priority': task.priority,
+      'task.category': task.category,
+    });
 
-  // Perform handoff
-  const result = await specialistAgent.process(task);
+    // Perform handoff
+    const result = await specialistAgent.process(task);
 
-  // Track business metric with precise duration
-  track('agent.handoff_completed', {
-    from: 'triage',
-    to: 'specialist',
-    duration_ms: Math.round(performance.now() - startTime),
-    success: true,
-  });
+    // Track business metric with precise duration
+    track('agent.handoff_completed', {
+      from: 'triage',
+      to: 'specialist',
+      duration_ms: Math.round(performance.now() - startTime),
+      success: true,
+    });
 
-  return result;
-});
+    return result;
+  },
+);
 ```
 
 ## Pattern: Multi-Agent Workflows
@@ -648,86 +677,94 @@ Multi-agent systems need to track the handoffs between agents with full context 
 ### Example: Triage → Specialist → QA Escalation
 
 ```typescript
-import { trace, track } from 'autotel';
+import { trace, span, withTracing, track } from 'autotel';
 import { generateText, generateObject } from 'ai'; // Vercel AI SDK example
 
 // Agent 1: Triage
-const triageAgent = trace('agent.triage', ctx => async (userRequest: string) => {
-  ctx.setAttributes({
-    'agent.role': 'triage',
-    'agent.model': 'gpt-4o-mini',
-  });
+const triageAgent = withTracing({ name: 'agent.triage' })(
+  (ctx) => async (userRequest: string) => {
+    ctx.setAttributes({
+      'agent.role': 'triage',
+      'agent.model': 'gpt-4o-mini',
+    });
 
-  const result = await generateText({
-    model: openai('gpt-4o-mini'),
-    prompt: `Analyze this request and create a plan: ${userRequest}`,
-  });
+    const result = await generateText({
+      model: openai('gpt-4o-mini'),
+      prompt: `Analyze this request and create a plan: ${userRequest}`,
+    });
 
-  track('agent.triage_completed', {
-    request_length: userRequest.length,
-    plan_length: result.text.length,
-  });
+    track('agent.triage_completed', {
+      request_length: userRequest.length,
+      plan_length: result.text.length,
+    });
 
-  return {
-    plan: result.text,
-    requiresSpecialist: true,
-  };
-});
+    return {
+      plan: result.text,
+      requiresSpecialist: true,
+    };
+  },
+);
 
 // Agent 2: Specialist
-const specialistAgent = trace('agent.specialist', ctx => async (plan: string) => {
-  ctx.setAttributes({
-    'agent.role': 'specialist',
-    'agent.model': 'gpt-4o',
-  });
+const specialistAgent = withTracing({ name: 'agent.specialist' })(
+  (ctx) => async (plan: string) => {
+    ctx.setAttributes({
+      'agent.role': 'specialist',
+      'agent.model': 'gpt-4o',
+    });
 
-  ctx.addEvent('specialist_engaged', { plan_length: plan.length });
+    ctx.addEvent('specialist_engaged', { plan_length: plan.length });
 
-  const result = await generateText({
-    model: openai('gpt-4o'),
-    prompt: `Execute this plan: ${plan}`,
-  });
+    const result = await generateText({
+      model: openai('gpt-4o'),
+      prompt: `Execute this plan: ${plan}`,
+    });
 
-  track('agent.specialist_completed', {
-    plan_length: plan.length,
-    response_length: result.text.length,
-  });
+    track('agent.specialist_completed', {
+      plan_length: plan.length,
+      response_length: result.text.length,
+    });
 
-  return {
-    response: result.text,
-    requiresQA: true,
-  };
-});
+    return {
+      response: result.text,
+      requiresQA: true,
+    };
+  },
+);
 
 // Agent 3: QA
-const qaAgent = trace('agent.qa', ctx => async (response: string) => {
-  ctx.setAttributes({
-    'agent.role': 'qa',
-    'agent.model': 'gpt-4o',
-  });
+const qaAgent = withTracing({ name: 'agent.qa' })(
+  (ctx) => async (response: string) => {
+    ctx.setAttributes({
+      'agent.role': 'qa',
+      'agent.model': 'gpt-4o',
+    });
 
-  const result = await generateObject({
-    model: openai('gpt-4o'),
-    schema: z.object({
-      approved: z.boolean(),
-      feedback: z.string().optional(),
-      requiresFollowUp: z.boolean(),
-    }),
-    prompt: `Review this response for quality: ${response}`,
-  });
+    const result = await generateObject({
+      model: openai('gpt-4o'),
+      schema: z.object({
+        approved: z.boolean(),
+        feedback: z.string().optional(),
+        requiresFollowUp: z.boolean(),
+      }),
+      prompt: `Review this response for quality: ${response}`,
+    });
 
-  ctx.setAttribute('qa.approved', result.object.approved);
+    ctx.setAttribute('qa.approved', result.object.approved);
 
-  track('agent.qa_completed', {
-    approved: result.object.approved,
-    requires_follow_up: result.object.requiresFollowUp,
-  });
+    track('agent.qa_completed', {
+      approved: result.object.approved,
+      requires_follow_up: result.object.requiresFollowUp,
+    });
 
-  return result.object;
-});
+    return result.object;
+  },
+);
 
 // Orchestrator: Workflow coordinator
-export const runMultiAgentWorkflow = trace('workflow.multi_agent_escalation', ctx => async (userRequest: string, userId: string) => {
+export const runMultiAgentWorkflow = withTracing({
+  name: 'workflow.multi_agent_escalation',
+})((ctx) => async (userRequest: string, userId: string) => {
   ctx.setAttributes({
     'workflow.type': 'multi_agent_escalation',
     'workflow.user_id': userId,
@@ -736,7 +773,9 @@ export const runMultiAgentWorkflow = trace('workflow.multi_agent_escalation', ct
 
   // Step 1: Triage
   const triage = await triageAgent(userRequest);
-  ctx.addEvent('triage_complete', { requires_specialist: triage.requiresSpecialist });
+  ctx.addEvent('triage_complete', {
+    requires_specialist: triage.requiresSpecialist,
+  });
 
   // Step 2: Specialist (if needed)
   let response;
@@ -769,6 +808,7 @@ export const runMultiAgentWorkflow = trace('workflow.multi_agent_escalation', ct
 ```
 
 **Observability Benefits:**
+
 - ✅ Full trace tree showing agent handoffs
 - ✅ Correlation ID tracks request across all agents
 - ✅ Each agent's LLM calls auto-instrumented by OpenLLMetry
@@ -780,47 +820,53 @@ export const runMultiAgentWorkflow = trace('workflow.multi_agent_escalation', ct
 Retrieval-Augmented Generation (RAG) pipelines run embeddings, vector search, retrieval, and generation steps.
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing } from 'autotel';
 import { embed } from 'ai';
 import { openai } from '@ai-sdk/openai';
 
 // Step 1: Generate embeddings
-const generateEmbeddings = trace('rag.embeddings', ctx => async (query: string) => {
-  ctx.setAttribute('query.length', query.length);
+const generateEmbeddings = withTracing({ name: 'rag.embeddings' })(
+  (ctx) => async (query: string) => {
+    ctx.setAttribute('query.length', query.length);
 
-  const { embedding } = await embed({
-    model: openai.embedding('text-embedding-3-small'),
-    value: query,
-  });
+    const { embedding } = await embed({
+      model: openai.embedding('text-embedding-3-small'),
+      value: query,
+    });
 
-  ctx.setAttribute('embedding.dimensions', embedding.length);
+    ctx.setAttribute('embedding.dimensions', embedding.length);
 
-  return embedding;
-});
+    return embedding;
+  },
+);
 
 // Step 2: Vector search
-const vectorSearch = trace('rag.search', ctx => async (embedding: number[], topK: number = 5) => {
-  ctx.setAttributes({
-    'search.top_k': topK,
-    'search.embedding_dimensions': embedding.length,
-  });
+const vectorSearch = withTracing({ name: 'rag.search' })(
+  (ctx) =>
+    async (embedding: number[], topK: number = 5) => {
+      ctx.setAttributes({
+        'search.top_k': topK,
+        'search.embedding_dimensions': embedding.length,
+      });
 
-  // OpenLLMetry auto-instruments vector DB operations
-  const results = await vectorDb.search(embedding, topK);
+      // OpenLLMetry auto-instruments vector DB operations
+      const results = await vectorDb.search(embedding, topK);
 
-  ctx.setAttribute('search.results_count', results.length);
+      ctx.setAttribute('search.results_count', results.length);
 
-  return results;
-});
+      return results;
+    },
+);
 
 // Step 3: Generate response with context
-const generateWithContext = trace('rag.generate', ctx => async (query: string, context: string[]) => {
-  ctx.setAttributes({
-    'generation.context_chunks': context.length,
-    'generation.model': 'gpt-4o',
-  });
+const generateWithContext = withTracing({ name: 'rag.generate' })(
+  (ctx) => async (query: string, context: string[]) => {
+    ctx.setAttributes({
+      'generation.context_chunks': context.length,
+      'generation.model': 'gpt-4o',
+    });
 
-  const prompt = `
+    const prompt = `
 Context:
 ${context.join('\n\n')}
 
@@ -829,57 +875,61 @@ Question: ${query}
 Answer based on the context above:
   `.trim();
 
-  const result = await generateText({
-    model: openai('gpt-4o'),
-    prompt,
-  });
+    const result = await generateText({
+      model: openai('gpt-4o'),
+      prompt,
+    });
 
-  ctx.setAttributes({
-    'generation.tokens_used': result.usage.totalTokens,
-    'generation.response_length': result.text.length,
-  });
+    ctx.setAttributes({
+      'generation.tokens_used': result.usage.totalTokens,
+      'generation.response_length': result.text.length,
+    });
 
-  return result.text;
-});
+    return result.text;
+  },
+);
 
 // Complete RAG Pipeline
-export const ragPipeline = trace('rag.pipeline', ctx => async (query: string, userId: string) => {
-  ctx.setAttributes({
-    'pipeline.type': 'rag',
-    'pipeline.user_id': userId,
-    'pipeline.query': query,
-  });
+export const ragPipeline = withTracing({ name: 'rag.pipeline' })(
+  (ctx) => async (query: string, userId: string) => {
+    ctx.setAttributes({
+      'pipeline.type': 'rag',
+      'pipeline.user_id': userId,
+      'pipeline.query': query,
+    });
 
-  // Step 1: Embeddings
-  const embedding = await generateEmbeddings(query);
-  ctx.addEvent('embeddings_generated');
+    // Step 1: Embeddings
+    const embedding = await generateEmbeddings(query);
+    ctx.addEvent('embeddings_generated');
 
-  // Step 2: Search
-  const searchResults = await vectorSearch(embedding);
-  ctx.addEvent('search_completed', { results_count: searchResults.length });
+    // Step 2: Search
+    const searchResults = await vectorSearch(embedding);
+    ctx.addEvent('search_completed', { results_count: searchResults.length });
 
-  // Step 3: Generate
-  const context = searchResults.map(r => r.content);
-  const response = await generateWithContext(query, context);
-  ctx.addEvent('generation_completed', { response_length: response.length });
+    // Step 3: Generate
+    const context = searchResults.map((r) => r.content);
+    const response = await generateWithContext(query, context);
+    ctx.addEvent('generation_completed', { response_length: response.length });
 
-  // Track pipeline completion
-  track('rag.pipeline_completed', {
-    user_id: userId,
-    query_length: query.length,
-    results_retrieved: searchResults.length,
-    response_length: response.length,
-  });
+    // Track pipeline completion
+    track('rag.pipeline_completed', {
+      user_id: userId,
+      query_length: query.length,
+      results_retrieved: searchResults.length,
+      response_length: response.length,
+    });
 
-  return {
-    query,
-    response,
-    sources: searchResults.map(r => r.metadata),
-  };
-});
+    return {
+      query,
+      response,
+      sources: searchResults.map((r) => r.metadata),
+    };
+  },
+);
 ```
 
 **Span Hierarchy:**
+
 ```
 rag.pipeline (parent)
 ├── rag.embeddings (child)
@@ -895,54 +945,56 @@ rag.pipeline (parent)
 Track streaming LLM responses with progress events and final metrics. The example below records chunk counts and timing as the stream arrives.
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing } from 'autotel';
 import { streamText } from 'ai';
 
-export const generateStreamingResponse = trace('ai.stream', ctx => async (prompt: string) => {
-  ctx.setAttributes({
-    'stream.model': 'gpt-4o',
-    'stream.prompt_length': prompt.length,
-  });
+export const generateStreamingResponse = withTracing({ name: 'ai.stream' })(
+  (ctx) => async (prompt: string) => {
+    ctx.setAttributes({
+      'stream.model': 'gpt-4o',
+      'stream.prompt_length': prompt.length,
+    });
 
-  const stream = await streamText({
-    model: openai('gpt-4o'),
-    prompt,
-  });
+    const stream = await streamText({
+      model: openai('gpt-4o'),
+      prompt,
+    });
 
-  let chunkCount = 0;
-  let totalLength = 0;
+    let chunkCount = 0;
+    let totalLength = 0;
 
-  // Track streaming progress
-  const chunks: string[] = [];
-  for await (const chunk of stream.textStream) {
-    chunkCount++;
-    totalLength += chunk.length;
-    chunks.push(chunk);
+    // Track streaming progress
+    const chunks: string[] = [];
+    for await (const chunk of stream.textStream) {
+      chunkCount++;
+      totalLength += chunk.length;
+      chunks.push(chunk);
 
-    // Add event for significant milestones
-    if (chunkCount % 10 === 0) {
-      ctx.addEvent('streaming_progress', {
-        chunks_received: chunkCount,
-        total_length: totalLength,
-      });
+      // Add event for significant milestones
+      if (chunkCount % 10 === 0) {
+        ctx.addEvent('streaming_progress', {
+          chunks_received: chunkCount,
+          total_length: totalLength,
+        });
+      }
     }
-  }
 
-  // Set final metrics
-  ctx.setAttributes({
-    'stream.chunks_count': chunkCount,
-    'stream.total_length': totalLength,
-    'stream.avg_chunk_size': Math.round(totalLength / chunkCount),
-  });
+    // Set final metrics
+    ctx.setAttributes({
+      'stream.chunks_count': chunkCount,
+      'stream.total_length': totalLength,
+      'stream.avg_chunk_size': Math.round(totalLength / chunkCount),
+    });
 
-  track('ai.stream_completed', {
-    model: 'gpt-4o',
-    chunks: chunkCount,
-    total_length: totalLength,
-  });
+    track('ai.stream_completed', {
+      model: 'gpt-4o',
+      chunks: chunkCount,
+      total_length: totalLength,
+    });
 
-  return chunks.join('');
-});
+    return chunks.join('');
+  },
+);
 ```
 
 ## Pattern: Evaluation Loops
@@ -950,100 +1002,109 @@ export const generateStreamingResponse = trace('ai.stream', ctx => async (prompt
 Add quality checks and iterative refinement with full observability.
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing } from 'autotel';
 
-const generateContent = trace('ai.generate_content', ctx => async (prompt: string, model: string) => {
-  ctx.setAttribute('generation.model', model);
+const generateContent = withTracing({ name: 'ai.generate_content' })(
+  (ctx) => async (prompt: string, model: string) => {
+    ctx.setAttribute('generation.model', model);
 
-  const result = await generateText({
-    model: openai(model),
-    prompt,
-  });
+    const result = await generateText({
+      model: openai(model),
+      prompt,
+    });
 
-  return result.text;
-});
+    return result.text;
+  },
+);
 
-const evaluateQuality = trace('ai.evaluate_quality', ctx => async (content: string) => {
-  const result = await generateObject({
-    model: openai('gpt-4o'),
-    schema: z.object({
-      score: z.number().min(0).max(100),
-      feedback: z.string(),
-      passesThreshold: z.boolean(),
-    }),
-    prompt: `Evaluate this content quality (0-100): ${content}`,
-  });
+const evaluateQuality = withTracing({ name: 'ai.evaluate_quality' })(
+  (ctx) => async (content: string) => {
+    const result = await generateObject({
+      model: openai('gpt-4o'),
+      schema: z.object({
+        score: z.number().min(0).max(100),
+        feedback: z.string(),
+        passesThreshold: z.boolean(),
+      }),
+      prompt: `Evaluate this content quality (0-100): ${content}`,
+    });
 
-  ctx.setAttributes({
-    'evaluation.score': result.object.score,
-    'evaluation.passes': result.object.passesThreshold,
-  });
+    ctx.setAttributes({
+      'evaluation.score': result.object.score,
+      'evaluation.passes': result.object.passesThreshold,
+    });
 
-  return result.object;
-});
+    return result.object;
+  },
+);
 
-export const generateWithQualityCheck = trace('ai.generate_with_qa', ctx => async (
-  prompt: string,
-  options: { maxAttempts?: number; qualityThreshold?: number } = {}
-) => {
-  const { maxAttempts = 3, qualityThreshold = 75 } = options;
+export const generateWithQualityCheck = withTracing({
+  name: 'ai.generate_with_qa',
+})(
+  (ctx) =>
+    async (
+      prompt: string,
+      options: { maxAttempts?: number; qualityThreshold?: number } = {},
+    ) => {
+      const { maxAttempts = 3, qualityThreshold = 75 } = options;
 
-  ctx.setAttributes({
-    'qa.max_attempts': maxAttempts,
-    'qa.threshold': qualityThreshold,
-  });
-
-  let attempt = 0;
-  let content: string;
-  let evaluation: any;
-
-  // Evaluation loop
-  do {
-    attempt++;
-    ctx.addEvent('generation_attempt', { attempt });
-
-    // Generate content
-    content = await generateContent(prompt, 'gpt-4o');
-
-    // Evaluate quality
-    evaluation = await evaluateQuality(content);
-
-    if (evaluation.passesThreshold) {
-      ctx.addEvent('quality_passed', {
-        attempt,
-        score: evaluation.score
+      ctx.setAttributes({
+        'qa.max_attempts': maxAttempts,
+        'qa.threshold': qualityThreshold,
       });
-      break;
-    } else if (attempt < maxAttempts) {
-      ctx.addEvent('quality_failed_retrying', {
-        attempt,
-        score: evaluation.score,
-        feedback: evaluation.feedback,
+
+      let attempt = 0;
+      let content: string;
+      let evaluation: any;
+
+      // Evaluation loop
+      do {
+        attempt++;
+        ctx.addEvent('generation_attempt', { attempt });
+
+        // Generate content
+        content = await generateContent(prompt, 'gpt-4o');
+
+        // Evaluate quality
+        evaluation = await evaluateQuality(content);
+
+        if (evaluation.passesThreshold) {
+          ctx.addEvent('quality_passed', {
+            attempt,
+            score: evaluation.score,
+          });
+          break;
+        } else if (attempt < maxAttempts) {
+          ctx.addEvent('quality_failed_retrying', {
+            attempt,
+            score: evaluation.score,
+            feedback: evaluation.feedback,
+          });
+          // Refine prompt with feedback
+          prompt = `${prompt}\n\nPrevious attempt feedback: ${evaluation.feedback}`;
+        }
+      } while (attempt < maxAttempts);
+
+      ctx.setAttributes({
+        'qa.attempts_used': attempt,
+        'qa.final_score': evaluation.score,
+        'qa.success': evaluation.passesThreshold,
       });
-      // Refine prompt with feedback
-      prompt = `${prompt}\n\nPrevious attempt feedback: ${evaluation.feedback}`;
-    }
-  } while (attempt < maxAttempts);
 
-  ctx.setAttributes({
-    'qa.attempts_used': attempt,
-    'qa.final_score': evaluation.score,
-    'qa.success': evaluation.passesThreshold,
-  });
+      track('ai.qa_loop_completed', {
+        attempts: attempt,
+        final_score: evaluation.score,
+        success: evaluation.passesThreshold,
+        threshold: qualityThreshold,
+      });
 
-  track('ai.qa_loop_completed', {
-    attempts: attempt,
-    final_score: evaluation.score,
-    success: evaluation.passesThreshold,
-    threshold: qualityThreshold,
-  });
-
-  return {
-    content,
-    evaluation,
-    attempts: attempt,
-  };
-});
+      return {
+        content,
+        evaluation,
+        attempts: attempt,
+      };
+    },
+);
 ```
 
 ## AI Semantic Conventions
@@ -1122,7 +1183,7 @@ ctx.addEvent('quality.retry_initiated');
 ### Example: Customer Support Multi-Agent System
 
 ```typescript
-import { trace, track, init } from 'autotel';
+import { trace, span, withTracing, track, init } from 'autotel';
 import { generateText, generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
@@ -1140,45 +1201,44 @@ init({
 });
 
 // Routing Agent
-const routeRequest = trace('support.route', ctx => async (message: string, userId: string) => {
-  ctx.setAttributes({
-    'agent.role': 'router',
-    'support.user_id': userId,
-  });
+const routeRequest = withTracing({ name: 'support.route' })(
+  (ctx) => async (message: string, userId: string) => {
+    ctx.setAttributes({
+      'agent.role': 'router',
+      'support.user_id': userId,
+    });
 
-  const result = await generateObject({
-    model: openai('gpt-4o-mini'),
-    schema: z.object({
-      category: z.enum(['billing', 'technical', 'account', 'general']),
-      priority: z.enum(['low', 'medium', 'high', 'urgent']),
-      requiresHuman: z.boolean(),
-    }),
-    prompt: `Categorize this support request: ${message}`,
-  });
+    const result = await generateObject({
+      model: openai('gpt-4o-mini'),
+      schema: z.object({
+        category: z.enum(['billing', 'technical', 'account', 'general']),
+        priority: z.enum(['low', 'medium', 'high', 'urgent']),
+        requiresHuman: z.boolean(),
+      }),
+      prompt: `Categorize this support request: ${message}`,
+    });
 
-  ctx.setAttributes({
-    'support.category': result.object.category,
-    'support.priority': result.object.priority,
-    'support.requires_human': result.object.requiresHuman,
-  });
+    ctx.setAttributes({
+      'support.category': result.object.category,
+      'support.priority': result.object.priority,
+      'support.requires_human': result.object.requiresHuman,
+    });
 
-  return result.object;
-});
+    return result.object;
+  },
+);
 
 // Specialist Agent
-const handleSpecialistRequest = trace('support.specialist', ctx => async (
-  message: string,
-  category: string,
-  context: any
-) => {
-  ctx.setAttributes({
-    'agent.role': 'specialist',
-    'support.category': category,
-  });
+const handleSpecialistRequest = withTracing({ name: 'support.specialist' })(
+  (ctx) => async (message: string, category: string, context: any) => {
+    ctx.setAttributes({
+      'agent.role': 'specialist',
+      'support.category': category,
+    });
 
-  const result = await generateText({
-    model: openai('gpt-4o'),
-    prompt: `
+    const result = await generateText({
+      model: openai('gpt-4o'),
+      prompt: `
 You are a ${category} support specialist.
 
 Customer message: ${message}
@@ -1187,122 +1247,124 @@ Previous context: ${JSON.stringify(context)}
 
 Provide a helpful response:
     `.trim(),
-  });
+    });
 
-  ctx.setAttribute('response.length', result.text.length);
+    ctx.setAttribute('response.length', result.text.length);
 
-  return result.text;
-});
+    return result.text;
+  },
+);
 
 // Main workflow
-export const handleSupportRequest = trace('support.workflow', ctx => async (
-  userId: string,
-  message: string,
-  sessionContext: any = {}
-) => {
-  ctx.setAttributes({
-    'workflow.type': 'customer_support',
-    'workflow.user_id': userId,
-    'workflow.session_id': sessionContext.sessionId,
-  });
+export const handleSupportRequest = withTracing({ name: 'support.workflow' })(
+  (ctx) =>
+    async (userId: string, message: string, sessionContext: any = {}) => {
+      ctx.setAttributes({
+        'workflow.type': 'customer_support',
+        'workflow.user_id': userId,
+        'workflow.session_id': sessionContext.sessionId,
+      });
 
-  // Step 1: Route request
-  const routing = await routeRequest(message, userId);
-  ctx.addEvent('routing_completed', {
-    category: routing.category,
-    priority: routing.priority,
-  });
+      // Step 1: Route request
+      const routing = await routeRequest(message, userId);
+      ctx.addEvent('routing_completed', {
+        category: routing.category,
+        priority: routing.priority,
+      });
 
-  // Step 2: Handle with specialist
-  let response: string;
-  if (routing.requiresHuman) {
-    response = 'This request requires human assistance. A support agent will contact you shortly.';
-    ctx.addEvent('escalated_to_human');
+      // Step 2: Handle with specialist
+      let response: string;
+      if (routing.requiresHuman) {
+        response =
+          'This request requires human assistance. A support agent will contact you shortly.';
+        ctx.addEvent('escalated_to_human');
 
-    track('support.escalated_to_human', {
-      user_id: userId,
-      category: routing.category,
-      priority: routing.priority,
-    });
-  } else {
-    response = await handleSpecialistRequest(message, routing.category, sessionContext);
-    ctx.addEvent('specialist_handled');
-  }
+        track('support.escalated_to_human', {
+          user_id: userId,
+          category: routing.category,
+          priority: routing.priority,
+        });
+      } else {
+        response = await handleSpecialistRequest(
+          message,
+          routing.category,
+          sessionContext,
+        );
+        ctx.addEvent('specialist_handled');
+      }
 
-  // Track completion
-  track('support.request_handled', {
-    user_id: userId,
-    category: routing.category,
-    priority: routing.priority,
-    escalated: routing.requiresHuman,
-    response_length: response.length,
-  });
+      // Track completion
+      track('support.request_handled', {
+        user_id: userId,
+        category: routing.category,
+        priority: routing.priority,
+        escalated: routing.requiresHuman,
+        response_length: response.length,
+      });
 
-  return {
-    response,
-    category: routing.category,
-    priority: routing.priority,
-    requiresHuman: routing.requiresHuman,
-  };
-});
+      return {
+        response,
+        category: routing.category,
+        priority: routing.priority,
+        requiresHuman: routing.requiresHuman,
+      };
+    },
+);
 ```
 
 ### Example: Content Generation Pipeline with A/B Testing
 
 ```typescript
-import { trace, track } from 'autotel';
+import { trace, span, withTracing, track } from 'autotel';
 
-const generateVariant = trace('content.generate_variant', ctx => async (
-  prompt: string,
-  variantId: string,
-  model: string
-) => {
-  ctx.setAttributes({
-    'variant.id': variantId,
-    'variant.model': model,
-  });
+const generateVariant = withTracing({ name: 'content.generate_variant' })(
+  (ctx) => async (prompt: string, variantId: string, model: string) => {
+    ctx.setAttributes({
+      'variant.id': variantId,
+      'variant.model': model,
+    });
 
-  const result = await generateText({
-    model: openai(model),
-    prompt,
-  });
+    const result = await generateText({
+      model: openai(model),
+      prompt,
+    });
 
-  ctx.setAttribute('variant.length', result.text.length);
+    ctx.setAttribute('variant.length', result.text.length);
 
-  return result.text;
-});
+    return result.text;
+  },
+);
 
-export const generateABTestContent = trace('content.ab_test', ctx => async (
-  prompt: string,
-  userId: string
-) => {
-  ctx.setAttributes({
-    'experiment.type': 'ab_test',
-    'experiment.user_id': userId,
-  });
+export const generateABTestContent = withTracing({ name: 'content.ab_test' })(
+  (ctx) => async (prompt: string, userId: string) => {
+    ctx.setAttributes({
+      'experiment.type': 'ab_test',
+      'experiment.user_id': userId,
+    });
 
-  // Randomly assign variant (or use feature flag service)
-  const variant = Math.random() < 0.5 ? 'A' : 'B';
-  const model = variant === 'A' ? 'gpt-4o' : 'gpt-4o-mini';
+    // Randomly assign variant (or use feature flag service)
+    const variant = Math.random() < 0.5 ? 'A' : 'B';
+    const model = variant === 'A' ? 'gpt-4o' : 'gpt-4o-mini';
 
-  ctx.setAttribute('experiment.variant', variant);
+    ctx.setAttribute('experiment.variant', variant);
 
-  // Generate content
-  const content = await generateVariant(prompt, variant, model);
+    // Generate content
+    const content = await generateVariant(prompt, variant, model);
 
-  // Track experiment exposure
-  track('experiment.exposed', {
-    experiment_name: 'content_model_test',
-    variant,
-    user_id: userId,
-  });
+    // Track experiment exposure
+    track('experiment.exposed', {
+      experiment_name: 'content_model_test',
+      variant,
+      user_id: userId,
+    });
 
-  return {
-    content,
-    variant,
-    model,
-  };
-});
+    return {
+      content,
+      variant,
+      model,
+    };
+  },
+);
 ```
 
 ## Next Steps

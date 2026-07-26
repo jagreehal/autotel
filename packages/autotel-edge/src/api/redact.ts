@@ -163,11 +163,16 @@ function redactWithTree(
 ): void {
   if (!node.children) return;
 
-  const applyCensor = (target: Record<string, any>, k: string, currentPath: string[]) => {
+  const applyCensor = (
+    target: Record<string, any>,
+    k: string,
+    currentPath: string[],
+  ) => {
     if (remove) {
       delete target[k];
     } else {
-      target[k] = typeof censor === 'function' ? censor(target[k], currentPath) : censor;
+      target[k] =
+        typeof censor === 'function' ? censor(target[k], currentPath) : censor;
     }
   };
 
@@ -382,7 +387,11 @@ function resolveConfig(config: RedactorConfig): RedactorOptions {
  * ```
  */
 export function createRedactor(config: RedactorConfig): <T>(obj: T) => T {
-  const { paths, censor = DEFAULT_CENSOR, remove = false } = resolveConfig(config);
+  const {
+    paths,
+    censor = DEFAULT_CENSOR,
+    remove = false,
+  } = resolveConfig(config);
 
   if (paths.length === 0) {
     return <T>(obj: T): T => obj;

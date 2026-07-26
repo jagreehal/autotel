@@ -137,12 +137,7 @@ export type AgentObservabilityEvent =
       {
         requestId?: string;
         stage:
-          | 'parse'
-          | 'persist'
-          | 'turn'
-          | 'stream'
-          | 'recovery'
-          | 'transcript';
+          'parse' | 'persist' | 'turn' | 'stream' | 'recovery' | 'transcript';
         messagesPersisted?: boolean;
         error: string;
       }

@@ -26,10 +26,16 @@ describe('parseBrokerVerificationResult', () => {
 
   it('falls back to verified_at (snake_case) and createdAt', () => {
     expect(
-      parseBrokerVerificationResult('A', 'B', { success: true, verified_at: '2026-01-02T00:00:00Z' }),
+      parseBrokerVerificationResult('A', 'B', {
+        success: true,
+        verified_at: '2026-01-02T00:00:00Z',
+      }),
     ).toMatchObject({ verifiedAt: '2026-01-02T00:00:00Z' });
     expect(
-      parseBrokerVerificationResult('A', 'B', { success: true, createdAt: '2026-01-03T00:00:00Z' }),
+      parseBrokerVerificationResult('A', 'B', {
+        success: true,
+        createdAt: '2026-01-03T00:00:00Z',
+      }),
     ).toMatchObject({ verifiedAt: '2026-01-03T00:00:00Z' });
   });
 
@@ -58,7 +64,11 @@ describe('fetchBrokerVerifications', () => {
       [{ consumer: 'A', provider: 'B' }],
     );
 
-    expect(results[0]).toMatchObject({ consumer: 'A', provider: 'B', success: true });
+    expect(results[0]).toMatchObject({
+      consumer: 'A',
+      provider: 'B',
+      success: true,
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://broker.example/pacts/provider/B/consumer/A/latest/verification-results',
       expect.objectContaining({
@@ -110,7 +120,9 @@ describe('fetchBrokerVerifications', () => {
   });
 
   it('records error and success:false on network failure', async () => {
-    const fetchMock = vi.fn().mockRejectedValue(new Error('ENOTFOUND broker.example'));
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new Error('ENOTFOUND broker.example'));
     vi.stubGlobal('fetch', fetchMock);
 
     const [result] = await fetchBrokerVerifications(

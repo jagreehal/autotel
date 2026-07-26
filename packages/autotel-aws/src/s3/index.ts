@@ -36,7 +36,7 @@
  * ```
  */
 
-import { trace, type TraceContext } from 'autotel';
+import { type TraceContext, withTracing } from 'autotel';
 import { buildS3Attributes } from '../attributes';
 
 /**
@@ -80,8 +80,7 @@ export function traceS3(config: TraceS3Config) {
     fn: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): (...args: TArgs) => Promise<TReturn> {
     // Use autotel's trace() which properly handles the factory pattern
-    return trace(
-      `s3.${config.operation}`,
+    return withTracing({ name: `s3.${config.operation}` })(
       (ctx: TraceContext) =>
         async (...args: TArgs): Promise<TReturn> => {
           // Set S3 semantic attributes
@@ -93,6 +92,6 @@ export function traceS3(config: TraceS3Config) {
           const handler = fn(ctx);
           return handler(...args);
         },
-    );
+    ) as (...args: TArgs) => Promise<TReturn>;
   };
 }

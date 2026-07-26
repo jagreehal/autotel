@@ -1,12 +1,12 @@
 /**
  * Basic example demonstrating autotel
- * 
+ *
  * This example shows:
  * - Basic tracing with trace()
  * - Metrics tracking
  * - Events events
  * - Custom attributes
- * 
+ *
  * Run: pnpm start
  */
 
@@ -24,11 +24,21 @@ const logger = pino({
       ignore: 'pid,hostname',
     },
   },
- 
 });
 
 import 'dotenv/config';
-import { init, trace, Metric, track, shutdown, span, SpanStatusCode, createCounter, getMeter } from 'autotel';
+import {
+  init,
+  trace,
+  Metric,
+  track,
+  shutdown,
+  span,
+  SpanStatusCode,
+  createCounter,
+  getMeter,
+  withTracing,
+} from 'autotel';
 
 // Initialize autotel
 init({
@@ -56,25 +66,33 @@ const rollCounter = createCounter('example.roll.once', {
 
 const meter = getMeter();
 
-
-
 // Option 1: Named function - automatically infers name "increment"
-const increment = trace(async function increment() {   
-  logger.info({'event': 'increment', 'value': 1});
+const increment = trace(async function increment() {
+  logger.info({ event: 'increment', value: 1 });
   track('increment', { value: 1 });
   // Create nested span for metrics tracking (like startActiveSpan)
-  await span({ 
-    name: 'metrics.trackEvent',
-    attributes: { 'event.name': 'increment', 'event.value': 1 }
-  }, async (span) => {
-    metrics.trackEvent('increment', { value: 1 });
-  });
+  await span(
+    {
+      name: 'metrics.trackEvent',
+      attributes: { 'event.name': 'increment', 'event.value': 1 },
+    },
+    async (span) => {
+      metrics.trackEvent('increment', { value: 1 });
+    },
+  );
 
-  
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 100));
 });
 
-export const rollOnce = function rollOnce({ i, min, max }: { i: number, min: number, max: number }): number {
+export const rollOnce = function rollOnce({
+  i,
+  min,
+  max,
+}: {
+  i: number;
+  min: number;
+  max: number;
+}): number {
   // span() supports sync functions - no await needed!
   return span({ name: `rollOnce.${i}` }, (span) => {
     const result = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -88,13 +106,21 @@ export const rollOnce = function rollOnce({ i, min, max }: { i: number, min: num
   });
 };
 
-export const rollTheDice = trace(function rollTheDice({rolls, min, max}: {rolls: number, min: number, max: number}): number[] {
+export const rollTheDice = trace(function rollTheDice({
+  rolls,
+  min,
+  max,
+}: {
+  rolls: number;
+  min: number;
+  max: number;
+}): number[] {
   // span() supports sync functions - no await needed!
   return span({ name: 'rollTheDice' }, (span) => {
     span.setAttribute('rolls', rolls);
     span.setAttribute('min', min);
     span.setAttribute('max', max);
-    
+
     const result: number[] = [];
     for (let i = 0; i < rolls; i++) {
       const roll = rollOnce({ i, min, max });
@@ -104,9 +130,8 @@ export const rollTheDice = trace(function rollTheDice({rolls, min, max}: {rolls:
   });
 });
 
-
 // Option 2: With trace context (to add attributes, set status, etc.)
-// const increment = trace((ctx) => async () => {
+// const increment = withTracing({})((ctx) => async () => {
 //   ctx.setAttribute('operation', 'increment');
 //   logger.info('Incrementing');
 //   await new Promise(resolve => setTimeout(resolve, 100));
@@ -119,27 +144,27 @@ export const rollTheDice = trace(function rollTheDice({rolls, min, max}: {rolls:
 //   await new Promise(resolve => setTimeout(resolve, 100));
 // });
 
-// Main function to run examples 
+// Main function to run examples
 async function main() {
   console.log('🚀 Starting autotel example...\n');
 
   // Call the traced function
   await increment;
   logger.info('Increment completed');
-  
+
   // Test rollTheDice (sync function - no await needed!)
   const histogram = meter.createHistogram('example.roll.once', {
     description: 'Histogram of dice roll attempts',
     unit: '1',
   });
-  
+
   const diceResult = rollTheDice({ rolls: 3, min: 1, max: 6 });
   histogram.record(diceResult.reduce((acc, curr) => acc + curr, 0));
   logger.info({ diceResult }, 'Dice rolled');
-  
+
   // Wait a bit for traces to be exported
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
   // Gracefully shutdown - flushes all pending telemetry
   await shutdown();
   process.exit(0);

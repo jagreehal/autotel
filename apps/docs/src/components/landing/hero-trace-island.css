@@ -66,7 +66,8 @@
   margin-right: 0.35rem;
   border-radius: 999px;
   background: var(--color-aether-blue);
-  box-shadow: 0 0 8px color-mix(in oklch, var(--color-aether-blue) 60%, transparent);
+  box-shadow: 0 0 8px
+    color-mix(in oklch, var(--color-aether-blue) 60%, transparent);
   animation: hti-blink 1.2s steps(1) infinite;
   vertical-align: middle;
 }
@@ -144,12 +145,14 @@
 /* Root span is the request itself — the one blue signal. */
 .hti__row--root .hti__bar {
   background: var(--color-aether-blue);
-  box-shadow: 0 0 12px -2px color-mix(in oklch, var(--color-aether-blue) 55%, transparent);
+  box-shadow: 0 0 12px -2px
+    color-mix(in oklch, var(--color-aether-blue) 55%, transparent);
 }
 
 .hti__row--error .hti__bar {
   background: var(--color-warning-red);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--color-warning-red) 28%, transparent);
+  box-shadow: 0 0 0 1px
+    color-mix(in oklch, var(--color-warning-red) 28%, transparent);
   animation:
     hti-span-grow 720ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
     hti-span-pulse 2.4s ease-in-out 1.2s infinite;
@@ -230,7 +233,8 @@
   column-gap: 1rem;
   align-items: baseline;
   padding: 0.22rem 0;
-  border-bottom: 1px solid color-mix(in oklch, var(--color-charcoal-grey) 70%, transparent);
+  border-bottom: 1px solid
+    color-mix(in oklch, var(--color-charcoal-grey) 70%, transparent);
 }
 
 .hti__field:last-child {

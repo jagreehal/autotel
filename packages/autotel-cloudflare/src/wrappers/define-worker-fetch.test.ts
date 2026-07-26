@@ -21,7 +21,7 @@ describe('defineWorkerFetch', () => {
 
     const worker = defineWorkerFetch<Env>(
       { service: { name: 'test-worker' } },
-      async (request, _env, _ctx, _log) => {
+      async (_request, _env, _ctx, _log) => {
         called = true;
         return new Response('hello', { status: 201 });
       },
@@ -62,7 +62,9 @@ describe('defineWorkerFetch', () => {
 
     expect(receivedLog).toBeDefined();
     expect(typeof (receivedLog as { set?: unknown }).set).toBe('function');
-    expect(typeof (receivedLog as { emitNow?: unknown }).emitNow).toBe('function');
+    expect(typeof (receivedLog as { emitNow?: unknown }).emitNow).toBe(
+      'function',
+    );
   });
 
   it('calls waitUntil so async exports flush before response returns', async () => {

@@ -11,7 +11,7 @@ Pino is first-class: pass a single instance to `init()` for both autotel interna
 
 ```typescript
 import pino from 'pino';
-import { init, trace } from 'autotel';
+import { init, trace, withTracing } from 'autotel';
 
 const logger = pino({
   name: 'my-app',
@@ -29,7 +29,7 @@ init({
   endpoint: process.env.OTLP_ENDPOINT,
 });
 
-const createUser = trace((ctx) => async (name: string) => {
+const createUser = withTracing({})((ctx) => async (name: string) => {
   logger.info({ name }, 'Creating user');
   // trace_id, span_id automatically injected into log output
   const user = await db.users.create({ name });
@@ -112,6 +112,6 @@ Use **both together**: Pino for continuous logging + `getRequestLogger()` for th
 
 ## Examples
 
-- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino) — Pino as first-class logger with `init({ logger })` and trace context injection.
-- [`example-bunyan`](https://github.com/jagreehal/autotel/tree/main/apps/example-bunyan) — Bunyan with auto-instrumentation.
-- [`example-winston`](https://github.com/jagreehal/autotel/tree/main/apps/example-winston) — Winston with auto-instrumentation.
+- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino): Pino as first-class logger with `init({ logger })` and trace context injection.
+- [`example-bunyan`](https://github.com/jagreehal/autotel/tree/main/apps/example-bunyan): Bunyan with auto-instrumentation.
+- [`example-winston`](https://github.com/jagreehal/autotel/tree/main/apps/example-winston): Winston with auto-instrumentation.

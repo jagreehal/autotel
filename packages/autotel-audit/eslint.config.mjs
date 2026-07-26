@@ -58,7 +58,12 @@ export default defineConfig(
   },
   {
     // Allow barrel exports in entry point files
-    files: ['src/sampling.ts', 'src/testing.ts', 'src/logger.ts', 'src/events.ts'],
+    files: [
+      'src/sampling.ts',
+      'src/testing.ts',
+      'src/logger.ts',
+      'src/events.ts',
+    ],
     rules: {
       'no-restricted-syntax': [
         'error',

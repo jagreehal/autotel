@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { formatExceptionForPostHog, errorToExceptionList } from './posthog-error-formatter';
+import {
+  formatExceptionForPostHog,
+  errorToExceptionList,
+} from './posthog-error-formatter';
 
 describe('formatExceptionForPostHog', () => {
   it('formats an ExceptionList for PostHog $exception event', () => {
@@ -10,7 +13,13 @@ describe('formatExceptionForPostHog', () => {
         mechanism: { type: 'onerror' as const, handled: false },
         stacktrace: {
           frames: [
-            { filename: 'app.js', function: 'handleClick', lineno: 42, colno: 10, in_app: true },
+            {
+              filename: 'app.js',
+              function: 'handleClick',
+              lineno: 42,
+              colno: 10,
+              in_app: true,
+            },
           ],
         },
       },
@@ -19,8 +28,12 @@ describe('formatExceptionForPostHog', () => {
     const result = formatExceptionForPostHog(exceptionList);
     expect(result.$exception_list).toHaveLength(1);
     expect(result.$exception_list[0].type).toBe('TypeError');
-    expect(result.$exception_list[0].value).toBe('Cannot read properties of undefined');
-    expect(result.$exception_list[0].stacktrace.frames[0].platform).toBe('web:javascript');
+    expect(result.$exception_list[0].value).toBe(
+      'Cannot read properties of undefined',
+    );
+    expect(result.$exception_list[0].stacktrace.frames[0].platform).toBe(
+      'web:javascript',
+    );
   });
 
   it('adds platform to all frames', () => {
@@ -39,14 +52,21 @@ describe('formatExceptionForPostHog', () => {
     ];
 
     const result = formatExceptionForPostHog(exceptionList, 'node:javascript');
-    expect(result.$exception_list[0].stacktrace.frames[0].platform).toBe('node:javascript');
-    expect(result.$exception_list[0].stacktrace.frames[1].platform).toBe('node:javascript');
+    expect(result.$exception_list[0].stacktrace.frames[0].platform).toBe(
+      'node:javascript',
+    );
+    expect(result.$exception_list[0].stacktrace.frames[1].platform).toBe(
+      'node:javascript',
+    );
   });
 });
 
 describe('formatExceptionForPostHog with redactor', () => {
   const mockRedactor = (value: string) =>
-    value.replaceAll(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/gi, '[REDACTED]');
+    value.replaceAll(
+      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/gi,
+      '[REDACTED]',
+    );
 
   it('redacts PII from exception.value', () => {
     const exceptionList = [
@@ -57,7 +77,11 @@ describe('formatExceptionForPostHog with redactor', () => {
       },
     ];
 
-    const result = formatExceptionForPostHog(exceptionList, 'web:javascript', mockRedactor);
+    const result = formatExceptionForPostHog(
+      exceptionList,
+      'web:javascript',
+      mockRedactor,
+    );
     expect(result.$exception_list[0].value).toBe('User not found: [REDACTED]');
   });
 
@@ -69,14 +93,25 @@ describe('formatExceptionForPostHog with redactor', () => {
         mechanism: { type: 'manual' as const, handled: true },
         stacktrace: {
           frames: [
-            { filename: 'app.js', abs_path: '/home/alice@example.com/app.js', lineno: 1, colno: 1 },
+            {
+              filename: 'app.js',
+              abs_path: '/home/alice@example.com/app.js',
+              lineno: 1,
+              colno: 1,
+            },
           ],
         },
       },
     ];
 
-    const result = formatExceptionForPostHog(exceptionList, 'web:javascript', mockRedactor);
-    expect(result.$exception_list[0].stacktrace.frames[0].abs_path).toBe('/home/[REDACTED]/app.js');
+    const result = formatExceptionForPostHog(
+      exceptionList,
+      'web:javascript',
+      mockRedactor,
+    );
+    expect(result.$exception_list[0].stacktrace.frames[0].abs_path).toBe(
+      '/home/[REDACTED]/app.js',
+    );
   });
 
   it('does not redact exception.type', () => {
@@ -88,7 +123,11 @@ describe('formatExceptionForPostHog with redactor', () => {
       },
     ];
 
-    const result = formatExceptionForPostHog(exceptionList, 'web:javascript', mockRedactor);
+    const result = formatExceptionForPostHog(
+      exceptionList,
+      'web:javascript',
+      mockRedactor,
+    );
     expect(result.$exception_list[0].type).toBe('TypeError');
     expect(result.$exception_list[0].value).toBe('Error for [REDACTED]');
   });
@@ -103,7 +142,9 @@ describe('formatExceptionForPostHog with redactor', () => {
     ];
 
     const result = formatExceptionForPostHog(exceptionList);
-    expect(result.$exception_list[0].value).toBe('User alice@example.com not found');
+    expect(result.$exception_list[0].value).toBe(
+      'User alice@example.com not found',
+    );
   });
 });
 

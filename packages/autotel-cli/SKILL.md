@@ -28,9 +28,9 @@ npx autotel version
 Every command supports `--json`. Errors are returned as a structured envelope
 (see `npx autotel schema errors`). Exit codes:
 
-- `0` — success
-- `1` — runtime / unexpected failure
-- `2` — validation / conflict / refusal (caller-fixable)
+- `0`: success
+- `1`: runtime / unexpected failure
+- `2`: validation / conflict / refusal (caller-fixable)
 
 ## Agent-native init
 

@@ -25,7 +25,6 @@
   import { TAB_ORDER } from '../tabs';
   import { Sun, Moon, Monitor, HelpCircle } from '@lucide/svelte';
 
-
   /** Help list for the active context (read live; signals, not render state). */
   function contextShortcuts() {
     if (selectedTraceIdSignal.value) return TRACE_DETAIL_SHORTCUTS;

@@ -23,7 +23,10 @@ export function shouldInstrumentPath(
 ): boolean {
   const { include, exclude } = options;
 
-  if (exclude && exclude.some((pattern) => matchesRoutePattern(path, pattern))) {
+  if (
+    exclude &&
+    exclude.some((pattern) => matchesRoutePattern(path, pattern))
+  ) {
     return false;
   }
 

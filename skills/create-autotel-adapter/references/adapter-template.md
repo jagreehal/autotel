@@ -4,7 +4,7 @@ Annotated reference for a new autotel framework adapter. Replace `{name}` / `{Na
 
 ## `src/index.ts`
 
-```typescript
+````typescript
 /**
  * autotel-{name}
  *
@@ -27,7 +27,7 @@ export { withAutotel } from './middleware'
 export { useLogger } from './use-logger'
 export { {name}Toolkit } from './toolkit'
 export type { WithAutotelOptions } from './middleware'
-```
+````
 
 ## `src/toolkit.ts`
 

@@ -2,8 +2,40 @@
 **/.next/**
 **/node_modules/**
 **/coverage/**
-# Locked golden fixtures whose bytes are part of a public JSON contract.
-# Prettier collapses single-item arrays which would corrupt the byte
-# comparison in contract.test.ts.
-packages/autotel-eventcatalog/src/__fixtures__/**
-packages/autotel-eventcatalog/schemas/**
+
+# Build caches and generated output. Formatting them creates diff noise and
+# the generator overwrites it on the next run anyway.
+**/.astro/**
+**/.turbo/**
+
+# Fixtures, schemas, and snapshots are DATA, compared byte for byte or shape
+# for shape by the tests that own them. Prettier collapses single-item arrays
+# and rewrites quoting, which silently breaks those comparisons: it corrupted
+# the eventcatalog contract fixtures, the autotel-cli codemod golden files,
+# and the autotel-schema CI gate before these rules existed. If you need one
+# of these files reformatted, regenerate it from its producer instead.
+**/__fixtures__/**
+**/__snapshots__/**
+**/snapshots/**
+**/schemas/**
+apps/example-eventcatalog/services/test/snapshot.json
+
+# Captured OTLP evidence: recorded from a live run and asserted against.
+apps/cloudflare-example/scripts/evidence.json
+apps/cloudflare-example/scripts/otlp-spans.json
+
+# Generated vendor code, git-ignored and rewritten by the eventcatalog build.
+**/.eventcatalog-core/**
+
+# Lockfiles are generated. Prettier rewrites the YAML into block style and the
+# next `pnpm install` rewrites it straight back, so formatting them is churn.
+**/pnpm-lock.yaml
+**/package-lock.json
+**/yarn.lock
+
+# More generated output: pact contracts are written by the pact tooling and
+# compared as data, next-env.d.ts carries a do-not-edit header, and .netlify
+# is build output.
+**/pacts/**
+**/next-env.d.ts
+**/.netlify/**

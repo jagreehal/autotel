@@ -12,10 +12,10 @@ Framework-specific wrappers around autotel's core tracing primitives. Each adapt
 - A `useLogger()` function that retrieves the logger from within the handler
 - Direct re-exports of the utilities `parseError`, `createStructuredError`, and `createDrainPipeline`
 
-Options are passed per call site (e.g. `withAutotel(handler, options)`) — there are no
+Options are passed per call site (e.g. `withAutotel(handler, options)`). There are no
 `create*Adapter` factories or `*Toolkit` bundles.
 
-All adapters use `AsyncLocalStorage` (or a `WeakMap` for Cloudflare) internally so logger access is implicit — you never pass a logger through call chains manually.
+All adapters use `AsyncLocalStorage` (or a `WeakMap` for Cloudflare) internally so logger access is implicit. You never pass a logger through call chains manually.
 
 ## Setup
 
@@ -35,7 +35,7 @@ pnpm add hono          # Hono
 
 Import from the subpath `autotel-adapters/next` (or from the barrel `autotel-adapters`).
 
-**Option A — per-handler wrap:**
+**Option A, per-handler wrap:**
 
 ```typescript
 import { withAutotel, useLogger } from 'autotel-adapters/next';
@@ -47,7 +47,7 @@ export const GET = withAutotel(async (request) => {
 });
 ```
 
-**Option B — share defaults by passing options at each wrap:**
+**Option B, share defaults by passing options at each wrap:**
 
 ```typescript
 // lib/autotel.ts
@@ -74,7 +74,7 @@ export default defineEventHandler(
     const log = useLogger(event);
     log.info('handling event');
     return { ok: true };
-  })
+  }),
 );
 ```
 
@@ -131,12 +131,12 @@ log.info('handling request');
 Each subpath re-exports `parseError`, `createStructuredError`, and
 `createDrainPipeline` directly (they also live in `autotel`):
 
-| Export | Description |
-|---|---|
-| `useLogger(ctx?, opts?)` | Get the request-scoped `RequestLogger` |
-| `parseError(error)` | Normalise any thrown value into `ParsedError` |
+| Export                         | Description                                               |
+| ------------------------------ | --------------------------------------------------------- |
+| `useLogger(ctx?, opts?)`       | Get the request-scoped `RequestLogger`                    |
+| `parseError(error)`            | Normalise any thrown value into `ParsedError`             |
 | `createStructuredError(input)` | Build a `StructuredError` for consistent API error shapes |
-| `createDrainPipeline(opts?)` | Create a batching drain pipeline |
+| `createDrainPipeline(opts?)`   | Create a batching drain pipeline                          |
 
 ### Custom adapter (createUseLogger)
 
@@ -151,7 +151,7 @@ const useLogger = createUseLogger<MyContext>({
 
 ## Common Mistakes
 
-### HIGH — Calling useLogger outside a traced handler
+### HIGH: Calling useLogger outside a traced handler
 
 ```typescript
 // WRONG: no active trace context
@@ -164,13 +164,13 @@ export async function myFunction() {
 // CORRECT: always call useLogger inside a handler wrapped with withAutotel / withAutotelEventHandler
 export const GET = withAutotel(async (request) => {
   const log = useLogger(request); // ok — trace context is active
-  await myFunction(log);          // pass the logger down if needed
+  await myFunction(log); // pass the logger down if needed
 });
 ```
 
 `useLogger` looks up an `AsyncLocalStorage` store populated by the handler wrapper. Calling it outside that wrapper throws.
 
-### HIGH — Importing from wrong subpath
+### HIGH: Importing from wrong subpath
 
 ```typescript
 // WRONG
@@ -184,7 +184,7 @@ import { useLogger } from 'autotel-adapters/next';
 import { withAutotelEventHandler } from 'autotel-adapters/nitro';
 ```
 
-### MEDIUM — Skipping the request argument in Next.js useLogger
+### MEDIUM: Skipping the request argument in Next.js useLogger
 
 ```typescript
 // WRONG: loses auto-enrichment (method, url, route, requestId)
@@ -198,7 +198,7 @@ const log = useLogger(request);
 
 The request argument is optional only when you are certain the `AsyncLocalStorage` store is already populated (i.e., called from code deeply nested inside a `withAutotel`-wrapped handler).
 
-### MEDIUM — Not passing request to useLogger on Cloudflare
+### MEDIUM: Not passing request to useLogger on Cloudflare
 
 In Cloudflare Workers, the logger is stored per-request in a `WeakMap`. If you call `useLogger()` without the request object, you always get a new logger with no stored enrichment.
 

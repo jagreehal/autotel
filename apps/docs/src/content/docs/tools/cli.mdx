@@ -35,10 +35,10 @@ npx autotel init --dry-run
 
 **Quick presets:**
 
-- `node-datadog-pino` — Node.js + Datadog + Pino logging
-- `node-datadog-agent` — Node.js + Datadog Agent (local dev)
-- `node-honeycomb` — Node.js + Honeycomb
-- `node-otlp` — Node.js + Generic OTLP endpoint
+- `node-datadog-pino`: Node.js + Datadog + Pino logging
+- `node-datadog-agent`: Node.js + Datadog Agent (local dev)
+- `node-honeycomb`: Node.js + Honeycomb
+- `node-otlp`: Node.js + Generic OTLP endpoint
 
 ### `autotel doctor`
 
@@ -95,11 +95,11 @@ npx autotel security mcp --lookback-minutes 60
 ```
 
 The `security summary` / `security events` commands read the stable `security.*`
-schema emitted by `autotel-audit` — see
+schema emitted by `autotel-audit`. See
 [Security Observability](/autotel/integrations/security/) for the full picture.
 `security mcp` aggregates the MCP signals emitted by
 `autotel-mcp-instrumentation` (prompt-injection verdicts, output-budget
-breaches, untrusted-content tool calls) — see [MCP](/autotel/integrations/mcp/).
+breaches, untrusted-content tool calls). See [MCP](/autotel/integrations/mcp/).
 
 All backend-touching commands accept:
 
@@ -117,7 +117,7 @@ Use `--output-file <path>` to persist command JSON and `--no-secrets-in-output` 
 
 ## Examples
 
-See any example app — `autotel init` generates the `instrumentation.ts` file used across all examples.
+See any example app. `autotel init` generates the `instrumentation.ts` file used across all examples.
 
 ### `autotel codemod trace <path>`
 
@@ -129,6 +129,6 @@ npx autotel codemod trace ./src
 
 ## Related
 
-- [MCP](/autotel/integrations/mcp/) — the `autotel-mcp` server this CLI investigate surface mirrors.
-- [Claude Code Skill](/autotel/tools/claude-code-skill/) — using these commands from a Claude skill workflow.
-- [Devtools](/autotel/tools/devtools/) — local OTLP receiver UI. Run it with `npx autotel-devtools` (not `npx autotel dev tools`).
+- [MCP](/autotel/integrations/mcp/): the `autotel-mcp` server this CLI investigate surface mirrors.
+- [Claude Code Skill](/autotel/tools/claude-code-skill/): using these commands from a Claude skill workflow.
+- [Devtools](/autotel/tools/devtools/): local OTLP receiver UI. Run it with `npx autotel-devtools` (not `npx autotel dev tools`).

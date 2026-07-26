@@ -169,7 +169,7 @@ export class PrivacyManager {
    */
   private matchesAnyOrigin(
     targetOrigin: string,
-    configuredOrigins: string[]
+    configuredOrigins: string[],
   ): boolean {
     return configuredOrigins.some((configuredOrigin) => {
       // Normalize both strings to lowercase for case-insensitive matching
@@ -204,7 +204,7 @@ export class PrivacyManager {
  */
 export function getDenialReason(
   privacyManager: PrivacyManager,
-  url: string
+  url: string,
 ): string | null {
   // This is a helper for debugging - it re-checks the conditions
   // to provide a user-friendly reason string
@@ -240,7 +240,7 @@ export function getDenialReason(
   // Check blocklist
   if (config.blockedOrigins) {
     const blocked = config.blockedOrigins.some((origin) =>
-      targetOrigin.toLowerCase().includes(origin.toLowerCase())
+      targetOrigin.toLowerCase().includes(origin.toLowerCase()),
     );
     if (blocked) {
       return `Origin ${targetOrigin} is in blockedOrigins list`;
@@ -250,7 +250,7 @@ export function getDenialReason(
   // Check allowlist
   if (config.allowedOrigins && config.allowedOrigins.length > 0) {
     const allowed = config.allowedOrigins.some((origin) =>
-      targetOrigin.toLowerCase().includes(origin.toLowerCase())
+      targetOrigin.toLowerCase().includes(origin.toLowerCase()),
     );
     if (!allowed) {
       return `Origin ${targetOrigin} is not in allowedOrigins list`;

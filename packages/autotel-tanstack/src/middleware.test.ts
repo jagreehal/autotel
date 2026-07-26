@@ -6,16 +6,28 @@ import {
 } from './middleware';
 
 // Mock autotel
-vi.mock('autotel', () => ({
-  trace: vi.fn((name, fn) =>
-    fn({
-      setAttributes: vi.fn(),
-      setAttribute: vi.fn(),
-      setStatus: vi.fn(),
-      recordException: vi.fn(),
-    }),
-  ),
-}));
+vi.mock('autotel', () => {
+  // Ambient model: trace(name|opts, fn) returns the wrapper; the body reaches
+  // the span via getActiveTraceContext(). withTracing(opts)(factory) mirrors
+  // that for the explicit factory form.
+  const mockCtx = {
+    setAttributes: vi.fn(),
+    setAttribute: vi.fn(),
+    setStatus: vi.fn(),
+    recordException: vi.fn(),
+    recordError: vi.fn(),
+  };
+  return {
+    trace: vi.fn(
+      (_nameOrOpts: unknown, fn: (...a: unknown[]) => unknown) => fn,
+    ),
+    withTracing: vi.fn(
+      () => (factory: (ctx: unknown) => (...a: unknown[]) => unknown) =>
+        factory(mockCtx),
+    ),
+    getActiveTraceContext: vi.fn(() => mockCtx),
+  };
+});
 
 // Mock context module
 vi.mock('./context.js', () => ({

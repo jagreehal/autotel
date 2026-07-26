@@ -20,7 +20,10 @@ export async function runTelemetryDisable(toolName: string): Promise<void> {
   console.log(`Telemetry disabled for ${toolName}`);
 }
 
-export function runTelemetryDisclosure(toolName: string, version: string): void {
+export function runTelemetryDisclosure(
+  toolName: string,
+  version: string,
+): void {
   const disclosure = generateDisclosure({ name: toolName, version });
   console.log(disclosure.markdown);
 }

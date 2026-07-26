@@ -5,11 +5,11 @@ description: Code structure patterns, conventions, and important architectural d
 
 ## Functional API Pattern
 
-The core `trace()` function uses a factory pattern to detect if the user is passing a function that needs a context parameter:
+The core `trace()` function deterministically wraps a plain function. Use `getActiveTraceContext()` for ambient context, or `withTracing()` when an explicit context factory is clearer:
 
 ```typescript
 // Factory pattern (receives ctx)
-export const createUser = trace((ctx) => async (data) => {
+export const createUser = withTracing({})((ctx) => async (data) => {
   ctx.setAttribute('user.id', data.id);
   return await db.users.create(data);
 });
@@ -20,27 +20,27 @@ export const getUser = trace(async (id) => {
 });
 ```
 
-The implementation auto-detects the pattern by analyzing the function signature and checking the first parameter name against known hints (`ctx`, `context`, `tracecontext`, etc.).
+`trace()` never inspects or executes the function during wrapper construction. The explicit factory shape belongs to `withTracing()` and the semantic, messaging, and workflow helpers.
 
 ### Trace Name Inference
 
 Trace names are inferred automatically with the following priority:
 
 1. **Explicit name** (from `trace('customName', ...)` or `instrument()` key)
-2. **Named function expressions** (e.g., `trace((ctx) => async function createUser() {})`)
+2. **Named function expressions** (e.g., `withTracing({})((ctx) => async function createUser() {})`)
 3. **Variable name from assignment** (e.g., `const processDocuments = trace(...)` → "processDocuments")
 4. **Factory function name** (if the outer function is named)
 
 ```typescript
 // Arrow function with inferred name from const assignment
-export const processDocuments = trace((ctx) => async (data: string) => {
+export const processDocuments = withTracing({})((ctx) => async (data: string) => {
   ctx.setAttribute('document.count', data.length);
   return data.toUpperCase();
 });
 // Trace name: "processDocuments" (inferred from const)
 
 // Named function expression (takes precedence)
-export const processDocuments = trace((ctx) => async function processData(data: string) => {
+export const processDocuments = withTracing({})((ctx) => async function processData(data: string) => {
   return data.toUpperCase();
 });
 // Trace name: "processData" (from named function, not "processDocuments")
@@ -209,9 +209,9 @@ All components implement graceful shutdown:
 Autotel's `getRequestLogger()` implements the **canonical log lines** pattern: one structured snapshot per request with all context, instead of scattered `console.log` calls.
 
 ```typescript
-import { trace, getRequestLogger } from 'autotel';
+import { trace, withTracing, getRequestLogger } from 'autotel';
 
-export const postCheckout = trace((ctx) => async (req, res) => {
+export const postCheckout = withTracing({})((ctx) => async (req, res) => {
   const log = getRequestLogger(ctx);
 
   // Accumulate context throughout the request
@@ -230,8 +230,8 @@ export const postCheckout = trace((ctx) => async (req, res) => {
 
 **Why this matters:**
 
-- **Before**: 10 scattered `console.log` calls per request — hard to correlate, noisy
-- **After**: 1 wide event with all context — easy to search, filter, and analyze in Grafana/Honeycomb/Datadog
+- **Before**: 10 scattered `console.log` calls per request: hard to correlate, noisy
+- **After**: 1 wide event with all context: easy to search, filter, and analyze in Grafana/Honeycomb/Datadog
 
 The request logger collects attributes via `.set()`, then `.emitNow()` attaches them all to the active span as attributes and emits a single log event. This pairs with OTel's span-based export so the wide event is queryable in any backend.
 
@@ -246,7 +246,7 @@ The request logger collects attributes via `.set()`, then `.emitNow()` attaches 
 
 ### Auto-Instrumentation Requirements
 
-**ESM Setup (Node 18.19+) — Recommended:**
+**ESM Setup (Node 18.19+), Recommended:**
 
 For ESM apps using auto-instrumentation (Pino, Express, HTTP, etc.), you need to:
 
@@ -305,16 +305,16 @@ OpenTelemetry's ESM instrumentation uses `import-in-the-middle` to hook into mod
 
 ## Examples
 
-- [`example-canonical-logs`](https://github.com/jagreehal/autotel/tree/main/apps/example-canonical-logs) — Canonical log lines (wide events) vs scattered logging.
-- [`example-effect`](https://github.com/jagreehal/autotel/tree/main/apps/example-effect) — Effect TypeScript effect system with autotel for OTel export.
-- [`awaitly-example`](https://github.com/jagreehal/autotel/tree/main/apps/awaitly-example) — awaitly workflows with autotel instrumentation and Mermaid visualization.
+- [`example-canonical-logs`](https://github.com/jagreehal/autotel/tree/main/apps/example-canonical-logs): Canonical log lines (wide events) vs scattered logging.
+- [`example-effect`](https://github.com/jagreehal/autotel/tree/main/apps/example-effect): Effect TypeScript effect system with autotel for OTel export.
+- [`awaitly-example`](https://github.com/jagreehal/autotel/tree/main/apps/awaitly-example): awaitly workflows with autotel instrumentation and Mermaid visualization.
 
 ### Logger Integration Examples
 
-- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino) — Pino as first-class logger with `init({ logger })` and trace context injection.
-- [`example-bunyan`](https://github.com/jagreehal/autotel/tree/main/apps/example-bunyan) — Bunyan with auto-instrumentation for trace context injection.
-- [`example-winston`](https://github.com/jagreehal/autotel/tree/main/apps/example-winston) — Winston with auto-instrumentation for trace context injection.
-- [`example-otel-tui`](https://github.com/jagreehal/autotel/tree/main/apps/example-otel-tui) — otel-tui terminal UI with Docker Compose for trace-to-log correlation.
+- [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino): Pino as first-class logger with `init({ logger })` and trace context injection.
+- [`example-bunyan`](https://github.com/jagreehal/autotel/tree/main/apps/example-bunyan): Bunyan with auto-instrumentation for trace context injection.
+- [`example-winston`](https://github.com/jagreehal/autotel/tree/main/apps/example-winston): Winston with auto-instrumentation for trace context injection.
+- [`example-otel-tui`](https://github.com/jagreehal/autotel/tree/main/apps/example-otel-tui): otel-tui terminal UI with Docker Compose for trace-to-log correlation.
 
 ### Build Outputs
 

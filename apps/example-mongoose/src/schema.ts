@@ -43,7 +43,7 @@ interface IUserMethods {
 // Query helpers (User.find().byEmailDomain('example.com'))
 interface UserQueryHelpers {
   byEmailDomain(
-    domain: string
+    domain: string,
   ): QueryWithHelpers<
     HydratedDocument<IUser, IUserMethods>[],
     HydratedDocument<IUser, IUserMethods>,
@@ -52,10 +52,9 @@ interface UserQueryHelpers {
 }
 
 // Statics (User.findByEmail(...))
-interface UserModel
-  extends Model<IUser, UserQueryHelpers, IUserMethods> {
+interface UserModel extends Model<IUser, UserQueryHelpers, IUserMethods> {
   findByEmail(
-    email: string
+    email: string,
   ): Promise<HydratedDocument<IUser, IUserMethods> | null>;
   countByDomain(domain: string): Promise<number>;
 }
@@ -82,7 +81,7 @@ const userSchema = new mongoose.Schema<
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Post schema
@@ -109,7 +108,7 @@ const postSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Demo middleware/hooks - now AUTOMATICALLY instrumented!
@@ -126,7 +125,7 @@ userSchema.pre(
     if (this.get('name') && typeof this.get('name') === 'string') {
       this.set('name', this.get('name').trim());
     }
-  }
+  },
 );
 
 // Callback-style hook: `next()` is called from an async continuation. The
@@ -194,7 +193,7 @@ userSchema.query.byEmailDomain = function byEmailDomain(
     HydratedDocument<IUser, IUserMethods>,
     UserQueryHelpers
   >,
-  domain: string
+  domain: string,
 ) {
   return this.where({ email: new RegExp(`@${domain}$`, 'i') });
 };
@@ -202,6 +201,6 @@ userSchema.query.byEmailDomain = function byEmailDomain(
 // Export models
 export const User = mongoose.model<IUser, UserModel, UserQueryHelpers>(
   'User',
-  userSchema
+  userSchema,
 );
 export const Post = mongoose.model('Post', postSchema);

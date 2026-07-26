@@ -27,16 +27,24 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "SF Pro Display", "Inter", "Segoe UI", sans-serif;
+  font-family: 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(110, 125, 255, 0.18), transparent 32%),
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.14), transparent 24%),
+    radial-gradient(
+      circle at top left,
+      rgba(110, 125, 255, 0.18),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(56, 189, 248, 0.14),
+      transparent 24%
+    ),
     linear-gradient(180deg, #0b0f17 0%, #121827 100%);
 }
 
 code {
-  font-family: "SF Mono", "IBM Plex Mono", monospace;
+  font-family: 'SF Mono', 'IBM Plex Mono', monospace;
 }
 
 .app-shell {
@@ -57,7 +65,11 @@ code {
 .persona-panel,
 .status-strip,
 .card {
-  background: linear-gradient(180deg, rgba(20, 25, 39, 0.95), rgba(17, 21, 33, 0.95));
+  background: linear-gradient(
+    180deg,
+    rgba(20, 25, 39, 0.95),
+    rgba(17, 21, 33, 0.95)
+  );
   border: 1px solid var(--border);
   border-radius: 22px;
   box-shadow: var(--shadow);
@@ -162,8 +174,13 @@ code {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
 .status-trace {
@@ -182,7 +199,7 @@ code {
 .trace-link {
   color: var(--text);
   text-decoration: none;
-  font-family: "SF Mono", "IBM Plex Mono", monospace;
+  font-family: 'SF Mono', 'IBM Plex Mono', monospace;
 }
 
 .trace-link-empty {
@@ -332,7 +349,7 @@ code {
   background: rgba(5, 8, 14, 0.38);
   border: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--text-soft);
-  font-family: "SF Mono", "IBM Plex Mono", monospace;
+  font-family: 'SF Mono', 'IBM Plex Mono', monospace;
   font-size: 0.82rem;
   line-height: 1.65;
   overflow: auto;

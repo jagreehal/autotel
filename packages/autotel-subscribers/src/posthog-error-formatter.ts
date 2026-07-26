@@ -46,7 +46,10 @@ export function formatExceptionForPostHog(
       stacktrace: {
         frames: (ex.stacktrace?.frames || []).map((frame) => ({
           ...frame,
-          abs_path: frame.abs_path && redactor ? redactor(frame.abs_path) : frame.abs_path,
+          abs_path:
+            frame.abs_path && redactor
+              ? redactor(frame.abs_path)
+              : frame.abs_path,
           platform,
         })),
       },
@@ -58,9 +61,14 @@ export function errorToExceptionList(
   input: unknown,
   redactor?: StringRedactor,
 ): ExceptionRecord[] {
-  const error = input instanceof Error ? input : new Error(
-    input === null || input === undefined ? 'Unknown error' : String(input),
-  );
+  const error =
+    input instanceof Error
+      ? input
+      : new Error(
+          input === null || input === undefined
+            ? 'Unknown error'
+            : String(input),
+        );
 
   const records: ExceptionRecord[] = [];
   let current: Error | undefined = error;
@@ -73,14 +81,16 @@ export function errorToExceptionList(
       type: current.name || 'Error',
       value: redactor ? redactor(value) : value,
       mechanism: { type: 'manual', handled: true },
-      stacktrace: frames ? {
-        frames: redactor
-          ? frames.map((f) => ({
-              ...f,
-              abs_path: f.abs_path ? redactor(f.abs_path) : f.abs_path,
-            }))
-          : frames,
-      } : undefined,
+      stacktrace: frames
+        ? {
+            frames: redactor
+              ? frames.map((f) => ({
+                  ...f,
+                  abs_path: f.abs_path ? redactor(f.abs_path) : f.abs_path,
+                }))
+              : frames,
+          }
+        : undefined,
     });
     current = current.cause instanceof Error ? current.cause : undefined;
     depth++;

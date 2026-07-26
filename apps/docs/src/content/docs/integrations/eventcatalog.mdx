@@ -19,12 +19,21 @@ Two pieces:
   </thead>
   <tbody>
     <tr>
-      <td><code>ArchitectureSnapshotSubscriber</code></td>
-      <td><code>autotel-subscribers</code></td>
-      <td>Records every event your tests emit, with field paths, runtime types and sample values</td>
+      <td>
+        <code>ArchitectureSnapshotSubscriber</code>
+      </td>
+      <td>
+        <code>autotel-subscribers</code>
+      </td>
+      <td>
+        Records every event your tests emit, with field paths, runtime types and
+        sample values
+      </td>
     </tr>
     <tr>
-      <td><code>autotel-eventcatalog</code></td>
+      <td>
+        <code>autotel-eventcatalog</code>
+      </td>
       <td>this package</td>
       <td>Reads the snapshot, diffs it against the catalog, reports drift</td>
     </tr>
@@ -35,16 +44,16 @@ It uses the same model as [Pact](https://docs.pact.io/), applied to event archit
 
 ## What gets caught
 
-| Drift class | Example finding |
-| --- | --- |
-| **Events observed but undocumented** | `order.cancelled` emitted by code; no entry in catalog |
-| **Events documented but never observed** | `LegacyEvent` in catalog; never seen in tests |
-| **Field-path drift (extra)** | `personalization_seed` in payload; not declared in schema |
-| **Field-path drift (missing)** | `customerId` declared in schema; never present in payloads |
-| **Type drift** | `amount` declared `number`; observed `string` |
-| **Value drift (enum mismatch)** | `status: "placed"` observed; schema enum excludes it |
-| **Services observed but undocumented** | `OrdersService` is a producer; no service page |
-| **Channels observed but undocumented** | `orders.events` carries messages; no channel page |
+| Drift class                              | Example finding                                            |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| **Events observed but undocumented**     | `order.cancelled` emitted by code; no entry in catalog     |
+| **Events documented but never observed** | `LegacyEvent` in catalog; never seen in tests              |
+| **Field-path drift (extra)**             | `personalization_seed` in payload; not declared in schema  |
+| **Field-path drift (missing)**           | `customerId` declared in schema; never present in payloads |
+| **Type drift**                           | `amount` declared `number`; observed `string`              |
+| **Value drift (enum mismatch)**          | `status: "placed"` observed; schema enum excludes it       |
+| **Services observed but undocumented**   | `OrdersService` is a producer; no service page             |
+| **Channels observed but undocumented**   | `orders.events` carries messages; no channel page          |
 
 Type and value drift use declared schema constraints from the catalog's
 `schemaPath` plus runtime `fieldStats` captured by the subscriber (observed
@@ -94,13 +103,21 @@ What ends up in the snapshot, per event:
   "events": {
     "order.placed": {
       "observedCount": 5,
-      "fieldPaths": ["currency", "customerId", "items[].priceCents", "totalCents"],
+      "fieldPaths": [
+        "currency",
+        "customerId",
+        "items[].priceCents",
+        "totalCents"
+      ],
       "fieldStats": {
-        "currency":    { "types": ["string"], "sampleValues": ["GBP"] },
-        "totalCents":  { "types": ["number"], "sampleValues": [8499, 8599, 8699] }
+        "currency": { "types": ["string"], "sampleValues": ["GBP"] },
+        "totalCents": {
+          "types": ["number"],
+          "sampleValues": [8499, 8599, 8699]
+        }
       },
       "producer": "OrdersService",
-      "channel":  "orders.events"
+      "channel": "orders.events"
     }
   }
 }
@@ -195,8 +212,8 @@ import {
 } from 'autotel-eventcatalog';
 
 const snapshot = await loadSnapshot('./services/test/snapshot.json');
-const catalog  = await readCatalogState('./catalog');
-const report   = diffCatalogAgainstSnapshot(snapshot, catalog);
+const catalog = await readCatalogState('./catalog');
+const report = diffCatalogAgainstSnapshot(snapshot, catalog);
 
 console.log(renderMarkdown(report));
 console.log('findings:', countDriftReport(report).total);

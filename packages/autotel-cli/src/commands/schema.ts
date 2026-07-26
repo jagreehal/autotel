@@ -93,15 +93,18 @@ export function runSchemaOutputs(opts: SchemaCommonOptions): void {
         ok: 'boolean',
         command: 'string',
         detected: {
-          packages: 'array of { name, version, resolution: "target" | "workspace-root" }',
+          packages:
+            'array of { name, version, resolution: "target" | "workspace-root" }',
           logger: '"pino" | "winston" | "bunyan" | null',
-          backend: '{ source: "env" | "wrangler" | "deps" | "prompt" | "default", value: string }',
+          backend:
+            '{ source: "env" | "wrangler" | "deps" | "prompt" | "default", value: string }',
           platform: '"cloudflare" | "aws-lambda" | "edge" | null',
         },
         plan: {
           presets: 'string[] (slugs)',
           packagesToInstall: { prod: 'string[]', dev: 'string[]' },
-          filesToWrite: 'array of { path, action: "create" | "merge" | "skip" }',
+          filesToWrite:
+            'array of { path, action: "create" | "merge" | "skip" }',
           envVars: 'array of { name, sensitive, action }',
         },
         nextSteps: 'string[]',
@@ -128,13 +131,13 @@ export function runCommandsListing(opts: SchemaCommonOptions): void {
 /** `autotel examples [name] [--json]` */
 export function runExamples(
   name: string | undefined,
-  opts: SchemaCommonOptions
+  opts: SchemaCommonOptions,
 ): void {
   configure(opts);
 
   if (name === undefined) {
     const all = COMMANDS.filter((c) => c.examples && c.examples.length > 0).map(
-      (c) => ({ command: c.name, examples: c.examples })
+      (c) => ({ command: c.name, examples: c.examples }),
     );
     printJson({ ok: true, command: 'autotel examples', examples: all });
     return;

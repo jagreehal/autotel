@@ -20,21 +20,22 @@ throw createStructuredError({
 
 ### Fields
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `message` | `string` (required) | What happened |
-| `why` | `string` | Why it happened (root cause) |
-| `fix` | `string` | How to fix it (actionable) |
-| `link` | `string` | Documentation URL |
-| `code` | `string \| number` | Machine-readable error code |
-| `status` | `number` | HTTP status code |
-| `cause` | `unknown` | Original error (Error.cause) |
-| `details` | `Record<string, unknown>` | Additional context (flattened to `error.details.*`) |
-| `internal` | `Record<string, unknown>` | Backend-only context (never serialized to clients) |
+| Field      | Type                      | Purpose                                             |
+| ---------- | ------------------------- | --------------------------------------------------- |
+| `message`  | `string` (required)       | What happened                                       |
+| `why`      | `string`                  | Why it happened (root cause)                        |
+| `fix`      | `string`                  | How to fix it (actionable)                          |
+| `link`     | `string`                  | Documentation URL                                   |
+| `code`     | `string \| number`        | Machine-readable error code                         |
+| `status`   | `number`                  | HTTP status code                                    |
+| `cause`    | `unknown`                 | Original error (Error.cause)                        |
+| `details`  | `Record<string, unknown>` | Additional context (flattened to `error.details.*`) |
+| `internal` | `Record<string, unknown>` | Backend-only context (never serialized to clients)  |
 
 ### Span Attributes
 
 When recorded on a span, fields map to:
+
 - `error.type` - error name
 - `error.message` - message
 - `error.why` - why
@@ -51,7 +52,7 @@ Records a structured error onto a trace context (sets status, exception, and att
 ```typescript
 import { trace, recordStructuredError, createStructuredError } from 'autotel';
 
-export const processPayment = trace(ctx => async (req) => {
+export const processPayment = trace((ctx) => async (req) => {
   try {
     return await stripe.charges.create(req);
   } catch (err) {
@@ -70,6 +71,7 @@ export const processPayment = trace(ctx => async (req) => {
 ```
 
 `recordStructuredError(ctx, error)` does three things:
+
 1. `ctx.recordException(error)` - records the exception event
 2. `ctx.setStatus({ code: ERROR, message })` - sets span status
 3. `ctx.setAttributes(...)` - flattens all structured fields as span attributes
@@ -92,18 +94,19 @@ try {
 
 ### What parseError Handles
 
-| Input | Behavior |
-|-------|----------|
-| `Error` instance | Extracts message, preserves structured fields if present |
-| `StructuredError` | Extracts all fields (why, fix, link, code, status, details) |
-| Axios/fetch error | Unwraps `.data.data`, `.data`, extracts status/statusCode |
-| Plain object | Extracts message, status, structured fields |
-| String | Uses as message, defaults status to 500 |
-| `null`/`undefined` | Returns `"An error occurred"`, status 500 |
+| Input              | Behavior                                                    |
+| ------------------ | ----------------------------------------------------------- |
+| `Error` instance   | Extracts message, preserves structured fields if present    |
+| `StructuredError`  | Extracts all fields (why, fix, link, code, status, details) |
+| Axios/fetch error  | Unwraps `.data.data`, `.data`, extracts status/statusCode   |
+| Plain object       | Extracts message, status, structured fields                 |
+| String             | Uses as message, defaults status to 500                     |
+| `null`/`undefined` | Returns `"An error occurred"`, status 500                   |
 
 ### Common Error Patterns
 
 **API endpoint error response:**
+
 ```typescript
 export const POST = withAutotel(async (request) => {
   try {
@@ -120,6 +123,7 @@ export const POST = withAutotel(async (request) => {
 ```
 
 **Wrapping third-party errors:**
+
 ```typescript
 try {
   await stripe.charges.create(params);
@@ -136,6 +140,7 @@ try {
 ```
 
 **Domain validation errors:**
+
 ```typescript
 if (order.total <= 0) {
   throw createStructuredError({

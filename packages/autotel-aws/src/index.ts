@@ -66,7 +66,9 @@ export * from './xray';
  * });
  * ```
  */
-export async function init(config: import('./config').AWSInitConfig): Promise<void> {
+export async function init(
+  config: import('./config').AWSInitConfig,
+): Promise<void> {
   const { init: autotelInit } = await import('autotel');
 
   autotelInit({

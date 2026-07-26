@@ -1,86 +1,88 @@
 // src/server/server.ts
-import { WebSocketServer, WebSocket } from 'ws'
-import type { Server as HTTPServer, IncomingMessage } from 'node:http'
-import { createServer } from 'node:http'
-import { ErrorAggregator } from './error-aggregator'
+import { WebSocketServer, WebSocket } from 'ws';
+import type { Server as HTTPServer, IncomingMessage } from 'node:http';
+import { createServer } from 'node:http';
+import { ErrorAggregator } from './error-aggregator';
 import {
   ingestAgentEvents,
   ingestAgentMetrics,
   type AgentSessionStore,
   type AgentRawEvent,
   type OtelMetricRecord,
-} from 'autotel-agents'
-import type {
-  TraceData,
-  LogData,
-  MetricData,
-  DevtoolsData,
-} from './types'
+} from 'autotel-agents';
+import type { TraceData, LogData, MetricData, DevtoolsData } from './types';
 import {
   appendManyWithLimit,
   appendWithLimit,
   resolveTelemetryLimits,
   type TelemetryLimits,
-} from './telemetry-limits'
-import { allowSensitiveRequest, hostHeaderIsLoopback } from './origin-guard'
+} from './telemetry-limits';
+import { allowSensitiveRequest, hostHeaderIsLoopback } from './origin-guard';
 
 export interface DevtoolsServerOptions {
-  port?: number
-  server?: HTTPServer
-  path?: string
-  verbose?: boolean
-  maxHistory?: number
-  maxTraceCount?: number
-  maxLogCount?: number
-  maxMetricCount?: number
+  port?: number;
+  server?: HTTPServer;
+  path?: string;
+  verbose?: boolean;
+  maxHistory?: number;
+  maxTraceCount?: number;
+  maxLogCount?: number;
+  maxMetricCount?: number;
   /**
    * Bind host, used only to decide the WebSocket origin policy. A loopback host
    * (the default) enables the DNS-rebinding `Host` check on the live stream; an
    * explicit non-loopback bind opts out, leaving just the cross-origin check.
    */
-  host?: string
+  host?: string;
   /**
    * Called after each ingest, with the incremental data just broadcast to WS
    * clients. Lets an embedder (e.g. the VS Code extension) react to new
    * telemetry — refresh its own tree views — while the server owns the buffer.
    */
-  onData?: (incremental: DevtoolsData) => void
+  onData?: (incremental: DevtoolsData) => void;
 }
 
 export class DevtoolsServer {
-  private wss: WebSocketServer
-  private clients = new Set<WebSocket>()
-  private httpServer: HTTPServer
-  private traces: TraceData[] = []
-  private logs: LogData[] = []
-  private metrics: MetricData[] = []
+  private wss: WebSocketServer;
+  private clients = new Set<WebSocket>();
+  private httpServer: HTTPServer;
+  private traces: TraceData[] = [];
+  private logs: LogData[] = [];
+  private metrics: MetricData[] = [];
   // Canonical agent-session store. Rollups are kept indefinitely; the package's
   // reducers ring-buffer each session's raw timeline. We broadcast the full set
   // (full-state, like errors) so late/reconnecting clients converge.
-  private agentSessions: AgentSessionStore = new Map()
-  private errorAggregator = new ErrorAggregator()
-  private limits: TelemetryLimits
-  private verbose: boolean
-  private _port: number
-  private onData?: (incremental: DevtoolsData) => void
+  private agentSessions: AgentSessionStore = new Map();
+  private errorAggregator = new ErrorAggregator();
+  private limits: TelemetryLimits;
+  private verbose: boolean;
+  private _port: number;
+  private onData?: (incremental: DevtoolsData) => void;
 
   constructor(options: DevtoolsServerOptions = {}) {
-    this.limits = resolveTelemetryLimits(options)
-    this.verbose = options.verbose ?? false
-    this._port = options.port ?? 4318
-    this.onData = options.onData
+    this.limits = resolveTelemetryLimits(options);
+    this.verbose = options.verbose ?? false;
+    this._port = options.port ?? 4318;
+    this.onData = options.onData;
 
-    this.httpServer = options.server ?? createServer()
+    this.httpServer = options.server ?? createServer();
     // Reject a live-stream subscription from a page that isn't same-machine —
     // a browser tab on evil.com opening `ws://127.0.0.1:PORT/ws` would otherwise
     // receive every captured span. Mirrors the read-back HTTP guard.
-    const loopbackOnly = options.host == null || hostHeaderIsLoopback(options.host)
+    const loopbackOnly =
+      options.host == null || hostHeaderIsLoopback(options.host);
     this.wss = new WebSocketServer({
       server: this.httpServer,
       path: options.path ?? '/ws',
-      verifyClient: ({ origin, req }: { origin: string; req: IncomingMessage }) =>
+      verifyClient: ({
+        origin,
+        req,
+      }: {
+        origin: string;
+        req: IncomingMessage;
+      }) =>
         allowSensitiveRequest({ origin, host: req.headers.host }, loopbackOnly),
-    })
+    });
 
     // The `ws` library re-emits the http server's `error` event onto the
     // WebSocketServer itself. During the bind phase (EADDRINUSE etc.) the
@@ -89,48 +91,48 @@ export class DevtoolsServer {
     // re-emission (server not yet listening). Anything emitted once the server
     // is live is a genuine WSS fault — re-throw so it surfaces.
     this.wss.on('error', (err) => {
-      if (this.httpServer.listening) throw err
-    })
+      if (this.httpServer.listening) throw err;
+    });
 
     this.wss.on('connection', (ws) => {
-      this.clients.add(ws)
-      this.log(`Client connected (${this.clients.size} total)`)
+      this.clients.add(ws);
+      this.log(`Client connected (${this.clients.size} total)`);
 
       // Send history to late-connecting clients
-      const data = this.getCurrentData()
+      const data = this.getCurrentData();
       if (
         data.traces.length > 0 ||
         data.logs.length > 0 ||
         data.errors.length > 0 ||
         (data.agents?.length ?? 0) > 0
       ) {
-        ws.send(JSON.stringify(data))
+        ws.send(JSON.stringify(data));
       }
 
       ws.on('close', () => {
-        this.clients.delete(ws)
-        this.log(`Client disconnected (${this.clients.size} total)`)
-      })
-    })
+        this.clients.delete(ws);
+        this.log(`Client disconnected (${this.clients.size} total)`);
+      });
+    });
 
     // Only start listening if no external server was provided
     if (!options.server) {
       this.httpServer.listen(this._port, () => {
-        const addr = this.httpServer.address()
-        if (addr && typeof addr === 'object') this._port = addr.port
-        this.log(`WebSocket server listening on port ${this._port}`)
-      })
+        const addr = this.httpServer.address();
+        if (addr && typeof addr === 'object') this._port = addr.port;
+        this.log(`WebSocket server listening on port ${this._port}`);
+      });
     }
   }
 
   get port(): number {
-    const addr = this.httpServer.address()
-    if (addr && typeof addr === 'object') return addr.port
-    return this._port
+    const addr = this.httpServer.address();
+    if (addr && typeof addr === 'object') return addr.port;
+    return this._port;
   }
 
   get clientCount(): number {
-    return this.clients.size
+    return this.clients.size;
   }
 
   addTrace(trace: TraceData): void {
@@ -138,26 +140,26 @@ export class DevtoolsServer {
     // arrive across multiple batches and services, so the root span and timing
     // must be recomputed from the merged span set — the first batch to arrive
     // (e.g. a downstream service) may not contain the parentless root span.
-    const existing = this.traces.find(t => t.traceId === trace.traceId)
-    const merged = existing ?? trace
+    const existing = this.traces.find((t) => t.traceId === trace.traceId);
+    const merged = existing ?? trace;
     if (existing) {
-      const existingSpanIds = new Set(existing.spans.map(s => s.spanId))
+      const existingSpanIds = new Set(existing.spans.map((s) => s.spanId));
       for (const span of trace.spans) {
         if (!existingSpanIds.has(span.spanId)) {
-          existing.spans.push(span)
+          existing.spans.push(span);
         }
       }
-      existing.startTime = Math.min(existing.startTime, trace.startTime)
-      existing.endTime = Math.max(existing.endTime, trace.endTime)
-      existing.duration = existing.endTime - existing.startTime
-      if (trace.status === 'ERROR') existing.status = 'ERROR'
+      existing.startTime = Math.min(existing.startTime, trace.startTime);
+      existing.endTime = Math.max(existing.endTime, trace.endTime);
+      existing.duration = existing.endTime - existing.startTime;
+      if (trace.status === 'ERROR') existing.status = 'ERROR';
 
-      const root = existing.spans.find(s => !s.parentSpanId)
+      const root = existing.spans.find((s) => !s.parentSpanId);
       if (root) {
-        existing.rootSpan = root
-        const rootService = root.attributes?.['service.name']
+        existing.rootSpan = root;
+        const rootService = root.attributes?.['service.name'];
         if (typeof rootService === 'string' && rootService.length > 0) {
-          existing.service = rootService
+          existing.service = rootService;
         }
       }
     } else {
@@ -165,30 +167,45 @@ export class DevtoolsServer {
         this.traces,
         trace,
         this.limits.maxTraceCount,
-      )
+      );
     }
 
-    this.errorAggregator.addErrorsFromTrace(trace)
+    this.errorAggregator.addErrorsFromTrace(trace);
     // Broadcast the merged trace (not just the incoming batch) so live clients
     // and any client that reconnects mid-trace converge on the full picture.
-    this.broadcast({ traces: [merged], metrics: [], logs: [], errors: this.errorAggregator.getErrorGroups() })
+    this.broadcast({
+      traces: [merged],
+      metrics: [],
+      logs: [],
+      errors: this.errorAggregator.getErrorGroups(),
+    });
   }
 
   addTraces(traces: TraceData[]): void {
-    for (const trace of traces) this.addTrace(trace)
+    for (const trace of traces) this.addTrace(trace);
   }
 
   // `errors` is full-state on every broadcast (the client replaces, not appends),
   // so non-trace broadcasts must echo the current error groups rather than `[]` —
   // otherwise a log/metric arriving after an error would wipe it from the UI.
   addLog(log: LogData): void {
-    this.logs = appendWithLimit(this.logs, log, this.limits.maxLogCount)
-    this.broadcast({ traces: [], metrics: [], logs: [log], errors: this.errorAggregator.getErrorGroups() })
+    this.logs = appendWithLimit(this.logs, log, this.limits.maxLogCount);
+    this.broadcast({
+      traces: [],
+      metrics: [],
+      logs: [log],
+      errors: this.errorAggregator.getErrorGroups(),
+    });
   }
 
   addLogs(logs: LogData[]): void {
-    this.logs = appendManyWithLimit(this.logs, logs, this.limits.maxLogCount)
-    this.broadcast({ traces: [], metrics: [], logs, errors: this.errorAggregator.getErrorGroups() })
+    this.logs = appendManyWithLimit(this.logs, logs, this.limits.maxLogCount);
+    this.broadcast({
+      traces: [],
+      metrics: [],
+      logs,
+      errors: this.errorAggregator.getErrorGroups(),
+    });
   }
 
   addMetric(metric: MetricData): void {
@@ -196,22 +213,27 @@ export class DevtoolsServer {
       this.metrics,
       metric,
       this.limits.maxMetricCount,
-    )
-    this.broadcast({ traces: [], metrics: [metric], logs: [], errors: this.errorAggregator.getErrorGroups() })
+    );
+    this.broadcast({
+      traces: [],
+      metrics: [metric],
+      logs: [],
+      errors: this.errorAggregator.getErrorGroups(),
+    });
   }
 
   /** Fold decoded agent log events into sessions and broadcast the full set. */
   ingestAgentEvents(records: AgentRawEvent[]): void {
-    if (records.length === 0) return
-    ingestAgentEvents(this.agentSessions, records)
-    this.broadcastAgents()
+    if (records.length === 0) return;
+    ingestAgentEvents(this.agentSessions, records);
+    this.broadcastAgents();
   }
 
   /** Fold decoded agent metric records into sessions and broadcast the full set. */
   ingestAgentMetrics(records: OtelMetricRecord[]): void {
-    if (records.length === 0) return
-    ingestAgentMetrics(this.agentSessions, records)
-    this.broadcastAgents()
+    if (records.length === 0) return;
+    ingestAgentMetrics(this.agentSessions, records);
+    this.broadcastAgents();
   }
 
   private broadcastAgents(): void {
@@ -221,7 +243,7 @@ export class DevtoolsServer {
       logs: [],
       errors: this.errorAggregator.getErrorGroups(),
       agents: [...this.agentSessions.values()],
-    })
+    });
   }
 
   getCurrentData(): DevtoolsData {
@@ -231,28 +253,28 @@ export class DevtoolsServer {
       logs: this.logs,
       errors: this.errorAggregator.getErrorGroups(),
       agents: [...this.agentSessions.values()],
-    }
+    };
   }
 
   clearData(): void {
-    this.traces = []
-    this.logs = []
-    this.metrics = []
-    this.agentSessions.clear()
-    this.errorAggregator.clear()
+    this.traces = [];
+    this.logs = [];
+    this.metrics = [];
+    this.agentSessions.clear();
+    this.errorAggregator.clear();
   }
 
   private broadcast(data: DevtoolsData): void {
-    const msg = JSON.stringify(data)
+    const msg = JSON.stringify(data);
     for (const client of this.clients) {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(msg)
+        client.send(msg);
       }
     }
     // Notify embedders after WS fan-out; never let a listener throw break ingest.
     if (this.onData) {
       try {
-        this.onData(data)
+        this.onData(data);
       } catch {
         /* embedder listener errors are their own concern */
       }
@@ -260,13 +282,15 @@ export class DevtoolsServer {
   }
 
   private log(message: string): void {
-    if (this.verbose) console.log(`[autotel-devtools] ${message}`)
+    if (this.verbose) console.log(`[autotel-devtools] ${message}`);
   }
 
   async close(): Promise<void> {
-    for (const client of this.clients) client.close()
-    this.clients.clear()
-    this.wss.close()
-    await new Promise<void>((resolve) => this.httpServer.close(() => resolve()))
+    for (const client of this.clients) client.close();
+    this.clients.clear();
+    this.wss.close();
+    await new Promise<void>((resolve) =>
+      this.httpServer.close(() => resolve()),
+    );
   }
 }

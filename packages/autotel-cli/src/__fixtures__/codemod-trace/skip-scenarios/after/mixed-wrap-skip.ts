@@ -2,7 +2,7 @@ import { trace } from "autotel";
 
 const createUser = trace('createUser', function createUser(data: string) {
   return data;
-};
+});
 
 class UserService {
   constructor(name: string) {

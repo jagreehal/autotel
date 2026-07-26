@@ -1,5 +1,9 @@
 import * as path from 'node:path';
-import type { PackageJson, ProjectContext, WorkspaceInfo } from '../types/index';
+import type {
+  PackageJson,
+  ProjectContext,
+  WorkspaceInfo,
+} from '../types/index';
 import { fileExists, dirExists, readJsonSafe, findUpward } from './fs';
 import { detectPackageManager, detectWorkspaceRoot } from './package-manager';
 
@@ -30,7 +34,9 @@ export function detectTypeScript(packageRoot: string): boolean {
   }
 
   // Check for typescript in dependencies
-  const pkgJson = readJsonSafe<PackageJson>(path.join(packageRoot, 'package.json'));
+  const pkgJson = readJsonSafe<PackageJson>(
+    path.join(packageRoot, 'package.json'),
+  );
   if (pkgJson) {
     const deps = { ...pkgJson.dependencies, ...pkgJson.devDependencies };
     if ('typescript' in deps) {
@@ -53,7 +59,7 @@ export function detectEsm(packageJson: PackageJson): boolean {
  */
 export function buildWorkspaceInfo(
   packageRoot: string,
-  cwd: string
+  cwd: string,
 ): WorkspaceInfo {
   const { workspaceRoot, workspaceType } = detectWorkspaceRoot(cwd);
 
@@ -137,11 +143,12 @@ export function getEntrypointCandidates(packageRoot: string): string[] {
  */
 export function getInstrumentationPath(
   packageRoot: string,
-  hasTypeScript: boolean
+  hasTypeScript: boolean,
 ): string {
   // Check if src/ exists (as directory or has files inside)
   const srcDir = path.join(packageRoot, 'src');
-  const hasSrcDir = dirExists(srcDir) ||
+  const hasSrcDir =
+    dirExists(srcDir) ||
     fileExists(path.join(packageRoot, 'src', 'index.ts')) ||
     fileExists(path.join(packageRoot, 'src', 'index.js'));
 

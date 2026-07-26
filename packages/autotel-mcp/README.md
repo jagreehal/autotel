@@ -1,11 +1,11 @@
 # autotel-mcp
 
-An MCP server that gives AI agents the ability to investigate OpenTelemetry traces, metrics, and logs. Ships with a built-in OTLP collector so any instrumented app can send data directly — no Jaeger, Grafana, or vendor setup required.
+An MCP server that gives AI agents the ability to investigate OpenTelemetry traces, metrics, and logs. Ships with a built-in OTLP collector so any instrumented app can send data directly. No Jaeger, Grafana, or vendor setup required.
 
 ### Key Features
 
 - **Backend-agnostic.** Built-in OTLP collector on port 4318 accepts data from any OTel-instrumented app.
-- **All three signals.** Traces, metrics, and logs — with cross-signal correlation.
+- **All three signals.** Traces, metrics, and logs: with cross-signal correlation.
 - **Agent-optimized.** 33 tools designed for progressive investigation: discover → diagnose → correlate → root cause.
 - **Zero infrastructure.** In-memory by default, persistent with `--persist`.
 
@@ -314,85 +314,85 @@ Then configure your MCP client with:
 <details>
 <summary><b>Discovery (5)</b></summary>
 
-- **list_services** — Services with span counts and error rates
-- **list_operations** — Operations for a service, ranked by traffic
-- **backend_health** — Backend reachability and ingestion status
-- **backend_capabilities** — Signal support and query features
-- **list_capabilities** — Full server manifest
+- **list_services**: Services with span counts and error rates
+- **list_operations**: Operations for a service, ranked by traffic
+- **backend_health**: Backend reachability and ingestion status
+- **backend_capabilities**: Signal support and query features
+- **list_capabilities**: Full server manifest
 
 </details>
 
 <details>
 <summary><b>Trace Investigation (4)</b></summary>
 
-- **search_traces** — Find traces by service, operation, status, duration, tags, time window
-- **search_spans** — Span-level search across traces
-- **get_trace** — Full trace detail by ID
-- **summarize_trace** — Compact summary: span tree, errors, critical path, duration breakdown
+- **search_traces**: Find traces by service, operation, status, duration, tags, time window
+- **search_spans**: Span-level search across traces
+- **get_trace**: Full trace detail by ID
+- **summarize_trace**: Compact summary: span tree, errors, critical path, duration breakdown
 
 </details>
 
 <details>
 <summary><b>Diagnosis (4)</b></summary>
 
-- **find_anomalies** — Scan for statistical outliers: latency spikes, error rate jumps
-- **find_root_cause** — Walk a trace span tree to identify the bottleneck span
-- **find_errors** — Aggregate error spans grouped by service and operation
-- **check_slos** — Report SLO violations given p99 latency and error rate targets
+- **find_anomalies**: Scan for statistical outliers: latency spikes, error rate jumps
+- **find_root_cause**: Walk a trace span tree to identify the bottleneck span
+- **find_errors**: Aggregate error spans grouped by service and operation
+- **check_slos**: Report SLO violations given p99 latency and error rate targets
 
 </details>
 
 <details>
 <summary><b>Topology (2)</b></summary>
 
-- **service_map** — Dependency graph with call counts, error rates, latency percentiles
-- **list_services** / **list_operations** — Service and operation discovery
+- **service_map**: Dependency graph with call counts, error rates, latency percentiles
+- **list_services** / **list_operations**: Service and operation discovery
 
 </details>
 
 <details>
 <summary><b>LLM Analytics (6)</b></summary>
 
-- **get_llm_usage** — Token usage by model and service
-- **list_llm_models** — Models in use with request counts
-- **get_llm_model_stats** — Latency/token/error percentiles per model
-- **get_llm_expensive_traces** — Top traces by token count
-- **get_llm_slow_traces** — Slowest LLM traces
-- **list_llm_tools** — Tool/function call usage by name
+- **get_llm_usage**: Token usage by model and service
+- **list_llm_models**: Models in use with request counts
+- **get_llm_model_stats**: Latency/token/error percentiles per model
+- **get_llm_expensive_traces**: Top traces by token count
+- **get_llm_slow_traces**: Slowest LLM traces
+- **list_llm_tools**: Tool/function call usage by name
 
 </details>
 
 <details>
 <summary><b>Signals (3)</b></summary>
 
-- **list_metrics** — Available metric series
-- **get_metric_series** — Time-series data for a metric
-- **search_logs** — Log search by severity, service, trace ID, text
+- **list_metrics**: Available metric series
+- **get_metric_series**: Time-series data for a metric
+- **search_logs**: Log search by severity, service, trace ID, text
 
 </details>
 
 <details>
 <summary><b>Cross-Signal Correlation (2)</b></summary>
 
-- **correlate** — Given a trace ID: return trace + metrics from involved services + correlated logs
-- **explain_slowdown** — Combines anomaly detection with cross-signal correlation
+- **correlate**: Given a trace ID: return trace + metrics from involved services + correlated logs
+- **explain_slowdown**: Combines anomaly detection with cross-signal correlation
 
 </details>
 
 <details>
 <summary><b>Collector Config (3)</b></summary>
 
-- **validate_collector_config** — Validate OTLP receiver config fragment
-- **explain_collector_config** — Explain config shape and defaults
-- **suggest_collector_config** — Generate minimal config
+- **validate_collector_config**: Validate OTLP receiver config fragment
+- **explain_collector_config**: Explain config shape and defaults
+- **suggest_collector_config**: Generate minimal config
 
 </details>
 
 <details>
 <summary><b>Instrumentation Quality (2)</b></summary>
 
-- **score_span_instrumentation** — Quality score 0-100 with A-F grade
-- **explain_instrumentation_score** — Scoring rubric details
+- **score_span_instrumentation**: Quality score 0-100 with A-F grade
+- **explain_instrumentation_score**: Scoring rubric details
 
 </details>
 

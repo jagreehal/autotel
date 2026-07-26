@@ -98,5 +98,5 @@ app.onError((error, c) => {
 | `throw new Error('something went wrong')`                    | `createStructuredError({ message, status, why, fix })`                                 |
 | Putting support IDs in `message` (`"Failed for user 42"`)    | Use `internal: { userId: 42 }`                                                         |
 | Returning `details: { error: stack }` to clients             | Stack traces stay in `cause` / span; never serialise them out                          |
-| `console.error(e); throw e`                                  | Just throw — autotel's span will pick up the exception                                 |
+| `console.error(e); throw e`                                  | Just throw: autotel's span will pick up the exception                                  |
 | Two callers throwing different shapes for the same condition | Centralise: `function declined(reason: string) { throw createStructuredError({ … }) }` |

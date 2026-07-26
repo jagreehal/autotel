@@ -3,7 +3,7 @@ import { Event, getEvents, resetEvents } from './event';
 import { type Logger } from './logger';
 import { init } from './init';
 import { shutdown } from './shutdown';
-import { trace } from './functional';
+import { withTracing, trace, span } from './functional';
 import { context, propagation } from '@opentelemetry/api';
 
 describe('Events', () => {
@@ -334,7 +334,7 @@ describe('Events', () => {
       // Pino-native: first arg is the extra object
       const capturedCall = (mockLogger.info as ReturnType<typeof vi.fn>).mock
         .calls[0];
-      const attributes = capturedCall[0].attributes;
+      const attributes = capturedCall![0].attributes;
 
       expect(attributes).toHaveProperty('traceId');
       expect(attributes).toHaveProperty('spanId');
@@ -544,8 +544,7 @@ describe('Events', () => {
 
       // Test 2: Named function with factory pattern (ctx parameter)
       // Explicit name should take precedence
-      const deleteUser = trace(
-        'user.delete',
+      const deleteUser = withTracing({ name: 'user.delete' })(
         (ctx) =>
           async function deleteUser(userId: string) {
             ctx.setAttribute('user.id', userId);
@@ -555,7 +554,7 @@ describe('Events', () => {
       await deleteUser('user-456');
 
       // Test 3: Named function in factory pattern (should infer inner function name)
-      const createOrder = trace(
+      const createOrder = withTracing({})(
         (ctx) =>
           async function createOrder(orderId: string) {
             ctx.setAttribute('order.id', orderId);
@@ -569,20 +568,19 @@ describe('Events', () => {
       const calls = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls;
 
       // First call: updateUser - should infer from named function declaration
-      expect(calls[0][0].attributes['operation.name']).toMatch(/updateUser/);
+      expect(calls[0]![0].attributes['operation.name']).toMatch(/updateUser/);
 
       // Second call: user.delete - explicit name takes precedence
-      expect(calls[1][0].attributes['operation.name']).toBe('user.delete');
+      expect(calls[1]![0].attributes['operation.name']).toBe('user.delete');
 
       // Third call: createOrder - should infer from inner named function in factory pattern
-      expect(calls[2][0].attributes['operation.name']).toMatch(/createOrder/);
+      expect(calls[2]![0].attributes['operation.name']).toMatch(/createOrder/);
     });
 
     it('should auto-capture operation.name in nested spans', async () => {
       init({ service: 'test-service' });
 
       const event = new Event('test-service', { logger: mockLogger });
-      const { span } = await import('./functional');
 
       const operation = trace('order.process', async () => {
         span({ name: 'order.validate' }, () => {
@@ -711,7 +709,6 @@ describe('Events', () => {
         event.trackEvent('parent.event', { step: 1 });
 
         // Then create a nested span
-        const { span } = await import('./functional');
         span({ name: 'child.operation' }, () => {
           event.trackEvent('child.event', { step: 2 });
         });
@@ -751,10 +748,12 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const operation = trace('factory.operation', (ctx) => async () => {
-        ctx.setAttribute('custom', 'attribute');
-        event.trackEvent('factory.event', { data: 'test' });
-      });
+      const operation = withTracing({ name: 'factory.operation' })(
+        (ctx) => async () => {
+          ctx.setAttribute('custom', 'attribute');
+          event.trackEvent('factory.event', { data: 'test' });
+        },
+      );
 
       await operation();
 
@@ -815,7 +814,7 @@ describe('Events', () => {
 
       // Correlation ID should be 16 hex chars
       const call = mockSubscriber.trackEvent.mock.calls[0];
-      const autotelContext = call[2].autotel;
+      const autotelContext = call![2].autotel;
       expect(autotelContext.correlation_id).toHaveLength(16);
       expect(/^[0-9a-f]{16}$/.test(autotelContext.correlation_id)).toBe(true);
     });
@@ -865,7 +864,7 @@ describe('Events', () => {
 
       // Verify trace_id is 32 hex chars
       const call = mockSubscriber.trackEvent.mock.calls[0];
-      const autotelContext = call[2].autotel;
+      const autotelContext = call![2].autotel;
       expect(autotelContext.trace_id).toHaveLength(32);
       expect(/^[0-9a-f]{32}$/.test(autotelContext.trace_id)).toBe(true);
 
@@ -1095,7 +1094,7 @@ describe('Events', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const call = mockSubscriber.trackEvent.mock.calls[0];
-      const attributes = call[1] as Record<string, unknown>;
+      const attributes = call![1] as Record<string, unknown>;
 
       expect(attributes['user.id']).toBeDefined();
       expect(String(attributes['user.id'])).toHaveLength(8);

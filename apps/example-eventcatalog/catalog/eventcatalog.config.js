@@ -2,10 +2,12 @@
 export default {
   cId: 'autotel-example-catalog',
   title: 'Autotel Commerce',
-  tagline: 'Architecture that documents itself — populated from autotel telemetry.',
+  tagline:
+    'Architecture that documents itself — populated from autotel telemetry.',
   organizationName: 'Autotel',
   homepageLink: 'https://github.com/jagreehal/autotel',
-  editUrl: 'https://github.com/jagreehal/autotel/edit/main/apps/example-eventcatalog/catalog',
+  editUrl:
+    'https://github.com/jagreehal/autotel/edit/main/apps/example-eventcatalog/catalog',
   port: 3000,
   outDir: 'dist',
   logo: {

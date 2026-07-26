@@ -81,7 +81,10 @@ function resolveTracer(config: NormalizedOtelConfig): Tracer | undefined {
       config.serviceVersion,
     );
   }
-  return getTracer(config.tracerName ?? INSTRUMENTATION_SCOPE_NAME, config.serviceVersion);
+  return getTracer(
+    config.tracerName ?? INSTRUMENTATION_SCOPE_NAME,
+    config.serviceVersion,
+  );
 }
 
 function resolveMeter(config: NormalizedOtelConfig): Meter {
@@ -129,7 +132,7 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
       const name = rawName.toLowerCase();
       if (config.requestHeaderSet.has(name)) {
         deferredRequestHeaderAttributes[httpRequestHeaderAttribute(name)] =
-          typeof value === 'string' ? value : value[0] ?? '';
+          typeof value === 'string' ? value : (value[0] ?? '');
       }
     }
 
@@ -196,7 +199,9 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
       parent,
       async (span) => {
         try {
-          for (const [k, v] of Object.entries(deferredRequestHeaderAttributes)) {
+          for (const [k, v] of Object.entries(
+            deferredRequestHeaderAttributes,
+          )) {
             span.setAttribute(k, v);
           }
           await next();

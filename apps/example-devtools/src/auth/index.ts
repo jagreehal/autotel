@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { createStructuredError, trace } from 'autotel';
+import { createStructuredError, withTracing } from 'autotel';
 import type { TraceContext } from 'autotel';
 import { useLogger } from 'autotel-adapters/hono';
 import { otel } from 'autotel-hono';
@@ -21,16 +21,18 @@ export function createAuthApp(serviceName: string): Hono {
     }),
   );
 
-  const lookupSession = trace('lookupSession', (ctx: TraceContext) => async (token: string) => {
-    ctx.setAttribute('auth.token_prefix', token.slice(0, 8));
-    ctx.setAttribute('shop.flow', 'auth-validation');
-    return db.query.sessions.findFirst({
-      where: eq(sessions.token, token),
-      with: {
-        user: true,
-      },
-    });
-  });
+  const lookupSession = withTracing({ name: 'lookupSession' })(
+    (ctx: TraceContext) => async (token: string) => {
+      ctx.setAttribute('auth.token_prefix', token.slice(0, 8));
+      ctx.setAttribute('shop.flow', 'auth-validation');
+      return db.query.sessions.findFirst({
+        where: eq(sessions.token, token),
+        with: {
+          user: true,
+        },
+      });
+    },
+  );
 
   app.get('/health', (c) =>
     c.json({

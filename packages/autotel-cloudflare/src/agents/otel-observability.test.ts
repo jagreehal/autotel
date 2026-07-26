@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { EdgeConfig, ReadableSpan } from 'autotel-edge';
+
+// SpanProcessor is exactly the element type autotel-edge's config expects, so a
+// mock typed against it is assignable to `spanProcessors`.
+type SpanProcessor = Extract<
+  NonNullable<EdgeConfig['spanProcessors']>,
+  unknown[]
+>[number];
 import {
   createOtelObservability,
   createOtelObservabilityFromEnv,
@@ -167,7 +174,9 @@ describe('OtelObservability', () => {
       );
 
       expect(processor.spans).toHaveLength(1);
-      expect(processor.spans[0]?.name).toBe('mcp.client.close https://mcp.example');
+      expect(processor.spans[0]?.name).toBe(
+        'mcp.client.close https://mcp.example',
+      );
       expect(processor.spans[0]?.attributes).toMatchObject({
         'agent.mcp.url': 'https://mcp.example',
         'agent.mcp.transport': 'http',

@@ -45,11 +45,11 @@ export function initTelemetry(service: string): void {
         ),
       ],
       logRecordProcessors: [
-        new BatchLogRecordProcessor(
-          new CloudWatchLogExporter({
+        new BatchLogRecordProcessor({
+          exporter: new CloudWatchLogExporter({
             region,
           }),
-        ),
+        }),
       ],
       metricReaders: [
         new PeriodicExportingMetricReader({

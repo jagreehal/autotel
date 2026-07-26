@@ -5,10 +5,16 @@ import { randomBytes } from 'node:crypto';
 /**
  * Check if a path is within the allowed root directory
  */
-export function isPathWithinRoot(targetPath: string, rootPath: string): boolean {
+export function isPathWithinRoot(
+  targetPath: string,
+  rootPath: string,
+): boolean {
   const resolvedTarget = path.resolve(targetPath);
   const resolvedRoot = path.resolve(rootPath);
-  return resolvedTarget.startsWith(resolvedRoot + path.sep) || resolvedTarget === resolvedRoot;
+  return (
+    resolvedTarget.startsWith(resolvedRoot + path.sep) ||
+    resolvedTarget === resolvedRoot
+  );
 }
 
 /**
@@ -72,14 +78,14 @@ export function createBackup(filePath: string): string | null {
 export function atomicWrite(
   filePath: string,
   content: string,
-  options: { root: string; backup?: boolean }
+  options: { root: string; backup?: boolean },
 ): { backupPath: string | null } {
   const resolvedPath = path.resolve(filePath);
 
   // Security: ensure we're writing within root
   if (!isPathWithinRoot(resolvedPath, options.root)) {
     throw new Error(
-      `Path traversal detected: ${filePath} resolves outside root ${options.root}`
+      `Path traversal detected: ${filePath} resolves outside root ${options.root}`,
     );
   }
 
@@ -132,7 +138,7 @@ export function readJsonSafe<T>(filePath: string): T | null {
 export function findUpward(
   startDir: string,
   filename: string,
-  stopAtRoot = true
+  stopAtRoot = true,
 ): string | null {
   let currentDir = path.resolve(startDir);
   const root = path.parse(currentDir).root;
@@ -166,7 +172,7 @@ export function findUpward(
  */
 export function findAllUpward(
   startDir: string,
-  filenames: string[]
+  filenames: string[],
 ): Map<string, string> {
   const found = new Map<string, string>();
   let currentDir = path.resolve(startDir);

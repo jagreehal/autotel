@@ -131,10 +131,8 @@ export function createAgentAuditMetadata(
 
   const delegation =
     metadata.delegation &&
-    (
-      metadata.delegation.authorityLineageHash === undefined ||
-      metadata.delegation.depth === undefined
-    )
+    (metadata.delegation.authorityLineageHash === undefined ||
+      metadata.delegation.depth === undefined)
       ? {
           ...metadata.delegation,
           ...(metadata.delegation.authorityLineage && {

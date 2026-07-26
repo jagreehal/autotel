@@ -1,4 +1,4 @@
-# Autotel — Guide for AI Coding Agents
+# Autotel: Guide for AI Coding Agents
 
 This file is the **single source of truth** for AI coding assistants (Cursor, Claude Code, etc.) working in the Autotel repo or in codebases that use Autotel. Use it to suggest correct instrumentation, avoid anti-patterns, and keep changes consistent with project rules.
 
@@ -26,7 +26,7 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 ### Cloudflare Direction
 
 - For `autotel-cloudflare`, prefer one DX across Workers, Queues, Scheduled, Email, Durable Objects, alarms, and Workflows.
-- Keep `trace(..., (ctx) => ...)` as the main user-facing instrumentation pattern for Cloudflare business logic.
+- Keep plain `trace(name?, fn)` as the main Cloudflare business-logic wrapper. Use ambient `getActiveTraceContext()` or explicit `withTracing({ name })((ctx) => fn)` when context access is needed.
 - Prefer span attributes plus one execution-scoped snapshot over scattered `logger.info(...)` calls in Cloudflare examples.
 - If Cloudflare needs request-logger-style DX, implement it in `autotel-edge` first using edge-safe context primitives. Do not copy the Node `AsyncLocalStorage` implementation from core `autotel`.
 - **Native tracing**: `trace()`/`span()`/`enterSpan()` auto-nest in Cloudflare's native trace waterfall when `observability.traces` is enabled (autotel detects `ctx.tracing`); it defers binding instrumentation + export to the platform and falls back to autotel's OTLP pipeline otherwise. The runtime-agnostic seam is in `autotel-edge` (`src/core/native-bridge.ts`); the CF adapter is in `autotel-cloudflare` (`src/native/native-tracing.ts`). Config: `nativeTracing: 'auto'|'on'|'off'`. Don't add CF imports to autotel-edge. See `docs/CLOUDFLARE-NATIVE-TRACING.md`.
@@ -35,15 +35,15 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 
 ## Quick Reference
 
-| Command                | Description                              |
-| ---------------------- | ---------------------------------------- |
-| `pnpm build`           | Build all packages                       |
-| `pnpm test`            | Run all tests                            |
-| `pnpm lint`            | Lint all packages                        |
-| `pnpm format`          | Format with Prettier                     |
-| `pnpm quality`         | Build + lint + format + typecheck + test |
+| Command        | Description                              |
+| -------------- | ---------------------------------------- |
+| `pnpm build`   | Build all packages                       |
+| `pnpm test`    | Run all tests                            |
+| `pnpm lint`    | Lint all packages                        |
+| `pnpm format`  | Format with Prettier                     |
+| `pnpm quality` | Build + lint + format + typecheck + test |
 
-**Agent Skills:** Skills ship inside each package under `skills/` (e.g. `packages/autotel/skills/`, `packages/autotel-cloudflare/skills/`). They follow the open [Agent Skills specification](https://agentskills.io/specification) — skill-aware agents discover them by scanning the filesystem for `SKILL.md` files, no consumer-side CLI required.
+**Agent Skills:** Skills ship inside each package under `skills/` (e.g. `packages/autotel/skills/`, `packages/autotel-cloudflare/skills/`). They follow the open [Agent Skills specification](https://agentskills.io/specification). Skill-aware agents discover them by scanning the filesystem for `SKILL.md` files, no consumer-side CLI required.
 
 ---
 
@@ -78,45 +78,49 @@ Package-specific details: see each package’s `CLAUDE.md` (e.g. `packages/autot
 
 When the user wants observability, suggest these entry points. All from `autotel` unless noted.
 
-| Need                        | API / entry point                                                                                |
-| --------------------------- | ------------------------------------------------------------------------------------------------ |
-| Wrap a function with a span | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                                         |
-| Request-scoped attributes   | `getRequestLogger(ctx?)` → `.set()`, `.info()` / `.warn()` / `.error()`, `.emitNow()`, `.fork()` |
-| Structured throw            | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })`                  |
-| Parse API errors (client)   | `parseError(err)` → `{ message, status, why?, fix?, link?, raw }`                                |
-| Lock init (framework)       | `lockLogger()`, `isLoggerLocked()`                                                               |
-| Product/analytics events    | `track(name, attributes)` or `Event` from `autotel/event`                                        |
-| Observable input validation | `defineValidator(name, schema, { boundary, onMismatch })` from `autotel/validate` — records Zod/`safeParse` mismatches as `validation.*` spans + `autotel.validation.mismatches` counter. `reject` (default) records then throws a 400; `observe` records then returns raw input. PII-safe (paths/codes only). Security escalation is explicit opt-in via `onValidationMismatch()`. Not the same as `autotel-schema` (telemetry-surface contract) |
-| Init (once at startup)      | `init({ service, ... })` from `autotel` or `autotel/instrumentation`                             |
-| PII redaction               | `init({ attributeRedactor: 'default' | 'strict' | 'pci-dss' | { keyPatterns, valuePatterns } })`       |
-| Testing                     | `createTraceCollector()` from `autotel/testing`; `InMemorySpanExporter` from `autotel/exporters` |
-| Security observability hooks (OWASP A09) | Observability at security decision points: `securityEvent()` / `withSecurity()` / `hashIdentifier()` from `autotel-audit`; zero-code signals via `createSecuritySignalProcessor()` in `init({ spanProcessors })`. See `docs/SECURITY-OBSERVABILITY.md` and `integrations/security` in apps/docs. |
-| GenAI/LLM calls | `traceGenAI()` (alias `traceLLM`) from `autotel-genai/trace`; pair with `recordGenAiResponse()`, `recordGenAiUsage()`, `setGenAiContent()`. Cost via `recordLLMCost`/`estimateLLMCost`/`MODEL_PRICING` from `autotel-genai/cost`; events via `recordInferenceDetails()`/`recordEvaluationResult()` from `autotel-genai/events`; metrics via `genAiMetricViews` from `autotel-genai/metrics`. Canonical `gen_ai.*` attributes only |
-| Agent identity + auditability | `withAgentAction()`, `withAgentSession()`, `withScopedTool()`, `recordPolicyDecision()`, `recordDecisionBasis()`, `createAgentIdentityRegistry()`, `createSignedEventEnvelope()` from `autotel-genai/agent` |
-| Agent security observability (Google SAIF) | `recordControllerId()`, `recordHumanApproval()`, `recordInputProvenance()`, `recordPlanStep()`, `recordPlanRiskAssessment()`, `runAgentPlanClassifier()`, `heuristicPlanRiskClassifier()` from `autotel-genai/agent`; MCP bridge via `createMcpSecurityEventBridge()` from `autotel-audit`; passive chain detection via `createSecuritySignalProcessor()`. See [`docs/AGENT-SECURITY-OBSERVABILITY.md`](docs/AGENT-SECURITY-OBSERVABILITY.md). |
+| Need                                       | API / entry point                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Wrap a function with a span                | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                                                                                                                                                                                                                                                                                                                                                                                         |
+| Request-scoped attributes                  | `getRequestLogger(ctx?)` → `.set()`, `.info()` / `.warn()` / `.error()`, `.emitNow()`, `.fork()`                                                                                                                                                                                                                                                                                                                                                 |
+| Structured throw                           | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })`                                                                                                                                                                                                                                                                                                                                                                  |
+| Parse API errors (client)                  | `parseError(err)` → `{ message, status, why?, fix?, link?, raw }`                                                                                                                                                                                                                                                                                                                                                                                |
+| Lock init (framework)                      | `lockLogger()`, `isLoggerLocked()`                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Product/analytics events                   | `track(name, attributes)` or `Event` from `autotel/event`                                                                                                                                                                                                                                                                                                                                                                                        |
+| Observable input validation                | `defineValidator(name, schema, { boundary, onMismatch })` from `autotel/validate`: records Zod/`safeParse` mismatches as `validation.*` spans + `autotel.validation.mismatches` counter. `reject` (default) records then throws a 400; `observe` records then returns raw input. PII-safe (paths/codes only). Security escalation is explicit opt-in via `onValidationMismatch()`. Not the same as `autotel-schema` (telemetry-surface contract) |
+| Init (once at startup)                     | `init({ service, ... })` from `autotel` or `autotel/instrumentation`                                                                                                                                                                                                                                                                                                                                                                             |
+| PII redaction                              | `init({ attributeRedactor: 'default' \| 'strict' \| 'pci-dss' \| { keyPatterns, valuePatterns } })`                                                                                                                                                                                                                                                                                                                                              |
+| Testing                                    | `createTraceCollector()` from `autotel/testing`; `InMemorySpanExporter` from `autotel/exporters`                                                                                                                                                                                                                                                                                                                                                 |
+| Service level objectives                   | `createSloTracker()` and `evaluateBurnRateAlert()` from `autotel/slo`: rolling good/bad SLI calculation, error-budget consumption, baseline/lookahead forecasts, and dual-window burn-rate decisions. Keep SLO names and metric attributes low-cardinality.                                                                                                                                                                                      |
+| Cohort analysis (debug loop)               | `compareCohorts({ outlier, baseline })` from `autotel/analysis`: ranks the field/value pairs separating a group you are investigating from a normal population. Accepts wide events, `TestSpan.attributes`, or backend rows. Skips fields whose values never repeat, so bucket numeric fields at instrumentation time. Output is a hypothesis; confirm it against individual traces.                                                             |
+| Security observability hooks (OWASP A09)   | Observability at security decision points: `securityEvent()` / `withSecurity()` / `hashIdentifier()` from `autotel-audit`; zero-code signals via `createSecuritySignalProcessor()` in `init({ spanProcessors })`. See `docs/SECURITY-OBSERVABILITY.md` and `integrations/security` in apps/docs.                                                                                                                                                 |
+| GenAI/LLM calls                            | `traceGenAI()` (alias `traceLLM`) from `autotel-genai/trace`; pair with `recordGenAiResponse()`, `recordGenAiUsage()`, `setGenAiContent()`. Cost via `recordLLMCost`/`estimateLLMCost`/`MODEL_PRICING` from `autotel-genai/cost`; events via `recordInferenceDetails()`/`recordEvaluationResult()` from `autotel-genai/events`; metrics via `genAiMetricViews` from `autotel-genai/metrics`. Canonical `gen_ai.*` attributes only                |
+| Agent identity + auditability              | `withAgentAction()`, `withAgentSession()`, `withScopedTool()`, `recordPolicyDecision()`, `recordDecisionBasis()`, `createAgentIdentityRegistry()`, `createSignedEventEnvelope()` from `autotel-genai/agent`                                                                                                                                                                                                                                      |
+| Agent security observability (Google SAIF) | `recordControllerId()`, `recordHumanApproval()`, `recordInputProvenance()`, `recordPlanStep()`, `recordPlanRiskAssessment()`, `runAgentPlanClassifier()`, `heuristicPlanRiskClassifier()` from `autotel-genai/agent`; MCP bridge via `createMcpSecurityEventBridge()` from `autotel-audit`; passive chain detection via `createSecuritySignalProcessor()`. See [`docs/AGENT-SECURITY-OBSERVABILITY.md`](docs/AGENT-SECURITY-OBSERVABILITY.md).   |
 
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
 - **Structured errors**: Prefer `createStructuredError` over `new Error()` in API routes and services. On the client, use `parseError(caught)` to show message/why/fix in UI.
 - **Span Event deprecation direction**: Existing span-event data remains supported, but new code should prefer log-based correlated events and keep span-timeline compatibility as an implementation detail.
+- **Deterministic wrappers**: `trace(name?, fn)` is plain-only and never executes or inspects `fn` during construction. Use `withTracing({ name })((ctx) => fn)` for the explicit context-factory form. Keep edge `withTracing()` factories pure because edge may inspect the returned handler for naming.
+- **Stable names in examples**: Runnable examples must not emit `unknown` span names. Use `trace('operation.name', fn)` or `instrument({ key, fn })` when inference is not guaranteed.
 
 ---
 
 ## Framework Quick Reference (for suggesting setup)
 
-| Framework              | Where to look / what to suggest                                                                             |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Hono**               | `autotel-hono` + `autotel-adapters/hono` (`autotelMiddleware`, `useLogger`).                                |
-| **Fastify**            | `autotel-adapters/fastify` (`withAutotel`, `useLogger`).                                                  |
-| **Express**            | `autotel-adapters/express` (`withAutotel`, `useLogger`).                                                    |
-| **NestJS**             | `autotel-adapters/nestjs` (`AutotelInterceptor`, `useLogger`).                                              |
-| **SvelteKit**          | `autotel-adapters/sveltekit` (`autotelHandle`, `useLogger`).                                                |
-| **Elysia**             | `autotel-adapters/elysia` (`withAutotelHandler`, `useLogger`).                                              |
-| **Nuxt**               | `autotel-nuxt` module + `autotel-adapters/nitro`.                                                           |
-| **TanStack Start**     | `autotel-tanstack`: middleware, env; see package CLAUDE and `apps/example-tanstack-start`.                  |
-| **Cloudflare Workers** | `autotel-cloudflare` + `autotel-adapters/cloudflare` (`withAutotelFetch`, `waitUntil`).                      |
-| **Next.js**            | `autotel-adapters/next` (`withAutotel`, streaming-aware emit).                                              |
-| **Custom HTTP**        | `autotel-adapters/toolkit` (`defineFrameworkIntegration`); see `examples/community-framework-skeleton/`.    |
-| **Browser / SPA**      | `autotel-web`: `init()` auto-injects `traceparent`. For per-tenant tracing, call `setBaggage({ 'tenant.id': id })` after login — it propagates as a W3C `baggage` header (same-origin/fail-closed) and the backend's `BaggageSpanProcessor` tags server spans. Do **not** hand-roll a fetch wrapper for this. |
+| Framework              | Where to look / what to suggest                                                                                                                                                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Hono**               | `autotel-hono` + `autotel-adapters/hono` (`autotelMiddleware`, `useLogger`).                                                                                                                                                                                                                                 |
+| **Fastify**            | `autotel-adapters/fastify` (`withAutotel`, `useLogger`).                                                                                                                                                                                                                                                     |
+| **Express**            | `autotel-adapters/express` (`withAutotel`, `useLogger`).                                                                                                                                                                                                                                                     |
+| **NestJS**             | `autotel-adapters/nestjs` (`AutotelInterceptor`, `useLogger`).                                                                                                                                                                                                                                               |
+| **SvelteKit**          | `autotel-adapters/sveltekit` (`autotelHandle`, `useLogger`).                                                                                                                                                                                                                                                 |
+| **Elysia**             | `autotel-adapters/elysia` (`withAutotelHandler`, `useLogger`).                                                                                                                                                                                                                                               |
+| **Nuxt**               | `autotel-nuxt` module + `autotel-adapters/nitro`.                                                                                                                                                                                                                                                            |
+| **TanStack Start**     | `autotel-tanstack`: middleware, env; see package CLAUDE and `apps/example-tanstack-start`.                                                                                                                                                                                                                   |
+| **Cloudflare Workers** | `autotel-cloudflare` + `autotel-adapters/cloudflare` (`withAutotelFetch`, `waitUntil`).                                                                                                                                                                                                                      |
+| **Next.js**            | `autotel-adapters/next` (`withAutotel`, streaming-aware emit).                                                                                                                                                                                                                                               |
+| **Custom HTTP**        | `autotel-adapters/toolkit` (`defineFrameworkIntegration`); see `examples/community-framework-skeleton/`.                                                                                                                                                                                                     |
+| **Browser / SPA**      | `autotel-web`: `init()` auto-injects `traceparent`. For per-tenant tracing, call `setBaggage({ 'tenant.id': id })` after login: it propagates as a W3C `baggage` header (same-origin/fail-closed) and the backend's `BaggageSpanProcessor` tags server spans. Do **not** hand-roll a fetch wrapper for this. |
 
 Always suggest `init()` (or instrumentation) once at app entry; then spans + request logger or `trace()` in handlers.
 
@@ -127,6 +131,7 @@ Always suggest `init()` (or instrumentation) once at app entry; then spans + req
 - **Synchronous init**: `init()` must stay synchronous. Use `node-require` helpers for optional/dynamic imports, never `await import()` for init-time loading.
 - **Tree-shaking**: Packages use explicit `exports` in `package.json`. Do not add barrel re-exports that pull in unused modules.
 - **Test split**: Unit tests `*.test.ts`; integration tests `*.integration.test.ts` (separate config in core package).
+- **Executable examples**: Changes to public APIs must keep `apps/book-chapters` type-checking and all chapter scripts runnable via its `run-all` command.
 - **No secrets**: Never commit API keys, tokens, or secrets. Do not log sensitive data in examples or docs.
 
 ---
@@ -209,7 +214,7 @@ Use these when suggesting changes to user code:
 
 ## Summary: Making Autotel the Right Fit for AI Coding Agents
 
-1. **Single source of truth**: This file (AGENTS.md) — keep it updated when patterns or rules change.
+1. **Single source of truth**: This file (AGENTS.md): keep it updated when patterns or rules change.
 2. **Clear API surface**: Suggest `trace` / `span` / `instrument`, `getRequestLogger`, `createStructuredError` / `parseError`, `track` / Event API, and `init()`; point to package exports for subpaths.
 3. **Structured errors**: Always prefer structured errors and `parseError()` on the client so agents and users get explainable, actionable errors.
 4. **Review checklist**: Use the instrumentation checklist and anti-patterns above when reviewing or generating code.

@@ -9,6 +9,7 @@ This application demonstrates how to use autotel event subscribers to send produ
 Demonstrates sending events to PostHog with the official adapter.
 
 **Setup:**
+
 1. Sign up for PostHog at https://posthog.com
 2. Get your Project API key (starts with `phc_`)
 3. Add to `.env`:
@@ -19,11 +20,13 @@ Demonstrates sending events to PostHog with the official adapter.
    ```
 
 **Run:**
+
 ```bash
 pnpm start:posthog
 ```
 
 **What it demonstrates:**
+
 - Tracking product view events
 - Funnel step tracking (checkout flow)
 - Outcome tracking (payment success/failure)
@@ -34,6 +37,7 @@ pnpm start:posthog
 Demonstrates sending selective events alerts to Slack channels.
 
 **Setup:**
+
 1. Create a Slack App at https://api.slack.com/apps
 2. Enable "Incoming Webhooks"
 3. Add webhook to your workspace
@@ -45,11 +49,13 @@ Demonstrates sending selective events alerts to Slack channels.
    ```
 
 **Run:**
+
 ```bash
 pnpm start:slack
 ```
 
 **What it demonstrates:**
+
 - Filtering events to avoid noisy channels (only high-value orders and failures)
 - Outcome tracking for failure alerts
 - Value tracking for revenue notifications
@@ -65,22 +71,26 @@ Demonstrates the WebhookSubscriber with a self-contained local server.
 No external services required! This example creates both the webhook sender and receiver in one process.
 
 **Run:**
+
 ```bash
 pnpm start:webhook
 ```
 
 **What it demonstrates:**
+
 - Creating a webhook receiver endpoint
 - Sending events through WebhookSubscriber
 - Testing webhook integration locally
 - Custom headers for webhook authentication
 
 **Endpoints:**
+
 - `GET /health` - Health check
 - `POST /webhook` - Receives webhook payloads
 - `POST /trigger` - Triggers demo events
 
 **Test manually:**
+
 ```bash
 # Test webhook receiver directly
 curl -X POST http://localhost:4100/webhook \
@@ -93,6 +103,7 @@ curl -X POST http://localhost:4100/webhook \
 ## Running the Examples
 
 1. Copy `.env.example` to `.env`:
+
    ```bash
    cp .env.example .env
    ```
@@ -100,6 +111,7 @@ curl -X POST http://localhost:4100/webhook \
 2. Fill in your credentials in `.env`
 
 3. Build the required packages:
+
    ```bash
    # From monorepo root
    pnpm build
@@ -115,14 +127,18 @@ curl -X POST http://localhost:4100/webhook \
 ## Architecture Notes
 
 ### Events Queue Pattern
+
 All subscribers use an async queue pattern:
+
 - Events are queued immediately and return to the caller
 - A background worker processes the queue
 - Multiple adapters can be configured simultaneously
 - Graceful shutdown waits for queue to drain
 
 ### Filtering Events
+
 Each subscriber supports filtering to control which events are sent:
+
 ```typescript
 new SlackSubscriber({
   webhookUrl: process.env.SLACK_WEBHOOK_URL!,
@@ -135,12 +151,14 @@ new SlackSubscriber({
       return true;
     }
     return false;
-  }
-})
+  },
+});
 ```
 
 ### Graceful Shutdown
+
 All examples implement proper cleanup:
+
 - Flush pending events
 - Shutdown OpenTelemetry SDK
 - Close HTTP servers
@@ -149,19 +167,23 @@ All examples implement proper cleanup:
 ## Troubleshooting
 
 **"Package subpath './slack' is not defined by exports"**
+
 - Run `pnpm build` from the monorepo root to build all packages
 
 **"ECONNREFUSED on localhost:4318"**
+
 - This is expected if you don't have a local OTLP collector running
 - The events functionality still works; this only affects OpenTelemetry traces
 - To fix: Run a local OTLP collector or set `OTLP_ENDPOINT` to a remote endpoint
 
 **PostHog events not appearing**
+
 - Check your `POSTHOG_KEY` is correct (should start with `phc_`)
 - Verify `POSTHOG_HOST` matches your PostHog instance region
 - Events may take a few seconds to appear in PostHog UI
 
 **Slack messages not sending**
+
 - Ensure you're using an Incoming Webhook URL (not a bot token)
 - Verify the webhook URL format: `https://hooks.slack.com/services/...`
 - Check that the webhook is still active in your Slack app settings

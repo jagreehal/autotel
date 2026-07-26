@@ -19,7 +19,9 @@ function authHeaders(config: BrokerConfig): Record<string, string> {
   if (config.token) {
     headers.Authorization = `Bearer ${config.token}`;
   } else if (config.username && config.password) {
-    const encoded = Buffer.from(`${config.username}:${config.password}`).toString('base64');
+    const encoded = Buffer.from(
+      `${config.username}:${config.password}`,
+    ).toString('base64');
     headers.Authorization = `Basic ${encoded}`;
   }
   return headers;

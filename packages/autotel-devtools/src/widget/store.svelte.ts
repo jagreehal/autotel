@@ -287,12 +287,7 @@ export const unseenFailuresSignal = computed(() => {
  * surface the slowest / largest / failing traces for debugging.
  */
 export type TraceSortKey =
-  | 'time'
-  | 'duration'
-  | 'spans'
-  | 'service'
-  | 'name'
-  | 'status';
+  'time' | 'duration' | 'spans' | 'service' | 'name' | 'status';
 export type SortDir = 'asc' | 'desc';
 
 export const traceSortSignal = signal<{ key: TraceSortKey; dir: SortDir }>({
@@ -397,7 +392,7 @@ export const sortedTracesSignal = computed(() => {
         ? av.localeCompare(bv as string)
         : (av as number) - (bv as number);
     // Stable tiebreak on start time so equal keys keep a deterministic order.
-    return cmp !== 0 ? cmp * factor : (b.startTime - a.startTime);
+    return cmp !== 0 ? cmp * factor : b.startTime - a.startTime;
   });
 });
 
@@ -477,7 +472,12 @@ export const genAiRowsSignal = computed<GenAiRow[]>(() => {
       if (!isGenAiSpan(span)) continue;
       const normalized = toGenAiSpan(span);
       hydrateToolResults(normalized, toolResultIndex);
-      rows.push({ raw: span, normalized, service: trace.service, traceId: trace.traceId });
+      rows.push({
+        raw: span,
+        normalized,
+        service: trace.service,
+        traceId: trace.traceId,
+      });
     }
   }
   // Newest first.
@@ -613,7 +613,10 @@ function mergeTraceData(base: TraceData, incoming: TraceData): TraceData {
   return recomputeTrace(base, [...byId.values()]);
 }
 
-function mergeTraces(existing: TraceData[], incoming: TraceData[]): TraceData[] {
+function mergeTraces(
+  existing: TraceData[],
+  incoming: TraceData[],
+): TraceData[] {
   if (incoming.length === 0) return existing;
 
   // Collapse any duplicate trace ids within the incoming batch first. A single
@@ -651,10 +654,15 @@ function mergeTracesCapped(
   return merged.length > limit ? merged.slice(-limit) : merged;
 }
 
-function prependLogsCapped(existing: LogData[], incoming: LogData[]): LogData[] {
+function prependLogsCapped(
+  existing: LogData[],
+  incoming: LogData[],
+): LogData[] {
   if (incoming.length === 0) return existing;
   const merged = [...incoming, ...existing];
-  return merged.length > maxHistorySize ? merged.slice(0, maxHistorySize) : merged;
+  return merged.length > maxHistorySize
+    ? merged.slice(0, maxHistorySize)
+    : merged;
 }
 
 // ===== Pause-buffer streams =====

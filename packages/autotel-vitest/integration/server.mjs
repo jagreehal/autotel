@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { init, getTracer, context as otelContext, trace } from 'autotel';
+import { init, getTracer, context as otelContext, withTracing } from 'autotel';
 import { extractTraceContext } from 'autotel/http';
 
 const PORT = Number(process.env.PORT) || 3399;
@@ -12,7 +12,7 @@ init({
 
 const tracer = getTracer('autotel-vitest-compat-server', '1.0.0');
 
-const fetchUser = trace((ctx) => async (userId) => {
+const fetchUser = withTracing({})((ctx) => async (userId) => {
   ctx.setAttribute('db.userId', userId);
   return { id: userId, name: `User ${userId}` };
 });

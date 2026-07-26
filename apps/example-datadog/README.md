@@ -63,6 +63,7 @@ pnpm start
 ```
 
 The example will:
+
 1. Initialize autotel with Datadog OTLP endpoints
 2. Execute several traced operations (orders, payments, refunds, reports)
 3. Send traces, logs, and metrics to Datadog
@@ -73,16 +74,19 @@ The example will:
 After running the example, visit Datadog to see your data:
 
 **Traces (APM)**
+
 ```
 https://app.datadoghq.com/apm/traces?query=service:example-datadog
 ```
 
 **Logs**
+
 ```
 https://app.datadoghq.com/logs?query=service:example-datadog
 ```
 
 **Metrics**
+
 ```
 https://app.datadoghq.com/metric/explorer?query=example-datadog
 ```
@@ -137,17 +141,17 @@ init(
     service: 'example-datadog',
     environment: 'development',
     enableLogs: true,
-  })
+  }),
 );
 ```
 
 #### What Gets Configured
 
-| Signal | Endpoint | Authentication |
-|--------|----------|----------------|
-| **Traces** | `https://otlp.{site}/v1/traces` | `dd-api-key` header |
+| Signal      | Endpoint                         | Authentication      |
+| ----------- | -------------------------------- | ------------------- |
+| **Traces**  | `https://otlp.{site}/v1/traces`  | `dd-api-key` header |
 | **Metrics** | `https://otlp.{site}/v1/metrics` | `dd-api-key` header |
-| **Logs** | `https://otlp.{site}/v1/logs` | `dd-api-key` header |
+| **Logs**    | `https://otlp.{site}/v1/logs`    | `dd-api-key` header |
 
 All three signals use the same API key and site configuration.
 
@@ -156,7 +160,7 @@ All three signals use the same API key and site configuration.
 If you don't need log export, you can use a simpler configuration without installing the log packages:
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, trace, withTracing } from 'autotel';
 
 // No need for log packages; autotel-backends bundles them when enableLogs: true
 init({
@@ -167,18 +171,20 @@ init({
 });
 
 // Traces and metrics work automatically
-const processOrder = trace(ctx => async (orderId: string) => {
+const processOrder = withTracing({})((ctx) => async (orderId: string) => {
   ctx.setAttribute('order.id', orderId);
   // ... business logic
 });
 ```
 
 **This sends**:
+
 - ✅ Traces to Datadog APM
 - ✅ Metrics to Datadog Metrics
 - ❌ No logs (use your existing logger separately)
 
 **Package.json dependencies**:
+
 ```json
 {
   "dependencies": {
@@ -213,6 +219,7 @@ Autotel supports **two architectures** for sending telemetry to Datadog. Choose 
 ```
 
 **Configuration**:
+
 ```typescript
 import { init } from 'autotel';
 
@@ -224,6 +231,7 @@ init({
 ```
 
 **Best for**:
+
 - ✅ **Serverless environments** (AWS Lambda, Google Cloud Functions, Azure Functions)
 - ✅ **Edge runtimes** (Cloudflare Workers, Vercel Edge Functions)
 - ✅ **Container platforms without persistent agents** (AWS Fargate, Google Cloud Run)
@@ -231,6 +239,7 @@ init({
 - ✅ **Development environments** (no infrastructure needed)
 
 **Pros**:
+
 - Zero infrastructure - no Agent to install or manage
 - Simple configuration - just API key and endpoint
 - Works anywhere with HTTPS egress
@@ -238,6 +247,7 @@ init({
 - Fast initial setup
 
 **Cons**:
+
 - Higher egress costs (direct HTTPS to Datadog)
 - No advanced Agent features (see below)
 - No local data aggregation/buffering
@@ -274,6 +284,7 @@ init({
 ```
 
 **Configuration**:
+
 ```typescript
 import { init } from 'autotel';
 
@@ -286,6 +297,7 @@ init({
 ```
 
 **Best for**:
+
 - ✅ **Production long-running services** (Node.js servers, APIs)
 - ✅ **Kubernetes/container orchestration** (Agent as DaemonSet/sidecar)
 - ✅ **On-premise deployments** (VMs, bare metal)
@@ -293,6 +305,7 @@ init({
 - ✅ **Advanced use cases** (log multi-line parsing, data scrubbing, enrichment)
 
 **Pros**:
+
 - **Lower egress costs** - Agent batches and compresses data locally
 - **500+ integrations** - Agent auto-collects infrastructure metrics (CPU, memory, disk, network)
 - **Advanced log features**:
@@ -305,6 +318,7 @@ init({
 - **Live debugging** - Datadog Live Tail, Dynamic Instrumentation
 
 **Cons**:
+
 - Requires Agent installation and management
 - Additional infrastructure dependency
 - Not available in serverless/edge environments
@@ -319,16 +333,19 @@ If you want to use the Datadog Agent approach:
 #### Step 1: Install Datadog Agent
 
 **On macOS**:
+
 ```bash
 DD_API_KEY=<YOUR_API_KEY> DD_SITE="datadoghq.com" bash -c "$(curl -L https://install.datadoghq.com/scripts/install_mac_os.sh)"
 ```
 
 **On Ubuntu/Debian**:
+
 ```bash
 DD_API_KEY=<YOUR_API_KEY> DD_SITE="datadoghq.com" bash -c "$(curl -L https://install.datadoghq.com/scripts/install_script_agent7.sh)"
 ```
 
 **On Kubernetes** (using Helm):
+
 ```bash
 helm repo add datadog https://helm.datadoghq.com
 helm repo update
@@ -340,6 +357,7 @@ helm install datadog-agent datadog/datadog \
 ```
 
 **On Docker**:
+
 ```bash
 docker run -d \
   --name datadog-agent \
@@ -369,6 +387,7 @@ log_level: debug
 ```
 
 Restart the Agent:
+
 ```bash
 sudo systemctl restart datadog-agent
 ```
@@ -395,24 +414,28 @@ init({
       new OTLPLogExporter({
         url: 'http://localhost:4318/v1/logs',
         // No headers needed
-      })
-    )
+      }),
+    ),
   ],
 });
 ```
 
 **For Kubernetes**: Use the Agent's service hostname:
+
 ```typescript
 init({
   service: 'my-app',
   // Agent runs as DaemonSet, accessible via localhost or service name
-  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://datadog-agent.default.svc.cluster.local:4318',
+  endpoint:
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+    'http://datadog-agent.default.svc.cluster.local:4318',
 });
 ```
 
 #### Step 4: Verify Agent is Receiving Data
 
 Check Agent status:
+
 ```bash
 sudo datadog-agent status
 ```
@@ -430,23 +453,28 @@ import { init } from 'autotel';
 import { createDatadogConfig } from 'autotel-backends/datadog';
 
 // Direct cloud ingestion
-init(createDatadogConfig({
-  apiKey: process.env.DATADOG_API_KEY!,
-  service: 'my-app',
-  site: 'datadoghq.com',
-  enableLogs: true,
-}));
+init(
+  createDatadogConfig({
+    apiKey: process.env.DATADOG_API_KEY!,
+    service: 'my-app',
+    site: 'datadoghq.com',
+    enableLogs: true,
+  }),
+);
 
 // OR use local Agent
-init(createDatadogConfig({
-  service: 'my-app',
-  useAgent: true,  // No API key needed!
-  agentHost: 'localhost',  // Default
-  agentPort: 4318,         // Default
-}));
+init(
+  createDatadogConfig({
+    service: 'my-app',
+    useAgent: true, // No API key needed!
+    agentHost: 'localhost', // Default
+    agentPort: 4318, // Default
+  }),
+);
 ```
 
 **Benefits of the preset**:
+
 - Automatic endpoint configuration based on site/Agent
 - Handles API key authentication headers
 - Optional log processor setup
@@ -460,6 +488,7 @@ See `/packages/autotel/src/presets/datadog.ts` for full API.
 ### Decision Guide
 
 **Choose Direct Cloud Ingestion if**:
+
 - You're deploying to serverless (Lambda, Cloud Functions)
 - You're using edge runtimes (Cloudflare Workers, Vercel)
 - You're getting started and want simplest setup
@@ -467,6 +496,7 @@ See `/packages/autotel/src/presets/datadog.ts` for full API.
 - You don't need advanced Agent features
 
 **Choose Datadog Agent if**:
+
 - You're running production long-lived services
 - You're on Kubernetes or container orchestration
 - You have high data volume (cost optimization matters)
@@ -475,6 +505,7 @@ See `/packages/autotel/src/presets/datadog.ts` for full API.
 - You want the lowest possible performance overhead
 
 **Hybrid Approach**:
+
 - Serverless functions → Direct cloud ingestion
 - Backend services → Datadog Agent
 - Edge functions → Direct cloud ingestion
@@ -487,14 +518,16 @@ Both approaches send identical telemetry to Datadog - the data appears the same 
 ### 1. Traces with Custom Attributes
 
 ```typescript
-const processOrder = trace(ctx => async (orderId: string, amount: number) => {
-  // Custom attributes appear in Datadog APM
-  ctx.setAttribute('order.id', orderId);
-  ctx.setAttribute('order.amount', amount);
-  ctx.setAttribute('order.currency', 'USD');
+const processOrder = withTracing({})(
+  (ctx) => async (orderId: string, amount: number) => {
+    // Custom attributes appear in Datadog APM
+    ctx.setAttribute('order.id', orderId);
+    ctx.setAttribute('order.amount', amount);
+    ctx.setAttribute('order.currency', 'USD');
 
-  // ... business logic
-});
+    // ... business logic
+  },
+);
 ```
 
 **View in Datadog**: APM → Traces → Select a trace → See custom tags
@@ -504,7 +537,7 @@ const processOrder = trace(ctx => async (orderId: string, amount: number) => {
 ```typescript
 const logger = createBuiltinLogger('datadog-example');
 
-const processOrder = trace(ctx => async (orderId: string) => {
+const processOrder = withTracing({})((ctx) => async (orderId: string) => {
   // This log automatically includes trace_id and span_id
   logger.info({ orderId }, 'Processing order');
 
@@ -518,7 +551,7 @@ const processOrder = trace(ctx => async (orderId: string) => {
 ### 3. Nested Spans (Parent-Child Relationships)
 
 ```typescript
-const processPayment = trace(ctx => async (orderId: string) => {
+const processPayment = withTracing({})((ctx) => async (orderId: string) => {
   // These automatically create child spans
   await validatePayment(orderId);
   await chargeCard(orderId);
@@ -530,7 +563,7 @@ const processPayment = trace(ctx => async (orderId: string) => {
 ### 4. Error Handling and Capture
 
 ```typescript
-const processRefund = trace(ctx => async (orderId: string) => {
+const processRefund = withTracing({})((ctx) => async (orderId: string) => {
   if (shouldFail) {
     // Error is automatically captured with full stack trace
     throw new Error('Refund failed: insufficient funds');
@@ -547,11 +580,11 @@ import { recordMetric } from 'autotel';
 
 recordMetric('order.processed', 1, {
   currency: 'USD',
-  environment: 'development'
+  environment: 'development',
 });
 
 recordMetric('report.duration_ms', duration, {
-  report_type: 'daily_sales'
+  report_type: 'daily_sales',
 });
 ```
 
@@ -571,13 +604,13 @@ const logger = pino(
     target: 'pino-datadog-transport',
     options: {
       ddClientConf: {
-        authMethods: { apiKeyAuth: process.env.DATADOG_API_KEY }
+        authMethods: { apiKeyAuth: process.env.DATADOG_API_KEY },
       },
       ddServerConf: { site: 'datadoghq.eu' },
       ddsource: 'nodejs',
-      service: 'my-app'
-    }
-  })
+      service: 'my-app',
+    },
+  }),
 );
 ```
 
@@ -607,15 +640,15 @@ init({
 
 ### Migration Benefits
 
-| Feature | pino-datadog-transport | Autotel OTLP |
-|---------|------------------------|------------------|
-| **Logs** | ✅ Direct | ✅ Via OTLP (optional) |
-| **Traces** | ❌ No | ✅ Built-in |
-| **Metrics** | ❌ No | ✅ Built-in |
-| **Trace Correlation** | ❌ Manual | ✅ Automatic |
-| **Vendor Lock-in** | ⚠️ Datadog-specific | ✅ OTLP standard |
+| Feature                     | pino-datadog-transport | Autotel OTLP                                  |
+| --------------------------- | ---------------------- | --------------------------------------------- |
+| **Logs**                    | ✅ Direct              | ✅ Via OTLP (optional)                        |
+| **Traces**                  | ❌ No                  | ✅ Built-in                                   |
+| **Metrics**                 | ❌ No                  | ✅ Built-in                                   |
+| **Trace Correlation**       | ❌ Manual              | ✅ Automatic                                  |
+| **Vendor Lock-in**          | ⚠️ Datadog-specific    | ✅ OTLP standard                              |
 | **Additional Dependencies** | pino-datadog-transport | autotel + autotel-backends (log libs bundled) |
-| **Unified Observability** | ❌ Logs only | ✅ All signals |
+| **Unified Observability**   | ❌ Logs only           | ✅ All signals                                |
 
 ### Incremental Migration Strategy
 
@@ -631,12 +664,12 @@ const logger = pino(
     target: 'pino-datadog-transport',
     options: {
       ddClientConf: {
-        authMethods: { apiKeyAuth: process.env.DATADOG_API_KEY }
+        authMethods: { apiKeyAuth: process.env.DATADOG_API_KEY },
       },
       ddServerConf: { site: 'datadoghq.eu' },
-      service: 'my-app'
-    }
-  })
+      service: 'my-app',
+    },
+  }),
 );
 
 // Add autotel for traces and metrics only
@@ -651,6 +684,7 @@ init({
 ```
 
 **Benefits**:
+
 - ✅ No changes to existing log pipeline
 - ✅ Immediately get traces and metrics
 - ✅ Low risk migration
@@ -658,6 +692,7 @@ init({
 
 **Option 2: Full Migration**
 Replace everything with autotel OTLP (this example app):
+
 - Install `autotel` and `autotel-backends` (log libs are bundled)
 - Use `createDatadogConfig()` with `enableLogs: true`
 - Use `createBuiltinLogger()` from autotel
@@ -674,15 +709,16 @@ Replace everything with autotel OTLP (this example app):
 
 Datadog has multiple geographic regions. Use the correct site for your account:
 
-| Region | Site Value | OTLP Endpoint |
-|--------|------------|---------------|
-| **US1 (default)** | `datadoghq.com` | `https://otlp.datadoghq.com` |
-| **EU** | `datadoghq.eu` | `https://otlp.datadoghq.eu` |
-| **US3** | `us3.datadoghq.com` | `https://otlp.us3.datadoghq.com` |
-| **US5** | `us5.datadoghq.com` | `https://otlp.us5.datadoghq.com` |
-| **AP1** | `ap1.datadoghq.com` | `https://otlp.ap1.datadoghq.com` |
+| Region            | Site Value          | OTLP Endpoint                    |
+| ----------------- | ------------------- | -------------------------------- |
+| **US1 (default)** | `datadoghq.com`     | `https://otlp.datadoghq.com`     |
+| **EU**            | `datadoghq.eu`      | `https://otlp.datadoghq.eu`      |
+| **US3**           | `us3.datadoghq.com` | `https://otlp.us3.datadoghq.com` |
+| **US5**           | `us5.datadoghq.com` | `https://otlp.us5.datadoghq.com` |
+| **AP1**           | `ap1.datadoghq.com` | `https://otlp.ap1.datadoghq.com` |
 
 Check your Datadog URL to determine your site:
+
 - If you log in at `app.datadoghq.com`, use `datadoghq.com`
 - If you log in at `app.datadoghq.eu`, use `datadoghq.eu`
 
@@ -691,22 +727,28 @@ Check your Datadog URL to determine your site:
 ### Traces/Logs/Metrics Not Appearing in Datadog
 
 1. **Check API Key**
+
    ```bash
    echo $DATADOG_API_KEY
    ```
+
    Verify it's not empty and is the correct key from Datadog.
 
 2. **Verify Site Configuration**
+
    ```bash
    echo $DATADOG_SITE
    ```
+
    Make sure it matches your Datadog region.
 
 3. **Check Application Output**
    The example prints the OTLP endpoint on startup:
+
    ```
    OTLP Endpoint: https://otlp.datadoghq.com
    ```
+
    Verify this matches your expected site.
 
 4. **Wait for Data**
@@ -754,11 +796,11 @@ init({
   endpoint: `https://otlp.${DATADOG_SITE}`,
   otlpHeaders: `dd-api-key=${DATADOG_API_KEY}`,
   sampler: new AdaptiveSampler({
-    baselineSampleRate: 0.05,    // Sample 5% of normal requests
-    slowThresholdMs: 500,         // Requests >500ms are "slow"
-    alwaysSampleErrors: true,     // Always capture errors
-    alwaysSampleSlow: true,       // Always capture slow requests
-  })
+    baselineSampleRate: 0.05, // Sample 5% of normal requests
+    slowThresholdMs: 500, // Requests >500ms are "slow"
+    alwaysSampleErrors: true, // Always capture errors
+    alwaysSampleSlow: true, // Always capture slow requests
+  }),
 });
 ```
 
@@ -798,7 +840,7 @@ init({
     'service.version': process.env.APP_VERSION,
     'service.namespace': 'payments',
     'host.name': process.env.HOSTNAME,
-  })
+  }),
 });
 ```
 
@@ -812,5 +854,6 @@ init({
 ## Support
 
 For issues or questions:
+
 - Autotel: [GitHub Issues](https://github.com/jagreehal/autotel/issues)
 - Datadog: [Support Portal](https://help.datadoghq.com/)

@@ -28,9 +28,18 @@ export default defineConfig(
       'unicorn/no-null': 'off',
       'unicorn/prefer-top-level-await': 'off',
       'unicorn/no-nested-ternary': 'off',
+      // TypeScript often *requires* an explicit `undefined` argument, so the
+      // autofix for arguments strips a parameter the signature demands.
+      // Keep the rule for `return undefined` / `let x = undefined`.
+      'unicorn/no-useless-undefined': ['error', { checkArguments: false }],
       'unicorn/number-literal-case': 'off', // Conflicts with Prettier (Prettier uses lowercase)
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-exports': 'error',
+      // `_name` marks a parameter kept for signature shape but not read.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       'no-restricted-syntax': [
         'error',
         {
@@ -76,6 +85,10 @@ export default defineConfig(
       'unicorn/no-null': 'off',
       'unicorn/prefer-top-level-await': 'off',
       'unicorn/no-nested-ternary': 'off',
+      // TypeScript often *requires* an explicit `undefined` argument, so the
+      // autofix for arguments strips a parameter the signature demands.
+      // Keep the rule for `return undefined` / `let x = undefined`.
+      'unicorn/no-useless-undefined': ['error', { checkArguments: false }],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/consistent-type-exports': 'off',
       '@typescript-eslint/no-unused-vars': [

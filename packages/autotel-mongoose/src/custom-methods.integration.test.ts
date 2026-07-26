@@ -85,8 +85,11 @@ async function setup(config?: InstrumentMongooseConfig) {
     return `${this.name} <${this.email}>`;
   };
 
-  // Query helper: chainable
-  schema.query.byDomain = function byDomain(this: any, domain: string): any {
+  // Query helper: chainable. `schema.query` defaults to `{}` (no query-helper
+  // generic supplied), so assign through its real runtime shape: a map of helpers.
+  (
+    schema.query as Record<string, (this: any, ...args: any[]) => unknown>
+  ).byDomain = function byDomain(this: any, domain: string): any {
     return this.where({ email: new RegExp(`@${domain}$`) });
   };
 
@@ -450,7 +453,9 @@ describe('custom method instrumentation', () => {
     const PatchModel = m.model(`Patch_${(modelCounter += 1)}`, patchSchema);
 
     const schema = new m.Schema({ email: { type: String } });
-    schema.statics.Patches = PatchModel; // plugin-style attachment
+    // Plugin-style attachment: statics is typed as a map of functions, but the
+    // runtime (and this test) deliberately parks a compiled Model there.
+    (schema.statics as Record<string, unknown>).Patches = PatchModel;
     const Model = m.model(`Hist_${(modelCounter += 1)}`, schema) as any;
 
     try {

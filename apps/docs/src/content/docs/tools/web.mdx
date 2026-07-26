@@ -94,18 +94,18 @@ function App() {
 
 ## Examples
 
-- [`example-web-vanilla`](https://github.com/jagreehal/autotel/tree/main/apps/example-web-vanilla) — Vanilla JS with `autotel-web` lean mode showing automatic `traceparent` injection.
-- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs) — Next.js with `autotel-web` for browser-to-backend distributed tracing.
-- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start) — TanStack Start with `autotel-web` for client-side trace propagation.
+- [`example-web-vanilla`](https://github.com/jagreehal/autotel/tree/main/apps/example-web-vanilla): Vanilla JS with `autotel-web` lean mode showing automatic `traceparent` injection.
+- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs): Next.js with `autotel-web` for browser-to-backend distributed tracing.
+- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start): TanStack Start with `autotel-web` for client-side trace propagation.
 
 ## Why Not Full OTel in the Browser?
 
 - Full `@opentelemetry/sdk-trace-web` is ~700KB
 - `autotel-web` lean mode is **1.6KB** (440x smaller)
-- The browser only needs to propagate context — the backend does the tracing
+- The browser only needs to propagate context: the backend does the tracing
 
 ## Entry Points
 
-- `autotel-web` — Lean mode (default, ~1.6KB)
-- `autotel-web/full` — Full mode (~40-50KB)
-- `autotel-web/privacy` — Privacy manager
+- `autotel-web`: Lean mode (default, ~1.6KB)
+- `autotel-web/full`: Full mode (~40-50KB)
+- `autotel-web/privacy`: Privacy manager

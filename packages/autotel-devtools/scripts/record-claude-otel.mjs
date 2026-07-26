@@ -31,14 +31,27 @@ const OUT_DIR = path.resolve(here, '../src/server/__tests__/__fixtures__');
 const FIXED_SESSION = 'fixture-session-0001';
 // Attribute keys whose *value* is replaced with a constant redaction.
 const REDACT_KEYS = new Set([
-  'user.email', 'user.id', 'user.account_uuid', 'user.account_id',
-  'organization.id', 'request_id', 'client_request_id',
-  'gen_ai.response.id', 'prompt.id', 'plugin_id_hash',
+  'user.email',
+  'user.id',
+  'user.account_uuid',
+  'user.account_id',
+  'organization.id',
+  'request_id',
+  'client_request_id',
+  'gen_ai.response.id',
+  'prompt.id',
+  'plugin_id_hash',
 ]);
 // Attribute keys whose value is free-text content — dropped entirely.
 const DROP_KEYS = new Set([
-  'prompt', 'response', 'body', 'tool_input', 'tool_parameters',
-  'tool_result', 'full_command', 'user_prompt',
+  'prompt',
+  'response',
+  'body',
+  'tool_input',
+  'tool_parameters',
+  'tool_result',
+  'full_command',
+  'user_prompt',
 ]);
 
 function sanitizeAttr(attr) {
@@ -60,7 +73,8 @@ function sanitizeLogs(batches) {
   const resourceLogs = [];
   for (const batch of batches) {
     for (const rl of batch.resourceLogs ?? []) {
-      if (rl.resource) rl.resource.attributes = sanitizeAttrs(rl.resource.attributes);
+      if (rl.resource)
+        rl.resource.attributes = sanitizeAttrs(rl.resource.attributes);
       for (const sl of rl.scopeLogs ?? []) {
         for (const lr of sl.logRecords ?? []) {
           lr.attributes = sanitizeAttrs(lr.attributes);
@@ -76,7 +90,8 @@ function sanitizeMetrics(batches) {
   const resourceMetrics = [];
   for (const batch of batches) {
     for (const rm of batch.resourceMetrics ?? []) {
-      if (rm.resource) rm.resource.attributes = sanitizeAttrs(rm.resource.attributes);
+      if (rm.resource)
+        rm.resource.attributes = sanitizeAttrs(rm.resource.attributes);
       for (const sm of rm.scopeMetrics ?? []) {
         for (const m of sm.metrics ?? []) {
           const dps = (m.sum ?? m.gauge ?? m.histogram ?? {}).dataPoints ?? [];
@@ -101,7 +116,9 @@ function readJsonl(file) {
 function writeFixtures(rawDir) {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const logs = sanitizeLogs(readJsonl(path.join(rawDir, 'logs.jsonl')));
-  const metrics = sanitizeMetrics(readJsonl(path.join(rawDir, 'metrics.jsonl')));
+  const metrics = sanitizeMetrics(
+    readJsonl(path.join(rawDir, 'metrics.jsonl')),
+  );
   fs.writeFileSync(
     path.join(OUT_DIR, 'claude-code-logs.otlp.json'),
     JSON.stringify(logs, null, 2) + '\n',
@@ -111,11 +128,21 @@ function writeFixtures(rawDir) {
     JSON.stringify(metrics, null, 2) + '\n',
   );
   const logCount = logs.resourceLogs.reduce(
-    (n, rl) => n + (rl.scopeLogs ?? []).reduce((m, sl) => m + (sl.logRecords ?? []).length, 0),
+    (n, rl) =>
+      n +
+      (rl.scopeLogs ?? []).reduce(
+        (m, sl) => m + (sl.logRecords ?? []).length,
+        0,
+      ),
     0,
   );
   const metricCount = metrics.resourceMetrics.reduce(
-    (n, rm) => n + (rm.scopeMetrics ?? []).reduce((m, sm) => m + (sm.metrics ?? []).length, 0),
+    (n, rm) =>
+      n +
+      (rm.scopeMetrics ?? []).reduce(
+        (m, sm) => m + (sm.metrics ?? []).length,
+        0,
+      ),
     0,
   );
   process.stdout.write(
@@ -125,7 +152,9 @@ function writeFixtures(rawDir) {
 
 // ── capture mode: run claude wired to a local receiver ──────────────────────
 async function capture(prompt) {
-  const rawDir = fs.mkdtempSync(path.join(process.env.TMPDIR ?? '/tmp', 'claudeotel-'));
+  const rawDir = fs.mkdtempSync(
+    path.join(process.env.TMPDIR ?? '/tmp', 'claudeotel-'),
+  );
   const files = {
     '/v1/traces': path.join(rawDir, 'traces.jsonl'),
     '/v1/logs': path.join(rawDir, 'logs.jsonl'),
@@ -138,7 +167,10 @@ async function capture(prompt) {
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {
       try {
-        fs.appendFileSync(f, JSON.stringify(JSON.parse(Buffer.concat(chunks).toString())) + '\n');
+        fs.appendFileSync(
+          f,
+          JSON.stringify(JSON.parse(Buffer.concat(chunks).toString())) + '\n',
+        );
       } catch {
         /* protobuf / non-json — ignore; we ask for json below */
       }
@@ -161,10 +193,14 @@ async function capture(prompt) {
     OTEL_LOG_TOOL_DETAILS: '1',
   };
   await new Promise((resolve) => {
-    const child = spawn('claude', ['-p', prompt, '--allowedTools', 'Bash Read Glob'], {
-      stdio: 'inherit',
-      env,
-    });
+    const child = spawn(
+      'claude',
+      ['-p', prompt, '--allowedTools', 'Bash Read Glob'],
+      {
+        stdio: 'inherit',
+        env,
+      },
+    );
     child.on('exit', resolve);
   });
   await new Promise((r) => setTimeout(r, 3000)); // final flush
@@ -177,6 +213,7 @@ if (arg === '--from-dir') {
   writeFixtures(process.argv[3]);
 } else {
   const prompt =
-    arg ?? "Use the Bash tool to run 'ls -a', then write a one-sentence summary of what you see.";
+    arg ??
+    "Use the Bash tool to run 'ls -a', then write a one-sentence summary of what you see.";
   await capture(prompt);
 }

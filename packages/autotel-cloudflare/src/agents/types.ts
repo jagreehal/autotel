@@ -16,7 +16,8 @@ import type {
 export type { BaseEvent, AgentObservabilityEvent, MCPObservabilityEvent };
 export type { Observability, ObservabilityEvent, ChannelEventMap };
 
-export type ObservabilityExecutionContext = DurableObjectState | ExecutionContext;
+export type ObservabilityExecutionContext =
+  DurableObjectState | ExecutionContext;
 
 export interface AgentInstrumentationOptions {
   traceRpc?: boolean;

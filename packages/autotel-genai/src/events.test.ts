@@ -14,7 +14,9 @@ describe('setGenAiContent', () => {
     setGenAiContent(
       { setAttributes, track },
       {
-        inputMessages: [{ role: 'user', parts: [{ type: 'text', content: 'hi' }] }],
+        inputMessages: [
+          { role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+        ],
         systemInstructions: 'be concise',
       },
     );
@@ -74,7 +76,10 @@ describe('recordEvaluationResult', () => {
 describe('recordOperationException', () => {
   it('emits the canonical exception event', () => {
     const track = vi.fn();
-    recordOperationException({ track }, { type: 'timeout', message: 'timed out' });
+    recordOperationException(
+      { track },
+      { type: 'timeout', message: 'timed out' },
+    );
     expect(track).toHaveBeenCalledWith('gen_ai.client.operation.exception', {
       'exception.type': 'timeout',
       'exception.message': 'timed out',

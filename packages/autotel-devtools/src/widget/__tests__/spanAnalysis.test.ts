@@ -52,7 +52,12 @@ describe('computeCriticalPath', () => {
       span({ spanId: 'root', startTime: 0, endTime: 100 }),
       span({ spanId: 'fast', parentSpanId: 'root', startTime: 0, endTime: 30 }),
       span({ spanId: 'slow', parentSpanId: 'root', startTime: 0, endTime: 95 }),
-      span({ spanId: 'leaf', parentSpanId: 'slow', startTime: 10, endTime: 90 }),
+      span({
+        spanId: 'leaf',
+        parentSpanId: 'slow',
+        startTime: 10,
+        endTime: 90,
+      }),
     ];
     const path = computeCriticalPath(spans);
     expect([...path].sort()).toEqual(['leaf', 'root', 'slow']);
@@ -61,7 +66,12 @@ describe('computeCriticalPath', () => {
 
   it('handles orphan spans as roots without infinite loops', () => {
     const spans = [
-      span({ spanId: 'orphan', parentSpanId: 'missing', startTime: 0, endTime: 50 }),
+      span({
+        spanId: 'orphan',
+        parentSpanId: 'missing',
+        startTime: 0,
+        endTime: 50,
+      }),
     ];
     expect(computeCriticalPath(spans).has('orphan')).toBe(true);
   });

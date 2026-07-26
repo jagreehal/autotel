@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { context as api_context } from '@opentelemetry/api';
-import { trace, span, enterSpan } from './functional';
+import {
+  trace,
+  withTracing,
+  span,
+  enterSpan,
+  getActiveTraceContext,
+} from './functional';
 import {
   withNativeTracer,
   type NativeTracer,
@@ -52,11 +58,10 @@ describe('span()/trace()/enterSpan() route to the native tracer when active', ()
 
   it('trace() (async factory) routes to native and maps arg attributes', async () => {
     const tracer = recordingTracer();
-    const processPayment = trace(
-      {
-        name: 'payment.process',
-        attributesFromArgs: ([amount]) => ({ 'payment.amount': amount }),
-      },
+    const processPayment = withTracing({
+      name: 'payment.process',
+      attributesFromArgs: ([amount]) => ({ 'payment.amount': amount }),
+    })(
       (ctx) =>
         async function processPayment(amount: number) {
           ctx.setAttribute('payment.ok', true);
@@ -69,7 +74,26 @@ describe('span()/trace()/enterSpan() route to the native tracer when active', ()
     expect(tracer.spans[0]!.name).toBe('payment.process');
     expect(tracer.spans[0]!.attributes['payment.amount']).toBe(21);
     expect(tracer.spans[0]!.attributes['payment.ok']).toBe(true);
-    expect(tracer.spans[0]!.attributes['code.function']).toBe('payment.process');
+    expect(tracer.spans[0]!.attributes['code.function']).toBe(
+      'payment.process',
+    );
+  });
+
+  it('exposes the native span through getActiveTraceContext()', () => {
+    const tracer = recordingTracer();
+    const handler = trace('native.ambient', () => {
+      const ctx = getActiveTraceContext();
+      ctx?.setAttribute('ambient.available', true);
+      return ctx?.correlationId;
+    });
+
+    const correlationId = withNative(
+      { ...tracer, correlationId: 'ray-123' },
+      () => handler(),
+    );
+
+    expect(correlationId).toBe('ray-123');
+    expect(tracer.spans[0]!.attributes['ambient.available']).toBe(true);
   });
 
   it('trace() error path marks error attributes and rethrows', async () => {

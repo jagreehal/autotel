@@ -30,11 +30,21 @@ recommendation is generated.
 
 Four services collaborate over three Kafka topics. Each step is traced. Each event
 on the wire carries a correlation ID. The catalog you are reading is **the
-read-side of the same telemetry** — generated, not maintained.
+read-side of the same telemetry**. Generated, not maintained.
 
 <Tiles>
-  <Tile icon="BoltIcon" href="/docs/flows/CheckoutFlow" title="Walk the checkout flow" description="The headline path: basket to confirmed order." />
-  <Tile icon="ExclamationTriangleIcon" href="/docs/flows/PaymentRecoveryFlow" title="See what happens on payment failure" description="The recovery path: failed capture, retry, abandon." />
+  <Tile
+    icon="BoltIcon"
+    href="/docs/flows/CheckoutFlow"
+    title="Walk the checkout flow"
+    description="The headline path: basket to confirmed order."
+  />
+  <Tile
+    icon="ExclamationTriangleIcon"
+    href="/docs/flows/PaymentRecoveryFlow"
+    title="See what happens on payment failure"
+    description="The recovery path: failed capture, retry, abandon."
+  />
 </Tiles>
 
 ### Architecture
@@ -50,15 +60,16 @@ across **4,212** distinct customers. End-to-end p95 from `OrderPlaced` to
 **183 times** with a **94.5%** eventual-success rate after retry.
 
 Source: autotel telemetry, snapshot `2026-05-21T18:04Z`.
+
 </div>
 
 ## Services in this domain
 
-| Service | Role | Emits | Consumes |
-|---|---|---|---|
-| [[service\|OrdersService]] | Accepts the order, owns the order lifecycle | `OrderPlaced` | `PaymentCaptured`, `InventoryReserved` |
-| [[service\|PaymentService]] | Captures payment, retries on failure | `PaymentCaptured`, `PaymentFailed` | `OrderPlaced` |
-| [[service\|InventoryService]] | Reserves stock for confirmed orders | `InventoryReserved` | `PaymentCaptured` |
-| [[service\|RecommendationsService]] | Generates personalized post-purchase recs via an LLM | `RecommendationGenerated` | `OrderPlaced` |
+| Service                             | Role                                                 | Emits                              | Consumes                               |
+| ----------------------------------- | ---------------------------------------------------- | ---------------------------------- | -------------------------------------- |
+| [[service\|OrdersService]]          | Accepts the order, owns the order lifecycle          | `OrderPlaced`                      | `PaymentCaptured`, `InventoryReserved` |
+| [[service\|PaymentService]]         | Captures payment, retries on failure                 | `PaymentCaptured`, `PaymentFailed` | `OrderPlaced`                          |
+| [[service\|InventoryService]]       | Reserves stock for confirmed orders                  | `InventoryReserved`                | `PaymentCaptured`                      |
+| [[service\|RecommendationsService]] | Generates personalized post-purchase recs via an LLM | `RecommendationGenerated`          | `OrderPlaced`                          |
 
 <Footer />

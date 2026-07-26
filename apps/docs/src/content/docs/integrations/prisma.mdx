@@ -32,12 +32,12 @@ tsx --import ./instrumentation.ts src/index.ts
 ## Tracing Prisma Operations
 
 ```typescript
-import { trace, type TraceContext } from 'autotel';
+import { trace, withTracing, type TraceContext } from 'autotel';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export const createUser = trace(
+export const createUser = withTracing({})(
   (ctx) => async (email: string, name?: string) => {
     ctx.setAttribute('user.email', email);
 
@@ -50,29 +50,31 @@ export const createUser = trace(
   },
 );
 
-export const getUserWithPosts = trace((ctx) => async (userId: number) => {
-  ctx.setAttribute('user.id', userId);
+export const getUserWithPosts = withTracing({})(
+  (ctx) => async (userId: number) => {
+    ctx.setAttribute('user.id', userId);
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { posts: true },
-  });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { posts: true },
+    });
 
-  return user;
-});
+    return user;
+  },
+);
 ```
 
 ## What Gets Traced
 
 `PrismaInstrumentation` automatically captures:
 
-- `prisma:client:operation` — Full Prisma operation
-- `prisma:client:serialize` — Query serialization
-- `prisma:engine:query` — Query engine execution
-- `prisma:engine:connection` — Database connection
-- `prisma:engine:db_query` — Actual SQL query
-- `prisma:engine:serialize` — Response serialization
+- `prisma:client:operation`: Full Prisma operation
+- `prisma:client:serialize`: Query serialization
+- `prisma:engine:query`: Query engine execution
+- `prisma:engine:connection`: Database connection
+- `prisma:engine:db_query`: Actual SQL query
+- `prisma:engine:serialize`: Response serialization
 
 ## Examples
 
-- [`example-prisma`](https://github.com/jagreehal/autotel/tree/main/apps/example-prisma) — SQLite setup with User/Post models, nested queries, and transactions.
+- [`example-prisma`](https://github.com/jagreehal/autotel/tree/main/apps/example-prisma): SQLite setup with User/Post models, nested queries, and transactions.

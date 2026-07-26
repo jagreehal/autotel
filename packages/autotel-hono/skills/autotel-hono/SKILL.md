@@ -21,14 +21,16 @@ app.use(otel({ serviceName: 'my-api' }));
 ## Configuration
 
 ```typescript
-app.use(otel({
-  serviceName: 'my-api',
-  captureRequestHeaders: ['x-request-id'],
-  captureResponseHeaders: ['x-response-time'],
-  captureActiveRequests: true,
-  captureRequestDuration: true,
-  spanNameFactory: (c) => `${c.req.method} ${c.req.routePath}`,
-}));
+app.use(
+  otel({
+    serviceName: 'my-api',
+    captureRequestHeaders: ['x-request-id'],
+    captureResponseHeaders: ['x-response-time'],
+    captureActiveRequests: true,
+    captureRequestDuration: true,
+    spanNameFactory: (c) => `${c.req.method} ${c.req.routePath}`,
+  }),
+);
 ```
 
 ## What Gets Traced
@@ -39,6 +41,6 @@ app.use(otel({
 
 ## Common Mistakes
 
-- Do NOT call `otel()` per-route — register once with `app.use(otel(...))`.
-- Do NOT pass a tracer unless you need a custom one — the middleware creates one from the global provider.
+- Do NOT call `otel()` per-route: register once with `app.use(otel(...))`.
+- Do NOT pass a tracer unless you need a custom one: the middleware creates one from the global provider.
 - Header capture requires listing header names upfront in config, not at request time.

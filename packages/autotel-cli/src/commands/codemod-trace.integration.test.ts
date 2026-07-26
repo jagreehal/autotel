@@ -104,7 +104,9 @@ describe('resolveCodemodFiles', () => {
     it('resolves all TypeScript and TSX files with brace expansion', async () => {
       const files = await resolveCodemodFiles('src/**/*.{ts,tsx}', tempDir);
       expect(files.length).toBeGreaterThan(1);
-      expect(files.every((f) => f.endsWith('.ts') || f.endsWith('.tsx'))).toBe(true);
+      expect(files.every((f) => f.endsWith('.ts') || f.endsWith('.tsx'))).toBe(
+        true,
+      );
     });
 
     it('resolves files in specific subdirectory', async () => {
@@ -116,7 +118,10 @@ describe('resolveCodemodFiles', () => {
 
   describe('.d.ts exclusion', () => {
     it('excludes .d.ts files when using single file path', async () => {
-      const files = await resolveCodemodFiles('src/utils/helpers.d.ts', tempDir);
+      const files = await resolveCodemodFiles(
+        'src/utils/helpers.d.ts',
+        tempDir,
+      );
       expect(files).toHaveLength(0);
     });
 

@@ -87,9 +87,9 @@ wrap:
 
 ```typescript
 // app/orders/page.tsx
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
-const loadOrders = trace((ctx) => async (userId: string) => {
+const loadOrders = withTracing({})((ctx) => async (userId: string) => {
   ctx.setAttribute('user.id', userId);
   return db.orders.findMany({ where: { userId } });
 });
@@ -103,9 +103,9 @@ export default async function Page() {
 ```typescript
 // app/actions.ts ("use server")
 'use server';
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
-export const createOrder = trace((ctx) => async (data: OrderData) => {
+export const createOrder = withTracing({})((ctx) => async (data: OrderData) => {
   ctx.setAttribute('source', 'server-action');
   return db.orders.create({ data });
 });
@@ -159,10 +159,10 @@ directly.
 
 ## Examples
 
-- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs) — Next.js with `autotel-adapters/next` and `parseError()` for client-side error handling.
+- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs): Next.js with `autotel-adapters/next` and `parseError()` for client-side error handling.
 
 ## Related
 
-- [Adapters](/autotel/frameworks/adapters/) — full `autotel-adapters` reference.
-- [Auto-Instrumentation](/autotel/integrations/auto-instrumentation/) — HTTP, databases, etc.
-- [Edge Runtimes](/autotel/frameworks/edge/) — for `runtime = 'edge'` routes.
+- [Adapters](/autotel/frameworks/adapters/): full `autotel-adapters` reference.
+- [Auto-Instrumentation](/autotel/integrations/auto-instrumentation/): HTTP, databases, etc.
+- [Edge Runtimes](/autotel/frameworks/edge/): for `runtime = 'edge'` routes.

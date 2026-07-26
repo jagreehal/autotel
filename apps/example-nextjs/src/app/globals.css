@@ -1,10 +1,10 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  --font-geist-sans: "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-geist-mono: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  --font-geist-sans: 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-geist-mono: 'SFMono-Regular', 'Cascadia Code', Consolas, monospace;
 }
 
 @theme inline {

@@ -15,6 +15,10 @@
  * ```
  */
 
-export { configureXRay, setXRayAnnotation, setXRayMetadata } from './annotations';
+export {
+  configureXRay,
+  setXRayAnnotation,
+  setXRayMetadata,
+} from './annotations';
 export { XRayPropagator } from './propagator';
 export type { XRayConfig } from '../config';

@@ -241,7 +241,11 @@ class SlidingWindow {
    * Record a hit; returns the totals inside the window before and after it,
    * so callers can signal exactly once on a threshold crossing.
    */
-  record(key: string, now: number, weight = 1): { before: number; after: number } {
+  record(
+    key: string,
+    now: number,
+    weight = 1,
+  ): { before: number; after: number } {
     let entries = this.hits.get(key);
     if (!entries) {
       // Bound memory: random client addresses must not grow the map forever.
@@ -347,7 +351,9 @@ function readTraceId(span: ReadableSpanLike): string | undefined {
     return fromContext;
   }
   const fromAttr = readAttribute(span.attributes, ['trace_id']);
-  return typeof fromAttr === 'string' && fromAttr.length > 0 ? fromAttr : undefined;
+  return typeof fromAttr === 'string' && fromAttr.length > 0
+    ? fromAttr
+    : undefined;
 }
 
 function readBooleanAttribute(
@@ -447,7 +453,9 @@ export function createSecuritySignalProcessor(
     if (typeof total === 'number') {
       tokens = total;
     } else {
-      const input = readAttribute(span.attributes, ['gen_ai.usage.input_tokens']);
+      const input = readAttribute(span.attributes, [
+        'gen_ai.usage.input_tokens',
+      ]);
       const output = readAttribute(span.attributes, [
         'gen_ai.usage.output_tokens',
       ]);

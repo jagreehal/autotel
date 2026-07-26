@@ -111,10 +111,18 @@ export interface AutotelWebFullConfig {
   errorTracking?: Omit<ErrorTrackingConfig, 'debug'>;
 
   /** Redact PII from error messages and stack traces before export. Preset or custom config. */
-  attributeRedactor?: 'default' | 'strict' | 'pci-dss' | {
-    valuePatterns?: Array<{ name: string; pattern: RegExp; replacement?: string }>;
-    replacement?: string;
-  };
+  attributeRedactor?:
+    | 'default'
+    | 'strict'
+    | 'pci-dss'
+    | {
+        valuePatterns?: Array<{
+          name: string;
+          pattern: RegExp;
+          replacement?: string;
+        }>;
+        replacement?: string;
+      };
 
   /** Privacy controls (origin filtering, DNT, GPC). Applied to which requests get traced. */
   privacy?: PrivacyConfig;
@@ -168,18 +176,22 @@ export function initFull(config: AutotelWebFullConfig): void {
       new BatchSpanProcessor(exporter, {
         scheduledDelayMillis: 1000,
         maxExportBatchSize: 64,
-      })
+      }),
     );
   } else {
     // No export; still create spans (e.g. for propagation only)
     if (config.debug) {
-      console.log('[autotel-web/full] No endpoint or spanProcessor; spans will not be exported.');
+      console.log(
+        '[autotel-web/full] No endpoint or spanProcessor; spans will not be exported.',
+      );
     }
   }
 
-  const sampler = config.sampler ?? (config.sampleRate != null
-    ? createRatioSampler(config.sampleRate)
-    : undefined);
+  const sampler =
+    config.sampler ??
+    (config.sampleRate != null
+      ? createRatioSampler(config.sampleRate)
+      : undefined);
 
   provider = new WebTracerProvider({
     resource,
@@ -201,16 +213,20 @@ export function initFull(config: AutotelWebFullConfig): void {
     instrumentations.push(new DocumentLoadInstrumentation());
   }
   if (config.captureFetch !== false) {
-    const fetchOptions: ConstructorParameters<typeof FetchInstrumentation>[0] = {};
+    const fetchOptions: ConstructorParameters<typeof FetchInstrumentation>[0] =
+      {};
     if (config.privacy?.allowedOrigins?.length) {
-      fetchOptions.propagateTraceHeaderCorsUrls = config.privacy.allowedOrigins.map(
-        (o) => new RegExp(escapeRegex(o), 'i')
-      );
+      fetchOptions.propagateTraceHeaderCorsUrls =
+        config.privacy.allowedOrigins.map(
+          (o) => new RegExp(escapeRegex(o), 'i'),
+        );
     }
     instrumentations.push(new FetchInstrumentation(fetchOptions));
   }
   if (config.captureXHR !== false) {
-    const xhrOptions: ConstructorParameters<typeof XMLHttpRequestInstrumentation>[0] = {};
+    const xhrOptions: ConstructorParameters<
+      typeof XMLHttpRequestInstrumentation
+    >[0] = {};
     if (config.privacy?.allowedOrigins?.length) {
       xhrOptions.propagateTraceHeaderCorsUrls = config.privacy.allowedOrigins;
     }
@@ -280,7 +296,14 @@ function escapeRegex(s: string): string {
 
 function createRatioSampler(ratio: number): Sampler {
   return {
-    shouldSample(_context, _traceId, _spanName, _spanKind, _attributes, _links) {
+    shouldSample(
+      _context,
+      _traceId,
+      _spanName,
+      _spanKind,
+      _attributes,
+      _links,
+    ) {
       if (ratio >= 1) return { decision: SamplingDecision.RECORD_AND_SAMPLED };
       if (ratio <= 0) return { decision: SamplingDecision.NOT_RECORD };
       return Math.random() < ratio
@@ -298,7 +321,10 @@ function createRatioSampler(ratio: number): Sampler {
  */
 export function span<T>(
   name: string,
-  fn: (s: { setAttribute: (k: string, v: string | number | boolean) => void; end: () => void }) => T
+  fn: (s: {
+    setAttribute: (k: string, v: string | number | boolean) => void;
+    end: () => void;
+  }) => T,
 ): T {
   const tracer = otelTrace.getTracer('autotel-web', '1.0.0');
   return tracer.startActiveSpan(name, (s) => {
@@ -314,7 +340,7 @@ export function span<T>(
           (err: unknown) => {
             s.recordException(err as Error);
             s.end();
-          }
+          },
         );
         return result;
       }
@@ -331,7 +357,10 @@ export function span<T>(
 /**
  * Set attribute on the active span (full mode).
  */
-export function setAttribute(key: string, value: string | number | boolean): void {
+export function setAttribute(
+  key: string,
+  value: string | number | boolean,
+): void {
   const activeSpan = otelTrace.getActiveSpan();
   if (activeSpan) {
     activeSpan.setAttribute(key, value);
@@ -341,7 +370,10 @@ export function setAttribute(key: string, value: string | number | boolean): voi
 /**
  * Add an event to the active span (full mode).
  */
-export function addEvent(name: string, attributes?: Record<string, string | number | boolean>): void {
+export function addEvent(
+  name: string,
+  attributes?: Record<string, string | number | boolean>,
+): void {
   const activeSpan = otelTrace.getActiveSpan();
   if (activeSpan) {
     activeSpan.addEvent(name, attributes);
@@ -351,12 +383,20 @@ export function addEvent(name: string, attributes?: Record<string, string | numb
 /**
  * Run a function with the given context (for manual async propagation in full mode).
  */
-export function runWithContext<T>(ctx: ReturnType<typeof context.active>, fn: () => T): T {
+export function runWithContext<T>(
+  ctx: ReturnType<typeof context.active>,
+  fn: () => T,
+): T {
   return context.with(ctx, fn);
 }
 
 /** Re-export for full mode API */
-export { trace, getActiveContext, getTraceparent, extractContext } from './functional';
+export {
+  trace,
+  getActiveContext,
+  getTraceparent,
+  extractContext,
+} from './functional';
 export type { TraceContext } from './functional';
 export { captureException } from './error-tracking';
 

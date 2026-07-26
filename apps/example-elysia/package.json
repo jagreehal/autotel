@@ -9,7 +9,7 @@
   "dependencies": {
     "autotel": "workspace:*",
     "autotel-adapters": "workspace:*",
-    "elysia": "^1.2.25"
+    "elysia": "^1.4.29"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

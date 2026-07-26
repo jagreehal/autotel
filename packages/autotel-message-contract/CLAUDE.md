@@ -5,21 +5,21 @@ Brokerless **message** contract testing: pin the serialized shape of application
 ## What it is / isn't
 
 - **Is**: a test-time, dev-dependency library. Snapshot a message's serialized output (committed `.approved.txt` file beside the test) + verify backward/forward deserialization compatibility across versioned readers.
-- **Isn't**: a runtime tracing concern. It does NOT depend on the OTel SDK at runtime (autotel is an *optional* peer). It does not replace Pact/`autotel-pact` (which prove interactions *fired*) or `autotel-schema` (which pins the *telemetry* surface). It is single-purpose: message serialization only (API-surface pinning was dropped to keep the pitch clean).
+- **Isn't**: a runtime tracing concern. It does NOT depend on the OTel SDK at runtime (autotel is an _optional_ peer). It does not replace Pact/`autotel-pact` (which prove interactions _fired_) or `autotel-schema` (which pins the _telemetry_ surface). It is single-purpose: message serialization only (API-surface pinning was dropped to keep the pitch clean).
 
 ## Portfolio frame: optional adjacent to the observability-contract pair
 
 This is an **optional, standalone, test-time** package. Unlike the core
 observability-contract pair it needs no runtime observability to be useful (it's
 a dev dependency; `autotel` is an optional peer). It extends the "govern the
-observable contracts at each boundary" idea *beyond* telemetry, to serialized
+observable contracts at each boundary" idea _beyond_ telemetry, to serialized
 payloads. Keep it positioned as adjacent, not co-equal, with schema + pact.
 
-| Package | What it contracts | Role |
-|---------|-------------------|------|
-| `autotel-schema` | the telemetry contract you emit (span names + attributes) | core pair |
-| `autotel-pact` | evidence that contracted (Pact) interactions actually ran | core pair |
-| **`autotel-message-contract`** (this) | serialized payload compatibility across versions | optional adjacent |
+| Package                               | What it contracts                                         | Role              |
+| ------------------------------------- | --------------------------------------------------------- | ----------------- |
+| `autotel-schema`                      | the telemetry contract you emit (span names + attributes) | core pair         |
+| `autotel-pact`                        | evidence that contracted (Pact) interactions actually ran | core pair         |
+| **`autotel-message-contract`** (this) | serialized payload compatibility across versions          | optional adjacent |
 
 The name states the unit on purpose: "contract" alone is overloaded by `autotel-pact` and `autotel-schema`'s `TelemetryContract`.
 

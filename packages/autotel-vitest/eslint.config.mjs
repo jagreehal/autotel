@@ -22,7 +22,10 @@ export default defineConfig(
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/consistent-type-exports': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_' },
+      ],
     },
   },
   {
@@ -35,7 +38,10 @@ export default defineConfig(
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/consistent-type-exports': 'off',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_' },
+      ],
     },
   },
 );

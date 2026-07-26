@@ -63,6 +63,16 @@ export interface CaptureConsoleOptions {
 
 type ConsoleMessage = { args?: unknown[] };
 
+/**
+ * Node publishes `console.*` channel messages as the raw argument array
+ * (e.g. `console.warn('a', 1)` → `['a', 1]`); some publishers use the
+ * `{ args: [...] }` object shape instead. Accept both.
+ */
+function messageArgs(message: unknown): unknown[] {
+  if (Array.isArray(message)) return message;
+  return (message as ConsoleMessage)?.args ?? [];
+}
+
 const nodeUtil = safeRequire<typeof import('node:util')>('node:util');
 
 /** Format console arguments the way `console` itself would (printf + inspect). */
@@ -103,8 +113,8 @@ export function captureConsole(
   const disposers = levels.map((level) =>
     subscribeChannel(`console.${level}`, (message) => {
       if (recording) return;
-      const args = (message as ConsoleMessage)?.args ?? [];
-      const body = formatArgs(args as unknown[]);
+      const args = messageArgs(message);
+      const body = formatArgs(args);
       recording = true;
       try {
         const attributes: Attributes = {

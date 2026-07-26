@@ -75,7 +75,9 @@ function createActorAttributes(
     'actor.class': (actorClass as { name?: string }).name || 'Actor',
     'actor.lifecycle': lifecycle,
     'actor.coldstart': isColdStart(actorClass),
-    ...(actorInstance.identifier && { 'actor.identifier': actorInstance.identifier }),
+    ...(actorInstance.identifier && {
+      'actor.identifier': actorInstance.identifier,
+    }),
   };
 }
 
@@ -93,7 +95,11 @@ function instrumentOnInit(
     const actorClassName = (actorClass as { name?: string }).name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'init')
-      : defaultSpanNameFormatter(actorInstance.name || '', actorClassName, 'init');
+      : defaultSpanNameFormatter(
+          actorInstance.name || '',
+          actorClassName,
+          'init',
+        );
 
     return tracer.startActiveSpan(
       spanName,
@@ -129,11 +135,16 @@ function instrumentOnRequest(
   actorClass: object,
   options: ActorInstrumentationOptions,
 ): (request: Request) => Promise<Response> {
-  return async function instrumentedOnRequest(request: Request): Promise<Response> {
+  return async function instrumentedOnRequest(
+    request: Request,
+  ): Promise<Response> {
     const tracer = getTracer();
 
     // Extract parent context from request headers
-    const parentContext = propagation.extract(api_context.active(), request.headers);
+    const parentContext = propagation.extract(
+      api_context.active(),
+      request.headers,
+    );
 
     const url = new URL(request.url);
     const actorClassName = (actorClass as { name?: string }).name || 'Actor';
@@ -193,12 +204,18 @@ function instrumentOnAlarm(
   actorClass: object,
   options: ActorInstrumentationOptions,
 ): (alarmInfo?: unknown) => Promise<void> {
-  return async function instrumentedOnAlarm(alarmInfo?: unknown): Promise<void> {
+  return async function instrumentedOnAlarm(
+    alarmInfo?: unknown,
+  ): Promise<void> {
     const tracer = getTracer();
     const actorClassName = (actorClass as { name?: string }).name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'alarm')
-      : defaultSpanNameFormatter(actorInstance.name || '', actorClassName, 'alarm');
+      : defaultSpanNameFormatter(
+          actorInstance.name || '',
+          actorClassName,
+          'alarm',
+        );
 
     return tracer.startActiveSpan(
       spanName,
@@ -286,19 +303,30 @@ function instrumentWebSocketConnect(
   actorClass: object,
   options: ActorInstrumentationOptions,
 ): (ws: WebSocket, request: Request) => void {
-  return function instrumentedWebSocketConnect(ws: WebSocket, request: Request): void {
+  return function instrumentedWebSocketConnect(
+    ws: WebSocket,
+    request: Request,
+  ): void {
     const tracer = getTracer();
     const actorClassName = (actorClass as { name?: string }).name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'websocket.connect')
-      : defaultSpanNameFormatter(actorInstance.name || '', actorClassName, 'websocket.connect');
+      : defaultSpanNameFormatter(
+          actorInstance.name || '',
+          actorClassName,
+          'websocket.connect',
+        );
 
     tracer.startActiveSpan(
       spanName,
       {
         kind: SpanKind.SERVER,
         attributes: {
-          ...createActorAttributes(actorInstance, actorClass, 'websocket.connect'),
+          ...createActorAttributes(
+            actorInstance,
+            actorClass,
+            'websocket.connect',
+          ),
           'url.full': request.url,
         },
       },
@@ -327,19 +355,30 @@ function instrumentWebSocketMessage(
   actorClass: object,
   options: ActorInstrumentationOptions,
 ): (ws: WebSocket, message: unknown) => void {
-  return function instrumentedWebSocketMessage(ws: WebSocket, message: unknown): void {
+  return function instrumentedWebSocketMessage(
+    ws: WebSocket,
+    message: unknown,
+  ): void {
     const tracer = getTracer();
     const actorClassName = (actorClass as { name?: string }).name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'websocket.message')
-      : defaultSpanNameFormatter(actorInstance.name || '', actorClassName, 'websocket.message');
+      : defaultSpanNameFormatter(
+          actorInstance.name || '',
+          actorClassName,
+          'websocket.message',
+        );
 
     tracer.startActiveSpan(
       spanName,
       {
         kind: SpanKind.SERVER,
         attributes: {
-          ...createActorAttributes(actorInstance, actorClass, 'websocket.message'),
+          ...createActorAttributes(
+            actorInstance,
+            actorClass,
+            'websocket.message',
+          ),
           'websocket.message.type': typeof message,
           'websocket.message.size':
             typeof message === 'string'
@@ -378,14 +417,25 @@ function instrumentWebSocketDisconnect(
     const tracer = getTracer();
     const actorClassName = (actorClass as { name?: string }).name || 'Actor';
     const spanName = options.spanNameFormatter
-      ? options.spanNameFormatter(actorInstance.name || '', 'websocket.disconnect')
-      : defaultSpanNameFormatter(actorInstance.name || '', actorClassName, 'websocket.disconnect');
+      ? options.spanNameFormatter(
+          actorInstance.name || '',
+          'websocket.disconnect',
+        )
+      : defaultSpanNameFormatter(
+          actorInstance.name || '',
+          actorClassName,
+          'websocket.disconnect',
+        );
 
     tracer.startActiveSpan(
       spanName,
       {
         kind: SpanKind.SERVER,
-        attributes: createActorAttributes(actorInstance, actorClass, 'websocket.disconnect'),
+        attributes: createActorAttributes(
+          actorInstance,
+          actorClass,
+          'websocket.disconnect',
+        ),
       },
       (span) => {
         try {
@@ -422,31 +472,66 @@ function instrumentActorInstance(
 
       // Lifecycle methods that need instrumentation
       if (prop === 'onInit' && typeof value === 'function') {
-        return instrumentOnInit(value.bind(target), target, actorClass, options);
+        return instrumentOnInit(
+          value.bind(target),
+          target,
+          actorClass,
+          options,
+        );
       }
 
       if (prop === 'onRequest' && typeof value === 'function') {
-        return instrumentOnRequest(value.bind(target), target, actorClass, options);
+        return instrumentOnRequest(
+          value.bind(target),
+          target,
+          actorClass,
+          options,
+        );
       }
 
       if (prop === 'onAlarm' && typeof value === 'function') {
-        return instrumentOnAlarm(value.bind(target), target, actorClass, options);
+        return instrumentOnAlarm(
+          value.bind(target),
+          target,
+          actorClass,
+          options,
+        );
       }
 
       if (prop === 'onPersist' && typeof value === 'function') {
-        return instrumentOnPersist(value.bind(target), target, actorClass, options);
+        return instrumentOnPersist(
+          value.bind(target),
+          target,
+          actorClass,
+          options,
+        );
       }
 
       if (prop === 'onWebSocketConnect' && typeof value === 'function') {
-        return instrumentWebSocketConnect(value.bind(target), target, actorClass, options);
+        return instrumentWebSocketConnect(
+          value.bind(target),
+          target,
+          actorClass,
+          options,
+        );
       }
 
       if (prop === 'onWebSocketMessage' && typeof value === 'function') {
-        return instrumentWebSocketMessage(value.bind(target), target, actorClass, options);
+        return instrumentWebSocketMessage(
+          value.bind(target),
+          target,
+          actorClass,
+          options,
+        );
       }
 
       if (prop === 'onWebSocketDisconnect' && typeof value === 'function') {
-        return instrumentWebSocketDisconnect(value.bind(target), target, actorClass, options);
+        return instrumentWebSocketDisconnect(
+          value.bind(target),
+          target,
+          actorClass,
+          options,
+        );
       }
 
       // Instrument sub-components if enabled
@@ -544,7 +629,9 @@ export function instrumentActor<C extends ActorConstructor>(
       // Merge options with defaults
       // Handle the case where config might not have actors property
       const actorOptions =
-        resolvedConfig && typeof resolvedConfig === 'object' && 'actors' in resolvedConfig
+        resolvedConfig &&
+        typeof resolvedConfig === 'object' &&
+        'actors' in resolvedConfig
           ? (resolvedConfig as { actors?: ActorInstrumentationOptions }).actors
           : undefined;
       const options: ActorInstrumentationOptions = {
@@ -566,7 +653,13 @@ export function instrumentActor<C extends ActorConstructor>(
       }) as ActorLike;
 
       // Instrument the instance
-      return instrumentActorInstance(actorInstance, state, env, actorClass, options);
+      return instrumentActorInstance(
+        actorInstance,
+        state,
+        env,
+        actorClass,
+        options,
+      );
     },
   };
 

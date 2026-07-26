@@ -364,7 +364,6 @@ describe('spotlight', () => {
   it('base64 works on edge runtimes (no Buffer, btoa fallback)', () => {
     const original = (globalThis as { Buffer?: unknown }).Buffer;
     try {
-      // @ts-expect-error — deleting the global for the duration of the test
       delete (globalThis as { Buffer?: unknown }).Buffer;
       const wrapped = spotlight('café ☕', { method: 'base64' });
       const encoded = wrapped

@@ -32,10 +32,10 @@
  *
  * Usage:
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { SnowflakeSubscriber } from './adapter-snowflake';
  *
- * const events = new Events('app', {
+ * const events = new Event('app', {
  *   subscribers: [
  *     new SnowflakeSubscriber({
  *       account: 'xy12345.us-east-1',

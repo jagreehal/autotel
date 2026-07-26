@@ -1,5 +1,9 @@
 import { securityEvent } from 'autotel-audit';
-import { resolveContext, toAttributeValue, type AgentContext } from './context.js';
+import {
+  resolveContext,
+  toAttributeValue,
+  type AgentContext,
+} from './context.js';
 
 /** Canonical plan-risk attribute keys (Google SAIF plan-risk predictor aligned). */
 export const AGENT_PLAN_RISK_ATTR = {
@@ -49,8 +53,10 @@ function setPlanRiskAttrs(
   attrs: Record<string, unknown>,
 ): void {
   const traceCtx = resolveContext(ctx);
-  const mapped: Record<string, string | number | boolean | string[] | number[] | boolean[]> =
-    {};
+  const mapped: Record<
+    string,
+    string | number | boolean | string[] | number[] | boolean[]
+  > = {};
   for (const [key, value] of Object.entries(attrs)) {
     const attr = toAttributeValue(value);
     if (attr !== undefined) {
@@ -80,13 +86,12 @@ export function recordPlanRiskAssessment(
     ...(toolSequence?.length && {
       [AGENT_PLAN_RISK_ATTR.toolSequence]: toolSequence,
     }),
-    ...(assessment.reason !== undefined && { 'decision.summary': assessment.reason }),
+    ...(assessment.reason !== undefined && {
+      'decision.summary': assessment.reason,
+    }),
   });
 
-  if (
-    options.emitSecurityEvent &&
-    assessment.verdict !== 'low'
-  ) {
+  if (options.emitSecurityEvent && assessment.verdict !== 'low') {
     securityEvent(
       {
         name: 'llm.plan.risk.elevated',
@@ -133,8 +138,10 @@ export async function runAgentPlanClassifier(
   return assessment;
 }
 
-const DESTRUCTIVE_TOOL = /\b(delete|remove|send|post|transfer|pay|upload|execute)\b/i;
-const UNTRUSTED_READ = /\b(read|fetch|get|search|load|parse|inbox|email|web|scrape)\b/i;
+const DESTRUCTIVE_TOOL =
+  /\b(delete|remove|send|post|transfer|pay|upload|execute)\b/i;
+const UNTRUSTED_READ =
+  /\b(read|fetch|get|search|load|parse|inbox|email|web|scrape)\b/i;
 
 /**
  * Dependency-free first-pass plan-risk heuristic. Opt-in — pass as
@@ -147,8 +154,12 @@ export function heuristicPlanRiskClassifier(): AgentPlanClassifier {
     }
 
     const normalized = toolSequence.map((name) => name.replaceAll('_', ' '));
-    const hasDestructive = normalized.some((name) => DESTRUCTIVE_TOOL.test(name));
-    const hasUntrustedRead = normalized.some((name) => UNTRUSTED_READ.test(name));
+    const hasDestructive = normalized.some((name) =>
+      DESTRUCTIVE_TOOL.test(name),
+    );
+    const hasUntrustedRead = normalized.some((name) =>
+      UNTRUSTED_READ.test(name),
+    );
 
     if (hasDestructive && hasUntrustedRead) {
       return {

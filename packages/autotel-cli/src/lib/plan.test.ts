@@ -35,7 +35,7 @@ describe('parsePlan', () => {
         filesToWrite: [],
         envVars: [],
         nextSteps: [],
-      })
+      }),
     ).toThrowError(/Unsupported plan version/);
   });
 
@@ -48,7 +48,7 @@ describe('parsePlan', () => {
         filesToWrite: [],
         envVars: [],
         nextSteps: [],
-      })
+      }),
     ).toThrowError(/presets must be an array/);
   });
 
@@ -61,7 +61,7 @@ describe('parsePlan', () => {
         filesToWrite: [],
         envVars: [],
         nextSteps: [],
-      })
+      }),
     ).toThrowError(/packagesToInstall/);
   });
 });

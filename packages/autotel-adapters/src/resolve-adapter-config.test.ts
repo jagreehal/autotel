@@ -24,9 +24,9 @@ describe('shouldProbeRuntime', () => {
   });
 
   it('returns false when overrides cover every env-backed field', () => {
-    expect(
-      shouldProbeRuntime(FIELDS, { token: 't', endpoint: 'u' }),
-    ).toBe(false);
+    expect(shouldProbeRuntime(FIELDS, { token: 't', endpoint: 'u' })).toBe(
+      false,
+    );
   });
 
   it('returns false when env covers every env-backed field', () => {
@@ -60,7 +60,12 @@ describe('resolveAdapterConfig', () => {
     process.env.MY_ADAPTER_ENDPOINT = 'u';
 
     const probe = vi.fn().mockResolvedValue(undefined);
-    const cfg = await resolveAdapterConfig('my-adapter', FIELDS, undefined, probe);
+    const cfg = await resolveAdapterConfig(
+      'my-adapter',
+      FIELDS,
+      undefined,
+      probe,
+    );
 
     expect(probe).toHaveBeenCalledOnce();
     expect(cfg.token).toBe('t');
@@ -71,7 +76,12 @@ describe('resolveAdapterConfig', () => {
     const probe = vi.fn().mockResolvedValue({
       autotel: { 'my-adapter': { token: 'from-runtime', endpoint: 'rt-url' } },
     });
-    const cfg = await resolveAdapterConfig('my-adapter', FIELDS, undefined, probe);
+    const cfg = await resolveAdapterConfig(
+      'my-adapter',
+      FIELDS,
+      undefined,
+      probe,
+    );
 
     expect(probe).toHaveBeenCalledOnce();
     expect(cfg.token).toBe('from-runtime');
@@ -102,7 +112,12 @@ describe('resolveAdapterConfig', () => {
     const probe = vi.fn().mockResolvedValue({
       autotel: { 'my-adapter': { token: 'rt-token', endpoint: 'rt-url' } },
     });
-    const cfg = await resolveAdapterConfig('my-adapter', FIELDS, undefined, probe);
+    const cfg = await resolveAdapterConfig(
+      'my-adapter',
+      FIELDS,
+      undefined,
+      probe,
+    );
 
     expect(cfg.token).toBe('rt-token');
     expect(cfg.endpoint).toBe('rt-url');

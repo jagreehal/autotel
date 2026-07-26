@@ -61,7 +61,12 @@
  * ```
  */
 
-import { trace, type TraceContext } from 'autotel';
+import {
+  trace,
+  type TraceContext,
+  withTracing,
+  getActiveTraceContext,
+} from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import type { SpanContext } from '@opentelemetry/api';
 import { buildEventBridgeAttributes } from '../attributes';
@@ -264,7 +269,9 @@ export function extractEventBridgeContext(
   };
 
   const extractedContext = propagation.extract(context.active(), carrier);
-  const span = extractedContext.getValue(Symbol.for('OpenTelemetry Context Key SPAN'));
+  const span = extractedContext.getValue(
+    Symbol.for('OpenTelemetry Context Key SPAN'),
+  );
 
   // Handle both Span and SpanContext
   if (span && typeof span === 'object') {
@@ -346,8 +353,7 @@ export function traceEventBridge(config: TraceEventBridgeConfig) {
     fn: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): (...args: TArgs) => Promise<TReturn> {
     // Use autotel's trace() which properly handles the factory pattern
-    return trace(
-      `eventbridge.${config.detailType}`,
+    return withTracing({ name: `eventbridge.${config.detailType}` })(
       (ctx: TraceContext) =>
         async (...args: TArgs): Promise<TReturn> => {
           // Set EventBridge semantic attributes
@@ -363,7 +369,7 @@ export function traceEventBridge(config: TraceEventBridgeConfig) {
           const handler = fn(ctx);
           return handler(...args);
         },
-    );
+    ) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 
@@ -426,7 +432,6 @@ export function traceEventBridge(config: TraceEventBridgeConfig) {
  * ```
  */
 export class EventBridgePublisher<
-   
   TClient extends { send: (command: any) => Promise<any> } = any,
 > {
   private client: TClient;
@@ -454,7 +459,8 @@ export class EventBridgePublisher<
     eventId?: string;
     failedEntryCount?: number;
   }> {
-    return trace(`eventbridge.PutEvents`, async (ctx: TraceContext) => {
+    return trace(`eventbridge.PutEvents`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildEventBridgeAttributes({
           eventBus: this.config.eventBusName || 'default',
@@ -479,7 +485,8 @@ export class EventBridgePublisher<
       };
 
       try {
-        const { PutEventsCommand } = await import('@aws-sdk/client-eventbridge');
+        const { PutEventsCommand } =
+          await import('@aws-sdk/client-eventbridge');
         const result = await this.client.send(
           new PutEventsCommand({ Entries: [entry] }),
         );
@@ -509,7 +516,7 @@ export class EventBridgePublisher<
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -522,10 +529,15 @@ export class EventBridgePublisher<
     events: EventBridgeEvent<T>[],
   ): Promise<{
     successful: Array<{ eventId?: string; detailType: string }>;
-    failed: Array<{ errorCode?: string; errorMessage?: string; detailType: string }>;
+    failed: Array<{
+      errorCode?: string;
+      errorMessage?: string;
+      detailType: string;
+    }>;
     failedEntryCount: number;
   }> {
-    return trace(`eventbridge.PutEvents.batch`, async (ctx: TraceContext) => {
+    return trace(`eventbridge.PutEvents.batch`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildEventBridgeAttributes({
           eventBus: this.config.eventBusName || 'default',
@@ -552,14 +564,18 @@ export class EventBridgePublisher<
       });
 
       try {
-        const { PutEventsCommand } = await import('@aws-sdk/client-eventbridge');
+        const { PutEventsCommand } =
+          await import('@aws-sdk/client-eventbridge');
         const result = await this.client.send(
           new PutEventsCommand({ Entries: entries }),
         );
 
         const successful: Array<{ eventId?: string; detailType: string }> = [];
-        const failed: Array<{ errorCode?: string; errorMessage?: string; detailType: string }> =
-          [];
+        const failed: Array<{
+          errorCode?: string;
+          errorMessage?: string;
+          detailType: string;
+        }> = [];
 
         if (result.Entries) {
           for (const [index, entry] of result.Entries.entries()) {
@@ -603,11 +619,12 @@ export class EventBridgePublisher<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'PutEvents batch failed',
+          message:
+            error instanceof Error ? error.message : 'PutEvents batch failed',
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -624,7 +641,8 @@ export class EventBridgePublisher<
     eventId?: string;
     failedEntryCount?: number;
   }> {
-    return trace(`eventbridge.PutEvents`, async (ctx: TraceContext) => {
+    return trace(`eventbridge.PutEvents`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildEventBridgeAttributes({
           eventBus: this.config.eventBusName || 'default',
@@ -649,7 +667,8 @@ export class EventBridgePublisher<
       };
 
       try {
-        const { PutEventsCommand } = await import('@aws-sdk/client-eventbridge');
+        const { PutEventsCommand } =
+          await import('@aws-sdk/client-eventbridge');
         const result = await this.client.send(
           new PutEventsCommand({ Entries: [entry] }),
         );
@@ -679,6 +698,6 @@ export class EventBridgePublisher<
         });
         throw error;
       }
-    });
+    })();
   }
 }

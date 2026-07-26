@@ -42,6 +42,8 @@ export interface ContentPartView {
   output?: unknown;
   /** image / file */
   mediaType?: string;
+  /** image / file raw bytes — deliberately never inlined onto spans */
+  data?: unknown;
 }
 
 /** Result of converting an AI SDK prompt: messages plus split-out system parts. */
@@ -56,7 +58,7 @@ export interface ConvertedPrompt {
  * conventions).
  */
 export function promptToGenAiMessages(
-  messages: readonly ModelMessageView[] | undefined,
+  messages?: readonly ModelMessageView[],
 ): ConvertedPrompt {
   if (!messages?.length) return { messages: [] };
 
@@ -83,7 +85,7 @@ export function promptToGenAiMessages(
  * message (always `assistant`), optionally tagged with a `finish_reason`.
  */
 export function contentToGenAiMessage(
-  content: readonly ContentPartView[] | undefined,
+  content?: readonly ContentPartView[],
   finishReason?: string,
 ): GenAiMessage | undefined {
   if (!content?.length) return undefined;

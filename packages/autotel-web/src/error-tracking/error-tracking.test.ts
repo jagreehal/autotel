@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { trace } from '@opentelemetry/api';
-import { setupErrorTracking, captureException, resetErrorTrackingForTesting } from './index';
+import {
+  setupErrorTracking,
+  captureException,
+  resetErrorTrackingForTesting,
+} from './index';
 
 const mockRecordException = vi.fn();
 const mockSetStatus = vi.fn();
@@ -18,13 +22,15 @@ const mockSpan = {
   isRecording: () => true,
 };
 
-const mockStartActiveSpan = vi.fn((name: string, fn: (span: any) => any) => fn(mockSpan));
+const mockStartActiveSpan = vi.fn((_name: string, fn: (span: any) => any) =>
+  fn(mockSpan),
+);
 const mockTracer = {
   startActiveSpan: mockStartActiveSpan,
 };
 
 vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
-vi.spyOn(trace, 'getActiveSpan').mockReturnValue(null);
+vi.spyOn(trace, 'getActiveSpan').mockReturnValue(undefined);
 
 describe('setupErrorTracking', () => {
   beforeEach(() => {
@@ -36,11 +42,19 @@ describe('setupErrorTracking', () => {
     setupErrorTracking({ debug: false });
 
     const error = new TypeError('test error');
-    window.dispatchEvent(new ErrorEvent('error', { error, message: 'test error' }));
+    window.dispatchEvent(
+      new ErrorEvent('error', { error, message: 'test error' }),
+    );
 
     expect(mockStartActiveSpan).toHaveBeenCalled();
-    expect(mockSetAttribute).toHaveBeenCalledWith('exception.type', 'TypeError');
-    expect(mockSetAttribute).toHaveBeenCalledWith('exception.message', 'test error');
+    expect(mockSetAttribute).toHaveBeenCalledWith(
+      'exception.type',
+      'TypeError',
+    );
+    expect(mockSetAttribute).toHaveBeenCalledWith(
+      'exception.message',
+      'test error',
+    );
     expect(mockSetAttribute).toHaveBeenCalledWith('error.source', 'onerror');
   });
 
@@ -56,17 +70,27 @@ describe('setupErrorTracking', () => {
     );
 
     expect(mockStartActiveSpan).toHaveBeenCalled();
-    expect(mockSetAttribute).toHaveBeenCalledWith('error.source', 'onunhandledrejection');
+    expect(mockSetAttribute).toHaveBeenCalledWith(
+      'error.source',
+      'onunhandledrejection',
+    );
   });
 
   it('adds exception.list attribute with structured data', () => {
     setupErrorTracking({ debug: false });
 
     const error = new Error('structured test');
-    window.dispatchEvent(new ErrorEvent('error', { error, message: 'structured test' }));
+    window.dispatchEvent(
+      new ErrorEvent('error', { error, message: 'structured test' }),
+    );
 
-    expect(mockSetAttribute).toHaveBeenCalledWith('exception.list', expect.any(String));
-    const call = mockSetAttribute.mock.calls.find((c: any) => c[0] === 'exception.list');
+    expect(mockSetAttribute).toHaveBeenCalledWith(
+      'exception.list',
+      expect.any(String),
+    );
+    const call = mockSetAttribute.mock.calls.find(
+      (c: any) => c[0] === 'exception.list',
+    );
     const parsed = JSON.parse(call![1]);
     expect(parsed).toBeInstanceOf(Array);
     expect(parsed[0].type).toBe('Error');
@@ -80,8 +104,12 @@ describe('setupErrorTracking', () => {
 
     const error1 = new TypeError('first');
     const error2 = new TypeError('second');
-    window.dispatchEvent(new ErrorEvent('error', { error: error1, message: 'first' }));
-    window.dispatchEvent(new ErrorEvent('error', { error: error2, message: 'second' }));
+    window.dispatchEvent(
+      new ErrorEvent('error', { error: error1, message: 'first' }),
+    );
+    window.dispatchEvent(
+      new ErrorEvent('error', { error: error2, message: 'second' }),
+    );
 
     expect(mockStartActiveSpan).toHaveBeenCalledTimes(1);
   });
@@ -89,11 +117,15 @@ describe('setupErrorTracking', () => {
   it('suppresses matching errors', () => {
     setupErrorTracking({
       debug: false,
-      suppressionRules: [{ key: 'value', operator: 'contains', value: 'Script error' }],
+      suppressionRules: [
+        { key: 'value', operator: 'contains', value: 'Script error' },
+      ],
     });
 
     const error = new Error('Script error.');
-    window.dispatchEvent(new ErrorEvent('error', { error, message: 'Script error.' }));
+    window.dispatchEvent(
+      new ErrorEvent('error', { error, message: 'Script error.' }),
+    );
 
     expect(mockStartActiveSpan).not.toHaveBeenCalled();
   });
@@ -108,7 +140,9 @@ describe('setupErrorTracking', () => {
     window.addEventListener('error', swallow);
 
     const error = new Error('test');
-    window.dispatchEvent(new ErrorEvent('error', { error, message: 'test', cancelable: true }));
+    window.dispatchEvent(
+      new ErrorEvent('error', { error, message: 'test', cancelable: true }),
+    );
 
     expect(mockStartActiveSpan).not.toHaveBeenCalled();
 
@@ -142,13 +176,18 @@ describe('captureException', () => {
 
     expect(mockStartActiveSpan).toHaveBeenCalled();
     expect(mockSetAttribute).toHaveBeenCalledWith('exception.type', 'Error');
-    expect(mockSetAttribute).toHaveBeenCalledWith('exception.message', 'manual');
+    expect(mockSetAttribute).toHaveBeenCalledWith(
+      'exception.message',
+      'manual',
+    );
   });
 
   it('sets mechanism to manual with handled=true', () => {
     captureException(new Error('manual'));
 
-    const call = mockSetAttribute.mock.calls.find((c: any) => c[0] === 'exception.list');
+    const call = mockSetAttribute.mock.calls.find(
+      (c: any) => c[0] === 'exception.list',
+    );
     const parsed = JSON.parse(call![1]);
     expect(parsed[0].mechanism.type).toBe('manual');
     expect(parsed[0].mechanism.handled).toBe(true);

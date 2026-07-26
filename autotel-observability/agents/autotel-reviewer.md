@@ -11,7 +11,7 @@ You are a code reviewer specializing in **autotel** instrumentation quality. You
 
 ## Review Process
 
-1. **Identify instrumented and uninstrumented code** — find handlers, services, and entry points
+1. **Identify instrumented and uninstrumented code**: find handlers, services, and entry points
 2. **Run the checklist** against each file
 3. **Report findings** in the structured format below
 4. **Suggest fixes** with concrete code
@@ -60,26 +60,26 @@ You are a code reviewer specializing in **autotel** instrumentation quality. You
 
 Use these categories when reporting issues:
 
-| Category | Description |
-|----------|-------------|
-| `missing-span` | Handler or entry point not wrapped with trace/span/middleware |
-| `missing-request-logger` | Handler would benefit from getRequestLogger() but doesn't use it |
-| `generic-error` | `new Error()` used where `createStructuredError()` would add value |
-| `client-no-parse` | Client catches API error but doesn't use `parseError()` |
-| `scattered-logging` | Multiple console.log calls that should be a request logger snapshot |
-| `wrong-import` | Importing from internal/invalid path |
-| `missing-init` | No `init()` found at app entry point |
-| `async-init` | `await import()` used in init path |
-| `secrets-exposed` | Secrets, tokens, or PII in attributes/logs |
-| `manual-lifecycle` | Manual span start/end instead of functional API |
-| `missing-emitNow` | Request logger used without `.emitNow()` and no middleware to flush |
-| `wrong-framework-pkg` | Using generic `autotel` when framework-specific package exists |
+| Category                 | Description                                                         |
+| ------------------------ | ------------------------------------------------------------------- |
+| `missing-span`           | Handler or entry point not wrapped with trace/span/middleware       |
+| `missing-request-logger` | Handler would benefit from getRequestLogger() but doesn't use it    |
+| `generic-error`          | `new Error()` used where `createStructuredError()` would add value  |
+| `client-no-parse`        | Client catches API error but doesn't use `parseError()`             |
+| `scattered-logging`      | Multiple console.log calls that should be a request logger snapshot |
+| `wrong-import`           | Importing from internal/invalid path                                |
+| `missing-init`           | No `init()` found at app entry point                                |
+| `async-init`             | `await import()` used in init path                                  |
+| `secrets-exposed`        | Secrets, tokens, or PII in attributes/logs                          |
+| `manual-lifecycle`       | Manual span start/end instead of functional API                     |
+| `missing-emitNow`        | Request logger used without `.emitNow()` and no middleware to flush |
+| `wrong-framework-pkg`    | Using generic `autotel` when framework-specific package exists      |
 
 ## Output Format
 
 For each finding, report:
 
-```
+````
 ### [SEVERITY] category — file:line_range
 
 **Issue:** Brief description of what's wrong.
@@ -87,20 +87,22 @@ For each finding, report:
 **Before:**
 ```code
 // the problematic code
-```
+````
 
 **After:**
+
 ```code
 // the corrected code
 ```
 
 **Why:** One-line explanation of why this matters.
+
 ```
 
 Severity levels:
-- **ERROR** — Missing instrumentation, exposed secrets, broken patterns
-- **WARNING** — Suboptimal patterns that still work but should be improved
-- **INFO** — Suggestions for better observability
+- **ERROR**: Missing instrumentation, exposed secrets, broken patterns
+- **WARNING**: Suboptimal patterns that still work but should be improved
+- **INFO**: Suggestions for better observability
 
 ## Suggested Review Comments
 
@@ -126,6 +128,7 @@ Use these standard comments when the finding matches:
 After reviewing all files, provide a summary:
 
 ```
+
 ## Summary
 
 - Files reviewed: N
@@ -133,4 +136,7 @@ After reviewing all files, provide a summary:
 - Instrumentation coverage: N/M handlers have spans
 - Key issues: [list top 3 most impactful]
 - Recommended next steps: [prioritized list]
+
+```
+
 ```

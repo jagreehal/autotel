@@ -4,8 +4,8 @@
 
 `autotel-genai` is the AI layer for [autotel](https://github.com/jagreehal/autotel).
 It emits the **canonical `gen_ai.*` semantic conventions** (OpenTelemetry semconv
-**v1.42.0**) for everything from a single `chat` call to a multi-agent workflow —
-token usage, cost, latency metrics, content/evaluation events, and an agent
+**v1.42.0**) for everything from a single `chat` call to a multi-agent workflow.
+Token usage, cost, latency metrics, content/evaluation events, and an agent
 identity / delegation / policy / audit governance layer.
 
 Canonical-only by design: no legacy `gen.ai.*`, no `prompt_tokens` /
@@ -24,7 +24,11 @@ optional peer, needed only for `genAiMetricViews()`.
 ## Quick start
 
 ```ts
-import { traceGenAI, recordGenAiResponse, recordGenAiUsage } from 'autotel-genai/trace';
+import {
+  traceGenAI,
+  recordGenAiResponse,
+  recordGenAiUsage,
+} from 'autotel-genai/trace';
 import OpenAI from 'openai';
 
 const openai = new OpenAI();
@@ -58,19 +62,19 @@ export const chat = traceGenAI({
 
 ## What you get
 
-| Area | Import | Highlights |
-| --- | --- | --- |
-| **Semconv** | `autotel-genai/semconv` | `GEN_AI.*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()` |
-| **Cost** | `autotel-genai/cost` | `estimateLLMCost`, `recordLLMCost`, `MODEL_PRICING` (cache-read/write aware) |
-| **Metrics** | `autotel-genai/metrics` | `genAiMetricViews()` re-buckets the canonical histograms |
-| **Attributes** | `autotel-genai` | typed builders → canonical attribute maps |
-| **Events** | `autotel-genai/events` | opt-in content + `inference.operation.details` / `evaluation.result` |
-| **Trace** | `autotel-genai/trace` | `traceGenAI()`, `recordGenAiResponse/Usage` |
-| **Guard** | `autotel-genai/guard` | inline cost/token/loop kill-switch — `createGenAiBudget`, `createGenAiGuard`, `parseGuardRules` |
-| **Streaming** | `autotel-genai/streaming` | TTFC, throughput, inter-chunk distribution — `createStreamTimer`, `recordStreamTiming` |
-| **AI SDK** | `autotel-genai/observer` | `autotelTelemetry()` — `registerTelemetry()` integration: live `gen_ai.*` spans + cost + streaming + nested traces + opt-in content. `subscribeAiTelemetry()` — zero-config `ai:telemetry` channel path |
-| **AI SDK (legacy)** | `autotel-genai/ai-sdk` | `ai.*` → `gen_ai.*` mapping + cost for `LegacyOpenTelemetry`/older versions; `autotelEnrich()` for `@ai-sdk/otel` `enrichSpan` |
-| **Agents** | `autotel-genai/agent` | identity, delegation, policy, audit, privacy, non-repudiation |
+| Area                | Import                    | Highlights                                                                                                                                                                                            |
+| ------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Semconv**         | `autotel-genai/semconv`   | `GEN_AI.*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()`                                                                                                                             |
+| **Cost**            | `autotel-genai/cost`      | `estimateLLMCost`, `recordLLMCost`, `MODEL_PRICING` (cache-read/write aware)                                                                                                                          |
+| **Metrics**         | `autotel-genai/metrics`   | `genAiMetricViews()` re-buckets the canonical histograms                                                                                                                                              |
+| **Attributes**      | `autotel-genai`           | typed builders → canonical attribute maps                                                                                                                                                             |
+| **Events**          | `autotel-genai/events`    | opt-in content + `inference.operation.details` / `evaluation.result`                                                                                                                                  |
+| **Trace**           | `autotel-genai/trace`     | `traceGenAI()`, `recordGenAiResponse/Usage`                                                                                                                                                           |
+| **Guard**           | `autotel-genai/guard`     | inline cost/token/loop kill-switch: `createGenAiBudget`, `createGenAiGuard`, `parseGuardRules`                                                                                                        |
+| **Streaming**       | `autotel-genai/streaming` | TTFC, throughput, inter-chunk distribution: `createStreamTimer`, `recordStreamTiming`                                                                                                                 |
+| **AI SDK**          | `autotel-genai/observer`  | `autotelTelemetry()`: `registerTelemetry()` integration: live `gen_ai.*` spans + cost + streaming + nested traces + opt-in content. `subscribeAiTelemetry()`: zero-config `ai:telemetry` channel path |
+| **AI SDK (legacy)** | `autotel-genai/ai-sdk`    | `ai.*` → `gen_ai.*` mapping + cost for `LegacyOpenTelemetry`/older versions; `autotelEnrich()` for `@ai-sdk/otel` `enrichSpan`                                                                        |
+| **Agents**          | `autotel-genai/agent`     | identity, delegation, policy, audit, privacy, non-repudiation                                                                                                                                         |
 
 ### Cost
 
@@ -90,7 +94,10 @@ recordLLMCost(ctx, 'claude-sonnet-4', {
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { genAiMetricViews } from 'autotel-genai/metrics';
 
-const sdk = new NodeSDK({ serviceName: 'my-agent', views: [...genAiMetricViews()] });
+const sdk = new NodeSDK({
+  serviceName: 'my-agent',
+  views: [...genAiMetricViews()],
+});
 ```
 
 Re-buckets `gen_ai.client.operation.duration`, `…time_to_first_chunk`,
@@ -101,7 +108,7 @@ Re-buckets `gen_ai.client.operation.duration`, `…time_to_first_chunk`,
 
 Most tracing tells you what an agent _did_, after the bill. A **guard** runs
 _during_ the run: feed it each step, it accumulates cost / tokens / loop state,
-and halts the run when a rule crosses its threshold — aborting an `AbortSignal`
+and halts the run when a rule crosses its threshold. Aborting an `AbortSignal`
 and (by default) throwing a `GEN_AI_GUARD_STOP` structured error.
 
 ```ts
@@ -120,7 +127,7 @@ for (const task of tasks) {
 }
 ```
 
-Rules can also come from a shorthand string — cost ceilings, token ceilings,
+Rules can also come from a shorthand string. Cost ceilings, token ceilings,
 spin-loop detection (`N identical calls in a window of M`), error loops,
 tool-call / step caps, wall-clock timeouts, and context-window budgets:
 
@@ -135,7 +142,7 @@ guard.record({ kind: 'tool', name: 'search', signature: JSON.stringify(args) });
 ```
 
 Each rule fires once; `onStop` chooses `throw` (default), `abort` (signal only),
-or `silent` (record only). All logic is deterministic — no LLM in the loop.
+or `silent` (record only). All logic is deterministic. No LLM in the loop.
 
 ### Streaming performance
 
@@ -169,8 +176,11 @@ throughput, and an inter-chunk gap distribution `{min,p10,median,avg,p90,max}`).
 ```ts
 import { setGenAiContent, recordModelWarnings } from 'autotel-genai';
 
-setGenAiContent(ctx, { inputMessages, outputMessages },
-  { recordInputs: false, recordOutputs: true }); // keep prompts out of telemetry
+setGenAiContent(
+  ctx,
+  { inputMessages, outputMessages },
+  { recordInputs: false, recordOutputs: true },
+); // keep prompts out of telemetry
 
 recordModelWarnings(ctx, result.warnings); // surface provider warnings vendors only log
 ```
@@ -203,7 +213,7 @@ It honours spec breaking change #242 (`gen_ai.agent.id` is dropped on internal
 ### Vercel AI SDK
 
 Register `autotelTelemetry()` once and every `generateText` / `streamText` /
-`embed` call streams a canonical `gen_ai.*` span tree — live, as it runs:
+`embed` call streams a canonical `gen_ai.*` span tree. Live, as it runs:
 
 ```ts
 import { registerTelemetry } from 'ai';
@@ -216,7 +226,7 @@ See `apps/example-ai-sdk-observer` for a runnable AI SDK + Ollama demo
 (generateText, tool loop, streamText timing, embeddings).
 
 It implements the AI SDK's stable `Telemetry` lifecycle interface (ai v7+), so
-it slots in exactly where `@ai-sdk/otel`'s `OpenTelemetry` does — but it also,
+it slots in exactly where `@ai-sdk/otel`'s `OpenTelemetry` does. But it also,
 on every `chat` span:
 
 - **prices the call** (`gen_ai.usage.cost.usd`) from `MODEL_PRICING`;
@@ -226,13 +236,13 @@ on every `chat` span:
   double-counts.
 
 It is push-based and concurrency-safe (every event carries the SDK `callId`),
-and it pulls in **no** dependency on `ai` — the returned object satisfies the
+and it pulls in **no** dependency on `ai`. The returned object satisfies the
 `Telemetry` interface structurally, so the snippet above type-checks as-is.
 `rerank` has no canonical `gen_ai` operation and is intentionally not mapped.
 
 **Nested traces.** It implements the SDK's `executeTool` / `executeLanguageModelCall`
-context runners, so a tool whose `execute` calls `generateText` — and the
-provider's own auto-instrumented HTTP spans — nest under the right span
+context runners, so a tool whose `execute` calls `generateText`. And the
+provider's own auto-instrumented HTTP spans. Nest under the right span
 automatically.
 
 **Content capture (opt-in).** Off by default for privacy. Turn it on to record
@@ -262,7 +272,7 @@ const unsubscribe = subscribeAiTelemetry(); // once, at startup
 
 The channel path gives you the same `invoke_agent › chat › execute_tool` tree
 with usage and cost, but not the per-call streaming timing (which only the
-lifecycle `onLanguageModelCallEnd` event carries) — prefer
+lifecycle `onLanguageModelCallEnd` event carries). Prefer
 `registerTelemetry(autotelTelemetry())` when you can.
 
 Register globally, or pass per-call via `telemetry.integrations` to scope it to
@@ -276,7 +286,7 @@ walk the finished result with `observeAiSdkResult` (see
 import { mapAiSdkAttributes, recordAiSdkCost } from 'autotel-genai/ai-sdk';
 
 const canonical = mapAiSdkAttributes(span.attributes); // ai.* → gen_ai.*
-recordAiSdkCost(ctx, span.attributes);                 // sets gen_ai.usage.cost.usd
+recordAiSdkCost(ctx, span.attributes); // sets gen_ai.usage.cost.usd
 ```
 
 #### Already using `@ai-sdk/otel`?
@@ -291,7 +301,7 @@ import { autotelEnrich } from 'autotel-genai/ai-sdk';
 registerTelemetry(new OpenTelemetry({ enrichSpan: autotelEnrich() }));
 ```
 
-`enrichSpan` **cannot add cost** — the SDK passes it only
+`enrichSpan` **cannot add cost**. The SDK passes it only
 `{ spanType, operationId, callId, runtimeContext }` (no usage, no model), and its
 own attributes win over custom keys. To get `gen_ai.usage.cost.usd` on the model
 span, use `autotelTelemetry()` (it owns span creation). Either way,
@@ -301,8 +311,8 @@ shows there regardless of which integration emitted them.
 #### Local devtools, one line
 
 Point an OTLP exporter at a running `autotel-devtools` receiver and you get a
-live GenAI run view — cost, token breakdown, tool timeline, and a narrated
-"Explain run" walkthrough — that works in production too (unlike
+live GenAI run view. Cost, token breakdown, tool timeline, and a narrated
+"Explain run" walkthrough. That works in production too (unlike
 `@ai-sdk/devtools`, which is dev-only):
 
 ```ts
@@ -329,14 +339,22 @@ const observe = createGenAiObserver({
 });
 
 observe({ type: 'agent.start', id: 'a1', agent: { name: 'planner' } });
-observe({ type: 'chat.start', id: 'c1', parentId: 'a1',
-          request: { provider: 'openai', model: 'gpt-4o' } });
-observe({ type: 'chat.end', id: 'c1', response: { model: 'gpt-4o' },
-          usage: { inputTokens: 412, outputTokens: 87 } });
+observe({
+  type: 'chat.start',
+  id: 'c1',
+  parentId: 'a1',
+  request: { provider: 'openai', model: 'gpt-4o' },
+});
+observe({
+  type: 'chat.end',
+  id: 'c1',
+  response: { model: 'gpt-4o' },
+  usage: { inputTokens: 412, outputTokens: 87 },
+});
 observe({ type: 'agent.end', id: 'a1' }); // closes c1 too if it never ended
 ```
 
-Token usage lands on leaf `chat` spans only — aggregate `agent`/`workflow`
+Token usage lands on leaf `chat` spans only. Aggregate `agent`/`workflow`
 spans never carry `gen_ai.usage.*`, so summing usage across a trace counts each
 call exactly once.
 
@@ -346,7 +364,7 @@ call exactly once.
 import {
   createGenAiObserver,
   createLangChainObserver, // LangChain / LangGraph callback handler
-  observeAiSdkResult,      // Vercel AI SDK result walker
+  observeAiSdkResult, // Vercel AI SDK result walker
 } from 'autotel-genai/observer';
 
 const observe = createGenAiObserver();

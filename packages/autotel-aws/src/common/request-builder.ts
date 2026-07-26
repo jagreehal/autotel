@@ -9,7 +9,7 @@ import type { AWSCommandMetadata } from '../types';
  */
 export function extractRequestMetadata(
   command: { constructor: { name: string } },
-  context: { clientName: string }
+  context: { clientName: string },
 ): AWSCommandMetadata {
   return {
     clientName: context.clientName,

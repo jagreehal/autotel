@@ -26,7 +26,11 @@ import {
   ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions';
 import type { Sampler, SamplingPreset } from './sampling';
-import { samplingPresets, resolveSamplingPreset } from './sampling';
+import {
+  samplingPresets,
+  resolveSamplingPreset,
+  AUTOTEL_SAMPLING_RATE,
+} from './sampling';
 import type { EventSubscriber } from './event-subscriber';
 import type { Logger } from './logger';
 import type { Attributes, Context, SpanKind, Link } from '@opentelemetry/api';
@@ -101,15 +105,21 @@ function toOtelSampler(sampler: Sampler): OtelSampler {
       _attributes: Attributes,
       links: Link[],
     ): SamplingResult {
-      const shouldTrace = sampler.shouldSample({
+      const samplingContext = {
         operationName: spanName,
         args: [],
         links,
-      });
+      };
+      const shouldTrace = sampler.shouldSample(samplingContext);
+      const rate = sampler.sampleRate?.(samplingContext);
       return {
         decision: shouldTrace
           ? SamplingDecision.RECORD_AND_SAMPLED
           : SamplingDecision.NOT_RECORD,
+        // Let a query reweight counts back to the true population.
+        ...(shouldTrace && rate !== undefined && rate > 1
+          ? { attributes: { [AUTOTEL_SAMPLING_RATE]: rate } }
+          : {}),
       };
     },
     toString(): string {
@@ -1272,6 +1282,22 @@ let logger: Logger = silentLogger; // Silent by default - no spam
 let validationConfig: Partial<ValidationConfig> | null = null;
 let eventsConfig: EventsConfig | null = null;
 let _stringRedactor: StringRedactor | null = null;
+
+/** Subscribers may opt into value redaction by exposing this setter. */
+interface StringRedactorAware {
+  setStringRedactor: (redact: StringRedactor) => void;
+}
+
+function acceptsStringRedactor(
+  subscriber: unknown,
+): subscriber is StringRedactorAware {
+  return (
+    typeof subscriber === 'object' &&
+    subscriber !== null &&
+    'setStringRedactor' in subscriber &&
+    typeof (subscriber as StringRedactorAware).setStringRedactor === 'function'
+  );
+}
 let _optionalRequire: typeof safeRequire = safeRequire;
 let _devtoolsClose: (() => Promise<void> | void) | null = null;
 
@@ -1471,9 +1497,8 @@ function resolveOtlpDestinations(
   fallbackEndpoint?: string,
 ): ResolvedOtlpDestination[] {
   const rawDestinations =
-    config.destinations !== undefined
-      ? config.destinations
-      : fallbackEndpoint
+    config.destinations === undefined
+      ? fallbackEndpoint
         ? [
             {
               endpoint: fallbackEndpoint,
@@ -1481,7 +1506,8 @@ function resolveOtlpDestinations(
               protocol: config.protocol,
             },
           ]
-        : [];
+        : []
+      : config.destinations;
 
   return rawDestinations.map((destination) => ({
     endpoint: destination.endpoint,
@@ -1820,11 +1846,8 @@ export function init(cfg: AutotelConfig): void {
   // Wire string redactor to subscribers that support it (e.g., PostHogSubscriber)
   if (_stringRedactor && mergedConfig.subscribers) {
     for (const subscriber of mergedConfig.subscribers) {
-      if (
-        'setStringRedactor' in subscriber &&
-        typeof (subscriber as any).setStringRedactor === 'function'
-      ) {
-        (subscriber as any).setStringRedactor(_stringRedactor);
+      if (acceptsStringRedactor(subscriber)) {
+        subscriber.setStringRedactor(_stringRedactor);
       }
     }
   }
@@ -2005,6 +2028,10 @@ export function init(cfg: AutotelConfig): void {
 
   const sdkOptions: Partial<NodeSDKConfiguration> = {
     resource,
+    // NodeSDK runs its environment resource detector after merging `resource`.
+    // Passing serviceName separately reapplies the resolved Autotel value last,
+    // preserving our documented explicit > YAML > environment precedence.
+    serviceName: mergedConfig.service,
     sampler,
     instrumentations: finalInstrumentations,
   };

@@ -37,7 +37,9 @@ export class LiveStreamSubscriber extends EventSubscriber {
   protected async sendToDestination(payload: EventPayload): Promise<void> {
     if (payload.type !== 'event') return;
     const attrs = (payload.attributes ?? {}) as Record<string, unknown>;
-    const meta = (attrs._autotel as { channel?: string; producer?: string } | undefined) ?? {};
+    const meta =
+      (attrs._autotel as { channel?: string; producer?: string } | undefined) ??
+      {};
     const event: LiveEvent = {
       type: 'event',
       name: payload.name,
@@ -51,7 +53,9 @@ export class LiveStreamSubscriber extends EventSubscriber {
         fn(event);
       } catch (err) {
         // Listener errors must never block the producer.
-        process.stderr.write(`live-stream listener error: ${(err as Error).message}\n`);
+        process.stderr.write(
+          `live-stream listener error: ${(err as Error).message}\n`,
+        );
       }
     }
   }

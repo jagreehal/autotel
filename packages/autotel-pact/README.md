@@ -14,12 +14,12 @@ A green Pact suite is evidence of **compatibility**. An observed verified contra
 
 Every feature states what was observed or verified. We never claim precision the data cannot support.
 
-| Evidence | What it means | What you must configure |
-|----------|---------------|-------------------------|
-| **Seen in test** | Consumer exercised the interaction in CI (`source=test`, `role=consumer`) | `withPactInteraction` or `auto-wrap` |
-| **Seen in production** | A span tagged with `pact.*` was recorded at runtime | `tagPactInteraction()` + `PactLedgerSpanProcessor` |
-| **Provider verified** | Provider `verifyProvider()` succeeded and we enumerated interactions from the pact file | `withProviderVerification` |
-| **Broker verified** | Latest broker verification for the consumer–provider **pact pair** succeeded | Broker URL/token at **audit** time |
+| Evidence               | What it means                                                                           | What you must configure                            |
+| ---------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Seen in test**       | Consumer exercised the interaction in CI (`source=test`, `role=consumer`)               | `withPactInteraction` or `auto-wrap`               |
+| **Seen in production** | A span tagged with `pact.*` was recorded at runtime                                     | `tagPactInteraction()` + `PactLedgerSpanProcessor` |
+| **Provider verified**  | Provider `verifyProvider()` succeeded and we enumerated interactions from the pact file | `withProviderVerification`                         |
+| **Broker verified**    | Latest broker verification for the consumer–provider **pact pair** succeeded            | Broker URL/token at **audit** time                 |
 
 > **Broker limitation:** Broker verification proves the latest pact between a consumer and provider passed. It does **not** prove autotel-pact observed each interaction.
 
@@ -218,19 +218,16 @@ The wrapper parses the pact files, fans out one ledger row per interaction with 
 Tag business spans, then register the processor:
 
 ```ts
-import { init } from 'autotel';
-import { trace } from 'autotel';
+import { init, span } from 'autotel';
 import { createPactLedgerProcessor } from 'autotel-pact/processor';
 import { tagPactInteraction } from 'autotel-pact/tag';
 
 init({
   service: 'order-service',
-  spanProcessors: [
-    createPactLedgerProcessor({ dir: '.autotel-pact-prod' }),
-  ],
+  spanProcessors: [createPactLedgerProcessor({ dir: '.autotel-pact-prod' })],
 });
 
-trace('handleOrderCreated', (ctx) => {
+span('handleOrderCreated', () => {
   tagPactInteraction({
     consumer: 'OrderShipper',
     provider: 'OrderService',
@@ -280,26 +277,26 @@ STATUS  CONTRACTED  TEST_SEEN  PROD_SEEN  PROVIDER_VERIFIED  BROKER_VERIFIED  CO
 
 ### Status meanings
 
-| Status | Contracted in `pacts/` | In ledger window | Meaning                                       |
-|--------|------------------------|------------------|-----------------------------------------------|
-| OK     | yes                    | yes              | Trusted path, exercised this window           |
-| STALE  | yes                    | no               | Pact exists but no test exercised it          |
-| SHADOW | no                     | yes              | A wrapped call ran with no matching contract  |
+| Status | Contracted in `pacts/` | In ledger window | Meaning                                      |
+| ------ | ---------------------- | ---------------- | -------------------------------------------- |
+| OK     | yes                    | yes              | Trusted path, exercised this window          |
+| STALE  | yes                    | no               | Pact exists but no test exercised it         |
+| SHADOW | no                     | yes              | A wrapped call ran with no matching contract |
 
 ### Flags
 
-| Flag                | Default        | Description                                                                |
-|---------------------|----------------|----------------------------------------------------------------------------|
-| `--pacts <dir>`     | `./pacts`      | Directory containing pact files                                            |
-| `--ledger <dir>`    | `.autotel-pact`| Directory containing ledger files                                          |
-| `--window <days>`   | `14`           | Ledger lookback window                                                     |
-| `--gate`            | off            | Exit 1 if any contracted interaction was not **seen in test**              |
-| `--gate=strict`     | off            | Also exit 1 on observations with no matching contract                      |
-| `--gate=broker`     | off            | Exit 1 if broker configured and any contracted row lacks broker proof      |
-| `--broker-url`      | env            | Pact Broker base URL (`PACT_BROKER_BASE_URL`)                              |
-| `--broker-token`    | env            | Bearer token (`PACT_BROKER_TOKEN`)                                         |
-| `--json`            | off            | Machine-readable JSON (`test_seen`, `prod_seen`, …)                        |
-| `--help`            |                | Show help                                                                  |
+| Flag              | Default         | Description                                                           |
+| ----------------- | --------------- | --------------------------------------------------------------------- |
+| `--pacts <dir>`   | `./pacts`       | Directory containing pact files                                       |
+| `--ledger <dir>`  | `.autotel-pact` | Directory containing ledger files                                     |
+| `--window <days>` | `14`            | Ledger lookback window                                                |
+| `--gate`          | off             | Exit 1 if any contracted interaction was not **seen in test**         |
+| `--gate=strict`   | off             | Also exit 1 on observations with no matching contract                 |
+| `--gate=broker`   | off             | Exit 1 if broker configured and any contracted row lacks broker proof |
+| `--broker-url`    | env             | Pact Broker base URL (`PACT_BROKER_BASE_URL`)                         |
+| `--broker-token`  | env             | Bearer token (`PACT_BROKER_TOKEN`)                                    |
+| `--json`          | off             | Machine-readable JSON (`test_seen`, `prod_seen`, …)                   |
+| `--help`          |                 | Show help                                                             |
 
 ### CI gating
 
@@ -323,7 +320,7 @@ A few things to know before you turn `--gate` on for the whole org.
 
 A STALE row does **not** mean "never fires in production". It means no consumer test exercised this interaction in the window. Check **PROD_SEEN** for production evidence (requires explicit span tags + processor).
 
-Honest one-liner: *"verified by Pact, exercised by our tests, observed in production only when we tag spans."*
+Honest one-liner: _"verified by Pact, exercised by our tests, observed in production only when we tag spans."_
 
 ### Coverage equals wrapped tests
 
@@ -351,21 +348,21 @@ A contract that should not run anymore is a contract you should delete, not gate
 
 ## Attribute schema
 
-| Attribute                       | Type     | Description                                       |
-|---------------------------------|----------|---------------------------------------------------|
-| `pact.consumer`                 | string   | Consumer name from Pact config                    |
-| `pact.provider`                 | string   | Provider name from Pact config                    |
-| `pact.kind`                     | string   | `"message"` (v1) or `"http"` (v2)                 |
-| `pact.interaction.description`  | string   | The `expectsToReceive` or `uponReceiving` text    |
-| `pact.interaction.states`       | string[] | Provider state names from `.given()`              |
-| `pact.contract.file`            | string?  | Path to the pact file (when supplied)             |
-| `pact.outcome`                  | string   | `"passed"` or `"failed"`                          |
+| Attribute                      | Type     | Description                                    |
+| ------------------------------ | -------- | ---------------------------------------------- |
+| `pact.consumer`                | string   | Consumer name from Pact config                 |
+| `pact.provider`                | string   | Provider name from Pact config                 |
+| `pact.kind`                    | string   | `"message"` (v1) or `"http"` (v2)              |
+| `pact.interaction.description` | string   | The `expectsToReceive` or `uponReceiving` text |
+| `pact.interaction.states`      | string[] | Provider state names from `.given()`           |
+| `pact.contract.file`           | string?  | Path to the pact file (when supplied)          |
+| `pact.outcome`                 | string   | `"passed"` or `"failed"`                       |
 
 The `pact.*` namespace is currently unclaimed in OTel semantic conventions; we plan to propose it upstream once the package has traction. Pin to a specific `autotel-pact` version if you build dashboards against these attributes.
 
 ## How this is different from…
 
-- **Pact's own `--enable-otel`** flags emit telemetry about the *Pact tooling itself* (broker calls, verifier execution). `autotel-pact` operates at the **interaction wrapper layer in your code**, capturing whether the contract interactions ran.
+- **Pact's own `--enable-otel`** flags emit telemetry about the _Pact tooling itself_ (broker calls, verifier execution). `autotel-pact` operates at the **interaction wrapper layer in your code**, capturing whether the contract interactions ran.
 - **Tracetest** lets you write tests that assert against traces. `autotel-pact` does not change how you write tests. It audits which of your existing Pact contracts have evidence of being exercised.
 - **Pact Broker / PactFlow `can-i-deploy`** verifies version compatibility. `autotel-pact` adds the orthogonal question: have these verified contracts run recently?
 

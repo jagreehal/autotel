@@ -22,19 +22,20 @@ pnpm --filter @jagreehal/example-mcp-client start
 ### Example 1: Simple Tool Call
 
 ```typescript
-const weatherNYC = trace(async (ctx) => {
-  ctx.setSpanName('get-weather-example')
+import { span } from 'autotel';
 
+const weatherNYC = await span('get-weather-example', async () => {
   // Creates client span, injects _meta with trace context
   const result = await instrumented.callTool('get_weather', {
     location: 'New York',
-  })
+  });
 
-  return result
-})
+  return result;
+});
 ```
 
 **Trace structure:**
+
 ```
 get-weather-example (client)
 └── mcp.client.callTool.get_weather (client)
@@ -44,17 +45,23 @@ get-weather-example (client)
 ### Example 2: Multiple Tool Calls
 
 ```typescript
-const forecastLondon = trace(async (ctx) => {
-  ctx.setSpanName('get-forecast-example')
+import { span } from 'autotel';
 
-  const weather = await instrumented.callTool('get_weather', { location: 'London' })
-  const forecast = await instrumented.callTool('get_forecast', { location: 'London', days: 3 })
+const forecastLondon = await span('get-forecast-example', async () => {
+  const weather = await instrumented.callTool('get_weather', {
+    location: 'London',
+  });
+  const forecast = await instrumented.callTool('get_forecast', {
+    location: 'London',
+    days: 3,
+  });
 
-  return { weather, forecast }
-})
+  return { weather, forecast };
+});
 ```
 
 **Trace structure:**
+
 ```
 get-forecast-example (client)
 ├── mcp.client.callTool.get_weather (client)
@@ -102,21 +109,21 @@ This enables:
 Replace console exporter with OTLP:
 
 ```typescript
-import { init } from 'autotel'
+import { init } from 'autotel';
 
 // Honeycomb
 init({
   service: 'mcp-weather-client',
   endpoint: 'https://api.honeycomb.io',
   headers: { 'x-honeycomb-team': process.env.HONEYCOMB_API_KEY },
-})
+});
 
 // Datadog
 init({
   service: 'mcp-weather-client',
   endpoint: 'https://http-intake.logs.datadoghq.com',
   headers: { 'DD-API-KEY': process.env.DD_API_KEY },
-})
+});
 ```
 
 Then both client and server traces will appear in your observability backend, fully linked!

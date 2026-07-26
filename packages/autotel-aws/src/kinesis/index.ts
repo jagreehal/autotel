@@ -47,7 +47,12 @@
  * ```
  */
 
-import { trace, type TraceContext } from 'autotel';
+import {
+  trace,
+  type TraceContext,
+  withTracing,
+  getActiveTraceContext,
+} from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import { buildKinesisAttributes } from '../attributes';
 import { wrapSDKClient } from '../common/sdk-wrapper';
@@ -103,8 +108,7 @@ export function traceKinesis(config: TraceKinesisConfig) {
     fn: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): (...args: TArgs) => Promise<TReturn> {
     // Use autotel's trace() which properly handles the factory pattern
-    return trace(
-      `kinesis.${config.operation}`,
+    return withTracing({ name: `kinesis.${config.operation}` })(
       (ctx: TraceContext) =>
         async (...args: TArgs): Promise<TReturn> => {
           // Set Kinesis semantic attributes
@@ -120,7 +124,7 @@ export function traceKinesis(config: TraceKinesisConfig) {
           const handler = fn(ctx);
           return handler(...args);
         },
-    );
+    ) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 
@@ -212,11 +216,11 @@ export interface KinesisRecord {
  * ```
  */
 export class KinesisProducer<
-   
   TClient extends { send: (command: any) => Promise<any> } = any,
 > {
   private client: TClient;
-  private config: Required<Pick<KinesisProducerConfig, 'streamName'>> & KinesisProducerConfig;
+  private config: Required<Pick<KinesisProducerConfig, 'streamName'>> &
+    KinesisProducerConfig;
 
   constructor(client: TClient, config: KinesisProducerConfig) {
     this.client = wrapSDKClient(client as any, config.service) as TClient;
@@ -273,7 +277,8 @@ export class KinesisProducer<
     sequenceNumber?: string;
     encryptionType?: string;
   }> {
-    return trace(`kinesis.put`, async (ctx: TraceContext) => {
+    return trace(`kinesis.put`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildKinesisAttributes({
           streamName: this.config.streamName,
@@ -285,7 +290,9 @@ export class KinesisProducer<
         StreamName: this.config.streamName,
         Data: this.injectContext(record.data),
         PartitionKey: record.partitionKey,
-        ...(record.explicitHashKey && { ExplicitHashKey: record.explicitHashKey }),
+        ...(record.explicitHashKey && {
+          ExplicitHashKey: record.explicitHashKey,
+        }),
         ...(record.sequenceNumberForOrdering && {
           SequenceNumberForOrdering: record.sequenceNumberForOrdering,
         }),
@@ -299,7 +306,10 @@ export class KinesisProducer<
           ctx.setAttribute('aws.kinesis.shard_id', result.ShardId);
         }
         if (result.SequenceNumber) {
-          ctx.setAttribute('aws.kinesis.sequence_number', result.SequenceNumber);
+          ctx.setAttribute(
+            'aws.kinesis.sequence_number',
+            result.SequenceNumber,
+          );
         }
 
         ctx.setStatus({ code: SpanStatusCode.OK });
@@ -316,7 +326,7 @@ export class KinesisProducer<
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -330,7 +340,8 @@ export class KinesisProducer<
     failed: Array<{ errorCode?: string; errorMessage?: string }>;
     failedRecordCount: number;
   }> {
-    return trace(`kinesis.putBatch`, async (ctx: TraceContext) => {
+    return trace(`kinesis.putBatch`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildKinesisAttributes({
           streamName: this.config.streamName,
@@ -342,7 +353,9 @@ export class KinesisProducer<
       const entries = records.map((record) => ({
         Data: this.injectContext(record.data),
         PartitionKey: record.partitionKey,
-        ...(record.explicitHashKey && { ExplicitHashKey: record.explicitHashKey }),
+        ...(record.explicitHashKey && {
+          ExplicitHashKey: record.explicitHashKey,
+        }),
       }));
 
       try {
@@ -354,22 +367,40 @@ export class KinesisProducer<
           }),
         );
 
-        const successful: Array<{ shardId?: string; sequenceNumber?: string }> = [];
+        const successful: Array<{ shardId?: string; sequenceNumber?: string }> =
+          [];
         const failed: Array<{ errorCode?: string; errorMessage?: string }> = [];
 
         if (result.Records) {
           for (const r of result.Records) {
-            const record = r as { ShardId?: string; SequenceNumber?: string; ErrorCode?: string; ErrorMessage?: string };
+            const record = r as {
+              ShardId?: string;
+              SequenceNumber?: string;
+              ErrorCode?: string;
+              ErrorMessage?: string;
+            };
             if (record.ErrorCode) {
-              failed.push({ errorCode: record.ErrorCode, errorMessage: record.ErrorMessage });
+              failed.push({
+                errorCode: record.ErrorCode,
+                errorMessage: record.ErrorMessage,
+              });
             } else {
-              successful.push({ shardId: record.ShardId, sequenceNumber: record.SequenceNumber });
+              successful.push({
+                shardId: record.ShardId,
+                sequenceNumber: record.SequenceNumber,
+              });
             }
           }
         }
 
-        ctx.setAttribute('messaging.kinesis.successful_count', successful.length);
-        ctx.setAttribute('messaging.kinesis.failed_count', result.FailedRecordCount || 0);
+        ctx.setAttribute(
+          'messaging.kinesis.successful_count',
+          successful.length,
+        );
+        ctx.setAttribute(
+          'messaging.kinesis.failed_count',
+          result.FailedRecordCount || 0,
+        );
 
         if (result.FailedRecordCount && result.FailedRecordCount > 0) {
           ctx.setStatus({
@@ -392,7 +423,7 @@ export class KinesisProducer<
         });
         throw error;
       }
-    });
+    })();
   }
 }
 
@@ -439,7 +470,7 @@ export interface ReceivedKinesisRecord {
   /**
    * Parsed data (JSON parsed if possible)
    */
-   
+
   data: any;
 
   /**
@@ -460,7 +491,7 @@ export interface ReceivedKinesisRecord {
   /**
    * Original AWS SDK record object
    */
-   
+
   raw: any;
 }
 
@@ -510,11 +541,11 @@ export type KinesisRecordProcessor = (
  * ```
  */
 export class KinesisConsumer<
-   
   TClient extends { send: (command: any) => Promise<any> } = any,
 > {
   private client: TClient;
-  private config: Required<Pick<KinesisConsumerConfig, 'streamName'>> & KinesisConsumerConfig;
+  private config: Required<Pick<KinesisConsumerConfig, 'streamName'>> &
+    KinesisConsumerConfig;
 
   constructor(client: TClient, config: KinesisConsumerConfig) {
     this.client = wrapSDKClient(client as any, config.service) as TClient;
@@ -527,7 +558,7 @@ export class KinesisConsumer<
   /**
    * Extract trace context from record data
    */
-   
+
   private extractContext(data: any): Record<string, string> | undefined {
     if (!this.config.extractTraceContext || !data?._traceContext) {
       return undefined;
@@ -546,10 +577,12 @@ export class KinesisConsumer<
   /**
    * Parse raw record data
    */
-   
+
   private parseRecord(record: any): ReceivedKinesisRecord {
-    const rawData = record.Data ? Buffer.from(record.Data).toString('utf8') : '';
-     
+    const rawData = record.Data
+      ? Buffer.from(record.Data).toString('utf8')
+      : '';
+
     let data: any;
 
     try {
@@ -580,11 +613,17 @@ export class KinesisConsumer<
    */
   async getShardIterator(
     shardId: string,
-    type: 'AT_SEQUENCE_NUMBER' | 'AFTER_SEQUENCE_NUMBER' | 'TRIM_HORIZON' | 'LATEST' | 'AT_TIMESTAMP',
+    type:
+      | 'AT_SEQUENCE_NUMBER'
+      | 'AFTER_SEQUENCE_NUMBER'
+      | 'TRIM_HORIZON'
+      | 'LATEST'
+      | 'AT_TIMESTAMP',
     startingSequenceNumber?: string,
     timestamp?: Date,
   ): Promise<string> {
-    return trace(`kinesis.getShardIterator`, async (ctx: TraceContext) => {
+    return trace(`kinesis.getShardIterator`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildKinesisAttributes({
           streamName: this.config.streamName,
@@ -594,13 +633,16 @@ export class KinesisConsumer<
       );
 
       try {
-        const { GetShardIteratorCommand } = await import('@aws-sdk/client-kinesis');
+        const { GetShardIteratorCommand } =
+          await import('@aws-sdk/client-kinesis');
         const result = await this.client.send(
           new GetShardIteratorCommand({
             StreamName: this.config.streamName,
             ShardId: shardId,
             ShardIteratorType: type,
-            ...(startingSequenceNumber && { StartingSequenceNumber: startingSequenceNumber }),
+            ...(startingSequenceNumber && {
+              StartingSequenceNumber: startingSequenceNumber,
+            }),
             ...(timestamp && { Timestamp: timestamp }),
           }),
         );
@@ -610,11 +652,12 @@ export class KinesisConsumer<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'GetShardIterator failed',
+          message:
+            error instanceof Error ? error.message : 'GetShardIterator failed',
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -632,7 +675,8 @@ export class KinesisConsumer<
     nextIterator?: string;
     millisBehindLatest?: number;
   }> {
-    return trace(`kinesis.get`, async (ctx: TraceContext) => {
+    return trace(`kinesis.get`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildKinesisAttributes({
           streamName: this.config.streamName,
@@ -649,12 +693,16 @@ export class KinesisConsumer<
           }),
         );
 
-         
-        const records = (result.Records || []).map((r: any) => this.parseRecord(r));
+        const records = (result.Records || []).map((r: any) =>
+          this.parseRecord(r),
+        );
         ctx.setAttribute('messaging.batch.message_count', records.length);
 
         if (result.MillisBehindLatest !== undefined) {
-          ctx.setAttribute('aws.kinesis.millis_behind_latest', result.MillisBehindLatest);
+          ctx.setAttribute(
+            'aws.kinesis.millis_behind_latest',
+            result.MillisBehindLatest,
+          );
         }
 
         ctx.setStatus({ code: SpanStatusCode.OK });
@@ -671,7 +719,7 @@ export class KinesisConsumer<
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -687,7 +735,10 @@ export class KinesisConsumer<
     processor: KinesisRecordProcessor,
     limit?: number,
   ): Promise<{ nextIterator?: string; processedCount: number }> {
-    const { records, nextIterator } = await this.getRecords(shardIterator, limit);
+    const { records, nextIterator } = await this.getRecords(
+      shardIterator,
+      limit,
+    );
     let processedCount = 0;
 
     for (const record of records) {
@@ -696,14 +747,18 @@ export class KinesisConsumer<
 
       // Create processing span, optionally linked to producer
       const processRecord = async () => {
-        return trace(`kinesis.process`, async (ctx: TraceContext) => {
+        return trace(`kinesis.process`, async () => {
+          const ctx = getActiveTraceContext()!;
           ctx.setAttributes(
             buildKinesisAttributes({
               streamName: this.config.streamName,
               operation: 'get',
             }),
           );
-          ctx.setAttribute('aws.kinesis.sequence_number', record.sequenceNumber);
+          ctx.setAttribute(
+            'aws.kinesis.sequence_number',
+            record.sequenceNumber,
+          );
           ctx.setAttribute('aws.kinesis.partition_key', record.partitionKey);
 
           try {
@@ -713,11 +768,12 @@ export class KinesisConsumer<
           } catch (error) {
             ctx.setStatus({
               code: SpanStatusCode.ERROR,
-              message: error instanceof Error ? error.message : 'Processing failed',
+              message:
+                error instanceof Error ? error.message : 'Processing failed',
             });
             throw error;
           }
-        });
+        })();
       };
 
       // Run with extracted context if available
@@ -738,7 +794,8 @@ export class KinesisConsumer<
    * @returns Array of shard IDs
    */
   async listShards(): Promise<string[]> {
-    return trace(`kinesis.listShards`, async (ctx: TraceContext) => {
+    return trace(`kinesis.listShards`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildKinesisAttributes({
           streamName: this.config.streamName,
@@ -754,7 +811,9 @@ export class KinesisConsumer<
           }),
         );
 
-        const shardIds = result.Shards?.map((s: { ShardId?: string }) => s.ShardId || '') || [];
+        const shardIds =
+          result.Shards?.map((s: { ShardId?: string }) => s.ShardId || '') ||
+          [];
         ctx.setAttribute('aws.kinesis.shard_count', shardIds.length);
         ctx.setStatus({ code: SpanStatusCode.OK });
 
@@ -766,6 +825,6 @@ export class KinesisConsumer<
         });
         throw error;
       }
-    });
+    })();
   }
 }

@@ -32,7 +32,10 @@ function makeTestCase(overrides: {
   id: string;
   name: string;
   moduleId?: string;
-  result?: { state: string; errors?: Array<{ message?: string; stack?: string }> };
+  result?: {
+    state: string;
+    errors?: Array<{ message?: string; stack?: string }>;
+  };
 }) {
   return {
     id: overrides.id,
@@ -86,7 +89,12 @@ describe('OtelReporter', () => {
       name: 'failing test',
       result: {
         state: 'failed',
-        errors: [{ message: 'assertion failed', stack: 'Error: assertion failed\n  at ...' }],
+        errors: [
+          {
+            message: 'assertion failed',
+            stack: 'Error: assertion failed\n  at ...',
+          },
+        ],
       },
     });
 
@@ -133,7 +141,11 @@ describe('OtelReporter', () => {
     const { OtelReporter } = await import('./reporter');
     const reporter = new OtelReporter();
 
-    const suite = makeTestSuite({ id: 'suite-fail', name: 'FailingSuite', state: 'failed' });
+    const suite = makeTestSuite({
+      id: 'suite-fail',
+      name: 'FailingSuite',
+      state: 'failed',
+    });
 
     reporter.onTestSuiteReady!(suite);
     reporter.onTestSuiteResult!(suite);
@@ -159,8 +171,16 @@ describe('OtelReporter', () => {
 
     const moduleA = { moduleId: 'a.test.ts' } as any;
 
-    const testInA = makeTestCase({ id: 'a-1', name: 'test a', moduleId: 'a.test.ts' });
-    const testInB = makeTestCase({ id: 'b-1', name: 'test b', moduleId: 'b.test.ts' });
+    const testInA = makeTestCase({
+      id: 'a-1',
+      name: 'test a',
+      moduleId: 'a.test.ts',
+    });
+    const testInB = makeTestCase({
+      id: 'b-1',
+      name: 'test b',
+      moduleId: 'b.test.ts',
+    });
 
     reporter.onTestCaseReady!(testInA);
     reporter.onTestCaseReady!(testInB);
@@ -178,8 +198,16 @@ describe('OtelReporter', () => {
 
     const moduleA = { moduleId: 'a.test.ts' } as any;
 
-    const suiteInA = makeTestSuite({ id: 'suite-a', name: 'suite a', moduleId: 'a.test.ts' });
-    const suiteInB = makeTestSuite({ id: 'suite-b', name: 'suite b', moduleId: 'b.test.ts' });
+    const suiteInA = makeTestSuite({
+      id: 'suite-a',
+      name: 'suite a',
+      moduleId: 'a.test.ts',
+    });
+    const suiteInB = makeTestSuite({
+      id: 'suite-b',
+      name: 'suite b',
+      moduleId: 'b.test.ts',
+    });
 
     reporter.onTestSuiteReady!(suiteInA);
     reporter.onTestSuiteReady!(suiteInB);

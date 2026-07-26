@@ -131,15 +131,19 @@ function checkValue(
     });
     return; // a wrong type makes enum/deprecation checks noise
   }
-  if (spec.enum && (typeof value === 'string' || typeof value === 'number') && !spec.enum.includes(value)) {
-      out.push({
-        code: 'enum_violation',
-        severity: 'error',
-        spanName,
-        attribute: key,
-        message: `attribute "${key}" value ${JSON.stringify(value)} is not one of ${JSON.stringify(spec.enum)}`,
-      });
-    }
+  if (
+    spec.enum &&
+    (typeof value === 'string' || typeof value === 'number') &&
+    !spec.enum.includes(value)
+  ) {
+    out.push({
+      code: 'enum_violation',
+      severity: 'error',
+      spanName,
+      attribute: key,
+      message: `attribute "${key}" value ${JSON.stringify(value)} is not one of ${JSON.stringify(spec.enum)}`,
+    });
+  }
   if (spec.stability === 'deprecated') {
     const hint = spec.replacedBy
       ? ` — use "${spec.replacedBy}" instead`

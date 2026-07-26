@@ -2,18 +2,17 @@
  * Hyperdrive binding instrumentation
  */
 
-import {
-  trace,
-  SpanKind,
-  SpanStatusCode,
-} from '@opentelemetry/api';
+import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap, setAttr } from './common';
 
 /**
  * Instrument Hyperdrive binding
  */
-export function instrumentHyperdrive<T extends Hyperdrive>(hyperdrive: T, bindingName?: string): T {
+export function instrumentHyperdrive<T extends Hyperdrive>(
+  hyperdrive: T,
+  bindingName?: string,
+): T {
   const name = bindingName || 'hyperdrive';
 
   const handler: ProxyHandler<T> = {
@@ -32,9 +31,33 @@ export function instrumentHyperdrive<T extends Hyperdrive>(hyperdrive: T, bindin
 
             // Extract connection info safely (never record password)
             try {
-              setAttr({ setAttribute: (k: string, v: any) => { if (v !== undefined && v !== null) attributes[k] = v; } }, 'server.address', target.host);
-              setAttr({ setAttribute: (k: string, v: any) => { if (v !== undefined && v !== null) attributes[k] = v; } }, 'server.port', target.port);
-              setAttr({ setAttribute: (k: string, v: any) => { if (v !== undefined && v !== null) attributes[k] = v; } }, 'db.user', target.user);
+              setAttr(
+                {
+                  setAttribute: (k: string, v: any) => {
+                    if (v !== undefined && v !== null) attributes[k] = v;
+                  },
+                },
+                'server.address',
+                target.host,
+              );
+              setAttr(
+                {
+                  setAttribute: (k: string, v: any) => {
+                    if (v !== undefined && v !== null) attributes[k] = v;
+                  },
+                },
+                'server.port',
+                target.port,
+              );
+              setAttr(
+                {
+                  setAttribute: (k: string, v: any) => {
+                    if (v !== undefined && v !== null) attributes[k] = v;
+                  },
+                },
+                'db.user',
+                target.user,
+              );
             } catch {
               // Properties may not be accessible in all environments
             }
@@ -54,7 +77,8 @@ export function instrumentHyperdrive<T extends Hyperdrive>(hyperdrive: T, bindin
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {

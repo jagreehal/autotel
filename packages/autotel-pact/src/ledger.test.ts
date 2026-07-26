@@ -1,9 +1,12 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { appendLedgerEntry, ledgerPath, readLedger } from './ledger.js';
-import { isInteractionLedgerEntry, type InteractionLedgerEntry } from './types.js';
+import {
+  isInteractionLedgerEntry,
+  type InteractionLedgerEntry,
+} from './types.js';
 
 let workDir: string;
 let originalCwd: string;
@@ -23,7 +26,9 @@ afterEach(() => {
 
 import { LEDGER_ENTRY_SPEC } from './types.js';
 
-function sampleEntry(overrides: Partial<InteractionLedgerEntry> = {}): InteractionLedgerEntry {
+function sampleEntry(
+  overrides: Partial<InteractionLedgerEntry> = {},
+): InteractionLedgerEntry {
   return {
     type: 'interaction',
     spec: LEDGER_ENTRY_SPEC,
@@ -49,10 +54,9 @@ describe('ledger', () => {
 
     const entries = readLedger(opts);
     expect(entries).toHaveLength(2);
-    expect(entries.map((e) => (isInteractionLedgerEntry(e) ? e.interaction : ''))).toEqual([
-      'one',
-      'two',
-    ]);
+    expect(
+      entries.map((e) => (isInteractionLedgerEntry(e) ? e.interaction : '')),
+    ).toEqual(['one', 'two']);
   });
 
   it('skips malformed lines silently', () => {
@@ -65,7 +69,9 @@ describe('ledger', () => {
 
     const entries = readLedger(opts);
     expect(entries).toHaveLength(1);
-    expect(isInteractionLedgerEntry(entries[0]!) && entries[0].interaction).toBe('good');
+    expect(
+      isInteractionLedgerEntry(entries[0]!) && entries[0].interaction,
+    ).toBe('good');
   });
 
   it('reads multiple ledger files in the directory', () => {

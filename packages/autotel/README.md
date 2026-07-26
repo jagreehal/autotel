@@ -142,20 +142,20 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
 
 `autotel` has ~35 subpath exports. For most scenarios you only need one or two. Cloudflare Workers and other edge runtimes should use [`autotel-cloudflare`](../autotel-cloudflare) or [`autotel-edge`](../autotel-edge), not `autotel` (which expects Node).
 
-| Scenario                                            | Package                               | Import                                                                 |
-| --------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------- |
-| Node service — init + spans                         | `autotel`                             | `import { init, trace, span } from 'autotel'`                          |
-| Node service — pino-style logger with trace context | `autotel`                             | `import { createLogger } from 'autotel/logger'`                        |
-| Node service — class decorators                     | `autotel`                             | `import { Trace, Span } from 'autotel/decorators'`                     |
-| Node service — Drizzle ORM spans                    | `autotel-drizzle`                     | `import { instrumentDrizzleClient } from 'autotel-drizzle'`            |
-| Node service — testing assertions                   | `autotel`                             | `import { createTraceCollector } from 'autotel/testing'`               |
-| Cloudflare Worker — fetch with spans                | `autotel-cloudflare`                  | `import { wrapModule, trace } from 'autotel-cloudflare'`               |
-| Cloudflare Worker — logs only, no `nodejs_compat`   | `autotel-cloudflare`                  | `import { createEdgeLogger } from 'autotel-cloudflare/logger'`         |
-| Cloudflare Worker — queue consumer                  | `autotel-cloudflare`                  | `import { wrapModule, getQueueLogger } from 'autotel-cloudflare'`      |
-| Cloudflare Worker — Durable Object                  | `autotel-cloudflare`                  | `import { wrapDurableObject } from 'autotel-cloudflare'`               |
-| Hono on Workers                                     | `autotel-cloudflare` + `autotel-hono` | `wrapModule` from `autotel-cloudflare`, middleware from `autotel-hono` |
-| Vercel Edge / Netlify Edge / Deno Deploy            | `autotel-edge`                        | `import { init, trace } from 'autotel-edge'`                           |
-| Edge runtime — logs only                            | `autotel-edge`                        | `import { createEdgeLogger } from 'autotel-edge/logger'`               |
+| Scenario                                           | Package                               | Import                                                                      |
+| -------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------- |
+| Node service: init + spans                         | `autotel`                             | `import { init, trace, span, withTracing, span } from 'autotel'`            |
+| Node service: pino-style logger with trace context | `autotel`                             | `import { createLogger } from 'autotel/logger'`                             |
+| Node service: class decorators                     | `autotel`                             | `import { Trace, Span } from 'autotel/decorators'`                          |
+| Node service: Drizzle ORM spans                    | `autotel-drizzle`                     | `import { instrumentDrizzleClient } from 'autotel-drizzle'`                 |
+| Node service: testing assertions                   | `autotel`                             | `import { createTraceCollector } from 'autotel/testing'`                    |
+| Cloudflare Worker: fetch with spans                | `autotel-cloudflare`                  | `import { wrapModule, trace, span, withTracing } from 'autotel-cloudflare'` |
+| Cloudflare Worker: logs only, no `nodejs_compat`   | `autotel-cloudflare`                  | `import { createEdgeLogger } from 'autotel-cloudflare/logger'`              |
+| Cloudflare Worker: queue consumer                  | `autotel-cloudflare`                  | `import { wrapModule, getQueueLogger } from 'autotel-cloudflare'`           |
+| Cloudflare Worker: Durable Object                  | `autotel-cloudflare`                  | `import { wrapDurableObject } from 'autotel-cloudflare'`                    |
+| Hono on Workers                                    | `autotel-cloudflare` + `autotel-hono` | `wrapModule` from `autotel-cloudflare`, middleware from `autotel-hono`      |
+| Vercel Edge / Netlify Edge / Deno Deploy           | `autotel-edge`                        | `import { init, trace, span, withTracing } from 'autotel-edge'`             |
+| Edge runtime: logs only                            | `autotel-edge`                        | `import { createEdgeLogger } from 'autotel-edge/logger'`                    |
 
 ## Quick Start
 
@@ -224,7 +224,7 @@ Sampling presets:
 ### 3. Instrument code with `trace()`
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing, getActiveTraceContext } from 'autotel';
 
 export const createUser = trace(async function createUser(
   data: CreateUserData,
@@ -236,6 +236,9 @@ export const createUser = trace(async function createUser(
 
 - Named function expressions automatically become span names (`code.function`).
 - Errors are recorded, spans are ended, and status is set automatically.
+- When inference may be unreliable, use `trace('user.create', fn)` or
+  `instrument({ key: 'user.create', fn })`. For a module-sized batch, use
+  `instrument({ functions: { createUser, updateUser } })`.
 
 ### 4. See the value everywhere
 
@@ -522,7 +525,7 @@ These use the `autotel.*` namespace intentionally. OpenTelemetry does not define
 Wrap any sync/async function to create spans automatically.
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, span, withTracing } from 'autotel';
 
 export const updateUser = trace(async function updateUser(
   id: string,
@@ -536,26 +539,27 @@ export const deleteUser = trace('user.delete', async (id: string) => {
   return db.users.delete(id);
 });
 
-// Factory form exposes the `ctx` helper (see below)
-export const createOrder = trace((ctx) => async (order: Order) => {
-  ctx.setAttribute('order.id', order.id);
-  return submit(order);
-});
+// Explicit factory form exposes the `ctx` helper
+export const createOrder = withTracing({ name: 'order.create' })(
+  (ctx) => async (order: Order) => {
+    ctx.setAttribute('order.id', order.id);
+    return submit(order);
+  },
+);
 
-// Immediate execution - wraps and executes instantly (for middleware/wrappers)
+// For one-off work, create the wrapper and call it
 function timed<T>(operation: string, fn: () => Promise<T>): Promise<T> {
-  return trace(operation, async (ctx) => {
-    ctx.setAttribute('operation', operation);
+  return trace(operation, async () => {
+    getActiveTraceContext()?.setAttribute('operation', operation);
     return await fn();
-  });
+  })();
 }
-// Executes immediately, returns Promise<T> directly
 ```
 
-**Two patterns supported:**
+**Context access:**
 
-1. **Factory pattern** `trace(ctx => (...args) => result)` : Returns a wrapped function for reuse
-2. **Immediate execution** `trace(ctx => result)` : Executes once immediately, returns the result directly
+1. Plain `trace(name?, fn)` wrappers receive their real arguments; use `getActiveTraceContext()` inside.
+2. Explicit factories use `withTracing({ name })(ctx => (...args) => result)`.
 
 - Automatic span lifecycle (`start`, `end`, status, and error recording).
 - Function names feed `operation.name`, `code.function`, and events enrichment.
@@ -566,7 +570,7 @@ function timed<T>(operation: string, fn: () => Promise<T>): Promise<T> {
 Create nested spans for individual code blocks without wrapping entire functions.
 
 ```typescript
-import { span, trace } from 'autotel';
+import { span, trace, withTracing } from 'autotel';
 
 export const rollDice = trace(async function rollDice(rolls: number) {
   const results: number[] = [];
@@ -591,27 +595,29 @@ Nested spans automatically inherit context and correlation IDs.
 
 ### Trace Context (`ctx`)
 
-Every `trace((ctx) => ...)` factory receives a type-safe helper backed by `AsyncLocalStorage`.
+Every `withTracing({})((ctx) => ...)` factory receives a type-safe helper backed by `AsyncLocalStorage`.
 
 ```typescript
-import { trace, recordStructuredError } from 'autotel';
+import { trace, span, withTracing, recordStructuredError } from 'autotel';
 import { SpanStatusCode } from '@opentelemetry/api';
 
-export const createUser = trace((ctx) => async (input: CreateUserData) => {
-  logger.info({ traceId: ctx.traceId }, 'Handling request');
-  ctx.setAttributes({ 'user.id': input.id, 'user.plan': input.plan });
+export const createUser = withTracing({})(
+  (ctx) => async (input: CreateUserData) => {
+    logger.info({ traceId: ctx.traceId }, 'Handling request');
+    ctx.setAttributes({ 'user.id': input.id, 'user.plan': input.plan });
 
-  try {
-    const user = await db.users.create(input);
-    ctx.setStatus({ code: SpanStatusCode.OK });
-    return user;
-  } catch (error) {
-    // Records the error on the span and sets ERROR status. Pair with
-    // `getRequestLogger(ctx).error(error)` if you also want a correlated log.
-    recordStructuredError(ctx, error as Error);
-    throw error;
-  }
-});
+    try {
+      const user = await db.users.create(input);
+      ctx.setStatus({ code: SpanStatusCode.OK });
+      return user;
+    } catch (error) {
+      // Records the error on the span and sets ERROR status. Pair with
+      // `getRequestLogger(ctx).error(error)` if you also want a correlated log.
+      recordStructuredError(ctx, error as Error);
+      throw error;
+    }
+  },
+);
 ```
 
 Available helpers: `traceId`, `spanId`, `correlationId`, `setAttribute`, `setAttributes`, `setStatus`, `getBaggage`, `setBaggage`, `deleteBaggage`, `getAllBaggage`.
@@ -626,11 +632,11 @@ Available helpers: `traceId`, `spanId`, `correlationId`, `setAttribute`, `setAtt
 Baggage allows you to propagate custom key-value pairs across distributed traces. Baggage is automatically included in HTTP headers when using `injectTraceContext()` from `autotel/http`.
 
 ```typescript
-import { trace, withBaggage } from 'autotel';
+import { trace, span, withTracing, withBaggage } from 'autotel';
 import { injectTraceContext } from 'autotel/http';
 
 // Set baggage for downstream services
-export const createOrder = trace((ctx) => async (order: Order) => {
+export const createOrder = withTracing({})((ctx) => async (order: Order) => {
   return await withBaggage({
     baggage: {
       'tenant.id': order.tenantId,
@@ -654,7 +660,7 @@ export const createOrder = trace((ctx) => async (order: Order) => {
 For type-safe baggage operations, use `defineBaggageSchema()`:
 
 ```typescript
-import { trace, defineBaggageSchema } from 'autotel';
+import { trace, span, withTracing, defineBaggageSchema } from 'autotel';
 
 type TenantBaggage = { tenantId: string; region?: string };
 const tenantBaggage = defineBaggageSchema<TenantBaggage>('tenant');
@@ -678,14 +684,14 @@ export const handler = trace<TenantBaggage>((ctx) => async () => {
 Enable `baggage: true` in `init()` to automatically copy all baggage entries to span attributes, making them visible in trace UIs without manual `ctx.setAttribute()` calls:
 
 ```typescript
-import { init, trace, withBaggage } from 'autotel';
+import { init, trace, span, withTracing, withBaggage } from 'autotel';
 
 init({
   service: 'my-app',
   baggage: true, // Auto-copy baggage to span attributes
 });
 
-export const processOrder = trace((ctx) => async (order: Order) => {
+export const processOrder = withTracing({})((ctx) => async (order: Order) => {
   return await withBaggage({
     baggage: {
       'tenant.id': order.tenantId,
@@ -713,7 +719,13 @@ init({
 **Extracting Baggage from Incoming Requests:**
 
 ```typescript
-import { extractTraceContext, trace, context } from 'autotel';
+import {
+  extractTraceContext,
+  trace,
+  span,
+  withTracing,
+  context,
+} from 'autotel';
 
 // In Express middleware
 app.use((req, res, next) => {
@@ -888,7 +900,7 @@ Attachers know WHERE to attach attributes - they handle spans, resources, and ap
 import { setUser, httpServer, identify, dbClient } from 'autotel/attributes';
 
 // Set user attributes with automatic PII redaction
-export const handleRequest = trace((ctx) => async (req) => {
+export const handleRequest = withTracing({})((ctx) => async (req) => {
   setUser(ctx, {
     id: req.userId,
     email: req.userEmail, // Automatically redacted by default
@@ -904,7 +916,7 @@ export const handleRequest = trace((ctx) => async (req) => {
 });
 
 // Bundle user, session, and device attributes together
-export const identifyUser = trace((ctx) => async (data) => {
+export const identifyUser = withTracing({})((ctx) => async (data) => {
   identify(ctx, {
     user: { id: data.userId, name: data.userName },
     session: { id: data.sessionId },
@@ -913,7 +925,7 @@ export const identifyUser = trace((ctx) => async (data) => {
 });
 
 // Database client attributes
-export const queryUsers = trace((ctx) => async () => {
+export const queryUsers = withTracing({})((ctx) => async () => {
   dbClient(ctx, {
     system: 'postgresql',
     operation: 'SELECT',
@@ -930,7 +942,7 @@ export const queryUsers = trace((ctx) => async () => {
 ```typescript
 import { safeSetAttributes, attrs } from 'autotel/attributes';
 
-export const processUser = trace((ctx) => async (user) => {
+export const processUser = withTracing({})((ctx) => async (user) => {
   // Default: PII is redacted automatically
   safeSetAttributes(ctx, attrs.user.data({ email: 'user@example.com' }));
   // → { 'user.email': '[REDACTED]' }
@@ -980,7 +992,7 @@ Domain helpers bundle multiple attribute groups for common scenarios:
 import { transaction } from 'autotel/attributes';
 
 // Bundle HTTP request with user context
-export const handleRequest = trace((ctx) => async (req) => {
+export const handleRequest = withTracing({})((ctx) => async (req) => {
   transaction(ctx, {
     user: { id: req.userId },
     session: { id: req.sessionId },
@@ -1248,9 +1260,9 @@ Baggage allows key-value pairs to propagate across service boundaries. Autotel p
 Use the pre-built `BusinessBaggage` schema for common business context:
 
 ```typescript
-import { BusinessBaggage, trace } from 'autotel';
+import { BusinessBaggage, trace, span, withTracing } from 'autotel';
 
-export const processOrder = trace((ctx) => async (order: Order) => {
+export const processOrder = withTracing({})((ctx) => async (order: Order) => {
   // Set business context (propagates to downstream services)
   BusinessBaggage.set(ctx, {
     tenantId: order.tenantId,
@@ -1266,7 +1278,7 @@ export const processOrder = trace((ctx) => async (order: Order) => {
 });
 
 // In downstream service
-export const chargeOrder = trace((ctx) => async () => {
+export const chargeOrder = withTracing({})((ctx) => async () => {
   // Read business context
   const { tenantId, userId, priority } = BusinessBaggage.get(ctx);
 
@@ -1311,7 +1323,7 @@ const OrderBaggage = createSafeBaggageSchema(
 );
 
 // Use in traced functions
-export const processOrder = trace((ctx) => async (order: Order) => {
+export const processOrder = withTracing({})((ctx) => async (order: Order) => {
   // Type-safe set (TypeScript validates fields)
   OrderBaggage.set(ctx, {
     orderId: order.id,
@@ -1443,12 +1455,12 @@ export const orderSaga = traceWorkflow({
 // 2. ReserveInventory.compensate (release)
 ```
 
-**WorkflowContext Methods:**
+**Context Methods:**
 
 - `ctx.getWorkflowId()` - Get current workflow instance ID
 - `ctx.getWorkflowName()` - Get workflow type name
-- `ctx.getStepIndex()` - Current step number
-- `ctx.getPreviousStepContext()` - SpanContext for linking
+- Step factories receive `StepContext`, which adds `getStepName()`,
+  `getStepIndex()`, and `getWorkflowContext()`
 
 **Compensation Attributes:**
 
@@ -1468,7 +1480,7 @@ import { Metric, createHistogram } from 'autotel';
 const metrics = new Metric('checkout');
 const revenue = createHistogram('checkout.revenue');
 
-export const processOrder = trace((ctx) => async (order) => {
+export const processOrder = withTracing({})((ctx) => async (order) => {
   metrics.trackEvent('order.completed', {
     orderId: order.id,
     amount: order.total,
@@ -1488,7 +1500,7 @@ Track user behavior, conversion funnels, and business outcomes alongside your Op
 **Recommended: Configure subscribers in `init()`, use global `track()` function:**
 
 ```typescript
-import { init, track, trace } from 'autotel';
+import { init, track, trace, span, withTracing } from 'autotel';
 import { PostHogSubscriber } from 'autotel-subscribers/posthog';
 
 init({
@@ -1559,7 +1571,7 @@ npm install @opentelemetry/instrumentation-pino
 
 ```typescript
 import pino from 'pino';
-import { init, trace } from 'autotel';
+import { init, trace, span, withTracing } from 'autotel';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
@@ -1665,7 +1677,7 @@ init({
 ### Basic Usage
 
 ```typescript
-import { init, trace, setUser, httpServer } from 'autotel';
+import { init, trace, span, withTracing, setUser, httpServer } from 'autotel';
 import pino from 'pino';
 
 const logger = pino();
@@ -1679,28 +1691,30 @@ init({
   },
 });
 
-export const processCheckout = trace((ctx) => async (order: Order) => {
-  setUser(ctx, {
-    id: order.userId,
-    subscription: order.plan,
-    accountAgeDays: daysSince(order.userCreatedAt),
-  });
+export const processCheckout = withTracing({})(
+  (ctx) => async (order: Order) => {
+    setUser(ctx, {
+      id: order.userId,
+      subscription: order.plan,
+      accountAgeDays: daysSince(order.userCreatedAt),
+    });
 
-  httpServer(ctx, {
-    method: 'POST',
-    route: '/api/checkout',
-    statusCode: 200,
-  });
+    httpServer(ctx, {
+      method: 'POST',
+      route: '/api/checkout',
+      statusCode: 200,
+    });
 
-  ctx.setAttributes({
-    'cart.total_cents': order.total,
-    'payment.method': order.paymentMethod,
-    'payment.provider': 'stripe',
-  });
+    ctx.setAttributes({
+      'cart.total_cents': order.total,
+      'payment.method': order.paymentMethod,
+      'payment.provider': 'stripe',
+    });
 
-  // When this span ends, a canonical log line is automatically emitted
-  // with ALL attributes: user.id, user.subscription, cart.total_cents, etc.
-});
+    // When this span ends, a canonical log line is automatically emitted
+    // with ALL attributes: user.id, user.subscription, cart.total_cents, etc.
+  },
+);
 ```
 
 ### What You Get
@@ -1798,9 +1812,15 @@ It writes correlated request context and log records, so canonical log lines sti
 wide event per request.
 
 ```typescript
-import { trace, getRequestLogger, createStructuredError } from 'autotel';
+import {
+  trace,
+  span,
+  withTracing,
+  getRequestLogger,
+  createStructuredError,
+} from 'autotel';
 
-export const checkout = trace((ctx) => async (order: Order) => {
+export const checkout = withTracing({})((ctx) => async (order: Order) => {
   const log = getRequestLogger(ctx);
 
   log.set({ user: { id: order.userId, plan: order.plan } });
@@ -1884,7 +1904,7 @@ try {
 
 `autotel/diagnostics` bridges Node's built-in
 [`diagnostics_channel`](https://nodejs.org/api/diagnostics_channel.html) into
-autotel spans and events — no monkey-patching, no `import-in-the-middle`. Every
+autotel spans and events. No monkey-patching, no `import-in-the-middle`. Every
 entry point is opt-in and degrades to a no-op on runtimes (edge, old Node) that
 lack the underlying channels.
 
@@ -1915,8 +1935,8 @@ const stop = instrumentHttp(); // SERVER span per inbound request (parented to t
 
 This is an opt-in alternative to `@opentelemetry/instrumentation-http` for span
 coverage and propagation. Limitation: a plain channel can't wrap the request
-handler, so it does **not** set an ambient context for the handler's duration —
-application spans created inside a handler won't auto-nest under the SERVER span.
+handler, so it does **not** set an ambient context for the handler's duration.
+Application spans created inside a handler won't auto-nest under the SERVER span.
 Use `@opentelemetry/instrumentation-http` if you need that nesting.
 
 **Bridge any channel** with the shared primitive (also used by
@@ -2332,7 +2352,7 @@ Autotel is designed as an **enabler** - it provides composable primitives that l
 ### Instrumenting Queue Consumers
 
 ```typescript
-import { trace, span, track } from 'autotel';
+import { trace, span, withTracing, span, track } from 'autotel';
 
 // Wrap your consumer handler with trace()
 export const processMessage = trace(async function processMessage(
@@ -2369,7 +2389,7 @@ consumer.on('message', async (msg) => {
 ### Instrumenting Scheduled Jobs / Cron
 
 ```typescript
-import { trace, getMetrics } from 'autotel';
+import { trace, span, withTracing, getMetrics } from 'autotel';
 
 export const dailyReportJob = trace(async function dailyReportJob() {
   const metrics = getMetrics();
@@ -2632,7 +2652,7 @@ For edge runtimes with different constraints:
 Cloudflare Workers example:
 
 ```typescript
-import { wrapModule, trace, init } from 'autotel-cloudflare';
+import { wrapModule, trace, span, withTracing, init } from 'autotel-cloudflare';
 
 const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
   return kv.get(orderId);
@@ -2799,7 +2819,7 @@ Autotel provides utilities that make it easy to instrument any library with Open
 Here's the minimal code to instrument any library:
 
 ```typescript
-import { trace, SpanKind } from '@opentelemetry/api';
+import { trace, span, withTracing, SpanKind } from '@opentelemetry/api';
 import { runWithSpan, finalizeSpan } from 'autotel/trace-helpers';
 
 const INSTRUMENTED_FLAG = Symbol('instrumented');
@@ -2837,7 +2857,7 @@ export function instrumentMyLibrary(client) {
 Let's walk through instrumenting the popular axios HTTP client:
 
 ```typescript
-import { trace, SpanKind } from '@opentelemetry/api';
+import { trace, span, withTracing, SpanKind } from '@opentelemetry/api';
 import { runWithSpan, finalizeSpan } from 'autotel/trace-helpers';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 
@@ -3087,7 +3107,7 @@ import {
   finalizeSpan, // Set status and end span with error handling
   getActiveSpan, // Get currently active span
   getTraceContext, // Get trace IDs for correlation
-  enrichWithTraceContext, // Add trace context to objects
+  enrichWithTraceContext, // Add trace, withTracing context to objects
   getActiveContext, // Get current OpenTelemetry context
 } from 'autotel/trace-helpers';
 
@@ -3131,7 +3151,9 @@ logger.info(
 
 ```typescript
 import {
-  trace, // Access to tracer provider
+  trace,
+  span,
+  withTracing, // Access to tracer provider
   context, // Context management (advanced)
   SpanKind, // CLIENT, SERVER, INTERNAL, PRODUCER, CONSUMER
   SpanStatusCode, // OK, ERROR, UNSET
@@ -3226,8 +3248,8 @@ init({
 
 ## See also
 
-- [autotel-cloudflare](../autotel-cloudflare) — Cloudflare Workers with KV/R2/D1/DO instrumentation
-- [autotel-edge](../autotel-edge) — vendor-agnostic edge runtime foundation
-- [autotel-drizzle](../autotel-drizzle) — Drizzle ORM query spans
+- [autotel-cloudflare](../autotel-cloudflare): Cloudflare Workers with KV/R2/D1/DO instrumentation
+- [autotel-edge](../autotel-edge): vendor-agnostic edge runtime foundation
+- [autotel-drizzle](../autotel-drizzle): Drizzle ORM query spans
 
 Happy observing!

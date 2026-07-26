@@ -9,7 +9,14 @@
 
 import { createTraceparent, parseTraceparent } from './traceparent';
 import { PrivacyManager, PrivacyConfig, getDenialReason } from './privacy';
-import { configureExporter, setRawFetch, recordSpan, flushSpans, isConfigured, resetForTesting as resetExporter } from './span-exporter';
+import {
+  configureExporter,
+  setRawFetch,
+  recordSpan,
+  flushSpans,
+  isConfigured,
+  resetForTesting as resetExporter,
+} from './span-exporter';
 import {
   setBaggage as setBaggageInternal,
   clearBaggage,
@@ -125,7 +132,8 @@ let config: AutotelWebConfig | undefined;
 let privacyManager: PrivacyManager | undefined;
 let originalFetch: typeof window.fetch | undefined;
 let originalXHROpen: typeof XMLHttpRequest.prototype.open | undefined;
-let originalXHRSetRequestHeader: typeof XMLHttpRequest.prototype.setRequestHeader | undefined;
+let originalXHRSetRequestHeader:
+  typeof XMLHttpRequest.prototype.setRequestHeader | undefined;
 
 /**
  * Initialize autotel-web
@@ -271,7 +279,7 @@ function patchFetch(): void {
 
   window.fetch = function (
     input: RequestInfo | URL,
-    init?: RequestInit
+    init?: RequestInit,
   ): Promise<Response> {
     // Get URL string for logging and privacy checks
     const url =
@@ -294,7 +302,7 @@ function patchFetch(): void {
           console.log(
             '[autotel-web] Skipped traceparent on fetch (privacy):',
             url,
-            reason
+            reason,
           );
         }
       } else {
@@ -305,7 +313,7 @@ function patchFetch(): void {
           console.log(
             '[autotel-web] Injected traceparent on fetch:',
             url,
-            injectedTraceparent
+            injectedTraceparent,
           );
         }
       }
@@ -329,16 +337,21 @@ function patchFetch(): void {
         if (baggageHeader) {
           headers.set('baggage', baggageHeader);
           if (config?.debug) {
-            console.log('[autotel-web] Injected baggage on fetch:', url, baggageHeader);
+            console.log(
+              '[autotel-web] Injected baggage on fetch:',
+              url,
+              baggageHeader,
+            );
           }
         }
       }
     }
 
     // Resolve HTTP method: prefer init override, then Request.method, then default GET
-    const method = init?.method
-      ?? (input instanceof Request ? input.method : undefined)
-      ?? 'GET';
+    const method =
+      init?.method ??
+      (input instanceof Request ? input.method : undefined) ??
+      'GET';
 
     // Call original fetch with updated headers
     const startTime = performance.timeOrigin + performance.now();
@@ -352,15 +365,26 @@ function patchFetch(): void {
           const parsed = parseTraceparent(injectedTraceparent!);
           if (parsed) {
             let pathname: string;
-            try { pathname = new URL(url, window.location.origin).pathname; } catch { pathname = url; }
-            recordSpan(parsed.traceId, parsed.spanId, `browser ${pathname}`, startTime, endTime, {
-              // Tag local spans with current baggage regardless of destination —
-              // this is our own telemetry and never leaves our collector.
-              ...getBaggageEntries(),
-              'http.method': method,
-              'http.url': url,
-              'http.status_code': response.status,
-            });
+            try {
+              pathname = new URL(url, window.location.origin).pathname;
+            } catch {
+              pathname = url;
+            }
+            recordSpan(
+              parsed.traceId,
+              parsed.spanId,
+              `browser ${pathname}`,
+              startTime,
+              endTime,
+              {
+                // Tag local spans with current baggage regardless of destination —
+                // this is our own telemetry and never leaves our collector.
+                ...getBaggageEntries(),
+                'http.method': method,
+                'http.url': url,
+                'http.status_code': response.status,
+              },
+            );
           }
         },
         () => {
@@ -368,12 +392,23 @@ function patchFetch(): void {
           const parsed = parseTraceparent(injectedTraceparent!);
           if (parsed) {
             let pathname: string;
-            try { pathname = new URL(url, window.location.origin).pathname; } catch { pathname = url; }
-            recordSpan(parsed.traceId, parsed.spanId, `browser ${pathname}`, startTime, endTime, {
-              ...getBaggageEntries(),
-              'http.method': method,
-              'http.url': url,
-            });
+            try {
+              pathname = new URL(url, window.location.origin).pathname;
+            } catch {
+              pathname = url;
+            }
+            recordSpan(
+              parsed.traceId,
+              parsed.spanId,
+              `browser ${pathname}`,
+              startTime,
+              endTime,
+              {
+                ...getBaggageEntries(),
+                'http.method': method,
+                'http.url': url,
+              },
+            );
           }
         },
       );
@@ -399,7 +434,7 @@ function patchXMLHttpRequest(): void {
   // Patch setRequestHeader to track manual traceparent headers
   XMLHttpRequest.prototype.setRequestHeader = function (
     name: string,
-    value: string
+    value: string,
   ): void {
     if (name.toLowerCase() === 'traceparent') {
       xhrHasTraceparent.add(this);
@@ -414,11 +449,18 @@ function patchXMLHttpRequest(): void {
     url: string | URL,
     async: boolean = true,
     username?: string | null,
-    password?: string | null
+    password?: string | null,
   ): void {
     // Call original open
     // originalXHROpen is always defined here because patchXMLHttpRequest() sets it before patching
-    const result = originalXHROpen!.call(this, method, url, async, username, password);
+    const result = originalXHROpen!.call(
+      this,
+      method,
+      url,
+      async,
+      username,
+      password,
+    );
 
     // Convert URL to string for logging and privacy checks
     const urlStr = typeof url === 'string' ? url : url.toString();
@@ -433,13 +475,16 @@ function patchXMLHttpRequest(): void {
         // Only inject if not already set
         if (!xhrHasTraceparent.has(xhr)) {
           // Check privacy controls
-          if (privacyManager && !privacyManager.shouldInjectTraceparent(urlStr)) {
+          if (
+            privacyManager &&
+            !privacyManager.shouldInjectTraceparent(urlStr)
+          ) {
             if (config?.debug) {
               const reason = getDenialReason(privacyManager, urlStr);
               console.log(
                 '[autotel-web] Skipped traceparent on XHR (privacy):',
                 urlStr,
-                reason
+                reason,
               );
             }
           } else {
@@ -447,13 +492,17 @@ function patchXMLHttpRequest(): void {
             try {
               const traceparent = createTraceparent();
               // originalXHRSetRequestHeader is always defined here because patchXMLHttpRequest() sets it before patching
-              originalXHRSetRequestHeader!.call(xhr, 'traceparent', traceparent);
+              originalXHRSetRequestHeader!.call(
+                xhr,
+                'traceparent',
+                traceparent,
+              );
 
               if (config?.debug) {
                 console.log(
                   '[autotel-web] Injected traceparent on XHR:',
                   urlStr,
-                  traceparent
+                  traceparent,
                 );
               }
             } catch (error) {
@@ -461,7 +510,7 @@ function patchXMLHttpRequest(): void {
               if (config?.debug) {
                 console.warn(
                   '[autotel-web] Failed to inject traceparent on XHR:',
-                  error
+                  error,
                 );
               }
             }
@@ -484,14 +533,25 @@ function patchXMLHttpRequest(): void {
             const baggageHeader = getBaggageHeader();
             if (baggageHeader) {
               try {
-                originalXHRSetRequestHeader!.call(xhr, 'baggage', baggageHeader);
+                originalXHRSetRequestHeader!.call(
+                  xhr,
+                  'baggage',
+                  baggageHeader,
+                );
                 xhrHasBaggage.add(xhr);
                 if (config?.debug) {
-                  console.log('[autotel-web] Injected baggage on XHR:', urlStr, baggageHeader);
+                  console.log(
+                    '[autotel-web] Injected baggage on XHR:',
+                    urlStr,
+                    baggageHeader,
+                  );
                 }
               } catch (error) {
                 if (config?.debug) {
-                  console.warn('[autotel-web] Failed to inject baggage on XHR:', error);
+                  console.warn(
+                    '[autotel-web] Failed to inject baggage on XHR:',
+                    error,
+                  );
                 }
               }
             }
@@ -516,7 +576,9 @@ function patchXMLHttpRequest(): void {
 function validateConfig(userConfig: AutotelWebConfig): void {
   // Validate service name
   if (!userConfig.service || typeof userConfig.service !== 'string') {
-    throw new Error('[autotel-web] service name is required and must be a string');
+    throw new Error(
+      '[autotel-web] service name is required and must be a string',
+    );
   }
 
   if (userConfig.service.length === 0) {
@@ -525,7 +587,7 @@ function validateConfig(userConfig: AutotelWebConfig): void {
 
   if (userConfig.service.length > 255) {
     console.warn(
-      '[autotel-web] service name is very long (> 255 chars). Consider using a shorter name.'
+      '[autotel-web] service name is very long (> 255 chars). Consider using a shorter name.',
     );
   }
 
@@ -541,7 +603,7 @@ function validateConfig(userConfig: AutotelWebConfig): void {
       !userConfig.privacy.respectGPC
     ) {
       console.warn(
-        '[autotel-web] privacy config provided but all options are empty/disabled. This has no effect.'
+        '[autotel-web] privacy config provided but all options are empty/disabled. This has no effect.',
       );
     }
 
@@ -549,26 +611,23 @@ function validateConfig(userConfig: AutotelWebConfig): void {
     if (allowedOrigins && blockedOrigins) {
       const overlap = allowedOrigins.filter((allowed) =>
         blockedOrigins.some((blocked) =>
-          allowed.toLowerCase().includes(blocked.toLowerCase())
-        )
+          allowed.toLowerCase().includes(blocked.toLowerCase()),
+        ),
       );
       if (overlap.length > 0) {
         console.warn(
           '[autotel-web] Some allowedOrigins match blockedOrigins. Blocklist takes precedence:',
-          overlap
+          overlap,
         );
       }
     }
 
     // Validate origin format (warn if looks invalid)
-    const allOrigins = [
-      ...(allowedOrigins ?? []),
-      ...(blockedOrigins ?? []),
-    ];
+    const allOrigins = [...(allowedOrigins ?? []), ...(blockedOrigins ?? [])];
     allOrigins.forEach((origin) => {
       if (origin.includes('://')) {
         console.warn(
-          `[autotel-web] Origin "${origin}" includes protocol (://) - this is usually not needed. Just use the domain name.`
+          `[autotel-web] Origin "${origin}" includes protocol (://) - this is usually not needed. Just use the domain name.`,
         );
       }
     });

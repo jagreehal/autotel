@@ -33,7 +33,6 @@
 
   const SVG_MIN_HEIGHT = 'min-height: 300px;';
 
-
   const traces = $derived(tracesSignal.value);
   let selectedNode = $state<string | null>(null);
   let hoveredNode = $state<string | null>(null);
@@ -303,189 +302,186 @@
           <g
             transform={`translate(${zoom.translate.x}, ${zoom.translate.y}) scale(${zoom.scale})`}
           >
-          <!-- Connection lines with bezier curves -->
-          {#each connections as conn (conn.id)}
-            {@const source = positions.get(conn.source)}
-            {@const target = positions.get(conn.target)}
-            {#if source && target}
-              {@const isHighlighted =
-                selectedNode === conn.source || selectedNode === conn.target}
-              {@const hasError = conn.errorCount > 0}
-              {@const x1 = source.x + NODE_W}
-              {@const y1 = source.y + NODE_H / 2}
-              {@const x2 = target.x}
-              {@const y2 = target.y + NODE_H / 2}
-              {@const dx = Math.abs(x2 - x1) * 0.5}
-              {@const errorRate =
-                conn.requestCount > 0
-                  ? (conn.errorCount / conn.requestCount) * 100
-                  : 0}
-              {@const label = hasError
-                ? `${conn.requestCount}× · ${errorRate.toFixed(0)}% err · ${formatDuration(conn.p50Latency)}`
-                : `${conn.requestCount}× · ${formatDuration(conn.p50Latency)}`}
-              <g>
-                <path
-                  d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`}
-                  fill="none"
-                  stroke={hasError ? '#ef4444' : '#94a3b8'}
-                  stroke-width={hasError ? 2.5 : isHighlighted ? 2.5 : 1.5}
-                  stroke-dasharray={hasError ? '6 4' : undefined}
-                  stroke-linecap="round"
-                  stroke-opacity={selectedNode && !isHighlighted ? 0.2 : 1}
-                  marker-end={`url(#${hasError ? 'arrowhead-error' : 'arrowhead'})`}
-                />
-                <!-- Edge label — always visible, dimmed when a node is selected elsewhere -->
-                <text
-                  x={(x1 + x2) / 2}
-                  y={(y1 + y2) / 2 - 6}
-                  text-anchor="middle"
-                  class={cn(
-                    'at-edge-label text-[10px]',
-                    hasError ? 'fill-danger font-medium' : 'fill-fg-subtle',
-                  )}
-                  opacity={selectedNode && !isHighlighted ? 0.25 : 1}
-                >
-                  {label}
-                </text>
-              </g>
-            {/if}
-          {/each}
-
-          <!-- Service nodes -->
-          {#each nodes as node (node.id)}
-            {@const pos = positions.get(node.id)}
-            {#if pos}
-              {@const isSelected = selectedNode === node.id}
-              {@const isHovered = hoveredNode === node.id}
-              {@const hasError = node.errorCount > 0}
-              {@const isMatch = matchedIds.has(node.id)}
-              {@const isDimmed = isFiltered && !isMatch}
-              {@const palette = serviceColor(node.id)}
-              {@const fill = palette.fill}
-              {@const stroke = hasError ? '#ef4444' : palette.stroke}
-              {@const sw = isSelected || hasError ? 2.5 : isHovered ? 2 : 1.5}
-              <g
-                data-node={node.id}
-                transform={`translate(${pos.x}, ${pos.y})`}
-                onclick={() => (selectedNode = isSelected ? null : node.id)}
-                onkeydown={(event) => handleNodeKeydown(event, node.id)}
-                onmouseenter={() => (hoveredNode = node.id)}
-                onmouseleave={() => (hoveredNode = null)}
-                class={cn(
-                  'cursor-pointer',
-                  isDimmed && 'opacity-30',
-                )}
-                role="button"
-                aria-label={node.name}
-                tabindex="0"
-              >
-                <!-- Accent ring for query matches — keeps layout intact while
-                     drawing attention to the searched service(s). -->
-                {#if isFiltered && isMatch}
-                  <rect
-                    x={-3}
-                    y={-3}
-                    width={NODE_W + 6}
-                    height={NODE_H + 6}
-                    rx={11}
+            <!-- Connection lines with bezier curves -->
+            {#each connections as conn (conn.id)}
+              {@const source = positions.get(conn.source)}
+              {@const target = positions.get(conn.target)}
+              {#if source && target}
+                {@const isHighlighted =
+                  selectedNode === conn.source || selectedNode === conn.target}
+                {@const hasError = conn.errorCount > 0}
+                {@const x1 = source.x + NODE_W}
+                {@const y1 = source.y + NODE_H / 2}
+                {@const x2 = target.x}
+                {@const y2 = target.y + NODE_H / 2}
+                {@const dx = Math.abs(x2 - x1) * 0.5}
+                {@const errorRate =
+                  conn.requestCount > 0
+                    ? (conn.errorCount / conn.requestCount) * 100
+                    : 0}
+                {@const label = hasError
+                  ? `${conn.requestCount}× · ${errorRate.toFixed(0)}% err · ${formatDuration(conn.p50Latency)}`
+                  : `${conn.requestCount}× · ${formatDuration(conn.p50Latency)}`}
+                <g>
+                  <path
+                    d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`}
                     fill="none"
-                    class="stroke-accent"
-                    stroke-width={2.5}
+                    stroke={hasError ? '#ef4444' : '#94a3b8'}
+                    stroke-width={hasError ? 2.5 : isHighlighted ? 2.5 : 1.5}
+                    stroke-dasharray={hasError ? '6 4' : undefined}
+                    stroke-linecap="round"
+                    stroke-opacity={selectedNode && !isHighlighted ? 0.2 : 1}
+                    marker-end={`url(#${hasError ? 'arrowhead-error' : 'arrowhead'})`}
                   />
-                {/if}
-                <!-- Node shape (per-type) filled with the service colour -->
-                <g filter="url(#nodeShadow)">
-                  {#if node.nodeType === 'database'}
-                    <!-- Cylinder for databases -->
-                    <rect
-                      x={2}
-                      y={6}
-                      width={NODE_W - 4}
-                      height={NODE_H - 12}
-                      {fill}
-                    />
-                    <path
-                      d={`M${2},${NODE_H - 6} A${NODE_W / 2 - 2},6 0 0,0 ${NODE_W - 2},${NODE_H - 6} L${NODE_W - 2},6 A${NODE_W / 2 - 2},6 0 0,1 2,6 Z`}
-                      {fill}
-                      {stroke}
-                      stroke-width={sw}
-                    />
-                    <ellipse
-                      cx={NODE_W / 2}
-                      cy={6}
-                      rx={NODE_W / 2 - 2}
-                      ry={6}
-                      {fill}
-                      {stroke}
-                      stroke-width={sw}
-                    />
-                  {:else if node.nodeType === 'messaging'}
-                    <!-- Hexagon for messaging -->
-                    <polygon
-                      points={`${NODE_W / 2},2 ${NODE_W - 2},${NODE_H / 4} ${NODE_W - 2},${(3 * NODE_H) / 4} ${NODE_W / 2},${NODE_H - 2} 2,${(3 * NODE_H) / 4} 2,${NODE_H / 4}`}
-                      {fill}
-                      {stroke}
-                      stroke-width={sw}
-                    />
-                  {:else}
-                    <!-- Rounded rect for services and external -->
-                    <rect
-                      x={2}
-                      y={2}
-                      width={NODE_W - 4}
-                      height={NODE_H - 4}
-                      rx={8}
-                      {fill}
-                      {stroke}
-                      stroke-width={sw}
-                    />
-                  {/if}
+                  <!-- Edge label — always visible, dimmed when a node is selected elsewhere -->
+                  <text
+                    x={(x1 + x2) / 2}
+                    y={(y1 + y2) / 2 - 6}
+                    text-anchor="middle"
+                    class={cn(
+                      'at-edge-label text-[10px]',
+                      hasError ? 'fill-danger font-medium' : 'fill-fg-subtle',
+                    )}
+                    opacity={selectedNode && !isHighlighted ? 0.25 : 1}
+                  >
+                    {label}
+                  </text>
                 </g>
+              {/if}
+            {/each}
 
-                <!-- Opacity dimming for non-related nodes -->
-                {#if selectedNode && !isSelected && !relatedConnections.some((c) => c.source === node.id || c.target === node.id)}
-                  <rect
-                    x={0}
-                    y={0}
-                    width={NODE_W}
-                    height={NODE_H}
-                    rx={8}
-                    fill="#64748b"
-                    opacity={0.4}
-                  />
-                {/if}
-
-                <!-- Service name — shape already encodes the node type -->
-                <text
-                  text-anchor="middle"
-                  x={NODE_W / 2}
-                  y={NODE_H / 2 - 3}
-                  class="text-[11px] font-semibold"
-                  fill="#1f2937"
+            <!-- Service nodes -->
+            {#each nodes as node (node.id)}
+              {@const pos = positions.get(node.id)}
+              {#if pos}
+                {@const isSelected = selectedNode === node.id}
+                {@const isHovered = hoveredNode === node.id}
+                {@const hasError = node.errorCount > 0}
+                {@const isMatch = matchedIds.has(node.id)}
+                {@const isDimmed = isFiltered && !isMatch}
+                {@const palette = serviceColor(node.id)}
+                {@const fill = palette.fill}
+                {@const stroke = hasError ? '#ef4444' : palette.stroke}
+                {@const sw = isSelected || hasError ? 2.5 : isHovered ? 2 : 1.5}
+                <g
+                  data-node={node.id}
+                  transform={`translate(${pos.x}, ${pos.y})`}
+                  onclick={() => (selectedNode = isSelected ? null : node.id)}
+                  onkeydown={(event) => handleNodeKeydown(event, node.id)}
+                  onmouseenter={() => (hoveredNode = node.id)}
+                  onmouseleave={() => (hoveredNode = null)}
+                  class={cn('cursor-pointer', isDimmed && 'opacity-30')}
+                  role="button"
+                  aria-label={node.name}
+                  tabindex="0"
                 >
-                  {node.name.length > 16
-                    ? node.name.slice(0, 14) + '…'
-                    : node.name}
-                </text>
-
-                <!-- Spans + error count -->
-                <text
-                  text-anchor="middle"
-                  x={NODE_W / 2}
-                  y={NODE_H / 2 + 12}
-                  class="text-[10px]"
-                  fill="#475569"
-                >
-                  {node.requestCount} span{node.requestCount === 1 ? '' : 's'}
-                  {#if hasError}
-                    <tspan fill="#dc2626" class="font-semibold">
-                      &nbsp;·&nbsp;{node.errorCount} err
-                    </tspan>
+                  <!-- Accent ring for query matches — keeps layout intact while
+                     drawing attention to the searched service(s). -->
+                  {#if isFiltered && isMatch}
+                    <rect
+                      x={-3}
+                      y={-3}
+                      width={NODE_W + 6}
+                      height={NODE_H + 6}
+                      rx={11}
+                      fill="none"
+                      class="stroke-accent"
+                      stroke-width={2.5}
+                    />
                   {/if}
-                </text>
-              </g>
-            {/if}
-          {/each}
+                  <!-- Node shape (per-type) filled with the service colour -->
+                  <g filter="url(#nodeShadow)">
+                    {#if node.nodeType === 'database'}
+                      <!-- Cylinder for databases -->
+                      <rect
+                        x={2}
+                        y={6}
+                        width={NODE_W - 4}
+                        height={NODE_H - 12}
+                        {fill}
+                      />
+                      <path
+                        d={`M${2},${NODE_H - 6} A${NODE_W / 2 - 2},6 0 0,0 ${NODE_W - 2},${NODE_H - 6} L${NODE_W - 2},6 A${NODE_W / 2 - 2},6 0 0,1 2,6 Z`}
+                        {fill}
+                        {stroke}
+                        stroke-width={sw}
+                      />
+                      <ellipse
+                        cx={NODE_W / 2}
+                        cy={6}
+                        rx={NODE_W / 2 - 2}
+                        ry={6}
+                        {fill}
+                        {stroke}
+                        stroke-width={sw}
+                      />
+                    {:else if node.nodeType === 'messaging'}
+                      <!-- Hexagon for messaging -->
+                      <polygon
+                        points={`${NODE_W / 2},2 ${NODE_W - 2},${NODE_H / 4} ${NODE_W - 2},${(3 * NODE_H) / 4} ${NODE_W / 2},${NODE_H - 2} 2,${(3 * NODE_H) / 4} 2,${NODE_H / 4}`}
+                        {fill}
+                        {stroke}
+                        stroke-width={sw}
+                      />
+                    {:else}
+                      <!-- Rounded rect for services and external -->
+                      <rect
+                        x={2}
+                        y={2}
+                        width={NODE_W - 4}
+                        height={NODE_H - 4}
+                        rx={8}
+                        {fill}
+                        {stroke}
+                        stroke-width={sw}
+                      />
+                    {/if}
+                  </g>
+
+                  <!-- Opacity dimming for non-related nodes -->
+                  {#if selectedNode && !isSelected && !relatedConnections.some((c) => c.source === node.id || c.target === node.id)}
+                    <rect
+                      x={0}
+                      y={0}
+                      width={NODE_W}
+                      height={NODE_H}
+                      rx={8}
+                      fill="#64748b"
+                      opacity={0.4}
+                    />
+                  {/if}
+
+                  <!-- Service name — shape already encodes the node type -->
+                  <text
+                    text-anchor="middle"
+                    x={NODE_W / 2}
+                    y={NODE_H / 2 - 3}
+                    class="text-[11px] font-semibold"
+                    fill="#1f2937"
+                  >
+                    {node.name.length > 16
+                      ? node.name.slice(0, 14) + '…'
+                      : node.name}
+                  </text>
+
+                  <!-- Spans + error count -->
+                  <text
+                    text-anchor="middle"
+                    x={NODE_W / 2}
+                    y={NODE_H / 2 + 12}
+                    class="text-[10px]"
+                    fill="#475569"
+                  >
+                    {node.requestCount} span{node.requestCount === 1 ? '' : 's'}
+                    {#if hasError}
+                      <tspan fill="#dc2626" class="font-semibold">
+                        &nbsp;·&nbsp;{node.errorCount} err
+                      </tspan>
+                    {/if}
+                  </text>
+                </g>
+              {/if}
+            {/each}
           </g>
         </svg>
 
@@ -558,36 +554,36 @@
             <!-- Stats -->
             <Copyable content={selectedNodeSummary}>
               <div class="space-y-3 pr-8">
-              {@render statRow(
-                'Requests',
-                selectedNodeData.requestCount.toString(),
-              )}
-              {@render statRow(
-                'Errors',
-                selectedNodeData.errorCount.toString(),
-                selectedNodeData.errorCount > 0,
-              )}
-              {@render statRow(
-                'Error Rate',
-                `${(
-                  (selectedNodeData.errorCount /
-                    selectedNodeData.requestCount) *
-                  100
-                ).toFixed(1)}%`,
-                selectedNodeData.errorCount > 0,
-              )}
-              {@render statRow(
-                'Avg Latency',
-                formatDuration(selectedNodeData.avgLatency),
-              )}
-              {@render statRow(
-                'Min Latency',
-                formatDuration(selectedNodeData.minLatency),
-              )}
-              {@render statRow(
-                'Max Latency',
-                formatDuration(selectedNodeData.maxLatency),
-              )}
+                {@render statRow(
+                  'Requests',
+                  selectedNodeData.requestCount.toString(),
+                )}
+                {@render statRow(
+                  'Errors',
+                  selectedNodeData.errorCount.toString(),
+                  selectedNodeData.errorCount > 0,
+                )}
+                {@render statRow(
+                  'Error Rate',
+                  `${(
+                    (selectedNodeData.errorCount /
+                      selectedNodeData.requestCount) *
+                    100
+                  ).toFixed(1)}%`,
+                  selectedNodeData.errorCount > 0,
+                )}
+                {@render statRow(
+                  'Avg Latency',
+                  formatDuration(selectedNodeData.avgLatency),
+                )}
+                {@render statRow(
+                  'Min Latency',
+                  formatDuration(selectedNodeData.minLatency),
+                )}
+                {@render statRow(
+                  'Max Latency',
+                  formatDuration(selectedNodeData.maxLatency),
+                )}
               </div>
             </Copyable>
 
@@ -595,9 +591,7 @@
             {#if relatedConnections.length > 0}
               <div class="mt-4 pt-4 border-t border-line">
                 <div class="group flex items-center justify-between mb-2">
-                  <h5 class="text-xs font-medium text-fg-muted">
-                    Connections
-                  </h5>
+                  <h5 class="text-xs font-medium text-fg-muted">Connections</h5>
                   <CopyButton
                     value={relatedConnectionsSummary}
                     label="Copy connections"

@@ -2,16 +2,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { traceServerFn, createTracedServerFnFactory } from './server-functions';
 
 // Mock autotel
-vi.mock('autotel', () => ({
-  trace: vi.fn((name, fn) =>
-    fn({
-      setAttributes: vi.fn(),
-      setAttribute: vi.fn(),
-      setStatus: vi.fn(),
-      recordException: vi.fn(),
-    }),
-  ),
-}));
+vi.mock('autotel', () => {
+  // Ambient model: trace(name|opts, fn) returns the wrapper; the body reaches
+  // the span via getActiveTraceContext(). withTracing(opts)(factory) mirrors
+  // that for the explicit factory form.
+  const mockCtx = {
+    setAttributes: vi.fn(),
+    setAttribute: vi.fn(),
+    setStatus: vi.fn(),
+    recordException: vi.fn(),
+    recordError: vi.fn(),
+  };
+  return {
+    trace: vi.fn(
+      (_nameOrOpts: unknown, fn: (...a: unknown[]) => unknown) => fn,
+    ),
+    withTracing: vi.fn(
+      () => (factory: (ctx: unknown) => (...a: unknown[]) => unknown) =>
+        factory(mockCtx),
+    ),
+    getActiveTraceContext: vi.fn(() => mockCtx),
+  };
+});
 
 describe('server-functions', () => {
   beforeEach(() => {
@@ -68,14 +80,15 @@ describe('server-functions', () => {
     });
 
     it('should wrap handler method', () => {
-      const _handlerFn = vi.fn().mockResolvedValue('result');
       const mockResult = {
-        handler: vi.fn((fn) => {
+        handler: vi.fn((fn: (...args: unknown[]) => unknown) => {
           // Simulate returning a callable
           return async (...args: unknown[]) => fn(...args);
         }),
       };
-      const mockCreateServerFn = vi.fn(() => mockResult);
+      const mockCreateServerFn = vi.fn(
+        (_opts: { method: string }) => mockResult,
+      );
 
       const tracedFactory = createTracedServerFnFactory(mockCreateServerFn);
       const builder = tracedFactory({ method: 'GET' });

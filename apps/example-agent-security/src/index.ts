@@ -5,11 +5,9 @@
  * MCP security bridge, and observer lifecycle stamps in one trace.
  */
 
-import { trace } from 'autotel';
+import { withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
-import {
-  createMcpSecurityEventBridge,
-} from 'autotel-audit';
+import { createMcpSecurityEventBridge } from 'autotel-audit';
 import {
   createAgentIdentityRegistry,
   deriveActionRiskClass,
@@ -34,12 +32,16 @@ async function main(): Promise<void> {
 
   const collector = createTraceCollector();
 
-  await trace('agent.run', async (ctx) => {
+  await withTracing({ name: 'agent.run' })((ctx) => async () => {
     recordControllerId({ controllerId: 'user-42', ctx });
     recordInputProvenance({ provenance: 'external_untrusted', ctx });
 
     const observe = createGenAiObserver();
-    observe({ type: 'agent.start', id: 'a1', agent: { name: 'research-agent' } });
+    observe({
+      type: 'agent.start',
+      id: 'a1',
+      agent: { name: 'research-agent' },
+    });
     observe({
       type: 'plan.step',
       parentId: 'a1',
@@ -88,10 +90,16 @@ async function main(): Promise<void> {
       { bridge, toolName: 'fetch_page' },
     );
 
-    enforceOutputBudget(ctx, 5000, 1500, { 'mcp.tool.name': 'fetch_page' }, {
-      bridge,
-      toolName: 'fetch_page',
-    });
+    enforceOutputBudget(
+      ctx,
+      5000,
+      1500,
+      { 'mcp.tool.name': 'fetch_page' },
+      {
+        bridge,
+        toolName: 'fetch_page',
+      },
+    );
 
     const registry = createAgentIdentityRegistry();
     registry.provisionIdentity({
@@ -126,7 +134,7 @@ async function main(): Promise<void> {
     }
 
     observe({ type: 'agent.end', id: 'a1' });
-  });
+  })();
 
   const spans = collector.getSpans();
   console.log(`\nCaptured ${spans.length} span(s).\n`);

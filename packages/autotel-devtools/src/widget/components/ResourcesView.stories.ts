@@ -103,9 +103,7 @@ export const MultipleResources: Story = {
       ],
     });
 
-    await expect(
-      await canvas.findByText('checkout-api'),
-    ).toBeInTheDocument();
+    await expect(await canvas.findByText('checkout-api')).toBeInTheDocument();
     await expect(canvas.getByText('postgresql')).toBeInTheDocument();
     await expect(canvas.getByText('payments-api')).toBeInTheDocument();
     await expect(canvas.getByText('Resources (3)')).toBeInTheDocument();
@@ -114,7 +112,9 @@ export const MultipleResources: Story = {
     // resource's own row — scope to it so we don't match the type-filter option.
     const dbRow = canvas.getByText('postgresql').closest('.border');
     await expect(dbRow).not.toBeNull();
-    await expect(within(dbRow as HTMLElement).getByText('database')).toBeInTheDocument();
+    await expect(
+      within(dbRow as HTMLElement).getByText('database'),
+    ).toBeInTheDocument();
     // payments-api: 1 of 2 spans errored → unhealthy.
     await expect(canvas.getByText('unhealthy')).toBeInTheDocument();
   },

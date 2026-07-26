@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { formatDuration, formatPrettyLogLine } from './pretty-log-formatter';
 import type { CanonicalLogLineEvent } from './processors/canonical-log-line-processor';
 
@@ -15,12 +15,12 @@ describe('formatDuration', () => {
   });
 
   it('rounds seconds above 10s', () => {
-    expect(formatDuration(12345)).toBe('12s');
+    expect(formatDuration(12_345)).toBe('12s');
   });
 
   it('formats minutes', () => {
-    expect(formatDuration(65000)).toBe('1m 5s');
-    expect(formatDuration(120000)).toBe('2m');
+    expect(formatDuration(65_000)).toBe('1m 5s');
+    expect(formatDuration(120_000)).toBe('2m');
   });
 });
 

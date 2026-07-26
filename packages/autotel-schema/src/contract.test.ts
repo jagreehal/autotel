@@ -16,7 +16,11 @@ const base: TelemetryContract = {
   spans: {
     'checkout.charge': {
       attributes: {
-        'payment.provider': { type: 'string', required: true, enum: ['stripe', 'paypal'] },
+        'payment.provider': {
+          type: 'string',
+          required: true,
+          enum: ['stripe', 'paypal'],
+        },
         'payment.amount_cents': { type: 'number', required: true },
       },
     },
@@ -31,11 +35,15 @@ describe('defineContract', () => {
   });
 
   it('rejects an empty service', () => {
-    expect(() => defineContract({ ...base, service: '' })).toThrowError(/service/);
+    expect(() => defineContract({ ...base, service: '' })).toThrowError(
+      /service/,
+    );
   });
 
   it('rejects a non-semver version', () => {
-    expect(() => defineContract({ ...base, version: 'v1' })).toThrowError(/semver/);
+    expect(() => defineContract({ ...base, version: 'v1' })).toThrowError(
+      /semver/,
+    );
   });
 
   it('rejects an unknown attribute type', () => {
@@ -50,9 +58,16 @@ describe('defineContract', () => {
 
 describe('resolveAttributeSpec', () => {
   it('prefers span-specific over common attributes', () => {
-    expect(resolveAttributeSpec(base, 'checkout.charge', 'payment.provider')?.required).toBe(true);
-    expect(resolveAttributeSpec(base, 'checkout.charge', 'user.id')?.highCardinality).toBe(true);
-    expect(resolveAttributeSpec(base, 'checkout.charge', 'nope')).toBeUndefined();
+    expect(
+      resolveAttributeSpec(base, 'checkout.charge', 'payment.provider')
+        ?.required,
+    ).toBe(true);
+    expect(
+      resolveAttributeSpec(base, 'checkout.charge', 'user.id')?.highCardinality,
+    ).toBe(true);
+    expect(
+      resolveAttributeSpec(base, 'checkout.charge', 'nope'),
+    ).toBeUndefined();
   });
 });
 

@@ -15,12 +15,16 @@ export function isStreamingResponse(response: Response): boolean {
 export function shouldDeferEmitForResponse(response: Response): boolean {
   if (!response.body) return false;
 
-  const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
+  const contentType = (
+    response.headers.get('content-type') ?? ''
+  ).toLowerCase();
 
   if (contentType.includes('text/event-stream')) return true;
   if (contentType.includes('application/x-ndjson')) return true;
   if (response.headers.has('x-vercel-ai-ui-message-stream')) return true;
-  if (response.headers.get('transfer-encoding')?.toLowerCase().includes('chunked')) {
+  if (
+    response.headers.get('transfer-encoding')?.toLowerCase().includes('chunked')
+  ) {
     return true;
   }
 
@@ -37,11 +41,11 @@ function createObservedBody(
   onError: (error: unknown) => void | Promise<void>,
 ): ReadableStream<Uint8Array> | null {
   if (body.locked) {
-    void Promise.resolve(onError(new TypeError('stream is already locked'))).catch(
-      (err: unknown) => {
-        console.error('[autotel-adapters] stream error handling failed:', err);
-      },
-    );
+    void Promise.resolve(
+      onError(new TypeError('stream is already locked')),
+    ).catch((err: unknown) => {
+      console.error('[autotel-adapters] stream error handling failed:', err);
+    });
     return null;
   }
 
@@ -52,7 +56,10 @@ function createObservedBody(
     if (settled) return;
     settled = true;
     void Promise.resolve(fn()).catch((err: unknown) => {
-      console.error('[autotel-adapters] stream completion handling failed:', err);
+      console.error(
+        '[autotel-adapters] stream completion handling failed:',
+        err,
+      );
     });
   };
 
@@ -93,7 +100,10 @@ export function bindStreamingResponseLifecycle(
   if (!response.body) {
     void Promise.resolve(onComplete({ status: response.status })).catch(
       (err: unknown) => {
-        console.error('[autotel-adapters] stream completion handling failed:', err);
+        console.error(
+          '[autotel-adapters] stream completion handling failed:',
+          err,
+        );
       },
     );
     return response;

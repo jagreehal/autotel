@@ -1,6 +1,6 @@
 # autotel-terminal
 
-**Terminal trace viewer for autotel** :  Ink (React-for-CLI) powered dashboard for live trace inspection during development. Zero setup, trace-first, autotel-only.
+**Terminal trace viewer for autotel** : Ink (React-for-CLI) powered dashboard for live trace inspection during development. Zero setup, trace-first, autotel-only.
 
 [![npm version](https://badge.fury.io/js/autotel-terminal.svg)](https://www.npmjs.com/package/autotel-terminal)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -13,13 +13,13 @@ If you need a **standalone, multi-signal TUI** that receives OTLP/Zipkin/Prometh
 
 ### Features
 
-- ✅ **Trace-first UI** :  Recent traces list; open a trace to see its span tree (parent/child)
-- ✅ **Real-time streaming** :  Spans appear as they complete; optional pause/resume
-- ✅ **Search** :  Filter by span name (`/`); combine with error-only filter (`e`)
-- ✅ **Span details** :  Key attributes first (e.g. `http.route`, `db.operation`); full list + waterfall for selected trace
-- ✅ **Relative time & errors** :  "2s ago" labels; error badge and new-error indicator
-- ✅ **Help overlay** :  `?` shows all shortcuts
-- ✅ **Simple setup** :  Add `StreamingSpanProcessor` to autotel and call `renderTerminal()`
+- ✅ **Trace-first UI** : Recent traces list; open a trace to see its span tree (parent/child)
+- ✅ **Real-time streaming** : Spans appear as they complete; optional pause/resume
+- ✅ **Search** : Filter by span name (`/`); combine with error-only filter (`e`)
+- ✅ **Span details** : Key attributes first (e.g. `http.route`, `db.operation`); full list + waterfall for selected trace
+- ✅ **Relative time & errors** : "2s ago" labels; error badge and new-error indicator
+- ✅ **Help overlay** : `?` shows all shortcuts
+- ✅ **Simple setup** : Add `StreamingSpanProcessor` to autotel and call `renderTerminal()`
 
 ## Installation
 
@@ -61,12 +61,12 @@ Port 4319 is used by default to avoid clashing with the standard OTLP port (4318
 
 ### OTLP Endpoints
 
-| Endpoint | Signal | Description |
-|----------|--------|-------------|
-| `POST /v1/traces` | Traces | Receives OTLP JSON spans, streamed into the TUI |
-| `POST /v1/logs` | Logs | Receives OTLP JSON logs, shown in the Logs view (`l`) |
-| `POST /v1/metrics` | Metrics | Accepts OTLP JSON metrics (acknowledged and counted) |
-| `GET /healthz` | — | Health check |
+| Endpoint           | Signal  | Description                                           |
+| ------------------ | ------- | ----------------------------------------------------- |
+| `POST /v1/traces`  | Traces  | Receives OTLP JSON spans, streamed into the TUI       |
+| `POST /v1/logs`    | Logs    | Receives OTLP JSON logs, shown in the Logs view (`l`) |
+| `POST /v1/metrics` | Metrics | Accepts OTLP JSON metrics (acknowledged and counted)  |
+| `GET /healthz`     | —       | Health check                                          |
 
 When bound to a loopback host, the receiver listens on **both** `127.0.0.1`
 and `::1`, so a `localhost` client connects regardless of how the OS resolves
@@ -83,14 +83,14 @@ spans silently vanish:
 app.use(
   '/v1/traces',
   createProxyMiddleware({
-    pathRewrite: () => '/v1/traces',      // Express strips the mount prefix → would forward "/"
-    target: 'http://127.0.0.1:4319',      // 127.0.0.1, not localhost (macOS resolves localhost → ::1)
+    pathRewrite: () => '/v1/traces', // Express strips the mount prefix → would forward "/"
+    target: 'http://127.0.0.1:4319', // 127.0.0.1, not localhost (macOS resolves localhost → ::1)
     changeOrigin: true,
   }),
 );
 ```
 
-The browser shows the request succeeding while the receiver stays empty — so
+The browser shows the request succeeding while the receiver stays empty. So
 verify on the receiver (the TUI should show the spans), not just that the
 request left the browser.
 
@@ -101,7 +101,7 @@ request left the browser.
 Create a `StreamingSpanProcessor` and pass it to `init()`, then use `renderTerminal()` with the stream:
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, withTracing } from 'autotel';
 import {
   renderTerminal,
   StreamingSpanProcessor,
@@ -123,7 +123,7 @@ const terminalStream = createTerminalSpanStream(streamingProcessor);
 renderTerminal({ title: 'My App Traces' }, terminalStream);
 
 // Your traced code will now appear in the dashboard
-const myFunction = trace((ctx) => async () => {
+const myFunction = withTracing({ name: 'example.run' })((ctx) => async () => {
   ctx.setAttribute('example', 'value');
   // ... your code
 });
@@ -146,7 +146,9 @@ import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 
 // Create exporter and base processor for your backend
-const exporter = new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' });
+const exporter = new OTLPTraceExporter({
+  url: 'http://localhost:4318/v1/traces',
+});
 const batchProcessor = new BatchSpanProcessor(exporter);
 
 // Create streaming processor that wraps your batch processor
@@ -207,6 +209,7 @@ Once the dashboard is running, use these keyboard controls:
 ### Trace View (default)
 
 The left panel shows **recent traces** (grouped by trace ID):
+
 - Root span name, duration, trace ID (short), relative time ("2s ago")
 - Error badge when any span in the trace failed
 - **Enter** to open a trace and see its **span tree** (ASCII parent-child: ├──, └──)
@@ -215,6 +218,7 @@ The left panel shows **recent traces** (grouped by trace ID):
 ### Span List (toggle with `t`)
 
 Flat list of recent spans with:
+
 - Span name (truncated), duration (color-coded: green < 500ms, yellow > 500ms, red = error)
 - Relative time
 - Selection indicator (cyan `›`)
@@ -226,6 +230,7 @@ Press **`/`** to filter by span name. Type to narrow; **Esc** to clear.
 ### Span Details
 
 The right panel shows detailed information for the selected span:
+
 - Name, status, duration (with "Nx avg" when slower than average for that span name)
 - Trace ID, Span ID, Parent Span ID
 - Span kind (INTERNAL, SERVER, CLIENT, etc.)
@@ -236,6 +241,7 @@ The right panel shows detailed information for the selected span:
 ### Statistics Bar
 
 When enabled, shows:
+
 - Total spans
 - Error count
 - Average duration
@@ -326,7 +332,10 @@ new StreamingSpanProcessor(wrappedProcessor?: SpanProcessor | null)
 Create a terminal-compatible stream from a `StreamingSpanProcessor`.
 
 ```typescript
-import { createTerminalSpanStream, StreamingSpanProcessor } from 'autotel-terminal';
+import {
+  createTerminalSpanStream,
+  StreamingSpanProcessor,
+} from 'autotel-terminal';
 
 const processor = new StreamingSpanProcessor(null);
 const stream = createTerminalSpanStream(processor);
@@ -386,7 +395,10 @@ renderTerminal({ title: 'Dev Server Traces' }, stream);
 Use the streaming processor to assert on spans in tests:
 
 ```typescript
-import { StreamingSpanProcessor, createTerminalSpanStream } from 'autotel-terminal';
+import {
+  StreamingSpanProcessor,
+  createTerminalSpanStream,
+} from 'autotel-terminal';
 import { init } from 'autotel';
 
 const processor = new StreamingSpanProcessor(null);
@@ -414,7 +426,10 @@ expect(spans[0].name).toBe('myFunction');
 Build your own dashboard using the streaming processor:
 
 ```typescript
-import { StreamingSpanProcessor, createTerminalSpanStream } from 'autotel-terminal';
+import {
+  StreamingSpanProcessor,
+  createTerminalSpanStream,
+} from 'autotel-terminal';
 
 const processor = new StreamingSpanProcessor(null);
 const stream = createTerminalSpanStream(processor);
@@ -465,7 +480,7 @@ logStream.emit({
   level: 'info',
   message: 'request completed',
   traceId: '...', // optional but recommended
-  spanId: '...',  // optional but recommended
+  spanId: '...', // optional but recommended
   attributes: {
     'service.name': 'my-service',
     'http.route': '/users/:id',
@@ -490,22 +505,22 @@ This is intentionally Autotel-native: you can wire this from request logger/cano
 
 ## Limitations
 
-- **Development only** :  Not designed for production use
-- **TTY required** :  Colors and interactivity require a terminal
-- **Memory** :  Keeps spans in memory (limited by `maxSpans` option)
-- **Single instance** :  Only one dashboard can run at a time
+- **Development only** : Not designed for production use
+- **TTY required** : Colors and interactivity require a terminal
+- **Memory** : Keeps spans in memory (limited by `maxSpans` option)
+- **Single instance** : Only one dashboard can run at a time
 
 ## Manual verification
 
 When testing the dashboard (e.g. with `example-terminal` or your app), you can verify:
 
-- **Trace list** :  Trigger some traced work; recent traces appear with root span name, duration, relative time
-- **Trace tree** :  Select a trace and press Enter; span tree shows with indented children
-- **Search** :  Press `/`, type a span name; list filters; Esc clears
-- **Errors** :  Press `e` for error-only filter; traces with failed spans show an error badge
-- **Help** :  Press `?` to see all shortcuts
-- **Waterfall** :  With a trace open, the details panel shows a simple duration waterfall
-- **Key attributes** :  In span details, `http.route`, `db.operation`, `code.function`, etc. appear first
+- **Trace list** : Trigger some traced work; recent traces appear with root span name, duration, relative time
+- **Trace tree** : Select a trace and press Enter; span tree shows with indented children
+- **Search** : Press `/`, type a span name; list filters; Esc clears
+- **Errors** : Press `e` for error-only filter; traces with failed spans show an error badge
+- **Help** : Press `?` to see all shortcuts
+- **Waterfall** : With a trace open, the details panel shows a simple duration waterfall
+- **Key attributes** : In span details, `http.route`, `db.operation`, `code.function`, etc. appear first
 
 ## Examples
 
@@ -522,6 +537,3 @@ Apache-2.0 © [Jag Reehal](https://github.com/jagreehal)
 - [GitHub Repository](https://github.com/jagreehal/autotel)
 - [Documentation](https://github.com/jagreehal/autotel#readme)
 - [Issues](https://github.com/jagreehal/autotel/issues)
-
-
-

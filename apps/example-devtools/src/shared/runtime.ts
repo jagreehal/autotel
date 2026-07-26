@@ -25,7 +25,9 @@ async function allocatePort(preferred: number): Promise<number> {
     server.once('listening', () => {
       const address = server.address();
       if (!address || typeof address === 'string') {
-        server.close(() => reject(new Error('Unable to allocate an ephemeral port.')));
+        server.close(() =>
+          reject(new Error('Unable to allocate an ephemeral port.')),
+        );
         return;
       }
 
@@ -36,22 +38,22 @@ async function allocatePort(preferred: number): Promise<number> {
   });
 }
 
-export async function pickPort(
-  preferred: number,
-): Promise<number> {
+export async function pickPort(preferred: number): Promise<number> {
   if (preferred === 0) {
     return allocatePort(0);
   }
 
   if (await canListen(preferred)) return preferred;
 
-  for (let candidate = preferred + 1; candidate < preferred + 25; candidate += 1) {
+  for (
+    let candidate = preferred + 1;
+    candidate < preferred + 25;
+    candidate += 1
+  ) {
     if (await canListen(candidate)) return candidate;
   }
 
-  throw new Error(
-    `Unable to find a free port near ${preferred}.`,
-  );
+  throw new Error(`Unable to find a free port near ${preferred}.`);
 }
 
 export function envPort(name: string, fallback: number): number {

@@ -36,10 +36,10 @@
  *
  * Usage:
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { BigQuerySubscriber } from './adapter-bigquery';
  *
- * const events = new Events('app', {
+ * const events = new Event('app', {
  *   subscribers: [
  *     new BigQuerySubscriber({
  *       projectId: 'my-gcp-project',
@@ -188,16 +188,20 @@ export class BigQuerySubscriber extends EventSubscriber {
       {
         eventName: payload.name,
         attributes: payload.attributes,
-      }
+      },
     );
 
     // BigQuery-specific error handling
     if (error.message.includes('quota')) {
-      console.error('[BigQuerySubscriber] Quota exceeded - consider increasing batchSize or flushInterval');
+      console.error(
+        '[BigQuerySubscriber] Quota exceeded - consider increasing batchSize or flushInterval',
+      );
     }
 
     if (error.message.includes('schema')) {
-      console.error('[BigQuerySubscriber] Schema mismatch - check table schema');
+      console.error(
+        '[BigQuerySubscriber] Schema mismatch - check table schema',
+      );
     }
   }
 

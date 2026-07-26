@@ -67,19 +67,21 @@ Autotel re-exports commonly-needed OpenTelemetry utilities in semantically-organ
 
 **Module Organization:**
 
-**`autotel/exporters`** — Span exporters for development and testing:
+**`autotel/exporters`**. Span exporters for development and testing:
 
-- `ConsoleSpanExporter` — Print spans to console (development debugging, examples)
-- `InMemorySpanExporter` — Collect spans in memory (testing, assertions)
+- `ConsoleSpanExporter`: Print spans to console (development debugging, examples)
+- `InMemorySpanExporter`: Collect spans in memory (testing, assertions)
 
-**`autotel/processors`** — Span processors for custom configurations:
+**`autotel/processors`**. Span processors for custom configurations:
 
-- `SimpleSpanProcessor` — Synchronous span processing (testing, immediate export)
-- `BatchSpanProcessor` — Async batching (production, custom configs)
+- `SimpleSpanProcessor`: Synchronous span processing (testing, immediate export)
+- `BatchSpanProcessor`: Async batching (production, custom configs)
 
-**`autotel/testing`** — High-level testing utilities with assertions:
+**`autotel/testing`**. High-level testing utilities with assertions:
 
-- `createTraceCollector()` — Auto-configured trace collector with helpers
+- `createTraceCollector()`: Auto-configured trace collector with helpers
+- Trace-tree helpers: `getSpansByTraceId()`, `getRootSpans()`, `getDescendants()`
+- `expectSpan(nameOrCriteria)`: Require exactly one match by name, IDs, kind, and/or attributes
 - `assertTraceCreated()`, `assertTraceSucceeded()`, `assertTraceFailed()`, etc.
 - Events and metrics testing utilities
 
@@ -134,6 +136,8 @@ import { createTraceCollector, assertTraceCreated } from 'autotel/testing';
 const collector = createTraceCollector();
 await myService.doSomething();
 assertTraceCreated(collector, 'myService.doSomething');
+const root = collector.expectSpan('myService.doSomething');
+expect(collector.getSpansByTraceId(root.traceId)).not.toHaveLength(0);
 
 // Low-level testing (when you need raw OTel spans)
 import { InMemorySpanExporter } from 'autotel/exporters';
@@ -153,7 +157,7 @@ Integration tests require OpenTelemetry SDK setup, so they're isolated in `*.int
 
 1. Create new file in `packages/autotel-subscribers/src/`
 2. Extend `EventSubscriber` base class
-3. Implement `trackEvent(name, attributes?, options?)` (and other track* methods as needed). Accept the optional third argument `options?: EventTrackingOptions`; if present, forward `options.autotel` (e.g. `correlation_id`, `trace_id`, `trace_url`) into your payload so consumers can correlate events with traces.
+3. Implement `trackEvent(name, attributes?, options?)` (and other track\* methods as needed). Accept the optional third argument `options?: EventTrackingOptions`; if present, forward `options.autotel` (e.g. `correlation_id`, `trace_id`, `trace_url`) into your payload so consumers can correlate events with traces.
 4. Add export to `packages/autotel-subscribers/src/index.ts`
 5. Add entry point to `package.json` exports field
 6. Add tests using `SubscriberTestHarness`

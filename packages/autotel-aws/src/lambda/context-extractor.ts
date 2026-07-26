@@ -17,11 +17,14 @@ import { AWSXRayPropagator } from '@opentelemetry/propagator-aws-xray';
  * - X-Ray header (Lambda integration)
  * - Step Functions (payload context)
  */
-export function extractTraceContext(event: LambdaEvent): SpanContext | undefined {
+export function extractTraceContext(
+  event: LambdaEvent,
+): SpanContext | undefined {
   // API Gateway - W3C Trace Context
   if (event.headers?.traceparent) {
     const carrier: Record<string, string> = {};
-    if (event.headers.traceparent) carrier.traceparent = event.headers.traceparent;
+    if (event.headers.traceparent)
+      carrier.traceparent = event.headers.traceparent;
     if (event.headers.tracestate) carrier.tracestate = event.headers.tracestate;
     if (event.headers.baggage) carrier.baggage = event.headers.baggage;
 
@@ -34,7 +37,7 @@ export function extractTraceContext(event: LambdaEvent): SpanContext | undefined
   if (event.Records?.[0]?.messageAttributes?.traceparent) {
     const record = event.Records[0];
     if (!record.messageAttributes) return undefined;
-    
+
     const carrier: Record<string, string> = {};
     if (record.messageAttributes.traceparent?.StringValue) {
       carrier.traceparent = record.messageAttributes.traceparent.StringValue;
@@ -55,7 +58,7 @@ export function extractTraceContext(event: LambdaEvent): SpanContext | undefined
   if (event.Records?.[0]?.Sns?.MessageAttributes?.traceparent) {
     const sns = event.Records[0].Sns;
     if (!sns.MessageAttributes) return undefined;
-    
+
     const carrier: Record<string, string> = {};
     if (sns.MessageAttributes.traceparent?.Value) {
       carrier.traceparent = sns.MessageAttributes.traceparent.Value;
@@ -82,7 +85,10 @@ export function extractTraceContext(event: LambdaEvent): SpanContext | undefined
     // AWSXRayPropagator.extract() requires a getter function
     // Use a simple getter for Record<string, string>
     const getter = {
-      get(carrier: Record<string, string>, key: string): string | string[] | undefined {
+      get(
+        carrier: Record<string, string>,
+        key: string,
+      ): string | string[] | undefined {
         return carrier[key];
       },
       keys(carrier: Record<string, string>): string[] {
@@ -90,7 +96,11 @@ export function extractTraceContext(event: LambdaEvent): SpanContext | undefined
       },
     };
 
-    const extractedContext = xrayPropagator.extract(context.active(), carrier, getter);
+    const extractedContext = xrayPropagator.extract(
+      context.active(),
+      carrier,
+      getter,
+    );
     const spanContext = trace.getSpanContext(extractedContext);
     return spanContext;
   }
@@ -106,7 +116,9 @@ export function extractTraceContext(event: LambdaEvent): SpanContext | undefined
 /**
  * Detect Lambda trigger type from event
  */
-export function detectTriggerType(event: LambdaEvent): 'http' | 'pubsub' | 'datasource' | 'timer' | 'other' {
+export function detectTriggerType(
+  event: LambdaEvent,
+): 'http' | 'pubsub' | 'datasource' | 'timer' | 'other' {
   // API Gateway / ALB
   if (event.headers || event.requestContext || event.httpMethod) {
     return 'http';

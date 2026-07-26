@@ -81,11 +81,14 @@ describe('cost from AI SDK attributes', () => {
 
   it('records cost on a wrapping context', () => {
     const setAttribute = vi.fn();
-    const cost = recordAiSdkCost({ setAttribute }, {
-      'ai.model.id': 'gpt-4o',
-      'ai.usage.promptTokens': 1000,
-      'ai.usage.completionTokens': 500,
-    });
+    const cost = recordAiSdkCost(
+      { setAttribute },
+      {
+        'ai.model.id': 'gpt-4o',
+        'ai.usage.promptTokens': 1000,
+        'ai.usage.completionTokens': 500,
+      },
+    );
     expect(cost).toBe(0.0075);
     expect(setAttribute).toHaveBeenCalledWith('gen_ai.usage.cost.usd', 0.0075);
   });
@@ -100,7 +103,9 @@ describe('cost from AI SDK attributes', () => {
 describe('autotelEnrich', () => {
   it('stamps a provenance marker and merges mapped attributes', () => {
     const enrich = autotelEnrich({
-      attributes: (ctx) => ({ 'app.session': String(ctx.runtimeContext?.sessionId) }),
+      attributes: (ctx) => ({
+        'app.session': String(ctx.runtimeContext?.sessionId),
+      }),
     });
     const attrs = enrich({
       spanType: 'languageModel',

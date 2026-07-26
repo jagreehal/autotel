@@ -1,8 +1,16 @@
 import path from 'node:path';
 import { span as autotelSpan, getActiveSpan } from 'autotel';
-import { appendLedgerEntry, appendProviderVerificationFailure, type LedgerOptions } from './ledger.js';
+import {
+  appendLedgerEntry,
+  appendProviderVerificationFailure,
+  type LedgerOptions,
+} from './ledger.js';
 import { interactionsFromPactFile, parsePactFile } from './pact-file.js';
-import { LEDGER_ENTRY_SPEC, type InteractionLedgerEntry, type PactKind } from './types.js';
+import {
+  LEDGER_ENTRY_SPEC,
+  type InteractionLedgerEntry,
+  type PactKind,
+} from './types.js';
 import { PACT_ATTRS } from './attrs.js';
 
 /**
@@ -46,7 +54,10 @@ function resolvePactPaths(opts: VerifierOptionsLike): string[] {
   return urls.map((u) => path.resolve(process.cwd(), u));
 }
 
-function inferConsumerFromPacts(pactPaths: string[], fallback?: string): string {
+function inferConsumerFromPacts(
+  pactPaths: string[],
+  fallback?: string,
+): string {
   for (const filePath of pactPaths) {
     const pact = parsePactFile(filePath);
     if (pact?.consumer?.name) return pact.consumer.name;
@@ -90,14 +101,17 @@ export async function withProviderVerification(
   const consumer = inferConsumerFromPacts(pactPaths, wrapOpts.consumer);
   const spanName = wrapOpts.spanName ?? 'pact.verification';
   const start = process.hrtime.bigint();
-  const Verifier = wrapOpts.skipVerifier ? undefined : await loadVerifier(wrapOpts.Verifier);
+  const Verifier = wrapOpts.skipVerifier
+    ? undefined
+    : await loadVerifier(wrapOpts.Verifier);
 
   return autotelSpan(spanName, async () => {
     const span = getActiveSpan();
     span?.setAttributes({
       [PACT_ATTRS.CONSUMER]: consumer,
       [PACT_ATTRS.PROVIDER]: provider,
-      [PACT_ATTRS.KIND]: pactPaths.length === 1 ? kindForPactFile(pactPaths[0]!) : 'message',
+      [PACT_ATTRS.KIND]:
+        pactPaths.length === 1 ? kindForPactFile(pactPaths[0]!) : 'message',
       'pact.role': 'provider',
     });
 

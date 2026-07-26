@@ -2,18 +2,17 @@
  * Queue producer binding instrumentation
  */
 
-import {
-  trace,
-  SpanKind,
-  SpanStatusCode,
-} from '@opentelemetry/api';
+import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap, setAttr } from './common';
 
 /**
  * Instrument Queue producer binding
  */
-export function instrumentQueueProducer<T extends Queue>(queue: T, queueName?: string): T {
+export function instrumentQueueProducer<T extends Queue>(
+  queue: T,
+  queueName?: string,
+): T {
   const name = queueName || 'queue';
 
   const handler: ProxyHandler<T> = {
@@ -39,14 +38,19 @@ export function instrumentQueueProducer<T extends Queue>(queue: T, queueName?: s
               async (span) => {
                 try {
                   const result = await Reflect.apply(fnTarget, target, args);
-                  setAttr(span, 'messaging.message.id', (result as any)?.messageId);
+                  setAttr(
+                    span,
+                    'messaging.message.id',
+                    (result as any)?.messageId,
+                  );
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -73,7 +77,9 @@ export function instrumentQueueProducer<T extends Queue>(queue: T, queueName?: s
                   'messaging.operation.type': 'publish',
                   'messaging.operation': 'sendBatch',
                   'messaging.destination.name': name,
-                  'messaging.batch.message_count': Array.isArray(messages) ? messages.length : 0,
+                  'messaging.batch.message_count': Array.isArray(messages)
+                    ? messages.length
+                    : 0,
                 },
               },
               async (span) => {
@@ -85,7 +91,8 @@ export function instrumentQueueProducer<T extends Queue>(queue: T, queueName?: s
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {

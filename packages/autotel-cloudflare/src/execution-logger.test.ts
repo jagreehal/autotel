@@ -95,7 +95,11 @@ describe('cloudflare execution logger aliases', () => {
       },
     });
 
-    const log = createWorkersLogger(request, { headers: ['x-request-id'] }, ctx);
+    const log = createWorkersLogger(
+      request,
+      { headers: ['x-request-id'] },
+      ctx,
+    );
 
     const fields = log.getContext();
     expect(fields.request).toMatchObject({

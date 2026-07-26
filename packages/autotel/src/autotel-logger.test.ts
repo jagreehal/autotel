@@ -240,7 +240,7 @@ describe('Built-in Logger', () => {
 
       // Warning should be logged in development
       expect(consoleWarnSpy).toHaveBeenCalledOnce();
-      expect(consoleWarnSpy.mock.calls[0][0]).toContain(
+      expect(consoleWarnSpy.mock.calls[0]![0]).toContain(
         'Legacy logger pattern',
       );
 
@@ -301,7 +301,7 @@ describe('Built-in Logger', () => {
 
       // Warning should be logged in development
       expect(consoleWarnSpy).toHaveBeenCalledOnce();
-      expect(consoleWarnSpy.mock.calls[0][0]).toContain(
+      expect(consoleWarnSpy.mock.calls[0]![0]).toContain(
         "logger.error('message', error)",
       );
 

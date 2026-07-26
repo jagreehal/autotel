@@ -26,7 +26,9 @@ const RECORD_PATH = process.env.RECORD_PATH; // capture session to disk
 const REPLAY_PATH = process.env.REPLAY_PATH; // play a recorded session back
 const REPLAY_SPEED = Number(process.env.REPLAY_SPEED ?? 1);
 
-const snapshot = new ArchitectureSnapshotSubscriber({ service: 'example-eventcatalog' });
+const snapshot = new ArchitectureSnapshotSubscriber({
+  service: 'example-eventcatalog',
+});
 const stream = new LiveStreamSubscriber();
 
 init({
@@ -79,7 +81,12 @@ function configurePayments(): void {
 }
 
 function pickDeclineCode(): string {
-  const codes = ['insufficient_funds', 'card_declined', 'expired_card', 'fraud_suspected'];
+  const codes = [
+    'insufficient_funds',
+    'card_declined',
+    'expired_card',
+    'fraud_suspected',
+  ];
   return codes[Math.floor(Math.random() * codes.length)];
 }
 
@@ -128,10 +135,13 @@ async function main() {
     },
     clearDrift: async () => {
       driftIntroduced = false;
-      (globalThis as { __autotel_demo_extra_recommendation_field__?: boolean })
-        .__autotel_demo_extra_recommendation_field__ = false;
+      (
+        globalThis as { __autotel_demo_extra_recommendation_field__?: boolean }
+      ).__autotel_demo_extra_recommendation_field__ = false;
       snapshot.reset();
-      process.stdout.write('\n[runner] demo control: drift cleared, snapshot reset\n');
+      process.stdout.write(
+        '\n[runner] demo control: drift cleared, snapshot reset\n',
+      );
     },
     burst: async () => {
       process.stdout.write('\n[runner] demo control: bursting 8 checkouts\n');
@@ -149,7 +159,12 @@ async function main() {
     process.stdout.write(`[runner] recording events to ${RECORD_PATH}\n`);
   }
 
-  const stopServer = await startLiveServer({ port: PORT, snapshot, stream, controls });
+  const stopServer = await startLiveServer({
+    port: PORT,
+    snapshot,
+    stream,
+    controls,
+  });
 
   const startedAt = Date.now();
   process.stdout.write(
@@ -185,7 +200,9 @@ async function main() {
       loop: true,
       speed: REPLAY_SPEED,
     }).catch((err) => {
-      process.stderr.write(`[runner] replay failed: ${(err as Error).message}\n`);
+      process.stderr.write(
+        `[runner] replay failed: ${(err as Error).message}\n`,
+      );
     });
   } else {
     ticker = setInterval(() => {

@@ -18,7 +18,9 @@ const ORIGIN = 'https://app.example.com';
 
 /** Install a minimal mutable window and return the underlying fetch mock. */
 function installWindow() {
-  const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 } as Response);
+  const mockFetch = vi
+    .fn()
+    .mockResolvedValue({ ok: true, status: 200 } as Response);
   vi.stubGlobal('window', {
     fetch: mockFetch,
     location: { origin: ORIGIN, href: `${ORIGIN}/` },
@@ -69,24 +71,38 @@ describe('init() baggage propagation', () => {
     init({ service: 'spa', instrumentXHR: false });
     setBaggage({ 'tenant.id': 'acme' });
 
-    await (window as unknown as { fetch: typeof fetch }).fetch('https://analytics.google.com/c');
+    await (window as unknown as { fetch: typeof fetch }).fetch(
+      'https://analytics.google.com/c',
+    );
 
     expect(lastBaggage(mockFetch)).toBeNull();
   });
 
   it('injects baggage cross-origin only when allowlisted', async () => {
-    init({ service: 'spa', instrumentXHR: false, baggage: { allowedOrigins: ['api.partner.com'] } });
+    init({
+      service: 'spa',
+      instrumentXHR: false,
+      baggage: { allowedOrigins: ['api.partner.com'] },
+    });
     setBaggage({ 'tenant.id': 'acme' });
 
-    await (window as unknown as { fetch: typeof fetch }).fetch('https://api.partner.com/x');
+    await (window as unknown as { fetch: typeof fetch }).fetch(
+      'https://api.partner.com/x',
+    );
     expect(lastBaggage(mockFetch)).toBe('tenant.id=acme');
 
-    await (window as unknown as { fetch: typeof fetch }).fetch('https://other.com/y');
+    await (window as unknown as { fetch: typeof fetch }).fetch(
+      'https://other.com/y',
+    );
     expect(lastBaggage(mockFetch)).toBeNull();
   });
 
   it('seeds initial baggage from init() config', async () => {
-    init({ service: 'spa', instrumentXHR: false, baggage: { initial: { 'tenant.id': 'globex' } } });
+    init({
+      service: 'spa',
+      instrumentXHR: false,
+      baggage: { initial: { 'tenant.id': 'globex' } },
+    });
 
     await (window as unknown as { fetch: typeof fetch }).fetch('/api/users');
 
@@ -104,14 +120,24 @@ describe('init() baggage propagation', () => {
   });
 
   it('respects Do Not Track (baggage is a subset of traceparent)', async () => {
-    Object.defineProperty(navigator, 'doNotTrack', { value: '1', configurable: true });
-    init({ service: 'spa', instrumentXHR: false, privacy: { respectDoNotTrack: true } });
+    Object.defineProperty(navigator, 'doNotTrack', {
+      value: '1',
+      configurable: true,
+    });
+    init({
+      service: 'spa',
+      instrumentXHR: false,
+      privacy: { respectDoNotTrack: true },
+    });
     setBaggage({ 'tenant.id': 'acme' });
 
     await (window as unknown as { fetch: typeof fetch }).fetch('/api/users');
 
     expect(lastBaggage(mockFetch)).toBeNull();
-    Object.defineProperty(navigator, 'doNotTrack', { value: null, configurable: true });
+    Object.defineProperty(navigator, 'doNotTrack', {
+      value: null,
+      configurable: true,
+    });
   });
 
   it('tags local browser spans with current baggage even cross-origin', async () => {
@@ -119,12 +145,17 @@ describe('init() baggage propagation', () => {
     setBaggage({ 'tenant.id': 'acme' });
 
     // Cross-origin: baggage header is NOT sent, but the local span is still tagged.
-    await (window as unknown as { fetch: typeof fetch }).fetch('https://analytics.google.com/c');
+    await (window as unknown as { fetch: typeof fetch }).fetch(
+      'https://analytics.google.com/c',
+    );
     await new Promise((r) => setTimeout(r, 0)); // let the fetch .then run
 
     expect(lastBaggage(mockFetch)).toBeNull();
     expect(recordSpan).toHaveBeenCalled();
-    const attrs = vi.mocked(recordSpan).mock.calls.at(-1)?.[5] as Record<string, unknown>;
+    const attrs = vi.mocked(recordSpan).mock.calls.at(-1)?.[5] as Record<
+      string,
+      unknown
+    >;
     expect(attrs['tenant.id']).toBe('acme');
     expect(attrs['http.url']).toBe('https://analytics.google.com/c');
   });

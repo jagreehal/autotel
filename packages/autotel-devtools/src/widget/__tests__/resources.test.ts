@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest';
 import {
   buildResourceSummaries,
   classifyResourceHealth,
   inferResourceName,
   inferResourceType,
-} from '../utils/resources'
+} from '../utils/resources';
 
 describe('resource utilities', () => {
   it('infers resource names and types from span attributes', () => {
@@ -13,17 +13,17 @@ describe('resource utilities', () => {
         'service.name': 'api',
         'db.system': 'postgresql',
       },
-    }
+    };
 
-    expect(inferResourceName(span, 'fallback')).toBe('api')
-    expect(inferResourceType(span.attributes, 'api')).toBe('database')
-  })
+    expect(inferResourceName(span, 'fallback')).toBe('api');
+    expect(inferResourceType(span.attributes, 'api')).toBe('database');
+  });
 
   it('classifies resource health from error rate', () => {
-    expect(classifyResourceHealth(20, 0)).toBe('healthy')
-    expect(classifyResourceHealth(20, 2)).toBe('degraded')
-    expect(classifyResourceHealth(20, 5)).toBe('unhealthy')
-  })
+    expect(classifyResourceHealth(20, 0)).toBe('healthy');
+    expect(classifyResourceHealth(20, 2)).toBe('degraded');
+    expect(classifyResourceHealth(20, 5)).toBe('unhealthy');
+  });
 
   it('builds resource summaries from traces, logs, and errors', () => {
     const resources = buildResourceSummaries({
@@ -95,19 +95,22 @@ describe('resource utilities', () => {
           service: 'api',
         },
       ],
-    })
+    });
 
-    expect(resources.map((resource) => resource.name)).toEqual(['api', 'postgresql'])
+    expect(resources.map((resource) => resource.name)).toEqual([
+      'api',
+      'postgresql',
+    ]);
     expect(resources[0]).toMatchObject({
       name: 'api',
       type: 'service',
       traceCount: 1,
       logCount: 1,
-    })
+    });
     expect(resources[1]).toMatchObject({
       name: 'postgresql',
       type: 'database',
       errorCount: 1,
-    })
-  })
-})
+    });
+  });
+});

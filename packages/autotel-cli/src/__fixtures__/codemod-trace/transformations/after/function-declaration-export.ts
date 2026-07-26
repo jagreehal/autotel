@@ -1,5 +1,5 @@
 import { trace } from "autotel";
 
-export const createUser = trace('createUser', function createUserexport function createUser(data: string) {
+export const createUser = trace('createUser', function createUser(data: string) {
   return data;
-};
+});

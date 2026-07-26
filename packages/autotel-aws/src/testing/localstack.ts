@@ -26,7 +26,7 @@ export function createLocalStackHelpers() {
       try {
         const response = await fetch(
           `${this.getEndpoint('health')}/_localstack/health`,
-          { method: 'GET' }
+          { method: 'GET' },
         );
         return response.ok;
       } catch {

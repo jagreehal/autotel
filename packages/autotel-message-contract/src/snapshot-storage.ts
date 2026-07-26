@@ -66,7 +66,11 @@ export interface ReadSnapshotResult {
 export function readSnapshot(location: SnapshotLocation): ReadSnapshotResult {
   const filePath = resolveSnapshotPath(location);
   if (!existsSync(filePath)) return { exists: false, path: filePath };
-  return { exists: true, content: readFileSync(filePath, 'utf8'), path: filePath };
+  return {
+    exists: true,
+    content: readFileSync(filePath, 'utf8'),
+    path: filePath,
+  };
 }
 
 export function writeSnapshot(
@@ -95,13 +99,16 @@ function callerOutsidePackage(): string | undefined {
   if (!stack) return undefined;
   const lines = stack.split('\n').slice(1);
   for (const line of lines) {
-    const match = line.match(/\((.*?):\d+:\d+\)/) ?? line.match(/at (.*?):\d+:\d+/);
+    const match =
+      line.match(/\((.*?):\d+:\d+\)/) ?? line.match(/at (.*?):\d+:\d+/);
     const file = match?.[1];
     if (!file) continue;
     if (file.includes('node:')) continue;
     // Skip frames inside this package's own source/dist.
-    if (file.includes(`${path.join('autotel-message-contract', 'src')}`)) continue;
-    if (file.includes(`${path.join('autotel-message-contract', 'dist')}`)) continue;
+    if (file.includes(`${path.join('autotel-message-contract', 'src')}`))
+      continue;
+    if (file.includes(`${path.join('autotel-message-contract', 'dist')}`))
+      continue;
     if (file.includes('node_modules')) continue;
     return file.startsWith('file://') ? fileUrlToPath(file) : file;
   }

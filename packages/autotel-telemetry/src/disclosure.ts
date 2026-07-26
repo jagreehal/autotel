@@ -1,4 +1,9 @@
-import { readPreferenceSync, resolveConsent, writePreference, purgeOutbox } from './consent';
+import {
+  readPreferenceSync,
+  resolveConsent,
+  writePreference,
+  purgeOutbox,
+} from './consent';
 import type { TelemetryOptions } from './types';
 
 export interface TelemetryStatus {
@@ -29,9 +34,19 @@ export function generateDisclosure(options: TelemetryOptions): {
   const json = {
     tool: options.name,
     version: options.version,
-    collected: ['command', 'outcome', 'durationMs', 'sanitized flags', 'optional custom counters'],
+    collected: [
+      'command',
+      'outcome',
+      'durationMs',
+      'sanitized flags',
+      'optional custom counters',
+    ],
     notCollected: ['raw argv strings', 'paths', 'tokens', 'secrets'],
-    optOut: ['DO_NOT_TRACK=1', 'AUTOTEL_TELEMETRY=0', 'autotel telemetry disable'],
+    optOut: [
+      'DO_NOT_TRACK=1',
+      'AUTOTEL_TELEMETRY=0',
+      'autotel telemetry disable',
+    ],
   };
   const markdown = `# ${options.name} telemetry disclosure
 

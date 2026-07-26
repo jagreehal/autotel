@@ -7,7 +7,11 @@ import {
   Tracing,
   type ILayerVersion,
 } from 'aws-cdk-lib/aws-lambda';
-import { NodejsFunction, SourceMapMode, type NodejsFunctionProps } from 'aws-cdk-lib/aws-lambda-nodejs';
+import {
+  NodejsFunction,
+  SourceMapMode,
+  type NodejsFunctionProps,
+} from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import { StackConfig, type OtelMode } from './constants';
@@ -67,9 +71,10 @@ export function createLambdaFunction({
     retention: logs.RetentionDays.ONE_DAY,
   });
 
-  const adotLayer = otelMode === 'cloudwatch-adot'
-    ? resolveAdotLayer(scope, functionName, config)
-    : undefined;
+  const adotLayer =
+    otelMode === 'cloudwatch-adot'
+      ? resolveAdotLayer(scope, functionName, config)
+      : undefined;
 
   const lambdaFunction = new NodejsFunction(scope, functionName, {
     entry: path.join(__dirname, `../src/handlers/${file || id}.ts`),
@@ -78,10 +83,7 @@ export function createLambdaFunction({
     ...props,
     functionName,
     logGroup,
-    layers: [
-      ...(adotLayer ? [adotLayer] : []),
-      ...(props.layers ?? []),
-    ],
+    layers: [...(adotLayer ? [adotLayer] : []), ...(props.layers ?? [])],
     environment: {
       NODE_OPTIONS: '--enable-source-maps',
       OTEL_SERVICE_NAME: config.STACK_NAME,
@@ -93,8 +95,12 @@ export function createLambdaFunction({
   return lambdaFunction;
 }
 
-function otelEnvironment(mode: OtelMode, config: StackConfig): Record<string, string> {
-  const region = config.AWS_REGION ?? process.env.CDK_DEFAULT_REGION ?? 'us-east-1';
+function otelEnvironment(
+  mode: OtelMode,
+  config: StackConfig,
+): Record<string, string> {
+  const region =
+    config.AWS_REGION ?? process.env.CDK_DEFAULT_REGION ?? 'us-east-1';
   switch (mode) {
     case 'custom-endpoint':
       // Original behaviour: a single endpoint for everything (LocalStack,

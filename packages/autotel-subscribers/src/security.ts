@@ -7,10 +7,10 @@
  *
  * @example Webhook (SIEM / incident channel)
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { SecuritySubscriber } from 'autotel-subscribers/security';
  *
- * const events = new Events('api', {
+ * const events = new Event('api', {
  *   subscribers: [
  *     new SecuritySubscriber({
  *       webhookUrl: process.env.SECURITY_WEBHOOK_URL!,

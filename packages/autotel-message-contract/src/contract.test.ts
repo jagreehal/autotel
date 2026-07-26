@@ -112,10 +112,7 @@ describe('snapshot contract', () => {
 
   it('requires a snapshot name', () => {
     expect(() =>
-      messageContract()
-        .given(order)
-        .whenSerialized()
-        .thenContractIsUnchanged(),
+      messageContract().given(order).whenSerialized().thenContractIsUnchanged(),
     ).toThrowError(/snapshot name is required/);
   });
 
@@ -132,8 +129,10 @@ describe('compatibility checks', () => {
   // A reader is a plain parse function here; a Zod/Valibot schema works identically.
   const orderV2Reader = (value: unknown) => {
     const v = value as Record<string, unknown>;
-    if (typeof v.orderId !== 'string') throw new Error('orderId must be a string');
-    if (typeof v.customer !== 'string') throw new Error('customer must be a string');
+    if (typeof v.orderId !== 'string')
+      throw new Error('orderId must be a string');
+    if (typeof v.customer !== 'string')
+      throw new Error('customer must be a string');
     return {
       orderId: v.orderId,
       customer: v.customer,
@@ -167,8 +166,10 @@ describe('compatibility checks', () => {
     const v2 = { orderId: 'ord-1', customer: 'Alice', coupon: 'SAVE10' };
     const orderV1Reader = (value: unknown) => {
       const v = value as Record<string, unknown>;
-      if (typeof v.orderId !== 'string') throw new Error('orderId must be a string');
-      if (typeof v.customer !== 'string') throw new Error('customer must be a string');
+      if (typeof v.orderId !== 'string')
+        throw new Error('orderId must be a string');
+      if (typeof v.customer !== 'string')
+        throw new Error('customer must be a string');
       return {
         orderId: v.orderId,
         customer: v.customer,
@@ -205,7 +206,10 @@ describe('compatibility checks', () => {
       const v = value as Record<string, unknown>;
       return {
         orderId: v.orderId,
-        customer: typeof v.customer === 'string' ? v.customer.toUpperCase() : v.customer,
+        customer:
+          typeof v.customer === 'string'
+            ? v.customer.toUpperCase()
+            : v.customer,
       };
     };
 
@@ -264,16 +268,24 @@ describe('compatibility checks', () => {
         validate: (value: unknown) => {
           const v = value as Record<string, unknown>;
           if (typeof v.orderId === 'string') return { value: v };
-          return { issues: [{ message: 'orderId required', path: ['orderId'] }] };
+          return {
+            issues: [{ message: 'orderId required', path: ['orderId'] }],
+          };
         },
       },
     };
     await expect(
-      messageContract().given({ orderId: 'ord-1' }).whenDeserializedAs(schema).thenForwardCompatible(),
+      messageContract()
+        .given({ orderId: 'ord-1' })
+        .whenDeserializedAs(schema)
+        .thenForwardCompatible(),
     ).resolves.toBeDefined();
 
     await expect(
-      messageContract().given({ nope: true }).whenDeserializedAs(schema).thenForwardCompatible(),
+      messageContract()
+        .given({ nope: true })
+        .whenDeserializedAs(schema)
+        .thenForwardCompatible(),
     ).rejects.toThrowError(/orderId required/);
   });
 });

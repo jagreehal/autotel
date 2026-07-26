@@ -230,4 +230,3 @@ async function closeGracefully(signal: NodeJS.Signals): Promise<void> {
 
 process.once('SIGINT', closeGracefully);
 process.once('SIGTERM', closeGracefully);
-

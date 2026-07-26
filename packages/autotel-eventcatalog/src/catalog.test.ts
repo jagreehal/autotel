@@ -54,7 +54,7 @@ describe('extractDeclaredFieldPaths', () => {
   it('returns an empty list for non-object schemas', () => {
     expect(extractDeclaredFieldPaths({ type: 'string' })).toEqual([]);
     expect(extractDeclaredFieldPaths(null)).toEqual([]);
-    expect(extractDeclaredFieldPaths()).toEqual([]);
+    expect(extractDeclaredFieldPaths(undefined)).toEqual([]);
   });
 });
 

@@ -15,11 +15,14 @@ import type { PostProcessorFn, TailSampleFn, LocalTrace } from '../types';
  * Span processor that supports flush by trace ID and tail sampling
  */
 export class SpanProcessorWithFlush implements SpanProcessor {
-  private exporter: SpanExporter;
+  private exporter: SpanExporter | undefined;
   private postProcessor?: PostProcessorFn;
   private spans: Map<string, ReadableSpan[]> = new Map();
 
-  constructor(exporter: SpanExporter, postProcessor?: PostProcessorFn) {
+  constructor(
+    exporter: SpanExporter | undefined,
+    postProcessor?: PostProcessorFn,
+  ) {
     this.exporter = exporter;
     this.postProcessor = postProcessor;
   }
@@ -72,7 +75,8 @@ export class SpanProcessorWithFlush implements SpanProcessor {
    */
   private async exportSpans(spans: ReadableSpan[]): Promise<void> {
     if (spans.length === 0) return;
-    if (!this.exporter) return; // No exporter configured (e.g., in tests)
+    const exporter = this.exporter;
+    if (!exporter) return; // No exporter configured (e.g., in tests)
 
     let processedSpans = spans;
 
@@ -88,7 +92,7 @@ export class SpanProcessorWithFlush implements SpanProcessor {
     }
 
     return new Promise((resolve) => {
-      this.exporter.export(processedSpans, (result) => {
+      exporter.export(processedSpans, (result) => {
         if (result.code === 0) {
           // SUCCESS
           resolve();
@@ -114,7 +118,7 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
   private traces: Map<string, LocalTrace> = new Map();
 
   constructor(
-    exporter: SpanExporter,
+    exporter: SpanExporter | undefined,
     postProcessor?: PostProcessorFn,
     tailSampler?: TailSampleFn,
   ) {
@@ -146,8 +150,9 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
     // A span is a local root if:
     // 1. It has no parentSpanId (definitive root)
     // 2. Its parentSpanId doesn't match any already-buffered span (remote parent = distributed trace entry)
-    const hasLocalParent = parentSpanId &&
-                            trace.spans.some(s => s.spanContext().spanId === parentSpanId);
+    const hasLocalParent =
+      parentSpanId &&
+      trace.spans.some((s) => s.spanContext().spanId === parentSpanId);
 
     // Set localRootSpan if this is the local root (no local parent found in buffer)
     if (!hasLocalParent) {
@@ -160,8 +165,10 @@ export class TailSamplingSpanProcessor implements SpanProcessor {
     // For distributed traces (parentSpanId present), we rely on explicit forceFlush() from instrument.ts
     // This ensures we don't trigger before all spans have been buffered
     const isDefinitiveRoot = !parentSpanId;
-    const shouldAutoFlush = isDefinitiveRoot && trace.localRootSpan &&
-                             trace.localRootSpan.spanContext().spanId === spanId;
+    const shouldAutoFlush =
+      isDefinitiveRoot &&
+      trace.localRootSpan &&
+      trace.localRootSpan.spanContext().spanId === spanId;
 
     if (shouldAutoFlush) {
       if (this.tailSampler) {

@@ -18,15 +18,21 @@ import {
   type RebalanceType,
 } from './messaging';
 
-// Mock the trace function to capture span options
+// Mock the tracing wrapper to capture span options
 vi.mock('./functional', () => ({
-  trace: vi.fn((name, factory) => {
-    return (...args: unknown[]) => {
-      const mockCtx = createMockContext();
-      const fn = factory(mockCtx);
-      return fn(...args);
-    };
-  }),
+  withTracing: vi.fn(
+    () =>
+      (
+        factory: (
+          ctx: ReturnType<typeof createMockContext>,
+        ) => (...args: unknown[]) => unknown,
+      ) =>
+      (...args: unknown[]) => {
+        const mockCtx = createMockContext();
+        const fn = factory(mockCtx);
+        return fn(...args);
+      },
+  ),
 }));
 
 // Mock sampling functions
@@ -285,9 +291,11 @@ describe('Messaging Helpers', () => {
         onError,
       };
 
-      const consumer = traceConsumer(config)((_ctx) => async () => {
-        throw testError;
-      });
+      const consumer = traceConsumer(config)(
+        (_ctx) => async (_message: unknown) => {
+          throw testError;
+        },
+      );
 
       await expect(consumer({})).rejects.toThrow('Process failed');
       expect(onError).toHaveBeenCalledWith(testError, expect.anything());
@@ -650,7 +658,7 @@ describe('Messaging Helpers', () => {
         await producer({ orderId: 'order-123' });
         expect(customAttributes).toHaveBeenCalled();
         // Args should include the event
-        const [, args] = customAttributes.mock.calls[0];
+        const [, args] = customAttributes.mock.calls[0]!;
         expect(args[0]).toEqual({ orderId: 'order-123' });
       });
 
@@ -718,8 +726,8 @@ describe('Messaging Helpers', () => {
           system: 'kafka',
           destination: 'events',
           customHeaders: (ctx) => ({
-            'x-datadog-trace-id': ctx.getTraceId?.() || 'unknown',
-            'x-datadog-parent-id': ctx.getSpanId?.() || 'unknown',
+            'x-datadog-trace-id': ctx.traceId || 'unknown',
+            'x-datadog-parent-id': ctx.spanId || 'unknown',
           }),
         };
 

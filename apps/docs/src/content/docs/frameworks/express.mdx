@@ -34,16 +34,18 @@ tsx --import ./instrumentation.ts src/index.ts
 
 ```typescript
 import express from 'express';
-import { trace, type TraceContext } from 'autotel';
+import { trace, withTracing, type TraceContext } from 'autotel';
 
 const app = express();
 
 // Auto-traced: HTTP spans created by auto-instrumentation
 // Manual trace: business logic spans
-const fetchUser = trace((ctx: TraceContext) => async (userId: string) => {
-  ctx.setAttribute('db.userId', userId);
-  return await db.users.findById(userId);
-});
+const fetchUser = withTracing({})(
+  (ctx: TraceContext) => async (userId: string) => {
+    ctx.setAttribute('db.userId', userId);
+    return await db.users.findById(userId);
+  },
+);
 
 app.get('/users/:userId', async (req, res) => {
   const user = await fetchUser(req.params.userId);
@@ -58,7 +60,7 @@ app.get('/error', async () => {
 ## Request-Scoped Logging
 
 ```typescript
-import { trace, getRequestLogger } from 'autotel';
+import { trace, withTracing, getRequestLogger } from 'autotel';
 
 app.get('/checkout', async (req, res) => {
   // If using autotel-hono or middleware that creates a span,
@@ -78,10 +80,10 @@ app.get('/checkout', async (req, res) => {
 
 With `autoInstrumentations: ['express', 'http']`:
 
-- **HTTP server spans** — automatic per-request spans with method, path, status
-- **Express middleware** — middleware execution time
-- **Your `trace()` calls** — business logic spans as children
+- **HTTP server spans**: automatic per-request spans with method, path, status
+- **Express middleware**: middleware execution time
+- **Your `trace()` calls**: business logic spans as children
 
 ## Examples
 
-- [`example-http`](https://github.com/jagreehal/autotel/tree/main/apps/example-http) — Express with Pino logger, manual `trace()` in routes, error tracking.
+- [`example-http`](https://github.com/jagreehal/autotel/tree/main/apps/example-http): Express with Pino logger, manual `trace()` in routes, error tracking.

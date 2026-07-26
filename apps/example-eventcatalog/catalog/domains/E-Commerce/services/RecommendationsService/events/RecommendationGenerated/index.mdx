@@ -44,6 +44,7 @@ avg completion tokens **142**. Total weekly spend **$14.27**.
 p95 generation latency **1.8s**, p99 **3.4s**.
 
 Sample trace: `trace-8d4e2c7a-91f5`.
+
 </div>
 
 <div class="evidence-callout">
@@ -57,9 +58,8 @@ Owner: `autotel-team`.
 
 **Suggested action**: add `personalization_seed: { type: "string" }` to the
 schema, or remove from the producer if unintentional.
+
 </div>
-
-
 
 <!-- autotel:stamp-start -->
 
@@ -69,6 +69,7 @@ schema, or remove from the producer if unintentional.
 **Volume**: 5 events · **Last seen**: 2026-05-22 05:33 UTC · **Producer**: RecommendationsService · **Channel**: `orders.events`
 
 **Field paths observed**: `model`, `orderId`, `personalization_seed`, `recommendations`, `recommendations[].reason`, `recommendations[].score`, `recommendations[].sku`, `usage`, `usage.completionTokens`, `usage.promptTokens`
+
 </div>
 
 <!-- autotel:stamp-end -->

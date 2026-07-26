@@ -6,21 +6,21 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 
 ## When to Use What
 
-| Scenario | Use | Example |
-|----------|-----|--------|
-| Wrap an async function with a span | `trace(fn)` or `span('Name', fn)` | Handlers, use-case functions, workers |
-| Wrap with explicit name/key | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })` | When name inference is unreliable |
-| Need span context (set attributes) | Factory: `trace((ctx) => async (args) => { ctx.setAttribute(...); ... })` | When you need to attach attributes inside the function |
-| One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs |
-| Throw an error with why/fix/link | `createStructuredError({ message, why?, fix?, link?, status?, cause? })` | API routes, services, validation |
-| Show API error in UI (client) | `parseError(caught)` → use `message`, `why`, `fix`, `link` | Toasts, error banners, forms |
-| Product/analytics events | `track('event.name', attributes)` or `Event` from `autotel/event` | Clicks, signups, conversions |
-| Record error on current span | `recordStructuredError(ctx, error)` or request logger `.error()` | Inside catch blocks when you have a span |
-| Security decision point | `securityEvent()` from `autotel-audit` | Login failure, `access.tenant.violation` |
-| Wrap a sensitive operation | `withSecurity()` from `autotel-audit` | API key creation |
-| Correlate actor without raw PII | `hashIdentifier()` from `autotel-audit` | Email or IP in `actorId` |
-| Validation mismatch observability | `defineValidator()` from `autotel/validate` | POST body shape at boundary |
-| Zero-code probe/401/LLM signals | `createSecuritySignalProcessor()` in `init({ spanProcessors })` | Scanner traffic, credential stuffing |
+| Scenario                                                      | Use                                                                                 | Example                                                |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Wrap an async function with a span                            | `trace(fn)` or `span('Name', fn)`                                                   | Handlers, use-case functions, workers                  |
+| Wrap with explicit name/key                                   | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })`                    | When name inference is unreliable                      |
+| Need span context (set attributes)                            | Factory: `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })` | When you need to attach attributes inside the function |
+| One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()`         | HTTP request handlers, background jobs                 |
+| Throw an error with why/fix/link                              | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`            | API routes, services, validation                       |
+| Show API error in UI (client)                                 | `parseError(caught)` → use `message`, `why`, `fix`, `link`                          | Toasts, error banners, forms                           |
+| Product/analytics events                                      | `track('event.name', attributes)` or `Event` from `autotel/event`                   | Clicks, signups, conversions                           |
+| Record error on current span                                  | `recordStructuredError(ctx, error)` or request logger `.error()`                    | Inside catch blocks when you have a span               |
+| Security decision point                                       | `securityEvent()` from `autotel-audit`                                              | Login failure, `access.tenant.violation`               |
+| Wrap a sensitive operation                                    | `withSecurity()` from `autotel-audit`                                               | API key creation                                       |
+| Correlate actor without raw PII                               | `hashIdentifier()` from `autotel-audit`                                             | Email or IP in `actorId`                               |
+| Validation mismatch observability                             | `defineValidator()` from `autotel/validate`                                         | POST body shape at boundary                            |
+| Zero-code probe/401/LLM signals                               | `createSecuritySignalProcessor()` in `init({ spanProcessors })`                     | Scanner traffic, credential stuffing                   |
 
 **Rule of thumb**: If there is an HTTP request or a "job", create a span via `trace()` or framework middleware, and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
 
@@ -44,21 +44,23 @@ export async function postCheckout(req: Request, res: Response) {
 **After (span + request-scoped context):**
 
 ```typescript
-import { trace, getRequestLogger } from 'autotel';
+import { trace, withTracing, getRequestLogger } from 'autotel';
 
-export const postCheckout = trace((ctx) => async (req: Request, res: Response) => {
-  const log = getRequestLogger(ctx);
-  const user = await getAuth(req);
-  log.set({ user: { id: user.id } });
+export const postCheckout = withTracing({})(
+  (ctx) => async (req: Request, res: Response) => {
+    const log = getRequestLogger(ctx);
+    const user = await getAuth(req);
+    log.set({ user: { id: user.id } });
 
-  const body = await readBody(req);
-  log.set({ cart: { items: body.items?.length } });
+    const body = await readBody(req);
+    log.set({ cart: { items: body.items?.length } });
 
-  const result = await processCheckout(user.id, body);
-  log.set({ result: { orderId: result.id } });
-  log.emitNow();
-  return res.json(result);
-});
+    const result = await processCheckout(user.id, body);
+    log.set({ result: { orderId: result.id } });
+    log.emitNow();
+    return res.json(result);
+  },
+);
 ```
 
 If the framework already creates a span per request, such as Autotel Hono middleware, call `getRequestLogger()` with no args inside the handler instead of passing `ctx`.
@@ -131,7 +133,9 @@ try {
   const error = parseError(err);
   toast.error(error.message, {
     description: error.why,
-    action: error.fix ? { label: 'Fix', onClick: () => showHelp(error.fix) } : undefined,
+    action: error.fix
+      ? { label: 'Fix', onClick: () => showHelp(error.fix) }
+      : undefined,
   });
   if (error.link) setDocLink(error.link);
 }
@@ -159,9 +163,9 @@ export default defineEventHandler(async (event) => {
 **After (with span + request logger):**
 
 ```typescript
-import { trace, getRequestLogger } from 'autotel';
+import { trace, withTracing, getRequestLogger } from 'autotel';
 
-export default trace((ctx) => async (event) => {
+export default withTracing({})((ctx) => async (event) => {
   const log = getRequestLogger(ctx);
   const user = await requireAuth(event);
   log.set({ user: { id: user.id } });
@@ -185,7 +189,7 @@ If the framework attaches the event to an existing span, use `getRequestLogger()
 **Before:**
 
 ```typescript
-export const postLogin = trace((ctx) => async (req, res) => {
+export const postLogin = withTracing({})((ctx) => async (req, res) => {
   const { email, password } = req.body;
   const user = await findUser(email);
   if (!user || !(await verifyPassword(user, password))) {
@@ -198,10 +202,10 @@ export const postLogin = trace((ctx) => async (req, res) => {
 **After:**
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 import { securityEvent, hashIdentifier } from 'autotel-audit';
 
-export const postLogin = trace((ctx) => async (req, res) => {
+export const postLogin = withTracing({})((ctx) => async (req, res) => {
   const { email, password } = req.body;
   const user = await findUser(email);
   if (!user || !(await verifyPassword(user, password))) {
@@ -252,14 +256,14 @@ app.post('/api/checkout', async (c) => {
 
 ```typescript
 import Fastify from 'fastify';
-import { init, trace, getRequestLogger } from 'autotel';
+import { init, trace, withTracing, getRequestLogger } from 'autotel';
 
 init({ service: 'my-api' });
 
 // Register middleware that creates a span per request (see example app).
 // In route handler:
 app.post('/api/checkout', async (request, reply) => {
-  return trace((ctx) => async () => {
+  return withTracing({})((ctx) => async () => {
     const log = getRequestLogger(ctx);
     log.set({ route: 'checkout' });
     const result = await handleCheckout(request);
@@ -294,12 +298,12 @@ See `docs/SECURITY-OBSERVABILITY.md` and the published guide at `integrations/se
 ### Generic Node HTTP
 
 ```typescript
-import { init, trace, getRequestLogger } from 'autotel';
+import { init, trace, withTracing, getRequestLogger } from 'autotel';
 
 init({ service: 'my-api' });
 
 server.on('request', (req, res) => {
-  trace((ctx) => async () => {
+  withTracing({})((ctx) => async () => {
     const log = getRequestLogger(ctx);
     log.set({ method: req.method, path: req.url });
     try {
@@ -328,18 +332,18 @@ When adding Autotel support for a new framework (e.g. a new web framework):
    `autotel-adapters/{express,fastify,next,nitro,cloudflare,hono,nestjs,sveltekit,elysia}` and `autotel-nuxt` for Nuxt apps.
 
 3. **Touchpoints to update**
-   - New source, e.g. `packages/autotel-<name>/src/index.ts`, or a new package.  
-   - Build: add entry in `tsup.config.ts` / package build.  
-   - Exports: add in `package.json` exports and typesVersions.  
-   - Tests: add `*.test.ts` for middleware (span created, request logger available).  
-   - Example app: add under `apps/example-<name>` and wire init + middleware.  
-   - Docs: update `AGENTS.md` framework table and this guide with a short snippet.  
+   - New source, e.g. `packages/autotel-<name>/src/index.ts`, or a new package.
+   - Build: add entry in `tsup.config.ts` / package build.
+   - Exports: add in `package.json` exports and typesVersions.
+   - Tests: add `*.test.ts` for middleware (span created, request logger available).
+   - Example app: add under `apps/example-<name>` and wire init + middleware.
+   - Docs: update `AGENTS.md` framework table and this guide with a short snippet.
    - Root: add workspace package and any scripts (e.g. `pnpm --filter example-<name> start`).
 
-3. **Shared behavior**  
+4. **Shared behavior**  
    Reuse existing patterns: one span per request, safe headers (no secrets), and optional integration with `getRequestLogger()` and `createStructuredError` in route handlers.
 
-4. **Do not**  
+5. **Do not**  
    Use `await import()` for init; keep init synchronous. Do not add barrel re-exports that break tree-shaking.
 
 ---

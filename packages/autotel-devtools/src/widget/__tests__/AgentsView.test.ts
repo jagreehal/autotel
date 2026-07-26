@@ -47,14 +47,18 @@ describe('AgentsView', () => {
     // appear in both the tool breakdown and the timeline, so allow multiples.
     expect((await screen.findAllByText('Task')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Skill').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('mcp__github__create_issue').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText('mcp__github__create_issue').length,
+    ).toBeGreaterThan(0);
   });
 
   it('keeps prompts private by default and toggles reveal', async () => {
     render(AgentsView);
     updateWidgetData({ agents: sampleAgentSessions() });
 
-    const toggle = await screen.findByTitle(/Reveal \/ hide captured prompt text/);
+    const toggle = await screen.findByTitle(
+      /Reveal \/ hide captured prompt text/,
+    );
     expect(toggle.textContent).toMatch(/Reveal prompts/);
     await fireEvent.click(toggle);
     expect(toggle.textContent).toMatch(/Hide prompts/);

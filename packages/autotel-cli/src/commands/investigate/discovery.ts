@@ -6,11 +6,7 @@ import {
   type TelemetryBackend,
 } from 'autotel-mcp';
 import { runInvestigate, type InvestigateFlags } from './runtime';
-import {
-  addBackendFlags,
-  backendFlagsFromOpts,
-  intArg,
-} from './cli-helpers';
+import { addBackendFlags, backendFlagsFromOpts, intArg } from './cli-helpers';
 
 export interface DiscoverServicesFlags extends InvestigateFlags {
   limitServices?: number;

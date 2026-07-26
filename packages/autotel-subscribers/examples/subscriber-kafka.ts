@@ -18,10 +18,10 @@
  *
  * Usage:
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { KafkaSubscriber } from './adapter-kafka';
  *
- * const events = new Events('app', {
+ * const events = new Event('app', {
  *   subscribers: [
  *     new KafkaSubscriber({
  *       clientId: 'events-producer',
@@ -51,7 +51,12 @@ import {
   type BufferOverflowStrategy,
 } from '../src/streaming-event-subscriber';
 import type { EventPayload } from '../src/event-subscriber-base';
-import { Kafka, Producer, CompressionTypes, type ProducerRecord } from 'kafkajs';
+import {
+  Kafka,
+  Producer,
+  CompressionTypes,
+  type ProducerRecord,
+} from 'kafkajs';
 
 type CompressionType = 'gzip' | 'snappy' | 'lz4' | 'zstd' | 'none';
 type PartitionStrategy = 'userId' | 'tenantId' | 'eventType' | 'round-robin';
@@ -104,7 +109,9 @@ export class KafkaSubscriber extends StreamingEventSubscriber {
 
   private kafka: Kafka;
   private producer: Producer;
-  private subscriberConfig: Required<Omit<KafkaSubscriberConfig, 'sasl' | 'ssl'>> & {
+  private subscriberConfig: Required<
+    Omit<KafkaSubscriberConfig, 'sasl' | 'ssl'>
+  > & {
     sasl?: KafkaSubscriberConfig['sasl'];
     ssl?: boolean;
   };
@@ -266,13 +273,13 @@ export class KafkaSubscriber extends StreamingEventSubscriber {
       // Log successful send (debug)
       if (process.env.DEBUG) {
         console.log(
-          `[KafkaSubscriber] Sent ${messages.length} events to partition ${result[0].partition}`
+          `[KafkaSubscriber] Sent ${messages.length} events to partition ${result[0].partition}`,
         );
       }
     } catch (error) {
       console.error(
         `[KafkaSubscriber] Failed to send ${messages.length} events:`,
-        error
+        error,
       );
       throw error; // Re-throw for retry logic
     }
@@ -288,18 +295,20 @@ export class KafkaSubscriber extends StreamingEventSubscriber {
       {
         eventName: payload.name,
         partitionKey: this.getPartitionKey(payload),
-      }
+      },
     );
 
     // Check for specific Kafka errors
     if (error.message.includes('NOT_LEADER_FOR_PARTITION')) {
       console.error(
-        '[KafkaSubscriber] Partition leadership changed - will retry'
+        '[KafkaSubscriber] Partition leadership changed - will retry',
       );
     }
 
     if (error.message.includes('BROKER_NOT_AVAILABLE')) {
-      console.error('[KafkaSubscriber] Broker unavailable - check cluster health');
+      console.error(
+        '[KafkaSubscriber] Broker unavailable - check cluster health',
+      );
     }
   }
 

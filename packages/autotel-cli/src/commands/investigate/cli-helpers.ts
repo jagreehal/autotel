@@ -47,7 +47,9 @@ export function addStaticFlags(cmd: Command): Command {
     .option('--no-secrets-in-output', 'Redact secret-shaped values');
 }
 
-export function backendFlagsFromOpts(opts: Record<string, unknown>): InvestigateFlags {
+export function backendFlagsFromOpts(
+  opts: Record<string, unknown>,
+): InvestigateFlags {
   return {
     backend: opts.backend as InvestigateFlags['backend'],
     jaegerBaseUrl: opts.jaegerBaseUrl as string | undefined,
@@ -61,7 +63,9 @@ export function backendFlagsFromOpts(opts: Record<string, unknown>): Investigate
   };
 }
 
-export function staticFlagsFromOpts(opts: Record<string, unknown>): InvestigateFlags {
+export function staticFlagsFromOpts(
+  opts: Record<string, unknown>,
+): InvestigateFlags {
   return {
     outputFile: opts.outputFile as string | undefined,
     noSecrets: opts.secretsInOutput === false,

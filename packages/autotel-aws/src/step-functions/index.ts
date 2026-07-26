@@ -55,7 +55,12 @@
  * ```
  */
 
-import { trace, type TraceContext } from 'autotel';
+import {
+  trace,
+  type TraceContext,
+  withTracing,
+  getActiveTraceContext,
+} from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import type { SpanContext } from '@opentelemetry/api';
 import { buildStepFunctionsAttributes } from '../attributes';
@@ -259,7 +264,9 @@ export function extractStepFunctionsContext(
   };
 
   const extractedContext = propagation.extract(context.active(), carrier);
-  const span = extractedContext.getValue(Symbol.for('OpenTelemetry Context Key SPAN'));
+  const span = extractedContext.getValue(
+    Symbol.for('OpenTelemetry Context Key SPAN'),
+  );
 
   // Handle both Span and SpanContext
   if (span && typeof span === 'object') {
@@ -341,8 +348,7 @@ export function traceStepFunction(config: TraceStepFunctionConfig) {
     fn: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): (...args: TArgs) => Promise<TReturn> {
     // Use autotel's trace() which properly handles the factory pattern
-    return trace(
-      `stepfunctions.${operation}`,
+    return withTracing({ name: `stepfunctions.${operation}` })(
       (ctx: TraceContext) =>
         async (...args: TArgs): Promise<TReturn> => {
           // Set Step Functions attributes
@@ -356,7 +362,7 @@ export function traceStepFunction(config: TraceStepFunctionConfig) {
           const handler = fn(ctx);
           return handler(...args);
         },
-    );
+    ) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 
@@ -405,11 +411,12 @@ export function traceStepFunction(config: TraceStepFunctionConfig) {
  * ```
  */
 export class StepFunctionsExecutor<
-   
   TClient extends { send: (command: any) => Promise<any> } = any,
 > {
   private client: TClient;
-  private config: Required<Pick<StepFunctionsExecutorConfig, 'stateMachineArn'>> &
+  private config: Required<
+    Pick<StepFunctionsExecutorConfig, 'stateMachineArn'>
+  > &
     StepFunctionsExecutorConfig;
   private stateMachineName: string;
 
@@ -420,7 +427,8 @@ export class StepFunctionsExecutor<
       ...config,
     };
     // Extract state machine name from ARN (last segment)
-    this.stateMachineName = config.stateMachineArn.split(':').pop() || 'unknown';
+    this.stateMachineName =
+      config.stateMachineArn.split(':').pop() || 'unknown';
   }
 
   /**
@@ -435,13 +443,17 @@ export class StepFunctionsExecutor<
     executionArn?: string;
     startDate?: Date;
   }> {
-    return trace(`stepfunctions.StartExecution`, async (ctx: TraceContext) => {
+    return trace(`stepfunctions.StartExecution`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildStepFunctionsAttributes({
           stateMachineArn: this.config.stateMachineArn,
         }),
       );
-      ctx.setAttribute('aws.stepfunctions.state_machine_name', this.stateMachineName);
+      ctx.setAttribute(
+        'aws.stepfunctions.state_machine_name',
+        this.stateMachineName,
+      );
 
       if (execution.name) {
         ctx.setAttribute('aws.stepfunctions.execution_name', execution.name);
@@ -464,7 +476,10 @@ export class StepFunctionsExecutor<
         const result = await this.client.send(new StartExecutionCommand(input));
 
         if (result.executionArn) {
-          ctx.setAttribute('aws.stepfunctions.execution_arn', result.executionArn);
+          ctx.setAttribute(
+            'aws.stepfunctions.execution_arn',
+            result.executionArn,
+          );
         }
 
         ctx.setStatus({ code: SpanStatusCode.OK });
@@ -476,11 +491,12 @@ export class StepFunctionsExecutor<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'StartExecution failed',
+          message:
+            error instanceof Error ? error.message : 'StartExecution failed',
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -502,13 +518,17 @@ export class StepFunctionsExecutor<
       billedDurationInMilliseconds?: number;
     };
   }> {
-    return trace(`stepfunctions.StartSyncExecution`, async (ctx: TraceContext) => {
+    return trace(`stepfunctions.StartSyncExecution`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildStepFunctionsAttributes({
           stateMachineArn: this.config.stateMachineArn,
         }),
       );
-      ctx.setAttribute('aws.stepfunctions.state_machine_name', this.stateMachineName);
+      ctx.setAttribute(
+        'aws.stepfunctions.state_machine_name',
+        this.stateMachineName,
+      );
       ctx.setAttribute('aws.stepfunctions.execution_type', 'express');
 
       if (execution.name) {
@@ -528,11 +548,17 @@ export class StepFunctionsExecutor<
       };
 
       try {
-        const { StartSyncExecutionCommand } = await import('@aws-sdk/client-sfn');
-        const result = await this.client.send(new StartSyncExecutionCommand(input));
+        const { StartSyncExecutionCommand } =
+          await import('@aws-sdk/client-sfn');
+        const result = await this.client.send(
+          new StartSyncExecutionCommand(input),
+        );
 
         if (result.executionArn) {
-          ctx.setAttribute('aws.stepfunctions.execution_arn', result.executionArn);
+          ctx.setAttribute(
+            'aws.stepfunctions.execution_arn',
+            result.executionArn,
+          );
         }
         if (result.status) {
           ctx.setAttribute('aws.stepfunctions.execution_status', result.status);
@@ -549,13 +575,15 @@ export class StepFunctionsExecutor<
 
         return {
           executionArn: result.executionArn,
-          status: result.status as 'SUCCEEDED' | 'FAILED' | 'TIMED_OUT' | undefined,
+          status: result.status as
+            'SUCCEEDED' | 'FAILED' | 'TIMED_OUT' | undefined,
           output: result.output,
           error: result.error,
           cause: result.cause,
           billingDetails: result.billingDetails
             ? {
-                billedMemoryUsedInMB: result.billingDetails.billedMemoryUsedInMB,
+                billedMemoryUsedInMB:
+                  result.billingDetails.billedMemoryUsedInMB,
                 billedDurationInMilliseconds:
                   result.billingDetails.billedDurationInMilliseconds,
               }
@@ -564,11 +592,14 @@ export class StepFunctionsExecutor<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'StartSyncExecution failed',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'StartSyncExecution failed',
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -589,7 +620,8 @@ export class StepFunctionsExecutor<
     error?: string;
     cause?: string;
   }> {
-    return trace(`stepfunctions.DescribeExecution`, async (ctx: TraceContext) => {
+    return trace(`stepfunctions.DescribeExecution`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildStepFunctionsAttributes({
           stateMachineArn: this.config.stateMachineArn,
@@ -598,7 +630,8 @@ export class StepFunctionsExecutor<
       ctx.setAttribute('aws.stepfunctions.execution_arn', executionArn);
 
       try {
-        const { DescribeExecutionCommand } = await import('@aws-sdk/client-sfn');
+        const { DescribeExecutionCommand } =
+          await import('@aws-sdk/client-sfn');
         const result = await this.client.send(
           new DescribeExecutionCommand({ executionArn }),
         );
@@ -624,11 +657,12 @@ export class StepFunctionsExecutor<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'DescribeExecution failed',
+          message:
+            error instanceof Error ? error.message : 'DescribeExecution failed',
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -642,7 +676,8 @@ export class StepFunctionsExecutor<
     executionArn: string,
     options?: { error?: string; cause?: string },
   ): Promise<{ stopDate?: Date }> {
-    return trace(`stepfunctions.StopExecution`, async (ctx: TraceContext) => {
+    return trace(`stepfunctions.StopExecution`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildStepFunctionsAttributes({
           stateMachineArn: this.config.stateMachineArn,
@@ -666,11 +701,12 @@ export class StepFunctionsExecutor<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'StopExecution failed',
+          message:
+            error instanceof Error ? error.message : 'StopExecution failed',
         });
         throw error;
       }
-    });
+    })();
   }
 }
 
@@ -725,11 +761,12 @@ export class StepFunctionsExecutor<
  * ```
  */
 export class StepFunctionsActivityWorker<
-   
   TClient extends { send: (command: any) => Promise<any> } = any,
 > {
   private client: TClient;
-  private config: Required<Pick<StepFunctionsActivityWorkerConfig, 'activityArn'>> &
+  private config: Required<
+    Pick<StepFunctionsActivityWorkerConfig, 'activityArn'>
+  > &
     StepFunctionsActivityWorkerConfig;
   private activityName: string;
 
@@ -756,12 +793,19 @@ export class StepFunctionsActivityWorker<
       ctx: TraceContext,
     ) => Promise<TOutput>,
   ): Promise<void> {
-    return trace(`stepfunctions.activity.poll`, async (ctx: TraceContext) => {
-      ctx.setAttribute('aws.stepfunctions.activity_arn', this.config.activityArn);
+    return trace(`stepfunctions.activity.poll`, async () => {
+      const ctx = getActiveTraceContext()!;
+      ctx.setAttribute(
+        'aws.stepfunctions.activity_arn',
+        this.config.activityArn,
+      );
       ctx.setAttribute('aws.stepfunctions.activity_name', this.activityName);
 
       if (this.config.workerName) {
-        ctx.setAttribute('aws.stepfunctions.worker_name', this.config.workerName);
+        ctx.setAttribute(
+          'aws.stepfunctions.worker_name',
+          this.config.workerName,
+        );
       }
 
       try {
@@ -813,7 +857,10 @@ export class StepFunctionsActivityWorker<
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'Activity processing failed',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Activity processing failed',
         });
 
         // If we have a task token, send failure
@@ -822,7 +869,7 @@ export class StepFunctionsActivityWorker<
 
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -833,22 +880,28 @@ export class StepFunctionsActivityWorker<
    * @param taskToken - The task token from GetActivityTask
    */
   async sendHeartbeat(taskToken: string): Promise<void> {
-    return trace(`stepfunctions.SendTaskHeartbeat`, async (ctx: TraceContext) => {
-      ctx.setAttribute('aws.stepfunctions.activity_arn', this.config.activityArn);
+    return trace(`stepfunctions.SendTaskHeartbeat`, async () => {
+      const ctx = getActiveTraceContext()!;
+      ctx.setAttribute(
+        'aws.stepfunctions.activity_arn',
+        this.config.activityArn,
+      );
 
       try {
-        const { SendTaskHeartbeatCommand } = await import('@aws-sdk/client-sfn');
+        const { SendTaskHeartbeatCommand } =
+          await import('@aws-sdk/client-sfn');
         await this.client.send(new SendTaskHeartbeatCommand({ taskToken }));
 
         ctx.setStatus({ code: SpanStatusCode.OK });
       } catch (error) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'SendTaskHeartbeat failed',
+          message:
+            error instanceof Error ? error.message : 'SendTaskHeartbeat failed',
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -863,8 +916,12 @@ export class StepFunctionsActivityWorker<
     error: string,
     cause?: string,
   ): Promise<void> {
-    return trace(`stepfunctions.SendTaskFailure`, async (ctx: TraceContext) => {
-      ctx.setAttribute('aws.stepfunctions.activity_arn', this.config.activityArn);
+    return trace(`stepfunctions.SendTaskFailure`, async () => {
+      const ctx = getActiveTraceContext()!;
+      ctx.setAttribute(
+        'aws.stepfunctions.activity_arn',
+        this.config.activityArn,
+      );
       ctx.setAttribute('aws.stepfunctions.task_error', error);
 
       try {
@@ -881,10 +938,11 @@ export class StepFunctionsActivityWorker<
       } catch (error_) {
         ctx.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error_ instanceof Error ? error_.message : 'SendTaskFailure failed',
+          message:
+            error_ instanceof Error ? error_.message : 'SendTaskFailure failed',
         });
         throw error_;
       }
-    });
+    })();
   }
 }

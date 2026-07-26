@@ -31,7 +31,7 @@
         --warn: #f0b13a;
         --warn-soft: rgba(240, 177, 58, 0.12);
         --good: #61dca3;
-        --good-soft: rgba(97, 220, 163, 0.10);
+        --good-soft: rgba(97, 220, 163, 0.1);
         --red: #f87171;
         --ch-orders: #7aa7ff;
         --ch-payments: #c084fc;
@@ -44,8 +44,14 @@
         --radius: 6px;
       }
 
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
 
       body {
         background: var(--bg-0);
@@ -56,8 +62,16 @@
         min-height: 100vh;
         overflow-x: hidden;
         background-image:
-          radial-gradient(ellipse 70% 50% at 20% 0%, rgba(255, 138, 61, 0.04), transparent 60%),
-          radial-gradient(ellipse 80% 60% at 100% 20%, rgba(122, 167, 255, 0.03), transparent 60%),
+          radial-gradient(
+            ellipse 70% 50% at 20% 0%,
+            rgba(255, 138, 61, 0.04),
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse 80% 60% at 100% 20%,
+            rgba(122, 167, 255, 0.03),
+            transparent 60%
+          ),
           linear-gradient(180deg, var(--bg-0), var(--bg-1));
         position: relative;
       }
@@ -74,8 +88,13 @@
         opacity: 0.55;
       }
 
-      .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-      .serif { font-family: var(--serif); }
+      .mono {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .serif {
+        font-family: var(--serif);
+      }
 
       /* ─── Top instrument bar ─────────────────────────── */
       .topbar {
@@ -93,14 +112,13 @@
         content: '';
         position: absolute;
         inset: 0;
-        background:
-          repeating-linear-gradient(
-            0deg,
-            transparent 0,
-            transparent 3px,
-            rgba(255, 255, 255, 0.012) 3px,
-            rgba(255, 255, 255, 0.012) 4px
-          );
+        background: repeating-linear-gradient(
+          0deg,
+          transparent 0,
+          transparent 3px,
+          rgba(255, 255, 255, 0.012) 3px,
+          rgba(255, 255, 255, 0.012) 4px
+        );
         pointer-events: none;
       }
 
@@ -154,17 +172,29 @@
         animation: pulse 1.6s ease-in-out infinite;
       }
       @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.42; }
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.42;
+        }
       }
-      .status .label { color: var(--text-2); }
+      .status .label {
+        color: var(--text-2);
+      }
 
       /* ─── Drift banner — the moment ─────────────────── */
       .alert {
         position: relative;
         max-height: 0;
         overflow: hidden;
-        background: linear-gradient(90deg, rgba(240, 177, 58, 0.18), rgba(255, 138, 61, 0.10) 60%, transparent);
+        background: linear-gradient(
+          90deg,
+          rgba(240, 177, 58, 0.18),
+          rgba(255, 138, 61, 0.1) 60%,
+          transparent
+        );
         border-bottom: 1px solid rgba(240, 177, 58, 0.32);
         transition: max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
       }
@@ -173,9 +203,15 @@
         animation: alert-bloom 6s ease-out forwards;
       }
       @keyframes alert-bloom {
-        0%   { box-shadow: 0 0 0 0 var(--hot-glow); }
-        15%  { box-shadow: 0 6px 60px -10px var(--hot-glow); }
-        100% { box-shadow: 0 0 0 0 transparent; }
+        0% {
+          box-shadow: 0 0 0 0 var(--hot-glow);
+        }
+        15% {
+          box-shadow: 0 6px 60px -10px var(--hot-glow);
+        }
+        100% {
+          box-shadow: 0 0 0 0 transparent;
+        }
       }
       .alert-inner {
         display: flex;
@@ -226,7 +262,9 @@
         padding: 0.35rem 0.65rem;
         border-radius: 3px;
         cursor: pointer;
-        transition: color 0.15s, border-color 0.15s;
+        transition:
+          color 0.15s,
+          border-color 0.15s;
       }
       .alert .dismiss:hover {
         color: var(--text);
@@ -243,7 +281,9 @@
       .hero > div {
         padding: 1.75rem 1.75rem 1.5rem;
       }
-      .hero .left { border-right: 1px solid var(--line); }
+      .hero .left {
+        border-right: 1px solid var(--line);
+      }
 
       .eyebrow {
         font-family: var(--mono);
@@ -282,7 +322,11 @@
         padding-top: 1.1rem;
         border-top: 1px solid var(--line);
       }
-      .hero-sub > div { display: flex; flex-direction: column; gap: 0.2rem; }
+      .hero-sub > div {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
       .hero-sub .v {
         font-family: var(--mono);
         font-size: 1.4rem;
@@ -298,7 +342,11 @@
         color: var(--muted);
       }
 
-      .hero .right { display: flex; flex-direction: column; justify-content: space-between; }
+      .hero .right {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
 
       .drift-meter {
         display: flex;
@@ -313,8 +361,12 @@
         font-variant-numeric: tabular-nums;
         letter-spacing: -0.02em;
       }
-      .drift-meter .n.clean { color: var(--good); }
-      .drift-meter .n.drift { color: var(--hot); }
+      .drift-meter .n.clean {
+        color: var(--good);
+      }
+      .drift-meter .n.drift {
+        color: var(--hot);
+      }
       .drift-meter .l {
         font-family: var(--mono);
         font-size: 0.7rem;
@@ -329,7 +381,9 @@
         margin-top: 0.5rem;
         font-size: 0.95rem;
       }
-      .drift-meter .verdict.bad { color: var(--warn); }
+      .drift-meter .verdict.bad {
+        color: var(--warn);
+      }
 
       .session-meta {
         display: grid;
@@ -339,7 +393,11 @@
         border-top: 1px solid var(--line);
         margin-top: 1rem;
       }
-      .session-meta > div { display: flex; flex-direction: column; gap: 0.2rem; }
+      .session-meta > div {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
       .session-meta .v {
         font-family: var(--mono);
         font-size: 0.95rem;
@@ -360,10 +418,15 @@
         gap: 0;
       }
       @media (max-width: 1100px) {
-        main { grid-template-columns: 1fr; }
+        main {
+          grid-template-columns: 1fr;
+        }
       }
 
-      .col-main { padding: 1.75rem; min-width: 0; }
+      .col-main {
+        padding: 1.75rem;
+        min-width: 0;
+      }
       .col-rail {
         background: var(--bg-rail);
         border-left: 1px solid var(--line);
@@ -438,7 +501,10 @@
         letter-spacing: 0.02em;
         transition: all 0.15s;
       }
-      .diff-tab:hover { color: var(--text-2); border-color: var(--line-strong); }
+      .diff-tab:hover {
+        color: var(--text-2);
+        border-color: var(--line-strong);
+      }
       .diff-tab.active {
         color: var(--paper);
         background: var(--hot-soft);
@@ -448,15 +514,22 @@
         opacity: 0.6;
         margin-left: 0.3rem;
       }
-      .diff-tab.active .count { opacity: 1; }
+      .diff-tab.active .count {
+        opacity: 1;
+      }
 
       .diff-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0;
       }
-      .diff-side { padding: 1rem 1.25rem; min-height: 240px; }
-      .diff-side.declared { border-right: 1px solid var(--line); }
+      .diff-side {
+        padding: 1rem 1.25rem;
+        min-height: 240px;
+      }
+      .diff-side.declared {
+        border-right: 1px solid var(--line);
+      }
 
       .diff-side-head {
         display: flex;
@@ -480,7 +553,11 @@
         color: var(--muted);
       }
 
-      .diff-list { display: flex; flex-direction: column; gap: 0.15rem; }
+      .diff-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+      }
       .diff-row {
         font-family: var(--mono);
         font-size: 0.84rem;
@@ -499,26 +576,40 @@
         width: 0.85rem;
         display: inline-block;
       }
-      .diff-row.match { color: var(--text-2); }
+      .diff-row.match {
+        color: var(--text-2);
+      }
       .diff-row.extra {
         background: var(--hot-soft);
         border-left-color: var(--hot);
         color: var(--paper);
       }
-      .diff-row.extra .sign { color: var(--hot); }
+      .diff-row.extra .sign {
+        color: var(--hot);
+      }
       .diff-row.missing {
         background: var(--warn-soft);
         border-left-color: var(--warn);
         color: var(--paper);
       }
-      .diff-row.missing .sign { color: var(--warn); }
+      .diff-row.missing .sign {
+        color: var(--warn);
+      }
       .diff-row.new {
         animation: row-highlight 1.8s ease-out;
       }
       @keyframes row-highlight {
-        0%   { background: var(--hot-glow); transform: translateX(-4px); }
-        20%  { background: var(--hot-glow); transform: translateX(0); }
-        100% { background: var(--hot-soft); }
+        0% {
+          background: var(--hot-glow);
+          transform: translateX(-4px);
+        }
+        20% {
+          background: var(--hot-glow);
+          transform: translateX(0);
+        }
+        100% {
+          background: var(--hot-soft);
+        }
       }
 
       .diff-empty {
@@ -586,11 +677,19 @@
         color: var(--muted);
         letter-spacing: 0.05em;
       }
-      .event-tile .foot .producer { color: var(--text-2); }
+      .event-tile .foot .producer {
+        color: var(--text-2);
+      }
 
-      .ch-orders .ch { background: var(--ch-orders); }
-      .ch-payments .ch { background: var(--ch-payments); }
-      .ch-inventory .ch { background: var(--ch-inventory); }
+      .ch-orders .ch {
+        background: var(--ch-orders);
+      }
+      .ch-payments .ch {
+        background: var(--ch-payments);
+      }
+      .ch-inventory .ch {
+        background: var(--ch-inventory);
+      }
 
       .events-grid:empty::after {
         content: 'Waiting for first event…';
@@ -633,7 +732,10 @@
         color: white;
         font-weight: 600;
       }
-      .pr-preview-head .when { margin-left: auto; color: var(--muted); }
+      .pr-preview-head .when {
+        margin-left: auto;
+        color: var(--muted);
+      }
       .pr-preview-body {
         padding: 0.9rem 1rem;
         font-family: var(--sans);
@@ -660,10 +762,23 @@
         padding-top: 0.6rem;
         border-top: 1px solid var(--line);
       }
-      .pr-preview-body h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0.5rem; }
-      .pr-preview-body p { color: var(--text-2); margin: 0.35rem 0; }
-      .pr-preview-body ul { padding-left: 1.2rem; margin: 0.35rem 0; }
-      .pr-preview-body li { color: var(--text-2); margin: 0.15rem 0; }
+      .pr-preview-body h2:first-of-type {
+        border-top: none;
+        padding-top: 0;
+        margin-top: 0.5rem;
+      }
+      .pr-preview-body p {
+        color: var(--text-2);
+        margin: 0.35rem 0;
+      }
+      .pr-preview-body ul {
+        padding-left: 1.2rem;
+        margin: 0.35rem 0;
+      }
+      .pr-preview-body li {
+        color: var(--text-2);
+        margin: 0.15rem 0;
+      }
       .pr-preview-body code {
         font-family: var(--mono);
         font-size: 0.92em;
@@ -672,8 +787,14 @@
         padding: 0.05em 0.35em;
         border-radius: 3px;
       }
-      .pr-preview-body strong { color: var(--paper); font-weight: 600; }
-      .pr-preview-body em { font-family: var(--serif); color: var(--muted); }
+      .pr-preview-body strong {
+        color: var(--paper);
+        font-weight: 600;
+      }
+      .pr-preview-body em {
+        font-family: var(--serif);
+        color: var(--muted);
+      }
 
       /* ─── Activity feed ───────────────────────────────── */
       .feed {
@@ -711,8 +832,13 @@
           background: var(--bg-card);
         }
       }
-      .feed-row .t { color: var(--muted); font-size: 0.7rem; }
-      .feed-row .n { color: var(--text); }
+      .feed-row .t {
+        color: var(--muted);
+        font-size: 0.7rem;
+      }
+      .feed-row .n {
+        color: var(--text);
+      }
       .feed-row .ch-dot {
         width: 6px;
         height: 6px;
@@ -740,8 +866,15 @@
         color: var(--muted);
         letter-spacing: 0.05em;
       }
-      footer a { color: var(--text-2); text-decoration: none; border-bottom: 1px solid var(--line); }
-      footer a:hover { color: var(--paper); border-bottom-color: var(--paper); }
+      footer a {
+        color: var(--text-2);
+        text-decoration: none;
+        border-bottom: 1px solid var(--line);
+      }
+      footer a:hover {
+        color: var(--paper);
+        border-bottom-color: var(--paper);
+      }
 
       /* ─── Page load stagger ──────────────────────────── */
       .reveal {
@@ -750,15 +883,32 @@
         animation: reveal 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
       @keyframes reveal {
-        to { opacity: 1; transform: translateY(0); }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
-      .topbar { animation-delay: 0s; }
-      .hero { animation-delay: 0.08s; }
-      .map-section { animation-delay: 0.14s; }
-      .diff   { animation-delay: 0.22s; }
-      .events-strip { animation-delay: 0.30s; }
-      .col-rail { animation-delay: 0.38s; }
-      .demo-controls { animation-delay: 0.5s; }
+      .topbar {
+        animation-delay: 0s;
+      }
+      .hero {
+        animation-delay: 0.08s;
+      }
+      .map-section {
+        animation-delay: 0.14s;
+      }
+      .diff {
+        animation-delay: 0.22s;
+      }
+      .events-strip {
+        animation-delay: 0.3s;
+      }
+      .col-rail {
+        animation-delay: 0.38s;
+      }
+      .demo-controls {
+        animation-delay: 0.5s;
+      }
 
       /* ─── Demo controls (bottom-right floating panel) ── */
       .demo-controls {
@@ -806,7 +956,9 @@
         color: var(--paper);
         background: var(--hot-soft);
       }
-      .demo-btn:active { transform: scale(0.97); }
+      .demo-btn:active {
+        transform: scale(0.97);
+      }
       .demo-btn .dot {
         width: 6px;
         height: 6px;
@@ -814,15 +966,25 @@
         background: var(--muted);
         transition: background 0.2s;
       }
-      .demo-btn.drift .dot { background: var(--warn); }
-      .demo-btn.clear .dot { background: var(--good); }
-      .demo-btn.burst .dot { background: var(--hot); }
+      .demo-btn.drift .dot {
+        background: var(--warn);
+      }
+      .demo-btn.clear .dot {
+        background: var(--good);
+      }
+      .demo-btn.burst .dot {
+        background: var(--hot);
+      }
       .demo-btn.firing {
         animation: btn-fire 0.4s ease-out;
       }
       @keyframes btn-fire {
-        0%   { background: var(--hot-soft); }
-        100% { background: var(--bg-card-2); }
+        0% {
+          background: var(--hot-soft);
+        }
+        100% {
+          background: var(--bg-card-2);
+        }
       }
 
       /* ─── Service map ────────────────────────────────── */
@@ -830,7 +992,11 @@
         padding: 1.5rem 1.75rem 1.75rem;
         border-bottom: 1px solid var(--line);
         background:
-          radial-gradient(ellipse 90% 70% at 50% 50%, rgba(255, 138, 61, 0.04), transparent 70%),
+          radial-gradient(
+            ellipse 90% 70% at 50% 50%,
+            rgba(255, 138, 61, 0.04),
+            transparent 70%
+          ),
           linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent);
       }
 
@@ -869,7 +1035,9 @@
         fill: none;
         stroke: rgba(255, 255, 255, 0.13);
         stroke-width: 1.2;
-        transition: stroke 0.3s, stroke-width 0.3s;
+        transition:
+          stroke 0.3s,
+          stroke-width 0.3s;
       }
       svg.map .edge.producer {
         stroke: rgba(255, 138, 61, 0.22);
@@ -905,7 +1073,9 @@
         fill: var(--bg-card);
         stroke: rgba(255, 255, 255, 0.18);
         stroke-width: 1.4;
-        transition: stroke 0.3s, filter 0.3s;
+        transition:
+          stroke 0.3s,
+          filter 0.3s;
       }
       svg.map .service circle.ring {
         fill: none;
@@ -945,8 +1115,13 @@
         animation: ring-warn 2.4s ease-in-out infinite;
       }
       @keyframes ring-warn {
-        0%, 100% { filter: drop-shadow(0 0 0 rgba(240, 177, 58, 0)); }
-        50%      { filter: drop-shadow(0 0 8px rgba(240, 177, 58, 0.6)); }
+        0%,
+        100% {
+          filter: drop-shadow(0 0 0 rgba(240, 177, 58, 0));
+        }
+        50% {
+          filter: drop-shadow(0 0 8px rgba(240, 177, 58, 0.6));
+        }
       }
 
       svg.map .channel.active rect {
@@ -1013,7 +1188,9 @@
     <div class="topbar reveal">
       <div class="brand">
         <span class="mark">autotel · live</span>
-        <span class="title">Autotel Commerce <em>— architecture stream</em></span>
+        <span class="title"
+          >Autotel Commerce <em>— architecture stream</em></span
+        >
       </div>
       <div class="status">
         <span class="label">Stream</span>
@@ -1026,7 +1203,8 @@
       <div class="alert-inner">
         <span class="badge">Drift</span>
         <div class="headline" id="drift-alert-text">
-          <em>Drift detected.</em> Reading from <code>recommendation.generated</code>…
+          <em>Drift detected.</em> Reading from
+          <code>recommendation.generated</code>…
         </div>
         <button class="dismiss" id="drift-alert-dismiss">Acknowledge</button>
       </div>
@@ -1061,7 +1239,9 @@
             <span class="n clean" id="drift-num">0</span>
             <span class="l">findings</span>
           </div>
-          <div class="verdict" id="drift-verdict">Catalog and runtime agree.</div>
+          <div class="verdict" id="drift-verdict">
+            Catalog and runtime agree.
+          </div>
         </div>
         <div class="session-meta">
           <div>
@@ -1155,25 +1335,48 @@
           </g>
 
           <g id="map-channels">
-            <g class="channel" data-id="orders.events" transform="translate(170 80)">
+            <g
+              class="channel"
+              data-id="orders.events"
+              transform="translate(170 80)"
+            >
               <rect width="110" height="40" rx="4" />
               <text class="name" x="55" y="17">orders.events</text>
-              <text class="sub" x="55" y="31" data-count="orders.events">0 events published</text>
+              <text class="sub" x="55" y="31" data-count="orders.events">
+                0 events published
+              </text>
             </g>
-            <g class="channel" data-id="payments.events" transform="translate(480 80)">
+            <g
+              class="channel"
+              data-id="payments.events"
+              transform="translate(480 80)"
+            >
               <rect width="110" height="40" rx="4" />
               <text class="name" x="55" y="17">payments.events</text>
-              <text class="sub" x="55" y="31" data-count="payments.events">0 events published</text>
+              <text class="sub" x="55" y="31" data-count="payments.events">
+                0 events published
+              </text>
             </g>
-            <g class="channel" data-id="inventory.events" transform="translate(790 80)">
+            <g
+              class="channel"
+              data-id="inventory.events"
+              transform="translate(790 80)"
+            >
               <rect width="110" height="40" rx="4" />
               <text class="name" x="55" y="17">inventory.events</text>
-              <text class="sub" x="55" y="31" data-count="inventory.events">0 events published</text>
+              <text class="sub" x="55" y="31" data-count="inventory.events">
+                0 events published
+              </text>
             </g>
           </g>
 
           <g id="map-services">
-            <g class="service" data-id="OrdersService" data-focus="order.placed" transform="translate(70 100)">
+            <g
+              class="service"
+              data-id="OrdersService"
+              data-focus="order.placed"
+              transform="translate(70 100)"
+            >
               <circle class="ring" r="42" />
               <circle class="bg" r="34" />
               <text class="title" y="-2">Orders</text>
@@ -1181,7 +1384,12 @@
               <text class="count" y="60" data-svc="OrdersService">0</text>
               <text class="subtitle" y="74">EMITTED</text>
             </g>
-            <g class="service" data-id="PaymentService" data-focus="payment.captured" transform="translate(380 100)">
+            <g
+              class="service"
+              data-id="PaymentService"
+              data-focus="payment.captured"
+              transform="translate(380 100)"
+            >
               <circle class="ring" r="42" />
               <circle class="bg" r="34" />
               <text class="title" y="-2">Payment</text>
@@ -1189,7 +1397,12 @@
               <text class="count" y="60" data-svc="PaymentService">0</text>
               <text class="subtitle" y="74">EMITTED</text>
             </g>
-            <g class="service" data-id="InventoryService" data-focus="inventory.reserved" transform="translate(690 100)">
+            <g
+              class="service"
+              data-id="InventoryService"
+              data-focus="inventory.reserved"
+              transform="translate(690 100)"
+            >
               <circle class="ring" r="42" />
               <circle class="bg" r="34" />
               <text class="title" y="-2">Inventory</text>
@@ -1197,12 +1410,19 @@
               <text class="count" y="60" data-svc="InventoryService">0</text>
               <text class="subtitle" y="74">EMITTED</text>
             </g>
-            <g class="service" data-id="RecommendationsService" data-focus="recommendation.generated" transform="translate(290 218)">
+            <g
+              class="service"
+              data-id="RecommendationsService"
+              data-focus="recommendation.generated"
+              transform="translate(290 218)"
+            >
               <circle class="ring" r="42" />
               <circle class="bg" r="34" />
               <text class="title" y="-2">Recos</text>
               <text class="subtitle" y="12">AI · gpt-4o-mini</text>
-              <text class="count" y="60" data-svc="RecommendationsService">0</text>
+              <text class="count" y="60" data-svc="RecommendationsService">
+                0
+              </text>
               <text class="subtitle" y="74">EMITTED</text>
             </g>
           </g>
@@ -1217,7 +1437,10 @@
         <section class="diff reveal">
           <div class="section-head">
             <h2>Declared vs observed</h2>
-            <span class="hint">drift surfaces here the moment a new field appears in a payload</span>
+            <span class="hint"
+              >drift surfaces here the moment a new field appears in a
+              payload</span
+            >
           </div>
           <div class="diff-card">
             <div class="diff-header">
@@ -1249,7 +1472,9 @@
         <section class="events-strip reveal">
           <div class="section-head">
             <h2>Events</h2>
-            <span class="hint" id="events-hint">click a tile to focus the diff</span>
+            <span class="hint" id="events-hint"
+              >click a tile to focus the diff</span
+            >
           </div>
           <div class="events-grid" id="events-grid"></div>
         </section>
@@ -1271,7 +1496,7 @@
           </div>
         </div>
 
-        <div class="section-head" style="margin-top:1.5rem">
+        <div class="section-head" style="margin-top: 1.5rem">
           <h2>Activity</h2>
           <span class="hint">most recent first</span>
         </div>
@@ -1280,7 +1505,10 @@
     </main>
 
     <footer>
-      <span>autotel-architecture/v0.1.0 — <a href="/snapshot.json">snapshot.json</a></span>
+      <span
+        >autotel-architecture/v0.1.0 —
+        <a href="/snapshot.json">snapshot.json</a></span
+      >
       <span>
         <a href="/drift.json">drift.json</a>
         &nbsp;·&nbsp;
@@ -1340,7 +1568,7 @@
       const state = {
         events: new Map(),
         catalogEvents: {}, // declared field paths by catalog event id
-        focus: null,        // current focused snapshot event name
+        focus: null, // current focused snapshot event name
         focusKnownPaths: new Set(),
         recentTimestamps: [],
         startedAt: Date.now(),
@@ -1349,7 +1577,7 @@
         priorDriftKey: '',
         animatedRate: 0,
         // Polish state:
-        driftRendered: '',   // last key we actually rendered, for de-bounced renders
+        driftRendered: '', // last key we actually rendered, for de-bounced renders
         snapshotFetchedAt: Date.now(),
         bannerShownOnce: false,
       };
@@ -1367,7 +1595,9 @@
       const fmtClock = (iso) => {
         const d = new Date(iso);
         const p = (n) => String(n).padStart(2, '0');
-        return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        return (
+          p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
+        );
       };
       const channelClass = (channel) => {
         if (!channel) return '';
@@ -1387,7 +1617,11 @@
       };
 
       // ─── Animated counters ──────────────────────────────
-      function animateText(el, to, formatter = (n) => Math.round(n).toString()) {
+      function animateText(
+        el,
+        to,
+        formatter = (n) => Math.round(n).toString(),
+      ) {
         const from = parseFloat(el.dataset.v || '0');
         const start = performance.now();
         const dur = 320;
@@ -1405,18 +1639,24 @@
       // ─── Hero / meta ────────────────────────────────────
       function refreshHero() {
         const now = Date.now();
-        state.recentTimestamps = state.recentTimestamps.filter((t) => now - t < 5000);
+        state.recentTimestamps = state.recentTimestamps.filter(
+          (t) => now - t < 5000,
+        );
         const rate = state.recentTimestamps.length / 5;
         animateText($('hero-rate'), rate, (n) => n.toFixed(1));
 
-        const total = [...state.events.values()].reduce((s, e) => s + e.count, 0);
-        animateText($('total-count'), total, (n) => Math.round(n).toLocaleString());
+        const total = [...state.events.values()].reduce(
+          (s, e) => s + e.count,
+          0,
+        );
+        animateText($('total-count'), total, (n) =>
+          Math.round(n).toLocaleString(),
+        );
         animateText($('distinct-count'), state.events.size);
 
         const upS = Math.floor((now - state.startedAt) / 1000);
-        $('session-uptime').textContent = upS < 60
-          ? upS + 's'
-          : Math.floor(upS / 60) + 'm ' + (upS % 60) + 's';
+        $('session-uptime').textContent =
+          upS < 60 ? upS + 's' : Math.floor(upS / 60) + 'm ' + (upS % 60) + 's';
       }
 
       // ─── Drift counters (FIXED: count individual paths) ─
@@ -1436,7 +1676,9 @@
         parts.push(drift.events.observedButUndocumented.join('|'));
         parts.push(drift.events.documentedButUnseen.join('|'));
         for (const fd of drift.events.fieldDrift) {
-          parts.push(fd.event + ':+' + fd.extra.join(',') + ':-' + fd.missing.join(','));
+          parts.push(
+            fd.event + ':+' + fd.extra.join(',') + ':-' + fd.missing.join(','),
+          );
         }
         return parts.join('||');
       }
@@ -1462,13 +1704,19 @@
       // ─── Drift banner ───────────────────────────────────
       let alertTimer = 0;
       function fireAlert(fresh) {
-        const headlines = fresh.map((f) =>
-          `<em>Drift detected.</em> <code>${f.event}</code> contains <code>${f.path}</code>, not declared in the schema.`
-        ).join(' &nbsp; · &nbsp; ');
+        const headlines = fresh
+          .map(
+            (f) =>
+              `<em>Drift detected.</em> <code>${f.event}</code> contains <code>${f.path}</code>, not declared in the schema.`,
+          )
+          .join(' &nbsp; · &nbsp; ');
         $('drift-alert-text').innerHTML = headlines;
         $('drift-alert').classList.add('show');
         clearTimeout(alertTimer);
-        alertTimer = setTimeout(() => $('drift-alert').classList.remove('show'), 7000);
+        alertTimer = setTimeout(
+          () => $('drift-alert').classList.remove('show'),
+          7000,
+        );
       }
 
       // ─── Diff panel ─────────────────────────────────────
@@ -1506,14 +1754,20 @@
 
         const obs = state.events.get(state.focus);
         const catalogId = findCatalogId(state.focus);
-        const declared = catalogId ? state.catalogEvents[catalogId]?.declaredFieldPaths ?? [] : [];
+        const declared = catalogId
+          ? (state.catalogEvents[catalogId]?.declaredFieldPaths ?? [])
+          : [];
         const observed = obs?.fieldPaths ?? [];
 
         $('focus-name').textContent = state.focus;
         $('focus-meta').innerHTML =
-          (obs?.producer ? `<span style="color:var(--text-2)">${obs.producer}</span> ` : '') +
+          (obs?.producer
+            ? `<span style="color:var(--text-2)">${obs.producer}</span> `
+            : '') +
           (obs?.channel ? `<span>· ${obs.channel}</span> ` : '') +
-          (catalogId ? `<span>· catalog: ${catalogId}</span>` : '<span style="color:var(--warn)">· not in catalog</span>');
+          (catalogId
+            ? `<span>· catalog: ${catalogId}</span>`
+            : '<span style="color:var(--warn)">· not in catalog</span>');
 
         const declaredSet = new Set(declared);
         const observedSet = new Set(observed);
@@ -1521,8 +1775,10 @@
         const observedOnly = observed.filter((p) => !declaredSet.has(p)).sort();
         const both = declared.filter((p) => observedSet.has(p)).sort();
 
-        $('declared-source').textContent = declared.length + ' field' + (declared.length === 1 ? '' : 's');
-        $('observed-source').textContent = observed.length + ' field' + (observed.length === 1 ? '' : 's');
+        $('declared-source').textContent =
+          declared.length + ' field' + (declared.length === 1 ? '' : 's');
+        $('observed-source').textContent =
+          observed.length + ' field' + (observed.length === 1 ? '' : 's');
 
         const declaredHtml = renderList(
           declared.map((p) => ({
@@ -1568,7 +1824,10 @@
         grid.innerHTML = items
           .map((e) => {
             const cc = channelClass(e.channel);
-            const isFocus = e.name === state.focus ? ' style="outline:1px solid var(--hot)"' : '';
+            const isFocus =
+              e.name === state.focus
+                ? ' style="outline:1px solid var(--hot)"'
+                : '';
             return `
               <div class="event-tile ${cc}" data-name="${e.name}"${isFocus}>
                 <div class="name"><span class="ch"></span><span>${e.name}</span></div>
@@ -1605,13 +1864,14 @@
         const row = document.createElement('div');
         row.className = 'feed-row';
         const cc = channelClass(event.channel);
-        const dotColor = cc === 'ch-orders'
-          ? 'var(--ch-orders)'
-          : cc === 'ch-payments'
-          ? 'var(--ch-payments)'
-          : cc === 'ch-inventory'
-          ? 'var(--ch-inventory)'
-          : 'var(--muted)';
+        const dotColor =
+          cc === 'ch-orders'
+            ? 'var(--ch-orders)'
+            : cc === 'ch-payments'
+              ? 'var(--ch-payments)'
+              : cc === 'ch-inventory'
+                ? 'var(--ch-inventory)'
+                : 'var(--muted)';
         row.innerHTML = `
           <span class="t">${fmtClock(event.timestamp)}</span>
           <span class="n">${event.name}</span>
@@ -1635,9 +1895,12 @@
       function updatePrWhen() {
         if (!prFetchedAt) return;
         const d = Date.now() - prFetchedAt;
-        const txt = d < 2000 ? 'just now'
-          : d < 60_000 ? Math.floor(d / 1000) + 's ago'
-          : Math.floor(d / 60_000) + 'm ago';
+        const txt =
+          d < 2000
+            ? 'just now'
+            : d < 60_000
+              ? Math.floor(d / 1000) + 's ago'
+              : Math.floor(d / 60_000) + 'm ago';
         $('pr-when').textContent = txt;
       }
       // Tiny markdown renderer scoped to what drift.md actually emits.
@@ -1645,16 +1908,33 @@
         const lines = md.split('\n');
         const out = [];
         let inList = false;
-        const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+        const closeList = () => {
+          if (inList) {
+            out.push('</ul>');
+            inList = false;
+          }
+        };
         for (const raw of lines) {
-          const line = raw.replace(/`([^`]+)`/g, '<code>$1</code>')
-                          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                          .replace(/_([^_]+)_/g, '<em>$1</em>');
-          if (/^# /.test(line)) { closeList(); out.push('<h1>' + line.slice(2) + '</h1>'); }
-          else if (/^## /.test(line)) { closeList(); out.push('<h2>' + line.slice(3) + '</h2>'); }
-          else if (/^### /.test(line)) { closeList(); out.push('<h2 style="color:var(--text-2)">' + line.slice(4) + '</h2>'); }
-          else if (/^- /.test(line)) {
-            if (!inList) { out.push('<ul>'); inList = true; }
+          const line = raw
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/_([^_]+)_/g, '<em>$1</em>');
+          if (/^# /.test(line)) {
+            closeList();
+            out.push('<h1>' + line.slice(2) + '</h1>');
+          } else if (/^## /.test(line)) {
+            closeList();
+            out.push('<h2>' + line.slice(3) + '</h2>');
+          } else if (/^### /.test(line)) {
+            closeList();
+            out.push(
+              '<h2 style="color:var(--text-2)">' + line.slice(4) + '</h2>',
+            );
+          } else if (/^- /.test(line)) {
+            if (!inList) {
+              out.push('<ul>');
+              inList = true;
+            }
             out.push('<li>' + line.slice(2) + '</li>');
           } else if (line.trim() === '') {
             closeList();
@@ -1701,7 +1981,8 @@
               verdictEl.textContent = 'Catalog and runtime agree.';
             } else {
               const m = next.events.fieldDrift[0];
-              const focusEvent = m?.event ?? next.events.observedButUndocumented[0];
+              const focusEvent =
+                m?.event ?? next.events.observedButUndocumented[0];
               verdictEl.innerHTML = focusEvent
                 ? `Diverged. <em style="color:var(--paper)">${focusEvent}</em> needs attention.`
                 : 'Diverged.';
@@ -1714,7 +1995,8 @@
           if (!state.priorDriftKey && !state.focusManuallySet) {
             const ranked = [...next.events.fieldDrift].sort(
               (a, b) =>
-                (b.extra.length + b.missing.length) -
+                b.extra.length +
+                b.missing.length -
                 (a.extra.length + a.missing.length),
             );
             if (ranked[0]) {
@@ -1722,7 +2004,10 @@
               renderDiffTabs();
               if (!state.bannerShownOnce && ranked[0].extra.length > 0) {
                 fireAlert(
-                  ranked[0].extra.map((path) => ({ event: ranked[0].event, path })),
+                  ranked[0].extra.map((path) => ({
+                    event: ranked[0].event,
+                    path,
+                  })),
                 );
                 state.bannerShownOnce = true;
               }
@@ -1803,7 +2088,9 @@
           const newPaths = Object.keys(event.attributes ?? {}).filter(
             (k) => k !== '_autotel' && k !== 'traceId' && k !== 'spanId',
           );
-          obs.fieldPaths = [...new Set([...obs.fieldPaths, ...newPaths])].sort();
+          obs.fieldPaths = [
+            ...new Set([...obs.fieldPaths, ...newPaths]),
+          ].sort();
 
           refreshEventsGrid();
           bumpTile(event.name);
@@ -1875,7 +2162,10 @@
           const pt = path.getPointAtLength(len * eased);
           dot.setAttribute('cx', pt.x);
           dot.setAttribute('cy', pt.y);
-          dot.setAttribute('opacity', String(p < 0.85 ? 1 : 1 - (p - 0.85) / 0.15));
+          dot.setAttribute(
+            'opacity',
+            String(p < 0.85 ? 1 : 1 - (p - 0.85) / 0.15),
+          );
 
           const trailP = Math.max(0, eased - 0.08);
           const trailPt = path.getPointAtLength(len * trailP);
@@ -1884,12 +2174,17 @@
           trail.setAttribute('opacity', String(0.35 * (1 - p)));
 
           if (p < 1) requestAnimationFrame(step);
-          else { dot.remove(); trail.remove(); }
+          else {
+            dot.remove();
+            trail.remove();
+          }
         }
         requestAnimationFrame(step);
 
         // Briefly highlight the destination channel.
-        const ch = document.querySelector(`.channel[data-id="${topo.channel}"]`);
+        const ch = document.querySelector(
+          `.channel[data-id="${topo.channel}"]`,
+        );
         if (ch) {
           setTimeout(() => {
             ch.classList.add('active');
@@ -1903,8 +2198,11 @@
         const svcCounts = {};
         const chCounts = {};
         for (const [, obs] of state.events) {
-          if (obs.producer) svcCounts[obs.producer] = (svcCounts[obs.producer] ?? 0) + obs.count;
-          if (obs.channel) chCounts[obs.channel] = (chCounts[obs.channel] ?? 0) + obs.count;
+          if (obs.producer)
+            svcCounts[obs.producer] =
+              (svcCounts[obs.producer] ?? 0) + obs.count;
+          if (obs.channel)
+            chCounts[obs.channel] = (chCounts[obs.channel] ?? 0) + obs.count;
         }
         document.querySelectorAll('[data-svc]').forEach((el) => {
           const v = svcCounts[el.dataset.svc] ?? 0;
@@ -1962,10 +2260,7 @@
       setInterval(refreshPrPreview, 6000);
       setInterval(updatePrWhen, 1000); // tick the "Ns ago" stamp
 
-      loadInitial()
-        .then(refreshDrift)
-        .then(refreshPrPreview)
-        .then(connect);
+      loadInitial().then(refreshDrift).then(refreshPrPreview).then(connect);
     </script>
   </body>
 </html>

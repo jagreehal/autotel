@@ -13,7 +13,11 @@ export const AGENT_SECURITY_TELEMETRY_CONTRACT = defineContract({
   service: 'autotel-agent-security',
   version: '1.0.0',
   commonAttributes: {
-    'autotel.agent': { ...boolAttr, required: false, description: 'Agent audit marker' },
+    'autotel.agent': {
+      ...boolAttr,
+      required: false,
+      description: 'Agent audit marker',
+    },
     'agent.controller.id': {
       ...stringAttr,
       highCardinality: true,
@@ -32,7 +36,13 @@ export const AGENT_SECURITY_TELEMETRY_CONTRACT = defineContract({
     },
     'agent.action.risk_class': {
       ...stringAttr,
-      enum: ['read', 'write', 'destructive', 'financial', 'exfiltration_capable'],
+      enum: [
+        'read',
+        'write',
+        'destructive',
+        'financial',
+        'exfiltration_capable',
+      ],
     },
     'agent.consent.required': { ...boolAttr },
     'agent.consent.outcome': {

@@ -21,7 +21,7 @@
  *
  * @example Use pre-built subscribers
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
  * import { MixpanelSubscriber } from 'autotel-subscribers/mixpanel';
  *

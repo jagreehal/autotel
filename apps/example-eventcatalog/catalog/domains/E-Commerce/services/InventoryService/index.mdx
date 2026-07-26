@@ -42,24 +42,26 @@ with a child `span()` for the WMS call. Both inherit the consumer span from
 `traceConsumer` so the producer→consumer→WMS chain is one trace.
 
 ```ts
-import { trace, span, track } from 'autotel';
+import { withTracing, span, track } from 'autotel';
 import { traceConsumer } from 'autotel/messaging';
 
-export const reserveStock = trace((ctx) => async (orderId: string, items: Item[]) => {
-  ctx.setAttribute('inventory.item_count', items.length);
+export const reserveStock = withTracing({ name: 'inventory.reserve' })(
+  (ctx) => async (orderId: string, items: Item[]) => {
+    ctx.setAttribute('inventory.item_count', items.length);
 
-  const reservation = await span('wms.reserve', async (s) => {
-    s.setAttribute('wms.system', 'manhattan');
-    return wms.reserve(items);
-  });
+    const reservation = await span('wms.reserve', async (s) => {
+      s.setAttribute('wms.system', 'manhattan');
+      return wms.reserve(items);
+    });
 
-  track('inventory.reserved', {
-    orderId,
-    reservationId: reservation.id,
-    _autotel: { channel: 'inventory.events', producer: 'InventoryService' },
-  });
-  return reservation;
-});
+    track('inventory.reserved', {
+      orderId,
+      reservationId: reservation.id,
+      _autotel: { channel: 'inventory.events', producer: 'InventoryService' },
+    });
+    return reservation;
+  },
+);
 
 export const handlePaymentCaptured = traceConsumer({
   system: 'kafka',
@@ -71,11 +73,12 @@ export const handlePaymentCaptured = traceConsumer({
 <strong>Observed in production</strong>
 
 `reserveStock` ran **27,248 times** in the last 7 days. p95 **78ms**, p99
-**203ms** — the long tail is the WMS round-trip, not autotel overhead.
+**203ms**. The long tail is the WMS round-trip, not autotel overhead.
 
 Out-of-stock failures **0.41%**, all routed to the manual-review queue.
 
 Last seen: 9 seconds ago. Sample trace: `trace-5e1f4b8a-c2d7`.
+
 </div>
 
 ### Sends

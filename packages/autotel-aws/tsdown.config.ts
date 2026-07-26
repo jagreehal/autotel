@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown';
-import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 
 export default defineConfig({
   outExtensions: tsupCompatOutExtensions,
@@ -30,25 +30,25 @@ export default defineConfig({
   minify: false,
   deps: {
     neverBundle: [
-    'autotel',
-    '@aws-sdk/client-s3',
-    '@aws-sdk/client-dynamodb',
-    '@aws-sdk/client-sqs',
-    '@aws-sdk/client-sns',
-    '@aws-sdk/client-kinesis',
-    '@aws-sdk/client-sfn',
-    '@aws-sdk/client-lambda',
-    '@aws-sdk/client-eventbridge',
-    '@middy/core',
-    '@smithy/signature-v4',
-    '@aws-sdk/credential-providers',
-    '@aws-crypto/sha256-js',
-    '@opentelemetry/otlp-transformer',
-    '@opentelemetry/sdk-trace-base',
-    '@opentelemetry/sdk-logs',
-    '@opentelemetry/sdk-metrics',
-    '@opentelemetry/core',
-  ],
+      'autotel',
+      '@aws-sdk/client-s3',
+      '@aws-sdk/client-dynamodb',
+      '@aws-sdk/client-sqs',
+      '@aws-sdk/client-sns',
+      '@aws-sdk/client-kinesis',
+      '@aws-sdk/client-sfn',
+      '@aws-sdk/client-lambda',
+      '@aws-sdk/client-eventbridge',
+      '@middy/core',
+      '@smithy/signature-v4',
+      '@aws-sdk/credential-providers',
+      '@aws-crypto/sha256-js',
+      '@opentelemetry/otlp-transformer',
+      '@opentelemetry/sdk-trace-base',
+      '@opentelemetry/sdk-logs',
+      '@opentelemetry/sdk-metrics',
+      '@opentelemetry/core',
+    ],
   },
   target: false,
 });

@@ -22,9 +22,9 @@ export interface StandardSchemaLike<Output = unknown> {
   readonly '~standard': {
     readonly version: 1;
     readonly vendor: string;
-    readonly validate: (value: unknown) =>
-      | StandardResult<Output>
-      | Promise<StandardResult<Output>>;
+    readonly validate: (
+      value: unknown,
+    ) => StandardResult<Output> | Promise<StandardResult<Output>>;
   };
 }
 
@@ -38,8 +38,7 @@ export type ParseFn<Output = unknown> = (value: unknown) => Output;
 
 /** Either accepted reader form. */
 export type Reader<Output = unknown> =
-  | StandardSchemaLike<Output>
-  | ParseFn<Output>;
+  StandardSchemaLike<Output> | ParseFn<Output>;
 
 function isStandardSchema(reader: Reader): reader is StandardSchemaLike {
   return (
@@ -73,8 +72,8 @@ export async function read<Output>(
       if (result.issues && result.issues.length > 0) {
         return {
           ok: false,
-          issues: result.issues.map(
-            (issue) => formatIssue(issue.message, issue.path),
+          issues: result.issues.map((issue) =>
+            formatIssue(issue.message, issue.path),
           ),
         };
       }

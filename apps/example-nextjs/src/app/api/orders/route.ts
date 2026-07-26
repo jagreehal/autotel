@@ -68,4 +68,3 @@ export const GET = withAutotel(
     spanName: 'next.api.orders.get',
   },
 );
-

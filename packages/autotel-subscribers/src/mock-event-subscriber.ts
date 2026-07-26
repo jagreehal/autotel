@@ -6,7 +6,7 @@
  *
  * @example Basic testing
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { MockEventSubscriber } from 'autotel-subscribers/mock-event-subscriber';
  * import { describe, it, expect, beforeEach } from 'vitest';
  *
@@ -16,7 +16,7 @@
  *
  *   beforeEach(() => {
  *     mockSubscriber = new MockEventSubscriber();
- *     events = new Events('checkout', { subscribers: [mockSubscriber] });
+ *     events = new Event('checkout', { subscribers: [mockSubscriber] });
  *   });
  *
  *   it('should track order completion', async () => {
@@ -266,9 +266,7 @@ export class MockEventSubscriber implements EventSubscriber {
     const matchingEvent = events.find((e) => e.step === step);
 
     if (!matchingEvent) {
-      throw new Error(
-        `Funnel "${funnelName}" step "${step}" was not tracked`,
-      );
+      throw new Error(`Funnel "${funnelName}" step "${step}" was not tracked`);
     }
 
     if (attributes) {
@@ -296,9 +294,7 @@ export class MockEventSubscriber implements EventSubscriber {
     const matchingEvent = events.find((e) => e.outcome === outcome);
 
     if (!matchingEvent) {
-      throw new Error(
-        `Outcome "${operationName}.${outcome}" was not tracked`,
-      );
+      throw new Error(`Outcome "${operationName}.${outcome}" was not tracked`);
     }
 
     if (attributes) {

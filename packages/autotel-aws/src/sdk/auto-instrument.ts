@@ -31,7 +31,8 @@ const INSTRUMENTED_SYMBOL = Symbol.for('autotel-aws.instrumented');
 let globalAutoInstrumentEnabled = false;
 
 // Store original send method for restoration
-let originalSmithyClientSend: ((...args: unknown[]) => Promise<unknown>) | null = null;
+let originalSmithyClientSend:
+  ((...args: unknown[]) => Promise<unknown>) | null = null;
 
 /**
  * Check if a client is already instrumented
@@ -89,10 +90,9 @@ function markAsInstrumented<T>(client: T): T {
  *
  * @see https://opentelemetry.io/docs/specs/semconv/cloud-providers/aws-sdk/
  */
-export function instrumentSDK<T extends Client<unknown, unknown, unknown, unknown>>(
-  client: T,
-  config?: SDKInstrumentationConfig,
-): T {
+export function instrumentSDK<
+  T extends Client<unknown, unknown, unknown, unknown>,
+>(client: T, config?: SDKInstrumentationConfig): T {
   // Prevent double-instrumentation
   if (isInstrumented(client)) {
     return client;
@@ -126,13 +126,11 @@ export function instrumentSDK<T extends Client<unknown, unknown, unknown, unknow
  * ```
  */
 export function createTracedClient<
-   
   T extends new (...args: any[]) => Client<unknown, unknown, unknown, unknown>,
 >(
   ClientClass: T,
   config?: SDKInstrumentationConfig & ConstructorParameters<T>[0],
 ): InstanceType<T> {
-   
   const client = new ClientClass(config as any);
   return instrumentSDK(client, config) as InstanceType<T>;
 }
@@ -187,7 +185,7 @@ export function autoInstrumentAWS(config?: SDKInstrumentationConfig): void {
   }
 
   // Try to get the smithy-client module
-   
+
   let SmithyClient: any;
   try {
     // Dynamic require to avoid bundling issues
@@ -225,8 +223,11 @@ export function autoInstrumentAWS(config?: SDKInstrumentationConfig): void {
 
     // Create a one-time wrapped client for this call
     // This is less efficient than pre-wrapping, but ensures all calls are traced
-    const wrappedClient = wrapSDKClient(this as Client<unknown, unknown, unknown, unknown>, config?.service);
-     
+    const wrappedClient = wrapSDKClient(
+      this as Client<unknown, unknown, unknown, unknown>,
+      config?.service,
+    );
+
     return (wrappedClient as any).send(command, ...args);
   };
 
@@ -255,7 +256,6 @@ export function disableAutoInstrumentAWS(): void {
     return;
   }
 
-   
   let SmithyClient: any;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

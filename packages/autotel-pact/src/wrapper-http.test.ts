@@ -92,7 +92,10 @@ describe('withHttpPactInteraction', () => {
     ).rejects.toThrow('assertion failed');
 
     const entries = readLedger({ runId: 'r-http-fail' });
-    expect(entries[0]).toMatchObject({ outcome: 'failed', error: 'assertion failed' });
+    expect(entries[0]).toMatchObject({
+      outcome: 'failed',
+      error: 'assertion failed',
+    });
   });
 
   it('records a failed entry when pact.executeTest itself throws', async () => {

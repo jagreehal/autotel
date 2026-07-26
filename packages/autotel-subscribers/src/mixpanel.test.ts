@@ -156,13 +156,16 @@ describe('MixpanelSubscriber', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const mockInstance = (Mixpanel.default.init as any).mock.results[0].value;
-      expect(mockInstance.track).toHaveBeenCalledWith('payment.processing.success', {
-        distinct_id: 'user-123',
-        operation: 'payment.processing',
-        outcome: 'success',
-        userId: 'user-123',
-        transactionId: 'txn-789',
-      });
+      expect(mockInstance.track).toHaveBeenCalledWith(
+        'payment.processing.success',
+        {
+          distinct_id: 'user-123',
+          operation: 'payment.processing',
+          outcome: 'success',
+          userId: 'user-123',
+          transactionId: 'txn-789',
+        },
+      );
     });
   });
 

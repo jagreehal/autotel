@@ -11,6 +11,4 @@
  * @type {import('tsdown').Options['outExtensions']}
  */
 export const tsupCompatOutExtensions = ({ format }) =>
-  format === 'es'
-    ? { js: '.js', dts: '.d.ts' }
-    : { js: '.cjs', dts: '.d.cts' };
+  format === 'es' ? { js: '.js', dts: '.d.ts' } : { js: '.cjs', dts: '.d.cts' };

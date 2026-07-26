@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { trace, context, propagation } from '@opentelemetry/api';
 import type { NodeSDK } from '@opentelemetry/sdk-node';
 import type { DeepMockProxy } from 'vitest-mock-extended';
 import { mockDeep } from 'vitest-mock-extended';
@@ -7,6 +8,10 @@ import {
   _resetAutoInstrumentationsLoader,
   type AutoInstrumentationsLoader,
 } from './init';
+import type {
+  Instrumentation,
+  InstrumentationConfig,
+} from '@opentelemetry/instrumentation';
 
 type SdkRecord = {
   options: Record<string, unknown>;
@@ -22,10 +27,21 @@ const mockedModules = [
 
 // Mock instrumentation classes with exact names from OpenTelemetry.
 // NodeSDK.start() calls lifecycle hooks on each instrumentation instance.
-class MockInstrumentationBase {
-  constructor(public config?: Record<string, unknown>) {}
+class MockInstrumentationBase implements Instrumentation {
+  instrumentationName = 'mock-instrumentation';
+  instrumentationVersion = '1.0.0';
+  config: InstrumentationConfig;
 
-  setConfig(_config: Record<string, unknown>) {}
+  constructor(config: InstrumentationConfig & Record<string, unknown> = {}) {
+    this.config = config;
+  }
+
+  setConfig(config: InstrumentationConfig) {
+    this.config = config;
+  }
+  getConfig(): InstrumentationConfig {
+    return this.config;
+  }
   setTracerProvider(_provider: unknown) {}
   setMeterProvider(_provider: unknown) {}
   setLoggerProvider(_provider: unknown) {}
@@ -125,16 +141,16 @@ async function loadInitWithMocks() {
 
   // Mock logger to capture log messages (Pino-compatible signature: extra, message)
   const mockLogger = {
-    info: vi.fn((extra: Record<string, unknown>, msg?: string) => {
+    info: vi.fn((extra: Record<string, unknown> | string, msg?: string) => {
       logMessages.push({ level: 'info', message: msg || '' });
     }),
-    warn: vi.fn((extra: Record<string, unknown>, msg?: string) => {
+    warn: vi.fn((extra: Record<string, unknown> | string, msg?: string) => {
       logMessages.push({ level: 'warn', message: msg || '' });
     }),
-    error: vi.fn((extra: Record<string, unknown>, msg?: string) => {
+    error: vi.fn((extra: Record<string, unknown> | string, msg?: string) => {
       logMessages.push({ level: 'error', message: msg || '' });
     }),
-    debug: vi.fn((extra: Record<string, unknown>, msg?: string) => {
+    debug: vi.fn((extra: Record<string, unknown> | string, msg?: string) => {
       logMessages.push({ level: 'debug', message: msg || '' });
     }),
   };
@@ -155,6 +171,9 @@ async function loadInitWithMocks() {
     PeriodicExportingMetricReader: MockPeriodicExportingMetricReader,
   }));
 
+  // vi.doMock is not hoisted, so ./init must be imported after the mocks
+  // above are registered; a static import would bind the unmocked module.
+  // eslint-disable-next-line no-restricted-syntax
   const initModule = await import('./init');
 
   // Inject the mock loader via the exported setter
@@ -190,7 +209,6 @@ describe('init() integrations vs instrumentations', () => {
     _resetAutoInstrumentationsLoader();
     delete process.env.AUTOTEL_METRICS;
     // Reset global OTel state that can leak between forked test files
-    const { trace, context, propagation } = await import('@opentelemetry/api');
     trace.disable();
     context.disable();
     propagation.disable();
@@ -224,7 +242,7 @@ describe('init() integrations vs instrumentations', () => {
 
     // Check that auto-instrumentations were called with exclusion config
     expect(autoInstrumentationsConfig).toHaveLength(1);
-    const config = autoInstrumentationsConfig[0];
+    const config = autoInstrumentationsConfig[0]!;
     expect(config['@opentelemetry/instrumentation-mongodb']).toEqual({
       enabled: false,
     });
@@ -243,13 +261,13 @@ describe('init() integrations vs instrumentations', () => {
       (log) => log.level === 'info' && log.message.includes('Detected manual'),
     );
     expect(manualInstrumentationWarnings).toHaveLength(1);
-    expect(manualInstrumentationWarnings[0].message).toContain(
+    expect(manualInstrumentationWarnings[0]!.message).toContain(
       'Detected manual instrumentations',
     );
-    expect(manualInstrumentationWarnings[0].message).toContain(
+    expect(manualInstrumentationWarnings[0]!.message).toContain(
       'MongoDBInstrumentation',
     );
-    expect(manualInstrumentationWarnings[0].message).toContain(
+    expect(manualInstrumentationWarnings[0]!.message).toContain(
       'MongooseInstrumentation',
     );
   });
@@ -276,7 +294,7 @@ describe('init() integrations vs instrumentations', () => {
 
     // Check that auto-instrumentations were called with MongoDB disabled
     expect(autoInstrumentationsConfig).toHaveLength(1);
-    const config = autoInstrumentationsConfig[0];
+    const config = autoInstrumentationsConfig[0]!;
     expect(config['@opentelemetry/instrumentation-mongodb']).toEqual({
       enabled: false,
     });
@@ -294,7 +312,7 @@ describe('init() integrations vs instrumentations', () => {
       (log) => log.level === 'info' && log.message.includes('Detected manual'),
     );
     expect(manualInstrumentationWarnings).toHaveLength(1);
-    expect(manualInstrumentationWarnings[0].message).toContain(
+    expect(manualInstrumentationWarnings[0]!.message).toContain(
       'MongoDBInstrumentation',
     );
   });
@@ -356,7 +374,7 @@ describe('init() integrations vs instrumentations', () => {
 
     // Check that auto-instrumentations were called with MongoDB disabled
     expect(autoInstrumentationsConfig).toHaveLength(1);
-    const config = autoInstrumentationsConfig[0];
+    const config = autoInstrumentationsConfig[0]!;
     expect(config['@opentelemetry/instrumentation-mongodb']).toEqual({
       enabled: false,
     });
@@ -392,7 +410,7 @@ describe('init() integrations vs instrumentations', () => {
       (log) => log.level === 'info' && log.message.includes('Detected manual'),
     );
     expect(manualInstrumentationWarnings).toHaveLength(1);
-    expect(manualInstrumentationWarnings[0].message).toContain(
+    expect(manualInstrumentationWarnings[0]!.message).toContain(
       'HttpInstrumentation',
     );
   });

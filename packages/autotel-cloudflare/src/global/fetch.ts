@@ -43,7 +43,8 @@ function gatherRequestAttributes(request: Request): Record<string, any> {
 function gatherResponseAttributes(response: Response): Record<string, any> {
   return {
     'http.response.status_code': response.status,
-    'http.response.body.size': response.headers.get('content-length') || undefined,
+    'http.response.body.size':
+      response.headers.get('content-length') || undefined,
   };
 }
 

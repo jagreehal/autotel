@@ -249,13 +249,13 @@ test('tracks user signup', async () => {
 
 The event queue can be configured with custom settings:
 
-| Setting        | Default  | Description                              |
-| -------------- | -------- | ---------------------------------------- |
-| `maxSize`      | 50,000   | Maximum events in queue before dropping  |
-| `batchSize`    | 100      | Events per batch                         |
-| `flushInterval`| 10,000ms | Automatic flush interval                 |
-| `maxRetries`   | 3        | Retry attempts for failed deliveries     |
-| `rateLimit`    | 100/sec  | Maximum events per second                |
+| Setting         | Default  | Description                             |
+| --------------- | -------- | --------------------------------------- |
+| `maxSize`       | 50,000   | Maximum events in queue before dropping |
+| `batchSize`     | 100      | Events per batch                        |
+| `flushInterval` | 10,000ms | Automatic flush interval                |
+| `maxRetries`    | 3        | Retry attempts for failed deliveries    |
+| `rateLimit`     | 100/sec  | Maximum events per second               |
 
 ### Correlation ID
 

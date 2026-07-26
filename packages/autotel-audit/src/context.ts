@@ -6,7 +6,10 @@ export interface AuditContext {
   correlationId: string;
   setAttribute(key: string, value: string | number | boolean): void;
   setAttributes(
-    attrs: Record<string, string | number | boolean | string[] | number[] | boolean[]>,
+    attrs: Record<
+      string,
+      string | number | boolean | string[] | number[] | boolean[]
+    >,
   ): void;
 }
 

@@ -26,12 +26,14 @@ describe('Rate Limiter Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
 
     mockLimiter = {
       limit: vi.fn(async () => ({ success: true })),
@@ -54,7 +56,9 @@ describe('Rate Limiter Instrumentation', () => {
       const [spanName, spanOptions] = mockTracer.startActiveSpan.mock.calls[0];
       expect(spanName).toBe('RateLimiter my-limiter: limit');
       expect(spanOptions.kind).toBe(SpanKind.CLIENT);
-      expect(spanOptions.attributes['rate_limiter.system']).toBe('cloudflare-rate-limiter');
+      expect(spanOptions.attributes['rate_limiter.system']).toBe(
+        'cloudflare-rate-limiter',
+      );
       expect(spanOptions.attributes['rate_limiter.key']).toBe('user-123');
     });
 
@@ -63,8 +67,13 @@ describe('Rate Limiter Instrumentation', () => {
 
       await instrumented.limit({ key: 'user-123' });
 
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('rate_limiter.success', true);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'rate_limiter.success',
+        true,
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -76,8 +85,13 @@ describe('Rate Limiter Instrumentation', () => {
       const result = await instrumented.limit({ key: 'user-456' });
 
       expect(result.success).toBe(false);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('rate_limiter.success', false);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'rate_limiter.success',
+        false,
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -89,7 +103,9 @@ describe('Rate Limiter Instrumentation', () => {
 
       const instrumented = instrumentRateLimiter(mockLimiter, 'my-limiter');
 
-      await expect(instrumented.limit({ key: 'user-789' })).rejects.toThrow('Rate limiter unavailable');
+      await expect(instrumented.limit({ key: 'user-789' })).rejects.toThrow(
+        'Rate limiter unavailable',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalledWith(error);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -113,7 +129,7 @@ describe('Rate Limiter Instrumentation', () => {
     it('should invoke limit() with original object as this, not the proxy', async () => {
       let receivedThis: any;
       const mockLim = {
-        limit: vi.fn(async function(this: any) {
+        limit: vi.fn(async function (this: any, _options: { key: string }) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return { success: true };

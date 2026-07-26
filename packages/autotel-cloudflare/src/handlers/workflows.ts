@@ -309,9 +309,7 @@ function instrumentWorkflowInstance(
  * @param config - Configuration or configuration function
  * @returns Instrumented Workflow class
  */
-export function instrumentWorkflow<
-  C extends new (...args: any[]) => any,
->(
+export function instrumentWorkflow<C extends new (...args: any[]) => any>(
   workflowClass: C,
   workflowName: string,
   config: ConfigurationOption,

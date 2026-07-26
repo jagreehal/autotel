@@ -25,22 +25,27 @@ describe('Hyperdrive Binding Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {
     getTracerSpy.mockRestore();
   });
 
-  function createMockHyperdrive(overrides: Partial<Hyperdrive> = {}): Hyperdrive {
+  function createMockHyperdrive(
+    overrides: Partial<Hyperdrive> = {},
+  ): Hyperdrive {
     return {
-      connect: vi.fn(async () => ({} as Socket)),
-      connectionString: 'postgresql://user:secret-password@db.example.com:5432/mydb',
+      connect: vi.fn(async () => ({}) as Socket),
+      connectionString:
+        'postgresql://user:secret-password@db.example.com:5432/mydb',
       host: 'db.example.com',
       port: 5432,
       user: 'user',
@@ -78,7 +83,9 @@ describe('Hyperdrive Binding Instrumentation', () => {
       });
       const instrumented = instrumentHyperdrive(mockHyperdrive, 'my-db');
 
-      await expect(instrumented.connect()).rejects.toThrow('Connection refused');
+      await expect(instrumented.connect()).rejects.toThrow(
+        'Connection refused',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalledWith(connectError);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -98,7 +105,9 @@ describe('Hyperdrive Binding Instrumentation', () => {
       const result = await instrumented.connect();
 
       expect(result).toBe(mockSocket);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -117,7 +126,7 @@ describe('Hyperdrive Binding Instrumentation', () => {
     it('should invoke connect() with original object as this, not the proxy', async () => {
       let receivedThis: any;
       const mockHyperdrive = {
-        connect: vi.fn(async function(this: any) {
+        connect: vi.fn(async function (this: any) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return {} as Socket;
@@ -140,7 +149,9 @@ describe('Hyperdrive Binding Instrumentation', () => {
       const mockHyperdrive = createMockHyperdrive();
       const instrumented = instrumentHyperdrive(mockHyperdrive, 'my-db');
 
-      expect(instrumented.connectionString).toBe('postgresql://user:secret-password@db.example.com:5432/mydb');
+      expect(instrumented.connectionString).toBe(
+        'postgresql://user:secret-password@db.example.com:5432/mydb',
+      );
       expect(instrumented.host).toBe('db.example.com');
       expect(instrumented.port).toBe(5432);
       expect(instrumented.user).toBe('user');

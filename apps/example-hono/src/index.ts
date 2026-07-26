@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { otel } from 'autotel-hono';
 import { useLogger } from 'autotel-adapters/hono';
-import { trace, type TraceContext } from 'autotel';
+import { type TraceContext, withTracing } from 'autotel';
 
 const app = new Hono();
 
@@ -23,24 +23,34 @@ app.use(
   }),
 );
 
-const fetchUser = trace((ctx: TraceContext) => async (userId: string) => {
-  ctx.setAttribute('db.query', 'SELECT * FROM users WHERE id = ?');
-  ctx.setAttribute('db.userId', userId);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  return { id: userId, name: `User ${userId}`, email: `user${userId}@example.com` };
-});
+const fetchUser = withTracing({})(
+  (ctx: TraceContext) => async (userId: string) => {
+    ctx.setAttribute('db.query', 'SELECT * FROM users WHERE id = ?');
+    ctx.setAttribute('db.userId', userId);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return {
+      id: userId,
+      name: `User ${userId}`,
+      email: `user${userId}@example.com`,
+    };
+  },
+);
 
-const fetchOrders = trace((ctx: TraceContext) => async (userId: string) => {
-  ctx.setAttribute('db.query', 'SELECT * FROM orders WHERE userId = ?');
-  ctx.setAttribute('db.userId', userId);
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  return [
-    { id: 'order-1', userId, amount: 99.99 },
-    { id: 'order-2', userId, amount: 149.99 },
-  ];
-});
+const fetchOrders = withTracing({})(
+  (ctx: TraceContext) => async (userId: string) => {
+    ctx.setAttribute('db.query', 'SELECT * FROM orders WHERE userId = ?');
+    ctx.setAttribute('db.userId', userId);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    return [
+      { id: 'order-1', userId, amount: 99.99 },
+      { id: 'order-2', userId, amount: 149.99 },
+    ];
+  },
+);
 
-app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/health', (c) =>
+  c.json({ status: 'ok', timestamp: new Date().toISOString() }),
+);
 
 app.get('/users/:userId', async (c) => {
   const log = useLogger(c);

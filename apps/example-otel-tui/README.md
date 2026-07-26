@@ -11,7 +11,7 @@ Demonstrates traces, spans, and Pino logs fully correlated in [otel-tui](https:/
 
 You need two terminals.
 
-### Terminal 1 — start otel-tui
+### Terminal 1: start otel-tui
 
 ```bash
 cd apps/example-otel-tui
@@ -20,7 +20,7 @@ cd apps/example-otel-tui
 docker compose up -d
 ```
 
-### Terminal 2 — send telemetry
+### Terminal 2: send telemetry
 
 ```bash
 cd apps/example-otel-tui
@@ -35,7 +35,7 @@ pnpm start
 pnpm start:loop
 ```
 
-### Terminal 1 — view in otel-tui
+### Terminal 1: view in otel-tui
 
 ```bash
 # Attach your terminal to the otel-tui TUI
@@ -44,11 +44,11 @@ docker compose attach oteltui
 
 You're now inside otel-tui. Navigate with:
 
-| Key | Action |
-|-----|--------|
-| `Tab` | Switch between Traces / Logs tabs |
-| `↑` / `↓` | Select a trace or span |
-| `Enter` | Expand/inspect a trace's span tree |
+| Key                    | Action                                  |
+| ---------------------- | --------------------------------------- |
+| `Tab`                  | Switch between Traces / Logs tabs       |
+| `↑` / `↓`              | Select a trace or span                  |
+| `Enter`                | Expand/inspect a trace's span tree      |
 | `Ctrl+p` then `Ctrl+q` | Detach from otel-tui (keeps it running) |
 
 ### Cleanup
@@ -59,9 +59,9 @@ docker compose down
 
 ## What you'll see
 
-**Traces tab** — traces named `order.process`, `api.request`, `health.check`
+**Traces tab**. Traces named `order.process`, `api.request`, `health.check`
 
-**Span tree** — select a trace to see nested spans:
+**Span tree**. Select a trace to see nested spans:
 
 ```
 order.process (root)
@@ -72,7 +72,7 @@ order.process (root)
 └── email.send
 ```
 
-**Logs tab** — Pino logs correlated by `trace_id` and `span_id`. Select a trace to see only its logs. Each log is attached to the exact span that produced it.
+**Logs tab**. Pino logs correlated by `trace_id` and `span_id`. Select a trace to see only its logs. Each log is attached to the exact span that produced it.
 
 ## How it works
 
@@ -83,4 +83,4 @@ The key to trace↔log correlation:
 3. **OTLP trace exporter** sends traces/spans to the same endpoint
 4. **otel-tui** indexes logs by `trace_id`/`span_id` and shows them alongside the span tree
 
-The wiring happens in `src/instrumentation.mjs` — loaded before the app via `tsx --import`.
+The wiring happens in `src/instrumentation.mjs`. Loaded before the app via `tsx --import`.

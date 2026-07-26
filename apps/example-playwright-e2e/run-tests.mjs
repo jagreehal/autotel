@@ -10,20 +10,22 @@ import { dirname, join } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outPath = join(__dirname, 'test-results.txt');
 
-const child = spawn(
-  'npx',
-  ['playwright', 'test', '--reporter=line'],
-  {
-    cwd: __dirname,
-    shell: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }
-);
+const child = spawn('npx', ['playwright', 'test', '--reporter=line'], {
+  cwd: __dirname,
+  shell: true,
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
 
 let stdout = '';
 let stderr = '';
-child.stdout?.on('data', (d) => { stdout += d; process.stdout.write(d); });
-child.stderr?.on('data', (d) => { stderr += d; process.stderr.write(d); });
+child.stdout?.on('data', (d) => {
+  stdout += d;
+  process.stdout.write(d);
+});
+child.stderr?.on('data', (d) => {
+  stderr += d;
+  process.stderr.write(d);
+});
 
 child.on('close', (code, signal) => {
   const result = [

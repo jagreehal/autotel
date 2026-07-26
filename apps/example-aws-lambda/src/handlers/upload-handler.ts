@@ -15,7 +15,11 @@ import { traceS3 } from 'autotel-aws/s3';
 import { traceDynamoDB } from 'autotel-aws/dynamodb';
 import { traceSQS } from 'autotel-aws/sqs';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+} from '@aws-sdk/client-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import type { S3Event } from 'aws-lambda';
 import { initTelemetry } from '../otel-init';
@@ -24,17 +28,23 @@ import { initTelemetry } from '../otel-init';
 initTelemetry(process.env.OTEL_SERVICE_NAME || 'autotel-lambda');
 
 // Create instrumented AWS SDK clients
-const s3 = instrumentSDK(new S3Client({
-  region: process.env.AWS_REGION || 'us-east-1',
-}));
+const s3 = instrumentSDK(
+  new S3Client({
+    region: process.env.AWS_REGION || 'us-east-1',
+  }),
+);
 
-const dynamodb = instrumentSDK(new DynamoDBClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-}));
+const dynamodb = instrumentSDK(
+  new DynamoDBClient({
+    region: process.env.AWS_REGION || 'us-east-1',
+  }),
+);
 
-const sqs = instrumentSDK(new SQSClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-}));
+const sqs = instrumentSDK(
+  new SQSClient({
+    region: process.env.AWS_REGION || 'us-east-1',
+  }),
+);
 
 // S3 file processing with semantic attributes
 const processS3File = traceS3({
@@ -48,7 +58,7 @@ const processS3File = traceS3({
     new GetObjectCommand({
       Bucket: bucket,
       Key: key,
-    })
+    }),
   );
 
   if (result.Body) {
@@ -72,7 +82,7 @@ const fetchUserData = traceDynamoDB({
     new GetItemCommand({
       TableName: process.env.DYNAMODB_TABLE_NAME || 'users',
       Key: { id: { S: userId } },
-    })
+    }),
   );
 
   ctx.setAttribute('user.exists', !!result.Item);
@@ -96,7 +106,7 @@ const recordUpload = traceDynamoDB({
         lastUploadSize: { N: String(fileSize) },
         updatedAt: { S: new Date().toISOString() },
       },
-    })
+    }),
   );
 });
 
@@ -105,28 +115,36 @@ const sendNotification = traceSQS({
   operation: 'send',
   queueName: 'notifications',
   queueUrl: process.env.SQS_QUEUE_URL,
-})((ctx) => async (data: { bucket: string; key: string; userId?: string; fileSize?: number }) => {
-  ctx.setAttribute('notification.type', 'file-processed');
-  ctx.setAttribute('notification.bucket', data.bucket);
-  ctx.setAttribute('notification.key', data.key);
+})(
+  (ctx) =>
+    async (data: {
+      bucket: string;
+      key: string;
+      userId?: string;
+      fileSize?: number;
+    }) => {
+      ctx.setAttribute('notification.type', 'file-processed');
+      ctx.setAttribute('notification.bucket', data.bucket);
+      ctx.setAttribute('notification.key', data.key);
 
-  const result = await sqs.send(
-    new SendMessageCommand({
-      QueueUrl: process.env.SQS_QUEUE_URL,
-      MessageBody: JSON.stringify({
-        event: 'file-processed',
-        ...data,
-        timestamp: new Date().toISOString(),
-      }),
-    })
-  );
+      const result = await sqs.send(
+        new SendMessageCommand({
+          QueueUrl: process.env.SQS_QUEUE_URL,
+          MessageBody: JSON.stringify({
+            event: 'file-processed',
+            ...data,
+            timestamp: new Date().toISOString(),
+          }),
+        }),
+      );
 
-  if (result.MessageId) {
-    ctx.setAttribute('messaging.message.id', result.MessageId);
-  }
+      if (result.MessageId) {
+        ctx.setAttribute('messaging.message.id', result.MessageId);
+      }
 
-  return result;
-});
+      return result;
+    },
+);
 
 // Helper to extract userId from S3 key
 function extractUserIdFromKey(key: string): string | undefined {
@@ -135,57 +153,58 @@ function extractUserIdFromKey(key: string): string | undefined {
 }
 
 // Main handler using traceLambda for context access
-export const handler = traceLambda<S3Event, { statusCode: number; body: string }>(
-  (ctx) => async (event) => {
-    ctx.setAttribute('lambda.event.source', 's3');
-    ctx.setAttribute('lambda.event.record_count', event.Records.length);
+export const handler = traceLambda<
+  S3Event,
+  { statusCode: number; body: string }
+>((ctx) => async (event) => {
+  ctx.setAttribute('lambda.event.source', 's3');
+  ctx.setAttribute('lambda.event.record_count', event.Records.length);
 
-    // X-Ray annotations for filtering in X-Ray console
-    setXRayAnnotation('operation.type', 'file-upload');
+  // X-Ray annotations for filtering in X-Ray console
+  setXRayAnnotation('operation.type', 'file-upload');
 
-    let processedCount = 0;
+  let processedCount = 0;
 
-    for (const record of event.Records) {
-      const bucket = record.s3.bucket.name;
-      const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
+  for (const record of event.Records) {
+    const bucket = record.s3.bucket.name;
+    const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
 
-      ctx.setAttribute('s3.bucket', bucket);
-      ctx.setAttribute('s3.key', key);
+    ctx.setAttribute('s3.bucket', bucket);
+    ctx.setAttribute('s3.key', key);
 
-      // Process the file
-      const fileData = await processS3File(bucket, key);
+    // Process the file
+    const fileData = await processS3File(bucket, key);
 
-      if (fileData) {
-        const userId = extractUserIdFromKey(key);
+    if (fileData) {
+      const userId = extractUserIdFromKey(key);
 
-        if (userId) {
-          setXRayAnnotation('user.id', userId);
+      if (userId) {
+        setXRayAnnotation('user.id', userId);
 
-          // Check if user exists
-          await fetchUserData(userId);
+        // Check if user exists
+        await fetchUserData(userId);
 
-          // Record the upload
-          await recordUpload(userId, key, fileData.content.length);
-        }
-
-        // Send notification
-        await sendNotification({
-          bucket,
-          key,
-          userId,
-          fileSize: fileData.content.length,
-        });
-
-        processedCount++;
+        // Record the upload
+        await recordUpload(userId, key, fileData.content.length);
       }
+
+      // Send notification
+      await sendNotification({
+        bucket,
+        key,
+        userId,
+        fileSize: fileData.content.length,
+      });
+
+      processedCount++;
     }
-
-    ctx.setAttribute('processing.complete', true);
-    ctx.setAttribute('processing.count', processedCount);
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: `Processed ${processedCount} files` }),
-    };
   }
-);
+
+  ctx.setAttribute('processing.complete', true);
+  ctx.setAttribute('processing.count', processedCount);
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ message: `Processed ${processedCount} files` }),
+  };
+});

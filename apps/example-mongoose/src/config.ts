@@ -5,7 +5,8 @@ import { URL } from 'node:url';
  * a developer's globally-set MONGO_URL (common in monorepos / other projects).
  */
 export const mongoUrl =
-  process.env.MONGOOSE_EXAMPLE_MONGO_URL ?? 'mongodb://localhost:27017/autotel-example';
+  process.env.MONGOOSE_EXAMPLE_MONGO_URL ??
+  'mongodb://localhost:27017/autotel-example';
 
 export type MongoConnectionInfo = {
   dbName: string;
@@ -13,7 +14,9 @@ export type MongoConnectionInfo = {
   peerPort: number;
 };
 
-export function getMongoConnectionInfo(urlString: string = mongoUrl): MongoConnectionInfo {
+export function getMongoConnectionInfo(
+  urlString: string = mongoUrl,
+): MongoConnectionInfo {
   const url = new URL(urlString);
 
   // URL.pathname includes a leading slash, e.g. "/autotel-example"
@@ -29,4 +32,3 @@ export function getMongoConnectionInfo(urlString: string = mongoUrl): MongoConne
     peerPort: Number.isFinite(peerPort) ? peerPort : 27017,
   };
 }
-

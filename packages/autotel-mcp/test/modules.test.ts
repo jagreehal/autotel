@@ -15,6 +15,7 @@ import {
 } from '../src/modules/query-filters';
 import { buildServiceMap } from '../src/modules/service-map';
 import { summarizeTrace } from '../src/modules/trace-summary';
+import type { TraceRecord } from '../src/types';
 
 describe('collector validation', () => {
   it('accepts a minimal OTLP receiver config', () => {
@@ -62,16 +63,13 @@ describe('instrumentation scoring', () => {
 });
 
 describe('trace and service summaries', () => {
-  const trace = {
+  const trace: TraceRecord = {
     traceId: 'trace-1',
-    serviceName: 'checkout',
-    startTimeUnixMs: 1,
-    durationMs: 300,
-    statusCode: 'ERROR',
     spans: [
       {
         traceId: 'trace-1',
         spanId: 'root',
+        parentSpanId: null,
         operationName: 'checkout.request',
         serviceName: 'checkout',
         startTimeUnixMs: 1,
@@ -93,7 +91,7 @@ describe('trace and service summaries', () => {
         statusCode: 'ERROR',
       },
     ],
-  } as const;
+  };
 
   it('summarizes traces', () => {
     const summary = summarizeTrace(trace);
@@ -130,7 +128,7 @@ describe('trace and service summaries', () => {
           hasError: true,
         },
       ],
-    } as const);
+    } satisfies TraceRecord);
 
     expect(summary.serviceName).toBe('checkout');
     expect(summary.durationMs).toBe(300);
@@ -159,10 +157,10 @@ describe('trace and service summaries', () => {
           },
         ],
       },
-    ] as const;
+    ] satisfies TraceRecord[];
 
-    const expensive = rankExpensiveTraces(traces as unknown as typeof traces);
-    const slow = rankSlowTraces(traces as unknown as typeof traces);
+    const expensive = rankExpensiveTraces(traces);
+    const slow = rankSlowTraces(traces);
 
     expect(expensive[0]?.serviceName).toBe('checkout');
     expect(expensive[0]?.startTimeUnixMs).toBe(10);
@@ -246,7 +244,7 @@ describe('trace and service summaries', () => {
           hasError: true,
         },
       ],
-    } as const;
+    } satisfies TraceRecord;
 
     expect(
       traceMatchesQuery(spanOnlyTrace, {
@@ -284,7 +282,7 @@ describe('trace and service summaries', () => {
           hasError: true,
         },
       ],
-    } as const;
+    } satisfies TraceRecord;
 
     expect(
       traceMatchesQuery(spanOnlyTrace, {
@@ -329,7 +327,7 @@ describe('trace and service summaries', () => {
           hasError: true,
         },
       ],
-    } as const;
+    } satisfies TraceRecord;
 
     expect(
       traceMatchesQuery(spanOnlyTrace, {

@@ -100,7 +100,10 @@ describe('SpanDetailPanel — navigable IDs', () => {
   });
 
   it('leaves Parent Span ID as plain text when the parent is not in the trace', () => {
-    const child = makeSpan({ spanId: 'child-1', parentSpanId: 'remote-parent' });
+    const child = makeSpan({
+      spanId: 'child-1',
+      parentSpanId: 'remote-parent',
+    });
     render(SpanDetailPanel, {
       props: { span: child, trace: makeTrace(child), onClose: () => {} },
     });

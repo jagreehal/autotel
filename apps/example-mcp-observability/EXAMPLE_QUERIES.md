@@ -7,26 +7,33 @@ Once you've configured the OpenTelemetry MCP server in Claude Desktop, you can a
 ### Basic Queries
 
 **List all services:**
+
 > "What services are being traced?"
 
 **Recent traces:**
+
 > "Show me traces from the last 5 minutes"
 
 **Service overview:**
+
 > "Give me an overview of the mcp-observability-demo service"
 
 ## Error Analysis
 
 **Find errors:**
+
 > "Show me all traces with errors from the last 10 minutes"
 
 **Specific error types:**
+
 > "Find all traces with payment failures"
 
 **Error patterns:**
+
 > "What are the most common errors in the system?"
 
 **Error details:**
+
 > "Show me the details of the most recent error trace"
 
 ## Performance Analysis
@@ -34,26 +41,33 @@ Once you've configured the OpenTelemetry MCP server in Claude Desktop, you can a
 ### Response Time Queries
 
 **Slowest endpoints:**
+
 > "What are the slowest endpoints?"
 
 **Slow traces:**
+
 > "Show me traces that took longer than 500ms"
 
 **Performance comparison:**
+
 > "Compare the average response times of different endpoints"
 
 ### Database Performance
 
 **Slow queries:**
+
 > "Find database queries that took longer than 100ms"
 
 **Query patterns:**
+
 > "Show me all slow database queries and their execution times"
 
 **Database operations:**
+
 > "List all database operations by table name"
 
 **Specific table analysis:**
+
 > "Show me all queries to the 'orders' table"
 
 ## Business Logic Analysis
@@ -61,29 +75,37 @@ Once you've configured the OpenTelemetry MCP server in Claude Desktop, you can a
 ### Payment Operations
 
 **Payment failures:**
+
 > "Find all failed payment transactions"
 
 **Payment status:**
+
 > "Show me the payment.status for all payment transactions"
 
 **Expensive transactions:**
+
 > "Find all payment transactions over $100"
 
 **Payment gateway performance:**
+
 > "What's the average response time for the payment gateway?"
 
 ### Order Processing
 
 **Order creation:**
+
 > "Show me traces for order creation in the last hour"
 
 **Failed orders:**
+
 > "Find orders that failed during processing"
 
 **Order pipeline:**
+
 > "Show me the complete trace for a successful order including all nested spans"
 
 **Validation issues:**
+
 > "Find traces where validation failed"
 
 ## Custom Attribute Queries
@@ -91,18 +113,23 @@ Once you've configured the OpenTelemetry MCP server in Claude Desktop, you can a
 These queries leverage the custom attributes set in the application:
 
 **DB query times:**
+
 > "Find all traces where db.query_time_ms is greater than 150"
 
 **Slow query flag:**
+
 > "Show me all traces where db.slow_query is true"
 
 **Item counts:**
+
 > "Find orders with more than 5 items (order.item_count > 5)"
 
 **User activity:**
+
 > "Show me all activity for user-123"
 
 **Notification failures:**
+
 > "Find traces where notification.sent is false"
 
 ## Advanced Queries
@@ -110,34 +137,43 @@ These queries leverage the custom attributes set in the application:
 ### Time-based Analysis
 
 **Peak traffic:**
+
 > "Show me traces grouped by hour to identify peak traffic times"
 
 **Recent activity:**
+
 > "What endpoints have been called in the last 30 minutes?"
 
 **Trend analysis:**
+
 > "Has the error rate increased in the last hour compared to the previous hour?"
 
 ### Multi-span Analysis
 
 **Trace depth:**
+
 > "Find traces with more than 5 spans (complex operations)"
 
 **Nested operations:**
+
 > "Show me traces that include both database and payment operations"
 
 **Complete workflows:**
+
 > "Find traces that have spans for validation, payment, database, and notification"
 
 ### Comparative Analysis
 
 **Error rates:**
+
 > "Which endpoints have the highest error rate?"
 
 **Performance ranking:**
+
 > "Rank all endpoints by average response time"
 
 **Success vs failure:**
+
 > "Compare successful vs failed order processing traces"
 
 ## Debugging Scenarios
@@ -145,23 +181,29 @@ These queries leverage the custom attributes set in the application:
 ### Investigate Specific Issues
 
 **Intermittent failures:**
+
 > "Show me all requests to /api/flaky and their outcomes"
 
 **Timeout investigation:**
+
 > "Find traces where the total duration exceeded 1 second"
 
 **Missing data:**
+
 > "Find traces where db.rows_returned is 0"
 
 ### Root Cause Analysis
 
 **Payment failures:**
+
 > "Show me the full trace for a failed payment including all attributes and child spans"
 
 **Slow endpoint investigation:**
+
 > "For the /api/events/report endpoint, show me the span breakdown to identify bottlenecks"
 
 **Error context:**
+
 > "Find the trace with the most recent error and show me all the span attributes leading up to the error"
 
 ## Query Tips
@@ -174,6 +216,7 @@ These queries leverage the custom attributes set in the application:
 ### Use Time Ranges
 
 Always specify a time range for better results:
+
 - "in the last 5 minutes"
 - "from the last hour"
 - "in the past 30 minutes"
@@ -181,6 +224,7 @@ Always specify a time range for better results:
 ### Filter by Attributes
 
 Use the custom attributes we've added:
+
 - `db.query_time_ms`
 - `db.slow_query`
 - `payment.status`
@@ -223,15 +267,19 @@ Claude: [Calculates percentage based on total payment attempts]
 ## Metrics and Aggregations
 
 **Count queries:**
+
 > "How many traces have errors?"
 
 **Averages:**
+
 > "What's the average response time for the /api/users endpoint?"
 
 **Percentiles:**
+
 > "What's the 95th percentile response time for all endpoints?"
 
 **Distributions:**
+
 > "Show me the distribution of database query times"
 
 ## Testing Your Queries

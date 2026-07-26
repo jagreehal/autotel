@@ -117,7 +117,10 @@ export async function runInvestigate<T>(
   }
 }
 
-export function toInvestigateError(command: string, error: unknown): AutotelError {
+export function toInvestigateError(
+  command: string,
+  error: unknown,
+): AutotelError {
   if (error instanceof AutotelError) return error;
   // ZodError surfaces from `loadConfig()` (bad --backend value) and from any
   // shared query schema. Detect by shape (`error.issues` array) so we don't
@@ -128,7 +131,16 @@ export function toInvestigateError(command: string, error: unknown): AutotelErro
     'issues' in error &&
     Array.isArray((error as { issues: unknown[] }).issues)
   ) {
-    const issues = (error as { issues: Array<{ path?: unknown[]; message: string; code?: string; values?: unknown[] }> }).issues;
+    const issues = (
+      error as {
+        issues: Array<{
+          path?: unknown[];
+          message: string;
+          code?: string;
+          values?: unknown[];
+        }>;
+      }
+    ).issues;
     const first = issues[0];
     const path = first?.path?.join('.') ?? '';
     return new AutotelError({

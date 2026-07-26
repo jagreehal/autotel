@@ -1,6 +1,14 @@
-import { appendLedgerEntryAsync, flushLedgerWrites, type LedgerOptions } from './ledger.js';
+import {
+  appendLedgerEntryAsync,
+  flushLedgerWrites,
+  type LedgerOptions,
+} from './ledger.js';
 import { PACT_ATTRS } from './attrs.js';
-import { LEDGER_ENTRY_SPEC, type InteractionLedgerEntry, type PactKind } from './types.js';
+import {
+  LEDGER_ENTRY_SPEC,
+  type InteractionLedgerEntry,
+  type PactKind,
+} from './types.js';
 
 /** Minimal ReadableSpan shape — avoids hard dependency on sdk-trace-base. */
 export interface ReadableSpanLike {
@@ -37,7 +45,10 @@ const WARN_INTERVAL_MS = 60_000;
 
 type QueueItem = { entry: InteractionLedgerEntry; opts: LedgerOptions };
 
-function attrString(attrs: Record<string, unknown>, key: string): string | undefined {
+function attrString(
+  attrs: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const v = attrs[key];
   if (typeof v === 'string' && v.length > 0) return v;
   return undefined;
@@ -51,7 +62,9 @@ function attrStates(attrs: Record<string, unknown>): string[] {
   return [];
 }
 
-function ledgerEntryFromSpan(span: ReadableSpanLike): InteractionLedgerEntry | null {
+function ledgerEntryFromSpan(
+  span: ReadableSpanLike,
+): InteractionLedgerEntry | null {
   const attrs = span.attributes;
   const consumer = attrString(attrs, PACT_ATTRS.CONSUMER);
   const provider = attrString(attrs, PACT_ATTRS.PROVIDER);

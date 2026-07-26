@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { SpanData } from '../types';
-  import type { SpanNode } from './WaterfallRow.svelte';
+  import type { SpanNode } from '../types';
 
   /**
    * Build a tree structure from flat spans array.

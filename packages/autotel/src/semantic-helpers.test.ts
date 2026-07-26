@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { SpanKind } from '@opentelemetry/api';
 import { traceDB, traceHTTP, traceMessaging } from './semantic-helpers';
 import { createTraceCollector } from './testing';
 
@@ -31,11 +32,26 @@ describe('Semantic Helpers', () => {
       const spans = collector.getSpans();
       expect(spans).toHaveLength(1);
 
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['db.system']).toBe('postgresql');
+      expect(span.attributes['db.system.name']).toBe('postgresql');
       expect(span.attributes['db.operation']).toBe('SELECT');
+      expect(span.attributes['db.operation.name']).toBe('SELECT');
       expect(span.attributes['db.name']).toBe('app_db');
+      expect(span.attributes['db.namespace']).toBe('app_db');
       expect(span.attributes['db.collection.name']).toBe('users');
+      expect(span.name).toBe('SELECT users');
+      expect(span.kind).toBe(SpanKind.CLIENT);
+    });
+
+    it('should accept a direct synchronous function', () => {
+      const get = traceDB(
+        { system: 'redis', operation: 'GET', collection: 'cache' },
+        (key: string) => `value:${key}`,
+      );
+
+      expect(get('answer')).toBe('value:answer');
+      expect(collector.expectSpan('GET cache').kind).toBe(SpanKind.CLIENT);
     });
 
     it('should work without optional attributes', async () => {
@@ -46,7 +62,7 @@ describe('Semantic Helpers', () => {
       await query();
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['db.system']).toBe('mongodb');
       expect(span.attributes['db.operation']).toBeUndefined();
       expect(span.attributes['db.name']).toBeUndefined();
@@ -64,7 +80,7 @@ describe('Semantic Helpers', () => {
       await query('test-key');
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['db.system']).toBe('redis');
       expect(span.attributes['db.redis.ttl']).toBe(3600);
     });
@@ -75,6 +91,7 @@ describe('Semantic Helpers', () => {
       const fetchUser = traceHTTP({
         method: 'GET',
         url: 'https://api.example.com/users/:id',
+        urlTemplate: '/users/{id}',
       })((_ctx) => async (userId: string) => {
         return { id: userId };
       });
@@ -84,11 +101,13 @@ describe('Semantic Helpers', () => {
       const spans = collector.getSpans();
       expect(spans).toHaveLength(1);
 
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['http.request.method']).toBe('GET');
       expect(span.attributes['url.full']).toBe(
         'https://api.example.com/users/:id',
       );
+      expect(span.name).toBe('GET /users/{id}');
+      expect(span.kind).toBe(SpanKind.CLIENT);
     });
 
     it('should work with only method', async () => {
@@ -99,7 +118,7 @@ describe('Semantic Helpers', () => {
       await request({ test: 'data' });
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['http.request.method']).toBe('POST');
       expect(span.attributes['url.full']).toBeUndefined();
     });
@@ -112,7 +131,7 @@ describe('Semantic Helpers', () => {
       await request();
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['url.full']).toBe('https://api.example.com');
       expect(span.attributes['http.request.method']).toBeUndefined();
     });
@@ -130,7 +149,7 @@ describe('Semantic Helpers', () => {
       await request();
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['http.request.retry_count']).toBe(3);
       expect(span.attributes['http.request.timeout']).toBe(5000);
     });
@@ -151,10 +170,14 @@ describe('Semantic Helpers', () => {
       const spans = collector.getSpans();
       expect(spans).toHaveLength(1);
 
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['messaging.system']).toBe('kafka');
       expect(span.attributes['messaging.operation']).toBe('publish');
+      expect(span.attributes['messaging.operation.name']).toBe('publish');
+      expect(span.attributes['messaging.operation.type']).toBe('send');
       expect(span.attributes['messaging.destination.name']).toBe('user-events');
+      expect(span.name).toBe('publish user-events');
+      expect(span.kind).toBe(SpanKind.PRODUCER);
     });
 
     it('should work with minimal config', async () => {
@@ -165,7 +188,7 @@ describe('Semantic Helpers', () => {
       await sendMessage();
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['messaging.system']).toBe('rabbitmq');
       expect(span.attributes['messaging.operation']).toBeUndefined();
       expect(span.attributes['messaging.destination.name']).toBeUndefined();
@@ -181,7 +204,7 @@ describe('Semantic Helpers', () => {
       await consumeMessage();
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['messaging.operation']).toBe('receive');
     });
 
@@ -199,7 +222,7 @@ describe('Semantic Helpers', () => {
       await publishBatch();
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       expect(span.attributes['messaging.batch.message_count']).toBe(10);
       expect(span.attributes['messaging.kafka.partition']).toBe(0);
     });
@@ -218,7 +241,7 @@ describe('Semantic Helpers', () => {
       await fn();
 
       const spans = collector.getSpans();
-      const span = spans[0];
+      const span = spans[0]!;
       // Custom attribute should win
       expect(span.attributes['db.operation']).toBe('CUSTOM_OPERATION');
     });

@@ -11,11 +11,7 @@ import {
 } from 'autotel-mcp';
 import { Command } from 'commander';
 import { runInvestigate, type InvestigateFlags } from './runtime';
-import {
-  addBackendFlags,
-  backendFlagsFromOpts,
-  intArg,
-} from './cli-helpers';
+import { addBackendFlags, backendFlagsFromOpts, intArg } from './cli-helpers';
 
 export interface LlmAnalyticsFlags extends InvestigateFlags {
   startTime?: string;

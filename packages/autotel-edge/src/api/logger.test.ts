@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createEdgeLogger, runWithLogLevel, getActiveLogLevel } from './logger';
+import type { EdgeLogger } from './logger';
 import { trace } from '@opentelemetry/api';
 
 describe('Edge Logger', () => {
@@ -717,7 +718,7 @@ describe('Edge Logger', () => {
 
     it('should not affect parent logger', () => {
       const logger = createEdgeLogger('test-service');
-      const child = logger.child({ childOnly: 'yes' });
+      logger.child({ childOnly: 'yes' });
 
       logger.info('parent message');
 
@@ -772,7 +773,9 @@ describe('Edge Logger', () => {
     });
 
     it('should allow child msgPrefix additions', () => {
-      const logger = createEdgeLogger('test-service', { msgPrefix: '[parent] ' });
+      const logger = createEdgeLogger('test-service', {
+        msgPrefix: '[parent] ',
+      });
       const child = logger.child(
         { requestId: 'req-123' },
         { msgPrefix: '[child] ' },
@@ -785,7 +788,9 @@ describe('Edge Logger', () => {
     });
 
     it('should append child msgPrefix to the parent prefix like pino', () => {
-      const logger = createEdgeLogger('test-service', { msgPrefix: '[parent] ' });
+      const logger = createEdgeLogger('test-service', {
+        msgPrefix: '[parent] ',
+      });
       const child = logger.child(
         { requestId: 'req-123' },
         { msgPrefix: '[child] ' },
@@ -1126,7 +1131,10 @@ describe('Edge Logger', () => {
       const logger = createEdgeLogger('test-service', {
         redact: ['password', 'secret'],
       });
-      logger.info({ password: 'hunter2', secret: 'abc', safe: 'visible' }, 'test');
+      logger.info(
+        { password: 'hunter2', secret: 'abc', safe: 'visible' },
+        'test',
+      );
 
       const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
       expect(logOutput.password).toBe('[Redacted]');
@@ -1220,13 +1228,8 @@ describe('Edge Logger', () => {
 
       expect(send).toHaveBeenCalledOnce();
       const [, event] = send.mock.calls[0];
-      expect(event.messages).toEqual([
-        { user: { id: 'msg-user' } },
-        'login',
-      ]);
-      expect(event.bindings).toEqual([
-        { user: { id: 'child-user' } },
-      ]);
+      expect(event.messages).toEqual([{ user: { id: 'msg-user' } }, 'login']);
+      expect(event.bindings).toEqual([{ user: { id: 'child-user' } }]);
     });
   });
 
@@ -1489,7 +1492,9 @@ describe('Edge Logger', () => {
       child.info('child msg');
 
       expect(sendSpy).toHaveBeenCalledOnce();
-      expect(sendSpy.mock.calls[0][1].bindings).toEqual([{ requestId: 'req-1' }]);
+      expect(sendSpy.mock.calls[0][1].bindings).toEqual([
+        { requestId: 'req-1' },
+      ]);
     });
 
     it('should redact secrets in transmit payload', () => {
@@ -1520,7 +1525,14 @@ describe('Edge Logger', () => {
             if (typeof first === 'object' && first !== null) {
               method({ ...first, hooked: true }, ...rest);
             } else {
-              method({ hooked: true }, ...args);
+              // `first` is the message; re-emit as object-first so the field
+              // merges in. LogFn's overloads type interpolation args against a
+              // literal message, which a runtime-forwarded arg list can't
+              // satisfy, so widen `method` to its structural call shape here.
+              (method as (obj: object, ...rest: unknown[]) => void)(
+                { hooked: true },
+                ...args,
+              );
             }
           },
         },
@@ -1550,11 +1562,6 @@ describe('Edge Logger', () => {
 
   describe('edgeLimit option', () => {
     it('should truncate objects with too many keys in safe stringify', () => {
-      const writeSpy = vi.fn();
-      const logger = createEdgeLogger('test-service', {
-        edgeLimit: 5,
-        write: writeSpy,
-      });
       const nested: Record<string, number> = {};
       for (let i = 0; i < 10; i++) {
         nested[`key${i}`] = i;

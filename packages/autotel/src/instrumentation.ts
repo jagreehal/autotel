@@ -19,7 +19,7 @@ import {
 } from '@opentelemetry/semantic-conventions/incubating';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { requireModule } from './node-require';
+import { requireModule, safeRequire } from './node-require';
 
 /**
  * Parse OTLP headers string into object format
@@ -185,30 +185,36 @@ export async function initInstrumentation(
 
   let resource: Resource;
 
-  // Dynamically load optional resource detectors
+  // Optional resource detectors: absent unless the host installed them.
+  // safeRequire returns undefined for a missing module and rethrows anything
+  // else, so a broken install still surfaces instead of being swallowed.
   const detectors: ResourceDetector[] = [processDetector, hostDetector];
-  try {
-    const awsDetectors = await import('@opentelemetry/resource-detector-aws');
+
+  const awsDetectors = safeRequire<{
+    awsEc2Detector: ResourceDetector;
+    awsEcsDetector: ResourceDetector;
+    awsEksDetector: ResourceDetector;
+  }>('@opentelemetry/resource-detector-aws');
+  if (awsDetectors) {
     detectors.push(
       awsDetectors.awsEc2Detector,
       awsDetectors.awsEcsDetector,
       awsDetectors.awsEksDetector,
     );
-  } catch {
-    // ignore
   }
-  try {
-    const gcpDetectors = await import('@opentelemetry/resource-detector-gcp');
+
+  const gcpDetectors = safeRequire<{ gcpDetector: ResourceDetector }>(
+    '@opentelemetry/resource-detector-gcp',
+  );
+  if (gcpDetectors) {
     detectors.push(gcpDetectors.gcpDetector);
-  } catch {
-    // ignore
   }
-  try {
-    const containerDetectors =
-      await import('@opentelemetry/resource-detector-container');
+
+  const containerDetectors = safeRequire<{
+    containerDetector: ResourceDetector;
+  }>('@opentelemetry/resource-detector-container');
+  if (containerDetectors) {
     detectors.push(containerDetectors.containerDetector);
-  } catch {
-    // ignore
   }
 
   if (config.detectResources) {

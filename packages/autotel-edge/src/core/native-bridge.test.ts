@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { context as api_context, SpanStatusCode } from '@opentelemetry/api';
+import type { AttributeValue } from '@opentelemetry/api';
 import {
   withNativeTracer,
   getActiveNativeTracer,
@@ -25,7 +26,9 @@ function fakeSpan(isTraced = true): NativeSpanHandle & {
   };
 }
 
-function fakeTracer(span: NativeSpanHandle): NativeTracer & { names: string[] } {
+function fakeTracer(
+  span: NativeSpanHandle,
+): NativeTracer & { names: string[] } {
   const names: string[] = [];
   return {
     names,
@@ -58,7 +61,16 @@ describe('native-bridge: createNativeTraceContext', () => {
     const ctx = createNativeTraceContext(span, 'work');
 
     ctx.setAttribute('a', 1);
-    ctx.setAttributes({ b: 'x', c: true, d: { nested: 1 }, e: undefined as never });
+    // Deliberately pass non-AttributeValue members (an object and undefined)
+    // to exercise the bridge's runtime coercion; the API type correctly forbids
+    // them, so opt out of that check at this one boundary.
+    const attrs: Record<string, unknown> = {
+      b: 'x',
+      c: true,
+      d: { nested: 1 },
+      e: undefined,
+    };
+    ctx.setAttributes(attrs as Record<string, AttributeValue>);
 
     expect(span.attributes).toEqual({
       a: 1,
@@ -102,8 +114,12 @@ describe('native-bridge: createNativeTraceContext', () => {
   });
 
   it('mirrors isRecording from isTraced', () => {
-    expect(createNativeTraceContext(fakeSpan(true), 'w').isRecording()).toBe(true);
-    expect(createNativeTraceContext(fakeSpan(false), 'w').isRecording()).toBe(false);
+    expect(createNativeTraceContext(fakeSpan(true), 'w').isRecording()).toBe(
+      true,
+    );
+    expect(createNativeTraceContext(fakeSpan(false), 'w').isRecording()).toBe(
+      false,
+    );
   });
 
   it('records error status as attributes', () => {

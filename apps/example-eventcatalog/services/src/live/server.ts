@@ -8,7 +8,11 @@
 //
 // No Express, no socket.io — just Node's http module + SSE.
 
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -42,7 +46,9 @@ export interface LiveServerConfig {
   controls?: DemoControls;
 }
 
-export async function startLiveServer(config: LiveServerConfig): Promise<() => Promise<void>> {
+export async function startLiveServer(
+  config: LiveServerConfig,
+): Promise<() => Promise<void>> {
   const { port, snapshot, stream, controls } = config;
   const html = await readFile(HTML_PATH, 'utf8');
   const prHtml = await readFile(PR_HTML_PATH, 'utf8');
@@ -133,7 +139,11 @@ function sendText(res: ServerResponse, body: string): void {
   res.end(body);
 }
 
-function sendStatus(res: ServerResponse, status: number, message: string): void {
+function sendStatus(
+  res: ServerResponse,
+  status: number,
+  message: string,
+): void {
   res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end(message);
 }
@@ -155,7 +165,9 @@ async function handleControl(
   // block the dashboard's responsiveness. Errors are logged but not
   // surfaced; the dashboard reads state from /snapshot.json afterward.
   Promise.resolve(handler()).catch((err) => {
-    process.stderr.write(`live demo control failed: ${(err as Error).message}\n`);
+    process.stderr.write(
+      `live demo control failed: ${(err as Error).message}\n`,
+    );
   });
   sendJson(res, { ok: true });
 }

@@ -25,9 +25,9 @@ label, never silently green.
 
 ## Required env vars
 
-- `OTLP_E2E_ENDPOINT` — full URL of the OTLP HTTP/JSON traces endpoint
-- `OTLP_E2E_HEADERS` — JSON object of headers, e.g. `{"x-honeycomb-team":"…"}`
-- `OTLP_E2E_SERVICE` — optional service.name (default: `autotel-e2e`)
+- `OTLP_E2E_ENDPOINT`: full URL of the OTLP HTTP/JSON traces endpoint
+- `OTLP_E2E_HEADERS`: JSON object of headers, e.g. `{"x-honeycomb-team":"…"}`
+- `OTLP_E2E_SERVICE`: optional service.name (default: `autotel-e2e`)
 
 Examples for common backends:
 
@@ -43,5 +43,5 @@ Examples for common backends:
 
 - daily cron (`0 3 * * *` UTC)
 - push to `main` (only when the autotel core / e2e tests / workflow change)
-- PR labelled `e2e` (only on same-repo PRs — never forks, for secret safety)
+- PR labelled `e2e` (only on same-repo PRs: never forks, for secret safety)
 - manual dispatch

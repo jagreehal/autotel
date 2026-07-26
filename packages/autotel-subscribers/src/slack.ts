@@ -11,10 +11,10 @@
  *
  * @example Basic usage
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { SlackSubscriber } from 'autotel-subscribers/slack';
  *
- * const events = new Events('app', {
+ * const events = new Event('app', {
  *   subscribers: [
  *     new SlackSubscriber({
  *       webhookUrl: process.env.SLACK_WEBHOOK_URL!,
@@ -33,7 +33,7 @@
  *
  * @example Filter critical events only
  * ```typescript
- * const events = new Events('app', {
+ * const events = new Event('app', {
  *   subscribers: [
  *     new SlackSubscriber({
  *       webhookUrl: process.env.SLACK_WEBHOOK_URL!,
@@ -60,10 +60,7 @@
  * 4. Copy webhook URL (https://hooks.slack.com/services/...)
  */
 
-import {
-  EventSubscriber,
-  type EventPayload,
-} from './event-subscriber-base';
+import { EventSubscriber, type EventPayload } from './event-subscriber-base';
 
 export interface SlackSubscriberConfig {
   /** Slack webhook URL (https://hooks.slack.com/services/...) */
@@ -122,7 +119,9 @@ export class SlackSubscriber extends EventSubscriber {
   readonly name = 'SlackSubscriber';
   readonly version = '1.0.0';
 
-  private config: Required<Omit<SlackSubscriberConfig, 'channel' | 'filter'>> & {
+  private config: Required<
+    Omit<SlackSubscriberConfig, 'channel' | 'filter'>
+  > & {
     channel?: string;
     filter?: (payload: EventPayload) => boolean;
   };
@@ -146,7 +145,7 @@ export class SlackSubscriber extends EventSubscriber {
 
     if (!this.config.webhookUrl) {
       console.error(
-        '[SlackSubscriber] No webhook URL provided - subscriber disabled'
+        '[SlackSubscriber] No webhook URL provided - subscriber disabled',
       );
       this.enabled = false;
     }
@@ -173,7 +172,7 @@ export class SlackSubscriber extends EventSubscriber {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Slack webhook failed (${response.status}): ${errorText}`
+        `Slack webhook failed (${response.status}): ${errorText}`,
       );
     }
   }
@@ -226,9 +225,7 @@ export class SlackSubscriber extends EventSubscriber {
 
     // Add Unix timestamp for Slack
     if (this.config.includeTimestamp) {
-      attachment.ts = Math.floor(
-        new Date(payload.timestamp).getTime() / 1000
-      );
+      attachment.ts = Math.floor(new Date(payload.timestamp).getTime() / 1000);
     }
 
     return {
@@ -377,7 +374,7 @@ export class SlackSubscriber extends EventSubscriber {
   protected handleError(error: Error, payload: EventPayload): void {
     console.error(
       `[SlackSubscriber] Failed to send ${payload.type} event "${payload.name}":`,
-      error
+      error,
     );
   }
 }

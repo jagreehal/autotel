@@ -400,7 +400,8 @@ export function contextBudget(
 ): GenAiGuardRule {
   const threshold = options.threshold ?? 0.9;
   const limit =
-    options.limit ?? (options.model ? resolveContextLimit(options.model) : undefined);
+    options.limit ??
+    (options.model ? resolveContextLimit(options.model) : undefined);
   return {
     name: `context-budget:${Math.round(threshold * 100)}%`,
     action,
@@ -474,7 +475,9 @@ export function parseGuardRules(
     switch (key) {
       case 'budget':
       case 'cost': {
-        rules.push(costCeiling(parseScaledNumber(value.replace(/^\$/, '')), action));
+        rules.push(
+          costCeiling(parseScaledNumber(value.replace(/^\$/, '')), action),
+        );
         break;
       }
       case 'tokens': {
@@ -485,7 +488,10 @@ export function parseGuardRules(
         const [count, window] = value.split('/');
         rules.push(
           spinLoop(
-            { count: parseScaledNumber(count), window: parseScaledNumber(window) },
+            {
+              count: parseScaledNumber(count),
+              window: parseScaledNumber(window),
+            },
             action,
           ),
         );
@@ -511,7 +517,10 @@ export function parseGuardRules(
         const [thr, model] = value.split('@');
         rules.push(
           contextBudget(
-            { threshold: Number.parseFloat(thr), model: model?.trim() || undefined },
+            {
+              threshold: Number.parseFloat(thr),
+              model: model?.trim() || undefined,
+            },
             action,
           ),
         );
@@ -639,7 +648,8 @@ export function createGenAiGuard(options: GenAiGuardOptions): GenAiGuard {
     const stopViolation = newViolations.find((v) => v.action === 'stop');
     if (stopViolation && !stopped) {
       stopped = true;
-      if (onStop !== 'silent') controller.abort(toStopError(stopViolation, state));
+      if (onStop !== 'silent')
+        controller.abort(toStopError(stopViolation, state));
     }
 
     if (ctx) recordTelemetry(ctx, state, newViolations, stopped);

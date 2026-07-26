@@ -49,7 +49,8 @@ export default defineConfig(
         'error',
         {
           selector: 'TSEnumDeclaration',
-          message: 'Enums are not allowed. Use union types or const assertions instead.',
+          message:
+            'Enums are not allowed. Use union types or const assertions instead.',
         },
       ],
     },

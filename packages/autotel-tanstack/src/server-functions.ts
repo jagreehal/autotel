@@ -1,6 +1,7 @@
 import { SpanStatusCode } from '@opentelemetry/api';
-import { trace, type TraceContext } from 'autotel';
+import { trace, getActiveTraceContext } from 'autotel';
 import { isServerSide } from './env';
+import { isControlFlowSignal, isRealError } from './control-flow';
 import { type TraceServerFnConfig, SPAN_ATTRIBUTES } from './types';
 
 /**
@@ -60,64 +61,72 @@ export function traceServerFn<T extends (...args: any[]) => any>(
         return target.apply(thisArg, argArray);
       }
 
-      return trace(`tanstack.serverFn.${fnName}`, async (ctx: TraceContext) => {
-        ctx.setAttributes({
-          [SPAN_ATTRIBUTES.RPC_SYSTEM]: 'tanstack-start',
-          [SPAN_ATTRIBUTES.RPC_METHOD]: fnName,
-          [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'serverFn',
-          [SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_NAME]: fnName,
-        });
+      return trace(
+        { name: `tanstack.serverFn.${fnName}`, isError: isRealError },
+        async () => {
+          const ctx = getActiveTraceContext()!;
+          ctx.setAttributes({
+            [SPAN_ATTRIBUTES.RPC_SYSTEM]: 'tanstack-start',
+            [SPAN_ATTRIBUTES.RPC_METHOD]: fnName,
+            [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'serverFn',
+            [SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_NAME]: fnName,
+          });
 
-        // Capture arguments if configured
-        if (captureArgs && argArray.length > 0) {
-          const args = argArray[0];
-          if (args !== undefined) {
-            try {
-              ctx.setAttribute(
-                SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_ARGS,
-                JSON.stringify(args),
-              );
-            } catch {
-              ctx.setAttribute(
-                SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_ARGS,
-                '[non-serializable]',
-              );
-            }
-          }
-        }
-
-        try {
-          const result = await Reflect.apply(target, thisArg, argArray);
-
-          // Capture result if configured
-          if (captureResults && result !== undefined) {
-            try {
-              ctx.setAttribute(
-                SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
-                JSON.stringify(result),
-              );
-            } catch {
-              ctx.setAttribute(
-                SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
-                '[non-serializable]',
-              );
+          // Capture arguments if configured
+          if (captureArgs && argArray.length > 0) {
+            const args = argArray[0];
+            if (args !== undefined) {
+              try {
+                ctx.setAttribute(
+                  SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_ARGS,
+                  JSON.stringify(args),
+                );
+              } catch {
+                ctx.setAttribute(
+                  SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_ARGS,
+                  '[non-serializable]',
+                );
+              }
             }
           }
 
-          ctx.setStatus({ code: SpanStatusCode.OK });
-          return result;
-        } catch (error) {
-          if ('recordError' in ctx && typeof ctx.recordError === 'function') {
-            ctx.recordError(error);
-          } else if (
-            'recordException' in ctx &&
-            typeof ctx.recordException === 'function'
-          ) {
-            ctx.recordException(error);
+          try {
+            const result = await Reflect.apply(target, thisArg, argArray);
+
+            // Capture result if configured
+            if (captureResults && result !== undefined) {
+              try {
+                ctx.setAttribute(
+                  SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
+                  JSON.stringify(result),
+                );
+              } catch {
+                ctx.setAttribute(
+                  SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
+                  '[non-serializable]',
+                );
+              }
+            }
+
+            ctx.setStatus({ code: SpanStatusCode.OK });
+            return result;
+          } catch (error) {
+            if (isControlFlowSignal(error)) {
+              ctx.setStatus({ code: SpanStatusCode.OK });
+              throw error;
+            }
+            if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+              ctx.recordError(error);
+            } else if (
+              'recordException' in ctx &&
+              typeof ctx.recordException === 'function'
+            ) {
+              ctx.recordException(error);
+            }
+            throw error;
           }
-          throw error;
-        }
-      });
+        },
+      )();
     },
 
     get(target, prop, receiver) {

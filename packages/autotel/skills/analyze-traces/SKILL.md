@@ -10,7 +10,7 @@ license: MIT
 
 # Analyze traces
 
-This skill teaches an AI assistant how to read and reason about OpenTelemetry traces produced by autotel — whether they're sitting in a backend, exported to a local JSON dump, or captured in a test.
+This skill teaches an AI assistant how to read and reason about OpenTelemetry traces produced by autotel. Whether they're sitting in a backend, exported to a local JSON dump, or captured in a test.
 
 ## When to use
 
@@ -24,7 +24,7 @@ This skill teaches an AI assistant how to read and reason about OpenTelemetry tr
 
 | Source                         | How to access                                                      |
 | ------------------------------ | ------------------------------------------------------------------ |
-| Local debug dump               | `.autotel/spans/*.ndjson` — one span per line, OTLP JSON shape     |
+| Local debug dump               | `.autotel/spans/*.ndjson`: one span per line, OTLP JSON shape      |
 | `InMemorySpanExporter` (tests) | `exporter.getFinishedSpans()`                                      |
 | Backend (interactive)          | Jaeger / Tempo / Honeycomb UI; Datadog Trace Search; etc.          |
 | Backend (programmatic)         | Honeycomb Query API, Tempo `/api/search`, Datadog Logs / Trace API |
@@ -79,18 +79,47 @@ Key conventions to recognise:
 1. Find the trace: filter `service.name = "<svc>" AND http.route = "<route>" AND status = error` for the last hour.
 2. Open the slowest / latest matching trace.
 3. Inspect the root span's `exception.message` and `exception.stacktrace`.
-4. Walk down the child spans — the deepest span with `status.code = ERROR` is usually the culprit.
+4. Walk down the child spans: the deepest span with `status.code = ERROR` is usually the culprit.
 5. If using `createStructuredError`, look for `code`, `why`, `internal.*` attributes. They usually answer the "why" without you reading code.
 
 ### "Why is endpoint X slow?"
 
 1. Find a slow trace: `service.name = "<svc>" AND http.route = "<route>" AND duration > p99(duration)`.
-2. View the waterfall — pinpoint the longest child span by self-time (not wall time).
+2. View the waterfall: pinpoint the longest child span by self-time (not wall time).
 3. Common offenders:
-   - **Sequential awaits that should be parallel** — sibling spans run end-to-end instead of overlapping.
-   - **N+1 queries** — many short same-named spans (`SELECT * FROM …`) under one parent.
-   - **Cold starts** — `faas.coldstart=true` in Workers or Lambda.
-   - **Tool retries** — gen-ai spans with `gen_ai.response.finish_reasons` containing `error` followed by another call.
+   - **Sequential awaits that should be parallel**: sibling spans run end-to-end instead of overlapping.
+   - **N+1 queries**: many short same-named spans (`SELECT * FROM …`) under one parent.
+   - **Cold starts**: `faas.coldstart=true` in Workers or Lambda.
+   - **Tool retries**: gen-ai spans with `gen_ai.response.finish_reasons` containing `error` followed by another call.
+
+### "Which requests are affected?"
+
+A waterfall explains one slow request. It cannot tell you what the slow ones
+share. Run the core analysis loop instead: split the population on the symptom,
+then score every recorded field by how much the two groups disagree.
+
+```typescript
+import { compareCohorts } from 'autotel/analysis';
+
+const isSlow = (event) => Number(event['checkout.duration_ms']) >= 800;
+
+const ranked = compareCohorts({
+  outlier: events.filter(isSlow),
+  baseline: events.filter((event) => !isSlow(event)),
+});
+// [{ field: 'payment.provider', value: 'bank-beta', difference: 0.67, … }]
+```
+
+Feed it any array of flat records: `span.attributes` from a collector, wide
+events from `getRequestLogger()`, or rows returned by a backend query.
+
+The loop skips fields whose values never repeat. A request id takes a fresh
+value on every event, so it would bury the answer under noise. Bucket durations
+and payload sizes when you instrument them if you want the loop to rank them.
+
+The top row is a hypothesis. A field can move with the problem without causing
+it. You are done when you have named the cohort and confirmed the mechanism in
+two traces drawn from it.
 
 ### "Follow this user across services"
 
@@ -127,10 +156,10 @@ init({ service: 'my-app', debug: 'pretty', spanDumpPath: '.autotel/spans' });
 
 | Check                         | Query / heuristic                                                                                               |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Span name cardinality**     | Top-K distinct `name` per service. Anything > a few hundred is a red flag — likely an unnormalised URL.         |
+| **Span name cardinality**     | Top-K distinct `name` per service. Anything > a few hundred is a red flag: likely an unnormalised URL.          |
 | **Per-attribute cardinality** | `unique(attribute_value)` per `attribute_key`. UUIDs / emails / `Date.now()` ids in attributes blow up storage. |
-| **Missing `service.name`**    | Spans where the resource attribute is empty or `"app"` — fix at the SDK init.                                   |
-| **PII smell**                 | Look for raw `@`, leading digit-runs of length 16, or `eyJ` prefixes — your redactor is off.                    |
+| **Missing `service.name`**    | Spans where the resource attribute is empty or `"app"`: fix at the SDK init.                                    |
+| **PII smell**                 | Look for raw `@`, leading digit-runs of length 16, or `eyJ` prefixes: your redactor is off.                     |
 | **Health-check noise**        | Spans with `http.route in (/healthz, /ready)`. Drop with `FilteringSpanProcessor`.                              |
 
 ## Reading gen-ai traces
@@ -161,8 +190,8 @@ If you expected a span and there isn't one:
 
 1. **Sampling.** Did head sampling drop it? Check `sampling.rates` and `recordedSpans` in any subscriber.
 2. **Workers without `waitUntil`.** Did the request return before the exporter flushed? Move to `defineWorkerFetch` / `wrapModule`.
-3. **`instrumentation.disabled = true`** — check env-conditional config.
-4. **Exporter rejected.** Check service logs for `OTLP exporter` 4xx / 5xx — bad token, wrong dataset.
+3. **`instrumentation.disabled = true`**: check env-conditional config.
+4. **Exporter rejected.** Check service logs for `OTLP exporter` 4xx / 5xx: bad token, wrong dataset.
 
 ## Output format
 

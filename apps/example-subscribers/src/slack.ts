@@ -17,9 +17,8 @@ import { randomUUID } from 'node:crypto';
 import 'dotenv/config';
 import pino from 'pino';
 
-import { init, shutdown } from 'autotel';
+import { init, shutdown, span, getActiveTraceContext } from 'autotel';
 import { Event } from 'autotel/event';
-import { trace } from 'autotel/functional';
 import { SlackSubscriber } from 'autotel-subscribers/slack';
 import type { EventPayload } from 'autotel-subscribers';
 
@@ -111,7 +110,8 @@ async function simulateSlackAlerts(): Promise<void> {
   logger.info('Sending demo alerts to Slack');
 
   for (let i = 0; i < 3; i++) {
-    await trace('slack.demo.order', async (ctx) => {
+    await span('slack.demo.order', async () => {
+      const ctx = getActiveTraceContext()!;
       const customer = createCustomer();
       const total = fakeOrderTotal(customer.plan);
       const highValue = total > 500;
@@ -149,7 +149,7 @@ async function simulateSlackAlerts(): Promise<void> {
         customerId: customer.id,
         region: customer.region,
       });
-    });
+    })();
   }
 
   logger.info('✅ Slack alerts sent (check your channel)');

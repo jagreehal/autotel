@@ -89,7 +89,7 @@ const normalise = new SpanNameNormalizingProcessor({
 });
 ```
 
-Now `GET /users/123e4567-e89b-12d3-a456-426614174000/orders` becomes `GET /users/:id/orders` in your traces — fewer unique span names, dramatically faster queries.
+Now `GET /users/123e4567-e89b-12d3-a456-426614174000/orders` becomes `GET /users/:id/orders` in your traces. Fewer unique span names, dramatically faster queries.
 
 ## Lift baggage onto every span
 
@@ -103,7 +103,7 @@ spanProcessors: composeSpanProcessors([baggage, new BatchSpanProcessor(otlp)]);
 
 ## Subscribers for in-process side effects
 
-Subscribers run synchronously in the parent context — ideal for metrics, audit, and cost calculation that you want recorded **before** the span goes to the batcher.
+Subscribers run synchronously in the parent context. Ideal for metrics, audit, and cost calculation that you want recorded **before** the span goes to the batcher.
 
 ```typescript
 import type { EdgeSubscriber } from 'autotel-edge';
@@ -192,7 +192,7 @@ export const otelConfig = defineConfig({
 
 ## Error isolation
 
-Every compose helper catches errors per item and logs to `console.error` with the helper name. A single bad processor cannot break the others — important when one of your subscribers is a third-party integration (Datadog, PagerDuty, …) that can rate-limit or 502.
+Every compose helper catches errors per item and logs to `console.error` with the helper name. A single bad processor cannot break the others. Important when one of your subscribers is a third-party integration (Datadog, PagerDuty, …) that can rate-limit or 502.
 
 ## Choosing between subscribers and post-processors
 

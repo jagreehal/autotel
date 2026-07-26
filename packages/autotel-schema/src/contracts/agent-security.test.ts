@@ -3,10 +3,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { AGENT_SECURITY_TELEMETRY_CONTRACT } from './agent-security.js';
-import { contractToSnapshot, parseSnapshot, serializeSnapshot } from '../snapshot.js';
+import {
+  contractToSnapshot,
+  parseSnapshot,
+  serializeSnapshot,
+} from '../snapshot.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const snapshotPath = path.join(here, '../../snapshots/agent-security.snapshot.json');
+const snapshotPath = path.join(
+  here,
+  '../../snapshots/agent-security.snapshot.json',
+);
 
 describe('agent-security contract snapshot', () => {
   it('matches the committed snapshot (CI gate for breaking telemetry changes)', () => {

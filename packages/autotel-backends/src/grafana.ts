@@ -157,12 +157,12 @@ export function createGrafanaConfig(
           '@opentelemetry/exporter-logs-otlp-http',
         );
         result.logRecordProcessors = [
-          new BatchLogRecordProcessor(
-            new OTLPLogExporter({
+          new BatchLogRecordProcessor({
+            exporter: new OTLPLogExporter({
               url: logsUrl,
               headers,
             }),
-          ),
+          }),
         ];
       } catch {
         throw new Error(

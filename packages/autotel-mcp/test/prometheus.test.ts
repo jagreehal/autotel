@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { PrometheusBackend } from '../src/backends/prometheus/index';
 
 type FetchCall = { url: string };
@@ -8,7 +8,7 @@ function installFetchStub(
 ): { calls: FetchCall[]; restore: () => void } {
   const calls: FetchCall[] = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
     const url = typeof input === 'string' ? input : input.toString();
     calls.push({ url });
     const { status = 200, body } = respond(url);

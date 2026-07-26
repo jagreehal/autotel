@@ -7,7 +7,11 @@
  * @see https://developers.cloudflare.com/workflows/
  */
 
-import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
+import {
+  WorkflowEntrypoint,
+  type WorkflowEvent,
+  type WorkflowStep,
+} from 'cloudflare:workers';
 import { instrumentWorkflow } from 'autotel-cloudflare/handlers';
 import { createEdgeLogger } from 'autotel-cloudflare/logger';
 import { SamplingPresets } from 'autotel-cloudflare/sampling';
@@ -37,7 +41,10 @@ interface WorkflowEnv {
  * - Workflow chaining patterns
  */
 class OrderWorkflowBase extends WorkflowEntrypoint<WorkflowEnv, OrderPayload> {
-  async run(event: WorkflowEvent<OrderPayload>, step: WorkflowStep): Promise<void> {
+  async run(
+    event: WorkflowEvent<OrderPayload>,
+    step: WorkflowStep,
+  ): Promise<void> {
     const { orderId, customerId, items, total } = event.payload;
 
     log.info(

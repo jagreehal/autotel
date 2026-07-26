@@ -25,16 +25,19 @@ This example demonstrates how to use `autotel-aws` to instrument AWS Lambda func
 ## Setup
 
 1. **Install dependencies:**
+
    ```bash
    pnpm install
    ```
 
 2. **Configure OpenTelemetry endpoint:**
+
    ```bash
    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
    ```
 
    Or create a `.env` file:
+
    ```env
    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
    ```
@@ -76,10 +79,12 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 
 const s3 = instrumentSDK(new S3Client({}));
 
-await s3.send(new GetObjectCommand({
-  Bucket: 'my-bucket',
-  Key: 'file.txt'
-}));
+await s3.send(
+  new GetObjectCommand({
+    Bucket: 'my-bucket',
+    Key: 'file.txt',
+  }),
+);
 ```
 
 ### 4. Service-Specific Semantic Helpers
@@ -90,14 +95,14 @@ import { traceDynamoDB } from 'autotel-aws/dynamodb';
 
 const getFile = traceS3({
   operation: 'GetObject',
-  bucket: 'my-bucket'
+  bucket: 'my-bucket',
 })((ctx) => async (key: string) => {
   // S3 operation with automatic semantic attributes
 });
 
 const getUser = traceDynamoDB({
   operation: 'GetItem',
-  table: 'users'
+  table: 'users',
 })((ctx) => async (userId: string) => {
   // DynamoDB operation with automatic semantic attributes
 });
@@ -106,6 +111,7 @@ const getUser = traceDynamoDB({
 ## Deployment to AWS Lambda
 
 1. **Build the function:**
+
    ```bash
    pnpm build
    ```
@@ -124,15 +130,15 @@ const getUser = traceDynamoDB({
 
 ## Telemetry shipping modes (`OTEL_MODE`)
 
-The CDK stack and the handlers share a single env switch — `OTEL_MODE` —
-that controls how OpenTelemetry data leaves the function. Set it before
+The CDK stack and the handlers share a single env switch, `OTEL_MODE`.
+That controls how OpenTelemetry data leaves the function. Set it before
 running `cdk deploy`.
 
-| `OTEL_MODE` | What happens | When to pick it |
-|---|---|---|
-| `custom-endpoint` (default) | Handlers init autotel with `OTEL_EXPORTER_OTLP_ENDPOINT`. Use for LocalStack, a standalone collector, Honeycomb, Datadog, … | Local dev, vendor-portable production |
-| `cloudwatch-direct` | Handlers wire CloudWatch trace/log/metric exporters from `autotel-aws/cloudwatch`. SigV4-signed OTLP/JSON goes straight to X-Ray, CloudWatch Logs, and CloudWatch Metrics endpoints. No collector. | Low/medium volume Lambdas where you want one fewer moving part |
-| `cloudwatch-adot` | The stack attaches the ADOT Lambda extension layer (`ADOT_LAYER_ARN` required). Handlers still use the default OTLP endpoint — the layer's collector signs and forwards to CloudWatch. | Higher-throughput Lambdas — export latency lives outside the billed handler time |
+| `OTEL_MODE`                 | What happens                                                                                                                                                                                       | When to pick it                                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `custom-endpoint` (default) | Handlers init autotel with `OTEL_EXPORTER_OTLP_ENDPOINT`. Use for LocalStack, a standalone collector, Honeycomb, Datadog, …                                                                        | Local dev, vendor-portable production                                           |
+| `cloudwatch-direct`         | Handlers wire CloudWatch trace/log/metric exporters from `autotel-aws/cloudwatch`. SigV4-signed OTLP/JSON goes straight to X-Ray, CloudWatch Logs, and CloudWatch Metrics endpoints. No collector. | Low/medium volume Lambdas where you want one fewer moving part                  |
+| `cloudwatch-adot`           | The stack attaches the ADOT Lambda extension layer (`ADOT_LAYER_ARN` required). Handlers still use the default OTLP endpoint: the layer's collector signs and forwards to CloudWatch.              | Higher-throughput Lambdas: export latency lives outside the billed handler time |
 
 Both CloudWatch modes land traces in X-Ray + Application Signals +
 Transaction Search, logs in CloudWatch Logs, and metrics in CloudWatch
@@ -162,18 +168,21 @@ https://aws-otel.github.io/docs/getting-started/lambda.
 This example works with any OTLP-compatible backend:
 
 - **Honeycomb:**
+
   ```env
   OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io
   OTEL_EXPORTER_OTLP_HEADERS=x-honeycomb-team=YOUR_API_KEY
   ```
 
 - **Datadog:**
+
   ```env
   OTEL_EXPORTER_OTLP_ENDPOINT=https://http-intake.logs.datadoghq.com
   OTEL_EXPORTER_OTLP_HEADERS=DD-API-KEY=YOUR_API_KEY
   ```
 
 - **X-Ray (via OpenTelemetry Collector):**
+
   ```env
   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
   # Configure OpenTelemetry Collector with X-Ray exporter
@@ -204,6 +213,7 @@ pnpm start
 ```
 
 This will:
+
 1. Initialize autotel
 2. Create instrumented AWS SDK clients
 3. Test handlers with mock events and context
@@ -214,25 +224,30 @@ This will:
 For more realistic testing with actual AWS services, use LocalStack:
 
 1. **Start LocalStack:**
+
    ```bash
    pnpm localstack:up
    ```
 
 2. **Setup AWS resources:**
+
    ```bash
    pnpm setup
    ```
+
    This creates:
    - S3 bucket (`test-bucket`)
    - DynamoDB table (`users`)
    - SQS queue (`notifications`)
 
 3. **Run tests with LocalStack:**
+
    ```bash
    pnpm test:localstack
    ```
 
 4. **View LocalStack logs:**
+
    ```bash
    pnpm localstack:logs
    ```
@@ -243,6 +258,7 @@ For more realistic testing with actual AWS services, use LocalStack:
    ```
 
 The LocalStack setup includes:
+
 - ✅ S3, DynamoDB, SQS services
 - ✅ OpenTelemetry Collector (optional)
 - ✅ Health checks and automatic setup

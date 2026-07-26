@@ -22,14 +22,8 @@ export type {
   CompatibilityStep,
 } from './contract.js';
 
-export {
-  defaultSerializer,
-  jsonSerializer,
-} from './serializer.js';
-export type {
-  MessageSerializer,
-  JsonSerializerOptions,
-} from './serializer.js';
+export { defaultSerializer, jsonSerializer } from './serializer.js';
+export type { MessageSerializer, JsonSerializerOptions } from './serializer.js';
 
 export { read } from './reader.js';
 export type {

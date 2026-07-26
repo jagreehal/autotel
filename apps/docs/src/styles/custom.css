@@ -172,7 +172,8 @@ body {
   transition: color var(--sl-transition);
 }
 
-.sl-markdown-content a:where(:not(.btn, .chip, .cta__btn, .copy-markdown-btn)):hover {
+.sl-markdown-content
+  a:where(:not(.btn, .chip, .cta__btn, .copy-markdown-btn)):hover {
   color: var(--sl-color-accent-high);
   text-decoration: underline;
 }
@@ -324,13 +325,19 @@ nav.sidebar a {
   mask-image: none;
 }
 
-:root[data-theme='light'] .expressive-code figure.frame.is-terminal figcaption.header {
+:root[data-theme='light']
+  .expressive-code
+  figure.frame.is-terminal
+  figcaption.header {
   color: #374151;
   background: linear-gradient(180deg, #f3f3f3 0%, #e8e8e8 100%);
   border-color: rgba(0, 0, 0, 0.08);
 }
 
-:root[data-theme='dark'] .expressive-code figure.frame.is-terminal figcaption.header {
+:root[data-theme='dark']
+  .expressive-code
+  figure.frame.is-terminal
+  figcaption.header {
   color: #d1d5db;
   background: linear-gradient(180deg, #3a3a3a 0%, #2f2f2f 100%);
   border-color: rgba(255, 255, 255, 0.08);
@@ -422,7 +429,9 @@ header.header .site-title * {
   border: 2px solid transparent;
 }
 
-.sl-markdown-no-margin :not(a, strong, em, del, span, input, code, br) + :not(a, strong, em, del, span, input, code, br, :where(.not-content *)) {
+.sl-markdown-no-margin
+  :not(a, strong, em, del, span, input, code, br)
+  + :not(a, strong, em, del, span, input, code, br, :where(.not-content *)) {
   margin-top: 0;
 }
 

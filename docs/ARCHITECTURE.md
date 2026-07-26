@@ -4,11 +4,11 @@ Code structure patterns, conventions, and important architectural decisions.
 
 ## Functional API Pattern
 
-The core `trace()` function uses a factory pattern to detect if the user is passing a function that needs a context parameter:
+The core `trace()` function deterministically wraps a plain function. Use `getActiveTraceContext()` for ambient context, or `withTracing()` when an explicit context factory is clearer:
 
 ```typescript
 // Factory pattern (receives ctx)
-export const createUser = trace((ctx) => async (data) => {
+export const createUser = withTracing({})((ctx) => async (data) => {
   ctx.setAttribute('user.id', data.id);
   return await db.users.create(data);
 });
@@ -19,14 +19,14 @@ export const getUser = trace(async (id) => {
 });
 ```
 
-The implementation auto-detects the pattern by analyzing the function signature and checking the first parameter name against known hints (`ctx`, `context`, `tracecontext`, etc.).
+`trace()` never inspects or executes the function during wrapper construction. The explicit factory shape belongs to `withTracing()` and the semantic, messaging, and workflow helpers.
 
 ### Trace Name Inference
 
 Trace names are inferred automatically with the following priority:
 
 1. **Explicit name** (from `trace('customName', ...)` or `instrument()` key)
-2. **Named function expressions** (e.g., `trace((ctx) => async function createUser() {})`)
+2. **Named function expressions** (e.g., `withTracing({})((ctx) => async function createUser() {})`)
 3. **Variable name from assignment** (e.g., `const processDocuments = trace(...)` → "processDocuments")
 4. **Factory function name** (if the outer function is named)
 
@@ -34,14 +34,14 @@ The variable name inference (priority #3) analyzes the call stack to find the so
 
 ```typescript
 // Arrow function with inferred name from const assignment
-export const processDocuments = trace((ctx) => async (data: string) => {
+export const processDocuments = withTracing({})((ctx) => async (data: string) => {
   ctx.setAttribute('document.count', data.length)
   return data.toUpperCase()
 })
 // Trace name: "processDocuments" (inferred from const)
 
 // Named function expression (takes precedence)
-export const processDocuments = trace((ctx) => async function processData(data: string) => {
+export const processDocuments = withTracing({})((ctx) => async function processData(data: string) => {
   return data.toUpperCase()
 })
 // Trace name: "processData" (from named function, not "processDocuments")
@@ -52,6 +52,7 @@ export const processDocuments = trace((ctx) => async function processData(data: 
 - Minified/obfuscated code may prevent name inference
 - Edge runtimes without file system access will fall back to unnamed spans
 - Results are cached per source location for performance
+- Production/minified builds should use an explicit stable name (`trace('order.process', fn)` or `instrument({ key, fn })`). Development emits one diagnostic if resolution still falls back to `unknown`.
 
 ## Events Queue Pattern
 
@@ -279,4 +280,3 @@ OpenTelemetry's ESM instrumentation uses `import-in-the-middle` to hook into mod
 - Type definitions (.d.ts) generated from ESM build
 - Source maps enabled for debugging
 - Use `tsup` for bundling (not tsc directly)
-

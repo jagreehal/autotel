@@ -12,7 +12,7 @@
 
 import 'dotenv/config';
 import * as Sentry from '@sentry/node';
-import { init, shutdown, span, trace } from 'autotel';
+import { init, shutdown, span, trace, getActiveTraceContext } from 'autotel';
 import { createBuiltinLogger } from 'autotel/logger';
 import { linkSentryErrors, sentryOtlpConfig } from 'autotel-sentry';
 
@@ -39,7 +39,8 @@ init({
 linkSentryErrors(Sentry);
 
 async function main() {
-  await trace('example-sentry-demo', async (ctx) => {
+  await span('example-sentry-demo', async () => {
+    const ctx = getActiveTraceContext()!;
     ctx.setAttribute('demo', true);
     log.info({ demo: true }, 'trace started');
 
@@ -57,7 +58,7 @@ async function main() {
     }
 
     log.info({ demo: true }, 'trace finished');
-  });
+  })();
 
   await Sentry.flush(5000);
   await shutdown();

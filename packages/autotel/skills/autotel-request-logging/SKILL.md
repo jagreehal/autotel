@@ -4,33 +4,35 @@ description: >
   getRequestLogger(), set(), info/warn/error, emitNow(). One snapshot per request; requires active span. Use when adding request-scoped context or replacing scattered console.log.
 ---
 
-# Autotel — Request Logging
+# Autotel: Request Logging
 
 This skill builds on autotel-instrumentation. Read it first for init and span creation.
 
-Accumulate context with `getRequestLogger(ctx)`, `.set()`, and `.info()`/`.warn()`/`.error()`. Call `.emitNow()` (or rely on middleware) to emit one snapshot per request. Request logger requires an active span — use inside `trace()` or framework middleware.
+Accumulate context with `getRequestLogger(ctx)`, `.set()`, and `.info()`/`.warn()`/`.error()`. Call `.emitNow()` (or rely on middleware) to emit one snapshot per request. Request logger requires an active span. Use inside `trace()` or framework middleware.
 
 Preferred event model: treat request logger emissions as the default way to capture request-correlated events in new code. If a backend still expects span-event rendering, keep compatibility at export/processor level rather than adding new `span.addEvent()` calls in application code.
 
 ## Setup
 
 ```typescript
-import { init, trace, getRequestLogger } from 'autotel';
+import { init, withTracing, getRequestLogger } from 'autotel';
 
 init({ service: 'my-app' });
 
-const handler = trace((ctx) => async (req: Request, res: Response) => {
-  const log = getRequestLogger(ctx);
-  log.set({ method: req.method, path: req.url });
+const handler = withTracing({ name: 'http.request' })(
+  (ctx) => async (req: Request, res: Response) => {
+    const log = getRequestLogger(ctx);
+    log.set({ method: req.method, path: req.url });
 
-  const user = await getAuth(req);
-  log.set({ user: { id: user.id } });
+    const user = await getAuth(req);
+    log.set({ user: { id: user.id } });
 
-  const result = await doWork(req);
-  log.set({ result: { id: result.id } });
-  log.emitNow();
-  return res.json(result);
-});
+    const result = await doWork(req);
+    log.set({ result: { id: result.id } });
+    log.emitNow();
+    return res.json(result);
+  },
+);
 ```
 
 When the framework creates the span (e.g. Hono middleware), call `getRequestLogger()` with no args:
@@ -91,4 +93,7 @@ Source: packages/autotel/src/request-logger.ts
 
 Targets autotel v2.23.x.
 
-See also: autotel-instrumentation/SKILL.md — creating the span. autotel-structured-errors/SKILL.md — use .error() to record errors in the snapshot.
+See also:
+
+- `autotel-instrumentation/SKILL.md` for creating the span
+- `autotel-structured-errors/SKILL.md`, which uses `.error()` to record errors in the snapshot

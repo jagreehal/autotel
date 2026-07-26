@@ -31,9 +31,9 @@ Flatten nested objects into dot-notation span attributes:
 
 ```typescript
 import { flattenMetadata } from 'autotel/trace-helpers';
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
-export const processOrder = trace((ctx) => async (order: Order) => {
+export const processOrder = withTracing({})((ctx) => async (order: Order) => {
   const metadata = flattenMetadata({
     user: { id: order.userId, tier: 'premium' },
     payment: { method: 'card', processor: 'stripe' },
@@ -102,9 +102,7 @@ export const generateText = traceGenAI({
   operation: 'chat',
   provider: 'openai',
 })((ctx) => async (prompt: string) => {
-  const response = await openai.chat.completions.create({
-    /* ... */
-  });
+  const response = await openai.chat.completions.create({/* ... */});
   // Records gen_ai.usage.input_tokens / gen_ai.usage.output_tokens
   recordGenAiUsage(ctx, 'gpt-4-turbo', {
     inputTokens: response.usage.prompt_tokens,
@@ -119,18 +117,19 @@ export const getUser = traceDB({
   operation: 'SELECT',
   database: 'app_db',
   collection: 'users',
+  querySummary: 'SELECT users',
 })((ctx) => async (userId: string) => {
-  const query = 'SELECT * FROM users WHERE id = $1';
-  ctx.setAttribute('db.statement', query);
-  return await pool.query(query, [userId]);
+  return await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
 });
 
 // HTTP client operations (HTTP semantic conventions)
 export const fetchUser = traceHTTP({
   method: 'GET',
-  url: 'https://api.example.com/users/:id',
+  urlTemplate: '/users/{id}',
 })((ctx) => async (userId: string) => {
-  const response = await fetch(`https://api.example.com/users/${userId}`);
+  const url = `https://api.example.com/users/${userId}`;
+  ctx.setAttribute('url.full', url);
+  const response = await fetch(url);
   ctx.setAttribute('http.response.status_code', response.status);
   return response.json();
 });
@@ -149,6 +148,8 @@ export const publishEvent = traceMessaging({
 **Benefits:**
 
 - Automatic semantic attributes following OTel specs
+- Stable low-cardinality span names and correct client/producer/consumer kinds
+- Direct `traceDB(config, fn)` / `traceHTTP(config, fn)` forms when context is not needed
 - Type-safe configuration interfaces
 - Reduces boilerplate by 60-70%
 - Links to official OTel semantic convention docs in JSDoc
@@ -283,5 +284,6 @@ export const orderSaga = traceWorkflow({
 - `traceStep` creates child spans with `workflow.step.name`, `workflow.step.index`
 - `linkToPrevious: true` creates span links for step sequencing
 - Compensations run in reverse order on failure
-- `ctx.getWorkflowId()`, `ctx.getWorkflowName()`, `ctx.getStepIndex()` context methods
+- Workflow context: `ctx.getWorkflowId()`, `ctx.getWorkflowName()`
+- Step context: `ctx.getStepName()`, `ctx.getStepIndex()`, `ctx.getWorkflowContext()`
 - WeakMap-based state isolation tied to span lifecycle

@@ -14,32 +14,40 @@
 
 import 'dotenv/config';
 import express from 'express';
-import { trace, type TraceContext } from 'autotel';
+import { type TraceContext, withTracing } from 'autotel';
 
 const app = express();
 
 // Example: Database query simulation
-const fetchUser = trace((ctx: TraceContext) => async (userId: string) => {
-  ctx.setAttribute('db.query', 'SELECT * FROM users WHERE id = ?');
-  ctx.setAttribute('db.userId', userId);
-  
-  // Simulate database query
-  await new Promise(resolve => setTimeout(resolve, 50));
-  
-  return { id: userId, name: `User ${userId}`, email: `user${userId}@example.com` };
-});
+const fetchUser = withTracing({})(
+  (ctx: TraceContext) => async (userId: string) => {
+    ctx.setAttribute('db.query', 'SELECT * FROM users WHERE id = ?');
+    ctx.setAttribute('db.userId', userId);
 
-const fetchOrders = trace((ctx: TraceContext) => async (userId: string) => {
-  ctx.setAttribute('db.query', 'SELECT * FROM orders WHERE userId = ?');
-  ctx.setAttribute('db.userId', userId);
-  
-  await new Promise(resolve => setTimeout(resolve, 30));
-  
-  return [
-    { id: 'order-1', userId, amount: 99.99 },
-    { id: 'order-2', userId, amount: 149.99 },
-  ];
-});
+    // Simulate database query
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    return {
+      id: userId,
+      name: `User ${userId}`,
+      email: `user${userId}@example.com`,
+    };
+  },
+);
+
+const fetchOrders = withTracing({})(
+  (ctx: TraceContext) => async (userId: string) => {
+    ctx.setAttribute('db.query', 'SELECT * FROM orders WHERE userId = ?');
+    ctx.setAttribute('db.userId', userId);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    return [
+      { id: 'order-1', userId, amount: 99.99 },
+      { id: 'order-2', userId, amount: 149.99 },
+    ];
+  },
+);
 
 // Routes
 app.get('/health', (req, res) => {
@@ -48,7 +56,7 @@ app.get('/health', (req, res) => {
 
 app.get('/users/:userId', async (req, res) => {
   const { userId } = req.params;
-  
+
   try {
     const user = await fetchUser(userId);
     res.json(user);
@@ -59,7 +67,7 @@ app.get('/users/:userId', async (req, res) => {
 
 app.get('/users/:userId/orders', async (req, res) => {
   const { userId } = req.params;
-  
+
   try {
     const orders = await fetchOrders(userId);
     res.json(orders);
@@ -84,4 +92,3 @@ app.listen(PORT, () => {
   console.log(`   - http://localhost:${PORT}/error`);
   console.log(`\n📊 Check Grafana for traces!`);
 });
-

@@ -23,11 +23,9 @@ export function createStringRedactor(
       // Smart masks (e.g. email → a***@***.com) take precedence over the
       // static replacement so callers see the same output as the
       // span-attribute redactor does.
-      if (mask) {
-        result = result.replaceAll(pattern, (match) => mask(match));
-      } else {
-        result = result.replaceAll(pattern, replacement ?? defaultReplacement);
-      }
+      result = mask
+        ? result.replaceAll(pattern, (match) => mask(match))
+        : result.replaceAll(pattern, replacement ?? defaultReplacement);
     }
     return result;
   };

@@ -19,7 +19,9 @@ import {
  */
 export interface HttpPactLike {
   addInteraction: (interaction: HttpInteraction) => unknown;
-  executeTest: <T>(testFn: (mockServer: HttpMockServer) => Promise<T>) => Promise<T | undefined>;
+  executeTest: <T>(
+    testFn: (mockServer: HttpMockServer) => Promise<T>,
+  ) => Promise<T | undefined>;
 }
 
 interface HttpPactWithOpts extends HttpPactLike {
@@ -140,7 +142,9 @@ export async function withHttpPactInteraction<T>(
   pact.addInteraction(interaction);
 
   return autotelSpan(spanName, async (span) => {
-    span.setAttributes(buildPactAttributes(meta, { contractFile: opts.contractFile }));
+    span.setAttributes(
+      buildPactAttributes(meta, { contractFile: opts.contractFile }),
+    );
 
     try {
       const result = await pact.executeTest(testFn);

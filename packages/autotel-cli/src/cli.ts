@@ -1,5 +1,10 @@
 import { Command } from 'commander';
-import type { InitOptions, DoctorOptions, AddOptions, CodemodTraceOptions } from './types/index';
+import type {
+  InitOptions,
+  DoctorOptions,
+  AddOptions,
+  CodemodTraceOptions,
+} from './types/index';
 import { runInit } from './commands/init';
 import { runDoctor } from './commands/doctor';
 import { runAdd } from './commands/add';
@@ -42,7 +47,9 @@ export function createProgram(): Command {
 
   program
     .name('autotel')
-    .description('CLI for autotel - setup wizard, diagnostics, and incremental features')
+    .description(
+      'CLI for autotel - setup wizard, diagnostics, and incremental features',
+    )
     .version('0.1.0');
 
   // Global options
@@ -58,17 +65,26 @@ export function createProgram(): Command {
     .description('Initialize autotel in your project')
     .option('--dry-run', 'Skip installation and print what would be done')
     .option('--no-install', 'Generate files only, skip package installation')
-    .option('--print-install-cmd', 'Output the install command without running it')
+    .option(
+      '--print-install-cmd',
+      'Output the install command without running it',
+    )
     .option('-y, --yes', 'Accept defaults, non-interactive')
     .option('--preset <name>', 'Use a quick preset (e.g., node-datadog-pino)')
     .option('--force', 'Overwrite existing config (creates backup first)')
-    .option('--workspace-root', 'Install at workspace root instead of package root')
+    .option(
+      '--workspace-root',
+      'Install at workspace root instead of package root',
+    )
     // Detection-driven flow
     .option('--no-detect', 'Skip auto-detection of installed deps')
     .option('--detect-only', 'Run detection, print the plan, write nothing')
     .option('--plan <path>', 'Apply a pre-built InitPlan JSON file')
     .option('--input <path>', 'Read InitPlan JSON from stdin (-) or a file')
-    .option('--scan-env', 'Consent to reading .env / .env.local for backend detection')
+    .option(
+      '--scan-env',
+      'Consent to reading .env / .env.local for backend detection',
+    )
     // Agent-native I/O
     .option('--json', 'Emit machine-readable JSON')
     .option('--output-file <path>', 'Persist JSON output to this file')
@@ -147,11 +163,17 @@ export function createProgram(): Command {
     .option('--list', 'List available presets for the given type')
     .option('--dry-run', 'Skip installation and print what would be done')
     .option('--no-install', 'Generate files only, skip package installation')
-    .option('--print-install-cmd', 'Output the install command without running it')
+    .option(
+      '--print-install-cmd',
+      'Output the install command without running it',
+    )
     .option('-y, --yes', 'Accept defaults, non-interactive')
     .option('--force', 'Overwrite non-CLI-owned config (creates backup first)')
     .option('--json', 'Output machine-readable JSON (for --list)')
-    .option('--workspace-root', 'Install at workspace root instead of package root')
+    .option(
+      '--workspace-root',
+      'Install at workspace root instead of package root',
+    )
     .action(async (type, name, opts) => {
       const options: AddOptions = {
         cwd: opts.cwd ?? process.cwd(),
@@ -180,14 +202,23 @@ export function createProgram(): Command {
   program.addCommand(addCmd);
 
   // Codemod command
-  const codemodCmd = new Command('codemod')
-    .description('Codemod commands for adopting autotel');
+  const codemodCmd = new Command('codemod').description(
+    'Codemod commands for adopting autotel',
+  );
   const traceCmd = new Command('trace')
-    .description('Wrap functions in trace() with span name from function/variable/method name')
+    .description(
+      'Wrap functions in trace() with span name from function/variable/method name',
+    )
     .argument('<path>', 'File path or glob (e.g. src/index.ts, src/**/*.ts)')
     .option('--dry-run', 'Print changes without writing files')
-    .option('--name-pattern <pattern>', 'Span name template: {name}, {file}, {path}')
-    .option('--skip <regex>...', 'Skip functions whose name matches (repeatable)')
+    .option(
+      '--name-pattern <pattern>',
+      'Span name template: {name}, {file}, {path}',
+    )
+    .option(
+      '--skip <regex>...',
+      'Skip functions whose name matches (repeatable)',
+    )
     .option('--print-files', 'Print per-file summary (wrapped count, skipped)')
     .action(async (pathArg: string, opts) => {
       const options: CodemodTraceOptions = {
@@ -200,7 +231,10 @@ export function createProgram(): Command {
         workspaceRoot: false,
         path: pathArg,
         namePattern: opts.namePattern,
-        skip: Array.isArray(opts.skip) && opts.skip.length > 0 ? opts.skip : undefined,
+        skip:
+          Array.isArray(opts.skip) && opts.skip.length > 0
+            ? opts.skip
+            : undefined,
         printFiles: opts.printFiles ?? false,
       };
       await runCodemodTrace(options);
@@ -216,7 +250,10 @@ export function createProgram(): Command {
     .option('--output-file <path>', 'Persist JSON to a file')
     .option('--no-secrets-in-output', 'Redact secret-shaped values')
     .action((opts) => {
-      runSchema({ outputFile: opts.outputFile, noSecrets: opts.secretsInOutput === false });
+      runSchema({
+        outputFile: opts.outputFile,
+        noSecrets: opts.secretsInOutput === false,
+      });
     });
 
   const schemaErrorsCmd = new Command('errors')
@@ -279,8 +316,9 @@ export function createProgram(): Command {
   registerCollectorCommands(program);
   registerSecurityCommands(program);
 
-  const telemetryCmd = new Command('telemetry')
-    .description('Manage opt-in CLI usage telemetry');
+  const telemetryCmd = new Command('telemetry').description(
+    'Manage opt-in CLI usage telemetry',
+  );
   telemetryCmd
     .command('status')
     .description('Show telemetry consent status')
@@ -303,7 +341,7 @@ export function createProgram(): Command {
     .command('disclosure')
     .description('Print telemetry disclosure markdown')
     .action(() => {
-      runTelemetryDisclosure('autotel', program.version());
+      runTelemetryDisclosure('autotel', program.version()!);
     });
   program.addCommand(telemetryCmd);
 
@@ -320,10 +358,21 @@ export function createProgram(): Command {
  * which the top-level handler in `index.ts` converts to an envelope.
  */
 export async function run(): Promise<void> {
-  const base = createProgram();
-  const program = withCommanderTelemetry(base, {
+  const program = createProgram();
+  // withCommanderTelemetry's published signature narrows its argument to
+  // { name; version: () => string; parseAsync } and returns that same shape,
+  // dropping commander's own methods and being stricter than commander's
+  // version() (which is string | undefined). It mutates and returns the object
+  // it's given, so hand it a thin typed view over `program` and keep using
+  // `program` itself for the commander-specific calls below.
+  const telemetryView = {
+    name: () => program.name(),
+    version: () => program.version() ?? '',
+    parseAsync: (argv: string[]) => program.parseAsync(argv),
+  };
+  const parseWithTelemetry = withCommanderTelemetry(telemetryView, {
     name: 'autotel',
-    version: base.version(),
+    version: program.version()!,
   });
   program.exitOverride();
   // Investigate / JSON-only commands need their failure path to be
@@ -351,5 +400,5 @@ export async function run(): Promise<void> {
     }
     stack.push(...cmd.commands);
   }
-  await program.parseAsync(process.argv);
+  await parseWithTelemetry.parseAsync(process.argv);
 }

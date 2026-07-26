@@ -26,12 +26,14 @@ describe('Browser Rendering Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
 
     mockBrowser = {
       fetch: vi.fn(async () => new Response('<html></html>', { status: 200 })),
@@ -45,7 +47,10 @@ describe('Browser Rendering Instrumentation', () => {
 
   describe('fetch()', () => {
     it('should create span with correct attributes', async () => {
-      const instrumented = instrumentBrowserRendering(mockBrowser, 'my-browser');
+      const instrumented = instrumentBrowserRendering(
+        mockBrowser,
+        'my-browser',
+      );
 
       await instrumented.fetch('https://example.com/page');
 
@@ -54,19 +59,33 @@ describe('Browser Rendering Instrumentation', () => {
       const [spanName, spanOptions] = mockTracer.startActiveSpan.mock.calls[0];
       expect(spanName).toBe('BrowserRendering my-browser: fetch');
       expect(spanOptions.kind).toBe(SpanKind.CLIENT);
-      expect(spanOptions.attributes['browser.system']).toBe('cloudflare-browser-rendering');
-      expect(spanOptions.attributes['url.full']).toBe('https://example.com/page');
+      expect(spanOptions.attributes['browser.system']).toBe(
+        'cloudflare-browser-rendering',
+      );
+      expect(spanOptions.attributes['url.full']).toBe(
+        'https://example.com/page',
+      );
     });
 
     it('should record http.response.status_code', async () => {
-      mockBrowser.fetch = vi.fn(async () => new Response('Not Found', { status: 404 }));
+      mockBrowser.fetch = vi.fn(
+        async () => new Response('Not Found', { status: 404 }),
+      );
 
-      const instrumented = instrumentBrowserRendering(mockBrowser, 'my-browser');
+      const instrumented = instrumentBrowserRendering(
+        mockBrowser,
+        'my-browser',
+      );
 
       await instrumented.fetch('https://example.com/missing');
 
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('http.response.status_code', 404);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'http.response.status_code',
+        404,
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -76,9 +95,14 @@ describe('Browser Rendering Instrumentation', () => {
         throw error;
       });
 
-      const instrumented = instrumentBrowserRendering(mockBrowser, 'my-browser');
+      const instrumented = instrumentBrowserRendering(
+        mockBrowser,
+        'my-browser',
+      );
 
-      await expect(instrumented.fetch('https://example.com/broken')).rejects.toThrow('Browser rendering failed');
+      await expect(
+        instrumented.fetch('https://example.com/broken'),
+      ).rejects.toThrow('Browser rendering failed');
 
       expect(mockSpan.recordException).toHaveBeenCalledWith(error);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -98,33 +122,51 @@ describe('Browser Rendering Instrumentation', () => {
     });
 
     it('should handle URL objects as input', async () => {
-      const instrumented = instrumentBrowserRendering(mockBrowser, 'my-browser');
+      const instrumented = instrumentBrowserRendering(
+        mockBrowser,
+        'my-browser',
+      );
 
       const url = new URL('https://example.com/rendered-page');
       await instrumented.fetch(url);
 
       const spanOptions = mockTracer.startActiveSpan.mock.calls[0][1];
-      expect(spanOptions.attributes['url.full']).toBe('https://example.com/rendered-page');
+      expect(spanOptions.attributes['url.full']).toBe(
+        'https://example.com/rendered-page',
+      );
     });
 
     it('should handle Request objects as input', async () => {
-      const instrumented = instrumentBrowserRendering(mockBrowser, 'my-browser');
+      const instrumented = instrumentBrowserRendering(
+        mockBrowser,
+        'my-browser',
+      );
 
       const request = new Request('https://example.com/request-page');
       await instrumented.fetch(request);
 
       const spanOptions = mockTracer.startActiveSpan.mock.calls[0][1];
-      expect(spanOptions.attributes['url.full']).toBe('https://example.com/request-page');
+      expect(spanOptions.attributes['url.full']).toBe(
+        'https://example.com/request-page',
+      );
     });
 
     it('should set OK status and end span on success', async () => {
-      const instrumented = instrumentBrowserRendering(mockBrowser, 'my-browser');
+      const instrumented = instrumentBrowserRendering(
+        mockBrowser,
+        'my-browser',
+      );
 
       const result = await instrumented.fetch('https://example.com/page');
 
       expect(result).toBeInstanceOf(Response);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('http.response.status_code', 200);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'http.response.status_code',
+        200,
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
   });
@@ -133,7 +175,7 @@ describe('Browser Rendering Instrumentation', () => {
     it('should invoke fetch() with original object as this, not the proxy', async () => {
       let receivedThis: any;
       const mockBrowserObj = {
-        fetch: vi.fn(async function(this: any) {
+        fetch: vi.fn(async function (this: any, _url: string) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return new Response('ok', { status: 200 });
@@ -147,7 +189,10 @@ describe('Browser Rendering Instrumentation', () => {
 
   describe('Non-instrumented methods', () => {
     it('should pass through non-instrumented methods unchanged', () => {
-      const instrumented = instrumentBrowserRendering(mockBrowser, 'my-browser');
+      const instrumented = instrumentBrowserRendering(
+        mockBrowser,
+        'my-browser',
+      );
 
       const result = instrumented.someOtherMethod();
 

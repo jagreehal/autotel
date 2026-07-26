@@ -1,6 +1,7 @@
 import { context, SpanStatusCode } from '@opentelemetry/api';
-import { trace, init, type TraceContext } from 'autotel';
+import { trace, init, getActiveTraceContext } from 'autotel';
 import { extractContextFromRequest } from './context';
+import { isControlFlowSignal, isRealError } from './control-flow';
 import { isExcludedPath } from './route-filter';
 import {
   type WrapStartHandlerConfig,
@@ -95,7 +96,8 @@ export function wrapStartHandler(
       return context.with(parentContext, async () => {
         const spanName = `${request.method} ${url.pathname}`;
 
-        return trace(spanName, async (ctx: TraceContext) => {
+        return trace({ name: spanName, isError: isRealError }, async () => {
+          const ctx = getActiveTraceContext()!;
           // Set HTTP semantic attributes
           ctx.setAttributes({
             [SPAN_ATTRIBUTES.HTTP_REQUEST_METHOD]: request.method,
@@ -166,13 +168,18 @@ export function wrapStartHandler(
               duration,
             );
 
+            if (isControlFlowSignal(error)) {
+              ctx.setStatus({ code: SpanStatusCode.OK });
+              throw error;
+            }
+
             if (mergedConfig.captureErrors) {
               ctx.recordError(error);
             }
 
             throw error;
           }
-        });
+        })();
       });
     };
   };
@@ -227,7 +234,8 @@ export function createTracedHandler(
       return context.with(parentContext, async () => {
         const spanName = `${request.method} ${url.pathname}`;
 
-        return trace(spanName, async (ctx: TraceContext) => {
+        return trace({ name: spanName, isError: isRealError }, async () => {
+          const ctx = getActiveTraceContext()!;
           ctx.setAttributes({
             [SPAN_ATTRIBUTES.HTTP_REQUEST_METHOD]: request.method,
             [SPAN_ATTRIBUTES.URL_PATH]: url.pathname,
@@ -293,13 +301,18 @@ export function createTracedHandler(
               duration,
             );
 
+            if (isControlFlowSignal(error)) {
+              ctx.setStatus({ code: SpanStatusCode.OK });
+              throw error;
+            }
+
             if (mergedConfig.captureErrors) {
               ctx.recordError(error);
             }
 
             throw error;
           }
-        });
+        })();
       });
     };
   };

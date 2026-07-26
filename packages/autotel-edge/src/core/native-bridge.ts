@@ -89,6 +89,9 @@ function resolveSpanIds(
 }
 
 const NATIVE_TRACER_KEY = createContextKey('autotel-native-tracer');
+const NATIVE_TRACE_CONTEXT_KEY = createContextKey(
+  'autotel-native-trace-context',
+);
 
 /**
  * Return a context with the given native tracer installed. Runtime adapters
@@ -109,9 +112,33 @@ export function withNativeTracer(
  */
 export function getActiveNativeTracer(): NativeTracer | null {
   const value = api_context.active().getValue(NATIVE_TRACER_KEY) as
-    | NativeTracer
-    | undefined;
+    NativeTracer | undefined;
   return value ?? null;
+}
+
+/**
+ * Return the TraceContext backed by the currently active native span.
+ *
+ * Native spans do not appear in OpenTelemetry's active-span API, so the
+ * functional API stores this value separately while a native callback runs.
+ */
+export function getActiveNativeTraceContext(): TraceContext | undefined {
+  return api_context.active().getValue(NATIVE_TRACE_CONTEXT_KEY) as
+    TraceContext | undefined;
+}
+
+/**
+ * Run a callback with a native-backed TraceContext available to ambient
+ * accessors such as `getActiveTraceContext()`.
+ */
+export function runWithNativeTraceContext<T>(
+  traceContext: TraceContext,
+  callback: () => T,
+): T {
+  const active = api_context
+    .active()
+    .setValue(NATIVE_TRACE_CONTEXT_KEY, traceContext);
+  return api_context.with(active, callback);
 }
 
 /**
@@ -158,7 +185,10 @@ function nativeSetErrorStatus(span: NativeSpanHandle, message?: string): void {
   }
 }
 
-function nativeRecordException(span: NativeSpanHandle, exception: unknown): void {
+function nativeRecordException(
+  span: NativeSpanHandle,
+  exception: unknown,
+): void {
   const error =
     exception instanceof Error ? exception : new Error(String(exception));
   span.setAttribute('exception.type', error.name);

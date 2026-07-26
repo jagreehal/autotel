@@ -10,7 +10,11 @@ import { bool, num, str } from '../attrs';
 import { estimateCostUsd } from '../cost';
 import { mergeAttrs, readIdentity } from '../identity';
 import { parseToolName } from '../mcp';
-import { classifyTool, readSkillName, readSubAgentType } from '../tool-taxonomy';
+import {
+  classifyTool,
+  readSkillName,
+  readSubAgentType,
+} from '../tool-taxonomy';
 import type {
   AgentEvent,
   AgentEventType,
@@ -19,11 +23,7 @@ import type {
   ToolRef,
   OtelMetricRecord,
 } from '../types';
-import type {
-  AgentAdapter,
-  AgentMetricKind,
-  AgentMetricSignal,
-} from './types';
+import type { AgentAdapter, AgentMetricKind, AgentMetricSignal } from './types';
 
 export interface PrefixAdapterConfig {
   kind: AgentAdapter['kind'];
@@ -52,7 +52,8 @@ const EVENT_SUFFIXES: Record<string, AgentEventType> = {
  * an unhandled signal to triage). Prefix-shaped agents (Claude Code / opencode)
  * share these names.
  */
-export const HANDLED_EVENT_NAMES: readonly string[] = Object.keys(EVENT_SUFFIXES);
+export const HANDLED_EVENT_NAMES: readonly string[] =
+  Object.keys(EVENT_SUFFIXES);
 
 /** Compose a full ToolRef: MCP split + category + (defensive) sub-agent/skill id. */
 function buildToolRef(name: string, attrs: Attributes): ToolRef {
@@ -117,7 +118,9 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
     normalizeEvent(record: AgentRawEvent): AgentEvent | null {
       const attrs = mergeAttrs(record.resource, record.attributes);
       const rawName =
-        suffixOf(record.eventName) || str(attrs, 'event.name') || record.eventName;
+        suffixOf(record.eventName) ||
+        str(attrs, 'event.name') ||
+        record.eventName;
       const type = EVENT_SUFFIXES[rawName] ?? 'other';
       const sessionId = str(attrs, 'session.id');
       if (!sessionId) return null;
@@ -142,7 +145,11 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
           event.durationMs = num(attrs, 'duration_ms');
           const reported = num(attrs, 'cost_usd', 'cost');
           if (reported === undefined) {
-            const estimated = estimateCostUsd(event.model, event.inputTokens, event.outputTokens);
+            const estimated = estimateCostUsd(
+              event.model,
+              event.inputTokens,
+              event.outputTokens,
+            );
             if (estimated !== undefined) {
               event.costUsd = estimated;
               event.costSource = 'estimated';
@@ -165,14 +172,16 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
           event.success = bool(attrs, 'success');
           event.durationMs = num(attrs, 'duration_ms');
           const decision = str(attrs, 'decision');
-          if (decision === 'accept' || decision === 'reject') event.decision = decision;
+          if (decision === 'accept' || decision === 'reject')
+            event.decision = decision;
           break;
         }
         case 'tool_decision': {
           const toolName = str(attrs, 'tool_name', 'name', 'tool');
           if (toolName) event.tool = buildToolRef(toolName, attrs);
           const decision = str(attrs, 'decision');
-          if (decision === 'accept' || decision === 'reject') event.decision = decision;
+          if (decision === 'accept' || decision === 'reject')
+            event.decision = decision;
           break;
         }
         case 'user_prompt': {

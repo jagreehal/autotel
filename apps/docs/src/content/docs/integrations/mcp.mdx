@@ -6,10 +6,10 @@ description: Instrument MCP servers and clients, and let AI agents query your tr
 The autotel monorepo ships **two** Model Context Protocol packages with
 different jobs. Pick the one you need:
 
-| Package                          | Purpose                                                                |
-| -------------------------------- | ---------------------------------------------------------------------- |
-| `autotel-mcp-instrumentation`    | Instrument **your own** MCP servers and clients with OpenTelemetry.    |
-| `autotel-mcp`                    | A standalone MCP **server** that lets AI agents query your traces, metrics, and logs. |
+| Package                       | Purpose                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `autotel-mcp-instrumentation` | Instrument **your own** MCP servers and clients with OpenTelemetry.                   |
+| `autotel-mcp`                 | A standalone MCP **server** that lets AI agents query your traces, metrics, and logs. |
 
 If you're building an MCP-based product → use `autotel-mcp-instrumentation`.
 If you want Claude / Cursor / Windsurf to investigate observability data
@@ -88,10 +88,10 @@ const result = await instrumented.callTool('get_weather', { location: 'NYC' });
 
 ```typescript
 interface McpInstrumentationConfig {
-  captureArgs?: boolean;       // default true
-  captureResults?: boolean;    // default false (PII risk)
-  captureErrors?: boolean;     // default true
-  customAttributes?: (ctx: { type, name, args, result }) => Attributes;
+  captureArgs?: boolean; // default true
+  captureResults?: boolean; // default false (PII risk)
+  captureErrors?: boolean; // default true
+  customAttributes?: (ctx: { type; name; args; result }) => Attributes;
 }
 ```
 
@@ -99,14 +99,14 @@ interface McpInstrumentationConfig {
 
 **Server spans:**
 
-- `mcp.type` — `tool`, `resource`, `prompt`
+- `mcp.type`: `tool`, `resource`, `prompt`
 - `mcp.tool.name` / `mcp.resource.name` / `mcp.prompt.name`
 - `mcp.tool.args` (when `captureArgs: true`)
 - `mcp.tool.result` (when `captureResults: true`)
 
 **Client spans:**
 
-- `mcp.client.operation` — `callTool`, `getResource`, `getPrompt`
+- `mcp.client.operation`: `callTool`, `getResource`, `getPrompt`
 - `mcp.client.name`, `mcp.client.args`, `mcp.client.result`
 
 ### Distributed tracing via `_meta`
@@ -160,14 +160,14 @@ MCP is where untrusted data crosses into your agent. The
 (Chrome/Google, June 2026) has two vectors: **malicious manifests** (hidden
 instructions in a tool's name/description/annotations) and **contaminated
 outputs** (injection smuggled inside legitimate tool results). Detecting these
-in production is an observability problem — and this package makes it observable
+in production is an observability problem. And this package makes it observable
 at the MCP boundary.
 
 :::note[Where this fits]
 This package **observes and signals**. Enforcement lives elsewhere in the
 monorepo: deterministic kill-switches (cost/token/tool-call ceilings, loop
 detection) in [`autotel-genai/guard`](/integrations/security/), and
-identity/scope/policy in `autotel-genai/agent`. The two compose — see the guard
+identity/scope/policy in `autotel-genai/agent`. The two compose. See the guard
 bridge below.
 :::
 
@@ -176,9 +176,9 @@ bridge below.
 - Annotation hints → `mcp.tool.read_only`, `mcp.tool.destructive`,
   `mcp.tool.idempotent`, `mcp.tool.open_world`, `mcp.tool.untrusted_content`
 - Payload sizes → `mcp.tool.arguments.size`, `mcp.tool.result.size` (sizes only,
-  no content) — a token-exhaustion / contaminated-output tell
+  no content). A token-exhaustion / contaminated-output tell
 
-**Opt-in** — a pluggable classifier (Model Armor, Promptfoo, an LLM critic, or
+**Opt-in**. A pluggable classifier (Model Armor, Promptfoo, an LLM critic, or
 the built-in heuristic) plus output budgets:
 
 ```typescript
@@ -198,19 +198,22 @@ The classifier scans tool **arguments** (server + client) and **results** (the
 contaminated-output vector the agent receives), recording `mcp.security.injection.*`
 and emitting a `mcp.security.injection_suspected` event on non-clean verdicts.
 Classifier failures never break the traced call. The built-in heuristic is a
-cheap tripwire — feed its signal to a real classifier, don't gate actions on it.
+cheap tripwire. Feed its signal to a real classifier, don't gate actions on it.
 
-**Helpers** (`autotel-mcp-instrumentation/security`, runtime-agnostic — works in
+**Helpers** (`autotel-mcp-instrumentation/security`, runtime-agnostic. Works in
 Workers/edge):
 
 ```typescript
-import { spotlight, validateToolBudget } from 'autotel-mcp-instrumentation/security';
+import {
+  spotlight,
+  validateToolBudget,
+} from 'autotel-mcp-instrumentation/security';
 
 const safe = spotlight(userComment); // <untrusted>…</untrusted> (or { method: 'base64' })
 const violations = validateToolBudget({ name, description, parameters }); // WebMCP char limits
 ```
 
-**Guard bridge — detection → enforcement.** Pass an `autotel-genai` guard and
+**Guard bridge, detection → enforcement.** Pass an `autotel-genai` guard and
 every tool call is recorded as a step; a `stop` rule throws to halt a runaway run:
 
 ```typescript
@@ -222,32 +225,32 @@ instrumentMcpClient(client, { guard }); // duck-typed — no genai dependency ad
 
 **Signals reference**
 
-| Signal | Kind | Meaning |
-| --- | --- | --- |
-| `mcp.tool.*` (hints) | span attr | tool trust profile / manifest vector |
-| `mcp.tool.{arguments,result}.size` | span attr | payload size (token-exhaustion tell) |
-| `mcp.security.injection.*` | span attr | classifier verdict / score / categories |
-| `mcp.security.injection_suspected` | event | non-clean classifier verdict |
-| `mcp.security.budget_exceeded` | event | output over `outputCharBudget` |
-| `mcp.security.events` | counter | aggregate security-signal count |
+| Signal                             | Kind      | Meaning                                 |
+| ---------------------------------- | --------- | --------------------------------------- |
+| `mcp.tool.*` (hints)               | span attr | tool trust profile / manifest vector    |
+| `mcp.tool.{arguments,result}.size` | span attr | payload size (token-exhaustion tell)    |
+| `mcp.security.injection.*`         | span attr | classifier verdict / score / categories |
+| `mcp.security.injection_suspected` | event     | non-clean classifier verdict            |
+| `mcp.security.budget_exceeded`     | event     | output over `outputCharBudget`          |
+| `mcp.security.events`              | counter   | aggregate security-signal count         |
 
 Query them in production with `autotel security mcp` (see the
 [investigate CLI](/tools/cli/)).
 
 ### Entry points
 
-| Import                                       | Contents                          | Size |
-| -------------------------------------------- | --------------------------------- | ---- |
-| `autotel-mcp-instrumentation`                | Everything                        | ~7KB |
-| `autotel-mcp-instrumentation/server`         | `instrumentMcpServer`             | ~5KB |
-| `autotel-mcp-instrumentation/client`         | `instrumentMcpClient`             | ~4KB |
-| `autotel-mcp-instrumentation/context`        | `inject*`/`extract*`/`activate*`  | ~2KB |
-| `autotel-mcp-instrumentation/security`       | classifier, spotlight, budgets    | ~2KB |
+| Import                                 | Contents                         | Size |
+| -------------------------------------- | -------------------------------- | ---- |
+| `autotel-mcp-instrumentation`          | Everything                       | ~7KB |
+| `autotel-mcp-instrumentation/server`   | `instrumentMcpServer`            | ~5KB |
+| `autotel-mcp-instrumentation/client`   | `instrumentMcpClient`            | ~4KB |
+| `autotel-mcp-instrumentation/context`  | `inject*`/`extract*`/`activate*` | ~2KB |
+| `autotel-mcp-instrumentation/security` | classifier, spotlight, budgets   | ~2KB |
 
 ### Examples
 
-- [`example-mcp-server`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-server) — MCP server with `instrumentMcpServer()`.
-- [`example-mcp-client`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-client) — MCP client with `instrumentMcpClient()` and distributed tracing.
+- [`example-mcp-server`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-server): MCP server with `instrumentMcpServer()`.
+- [`example-mcp-client`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-client): MCP client with `instrumentMcpClient()` and distributed tracing.
 
 ---
 
@@ -290,13 +293,86 @@ don't need Jaeger, Tempo, or Grafana.
 claude mcp add autotel npx autotel-mcp
 ```
 
-Once installed, ask the agent things like *"What slowed down checkout in the
-last hour?"* or *"Show traces with errors for `service.name=api`"*. The agent
+Once installed, ask the agent things like _"What slowed down checkout in the
+last hour?"_ or _"Show traces with errors for `service.name=api`"_. The agent
 will discover services, query traces, correlate logs, and return a written
 investigation.
 
+### Run alongside autotel-devtools
+
+`autotel-mcp` and [`autotel-devtools`](/autotel/tools/devtools/) both bind port
+4318 by default, because each starts its own OTLP collector. Start both with
+their defaults and the second one falls forward to a different port, so your app
+sends telemetry to one receiver while the other stays empty.
+
+Point `autotel-mcp` at the devtools receiver instead of starting a second
+collector. One process owns 4318, the browser dashboard and the agent read the
+same data:
+
+```bash
+# 1. devtools owns port 4318: receives OTLP, serves the dashboard
+npx autotel-devtools
+
+# 2. MCP reads through devtools and binds no OTLP port of its own
+AUTOTEL_BACKEND=devtools npx autotel-mcp
+```
+
+```bash
+# 3. your app exports once, to devtools
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+node app.js
+```
+
+Your app streams telemetry to devtools. The dashboard renders it live, and the
+agent queries the same traces over the devtools HTTP read API. On startup the
+`devtools` backend probes `/healthz` and refuses to run if a foreign process
+holds the port, so a wrong answer never masquerades as your data. Set
+`DEVTOOLS_BASE_URL` (default `http://localhost:4318`) when you moved devtools to
+another port.
+
+:::caution[The `devtools` backend serves traces only]
+autotel-devtools exposes traces over HTTP but streams logs and metrics to its UI
+over WebSocket, so through this backend the agent reads traces and gets an
+explicit _unsupported_ answer for metric and log queries. When you need the
+agent to query all three signals, run `autotel-mcp` on its own with the default
+`collector` backend as the single receiver on 4318 (you drop the browser
+dashboard), or give each tool a separate port and export from your app to both.
+:::
+
+### Backends
+
+`autotel-mcp` reads from one telemetry source, chosen with `AUTOTEL_BACKEND`
+(default `collector`):
+
+| Backend      | Reads from                                                                                            | Env                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `collector`  | Its own built-in OTLP receiver                                                                        | `AUTOTEL_COLLECTOR_PORT` (`4318`)                    |
+| `devtools`   | A running autotel-devtools instance                                                                   | `DEVTOOLS_BASE_URL` (`http://localhost:4318`)        |
+| `jaeger`     | Jaeger query API                                                                                      | `JAEGER_BASE_URL` (`http://localhost:16686`)         |
+| `tempo`      | Grafana Tempo                                                                                         | `TEMPO_BASE_URL` (`http://localhost:3200`)           |
+| `prometheus` | Prometheus                                                                                            | `PROMETHEUS_BASE_URL` (`http://localhost:9090`)      |
+| `loki`       | Grafana Loki                                                                                          | `LOKI_BASE_URL` (`http://localhost:3100`)            |
+| `stack`      | Tempo/Jaeger + Prometheus + Loki, composed from whichever `*_BASE_URL` you set                        | the base URLs above                                  |
+| `auto`       | Probes Tempo, Jaeger, Prometheus and Loki, then reads from whatever answers (falls back to `fixture`) | the base URLs above                                  |
+| `fixture`    | A JSON file, for demos and tests                                                                      | `AUTOTEL_FIXTURE_PATH` (`./fixtures/telemetry.json`) |
+
+To pass a backend through the MCP client config, add it to `args` or `env`:
+
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp"],
+      "env": { "AUTOTEL_BACKEND": "devtools" }
+    }
+  }
+}
+```
+
 ### Related
 
-- [AI-Assisted Observability](/autotel/ai-observability/) — patterns for letting
+- [AI-Assisted Observability](/autotel/ai-observability/): patterns for letting
   agents investigate production traces.
-- [MCP example app](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability) — autotel instruments a Node app, Claude queries the traces via MCP.
+- [MCP example app](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability): autotel instruments a Node app, Claude queries the traces via MCP.

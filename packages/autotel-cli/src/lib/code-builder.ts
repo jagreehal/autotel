@@ -69,7 +69,7 @@ export function setPinoLogger(file: CodeFile): void {
  */
 export function addAutoInstrumentationLogger(
   file: CodeFile,
-  name: string
+  name: string,
 ): void {
   if (!file.autoInstrumentations.includes(name)) {
     file.autoInstrumentations.push(name);
@@ -79,7 +79,11 @@ export function addAutoInstrumentationLogger(
 /**
  * Add import to code file
  */
-export function addImport(file: CodeFile, imp: Import, section?: 'backend' | 'plugin' | 'subscriber'): void {
+export function addImport(
+  file: CodeFile,
+  imp: Import,
+  section?: 'backend' | 'plugin' | 'subscriber',
+): void {
   switch (section) {
     case 'backend':
       file.backendImports.push(imp);
@@ -141,7 +145,8 @@ function sortImports(imports: Import[]): Import[] {
   }
 
   // Sort each group alphabetically by source
-  const sortBySource = (a: Import, b: Import): number => a.source.localeCompare(b.source);
+  const sortBySource = (a: Import, b: Import): number =>
+    a.source.localeCompare(b.source);
   external.sort(sortBySource);
   relative.sort(sortBySource);
 

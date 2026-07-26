@@ -44,22 +44,25 @@ export const deleteUser = trace(async (userId: string) => {
 import { trace } from 'autotel';
 import { withAudit } from 'autotel-audit';
 
-app.delete('/users/:id', trace(async (req, res) => {
-  await withAudit(
-    {
-      action: 'user.delete',
-      resource: 'user',
-      actorId: req.user.id,
-      userId: req.params.id,
-    },
-    async () => {
-      await deleteUser(req.params.id);
-    },
-    { emitNow: true },
-  );
+app.delete(
+  '/users/:id',
+  trace(async (req, res) => {
+    await withAudit(
+      {
+        action: 'user.delete',
+        resource: 'user',
+        actorId: req.user.id,
+        userId: req.params.id,
+      },
+      async () => {
+        await deleteUser(req.params.id);
+      },
+      { emitNow: true },
+    );
 
-  res.json({ ok: true });
-}));
+    res.json({ ok: true });
+  }),
+);
 ```
 
 ### NestJS
@@ -96,7 +99,10 @@ export class UsersController {
 import { trace } from 'autotel';
 import { withAudit } from 'autotel-audit';
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string } },
+) {
   return withAudit(
     {
       action: 'user.delete',
@@ -119,17 +125,17 @@ Wraps an async operation with audit context and automatic outcome tagging.
 
 **Parameters:**
 
-| Name | Type | Description |
-|------|------|-------------|
-| `metadata` | `AuditMetadata` | Audit event metadata (action, resource, actor, etc.) |
-| `fn` | `(ctx, logger) => Promise<T>` | Async function receiving audit context and request logger |
-| `options.emitNow` | `boolean` | Immediately emit the audit event (default: `false`) |
-| `options.forceKeep` | `boolean` | Force event through tail-sampling (default: `true`) |
-| `options.ctx` | `AuditContext` | Custom audit context (auto-resolved if omitted) |
-| `options.logger` | `RequestLogger` | Override request logger instance |
+| Name                       | Type                          | Description                                                          |
+| -------------------------- | ----------------------------- | -------------------------------------------------------------------- |
+| `metadata`                 | `AuditMetadata`               | Audit event metadata (action, resource, actor, etc.)                 |
+| `fn`                       | `(ctx, logger) => Promise<T>` | Async function receiving audit context and request logger            |
+| `options.emitNow`          | `boolean`                     | Immediately emit the audit event (default: `false`)                  |
+| `options.forceKeep`        | `boolean`                     | Force event through tail-sampling (default: `true`)                  |
+| `options.ctx`              | `AuditContext`                | Custom audit context (auto-resolved if omitted)                      |
+| `options.logger`           | `RequestLogger`               | Override request logger instance                                     |
 | `options.onMissingContext` | `'throw' \| 'warn' \| 'skip'` | What to do when there is no active trace context (default: `'warn'`) |
 
-**Returns:** `Promise<T>` — Result from the wrapped function.
+**Returns:** `Promise<T>`. Result from the wrapped function.
 
 **Outcome Tagging:**
 
@@ -138,24 +144,21 @@ Wraps an async operation with audit context and automatic outcome tagging.
 
 ```typescript
 // Explicit outcome override
-await withAudit(
-  { action: 'payment.process', outcome: 'partial' },
-  async () => {
-    // ...
-  },
-);
+await withAudit({ action: 'payment.process', outcome: 'partial' }, async () => {
+  // ...
+});
 ```
 
 #### Best-effort by default
 
-Audit is observability — a missing trace context must never crash the business
+Audit is observability. A missing trace context must never crash the business
 logic it wraps. When there is no active trace context, `withAudit` no longer
 throws into your handler. The `onMissingContext` option controls the behaviour:
 
 - `'warn'` (default): run the wrapped handler un-audited and log **one** warning
   per action.
 - `'skip'`: run un-audited, silently.
-- `'throw'`: previous fail-fast behaviour — opt in when telemetry is mandatory.
+- `'throw'`: previous fail-fast behaviour: opt in when telemetry is mandatory.
 
 ```typescript
 // Safe to drop into a production hot path: no surrounding trace() needed,
@@ -201,12 +204,12 @@ if (request.isPrivileged()) {
 
 ```typescript
 interface AuditMetadata {
-  action: string;           // Required: e.g., 'user.delete', 'payment.process'
-  resource?: string;        // What was modified: 'user', 'account', 'transaction'
-  actorId?: string;         // Who performed the action
-  category?: string;        // Optional grouping: 'admin', 'compliance', 'security'
-  outcome?: 'success' | 'failure' | string;  // Auto-set if omitted
-  [key: string]: unknown;   // Custom fields (auto-serialized)
+  action: string; // Required: e.g., 'user.delete', 'payment.process'
+  resource?: string; // What was modified: 'user', 'account', 'transaction'
+  actorId?: string; // Who performed the action
+  category?: string; // Optional grouping: 'admin', 'compliance', 'security'
+  outcome?: 'success' | 'failure' | string; // Auto-set if omitted
+  [key: string]: unknown; // Custom fields (auto-serialized)
 }
 ```
 
@@ -329,12 +332,12 @@ Audit attributes integrate with any OTLP-compatible backend:
 
 **Attributes exported:**
 
-- `audit.action` — The audited action
-- `audit.resource` — The affected resource
-- `audit.actorId` — The actor performing the action
-- `audit.outcome` — `'success'` or `'failure'`
-- `audit.*` — All custom metadata fields
-- `autotel.audit` — Always `true` (for filtering)
+- `audit.action`: The audited action
+- `audit.resource`: The affected resource
+- `audit.actorId`: The actor performing the action
+- `audit.outcome`: `'success'` or `'failure'`
+- `audit.*`: All custom metadata fields
+- `autotel.audit`: Always `true` (for filtering)
 
 **Query examples (Datadog):**
 
@@ -404,7 +407,7 @@ await withAudit(
 
 ## See Also
 
-- **[Security Observability](/autotel/integrations/security/)** — `securityEvent()`, zero-code signals, and alertable security metrics from the same package
-- **[Request Logging](/autotel/integrations/logging/)** — Structured context and event emission
-- **[Trace Helpers](/autotel/advanced/#metadata-flattening)** — Automatic metadata serialization
-- **[Core API](/autotel/)** — `trace()`, `span()`, context propagation
+- **[Security Observability](/autotel/integrations/security/)**: `securityEvent()`, zero-code signals, and alertable security metrics from the same package
+- **[Request Logging](/autotel/integrations/logging/)**: Structured context and event emission
+- **[Trace Helpers](/autotel/advanced/#metadata-flattening)**: Automatic metadata serialization
+- **[Core API](/autotel/)**: `trace()`, `span()`, context propagation

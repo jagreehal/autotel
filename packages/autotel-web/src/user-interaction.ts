@@ -15,7 +15,10 @@ function matchesSelectors(element: Element, selectors: string[]): boolean {
   return selectors.some((sel) => element.matches(sel));
 }
 
-function closestMatch(element: Element | null, selectors: string[]): Element | null {
+function closestMatch(
+  element: Element | null,
+  selectors: string[],
+): Element | null {
   let el: Element | null = element;
   while (el) {
     if (matchesSelectors(el, selectors)) return el;
@@ -24,7 +27,9 @@ function closestMatch(element: Element | null, selectors: string[]): Element | n
   return null;
 }
 
-export function setupUserInteractionInstrumentation(config: UserInteractionConfig): void {
+export function setupUserInteractionInstrumentation(
+  config: UserInteractionConfig,
+): void {
   if (typeof document === 'undefined') return;
 
   const tracer = trace.getTracer('autotel-web', '1.0.0');
@@ -37,7 +42,10 @@ export function setupUserInteractionInstrumentation(config: UserInteractionConfi
       if (!matched) return;
 
       const tagName = matched.tagName.toLowerCase();
-      const name = matched.getAttribute('data-track') ?? matched.getAttribute('aria-label') ?? tagName;
+      const name =
+        matched.getAttribute('data-track') ??
+        matched.getAttribute('aria-label') ??
+        tagName;
       const spanName = `click: ${name}`;
 
       const span = tracer.startSpan(spanName, {
@@ -45,7 +53,9 @@ export function setupUserInteractionInstrumentation(config: UserInteractionConfi
           'user.interaction.type': 'click',
           'element.tag': tagName,
           ...(matched.id && { 'element.id': matched.id }),
-          ...(matched.getAttribute('data-track') && { 'element.data_track': matched.getAttribute('data-track')! }),
+          ...(matched.getAttribute('data-track') && {
+            'element.data_track': matched.getAttribute('data-track')!,
+          }),
         },
       });
       span.end();
@@ -53,6 +63,6 @@ export function setupUserInteractionInstrumentation(config: UserInteractionConfi
         console.debug('[autotel-web] user interaction span:', spanName);
       }
     },
-    { capture: true, passive: true }
+    { capture: true, passive: true },
   );
 }

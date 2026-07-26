@@ -12,7 +12,7 @@ import { Event, resetEvents } from './event';
 import { flush, shutdown } from './shutdown';
 import { resetMetrics } from './metric';
 import { resetConfig } from './config';
-import { EventAttributes, EventSubscriber } from './event-subscriber';
+import type { EventAttributes, EventSubscriber } from './event-subscriber';
 
 // Test adapter that collects events
 class TestAdapter implements EventSubscriber {
@@ -330,7 +330,11 @@ describe('Integration Test Suite', () => {
         track(`event.${i}`, { index: i });
       }
 
-      await flush({ timeout: 10_000 }); // 10s timeout for high-volume test
+      // Headroom under vitest's 30s testTimeout. A flush racing a 10s
+      // wall-clock deadline flaked when the whole monorepo ran its suites in
+      // parallel; the invariant under test is delivery, not flush latency, so
+      // let vitest own the deadline.
+      await flush({ timeout: 25_000 });
 
       // All events should be captured
       expect(testAdapter.events.length).toBeGreaterThanOrEqual(1000);
@@ -349,7 +353,11 @@ describe('Integration Test Suite', () => {
         track(`event.${i}`, { index: i });
       }
 
-      await flush({ timeout: 10_000 }); // 10s timeout for high-volume test
+      // Headroom under vitest's 30s testTimeout. A flush racing a 10s
+      // wall-clock deadline flaked when the whole monorepo ran its suites in
+      // parallel; the invariant under test is delivery, not flush latency, so
+      // let vitest own the deadline.
+      await flush({ timeout: 25_000 });
 
       const duration = Date.now() - startTime;
 

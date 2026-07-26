@@ -24,7 +24,8 @@ export interface StackFrame {
 
 export interface ExceptionMechanism {
   /** How the error was captured */
-  type: 'onerror' | 'onunhandledrejection' | 'console.error' | 'manual' | 'generic';
+  type:
+    'onerror' | 'onunhandledrejection' | 'console.error' | 'manual' | 'generic';
   /** Whether the error was explicitly caught by user code */
   handled: boolean;
 }

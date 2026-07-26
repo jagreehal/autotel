@@ -8,7 +8,7 @@ Run these against the **audit backend** (the append-only one), not your ops back
 
 A spike in denials is a security signal (credential stuffing, privilege probing).
 
-- **Honeycomb** — filter `autotel.audit = true` AND `audit.outcome = deny`, group by `audit.action` and `enduser.id`, visualize `COUNT`.
+- **Honeycomb**: filter `autotel.audit = true` AND `audit.outcome = deny`, group by `audit.action` and `enduser.id`, visualize `COUNT`.
 - **Grafana Tempo (TraceQL)**:
   ```
   { span.autotel.audit = true && span.audit.outcome = "deny" }
@@ -22,7 +22,7 @@ A spike in denials is a security signal (credential stuffing, privilege probing)
 
 Answer "everything user X did" for an access review or incident.
 
-- **Honeycomb** — filter `enduser.id = "usr_42"`, group by `audit.action`, `audit.resource.type`, order by timestamp.
+- **Honeycomb**: filter `enduser.id = "usr_42"`, group by `audit.action`, `audit.resource.type`, order by timestamp.
 - **TraceQL**:
   ```
   { span.enduser.id = "usr_42" && span.autotel.audit = true }
@@ -49,7 +49,7 @@ Answer "everyone who accessed secret `sec_abc`".
 
 Confirm sensitive actions are actually being recorded. Group audit spans by `audit.action` and compare against your list of auditable actions. An action that never appears is either never exercised or never audited; both deserve a look.
 
-- **Honeycomb** — group by `audit.action`, `COUNT`, over 30 days.
+- **Honeycomb**: group by `audit.action`, `COUNT`, over 30 days.
 
 ## Detect tampering or missing signatures
 

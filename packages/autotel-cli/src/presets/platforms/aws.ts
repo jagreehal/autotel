@@ -53,9 +53,7 @@ export const cloudflare: PlatformPreset = {
   type: 'platform',
   description: 'Cloudflare Workers support',
   packages: {
-    required: [
-      'autotel-platforms',
-    ],
+    required: ['autotel-platforms'],
     optional: [],
     devOnly: [],
   },
@@ -89,9 +87,7 @@ export const edge: PlatformPreset = {
   type: 'platform',
   description: 'Vercel Edge, Deno Deploy, and other edge runtimes',
   packages: {
-    required: [
-      'autotel-platforms',
-    ],
+    required: ['autotel-platforms'],
     optional: [],
     devOnly: [],
   },

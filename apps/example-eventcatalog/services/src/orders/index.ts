@@ -4,7 +4,7 @@
 // OrdersService/index.mdx) is the read-side of the instrumentation below.
 // Field names, event names, and channel names match the catalog exactly.
 
-import { trace } from 'autotel';
+import { withTracing } from 'autotel';
 import { traceProducer } from 'autotel/messaging';
 import type { PlaceOrderInput, OrderPlacedMessage } from '../shared/types';
 import { orderPlacedEvent } from '../shared/events';
@@ -19,30 +19,34 @@ const kafka = {
 const publishOrderPlaced = traceProducer({
   system: 'kafka',
   destination: 'orders.events',
-})(() => async (msg: OrderPlacedMessage) => kafka.publish('orders.events', msg));
+})(
+  () => async (msg: OrderPlacedMessage) => kafka.publish('orders.events', msg),
+);
 
-export const placeOrder = trace((ctx) => async (order: PlaceOrderInput) => {
-  ctx.setAttribute('order.customer_id', order.customerId);
-  ctx.setAttribute('order.value_cents', order.totalCents);
-  ctx.setAttribute('order.item_count', order.items.length);
+export const placeOrder = withTracing({})(
+  (ctx) => async (order: PlaceOrderInput) => {
+    ctx.setAttribute('order.customer_id', order.customerId);
+    ctx.setAttribute('order.value_cents', order.totalCents);
+    ctx.setAttribute('order.item_count', order.items.length);
 
-  await db.orders.insert(order);
-  await publishOrderPlaced({ type: 'OrderPlaced', ...order });
+    await db.orders.insert(order);
+    await publishOrderPlaced({ type: 'OrderPlaced', ...order });
 
-  orderPlacedEvent.track({
-    orderId: order.id,
-    customerId: order.customerId,
-    totalCents: order.totalCents,
-    currency: order.currency,
-    items: order.items,
-    shipping: order.shipping,
-    metadata: order.metadata,
-    _autotel: {
-      channel: 'orders.events',
-      producer: 'OrdersService',
-      consumers: ['PaymentService', 'RecommendationsService'],
-    },
-  });
+    orderPlacedEvent.track({
+      orderId: order.id,
+      customerId: order.customerId,
+      totalCents: order.totalCents,
+      currency: order.currency,
+      items: order.items,
+      shipping: order.shipping,
+      metadata: order.metadata,
+      _autotel: {
+        channel: 'orders.events',
+        producer: 'OrdersService',
+        consumers: ['PaymentService', 'RecommendationsService'],
+      },
+    });
 
-  return order;
-});
+    return order;
+  },
+);

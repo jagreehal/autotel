@@ -141,7 +141,7 @@ export interface XRayConfig {
  */
 export function mergeServiceConfig(
   config?: AWSServiceConfig,
-  defaults?: AWSServiceConfig
+  defaults?: AWSServiceConfig,
 ): AWSServiceConfig {
   return {
     ...defaults,

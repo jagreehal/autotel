@@ -184,7 +184,9 @@ export class DevtoolsSpanExporter implements SpanExporter {
     const s =
       (span as any).instrumentationScope ??
       (span as any).instrumentationLibrary;
-    return s?.name ? { name: s.name, version: s.version || undefined } : undefined;
+    return s?.name
+      ? { name: s.name, version: s.version || undefined }
+      : undefined;
   }
 
   /**

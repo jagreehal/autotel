@@ -25,12 +25,14 @@ describe('Images Binding Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {
@@ -87,8 +89,13 @@ describe('Images Binding Instrumentation', () => {
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('images.width', 800);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('images.height', 600);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('images.format', 'png');
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'images.format',
+        'png',
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -100,7 +107,9 @@ describe('Images Binding Instrumentation', () => {
       });
       const instrumented = instrumentImages(images as any, 'my-images');
 
-      await expect(instrumented.info(new ArrayBuffer(8))).rejects.toThrow('Image info failed');
+      await expect(instrumented.info(new ArrayBuffer(8))).rejects.toThrow(
+        'Image info failed',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalledWith(testError);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -210,12 +219,16 @@ describe('Images Binding Instrumentation', () => {
     it('should invoke info() with original object as this, not the proxy', async () => {
       let receivedThis: any;
       const mockImagesObj = {
-        info: vi.fn(async function(this: any) {
+        info: vi.fn(async function (this: any) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return { width: 800, height: 600, format: 'png' };
         }),
-        input: vi.fn(() => ({ transform: vi.fn(), draw: vi.fn(), output: vi.fn() })),
+        input: vi.fn(() => ({
+          transform: vi.fn(),
+          draw: vi.fn(),
+          output: vi.fn(),
+        })),
       };
       const instrumented = instrumentImages(mockImagesObj as any, 'test');
       await instrumented.info(new ArrayBuffer(8));
@@ -224,10 +237,14 @@ describe('Images Binding Instrumentation', () => {
 
     it('should invoke input() with original object as this, not the proxy', () => {
       let receivedThis: any;
-      const mockTransformer = { transform: vi.fn(), draw: vi.fn(), output: vi.fn(async () => ({})) };
+      const mockTransformer = {
+        transform: vi.fn(),
+        draw: vi.fn(),
+        output: vi.fn(async () => ({})),
+      };
       const mockImagesObj = {
         info: vi.fn(async () => ({ width: 800, height: 600, format: 'png' })),
-        input: vi.fn(function(this: any) {
+        input: vi.fn(function (this: any) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return mockTransformer;

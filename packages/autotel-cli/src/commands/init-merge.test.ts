@@ -9,11 +9,13 @@ describe('init merge behavior', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autotel-init-merge-test-'));
+    tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'autotel-init-merge-test-'),
+    );
     fs.writeFileSync(
       path.join(tempDir, 'package.json'),
       JSON.stringify({ name: 'app', version: '1.0.0' }, null, 2),
-      'utf8'
+      'utf8',
     );
   });
 
@@ -26,7 +28,7 @@ describe('init merge behavior', () => {
     fs.writeFileSync(
       instrumentationPath,
       `/**\n * autotel instrumentation - managed by autotel-cli\n */\n\nimport 'autotel/register';\nimport { init } from 'autotel';\nimport { createDatadogConfig } from 'autotel-backends/datadog';\n\ninit({\n  serviceName: process.env.OTEL_SERVICE_NAME ?? 'app',\n  ...createDatadogConfig({\n    apiKey: process.env.DATADOG_API_KEY,\n    site: process.env.DATADOG_SITE,\n  }),\n});\n`,
-      'utf8'
+      'utf8',
     );
 
     const planPath = path.join(tempDir, 'plan.json');
@@ -42,9 +44,9 @@ describe('init merge behavior', () => {
           nextSteps: [],
         },
         null,
-        2
+        2,
       ),
-      'utf8'
+      'utf8',
     );
 
     const options: InitOptions = {

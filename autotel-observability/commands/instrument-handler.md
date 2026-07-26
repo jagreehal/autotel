@@ -1,6 +1,6 @@
 ---
 description: Add autotel instrumentation (trace, request logger, structured errors) to a handler or function
-argument-hint: "<file-path-or-function-name> — e.g. src/routes/checkout.ts or postCheckout"
+argument-hint: '<file-path-or-function-name> — e.g. src/routes/checkout.ts or postCheckout'
 ---
 
 # Instrument Handler with Autotel
@@ -21,26 +21,26 @@ $ARGUMENTS
 
 Read the target file or function and classify it:
 
-| Type | Characteristics | Pattern to Apply |
-|------|----------------|-----------------|
-| **HTTP handler** | Receives request/response, returns HTTP response | trace() + getRequestLogger() + createStructuredError() |
-| **Server function** | TanStack createServerFn, Next.js server action | Framework middleware or trace() |
-| **Background job** | Worker, cron, queue consumer | trace() + getRequestLogger() |
-| **Service function** | Business logic called by handlers | trace() or span() |
-| **Client code** | Fetches from API, catches errors | parseError() in catch blocks |
+| Type                 | Characteristics                                  | Pattern to Apply                                       |
+| -------------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| **HTTP handler**     | Receives request/response, returns HTTP response | trace() + getRequestLogger() + createStructuredError() |
+| **Server function**  | TanStack createServerFn, Next.js server action   | Framework middleware or trace()                        |
+| **Background job**   | Worker, cron, queue consumer                     | trace() + getRequestLogger()                           |
+| **Service function** | Business logic called by handlers                | trace() or span()                                      |
+| **Client code**      | Fetches from API, catches errors                 | parseError() in catch blocks                           |
 
 ### Step 2: Detect Framework
 
 Check imports and dependencies for framework-specific packages:
 
-| Detection Signal | Framework | Package to Use |
-|-----------------|-----------|---------------|
-| `import { Hono }` or `hono` in deps | Hono | `autotel-hono` — use `otel()` middleware |
-| `createServerFn`, `createFileRoute` from TanStack | TanStack Start | `autotel-tanstack` — use `tracingMiddleware()` |
-| `env.MY_KV`, `wrangler.toml`, Cloudflare bindings | Cloudflare Workers | `autotel-cloudflare` — use `instrument()` or `wrapModule()` |
-| `McpServer`, `@modelcontextprotocol/sdk` | MCP | `autotel-mcp-instrumentation` — use `instrumentMCPServer()` |
-| Edge runtime (Vercel Edge, Netlify Edge, Deno) | Edge | `autotel-edge` — use `trace()` from edge package |
-| Express, Fastify, Next.js, generic Node.js | Node.js | `autotel` — use `trace()` directly |
+| Detection Signal                                  | Framework          | Package to Use                                             |
+| ------------------------------------------------- | ------------------ | ---------------------------------------------------------- |
+| `import { Hono }` or `hono` in deps               | Hono               | `autotel-hono`: use `otel()` middleware                    |
+| `createServerFn`, `createFileRoute` from TanStack | TanStack Start     | `autotel-tanstack`: use `tracingMiddleware()`              |
+| `env.MY_KV`, `wrangler.toml`, Cloudflare bindings | Cloudflare Workers | `autotel-cloudflare`: use `instrument()` or `wrapModule()` |
+| `McpServer`, `@modelcontextprotocol/sdk`          | MCP                | `autotel-mcp-instrumentation`: use `instrumentMCPServer()` |
+| Edge runtime (Vercel Edge, Netlify Edge, Deno)    | Edge               | `autotel-edge`: use `trace()` from edge package            |
+| Express, Fastify, Next.js, generic Node.js        | Node.js            | `autotel`: use `trace()` directly                          |
 
 ### Step 3: Apply Instrumentation
 
@@ -115,13 +115,15 @@ export const getUser = createServerFn({ method: 'GET' })
 import { instrument } from 'autotel-cloudflare';
 
 export default instrument(
-  { async fetch(request, env, ctx) {
-    const log = getRequestLogger();
-    // ... handler logic
-    log.emitNow();
-    return new Response('OK');
-  }},
-  { service: 'my-worker', endpoint: env.OTEL_ENDPOINT }
+  {
+    async fetch(request, env, ctx) {
+      const log = getRequestLogger();
+      // ... handler logic
+      log.emitNow();
+      return new Response('OK');
+    },
+  },
+  { service: 'my-worker', endpoint: env.OTEL_ENDPOINT },
 );
 ```
 
@@ -130,12 +132,14 @@ export default instrument(
 ```typescript
 import { trace } from 'autotel';
 
-export const processCheckout = trace((ctx) => async (userId: string, cart: Cart) => {
-  ctx.setAttribute('user.id', userId);
-  ctx.setAttribute('cart.items', cart.items.length);
-  // ... business logic
-  return result;
-});
+export const processCheckout = trace(
+  (ctx) => async (userId: string, cart: Cart) => {
+    ctx.setAttribute('user.id', userId);
+    ctx.setAttribute('cart.items', cart.items.length);
+    // ... business logic
+    return result;
+  },
+);
 ```
 
 #### For Client Code
@@ -144,13 +148,18 @@ export const processCheckout = trace((ctx) => async (userId: string, cart: Cart)
 import { parseError } from 'autotel';
 
 try {
-  const res = await fetch('/api/checkout', { method: 'POST', body: JSON.stringify(data) });
+  const res = await fetch('/api/checkout', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw await res.json();
 } catch (err) {
   const error = parseError(err);
   toast.error(error.message, {
     description: error.why,
-    action: error.fix ? { label: 'Fix', onClick: () => showHelp(error.fix) } : undefined,
+    action: error.fix
+      ? { label: 'Fix', onClick: () => showHelp(error.fix) }
+      : undefined,
   });
 }
 ```
@@ -166,12 +175,13 @@ import { createStructuredError } from 'autotel';
 if (!user) throw new Error('User not found');
 
 // After
-if (!user) throw createStructuredError({
-  message: 'User not found',
-  status: 404,
-  why: `No user with ID "${userId}"`,
-  fix: 'Check the user ID and try again',
-});
+if (!user)
+  throw createStructuredError({
+    message: 'User not found',
+    status: 404,
+    why: `No user with ID "${userId}"`,
+    fix: 'Check the user ID and try again',
+  });
 ```
 
 ### Step 5: Verify init() Exists

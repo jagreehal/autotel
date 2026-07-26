@@ -4,7 +4,7 @@ description: >
   track(), Event API, subscribers (e.g. PostHog). Configure subscribers in init(); use track() or Event for product/analytics events.
 ---
 
-# Autotel — Events
+# Autotel: Events
 
 Send product and analytics events with `track(name, attributes)` or the `Event` class from `autotel/event`. Configure subscribers (e.g. PostHog) in `init()`; they receive events automatically.
 

@@ -8,15 +8,15 @@ Your telemetry surface (span names + attributes) as a typed, versioned contract:
 
 Core observability-contract pair (both answer a contract question using telemetry):
 
-| Package | What it contracts |
-|---------|-------------------|
+| Package                     | What it contracts                                         |
+| --------------------------- | --------------------------------------------------------- |
 | **`autotel-schema`** (this) | the telemetry contract you emit (span names + attributes) |
-| `autotel-pact` | evidence that contracted (Pact) interactions actually ran |
+| `autotel-pact`              | evidence that contracted (Pact) interactions actually ran |
 
 Optional adjacent (standalone, test-time, needs no runtime observability):
 
-| Package | What it contracts |
-|---------|-------------------|
+| Package                    | What it contracts                                |
+| -------------------------- | ------------------------------------------------ |
 | `autotel-message-contract` | serialized payload compatibility across versions |
 
 ## Design invariants
@@ -34,7 +34,7 @@ Optional adjacent (standalone, test-time, needs no runtime observability):
 - `processor.ts`: `SchemaValidationSpanProcessor` / `createSchemaValidationProcessor` (runtime gate, structural OTel types).
 - `snapshot.ts`: `contractToSnapshot`, `serializeSnapshot`, `parseSnapshot`.
 - `diff.ts`: `diffSnapshots`, `hasBreakingChanges`, `formatDiff` (markdown).
-- `scenario.ts`: flow-level scenario conformance — `ScenarioSpec` (events + cardinality + ancestor edges + completion boundary), `evaluateScenario`/`checkScenario` (three-state: conformant / non-conformant / **incomplete** — absence is definitive only after the completion boundary closes; errors and exceeded `max` fail fast while open; undeclared events are additive, never failing), `proposeScenario` (draft a contract from N recorded runs). Input `ScenarioSpan` is structurally compatible with `SerializedSpan` from `autotel/test-span-collector` (`peekTrace()` is the non-destructive polling read).
+- `scenario.ts`: flow-level scenario conformance: `ScenarioSpec` (events + cardinality + ancestor edges + completion boundary), `evaluateScenario`/`checkScenario` (three-state: conformant, non-conformant, or **incomplete**, where absence is definitive only after the completion boundary closes; errors and exceeded `max` fail fast while open; undeclared events are additive, never failing), `proposeScenario` (draft a contract from N recorded runs). Input `ScenarioSpan` is structurally compatible with `SerializedSpan` from `autotel/test-span-collector` (`peekTrace()` is the non-destructive polling read).
 - `redaction.ts`: `highCardinalityKeys` / `isHighCardinalityKey` → redactor protect-list.
 - `cli.ts`: `autotel-schema diff|check <baseline> <current> [--json]`; `check` exits 1 on breaking. Binary auto-runs only when basename matches (so a repo path containing "autotel-schema" can't trigger it).
 

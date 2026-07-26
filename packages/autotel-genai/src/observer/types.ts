@@ -9,7 +9,13 @@
  * boundaries, queues, or a resumed run.
  */
 
-import type { Context, Link, Span, TimeInput, Tracer } from '@opentelemetry/api';
+import type {
+  Context,
+  Link,
+  Span,
+  TimeInput,
+  Tracer,
+} from '@opentelemetry/api';
 import type {
   GenAiAgentInput,
   GenAiRequestInput,

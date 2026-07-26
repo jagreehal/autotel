@@ -54,6 +54,7 @@ Before you begin, ensure you have:
 ### Installing Prerequisites
 
 **Install pipx (recommended):**
+
 ```bash
 # macOS
 brew install pipx
@@ -203,13 +204,13 @@ Once configured, you can ask Claude questions about your traces:
 
 **Example Queries:**
 
-- *"Show me all traces with errors from the last 10 minutes"*
-- *"What are the slowest endpoints in my service?"*
-- *"Find traces where database queries took longer than 100ms"*
-- *"List all failed payment transactions"*
-- *"Which endpoints have the highest error rate?"*
-- *"Show me the trace for the slowest request"*
-- *"Find all slow database queries and show their query times"*
+- _"Show me all traces with errors from the last 10 minutes"_
+- _"What are the slowest endpoints in my service?"_
+- _"Find traces where database queries took longer than 100ms"_
+- _"List all failed payment transactions"_
+- _"Which endpoints have the highest error rate?"_
+- _"Show me the trace for the slowest request"_
+- _"Find all slow database queries and show their query times"_
 
 Claude will use the MCP server to query Jaeger and provide insights!
 
@@ -217,15 +218,15 @@ Claude will use the MCP server to query Jaeger and provide insights!
 
 The demo app provides several endpoints with different trace patterns:
 
-| Endpoint | Method | Description | Trace Pattern |
-|----------|--------|-------------|---------------|
-| `/health` | GET | Health check | Fast, no custom spans |
-| `/api/users` | GET | List users | Fast, single DB span |
-| `/api/users/:id/orders` | GET | User orders | Variable speed, sometimes slow |
-| `/api/orders` | POST | Create order | Complex nested spans (validation → payment → DB → notification) |
-| `/api/events/report` | GET | Generate report | Always slow (> 500ms) |
-| `/api/error` | GET | Test errors | Intentional error with stack trace |
-| `/api/flaky` | GET | Random behavior | 50% chance of failure |
+| Endpoint                | Method | Description     | Trace Pattern                                                   |
+| ----------------------- | ------ | --------------- | --------------------------------------------------------------- |
+| `/health`               | GET    | Health check    | Fast, no custom spans                                           |
+| `/api/users`            | GET    | List users      | Fast, single DB span                                            |
+| `/api/users/:id/orders` | GET    | User orders     | Variable speed, sometimes slow                                  |
+| `/api/orders`           | POST   | Create order    | Complex nested spans (validation → payment → DB → notification) |
+| `/api/events/report`    | GET    | Generate report | Always slow (> 500ms)                                           |
+| `/api/error`            | GET    | Test errors     | Intentional error with stack trace                              |
+| `/api/flaky`            | GET    | Random behavior | 50% chance of failure                                           |
 
 ## Understanding the Traces
 
@@ -234,6 +235,7 @@ The demo app provides several endpoints with different trace patterns:
 The application adds custom attributes to help with querying:
 
 **Database Operations:**
+
 - `db.system` - Database type (e.g., "postgresql")
 - `db.operation` - SQL operation (SELECT, INSERT, etc.)
 - `db.table` - Table name
@@ -242,6 +244,7 @@ The application adds custom attributes to help with querying:
 - `db.rows_returned` - Number of rows
 
 **Payment Operations:**
+
 - `payment.gateway` - Payment processor (e.g., "stripe")
 - `payment.amount` - Transaction amount
 - `payment.status` - success/failed
@@ -249,13 +252,14 @@ The application adds custom attributes to help with querying:
 - `payment.error` - Error reason if failed
 
 **Order Operations:**
+
 - `order.user_id` - User identifier
 - `order.item_count` - Number of items
 - `order.total` - Order total amount
 - `order.status` - Order status
 
 These attributes make it easy to filter traces. For example, you can ask Claude:
-*"Find all orders where payment.status is 'failed'"*
+_"Find all orders where payment.status is 'failed'"_
 
 ## MCP Server Tools
 
@@ -276,11 +280,13 @@ The OpenTelemetry MCP server provides 9 tools that Claude can use:
 ### Jaeger isn't showing traces
 
 1. Verify Jaeger is running:
+
    ```bash
    docker ps | grep jaeger
    ```
 
 2. Check the OTLP endpoint:
+
    ```bash
    curl http://localhost:4318/v1/traces
    ```
@@ -308,6 +314,7 @@ The OpenTelemetry MCP server provides 9 tools that Claude can use:
 The MCP server supports multiple backends:
 
 **Grafana Tempo:**
+
 ```json
 {
   "command": "uvx",
@@ -322,6 +329,7 @@ The MCP server supports multiple backends:
 ```
 
 **Traceloop Cloud:**
+
 ```json
 {
   "command": "uvx",

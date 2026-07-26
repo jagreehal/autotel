@@ -4,10 +4,8 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { cleanup, render, fireEvent, screen } from '@testing-library/svelte';
-import WaterfallRow, {
-  type SpanNode,
-} from '../components/WaterfallRow.svelte';
-import type { SpanData, TraceData } from '../types';
+import WaterfallRow from '../components/WaterfallRow.svelte';
+import type { SpanData, SpanNode, TraceData } from '../types';
 
 function makeSpan(overrides: Partial<SpanData> = {}): SpanData {
   return {

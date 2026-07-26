@@ -3,18 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const traceCalls: { name: unknown; factory: (ctx: unknown) => unknown }[] = [];
 const fakeCtx = { setAttributes: vi.fn(), setAttribute: vi.fn() };
 
-// Capture how traceGenAI invokes the core `trace()`: span name + factory.
+// Capture how traceGenAI invokes the core tracing wrapper.
 vi.mock('autotel', () => ({
-  trace: vi.fn((name: unknown, factory: (ctx: unknown) => unknown) => {
-    traceCalls.push({ name, factory });
-    return (...args: unknown[]) =>
-      (factory(fakeCtx) as (...a: unknown[]) => unknown)(...args);
-  }),
+  withTracing:
+    (options: { name: unknown }) => (factory: (ctx: unknown) => unknown) => {
+      traceCalls.push({ name: options.name, factory });
+      return (...args: unknown[]) =>
+        (factory(fakeCtx) as (...a: unknown[]) => unknown)(...args);
+    },
 }));
 
-const { traceGenAI, recordGenAiResponse, recordGenAiUsage } = await import(
-  './trace.js'
-);
+const { traceGenAI, recordGenAiResponse, recordGenAiUsage } =
+  await import('./trace.js');
 
 beforeEach(() => {
   traceCalls.length = 0;
@@ -126,7 +126,11 @@ describe('traceGenAI', () => {
 describe('recordGenAiResponse', () => {
   it('sets canonical response attributes', () => {
     const ctx = { setAttributes: vi.fn() };
-    recordGenAiResponse(ctx, { model: 'gpt-4o', id: 'r1', finishReasons: ['stop'] });
+    recordGenAiResponse(ctx, {
+      model: 'gpt-4o',
+      id: 'r1',
+      finishReasons: ['stop'],
+    });
     expect(ctx.setAttributes).toHaveBeenCalledWith({
       'gen_ai.response.model': 'gpt-4o',
       'gen_ai.response.id': 'r1',

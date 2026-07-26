@@ -13,7 +13,9 @@ describe('createStorageForkLifecycle', () => {
       (
         _label: string,
         fn: () => void,
-        options?: { lifecycle?: { onChildEnter?: (logger: RequestLogger) => void } },
+        options?: {
+          lifecycle?: { onChildEnter?: (logger: RequestLogger) => void };
+        },
       ) => {
         options?.lifecycle?.onChildEnter?.(child);
         storage.run(child, fn);

@@ -151,7 +151,9 @@ function* extractSpans(
   if (!Array.isArray(resourceSpans)) return;
   for (const resourceSpan of resourceSpans) {
     if (!resourceSpan || typeof resourceSpan !== 'object') continue;
-    const resource = (resourceSpan as { resource?: { attributes?: OtlpKeyValue[] } }).resource;
+    const resource = (
+      resourceSpan as { resource?: { attributes?: OtlpKeyValue[] } }
+    ).resource;
     const resourceAttrs = attrsToRecord(resource?.attributes);
     const scopeSpans = (resourceSpan as { scopeSpans?: unknown[] }).scopeSpans;
     if (!Array.isArray(scopeSpans)) continue;

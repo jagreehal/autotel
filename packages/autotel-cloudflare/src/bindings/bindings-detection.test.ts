@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
 import { instrumentBindings } from './bindings';
 import { isWrapped, wrap } from './common';
 
@@ -26,12 +26,14 @@ describe('instrumentBindings() detection logic', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {

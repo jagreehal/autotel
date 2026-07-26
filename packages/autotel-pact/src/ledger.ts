@@ -18,7 +18,10 @@ export interface LedgerOptions {
 const DEFAULT_DIR = '.autotel-pact';
 
 function resolveLedgerDir(opts: LedgerOptions = {}): string {
-  return path.resolve(process.cwd(), opts.dir ?? process.env.AUTOTEL_PACT_LEDGER_DIR ?? DEFAULT_DIR);
+  return path.resolve(
+    process.cwd(),
+    opts.dir ?? process.env.AUTOTEL_PACT_LEDGER_DIR ?? DEFAULT_DIR,
+  );
 }
 
 function resolveRunId(opts: LedgerOptions = {}): string {

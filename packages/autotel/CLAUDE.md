@@ -31,8 +31,11 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
 
 - `autotel` - Core trace/span/init functions
 - `autotel/logger` - Pino integration
-- `autotel/events` - Events API
-- `autotel/metrics` - Metrics helpers
+- `autotel/event` - Events API (`Event`, `track`)
+- `autotel/metric` - Metrics helpers
+- `autotel/analysis` - `compareCohorts()`: ranks the field/value pairs separating an
+  outlier group from a baseline. The core analysis loop as a pure function.
+- `autotel/slo` - Rolling SLI, error-budget, predictive forecast, and burn-rate calculations
 - `autotel/testing` - Test utilities
 - `autotel/messaging` - Producer/consumer helpers for Kafka, SQS, RabbitMQ
 - `autotel/business-baggage` - Safe baggage propagation with guardrails
@@ -68,19 +71,26 @@ pnpm lint               # Lint package
 
 ### Functional API Pattern
 
-The core `trace()` function uses a factory pattern to detect if the user is passing a function that needs a context parameter:
+`trace()` deterministically wraps a plain function and never injects context or
+executes the function during wrapper construction. Use the ambient accessor for
+context:
 
 ```typescript
-// Factory pattern (receives ctx)
-export const createUser = trace((ctx) => async (data) => {
-  ctx.setAttribute('user.id', data.id);
+export const createUser = trace(async (data) => {
+  getActiveTraceContext()?.setAttribute('user.id', data.id);
   return await db.users.create(data);
 });
+```
 
-// Direct pattern (no ctx needed)
-export const getUser = trace(async (id) => {
-  return await db.users.findById(id);
-});
+Use `withTracing()` for an explicit factory:
+
+```typescript
+export const createUser = withTracing({ name: 'user.create' })(
+  (ctx) => async (data) => {
+    ctx.setAttribute('user.id', data.id);
+    return await db.users.create(data);
+  },
+);
 ```
 
 ### Dynamic Module Loading

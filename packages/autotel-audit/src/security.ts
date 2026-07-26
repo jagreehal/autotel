@@ -43,11 +43,7 @@ export type SecurityEventCategory =
   | 'llm';
 
 export type SecurityOutcome =
-  | 'success'
-  | 'failure'
-  | 'denied'
-  | 'blocked'
-  | 'error';
+  'success' | 'failure' | 'denied' | 'blocked' | 'error';
 
 /**
  * Well-known security event names. Free-form names are allowed —
@@ -132,13 +128,7 @@ export type WithSecurityOptions = SecurityEventOptions;
 interface SecurityAttributeSink {
   setAttribute(
     key: string,
-    value:
-      | string
-      | number
-      | boolean
-      | string[]
-      | number[]
-      | boolean[],
+    value: string | number | boolean | string[] | number[] | boolean[],
   ): unknown;
 }
 
@@ -226,7 +216,9 @@ export function applySecurityEventAttributes(
     sink.setAttribute(SECURITY_ATTR.forceKeep, true);
   }
 
-  for (const [key, value] of Object.entries(flattenSecurityAttributes(metadata))) {
+  for (const [key, value] of Object.entries(
+    flattenSecurityAttributes(metadata),
+  )) {
     sink.setAttribute(key, value);
   }
 }
@@ -280,7 +272,8 @@ export function securityEvent(
   }
   traceCtx.setAttributes(flattenSecurityAttributes(metadata));
 
-  const logger = options.logger ?? getRequestLoggerSafe() ?? createNoopRequestLogger();
+  const logger =
+    options.logger ?? getRequestLoggerSafe() ?? createNoopRequestLogger();
   logger.set({
     security: {
       name: metadata.name,
@@ -332,7 +325,10 @@ export async function withSecurity<T>(
         outcome: 'error',
         // A failed security-sensitive operation is never less than an error,
         // but an explicit `critical` stays critical.
-        severity: escalateSecuritySeverity(metadata.severity ?? 'info', 'error'),
+        severity: escalateSecuritySeverity(
+          metadata.severity ?? 'info',
+          'error',
+        ),
       },
       { ...options, ctx: traceCtx ?? undefined, logger },
     );

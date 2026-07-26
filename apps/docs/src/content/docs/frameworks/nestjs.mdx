@@ -28,11 +28,11 @@ Use `trace()` inside NestJS services for business logic spans:
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { trace, type TraceContext } from 'autotel';
+import { trace, withTracing, type TraceContext } from 'autotel';
 
 @Injectable()
 export class UserService {
-  private readonly tracedFetchUser = trace(
+  private readonly tracedFetchUser = withTracing({})(
     (ctx: TraceContext) => async (userId: string) => {
       ctx.setAttribute('db.query', 'SELECT * FROM users WHERE id = ?');
       ctx.setAttribute('db.userId', userId);
@@ -65,11 +65,11 @@ bootstrap();
 
 With `autoInstrumentations: ['http', 'nestjs-core']`:
 
-- **HTTP server spans** — automatic per-request spans
-- **NestJS controllers/services** — handler execution time
-- **Guards, interceptors, pipes** — lifecycle timing
-- **Your `trace()` calls** — business logic spans as children
+- **HTTP server spans**: automatic per-request spans
+- **NestJS controllers/services**: handler execution time
+- **Guards, interceptors, pipes**: lifecycle timing
+- **Your `trace()` calls**: business logic spans as children
 
 ## Examples
 
-- [`example-nestjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nestjs) — NestJS with HTTP/NestJS auto-instrumentation and manual `trace()` in services.
+- [`example-nestjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nestjs): NestJS with HTTP/NestJS auto-instrumentation and manual `trace()` in services.

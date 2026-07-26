@@ -1,11 +1,11 @@
 /**
  * Handler instrumentation for Cloudflare Workers
- * 
+ *
  * Note: This file uses Cloudflare Workers types (ExportedHandler, Request, Response, etc.)
  * which are globally available via @cloudflare/workers-types when listed in tsconfig.json.
  * These types are devDependencies only - they're not runtime dependencies.
  * At runtime, Cloudflare Workers runtime provides the actual implementations.
- * 
+ *
  * Provides automatic OpenTelemetry tracing for:
  * - HTTP handlers (fetch)
  * - Scheduled/cron handlers
@@ -49,7 +49,12 @@ import {
   WorkerTracer,
 } from 'autotel-edge';
 import { getNativeTracerFromCtx } from '../native/native-tracing';
-import { proxyExecutionContext, unwrap, wrap, type PromiseTracker } from '../bindings/common';
+import {
+  proxyExecutionContext,
+  unwrap,
+  wrap,
+  type PromiseTracker,
+} from '../bindings/common';
 import { instrumentGlobalFetch } from '../global/fetch';
 import { instrumentGlobalCache } from '../global/cache';
 import { instrumentBindings } from '../bindings/bindings';
@@ -91,7 +96,9 @@ type EmailHandler = (
 /**
  * Extract Cloudflare-specific attributes from a request
  */
-function extractCfAttributes(request: Request): Record<string, string | number | boolean> {
+function extractCfAttributes(
+  request: Request,
+): Record<string, string | number | boolean> {
   const cf = (request as any).cf;
   if (!cf) return {};
 
@@ -129,12 +136,14 @@ function createFetchInstrumentation(
       const url = new URL(request.url);
       const routeService = getServiceForPath(
         url.pathname,
-        config.handlers.fetch.routes as Record<string, RouteServiceConfig> | undefined,
+        config.handlers.fetch.routes as
+          Record<string, RouteServiceConfig> | undefined,
       );
 
-      const cfAttrs = (config as any).extractCfAttributes === false
-        ? {}
-        : extractCfAttributes(request);
+      const cfAttrs =
+        (config as any).extractCfAttributes === false
+          ? {}
+          : extractCfAttributes(request);
 
       return {
         name: `${request.method} ${url.pathname}`,
@@ -143,11 +152,20 @@ function createFetchInstrumentation(
           attributes: {
             'http.request.method': request.method,
             'url.full': request.url,
-            ...(routeService ? { 'service.name': routeService, 'autotel.route.service': routeService } : {}),
+            ...(routeService
+              ? {
+                  'service.name': routeService,
+                  'autotel.route.service': routeService,
+                }
+              : {}),
             ...cfAttrs,
           },
         },
-        context: propagation.extract(api_context.active(), request.headers, headersGetter),
+        context: propagation.extract(
+          api_context.active(),
+          request.headers,
+          headersGetter,
+        ),
       };
     },
     getAttributesFromResult: (response: Response) => ({
@@ -175,7 +193,10 @@ function createFetchInstrumentation(
 /**
  * Scheduled handler instrumentation
  */
-const scheduledInstrumentation: HandlerInstrumentation<ScheduledController, void> = {
+const scheduledInstrumentation: HandlerInstrumentation<
+  ScheduledController,
+  void
+> = {
   getInitialSpanInfo: (event: ScheduledController): InitialSpanInfo => {
     return {
       name: `scheduledHandler ${event.cron || 'unknown'}`,
@@ -257,7 +278,10 @@ function addQueueEvent(name: string, msg?: Message, delaySeconds?: number) {
 /**
  * Proxy a queue message to track ack/retry operations
  */
-function proxyQueueMessage<Q>(msg: Message<Q>, count: MessageStatusCount): Message<Q> {
+function proxyQueueMessage<Q>(
+  msg: Message<Q>,
+  count: MessageStatusCount,
+): Message<Q> {
   const msgHandler: ProxyHandler<Message<Q>> = {
     get: (target, prop) => {
       if (prop === 'ack') {
@@ -275,8 +299,7 @@ function proxyQueueMessage<Q>(msg: Message<Q>, count: MessageStatusCount): Messa
           apply: (fnTarget, _thisArg, args) => {
             // Extract delay and content type from retry options if provided
             const retryOptions = args[0] as
-              | { delaySeconds?: number; contentType?: string }
-              | undefined;
+              { delaySeconds?: number; contentType?: string } | undefined;
             const delaySeconds = retryOptions?.delaySeconds;
 
             addQueueEvent('messageRetry', msg, delaySeconds);
@@ -285,7 +308,10 @@ function proxyQueueMessage<Q>(msg: Message<Q>, count: MessageStatusCount): Messa
             if (retryOptions?.contentType) {
               const span = trace.getActiveSpan();
               if (span) {
-                span.setAttribute('queue.message.content_type', retryOptions.contentType);
+                span.setAttribute(
+                  'queue.message.content_type',
+                  retryOptions.contentType,
+                );
               }
             }
 
@@ -305,7 +331,10 @@ function proxyQueueMessage<Q>(msg: Message<Q>, count: MessageStatusCount): Messa
 /**
  * Proxy MessageBatch to track ackAll/retryAll operations
  */
-function proxyMessageBatch(batch: MessageBatch, count: MessageStatusCount): MessageBatch {
+function proxyMessageBatch(
+  batch: MessageBatch,
+  count: MessageStatusCount,
+): MessageBatch {
   const batchHandler: ProxyHandler<MessageBatch> = {
     get: (target, prop) => {
       if (prop === 'messages') {
@@ -335,7 +364,8 @@ function proxyMessageBatch(batch: MessageBatch, count: MessageStatusCount): Mess
         return new Proxy(retryFn, {
           apply: (fnTarget, _thisArg, args) => {
             // Extract delay from retryAll options if provided
-            const retryOptions = args[0] as { delaySeconds?: number } | undefined;
+            const retryOptions = args[0] as
+              { delaySeconds?: number } | undefined;
             const delaySeconds = retryOptions?.delaySeconds;
 
             addQueueEvent('retryAll', undefined, delaySeconds);
@@ -353,7 +383,10 @@ function proxyMessageBatch(batch: MessageBatch, count: MessageStatusCount): Mess
 /**
  * Queue handler instrumentation with message tracking
  */
-class QueueInstrumentation implements HandlerInstrumentation<MessageBatch, void> {
+class QueueInstrumentation implements HandlerInstrumentation<
+  MessageBatch,
+  void
+> {
   private count?: MessageStatusCount;
 
   getInitialSpanInfo(batch: MessageBatch): InitialSpanInfo {
@@ -393,11 +426,14 @@ class QueueInstrumentation implements HandlerInstrumentation<MessageBatch, void>
  * Converts email headers into OpenTelemetry attributes.
  * When dataSafety.emailHeaderAllowlist is configured, only allowed headers are captured.
  */
-function headerAttributes(message: { headers: Headers }): Record<string, string> {
+function headerAttributes(message: {
+  headers: Headers;
+}): Record<string, string> {
   const attrs: Record<string, string> = {};
   if (message.headers instanceof Headers) {
     const config = getActiveConfig();
-    const allowlist: string[] | undefined = config?.dataSafety?.emailHeaderAllowlist;
+    const allowlist: string[] | undefined =
+      config?.dataSafety?.emailHeaderAllowlist;
     for (const [key, value] of message.headers.entries()) {
       if (allowlist && !allowlist.includes(key.toLowerCase())) {
         continue;
@@ -411,7 +447,10 @@ function headerAttributes(message: { headers: Headers }): Record<string, string>
 /**
  * Email handler instrumentation
  */
-const emailInstrumentation: HandlerInstrumentation<ForwardableEmailMessage, void> = {
+const emailInstrumentation: HandlerInstrumentation<
+  ForwardableEmailMessage,
+  void
+> = {
   getInitialSpanInfo: (message: ForwardableEmailMessage): InitialSpanInfo => {
     const attributes: Record<string, string> = {
       'faas.trigger': 'other',
@@ -438,7 +477,6 @@ const emailInstrumentation: HandlerInstrumentation<ForwardableEmailMessage, void
   },
 };
 
-
 /**
  * Export spans after request completes
  */
@@ -451,7 +489,9 @@ async function exportSpans(
   if (tracer instanceof WorkerTracer) {
     try {
       // scheduler is available on ExecutionContext at runtime
-      const ctxWithScheduler = ctx as ExecutionContext & { scheduler?: { wait(ms: number): Promise<void> } };
+      const ctxWithScheduler = ctx as ExecutionContext & {
+        scheduler?: { wait(ms: number): Promise<void> };
+      };
       if (ctxWithScheduler.scheduler) {
         await ctxWithScheduler.scheduler.wait(1);
       }
@@ -480,8 +520,11 @@ function createHandlerFlow<T extends Trigger, E, R>(
 
     const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
-    const { name, options, context: spanContext } =
-      instrumentation.getInitialSpanInfo(trigger);
+    const {
+      name,
+      options,
+      context: spanContext,
+    } = instrumentation.getInitialSpanInfo(trigger);
 
     // Add cold start tracking
     if (options.attributes) {
@@ -498,37 +541,44 @@ function createHandlerFlow<T extends Trigger, E, R>(
       ? instrumentation.instrumentTrigger(trigger)
       : trigger;
 
-    return tracer.startActiveSpan(name, options, parentContext, async (span) => {
-      try {
-        const result = await handlerFn(instrumentedTrigger, env, proxiedCtx);
+    return tracer.startActiveSpan(
+      name,
+      options,
+      parentContext,
+      async (span) => {
+        try {
+          const result = await handlerFn(instrumentedTrigger, env, proxiedCtx);
 
-        if (instrumentation.getAttributesFromResult) {
-          const attributes = instrumentation.getAttributesFromResult(result);
-          span.setAttributes(attributes);
-        }
+          if (instrumentation.getAttributesFromResult) {
+            const attributes = instrumentation.getAttributesFromResult(result);
+            span.setAttributes(attributes);
+          }
 
-        // Set default OK status; executionSucces may override (e.g. HTTP 5xx)
-        span.setStatus({ code: SpanStatusCode.OK });
+          // Set default OK status; executionSucces may override (e.g. HTTP 5xx)
+          span.setStatus({ code: SpanStatusCode.OK });
 
-        if (instrumentation.executionSucces) {
-          instrumentation.executionSucces(span, trigger, result);
+          if (instrumentation.executionSucces) {
+            instrumentation.executionSucces(span, trigger, result);
+          }
+          return result;
+        } catch (error) {
+          span.recordException(error as Error);
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          if (instrumentation.executionFailed) {
+            instrumentation.executionFailed(span, trigger, error);
+          }
+          throw error;
+        } finally {
+          span.end();
+          context.waitUntil(
+            exportSpans(span.spanContext().traceId, tracker, context),
+          );
         }
-        return result;
-      } catch (error) {
-        span.recordException(error as Error);
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        if (instrumentation.executionFailed) {
-          instrumentation.executionFailed(span, trigger, error);
-        }
-        throw error;
-      } finally {
-        span.end();
-        context.waitUntil(exportSpans(span.spanContext().traceId, tracker, context));
-      }
-    });
+      },
+    );
   };
 }
 
@@ -553,7 +603,8 @@ function resolveNativeTracer(
   // Correlation id: prefer Cloudflare's ray id (also stamped on the native root
   // span + carried by the workers logger), so logs/spans/dashboard share a key.
   // Fall back to a per-invocation uuid for non-fetch triggers.
-  const rayId = trigger instanceof Request ? trigger.headers.get('cf-ray') : null;
+  const rayId =
+    trigger instanceof Request ? trigger.headers.get('cf-ray') : null;
   const correlationId = rayId ?? crypto.randomUUID();
   const nativeTracer = getNativeTracerFromCtx(ctx, correlationId);
   if (!nativeTracer && mode === 'on' && !warnedMissingNative) {
@@ -615,7 +666,14 @@ function createHandlerProxy<T extends Trigger, E, R>(
     // Prefer Cloudflare native tracing when available — defer to the platform.
     const nativeTracer = resolveNativeTracer(config, ctx, trigger);
     if (nativeTracer) {
-      return runWithNativeTracing(handlerFn, trigger, env, ctx, config, nativeTracer);
+      return runWithNativeTracing(
+        handlerFn,
+        trigger,
+        env,
+        ctx,
+        config,
+        nativeTracer,
+      );
     }
 
     // Auto-instrument Cloudflare bindings in the environment
@@ -630,7 +688,9 @@ function createHandlerProxy<T extends Trigger, E, R>(
 
     // Execute the handler flow within the config context
     return api_context.with(configContext, () => {
-      return flowFn(handlerFn, [trigger, instrumentedEnv, ctx]) as ReturnType<typeof handlerFn>;
+      return flowFn(handlerFn, [trigger, instrumentedEnv, ctx]) as ReturnType<
+        typeof handlerFn
+      >;
     });
   };
 }
@@ -642,11 +702,13 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
   _handler: unknown,
   handlerFn: (trigger: T, env: E, ctx: ExecutionContext) => R | Promise<R>,
   initialiser: Initialiser,
-  createInstrumentation: (config: ResolvedEdgeConfig) => HandlerInstrumentation<T, R>,
+  createInstrumentation: (
+    config: ResolvedEdgeConfig,
+  ) => HandlerInstrumentation<T, R>,
 ): (trigger: T, env: E, ctx: ExecutionContext) => ReturnType<typeof handlerFn> {
   return (trigger: T, env: E, ctx: ExecutionContext) => {
     const config = initialiser(env, trigger);
-    
+
     // Check if instrumentation is disabled (useful for local dev)
     if (config.instrumentation.disabled) {
       // Return handler as-is without instrumentation
@@ -669,7 +731,14 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
     // Prefer Cloudflare native tracing when available — defer to the platform.
     const nativeTracer = resolveNativeTracer(config, ctx, trigger);
     if (nativeTracer) {
-      return runWithNativeTracing(handlerFn, trigger, env, ctx, config, nativeTracer) as ReturnType<typeof handlerFn>;
+      return runWithNativeTracing(
+        handlerFn,
+        trigger,
+        env,
+        ctx,
+        config,
+        nativeTracer,
+      ) as ReturnType<typeof handlerFn>;
     }
 
     // Auto-instrument Cloudflare bindings in the environment
@@ -686,7 +755,9 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
 
     // Execute the handler flow within the config context
     return api_context.with(configContext, () => {
-      return flowFn(handlerFn, [trigger, instrumentedEnv, ctx]) as ReturnType<typeof handlerFn>;
+      return flowFn(handlerFn, [trigger, instrumentedEnv, ctx]) as ReturnType<
+        typeof handlerFn
+      >;
     });
   };
 }

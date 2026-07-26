@@ -32,6 +32,7 @@ Autotel implements this via the `CanonicalLogLineProcessor` - a span processor t
 ```
 
 Core fields (always present):
+
 - `operation` - span name
 - `traceId`, `spanId`, `correlationId` - trace identifiers
 - `duration_ms` - numeric duration
@@ -84,14 +85,14 @@ init({
   service: 'my-app',
   canonicalLogLines: {
     enabled: true,
-    rootSpansOnly: true,       // One event per request (not per child span)
-    minLevel: 'info',          // Minimum level to emit
+    rootSpansOnly: true, // One event per request (not per child span)
+    minLevel: 'info', // Minimum level to emit
     includeResourceAttributes: true,
 
     // Declarative tail sampling (OR logic - any match keeps the event)
     keep: [
-      { status: 500 },         // Keep server errors
-      { durationMs: 1000 },    // Keep slow requests
+      { status: 500 }, // Keep server errors
+      { durationMs: 1000 }, // Keep slow requests
       { path: '/api/checkout' }, // Keep specific routes
     ],
 

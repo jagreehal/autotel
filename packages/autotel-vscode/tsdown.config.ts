@@ -1,4 +1,4 @@
-import { defineConfig } from 'tsdown'
+import { defineConfig } from 'tsdown';
 
 export default defineConfig({
   // package.json `main` is dist/extension.js (matching the published VSIX layout),
@@ -15,10 +15,10 @@ export default defineConfig({
   // CRITICAL: bundle autotel-devtools (and subexports) into dist.
   // The .vsix has no node_modules; runtime resolution will fail otherwise.
   esbuildOptions(options) {
-    options.conditions = ['require', 'node', 'default']
+    options.conditions = ['require', 'node', 'default'];
   },
   deps: {
     neverBundle: ['vscode'],
     alwaysBundle: [/^autotel-devtools($|\/)/],
   },
-})
+});

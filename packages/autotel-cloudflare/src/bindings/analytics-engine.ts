@@ -2,18 +2,17 @@
  * Analytics Engine binding instrumentation
  */
 
-import {
-  trace,
-  SpanKind,
-  SpanStatusCode,
-} from '@opentelemetry/api';
+import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap } from './common';
 
 /**
  * Instrument Analytics Engine binding
  */
-export function instrumentAnalyticsEngine<T extends AnalyticsEngineDataset>(ae: T, datasetName?: string): T {
+export function instrumentAnalyticsEngine<T extends AnalyticsEngineDataset>(
+  ae: T,
+  datasetName?: string,
+): T {
   const name = datasetName || 'analytics-engine';
 
   const handler: ProxyHandler<T> = {
@@ -33,10 +32,15 @@ export function instrumentAnalyticsEngine<T extends AnalyticsEngineDataset>(ae: 
 
             if (dataPoint) {
               if (dataPoint.indexes) {
-                attributes['analytics.indexes_count'] = Array.isArray(dataPoint.indexes) ? dataPoint.indexes.length : 1;
+                attributes['analytics.indexes_count'] = Array.isArray(
+                  dataPoint.indexes,
+                )
+                  ? dataPoint.indexes.length
+                  : 1;
               }
               if (dataPoint.doubles) {
-                attributes['analytics.doubles_count'] = dataPoint.doubles.length;
+                attributes['analytics.doubles_count'] =
+                  dataPoint.doubles.length;
               }
               if (dataPoint.blobs) {
                 attributes['analytics.blobs_count'] = dataPoint.blobs.length;
@@ -58,7 +62,8 @@ export function instrumentAnalyticsEngine<T extends AnalyticsEngineDataset>(ae: 
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {

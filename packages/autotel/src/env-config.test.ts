@@ -86,7 +86,7 @@ describe('env-config', () => {
     });
 
     it('should handle undefined', () => {
-      expect(parseResourceAttributes()).toEqual({});
+      expect(parseResourceAttributes(undefined)).toEqual({});
     });
 
     it('should skip invalid pairs without =', () => {
@@ -143,7 +143,7 @@ describe('env-config', () => {
     });
 
     it('should handle undefined', () => {
-      expect(parseOtlpHeaders()).toEqual({});
+      expect(parseOtlpHeaders(undefined)).toEqual({});
     });
 
     it('should skip invalid pairs', () => {

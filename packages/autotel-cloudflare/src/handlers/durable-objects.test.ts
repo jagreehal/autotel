@@ -26,7 +26,7 @@ describe('Durable Objects Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, context, fn) => {
+      startActiveSpan: vi.fn((_name, options, context, fn) => {
         if (typeof options === 'function') {
           return options(mockSpan);
         }
@@ -40,7 +40,9 @@ describe('Durable Objects Instrumentation', () => {
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {
@@ -50,9 +52,12 @@ describe('Durable Objects Instrumentation', () => {
   describe('instrumentDO()', () => {
     it('should wrap DO class constructor', () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('Hello');
         }
       }
@@ -67,9 +72,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should create DO instance with instrumentation', () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('Hello');
         }
       }
@@ -99,9 +107,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should accept static config', () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('Hello');
         }
       }
@@ -118,9 +129,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should accept config function', () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('Hello');
         }
       }
@@ -143,9 +157,12 @@ describe('Durable Objects Instrumentation', () => {
   describe('fetch() instrumentation', () => {
     it('should create span for fetch() calls', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('Hello from DO');
         }
       }
@@ -182,9 +199,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should add HTTP attributes (method, URL, status)', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('OK', { status: 200 });
         }
       }
@@ -205,20 +225,27 @@ describe('Durable Objects Instrumentation', () => {
       } as unknown as DurableObjectState;
 
       const instance = new InstrumentedDO(mockState, {});
-      const request = new Request('http://example.com/increment', { method: 'POST' });
+      const request = new Request('http://example.com/increment', {
+        method: 'POST',
+      });
       await instance.fetch(request);
 
       const options = mockTracer.startActiveSpan.mock.calls[0][1];
       expect(options.kind).toBe(SpanKind.SERVER);
       expect(options.attributes['http.request.method']).toBe('POST');
-      expect(options.attributes['url.full']).toBe('http://example.com/increment');
+      expect(options.attributes['url.full']).toBe(
+        'http://example.com/increment',
+      );
     });
 
     it('should add DO-specific attributes (do.id, do.id.name)', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('OK');
         }
       }
@@ -250,9 +277,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should track cold starts (first call = true, subsequent = false)', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('OK');
         }
       }
@@ -288,9 +318,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should handle fetch() errors', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           throw new Error('DO error');
         }
       }
@@ -327,9 +360,12 @@ describe('Durable Objects Instrumentation', () => {
       class TestDO {
         private counter = 0;
 
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           this.counter++;
           return new Response(`Count: ${this.counter}`);
         }
@@ -352,11 +388,15 @@ describe('Durable Objects Instrumentation', () => {
 
       const instance = new InstrumentedDO(mockState, {});
 
-      const response1 = await instance.fetch(new Request('http://example.com/test'));
+      const response1 = await instance.fetch(
+        new Request('http://example.com/test'),
+      );
       const text1 = await response1.text();
       expect(text1).toBe('Count: 1');
 
-      const response2 = await instance.fetch(new Request('http://example.com/test'));
+      const response2 = await instance.fetch(
+        new Request('http://example.com/test'),
+      );
       const text2 = await response2.text();
       expect(text2).toBe('Count: 2');
     });
@@ -365,9 +405,12 @@ describe('Durable Objects Instrumentation', () => {
   describe('alarm() instrumentation', () => {
     it('should create span for alarm() calls', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('OK');
         }
 
@@ -404,9 +447,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should add DO-specific attributes for alarm()', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('OK');
         }
 
@@ -442,9 +488,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should track cold starts for alarm()', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('OK');
         }
 
@@ -483,9 +532,12 @@ describe('Durable Objects Instrumentation', () => {
 
     it('should handle alarm() errors', async () => {
       class TestDO {
-        constructor(public state: DurableObjectState, public env: any) {}
+        constructor(
+          public state: DurableObjectState,
+          public env: any,
+        ) {}
 
-        async fetch(request: Request) {
+        async fetch(_request: Request) {
           return new Response('OK');
         }
 

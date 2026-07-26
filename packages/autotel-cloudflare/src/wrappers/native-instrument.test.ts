@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { instrument } from './instrument';
 import { span } from 'autotel-edge';
 import { isWrapped } from '../bindings/common';
+import type { IncomingRequestCfProperties } from '@cloudflare/workers-types';
 
 /**
  * A KV-shaped binding so instrumentBindings() would proxy it in the OTLP path.
@@ -11,7 +12,7 @@ import { isWrapped } from '../bindings/common';
  */
 function fakeKv() {
   return {
-    get: vi.fn(async () => 'value'),
+    get: vi.fn(async (_key: string) => 'value'),
     put: vi.fn(async () => {}),
     delete: vi.fn(async () => {}),
     list: vi.fn(async () => ({ keys: [] })),
@@ -56,7 +57,11 @@ describe('instrument() with Cloudflare native tracing (auto)', () => {
       baseConfig,
     );
 
-    await handler.fetch!(new Request('https://x/'), { MY_KV: kv }, ctx as never);
+    await handler.fetch!(
+      new Request('https://x/'),
+      { MY_KV: kv },
+      ctx as never,
+    );
 
     // Handler received the ORIGINAL binding, not an autotel proxy.
     expect(seenBinding).toBe(kv);
@@ -87,11 +92,17 @@ describe('instrument() with Cloudflare native tracing (auto)', () => {
     };
 
     const handler = instrument(
-      { async fetch() { return span('work', () => new Response('ok')); } },
+      {
+        async fetch() {
+          return span('work', () => new Response('ok'));
+        },
+      },
       baseConfig,
     );
 
-    const req = new Request('https://x/', { headers: { 'cf-ray': 'ray-7f' } });
+    const req = new Request('https://x/', {
+      headers: { 'cf-ray': 'ray-7f' },
+    }) as Request<unknown, IncomingRequestCfProperties>;
     await handler.fetch!(req, {}, ctx as never);
     expect(attrs['correlation.id']).toBe('ray-7f');
   });
@@ -111,7 +122,11 @@ describe('instrument() with Cloudflare native tracing (auto)', () => {
       baseConfig,
     );
 
-    const res = await handler.fetch!(new Request('https://x/'), {}, ctx as never);
+    const res = await handler.fetch!(
+      new Request('https://x/'),
+      {},
+      ctx as never,
+    );
     expect(await res.text()).toBe('done');
     expect(enteredSpans).toContain('user.work');
   });
@@ -119,7 +134,11 @@ describe('instrument() with Cloudflare native tracing (auto)', () => {
   it('does not run the OTLP export flow (no waitUntil) in native mode', async () => {
     const { ctx, waitUntil } = nativeCtx();
     const handler = instrument(
-      { async fetch() { return new Response('ok'); } },
+      {
+        async fetch() {
+          return new Response('ok');
+        },
+      },
       baseConfig,
     );
     await handler.fetch!(new Request('https://x/'), {}, ctx as never);
@@ -143,7 +162,11 @@ describe('instrument() with nativeTracing: "off"', () => {
       { ...baseConfig, nativeTracing: 'off' },
     );
 
-    await handler.fetch!(new Request('https://x/'), { MY_KV: kv }, ctx as never);
+    await handler.fetch!(
+      new Request('https://x/'),
+      { MY_KV: kv },
+      ctx as never,
+    );
 
     // OTLP path proxies the binding, so the handler sees a wrapped object.
     expect(isWrapped(seenBinding)).toBe(true);

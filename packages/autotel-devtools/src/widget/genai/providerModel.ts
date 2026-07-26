@@ -4,10 +4,11 @@
 
 /** Fold provider aliases (Azure→openai, Vertex/Gemini→google) to a base key. */
 export function normalizeProvider(provider: string): string {
-  const p = provider.toLowerCase()
-  if (p === 'az.ai.openai' || p === 'azure_openai') return 'openai'
-  if (p === 'vertex_ai' || p === 'gcp.vertex_ai' || p === 'gcp.gemini') return 'google'
-  return p
+  const p = provider.toLowerCase();
+  if (p === 'az.ai.openai' || p === 'azure_openai') return 'openai';
+  if (p === 'vertex_ai' || p === 'gcp.vertex_ai' || p === 'gcp.gemini')
+    return 'google';
+  return p;
 }
 
 /**
@@ -19,19 +20,22 @@ export function makeProviderModelLookup<T>(
   table: Record<string, T>,
 ): (provider: string, model: string) => T | undefined {
   const sortedKeys = Object.keys(table).sort((a, b) => {
-    const am = a.split('/')[1] ?? ''
-    const bm = b.split('/')[1] ?? ''
-    return bm.length - am.length
-  })
+    const am = a.split('/')[1] ?? '';
+    const bm = b.split('/')[1] ?? '';
+    return bm.length - am.length;
+  });
   return (provider, model) => {
-    const normalizedProvider = normalizeProvider(provider)
-    const normalizedModel = model.toLowerCase()
+    const normalizedProvider = normalizeProvider(provider);
+    const normalizedModel = model.toLowerCase();
     for (const key of sortedKeys) {
-      const [tableProvider, tableModel] = key.split('/')
-      if (tableProvider === normalizedProvider && normalizedModel.startsWith(tableModel)) {
-        return table[key]
+      const [tableProvider, tableModel] = key.split('/');
+      if (
+        tableProvider === normalizedProvider &&
+        normalizedModel.startsWith(tableModel)
+      ) {
+        return table[key];
       }
     }
-    return undefined
-  }
+    return undefined;
+  };
 }

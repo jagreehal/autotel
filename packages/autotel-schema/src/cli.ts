@@ -82,7 +82,9 @@ export function run(argv: string[]): number {
   }
 
   if (!baseline || !current) {
-    console.error('autotel-schema: both <baseline.json> and <current.json> are required\n');
+    console.error(
+      'autotel-schema: both <baseline.json> and <current.json> are required\n',
+    );
     console.error(USAGE);
     return 1;
   }

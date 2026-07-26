@@ -10,7 +10,8 @@ export function str(attrs: Attributes, ...keys: string[]): string | undefined {
   for (const key of keys) {
     const value = attrs[key];
     if (typeof value === 'string' && value.length > 0) return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (typeof value === 'number' || typeof value === 'boolean')
+      return String(value);
   }
   return undefined;
 }
@@ -27,7 +28,10 @@ export function num(attrs: Attributes, ...keys: string[]): number | undefined {
   return undefined;
 }
 
-export function bool(attrs: Attributes, ...keys: string[]): boolean | undefined {
+export function bool(
+  attrs: Attributes,
+  ...keys: string[]
+): boolean | undefined {
   for (const key of keys) {
     const value = attrs[key];
     if (typeof value === 'boolean') return value;

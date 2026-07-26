@@ -2,11 +2,7 @@
  * Browser Rendering binding instrumentation
  */
 
-import {
-  trace,
-  SpanKind,
-  SpanStatusCode,
-} from '@opentelemetry/api';
+import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap, setAttr } from './common';
 
@@ -17,7 +13,10 @@ interface BrowserRenderingLike {
 /**
  * Instrument Browser Rendering binding (manual only — not auto-detected)
  */
-export function instrumentBrowserRendering<T extends BrowserRenderingLike>(browser: T, bindingName?: string): T {
+export function instrumentBrowserRendering<T extends BrowserRenderingLike>(
+  browser: T,
+  bindingName?: string,
+): T {
   const name = bindingName || 'browser';
 
   const handler: ProxyHandler<T> = {
@@ -27,8 +26,16 @@ export function instrumentBrowserRendering<T extends BrowserRenderingLike>(brows
       if (prop === 'fetch' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
-            const [input] = args as [RequestInfo | URL, RequestInit | undefined];
-            const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+            const [input] = args as [
+              RequestInfo | URL,
+              RequestInit | undefined,
+            ];
+            const url =
+              typeof input === 'string'
+                ? input
+                : input instanceof URL
+                  ? input.toString()
+                  : input.url;
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
             return tracer.startActiveSpan(
@@ -50,7 +57,8 @@ export function instrumentBrowserRendering<T extends BrowserRenderingLike>(brows
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {

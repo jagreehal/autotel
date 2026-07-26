@@ -50,7 +50,7 @@ function collectImportSources(content: string): Set<string> {
 }
 
 function pickLogger(
-  imports: Set<string>
+  imports: Set<string>,
 ): ParsedInstrumentation['detectedLogger'] {
   if (imports.has('pino')) return 'pino';
   if (imports.has('winston')) return 'winston';
@@ -75,7 +75,7 @@ function parseAutoInstrumentations(content: string): string[] {
  */
 export function diffImportSources(
   existing: ParsedInstrumentation,
-  planImportSources: string[]
+  planImportSources: string[],
 ): string[] {
   return planImportSources.filter((s) => !existing.importedSources.has(s));
 }
@@ -86,7 +86,7 @@ export function diffImportSources(
  */
 export function diffAutoInstrumentations(
   existing: ParsedInstrumentation,
-  planEntries: string[]
+  planEntries: string[],
 ): string[] {
   return planEntries.filter((e) => !existing.autoInstrumentations.includes(e));
 }

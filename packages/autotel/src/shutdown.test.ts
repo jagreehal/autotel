@@ -11,7 +11,7 @@ import {
   _setOptionalRequireForTesting,
 } from './init';
 import { track, getEventQueue } from './track';
-import { EventSubscriber } from './event-subscriber';
+import type { EventSubscriber } from './event-subscriber';
 
 // Mock adapter for testing
 class MockAdapter implements EventSubscriber {
@@ -307,7 +307,7 @@ describe('shutdown module', () => {
             }),
           } as any;
         }
-        return undefined;
+        return;
       });
 
       init({

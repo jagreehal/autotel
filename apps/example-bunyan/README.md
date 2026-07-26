@@ -13,18 +13,21 @@ This example demonstrates how to use **Bunyan logger** with autotel for applicat
 ## Setup
 
 1. **Install dependencies:**
+
    ```bash
    cd apps/example-bunyan
    pnpm install
    ```
-   
+
    **Note:** While `@opentelemetry/auto-instrumentations-node` includes Bunyan instrumentation, you may need to install `@opentelemetry/instrumentation-bunyan` separately to ensure it's available:
+
    ```bash
    pnpm add @opentelemetry/instrumentation-bunyan
    ```
 
 2. **Configure OTLP endpoint (optional):**
    Create a `.env` file:
+
    ```bash
    OTLP_ENDPOINT=http://localhost:4318
    # Or for Grafana Cloud:
@@ -64,6 +67,7 @@ logger.info({ userId: '123' }, 'User created');
 When you run the example, you'll see:
 
 1. **Bunyan logs** with trace context automatically injected:
+
    ```
    {"name":"example-bunyan","hostname":"...","pid":12345,"level":30,"msg":"Creating user","name":"Alice","email":"alice@example.com","traceId":"abc123","spanId":"def456","time":"2025-01-27T10:30:00.000Z","v":0}
    ```
@@ -85,6 +89,7 @@ pnpm --filter example-bunyan exec npx autotel doctor
 ```
 
 This will check:
+
 - ✅ Bunyan is installed
 - ✅ Auto-instrumentation is configured
 - ✅ OTLP endpoint is reachable

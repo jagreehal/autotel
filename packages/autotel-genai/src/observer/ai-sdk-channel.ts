@@ -234,7 +234,9 @@ function closeSpan(
         response: {
           model: result?.response?.modelId ?? event?.modelId,
           id: result?.response?.id,
-          finishReasons: result?.finishReason ? [result.finishReason] : undefined,
+          finishReasons: result?.finishReason
+            ? [result.finishReason]
+            : undefined,
         },
         usage: toTokenUsage(result?.usage),
         costModel: event?.modelId,
@@ -267,4 +269,3 @@ interface ResultView {
   response?: { id?: string; modelId?: string };
   usage?: AiSdkUsageShape;
 }
-

@@ -1,6 +1,6 @@
-# Cloudflare Example — autotel-cloudflare
+# Cloudflare Example: autotel-cloudflare
 
-OpenTelemetry instrumentation for Cloudflare Workers using `autotel-cloudflare`. Wraps your handler and every request produces traces with HTTP attributes, span status codes, and exception recording — no manual span management needed.
+OpenTelemetry instrumentation for Cloudflare Workers using `autotel-cloudflare`. Wraps your handler and every request produces traces with HTTP attributes, span status codes, and exception recording. No manual span management needed.
 
 ## Quick Start
 
@@ -21,21 +21,21 @@ curl -X POST http://localhost:8787/payment -H 'Content-Type: application/json' -
 
 ## Endpoints
 
-| Path        | Method | Description                                       |
-| ----------- | ------ | ------------------------------------------------- |
-| `/`         | GET    | Basic request with attribute extractors           |
-| `/debug`    | GET    | `runWithLogLevel` — forces debug logging          |
-| `/cache`    | GET    | Cache instrumentation via `span()`                |
-| `/external` | GET    | Distributed tracing with auto context propagation |
-| `/payment`  | POST   | Error handling with proper span status codes      |
-| `/users`    | POST   | Nested spans — validation + DB operations         |
-| `/native`   | GET    | Nested `span()` demo — nests in CF's native waterfall when deployed |
+| Path        | Method | Description                                                        |
+| ----------- | ------ | ------------------------------------------------------------------ |
+| `/`         | GET    | Basic request with attribute extractors                            |
+| `/debug`    | GET    | `runWithLogLevel`: forces debug logging                            |
+| `/cache`    | GET    | Cache instrumentation via `span()`                                 |
+| `/external` | GET    | Distributed tracing with auto context propagation                  |
+| `/payment`  | POST   | Error handling with proper span status codes                       |
+| `/users`    | POST   | Nested spans: validation + DB operations                           |
+| `/native`   | GET    | Nested `span()` demo: nests in CF's native waterfall when deployed |
 
 Endpoints like `/kv`, `/r2`, `/d1`, `/ai`, `/queue` work when the corresponding binding is uncommented in `wrangler.toml`.
 
 ## Native tracing (deployed) vs OTLP (local)
 
-This worker uses the **same** `trace()`/`span()` code in both modes — autotel
+This worker uses the **same** `trace()`/`span()` code in both modes. Autotel
 auto-detects which to use:
 
 - **Deployed** with `[observability.traces] enabled = true` (set in
@@ -67,9 +67,9 @@ auto-detects which to use:
 
 ## What Gets Traced
 
-**HTTP requests** — automatic spans with `http.request.method`, `url.full`, `http.response.status_code`.
+**HTTP requests**. Automatic spans with `http.request.method`, `url.full`, `http.response.status_code`.
 
-**Custom functions** — wrap with `trace()` for automatic span naming, attribute extraction from args/results, and error recording:
+**Custom functions**. Wrap with `trace()` for automatic span naming, attribute extraction from args/results, and error recording:
 
 ```typescript
 const processPayment = trace(
@@ -87,11 +87,11 @@ const processPayment = trace(
 );
 ```
 
-**Code blocks** — use `span()` for fine-grained tracing of cache lookups, transformations, etc.
+**Code blocks**. Use `span()` for fine-grained tracing of cache lookups, transformations, etc.
 
-**Bindings** — KV, R2, D1, Service Bindings, AI, Vectorize, Queues, and Analytics Engine are auto-instrumented when present.
+**Bindings**. KV, R2, D1, Service Bindings, AI, Vectorize, Queues, and Analytics Engine are auto-instrumented when present.
 
-**Global fetch** — all `fetch()` calls get trace context propagation injected automatically.
+**Global fetch**. All `fetch()` calls get trace context propagation injected automatically.
 
 ## Edge Logger
 
@@ -116,7 +116,7 @@ log.debug({ body }, 'payload'); // filtered at info level
 
 ### Child loggers
 
-Like pino's `child()` — creates a new logger that inherits parent bindings and adds its own. Every call from the child includes both.
+Like pino's `child()`. Creates a new logger that inherits parent bindings and adds its own. Every call from the child includes both.
 
 ```typescript
 // In the fetch handler — add request-scoped context
@@ -131,7 +131,7 @@ reqLog.info('processing'); // includes method, path, requestId + parent bindings
 
 ### Log level override
 
-`runWithLogLevel` overrides the level for the duration of a callback — useful for debugging a single request without changing global config:
+`runWithLogLevel` overrides the level for the duration of a callback. Useful for debugging a single request without changing global config:
 
 ```typescript
 // Force debug logging for this request only
@@ -180,7 +180,7 @@ const masked = createEdgeLogger('my-service', {
 });
 ```
 
-Child loggers inherit redaction — no extra config needed.
+Child loggers inherit redaction. No extra config needed.
 
 ## Configuration
 
@@ -225,9 +225,9 @@ src/
 
 ## Additional Examples
 
-- **Actors** (`src/actor.ts`) — Durable Object lifecycle, storage (SQL), alarm tracing via `@cloudflare/actors`
-- **Agents** (`src/agent.ts`) — Agents SDK RPC calls, scheduled tasks, MCP operations via `createOtelObservability()`
-- **Workflows** (`src/workflow.ts`) — Workflow step tracing via `instrumentWorkflow()`
+- **Actors** (`src/actor.ts`): Durable Object lifecycle, storage (SQL), alarm tracing via `@cloudflare/actors`
+- **Agents** (`src/agent.ts`): Agents SDK RPC calls, scheduled tasks, MCP operations via `createOtelObservability()`
+- **Workflows** (`src/workflow.ts`): Workflow step tracing via `instrumentWorkflow()`
 
 ## Deploy
 
@@ -239,4 +239,4 @@ Set `ENVIRONMENT=production` and configure `OTLP_ENDPOINT` to your observability
 
 ## Package Choice
 
-`autotel-cloudflare` is the right package for Cloudflare Workers — it bundles the functional API (`trace`, `span`), handler wrappers (`wrapModule`, `instrument`), and bindings instrumentation (KV, R2, D1, AI, Vectorize, Queues, Durable Objects).
+`autotel-cloudflare` is the right package for Cloudflare Workers. It bundles the functional API (`trace`, `span`), handler wrappers (`wrapModule`, `instrument`), and bindings instrumentation (KV, R2, D1, AI, Vectorize, Queues, Durable Objects).

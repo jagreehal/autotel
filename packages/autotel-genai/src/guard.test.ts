@@ -35,7 +35,10 @@ describe('costCeiling', () => {
   });
 
   it('fires only once even if cost keeps climbing', () => {
-    const guard = createGenAiGuard({ rules: [costCeiling(1)], onStop: 'abort' });
+    const guard = createGenAiGuard({
+      rules: [costCeiling(1)],
+      onStop: 'abort',
+    });
     guard.record({ usage: { costUsd: 2 } });
     expect(guard.record({ usage: { costUsd: 2 } })).toEqual([]);
     expect(guard.violations).toHaveLength(1);
@@ -44,8 +47,13 @@ describe('costCeiling', () => {
 
 describe('tokenCeiling', () => {
   it('sums input + output tokens', () => {
-    const guard = createGenAiGuard({ rules: [tokenCeiling(100)], onStop: 'abort' });
-    const fired = guard.record({ usage: { inputTokens: 60, outputTokens: 60 } });
+    const guard = createGenAiGuard({
+      rules: [tokenCeiling(100)],
+      onStop: 'abort',
+    });
+    const fired = guard.record({
+      usage: { inputTokens: 60, outputTokens: 60 },
+    });
     expect(fired[0].observed).toBe(120);
     expect(fired[0].limit).toBe(100);
   });
@@ -53,7 +61,10 @@ describe('tokenCeiling', () => {
 
 describe('maxToolCalls', () => {
   it('counts only tool-kind steps', () => {
-    const guard = createGenAiGuard({ rules: [maxToolCalls(2)], onStop: 'abort' });
+    const guard = createGenAiGuard({
+      rules: [maxToolCalls(2)],
+      onStop: 'abort',
+    });
     guard.record({ kind: 'llm' });
     guard.record({ kind: 'tool' });
     guard.record({ kind: 'tool' });
@@ -96,7 +107,11 @@ describe('spinLoop', () => {
       rules: [spinLoop({ count: 3, window: 5 })],
       onStop: 'abort',
     });
-    const call = { kind: 'tool' as const, name: 'search', signature: '{"q":"x"}' };
+    const call = {
+      kind: 'tool' as const,
+      name: 'search',
+      signature: '{"q":"x"}',
+    };
     expect(guard.record(call)).toEqual([]);
     expect(guard.record(call)).toEqual([]);
     const fired = guard.record(call);
@@ -179,13 +194,19 @@ describe('onStop behaviour', () => {
   });
 
   it('aborts without throwing when onStop is "abort"', () => {
-    const guard = createGenAiGuard({ rules: [costCeiling(1)], onStop: 'abort' });
+    const guard = createGenAiGuard({
+      rules: [costCeiling(1)],
+      onStop: 'abort',
+    });
     expect(() => guard.record({ usage: { costUsd: 2 } })).not.toThrow();
     expect(guard.signal.aborted).toBe(true);
   });
 
   it('neither aborts nor throws when onStop is "silent"', () => {
-    const guard = createGenAiGuard({ rules: [costCeiling(1)], onStop: 'silent' });
+    const guard = createGenAiGuard({
+      rules: [costCeiling(1)],
+      onStop: 'silent',
+    });
     const fired = guard.record({ usage: { costUsd: 2 } });
     expect(fired).toHaveLength(1);
     expect(guard.stopped).toBe(true);
@@ -202,22 +223,28 @@ describe('onStop behaviour', () => {
 
 describe('telemetry sink', () => {
   it('records session attributes and a stop event', () => {
-    const setAttribute = vi.fn();
     const setAttributes = vi.fn();
     const track = vi.fn();
-    const guard = createGenAiGuard({ rules: [costCeiling(1)], onStop: 'abort' });
-    guard.record({ kind: 'tool', usage: { costUsd: 2, inputTokens: 10 } }, {
-      setAttribute,
-      setAttributes,
-      track,
+    const guard = createGenAiGuard({
+      rules: [costCeiling(1)],
+      onStop: 'abort',
     });
+    guard.record(
+      { kind: 'tool', usage: { costUsd: 2, inputTokens: 10 } },
+      {
+        setAttributes,
+        track,
+      },
+    );
     expect(setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
         'gen_ai.session.cost.usd': 2,
         'gen_ai.session.tool_call.count': 1,
       }),
     );
-    expect(setAttributes).toHaveBeenCalledWith({ 'gen_ai.guard.stopped': true });
+    expect(setAttributes).toHaveBeenCalledWith({
+      'gen_ai.guard.stopped': true,
+    });
     expect(track).toHaveBeenCalledWith(
       'gen_ai.guard.stop',
       expect.objectContaining({ 'gen_ai.guard.rule': 'cost-ceiling:$1' }),

@@ -9,24 +9,24 @@ Autotel supports standard OpenTelemetry environment variables for configuration.
 
 **Service Configuration:**
 
-- `OTEL_SERVICE_NAME` — Service name (maps to `service` in `init()`)
+- `OTEL_SERVICE_NAME`: Service name (maps to `service` in `init()`)
 
 **Exporter Configuration:**
 
-- `OTEL_EXPORTER_OTLP_ENDPOINT` — OTLP collector URL (e.g. `http://localhost:4318`)
-- `OTEL_EXPORTER_OTLP_PROTOCOL` — Protocol: `http` or `grpc`
-- `OTEL_EXPORTER_OTLP_HEADERS` — Auth headers as comma-separated `key=value` pairs
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP collector URL (e.g. `http://localhost:4318`)
+- `OTEL_EXPORTER_OTLP_PROTOCOL`: Protocol: `http` or `grpc`
+- `OTEL_EXPORTER_OTLP_HEADERS`: Auth headers as comma-separated `key=value` pairs
 
 **Resource Attributes:**
 
-- `OTEL_RESOURCE_ATTRIBUTES` — Custom metadata tags as comma-separated `key=value` pairs
+- `OTEL_RESOURCE_ATTRIBUTES`: Custom metadata tags as comma-separated `key=value` pairs
 
 ## Configuration Precedence
 
-1. **Explicit `init()` parameters** — highest priority
-2. **YAML file** — `autotel.yaml` or `AUTOTEL_CONFIG_FILE` env var
-3. **Environment variables** — `OTEL_*`, `AUTOTEL_*`
-4. **Built-in defaults** — sensible defaults for development
+1. **Explicit `init()` parameters**: highest priority
+2. **YAML file**: `autotel.yaml` or `AUTOTEL_CONFIG_FILE` env var
+3. **Environment variables**: `OTEL_*`, `AUTOTEL_*`
+4. **Built-in defaults**: sensible defaults for development
 
 ```typescript
 init({
@@ -97,9 +97,9 @@ init({
 
 **Presets:**
 
-- `default` — Emails, phone numbers, SSNs, credit cards (last 4), sensitive keys (password, token, etc.)
-- `strict` — All of default plus JWTs, Bearer tokens, IBANs, API keys in values
-- `pci-dss` — Focused on payment card data
+- `default`: Emails, phone numbers, SSNs, credit cards (last 4), sensitive keys (password, token, etc.)
+- `strict`: All of default plus JWTs, Bearer tokens, IBANs, API keys in values
+- `pci-dss`: Focused on payment card data
 
 **Custom configuration:**
 

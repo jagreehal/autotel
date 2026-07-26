@@ -176,16 +176,15 @@ export interface AutotelTelemetryIntegration {
   onEnd(event: OperationEndEventView): void;
   onAbort(event: AbortEventView): void;
   onError(event: unknown): void;
-  executeLanguageModelCall<T>(
-    options: { callId: string; execute: () => PromiseLike<T> },
-  ): PromiseLike<T>;
-  executeTool<T>(
-    options: {
-      callId: string;
-      toolCallId: string;
-      execute: () => PromiseLike<T>;
-    },
-  ): PromiseLike<T>;
+  executeLanguageModelCall<T>(options: {
+    callId: string;
+    execute: () => PromiseLike<T>;
+  }): PromiseLike<T>;
+  executeTool<T>(options: {
+    callId: string;
+    toolCallId: string;
+    execute: () => PromiseLike<T>;
+  }): PromiseLike<T>;
 }
 
 export interface AutotelTelemetryOptions {

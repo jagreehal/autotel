@@ -3,8 +3,15 @@
  */
 
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
-import { ParentBasedSampler, AlwaysOnSampler } from '@opentelemetry/sdk-trace-base';
-import { context as api_context, createContextKey, type Context } from '@opentelemetry/api';
+import {
+  ParentBasedSampler,
+  AlwaysOnSampler,
+} from '@opentelemetry/sdk-trace-base';
+import {
+  context as api_context,
+  createContextKey,
+  type Context,
+} from '@opentelemetry/api';
 import type {
   EdgeConfig,
   ResolvedEdgeConfig,
@@ -25,6 +32,7 @@ export type Initialiser = (env: any, trigger: Trigger) => ResolvedEdgeConfig;
  * Context key for storing config (isolates config per-request)
  */
 const CONFIG_KEY = createContextKey('autotel-edge-config');
+let missingExporterWarningEmitted = false;
 
 /**
  * Get the currently active config from context
@@ -34,9 +42,7 @@ const CONFIG_KEY = createContextKey('autotel-edge-config');
  */
 export function getActiveConfig(): ResolvedEdgeConfig | null {
   const value = api_context.active().getValue(CONFIG_KEY) as
-    | ResolvedEdgeConfig
-    | null
-    | undefined;
+    ResolvedEdgeConfig | null | undefined;
   return value ?? null;
 }
 
@@ -86,6 +92,19 @@ export function parseConfig(config: EdgeConfig): ResolvedEdgeConfig {
       return (ctx.traceFlags & 1) === 1 || localRootSpan.status.code === 2; // SAMPLED flag | ERROR status
     });
 
+  // A service-only config (no exporter, no spanProcessors) is valid for
+  // tests, but in production it silently drops every span — warn once.
+  if (
+    !missingExporterWarningEmitted &&
+    !isSpanProcessorConfig(config) &&
+    !config.exporter
+  ) {
+    missingExporterWarningEmitted = true;
+    console.warn(
+      '[autotel-edge] No exporter or spanProcessors configured — spans will not be exported.',
+    );
+  }
+
   // Parse exporter - use TailSamplingSpanProcessor when tail sampler is present
   const spanProcessors = isSpanProcessorConfig(config)
     ? Array.isArray(config.spanProcessors)
@@ -119,8 +138,10 @@ export function parseConfig(config: EdgeConfig): ResolvedEdgeConfig {
     spanProcessors,
     propagator: config.propagator ?? new W3CTraceContextPropagator(),
     instrumentation: {
-      instrumentGlobalFetch: config.instrumentation?.instrumentGlobalFetch ?? true,
-      instrumentGlobalCache: config.instrumentation?.instrumentGlobalCache ?? false,
+      instrumentGlobalFetch:
+        config.instrumentation?.instrumentGlobalFetch ?? true,
+      instrumentGlobalCache:
+        config.instrumentation?.instrumentGlobalCache ?? false,
       disabled: config.instrumentation?.disabled ?? false,
     },
     subscribers: config.subscribers ?? [],

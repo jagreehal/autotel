@@ -129,7 +129,7 @@ export const builtinPatterns = {
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
   creditCard: {
     pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
-    mask: (m: string) => `****${m.replace(/[\s-]/g, '').slice(-4)}`,
+    mask: (m: string) => `****${m.replaceAll(/[\s-]/g, '').slice(-4)}`,
   },
   /** Email addresses → a***@***.com */
   email: {
@@ -161,7 +161,7 @@ export const builtinPatterns = {
     pattern:
       /(?:\+\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}|\(\d{1,4}\)(?:[\s.-]?\d{2,4}){2,4}|\b\d{3}[-.]?\d{3}[-.]?\d{4}\b)/g,
     mask: (m: string) => {
-      const digits = m.replace(/[^\d]/g, '');
+      const digits = m.replaceAll(/[^\d]/g, '');
       const hasPlus = m.startsWith('+');
       if (hasPlus && digits.length > 4) {
         const ccMatch = m.match(/^\+\d{1,3}/);
@@ -189,7 +189,7 @@ export const builtinPatterns = {
     pattern:
       /\b[A-Z]{2}\d{2}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}\b/g,
     mask: (m: string) => {
-      const clean = m.replace(/[\s-]/g, '');
+      const clean = m.replaceAll(/[\s-]/g, '');
       return `${clean.slice(0, 4)}****${clean.slice(-3)}`;
     },
   },
@@ -389,7 +389,7 @@ function resolveConfig(
       : (Object.keys(builtinPatterns) as BuiltinPatternName[]);
     const builtinValuePatterns = builtinNames
       .filter((name) => name in builtinPatterns)
-      .map(builtinToValuePattern);
+      .map((name) => builtinToValuePattern(name));
 
     resolvedConfig.valuePatterns = [
       ...(resolvedConfig.valuePatterns ?? []),

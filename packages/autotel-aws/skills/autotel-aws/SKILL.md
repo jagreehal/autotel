@@ -67,15 +67,15 @@ export const handler = traceLambda((ctx) => async (event, lambdaContext) => {
 
 **LambdaInstrumentationConfig options:**
 
-| Option | Default | Description |
-|---|---|---|
-| `captureResponse` | `false` | Serialise response into `lambda.response` attribute (capped at 4 096 bytes) |
-| `extractTraceContext` | `true` | Extract W3C / X-Ray trace context from the incoming event |
-| `service` | — | Override service name |
+| Option                | Default | Description                                                                 |
+| --------------------- | ------- | --------------------------------------------------------------------------- |
+| `captureResponse`     | `false` | Serialise response into `lambda.response` attribute (capped at 4 096 bytes) |
+| `extractTraceContext` | `true`  | Extract W3C / X-Ray trace context from the incoming event                   |
+| `service`             | —       | Override service name                                                       |
 
 ### AWS SDK v3 instrumentation
 
-Three approaches — pick one:
+Three approaches. Pick one:
 
 **A. Instrument an existing client:**
 
@@ -125,8 +125,10 @@ import { traceS3 } from 'autotel-aws/s3';
 const getFile = traceS3({ operation: 'GetObject', bucket: 'my-bucket' })(
   (ctx) => async (key: string) => {
     ctx.setAttribute('aws.s3.key', key);
-    return await s3.send(new GetObjectCommand({ Bucket: 'my-bucket', Key: key }));
-  }
+    return await s3.send(
+      new GetObjectCommand({ Bucket: 'my-bucket', Key: key }),
+    );
+  },
 );
 
 await getFile('path/to/file.txt');
@@ -142,21 +144,26 @@ import { traceDynamoDB } from 'autotel-aws/dynamodb';
 const getUser = traceDynamoDB({ operation: 'GetItem', table: 'users' })(
   (ctx) => async (userId: string) => {
     ctx.setAttribute('db.statement', 'GetItem WHERE id = :id');
-    const result = await dynamodb.send(new GetItemCommand({
-      TableName: 'users',
-      Key: { id: { S: userId } },
-    }));
+    const result = await dynamodb.send(
+      new GetItemCommand({
+        TableName: 'users',
+        Key: { id: { S: userId } },
+      }),
+    );
     if (result.ConsumedCapacity?.CapacityUnits) {
-      ctx.setAttribute('aws.dynamodb.consumed_capacity', result.ConsumedCapacity.CapacityUnits);
+      ctx.setAttribute(
+        'aws.dynamodb.consumed_capacity',
+        result.ConsumedCapacity.CapacityUnits,
+      );
     }
     return result.Item;
-  }
+  },
 );
 ```
 
 Auto-sets: `db.system` ('dynamodb'), `db.operation`, `db.name`, `aws.dynamodb.table_names`. Span name: `dynamodb.GetItem`.
 
-**SQS / SNS / Kinesis / Step Functions / EventBridge** — follow the same `traceXxx({ operation, ... })` pattern via their respective subpaths (`autotel-aws/sqs`, `autotel-aws/sns`, etc.).
+**SQS / SNS / Kinesis / Step Functions / EventBridge**. Follow the same `traceXxx({ operation, ... })` pattern via their respective subpaths (`autotel-aws/sqs`, `autotel-aws/sns`, etc.).
 
 ### X-Ray compatibility
 
@@ -181,7 +188,7 @@ const detectors = await getAWSResourceDetectors();
 
 ## Common Mistakes
 
-### HIGH — Calling init() after creating SDK clients
+### HIGH: Calling init() after creating SDK clients
 
 ```typescript
 // WRONG: SDK clients created before SDK is initialised
@@ -196,13 +203,13 @@ await init({ service: 'my-service' });
 const s3 = instrumentSDK(new S3Client({}));
 ```
 
-### HIGH — Using traceLambda but forgetting to call the inner handler
+### HIGH: Using traceLambda but forgetting to call the inner handler
 
 ```typescript
 // WRONG: factory must return an async function; the function is what gets invoked
 export const handler = traceLambda((ctx) => {
   ctx.setAttribute('foo', 'bar'); // ctx.setAttribute called eagerly — wrong timing
-  return { statusCode: 200 };     // returning a value, not a handler function
+  return { statusCode: 200 }; // returning a value, not a handler function
 });
 ```
 
@@ -214,7 +221,7 @@ export const handler = traceLambda((ctx) => async (event, lambdaContext) => {
 });
 ```
 
-### MEDIUM — Forgetting to await init() before the first invocation
+### MEDIUM: Forgetting to await init() before the first invocation
 
 Lambda cold start code runs synchronously before the handler. If `init()` is not awaited, the first invocation may execute before the SDK is ready.
 
@@ -229,11 +236,11 @@ await init({ service: 'my-service' });
 export const handler = wrapHandler(async (event) => { ... });
 ```
 
-### MEDIUM — Enabling captureResponse on large payloads
+### MEDIUM: Enabling captureResponse on large payloads
 
 `captureResponse: true` serialises the full response to a span attribute. Payloads over 4 096 bytes are replaced with `lambda.response.truncated = true` and `lambda.response.size`, but the serialisation still happens. Avoid on high-throughput or large-payload handlers.
 
-### MEDIUM — Using global autoInstrumentAWS() in tests
+### MEDIUM: Using global autoInstrumentAWS() in tests
 
 `autoInstrumentAWS()` patches the SDK globally and persists across test files. Always call `disableAutoInstrumentAWS()` in test teardown, or prefer `instrumentSDK()` / `createTracedClient()` for isolated instrumentation.
 

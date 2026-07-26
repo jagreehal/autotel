@@ -80,7 +80,10 @@ describe('autotel-audit', () => {
       'autotel.sampling.tail.evaluated',
       true,
     );
-    expect(setAttribute).toHaveBeenCalledWith('autotel.sampling.tail.keep', true);
+    expect(setAttribute).toHaveBeenCalledWith(
+      'autotel.sampling.tail.keep',
+      true,
+    );
     expect(setAttribute).toHaveBeenCalledWith('autotel.audit.force_keep', true);
   });
 

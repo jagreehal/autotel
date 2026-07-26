@@ -6,7 +6,7 @@ OpenTelemetry spans, using `autotel-genai`'s event-stream observer.
 One `createLangChainObserver` handler bridges every LangChain callback
 (`runId` / `parentRunId`) into `createGenAiObserver`, which rebuilds the span
 tree, estimates cost, and force-closes abandoned children. An in-memory
-exporter then prints what was captured — proving the glue works end to end
+exporter then prints what was captured. Proving the glue works end to end
 against a real local model.
 
 ```ts
@@ -29,13 +29,13 @@ Override the model or endpoint with `OLLAMA_MODEL` / `OLLAMA_BASE_URL`.
 
 ## What it shows
 
-- **Demo 1 — plain chat.** `ChatOllama.invoke(...)` → one `chat` span carrying
+- **Demo 1, plain chat.** `ChatOllama.invoke(...)` → one `chat` span carrying
   real token usage pulled from Ollama's `usage_metadata`.
-- **Demo 2 — ReAct agent.** A LangGraph agent → an `invoke_agent` tree with a
+- **Demo 2, ReAct agent.** A LangGraph agent → an `invoke_agent` tree with a
   `chat` span per model turn. LangGraph plumbing (`RunnableSequence`,
   `ChannelWrite`, `Branch`, …) is skipped; their children reparent to the
   nearest kept node, so the tree stays readable.
-- **Demo 3 — direct tool call.** Invoking a tool through LangChain →
+- **Demo 3, direct tool call.** Invoking a tool through LangChain →
   `execute_tool` span with arguments and result captured as content. (Small
   local models call tools unreliably, so this proves tool capture deterministically.)
 
@@ -58,7 +58,7 @@ execute_tool multiply [internal]  —  args {"a":23,"b":19} · result 437
 ```
 
 > Cost (`gen_ai.usage.cost.usd`) is omitted here because local Ollama models
-> have no entry in `MODEL_PRICING` — they're free. Hosted models get priced
+> have no entry in `MODEL_PRICING`: they're free. Hosted models get priced
 > automatically.
 
 ## How content capture works

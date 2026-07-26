@@ -18,7 +18,6 @@ import type {
 
 // Re-export commonly used types
 
-
 /**
  * Extended SpanOptions with per-span sampler support
  */
@@ -31,11 +30,7 @@ export interface ExtendedSpanOptions extends SpanOptions {
  * Can be a Request or any vendor-specific trigger type
  */
 export type Trigger =
-  | Request
-  | DOConstructorTrigger
-  | WorkflowTrigger
-  | 'do-alarm'
-  | unknown;
+  Request | DOConstructorTrigger | WorkflowTrigger | 'do-alarm' | unknown;
 
 export interface DOConstructorTrigger {
   id: string;
@@ -95,17 +90,9 @@ export type OrPromise<T> = T | Promise<T>;
  * Adapter event types
  */
 export type FunnelStepStatus =
-  | 'started'
-  | 'completed'
-  | 'abandoned'
-  | 'failed'
-  | (string & {});
+  'started' | 'completed' | 'abandoned' | 'failed' | (string & {});
 
-export type OutcomeStatus =
-  | 'success'
-  | 'failure'
-  | 'partial'
-  | (string & {});
+export type OutcomeStatus = 'success' | 'failure' | 'partial' | (string & {});
 
 export interface EdgeEventBase {
   [key: string]: unknown;
@@ -142,10 +129,7 @@ export interface EdgeValueEvent extends EdgeEventBase {
 }
 
 export type EdgeEvent =
-  | EdgeTrackEvent
-  | EdgeFunnelStepEvent
-  | EdgeOutcomeEvent
-  | EdgeValueEvent;
+  EdgeTrackEvent | EdgeFunnelStepEvent | EdgeOutcomeEvent | EdgeValueEvent;
 
 export type EdgeSubscriber = (event: EdgeEvent) => OrPromise<void>;
 
@@ -231,6 +215,14 @@ export type NativeTracingMode = 'auto' | 'on' | 'off';
 
 interface EdgeConfigBase {
   service: ServiceConfig;
+  /**
+   * OTLP exporter or custom SpanExporter. Optional: omit (along with
+   * `spanProcessors`) for a no-export config — spans are collected but not
+   * exported (useful in tests or as an explicit no-op).
+   */
+  exporter?: ExporterConfig;
+  /** Custom span processor(s). Optional. */
+  spanProcessors?: SpanProcessor | SpanProcessor[];
   handlers?: HandlerConfig;
   fetch?: FetcherConfig;
   postProcessor?: PostProcessorFn;
@@ -247,15 +239,11 @@ interface EdgeConfigBase {
   nativeTracing?: NativeTracingMode;
 }
 
-interface EdgeConfigExporter extends EdgeConfigBase {
-  exporter: ExporterConfig;
-}
-
 interface EdgeConfigSpanProcessors extends EdgeConfigBase {
   spanProcessors: SpanProcessor | SpanProcessor[];
 }
 
-export type EdgeConfig = EdgeConfigExporter | EdgeConfigSpanProcessors;
+export type EdgeConfig = EdgeConfigBase;
 
 export function isSpanProcessorConfig(
   config: EdgeConfig,
@@ -321,5 +309,10 @@ export interface HandlerInstrumentation<T extends Trigger, R extends any> {
  * Utility types
  */
 
-export {type Attributes, type Context, type Span, type SpanOptions} from '@opentelemetry/api';
-export {type ReadableSpan} from '@opentelemetry/sdk-trace-base';
+export {
+  type Attributes,
+  type Context,
+  type Span,
+  type SpanOptions,
+} from '@opentelemetry/api';
+export { type ReadableSpan } from '@opentelemetry/sdk-trace-base';

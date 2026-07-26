@@ -153,7 +153,9 @@ export function useZoomPan(options: UseZoomPanOptions): ZoomPanState {
   };
 
   const zoomAt = (nextScaleRaw: number, anchor: Vec) =>
-    apply(zoomAbout({ scale, translate }, nextScaleRaw, anchor, minScale, maxScale));
+    apply(
+      zoomAbout({ scale, translate }, nextScaleRaw, anchor, minScale, maxScale),
+    );
 
   const reset = () => {
     scale = 1;
@@ -214,7 +216,14 @@ export function useZoomPan(options: UseZoomPanOptions): ZoomPanState {
       return;
     }
     apply(
-      fitToBounds(bounds, viewWidth(), viewHeight(), fitPadding, minScale, maxScale),
+      fitToBounds(
+        bounds,
+        viewWidth(),
+        viewHeight(),
+        fitPadding,
+        minScale,
+        maxScale,
+      ),
     );
   };
 

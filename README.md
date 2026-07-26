@@ -185,6 +185,7 @@ const result = await trace(async () => 'success')();
 ```
 
 That gives you:
+
 - traces, metrics, and logs in one local UI
 - no manual OTLP URL wiring for day-to-day development
 - the same `init()` surface you can later point at Grafana, Datadog, or any OTLP backend
@@ -210,7 +211,7 @@ import { init, trace } from 'autotel';
 // Start with console-only (no backend needed)
 init({
   service: 'my-app',
-  debug: true  // Outputs spans to console
+  debug: true, // Outputs spans to console
 });
 
 // Your traced functions work as normal
@@ -223,12 +224,14 @@ const result = await trace(async () => {
 ```
 
 **How it works:**
+
 - `debug: true` - Print spans to console AND send to backend (if endpoint configured)
   - No endpoint = console-only output for local development
   - With endpoint = console + backend (verify before choosing provider)
 - No debug flag - Send to backend only (default production behavior)
 
 Or use environment variable:
+
 ```bash
 AUTOTEL_DEBUG=true node server.js
 ```
@@ -378,12 +381,12 @@ Autotel is built on top of OpenTelemetry and provides:
 
 ## Why Autotel?
 
-| Challenge                           | With autotel                                    |
-| ----------------------------------- | --------------------------------------------------- |
-| Raw OpenTelemetry is verbose        | One-line `trace()` wrapper with automatic lifecycle |
-| Vendor SDKs create lock-in          | OTLP-native, works with any backend                 |
+| Challenge                        | With autotel                                        |
+| -------------------------------- | --------------------------------------------------- |
+| Raw OpenTelemetry is verbose     | One-line `trace()` wrapper with automatic lifecycle |
+| Vendor SDKs create lock-in       | OTLP-native, works with any backend                 |
 | Need both observability & events | Unified API for traces, metrics, logs, and events   |
-| Production safety concerns          | Built-in sampling, rate limiting, redaction         |
+| Production safety concerns       | Built-in sampling, rate limiting, redaction         |
 
 ## Troubleshooting
 

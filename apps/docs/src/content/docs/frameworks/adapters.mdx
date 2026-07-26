@@ -25,7 +25,7 @@ description: Composable framework adapters and DX helpers for autotel.
 
 ## withAutotel vs useLogger
 
-**`withAutotel()`** — use when you have NO existing autotel middleware. Creates a span and injects a request logger:
+**`withAutotel()`**. Use when you have NO existing autotel middleware. Creates a span and injects a request logger:
 
 ```typescript
 import { withAutotel, useLogger } from 'autotel-adapters/next';
@@ -37,7 +37,7 @@ export const POST = withAutotel(async (request) => {
 });
 ```
 
-**`useLogger()` alone** — use when middleware already creates the span (avoids duplicate spans):
+**`useLogger()` alone**. Use when middleware already creates the span (avoids duplicate spans):
 
 ```typescript
 import { otel } from 'autotel-hono';
@@ -83,6 +83,6 @@ const useLogger = createUseLogger<{ requestId?: string }>({
 
 ## Examples
 
-- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs) — Next.js with `autotel-adapters/next` and `parseError()` for client-side error handling.
-- [`example-nestjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nestjs) — NestJS with auto-instrumentation and manual `trace()` in services.
-- [`example-fastify`](https://github.com/jagreehal/autotel/tree/main/apps/example-fastify) — Fastify with HTTP and Fastify auto-instrumentation.
+- [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs): Next.js with `autotel-adapters/next` and `parseError()` for client-side error handling.
+- [`example-nestjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nestjs): NestJS with auto-instrumentation and manual `trace()` in services.
+- [`example-fastify`](https://github.com/jagreehal/autotel/tree/main/apps/example-fastify): Fastify with HTTP and Fastify auto-instrumentation.

@@ -254,7 +254,11 @@
     }[dock],
   );
   const sizeStyle = $derived(
-    pipActive ? '' : isVertical ? `height: ${axisSize}px;` : `width: ${axisSize}px;`,
+    pipActive
+      ? ''
+      : isVertical
+        ? `height: ${axisSize}px;`
+        : `width: ${axisSize}px;`,
   );
   // Shadow casts away from the docked edge so the panel reads as a surface
   // lifted off that edge rather than a box floating in space.
@@ -262,9 +266,11 @@
     pipActive
       ? ''
       : {
-          bottom: 'box-shadow: 0 -12px 32px -14px var(--at-shadow), 0 -2px 6px -4px var(--at-shadow);',
+          bottom:
+            'box-shadow: 0 -12px 32px -14px var(--at-shadow), 0 -2px 6px -4px var(--at-shadow);',
           top: 'box-shadow: 0 12px 32px -14px var(--at-shadow), 0 2px 6px -4px var(--at-shadow);',
-          right: 'box-shadow: -12px 0 32px -14px var(--at-shadow), -2px 0 6px -4px var(--at-shadow);',
+          right:
+            'box-shadow: -12px 0 32px -14px var(--at-shadow), -2px 0 6px -4px var(--at-shadow);',
           left: 'box-shadow: 12px 0 32px -14px var(--at-shadow), 2px 0 6px -4px var(--at-shadow);',
         }[dock],
   );
@@ -274,7 +280,11 @@
 
   // Drop-zone bands shown while dragging the header to re-dock.
   const dropZones: { edge: Dock; pos: string; label: string }[] = [
-    { edge: 'bottom', pos: 'left-0 right-0 bottom-0 h-24', label: 'Dock bottom' },
+    {
+      edge: 'bottom',
+      pos: 'left-0 right-0 bottom-0 h-24',
+      label: 'Dock bottom',
+    },
     { edge: 'top', pos: 'left-0 right-0 top-0 h-24', label: 'Dock top' },
     { edge: 'left', pos: 'top-0 bottom-0 left-0 w-44', label: 'Dock left' },
     { edge: 'right', pos: 'top-0 bottom-0 right-0 w-44', label: 'Dock right' },
@@ -319,28 +329,28 @@
           handlePosition,
         )}
       >
-      <!-- Edge hairline — quietly marks the divider at rest, fills with the
+        <!-- Edge hairline — quietly marks the divider at rest, fills with the
            brand accent while hovering, keyboard-focused, or dragging. -->
-      <div
-        class={cn(
-          'absolute bg-line-subtle transition-colors duration-150',
-          'group-hover:bg-accent group-focus-visible:bg-accent',
-          resize.resizing && '!bg-accent',
-          handleEdge,
-        )}
-      ></div>
-      <!-- Grip — a small pill centered on the edge so the handle is
+        <div
+          class={cn(
+            'absolute bg-line-subtle transition-colors duration-150',
+            'group-hover:bg-accent group-focus-visible:bg-accent',
+            resize.resizing && '!bg-accent',
+            handleEdge,
+          )}
+        ></div>
+        <!-- Grip — a small pill centered on the edge so the handle is
            discoverable without hovering, à la a real docked splitter. -->
-      <div
-        class={cn(
-          'absolute rounded-full bg-line transition-colors duration-150',
-          'group-hover:bg-accent group-focus-visible:bg-accent',
-          resize.resizing && '!bg-accent',
-          isVertical
-            ? 'left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-9 h-1'
-            : 'top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 h-9 w-1',
-        )}
-      ></div>
+        <div
+          class={cn(
+            'absolute rounded-full bg-line transition-colors duration-150',
+            'group-hover:bg-accent group-focus-visible:bg-accent',
+            resize.resizing && '!bg-accent',
+            isVertical
+              ? 'left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-9 h-1'
+              : 'top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 h-9 w-1',
+          )}
+        ></div>
       </div>
     {/if}
 
@@ -363,7 +373,8 @@
       {/if}
       <div class="flex items-center gap-2 flex-shrink-0 pr-1 mr-0.5">
         <Logo width={18} height={18} />
-        <span class="text-xs font-semibold tracking-tight text-fg hidden sm:inline"
+        <span
+          class="text-xs font-semibold tracking-tight text-fg hidden sm:inline"
           >autotel</span
         >
       </div>
@@ -389,7 +400,9 @@
           >
             <Icon
               size={14}
-              class={tab.id === 'errors' && tab.badge ? 'text-danger' : undefined}
+              class={tab.id === 'errors' && tab.badge
+                ? 'text-danger'
+                : undefined}
             />
             <span>{tab.label}</span>
             {#if tab.badge}
@@ -436,8 +449,12 @@
           <button
             onclick={togglePip}
             class="p-1.5 rounded-md text-fg-subtle hover:text-fg hover:bg-subtle transition-colors"
-            title={pipActive ? 'Return to docked panel' : 'Pop out to a separate window'}
-            aria-label={pipActive ? 'Return to docked panel' : 'Pop out to window'}
+            title={pipActive
+              ? 'Return to docked panel'
+              : 'Pop out to a separate window'}
+            aria-label={pipActive
+              ? 'Return to docked panel'
+              : 'Pop out to window'}
           >
             {#if pipActive}
               <Minimize2 size={15} />

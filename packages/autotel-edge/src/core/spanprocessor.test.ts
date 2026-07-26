@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SpanProcessorWithFlush, TailSamplingSpanProcessor } from './spanprocessor';
+import {
+  SpanProcessorWithFlush,
+  TailSamplingSpanProcessor,
+} from './spanprocessor';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
-import { SpanStatusCode } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 
 describe('SpanProcessorWithFlush', () => {
   let mockExporter: SpanExporter;
@@ -9,7 +12,7 @@ describe('SpanProcessorWithFlush', () => {
 
   beforeEach(() => {
     mockExporter = {
-      export: vi.fn((spans, callback) => {
+      export: vi.fn((_spans, callback) => {
         callback({ code: 0 }); // SUCCESS
       }),
       shutdown: vi.fn(async () => {}),
@@ -48,7 +51,7 @@ describe('SpanProcessorWithFlush', () => {
       expect(mockExporter.export).toHaveBeenCalledTimes(1);
       expect(mockExporter.export).toHaveBeenCalledWith(
         expect.arrayContaining([span1, span2]),
-        expect.any(Function)
+        expect.any(Function),
       );
     });
 
@@ -65,7 +68,7 @@ describe('SpanProcessorWithFlush', () => {
     });
 
     it('should apply post-processor before export', async () => {
-      const postProcessor = vi.fn((spans) => {
+      const postProcessor = vi.fn((spans: ReadableSpan[]) => {
         // Add custom attribute to all spans
         return spans.map((span) => ({
           ...span,
@@ -108,7 +111,11 @@ describe('TailSamplingSpanProcessor', () => {
       // Custom tail sampler that always keeps traces
       const tailSampler = vi.fn(() => true);
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       // Create a trace: root -> child1 -> child2
       const child2 = createMockSpan('trace-1', 'span-3', 'span-2');
@@ -126,7 +133,7 @@ describe('TailSamplingSpanProcessor', () => {
       processor.onEnd(root);
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Now all spans should be exported
       expect(mockExporter.export).toHaveBeenCalledTimes(1);
@@ -139,7 +146,11 @@ describe('TailSamplingSpanProcessor', () => {
     it('should only make tail sampling decision when root span ends', async () => {
       const tailSampler = vi.fn(() => true);
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       const child = createMockSpan('trace-1', 'span-2', 'span-1');
       const root = createMockSpan('trace-1', 'span-1');
@@ -152,7 +163,7 @@ describe('TailSamplingSpanProcessor', () => {
       processor.onEnd(root);
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Tail sampler should be called exactly once when root ends
       expect(tailSampler).toHaveBeenCalledTimes(1);
@@ -163,7 +174,11 @@ describe('TailSamplingSpanProcessor', () => {
     it('should export all buffered spans when tail sampler returns true', async () => {
       const tailSampler = vi.fn(() => true);
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       const child = createMockSpan('trace-1', 'span-2', 'span-1');
       const root = createMockSpan('trace-1', 'span-1');
@@ -172,7 +187,7 @@ describe('TailSamplingSpanProcessor', () => {
       processor.onEnd(root);
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(exportedSpans).toHaveLength(2);
       expect(exportedSpans).toContain(child);
@@ -182,7 +197,11 @@ describe('TailSamplingSpanProcessor', () => {
     it('should drop all buffered spans when tail sampler returns false', async () => {
       const tailSampler = vi.fn(() => false);
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       const child = createMockSpan('trace-1', 'span-2', 'span-1');
       const root = createMockSpan('trace-1', 'span-1');
@@ -203,7 +222,11 @@ describe('TailSamplingSpanProcessor', () => {
         return (ctx.traceFlags & 1) === 1 || localRootSpan.status.code === 2; // SAMPLED | ERROR
       };
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, defaultTailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        defaultTailSampler,
+      );
 
       const child = createMockSpan('trace-1', 'span-2', 'span-1');
       const root = createMockSpan('trace-1', 'span-1');
@@ -215,7 +238,7 @@ describe('TailSamplingSpanProcessor', () => {
       processor.onEnd(root);
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Trace should be kept because root has error
       expect(exportedSpans).toHaveLength(2);
@@ -224,10 +247,16 @@ describe('TailSamplingSpanProcessor', () => {
     it('should keep trace when error in child span affects root decision', async () => {
       // Tail sampler that checks if any span in trace has error
       const errorAwareSampler = (traceInfo: any) => {
-        return traceInfo.spans.some((span: any) => span.status.code === SpanStatusCode.ERROR);
+        return traceInfo.spans.some(
+          (span: any) => span.status.code === SpanStatusCode.ERROR,
+        );
       };
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, errorAwareSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        errorAwareSampler,
+      );
 
       const child = createMockSpan('trace-1', 'span-2', 'span-1');
       child.status = { code: SpanStatusCode.ERROR }; // Child has error
@@ -239,7 +268,7 @@ describe('TailSamplingSpanProcessor', () => {
       processor.onEnd(root);
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Trace should be kept because child has error
       expect(exportedSpans).toHaveLength(2);
@@ -250,7 +279,11 @@ describe('TailSamplingSpanProcessor', () => {
     it('should clean up trace after decision', async () => {
       const tailSampler = vi.fn(() => true);
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       const root1 = createMockSpan('trace-1', 'span-1');
       const root2 = createMockSpan('trace-2', 'span-2');
@@ -260,7 +293,7 @@ describe('TailSamplingSpanProcessor', () => {
 
       // Both traces should have been auto-flushed when root spans ended
       // Wait a tick for async flush to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Both root spans should have been exported
       expect(exportedSpans).toHaveLength(2);
@@ -280,7 +313,7 @@ describe('TailSamplingSpanProcessor', () => {
       processor.onEnd(root);
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // All spans should be exported
       expect(exportedSpans).toHaveLength(2);
@@ -294,7 +327,11 @@ describe('TailSamplingSpanProcessor', () => {
         return traceInfo.traceId === 'trace-1';
       });
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       // Trace 1
       const trace1_child = createMockSpan('trace-1', 'span-2', 'span-1');
@@ -311,7 +348,7 @@ describe('TailSamplingSpanProcessor', () => {
       processor.onEnd(trace2_root);
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Only trace-1 spans should be exported
       expect(exportedSpans).toHaveLength(2);
@@ -324,7 +361,11 @@ describe('TailSamplingSpanProcessor', () => {
     it('should handle deeply nested spans', async () => {
       const tailSampler = vi.fn(() => true);
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       // Create a deep trace: root -> child1 -> child2 -> child3
       const child3 = createMockSpan('trace-1', 'span-4', 'span-3');
@@ -338,7 +379,7 @@ describe('TailSamplingSpanProcessor', () => {
       processor.onEnd(root);
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // All spans should be exported
       expect(exportedSpans).toHaveLength(4);
@@ -347,7 +388,11 @@ describe('TailSamplingSpanProcessor', () => {
     it('should handle distributed traces (local root with remote parent)', async () => {
       const tailSampler = vi.fn(() => true);
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       // Create a distributed trace:
       // - remote-root (not in this trace, represented by parentSpanId 'remote-1')
@@ -370,7 +415,7 @@ describe('TailSamplingSpanProcessor', () => {
       await processor.forceFlush('trace-1');
 
       // Wait for async flush
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // ALL spans should be exported (including distributed trace entry point)
       expect(exportedSpans).toHaveLength(3);
@@ -383,7 +428,11 @@ describe('TailSamplingSpanProcessor', () => {
     it('should NOT leak traces when distributed trace root ends', async () => {
       const tailSampler = vi.fn(() => false); // Drop all traces
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       // Distributed trace
       const child = createMockSpan('trace-1', 'span-2', 'span-1');
@@ -406,7 +455,7 @@ describe('TailSamplingSpanProcessor', () => {
 
       // Explicitly flush the new trace
       await processor.forceFlush('trace-1');
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Tail sampler should be called again for the new trace
       expect(tailSampler).toHaveBeenCalledTimes(2);
@@ -424,7 +473,11 @@ describe('TailSamplingSpanProcessor', () => {
         return true;
       });
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, tailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        tailSampler,
+      );
 
       // All spans have parentSpanId (span1 has remote parent, others have local parent)
       // Spans end in this order: child2 -> child1 -> handler
@@ -438,7 +491,7 @@ describe('TailSamplingSpanProcessor', () => {
 
       // Explicitly flush (simulates instrument.ts behavior)
       await processor.forceFlush('trace-1');
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Tail sampler should have been called without crashing
       expect(tailSampler).toHaveBeenCalledTimes(1);
@@ -461,7 +514,11 @@ describe('TailSamplingSpanProcessor', () => {
         return (ctx.traceFlags & 1) === 1 || localRootSpan.status.code === 2; // SAMPLED | ERROR
       };
 
-      processor = new TailSamplingSpanProcessor(mockExporter, undefined, defaultTailSampler);
+      processor = new TailSamplingSpanProcessor(
+        mockExporter,
+        undefined,
+        defaultTailSampler,
+      );
 
       // Child ends first with OK status
       const child = createMockSpan('trace-1', 'span-2', 'span-1');
@@ -476,7 +533,7 @@ describe('TailSamplingSpanProcessor', () => {
 
       // Explicitly flush
       await processor.forceFlush('trace-1');
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Trace should be KEPT because handler (localRootSpan) has ERROR
       // If we incorrectly used child as localRootSpan, trace would be dropped (OK status)
@@ -490,13 +547,23 @@ describe('TailSamplingSpanProcessor', () => {
 /**
  * Helper to create mock ReadableSpan
  */
+// ReadableSpan with a writable `status` so tests can mutate it. A mutable span
+// is still assignable to ReadableSpan (readonly `status`) at every call site.
+type MutableMockSpan = Omit<ReadableSpan, 'status'> & {
+  status: ReadableSpan['status'];
+  // SDK v2 dropped `parentSpanId` from ReadableSpan, but the processor still
+  // reads it via `'parentSpanId' in span`; keep it on the test double.
+  parentSpanId?: string;
+};
+
 function createMockSpan(
   traceId: string,
   spanId: string,
-  parentSpanId?: string
-): ReadableSpan {
+  parentSpanId?: string,
+): MutableMockSpan {
   return {
     name: `span-${spanId}`,
+    kind: SpanKind.INTERNAL,
     spanContext: () => ({
       traceId,
       spanId,
@@ -513,9 +580,9 @@ function createMockSpan(
     duration: [0, 0],
     ended: true,
     resource: {} as any,
-    instrumentationLibrary: { name: 'test', version: '1.0.0' },
+    instrumentationScope: { name: 'test', version: '1.0.0' },
     droppedAttributesCount: 0,
     droppedEventsCount: 0,
     droppedLinksCount: 0,
-  } as ReadableSpan;
+  };
 }

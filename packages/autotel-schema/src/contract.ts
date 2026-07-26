@@ -20,12 +20,7 @@ import { validateScenarioSpec, type ScenarioSpec } from './scenario.js';
 
 /** Scalar and array attribute types permitted on a span (OTLP value shapes). */
 export type AttributeType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'string[]'
-  | 'number[]'
-  | 'boolean[]';
+  'string' | 'number' | 'boolean' | 'string[]' | 'number[]' | 'boolean[]';
 
 export const ATTRIBUTE_TYPES: readonly AttributeType[] = [
   'string',

@@ -26,6 +26,7 @@ Quick reference for catching and fixing incorrect autotel usage. Each anti-patte
 ### 1. Async Init / await import()
 
 **Bad:**
+
 ```typescript
 async function setup() {
   const { init } = await import('autotel');
@@ -35,6 +36,7 @@ await setup();
 ```
 
 **Good:**
+
 ```typescript
 import { init } from 'autotel';
 init({ service: 'my-api' });
@@ -47,6 +49,7 @@ init({ service: 'my-api' });
 ### 2. Manual Span Lifecycle
 
 **Bad:**
+
 ```typescript
 import { trace } from '@opentelemetry/api';
 
@@ -71,6 +74,7 @@ export async function getUser(id: string) {
 ```
 
 **Good:**
+
 ```typescript
 import { trace } from 'autotel';
 
@@ -80,13 +84,14 @@ export const getUser = trace((ctx) => async (id: string) => {
 });
 ```
 
-**Why:** `trace()` handles the entire span lifecycle automatically — start, end, error recording, and status. Manual lifecycle is verbose and error-prone (forgetting `span.end()`, incorrect error handling). Use `trace()`, `span()`, or `instrument()` instead.
+**Why:** `trace()` handles the entire span lifecycle automatically. Start, end, error recording, and status. Manual lifecycle is verbose and error-prone (forgetting `span.end()`, incorrect error handling). Use `trace()`, `span()`, or `instrument()` instead.
 
 ---
 
 ### 3. Scattered console.log
 
 **Bad:**
+
 ```typescript
 export async function handleCheckout(req, res) {
   console.log('Checkout started');
@@ -101,6 +106,7 @@ export async function handleCheckout(req, res) {
 ```
 
 **Good:**
+
 ```typescript
 import { trace, getRequestLogger } from 'autotel';
 
@@ -126,6 +132,7 @@ export const handleCheckout = trace((ctx) => async (req, res) => {
 ### 4. Generic Error Throws
 
 **Bad:**
+
 ```typescript
 if (!user) throw new Error('User not found');
 
@@ -137,6 +144,7 @@ try {
 ```
 
 **Good:**
+
 ```typescript
 import { createStructuredError } from 'autotel';
 
@@ -162,13 +170,14 @@ try {
 }
 ```
 
-**Why:** `new Error()` gives only a message string. `createStructuredError()` adds `why`, `fix`, `link`, and `status` — making errors machine-parseable and actionable for both users and AI agents. On the client, `parseError()` extracts these fields.
+**Why:** `new Error()` gives only a message string. `createStructuredError()` adds `why`, `fix`, `link`, and `status`. Making errors machine-parseable and actionable for both users and AI agents. On the client, `parseError()` extracts these fields.
 
 ---
 
 ### 5. Missing emitNow()
 
 **Bad:**
+
 ```typescript
 export const handler = trace((ctx) => async (req, res) => {
   const log = getRequestLogger(ctx);
@@ -180,6 +189,7 @@ export const handler = trace((ctx) => async (req, res) => {
 ```
 
 **Good:**
+
 ```typescript
 export const handler = trace((ctx) => async (req, res) => {
   const log = getRequestLogger(ctx);
@@ -197,6 +207,7 @@ export const handler = trace((ctx) => async (req, res) => {
 ### 6. Request Logger Without Active Span
 
 **Bad:**
+
 ```typescript
 // No trace() wrapper or middleware
 export async function getUser(id: string) {
@@ -206,6 +217,7 @@ export async function getUser(id: string) {
 ```
 
 **Good:**
+
 ```typescript
 import { trace, getRequestLogger } from 'autotel';
 
@@ -223,6 +235,7 @@ export const getUser = trace((ctx) => async (id: string) => {
 ### 7. Wrong Import Paths
 
 **Bad:**
+
 ```typescript
 import { trace } from 'autotel/src/functional';
 import { init } from 'autotel/dist/init';
@@ -230,6 +243,7 @@ import { createStructuredError } from 'autotel/src/errors/structured';
 ```
 
 **Good:**
+
 ```typescript
 import { trace, init, createStructuredError } from 'autotel';
 ```
@@ -241,18 +255,20 @@ import { trace, init, createStructuredError } from 'autotel';
 ### 8. Secrets in Attributes
 
 **Bad:**
+
 ```typescript
 log.set({
   user: {
     id: user.id,
     email: user.email,
     authToken: req.headers.authorization, // SECRET
-    creditCard: payment.cardNumber,       // PII
+    creditCard: payment.cardNumber, // PII
   },
 });
 ```
 
 **Good:**
+
 ```typescript
 log.set({
   user: {
@@ -269,6 +285,7 @@ log.set({
 ### 9. Using Generic autotel for Framework-Specific Apps
 
 **Bad:**
+
 ```typescript
 // In a Hono app
 import { trace } from 'autotel';
@@ -281,6 +298,7 @@ app.post('/api/checkout', async (c) => {
 ```
 
 **Good:**
+
 ```typescript
 // In a Hono app
 import { otel } from 'autotel-hono';
@@ -301,6 +319,7 @@ app.post('/api/checkout', async (c) => {
 ### 10. Barrel Re-exports Breaking Tree-Shaking
 
 **Bad:**
+
 ```typescript
 // utils/index.ts
 export * from 'autotel';
@@ -310,6 +329,7 @@ export * from 'autotel/messaging';
 ```
 
 **Good:**
+
 ```typescript
 // Import directly where needed
 import { trace, getRequestLogger } from 'autotel';
@@ -324,6 +344,7 @@ import { createTraceCollector } from 'autotel/testing';
 ### 11. Client Not Using parseError()
 
 **Bad:**
+
 ```typescript
 try {
   await fetch('/api/checkout', { method: 'POST', body: JSON.stringify(data) });
@@ -333,17 +354,23 @@ try {
 ```
 
 **Good:**
+
 ```typescript
 import { parseError } from 'autotel';
 
 try {
-  const res = await fetch('/api/checkout', { method: 'POST', body: JSON.stringify(data) });
+  const res = await fetch('/api/checkout', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw await res.json().catch(() => ({}));
 } catch (err) {
   const error = parseError(err);
   toast.error(error.message, {
     description: error.why,
-    action: error.fix ? { label: 'Fix', onClick: () => showHelp(error.fix) } : undefined,
+    action: error.fix
+      ? { label: 'Fix', onClick: () => showHelp(error.fix) }
+      : undefined,
   });
 }
 ```
@@ -356,16 +383,16 @@ try {
 
 When scanning code, look for these signals:
 
-| Signal | Anti-Pattern |
-|--------|-------------|
-| `await import('autotel')` | Async init (#1) |
-| `tracer.startActiveSpan`, `span.end()` | Manual lifecycle (#2) |
-| Multiple `console.log` in a handler | Scattered logging (#3) |
-| `throw new Error(` in API routes | Generic error (#4) |
-| `getRequestLogger()` without `emitNow()` | Missing emitNow (#5) |
-| `getRequestLogger()` outside `trace()` | No active span (#6) |
-| `from 'autotel/src/` or `autotel/dist/` | Wrong import (#7) |
-| `.authorization`, `.token`, `.password` in `.set()` | Secrets (#8) |
-| `from 'autotel'` in a Hono/TanStack/CF app | Wrong package (#9) |
-| `export * from 'autotel` | Barrel re-export (#10) |
+| Signal                                               | Anti-Pattern             |
+| ---------------------------------------------------- | ------------------------ |
+| `await import('autotel')`                            | Async init (#1)          |
+| `tracer.startActiveSpan`, `span.end()`               | Manual lifecycle (#2)    |
+| Multiple `console.log` in a handler                  | Scattered logging (#3)   |
+| `throw new Error(` in API routes                     | Generic error (#4)       |
+| `getRequestLogger()` without `emitNow()`             | Missing emitNow (#5)     |
+| `getRequestLogger()` outside `trace()`               | No active span (#6)      |
+| `from 'autotel/src/` or `autotel/dist/`              | Wrong import (#7)        |
+| `.authorization`, `.token`, `.password` in `.set()`  | Secrets (#8)             |
+| `from 'autotel'` in a Hono/TanStack/CF app           | Wrong package (#9)       |
+| `export * from 'autotel`                             | Barrel re-export (#10)   |
 | `toast.error('Something went wrong')` after API call | Missing parseError (#11) |
