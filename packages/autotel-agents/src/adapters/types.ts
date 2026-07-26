@@ -26,11 +26,7 @@ export interface AgentMetricSignal {
 // code_edit_tool.decision, session.count) maps to 'other' and is ignored —
 // events are authoritative.
 export type AgentMetricKind =
-  | 'lines_of_code'
-  | 'commit'
-  | 'pull_request'
-  | 'active_time'
-  | 'other';
+  'lines_of_code' | 'commit' | 'pull_request' | 'active_time' | 'other';
 
 /** Common identity attributes shared by every signal in a session. */
 export interface SessionIdentity {

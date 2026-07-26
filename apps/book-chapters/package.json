@@ -1,0 +1,46 @@
+{
+  "name": "@autotel/book-chapters",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "test": "node scripts/run-all.mjs",
+    "test:oe": "node scripts/run-oe.mjs",
+    "example:01": "tsx examples/01-philosophy.ts",
+    "example:02": "tsx examples/02-quickstart.ts",
+    "example:03": "tsx examples/03-core-instrumentation.ts",
+    "example:04": "tsx examples/04-request-context.ts",
+    "example:05": "tsx examples/05-structured-errors.ts",
+    "example:06": "tsx examples/06-events.ts",
+    "example:07": "tsx examples/07-configuration.ts",
+    "example:08": "tsx examples/08-attributes.ts",
+    "example:09": "tsx examples/09-metrics.ts",
+    "example:10": "tsx examples/10-messaging.ts",
+    "example:11": "tsx examples/11-workflows.ts",
+    "example:12": "tsx examples/12-baggage.ts",
+    "example:13": "tsx examples/13-diagnostics.ts",
+    "example:14": "tsx examples/14-http.ts",
+    "example:15": "tsx examples/15-database.ts",
+    "example:30": "tsx examples/30-subscribers.ts",
+    "example:31": "tsx examples/31-testing.ts",
+    "example:38": "tsx examples/38-devtools.ts",
+    "example:45": "tsx examples/45-advanced.ts",
+    "example:46": "tsx examples/46-sampling.ts",
+    "example:oe-08": "tsx examples/oe-08-analysis-loop.ts",
+    "example:oe-15": "tsx examples/oe-15-sampling.ts",
+    "run-all": "node scripts/run-all.mjs",
+    "run-oe": "node scripts/run-oe.mjs"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-devtools": "workspace:*",
+    "autotel-genai": "workspace:*",
+    "autotel-subscribers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.3"
+  }
+}

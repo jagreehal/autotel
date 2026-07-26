@@ -151,7 +151,7 @@ const ENV_KEY_TO_BACKEND: { key: string; slug: PresetSlug }[] = [
 /** Merge two dep maps; target package wins on overlapping names. */
 function mergeDeps(
   target: PackageJson,
-  root: PackageJson | null
+  root: PackageJson | null,
 ): Map<string, { version: string; resolution: 'target' | 'workspace-root' }> {
   const out = new Map<
     string,
@@ -306,7 +306,7 @@ export function detectInProject(opts: {
     project.workspace.workspaceRoot !== project.packageRoot
   ) {
     rootPkg = readJsonSafe<PackageJson>(
-      path.join(project.workspace.workspaceRoot, 'package.json')
+      path.join(project.workspace.workspaceRoot, 'package.json'),
     );
   }
 
@@ -391,7 +391,7 @@ export function enumerateWorkspacePackages(workspaceRoot: string): string[] {
 
   // package.json workspaces (npm/yarn)
   const rootPkg = readJsonSafe<PackageJson>(
-    path.join(workspaceRoot, 'package.json')
+    path.join(workspaceRoot, 'package.json'),
   );
   if (rootPkg?.workspaces) {
     const patterns = Array.isArray(rootPkg.workspaces)
@@ -425,11 +425,7 @@ function parsePnpmWorkspacePatterns(yaml: string): string[] {
   return out;
 }
 
-function expandPattern(
-  root: string,
-  pattern: string,
-  results: string[]
-): void {
+function expandPattern(root: string, pattern: string, results: string[]): void {
   // Support simple "apps/*" and exact-path patterns. Skip negations.
   if (pattern.startsWith('!')) return;
 
@@ -458,7 +454,7 @@ function expandPattern(
 function walkForPackageJson(
   dir: string,
   out: string[],
-  maxDepth: number
+  maxDepth: number,
 ): void {
   if (maxDepth < 0 || !fs.existsSync(dir)) return;
   let entries: fs.Dirent[];

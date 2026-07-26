@@ -35,10 +35,38 @@ const SCENES: Scene[] = [
     traceId: 'b5e1·c0ff·ee42',
     total: '124ms',
     spans: [
-      { name: 'POST /checkout', start: 0, width: 100, ms: '124ms', depth: 0, kind: 'root' },
-      { name: 'auth.verify', start: 4, width: 14, ms: '18ms', depth: 1, kind: 'child' },
-      { name: 'db.query', start: 20, width: 38, ms: '47ms', depth: 1, kind: 'child' },
-      { name: 'stripe.charge', start: 60, width: 34, ms: '42ms', depth: 1, kind: 'child' },
+      {
+        name: 'POST /checkout',
+        start: 0,
+        width: 100,
+        ms: '124ms',
+        depth: 0,
+        kind: 'root',
+      },
+      {
+        name: 'auth.verify',
+        start: 4,
+        width: 14,
+        ms: '18ms',
+        depth: 1,
+        kind: 'child',
+      },
+      {
+        name: 'db.query',
+        start: 20,
+        width: 38,
+        ms: '47ms',
+        depth: 1,
+        kind: 'child',
+      },
+      {
+        name: 'stripe.charge',
+        start: 60,
+        width: 34,
+        ms: '42ms',
+        depth: 1,
+        kind: 'child',
+      },
     ],
     snapTitle: 'getRequestLogger → emitNow',
     snapshot: [
@@ -55,10 +83,38 @@ const SCENES: Scene[] = [
     traceId: '9f3a·17bd·0e10',
     total: '138ms',
     spans: [
-      { name: 'POST /checkout', start: 0, width: 100, ms: '138ms', depth: 0, kind: 'root' },
-      { name: 'auth.verify', start: 4, width: 13, ms: '18ms', depth: 1, kind: 'child' },
-      { name: 'db.query', start: 19, width: 34, ms: '45ms', depth: 1, kind: 'child' },
-      { name: 'stripe.charge', start: 56, width: 40, ms: '52ms', depth: 1, kind: 'error' },
+      {
+        name: 'POST /checkout',
+        start: 0,
+        width: 100,
+        ms: '138ms',
+        depth: 0,
+        kind: 'root',
+      },
+      {
+        name: 'auth.verify',
+        start: 4,
+        width: 13,
+        ms: '18ms',
+        depth: 1,
+        kind: 'child',
+      },
+      {
+        name: 'db.query',
+        start: 19,
+        width: 34,
+        ms: '45ms',
+        depth: 1,
+        kind: 'child',
+      },
+      {
+        name: 'stripe.charge',
+        start: 56,
+        width: 40,
+        ms: '52ms',
+        depth: 1,
+        kind: 'error',
+      },
     ],
     snapTitle: 'error recorded → emitNow',
     snapshot: [
@@ -75,10 +131,38 @@ const SCENES: Scene[] = [
     traceId: 'a1c4·88fe·2b90',
     total: '2.10s',
     spans: [
-      { name: 'POST /chat', start: 0, width: 100, ms: '2.1s', depth: 0, kind: 'root' },
-      { name: 'retrieve.context', start: 3, width: 12, ms: '240ms', depth: 1, kind: 'child' },
-      { name: 'gen_ai.chat', start: 17, width: 74, ms: '1.6s', depth: 1, kind: 'child' },
-      { name: 'tool.get_order', start: 92, width: 7, ms: '150ms', depth: 1, kind: 'child' },
+      {
+        name: 'POST /chat',
+        start: 0,
+        width: 100,
+        ms: '2.1s',
+        depth: 0,
+        kind: 'root',
+      },
+      {
+        name: 'retrieve.context',
+        start: 3,
+        width: 12,
+        ms: '240ms',
+        depth: 1,
+        kind: 'child',
+      },
+      {
+        name: 'gen_ai.chat',
+        start: 17,
+        width: 74,
+        ms: '1.6s',
+        depth: 1,
+        kind: 'child',
+      },
+      {
+        name: 'tool.get_order',
+        start: 92,
+        width: 7,
+        ms: '150ms',
+        depth: 1,
+        kind: 'child',
+      },
     ],
     snapTitle: 'gen_ai span → emitNow',
     snapshot: [
@@ -99,7 +183,9 @@ export default function HeroTraceIsland() {
   const started = useRef(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   /** dormant = before scroll-in; live = waterfall; snapshot = collapsed wide event */
-  const [phase, setPhase] = useState<'dormant' | 'live' | 'snapshot'>('dormant');
+  const [phase, setPhase] = useState<'dormant' | 'live' | 'snapshot'>(
+    'dormant',
+  );
   const [sceneIdx, setSceneIdx] = useState(0);
   /** Remount span rows so bar keyframes restart each time a scene goes live. */
   const [animKey, setAnimKey] = useState(0);
@@ -175,7 +261,11 @@ export default function HeroTraceIsland() {
 
       <div class="hti__stage">
         {!showSnap ? (
-          <ol key={animKey} class="hti__list" aria-label={`Spans for ${scene.route}`}>
+          <ol
+            key={animKey}
+            class="hti__list"
+            aria-label={`Spans for ${scene.route}`}
+          >
             {scene.spans.map((s) => (
               <li
                 key={s.name}
@@ -202,12 +292,17 @@ export default function HeroTraceIsland() {
             ))}
           </ol>
         ) : (
-          <div class="hti__snapshot" aria-label={`Wide event for ${scene.route}`}>
+          <div
+            class="hti__snapshot"
+            aria-label={`Wide event for ${scene.route}`}
+          >
             <p class="hti__snap-title">{scene.snapTitle}</p>
             {scene.snapshot.map((row) => (
               <div key={row.key} class="hti__field">
                 <span class="hti__key">{row.key}</span>
-                <span class={`hti__val${row.accent ? ' hti__val--accent' : ''}`}>
+                <span
+                  class={`hti__val${row.accent ? ' hti__val--accent' : ''}`}
+                >
                   {row.value}
                 </span>
               </div>

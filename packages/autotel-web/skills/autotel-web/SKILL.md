@@ -8,12 +8,12 @@ description: >
 
 Ultra-lightweight browser SDK for distributed tracing. Two modes:
 
-- **Lean** (`autotel-web`) — ~1.6KB gzipped. No OTel dependencies. Injects W3C `traceparent` headers on fetch/XHR so the backend can continue the trace. No real browser spans.
-- **Full** (`autotel-web/full`) — Real OTel spans, Web Vitals, error capture, network timing, OTLP export. Larger bundle (~40–50KB gzipped).
+- **Lean** (`autotel-web`): ~1.6KB gzipped. No OTel dependencies. Injects W3C `traceparent` headers on fetch/XHR so the backend can continue the trace. No real browser spans.
+- **Full** (`autotel-web/full`): Real OTel spans, Web Vitals, error capture, network timing, OTLP export. Larger bundle (~40–50KB gzipped).
 
 ## Setup
 
-### Lean mode — traceparent injection only
+### Lean mode: traceparent injection only
 
 ```typescript
 import { init } from 'autotel-web';
@@ -25,7 +25,7 @@ init({ service: 'my-frontend-app' });
 fetch('/api/users');
 ```
 
-### Full mode — real browser spans + export
+### Full mode: real browser spans + export
 
 ```typescript
 import { initFull } from 'autotel-web/full';
@@ -33,12 +33,12 @@ import { initFull } from 'autotel-web/full';
 initFull({
   service: 'my-app',
   endpoint: 'https://collector.example.com/v1/traces', // OTLP HTTP
-  sampleRate: 0.1,        // 10% in production
+  sampleRate: 0.1, // 10% in production
   captureNavigation: true, // document load spans (default: true)
-  captureFetch: true,      // fetch instrumentation (default: true)
-  captureXHR: true,        // XHR instrumentation (default: true)
-  captureErrors: true,     // unhandled errors (default: true)
-  captureWebVitals: true,  // LCP, INP, CLS, FCP, TTFB (default: true)
+  captureFetch: true, // fetch instrumentation (default: true)
+  captureXHR: true, // XHR instrumentation (default: true)
+  captureErrors: true, // unhandled errors (default: true)
+  captureWebVitals: true, // LCP, INP, CLS, FCP, TTFB (default: true)
   captureLongTasks: false, // main thread blocking tasks (default: false, opt-in)
 });
 ```
@@ -64,15 +64,15 @@ function App() {
 
 ```typescript
 init({
-  service: 'my-app',          // Required. Identifies the browser service in logs.
-  debug: false,                // Log injection decisions to console (default: false)
-  instrumentFetch: true,       // Patch fetch() (default: true)
-  instrumentXHR: true,         // Patch XMLHttpRequest (default: true)
+  service: 'my-app', // Required. Identifies the browser service in logs.
+  debug: false, // Log injection decisions to console (default: false)
+  instrumentFetch: true, // Patch fetch() (default: true)
+  instrumentXHR: true, // Patch XMLHttpRequest (default: true)
   privacy: {
-    allowedOrigins: ['api.myapp.com'],       // Only inject on these origins
+    allowedOrigins: ['api.myapp.com'], // Only inject on these origins
     blockedOrigins: ['analytics.google.com'], // Never inject on these origins
-    respectDoNotTrack: true,                  // Honour browser DNT header
-    respectGPC: true,                         // Honour Global Privacy Control
+    respectDoNotTrack: true, // Honour browser DNT header
+    respectGPC: true, // Honour Global Privacy Control
   },
 });
 ```
@@ -82,7 +82,13 @@ Privacy decision order: DNT check → GPC check → blockedOrigins → allowedOr
 ### Functional API (lean mode)
 
 ```typescript
-import { init, trace, getActiveContext, getTraceparent, extractContext } from 'autotel-web';
+import {
+  init,
+  trace,
+  getActiveContext,
+  getTraceparent,
+  extractContext,
+} from 'autotel-web';
 
 init({ service: 'my-app' });
 
@@ -113,7 +119,12 @@ const ctx = extractContext(request.headers.get('traceparent') ?? '');
 ### Low-level traceparent utilities
 
 ```typescript
-import { createTraceparent, generateTraceId, generateSpanId, parseTraceparent } from 'autotel-web';
+import {
+  createTraceparent,
+  generateTraceId,
+  generateSpanId,
+  parseTraceparent,
+} from 'autotel-web';
 
 const header = createTraceparent(); // e.g. "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 const parsed = parseTraceparent(header);
@@ -139,7 +150,7 @@ setAttribute('user.id', '123');
 addEvent('button.clicked', { 'button.name': 'submit' });
 ```
 
-### Full mode — advanced options
+### Full mode: advanced options
 
 ```typescript
 initFull({
@@ -159,7 +170,7 @@ initFull({
 });
 ```
 
-### Backend (autotel) — automatic trace continuation
+### Backend (autotel): automatic trace continuation
 
 No code changes needed on the backend. Autotel's HTTP middleware reads the `traceparent` header and creates child spans automatically:
 
@@ -178,9 +189,10 @@ app.get('/api/users', async (req, res) => {
 
 ## Common Mistakes
 
-### HIGH — Calling init() in SSR/server code
+### HIGH: Calling init() in SSR/server code
 
 Wrong:
+
 ```typescript
 // pages/_app.tsx (Next.js) — runs on server too
 import { init } from 'autotel-web';
@@ -188,6 +200,7 @@ init({ service: 'my-app' }); // throws on server (no window)
 ```
 
 Correct:
+
 ```typescript
 useEffect(() => {
   init({ service: 'my-app' });
@@ -198,15 +211,17 @@ useEffect(() => {
 
 Explanation: `init()` checks `typeof window === 'undefined'` and no-ops on the server, but calling it at module level in SSR frameworks can still cause issues. Always initialize inside `useEffect` or a client component.
 
-### HIGH — Importing from autotel-web/full for lean use case
+### HIGH: Importing from autotel-web/full for lean use case
 
 Wrong:
+
 ```typescript
 import { initFull } from 'autotel-web/full'; // pulls in all OTel SDK packages (~40-50KB)
 initFull({ service: 'my-app' }); // when you only need header propagation
 ```
 
 Correct:
+
 ```typescript
 import { init } from 'autotel-web'; // ~1.6KB gzipped, zero OTel dependencies
 init({ service: 'my-app' });
@@ -214,9 +229,10 @@ init({ service: 'my-app' });
 
 Explanation: Full mode bundles the OpenTelemetry browser SDK. Use it only when you need real browser spans, Web Vitals, or OTLP export from the client.
 
-### HIGH — Using protocol:// in allowedOrigins / blockedOrigins
+### HIGH: Using protocol:// in allowedOrigins / blockedOrigins
 
 Wrong:
+
 ```typescript
 init({
   service: 'my-app',
@@ -227,6 +243,7 @@ init({
 ```
 
 Correct:
+
 ```typescript
 init({
   service: 'my-app',
@@ -238,9 +255,10 @@ init({
 
 Explanation: Origin matching is substring-based. Including `https://` is unnecessary and triggers a console warning. Use domain names only.
 
-### MEDIUM — Expecting trace() to create real browser spans
+### MEDIUM: Expecting trace() to create real browser spans
 
 Wrong:
+
 ```typescript
 // Expecting timing data to appear in the browser's trace
 const result = await trace(async () => heavyWork())();
@@ -249,9 +267,10 @@ const result = await trace(async () => heavyWork())();
 
 Correct: Use full mode (`autotel-web/full`) if you need real browser spans. In lean mode, only the backend creates spans; `trace()` is provided for API consistency and access to trace IDs via the factory pattern.
 
-### MEDIUM — Calling init() multiple times
+### MEDIUM: Calling init() multiple times
 
 Wrong:
+
 ```typescript
 // Called in two different components
 init({ service: 'my-app' });

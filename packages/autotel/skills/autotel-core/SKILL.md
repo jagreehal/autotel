@@ -4,7 +4,7 @@ description: >
   When to use trace vs span vs request logger vs events in Autotel. Init once at startup, package exports (autotel, autotel/event, autotel/testing). Use for setup and choosing the right API.
 ---
 
-# Autotel — Core
+# Autotel: Core
 
 OpenTelemetry instrumentation for Node.js and edge. Instrument once; stream to any OTLP backend. Use `trace()`/`span()` for spans, `getRequestLogger()` for one snapshot per request, `createStructuredError`/`parseError` for errors, `track()` for product events.
 
@@ -29,17 +29,19 @@ Backend config rule of thumb: use `endpoint` for one OTLP destination, `destinat
 ## Setup
 
 ```typescript
-import { init, trace, getRequestLogger } from 'autotel';
+import { init, withTracing, getRequestLogger } from 'autotel';
 
 init({ service: 'my-app' });
 
-const handler = trace((ctx) => async (req: Request) => {
-  const log = getRequestLogger(ctx);
-  log.set({ path: req.url });
-  const result = await doWork(req);
-  log.emitNow();
-  return result;
-});
+const handler = withTracing({ name: 'http.request' })(
+  (ctx) => async (req: Request) => {
+    const log = getRequestLogger(ctx);
+    log.set({ path: req.url });
+    const result = await doWork(req);
+    log.emitNow();
+    return result;
+  },
+);
 ```
 
 ## Core Patterns
@@ -47,12 +49,14 @@ const handler = trace((ctx) => async (req: Request) => {
 **Factory pattern when you need context (attributes, request logger):**
 
 ```typescript
-const createUser = trace((ctx) => async (data: UserInput) => {
-  ctx.setAttribute('user.id', data.id);
-  const log = getRequestLogger(ctx);
-  log.set({ user: { id: data.id } });
-  return db.users.create(data);
-});
+const createUser = withTracing({ name: 'user.create' })(
+  (ctx) => async (data: UserInput) => {
+    ctx.setAttribute('user.id', data.id);
+    const log = getRequestLogger(ctx);
+    log.set({ user: { id: data.id } });
+    return db.users.create(data);
+  },
+);
 ```
 
 **Direct pattern when you don't need context:**
@@ -142,7 +146,7 @@ const handler = trace(async (req) => {
 Correct:
 
 ```typescript
-const handler = trace((ctx) => async (req) => {
+const handler = withTracing({ name: 'http.request' })((ctx) => async (req) => {
   const log = getRequestLogger(ctx);
   log.set({ route: req.url });
 });
@@ -156,4 +160,7 @@ Source: docs/AGENT-GUIDE.md
 
 Targets autotel v2.23.x.
 
-See also: autotel-instrumentation/SKILL.md — init and trace/span in depth. autotel-request-logging/SKILL.md — request logger usage.
+See also:
+
+- `autotel-instrumentation/SKILL.md` for init and trace/span in depth
+- `autotel-request-logging/SKILL.md` for request logger usage

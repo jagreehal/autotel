@@ -21,7 +21,13 @@
 
 import { init, trace, track, shutdown, type TraceContext } from 'autotel';
 import { ConsoleSpanExporter } from 'autotel/exporters';
-import { Agent, handoff, run, setDefaultOpenAIClient, setOpenAIAPI } from '@openai/agents';
+import {
+  Agent,
+  handoff,
+  run,
+  setDefaultOpenAIClient,
+  setOpenAIAPI,
+} from '@openai/agents';
 import OpenAI from 'openai';
 import 'dotenv/config';
 
@@ -109,7 +115,8 @@ Format your response clearly and include specific technical guidance.`,
 const qaAgent = new Agent({
   name: 'QA Agent',
   model: 'gpt-oss:20b',
-  handoffDescription: 'Quality assurance agent that reviews responses for accuracy and completeness',
+  handoffDescription:
+    'Quality assurance agent that reviews responses for accuracy and completeness',
   instructions: `You are a QA agent reviewing responses for quality.
 Evaluate the response and provide:
 1. Approval status (approve or reject)
@@ -135,7 +142,8 @@ Format your response as JSON:
 const triageAgent = new Agent({
   name: 'Triage Agent',
   model: 'gpt-oss:20b',
-  handoffDescription: 'Initial triage agent that analyzes requests and routes to specialists',
+  handoffDescription:
+    'Initial triage agent that analyzes requests and routes to specialists',
   instructions: `You are a triage agent analyzing customer requests.
 Analyze the request and decide:
 1. Request category (technical/billing/general)
@@ -152,7 +160,12 @@ Format your initial assessment as JSON:
 }
 
 If the request needs specialist attention, transfer using the transfer_to_specialist function.`,
-  handoffs: [handoff(specialistAgent, { toolDescriptionOverride: 'Transfer to specialist for detailed technical analysis' })],
+  handoffs: [
+    handoff(specialistAgent, {
+      toolDescriptionOverride:
+        'Transfer to specialist for detailed technical analysis',
+    }),
+  ],
 });
 
 // ======================
@@ -177,14 +190,17 @@ If the request needs specialist attention, transfer using the transfer_to_specia
  * - All OpenAI SDK calls made by the agents
  * - Prompts, completions, and token usage
  */
-const runMultiAgentWorkflow = trace<[string, string], Promise<{
-  response: string;
-  agentsInvolved: string[];
-  metrics: {
-    duration: number;
-    messageCount: number;
-  };
-}>>(
+const runMultiAgentWorkflow = trace<
+  [string, string],
+  Promise<{
+    response: string;
+    agentsInvolved: string[];
+    metrics: {
+      duration: number;
+      messageCount: number;
+    };
+  }>
+>(
   'workflow.multi_agent_escalation',
   (ctx: TraceContext) =>
     async (
@@ -257,7 +273,9 @@ const runMultiAgentWorkflow = trace<[string, string], Promise<{
         correlation_id: ctx.correlationId,
       });
 
-      console.log(`\n✓ Workflow complete: ${agentsList.join(' → ')} (${duration.toFixed(0)}ms)\n`);
+      console.log(
+        `\n✓ Workflow complete: ${agentsList.join(' → ')} (${duration.toFixed(0)}ms)\n`,
+      );
 
       return {
         response: finalResponse,
@@ -291,7 +309,9 @@ async function main() {
     console.log('─'.repeat(60));
     console.log(`Response: ${result.response.substring(0, 200)}...`);
     console.log(`Agents: ${result.agentsInvolved.join(' → ')}`);
-    console.log(`Messages: ${result.metrics.messageCount}, Duration: ${result.metrics.duration.toFixed(0)}ms\n`);
+    console.log(
+      `Messages: ${result.metrics.messageCount}, Duration: ${result.metrics.duration.toFixed(0)}ms\n`,
+    );
   } catch (error) {
     console.error('\n❌ Error:', error);
     process.exit(1);

@@ -19,9 +19,11 @@ import { initTelemetry } from '../otel-init';
 initTelemetry(process.env.OTEL_SERVICE_NAME || 'autotel-lambda');
 
 // Create instrumented DynamoDB client
-const dynamodb = instrumentSDK(new DynamoDBClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-}));
+const dynamodb = instrumentSDK(
+  new DynamoDBClient({
+    region: process.env.AWS_REGION || 'us-east-1',
+  }),
+);
 
 // DynamoDB user lookup with semantic attributes
 const fetchUserData = traceDynamoDB({
@@ -35,7 +37,7 @@ const fetchUserData = traceDynamoDB({
     new GetItemCommand({
       TableName: process.env.DYNAMODB_TABLE_NAME || 'users',
       Key: { id: { S: userId } },
-    })
+    }),
   );
 
   ctx.setAttribute('user.exists', !!result.Item);
@@ -44,7 +46,10 @@ const fetchUserData = traceDynamoDB({
 
 // Simple health check handler using wrapHandler
 export const healthHandler = wrapHandler(
-  async (_event: unknown, _context: LambdaContext): Promise<APIGatewayProxyResult> => {
+  async (
+    _event: unknown,
+    _context: LambdaContext,
+  ): Promise<APIGatewayProxyResult> => {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -54,7 +59,7 @@ export const healthHandler = wrapHandler(
         timestamp: new Date().toISOString(),
       }),
     };
-  }
+  },
 );
 
 // Main API handler using traceLambda for context access
@@ -108,7 +113,9 @@ export const handler = traceLambda<APIGatewayProxyEvent, APIGatewayProxyResult>(
         body: JSON.stringify({
           id: userData.id?.S,
           lastUpload: userData.lastUpload?.S,
-          lastUploadSize: userData.lastUploadSize?.N ? parseInt(userData.lastUploadSize.N) : undefined,
+          lastUploadSize: userData.lastUploadSize?.N
+            ? parseInt(userData.lastUploadSize.N)
+            : undefined,
           updatedAt: userData.updatedAt?.S,
         }),
       };
@@ -120,5 +127,5 @@ export const handler = traceLambda<APIGatewayProxyEvent, APIGatewayProxyResult>(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'Not found' }),
     };
-  }
+  },
 );

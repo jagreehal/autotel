@@ -6,9 +6,9 @@ description: >
 
 # autotel-devtools
 
-Local-dev OTLP receiver with a browser UI. Think TanStack Devtools for OpenTelemetry — runs as CLI or embeds as a Shadow-DOM-isolated widget in any web app.
+Local-dev OTLP receiver with a browser UI. Think TanStack Devtools for OpenTelemetry. Runs as CLI or embeds as a Shadow-DOM-isolated widget in any web app.
 
-## Quick Start — pick an approach
+## Quick Start: pick an approach
 
 ### Standalone dashboard
 
@@ -36,12 +36,12 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python app.py
 <autotel-devtools></autotel-devtools>
 ```
 
-Shadow-DOM-isolated — never leaks styles into the host page.
+Shadow-DOM-isolated. Never leaks styles into the host page.
 
 ### Programmatic (Node + autotel)
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, withTracing } from 'autotel';
 import { createDevtools } from 'autotel-devtools';
 
 const { exporter, close } = createDevtools({ port: 4318, verbose: true });
@@ -52,48 +52,50 @@ init({
   spanProcessors: [exporter], // stream spans to the devtools UI
 });
 
-export const loadUser = trace(ctx => async (id: string) => {
-  // ... span shows up live in devtools
-});
+export const loadUser = withTracing({ name: 'user.load' })(
+  (ctx) => async (id: string) => {
+    // ... span shows up live in devtools
+  },
+);
 ```
 
 ## Package Entry Points
 
-| Import | What |
-| --- | --- |
-| `autotel-devtools` | `createDevtools()`, `DevtoolsServer`, exporters, types |
-| `autotel-devtools/server` | `DevtoolsServer`, OTLP parsing (`parseOtlpTraces`, `parseOtlpLogs`), HTTP routes (`attachDevtoolsRoutes`, `createDevtoolsHttpServer`), telemetry-limit helpers |
-| `autotel-devtools/exporter` | `DevtoolsSpanExporter` (standalone) |
+| Import                      | What                                                                                                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autotel-devtools`          | `createDevtools()`, `DevtoolsServer`, exporters, types                                                                                                         |
+| `autotel-devtools/server`   | `DevtoolsServer`, OTLP parsing (`parseOtlpTraces`, `parseOtlpLogs`), HTTP routes (`attachDevtoolsRoutes`, `createDevtoolsHttpServer`), telemetry-limit helpers |
+| `autotel-devtools/exporter` | `DevtoolsSpanExporter` (standalone)                                                                                                                            |
 
 ## Server Endpoints
 
-| Route | What |
-| --- | --- |
-| `POST /v1/traces` · `/v1/logs` · `/v1/metrics` | OTLP receivers — JSON or protobuf (`application/x-protobuf`) |
-| `GET /` | Dashboard UI (traces, logs, metrics, errors, resources, service map) |
-| `GET /widget.js` | Embeddable widget bundle (IIFE) |
-| `GET /healthz` | Health check |
-| `WS /ws` | WebSocket stream (history replay on connect) |
+| Route                                          | What                                                                 |
+| ---------------------------------------------- | -------------------------------------------------------------------- |
+| `POST /v1/traces` · `/v1/logs` · `/v1/metrics` | OTLP receivers: JSON or protobuf (`application/x-protobuf`)          |
+| `GET /`                                        | Dashboard UI (traces, logs, metrics, errors, resources, service map) |
+| `GET /widget.js`                               | Embeddable widget bundle (IIFE)                                      |
+| `GET /healthz`                                 | Health check                                                         |
+| `WS /ws`                                       | WebSocket stream (history replay on connect)                         |
 
 ## Views in the UI
 
-- **Traces** — waterfall + flame graph, search with 300 ms debounce
-- **Logs** — severity/resource filtering
-- **Metrics** — per-metric time series
-- **Errors** — aggregated and grouped by fingerprint
-- **Resources** — derived from ingested telemetry
-- **Service map** — visualises call graph
+- **Traces**: waterfall + flame graph, search with 300 ms debounce
+- **Logs**: severity/resource filtering
+- **Metrics**: per-metric time series
+- **Errors**: aggregated and grouped by fingerprint
+- **Resources**: derived from ingested telemetry
+- **Service map**: visualises call graph
 
 ## Environment Variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `AUTOTEL_DEVTOOLS_PORT` | `4318` | Server port |
-| `AUTOTEL_DEVTOOLS_HOST` | `127.0.0.1` | Bind host |
-| `AUTOTEL_DEVTOOLS_TITLE` | — | Dashboard title |
-| `AUTOTEL_MAX_TRACE_COUNT` | `100` | Max traces retained in memory |
-| `AUTOTEL_MAX_LOG_COUNT` | `100` | Max logs retained |
-| `AUTOTEL_MAX_METRIC_COUNT` | `100` | Max metric points retained |
+| Variable                   | Default     | Purpose                       |
+| -------------------------- | ----------- | ----------------------------- |
+| `AUTOTEL_DEVTOOLS_PORT`    | `4318`      | Server port                   |
+| `AUTOTEL_DEVTOOLS_HOST`    | `127.0.0.1` | Bind host                     |
+| `AUTOTEL_DEVTOOLS_TITLE`   | —           | Dashboard title               |
+| `AUTOTEL_MAX_TRACE_COUNT`  | `100`       | Max traces retained in memory |
+| `AUTOTEL_MAX_LOG_COUNT`    | `100`       | Max logs retained             |
+| `AUTOTEL_MAX_METRIC_COUNT` | `100`       | Max metric points retained    |
 
 ## CLI
 
@@ -102,22 +104,22 @@ npx autotel-devtools 4319                                       # port as bare p
 npx autotel-devtools --port 4319 --host 0.0.0.0 --title "My App"
 ```
 
-| Arg / Flag | Short | Purpose |
-| --- | --- | --- |
-| `[port]` | — | Listen port shorthand for `--port` (explicit `--port` wins) |
-| `--port` | `-p` | Listen port (default 4318); walks to next free port if taken |
-| `--host` | `-H` | Bind host (default 127.0.0.1) |
-| `--title` | `-t` | Dashboard title |
+| Arg / Flag | Short | Purpose                                                      |
+| ---------- | ----- | ------------------------------------------------------------ |
+| `[port]`   | —     | Listen port shorthand for `--port` (explicit `--port` wins)  |
+| `--port`   | `-p`  | Listen port (default 4318); walks to next free port if taken |
+| `--host`   | `-H`  | Bind host (default 127.0.0.1)                                |
+| `--title`  | `-t`  | Dashboard title                                              |
 
 ## Works With
 
-- **autotel** — pass `exporter` into `spanProcessors` for live streaming
-- **Standard OpenTelemetry SDK** — any OTLP exporter targeting `http://localhost:4318` works; autotel is not required
-- **Browser apps** — the widget is a custom element with Shadow DOM, so drop it in without CSS conflicts
+- **autotel**: pass `exporter` into `spanProcessors` for live streaming
+- **Standard OpenTelemetry SDK**: any OTLP exporter targeting `http://localhost:4318` works; autotel is not required
+- **Browser apps**: the widget is a custom element with Shadow DOM, so drop it in without CSS conflicts
 
 ## Common Mistakes
 
-- Do NOT use the widget in Node — it's a browser-only IIFE bundle. Use `createDevtools()` server-side instead.
-- Do NOT set a production OTLP endpoint at `localhost:4318` — devtools is in-memory only (no persistence, caps at 100 items per signal by default). Bump `AUTOTEL_MAX_*_COUNT` for longer local sessions.
-- Do NOT embed the widget into pages served via strict CSP without allowing `http://localhost:4318` — the WebSocket connection and script load both need the devtools origin allowed.
-- Do NOT confuse the two builds — the **server** uses tsup (Node ESM + CJS), the **widget** uses Vite's IIFE build. Don't import `autotel-devtools/server` into widget code; it pulls in Node APIs.
+- Do NOT use the widget in Node: it's a browser-only IIFE bundle. Use `createDevtools()` server-side instead.
+- Do NOT set a production OTLP endpoint at `localhost:4318`: devtools is in-memory only (no persistence, caps at 100 items per signal by default). Bump `AUTOTEL_MAX_*_COUNT` for longer local sessions.
+- Do NOT embed the widget into pages served via strict CSP without allowing `http://localhost:4318`: the WebSocket connection and script load both need the devtools origin allowed.
+- Do NOT confuse the two builds: the **server** uses tsup (Node ESM + CJS), the **widget** uses Vite's IIFE build. Don't import `autotel-devtools/server` into widget code; it pulls in Node APIs.

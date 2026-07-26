@@ -2,8 +2,8 @@
   "otlp": [
     {
       "name": "KV MY_KV: get",
-      "spanId": "d8b0c98e18c5a3b4",
-      "parentSpanId": "05a83fa81a668c91",
+      "spanId": "51d3b6b4f39d5871",
+      "parentSpanId": "910096d79ac9ca50",
       "status": "OK",
       "attributes": {
         "db.system": "cloudflare-kv",
@@ -16,8 +16,8 @@
     },
     {
       "name": "order.subtotal",
-      "spanId": "05a83fa81a668c91",
-      "parentSpanId": "86e11fd75761a16a",
+      "spanId": "910096d79ac9ca50",
+      "parentSpanId": "d96b69a423dc42bf",
       "status": "OK",
       "attributes": {
         "order.subtotal": 100,
@@ -26,8 +26,8 @@
     },
     {
       "name": "order.total",
-      "spanId": "65b6cd4b3773de94",
-      "parentSpanId": "86e11fd75761a16a",
+      "spanId": "64e0cd8dbd1ee254",
+      "parentSpanId": "d96b69a423dc42bf",
       "status": "OK",
       "attributes": {
         "order.total": 120,
@@ -36,20 +36,20 @@
     },
     {
       "name": "order.price",
-      "spanId": "86e11fd75761a16a",
-      "parentSpanId": "09abe11364e67357",
+      "spanId": "d96b69a423dc42bf",
+      "parentSpanId": "ae2b23e4a53608ae",
       "status": "OK",
       "attributes": {
         "order.id": "ORD-1",
-        "order.correlation": "c1cd4ec2380e157a",
+        "order.correlation": "914836fbca034b77",
         "order.total": 120,
         "code.function": "order.price"
       }
     },
     {
       "name": "db.checkDuplicate",
-      "spanId": "a509b39f53206749",
-      "parentSpanId": "384724d552c27cbb",
+      "spanId": "268504d0de7a99bf",
+      "parentSpanId": "69965360277227e7",
       "status": "OK",
       "attributes": {
         "code.function": "db.checkDuplicate"
@@ -57,8 +57,8 @@
     },
     {
       "name": "user.create",
-      "spanId": "384724d552c27cbb",
-      "parentSpanId": "09abe11364e67357",
+      "spanId": "69965360277227e7",
+      "parentSpanId": "ae2b23e4a53608ae",
       "status": "OK",
       "attributes": {
         "user.duplicate": true,
@@ -67,8 +67,8 @@
     },
     {
       "name": "payment.charge",
-      "spanId": "30c7db8dc41bdf4f",
-      "parentSpanId": "09abe11364e67357",
+      "spanId": "ad2f16ab0d3d7cfc",
+      "parentSpanId": "ae2b23e4a53608ae",
       "status": "ERROR",
       "attributes": {
         "code.function": "payment.charge"
@@ -76,7 +76,7 @@
     },
     {
       "name": "GET /orders",
-      "spanId": "09abe11364e67357",
+      "spanId": "ae2b23e4a53608ae",
       "parentSpanId": null,
       "status": "OK",
       "attributes": {}

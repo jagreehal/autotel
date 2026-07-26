@@ -34,7 +34,6 @@ function makeTrace(spans: SpanData[], service = 'api'): TraceData {
     endTime: root.endTime,
     duration: root.duration,
     status: 'OK',
-    affectedSpans: [],
     service,
   };
 }

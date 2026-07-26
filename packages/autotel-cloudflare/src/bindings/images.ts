@@ -6,11 +6,7 @@
  * info() is a standalone operation and gets its own span.
  */
 
-import {
-  trace,
-  SpanKind,
-  SpanStatusCode,
-} from '@opentelemetry/api';
+import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap, setAttr } from './common';
 
@@ -21,7 +17,9 @@ interface PipelineMeta {
 }
 
 interface ImagesLike {
-  info(blob: ReadableStream | ArrayBuffer | Blob): Promise<{ width: number; height: number; format: string }>;
+  info(
+    blob: ReadableStream | ArrayBuffer | Blob,
+  ): Promise<{ width: number; height: number; format: string }>;
   input(blob: ReadableStream | ArrayBuffer | Blob): ImageTransformerLike;
 }
 
@@ -37,19 +35,33 @@ interface ImageOutputLike {
   arrayBuffer(): Promise<ArrayBuffer>;
 }
 
-function proxyTransformer(transformer: ImageTransformerLike, meta: PipelineMeta, bindingName: string): ImageTransformerLike {
+function proxyTransformer(
+  transformer: ImageTransformerLike,
+  meta: PipelineMeta,
+  bindingName: string,
+): ImageTransformerLike {
   const handler: ProxyHandler<ImageTransformerLike> = {
     get(target, prop) {
       const value = Reflect.get(target, prop);
 
-      if ((prop === 'transform' || prop === 'draw') && typeof value === 'function') {
+      if (
+        (prop === 'transform' || prop === 'draw') &&
+        typeof value === 'function'
+      ) {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
             meta.operationCount++;
             const result = Reflect.apply(fnTarget, target, args);
             // If the result is the transformer itself (fluent chain), return our proxy
-            if (result === target || (result && typeof result === 'object' && 'output' in result)) {
-              return proxyTransformer(result as ImageTransformerLike, meta, bindingName);
+            if (
+              result === target ||
+              (result && typeof result === 'object' && 'output' in result)
+            ) {
+              return proxyTransformer(
+                result as ImageTransformerLike,
+                meta,
+                bindingName,
+              );
             }
             return result;
           },
@@ -90,7 +102,8 @@ function proxyTransformer(transformer: ImageTransformerLike, meta: PipelineMeta,
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -119,7 +132,10 @@ function proxyTransformer(transformer: ImageTransformerLike, meta: PipelineMeta,
 /**
  * Instrument Images binding
  */
-export function instrumentImages<T extends ImagesLike>(images: T, bindingName?: string): T {
+export function instrumentImages<T extends ImagesLike>(
+  images: T,
+  bindingName?: string,
+): T {
   const name = bindingName || 'images';
 
   const handler: ProxyHandler<T> = {
@@ -152,7 +168,8 @@ export function instrumentImages<T extends ImagesLike>(images: T, bindingName?: 
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -167,7 +184,11 @@ export function instrumentImages<T extends ImagesLike>(images: T, bindingName?: 
       if (prop === 'input' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
-            const transformer = Reflect.apply(fnTarget, target, args) as ImageTransformerLike;
+            const transformer = Reflect.apply(
+              fnTarget,
+              target,
+              args,
+            ) as ImageTransformerLike;
             const meta: PipelineMeta = { operationCount: 0 };
             return proxyTransformer(transformer, meta, name);
           },

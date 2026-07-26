@@ -45,9 +45,11 @@ describe('extractFieldPaths', () => {
   });
 
   it('handles nested objects', () => {
-    expect(
-      extractFieldPaths({ a: { b: { c: 1 } } }),
-    ).toEqual(['a', 'a.b', 'a.b.c']);
+    expect(extractFieldPaths({ a: { b: { c: 1 } } })).toEqual([
+      'a',
+      'a.b',
+      'a.b.c',
+    ]);
   });
 });
 
@@ -150,8 +152,11 @@ describe('ArchitectureSnapshotSubscriber', () => {
       maxSampleTraceIds: 2,
     });
     for (const id of ['t-1', 't-2', 't-3', 't-1']) {
-      await (limited as unknown as { sendToDestination(p: EventPayload): Promise<void> })
-        .sendToDestination(event('order.placed', {}, { traceId: id }));
+      await (
+        limited as unknown as {
+          sendToDestination(p: EventPayload): Promise<void>;
+        }
+      ).sendToDestination(event('order.placed', {}, { traceId: id }));
     }
     const obs = limited.toSnapshot({ now: FIXED_NOW }).events['order.placed'];
     expect(obs.sampleTraceIds).toEqual(['t-1', 't-2']);

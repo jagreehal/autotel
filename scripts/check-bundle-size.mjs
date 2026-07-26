@@ -15,7 +15,13 @@
  * Tolerance is per-package, expressed in bytes. Defaults: +5% or +2 KiB,
  * whichever is larger.
  */
-import { readdirSync, statSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
+import {
+  readdirSync,
+  statSync,
+  existsSync,
+  writeFileSync,
+  readFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const ROOT = resolve(new URL('.', import.meta.url).pathname, '..');
@@ -106,15 +112,22 @@ function printReport({ rows, regressed }) {
   console.log('-'.repeat(padName + 12 * 3 + 6));
   for (const row of rows) {
     const prefix = row.overTolerance ? '🔺' : row.isNew ? '🆕' : '  ';
-    const pct = row.pct === null ? '   new' : `${row.pct >= 0 ? '+' : ''}${row.pct.toFixed(1)}%`;
+    const pct =
+      row.pct === null
+        ? '   new'
+        : `${row.pct >= 0 ? '+' : ''}${row.pct.toFixed(1)}%`;
     console.log(
       `${prefix} ${row.name.padEnd(padName - 1)}  ${formatKib(row.before).padStart(12)}  ${formatKib(row.after).padStart(12)}  ${`${row.delta >= 0 ? '+' : ''}${formatKib(row.delta)} ${pct}`.padStart(12)}`,
     );
   }
   console.log();
   if (regressed > 0) {
-    console.log(`❌ ${regressed} package(s) exceeded the size tolerance (${TOLERANCE_PCT * 100}% / ${formatKib(TOLERANCE_BYTES)}).`);
-    console.log(`   If the growth is intentional, run \`node scripts/check-bundle-size.mjs --update\` and commit ${BASELINE_PATH}.`);
+    console.log(
+      `❌ ${regressed} package(s) exceeded the size tolerance (${TOLERANCE_PCT * 100}% / ${formatKib(TOLERANCE_BYTES)}).`,
+    );
+    console.log(
+      `   If the growth is intentional, run \`node scripts/check-bundle-size.mjs --update\` and commit ${BASELINE_PATH}.`,
+    );
   } else {
     console.log('✅ all packages within tolerance');
   }
@@ -125,21 +138,31 @@ function main() {
   const current = measureAll();
 
   if (args.includes('--json')) {
-    console.log(JSON.stringify({ generatedAt: new Date().toISOString(), sizes: current }, null, 2));
+    console.log(
+      JSON.stringify(
+        { generatedAt: new Date().toISOString(), sizes: current },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
   if (args.includes('--update')) {
     const data = { generatedAt: new Date().toISOString(), sizes: current };
     writeFileSync(BASELINE_PATH, `${JSON.stringify(data, null, 2)}\n`);
-    console.log(`wrote ${BASELINE_PATH} for ${Object.keys(current).length} packages`);
+    console.log(
+      `wrote ${BASELINE_PATH} for ${Object.keys(current).length} packages`,
+    );
     return;
   }
 
   const baseline = loadBaseline();
   if (!baseline) {
     console.warn('No baseline found — printing current sizes only.');
-    console.warn(`Run \`node scripts/check-bundle-size.mjs --update\` to create one.\n`);
+    console.warn(
+      `Run \`node scripts/check-bundle-size.mjs --update\` to create one.\n`,
+    );
   }
 
   const result = compare(baseline ?? { sizes: {} }, current);

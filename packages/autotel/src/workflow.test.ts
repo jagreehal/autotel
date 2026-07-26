@@ -9,26 +9,34 @@ import {
   type StepContext,
 } from './workflow';
 
-// Mock the functional trace
-vi.mock('./functional', () => ({
-  trace: vi.fn((name, factory) => {
-    return (...args: unknown[]) => {
-      const mockCtx = createMockTraceContext();
-      const fn = factory(mockCtx);
-      return fn(...args);
-    };
+const mockActiveSpan = vi.hoisted(() => ({
+  spanContext: () => ({
+    traceId: '00000000000000000000000000000001',
+    spanId: '0000000000000001',
+    traceFlags: 1,
   }),
+}));
+
+// Mock the functional tracing wrapper
+vi.mock('./functional', () => ({
+  withTracing: vi.fn(
+    () =>
+      (
+        factory: (
+          ctx: ReturnType<typeof createMockTraceContext>,
+        ) => (...args: unknown[]) => unknown,
+      ) =>
+      (...args: unknown[]) => {
+        const mockCtx = createMockTraceContext();
+        const fn = factory(mockCtx);
+        return fn(...args);
+      },
+  ),
 }));
 
 // Mock trace-helpers
 vi.mock('./trace-helpers', () => ({
-  getActiveSpan: vi.fn(() => ({
-    spanContext: () => ({
-      traceId: '00000000000000000000000000000001',
-      spanId: '0000000000000001',
-      traceFlags: 1,
-    }),
-  })),
+  getActiveSpan: vi.fn(() => mockActiveSpan),
   finalizeSpan: vi.fn(),
 }));
 
@@ -548,6 +556,27 @@ describe('Workflow Helpers', () => {
   });
 
   describe('Compensation execution', () => {
+    it('should provide the completed StepContext to compensation', async () => {
+      const compensation = vi.fn(async (ctx: StepContext, error: Error) => {
+        expect(ctx.getStepName()).toBe('ReserveInventory');
+        expect(error.message).toBe('payment failed');
+      });
+      const reserve = traceStep({
+        name: 'ReserveInventory',
+        compensate: compensation,
+      })(async () => 'reserved');
+      const workflow = traceWorkflow({
+        name: 'ContextCompensation',
+        workflowId: 'wf-context',
+      })(() => async () => {
+        await reserve();
+        throw new Error('payment failed');
+      });
+
+      await expect(workflow()).rejects.toThrow('payment failed');
+      expect(compensation).toHaveBeenCalledOnce();
+    });
+
     it('should execute compensations in reverse order', async () => {
       // Note: In mocked environment, compensation execution is bypassed
       // This test verifies the structure of the compensation pattern
@@ -639,7 +668,7 @@ describe('Workflow Helpers', () => {
 
       // Check that there was some delay between attempts
       if (timestamps.length >= 2) {
-        const delay = timestamps[1] - timestamps[0];
+        const delay = timestamps[1]! - timestamps[0]!;
         expect(delay).toBeGreaterThanOrEqual(40); // Allow some variance
       }
     });

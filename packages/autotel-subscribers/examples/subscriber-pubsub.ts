@@ -31,10 +31,10 @@
  *
  * Usage:
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { PubSubSubscriber } from './adapter-pubsub';
  *
- * const events = new Events('app', {
+ * const events = new Event('app', {
  *   subscribers: [
  *     new PubSubSubscriber({
  *       projectId: 'my-gcp-project',
@@ -244,10 +244,7 @@ export class PubSubSubscriber extends StreamingEventSubscriber {
       };
 
       // Add ordering key if message ordering is enabled
-      if (
-        this.adapterConfig.enableMessageOrdering &&
-        orderingKey
-      ) {
+      if (this.adapterConfig.enableMessageOrdering && orderingKey) {
         message.orderingKey = orderingKey;
       }
 
@@ -261,25 +258,25 @@ export class PubSubSubscriber extends StreamingEventSubscriber {
       // Success - log metrics
       if (process.env.DEBUG) {
         console.log(
-          `[PubSubSubscriber] Published ${events.length} messages (IDs: ${messageIds.slice(0, 3).join(', ')}${events.length > 3 ? '...' : ''})`
+          `[PubSubSubscriber] Published ${events.length} messages (IDs: ${messageIds.slice(0, 3).join(', ')}${events.length > 3 ? '...' : ''})`,
         );
       }
     } catch (error: any) {
       console.error(
         `[PubSubSubscriber] Failed to publish ${events.length} messages:`,
-        error
+        error,
       );
 
       // Handle specific Pub/Sub errors
       if (error.code === 10) {
         console.error(
-          '[PubSubSubscriber] Flow control limits exceeded - reduce rate or increase limits'
+          '[PubSubSubscriber] Flow control limits exceeded - reduce rate or increase limits',
         );
       }
 
       if (error.code === 5) {
         console.error(
-          `[PubSubSubscriber] Topic not found: ${this.adapterConfig.topicName}`
+          `[PubSubSubscriber] Topic not found: ${this.adapterConfig.topicName}`,
         );
       }
 
@@ -298,7 +295,7 @@ export class PubSubSubscriber extends StreamingEventSubscriber {
         eventName: payload.name,
         orderingKey: this.getPartitionKey(payload),
         topicName: this.adapterConfig.topicName,
-      }
+      },
     );
   }
 

@@ -83,7 +83,10 @@ export function parseCardinality(input: string | Cardinality): Cardinality {
   if (range) {
     const min = Number(range[1]);
     const max = range[2] === '' ? undefined : Number(range[2]);
-    assert(max === undefined || max >= min, `cardinality "${input}" has max < min`);
+    assert(
+      max === undefined || max >= min,
+      `cardinality "${input}" has max < min`,
+    );
     return { min, max };
   }
   throw new Error(
@@ -205,7 +208,8 @@ export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
   switch (spec.completion.mode) {
     case 'terminal-event':
       assert(
-        typeof spec.completion.event === 'string' && spec.completion.event.length > 0,
+        typeof spec.completion.event === 'string' &&
+          spec.completion.event.length > 0,
         `${scope} terminal-event completion must declare a non-empty event`,
       );
       break;
@@ -233,7 +237,10 @@ export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
       );
     }
   }
-  for (const [from, to] of [...(spec.edges ?? []), ...(spec.optionalEdges ?? [])]) {
+  for (const [from, to] of [
+    ...(spec.edges ?? []),
+    ...(spec.optionalEdges ?? []),
+  ]) {
     assert(
       from in spec.events && to in spec.events,
       `${scope} edge ["${from}", "${to}"] references an undeclared event — declare both endpoints in events`,
@@ -317,9 +324,7 @@ export function evaluateScenario(
   }
 
   for (const [event, eventSpec] of Object.entries(spec.events)) {
-    const { min, max } = parseCardinality(
-      eventSpec.cardinality ?? { min: 1 },
-    );
+    const { min, max } = parseCardinality(eventSpec.cardinality ?? { min: 1 });
     const count = countByName.get(event) ?? 0;
 
     // Excess is definitive immediately.
@@ -436,8 +441,7 @@ export async function checkScenario(
 
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let next:
-      | { kind: 'spans'; spans: readonly ScenarioSpan[] }
-      | { kind: 'timeout' };
+      { kind: 'spans'; spans: readonly ScenarioSpan[] } | { kind: 'timeout' };
     try {
       next = await Promise.race([
         Promise.resolve()
@@ -490,7 +494,10 @@ export function proposeScenario(
 ): ScenarioProposal {
   assert(runs.length > 0, 'proposeScenario needs at least one recorded run');
   for (const [index, run] of runs.entries()) {
-    assert(run.length > 0, `proposeScenario run ${index + 1} has no recorded spans`);
+    assert(
+      run.length > 0,
+      `proposeScenario run ${index + 1} has no recorded spans`,
+    );
   }
   const name = options?.name ?? 'scenario';
   const notes: string[] = [];
@@ -521,7 +528,11 @@ export function proposeScenario(
         ? `${event}: exactly ${min} (${seenIn}/${total} runs)`
         : `${event}: ${min}..${max} (${seenIn}/${total} runs) — review: variable`,
     );
-    if (runs.some((run) => run.some((s) => s.name === event && s.status === 'error'))) {
+    if (
+      runs.some((run) =>
+        run.some((s) => s.name === event && s.status === 'error'),
+      )
+    ) {
       notes.push(`${event}: observed with status error — review: expected?`);
     }
   }
@@ -532,7 +543,9 @@ export function proposeScenario(
     const byId = new Map(run.map((s) => [s.spanId, s]));
     const pairs = new Set<string>();
     for (const span of run) {
-      const parent = span.parentSpanId ? byId.get(span.parentSpanId) : undefined;
+      const parent = span.parentSpanId
+        ? byId.get(span.parentSpanId)
+        : undefined;
       if (parent) pairs.add(`${parent.name} ${span.name}`);
     }
     for (const pair of pairs) edgeRuns.set(pair, (edgeRuns.get(pair) ?? 0) + 1);
@@ -545,7 +558,9 @@ export function proposeScenario(
       edges.push([from, to]);
     } else {
       optionalEdges.push([from, to]);
-      notes.push(`edge ${from} → ${to}: ${seen}/${total} runs — proposed optional`);
+      notes.push(
+        `edge ${from} → ${to}: ${seen}/${total} runs — proposed optional`,
+      );
     }
   }
 

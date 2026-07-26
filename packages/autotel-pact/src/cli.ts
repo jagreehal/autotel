@@ -60,71 +60,71 @@ function parseArgs(argv: string[]): CliArgs {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     switch (a) {
-    case '--help':
-    case '-h': {
-      args.help = true;
-      break;
-    }
-    case '--json': {
-      args.json = true;
-      break;
-    }
-    case '--gate': {
-      args.gate = 'on';
-      break;
-    }
-    case '--gate=strict': {
-      args.gate = 'strict';
-      break;
-    }
-    case '--gate=broker': {
-      args.gate = 'broker';
-      break;
-    }
-    case '--pacts': {
-      args.pactsDir = requireValue(argv, ++i, '--pacts');
-      break;
-    }
-    case '--ledger': {
-      args.ledgerDir = requireValue(argv, ++i, '--ledger');
-      break;
-    }
-    case '--window': {
-      args.windowDays = parseDuration(requireValue(argv, ++i, '--window'));
-      break;
-    }
-    case '--broker-url': {
-      args.brokerUrl = requireValue(argv, ++i, '--broker-url');
-      break;
-    }
-    case '--broker-token': {
-      args.brokerToken = requireValue(argv, ++i, '--broker-token');
-      break;
-    }
-    default: {
-      if (a.startsWith('--pacts=')) {
-        const value = a.slice('--pacts='.length);
-        if (!value) throw new Error('Missing value for --pacts');
-        args.pactsDir = value;
-      } else if (a.startsWith('--ledger=')) {
-        const value = a.slice('--ledger='.length);
-        if (!value) throw new Error('Missing value for --ledger');
-        args.ledgerDir = value;
-      } else if (a.startsWith('--window=')) {
-        const value = a.slice('--window='.length);
-        if (!value) throw new Error('Missing value for --window');
-        args.windowDays = parseDuration(value);
-      } else if (a.startsWith('--broker-url=')) {
-        const value = a.slice('--broker-url='.length);
-        if (!value) throw new Error('Missing value for --broker-url');
-        args.brokerUrl = value;
-      } else if (a.startsWith('--broker-token=')) {
-        const value = a.slice('--broker-token='.length);
-        if (!value) throw new Error('Missing value for --broker-token');
-        args.brokerToken = value;
-      } else if (a === 'audit') continue;
-      else throw new Error(`Unknown argument: ${a}`);
-    }
+      case '--help':
+      case '-h': {
+        args.help = true;
+        break;
+      }
+      case '--json': {
+        args.json = true;
+        break;
+      }
+      case '--gate': {
+        args.gate = 'on';
+        break;
+      }
+      case '--gate=strict': {
+        args.gate = 'strict';
+        break;
+      }
+      case '--gate=broker': {
+        args.gate = 'broker';
+        break;
+      }
+      case '--pacts': {
+        args.pactsDir = requireValue(argv, ++i, '--pacts');
+        break;
+      }
+      case '--ledger': {
+        args.ledgerDir = requireValue(argv, ++i, '--ledger');
+        break;
+      }
+      case '--window': {
+        args.windowDays = parseDuration(requireValue(argv, ++i, '--window'));
+        break;
+      }
+      case '--broker-url': {
+        args.brokerUrl = requireValue(argv, ++i, '--broker-url');
+        break;
+      }
+      case '--broker-token': {
+        args.brokerToken = requireValue(argv, ++i, '--broker-token');
+        break;
+      }
+      default: {
+        if (a.startsWith('--pacts=')) {
+          const value = a.slice('--pacts='.length);
+          if (!value) throw new Error('Missing value for --pacts');
+          args.pactsDir = value;
+        } else if (a.startsWith('--ledger=')) {
+          const value = a.slice('--ledger='.length);
+          if (!value) throw new Error('Missing value for --ledger');
+          args.ledgerDir = value;
+        } else if (a.startsWith('--window=')) {
+          const value = a.slice('--window='.length);
+          if (!value) throw new Error('Missing value for --window');
+          args.windowDays = parseDuration(value);
+        } else if (a.startsWith('--broker-url=')) {
+          const value = a.slice('--broker-url='.length);
+          if (!value) throw new Error('Missing value for --broker-url');
+          args.brokerUrl = value;
+        } else if (a.startsWith('--broker-token=')) {
+          const value = a.slice('--broker-token='.length);
+          if (!value) throw new Error('Missing value for --broker-token');
+          args.brokerToken = value;
+        } else if (a === 'audit') continue;
+        else throw new Error(`Unknown argument: ${a}`);
+      }
     }
   }
   return args;
@@ -207,7 +207,10 @@ function formatTable(matrix: AuditMatrix): string {
     }
   }
   if (brokerErrors.size > 0) {
-    lines.push('', 'Broker unreachable / errored (verification status unknown):');
+    lines.push(
+      '',
+      'Broker unreachable / errored (verification status unknown):',
+    );
     for (const [pair, err] of brokerErrors) {
       lines.push(`  ${pair}: ${err}`);
     }
@@ -219,7 +222,8 @@ function formatTable(matrix: AuditMatrix): string {
 function shouldFail(matrix: AuditMatrix, gate: CliArgs['gate']): boolean {
   if (gate === 'off') return false;
   if (matrix.counts.contracted_not_test_seen > 0) return true;
-  if (gate === 'strict' && matrix.counts.test_or_prod_seen_not_contracted > 0) return true;
+  if (gate === 'strict' && matrix.counts.test_or_prod_seen_not_contracted > 0)
+    return true;
   if (gate === 'broker') {
     const contractedRows = matrix.rows.filter((r) => r.contracted);
     // Fail loudly on unreachable broker — a transient outage should not be
@@ -275,7 +279,8 @@ export async function main(argv: string[]): Promise<number> {
 const isDirectInvocation =
   typeof process !== 'undefined' &&
   process.argv[1] &&
-  (process.argv[1].endsWith('cli.js') || process.argv[1].endsWith('autotel-pact'));
+  (process.argv[1].endsWith('cli.js') ||
+    process.argv[1].endsWith('autotel-pact'));
 
 if (isDirectInvocation) {
   main(process.argv.slice(2))

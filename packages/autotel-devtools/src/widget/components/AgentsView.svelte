@@ -97,15 +97,22 @@
       if (tok > 0) parts.push(`${formatNumber(tok)} tok`);
       if (e.durationMs) parts.push(formatDuration(e.durationMs));
     } else if (e.type === 'tool_result') {
-      if (e.tool?.isMcp && e.tool.mcpServer) parts.push(`mcp:${e.tool.mcpServer}`);
+      if (e.tool?.isMcp && e.tool.mcpServer)
+        parts.push(`mcp:${e.tool.mcpServer}`);
       else if (e.tool) parts.push(e.tool.category);
       if (e.success === false) parts.push('failed');
       if (e.durationMs) parts.push(formatDuration(e.durationMs));
     } else if (e.type === 'tool_decision') {
       if (e.tool) parts.push(e.tool.category);
     } else if (e.type === 'user_prompt') {
-      if (e.promptText) parts.push(reveal ? redact(e.promptText) : `${e.promptLength ?? e.promptText.length} chars (hidden)`);
-      else if (e.promptLength !== undefined) parts.push(`${e.promptLength} chars`);
+      if (e.promptText)
+        parts.push(
+          reveal
+            ? redact(e.promptText)
+            : `${e.promptLength ?? e.promptText.length} chars (hidden)`,
+        );
+      else if (e.promptLength !== undefined)
+        parts.push(`${e.promptLength} chars`);
     } else if (e.type === 'api_error') {
       if (e.statusCode) parts.push(String(e.statusCode));
       if (e.errorMessage) parts.push(e.errorMessage);
@@ -127,18 +134,28 @@
   }
 
   // newest events first, capped so a long session stays responsive
-  const timeline = $derived(selected ? [...selected.timeline].reverse().slice(0, 200) : []);
+  const timeline = $derived(
+    selected ? [...selected.timeline].reverse().slice(0, 200) : [],
+  );
   const sessionTools = $derived(
-    selected ? Object.values(selected.rollup.tools).sort((a, b) => b.count - a.count) : [],
+    selected
+      ? Object.values(selected.rollup.tools).sort((a, b) => b.count - a.count)
+      : [],
   );
 
   // Runtime environment: MCP server connections, loaded plugins, hook runs —
   // modeled from mcp_server_connection / plugin_loaded / hook_execution events.
-  const mcpConns = $derived(selected ? Object.values(selected.rollup.mcpConnections) : []);
-  const plugins = $derived(selected ? Object.values(selected.rollup.plugins) : []);
+  const mcpConns = $derived(
+    selected ? Object.values(selected.rollup.mcpConnections) : [],
+  );
+  const plugins = $derived(
+    selected ? Object.values(selected.rollup.plugins) : [],
+  );
   const hooks = $derived(selected?.rollup.hooks);
   const hasEnv = $derived(
-    mcpConns.length > 0 || plugins.length > 0 || (hooks !== undefined && hooks.runs > 0),
+    mcpConns.length > 0 ||
+      plugins.length > 0 ||
+      (hooks !== undefined && hooks.runs > 0),
   );
 </script>
 
@@ -156,7 +173,9 @@
       <Bot size={16} class="text-violet-500" />
       Agents
       {#if sessions.length > 0}
-        <span class="ml-1 px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 rounded-full">
+        <span
+          class="ml-1 px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 rounded-full"
+        >
           {sessions.length}
         </span>
       {/if}
@@ -165,42 +184,56 @@
 
   {#if sessions.length === 0}
     <!-- Empty state: one command to a live agent view -->
-    <div class="flex-1 flex flex-col items-center justify-center text-center gap-4 px-6">
+    <div
+      class="flex-1 flex flex-col items-center justify-center text-center gap-4 px-6"
+    >
       <Bot size={40} class="text-fg-muted opacity-40" />
       <div class="max-w-md">
-        <p class="text-sm font-medium text-fg">Waiting for coding-agent telemetry</p>
+        <p class="text-sm font-medium text-fg">
+          Waiting for coding-agent telemetry
+        </p>
         <p class="text-xs text-fg-muted mt-1.5">
           Launch Claude Code wired to this receiver and its sessions, tokens,
           cost, tool, MCP, sub-agent &amp; skill usage will appear here.
         </p>
       </div>
-      <div class="flex items-center gap-2 bg-subtle border border-line rounded-md px-3 py-2 font-mono text-xs text-fg">
+      <div
+        class="flex items-center gap-2 bg-subtle border border-line rounded-md px-3 py-2 font-mono text-xs text-fg"
+      >
         <Terminal size={13} class="text-fg-muted flex-shrink-0" />
         <span>{launchCommand}</span>
         <CopyButton value={launchCommand} label="Copy launch command" />
       </div>
       <p class="text-[11px] text-fg-muted/80 max-w-md">
         Uses OTLP <span class="font-mono">http/protobuf</span> to
-        <span class="font-mono">:4318</span> — not the gRPC setup from most
-        guides, which this receiver doesn't speak.
+        <span class="font-mono">:4318</span> — not the gRPC setup from most guides,
+        which this receiver doesn't speak.
       </p>
     </div>
   {:else}
     <!-- Aggregate strip -->
     <div class="flex flex-wrap gap-2 p-3 border-b border-line text-xs">
-      <span class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-fg">
+      <span
+        class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-fg"
+      >
         <DollarSign size={12} class="text-emerald-500" />{cost(agg.costUsd)}
       </span>
-      <span class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-fg">
+      <span
+        class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-fg"
+      >
         <Coins size={12} class="text-amber-500" />
         {formatNumber(agg.inputTokens)} in / {formatNumber(agg.outputTokens)} out
       </span>
-      <span class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-fg">
+      <span
+        class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-fg"
+      >
         <Check size={12} class="text-emerald-500" />{agg.accepted}
         <X size={12} class="text-red-500 ml-1" />{agg.rejected}
       </span>
       {#if agg.apiErrors > 0}
-        <span class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-red-600">
+        <span
+          class="flex items-center gap-1 px-2 py-1 bg-subtle rounded-md text-red-600"
+        >
           <AlertTriangle size={12} />{agg.apiErrors} errors
         </span>
       {/if}
@@ -217,7 +250,9 @@
         {@render chip(Sparkles, `${name} ${n}`, 'text-fuchsia-600')}
       {/each}
       {#each entries(agg.models) as [model, n] (model)}
-        <span class="px-2 py-1 bg-subtle rounded-md text-fg-muted font-mono">{model} ×{n}</span>
+        <span class="px-2 py-1 bg-subtle rounded-md text-fg-muted font-mono"
+          >{model} ×{n}</span
+        >
       {/each}
     </div>
 
@@ -233,7 +268,9 @@
             onclick={() => selectAgentSession(s.id)}
           >
             <div class="flex items-center justify-between gap-2">
-              <span class="font-mono text-xs text-fg truncate">{shortId(s.id)}</span>
+              <span class="font-mono text-xs text-fg truncate"
+                >{shortId(s.id)}</span
+              >
               <span class="text-[11px] text-fg-muted">{s.agent}</span>
             </div>
             <div class="flex items-center gap-2 mt-1 text-[11px] text-fg-muted">
@@ -256,28 +293,46 @@
               <span class="font-mono text-xs text-fg">{selected.id}</span>
               {#if selected.terminal || selected.appVersion}
                 <span class="text-[11px] text-fg-muted">
-                  {selected.terminal ?? ''}{selected.appVersion ? ` · v${selected.appVersion}` : ''}
+                  {selected.terminal ?? ''}{selected.appVersion
+                    ? ` · v${selected.appVersion}`
+                    : ''}
                 </span>
               {/if}
             </div>
             <div class="flex flex-wrap gap-2 mt-2 text-[11px]">
-              <span class="px-2 py-0.5 bg-subtle rounded text-fg">{cost(selected.rollup.costUsd)}
+              <span class="px-2 py-0.5 bg-subtle rounded text-fg"
+                >{cost(selected.rollup.costUsd)}
                 {#if selected.rollup.costEstimatedUsd > 0}
-                  <span class="text-amber-500" title="includes estimated cost">~</span>
+                  <span class="text-amber-500" title="includes estimated cost"
+                    >~</span
+                  >
                 {/if}
               </span>
-              <span class="px-2 py-0.5 bg-subtle rounded text-fg">{formatNumber(selected.rollup.inputTokens)} in / {formatNumber(selected.rollup.outputTokens)} out</span>
-              <span class="px-2 py-0.5 bg-subtle rounded text-fg">{selected.rollup.apiRequests} req</span>
-              <span class="px-2 py-0.5 bg-subtle rounded text-fg flex items-center gap-1">
+              <span class="px-2 py-0.5 bg-subtle rounded text-fg"
+                >{formatNumber(selected.rollup.inputTokens)} in / {formatNumber(
+                  selected.rollup.outputTokens,
+                )} out</span
+              >
+              <span class="px-2 py-0.5 bg-subtle rounded text-fg"
+                >{selected.rollup.apiRequests} req</span
+              >
+              <span
+                class="px-2 py-0.5 bg-subtle rounded text-fg flex items-center gap-1"
+              >
                 <MessageSquare size={11} />{selected.rollup.prompts}
               </span>
               {#if selected.rollup.linesAdded || selected.rollup.linesRemoved}
-                <span class="px-2 py-0.5 bg-subtle rounded text-fg flex items-center gap-1">
-                  <GitBranch size={11} />+{selected.rollup.linesAdded}/-{selected.rollup.linesRemoved}
+                <span
+                  class="px-2 py-0.5 bg-subtle rounded text-fg flex items-center gap-1"
+                >
+                  <GitBranch size={11} />+{selected.rollup
+                    .linesAdded}/-{selected.rollup.linesRemoved}
                 </span>
               {/if}
               {#if selected.rollup.commits}
-                <span class="px-2 py-0.5 bg-subtle rounded text-fg">{selected.rollup.commits} commits</span>
+                <span class="px-2 py-0.5 bg-subtle rounded text-fg"
+                  >{selected.rollup.commits} commits</span
+                >
               {/if}
             </div>
           </div>
@@ -285,20 +340,41 @@
           <!-- Per-tool breakdown -->
           {#if sessionTools.length > 0}
             <div class="p-3 border-b border-line">
-              <div class="text-[11px] font-semibold text-fg-muted uppercase mb-2">Tools &amp; MCP</div>
+              <div
+                class="text-[11px] font-semibold text-fg-muted uppercase mb-2"
+              >
+                Tools &amp; MCP
+              </div>
               <div class="flex flex-col gap-1">
                 {#each sessionTools as t (t.name)}
                   <div class="flex items-center justify-between text-xs">
-                    <span class="font-mono text-fg truncate flex items-center gap-1.5">
-                      {#if t.isMcp}<Server size={11} class="text-sky-500" />{/if}
-                      {#if t.category === 'subagent'}<Bot size={11} class="text-violet-500" />{/if}
-                      {#if t.category === 'skill'}<Sparkles size={11} class="text-fuchsia-500" />{/if}
+                    <span
+                      class="font-mono text-fg truncate flex items-center gap-1.5"
+                    >
+                      {#if t.isMcp}<Server
+                          size={11}
+                          class="text-sky-500"
+                        />{/if}
+                      {#if t.category === 'subagent'}<Bot
+                          size={11}
+                          class="text-violet-500"
+                        />{/if}
+                      {#if t.category === 'skill'}<Sparkles
+                          size={11}
+                          class="text-fuchsia-500"
+                        />{/if}
                       {t.name}
                     </span>
-                    <span class="text-fg-muted flex items-center gap-2 flex-shrink-0">
+                    <span
+                      class="text-fg-muted flex items-center gap-2 flex-shrink-0"
+                    >
                       <span>×{t.count}</span>
-                      {#if t.failures > 0}<span class="text-red-500">{t.failures} fail</span>{/if}
-                      {#if t.totalDurationMs > 0}<span>{formatDuration(t.totalDurationMs)}</span>{/if}
+                      {#if t.failures > 0}<span class="text-red-500"
+                          >{t.failures} fail</span
+                        >{/if}
+                      {#if t.totalDurationMs > 0}<span
+                          >{formatDuration(t.totalDurationMs)}</span
+                        >{/if}
                     </span>
                   </div>
                 {/each}
@@ -309,17 +385,23 @@
           <!-- Runtime environment: MCP servers, plugins, hooks -->
           {#if hasEnv}
             <div class="p-3 border-b border-line">
-              <div class="text-[11px] font-semibold text-fg-muted uppercase mb-2">
+              <div
+                class="text-[11px] font-semibold text-fg-muted uppercase mb-2"
+              >
                 Runtime environment
               </div>
               <div class="flex flex-col gap-1">
                 {#each mcpConns as m (m.name)}
                   <div class="flex items-center justify-between text-xs">
-                    <span class="font-mono text-fg truncate flex items-center gap-1.5">
+                    <span
+                      class="font-mono text-fg truncate flex items-center gap-1.5"
+                    >
                       <Plug size={11} class="text-sky-500 flex-shrink-0" />
                       {m.name}
                     </span>
-                    <span class="text-fg-muted flex items-center gap-2 flex-shrink-0">
+                    <span
+                      class="text-fg-muted flex items-center gap-2 flex-shrink-0"
+                    >
                       <span
                         class="w-1.5 h-1.5 rounded-full {m.connected
                           ? 'bg-emerald-500'
@@ -327,17 +409,26 @@
                         title={m.connected ? 'connected' : 'disconnected'}
                       ></span>
                       {#if m.transport}<span>{m.transport}</span>{/if}
-                      {#if m.disconnects > 0}<span>{m.connects}↑/{m.disconnects}↓</span>{/if}
+                      {#if m.disconnects > 0}<span
+                          >{m.connects}↑/{m.disconnects}↓</span
+                        >{/if}
                     </span>
                   </div>
                 {/each}
                 {#each plugins as p (p.name)}
                   <div class="flex items-center justify-between text-xs">
-                    <span class="font-mono text-fg truncate flex items-center gap-1.5">
-                      <Blocks size={11} class="text-fuchsia-500 flex-shrink-0" />
+                    <span
+                      class="font-mono text-fg truncate flex items-center gap-1.5"
+                    >
+                      <Blocks
+                        size={11}
+                        class="text-fuchsia-500 flex-shrink-0"
+                      />
                       {p.name}
                     </span>
-                    {#if p.version}<span class="text-fg-muted flex-shrink-0">v{p.version}</span>{/if}
+                    {#if p.version}<span class="text-fg-muted flex-shrink-0"
+                        >v{p.version}</span
+                      >{/if}
                   </div>
                 {/each}
                 {#if hooks && hooks.runs > 0}
@@ -346,10 +437,16 @@
                       <Webhook size={11} class="text-amber-500 flex-shrink-0" />
                       hooks
                     </span>
-                    <span class="text-fg-muted flex items-center gap-2 flex-shrink-0">
+                    <span
+                      class="text-fg-muted flex items-center gap-2 flex-shrink-0"
+                    >
                       <span>×{hooks.runs}</span>
-                      {#if hooks.blocked > 0}<span class="text-amber-600">{hooks.blocked} blocked</span>{/if}
-                      {#if hooks.errored > 0}<span class="text-red-500">{hooks.errored} err</span>{/if}
+                      {#if hooks.blocked > 0}<span class="text-amber-600"
+                          >{hooks.blocked} blocked</span
+                        >{/if}
+                      {#if hooks.errored > 0}<span class="text-red-500"
+                          >{hooks.errored} err</span
+                        >{/if}
                     </span>
                   </div>
                 {/if}
@@ -360,28 +457,39 @@
           <!-- Timeline -->
           <div class="p-3">
             <div class="flex items-center justify-between mb-2">
-              <div class="text-[11px] font-semibold text-fg-muted uppercase">Timeline</div>
+              <div class="text-[11px] font-semibold text-fg-muted uppercase">
+                Timeline
+              </div>
               <button
                 class="flex items-center gap-1 text-[11px] text-fg-muted hover:text-fg"
                 onclick={() => (reveal = !reveal)}
                 title="Reveal / hide captured prompt text"
               >
-                {#if reveal}<EyeOff size={12} />Hide prompts{:else}<Eye size={12} />Reveal prompts{/if}
+                {#if reveal}<EyeOff size={12} />Hide prompts{:else}<Eye
+                    size={12}
+                  />Reveal prompts{/if}
               </button>
             </div>
             <div class="flex flex-col gap-1">
               {#each timeline as e (e.id)}
-                <div class="flex items-center gap-2 text-xs py-1 border-b border-line/50">
-                  <span class="text-fg-muted tabular-nums flex-shrink-0">{formatTimestamp(e.timestamp)}</span>
+                <div
+                  class="flex items-center gap-2 text-xs py-1 border-b border-line/50"
+                >
+                  <span class="text-fg-muted tabular-nums flex-shrink-0"
+                    >{formatTimestamp(e.timestamp)}</span
+                  >
                   <span
-                    class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 {e.type === 'api_error'
+                    class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 {e.type ===
+                    'api_error'
                       ? 'bg-red-100 text-red-700'
                       : e.decision === 'reject'
                         ? 'bg-amber-100 text-amber-700'
-                        : 'bg-subtle text-fg-muted'}"
-                  >{e.type}</span>
+                        : 'bg-subtle text-fg-muted'}">{e.type}</span
+                  >
                   <span class="text-fg truncate">{eventLabel(e)}</span>
-                  <span class="text-fg-muted truncate ml-auto text-right">{eventDetail(e)}</span>
+                  <span class="text-fg-muted truncate ml-auto text-right"
+                    >{eventDetail(e)}</span
+                  >
                 </div>
               {/each}
             </div>

@@ -1,10 +1,14 @@
 import type { AgentObservabilityEvent } from './agent';
 import type { MCPObservabilityEvent } from './mcp';
 
-export type ObservabilityEvent = AgentObservabilityEvent | MCPObservabilityEvent;
+export type ObservabilityEvent =
+  AgentObservabilityEvent | MCPObservabilityEvent;
 
 export interface Observability {
-  emit(event: ObservabilityEvent, ctx?: DurableObjectState | ExecutionContext): void;
+  emit(
+    event: ObservabilityEvent,
+    ctx?: DurableObjectState | ExecutionContext,
+  ): void;
 }
 
 type ChannelKey =
@@ -51,7 +55,9 @@ export type ChannelEventMap = {
   email: Extract<ObservabilityEvent, { type: `email:${string}` }>;
 };
 
-export interface ObservabilityChannel<TEvent extends ObservabilityEvent = ObservabilityEvent> {
+export interface ObservabilityChannel<
+  TEvent extends ObservabilityEvent = ObservabilityEvent,
+> {
   name: string;
   publish(event: TEvent): void;
 }

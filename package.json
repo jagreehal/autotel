@@ -12,7 +12,7 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
-    "format": "turbo format",
+    "format": "prettier --write .",
     "test": "turbo test",
     "test:integration": "turbo test:integration",
     "test:e2e": "pnpm --filter autotel run test:e2e",
@@ -24,21 +24,23 @@
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install --lockfile-only",
     "release": "pnpm build && changeset publish",
-    "quality": "turbo run build && turbo run build-storybook && turbo run lint && turbo run format && turbo run type-check && turbo run test && turbo run test:integration"
+    "quality": "turbo run build && turbo run build-storybook && turbo run lint && pnpm run format:check && turbo run type-check && turbo run test && turbo run test:integration",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^2.31.1",
     "@eslint/js": "^10.0.1",
-    "@typescript-eslint/eslint-plugin": "^8.63.0",
-    "@typescript-eslint/parser": "^8.63.0",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "esbuild": "^0.28.1",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^64.0.0",
-    "prettier": "^3.9.4",
+    "prettier": "^3.9.6",
     "prettier-plugin-svelte": "^4.1.1",
-    "turbo": "^2.10.4",
-    "typescript-eslint": "^8.63.0"
+    "turbo": "^2.10.5",
+    "typescript-eslint": "^8.65.0",
+    "unrun": "0.3.1"
   },
   "engines": {
     "node": ">=24",
@@ -46,6 +48,9 @@
   },
   "packageManager": "pnpm@10.27.0",
   "pnpm": {
+    "overrides": {
+      "typescript": "6.0.3"
+    },
     "peerDependencyRules": {
       "allowedVersions": {
         "typescript": "6",

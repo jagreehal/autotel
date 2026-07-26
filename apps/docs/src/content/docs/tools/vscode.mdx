@@ -39,11 +39,11 @@ With autotel, the same applies. `init()` honours `OTEL_EXPORTER_OTLP_ENDPOINT`,
 so no code change is needed:
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, trace, withTracing } from 'autotel';
 
 init({ service: 'my-app' });
 
-const checkout = trace((ctx) => async (req, res) => {
+const checkout = withTracing({})((ctx) => async (req, res) => {
   ctx.set('order.id', req.body.id);
   // ...
 });
@@ -79,28 +79,28 @@ bundled webview script runs.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `Autotel: Start Receiver` | Start the OTLP HTTP receiver. |
-| `Autotel: Stop Receiver` | Stop the receiver and free the port. |
-| `Autotel: Set Receiver Port` | Change the listen port. Saved to workspace settings. |
-| `Autotel: Clear Buffered Data` | Drop all buffered spans, logs, and error groups. |
-| `Autotel: Reveal Span Source` | Jump to `code.filepath:code.lineno` for the selected span. |
-| `Autotel: Copy Span ID` | Copy the span ID to the clipboard. |
-| `Autotel: Open Span Detail` | Open the span in the detail webview. |
+| Command                        | Description                                                |
+| ------------------------------ | ---------------------------------------------------------- |
+| `Autotel: Start Receiver`      | Start the OTLP HTTP receiver.                              |
+| `Autotel: Stop Receiver`       | Stop the receiver and free the port.                       |
+| `Autotel: Set Receiver Port`   | Change the listen port. Saved to workspace settings.       |
+| `Autotel: Clear Buffered Data` | Drop all buffered spans, logs, and error groups.           |
+| `Autotel: Reveal Span Source`  | Jump to `code.filepath:code.lineno` for the selected span. |
+| `Autotel: Copy Span ID`        | Copy the span ID to the clipboard.                         |
+| `Autotel: Open Span Detail`    | Open the span in the detail webview.                       |
 
 ## Settings
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `autotel.receiver.enabled` | `true` | Boot the receiver on activation. |
-| `autotel.receiver.host` | `127.0.0.1` | Bind host. Non-loopback values trigger a confirmation prompt. |
-| `autotel.receiver.port` | `4318` | TCP port. Standard OTLP/HTTP port. |
-| `autotel.buffer.maxSpans` | `10000` | Span buffer cap. Older entries drop first. |
-| `autotel.buffer.maxLogs` | `10000` | Log buffer cap. |
-| `autotel.buffer.maxAgeMs` | `1800000` | Reserved for future age-based eviction. |
-| `autotel.source.workspaceRoot` | `null` | Override workspace root for source resolution. `null` auto-detects. |
-| `autotel.source.followSymlinks` | `false` | Follow symlinks when resolving span source paths. |
+| Setting                         | Default     | Description                                                         |
+| ------------------------------- | ----------- | ------------------------------------------------------------------- |
+| `autotel.receiver.enabled`      | `true`      | Boot the receiver on activation.                                    |
+| `autotel.receiver.host`         | `127.0.0.1` | Bind host. Non-loopback values trigger a confirmation prompt.       |
+| `autotel.receiver.port`         | `4318`      | TCP port. Standard OTLP/HTTP port.                                  |
+| `autotel.buffer.maxSpans`       | `10000`     | Span buffer cap. Older entries drop first.                          |
+| `autotel.buffer.maxLogs`        | `10000`     | Log buffer cap.                                                     |
+| `autotel.buffer.maxAgeMs`       | `1800000`   | Reserved for future age-based eviction.                             |
+| `autotel.source.workspaceRoot`  | `null`      | Override workspace root for source resolution. `null` auto-detects. |
+| `autotel.source.followSymlinks` | `false`     | Follow symlinks when resolving span source paths.                   |
 
 ## When the port is taken
 
@@ -118,7 +118,7 @@ to match.
   The check uses `path.relative` against the resolved workspace root, so
   symlink games and `..` traversal cannot escape.
 - Maximum request body is 10 MB. Anything larger returns `413 Payload too
-  large`.
+large`.
 - No credentials live in settings. Remote-export support, planned for
   v0.2, will use `vscode.SecretStorage`.
 

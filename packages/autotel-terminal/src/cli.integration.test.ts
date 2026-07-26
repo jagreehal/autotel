@@ -154,10 +154,7 @@ describe('CLI HTTP server integration', () => {
   });
 
   if (!supportsLocalServer) {
-    it.skip(
-      'skips CLI HTTP server integration when the environment cannot open local TCP ports',
-      () => {},
-    );
+    it.skip('skips CLI HTTP server integration when the environment cannot open local TCP ports', () => {});
     return;
   }
 

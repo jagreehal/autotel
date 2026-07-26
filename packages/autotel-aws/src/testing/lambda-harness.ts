@@ -8,13 +8,16 @@ import type { LambdaContext } from '../types';
 /**
  * Mock Lambda context for testing
  */
-export function createMockLambdaContext(overrides?: Partial<LambdaContext>): LambdaContext {
+export function createMockLambdaContext(
+  overrides?: Partial<LambdaContext>,
+): LambdaContext {
   return {
     callbackWaitsForEmptyEventLoop: true,
     awsRequestId: 'test-request-id',
     functionName: 'test-function',
     functionVersion: '$LATEST',
-    invokedFunctionArn: 'arn:aws:lambda:us-east-1:123456789012:function:test-function',
+    invokedFunctionArn:
+      'arn:aws:lambda:us-east-1:123456789012:function:test-function',
     memoryLimitInMB: '128',
     logGroupName: '/aws/lambda/test-function',
     logStreamName: '2026/01/01/[$LATEST]test',
@@ -37,7 +40,7 @@ export function createLambdaTestHarness() {
     async invoke<TEvent, TResult>(
       handler: LambdaHandler<TEvent, TResult>,
       event: TEvent,
-      context?: Partial<LambdaContext>
+      context?: Partial<LambdaContext>,
     ): Promise<TResult> {
       const mockContext = createMockLambdaContext(context);
       return handler(event, mockContext);

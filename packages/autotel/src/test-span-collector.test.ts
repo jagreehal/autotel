@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SpanStatusCode } from '@opentelemetry/api';
-import { TestSpanCollector, type SerializedSpan } from './test-span-collector';
+import { TestSpanCollector } from './test-span-collector';
 
 /** Helper to create a minimal ReadableSpan mock */
 function makeSpan(opts: {
@@ -59,7 +59,7 @@ describe('TestSpanCollector', () => {
 
     const traceB = collector.drainTrace('trace-b', 'span-2');
     expect(traceB).toHaveLength(1);
-    expect(traceB[0].name).toBe('op2');
+    expect(traceB[0]!.name).toBe('op2');
   });
 
   it('drainTrace returns only descendants of rootSpanId', () => {
@@ -176,7 +176,7 @@ describe('TestSpanCollector', () => {
 
     const spans = collector.drainTrace('t', 's');
     expect(spans).toHaveLength(1);
-    const attrs = spans[0].attributes!;
+    const attrs = spans[0]!.attributes!;
     expect(attrs.str).toBe('hello');
     expect(attrs.num).toBe(42);
     expect(attrs.bool).toBe(true);
@@ -205,7 +205,7 @@ describe('TestSpanCollector', () => {
     );
 
     const spans = collector.drainTrace('t', 's');
-    expect(spans[0].attributes).toBeUndefined();
+    expect(spans[0]!.attributes).toBeUndefined();
   });
 
   it('clears all data on shutdown', async () => {

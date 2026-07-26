@@ -9,7 +9,15 @@ import {
 } from './request-logger';
 import type { TraceContext } from './trace-context';
 
-function createMockContext(): TraceContext {
+// The runtime ctx exposes deprecated OTel span methods (recordException/addEvent)
+// as back-compat shims that the public TraceContext type hides; the mock and the
+// code under test still use them, so expose them on the mock's type.
+type MockTraceContext = TraceContext & {
+  recordException: (error: unknown) => void;
+  addEvent: (name: string, attributes?: Record<string, unknown>) => void;
+};
+
+function createMockContext(): MockTraceContext {
   return {
     traceId: 'trace-id',
     spanId: 'span-id',
@@ -27,7 +35,7 @@ function createMockContext(): TraceContext {
     setBaggage: vi.fn(),
     deleteBaggage: vi.fn(),
     getAllBaggage: vi.fn(() => new Map()),
-  } as unknown as TraceContext;
+  } as unknown as MockTraceContext;
 }
 
 afterEach(() => {
@@ -193,7 +201,7 @@ describe('log.fork()', () => {
 
   it('throws when parent has no correlationId', () => {
     const noCorrCtx = createMockContext();
-    (noCorrCtx as Record<string, unknown>).correlationId = '';
+    noCorrCtx.correlationId = '';
     const noCorrLog = getRequestLogger(noCorrCtx);
 
     expect(() => noCorrLog.fork('test', () => {})).toThrow(

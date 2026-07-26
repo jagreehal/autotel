@@ -23,14 +23,14 @@
 The package direction is to make Cloudflare observability feel the same across Workers, Queues, Durable Objects, alarms, and Workflows:
 
 - use Cloudflare-native wrappers to create the root span
-- use the `trace(..., (ctx) => ...)` factory form for business logic
+- use plain `trace(name?, fn)` for business logic, with ambient `getActiveTraceContext()` or explicit `withTracing({ name })((ctx) => fn)` when span access is needed
 - prefer span attributes and one execution snapshot over scattered info logs
 
 See [docs/CLOUDFLARE-DX.md](../../docs/CLOUDFLARE-DX.md) for the design target and review rules.
 
 ## Cloudflare native tracing (automatic)
 
-Cloudflare Workers ship [native tracing](https://developers.cloudflare.com/workers/observability/traces/): enable it in Wrangler and Cloudflare instruments fetch/KV/R2/D1/handlers and exports OTLP to any backend — no exporter code. autotel integrates **automatically**: the same `trace()`/`span()`/`enterSpan()` code nests inside Cloudflare's native waterfall when native tracing is on, and falls back to autotel's own OTLP pipeline everywhere else (other edge runtimes, native off, local `wrangler dev`).
+Cloudflare Workers ship [native tracing](https://developers.cloudflare.com/workers/observability/traces/): enable it in Wrangler and Cloudflare instruments fetch/KV/R2/D1/handlers and exports OTLP to any backend. No exporter code. autotel integrates **automatically**: the same `trace()`/`span()`/`enterSpan()` code nests inside Cloudflare's native waterfall when native tracing is on, and falls back to autotel's own OTLP pipeline everywhere else (other edge runtimes, native off, local `wrangler dev`).
 
 ```toml
 # wrangler.toml — that's the only setup
@@ -40,7 +40,7 @@ enabled = true
 
 When native tracing is active, autotel **defers to the platform**: it does not proxy-instrument bindings (no duplicate spans) and does not run its own exporter. It routes your custom spans to `tracing.enterSpan()` and surfaces the `cf-ray` id as `ctx.correlationId` + a `correlation.id` span attribute. Controlled by `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`).
 
-### Same code, both modes — captured evidence
+### Same code, both modes: captured evidence
 
 This is real output from [`apps/cloudflare-example`](../../apps/cloudflare-example) (`node scripts/capture-evidence.mjs`). Identical business logic, two runtimes:
 
@@ -64,7 +64,7 @@ This is real output from [`apps/cloudflare-example`](../../apps/cloudflare-examp
 • payment.charge [ERROR] error=true exception.message="card declined"  correlation.id=8f1c2d3e…-LHR
 ```
 
-Note the native tree has **no `KV MY_KV: get` span** — Cloudflare emits that natively (your custom spans nest above it on deploy), so there are no duplicates.
+Note the native tree has **no `KV MY_KV: get` span**. Cloudflare emits that natively (your custom spans nest above it on deploy), so there are no duplicates.
 
 Full details, degradation map, and the forward-compatible trace-id story: [docs/CLOUDFLARE-NATIVE-TRACING.md](../../docs/CLOUDFLARE-NATIVE-TRACING.md).
 
@@ -83,19 +83,19 @@ yarn add autotel-cloudflare
 For just structured logs (no tracing setup required), import from `autotel-cloudflare/logger`:
 
 ```ts
-import { createEdgeLogger } from 'autotel-cloudflare/logger'
+import { createEdgeLogger } from 'autotel-cloudflare/logger';
 
-const log = createEdgeLogger('my-worker', { level: 'info' })
+const log = createEdgeLogger('my-worker', { level: 'info' });
 
 export default {
   async fetch() {
-    log.info({ user_id: 'u1' }, 'request handled')
-    return new Response('ok')
+    log.info({ user_id: 'u1' }, 'request handled');
+    return new Response('ok');
   },
-}
+};
 ```
 
-`autotel-cloudflare/logger` is the edge-clean entry: it re-exports `createEdgeLogger` from `autotel-edge/logger` plus the Cloudflare execution-logger helpers (`createWorkersLogger`, `getRequestLogger`, `getQueueLogger`). The root `autotel-cloudflare` import pulls in tracing, `AsyncLocalStorage`, and the wrappers — only use it when you want spans.
+`autotel-cloudflare/logger` is the edge-clean entry: it re-exports `createEdgeLogger` from `autotel-edge/logger` plus the Cloudflare execution-logger helpers (`createWorkersLogger`, `getRequestLogger`, `getQueueLogger`). The root `autotel-cloudflare` import pulls in tracing, `AsyncLocalStorage`, and the wrappers. Only use it when you want spans.
 
 ## Quick Start
 
@@ -111,26 +111,26 @@ head_sampling_rate = 1.0      # Let autotel handle sampling
 ### 2. Instrument Your Worker
 
 ```typescript
-import { wrapModule, trace } from 'autotel-cloudflare'
+import { wrapModule, trace } from 'autotel-cloudflare';
 
 // Zero-boilerplate function tracing
 const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
-  const order = await kv.get(orderId)  // Auto-instrumented!
-  return order
-})
+  const order = await kv.get(orderId); // Auto-instrumented!
+  return order;
+});
 
 export default wrapModule(
   {
     service: { name: 'my-worker' },
-    instrumentBindings: true,    // Auto-instrument KV, R2, D1, etc.
-    sampling: 'adaptive'          // 10% baseline, 100% errors/slow
+    instrumentBindings: true, // Auto-instrument KV, R2, D1, etc.
+    sampling: 'adaptive', // 10% baseline, 100% errors/slow
   },
   {
     async fetch(req, env, ctx) {
-      return Response.json(await processOrder('123', env.ORDERS_KV))
-    }
-  }
-)
+      return Response.json(await processOrder('123', env.ORDERS_KV));
+    },
+  },
+);
 ```
 
 ## API Styles
@@ -140,33 +140,30 @@ export default wrapModule(
 Inspired by workers-honeycomb-logger:
 
 ```typescript
-import { wrapModule } from 'autotel-cloudflare'
+import { wrapModule } from 'autotel-cloudflare';
 
 const handler = {
   async fetch(req, env, ctx) {
-    return new Response('Hello')
-  }
-}
+    return new Response('Hello');
+  },
+};
 
-export default wrapModule(
-  { service: { name: 'my-worker' } },
-  handler
-)
+export default wrapModule({ service: { name: 'my-worker' } }, handler);
 ```
 
 ### Style 2: instrument
 
 ```typescript
-import { instrument } from 'autotel-cloudflare'
+import { instrument } from 'autotel-cloudflare';
 
 export default instrument(
   {
     async fetch(req, env, ctx) {
-      return new Response('Hello')
-    }
+      return new Response('Hello');
+    },
   },
-  { service: { name: 'my-worker' } }
-)
+  { service: { name: 'my-worker' } },
+);
 ```
 
 ### Fetch Route Controls
@@ -174,7 +171,7 @@ export default instrument(
 Filter which fetch routes are instrumented and map route patterns to service names:
 
 ```typescript
-import { wrapModule } from 'autotel-cloudflare'
+import { wrapModule } from 'autotel-cloudflare';
 
 export default wrapModule(
   {
@@ -192,10 +189,10 @@ export default wrapModule(
   },
   {
     async fetch(req) {
-      return new Response('ok')
+      return new Response('ok');
     },
   },
-)
+);
 ```
 
 ### Style 3: Functional API (Unique)
@@ -203,22 +200,24 @@ export default wrapModule(
 Zero-boilerplate function tracing:
 
 ```typescript
-import { trace, span } from 'autotel-cloudflare'
+import { trace, span, withTracing } from 'autotel-cloudflare';
 
 // Automatic trace name inference
 export const createUser = trace(async (data: UserData) => {
-  return await db.insert(data)
-})
+  return await db.insert(data);
+});
 
 // Factory pattern for context access
-export const processPayment = trace(ctx => async (amount: number) => {
-  ctx.setAttribute('amount', amount)
+export const processPayment = withTracing({ name: 'payment.process' })(
+  (ctx) => async (amount: number) => {
+    ctx.setAttribute('amount', amount);
 
-  await span('validate.card', () => validateCard())
-  await span('charge.card', () => chargeCard(amount))
+    await span('validate.card', () => validateCard());
+    await span('charge.card', () => chargeCard(amount));
 
-  return { success: true }
-})
+    return { success: true };
+  },
+);
 ```
 
 ## Request Logger Bootstrap
@@ -226,7 +225,7 @@ export const processPayment = trace(ctx => async (amount: number) => {
 Use `createWorkersLogger()` for request-scoped snapshots with Cloudflare context pre-filled.
 
 ```typescript
-import { wrapModule, createWorkersLogger } from 'autotel-cloudflare'
+import { wrapModule, createWorkersLogger } from 'autotel-cloudflare';
 
 export default wrapModule(
   { service: { name: 'checkout-worker' } },
@@ -234,16 +233,16 @@ export default wrapModule(
     async fetch(request) {
       const log = createWorkersLogger(request, {
         headers: ['x-request-id'],
-      })
+      });
 
-      log.info('checkout.started')
-      log.set({ checkout: { stage: 'validated' } })
-      log.emitNow({ status: 200 })
+      log.info('checkout.started');
+      log.set({ checkout: { stage: 'validated' } });
+      log.emitNow({ status: 200 });
 
-      return new Response('ok')
+      return new Response('ok');
     },
   },
-)
+);
 ```
 
 ## Complete Bindings Coverage
@@ -303,66 +302,74 @@ await env.ANALYTICS.writeDataPoint({ ... })  // → Span: "Analytics: writeDataP
 ### Adaptive Sampling (Recommended)
 
 ```typescript
-import { SamplingPresets } from 'autotel-cloudflare/sampling'
+import { SamplingPresets } from 'autotel-cloudflare/sampling';
 
 wrapModule(
   {
     service: { name: 'my-worker' },
     sampling: {
-      tailSampler: SamplingPresets.production()
+      tailSampler: SamplingPresets.production(),
       // 10% baseline, 100% errors, 100% slow requests (>1s)
-    }
+    },
   },
-  handler
-)
+  handler,
+);
 ```
 
 ### Available Presets
 
 ```typescript
 // Development - 100% sampling
-sampling: { tailSampler: SamplingPresets.development() }
+sampling: {
+  tailSampler: SamplingPresets.development();
+}
 
 // Production - 10% baseline, all errors, slow >1s
-sampling: { tailSampler: SamplingPresets.production() }
+sampling: {
+  tailSampler: SamplingPresets.production();
+}
 
 // High traffic - 1% baseline, all errors, slow >1s
-sampling: { tailSampler: SamplingPresets.highTraffic() }
+sampling: {
+  tailSampler: SamplingPresets.highTraffic();
+}
 
 // Debugging - errors only
-sampling: { tailSampler: SamplingPresets.debugging() }
+sampling: {
+  tailSampler: SamplingPresets.debugging();
+}
 
 // Or use shorthand
-sampling: 'adaptive'      // Same as SamplingPresets.production()
-sampling: 'error-only'    // Same as SamplingPresets.debugging()
+sampling: 'adaptive'; // Same as SamplingPresets.production()
+sampling: 'error-only'; // Same as SamplingPresets.debugging()
 ```
 
 ### Custom Sampling
 
 ```typescript
-import { createCustomTailSampler } from 'autotel-cloudflare/sampling'
+import { createCustomTailSampler } from 'autotel-cloudflare/sampling';
 
 const customSampler = createCustomTailSampler((trace) => {
-  const span = trace.localRootSpan
+  const span = trace.localRootSpan;
 
   // Always sample /api/* endpoints
   if (span.attributes['http.route']?.toString().startsWith('/api/')) {
-    return true
+    return true;
   }
 
   // Sample all errors
   if (span.status.code === SpanStatusCode.ERROR) {
-    return true
+    return true;
   }
 
   // Sample slow requests
-  const duration = (span.endTime[0] - span.startTime[0]) / 1_000_000
+  const duration = (span.endTime[0] - span.startTime[0]) / 1_000_000;
   if (duration > 1000) {
-    return true
+    return true;
   }
 
-  return Math.random() < 0.1  // 10% of everything else
-})
+  return Math.random() < 0.1; // 10% of everything else
+});
 ```
 
 ## Durable Objects
@@ -370,26 +377,23 @@ const customSampler = createCustomTailSampler((trace) => {
 ### Instrument Durable Object Class
 
 ```typescript
-import { wrapDurableObject } from 'autotel-cloudflare'
+import { wrapDurableObject } from 'autotel-cloudflare';
 
 class Counter implements DurableObject {
   async fetch(request: Request) {
     // Auto-traced with span "Counter: fetch"
-    const count = await this.state.storage.get('count') || 0
-    await this.state.storage.put('count', count + 1)
-    return new Response(String(count + 1))
+    const count = (await this.state.storage.get('count')) || 0;
+    await this.state.storage.put('count', count + 1);
+    return new Response(String(count + 1));
   }
 
   async alarm() {
     // Auto-traced with span "Counter: alarm"
-    console.log('Alarm triggered')
+    console.log('Alarm triggered');
   }
 }
 
-export default wrapDurableObject(
-  { service: { name: 'counter-do' } },
-  Counter
-)
+export default wrapDurableObject({ service: { name: 'counter-do' } }, Counter);
 ```
 
 ## Events Integration
@@ -397,7 +401,7 @@ export default wrapDurableObject(
 Track product events with automatic trace correlation:
 
 ```typescript
-import { publishEvent } from 'autotel-cloudflare/events'
+import { publishEvent } from 'autotel-cloudflare/events';
 
 wrapModule(
   {
@@ -408,10 +412,10 @@ wrapModule(
         // Send to your analytics platform
         await fetch('https://analytics.example.com/events', {
           method: 'POST',
-          body: JSON.stringify(event)
-        })
-      }
-    ]
+          body: JSON.stringify(event),
+        });
+      },
+    ],
   },
   {
     async fetch(req, env, ctx) {
@@ -421,15 +425,15 @@ wrapModule(
         userId: '123',
         properties: {
           orderId: 'abc',
-          amount: 99.99
-        }
+          amount: 99.99,
+        },
         // Automatically includes current trace ID
-      })
+      });
 
-      return new Response('OK')
-    }
-  }
-)
+      return new Response('OK');
+    },
+  },
+);
 ```
 
 ## Configuration
@@ -437,7 +441,7 @@ wrapModule(
 ### Complete Example
 
 ```typescript
-import { wrapModule, SamplingPresets } from 'autotel-cloudflare'
+import { wrapModule, SamplingPresets } from 'autotel-cloudflare';
 
 export default wrapModule(
   {
@@ -445,7 +449,7 @@ export default wrapModule(
     service: {
       name: 'my-worker',
       version: '1.0.0',
-      namespace: 'production'
+      namespace: 'production',
     },
 
     // Auto-instrument bindings
@@ -453,14 +457,14 @@ export default wrapModule(
 
     // Global instrumentations
     instrumentation: {
-      instrumentGlobalFetch: true,   // Trace all fetch() calls
-      instrumentGlobalCache: true,   // Trace cache API
-      disabled: false                // Set true to disable all tracing
+      instrumentGlobalFetch: true, // Trace all fetch() calls
+      instrumentGlobalCache: true, // Trace cache API
+      disabled: false, // Set true to disable all tracing
     },
 
     // Sampling strategy
     sampling: {
-      tailSampler: SamplingPresets.production()
+      tailSampler: SamplingPresets.production(),
     },
 
     // Handler-specific config
@@ -468,16 +472,16 @@ export default wrapModule(
       fetch: {
         postProcess: (span, { request, response }) => {
           // Add custom attributes
-          const url = new URL(request.url)
+          const url = new URL(request.url);
           if (url.pathname.startsWith('/api/')) {
-            span.setAttribute('api.endpoint', url.pathname)
+            span.setAttribute('api.endpoint', url.pathname);
           }
-        }
-      }
-    }
+        },
+      },
+    },
   },
-  handler
-)
+  handler,
+);
 ```
 
 ### Dynamic Configuration
@@ -489,72 +493,76 @@ export default wrapModule(
     service: { name: env.SERVICE_NAME || 'my-worker' },
     exporter: {
       url: env.OTEL_ENDPOINT,
-      headers: { 'x-api-key': env.API_KEY }
+      headers: { 'x-api-key': env.API_KEY },
     },
     sampling: {
-      tailSampler: env.ENVIRONMENT === 'production'
-        ? SamplingPresets.production()
-        : SamplingPresets.development()
-    }
+      tailSampler:
+        env.ENVIRONMENT === 'production'
+          ? SamplingPresets.production()
+          : SamplingPresets.development(),
+    },
   }),
-  handler
-)
+  handler,
+);
 ```
 
 ## Entry Points (Tree-Shaking)
 
 ```typescript
 // Main export (everything — pulls AsyncLocalStorage, needs nodejs_compat)
-import { wrapModule, trace, instrument } from 'autotel-cloudflare'
+import { wrapModule, trace, instrument } from 'autotel-cloudflare';
 
 // Tree-shakeable entry points
-import { instrumentKV, instrumentR2 } from 'autotel-cloudflare/bindings'
-import { instrumentDO } from 'autotel-cloudflare/handlers'
-import { SamplingPresets } from 'autotel-cloudflare/sampling'
-import { publishEvent } from 'autotel-cloudflare/events'
-import { createEdgeLogger } from 'autotel-cloudflare/logger'
-import { createTraceCollector } from 'autotel-cloudflare/testing'
+import { instrumentKV, instrumentR2 } from 'autotel-cloudflare/bindings';
+import { instrumentDO } from 'autotel-cloudflare/handlers';
+import { SamplingPresets } from 'autotel-cloudflare/sampling';
+import { publishEvent } from 'autotel-cloudflare/events';
+import { createEdgeLogger } from 'autotel-cloudflare/logger';
+import { createTraceCollector } from 'autotel-cloudflare/testing';
 ```
 
 ## Cloudflare compatibility
 
 Workers run on V8 isolates, not Node. Anything that transitively imports `node:async_hooks` (used by `AsyncLocalStorageContextManager` for span context) or `node:buffer` requires `compatibility_flags = ["nodejs_compat"]` in your `wrangler.toml`. The `/logger` subpath stays clear of those.
 
-| Entry | Edge-safe without `nodejs_compat`? | Notes |
-| --- | --- | --- |
-| `autotel-cloudflare` | No — needs `nodejs_compat` | Pulls `AsyncLocalStorage` (span context) and `Buffer` transitively via `autotel-edge` root |
-| `autotel-cloudflare/logger` | Yes | Edge-clean. `createEdgeLogger`, `createWorkersLogger`, `getRequestLogger`, `getQueueLogger`, `getWorkflowLogger`, `getActorLogger` |
-| `autotel-cloudflare/bindings` | No — needs `nodejs_compat` | Wrappers create spans, require context manager |
-| `autotel-cloudflare/handlers` | No — needs `nodejs_compat` | DO/Workflow wrappers create spans |
-| `autotel-cloudflare/sampling` | Yes | Pure samplers, no runtime imports |
-| `autotel-cloudflare/events` | No — needs `nodejs_compat` | Pulls trace context for correlation |
-| `autotel-cloudflare/testing` | Yes (test-only) | Collectors live in test runtime; do not ship to Workers |
-| `autotel-cloudflare/actors` | No — needs `nodejs_compat` | Builds on DO wrappers |
-| `autotel-cloudflare/agents` | No — needs `nodejs_compat` | Builds on DO wrappers |
-| `autotel-cloudflare/parse-error` | Yes | Pure error normaliser |
+| Entry                            | Edge-safe without `nodejs_compat`? | Notes                                                                                                                              |
+| -------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `autotel-cloudflare`             | No: needs `nodejs_compat`          | Pulls `AsyncLocalStorage` (span context) and `Buffer` transitively via `autotel-edge` root                                         |
+| `autotel-cloudflare/logger`      | Yes                                | Edge-clean. `createEdgeLogger`, `createWorkersLogger`, `getRequestLogger`, `getQueueLogger`, `getWorkflowLogger`, `getActorLogger` |
+| `autotel-cloudflare/bindings`    | No: needs `nodejs_compat`          | Wrappers create spans, require context manager                                                                                     |
+| `autotel-cloudflare/handlers`    | No: needs `nodejs_compat`          | DO/Workflow wrappers create spans                                                                                                  |
+| `autotel-cloudflare/sampling`    | Yes                                | Pure samplers, no runtime imports                                                                                                  |
+| `autotel-cloudflare/events`      | No: needs `nodejs_compat`          | Pulls trace context for correlation                                                                                                |
+| `autotel-cloudflare/testing`     | Yes (test-only)                    | Collectors live in test runtime; do not ship to Workers                                                                            |
+| `autotel-cloudflare/actors`      | No: needs `nodejs_compat`          | Builds on DO wrappers                                                                                                              |
+| `autotel-cloudflare/agents`      | No: needs `nodejs_compat`          | Builds on DO wrappers                                                                                                              |
+| `autotel-cloudflare/parse-error` | Yes                                | Pure error normaliser                                                                                                              |
 
 Rule of thumb: if you only need logs, import `autotel-cloudflare/logger` and skip `nodejs_compat`. If you want spans, add `nodejs_compat` and import from the root.
 
 ## See also
 
-- [autotel-edge](../autotel-edge) — vendor-agnostic foundation re-exported by this package
-- [autotel](../autotel) — Node.js entry, full SDK with auto-instrumentation
-- [autotel-drizzle](../autotel-drizzle) — Drizzle ORM spans (Node only)
+- [autotel-edge](../autotel-edge): vendor-agnostic foundation re-exported by this package
+- [autotel](../autotel): Node.js entry, full SDK with auto-instrumentation
+- [autotel-drizzle](../autotel-drizzle): Drizzle ORM spans (Node only)
 
 ## Testing
 
 ```typescript
-import { createTraceCollector, assertTraceCreated } from 'autotel-cloudflare/testing'
+import {
+  createTraceCollector,
+  assertTraceCreated,
+} from 'autotel-cloudflare/testing';
 
 describe('my worker', () => {
   it('creates traces', async () => {
-    const collector = createTraceCollector()
+    const collector = createTraceCollector();
 
-    await myFunction()
+    await myFunction();
 
-    assertTraceCreated(collector, 'myFunction')
-  })
-})
+    assertTraceCreated(collector, 'myFunction');
+  });
+});
 ```
 
 ## Examples

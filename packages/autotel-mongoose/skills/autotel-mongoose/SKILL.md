@@ -176,7 +176,7 @@ Internal Mongoose hooks (those starting with `_` or `$`, or containing known int
 
 ## Common Mistakes
 
-### HIGH — Calling `instrumentMongoose` after defining schemas
+### HIGH: Calling `instrumentMongoose` after defining schemas
 
 ```typescript
 // Wrong: hooks on existing schemas are not retroactively wrapped
@@ -190,7 +190,7 @@ const User = mongoose.model('User', new mongoose.Schema({ name: String }));
 
 Hook wrapping (`instrumentHooks: true`) only applies to `pre`/`post` calls made after `instrumentMongoose` runs. Model method patching affects `mongoose.Model` globally and works regardless, but hook instrumentation is order-sensitive.
 
-### HIGH — Disabling redaction when query text contains PII
+### HIGH: Disabling redaction when query text contains PII
 
 ```typescript
 // Dangerous: raw query payloads may include emails, IDs, or sensitive fields
@@ -209,7 +209,7 @@ instrumentMongoose(mongoose, {
 
 The default `'default'` redactor covers common PII patterns (email, phone, SSN, credit card) but is not exhaustive. Review your query payloads before disabling redaction.
 
-### MEDIUM — Using `instrumentHooks: false` (default) and expecting hook spans
+### MEDIUM: Using `instrumentHooks: false` (default) and expecting hook spans
 
 ```typescript
 // Wrong assumption: hooks are NOT traced by default
@@ -224,7 +224,7 @@ instrumentMongoose(mongoose, { instrumentHooks: true });
 
 Hook instrumentation is off by default to avoid unexpected performance overhead and to avoid wrapping Mongoose internals by accident.
 
-### MEDIUM — Using deprecated semconv attribute names
+### MEDIUM: Using deprecated semconv attribute names
 
 autotel-mongoose uses stable OTel semconv:
 
@@ -238,7 +238,7 @@ autotel-mongoose uses stable OTel semconv:
 
 The package exports stable constants from `autotel-mongoose/constants` if needed for custom attribute access.
 
-### MEDIUM — Expecting spans for `.find()` without calling `.exec()`
+### MEDIUM: Expecting spans for `.find()` without calling `.exec()`
 
 ```typescript
 // Wrong: span is created but never finalized — it stays open

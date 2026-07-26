@@ -16,17 +16,23 @@ export interface CloudWatchEndpointInput {
 }
 
 /** Traces — signed against the `xray` service. */
-export function cloudWatchTracesEndpoint({ region }: CloudWatchEndpointInput): string {
+export function cloudWatchTracesEndpoint({
+  region,
+}: CloudWatchEndpointInput): string {
   return `https://xray.${region}.amazonaws.com/v1/traces`;
 }
 
 /** Logs — signed against the `logs` service. Requires log group/stream headers. */
-export function cloudWatchLogsEndpoint({ region }: CloudWatchEndpointInput): string {
+export function cloudWatchLogsEndpoint({
+  region,
+}: CloudWatchEndpointInput): string {
   return `https://logs.${region}.amazonaws.com/v1/logs`;
 }
 
 /** Metrics — signed against the `monitoring` service. */
-export function cloudWatchMetricsEndpoint({ region }: CloudWatchEndpointInput): string {
+export function cloudWatchMetricsEndpoint({
+  region,
+}: CloudWatchEndpointInput): string {
   return `https://monitoring.${region}.amazonaws.com/v1/metrics`;
 }
 

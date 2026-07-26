@@ -5,13 +5,13 @@
 // Anthropic cache rates follow public published ratios:
 //   cache_read = 0.1x input rate, cache_write = 1.25x input rate.
 
-import { makeProviderModelLookup } from './providerModel'
+import { makeProviderModelLookup } from './providerModel';
 
 export interface PriceEntry {
-  inputPerMTok: number
-  outputPerMTok: number
-  cacheReadPerMTok?: number
-  cacheWritePerMTok?: number
+  inputPerMTok: number;
+  outputPerMTok: number;
+  cacheReadPerMTok?: number;
+  cacheWritePerMTok?: number;
 }
 
 const TABLE: Record<string, PriceEntry> = {
@@ -33,46 +33,68 @@ const TABLE: Record<string, PriceEntry> = {
   'mistral/mistral-small': { inputPerMTok: 0.2, outputPerMTok: 0.6 },
   'groq/llama-3.1-70b': { inputPerMTok: 0.59, outputPerMTok: 0.79 },
   'deepseek/deepseek-chat': { inputPerMTok: 0.27, outputPerMTok: 1.1 },
-}
+};
 
 /** Longest-model-prefix lookup, matched by normalized provider (see helper). */
-export const lookupPrice: (provider: string, model: string) => PriceEntry | undefined =
-  makeProviderModelLookup(TABLE)
+export const lookupPrice: (
+  provider: string,
+  model: string,
+) => PriceEntry | undefined = makeProviderModelLookup(TABLE);
 
 interface PriceInputs {
-  provider: string
-  model: string
-  inputTokens?: number
-  outputTokens?: number
-  cacheReadInputTokens?: number
-  cacheCreationInputTokens?: number
+  provider: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
 }
 
 export interface PriceOutputs {
-  currency: 'USD'
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  total: number
-  source: 'table' | 'unknown'
+  currency: 'USD';
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+  source: 'table' | 'unknown';
 }
 
 export function priceCall(inputs: PriceInputs): PriceOutputs {
-  const entry = lookupPrice(inputs.provider, inputs.model)
+  const entry = lookupPrice(inputs.provider, inputs.model);
   if (!entry) {
-    return { currency: 'USD', input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, source: 'unknown' }
+    return {
+      currency: 'USD',
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+      source: 'unknown',
+    };
   }
-  const cacheReadRate = entry.cacheReadPerMTok ?? entry.inputPerMTok * 0.1
-  const cacheWriteRate = entry.cacheWritePerMTok ?? entry.inputPerMTok * 1.25
-  const cacheRead = ((inputs.cacheReadInputTokens ?? 0) / 1_000_000) * cacheReadRate
-  const cacheWrite = ((inputs.cacheCreationInputTokens ?? 0) / 1_000_000) * cacheWriteRate
+  const cacheReadRate = entry.cacheReadPerMTok ?? entry.inputPerMTok * 0.1;
+  const cacheWriteRate = entry.cacheWritePerMTok ?? entry.inputPerMTok * 1.25;
+  const cacheRead =
+    ((inputs.cacheReadInputTokens ?? 0) / 1_000_000) * cacheReadRate;
+  const cacheWrite =
+    ((inputs.cacheCreationInputTokens ?? 0) / 1_000_000) * cacheWriteRate;
   const billableInputTokens = Math.max(
     0,
-    (inputs.inputTokens ?? 0) - (inputs.cacheReadInputTokens ?? 0) - (inputs.cacheCreationInputTokens ?? 0),
-  )
-  const input = (billableInputTokens / 1_000_000) * entry.inputPerMTok
-  const output = ((inputs.outputTokens ?? 0) / 1_000_000) * entry.outputPerMTok
-  const total = input + output + cacheRead + cacheWrite
-  return { currency: 'USD', input, output, cacheRead, cacheWrite, total, source: 'table' }
+    (inputs.inputTokens ?? 0) -
+      (inputs.cacheReadInputTokens ?? 0) -
+      (inputs.cacheCreationInputTokens ?? 0),
+  );
+  const input = (billableInputTokens / 1_000_000) * entry.inputPerMTok;
+  const output = ((inputs.outputTokens ?? 0) / 1_000_000) * entry.outputPerMTok;
+  const total = input + output + cacheRead + cacheWrite;
+  return {
+    currency: 'USD',
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    total,
+    source: 'table',
+  };
 }

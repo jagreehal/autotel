@@ -7,9 +7,74 @@
  * Based on: https://opentelemetry.io/docs/specs/semconv/
  */
 
-import { trace } from './functional';
+import { withTracing } from './functional';
+import { assertTraceFactory } from './trace-factory-validation';
 import type { TraceContext } from './trace-context';
-import type { Attributes } from '@opentelemetry/api';
+import { SpanKind, type Attributes } from '@opentelemetry/api';
+
+type SemanticHandler<TArgs extends unknown[], TReturn> = (
+  ...args: TArgs
+) => TReturn | Promise<TReturn>;
+
+type SemanticFactory<TArgs extends unknown[], TReturn> = (
+  ctx: TraceContext,
+) => SemanticHandler<TArgs, TReturn>;
+
+function setConfiguredAttributes(
+  ctx: TraceContext,
+  attributes?: Attributes,
+): void {
+  if (!attributes) return;
+  for (const [key, value] of Object.entries(attributes)) {
+    if (value === undefined || value === null) continue;
+    const attributeValue =
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+        ? value
+        : JSON.stringify(value);
+    ctx.setAttribute(key, attributeValue);
+  }
+}
+
+/**
+ * Shared tail of `traceDB`/`traceHTTP`/`traceMessaging`: wrap `fn` directly
+ * when given, otherwise return the curried factory-acceptor form.
+ */
+function wrapSemantic<TArgs extends unknown[], TReturn>(
+  helperName: string,
+  name: string,
+  spanKind: SpanKind,
+  configure: (ctx: TraceContext) => void,
+  fn?: SemanticHandler<TArgs, TReturn>,
+):
+  | SemanticHandler<TArgs, TReturn>
+  | (<TFactoryArgs extends unknown[], TFactoryReturn>(
+      factory: SemanticFactory<TFactoryArgs, TFactoryReturn>,
+    ) => SemanticHandler<TFactoryArgs, TFactoryReturn>) {
+  if (fn) {
+    assertTraceFactory(helperName, fn);
+    return withTracing<TArgs, TReturn>({ name, spanKind })(
+      (ctx: TraceContext) => {
+        configure(ctx);
+        return fn;
+      },
+    );
+  }
+  return <TFactoryArgs extends unknown[], TFactoryReturn>(
+    factory: SemanticFactory<TFactoryArgs, TFactoryReturn>,
+  ) => {
+    assertTraceFactory(helperName, factory);
+    return withTracing<TFactoryArgs, TFactoryReturn>({ name, spanKind })(
+      (ctx: TraceContext) => {
+        configure(ctx);
+        const handler = factory(ctx);
+        assertTraceFactory(helperName, handler, 'result');
+        return handler;
+      },
+    );
+  };
+}
 
 /**
  * Configuration for database operations
@@ -26,6 +91,8 @@ export interface DBConfig {
   database?: string;
   /** Collection/table name */
   collection?: string;
+  /** Low-cardinality query summary used as the preferred span name */
+  querySummary?: string;
   /** Additional attributes to add to the span */
   attributes?: Attributes;
 }
@@ -41,6 +108,10 @@ export interface HTTPConfig {
   method?: string;
   /** Target URL or URL template */
   url?: string;
+  /** Low-cardinality server route used in the span name */
+  route?: string;
+  /** Low-cardinality client URL template used in the span name */
+  urlTemplate?: string;
   /** Additional attributes to add to the span */
   attributes?: Attributes;
 }
@@ -66,9 +137,9 @@ export interface MessagingConfig {
  * Trace database operations with DB semantic conventions
  *
  * Automatically adds standard attributes for database operations:
- * - db.system
- * - db.operation
- * - db.name
+ * - db.system.name
+ * - db.operation.name
+ * - db.namespace
  * - db.collection.name (for NoSQL)
  *
  * **Use Cases:**
@@ -88,11 +159,10 @@ export interface MessagingConfig {
  *   system: 'postgresql',
  *   operation: 'SELECT',
  *   database: 'app_db',
- *   collection: 'users'
+ *   collection: 'users',
+ *   querySummary: 'SELECT users'
  * })(ctx => async (userId: string) => {
  *   const query = 'SELECT * FROM users WHERE id = $1'
- *   ctx.setAttribute('db.statement', query)
- *
  *   const result = await pool.query(query, [userId])
  *   ctx.setAttribute('db.rows_affected', result.rowCount)
  *
@@ -161,42 +231,54 @@ export interface MessagingConfig {
  *
  * @public
  */
-export function traceDB<TArgs extends unknown[], TReturn>(config: DBConfig) {
-  return (
-    fnFactory: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
-  ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>((ctx) => {
-      // Set semantic convention attributes
-      ctx.setAttribute('db.system', config.system);
-      if (config.operation) {
-        ctx.setAttribute('db.operation', config.operation);
-      }
-      if (config.database) {
-        ctx.setAttribute('db.name', config.database);
-      }
-      if (config.collection) {
-        ctx.setAttribute('db.collection.name', config.collection);
-      }
-      if (config.attributes) {
-        for (const [key, value] of Object.entries(config.attributes)) {
-          if (value !== undefined && value !== null) {
-            // setAttribute only accepts primitives (string | number | boolean)
-            // Arrays and objects should be serialized
-            const attrValue =
-              typeof value === 'string' ||
-              typeof value === 'number' ||
-              typeof value === 'boolean'
-                ? value
-                : JSON.stringify(value);
-            ctx.setAttribute(key, attrValue);
-          }
-        }
-      }
-
-      // Call the user's factory to get their function and return it
-      return fnFactory(ctx);
-    });
+export function traceDB(
+  config: DBConfig,
+): <TArgs extends unknown[], TReturn>(
+  factory: SemanticFactory<TArgs, TReturn>,
+) => SemanticHandler<TArgs, TReturn>;
+export function traceDB<TArgs extends unknown[], TReturn>(
+  config: DBConfig,
+  fn: SemanticHandler<TArgs, TReturn>,
+): SemanticHandler<TArgs, TReturn>;
+export function traceDB<TArgs extends unknown[], TReturn>(
+  config: DBConfig,
+  fn?: SemanticHandler<TArgs, TReturn>,
+):
+  | SemanticHandler<TArgs, TReturn>
+  | (<TFactoryArgs extends unknown[], TFactoryReturn>(
+      factory: SemanticFactory<TFactoryArgs, TFactoryReturn>,
+    ) => SemanticHandler<TFactoryArgs, TFactoryReturn>) {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('traceDB: config must be an object');
+  }
+  if (typeof config.system !== 'string' || config.system.trim() === '') {
+    throw new TypeError('traceDB: config.system must be a non-empty string');
+  }
+  const target = config.collection ?? config.database;
+  const name =
+    config.querySummary ?? [config.operation, target].filter(Boolean).join(' ');
+  const spanName = name || config.system;
+  const configure = (ctx: TraceContext) => {
+    // Emit current stable names plus legacy aliases for dashboard compatibility.
+    ctx.setAttribute('db.system.name', config.system);
+    ctx.setAttribute('db.system', config.system);
+    if (config.operation) {
+      ctx.setAttribute('db.operation.name', config.operation);
+      ctx.setAttribute('db.operation', config.operation);
+    }
+    if (config.database) {
+      ctx.setAttribute('db.namespace', config.database);
+      ctx.setAttribute('db.name', config.database);
+    }
+    if (config.collection) {
+      ctx.setAttribute('db.collection.name', config.collection);
+    }
+    if (config.querySummary) {
+      ctx.setAttribute('db.query.summary', config.querySummary);
+    }
+    setConfiguredAttributes(ctx, config.attributes);
   };
+  return wrapSemantic('traceDB', spanName, SpanKind.CLIENT, configure, fn);
 }
 
 /**
@@ -220,7 +302,7 @@ export function traceDB<TArgs extends unknown[], TReturn>(config: DBConfig) {
  *
  * export const fetchUser = traceHTTP({
  *   method: 'GET',
- *   url: 'https://api.example.com/users/:id'
+ *   urlTemplate: '/users/{id}'
  * })(ctx => async (userId: string) => {
  *   const url = `https://api.example.com/users/${userId}`
  *   ctx.setAttribute('url.full', url)
@@ -267,40 +349,39 @@ export function traceDB<TArgs extends unknown[], TReturn>(config: DBConfig) {
  *
  * @public
  */
+export function traceHTTP(
+  config: HTTPConfig,
+): <TArgs extends unknown[], TReturn>(
+  factory: SemanticFactory<TArgs, TReturn>,
+) => SemanticHandler<TArgs, TReturn>;
 export function traceHTTP<TArgs extends unknown[], TReturn>(
   config: HTTPConfig,
-) {
-  return (
-    fnFactory: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
-  ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>((ctx) => {
-      // Set semantic convention attributes
-      if (config.method) {
-        ctx.setAttribute('http.request.method', config.method);
-      }
-      if (config.url) {
-        ctx.setAttribute('url.full', config.url);
-      }
-      if (config.attributes) {
-        for (const [key, value] of Object.entries(config.attributes)) {
-          if (value !== undefined && value !== null) {
-            // setAttribute only accepts primitives (string | number | boolean)
-            // Arrays and objects should be serialized
-            const attrValue =
-              typeof value === 'string' ||
-              typeof value === 'number' ||
-              typeof value === 'boolean'
-                ? value
-                : JSON.stringify(value);
-            ctx.setAttribute(key, attrValue);
-          }
-        }
-      }
-
-      // Call the user's factory to get their function and return it
-      return fnFactory(ctx);
-    });
+  fn: SemanticHandler<TArgs, TReturn>,
+): SemanticHandler<TArgs, TReturn>;
+export function traceHTTP<TArgs extends unknown[], TReturn>(
+  config: HTTPConfig,
+  fn?: SemanticHandler<TArgs, TReturn>,
+):
+  | SemanticHandler<TArgs, TReturn>
+  | (<TFactoryArgs extends unknown[], TFactoryReturn>(
+      factory: SemanticFactory<TFactoryArgs, TFactoryReturn>,
+    ) => SemanticHandler<TFactoryArgs, TFactoryReturn>) {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('traceHTTP: config must be an object');
+  }
+  const method = config.method?.toUpperCase() || 'HTTP';
+  const target = config.route ?? config.urlTemplate;
+  const spanName = target ? `${method} ${target}` : method;
+  const configure = (ctx: TraceContext) => {
+    if (config.method) ctx.setAttribute('http.request.method', method);
+    if (config.url) ctx.setAttribute('url.full', config.url);
+    if (config.route) ctx.setAttribute('http.route', config.route);
+    if (config.urlTemplate) {
+      ctx.setAttribute('url.template', config.urlTemplate);
+    }
+    setConfiguredAttributes(ctx, config.attributes);
   };
+  return wrapSemantic('traceHTTP', spanName, SpanKind.CLIENT, configure, fn);
 }
 
 /**
@@ -400,39 +481,53 @@ export function traceHTTP<TArgs extends unknown[], TReturn>(
  *
  * @public
  */
+export function traceMessaging(
+  config: MessagingConfig,
+): <TArgs extends unknown[], TReturn>(
+  factory: SemanticFactory<TArgs, TReturn>,
+) => SemanticHandler<TArgs, TReturn>;
 export function traceMessaging<TArgs extends unknown[], TReturn>(
   config: MessagingConfig,
-) {
-  return (
-    fnFactory: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
-  ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>((ctx) => {
-      // Set semantic convention attributes
-      ctx.setAttribute('messaging.system', config.system);
-      if (config.operation) {
-        ctx.setAttribute('messaging.operation', config.operation);
-      }
-      if (config.destination) {
-        ctx.setAttribute('messaging.destination.name', config.destination);
-      }
-      if (config.attributes) {
-        for (const [key, value] of Object.entries(config.attributes)) {
-          if (value !== undefined && value !== null) {
-            // setAttribute only accepts primitives (string | number | boolean)
-            // Arrays and objects should be serialized
-            const attrValue =
-              typeof value === 'string' ||
-              typeof value === 'number' ||
-              typeof value === 'boolean'
-                ? value
-                : JSON.stringify(value);
-            ctx.setAttribute(key, attrValue);
-          }
-        }
-      }
-
-      // Call the user's factory to get their function and return it
-      return fnFactory(ctx);
-    });
+  fn: SemanticHandler<TArgs, TReturn>,
+): SemanticHandler<TArgs, TReturn>;
+export function traceMessaging<TArgs extends unknown[], TReturn>(
+  config: MessagingConfig,
+  fn?: SemanticHandler<TArgs, TReturn>,
+):
+  | SemanticHandler<TArgs, TReturn>
+  | (<TFactoryArgs extends unknown[], TFactoryReturn>(
+      factory: SemanticFactory<TFactoryArgs, TFactoryReturn>,
+    ) => SemanticHandler<TFactoryArgs, TFactoryReturn>) {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('traceMessaging: config must be an object');
+  }
+  if (typeof config.system !== 'string' || config.system.trim() === '') {
+    throw new TypeError(
+      'traceMessaging: config.system must be a non-empty string',
+    );
+  }
+  const operation = config.operation ?? 'messaging';
+  const spanName = [operation, config.destination].filter(Boolean).join(' ');
+  const operationType = operation === 'publish' ? 'send' : operation;
+  const spanKind =
+    operation === 'publish'
+      ? SpanKind.PRODUCER
+      : operation === 'process'
+        ? SpanKind.CONSUMER
+        : operation === 'receive'
+          ? SpanKind.CLIENT
+          : SpanKind.INTERNAL;
+  const configure = (ctx: TraceContext) => {
+    ctx.setAttribute('messaging.system', config.system);
+    if (config.operation) {
+      ctx.setAttribute('messaging.operation.name', config.operation);
+      ctx.setAttribute('messaging.operation.type', operationType);
+      ctx.setAttribute('messaging.operation', config.operation);
+    }
+    if (config.destination) {
+      ctx.setAttribute('messaging.destination.name', config.destination);
+    }
+    setConfiguredAttributes(ctx, config.attributes);
   };
+  return wrapSemantic('traceMessaging', spanName, spanKind, configure, fn);
 }

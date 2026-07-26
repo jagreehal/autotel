@@ -26,7 +26,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { MessageConsumerPact } from '@pact-foundation/pact';
-import { init, shutdown, trace } from 'autotel';
+import { init, shutdown, span } from 'autotel';
 import {
   appendLedgerEntry,
   createPactLedgerProcessor,
@@ -116,11 +116,15 @@ const OrderShippedMessage = z.object({
 });
 type OrderShippedMessage = z.infer<typeof OrderShippedMessage>;
 
-function handleOrderCreated(message: OrderCreatedMessage): { processed: string } {
+function handleOrderCreated(message: OrderCreatedMessage): {
+  processed: string;
+} {
   return { processed: message.orderId };
 }
 
-function handleOrderShipped(message: OrderShippedMessage): { dispatched: string } {
+function handleOrderShipped(message: OrderShippedMessage): {
+  dispatched: string;
+} {
   return { dispatched: `${message.orderId} via ${message.carrier}` };
 }
 
@@ -142,7 +146,8 @@ async function exerciseOrderCreated(): Promise<void> {
 
   await withPactInteraction(
     pact,
-    (message) => handleOrderCreated(OrderCreatedMessage.parse(message.contents)),
+    (message) =>
+      handleOrderCreated(OrderCreatedMessage.parse(message.contents)),
     {
       dir: LEDGER_DIR,
       runId: RUN_ID,
@@ -166,7 +171,8 @@ async function exerciseOrderShipped(): Promise<void> {
 
   await withPactInteraction(
     pact,
-    (message) => handleOrderShipped(OrderShippedMessage.parse(message.contents)),
+    (message) =>
+      handleOrderShipped(OrderShippedMessage.parse(message.contents)),
     {
       dir: LEDGER_DIR,
       runId: RUN_ID,
@@ -254,7 +260,7 @@ async function runProviderVerification(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function simulateProductionObservation(): Promise<void> {
-  await trace('handleOrderCreated', () => {
+  await span('handleOrderCreated', () => {
     tagPactInteraction({
       consumer: 'OrderShipper',
       provider: 'OrderService',
@@ -293,13 +299,17 @@ function mergeProdLedger(): void {
 // ---------------------------------------------------------------------------
 
 function statusBadge(row: AuditMatrix['rows'][number]): string {
-  if (row.contracted && row.test_seen) return `${COLOR.green}✅ OK    ${COLOR.reset}`;
-  if (row.contracted && !row.test_seen) return `${COLOR.yellow}⚠️  STALE ${COLOR.reset}`;
+  if (row.contracted && row.test_seen)
+    return `${COLOR.green}✅ OK    ${COLOR.reset}`;
+  if (row.contracted && !row.test_seen)
+    return `${COLOR.yellow}⚠️  STALE ${COLOR.reset}`;
   return `${COLOR.magenta}👻 SHADOW${COLOR.reset}`;
 }
 
 function yesno(value: boolean): string {
-  return value ? `${COLOR.green}yes${COLOR.reset}` : `${COLOR.dim} no${COLOR.reset}`;
+  return value
+    ? `${COLOR.green}yes${COLOR.reset}`
+    : `${COLOR.dim} no${COLOR.reset}`;
 }
 
 function printMatrix(matrix: AuditMatrix): void {
@@ -322,8 +332,12 @@ function printMatrix(matrix: AuditMatrix): void {
   console.log(`  Contracted:                  ${matrix.counts.contracted}`);
   console.log(`  Seen in test:                ${matrix.counts.test_seen}`);
   console.log(`  Seen in production:          ${matrix.counts.prod_seen}`);
-  console.log(`  Provider verified:           ${matrix.counts.provider_verified}`);
-  console.log(`  Contracted AND seen in test: ${matrix.counts.contracted_and_test_seen}`);
+  console.log(
+    `  Provider verified:           ${matrix.counts.provider_verified}`,
+  );
+  console.log(
+    `  Contracted AND seen in test: ${matrix.counts.contracted_and_test_seen}`,
+  );
   console.log(
     `  Contracted, NOT seen in test:${COLOR.yellow}${matrix.counts.contracted_not_test_seen}${COLOR.reset}  ← stale confidence`,
   );
@@ -351,17 +365,33 @@ function assertMatrix(matrix: AuditMatrix): void {
   assert.equal(created.contracted, true, 'OrderCreated should be contracted');
   assert.equal(created.test_seen, true, 'OrderCreated should be test_seen');
   assert.equal(created.prod_seen, true, 'OrderCreated should be prod_seen');
-  assert.equal(created.provider_verified, true, 'OrderCreated should be provider_verified');
+  assert.equal(
+    created.provider_verified,
+    true,
+    'OrderCreated should be provider_verified',
+  );
 
   const shipped = row('an OrderShipped event');
   assert.equal(shipped.test_seen, true);
-  assert.equal(shipped.prod_seen, false, 'OrderShipped was not tagged in production');
+  assert.equal(
+    shipped.prod_seen,
+    false,
+    'OrderShipped was not tagged in production',
+  );
   assert.equal(shipped.provider_verified, true);
 
   const refunded = row('an OrderRefunded event');
-  assert.equal(refunded.contracted, true, 'OrderRefunded comes from the injected pact entry');
+  assert.equal(
+    refunded.contracted,
+    true,
+    'OrderRefunded comes from the injected pact entry',
+  );
   assert.equal(refunded.test_seen, false, 'OrderRefunded is the STALE row');
-  assert.equal(refunded.provider_verified, true, 'stub provider verify covers all interactions');
+  assert.equal(
+    refunded.provider_verified,
+    true,
+    'stub provider verify covers all interactions',
+  );
 
   const shadow = row('an InventoryReserved event');
   assert.equal(shadow.contracted, false, 'InventoryReserved has no pact entry');
@@ -384,14 +414,20 @@ async function runDemo(): Promise<void> {
   console.log('autotel-pact demo — runtime evidence for Pact contracts (v0.2)');
   console.log('='.repeat(96));
 
-  console.log('\n  ▶ Running 2 contracted interactions through withPactInteraction()');
+  console.log(
+    '\n  ▶ Running 2 contracted interactions through withPactInteraction()',
+  );
   await exerciseOrderCreated();
   await exerciseOrderShipped();
 
-  console.log('  ▶ Injecting a stale pact entry (contract exists, nothing exercised it)');
+  console.log(
+    '  ▶ Injecting a stale pact entry (contract exists, nothing exercised it)',
+  );
   injectStalePactFile();
 
-  console.log('  ▶ Recording a SHADOW observation (runtime fires, no contract)');
+  console.log(
+    '  ▶ Recording a SHADOW observation (runtime fires, no contract)',
+  );
   recordShadowObservation();
 
   console.log('  ▶ Running provider verification (skipVerifier: true)');
@@ -416,7 +452,9 @@ async function runDemo(): Promise<void> {
 
   console.log('\nEquivalent CLI:');
   console.log('  pnpm pact:audit             # show the matrix');
-  console.log('  pnpm pact:audit:gate        # fail CI if any interaction is STALE');
+  console.log(
+    '  pnpm pact:audit:gate        # fail CI if any interaction is STALE',
+  );
   console.log('  pnpm pact:audit:broker      # also require Pact Broker proof');
 
   await shutdown();

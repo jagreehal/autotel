@@ -3,18 +3,18 @@
  *
  * @example Minimal setup
  * ```typescript
- * import { init, trace, track } from 'autotel'
+ * import { init, trace, withTracing, track } from 'autotel'
  *
  * init({ service: 'my-app' })
  *
- * export const createUser = trace(ctx => async (data: CreateUserData) => {
+ * export const createUser = withTracing({})(ctx => async (data: CreateUserData) => {
  *   track('user.signup', { userId: data.id, plan: data.plan })
  * })
  * ```
  *
  * @example With events
  * ```typescript
- * import { init, trace, track } from 'autotel'
+ * import { init, trace, withTracing, track } from 'autotel'
  * import { PostHogSubscriber } from 'autotel-subscribers'
  *
  * init({
@@ -22,7 +22,7 @@
  *   subscribers: [new PostHogSubscriber({ apiKey: '...' })]
  * })
  *
- * export const createUser = trace(ctx => async (data: CreateUserData) => {
+ * export const createUser = withTracing({})(ctx => async (data: CreateUserData) => {
  *   track('user.signup', { userId: data.id })
  * })
  * ```
@@ -89,6 +89,7 @@ export type {
   WithNewContextOptions,
   WithBaggageOptions,
   InstrumentOptions,
+  SingleInstrumentOptions,
 } from './functional';
 export {
   instrument,
@@ -97,7 +98,7 @@ export {
   withNewContext,
   withBaggage,
   ctx,
-  markAsImmediate,
+  getActiveTraceContext,
 } from './functional';
 // `trace` is the hybrid: callable like autotel's `trace(fn)` AND carries the
 // full `@opentelemetry/api` TraceAPI surface (getActiveSpan, getTracer, etc).

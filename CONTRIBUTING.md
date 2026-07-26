@@ -13,22 +13,26 @@ Thank you for your interest in contributing to Autotel! This guide will help you
 ### Getting Started
 
 1. **Fork and clone the repository:**
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/autotel.git
    cd autotel
    ```
 
 2. **Install dependencies:**
+
    ```bash
    pnpm install
    ```
 
 3. **Build all packages:**
+
    ```bash
    pnpm build
    ```
 
 4. **Run tests:**
+
    ```bash
    pnpm test
    ```
@@ -66,6 +70,7 @@ git checkout -b fix/bug-description
 ```
 
 Branch naming conventions:
+
 - `feature/*` - New features
 - `fix/*` - Bug fixes
 - `docs/*` - Documentation only
@@ -103,6 +108,7 @@ git commit -m "docs(readme): update installation instructions"
 ```
 
 **Commit types:**
+
 - `feat:` - New feature
 - `fix:` - Bug fix
 - `docs:` - Documentation changes
@@ -112,6 +118,7 @@ git commit -m "docs(readme): update installation instructions"
 - `perf:` - Performance improvements
 
 **Scope examples:**
+
 - `core` - autotel package
 - `adapters` - autotel-subscribers package
 - `edge` - autotel-edge package
@@ -126,6 +133,7 @@ pnpm changeset
 ```
 
 Follow the prompts:
+
 1. Select which packages changed (autotel, autotel-subscribers, autotel-edge)
 2. Choose the semver bump type:
    - **Patch** (0.0.x) - Bug fixes, docs
@@ -134,10 +142,11 @@ Follow the prompts:
 3. Write a summary of your changes
 
 **Example changeset:**
+
 ```markdown
 ---
-"autotel": minor
-"autotel-subscribers": minor
+'autotel': minor
+'autotel-subscribers': minor
 ---
 
 Add Slack webhook adapter for sending events to Slack channels
@@ -150,6 +159,7 @@ git push origin feature/my-feature
 ```
 
 Then open a pull request on GitHub with:
+
 - **Clear title** describing the change
 - **Description** explaining what and why
 - **Related issues** (if applicable)
@@ -170,9 +180,9 @@ Then open a pull request on GitHub with:
  */
 export interface PostHogConfig {
   /** PostHog API key (starts with 'phc_') */
-  apiKey: string
+  apiKey: string;
   /** PostHog instance URL (default: 'https://us.i.posthog.com') */
-  host?: string
+  host?: string;
 }
 ```
 
@@ -186,12 +196,12 @@ export interface PostHogConfig {
 describe('trace()', () => {
   it('should create a span with the function name', () => {
     // Test implementation
-  })
+  });
 
   it('should propagate context to nested spans', () => {
     // Test implementation
-  })
-})
+  });
+});
 ```
 
 ### Documentation
@@ -219,7 +229,7 @@ describe('trace()', () => {
 
 ```typescript
 export class MyAdapter extends EventsAdapter {
-  readonly name = 'MyAdapter'
+  readonly name = 'MyAdapter';
 
   protected async sendToDestination(payload: AdapterPayload): Promise<void> {
     // Implementation
@@ -259,6 +269,7 @@ export class MyAdapter extends EventsAdapter {
 **For Maintainers:**
 
 1. **Create a version PR:**
+
    ```bash
    pnpm changeset version
    ```

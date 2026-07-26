@@ -1,4 +1,6 @@
-import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
+import type { LogRecordProcessor, SdkLogRecord } from '@opentelemetry/sdk-logs';
+import type { Context } from '@opentelemetry/api';
+import type { AnyValue } from '@opentelemetry/api-logs';
 import { safeRequire } from './node-require';
 import type { StringRedactor } from './redact-values';
 
@@ -8,7 +10,7 @@ export class RedactingLogRecordProcessor implements LogRecordProcessor {
     private redact: StringRedactor,
   ) {}
 
-  onEmit(logRecord: any, context?: any): void {
+  onEmit(logRecord: SdkLogRecord, context?: Context): void {
     if (logRecord.body && typeof logRecord.body === 'string') {
       logRecord.body = this.redact(logRecord.body);
     }
@@ -17,7 +19,7 @@ export class RedactingLogRecordProcessor implements LogRecordProcessor {
         if (typeof value === 'string') {
           logRecord.attributes[key] = this.redact(value);
         } else if (Array.isArray(value)) {
-          logRecord.attributes[key] = value.map((item: unknown) =>
+          logRecord.attributes[key] = value.map((item: AnyValue) =>
             typeof item === 'string' ? this.redact(item) : item,
           );
         }
@@ -56,7 +58,9 @@ export function buildPostHogLogProcessors(
   if (!url) return [];
 
   const sdkLogs = safeRequire<{
-    BatchLogRecordProcessor: new (exporter: unknown) => LogRecordProcessor;
+    BatchLogRecordProcessor: new (options: {
+      exporter: unknown;
+    }) => LogRecordProcessor;
   }>('@opentelemetry/sdk-logs');
 
   const exporterModule = safeRequire<{
@@ -66,9 +70,9 @@ export function buildPostHogLogProcessors(
   if (!sdkLogs || !exporterModule) return [];
 
   const exporter = new exporterModule.OTLPLogExporter({ url });
-  let processor: LogRecordProcessor = new sdkLogs.BatchLogRecordProcessor(
+  let processor: LogRecordProcessor = new sdkLogs.BatchLogRecordProcessor({
     exporter,
-  );
+  });
   if (stringRedactor) {
     processor = new RedactingLogRecordProcessor(processor, stringRedactor);
   }

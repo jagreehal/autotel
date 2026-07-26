@@ -11,7 +11,11 @@
  * but `enabledInProduction` is there if you want a sampled canary in prod.
  */
 
-import { validateSpan, type SchemaViolation, type ValidateOptions } from './validate.js';
+import {
+  validateSpan,
+  type SchemaViolation,
+  type ValidateOptions,
+} from './validate.js';
 import type { TelemetryContract } from './contract.js';
 
 /** Minimal ReadableSpan shape — matches OTel without a hard SDK dependency. */

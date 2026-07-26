@@ -11,7 +11,10 @@ import type { SpanContext } from '@opentelemetry/api';
 export interface LambdaEvent {
   headers?: Record<string, string>;
   Records?: Array<{
-    messageAttributes?: Record<string, { DataType: string; StringValue?: string }>;
+    messageAttributes?: Record<
+      string,
+      { DataType: string; StringValue?: string }
+    >;
     Sns?: {
       MessageAttributes?: Record<string, { Type: string; Value?: string }>;
     };

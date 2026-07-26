@@ -24,14 +24,14 @@ track('order.completed', { userId: 'user-123', amount: 99.99 });
 
 ## Subscribers and import paths
 
-| Platform   | Import path                      | Peer dependency           |
-|-----------|-----------------------------------|----------------------------|
-| PostHog   | `autotel-subscribers/posthog`     | posthog-node (optional)    |
-| Mixpanel  | `autotel-subscribers/mixpanel`    | mixpanel (optional)        |
-| Amplitude | `autotel-subscribers/amplitude`   | @amplitude/analytics-node  |
-| Segment   | `autotel-subscribers/segment`     | @segment/analytics-node    |
-| Webhook   | `autotel-subscribers/webhook`     | none                       |
-| Slack     | `autotel-subscribers/slack`       | none                       |
+| Platform  | Import path                     | Peer dependency           |
+| --------- | ------------------------------- | ------------------------- |
+| PostHog   | `autotel-subscribers/posthog`   | posthog-node (optional)   |
+| Mixpanel  | `autotel-subscribers/mixpanel`  | mixpanel (optional)       |
+| Amplitude | `autotel-subscribers/amplitude` | @amplitude/analytics-node |
+| Segment   | `autotel-subscribers/segment`   | @segment/analytics-node   |
+| Webhook   | `autotel-subscribers/webhook`   | none                      |
+| Slack     | `autotel-subscribers/slack`     | none                      |
 
 Install the peer dependency for the subscriber you use (e.g. `pnpm add posthog-node` for PostHog).
 

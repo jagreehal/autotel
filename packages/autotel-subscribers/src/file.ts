@@ -8,7 +8,7 @@
  *
  * @example
  * ```typescript
- * import { Event } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { FileSubscriber } from 'autotel-subscribers/file';
  *
  * const events = new Event('worker', {

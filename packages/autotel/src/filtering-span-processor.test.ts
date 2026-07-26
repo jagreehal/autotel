@@ -149,7 +149,7 @@ describe('FilteringSpanProcessor', () => {
       filteringProcessor.onEnd(autotelSpan);
 
       expect(mockProcessor.endedSpans).toHaveLength(1);
-      expect(mockProcessor.endedSpans[0].instrumentationScope.name).toBe(
+      expect(mockProcessor.endedSpans[0]!.instrumentationScope.name).toBe(
         'autotel',
       );
     });
@@ -172,7 +172,7 @@ describe('FilteringSpanProcessor', () => {
       filteringProcessor.onEnd(createMockSpan('span3', 'autotel'));
 
       expect(mockProcessor.endedSpans).toHaveLength(1);
-      expect(mockProcessor.endedSpans[0].name).toBe('span3');
+      expect(mockProcessor.endedSpans[0]!.name).toBe('span3');
     });
   });
 
@@ -235,7 +235,7 @@ describe('FilteringSpanProcessor', () => {
       );
 
       expect(mockProcessor.endedSpans).toHaveLength(1);
-      expect(mockProcessor.endedSpans[0].name).toBe('GET /api/users');
+      expect(mockProcessor.endedSpans[0]!.name).toBe('GET /api/users');
     });
 
     it('should support span name pattern matching', () => {
@@ -250,7 +250,7 @@ describe('FilteringSpanProcessor', () => {
       filteringProcessor.onEnd(createMockSpan('createUser'));
 
       expect(mockProcessor.endedSpans).toHaveLength(1);
-      expect(mockProcessor.endedSpans[0].name).toBe('createUser');
+      expect(mockProcessor.endedSpans[0]!.name).toBe('createUser');
     });
 
     it('should support combining multiple filter conditions', () => {

@@ -1,13 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import {
-  test,
-  expect,
-  beforeAll,
-  afterAll,
-  describe,
-} from '../src/index';
+import { test, expect, beforeAll, afterAll, describe } from '../src/index';
 import { injectTraceContext } from 'autotel/http';
 
 const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3399';
@@ -18,7 +12,12 @@ async function canListenOnLoopback(): Promise<boolean> {
     const server = createServer();
 
     server.once('error', (error) => {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'EPERM') {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'EPERM'
+      ) {
         resolve(false);
         return;
       }

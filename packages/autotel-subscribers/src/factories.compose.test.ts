@@ -25,16 +25,35 @@ class StubSubscriber implements EventSubscriber {
     }
   }
 
-  async trackEvent(_name: string, _attributes?: EventAttributes, _options?: EventTrackingOptions): Promise<void> {
+  async trackEvent(
+    _name: string,
+    _attributes?: EventAttributes,
+    _options?: EventTrackingOptions,
+  ): Promise<void> {
     await this.run();
   }
-  async trackFunnelStep(_funnel: string, _step: FunnelStatus, _attributes?: EventAttributes, _options?: EventTrackingOptions): Promise<void> {
+  async trackFunnelStep(
+    _funnel: string,
+    _step: FunnelStatus,
+    _attributes?: EventAttributes,
+    _options?: EventTrackingOptions,
+  ): Promise<void> {
     await this.run();
   }
-  async trackOutcome(_operation: string, _outcome: OutcomeStatus, _attributes?: EventAttributes, _options?: EventTrackingOptions): Promise<void> {
+  async trackOutcome(
+    _operation: string,
+    _outcome: OutcomeStatus,
+    _attributes?: EventAttributes,
+    _options?: EventTrackingOptions,
+  ): Promise<void> {
     await this.run();
   }
-  async trackValue(_name: string, _value: number, _attributes?: EventAttributes, _options?: EventTrackingOptions): Promise<void> {
+  async trackValue(
+    _name: string,
+    _value: number,
+    _attributes?: EventAttributes,
+    _options?: EventTrackingOptions,
+  ): Promise<void> {
     await this.run();
   }
 }

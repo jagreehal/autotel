@@ -58,7 +58,9 @@ describe('extractDbInfo', () => {
 describe('highlightSql', () => {
   it('tags SQL keywords as keyword segments, preserving original casing', () => {
     const tokens = highlightSql('select id from users');
-    const keywords = tokens.filter((t) => t.kind === 'keyword').map((t) => t.text);
+    const keywords = tokens
+      .filter((t) => t.kind === 'keyword')
+      .map((t) => t.text);
     expect(keywords).toEqual(['select', 'from']);
     // Reassembling the tokens reproduces the original string exactly.
     expect(tokens.map((t) => t.text).join('')).toBe('select id from users');
@@ -77,8 +79,8 @@ describe('highlightSql', () => {
   it('does not treat substrings of identifiers as keywords', () => {
     const tokens = highlightSql('SELECT format FROM t');
     // "format" contains "for"/"from"-like fragments but must stay plain text.
-    expect(tokens.some((t) => t.kind === 'keyword' && t.text === 'format')).toBe(
-      false,
-    );
+    expect(
+      tokens.some((t) => t.kind === 'keyword' && t.text === 'format'),
+    ).toBe(false);
   });
 });

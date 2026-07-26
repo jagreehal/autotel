@@ -50,10 +50,13 @@ function hrTimeToMs(hrTime: [number, number]): number {
   return hrTime[0] * 1000 + hrTime[1] / 1e6;
 }
 
-function bodyToPayload(body: ReadableLogRecord['body']): string | Record<string, unknown> {
+function bodyToPayload(
+  body: ReadableLogRecord['body'],
+): string | Record<string, unknown> {
   if (body === undefined) return '';
   if (typeof body === 'string') return body;
-  if (typeof body === 'object' && body !== null) return body as Record<string, unknown>;
+  if (typeof body === 'object' && body !== null)
+    return body as Record<string, unknown>;
   return String(body);
 }
 
@@ -61,12 +64,15 @@ function recordToLogData(record: ReadableLogRecord, index: number): LogData {
   const id = `log-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 9)}`;
   const timestamp = hrTimeToMs(record.hrTime);
   const body = bodyToPayload(record.body);
-  const attributes = record.attributes && Object.keys(record.attributes).length > 0
-    ? (record.attributes as Record<string, unknown>)
-    : undefined;
-  const resource = record.resource?.attributes && Object.keys(record.resource.attributes).length > 0
-    ? (record.resource.attributes as Record<string, unknown>)
-    : undefined;
+  const attributes =
+    record.attributes && Object.keys(record.attributes).length > 0
+      ? (record.attributes as Record<string, unknown>)
+      : undefined;
+  const resource =
+    record.resource?.attributes &&
+    Object.keys(record.resource.attributes).length > 0
+      ? (record.resource.attributes as Record<string, unknown>)
+      : undefined;
 
   const log: LogData = {
     id,
@@ -99,7 +105,10 @@ export class DevtoolsLogExporter implements LogRecordExporter {
     this.timeout = options.timeout ?? defaultTimeout;
   }
 
-  export(logs: ReadableLogRecord[], resultCallback: (result: ExportResult) => void): void {
+  export(
+    logs: ReadableLogRecord[],
+    resultCallback: (result: ExportResult) => void,
+  ): void {
     if (this.isShutdown || logs.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS });
       return;
@@ -126,7 +135,9 @@ export class DevtoolsLogExporter implements LogRecordExporter {
       .then((res) => {
         clearTimeout(timeoutId);
         if (!res.ok) {
-          throw new Error(`Devtools log ingest failed: ${res.status} ${res.statusText}`);
+          throw new Error(
+            `Devtools log ingest failed: ${res.status} ${res.statusText}`,
+          );
         }
         resultCallback({ code: ExportResultCode.SUCCESS });
       })

@@ -23,7 +23,9 @@ console.log('\n📦 Requiring pg module AFTER init...');
 const pg = require('pg');
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/postgres';
+  const connectionString =
+    process.env.DATABASE_URL ||
+    'postgresql://test:test@localhost:5432/postgres';
   const client = new pg.Client({ connectionString });
 
   try {
@@ -41,7 +43,6 @@ async function main() {
     console.log('\n🎉 CJS Test Complete!');
     console.log('📊 Check output above for spans');
     console.log('Expected: pg.connect and pg.query spans');
-
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {

@@ -44,7 +44,11 @@ function firstNumber(
   for (const key of keys) {
     const v = attributes[key];
     if (typeof v === 'number' && Number.isFinite(v)) return v;
-    if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) {
+    if (
+      typeof v === 'string' &&
+      v.trim() !== '' &&
+      Number.isFinite(Number(v))
+    ) {
       return Number(v);
     }
   }

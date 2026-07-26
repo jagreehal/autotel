@@ -19,20 +19,13 @@
  */
 
 import type { TraceContext } from 'autotel';
-import {
-  genAiUsageAttributes,
-  type GenAiAttributeMap,
-} from './attributes.js';
+import { genAiUsageAttributes, type GenAiAttributeMap } from './attributes.js';
 import {
   estimateLLMCost,
   type EstimateCostOptions,
   type TokenUsage,
 } from './cost.js';
-import {
-  GEN_AI,
-  GEN_AI_PROVIDER,
-  type GenAiProviderName,
-} from './semconv.js';
+import { GEN_AI, GEN_AI_PROVIDER, type GenAiProviderName } from './semconv.js';
 
 /** Legacy AI SDK (`LegacyOpenTelemetry`) attribute keys we understand. */
 export const AI_SDK_ATTR = {
@@ -79,7 +72,9 @@ export function normalizeAiSdkProvider(provider: string): GenAiProviderName {
 }
 
 function num(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function str(value: unknown): string | undefined {
@@ -135,7 +130,8 @@ export function extractAiSdkModel(
   attributes: Record<string, unknown>,
 ): string | undefined {
   return (
-    str(attributes[GEN_AI.REQUEST_MODEL]) ?? str(attributes[AI_SDK_ATTR.MODEL_ID])
+    str(attributes[GEN_AI.REQUEST_MODEL]) ??
+    str(attributes[AI_SDK_ATTR.MODEL_ID])
   );
 }
 
@@ -215,12 +211,7 @@ export const AUTOTEL_ENRICHED_ATTR = 'autotel.enriched';
 
 /** Span kinds the `@ai-sdk/otel` `OpenTelemetry` integration emits. */
 export type AiSdkSpanType =
-  | 'operation'
-  | 'step'
-  | 'languageModel'
-  | 'tool'
-  | 'embedding'
-  | 'reranking';
+  'operation' | 'step' | 'languageModel' | 'tool' | 'embedding' | 'reranking';
 
 /** The context `@ai-sdk/otel` passes to an `enrichSpan` callback. */
 export interface AiSdkEnrichContext {

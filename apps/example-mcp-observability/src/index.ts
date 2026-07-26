@@ -21,7 +21,7 @@
 
 import 'dotenv/config';
 import express from 'express';
-import { init, trace, span, type TraceContext } from 'autotel';
+import { init, span, type TraceContext, withTracing } from 'autotel';
 
 // Initialize autotel to export to local Jaeger
 init({
@@ -37,119 +37,136 @@ app.use(express.json());
 // Simulated Database Operations
 // ============================================================================
 
-const queryUsers = trace((ctx: TraceContext) => async (filters: Record<string, unknown>) => {
-  ctx.setAttribute('db.system', 'postgresql');
-  ctx.setAttribute('db.operation', 'SELECT');
-  ctx.setAttribute('db.table', 'users');
-  ctx.setAttribute('db.filters', JSON.stringify(filters));
+const queryUsers = withTracing({})(
+  (ctx: TraceContext) => async (filters: Record<string, unknown>) => {
+    ctx.setAttribute('db.system', 'postgresql');
+    ctx.setAttribute('db.operation', 'SELECT');
+    ctx.setAttribute('db.table', 'users');
+    ctx.setAttribute('db.filters', JSON.stringify(filters));
 
-  // Simulate varying query times
-  const queryTime = Math.random() * 150;
-  await new Promise(resolve => setTimeout(resolve, queryTime));
+    // Simulate varying query times
+    const queryTime = Math.random() * 150;
+    await new Promise((resolve) => setTimeout(resolve, queryTime));
 
-  ctx.setAttribute('db.query_time_ms', queryTime);
-  ctx.setAttribute('db.rows_returned', 5);
+    ctx.setAttribute('db.query_time_ms', queryTime);
+    ctx.setAttribute('db.rows_returned', 5);
 
-  return [
-    { id: '1', name: 'Alice', role: 'admin' },
-    { id: '2', name: 'Bob', role: 'user' },
-    { id: '3', name: 'Charlie', role: 'user' },
-  ];
-});
+    return [
+      { id: '1', name: 'Alice', role: 'admin' },
+      { id: '2', name: 'Bob', role: 'user' },
+      { id: '3', name: 'Charlie', role: 'user' },
+    ];
+  },
+);
 
-const queryOrders = trace((ctx: TraceContext) => async (userId: string) => {
-  ctx.setAttribute('db.system', 'postgresql');
-  ctx.setAttribute('db.operation', 'SELECT');
-  ctx.setAttribute('db.table', 'orders');
-  ctx.setAttribute('db.user_id', userId);
+const queryOrders = withTracing({})(
+  (ctx: TraceContext) => async (userId: string) => {
+    ctx.setAttribute('db.system', 'postgresql');
+    ctx.setAttribute('db.operation', 'SELECT');
+    ctx.setAttribute('db.table', 'orders');
+    ctx.setAttribute('db.user_id', userId);
 
-  // Simulate slow query occasionally
-  const isSlow = Math.random() > 0.7;
-  const queryTime = isSlow ? 200 + Math.random() * 300 : 30 + Math.random() * 70;
+    // Simulate slow query occasionally
+    const isSlow = Math.random() > 0.7;
+    const queryTime = isSlow
+      ? 200 + Math.random() * 300
+      : 30 + Math.random() * 70;
 
-  await new Promise(resolve => setTimeout(resolve, queryTime));
+    await new Promise((resolve) => setTimeout(resolve, queryTime));
 
-  ctx.setAttribute('db.query_time_ms', queryTime);
-  ctx.setAttribute('db.slow_query', isSlow);
-  ctx.setAttribute('db.rows_returned', 3);
+    ctx.setAttribute('db.query_time_ms', queryTime);
+    ctx.setAttribute('db.slow_query', isSlow);
+    ctx.setAttribute('db.rows_returned', 3);
 
-  return [
-    { id: 'order-1', userId, amount: 99.99, status: 'completed' },
-    { id: 'order-2', userId, amount: 149.99, status: 'pending' },
-  ];
-});
+    return [
+      { id: 'order-1', userId, amount: 99.99, status: 'completed' },
+      { id: 'order-2', userId, amount: 149.99, status: 'pending' },
+    ];
+  },
+);
 
 // ============================================================================
 // Simulated External API Calls
 // ============================================================================
 
-const callPaymentGateway = trace((ctx: TraceContext) => async (amount: number) => {
-  ctx.setAttribute('payment.gateway', 'stripe');
-  ctx.setAttribute('payment.amount', amount);
-  ctx.setAttribute('payment.currency', 'USD');
+const callPaymentGateway = withTracing({})(
+  (ctx: TraceContext) => async (amount: number) => {
+    ctx.setAttribute('payment.gateway', 'stripe');
+    ctx.setAttribute('payment.amount', amount);
+    ctx.setAttribute('payment.currency', 'USD');
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
+    // Simulate API call
+    await new Promise((resolve) =>
+      setTimeout(resolve, 100 + Math.random() * 200),
+    );
 
-  // Occasionally fail
-  const shouldFail = Math.random() > 0.9;
-  if (shouldFail) {
-    ctx.setAttribute('payment.status', 'failed');
-    ctx.setAttribute('payment.error', 'insufficient_funds');
-    throw new Error('Payment failed: insufficient funds');
-  }
+    // Occasionally fail
+    const shouldFail = Math.random() > 0.9;
+    if (shouldFail) {
+      ctx.setAttribute('payment.status', 'failed');
+      ctx.setAttribute('payment.error', 'insufficient_funds');
+      throw new Error('Payment failed: insufficient funds');
+    }
 
-  ctx.setAttribute('payment.status', 'success');
-  ctx.setAttribute('payment.transaction_id', `txn_${Date.now()}`);
+    ctx.setAttribute('payment.status', 'success');
+    ctx.setAttribute('payment.transaction_id', `txn_${Date.now()}`);
 
-  return { success: true, transactionId: `txn_${Date.now()}` };
-});
+    return { success: true, transactionId: `txn_${Date.now()}` };
+  },
+);
 
-const sendNotification = trace((ctx: TraceContext) => async (userId: string, message: string) => {
-  ctx.setAttribute('notification.channel', 'email');
-  ctx.setAttribute('notification.user_id', userId);
-  ctx.setAttribute('notification.message_length', message.length);
+const sendNotification = withTracing({})(
+  (ctx: TraceContext) => async (userId: string, message: string) => {
+    ctx.setAttribute('notification.channel', 'email');
+    ctx.setAttribute('notification.user_id', userId);
+    ctx.setAttribute('notification.message_length', message.length);
 
-  await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 100));
+    await new Promise((resolve) =>
+      setTimeout(resolve, 50 + Math.random() * 100),
+    );
 
-  ctx.setAttribute('notification.sent', true);
-  return { sent: true };
-});
+    ctx.setAttribute('notification.sent', true);
+    return { sent: true };
+  },
+);
 
 // ============================================================================
 // Business Logic Functions
 // ============================================================================
 
-const processOrder = trace((ctx: TraceContext) => async (userId: string, items: unknown[], total: number) => {
-  ctx.setAttribute('order.user_id', userId);
-  ctx.setAttribute('order.item_count', items.length);
-  ctx.setAttribute('order.total', total);
+const processOrder = withTracing({})(
+  (ctx: TraceContext) =>
+    async (userId: string, items: unknown[], total: number) => {
+      ctx.setAttribute('order.user_id', userId);
+      ctx.setAttribute('order.item_count', items.length);
+      ctx.setAttribute('order.total', total);
 
-  // Step 1: Validate user
-  await span({ name: 'validate-user' }, async (validateCtx) => {
-    validateCtx.setAttribute('validation.type', 'user');
-    await new Promise(resolve => setTimeout(resolve, 20));
-  });
+      // Step 1: Validate user
+      await span({ name: 'validate-user' }, async (validateCtx) => {
+        validateCtx.setAttribute('validation.type', 'user');
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
 
-  // Step 2: Process payment
-  await span({ name: 'process-payment' }, async () => {
-    await callPaymentGateway(total);
-  });
+      // Step 2: Process payment
+      await span({ name: 'process-payment' }, async () => {
+        await callPaymentGateway(total);
+      });
 
-  // Step 3: Create order record
-  await span({ name: 'create-order-record' }, async (recordCtx) => {
-    recordCtx.setAttribute('db.system', 'postgresql');
-    recordCtx.setAttribute('db.operation', 'INSERT');
-    recordCtx.setAttribute('db.table', 'orders');
-    await new Promise(resolve => setTimeout(resolve, 40));
-  });
+      // Step 3: Create order record
+      await span({ name: 'create-order-record' }, async (recordCtx) => {
+        recordCtx.setAttribute('db.system', 'postgresql');
+        recordCtx.setAttribute('db.operation', 'INSERT');
+        recordCtx.setAttribute('db.table', 'orders');
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      });
 
-  // Step 4: Send confirmation
-  await sendNotification(userId, 'Your order has been confirmed!');
+      // Step 4: Send confirmation
+      await sendNotification(userId, 'Your order has been confirmed!');
 
-  ctx.setAttribute('order.status', 'completed');
-  return { orderId: `order-${Date.now()}`, status: 'completed' };
-});
+      ctx.setAttribute('order.status', 'completed');
+      return { orderId: `order-${Date.now()}`, status: 'completed' };
+    },
+);
 
 // ============================================================================
 // HTTP Routes
@@ -159,7 +176,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    service: 'mcp-observability-demo'
+    service: 'mcp-observability-demo',
   });
 });
 
@@ -199,7 +216,7 @@ app.post('/api/orders', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: 'Failed to process order',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
@@ -216,12 +233,14 @@ app.get('/api/events/report', async (req, res) => {
     ctx.setAttribute('report.expensive', true);
 
     // Simulate expensive computation
-    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
+    await new Promise((resolve) =>
+      setTimeout(resolve, 500 + Math.random() * 500),
+    );
 
     res.json({
       report: 'Monthly sales report',
       generatedAt: new Date().toISOString(),
-      processingTimeMs: 500 + Math.random() * 500
+      processingTimeMs: 500 + Math.random() * 500,
     });
   });
 });
@@ -232,7 +251,7 @@ app.get('/api/flaky', async (req, res) => {
     const shouldFail = Math.random() > 0.5;
     ctx.setAttribute('operation.will_fail', shouldFail);
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     if (shouldFail) {
       throw new Error('Random failure occurred');
@@ -257,8 +276,12 @@ app.listen(PORT, () => {
   console.log(`🔧 Try these endpoints:\n`);
   console.log(`   GET  /health                    - Health check (fast)`);
   console.log(`   GET  /api/users                 - List users (fast)`);
-  console.log(`   GET  /api/users/:id/orders      - User orders (variable speed)`);
-  console.log(`   POST /api/orders                - Create order (complex trace)`);
+  console.log(
+    `   GET  /api/users/:id/orders      - User orders (variable speed)`,
+  );
+  console.log(
+    `   POST /api/orders                - Create order (complex trace)`,
+  );
   console.log(`   GET  /api/events/report      - Generate report (slow)`);
   console.log(`   GET  /api/error                 - Intentional error`);
   console.log(`   GET  /api/flaky                 - Random success/failure\n`);

@@ -85,7 +85,8 @@ export function instrumentActorAlarms(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -125,7 +126,8 @@ export function instrumentActorAlarms(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -165,7 +167,8 @@ export function instrumentActorAlarms(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -178,7 +181,9 @@ export function instrumentActorAlarms(
 
       // Instrument cancelAll method
       if (prop === 'cancelAll' && typeof value === 'function') {
-        return async function instrumentedCancelAll(this: unknown): Promise<unknown> {
+        return async function instrumentedCancelAll(
+          this: unknown,
+        ): Promise<unknown> {
           const tracer = getTracer();
           const spanName = `Actor ${actorName}: alarms.cancelAll`;
 
@@ -201,7 +206,8 @@ export function instrumentActorAlarms(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {

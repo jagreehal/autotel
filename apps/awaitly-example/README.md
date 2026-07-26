@@ -30,6 +30,7 @@ pnpm --filter @jagreehal/awaitly-example start
 ### Example 1: Successful Workflow ✅
 
 Demonstrates a complete successful checkout workflow with:
+
 - Step-level spans
 - Metrics collection
 - ASCII visualization
@@ -37,6 +38,7 @@ Demonstrates a complete successful checkout workflow with:
 - Console logging
 
 **Output includes:**
+
 - Success metrics (all steps succeeded)
 - Beautiful ASCII box diagrams
 - Mermaid flowcharts ready for GitHub markdown
@@ -45,12 +47,14 @@ Demonstrates a complete successful checkout workflow with:
 ### Example 2: Error Handling ⚠️
 
 Shows how errors are tracked and visualized:
+
 - Error spans with proper status codes
 - Error metrics collection
 - Error visualization (red indicators)
 - Error type tracking
 
 **Output shows:**
+
 - Error metrics with `success: false`
 - Visualizations with ✗ indicators
 - Proper error Result types
@@ -58,11 +62,13 @@ Shows how errors are tracked and visualized:
 ### Example 3: Decision Tracking 🎯
 
 Demonstrates conditional logic tracking:
+
 - `trackIf` for if/else branches
 - Decision visualization in diagrams
 - Branch-specific metrics
 
 **Features:**
+
 - Tracks which branch was taken
 - Visualizes decision points in diagrams
 - Records branch-specific step execution
@@ -70,11 +76,13 @@ Demonstrates conditional logic tracking:
 ### Example 4: Cache Behavior 🔄
 
 Shows step caching in action:
+
 - Cache hit/miss tracking
 - Cache-aware metrics
 - Console logging of cache events
 
 **Demonstrates:**
+
 - First call: cache miss
 - Second call with same key: cache hit
 - Cache statistics in metrics
@@ -82,11 +90,13 @@ Shows step caching in action:
 ### Example 5: With Autotel Tracing 🎯
 
 Wraps entire workflow in OpenTelemetry trace:
+
 - Parent span for entire workflow
 - Step spans as children
 - Custom attributes
 
 **Production pattern:**
+
 - Use `withAutotelTracing` to wrap workflows
 - Add custom attributes for filtering
 - Full trace context propagation
@@ -94,12 +104,14 @@ Wraps entire workflow in OpenTelemetry trace:
 ### Example 6: Multiple Error Scenarios 🔴
 
 Comprehensive error testing:
+
 - User not found errors
 - Card declined errors
 - Email failure errors
 - All tracked in metrics
 
 **Shows:**
+
 - Different error types
 - Error aggregation
 - Complete error visualization
@@ -114,7 +126,9 @@ The example uses **Result types** for proper error handling:
 type UserNotFound = { type: 'USER_NOT_FOUND'; userId: string };
 type CardDeclined = { type: 'CARD_DECLINED'; amount: number; reason: string };
 
-const fetchUser = async (id: string): Promise<AsyncResult<User, UserNotFound>> => {
+const fetchUser = async (
+  id: string,
+): Promise<AsyncResult<User, UserNotFound>> => {
   if (id === 'error-user') {
     return err({ type: 'USER_NOT_FOUND', userId: id });
   }
@@ -134,10 +148,14 @@ function createConsoleLogger(opts: { prefix?: string; colors?: boolean } = {}) {
   const p = opts.prefix ? `${opts.prefix} ` : '';
   return (event: WorkflowEvent<unknown>) => {
     if (event.type === 'workflow_start') console.log(`${p}⏵ Workflow started`);
-    else if (event.type === 'workflow_success') console.log(`${p}✓ Workflow completed (${event.durationMs}ms)`);
-    else if (event.type === 'step_start') console.log(`${p}→ ${event.name ?? 'step'}`);
-    else if (event.type === 'step_success') console.log(`${p}✓ ${event.name ?? 'step'} (${event.durationMs}ms)`);
-    else if (event.type === 'step_error') console.log(`${p}✗ ${event.name ?? 'step'}`);
+    else if (event.type === 'workflow_success')
+      console.log(`${p}✓ Workflow completed (${event.durationMs}ms)`);
+    else if (event.type === 'step_start')
+      console.log(`${p}→ ${event.name ?? 'step'}`);
+    else if (event.type === 'step_success')
+      console.log(`${p}✓ ${event.name ?? 'step'} (${event.durationMs}ms)`);
+    else if (event.type === 'step_error')
+      console.log(`${p}✗ ${event.name ?? 'step'}`);
   };
 }
 
@@ -186,7 +204,7 @@ const result = await workflow(async (step, deps) => {
 
   const email = await step(
     () => deps.sendEmail(user.email, 'Order confirmation'),
-    { name: 'Send email' }
+    { name: 'Send email' },
   );
 
   return { user, charge, email };
@@ -287,10 +305,10 @@ console.log(metrics.stepDurations);
 //   ...
 // ]
 
-console.log(metrics.retryCount);     // Total retry count
-console.log(metrics.errorCount);     // Total error count
-console.log(metrics.cacheHits);      // Cache hit count
-console.log(metrics.cacheMisses);    // Cache miss count
+console.log(metrics.retryCount); // Total retry count
+console.log(metrics.errorCount); // Total error count
+console.log(metrics.cacheHits); // Cache hit count
+console.log(metrics.cacheMisses); // Cache miss count
 console.log(metrics.defaultAttributes); // Default attributes
 ```
 
@@ -384,11 +402,11 @@ init({
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `OTLP_ENDPOINT` | OTLP exporter endpoint (default: `http://localhost:4318`) |
-| `AUTOTEL_DEBUG` | Set to `true` for console output |
-| `OTEL_SERVICE_NAME` | Default service name (overridden by config) |
+| Variable            | Description                                               |
+| ------------------- | --------------------------------------------------------- |
+| `OTLP_ENDPOINT`     | OTLP exporter endpoint (default: `http://localhost:4318`) |
+| `AUTOTEL_DEBUG`     | Set to `true` for console output                          |
+| `OTEL_SERVICE_NAME` | Default service name (overridden by config)               |
 
 ## TypeScript
 
@@ -424,10 +442,10 @@ Combine multiple event handlers for comprehensive observability:
 ```typescript
 const workflow = createWorkflow(deps, {
   onEvent: (event) => {
-    autotel.handleEvent(event);  // OpenTelemetry
-    viz.handleEvent(event);      // Visualization
-    logger(event);               // Console logging
-    customHandler(event);        // Custom logic
+    autotel.handleEvent(event); // OpenTelemetry
+    viz.handleEvent(event); // Visualization
+    logger(event); // Console logging
+    customHandler(event); // Custom logic
   },
 });
 ```
@@ -441,11 +459,15 @@ const traced = withAutotelTracing(trace, {
   serviceName: 'checkout-service',
 });
 
-const result = await traced('process-order', async () => {
-  return workflow(async (step, deps) => {
-    // ... workflow steps
-  });
-}, { orderId: '123' });
+const result = await traced(
+  'process-order',
+  async () => {
+    return workflow(async (step, deps) => {
+      // ... workflow steps
+    });
+  },
+  { orderId: '123' },
+);
 ```
 
 ### 4. Error Result Handling
@@ -470,15 +492,15 @@ if (result.ok) {
 
 When `createStepSpans` is enabled, spans include:
 
-| Attribute | Description |
-|-----------|-------------|
-| `workflow.step.name` | Step name from options |
-| `workflow.step.key` | Step cache key (if set) |
-| `workflow.step.cached` | Whether result was cached |
-| `workflow.step.retry_count` | Number of retries |
-| `workflow.step.duration_ms` | Step duration |
-| `workflow.step.success` | Whether step succeeded |
-| `workflow.step.error` | Error type (if failed) |
+| Attribute                   | Description               |
+| --------------------------- | ------------------------- |
+| `workflow.step.name`        | Step name from options    |
+| `workflow.step.key`         | Step cache key (if set)   |
+| `workflow.step.cached`      | Whether result was cached |
+| `workflow.step.retry_count` | Number of retries         |
+| `workflow.step.duration_ms` | Step duration             |
+| `workflow.step.success`     | Whether step succeeded    |
+| `workflow.step.error`       | Error type (if failed)    |
 
 ## References
 

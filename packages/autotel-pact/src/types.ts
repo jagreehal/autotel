@@ -67,7 +67,8 @@ export interface ProviderVerificationRunEntry {
   span_id?: string;
 }
 
-export type LedgerRecord = InteractionLedgerEntry | ProviderVerificationRunEntry;
+export type LedgerRecord =
+  InteractionLedgerEntry | ProviderVerificationRunEntry;
 
 export function isInteractionLedgerEntry(
   entry: LedgerRecord,

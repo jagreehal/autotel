@@ -136,8 +136,7 @@ export function computeStreamTiming(
   const intervals = input.chunkTimestamps
     ? chunkIntervalStats(input.chunkTimestamps)
     : undefined;
-  const chunkCount =
-    input.chunkCount ?? input.chunkTimestamps?.length ?? 0;
+  const chunkCount = input.chunkCount ?? input.chunkTimestamps?.length ?? 0;
 
   let outputTokensPerSecond: number | undefined;
   let steadyOutputTokensPerSecond: number | undefined;

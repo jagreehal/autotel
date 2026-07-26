@@ -6,7 +6,7 @@
 
 You write a small unit test that locks down a message's serialized format. Later you rename a field or change a type. The code still compiles and your other tests pass, but this one fails and points at what changed. You fix it in the same pull request, before a consumer or a stored event has hit the old format in production.
 
-It is the test-time companion to [`autotel-pact`](../autotel-pact) (runtime evidence that contracted interactions actually fired) and [`autotel-schema`](../autotel-schema) (your telemetry surface as a contract). Where those answer *did it run?* and *is my trace surface stable?*, this answers *does my message serialization stay stable and stay compatible across versions?*
+It is the test-time companion to [`autotel-pact`](../autotel-pact) (runtime evidence that contracted interactions actually fired) and [`autotel-schema`](../autotel-schema) (your telemetry surface as a contract). Where those answer _did it run?_ and _is my trace surface stable?_, this answers _does my message serialization stay stable and stay compatible across versions?_
 
 ## Why
 
@@ -153,13 +153,13 @@ Or per-check: `messageContract({ snapshot: 'X', update: true })`.
 
 ## API
 
-| Export | Purpose |
-|--------|---------|
-| `messageContract(options?)` | Start a check: `.given(msg).whenSerialized()` / `.whenDeserializedAs(reader)`. |
-| `approvedSnapshot(location?)` | Use a committed approved file as the source version in a compatibility check. |
-| `jsonSerializer(options?)` | Deterministic JSON serializer; `defaultSerializer` is `jsonSerializer()`. |
-| `read(reader, value)` | Run a reader (schema or parse fn) against a value; never throws. |
-| `lineDiff`, `resolveSnapshotPath`, `readSnapshot`, `writeSnapshot`, `isUpdateMode` | Lower-level building blocks. |
+| Export                                                                             | Purpose                                                                        |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `messageContract(options?)`                                                        | Start a check: `.given(msg).whenSerialized()` / `.whenDeserializedAs(reader)`. |
+| `approvedSnapshot(location?)`                                                      | Use a committed approved file as the source version in a compatibility check.  |
+| `jsonSerializer(options?)`                                                         | Deterministic JSON serializer; `defaultSerializer` is `jsonSerializer()`.      |
+| `read(reader, value)`                                                              | Run a reader (schema or parse fn) against a value; never throws.               |
+| `lineDiff`, `resolveSnapshotPath`, `readSnapshot`, `writeSnapshot`, `isUpdateMode` | Lower-level building blocks.                                                   |
 
 ## License
 

@@ -2,27 +2,37 @@
  * Vectorize binding instrumentation
  */
 
-import {
-  trace,
-  SpanKind,
-  SpanStatusCode,
-} from '@opentelemetry/api';
+import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap, setAttr } from './common';
 
-const TRACED_METHODS = ['query', 'insert', 'upsert', 'deleteByIds', 'getByIds', 'describe'] as const;
+const TRACED_METHODS = [
+  'query',
+  'insert',
+  'upsert',
+  'deleteByIds',
+  'getByIds',
+  'describe',
+] as const;
 
 /**
  * Instrument Vectorize index binding
  */
-export function instrumentVectorize<T extends VectorizeIndex>(vectorize: T, indexName?: string): T {
+export function instrumentVectorize<T extends VectorizeIndex>(
+  vectorize: T,
+  indexName?: string,
+): T {
   const name = indexName || 'vectorize';
 
   const handler: ProxyHandler<T> = {
     get(target, prop) {
       const value = Reflect.get(target, prop);
 
-      if (typeof prop === 'string' && TRACED_METHODS.includes(prop as any) && typeof value === 'function') {
+      if (
+        typeof prop === 'string' &&
+        TRACED_METHODS.includes(prop as any) &&
+        typeof value === 'function'
+      ) {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
             const operation = prop as string;
@@ -42,7 +52,10 @@ export function instrumentVectorize<T extends VectorizeIndex>(vectorize: T, inde
               }
             }
 
-            if ((operation === 'insert' || operation === 'upsert') && Array.isArray(args[0])) {
+            if (
+              (operation === 'insert' || operation === 'upsert') &&
+              Array.isArray(args[0])
+            ) {
               attributes['db.vectorize.vectors_count'] = args[0].length;
             }
 
@@ -57,7 +70,11 @@ export function instrumentVectorize<T extends VectorizeIndex>(vectorize: T, inde
                   const result = await Reflect.apply(fnTarget, target, args);
 
                   if (operation === 'query' && result?.matches) {
-                    setAttr(span, 'db.vectorize.matches_count', result.matches.length);
+                    setAttr(
+                      span,
+                      'db.vectorize.matches_count',
+                      result.matches.length,
+                    );
                   }
 
                   span.setStatus({ code: SpanStatusCode.OK });
@@ -66,7 +83,8 @@ export function instrumentVectorize<T extends VectorizeIndex>(vectorize: T, inde
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {

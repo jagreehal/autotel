@@ -142,7 +142,13 @@ describe('autotel-vitest fixture', () => {
 
   it('attaches otelSpans to task.meta when collector returns spans', async () => {
     mockDrainResult = [
-      { spanId: 'span-1', name: 'test:my-test', startTimeMs: 1000, durationMs: 100, status: 'ok' },
+      {
+        spanId: 'span-1',
+        name: 'test:my-test',
+        startTimeMs: 1000,
+        durationMs: 100,
+        status: 'ok',
+      },
     ];
 
     const { fixtureFn } = await getFixture();
@@ -161,7 +167,13 @@ describe('autotel-vitest fixture', () => {
     );
 
     expect(meta.otelSpans).toEqual([
-      { spanId: 'span-1', name: 'test:my-test', startTimeMs: 1000, durationMs: 100, status: 'ok' },
+      {
+        spanId: 'span-1',
+        name: 'test:my-test',
+        startTimeMs: 1000,
+        durationMs: 100,
+        status: 'ok',
+      },
     ]);
   });
 

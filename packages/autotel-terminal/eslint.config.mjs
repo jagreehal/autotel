@@ -14,7 +14,12 @@ export default defineConfig(
   eslintPluginUnicorn.configs.recommended,
   {
     files: ['src/**/*.ts', 'src/**/*.tsx'],
-    ignores: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.integration.test.ts', 'src/**/*.integration.test.tsx'],
+    ignores: [
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'src/**/*.integration.test.ts',
+      'src/**/*.integration.test.tsx',
+    ],
     languageOptions: {
       parserOptions: {
         project: './tsconfig.json',
@@ -46,7 +51,12 @@ export default defineConfig(
     },
   },
   {
-    files: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.integration.test.ts', 'src/**/*.integration.test.tsx'],
+    files: [
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'src/**/*.integration.test.ts',
+      'src/**/*.integration.test.tsx',
+    ],
     languageOptions: {
       parserOptions: {
         project: false,
@@ -84,8 +94,3 @@ export default defineConfig(
     },
   },
 );
-
-
-
-
-

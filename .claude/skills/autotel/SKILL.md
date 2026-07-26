@@ -21,14 +21,14 @@ Philosophy: "Write once, observe everywhere" - instrument once, stream to any OT
 
 ## Quick Reference
 
-| Task | Reference |
-|------|-----------|
-| Convert console.log to wide events | [wide-events.md](references/wide-events.md) |
-| Add structured errors | [structured-errors.md](references/structured-errors.md) |
-| Accumulate request context | [request-logger.md](references/request-logger.md) |
-| Review code for anti-patterns | [code-review.md](references/code-review.md) |
-| Add attribute redaction | (use `init({ attributeRedactor: 'default' | 'strict' | 'pci-dss' })` or custom config) |
-| Lock init from re-initialization | (use `lockLogger()` in framework plugins) | |
+| Task                               | Reference                                               |
+| ---------------------------------- | ------------------------------------------------------- |
+| Convert console.log to wide events | [wide-events.md](references/wide-events.md)             |
+| Add structured errors              | [structured-errors.md](references/structured-errors.md) |
+| Accumulate request context         | [request-logger.md](references/request-logger.md)       |
+| Review code for anti-patterns      | [code-review.md](references/code-review.md)             |
+| Add attribute redaction            | (use `init({ attributeRedactor: 'default'               | 'strict' | 'pci-dss' })` or custom config) |
+| Lock init from re-initialization   | (use `lockLogger()` in framework plugins)               |          |
 
 ## Tracing API
 
@@ -74,8 +74,8 @@ export const charge = trace((ctx) => async (cart) => {
 
 Fallbacks, in order:
 
-1. **Attach call-site context, then rethrow** — `getRequestLogger(ctx).error(err, { step })`. Use when the rethrown error needs context only known at the catch site.
-2. **Writing instrumentation/middleware that wraps user handlers** — `ctx.recordError(err)` from inside a `trace((ctx) => ...)` callback. Sets ERROR status, structured `error.*` attributes, and (during the back-compat window) records the exception. Accepts `unknown` so no `as Error` cast is needed in catch blocks. For code that doesn't have a `ctx` handle, use the standalone form `recordStructuredError(ctx, err)`.
+1. **Attach call-site context, then rethrow**: `getRequestLogger(ctx).error(err, { step })`. Use when the rethrown error needs context only known at the catch site.
+2. **Writing instrumentation/middleware that wraps user handlers**: `ctx.recordError(err)` from inside a `trace((ctx) => ...)` callback. Sets ERROR status, structured `error.*` attributes, and (during the back-compat window) records the exception. Accepts `unknown` so no `as Error` cast is needed in catch blocks. For code that doesn't have a `ctx` handle, use the standalone form `recordStructuredError(ctx, err)`.
 
 ```typescript
 // Inside a trace() callback — instrumentation wrapping a user handler:
@@ -89,7 +89,7 @@ return trace({ name }, async (ctx) => {
 });
 ```
 
-`ctx.recordException(...)` and `ctx.addEvent(...)` are intentionally hidden from the `TraceContext` type per OTEP 4430 (March 2026 — Span Event API deprecation). The runtime methods exist for back-compat only; new code MUST go through `createStructuredError`, `ctx.recordError(err)` / `recordStructuredError(ctx, err)`, or the request logger.
+`ctx.recordException(...)` and `ctx.addEvent(...)` are intentionally hidden from the `TraceContext` type per OTEP 4430 (March 2026. Span Event API deprecation). The runtime methods exist for back-compat only; new code MUST go through `createStructuredError`, `ctx.recordError(err)` / `recordStructuredError(ctx, err)`, or the request logger.
 
 ### Request Logger
 
@@ -146,8 +146,8 @@ runWithCorrelationId(incomingId, () => handleRequest());
 ## Framework Adapters
 
 ```typescript
-// Cloudflare Workers (via autotel/workers)
-import { init, wrapModule, trace } from 'autotel/workers';
+// Cloudflare Workers
+import { init, wrapModule, trace } from 'autotel-cloudflare';
 
 const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
   return await kv.get(orderId);
@@ -187,17 +187,17 @@ app.get('/orders/:id', (c) => {
 
 ## Anti-Patterns to Detect
 
-| Anti-Pattern | Fix |
-|---|---|
-| `console.log('user created', userId)` | `log.set({ user_id: userId })` inside `trace()` |
-| `catch (e) { throw e }` | Delete the catch — `trace()` records errors automatically. Or `log.error(e, { step }); throw e` to attach call-site context |
-| `catch (e) { res.json({ error: e.message }) }` | `parseError(e)` for consistent shape |
-| `throw new Error('Payment failed')` | `createStructuredError({ message, why, fix, link })` |
-| `ctx.recordException(err)` / `span.recordException(err)` | App code: throw `createStructuredError(...)`. Instrumentation: `ctx.recordError(err)` (or `recordStructuredError(ctx, err)` if you don't have a `ctx` handle). Span Event API is deprecated (OTEP 4430) and type-gated out of `TraceContext` |
-| `ctx.addEvent('name', { ... })` / `span.addEvent(...)` | Discrete event inside `trace()`: `ctx.track('event.name', { ... })` (or standalone `track('event.name', { ... })` when there's no `ctx` handle). Wide-event attribute: `getRequestLogger(ctx).set({ ... })` |
-| `(ctx as any).recordException(err)` / `as unknown as { recordException }` | Don't bypass the type gate — use `recordStructuredError(ctx, err)` instead |
-| Manual `console.log` at start/end of function | `trace()` wrapper handles lifecycle |
-| Separate request ID generation | `ctx.correlationId` provides automatic correlation |
+| Anti-Pattern                                                              | Fix                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `console.log('user created', userId)`                                     | `log.set({ user_id: userId })` inside `trace()`                                                                                                                                                                                              |
+| `catch (e) { throw e }`                                                   | Delete the catch: `trace()` records errors automatically. Or `log.error(e, { step }); throw e` to attach call-site context                                                                                                                   |
+| `catch (e) { res.json({ error: e.message }) }`                            | `parseError(e)` for consistent shape                                                                                                                                                                                                         |
+| `throw new Error('Payment failed')`                                       | `createStructuredError({ message, why, fix, link })`                                                                                                                                                                                         |
+| `ctx.recordException(err)` / `span.recordException(err)`                  | App code: throw `createStructuredError(...)`. Instrumentation: `ctx.recordError(err)` (or `recordStructuredError(ctx, err)` if you don't have a `ctx` handle). Span Event API is deprecated (OTEP 4430) and type-gated out of `TraceContext` |
+| `ctx.addEvent('name', { ... })` / `span.addEvent(...)`                    | Discrete event inside `trace()`: `ctx.track('event.name', { ... })` (or standalone `track('event.name', { ... })` when there's no `ctx` handle). Wide-event attribute: `getRequestLogger(ctx).set({ ... })`                                  |
+| `(ctx as any).recordException(err)` / `as unknown as { recordException }` | Don't bypass the type gate: use `recordStructuredError(ctx, err)` instead                                                                                                                                                                    |
+| Manual `console.log` at start/end of function                             | `trace()` wrapper handles lifecycle                                                                                                                                                                                                          |
+| Separate request ID generation                                            | `ctx.correlationId` provides automatic correlation                                                                                                                                                                                           |
 
 ## init() Configuration
 
@@ -212,7 +212,7 @@ init({
   // traces: always on when endpoint is set
   // metrics: true by default (AUTOTEL_METRICS env var override)
   // logs: false by default — opt-in with logs: true (AUTOTEL_LOGS env var override)
-  logs: true,  // enable auto OTLP log export
+  logs: true, // enable auto OTLP log export
 });
 ```
 
@@ -222,12 +222,12 @@ Disable any signal explicitly:
 init({
   service: 'my-app',
   endpoint: 'http://localhost:4318',
-  metrics: false,  // disable auto OTLP metrics
-  logs: false,     // disable auto OTLP logs (already the default)
+  metrics: false, // disable auto OTLP metrics
+  logs: false, // disable auto OTLP logs (already the default)
 });
 ```
 
-Custom `logRecordProcessors` are additive — they work alongside the auto-configured exporter:
+Custom `logRecordProcessors` are additive. They work alongside the auto-configured exporter:
 
 ```typescript
 init({
@@ -257,8 +257,8 @@ Suppress internal autotel logs while keeping exporters running:
 ```typescript
 init({
   service: 'my-app',
-  silent: true,        // Suppress console output
-  minLevel: 'warn',    // Only log warnings/errors
+  silent: true, // Suppress console output
+  minLevel: 'warn', // Only log warnings/errors
 });
 ```
 
@@ -273,9 +273,9 @@ init({
 });
 ```
 
-- `default` — Emails, phones, SSNs, credit cards (last 4), sensitive keys
-- `strict` — Plus JWTs, Bearer tokens, IBANs, API keys
-- `pci-dss` — Focused on payment card data
+- `default`: Emails, phones, SSNs, credit cards (last 4), sensitive keys
+- `strict`: Plus JWTs, Bearer tokens, IBANs, API keys
+- `pci-dss`: Focused on payment card data
 
 Custom:
 
@@ -283,7 +283,9 @@ Custom:
 init({
   attributeRedactor: {
     keyPatterns: [/password/i, /secret/i],
-    valuePatterns: [{ name: 'customerId', pattern: /CUST-\d{8}/g, replacement: 'CUST-***' }],
+    valuePatterns: [
+      { name: 'customerId', pattern: /CUST-\d{8}/g, replacement: 'CUST-***' },
+    ],
     builtins: ['email', 'creditCard'],
   },
 });
@@ -300,16 +302,16 @@ init({
   service: 'my-app',
   endpoint: 'http://localhost:4318',
   sampler: new AdaptiveSampler({
-    baselineSampleRate: 0.1,    // 10% of normal requests (default)
-    slowThresholdMs: 1000,       // Requests > 1s are "slow" (default)
-    alwaysSampleErrors: true,    // Always trace errors (default)
-    alwaysSampleSlow: true,      // Always trace slow requests (default)
-    linksBased: false,           // Enable for event-driven architectures
+    baselineSampleRate: 0.1, // 10% of normal requests (default)
+    slowThresholdMs: 1000, // Requests > 1s are "slow" (default)
+    alwaysSampleErrors: true, // Always trace errors (default)
+    alwaysSampleSlow: true, // Always trace slow requests (default)
+    linksBased: false, // Enable for event-driven architectures
   }),
 });
 ```
 
-The `Sampler` interface is simple — return `true` to trace, `false` to skip:
+The `Sampler` interface is simple: return `true` to trace, `false` to skip:
 
 ```typescript
 const sampler: Sampler = {
@@ -351,11 +353,11 @@ init({
 
 ### Errors & Events
 
-- MUST: Throw `createStructuredError({ message, why, fix, link })` instead of `new Error(...)` in app code — let `trace()` record it on span exit
+- MUST: Throw `createStructuredError({ message, why, fix, link })` instead of `new Error(...)` in app code: let `trace()` record it on span exit
 - MUST: Use `ctx.recordError(err)` from instrumentation/middleware code that wraps user handlers (or `recordStructuredError(ctx, err)` if you don't have a `ctx` handle)
 - SHOULD: Only catch errors when you need to attach call-site context, then `getRequestLogger(ctx).error(err, { step })` and rethrow
 - SHOULD: Emit discrete events inside `trace()` with `ctx.track('event.name', { ... })` (or standalone `track('event.name', { ... })` outside `trace()`); emit wide-event attributes with `getRequestLogger(ctx).set({ ... })`
-- NEVER: Call `ctx.recordException(err)` or `ctx.addEvent(...)` — Span Event API is deprecated (OTEP 4430, March 2026) and intentionally type-gated out of `TraceContext`
+- NEVER: Call `ctx.recordException(err)` or `ctx.addEvent(...)`: Span Event API is deprecated (OTEP 4430, March 2026) and intentionally type-gated out of `TraceContext`
 - NEVER: Cast `ctx as any` or `as unknown as { recordException }` to bypass the type gate
 
 ### Event Queue
@@ -373,16 +375,16 @@ init({
 
 ## Package Layout
 
-| Package | Role |
-|---------|------|
-| `autotel` | Node.js core: init, trace, span, track, event-queue, correlation-id. Also provides `autotel/workers` and `autotel/cloudflare` for Cloudflare Workers |
-| `autotel-genai` | GenAI/LLM instrumentation: `traceGenAI`, cost, metrics, events, semconv, ai-sdk bridge, and agent governance (`autotel-genai/agent`) |
-| `autotel-edge` | Edge runtime foundation (alternative to workers for vendor-agnostic edge) |
-| `autotel-cloudflare` | Cloudflare Workers implementation (re-exported via `autotel/workers`) |
-| `autotel-adapters` | Framework adapters (Next.js, Hono, Nitro) |
-| `autotel-mcp-instrumentation` | MCP instrumentation |
-| `autotel-tanstack` | TanStack Start |
-| `autotel-subscribers` | Event subscribers (PostHog, Mixpanel, Webhook) |
+| Package                       | Role                                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `autotel`                     | Node.js core: init, trace, span, track, event-queue, correlation-id                                                                  |
+| `autotel-genai`               | GenAI/LLM instrumentation: `traceGenAI`, cost, metrics, events, semconv, ai-sdk bridge, and agent governance (`autotel-genai/agent`) |
+| `autotel-edge`                | Edge runtime foundation (alternative to workers for vendor-agnostic edge)                                                            |
+| `autotel-cloudflare`          | Cloudflare Workers implementation                                                                                                    |
+| `autotel-adapters`            | Framework adapters (Next.js, Hono, Nitro)                                                                                            |
+| `autotel-mcp-instrumentation` | MCP instrumentation                                                                                                                  |
+| `autotel-tanstack`            | TanStack Start                                                                                                                       |
+| `autotel-subscribers`         | Event subscribers (PostHog, Mixpanel, Webhook)                                                                                       |
 
 Each package has a `CLAUDE.md` for local conventions.
 
@@ -394,9 +396,11 @@ import { traceGenAI, recordGenAiUsage } from 'autotel-genai/trace';
 
 // GenAI helpers live in the autotel-genai package (not core autotel)
 export const generateText = traceGenAI({
-  model: 'gpt-4-turbo', operation: 'chat', provider: 'openai',
+  model: 'gpt-4-turbo',
+  operation: 'chat',
+  provider: 'openai',
 })((ctx) => async (prompt) => {
-  const response = await openai.chat.completions.create({ /* ... */ });
+  const response = await openai.chat.completions.create({/* ... */});
   recordGenAiUsage(ctx, 'gpt-4-turbo', {
     inputTokens: response.usage.prompt_tokens,
     outputTokens: response.usage.completion_tokens,
@@ -404,8 +408,12 @@ export const generateText = traceGenAI({
 });
 
 export const getUser = traceDB({
-  system: 'postgresql', operation: 'SELECT', collection: 'users',
-})((ctx) => async (userId) => { /* ... */ });
+  system: 'postgresql',
+  operation: 'SELECT',
+  collection: 'users',
+})((ctx) => async (userId) => {
+  /* ... */
+});
 ```
 
 ## Type-Safe Attributes
@@ -426,7 +434,8 @@ safeSetAttributes(ctx, attrs.user.data({ email: 'pii@example.com' }), {
 import { traceProducer, traceConsumer } from 'autotel/messaging';
 
 export const publish = traceProducer({
-  system: 'kafka', destination: 'user-events',
+  system: 'kafka',
+  destination: 'user-events',
   messageIdFrom: (args) => args[0].id,
 })((ctx) => async (event) => {
   const headers = ctx.getTraceHeaders();

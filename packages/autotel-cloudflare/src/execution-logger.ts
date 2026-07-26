@@ -6,11 +6,7 @@ import {
   type TraceContext,
 } from 'autotel-edge/logger';
 
-export type {
-  ExecutionLogger,
-  ExecutionLoggerOptions,
-  ExecutionLogSnapshot,
-};
+export type { ExecutionLogger, ExecutionLoggerOptions, ExecutionLogSnapshot };
 
 export interface WorkersLoggerOptions {
   /** Override derived request id (default: cf-ray header value when present). */

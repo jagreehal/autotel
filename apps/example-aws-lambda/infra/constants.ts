@@ -13,7 +13,8 @@ import { StackProps } from 'aws-cdk-lib/core';
  *   endpoints. Collector runs in a sidecar process, export latency lives
  *   outside the billed handler time.
  */
-export type OtelMode = 'custom-endpoint' | 'cloudwatch-direct' | 'cloudwatch-adot';
+export type OtelMode =
+  'custom-endpoint' | 'cloudwatch-direct' | 'cloudwatch-adot';
 
 export interface StackConfig extends StackProps {
   ENV: string;

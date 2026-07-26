@@ -69,7 +69,10 @@ export function normalizeLedgerRecord(parsed: unknown): LedgerRecord | null {
     observed_at,
   };
 
-  if (typeof parsed.interaction_id === 'string' && parsed.interaction_id.length > 0) {
+  if (
+    typeof parsed.interaction_id === 'string' &&
+    parsed.interaction_id.length > 0
+  ) {
     entry.interaction_id = parsed.interaction_id;
   }
   if (typeof parsed.trace_id === 'string') entry.trace_id = parsed.trace_id;

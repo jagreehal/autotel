@@ -14,7 +14,7 @@ This example shows how to use [Fastify](https://fastify.dev) with autotel for HT
 1. From repo root: `pnpm install`
 2. Recommended: run `autotel-devtools` locally, or set `AUTOTEL_DEVTOOLS=embedded` if you have `autotel-devtools` installed
 3. Optional: set `OTLP_ENDPOINT` or `PORT` in `.env` when you want to bypass local devtools
-3. Run: `pnpm start` (or from root: `pnpm --filter @jagreehal/example-fastify start`)
+4. Run: `pnpm start` (or from root: `pnpm --filter @jagreehal/example-fastify start`)
 
 ## How It Works
 

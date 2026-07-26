@@ -75,18 +75,60 @@ export const COMMANDS: CommandSpec[] = [
     flags: [
       ...GLOBAL_FLAGS,
       ...AGENT_FLAGS,
-      { name: '--dry-run', description: 'Print what would be done; write nothing' },
-      { name: '--no-install', description: 'Generate files only, skip package installation' },
-      { name: '--print-install-cmd', description: 'Output install command without running it' },
-      { name: '--yes', alias: '-y', description: 'Auto-apply detected items; no prompts' },
-      { name: '--preset', takesValue: true, description: 'Use a named quick preset' },
-      { name: '--force', description: 'Overwrite existing config (creates backup)' },
-      { name: '--workspace-root', description: 'Install at workspace root, not package root' },
-      { name: '--no-detect', description: 'Skip auto-detection of installed deps' },
-      { name: '--detect-only', description: 'Run detection and print the proposal; write nothing' },
-      { name: '--plan', takesValue: true, description: 'Read a pre-built InitPlan JSON from this path and apply it' },
-      { name: '--input', takesValue: true, description: 'Read InitPlan JSON from stdin (-) or a file' },
-      { name: '--scan-env', description: 'Consent to reading uncommitted .env files for backend detection' },
+      {
+        name: '--dry-run',
+        description: 'Print what would be done; write nothing',
+      },
+      {
+        name: '--no-install',
+        description: 'Generate files only, skip package installation',
+      },
+      {
+        name: '--print-install-cmd',
+        description: 'Output install command without running it',
+      },
+      {
+        name: '--yes',
+        alias: '-y',
+        description: 'Auto-apply detected items; no prompts',
+      },
+      {
+        name: '--preset',
+        takesValue: true,
+        description: 'Use a named quick preset',
+      },
+      {
+        name: '--force',
+        description: 'Overwrite existing config (creates backup)',
+      },
+      {
+        name: '--workspace-root',
+        description: 'Install at workspace root, not package root',
+      },
+      {
+        name: '--no-detect',
+        description: 'Skip auto-detection of installed deps',
+      },
+      {
+        name: '--detect-only',
+        description: 'Run detection and print the proposal; write nothing',
+      },
+      {
+        name: '--plan',
+        takesValue: true,
+        description:
+          'Read a pre-built InitPlan JSON from this path and apply it',
+      },
+      {
+        name: '--input',
+        takesValue: true,
+        description: 'Read InitPlan JSON from stdin (-) or a file',
+      },
+      {
+        name: '--scan-env',
+        description:
+          'Consent to reading uncommitted .env files for backend detection',
+      },
     ],
     mutating: true,
     network: true,
@@ -96,10 +138,22 @@ export const COMMANDS: CommandSpec[] = [
     mayReadEnv: true,
     supportsJson: true,
     examples: [
-      { description: 'Interactive setup with detection', command: 'autotel init' },
-      { description: 'Non-interactive, apply all detected items', command: 'autotel init --yes' },
-      { description: 'Preview as JSON without writing', command: 'autotel init --json --dry-run' },
-      { description: 'Detection only', command: 'autotel init --detect-only --json' },
+      {
+        description: 'Interactive setup with detection',
+        command: 'autotel init',
+      },
+      {
+        description: 'Non-interactive, apply all detected items',
+        command: 'autotel init --yes',
+      },
+      {
+        description: 'Preview as JSON without writing',
+        command: 'autotel init --json --dry-run',
+      },
+      {
+        description: 'Detection only',
+        command: 'autotel init --detect-only --json',
+      },
     ],
   },
   {
@@ -110,7 +164,11 @@ export const COMMANDS: CommandSpec[] = [
       ...AGENT_FLAGS,
       { name: '--fix', description: 'Auto-fix resolvable issues' },
       { name: '--list-checks', description: 'List all available checks' },
-      { name: '--env-file', takesValue: true, description: 'Path to env file to check' },
+      {
+        name: '--env-file',
+        takesValue: true,
+        description: 'Path to env file to check',
+      },
     ],
     mutating: false,
     network: false,
@@ -130,10 +188,16 @@ export const COMMANDS: CommandSpec[] = [
     flags: [
       ...GLOBAL_FLAGS,
       ...AGENT_FLAGS,
-      { name: '--list', description: 'List available presets for the given type' },
+      {
+        name: '--list',
+        description: 'List available presets for the given type',
+      },
       { name: '--dry-run', description: 'Print what would be done' },
       { name: '--no-install', description: 'Generate files only' },
-      { name: '--print-install-cmd', description: 'Output install command without running' },
+      {
+        name: '--print-install-cmd',
+        description: 'Output install command without running',
+      },
       { name: '--yes', alias: '-y', description: 'Accept defaults' },
       { name: '--force', description: 'Overwrite non-CLI-owned config' },
       { name: '--workspace-root', description: 'Install at workspace root' },
@@ -148,13 +212,22 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: 'codemod trace',
-    description: 'Wrap functions in trace() with span name from function/variable/method name',
+    description:
+      'Wrap functions in trace() with span name from function/variable/method name',
     args: [{ name: 'path', required: true, description: 'File path or glob' }],
     flags: [
       ...GLOBAL_FLAGS,
       { name: '--dry-run', description: 'Print changes without writing files' },
-      { name: '--name-pattern', takesValue: true, description: 'Span name template' },
-      { name: '--skip', takesValue: true, description: 'Skip functions whose name matches (repeatable)' },
+      {
+        name: '--name-pattern',
+        takesValue: true,
+        description: 'Span name template',
+      },
+      {
+        name: '--skip',
+        takesValue: true,
+        description: 'Skip functions whose name matches (repeatable)',
+      },
       { name: '--print-files', description: 'Print per-file summary' },
     ],
     mutating: true,
@@ -169,7 +242,10 @@ export const COMMANDS: CommandSpec[] = [
     name: 'schema',
     description: 'Print the CLI manifest as JSON (agent discovery)',
     flags: [
-      { name: '--json', description: 'Always JSON (this command is JSON-only)' },
+      {
+        name: '--json',
+        description: 'Always JSON (this command is JSON-only)',
+      },
     ],
     mutating: false,
     network: false,
@@ -219,7 +295,11 @@ export const COMMANDS: CommandSpec[] = [
     name: 'examples',
     description: 'Print copy-pasteable examples for a command',
     args: [
-      { name: 'command', required: false, description: 'Command name (omit for all)' },
+      {
+        name: 'command',
+        required: false,
+        description: 'Command name (omit for all)',
+      },
     ],
     flags: [{ name: '--json', description: 'Emit JSON' }],
     mutating: false,
@@ -249,20 +329,54 @@ export const COMMANDS: CommandSpec[] = [
 // terse (full flag docs live in the runtime); the manifest exists for agent
 // discoverability + drift-test parity with the dispatcher.
 const INVESTIGATE_FLAGS: FlagSpec[] = [
-  { name: '--backend', takesValue: true, description: 'Backend kind (env: AUTOTEL_BACKEND)' },
-  { name: '--jaeger-base-url', takesValue: true, description: 'Jaeger base URL' },
+  {
+    name: '--backend',
+    takesValue: true,
+    description: 'Backend kind (env: AUTOTEL_BACKEND)',
+  },
+  {
+    name: '--jaeger-base-url',
+    takesValue: true,
+    description: 'Jaeger base URL',
+  },
   { name: '--tempo-base-url', takesValue: true, description: 'Tempo base URL' },
-  { name: '--prometheus-base-url', takesValue: true, description: 'Prometheus base URL' },
+  {
+    name: '--prometheus-base-url',
+    takesValue: true,
+    description: 'Prometheus base URL',
+  },
   { name: '--loki-base-url', takesValue: true, description: 'Loki base URL' },
-  { name: '--collector-port', takesValue: true, description: 'OTLP receiver port' },
-  { name: '--fixture-path', takesValue: true, description: 'Fixture JSON path' },
-  { name: '--output-file', takesValue: true, description: 'Persist JSON output to this path' },
-  { name: '--no-secrets-in-output', description: 'Redact secret-shaped values' },
+  {
+    name: '--collector-port',
+    takesValue: true,
+    description: 'OTLP receiver port',
+  },
+  {
+    name: '--fixture-path',
+    takesValue: true,
+    description: 'Fixture JSON path',
+  },
+  {
+    name: '--output-file',
+    takesValue: true,
+    description: 'Persist JSON output to this path',
+  },
+  {
+    name: '--no-secrets-in-output',
+    description: 'Redact secret-shaped values',
+  },
 ];
 
 const STATIC_FLAGS: FlagSpec[] = [
-  { name: '--output-file', takesValue: true, description: 'Persist JSON output to this path' },
-  { name: '--no-secrets-in-output', description: 'Redact secret-shaped values' },
+  {
+    name: '--output-file',
+    takesValue: true,
+    description: 'Persist JSON output to this path',
+  },
+  {
+    name: '--no-secrets-in-output',
+    description: 'Redact secret-shaped values',
+  },
 ];
 
 function investigateCmd(
@@ -279,7 +393,10 @@ function investigateCmd(
     name,
     description,
     ...(extras.args ? { args: extras.args } : {}),
-    flags: [...(extras.static ? STATIC_FLAGS : INVESTIGATE_FLAGS), ...(extras.flags ?? [])],
+    flags: [
+      ...(extras.static ? STATIC_FLAGS : INVESTIGATE_FLAGS),
+      ...(extras.flags ?? []),
+    ],
     mutating: false,
     network: extras.network ?? !extras.static,
     writesFiles: false,
@@ -303,37 +420,68 @@ const INVESTIGATE_COMMANDS: CommandSpec[] = [
 
   investigateCmd('discover', 'Discover services and field shapes (parent)'),
   investigateCmd('discover services', 'Services with cross-signal metadata'),
-  investigateCmd('discover trace-fields', 'Trace/span field names from sampled traces', {
-    flags: [{ name: '--search', takesValue: true, description: 'Substring filter' }],
-  }),
+  investigateCmd(
+    'discover trace-fields',
+    'Trace/span field names from sampled traces',
+    {
+      flags: [
+        { name: '--search', takesValue: true, description: 'Substring filter' },
+      ],
+    },
+  ),
   investigateCmd('discover log-fields', 'Log field names from sampled logs', {
-    flags: [{ name: '--search', takesValue: true, description: 'Substring filter' }],
+    flags: [
+      { name: '--search', takesValue: true, description: 'Substring filter' },
+    ],
   }),
 
   investigateCmd('query', 'Query traces/spans/metrics/logs (parent)'),
-  investigateCmd('query traces', 'Search traces by service/op/status/tags/time/error'),
-  investigateCmd('query spans', 'Search individual spans (extra duration filters)'),
+  investigateCmd(
+    'query traces',
+    'Search traces by service/op/status/tags/time/error',
+  ),
+  investigateCmd(
+    'query spans',
+    'Search individual spans (extra duration filters)',
+  ),
   investigateCmd('query metrics', 'List metric series'),
   investigateCmd('query logs', 'Search logs'),
 
   investigateCmd('trace', 'Trace lookup commands (parent)'),
   investigateCmd('trace get', 'Get a trace by ID', { args: traceIdArg }),
-  investigateCmd('trace summary', 'Compact incident-friendly trace summary', { args: traceIdArg }),
+  investigateCmd('trace summary', 'Compact incident-friendly trace summary', {
+    args: traceIdArg,
+  }),
 
   investigateCmd('topology', 'Service topology commands (parent)'),
   investigateCmd('topology services', 'List known services'),
-  investigateCmd('topology operations', 'List operations for a service', { args: serviceNameArg }),
-  investigateCmd('topology map', 'Service dependency map with node/edge health'),
+  investigateCmd('topology operations', 'List operations for a service', {
+    args: serviceNameArg,
+  }),
+  investigateCmd(
+    'topology map',
+    'Service dependency map with node/edge health',
+  ),
 
-  investigateCmd('diagnose', 'Anomaly / root-cause / errors / SLO diagnosis (parent)'),
+  investigateCmd(
+    'diagnose',
+    'Anomaly / root-cause / errors / SLO diagnosis (parent)',
+  ),
   investigateCmd('diagnose anomalies', 'Latency / error-rate outliers'),
-  investigateCmd('diagnose root-cause', 'Bottleneck span in a trace', { args: traceIdArg }),
+  investigateCmd('diagnose root-cause', 'Bottleneck span in a trace', {
+    args: traceIdArg,
+  }),
   investigateCmd('diagnose errors', 'Error spans grouped by service/operation'),
   investigateCmd('diagnose slos', 'SLO violations for a service'),
 
   investigateCmd('correlate', 'Cross-signal correlation (parent)'),
-  investigateCmd('correlate trace', 'Trace + metrics + logs for a trace ID', { args: traceIdArg }),
-  investigateCmd('correlate explain-slowdown', 'Anomalies + root cause + correlated signals'),
+  investigateCmd('correlate trace', 'Trace + metrics + logs for a trace ID', {
+    args: traceIdArg,
+  }),
+  investigateCmd(
+    'correlate explain-slowdown',
+    'Anomalies + root cause + correlated signals',
+  ),
 
   investigateCmd('llm', 'LLM analytics (parent)'),
   investigateCmd('llm usage', 'Token usage + USD by model and service'),
@@ -354,37 +502,83 @@ const INVESTIGATE_COMMANDS: CommandSpec[] = [
     'MCP protocol-boundary security: injection verdicts, output-budget breaches, untrusted-content tool calls',
   ),
 
-  investigateCmd('semconv', 'Semantic conventions lookup (parent)', { static: true }),
-  investigateCmd('semconv list', 'List semconv namespaces', { static: true, network: true }),
+  investigateCmd('semconv', 'Semantic conventions lookup (parent)', {
+    static: true,
+  }),
+  investigateCmd('semconv list', 'List semconv namespaces', {
+    static: true,
+    network: true,
+  }),
   investigateCmd('semconv get', 'Groups for one namespace', {
     static: true,
     network: true,
-    args: [{ name: 'namespace', required: true, description: 'Namespace (e.g. http)' }],
+    args: [
+      {
+        name: 'namespace',
+        required: true,
+        description: 'Namespace (e.g. http)',
+      },
+    ],
   }),
   investigateCmd('semconv refresh', 'Clear semconv cache', { static: true }),
 
-  investigateCmd('score', 'Score a span for instrumentation quality (JSON on stdin)', {
-    static: true,
-    flags: [{ name: '--span-file', takesValue: true, description: 'Read span JSON from file' }],
-  }),
-  investigateCmd('score explain', 'Explain the instrumentation scoring rubric', { static: true }),
+  investigateCmd(
+    'score',
+    'Score a span for instrumentation quality (JSON on stdin)',
+    {
+      static: true,
+      flags: [
+        {
+          name: '--span-file',
+          takesValue: true,
+          description: 'Read span JSON from file',
+        },
+      ],
+    },
+  ),
+  investigateCmd(
+    'score explain',
+    'Explain the instrumentation scoring rubric',
+    { static: true },
+  ),
 
-  investigateCmd('collector', 'OpenTelemetry Collector config + schema commands (parent)', {
-    static: true,
-  }),
+  investigateCmd(
+    'collector',
+    'OpenTelemetry Collector config + schema commands (parent)',
+    {
+      static: true,
+    },
+  ),
   investigateCmd('collector validate', 'Validate OTLP receiver config', {
     static: true,
-    flags: [{ name: '--config-file', takesValue: true, description: 'Read JSON config from file' }],
+    flags: [
+      {
+        name: '--config-file',
+        takesValue: true,
+        description: 'Read JSON config from file',
+      },
+    ],
   }),
-  investigateCmd('collector suggest', 'Minimal OTLP receiver config', { static: true }),
-  investigateCmd('collector explain', 'Receiver config shape + defaults', { static: true }),
-  investigateCmd('collector versions', 'Supported collector schema versions', { static: true, network: true }),
+  investigateCmd('collector suggest', 'Minimal OTLP receiver config', {
+    static: true,
+  }),
+  investigateCmd('collector explain', 'Receiver config shape + defaults', {
+    static: true,
+  }),
+  investigateCmd('collector versions', 'Supported collector schema versions', {
+    static: true,
+    network: true,
+  }),
   investigateCmd('collector components', 'Components for a version', {
     static: true,
     network: true,
     flags: [
       { name: '--version', takesValue: true, description: 'Collector version' },
-      { name: '--kind', takesValue: true, description: 'Component kind filter' },
+      {
+        name: '--kind',
+        takesValue: true,
+        description: 'Component kind filter',
+      },
     ],
   }),
   investigateCmd('collector schema', 'JSON schema for a component', {
@@ -405,17 +599,33 @@ const INVESTIGATE_COMMANDS: CommandSpec[] = [
       { name: '--version', takesValue: true, description: 'Collector version' },
     ],
   }),
-  investigateCmd('collector validate-component', 'Validate component config against upstream schema', {
-    static: true,
-    network: true,
-    flags: [
-      { name: '--kind', takesValue: true, description: 'Component kind' },
-      { name: '--name', takesValue: true, description: 'Component name' },
-      { name: '--version', takesValue: true, description: 'Collector version' },
-      { name: '--config-file', takesValue: true, description: 'Read JSON config from file' },
-    ],
-  }),
-  investigateCmd('collector refresh', 'Refresh in-memory collector metadata cache', { static: true, network: true }),
+  investigateCmd(
+    'collector validate-component',
+    'Validate component config against upstream schema',
+    {
+      static: true,
+      network: true,
+      flags: [
+        { name: '--kind', takesValue: true, description: 'Component kind' },
+        { name: '--name', takesValue: true, description: 'Component name' },
+        {
+          name: '--version',
+          takesValue: true,
+          description: 'Collector version',
+        },
+        {
+          name: '--config-file',
+          takesValue: true,
+          description: 'Read JSON config from file',
+        },
+      ],
+    },
+  ),
+  investigateCmd(
+    'collector refresh',
+    'Refresh in-memory collector metadata cache',
+    { static: true, network: true },
+  ),
 ];
 
 COMMANDS.push(...INVESTIGATE_COMMANDS);
@@ -425,30 +635,60 @@ const TELEMETRY_COMMANDS: CommandSpec[] = [
     name: 'telemetry',
     description: 'Manage opt-in CLI usage telemetry (parent)',
     mutating: false,
+    network: false,
+    writesFiles: false,
+    supportsDryRun: false,
+    requiresPackageJson: false,
+    mayReadEnv: false,
+    supportsJson: false,
     flags: [],
   },
   {
     name: 'telemetry status',
     description: 'Show telemetry consent status',
     mutating: false,
+    network: false,
+    writesFiles: false,
+    supportsDryRun: false,
+    requiresPackageJson: false,
+    mayReadEnv: false,
+    supportsJson: true,
     flags: [],
   },
   {
     name: 'telemetry enable',
     description: 'Enable telemetry for this tool',
     mutating: true,
+    network: false,
+    writesFiles: true,
+    supportsDryRun: false,
+    requiresPackageJson: false,
+    mayReadEnv: false,
+    supportsJson: false,
     flags: [],
   },
   {
     name: 'telemetry disable',
     description: 'Disable telemetry and purge undelivered events',
     mutating: true,
+    network: false,
+    writesFiles: true,
+    supportsDryRun: false,
+    requiresPackageJson: false,
+    mayReadEnv: false,
+    supportsJson: false,
     flags: [],
   },
   {
     name: 'telemetry disclosure',
     description: 'Print telemetry disclosure markdown',
     mutating: false,
+    network: false,
+    writesFiles: false,
+    supportsDryRun: false,
+    requiresPackageJson: false,
+    mayReadEnv: false,
+    supportsJson: false,
     flags: [],
   },
 ];
@@ -467,17 +707,72 @@ export interface ErrorCodeEntry {
 
 /** Public catalogue of AUTOTEL_E_* codes for `autotel schema errors`. */
 export const ERROR_CATALOGUE: ErrorCodeEntry[] = [
-  { code: AutotelErrorCodes.E_NO_PACKAGE_JSON, type: 'environment', description: 'No package.json found in cwd or ancestors' },
-  { code: AutotelErrorCodes.E_UNKNOWN_PRESET, type: 'validation', description: 'Preset slug not in registry' },
-  { code: AutotelErrorCodes.E_INVALID_PLAN, type: 'validation', description: 'Plan file failed schema validation' },
-  { code: AutotelErrorCodes.E_INVALID_INPUT, type: 'validation', description: 'Stdin or --input payload invalid' },
-  { code: AutotelErrorCodes.E_INVALID_FLAG, type: 'validation', description: 'Conflicting or invalid flag combination' },
-  { code: AutotelErrorCodes.E_NO_WORKSPACE_PACKAGES, type: 'environment', description: 'Workspace root has no detectable packages' },
-  { code: AutotelErrorCodes.E_ENV_CONSENT_REQUIRED, type: 'environment', description: '.env file present; consent required (pass --scan-env or run interactively)' },
-  { code: AutotelErrorCodes.E_EXISTING_CONFIG, type: 'conflict', description: 'Existing instrumentation config; use --force or run with merge' },
-  { code: AutotelErrorCodes.E_AMBIGUOUS_LOGGER, type: 'conflict', description: 'Multiple loggers detected and selection could not be inferred' },
-  { code: AutotelErrorCodes.E_INSTALL_FAILED, type: 'install', description: 'Package manager install command failed' },
-  { code: AutotelErrorCodes.E_WRITE_FAILED, type: 'io', description: 'Failed to write a file' },
-  { code: AutotelErrorCodes.E_READ_FAILED, type: 'io', description: 'Failed to read a file' },
-  { code: AutotelErrorCodes.E_UNKNOWN, type: 'runtime', description: 'Unexpected error' },
+  {
+    code: AutotelErrorCodes.E_NO_PACKAGE_JSON,
+    type: 'environment',
+    description: 'No package.json found in cwd or ancestors',
+  },
+  {
+    code: AutotelErrorCodes.E_UNKNOWN_PRESET,
+    type: 'validation',
+    description: 'Preset slug not in registry',
+  },
+  {
+    code: AutotelErrorCodes.E_INVALID_PLAN,
+    type: 'validation',
+    description: 'Plan file failed schema validation',
+  },
+  {
+    code: AutotelErrorCodes.E_INVALID_INPUT,
+    type: 'validation',
+    description: 'Stdin or --input payload invalid',
+  },
+  {
+    code: AutotelErrorCodes.E_INVALID_FLAG,
+    type: 'validation',
+    description: 'Conflicting or invalid flag combination',
+  },
+  {
+    code: AutotelErrorCodes.E_NO_WORKSPACE_PACKAGES,
+    type: 'environment',
+    description: 'Workspace root has no detectable packages',
+  },
+  {
+    code: AutotelErrorCodes.E_ENV_CONSENT_REQUIRED,
+    type: 'environment',
+    description:
+      '.env file present; consent required (pass --scan-env or run interactively)',
+  },
+  {
+    code: AutotelErrorCodes.E_EXISTING_CONFIG,
+    type: 'conflict',
+    description:
+      'Existing instrumentation config; use --force or run with merge',
+  },
+  {
+    code: AutotelErrorCodes.E_AMBIGUOUS_LOGGER,
+    type: 'conflict',
+    description:
+      'Multiple loggers detected and selection could not be inferred',
+  },
+  {
+    code: AutotelErrorCodes.E_INSTALL_FAILED,
+    type: 'install',
+    description: 'Package manager install command failed',
+  },
+  {
+    code: AutotelErrorCodes.E_WRITE_FAILED,
+    type: 'io',
+    description: 'Failed to write a file',
+  },
+  {
+    code: AutotelErrorCodes.E_READ_FAILED,
+    type: 'io',
+    description: 'Failed to read a file',
+  },
+  {
+    code: AutotelErrorCodes.E_UNKNOWN,
+    type: 'runtime',
+    description: 'Unexpected error',
+  },
 ];

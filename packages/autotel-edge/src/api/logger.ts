@@ -20,21 +20,24 @@ import {
 import { createRedactor, type RedactorConfig } from './redact';
 
 export type LogLevel =
-  | 'trace'
-  | 'debug'
-  | 'info'
-  | 'warn'
-  | 'error'
-  | 'fatal'
-  | 'silent';
+  'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
 type LogAttrs = Record<string, any>;
 type LevelWithSilentOrString = LogLevel | (string & {});
 type SerializerFn = (value: any) => any;
 type LevelFormatter = (label: string, number: number) => object;
 type BindingsFormatter = (bindings: LogAttrs) => object;
-type LogFormatter = (object: Record<string, unknown>) => Record<string, unknown>;
-type MixinFn = (mergeObject: object, level: number, logger: EdgeLogger) => object;
-type MixinMergeStrategyFn = (mergeObject: object, mixinObject: object) => object;
+type LogFormatter = (
+  object: Record<string, unknown>,
+) => Record<string, unknown>;
+type MixinFn = (
+  mergeObject: object,
+  level: number,
+  logger: EdgeLogger,
+) => object;
+type MixinMergeStrategyFn = (
+  mergeObject: object,
+  mixinObject: object,
+) => object;
 type PlaceholderSpecifier = 'd' | 's' | 'j' | 'o' | 'O';
 type PlaceholderTypeMapping<T extends PlaceholderSpecifier> = T extends 'd'
   ? number
@@ -44,16 +47,21 @@ type PlaceholderTypeMapping<T extends PlaceholderSpecifier> = T extends 'd'
       ? // eslint-disable-next-line @typescript-eslint/no-empty-object-type
         {} | null
       : never;
-type ParseLogFnArgs<T, Acc extends unknown[] = []> =
-  T extends `${infer _}%${infer Placeholder}${infer Rest}`
-    ? Placeholder extends PlaceholderSpecifier
-      ? ParseLogFnArgs<Rest, [...Acc, PlaceholderTypeMapping<Placeholder>]>
-      : ParseLogFnArgs<Rest, Acc>
-    : Acc;
+type ParseLogFnArgs<
+  T,
+  Acc extends unknown[] = [],
+> = T extends `${infer _}%${infer Placeholder}${infer Rest}`
+  ? Placeholder extends PlaceholderSpecifier
+    ? ParseLogFnArgs<Rest, [...Acc, PlaceholderTypeMapping<Placeholder>]>
+    : ParseLogFnArgs<Rest, Acc>
+  : Acc;
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface LogFnFields {}
 type LogFn = {
-  <TMsg extends string = string>(msg: TMsg, ...args: ParseLogFnArgs<TMsg>): void;
+  <TMsg extends string = string>(
+    msg: TMsg,
+    ...args: ParseLogFnArgs<TMsg>
+  ): void;
   <T, TMsg extends string = string>(
     obj: [T] extends [object] ? T & LogFnFields : T,
     msg?: T extends string ? never : TMsg,
@@ -111,11 +119,20 @@ interface EdgeEventEmitter {
   off(event: string | symbol, listener: (...args: any[]) => any): any;
   on(event: string | symbol, listener: (...args: any[]) => any): any;
   once(event: string | symbol, listener: (...args: any[]) => any): any;
-  prependListener(event: string | symbol, listener: (...args: any[]) => any): any;
-  prependOnceListener(event: string | symbol, listener: (...args: any[]) => any): any;
+  prependListener(
+    event: string | symbol,
+    listener: (...args: any[]) => any,
+  ): any;
+  prependOnceListener(
+    event: string | symbol,
+    listener: (...args: any[]) => any,
+  ): any;
   rawListeners(event: string | symbol): ((...args: any[]) => any)[];
   removeAllListeners(event?: string | symbol): any;
-  removeListener(event: string | symbol, listener: (...args: any[]) => any): any;
+  removeListener(
+    event: string | symbol,
+    listener: (...args: any[]) => any,
+  ): any;
   setMaxListeners(n: number): any;
 }
 
@@ -313,11 +330,11 @@ const ANSI_DIM = '\u001B[2m';
 const ANSI_BOLD = '\u001B[1m';
 const ANSI_COLORS: Record<string, string> = {
   fatal: '\u001B[41m\u001B[37m', // white on red bg
-  error: '\u001B[31m',          // red
-  warn: '\u001B[33m',           // yellow
-  info: '\u001B[36m',           // cyan
-  debug: '\u001B[34m',          // blue
-  trace: '\u001B[90m',          // gray
+  error: '\u001B[31m', // red
+  warn: '\u001B[33m', // yellow
+  info: '\u001B[36m', // cyan
+  debug: '\u001B[34m', // blue
+  trace: '\u001B[90m', // gray
 };
 const LEVEL_SYMBOLS: Record<string, string> = {
   fatal: '✗',
@@ -340,10 +357,13 @@ function formatPrettyTimestamp(): string {
 function formatPrettyAttrs(attrs: Record<string, any>): string {
   const keys = Object.keys(attrs);
   if (keys.length === 0) return '';
-  return '\n' + JSON.stringify(attrs, null, 2)
-    .split('\n')
-    .map((line) => `    ${line}`)
-    .join('\n');
+  return (
+    '\n' +
+    JSON.stringify(attrs, null, 2)
+      .split('\n')
+      .map((line) => `    ${line}`)
+      .join('\n')
+  );
 }
 
 function safeStringify(
@@ -357,35 +377,41 @@ function safeStringify(
   // normally while true cycles produce '[Circular]'.
   const ancestors: object[] = [];
 
-  return JSON.stringify(obj, function replacer(this: any, _key: string, value: unknown) {
-    if (typeof value === 'object' && value !== null) {
-      // Unwind: `this` is the object that owns the current key.
-      // Pop ancestors until we find `this` (our direct parent).
-      while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
-        ancestors.pop();
-      }
+  return JSON.stringify(
+    obj,
+    function replacer(this: any, _key: string, value: unknown) {
+      if (typeof value === 'object' && value !== null) {
+        // Unwind: `this` is the object that owns the current key.
+        // Pop ancestors until we find `this` (our direct parent).
+        while (
+          ancestors.length > 0 &&
+          ancestors[ancestors.length - 1] !== this
+        ) {
+          ancestors.pop();
+        }
 
-      // True circular reference: value is already an ancestor
-      if (ancestors.includes(value as object)) return '[Circular]';
+        // True circular reference: value is already an ancestor
+        if (ancestors.includes(value as object)) return '[Circular]';
 
-      if (ancestors.length >= depthLimit) return '[Object]';
+        if (ancestors.length >= depthLimit) return '[Object]';
 
-      ancestors.push(value as object);
+        ancestors.push(value as object);
 
-      if (!Array.isArray(value)) {
-        const keys = Object.keys(value as Record<string, unknown>);
-        if (keys.length > edgeLimit) {
-          const truncated: Record<string, unknown> = {};
-          for (let i = 0; i < edgeLimit; i++) {
-            truncated[keys[i]] = (value as Record<string, unknown>)[keys[i]];
+        if (!Array.isArray(value)) {
+          const keys = Object.keys(value as Record<string, unknown>);
+          if (keys.length > edgeLimit) {
+            const truncated: Record<string, unknown> = {};
+            for (let i = 0; i < edgeLimit; i++) {
+              truncated[keys[i]] = (value as Record<string, unknown>)[keys[i]];
+            }
+            truncated['...'] = `[${keys.length - edgeLimit} more properties]`;
+            return truncated;
           }
-          truncated['...'] = `[${keys.length - edgeLimit} more properties]`;
-          return truncated;
         }
       }
-    }
-    return value;
-  });
+      return value;
+    },
+  );
 }
 
 function parseLogArgs(args: unknown[]): { msg: string; attrs?: LogAttrs } {
@@ -466,7 +492,8 @@ export type EdgeLoggerOptions = {
   mixinMergeStrategy?: MixinMergeStrategyFn;
   customLevels?: Record<string, number>;
   useOnlyCustomLevels?: boolean;
-  levelComparison?: 'ASC' | 'DESC' | ((current: number, expected: number) => boolean);
+  levelComparison?:
+    'ASC' | 'DESC' | ((current: number, expected: number) => boolean);
   name?: string;
   base?: Record<string, any> | null;
   timestamp?: TimeFn | boolean;
@@ -475,13 +502,9 @@ export type EdgeLoggerOptions = {
   depthLimit?: number;
   edgeLimit?: number;
   hooks?: {
-    logMethod?: (
-      args: Parameters<LogFn>,
-      method: LogFn,
-      level: number,
-    ) => void;
+    logMethod?: (args: Parameters<LogFn>, method: LogFn, level: number) => void;
   };
-  write?: WriteFn | ({ [level: string]: WriteFn });
+  write?: WriteFn | { [level: string]: WriteFn };
   transmit?: {
     level?: LevelWithSilentOrString;
     send: (level: string, logEvent: LogEvent) => void;
@@ -500,7 +523,10 @@ export function createEdgeLogger(
   const availableLevels: Record<string, number> = options?.useOnlyCustomLevels
     ? { ...customLevels, silent: Infinity }
     : { ...PINO_LEVELS.values, ...customLevels };
-  const defaultLevel = options?.level ?? (options?.useOnlyCustomLevels ? Object.keys(customLevels)[0] : 'info') ?? 'info';
+  const defaultLevel =
+    options?.level ??
+    (options?.useOnlyCustomLevels ? Object.keys(customLevels)[0] : 'info') ??
+    'info';
   let currentLevel = defaultLevel as LevelWithSilentOrString;
   const pretty = options?.pretty || false;
   const currentBindings = { ...options?.bindings };
@@ -533,7 +559,11 @@ export function createEdgeLogger(
   const mixin = options?.mixin;
   const levelComparison = options?.levelComparison;
   const mixinMergeStrategy =
-    options?.mixinMergeStrategy ?? ((mergeObject: object, mixinObject: object) => ({ ...mergeObject, ...mixinObject }));
+    options?.mixinMergeStrategy ??
+    ((mergeObject: object, mixinObject: object) => ({
+      ...mergeObject,
+      ...mixinObject,
+    }));
   let enabled = options?.enabled ?? true;
   const loggerName = options?.name;
   const base = options?.base;
@@ -550,7 +580,11 @@ export function createEdgeLogger(
   const compareLevels = (
     current: number,
     expected: number,
-    comparison: 'ASC' | 'DESC' | ((current: number, expected: number) => boolean) | undefined,
+    comparison:
+      | 'ASC'
+      | 'DESC'
+      | ((current: number, expected: number) => boolean)
+      | undefined,
   ) => {
     if (typeof comparison === 'function') return comparison(current, expected);
     if (comparison === 'DESC') return current <= expected;
@@ -572,7 +606,8 @@ export function createEdgeLogger(
     if (event === 'level-change') {
       levelListeners.length = 0;
       levelListeners.push(
-        ...(listeners.get(event) as LevelChangeEventListener[] | undefined ?? []),
+        ...((listeners.get(event) as LevelChangeEventListener[] | undefined) ??
+          []),
       );
     }
   };
@@ -590,7 +625,10 @@ export function createEdgeLogger(
     }
   };
 
-  const removeEventListener = (event: string | symbol, listener: EventListener) => {
+  const removeEventListener = (
+    event: string | symbol,
+    listener: EventListener,
+  ) => {
     const activeListeners = listeners.get(event);
     if (!activeListeners) {
       return;
@@ -625,11 +663,7 @@ export function createEdgeLogger(
     const expectedValue = levelValues[level];
     if (currentValue === undefined || expectedValue === undefined) return false;
 
-    return compareLevels(
-      expectedValue,
-      currentValue,
-      levelComparison,
-    );
+    return compareLevels(expectedValue, currentValue, levelComparison);
   };
 
   const stringify = (obj: unknown): string => {
@@ -645,7 +679,10 @@ export function createEdgeLogger(
     return new Date().toISOString();
   };
 
-  const writeOutput = (level: LevelWithSilentOrString, logObject: Record<string, any>) => {
+  const writeOutput = (
+    level: LevelWithSilentOrString,
+    logObject: Record<string, any>,
+  ) => {
     if (writeFn) {
       if (typeof writeFn === 'function') {
         writeFn(logObject);
@@ -672,15 +709,16 @@ export function createEdgeLogger(
     );
   };
 
-  const emitTransmit = (
-    level: LevelWithSilentOrString,
-    rawArgs: unknown[],
-  ) => {
+  const emitTransmit = (level: LevelWithSilentOrString, rawArgs: unknown[]) => {
     if (!transmit) return;
     if (transmit.level) {
       const transmitValue = levelValues[transmit.level];
       const logValue = levelValues[level];
-      if (transmitValue !== undefined && logValue !== undefined && logValue < transmitValue) {
+      if (
+        transmitValue !== undefined &&
+        logValue !== undefined &&
+        logValue < transmitValue
+      ) {
         return;
       }
     }
@@ -728,12 +766,11 @@ export function createEdgeLogger(
     const mergeObject = nestedKey
       ? ({ [nestedKey]: serializedAttrs ?? {} } as Record<string, unknown>)
       : (serializedAttrs ?? {});
-    const mixinObject =
-      mixin?.(mergeObject, levelValues[level], logger) ?? {};
-    const mergedLogObject = mixinMergeStrategy(mergeObject, mixinObject) as Record<
-      string,
-      unknown
-    >;
+    const mixinObject = mixin?.(mergeObject, levelValues[level], logger) ?? {};
+    const mergedLogObject = mixinMergeStrategy(
+      mergeObject,
+      mixinObject,
+    ) as Record<string, unknown>;
     const formattedLogObject = logFormatter
       ? logFormatter(mergedLogObject)
       : mergedLogObject;
@@ -755,7 +792,12 @@ export function createEdgeLogger(
       ...(ts === undefined ? {} : { timestamp: ts }),
     };
 
-    if (serializedAttrs && !nestedKey && errorKey !== 'error' && 'error' in logEntry) {
+    if (
+      serializedAttrs &&
+      !nestedKey &&
+      errorKey !== 'error' &&
+      'error' in logEntry
+    ) {
       logEntry[errorKey] = logEntry.error;
       delete logEntry.error;
     }
@@ -795,7 +837,12 @@ export function createEdgeLogger(
           const { msg, attrs } = parseLogArgs(methodArgs);
           log(levelName, msg, attrs, methodArgs);
         }) as LogFn;
-        hooks.logMethod.call(logger, args as Parameters<LogFn>, method, levelValues[levelName]);
+        hooks.logMethod.call(
+          logger,
+          args as Parameters<LogFn>,
+          method,
+          levelValues[levelName],
+        );
         return;
       }
       const { msg, attrs } = parseLogArgs(args);
@@ -936,7 +983,8 @@ export function createEdgeLogger(
 
     getMaxListeners: () => maxListeners,
 
-    listenerCount: (event: string | symbol) => listeners.get(event)?.length ?? 0,
+    listenerCount: (event: string | symbol) =>
+      listeners.get(event)?.length ?? 0,
 
     listeners: (event: string | symbol) => [...(listeners.get(event) ?? [])],
 
@@ -959,18 +1007,12 @@ export function createEdgeLogger(
       return logger;
     },
 
-    prependListener: (
-      event: string | symbol,
-      listener: EventListener,
-    ) => {
+    prependListener: (event: string | symbol, listener: EventListener) => {
       addListener(event, listener, true);
       return logger;
     },
 
-    prependOnceListener: (
-      event: string | symbol,
-      listener: EventListener,
-    ) => {
+    prependOnceListener: (event: string | symbol, listener: EventListener) => {
       const wrapped: EventListener = (...args: any[]) => {
         removeEventListener(event, wrapped);
         listener(...args);
@@ -999,10 +1041,7 @@ export function createEdgeLogger(
       return logger;
     },
 
-    removeListener: (
-      event: string | symbol,
-      listener: EventListener,
-    ) => {
+    removeListener: (event: string | symbol, listener: EventListener) => {
       removeEventListener(event, listener);
       return logger;
     },

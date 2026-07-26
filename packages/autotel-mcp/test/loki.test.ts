@@ -48,7 +48,7 @@ describe('LokiBackend — wiring', () => {
   it('searchLogs sends LogQL, nanosecond times, and parses stream entries', async () => {
     const requests: string[] = [];
     originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       requests.push(typeof input === 'string' ? input : input.toString());
       return new Response(
         JSON.stringify({

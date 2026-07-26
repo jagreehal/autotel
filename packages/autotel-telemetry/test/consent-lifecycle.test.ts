@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { RunEvent } from '../src/types';
 
 const { append, readAll, purge } = vi.hoisted(() => ({
   append: vi.fn(async () => {}),
-  readAll: vi.fn(async () => []),
+  readAll: vi.fn<() => Promise<RunEvent[]>>(async () => []),
   purge: vi.fn(async () => {}),
 }));
 

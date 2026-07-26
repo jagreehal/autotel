@@ -32,7 +32,9 @@ export function packEventLanes(
     const posPercent = Math.min(Math.max(raw, 0), 100);
 
     const lane = lanes.find((entries) =>
-      entries.every((e) => Math.abs(posPercent - e.posPercent) > MIN_GAP_PERCENT),
+      entries.every(
+        (e) => Math.abs(posPercent - e.posPercent) > MIN_GAP_PERCENT,
+      ),
     );
     if (lane) {
       lane.push({ index: i, posPercent });

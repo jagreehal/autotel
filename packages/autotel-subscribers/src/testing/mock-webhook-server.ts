@@ -99,7 +99,12 @@ export class MockWebhookServer {
         this.requests.push(request);
 
         if (this.options.logRequests) {
-          console.log('[MockWebhookServer]', request.method, request.path, parsedBody);
+          console.log(
+            '[MockWebhookServer]',
+            request.method,
+            request.path,
+            parsedBody,
+          );
         }
 
         // Simulate response delay
@@ -201,13 +206,16 @@ export class MockWebhookServer {
    * await server.waitForRequests(2, 1000); // Wait max 1 second
    * ```
    */
-  async waitForRequests(count: number, timeoutMs: number = 5000): Promise<void> {
+  async waitForRequests(
+    count: number,
+    timeoutMs: number = 5000,
+  ): Promise<void> {
     const startTime = Date.now();
 
     while (this.requests.length < count) {
       if (Date.now() - startTime > timeoutMs) {
         throw new Error(
-          `Timeout waiting for ${count} requests (got ${this.requests.length})`
+          `Timeout waiting for ${count} requests (got ${this.requests.length})`,
         );
       }
 

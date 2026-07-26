@@ -44,7 +44,10 @@ export type { PactAttributeKey } from './attrs.js';
 
 export { tagPactInteraction } from './tag.js';
 
-export { PactLedgerSpanProcessor, createPactLedgerProcessor } from './processor.js';
+export {
+  PactLedgerSpanProcessor,
+  createPactLedgerProcessor,
+} from './processor.js';
 export type {
   PactLedgerProcessorOptions,
   ReadableSpanLike,

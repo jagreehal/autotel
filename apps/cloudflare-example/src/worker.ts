@@ -2,6 +2,7 @@ import type { WorkerEnv } from './types';
 import {
   wrapModule,
   trace,
+  withTracing,
   span,
   isNativeTracingAvailable,
   getActiveNativeTracer,
@@ -196,14 +197,13 @@ const aiSearchPipeline = trace(
 );
 
 // Example with proper error handling and span status codes
-const processPayment = trace(
-  {
-    name: 'payment.process',
-    attributesFromArgs: ([amount, userId]) => ({
-      'payment.amount': amount,
-      'payment.user_id': userId,
-    }),
-  },
+const processPayment = withTracing({
+  name: 'payment.process',
+  attributesFromArgs: ([amount, userId]: [number, string]) => ({
+    'payment.amount': amount,
+    'payment.user_id': userId,
+  }),
+})(
   (ctx) =>
     async function processPayment(amount: number, userId: string) {
       try {
@@ -274,7 +274,11 @@ const insertUser = trace(
   {
     name: 'db.insertUser',
     attributesFromArgs: ([user]) => ({ 'user.email': user.email }),
-    attributesFromResult: (user: { id: string; email: string; name: string }) => ({ 'user.id': user.id }),
+    attributesFromResult: (user: {
+      id: string;
+      email: string;
+      name: string;
+    }) => ({ 'user.id': user.id }),
   },
   async function insertUser(
     user: { email: string; name: string },
@@ -293,7 +297,11 @@ const validateAndCreate = trace(
   {
     name: 'user.create',
     attributesFromArgs: ([data]) => ({ 'user.email': data.email }),
-    attributesFromResult: (user: { id: string; email: string; name: string }) => ({ 'user.id': user.id }),
+    attributesFromResult: (user: {
+      id: string;
+      email: string;
+      name: string;
+    }) => ({ 'user.id': user.id }),
   },
   async function validateAndCreate(
     data: { email: string; name: string },
@@ -577,53 +585,56 @@ async function processMessage(message: Message) {
 // `nativeTracing` lets you override the auto-detection:
 //   'auto' (default) · 'on' (force native) · 'off' (force autotel OTLP — handy
 //   to keep using devtools locally even if the runtime exposes native tracing).
-export default wrapModule((env: WorkerEnv) => ({
-  exporter: {
-    url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
-    headers: parseHeaders(env.OTLP_HEADERS),
-  },
-  service: {
-    name: 'cloudflare-example',
-    version: '1.0.1',
-  },
-  // 'auto' | 'on' | 'off' — omit for the default ('auto').
-  nativeTracing: env.NATIVE_TRACING as 'auto' | 'on' | 'off' | undefined,
-  // Adaptive sampling: 10% baseline, all errors, all slow requests (>1s)
-  // Use SamplingPresets.highTraffic() for high-volume services
-  // Use SamplingPresets.debugging() for active debugging
-  // Use SamplingPresets.development() for 100% sampling in dev
-  sampling: {
-    tailSampler:
-      env.ENVIRONMENT === 'production'
-        ? SamplingPresets.production() // 10% baseline, all errors, slow >1s
-        : SamplingPresets.development(), // 100% in dev
-  },
-  instrumentation: {
-    instrumentGlobalFetch: true,
-    instrumentGlobalCache: true,
-    // Set to true to disable all instrumentation for local dev
-    disabled: env.DISABLE_INSTRUMENTATION === 'true',
-  },
-  handlers: {
-    fetch: {
-      // Customize fetch spans with postProcess callback
-      postProcess: (span, { request, response, readable }) => {
-        const url = new URL(request.url);
-        // Add custom attributes based on request/response
-        if (url.pathname.startsWith('/api/')) {
-          span.setAttribute('api.endpoint', url.pathname);
-        }
-        if (response.status >= 500) {
-          span.setAttribute('error.severity', 'high');
-        }
-        // Access readable span for advanced use cases
-        const durationMs =
-          (readable.endTime[0] - readable.startTime[0]) * 1000 +
-          (readable.endTime[1] - readable.startTime[1]) / 1_000_000;
-        if (durationMs > 1000) {
-          span.setAttribute('performance.slow', true);
-        }
+export default wrapModule(
+  (env: WorkerEnv) => ({
+    exporter: {
+      url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
+      headers: parseHeaders(env.OTLP_HEADERS),
+    },
+    service: {
+      name: 'cloudflare-example',
+      version: '1.0.1',
+    },
+    // 'auto' | 'on' | 'off' — omit for the default ('auto').
+    nativeTracing: env.NATIVE_TRACING as 'auto' | 'on' | 'off' | undefined,
+    // Adaptive sampling: 10% baseline, all errors, all slow requests (>1s)
+    // Use SamplingPresets.highTraffic() for high-volume services
+    // Use SamplingPresets.debugging() for active debugging
+    // Use SamplingPresets.development() for 100% sampling in dev
+    sampling: {
+      tailSampler:
+        env.ENVIRONMENT === 'production'
+          ? SamplingPresets.production() // 10% baseline, all errors, slow >1s
+          : SamplingPresets.development(), // 100% in dev
+    },
+    instrumentation: {
+      instrumentGlobalFetch: true,
+      instrumentGlobalCache: true,
+      // Set to true to disable all instrumentation for local dev
+      disabled: env.DISABLE_INSTRUMENTATION === 'true',
+    },
+    handlers: {
+      fetch: {
+        // Customize fetch spans with postProcess callback
+        postProcess: (span, { request, response, readable }) => {
+          const url = new URL(request.url);
+          // Add custom attributes based on request/response
+          if (url.pathname.startsWith('/api/')) {
+            span.setAttribute('api.endpoint', url.pathname);
+          }
+          if (response.status >= 500) {
+            span.setAttribute('error.severity', 'high');
+          }
+          // Access readable span for advanced use cases
+          const durationMs =
+            (readable.endTime[0] - readable.startTime[0]) * 1000 +
+            (readable.endTime[1] - readable.startTime[1]) / 1_000_000;
+          if (durationMs > 1000) {
+            span.setAttribute('performance.slow', true);
+          }
+        },
       },
     },
-  },
-}), handler);
+  }),
+  handler,
+);

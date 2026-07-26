@@ -30,6 +30,9 @@ function catalog(opts: {
         e.id,
         {
           id: e.id,
+          name: e.id,
+          version: '1.0.0',
+          markdown: '',
           filePath: `mock/${e.id}.mdx`,
           declaredFieldPaths: e.declaredFieldPaths,
           declaredSchemaConstraints: e.declaredSchemaConstraints,
@@ -39,13 +42,25 @@ function catalog(opts: {
     services: new Map(
       (opts.services ?? []).map((id) => [
         id,
-        { id, filePath: `mock/${id}.mdx` },
+        {
+          id,
+          name: id,
+          version: '1.0.0',
+          markdown: '',
+          filePath: `mock/${id}.mdx`,
+        },
       ]),
     ),
     channels: new Map(
       (opts.channels ?? []).map((id) => [
         id,
-        { id, filePath: `mock/${id}.mdx` },
+        {
+          id,
+          name: id,
+          version: '1.0.0',
+          markdown: '',
+          filePath: `mock/${id}.mdx`,
+        },
       ]),
     ),
   };

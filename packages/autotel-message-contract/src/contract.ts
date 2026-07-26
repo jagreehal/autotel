@@ -24,10 +24,7 @@
  */
 import { lineDiff } from './diff.js';
 import { read, type Reader } from './reader.js';
-import {
-  defaultSerializer,
-  type MessageSerializer,
-} from './serializer.js';
+import { defaultSerializer, type MessageSerializer } from './serializer.js';
 import {
   isUpdateMode,
   readSnapshot,
@@ -75,7 +72,9 @@ export function approvedSnapshot(
   };
 }
 
-function isApprovedSnapshotSource(value: unknown): value is ApprovedSnapshotSource {
+function isApprovedSnapshotSource(
+  value: unknown,
+): value is ApprovedSnapshotSource {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -85,7 +84,9 @@ function isApprovedSnapshotSource(value: unknown): value is ApprovedSnapshotSour
 }
 
 /** Start a contract check. */
-export function messageContract(options: MessageContractOptions = {}): GivenStep {
+export function messageContract(
+  options: MessageContractOptions = {},
+): GivenStep {
   return new GivenStep(options);
 }
 
@@ -123,9 +124,16 @@ class WhenStep<T> {
    * (a Standard Schema such as Zod/Valibot, or a parse function). The next step
    * asserts the versions stay compatible.
    */
-  whenDeserializedAs<Output>(reader: Reader<Output>): CompatibilityStep<Output> {
+  whenDeserializedAs<Output>(
+    reader: Reader<Output>,
+  ): CompatibilityStep<Output> {
     const serializer = this.options.serializer ?? defaultSerializer;
-    return new CompatibilityStep(this.message, reader, serializer, this.options);
+    return new CompatibilityStep(
+      this.message,
+      reader,
+      serializer,
+      this.options,
+    );
   }
 }
 
@@ -225,7 +233,8 @@ class CompatibilityStep<Output> {
     const outcome = await read(this.reader, deserializedSource);
 
     if (!outcome.ok) {
-      const writer = direction === 'backward' ? 'an older writer' : 'a newer writer';
+      const writer =
+        direction === 'backward' ? 'an older writer' : 'a newer writer';
       const readerLabel =
         direction === 'backward' ? 'the newer reader' : 'the older reader';
       throw new ContractViolationError(
@@ -301,7 +310,9 @@ class CompatibilityStep<Output> {
 }
 
 function truncate(value: string, max = 400): string {
-  return value.length > max ? `${value.slice(0, max)}… (${value.length} chars)` : value;
+  return value.length > max
+    ? `${value.slice(0, max)}… (${value.length} chars)`
+    : value;
 }
 
 function compareSharedStructure(
@@ -324,7 +335,9 @@ function compareSharedStructure(
       return;
     }
 
-    for (const key of sourceKeys.filter((candidate) => candidate in targetValue).toSorted()) {
+    for (const key of sourceKeys
+      .filter((candidate) => candidate in targetValue)
+      .toSorted()) {
       compareSharedStructure(
         sourceValue[key],
         targetValue[key],
@@ -344,7 +357,12 @@ function compareSharedStructure(
     }
 
     for (const [index, sourceItem] of sourceValue.entries()) {
-      compareSharedStructure(sourceItem, targetValue[index], `${path}[${index}]`, mismatches);
+      compareSharedStructure(
+        sourceItem,
+        targetValue[index],
+        `${path}[${index}]`,
+        mismatches,
+      );
     }
     return;
   }
@@ -357,7 +375,8 @@ function compareSharedStructure(
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
@@ -401,9 +420,4 @@ function joinPath(path: string, key: string): string {
   return path === '$' ? `$.${key}` : `${path}.${key}`;
 }
 
-export type {
-  GivenStep,
-  WhenStep,
-  SnapshotStep,
-  CompatibilityStep,
-};
+export type { GivenStep, WhenStep, SnapshotStep, CompatibilityStep };

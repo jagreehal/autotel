@@ -11,7 +11,7 @@
 
 import 'dotenv/config';
 import express from 'express';
-import { trace, setUser, httpServer, type TraceContext } from 'autotel';
+import { setUser, httpServer, type TraceContext, withTracing } from 'autotel';
 
 const app = express();
 app.use(express.json());
@@ -28,12 +28,15 @@ interface CheckoutSession {
 const sessions = new Map<string, CheckoutSession>();
 
 // Simulated user database (matching Boris's example)
-const users: Record<string, {
-  id: string;
-  subscription: string;
-  account_age_days: number;
-  lifetime_value_cents: number;
-}> = {
+const users: Record<
+  string,
+  {
+    id: string;
+    subscription: string;
+    account_age_days: number;
+    lifetime_value_cents: number;
+  }
+> = {
   user_456: {
     id: 'user_456',
     subscription: 'premium',
@@ -49,12 +52,15 @@ const users: Record<string, {
 };
 
 // Simulated cart database
-const carts: Record<string, {
-  id: string;
-  item_count: number;
-  total_cents: number;
-  coupon_applied?: string;
-}> = {
+const carts: Record<
+  string,
+  {
+    id: string;
+    item_count: number;
+    total_cents: number;
+    coupon_applied?: string;
+  }
+> = {
   cart_xyz: {
     id: 'cart_xyz',
     item_count: 3,
@@ -111,7 +117,9 @@ app.post('/checkout/auth', (req, res) => {
 
   const session = sessions.get(request_id);
   if (!session) {
-    return res.status(404).json({ error: 'Session not found. Call /checkout/start first.' });
+    return res
+      .status(404)
+      .json({ error: 'Session not found. Call /checkout/start first.' });
   }
 
   const user = users[user_id] || users['user_456'];
@@ -150,7 +158,9 @@ app.post('/checkout/cart', (req, res) => {
 
   const session = sessions.get(request_id);
   if (!session) {
-    return res.status(404).json({ error: 'Session not found. Call /checkout/start first.' });
+    return res
+      .status(404)
+      .json({ error: 'Session not found. Call /checkout/start first.' });
   }
 
   const cart = carts[cart_id] || carts['cart_xyz'];
@@ -189,12 +199,16 @@ app.post('/checkout/payment', async (req, res) => {
 
   const session = sessions.get(request_id);
   if (!session) {
-    return res.status(404).json({ error: 'Session not found. Call /checkout/start first.' });
+    return res
+      .status(404)
+      .json({ error: 'Session not found. Call /checkout/start first.' });
   }
 
   // Simulate payment processing latency
   const paymentStart = Date.now();
-  await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
+  await new Promise((resolve) =>
+    setTimeout(resolve, 100 + Math.random() * 200),
+  );
   const paymentLatency = Date.now() - paymentStart;
 
   session.step = 4;
@@ -228,74 +242,82 @@ app.post('/checkout/payment', async (req, res) => {
  *
  * Pass ?simulate_error=true to simulate a payment failure
  */
-const processCheckout = trace((ctx: TraceContext) => async (session: CheckoutSession, simulateError: boolean) => {
-  // Set all accumulated attributes on the span
-  httpServer(ctx, {
-    method: 'POST',
-    route: '/api/checkout',
-    statusCode: simulateError ? 500 : 200,
-  });
+const processCheckout = withTracing({})(
+  (ctx: TraceContext) =>
+    async (session: CheckoutSession, simulateError: boolean) => {
+      // Set all accumulated attributes on the span
+      httpServer(ctx, {
+        method: 'POST',
+        route: '/api/checkout',
+        statusCode: simulateError ? 500 : 200,
+      });
 
-  // User context
-  const user = session.attributes.user as Record<string, unknown> | undefined;
-  if (user) {
-    setUser(ctx, {
-      id: user.id as string,
-    });
-    ctx.setAttributes({
-      'user.subscription': user.subscription,
-      'user.account_age_days': user.account_age_days,
-      'user.lifetime_value_cents': user.lifetime_value_cents,
-    });
-  }
+      // User context
+      const user = session.attributes.user as
+        Record<string, unknown> | undefined;
+      if (user) {
+        setUser(ctx, {
+          id: user.id as string,
+        });
+        ctx.setAttributes({
+          'user.subscription': user.subscription,
+          'user.account_age_days': user.account_age_days,
+          'user.lifetime_value_cents': user.lifetime_value_cents,
+        });
+      }
 
-  // Request context
-  ctx.setAttributes({
-    'request.id': session.request_id,
-  });
+      // Request context
+      ctx.setAttributes({
+        'request.id': session.request_id,
+      });
 
-  // Cart context
-  const cart = session.attributes.cart as Record<string, unknown> | undefined;
-  if (cart) {
-    ctx.setAttributes({
-      'cart.id': cart.id,
-      'cart.item_count': cart.item_count,
-      'cart.total_cents': cart.total_cents,
-      'cart.coupon_applied': cart.coupon_applied,
-    });
-  }
+      // Cart context
+      const cart = session.attributes.cart as
+        Record<string, unknown> | undefined;
+      if (cart) {
+        ctx.setAttributes({
+          'cart.id': cart.id,
+          'cart.item_count': cart.item_count,
+          'cart.total_cents': cart.total_cents,
+          'cart.coupon_applied': cart.coupon_applied,
+        });
+      }
 
-  // Payment context
-  const payment = session.attributes.payment as Record<string, unknown> | undefined;
-  if (payment) {
-    ctx.setAttributes({
-      'payment.method': payment.method,
-      'payment.provider': payment.provider,
-      'payment.latency_ms': payment.latency_ms,
-      'payment.attempt': payment.attempt,
-    });
-  }
+      // Payment context
+      const payment = session.attributes.payment as
+        Record<string, unknown> | undefined;
+      if (payment) {
+        ctx.setAttributes({
+          'payment.method': payment.method,
+          'payment.provider': payment.provider,
+          'payment.latency_ms': payment.latency_ms,
+          'payment.attempt': payment.attempt,
+        });
+      }
 
-  // Simulate error if requested
-  if (simulateError) {
-    ctx.setAttributes({
-      'error.type': 'PaymentError',
-      'error.code': 'card_declined',
-      'error.message': 'Card declined by issuer',
-      'error.stripe_decline_code': 'insufficient_funds',
-    });
-    throw new Error('Payment failed: card_declined');
-  }
+      // Simulate error if requested
+      if (simulateError) {
+        ctx.setAttributes({
+          'error.type': 'PaymentError',
+          'error.code': 'card_declined',
+          'error.message': 'Card declined by issuer',
+          'error.stripe_decline_code': 'insufficient_funds',
+        });
+        throw new Error('Payment failed: card_declined');
+      }
 
-  return { success: true };
-});
+      return { success: true };
+    },
+);
 
 app.post('/checkout/complete', async (req, res) => {
   const { request_id, simulate_error = false } = req.body;
 
   const session = sessions.get(request_id);
   if (!session) {
-    return res.status(404).json({ error: 'Session not found. Call /checkout/start first.' });
+    return res
+      .status(404)
+      .json({ error: 'Session not found. Call /checkout/start first.' });
   }
 
   const duration_ms = Date.now() - session.startTime;
@@ -367,7 +389,10 @@ function countFields(obj: Record<string, unknown>, prefix = ''): number {
   let count = 0;
   for (const [key, value] of Object.entries(obj)) {
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      count += countFields(value as Record<string, unknown>, `${prefix}${key}.`);
+      count += countFields(
+        value as Record<string, unknown>,
+        `${prefix}${key}.`,
+      );
     } else {
       count++;
     }
@@ -380,7 +405,9 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log('\n' + '='.repeat(70));
   console.log('Wide Event Builder API');
-  console.log('Demonstrates canonical log lines (Boris Tane\'s wide events pattern)');
+  console.log(
+    "Demonstrates canonical log lines (Boris Tane's wide events pattern)",
+  );
   console.log('='.repeat(70));
   console.log(`\nServer running on http://localhost:${PORT}`);
   console.log('\nEndpoints (call in order):');

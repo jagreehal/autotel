@@ -150,7 +150,9 @@ export const WithAffectedTraces: Story = {
         lastSeen: now - 100,
       }),
     ];
-    await userEvent.click(await canvas.findByText('Request failed with status 500'));
+    await userEvent.click(
+      await canvas.findByText('Request failed with status 500'),
+    );
     await expect(await canvas.findByText('Recent Traces')).toBeInTheDocument();
     await expect(canvas.getByText('GET /api/users')).toBeInTheDocument();
   },

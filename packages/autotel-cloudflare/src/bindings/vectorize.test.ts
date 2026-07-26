@@ -5,7 +5,6 @@ import { instrumentVectorize } from './vectorize';
 describe('Vectorize Binding Instrumentation', () => {
   let mockTracer: any;
   let mockSpan: any;
-  let getTracerSpy: any;
   let mockVectorize: any;
 
   beforeEach(() => {
@@ -26,12 +25,12 @@ describe('Vectorize Binding Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer);
 
     mockVectorize = {
       query: vi.fn(async () => ({
@@ -83,8 +82,13 @@ describe('Vectorize Binding Instrumentation', () => {
 
       await instrumented.query([0.1, 0.2, 0.3] as any, {} as any);
 
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('db.vectorize.matches_count', 3);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'db.vectorize.matches_count',
+        3,
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -122,7 +126,9 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.any(Function),
       );
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
   });
@@ -152,7 +158,9 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.any(Function),
       );
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
   });
@@ -176,7 +184,9 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.any(Function),
       );
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
   });
@@ -200,7 +210,9 @@ describe('Vectorize Binding Instrumentation', () => {
         expect.any(Function),
       );
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
   });
@@ -209,7 +221,7 @@ describe('Vectorize Binding Instrumentation', () => {
     it('should invoke methods with original object as this, not the proxy', async () => {
       let receivedThis: any;
       const mockVec = {
-        query: vi.fn(async function(this: any) {
+        query: vi.fn(async function (this: any) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return { matches: [], count: 0 };
@@ -218,7 +230,11 @@ describe('Vectorize Binding Instrumentation', () => {
         upsert: vi.fn(async () => ({ mutationId: 'mut-2', count: 0 })),
         deleteByIds: vi.fn(async () => ({ mutationId: 'mut-3', count: 0 })),
         getByIds: vi.fn(async () => []),
-        describe: vi.fn(async () => ({ dimensions: 128, vectorCount: 0, processedUpTo: '' })),
+        describe: vi.fn(async () => ({
+          dimensions: 128,
+          vectorCount: 0,
+          processedUpTo: '',
+        })),
       } as unknown as VectorizeIndex;
 
       const instrumented = instrumentVectorize(mockVec, 'test');
@@ -235,7 +251,9 @@ describe('Vectorize Binding Instrumentation', () => {
 
       const instrumented = instrumentVectorize(mockVectorize, 'my-index');
 
-      await expect(instrumented.query([0.1, 0.2] as any, {} as any)).rejects.toThrow('Vectorize query failed');
+      await expect(
+        instrumented.query([0.1, 0.2] as any, {} as any),
+      ).rejects.toThrow('Vectorize query failed');
 
       expect(mockSpan.recordException).toHaveBeenCalled();
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -252,7 +270,9 @@ describe('Vectorize Binding Instrumentation', () => {
 
       const instrumented = instrumentVectorize(mockVectorize, 'my-index');
 
-      await expect(instrumented.insert([{ id: 'v1', values: [0.1] }] as any)).rejects.toThrow('Insert failed');
+      await expect(
+        instrumented.insert([{ id: 'v1', values: [0.1] }] as any),
+      ).rejects.toThrow('Insert failed');
 
       expect(mockSpan.recordException).toHaveBeenCalled();
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -269,7 +289,9 @@ describe('Vectorize Binding Instrumentation', () => {
 
       const instrumented = instrumentVectorize(mockVectorize, 'my-index');
 
-      await expect(instrumented.upsert([{ id: 'v1', values: [0.1] }] as any)).rejects.toThrow('Upsert failed');
+      await expect(
+        instrumented.upsert([{ id: 'v1', values: [0.1] }] as any),
+      ).rejects.toThrow('Upsert failed');
 
       expect(mockSpan.recordException).toHaveBeenCalled();
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -286,7 +308,9 @@ describe('Vectorize Binding Instrumentation', () => {
 
       const instrumented = instrumentVectorize(mockVectorize, 'my-index');
 
-      await expect(instrumented.deleteByIds(['vec-1'])).rejects.toThrow('Delete failed');
+      await expect(instrumented.deleteByIds(['vec-1'])).rejects.toThrow(
+        'Delete failed',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalled();
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -320,7 +344,9 @@ describe('Vectorize Binding Instrumentation', () => {
 
       const instrumented = instrumentVectorize(mockVectorize, 'my-index');
 
-      await expect(instrumented.query([0.1] as any, {} as any)).rejects.toThrow('string error');
+      await expect(instrumented.query([0.1] as any, {} as any)).rejects.toThrow(
+        'string error',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalled();
       expect(mockSpan.setStatus).toHaveBeenCalledWith({

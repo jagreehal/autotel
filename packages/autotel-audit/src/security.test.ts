@@ -92,7 +92,10 @@ describe('securityEvent', () => {
       'autotel.sampling.tail.evaluated',
       true,
     );
-    expect(setAttribute).toHaveBeenCalledWith('autotel.sampling.tail.keep', true);
+    expect(setAttribute).toHaveBeenCalledWith(
+      'autotel.sampling.tail.keep',
+      true,
+    );
     expect(setAttribute).toHaveBeenCalledWith(
       'autotel.security.force_keep',
       true,
@@ -101,7 +104,11 @@ describe('securityEvent', () => {
 
   it('can opt out of force-keep', () => {
     securityEvent(
-      { name: 'auth.login.success', category: 'authentication', outcome: 'success' },
+      {
+        name: 'auth.login.success',
+        category: 'authentication',
+        outcome: 'success',
+      },
       { ctx: mockCtx as never, forceKeep: false },
     );
 
@@ -210,7 +217,11 @@ describe('securityEvent', () => {
 
   it('can opt out of metrics', () => {
     securityEvent(
-      { name: 'auth.login.success', category: 'authentication', outcome: 'success' },
+      {
+        name: 'auth.login.success',
+        category: 'authentication',
+        outcome: 'success',
+      },
       { ctx: mockCtx as never, metrics: false },
     );
 

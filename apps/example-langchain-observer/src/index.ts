@@ -37,7 +37,10 @@ async function main(): Promise<void> {
 
   // `exportContent: (e) => e` opts in to capturing prompts / tool args / results
   // so they show up on the spans. Omit it (the default) to keep content off.
-  const observe = createGenAiObserver({ tracer, exportContent: (event) => event });
+  const observe = createGenAiObserver({
+    tracer,
+    exportContent: (event) => event,
+  });
   const handler = createLangChainObserver(observe);
 
   const multiply = tool(({ a, b }) => String(a * b), {
@@ -46,7 +49,11 @@ async function main(): Promise<void> {
     schema: z.object({ a: z.number(), b: z.number() }),
   });
 
-  const llm = new ChatOllama({ model: MODEL, temperature: 0, baseUrl: BASE_URL });
+  const llm = new ChatOllama({
+    model: MODEL,
+    temperature: 0,
+    baseUrl: BASE_URL,
+  });
 
   // --- Demo 1: a plain chat — a single `chat` span carrying token usage ------
   console.log(`\n=== Demo 1 · ChatOllama.invoke (${MODEL}) ===`);

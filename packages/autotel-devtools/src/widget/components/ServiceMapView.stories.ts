@@ -64,7 +64,9 @@ export const SingleService: Story = {
     updateWidgetData({
       traces: [makeTrace({ service: 'api-service' })],
     });
-    await expect(await canvas.findByText('Service Map (1 services)')).toBeInTheDocument();
+    await expect(
+      await canvas.findByText('Service Map (1 services)'),
+    ).toBeInTheDocument();
     await expect(canvas.getByText('api-service')).toBeInTheDocument();
   },
 };
@@ -79,7 +81,9 @@ export const MultipleServices: Story = {
         makeTrace({ traceId: 't4', service: 'payment-service' }),
       ],
     });
-    await expect(await canvas.findByText('Service Map (4 services)')).toBeInTheDocument();
+    await expect(
+      await canvas.findByText('Service Map (4 services)'),
+    ).toBeInTheDocument();
     await expect(canvas.getByText('api-gateway')).toBeInTheDocument();
     await expect(canvas.getByText('user-service')).toBeInTheDocument();
   },
@@ -95,7 +99,11 @@ export const ConnectedWithErrorEdge: Story = {
         makeTrace({
           traceId: 'tc',
           service: 'frontend',
-          rootSpan: s({ spanId: 'root', name: 'GET /checkout', kind: 'SERVER' }),
+          rootSpan: s({
+            spanId: 'root',
+            name: 'GET /checkout',
+            kind: 'SERVER',
+          }),
           spans: [
             s({ spanId: 'root', name: 'GET /checkout', kind: 'SERVER' }),
             s({
@@ -113,7 +121,10 @@ export const ConnectedWithErrorEdge: Story = {
               parentSpanId: 'root',
               duration: 150,
               status: { code: 'ERROR' },
-              attributes: { 'peer.service': 'database', 'db.system': 'postgres' },
+              attributes: {
+                'peer.service': 'database',
+                'db.system': 'postgres',
+              },
             }),
           ],
         }),
@@ -134,7 +145,9 @@ export const WithErrors: Story = {
         makeTrace({ traceId: 't3', service: 'auth-service', status: 'ERROR' }),
       ],
     });
-    await expect(await canvas.findByText('Service Map (2 services)')).toBeInTheDocument();
+    await expect(
+      await canvas.findByText('Service Map (2 services)'),
+    ).toBeInTheDocument();
     await expect(canvas.getByText('Has Errors')).toBeInTheDocument();
   },
 };
@@ -161,7 +174,9 @@ export const ManyServices: Story = {
         }),
       ),
     });
-    await expect(await canvas.findByText('Service Map (8 services)')).toBeInTheDocument();
+    await expect(
+      await canvas.findByText('Service Map (8 services)'),
+    ).toBeInTheDocument();
     await expect(canvas.getByText(/cache-serv/)).toBeInTheDocument();
   },
 };
@@ -183,7 +198,9 @@ export const HighTrafficServices: Story = {
     }
 
     updateWidgetData({ traces });
-    await expect(await canvas.findByText('Service Map (3 services)')).toBeInTheDocument();
+    await expect(
+      await canvas.findByText('Service Map (3 services)'),
+    ).toBeInTheDocument();
     await expect(canvas.getByText('api-gateway')).toBeInTheDocument();
     await expect(canvas.getByText('order-service')).toBeInTheDocument();
   },
@@ -230,7 +247,9 @@ export const WithLogsAndErrors: Story = {
         },
       ],
     });
-    await expect(await canvas.findByText('Service Map (2 services)')).toBeInTheDocument();
+    await expect(
+      await canvas.findByText('Service Map (2 services)'),
+    ).toBeInTheDocument();
     await expect(canvas.getByText(/worker-ser/)).toBeInTheDocument();
   },
 };

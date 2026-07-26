@@ -6,8 +6,8 @@ import {
   createSlowOnlyTailSampler,
   combineTailSamplers,
   SamplingPresets,
-  type LocalTrace,
 } from './index';
+import type { LocalTrace } from '../types';
 import { SpanStatusCode } from '@opentelemetry/api';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
@@ -59,7 +59,9 @@ describe('Sampling Strategies', () => {
 
       // Create multiple traces and check sampling distribution
       const traces = Array.from({ length: 100 }, (_, i) =>
-        createLocalTrace(`trace-${i}`, { status: { code: SpanStatusCode.UNSET } }),
+        createLocalTrace(`trace-${i}`, {
+          status: { code: SpanStatusCode.UNSET },
+        }),
       );
 
       const sampled = traces.filter((trace) => sampler(trace));
@@ -105,7 +107,10 @@ describe('Sampling Strategies', () => {
 
       const slowTrace = createLocalTrace('slow-trace', {
         startTime: [Math.floor(now / 1000), (now % 1000) * 1_000_000],
-        endTime: [Math.floor((now + 2000) / 1000), ((now + 2000) % 1000) * 1_000_000],
+        endTime: [
+          Math.floor((now + 2000) / 1000),
+          ((now + 2000) % 1000) * 1_000_000,
+        ],
       });
 
       expect(sampler(slowTrace)).toBe(true);
@@ -121,7 +126,10 @@ describe('Sampling Strategies', () => {
 
       const slowTrace = createLocalTrace('slow-trace', {
         startTime: [Math.floor(now / 1000), (now % 1000) * 1_000_000],
-        endTime: [Math.floor((now + 2000) / 1000), ((now + 2000) % 1000) * 1_000_000],
+        endTime: [
+          Math.floor((now + 2000) / 1000),
+          ((now + 2000) % 1000) * 1_000_000,
+        ],
       });
 
       expect(sampler(slowTrace)).toBe(false);
@@ -208,12 +216,18 @@ describe('Sampling Strategies', () => {
 
       const fastTrace = createLocalTrace('fast-trace', {
         startTime: [Math.floor(now / 1000), (now % 1000) * 1_000_000],
-        endTime: [Math.floor((now + 500) / 1000), ((now + 500) % 1000) * 1_000_000],
+        endTime: [
+          Math.floor((now + 500) / 1000),
+          ((now + 500) % 1000) * 1_000_000,
+        ],
       });
 
       const slowTrace = createLocalTrace('slow-trace', {
         startTime: [Math.floor(now / 1000), (now % 1000) * 1_000_000],
-        endTime: [Math.floor((now + 2000) / 1000), ((now + 2000) % 1000) * 1_000_000],
+        endTime: [
+          Math.floor((now + 2000) / 1000),
+          ((now + 2000) % 1000) * 1_000_000,
+        ],
       });
 
       expect(sampler(fastTrace)).toBe(false);
@@ -233,21 +247,30 @@ describe('Sampling Strategies', () => {
       const errorTrace = createLocalTrace('error-trace', {
         status: { code: SpanStatusCode.ERROR },
         startTime: [Math.floor(now / 1000), (now % 1000) * 1_000_000],
-        endTime: [Math.floor((now + 500) / 1000), ((now + 500) % 1000) * 1_000_000],
+        endTime: [
+          Math.floor((now + 500) / 1000),
+          ((now + 500) % 1000) * 1_000_000,
+        ],
       });
 
       // OK but slow - should sample
       const slowTrace = createLocalTrace('slow-trace', {
         status: { code: SpanStatusCode.OK },
         startTime: [Math.floor(now / 1000), (now % 1000) * 1_000_000],
-        endTime: [Math.floor((now + 2000) / 1000), ((now + 2000) % 1000) * 1_000_000],
+        endTime: [
+          Math.floor((now + 2000) / 1000),
+          ((now + 2000) % 1000) * 1_000_000,
+        ],
       });
 
       // OK and fast - should not sample
       const normalTrace = createLocalTrace('normal-trace', {
         status: { code: SpanStatusCode.OK },
         startTime: [Math.floor(now / 1000), (now % 1000) * 1_000_000],
-        endTime: [Math.floor((now + 500) / 1000), ((now + 500) % 1000) * 1_000_000],
+        endTime: [
+          Math.floor((now + 500) / 1000),
+          ((now + 500) % 1000) * 1_000_000,
+        ],
       });
 
       expect(combined(errorTrace)).toBe(true);
@@ -287,7 +310,10 @@ describe('Sampling Strategies', () => {
 
       const slowTrace = createLocalTrace('slow-trace', {
         startTime: [Math.floor(now / 1000), (now % 1000) * 1_000_000],
-        endTime: [Math.floor((now + 2000) / 1000), ((now + 2000) % 1000) * 1_000_000],
+        endTime: [
+          Math.floor((now + 2000) / 1000),
+          ((now + 2000) % 1000) * 1_000_000,
+        ],
       });
 
       expect(sampler(errorTrace)).toBe(true);

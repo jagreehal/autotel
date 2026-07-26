@@ -26,12 +26,14 @@ describe('Analytics Engine Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
 
     mockAE = {
       writeDataPoint: vi.fn(),
@@ -58,8 +60,12 @@ describe('Analytics Engine Instrumentation', () => {
       const [spanName, spanOptions] = mockTracer.startActiveSpan.mock.calls[0];
       expect(spanName).toBe('AnalyticsEngine my-dataset: writeDataPoint');
       expect(spanOptions.kind).toBe(SpanKind.CLIENT);
-      expect(spanOptions.attributes['analytics.system']).toBe('cloudflare-analytics-engine');
-      expect(spanOptions.attributes['analytics.operation']).toBe('writeDataPoint');
+      expect(spanOptions.attributes['analytics.system']).toBe(
+        'cloudflare-analytics-engine',
+      );
+      expect(spanOptions.attributes['analytics.operation']).toBe(
+        'writeDataPoint',
+      );
     });
 
     it('should record indexes_count, doubles_count, blobs_count', () => {
@@ -96,14 +102,20 @@ describe('Analytics Engine Instrumentation', () => {
       expect(mockTracer.startActiveSpan).toHaveBeenCalledTimes(1);
 
       const spanOptions = mockTracer.startActiveSpan.mock.calls[0][1];
-      expect(spanOptions.attributes['analytics.system']).toBe('cloudflare-analytics-engine');
-      expect(spanOptions.attributes['analytics.operation']).toBe('writeDataPoint');
+      expect(spanOptions.attributes['analytics.system']).toBe(
+        'cloudflare-analytics-engine',
+      );
+      expect(spanOptions.attributes['analytics.operation']).toBe(
+        'writeDataPoint',
+      );
       // No count attributes should be set when no datapoint
       expect(spanOptions.attributes['analytics.indexes_count']).toBeUndefined();
       expect(spanOptions.attributes['analytics.doubles_count']).toBeUndefined();
       expect(spanOptions.attributes['analytics.blobs_count']).toBeUndefined();
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -115,7 +127,9 @@ describe('Analytics Engine Instrumentation', () => {
 
       const instrumented = instrumentAnalyticsEngine(mockAE, 'my-dataset');
 
-      expect(() => instrumented.writeDataPoint({ indexes: ['idx1'] })).toThrow('writeDataPoint failed');
+      expect(() => instrumented.writeDataPoint({ indexes: ['idx1'] })).toThrow(
+        'writeDataPoint failed',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalledWith(error);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -139,7 +153,9 @@ describe('Analytics Engine Instrumentation', () => {
 
       instrumented.writeDataPoint({ doubles: [42] });
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
       expect(mockAE.writeDataPoint).toHaveBeenCalledWith({ doubles: [42] });
     });
@@ -149,7 +165,7 @@ describe('Analytics Engine Instrumentation', () => {
     it('should invoke writeDataPoint() with original object as this, not the proxy', () => {
       let receivedThis: any;
       const mockAEObj = {
-        writeDataPoint: vi.fn(function(this: any) {
+        writeDataPoint: vi.fn(function (this: any) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
         }),

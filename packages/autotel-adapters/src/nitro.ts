@@ -20,9 +20,14 @@ export interface NitroEventLike {
   context?: Record<string, unknown>;
 }
 
-export interface NitroWithAutotelOptions extends Omit<FrameworkHandlerOptions, 'spanName'> {
+export interface NitroWithAutotelOptions extends Omit<
+  FrameworkHandlerOptions,
+  'spanName'
+> {
   spanName?: string | ((event: NitroEventLike) => string);
-  enrichRequest?: (event: NitroEventLike) => Record<string, unknown> | undefined;
+  enrichRequest?: (
+    event: NitroEventLike,
+  ) => Record<string, unknown> | undefined;
 }
 
 function enrichFromEvent(

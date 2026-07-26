@@ -59,7 +59,8 @@ const REDACTOR_PRESETS: Record<RedactorPreset, RedactorConfig> = {
 export function createStringRedactor(
   config: RedactorConfig | RedactorPreset,
 ): StringRedactor {
-  const resolved = typeof config === 'string' ? REDACTOR_PRESETS[config] : config;
+  const resolved =
+    typeof config === 'string' ? REDACTOR_PRESETS[config] : config;
   const valuePatterns: ValuePatternConfig[] = resolved.valuePatterns ?? [];
   const defaultReplacement = resolved.replacement ?? '[REDACTED]';
 

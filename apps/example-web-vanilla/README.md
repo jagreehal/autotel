@@ -10,7 +10,7 @@ Ultra-lightweight example demonstrating browser-to-backend distributed tracing w
 - ✅ Accessing trace context in `trace(ctx => ...)` (traceId, spanId, correlationId)
 - ✅ Using the `trace()` wrapper for DX
 
-For **full mode** (real spans, `setAttribute`, network timing, user interaction), use `initFull` from `autotel-web/full` :  see [autotel-web README](../../packages/autotel-web/README.md#full-mode-real-spans).
+For **full mode** (real spans, `setAttribute`, network timing, user interaction), use `initFull` from `autotel-web/full` : see [autotel-web README](../../packages/autotel-web/README.md#full-mode-real-spans).
 
 ## Running the Example
 
@@ -36,7 +36,7 @@ pnpm start
 Then open: **http://localhost:8000/apps/example-web-vanilla/**  
 (The server runs from the repo root so the script can load `packages/autotel-web/dist/index.js`.)
 
-To serve only this folder (e.g. for testing without loading autotel-web from repo), run `pnpm run start:local` and open http://localhost:8000 :  but the autotel-web import will 404 unless you copy the built package into this app.
+To serve only this folder (e.g. for testing without loading autotel-web from repo), run `pnpm run start:local` and open http://localhost:8000 : but the autotel-web import will 404 unless you copy the built package into this app.
 
 ### Option 2: Other HTTP servers
 
@@ -71,6 +71,7 @@ Then open: http://localhost:8000
    ```
 
 Example traceparent header:
+
 ```
 traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
 ```
@@ -80,20 +81,20 @@ traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
 ### 1. Browser Side (This Example)
 
 ```typescript
-import { init, trace } from 'autotel-web'
+import { init, trace } from 'autotel-web';
 
 // Initialize SDK (lean mode) - patches fetch/XHR globally
-init({ service: 'vanilla-js-example', debug: true })
+init({ service: 'vanilla-js-example', debug: true });
 
 // traceparent header is automatically injected on all fetch calls
-fetch('https://jsonplaceholder.typicode.com/posts/1')
+fetch('https://jsonplaceholder.typicode.com/posts/1');
 
 // trace(ctx => ...) gives you traceId, spanId, correlationId
-const doFetch = trace(ctx => async () => {
-  const res = await fetch('/api/users/1')
-  console.log('Trace ID:', ctx.traceId)
-  return res.json()
-})
+const doFetch = trace((ctx) => async () => {
+  const res = await fetch('/api/users/1');
+  console.log('Trace ID:', ctx.traceId);
+  return res.json();
+});
 ```
 
 ### 2. Backend Side (Your API)
@@ -102,21 +103,22 @@ The backend using Autotel automatically extracts the `traceparent` header:
 
 ```typescript
 // Backend (Express + Autotel)
-import { init, trace } from 'autotel'
+import { init, trace } from 'autotel';
 
-init({ service: 'my-api', endpoint: 'http://localhost:4318' })
+init({ service: 'my-api', endpoint: 'http://localhost:4318' });
 
 app.get('/api/users', async (req, res) => {
   // traceparent header is automatically extracted from req.headers
   // This creates a child span continuing the browser's trace!
-  const users = await trace(() => db.users.findAll())()
-  res.json(users)
-})
+  const users = await trace(() => db.users.findAll())();
+  res.json(users);
+});
 ```
 
 ### 3. Observability Platform
 
 View the complete distributed trace in your observability platform:
+
 - Browser → API → Database (all in one trace!)
 - See the full request flow with timing
 - Correlate frontend and backend performance
@@ -126,6 +128,7 @@ View the complete distributed trace in your observability platform:
 The autotel-web SDK loaded by this example is only **1.6KB gzipped**!
 
 Check the bundle in DevTools:
+
 1. Network tab → JS filter
 2. Look for `index.js` from autotel-web
 3. Size column shows: ~5KB uncompressed, ~1.6KB gzipped
@@ -142,6 +145,7 @@ Check the bundle in DevTools:
 ### Headers not appearing?
 
 1. Check the console for initialization message:
+
    ```
    [autotel-web] Initialized successfully
    ```
@@ -150,7 +154,7 @@ Check the bundle in DevTools:
 
 3. Try enabling debug mode:
    ```typescript
-   init({ service: 'my-app', debug: true })
+   init({ service: 'my-app', debug: true });
    ```
 
 ### CORS issues?
@@ -161,9 +165,11 @@ This example uses `jsonplaceholder.typicode.com` which allows CORS. If you're te
 2. Add to your API's CORS config:
    ```javascript
    // Express example
-   app.use(cors({
-     exposedHeaders: ['traceparent', 'tracestate']
-   }))
+   app.use(
+     cors({
+       exposedHeaders: ['traceparent', 'tracestate'],
+     }),
+   );
    ```
 
 ## Learn More

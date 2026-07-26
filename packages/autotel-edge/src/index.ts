@@ -25,7 +25,10 @@
 export { SpanImpl } from './core/span';
 export { WorkerTracer, withNextSpan } from './core/tracer';
 export { OTLPExporter } from './core/exporter';
-export { AsyncLocalStorageContextManager, ensureGlobalContextManager } from './core/context';
+export {
+  AsyncLocalStorageContextManager,
+  ensureGlobalContextManager,
+} from './core/context';
 export { WorkerTracerProvider } from './core/provider';
 export { Buffer } from './core/buffer';
 export {
@@ -43,6 +46,7 @@ export {
   instrument as instrumentFunctions,
   span,
   enterSpan,
+  getActiveTraceContext,
   type traceOptions,
   type TraceContext,
   type InstrumentOptions,
@@ -129,12 +133,7 @@ export type {
 export { context, propagation } from '@opentelemetry/api';
 
 // Re-export common OpenTelemetry types
-export type {
-  Span,
-  SpanContext,
-  Tracer,
-  Context,
-} from '@opentelemetry/api';
+export type { Span, SpanContext, Tracer, Context } from '@opentelemetry/api';
 
 // Error parsing helper for frontend/API consumers in edge runtimes
 export { parseError, type ParsedError } from './parse-error';

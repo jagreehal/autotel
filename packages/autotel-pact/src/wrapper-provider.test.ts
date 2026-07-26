@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readLedger } from './ledger.js';
-import { isInteractionLedgerEntry, isProviderVerificationRun } from './types.js';
+import {
+  isInteractionLedgerEntry,
+  isProviderVerificationRun,
+} from './types.js';
 import {
   withProviderVerification,
   type VerifierConstructor,
@@ -27,7 +30,8 @@ function mockVerifier(outcome: 'pass' | 'fail'): VerifierConstructor {
   return class {
     constructor(_opts: unknown) {}
     verifyProvider() {
-      if (outcome === 'fail') return Promise.reject(new Error('verifier failed'));
+      if (outcome === 'fail')
+        return Promise.reject(new Error('verifier failed'));
       return Promise.resolve();
     }
   };
@@ -59,7 +63,9 @@ describe('withProviderVerification', () => {
     const entries = readLedger({ runId: 'prov-ok' });
     expect(entries).toHaveLength(2);
     expect(entries.every(isInteractionLedgerEntry)).toBe(true);
-    expect(entries.every((e) => e.role === 'provider' && e.outcome === 'passed')).toBe(true);
+    expect(
+      entries.every((e) => e.role === 'provider' && e.outcome === 'passed'),
+    ).toBe(true);
   });
 
   it('skipVerifier emits per-interaction rows without loading or calling a Verifier', async () => {
@@ -79,9 +85,11 @@ describe('withProviderVerification', () => {
     // @pact-foundation/pact. With skipVerifier: true, no import happens.
     const VerifierThatWouldThrow = class {
       constructor(_opts: unknown) {
-        throw new Error('Verifier should not be instantiated when skipVerifier is true');
+        throw new Error(
+          'Verifier should not be instantiated when skipVerifier is true',
+        );
       }
-      verifyProvider() {
+      verifyProvider(): Promise<unknown> {
         throw new Error('unreachable');
       }
     };
@@ -92,13 +100,19 @@ describe('withProviderVerification', () => {
         providerBaseUrl: 'http://localhost:0',
         pactUrls: [path.join(pactDir, 'A-B.json')],
       },
-      { runId: 'prov-skip', skipVerifier: true, Verifier: VerifierThatWouldThrow },
+      {
+        runId: 'prov-skip',
+        skipVerifier: true,
+        Verifier: VerifierThatWouldThrow,
+      },
     );
 
     const entries = readLedger({ runId: 'prov-skip' });
     expect(entries).toHaveLength(2);
     expect(entries.every(isInteractionLedgerEntry)).toBe(true);
-    expect(entries.every((e) => e.role === 'provider' && e.outcome === 'passed')).toBe(true);
+    expect(
+      entries.every((e) => e.role === 'provider' && e.outcome === 'passed'),
+    ).toBe(true);
   });
 
   it('appends run-level failure without interaction rows', async () => {

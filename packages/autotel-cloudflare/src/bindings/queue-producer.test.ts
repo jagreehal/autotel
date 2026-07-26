@@ -25,12 +25,14 @@ describe('Queue Producer Binding Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {
@@ -65,14 +67,22 @@ describe('Queue Producer Binding Instrumentation', () => {
 
     it('should record messageId from result when available', async () => {
       const mockQueue = createMockQueue({
-        send: vi.fn(async () => ({ messageId: 'msg-456', outcome: 'ok' })) as any,
+        send: vi.fn(async () => ({
+          messageId: 'msg-456',
+          outcome: 'ok',
+        })) as any,
       });
       const instrumented = instrumentQueueProducer(mockQueue, 'my-queue');
 
       await instrumented.send({ data: 'test-payload' });
 
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('messaging.message.id', 'msg-456');
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'messaging.message.id',
+        'msg-456',
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -86,7 +96,7 @@ describe('Queue Producer Binding Instrumentation', () => {
 
       // setAttr uses the common helper which skips undefined/null values
       const messageIdCalls = mockSpan.setAttribute.mock.calls.filter(
-        (call: any) => call[0] === 'messaging.message.id'
+        (call: any) => call[0] === 'messaging.message.id',
       );
       expect(messageIdCalls.length).toBe(0);
     });
@@ -100,7 +110,9 @@ describe('Queue Producer Binding Instrumentation', () => {
       });
       const instrumented = instrumentQueueProducer(mockQueue, 'my-queue');
 
-      await expect(instrumented.send({ data: 'test-payload' })).rejects.toThrow('Queue full');
+      await expect(instrumented.send({ data: 'test-payload' })).rejects.toThrow(
+        'Queue full',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalledWith(sendError);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -153,7 +165,9 @@ describe('Queue Producer Binding Instrumentation', () => {
 
       await instrumented.sendBatch([{ body: { data: 'msg-1' } }]);
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -166,9 +180,14 @@ describe('Queue Producer Binding Instrumentation', () => {
       });
       const instrumented = instrumentQueueProducer(mockQueue, 'my-queue');
 
-      const messages = [{ body: { data: 'msg-1' } }, { body: { data: 'msg-2' } }];
+      const messages = [
+        { body: { data: 'msg-1' } },
+        { body: { data: 'msg-2' } },
+      ];
 
-      await expect(instrumented.sendBatch(messages)).rejects.toThrow('Batch limit exceeded');
+      await expect(instrumented.sendBatch(messages)).rejects.toThrow(
+        'Batch limit exceeded',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalledWith(batchError);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -183,7 +202,7 @@ describe('Queue Producer Binding Instrumentation', () => {
     it('should invoke send() with original object as this, not the proxy', async () => {
       let receivedThis: any;
       const mockQueue = {
-        send: vi.fn(async function(this: any) {
+        send: vi.fn(async function (this: any) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return { messageId: 'msg-123' };
@@ -199,7 +218,7 @@ describe('Queue Producer Binding Instrumentation', () => {
       let receivedThis: any;
       const mockQueue = {
         send: vi.fn(async () => ({ messageId: 'msg-123' })),
-        sendBatch: vi.fn(async function(this: any) {
+        sendBatch: vi.fn(async function (this: any) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return {};

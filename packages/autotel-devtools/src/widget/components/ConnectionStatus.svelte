@@ -86,7 +86,10 @@
   {#if !compact}
     <span class={cn('text-xs font-medium', meta.text)}>{meta.label}</span>
     {#if showRate}
-      <span class="text-xs font-mono tabular-nums text-fg-subtle" title="Telemetry ingest rate">
+      <span
+        class="text-xs font-mono tabular-nums text-fg-subtle"
+        title="Telemetry ingest rate"
+      >
         · {rate}/s
       </span>
     {/if}

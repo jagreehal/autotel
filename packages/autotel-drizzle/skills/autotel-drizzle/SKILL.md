@@ -111,8 +111,8 @@ SQL text may contain user-supplied values. Disable capture or truncate aggressiv
 ### What is instrumented
 
 - Session `query()` and `execute()` methods
-- Prepared queries (`prepareQuery`) — all execution methods: `all`, `execute`, `get`, `run`, `values`
-- Transactions — the callback receives an already-instrumented transaction object, spans carry `db.transaction: true`
+- Prepared queries (`prepareQuery`): all execution methods: `all`, `execute`, `get`, `run`, `values`
+- Transactions: the callback receives an already-instrumented transaction object, spans carry `db.transaction: true`
 
 ### Idempotency
 
@@ -132,7 +132,7 @@ import {
 
 ## Common Mistakes
 
-### HIGH — Calling `instrumentDrizzleClient` after queries have already run
+### HIGH: Calling `instrumentDrizzleClient` after queries have already run
 
 ```typescript
 // Wrong: some early queries miss instrumentation
@@ -150,7 +150,7 @@ await db.select().from(users); // instrumented
 
 Patching works by mutating method references on the live object. Any query that ran before patching has no span.
 
-### HIGH — Using autotel-drizzle for databases that have official OTel packages
+### HIGH: Using autotel-drizzle for databases that have official OTel packages
 
 ```typescript
 // Wrong: autotel-drizzle is for Drizzle, not for pg directly
@@ -164,7 +164,7 @@ init({ instrumentations: [new PgInstrumentation()] });
 
 For PostgreSQL (`pg`/`postgres`), MySQL (`mysql2`), SQLite, MongoDB, and Redis, official OTel instrumentation packages exist and should be preferred.
 
-### MEDIUM — Not setting `dbSystem` for non-PostgreSQL databases
+### MEDIUM: Not setting `dbSystem` for non-PostgreSQL databases
 
 ```typescript
 // Wrong: dbSystem defaults to 'postgresql' even for SQLite
@@ -176,7 +176,7 @@ instrumentDrizzleClient(sqliteDb, { dbSystem: 'sqlite' });
 
 The `db.system` span attribute will be wrong if the default is not overridden.
 
-### MEDIUM — Passing `captureQueryText: true` without reviewing SQL for PII
+### MEDIUM: Passing `captureQueryText: true` without reviewing SQL for PII
 
 SQL statements built by Drizzle may embed user-supplied values (e.g., email addresses in `WHERE` clauses). Either disable capture or review what Drizzle sends before enabling in production.
 

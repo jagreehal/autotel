@@ -16,7 +16,7 @@ You are working on the Cloudflare Workers package. You understand Cloudflare Wor
 
 ## Key Concepts
 
-- **Cloudflare Native Tracing (auto)**: When a Worker enables `observability.traces` and exposes `ctx.tracing`, the handler wrappers auto-detect it and `trace()`/`span()`/`enterSpan()` route to Cloudflare's native `tracing.enterSpan()` — nesting in the platform waterfall and exported by Cloudflare. autotel defers to the platform: no proxy binding instrumentation (no duplicate spans), no own provider/exporter. Falls back to autotel's OTLP pipeline when native is off / on other runtimes / local dev. Controlled by `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`). Concrete adapter: `src/native/native-tracing.ts`; seam lives in autotel-edge (`src/core/native-bridge.ts`). See `docs/CLOUDFLARE-NATIVE-TRACING.md`.
+- **Cloudflare Native Tracing (auto)**: When a Worker enables `observability.traces` and exposes `ctx.tracing`, the handler wrappers auto-detect it and `trace()`/`span()`/`enterSpan()` route to Cloudflare's native `tracing.enterSpan()`: nesting in the platform waterfall and exported by Cloudflare. autotel defers to the platform: no proxy binding instrumentation (no duplicate spans), no own provider/exporter. Falls back to autotel's OTLP pipeline when native is off / on other runtimes / local dev. Controlled by `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`). Concrete adapter: `src/native/native-tracing.ts`; seam lives in autotel-edge (`src/core/native-bridge.ts`). See `docs/CLOUDFLARE-NATIVE-TRACING.md`.
 - **Native CF OTel Integration**: Works with Cloudflare's native observability (wrangler.toml destinations)
 - **Complete Bindings Coverage**: Auto-instruments KV, R2, D1, Durable Objects, Workflows, Workers AI, Vectorize, Hyperdrive, Service Bindings, Queue, Analytics Engine, and Email
 - **Multiple API Styles**:
@@ -82,10 +82,13 @@ export default instrument(fetchHandler, {
 });
 
 // Style 2: wrapModule() (compatible with workers-honeycomb-logger)
-export default wrapModule({
-  service: 'my-worker',
-  endpoint: 'https://api.honeycomb.io',
-}, fetchHandler);
+export default wrapModule(
+  {
+    service: 'my-worker',
+    endpoint: 'https://api.honeycomb.io',
+  },
+  fetchHandler,
+);
 
 // Style 3: Functional API (from autotel-edge)
 import { trace } from 'autotel-cloudflare';
@@ -101,7 +104,7 @@ Use `createWorkersLogger(request, options?)` to pre-populate method/path, `cf-ra
 ## Boundaries
 
 - ✅ **Always do**: Use Proxy pattern for bindings, maintain API compatibility, check bundle size
-- ✅ **Prefer**: `trace(..., (ctx) => ...)` for Cloudflare business logic and examples
+- ✅ **Prefer**: plain `trace(name?, fn)` for Cloudflare business logic; use `getActiveTraceContext()` or `withTracing({ name })((ctx) => fn)` when context access is needed
 - ✅ **Prefer**: span attributes plus one execution-scoped snapshot over repeated raw info logs
 - ✅ **Prefer**: implementing shared execution logger primitives in `autotel-edge` before adding Cloudflare-only logger variants
 - ⚠️ **Ask first**: Adding new bindings, changing API styles, increasing bundle size

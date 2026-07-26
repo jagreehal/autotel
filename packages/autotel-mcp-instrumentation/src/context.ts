@@ -22,7 +22,7 @@ import type { McpTraceMeta } from './types';
  * ```
  */
 export function extractOtelContextFromMeta(
-  meta?: Record<string, unknown>,
+  meta?: Record<string, unknown> | McpTraceMeta,
 ): Context {
   if (!meta || typeof meta !== 'object') {
     return context.active();
@@ -103,6 +103,8 @@ export function injectOtelContextToMeta(ctx?: Context): McpTraceMeta {
  * };
  * ```
  */
-export function activateTraceContext(meta?: Record<string, unknown>): Context {
+export function activateTraceContext(
+  meta?: Record<string, unknown> | McpTraceMeta,
+): Context {
   return extractOtelContextFromMeta(meta);
 }

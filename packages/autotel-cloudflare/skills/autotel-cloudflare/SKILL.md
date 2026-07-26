@@ -8,7 +8,7 @@ description: >
 
 Complete OpenTelemetry for Cloudflare Workers. Three API styles, full bindings coverage.
 
-## Quick Start — pick one style
+## Quick Start: pick one style
 
 ### Style 1: instrument() (recommended)
 
@@ -34,7 +34,11 @@ import { wrapModule } from 'autotel-cloudflare';
 
 export default wrapModule(
   { service: { name: 'my-worker' } },
-  { async fetch(req, env, ctx) { return new Response('OK'); } },
+  {
+    async fetch(req, env, ctx) {
+      return new Response('OK');
+    },
+  },
 );
 ```
 
@@ -49,17 +53,17 @@ export default { fetch: trace(async (req) => new Response('OK')) };
 
 Every Cloudflare binding has a wrapper. Each creates spans for all operations.
 
-| Binding | Wrapper | Import |
-|---------|---------|--------|
-| KV | `instrumentKV(env.KV, { name })` | `autotel-cloudflare` or `/bindings` |
-| R2 | `instrumentR2(env.BUCKET, { name })` | same |
-| D1 | `instrumentD1(env.DB, { name })` | same |
-| Service Binding | `instrumentServiceBinding(env.SVC, { name })` | same |
-| Workers AI | `instrumentAI(env.AI)` | same |
-| Vectorize | `instrumentVectorize(env.INDEX, { name })` | same |
-| Hyperdrive | `instrumentHyperdrive(env.HD, { name })` | same |
-| Queue Producer | `instrumentQueueProducer(env.QUEUE, { name })` | same |
-| Durable Objects | `instrumentDO(DOClass)` or `wrapDurableObject(config, DOClass)` | same |
+| Binding         | Wrapper                                                         | Import                              |
+| --------------- | --------------------------------------------------------------- | ----------------------------------- |
+| KV              | `instrumentKV(env.KV, { name })`                                | `autotel-cloudflare` or `/bindings` |
+| R2              | `instrumentR2(env.BUCKET, { name })`                            | same                                |
+| D1              | `instrumentD1(env.DB, { name })`                                | same                                |
+| Service Binding | `instrumentServiceBinding(env.SVC, { name })`                   | same                                |
+| Workers AI      | `instrumentAI(env.AI)`                                          | same                                |
+| Vectorize       | `instrumentVectorize(env.INDEX, { name })`                      | same                                |
+| Hyperdrive      | `instrumentHyperdrive(env.HD, { name })`                        | same                                |
+| Queue Producer  | `instrumentQueueProducer(env.QUEUE, { name })`                  | same                                |
+| Durable Objects | `instrumentDO(DOClass)` or `wrapDurableObject(config, DOClass)` | same                                |
 
 Or use `instrumentBindings(env)` to auto-instrument all bindings at once.
 
@@ -69,6 +73,6 @@ Or use `instrumentBindings(env)` to auto-instrument all bindings at once.
 
 ## Common Mistakes
 
-- Do NOT call `instrumentKV()` etc. outside the handler — bindings aren't available at module scope.
-- Do NOT use `await import()` for dynamic imports — use autotel's `safeRequire` helpers.
+- Do NOT call `instrumentKV()` etc. outside the handler: bindings aren't available at module scope.
+- Do NOT use `await import()` for dynamic imports: use autotel's `safeRequire` helpers.
 - Use `autotel-cloudflare/bindings` for tree-shaking if you only need binding wrappers.

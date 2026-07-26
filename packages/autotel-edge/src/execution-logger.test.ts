@@ -241,8 +241,10 @@ describe('getExecutionLogger', () => {
     };
 
     const tracer = {
-      startActiveSpan: (_name: string, cb: (span: typeof childSpan) => Promise<void>) =>
-        cb(childSpan),
+      startActiveSpan: (
+        _name: string,
+        cb: (span: typeof childSpan) => Promise<void>,
+      ) => cb(childSpan),
     };
 
     vi.spyOn(otelTrace, 'getTracer').mockReturnValue(
@@ -294,8 +296,10 @@ describe('getExecutionLogger', () => {
     };
 
     vi.spyOn(otelTrace, 'getTracer').mockReturnValue({
-      startActiveSpan: (_name: string, cb: (s: typeof childSpan) => Promise<void>) =>
-        cb(childSpan),
+      startActiveSpan: (
+        _name: string,
+        cb: (s: typeof childSpan) => Promise<void>,
+      ) => cb(childSpan),
     } as unknown as ReturnType<typeof otelTrace.getTracer>);
 
     const calls: string[] = [];
@@ -342,21 +346,19 @@ describe('getExecutionLogger', () => {
     };
 
     vi.spyOn(otelTrace, 'getTracer').mockReturnValue({
-      startActiveSpan: (_name: string, cb: (s: typeof childSpan) => Promise<void>) =>
-        cb(childSpan),
+      startActiveSpan: (
+        _name: string,
+        cb: (s: typeof childSpan) => Promise<void>,
+      ) => cb(childSpan),
     } as unknown as ReturnType<typeof otelTrace.getTracer>);
 
-    log.fork(
-      'task',
-      async () => {},
-      {
-        lifecycle: {
-          onChildExit: () => {
-            throw new Error('hook boom');
-          },
+    log.fork('task', async () => {}, {
+      lifecycle: {
+        onChildExit: () => {
+          throw new Error('hook boom');
         },
       },
-    );
+    });
 
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));

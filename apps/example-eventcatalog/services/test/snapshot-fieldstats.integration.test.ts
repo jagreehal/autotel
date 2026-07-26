@@ -43,4 +43,3 @@ describe('snapshot integration — fieldStats', () => {
     expect(orderPlaced.fieldStats?.currency?.sampleValues).toContain('GBP');
   });
 });
-

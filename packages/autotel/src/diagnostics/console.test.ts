@@ -93,6 +93,18 @@ describe('captureConsole', () => {
     expect(all[0]!.attributes['log.method']).toBe('log');
   });
 
+  it('captures the raw argument-array shape Node itself publishes', () => {
+    dispose = captureConsole();
+    // Real Node console channels publish the args array directly,
+    // e.g. console.warn('cache miss for', 'user_42') → ['cache miss for', 'user_42'].
+    channel('console.log').publish(['cache miss for %s', 'user_42']);
+
+    const all = records();
+    expect(all).toHaveLength(1);
+    expect(all[0]!.body).toBe('cache miss for user_42');
+    expect(all[0]!.attributes['log.method']).toBe('log');
+  });
+
   it('maps severities and honors the levels filter', () => {
     dispose = captureConsole({ levels: ['error', 'warn'] });
     channel('console.error').publish({ args: ['boom'] });

@@ -97,7 +97,10 @@ describe('PostHogSubscriber stringRedactor', () => {
     const { PostHogSubscriber } = await import('./posthog');
 
     const mockRedactor = (value: string) =>
-      value.replaceAll(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/gi, '[REDACTED]');
+      value.replaceAll(
+        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/gi,
+        '[REDACTED]',
+      );
 
     const subscriber = new PostHogSubscriber({
       client: {
@@ -127,7 +130,8 @@ describe('PostHogSubscriber stringRedactor', () => {
         shutdown: vi.fn(() => Promise.resolve()),
         on: vi.fn(),
       } as any,
-      stringRedactor: (value: string) => value.replaceAll(/secret/gi, '[REDACTED]'),
+      stringRedactor: (value: string) =>
+        value.replaceAll(/secret/gi, '[REDACTED]'),
     });
 
     await subscriber.trackEvent('test.event', {

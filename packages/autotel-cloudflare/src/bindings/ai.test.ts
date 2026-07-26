@@ -26,12 +26,14 @@ describe('AI Binding Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
 
     mockAI = {
       run: vi.fn(async () => ({ response: 'Hello world' })),
@@ -55,22 +57,30 @@ describe('AI Binding Instrumentation', () => {
     it('should create span with correct name and attributes for run()', async () => {
       const instrumented = instrumentAI(mockAI, 'my-ai');
 
-      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', { prompt: 'Hello' });
+      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', {
+        prompt: 'Hello',
+      });
 
       expect(mockTracer.startActiveSpan).toHaveBeenCalledTimes(1);
 
       const [spanName, options] = mockTracer.startActiveSpan.mock.calls[0];
       expect(spanName).toBe('AI my-ai: run @cf/meta/llama-2-7b-chat-int8');
       expect(options.kind).toBe(SpanKind.CLIENT);
-      expect(options.attributes['gen_ai.provider.name']).toBe('cloudflare-workers-ai');
+      expect(options.attributes['gen_ai.provider.name']).toBe(
+        'cloudflare-workers-ai',
+      );
       expect(options.attributes['gen_ai.operation.name']).toBe('run');
-      expect(options.attributes['gen_ai.request.model']).toBe('@cf/meta/llama-2-7b-chat-int8');
+      expect(options.attributes['gen_ai.request.model']).toBe(
+        '@cf/meta/llama-2-7b-chat-int8',
+      );
     });
 
     it('should use default binding name "ai" when no name is provided', async () => {
       const instrumented = instrumentAI(mockAI);
 
-      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', { prompt: 'Hello' });
+      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', {
+        prompt: 'Hello',
+      });
 
       const spanName = mockTracer.startActiveSpan.mock.calls[0][0];
       expect(spanName).toBe('AI ai: run @cf/meta/llama-2-7b-chat-int8');
@@ -87,11 +97,21 @@ describe('AI Binding Instrumentation', () => {
 
       const instrumented = instrumentAI(mockAI);
 
-      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', { prompt: 'Hello' });
+      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', {
+        prompt: 'Hello',
+      });
 
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.input_tokens', 10);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.output_tokens', 25);
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'gen_ai.usage.input_tokens',
+        10,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'gen_ai.usage.output_tokens',
+        25,
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -102,7 +122,9 @@ describe('AI Binding Instrumentation', () => {
 
       const instrumented = instrumentAI(mockAI);
 
-      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', { prompt: 'Hello' });
+      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', {
+        prompt: 'Hello',
+      });
 
       expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
         'gen_ai.usage.input_tokens',
@@ -112,7 +134,9 @@ describe('AI Binding Instrumentation', () => {
         'gen_ai.usage.output_tokens',
         expect.anything(),
       );
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
 
@@ -139,14 +163,16 @@ describe('AI Binding Instrumentation', () => {
     it('should invoke run() with original object as this, not the proxy', async () => {
       let receivedThis: any;
       const mockAIObj = {
-        run: vi.fn(async function(this: any) {
+        run: vi.fn(async function (this: any) {
           // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
           receivedThis = this;
           return { response: 'Hello' };
         }),
       };
       const instrumented = instrumentAI(mockAIObj as any, 'test');
-      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', { prompt: 'Hello' });
+      await instrumented.run('@cf/meta/llama-2-7b-chat-int8', {
+        prompt: 'Hello',
+      });
       expect(receivedThis).toBe(mockAIObj);
     });
 

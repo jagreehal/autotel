@@ -3,7 +3,14 @@
   "$id": "https://autotel.dev/schemas/payment-captured/1.0.0.json",
   "title": "PaymentCaptured",
   "type": "object",
-  "required": ["orderId", "amountCents", "currency", "psp", "pspTransactionId", "capturedAt"],
+  "required": [
+    "orderId",
+    "amountCents",
+    "currency",
+    "psp",
+    "pspTransactionId",
+    "capturedAt"
+  ],
   "properties": {
     "orderId": { "type": "string", "format": "uuid" },
     "amountCents": { "type": "integer", "minimum": 0 },

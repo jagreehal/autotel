@@ -8,7 +8,7 @@
  *   4. Ctrl+C to stop
  */
 
-import { trace, span, shutdown, flush } from 'autotel';
+import { trace, span, shutdown, flush, getActiveTraceContext } from 'autotel';
 import pino from 'pino';
 
 const logger = pino({
@@ -16,11 +16,17 @@ const logger = pino({
   level: 'debug',
 });
 
-const routes = ['/api/orders', '/api/users', '/api/products', '/api/health'] as const;
+const routes = [
+  '/api/orders',
+  '/api/users',
+  '/api/products',
+  '/api/health',
+] as const;
 const methods = ['GET', 'POST', 'GET', 'GET'] as const;
 
 async function apiRequest() {
-  return trace('api.request', async (ctx) => {
+  return trace('api.request', async () => {
+    const ctx = getActiveTraceContext()!;
     const idx = Math.floor(Math.random() * routes.length);
     const route = routes[idx]!;
     const method = methods[idx]!;
@@ -34,42 +40,48 @@ async function apiRequest() {
       logger.debug({ valid: true }, 'token verified');
     });
 
-    await span({ name: 'handler.execute', attributes: { 'http.route': route } }, async (hCtx) => {
-      logger.info({ route }, 'executing handler');
+    await span(
+      { name: 'handler.execute', attributes: { 'http.route': route } },
+      async (hCtx) => {
+        logger.info({ route }, 'executing handler');
 
-      // DB query
-      await span({ name: 'db.query' }, async (dbCtx) => {
-        const table = route.replace('/api/', '');
-        dbCtx.setAttribute('db.system', 'postgresql');
-        dbCtx.setAttribute('db.statement', `SELECT * FROM ${table} LIMIT 50`);
-        logger.debug({ table }, 'executing database query');
-        await delay(20 + jitter(40));
+        // DB query
+        await span({ name: 'db.query' }, async (dbCtx) => {
+          const table = route.replace('/api/', '');
+          dbCtx.setAttribute('db.system', 'postgresql');
+          dbCtx.setAttribute('db.statement', `SELECT * FROM ${table} LIMIT 50`);
+          logger.debug({ table }, 'executing database query');
+          await delay(20 + jitter(40));
 
-        if (Math.random() > 0.9) {
-          const err = new Error('connection timeout');
-          dbCtx.recordException(err);
-          dbCtx.setStatus({ code: 2, message: 'db timeout' });
-          logger.error({ table, err }, 'database query failed');
-          throw err;
-        }
+          if (Math.random() > 0.9) {
+            const err = new Error('connection timeout');
+            dbCtx.recordException(err);
+            dbCtx.setStatus({ code: 2, message: 'db timeout' });
+            logger.error({ table, err }, 'database query failed');
+            throw err;
+          }
 
-        logger.debug({ table, rows: Math.floor(Math.random() * 50) }, 'query complete');
-      });
+          logger.debug(
+            { table, rows: Math.floor(Math.random() * 50) },
+            'query complete',
+          );
+        });
 
-      // Cache write
-      await span({ name: 'cache.set' }, async (cacheCtx) => {
-        cacheCtx.setAttribute('cache.system', 'redis');
-        logger.debug({ key: `cache:${route}` }, 'writing to cache');
-        await delay(3 + jitter(5));
-      });
+        // Cache write
+        await span({ name: 'cache.set' }, async (cacheCtx) => {
+          cacheCtx.setAttribute('cache.system', 'redis');
+          logger.debug({ key: `cache:${route}` }, 'writing to cache');
+          await delay(3 + jitter(5));
+        });
 
-      const status = 200;
-      hCtx.setAttribute('http.status_code', status);
-      logger.info({ route, status }, 'request completed');
-    });
+        const status = 200;
+        hCtx.setAttribute('http.status_code', status);
+        logger.info({ route, status }, 'request completed');
+      },
+    );
 
     ctx.setStatus({ code: 1 });
-  });
+  })();
 }
 
 // --- Main loop ---

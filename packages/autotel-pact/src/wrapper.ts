@@ -16,7 +16,9 @@ import {
  * at runtime, with `opts.consumer` / `opts.provider` as override fallbacks.
  */
 export interface MessageConsumerPactLike {
-  verify: (handler: (message: ReifiedMessage) => Promise<unknown>) => Promise<unknown>;
+  verify: (
+    handler: (message: ReifiedMessage) => Promise<unknown>,
+  ) => Promise<unknown>;
   /**
    * Optional fluent metadata appender. Pact-JS's `MessageConsumerPact`
    * provides this; we use it (when present) to write `interactionId`
@@ -150,7 +152,9 @@ export async function withPactInteraction<R>(
           kind,
           interactionId: opts.interactionId,
         };
-        span.setAttributes(buildPactAttributes(meta, { contractFile: opts.contractFile }));
+        span.setAttributes(
+          buildPactAttributes(meta, { contractFile: opts.contractFile }),
+        );
 
         handlerResult = (await handler(reified)) as R;
         return handlerResult;
@@ -195,7 +199,8 @@ function writeLedgerForOutcome(args: {
   opts: WithPactInteractionOptions;
   error?: string;
 }): void {
-  const { consumer, provider, captured, kind, outcome, start, opts, error } = args;
+  const { consumer, provider, captured, kind, outcome, start, opts, error } =
+    args;
   const ctx = getActiveSpan()?.spanContext();
   const entry: InteractionLedgerEntry = {
     type: 'interaction',

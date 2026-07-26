@@ -1,7 +1,8 @@
 import { context, SpanStatusCode, type Attributes } from '@opentelemetry/api';
-import { trace, type TraceContext } from 'autotel';
+import { trace, getActiveTraceContext } from 'autotel';
 import { extractContextFromRequest } from './context';
 import { isServerSide } from './env';
+import { isControlFlowSignal, isRealError } from './control-flow';
 import { isExcludedPath } from './route-filter';
 import {
   type TracingMiddlewareConfig,
@@ -152,73 +153,84 @@ export function createTracingMiddleware<TContext = unknown>(
       const fnName = functionId || 'unknown';
       const method = (opts as { method?: string }).method || 'POST';
 
-      return trace(`tanstack.serverFn.${fnName}`, async (ctx: TraceContext) => {
-        const attrs = buildServerFnAttributes(
-          fnName,
-          method,
-          data,
-          mergedConfig,
-        );
-        ctx.setAttributes(attrs as Record<string, string | number | boolean>);
-
-        // Add custom attributes if provided
-        if (config?.customAttributes) {
-          const customAttrs = config.customAttributes({
-            type: 'serverFn',
-            name: fnName,
-            args: data,
-          });
-          ctx.setAttributes(
-            customAttrs as Record<string, string | number | boolean>,
+      return trace(
+        { name: `tanstack.serverFn.${fnName}`, isError: isRealError },
+        async () => {
+          const ctx = getActiveTraceContext()!;
+          const attrs = buildServerFnAttributes(
+            fnName,
+            method,
+            data,
+            mergedConfig,
           );
-        }
+          ctx.setAttributes(attrs as Record<string, string | number | boolean>);
 
-        try {
-          const result = await next();
-
-          // Capture result if configured
-          if (mergedConfig.captureResults && result !== undefined) {
-            try {
-              ctx.setAttribute(
-                SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
-                JSON.stringify(result),
-              );
-            } catch {
-              ctx.setAttribute(
-                SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
-                '[non-serializable]',
-              );
-            }
+          // Add custom attributes if provided
+          if (config?.customAttributes) {
+            const customAttrs = config.customAttributes({
+              type: 'serverFn',
+              name: fnName,
+              args: data,
+            });
+            ctx.setAttributes(
+              customAttrs as Record<string, string | number | boolean>,
+            );
           }
 
-          ctx.setStatus({ code: SpanStatusCode.OK });
-          return result;
-        } catch (error) {
-          if (mergedConfig.captureErrors) {
-            if ('recordError' in ctx && typeof ctx.recordError === 'function') {
-              ctx.recordError(error);
-            } else if (
-              'recordException' in ctx &&
-              typeof ctx.recordException === 'function'
-            ) {
-              ctx.recordException(error);
+          try {
+            const result = await next();
+
+            // Capture result if configured
+            if (mergedConfig.captureResults && result !== undefined) {
+              try {
+                ctx.setAttribute(
+                  SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
+                  JSON.stringify(result),
+                );
+              } catch {
+                ctx.setAttribute(
+                  SPAN_ATTRIBUTES.TANSTACK_SERVER_FN_RESULT,
+                  '[non-serializable]',
+                );
+              }
             }
 
-            // Report error to error store
-            try {
-              const { reportError } = await import('./error-reporting');
-              reportError(error as Error, {
-                type: 'serverFn',
-                name: fnName,
-                method,
-              });
-            } catch {
-              // Error reporting not available, skip
+            ctx.setStatus({ code: SpanStatusCode.OK });
+            return result;
+          } catch (error) {
+            if (isControlFlowSignal(error)) {
+              ctx.setStatus({ code: SpanStatusCode.OK });
+              throw error;
             }
+            if (mergedConfig.captureErrors) {
+              if (
+                'recordError' in ctx &&
+                typeof ctx.recordError === 'function'
+              ) {
+                ctx.recordError(error);
+              } else if (
+                'recordException' in ctx &&
+                typeof ctx.recordException === 'function'
+              ) {
+                ctx.recordException(error);
+              }
+
+              // Report error to error store
+              try {
+                const { reportError } = await import('./error-reporting');
+                reportError(error as Error, {
+                  type: 'serverFn',
+                  name: fnName,
+                  method,
+                });
+              } catch {
+                // Error reporting not available, skip
+              }
+            }
+            throw error;
           }
-          throw error;
-        }
-      }) as Promise<TContext>;
+        },
+      )() as Promise<TContext>;
     }
 
     // For request middleware
@@ -241,7 +253,8 @@ export function createTracingMiddleware<TContext = unknown>(
     return context.with(parentContext, async () => {
       const spanName = `${request.method} ${pathname || url.pathname}`;
 
-      return trace(spanName, async (ctx: TraceContext) => {
+      return trace({ name: spanName, isError: isRealError }, async () => {
+        const ctx = getActiveTraceContext()!;
         const attrs = buildRequestAttributes(request, mergedConfig);
         ctx.setAttributes(attrs as Record<string, string | number | boolean>);
 
@@ -293,6 +306,11 @@ export function createTracingMiddleware<TContext = unknown>(
             duration,
           );
 
+          if (isControlFlowSignal(error)) {
+            ctx.setStatus({ code: SpanStatusCode.OK });
+            throw error;
+          }
+
           if (mergedConfig.captureErrors) {
             if ('recordError' in ctx && typeof ctx.recordError === 'function') {
               ctx.recordError(error);
@@ -317,7 +335,7 @@ export function createTracingMiddleware<TContext = unknown>(
           }
           throw error;
         }
-      }) as Promise<TContext>;
+      })() as Promise<TContext>;
     });
   };
 }

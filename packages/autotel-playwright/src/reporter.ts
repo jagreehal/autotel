@@ -24,7 +24,12 @@ import type {
   TestResult,
   TestStep,
 } from '@playwright/test/reporter';
-import { getTracer, context as otelContext, otelTrace, SpanStatusCode } from 'autotel';
+import {
+  getTracer,
+  context as otelContext,
+  otelTrace,
+  SpanStatusCode,
+} from 'autotel';
 
 const TRACER_NAME = 'playwright-reporter';
 const TRACER_VERSION = '0.1.0';
@@ -45,8 +50,14 @@ function toError(testError: { message?: string; stack?: string }): Error {
  * Requires autotel.init() in globalSetup so spans are exported.
  */
 class OtelReporter implements Reporter {
-  private testSpans = new Map<string, ReturnType<ReturnType<typeof getTracer>['startSpan']>>();
-  private stepSpans = new WeakMap<TestStep, ReturnType<ReturnType<typeof getTracer>['startSpan']>>();
+  private testSpans = new Map<
+    string,
+    ReturnType<ReturnType<typeof getTracer>['startSpan']>
+  >();
+  private stepSpans = new WeakMap<
+    TestStep,
+    ReturnType<ReturnType<typeof getTracer>['startSpan']>
+  >();
 
   onTestBegin(test: TestCase, _result: TestResult): void {
     const tracer = getTracer(TRACER_NAME, TRACER_VERSION);

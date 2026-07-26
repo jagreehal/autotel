@@ -16,7 +16,6 @@ export type SubscriberDeliveryMode = 'fire-and-forget' | 'await';
 
 // Re-export event types for convenience
 
-
 export type EdgeTransport = (event: EdgeEvent) => OrPromise<void>;
 
 export interface EdgeDispatchOptions {
@@ -88,9 +87,9 @@ const DEFAULT_SERVICE_NAME = 'edge-service';
 /**
  * Extract a normalized event name from any EdgeEvent.
  * Useful for subscribers that need to send events to events platforms.
- * 
+ *
  * @deprecated Use `event.name` directly instead - it's now a property on all events.
- * 
+ *
  * @example
  * ```typescript
  * const subscriber: EdgeSubscribersAdapter = async (event) => {
@@ -112,7 +111,8 @@ function createBaseEvent(
 ): Omit<EdgeEventBase, 'name'> {
   const config = getActiveConfig();
   // Prioritize explicit service override, then config service name, then default
-  const serviceName = options.service ?? config?.service.name ?? DEFAULT_SERVICE_NAME;
+  const serviceName =
+    options.service ?? config?.service.name ?? DEFAULT_SERVICE_NAME;
   const baseAttributes = attributes ? { ...attributes } : {};
 
   const baseEvent: Omit<EdgeEventBase, 'name'> = {
@@ -144,11 +144,16 @@ function handleError(
       options.onError(error, event);
       return;
     } catch (handlerError) {
-      console.error('[autotel-edge] Subscribers onError handler failed', handlerError);
+      console.error(
+        '[autotel-edge] Subscribers onError handler failed',
+        handlerError,
+      );
     }
   }
 
-  console.error('[autotel-edge] Subscribers transport failed', error, { event });
+  console.error('[autotel-edge] Subscribers transport failed', error, {
+    event,
+  });
 }
 
 function deliverResult(
@@ -195,12 +200,17 @@ function createSubscribersInstance(
       bindings.delivery ??
       options.delivery ??
       ('fire-and-forget' as SubscriberDeliveryMode);
-    const waitUntil = callOptions?.waitUntil ?? bindings.waitUntil ?? options.waitUntil;
+    const waitUntil =
+      callOptions?.waitUntil ?? bindings.waitUntil ?? options.waitUntil;
     const result = options.transport(event);
     return deliverResult(result, event, delivery, waitUntil, options);
   };
 
-  const trackEvent: EdgeSubscribers['trackEvent'] = (eventName, attributes, callOptions) => {
+  const trackEvent: EdgeSubscribers['trackEvent'] = (
+    eventName,
+    attributes,
+    callOptions,
+  ) => {
     const baseEvent = createBaseEvent(attributes, options);
     const event: EdgeTrackEvent = {
       ...baseEvent,
@@ -273,7 +283,9 @@ function createSubscribersInstance(
   };
 }
 
-export function createEdgeSubscribers(options: CreateEdgeSubscribersOptions): EdgeSubscribers {
+export function createEdgeSubscribers(
+  options: CreateEdgeSubscribersOptions,
+): EdgeSubscribers {
   if (typeof options.transport !== 'function') {
     throw new TypeError('createEdgeSubscribers: options.transport is required');
   }
@@ -298,9 +310,9 @@ export function createEdgeSubscribers(options: CreateEdgeSubscribersOptions): Ed
  * }
  * ```
  */
-export function getEdgeSubscribers(
-  ctx?: { waitUntil(promise: Promise<any>): void },
-): EdgeSubscribers | null {
+export function getEdgeSubscribers(ctx?: {
+  waitUntil(promise: Promise<any>): void;
+}): EdgeSubscribers | null {
   const config = getActiveConfig();
   if (!config) {
     return null;
@@ -334,5 +346,12 @@ export function getEdgeSubscribers(
   });
 }
 
-
-export {type FunnelStepStatus, type OutcomeStatus, type EdgeEvent, type EdgeTrackEvent, type EdgeFunnelStepEvent, type EdgeOutcomeEvent, type EdgeValueEvent} from '../types';
+export {
+  type FunnelStepStatus,
+  type OutcomeStatus,
+  type EdgeEvent,
+  type EdgeTrackEvent,
+  type EdgeFunnelStepEvent,
+  type EdgeOutcomeEvent,
+  type EdgeValueEvent,
+} from '../types';

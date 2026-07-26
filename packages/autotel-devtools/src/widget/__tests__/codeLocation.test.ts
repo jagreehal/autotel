@@ -18,7 +18,10 @@ describe('buildCodeLocation', () => {
 
   it('accepts the newer OTel semconv keys (code.file.path / code.line.number)', () => {
     const loc = buildCodeLocation(
-      { 'code.file.path': '/Users/me/app/src/users.ts', 'code.line.number': 42 },
+      {
+        'code.file.path': '/Users/me/app/src/users.ts',
+        'code.line.number': 42,
+      },
       'vscode',
     );
     expect(loc!.href).toBe('vscode://file/Users/me/app/src/users.ts:42');

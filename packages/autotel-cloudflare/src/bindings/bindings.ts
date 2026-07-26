@@ -1,11 +1,11 @@
 /**
  * Auto-instrumentation for Cloudflare Workers bindings
- * 
+ *
  * Note: This file uses Cloudflare Workers types (KVNamespace, R2Bucket, D1Database, Fetcher, etc.)
  * which are globally available via @cloudflare/workers-types when listed in tsconfig.json.
  * These types are devDependencies only - they're not runtime dependencies.
  * At runtime, Cloudflare Workers runtime provides the actual implementations.
- * 
+ *
  * This module provides automatic tracing for Cloudflare bindings:
  * - KV (key-value operations)
  * - R2 (object storage operations)
@@ -17,11 +17,7 @@
  * - Hyperdrive
  */
 
-import {
-  trace,
-  SpanKind,
-  SpanStatusCode,
-} from '@opentelemetry/api';
+import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { WorkerTracer, getActiveConfig } from 'autotel-edge';
 import { wrap, isWrapped } from './common';
 import { instrumentAI } from './ai';
@@ -39,26 +35,36 @@ type DbStatementCapture = 'off' | 'obfuscated' | 'full';
  * - 'obfuscated': replaces string literals and numbers with '?'
  * - 'off': returns undefined (attribute not set)
  */
-function sanitizeStatement(query: string, mode: DbStatementCapture): string | undefined {
+function sanitizeStatement(
+  query: string,
+  mode: DbStatementCapture,
+): string | undefined {
   if (mode === 'off') return undefined;
-  if (mode === 'obfuscated') return query.replaceAll(/'[^']*'/g, "'?'").replaceAll(/\b\d+\b/g, '?');
+  if (mode === 'obfuscated')
+    return query.replaceAll(/'[^']*'/g, "'?'").replaceAll(/\b\d+\b/g, '?');
   return query;
 }
 
 /**
  * Instrument KV namespace
  */
-export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: string): K {
+export function instrumentKV<K extends KVNamespace>(
+  kv: K,
+  namespaceName?: string,
+): K {
   const name = namespaceName || 'kv';
-  
+
   const kvHandler: ProxyHandler<K> = {
     get(target, prop) {
       const value = Reflect.get(target, prop);
-      
+
       if (prop === 'get' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
-            const [key, options] = args as [string, KVNamespaceGetOptions<unknown> | undefined];
+            const [key, options] = args as [
+              string,
+              KVNamespaceGetOptions<unknown> | undefined,
+            ];
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
             return tracer.startActiveSpan(
@@ -76,14 +82,18 @@ export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: strin
               async (span) => {
                 try {
                   const result = await Reflect.apply(fnTarget, target, args);
-                  span.setAttribute('db.result.type', result === null ? 'null' : typeof result);
+                  span.setAttribute(
+                    'db.result.type',
+                    result === null ? 'null' : typeof result,
+                  );
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -94,11 +104,15 @@ export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: strin
           },
         });
       }
-      
+
       if (prop === 'put' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
-            const [key] = args as [string, unknown, KVNamespacePutOptions | undefined];
+            const [key] = args as [
+              string,
+              unknown,
+              KVNamespacePutOptions | undefined,
+            ];
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
             return tracer.startActiveSpan(
@@ -121,7 +135,8 @@ export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: strin
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -132,7 +147,7 @@ export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: strin
           },
         });
       }
-      
+
       if (prop === 'delete' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
@@ -159,7 +174,8 @@ export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: strin
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -170,7 +186,7 @@ export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: strin
           },
         });
       }
-      
+
       if (prop === 'list' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
@@ -199,7 +215,8 @@ export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: strin
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -210,24 +227,27 @@ export function instrumentKV<K extends KVNamespace>(kv: K, namespaceName?: strin
           },
         });
       }
-      
+
       return value;
     },
   };
-  
+
   return wrap(kv, kvHandler);
 }
 
 /**
  * Instrument R2 bucket
  */
-export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R {
+export function instrumentR2<R extends R2Bucket>(
+  r2: R,
+  bucketName?: string,
+): R {
   const name = bucketName || 'r2';
-  
+
   const r2Handler: ProxyHandler<R> = {
     get(target, prop) {
       const value = Reflect.get(target, prop);
-      
+
       if (prop === 'get' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
@@ -251,7 +271,10 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
                   if (result) {
                     span.setAttribute('db.result.size', result.size);
                     span.setAttribute('db.result.etag', result.etag);
-                    span.setAttribute('db.result.content_type', result.httpMetadata?.contentType);
+                    span.setAttribute(
+                      'db.result.content_type',
+                      result.httpMetadata?.contentType,
+                    );
                   } else {
                     span.setAttribute('db.result.exists', false);
                   }
@@ -261,7 +284,8 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -272,11 +296,22 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
           },
         });
       }
-      
+
       if (prop === 'put' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
-            const [key] = args as [string, ReadableStream | ArrayBuffer | ArrayBufferView | string | null | Blob, R2PutOptions | undefined];
+            const [key] = args as [
+              string,
+              (
+                | ReadableStream
+                | ArrayBuffer
+                | ArrayBufferView
+                | string
+                | null
+                | Blob
+              ),
+              R2PutOptions | undefined,
+            ];
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
             return tracer.startActiveSpan(
@@ -301,7 +336,8 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -312,7 +348,7 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
           },
         });
       }
-      
+
       if (prop === 'delete' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
@@ -339,7 +375,8 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -350,7 +387,7 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
           },
         });
       }
-      
+
       if (prop === 'list' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
@@ -372,7 +409,10 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
               async (span) => {
                 try {
                   const result = await Reflect.apply(fnTarget, target, args);
-                  span.setAttribute('db.result.objects_count', result.objects.length);
+                  span.setAttribute(
+                    'db.result.objects_count',
+                    result.objects.length,
+                  );
                   span.setAttribute('db.result.truncated', result.truncated);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
@@ -380,7 +420,8 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -391,24 +432,27 @@ export function instrumentR2<R extends R2Bucket>(r2: R, bucketName?: string): R 
           },
         });
       }
-      
+
       return value;
     },
   };
-  
+
   return wrap(r2, r2Handler);
 }
 
 /**
  * Instrument D1 database
  */
-export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string): D {
+export function instrumentD1<D extends D1Database>(
+  d1: D,
+  databaseName?: string,
+): D {
   const name = databaseName || 'd1';
-  
+
   const d1Handler: ProxyHandler<D> = {
     get(target, prop) {
       const value = Reflect.get(target, prop);
-      
+
       if (prop === 'prepare' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
@@ -416,17 +460,23 @@ export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string)
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
             const prepared = Reflect.apply(fnTarget, target, args);
-            
+
             // Instrument the prepared statement
             const preparedHandler: ProxyHandler<typeof prepared> = {
               get(target, prop) {
                 const value = Reflect.get(target, prop);
-                
-                if (prop === 'first' || prop === 'run' || prop === 'all' || prop === 'raw') {
+
+                if (
+                  prop === 'first' ||
+                  prop === 'run' ||
+                  prop === 'all' ||
+                  prop === 'raw'
+                ) {
                   return new Proxy(value, {
                     apply: (fnTarget, _thisArg, args) => {
                       const activeConfig = getActiveConfig();
-                      const captureMode: DbStatementCapture = activeConfig?.dataSafety?.captureDbStatement ?? 'full';
+                      const captureMode: DbStatementCapture =
+                        activeConfig?.dataSafety?.captureDbStatement ?? 'full';
                       const statement = sanitizeStatement(query, captureMode);
                       const attributes: Record<string, any> = {
                         'db.system': 'cloudflare-d1',
@@ -444,9 +494,16 @@ export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string)
                         },
                         async (span) => {
                           try {
-                            const result = await Reflect.apply(fnTarget, target, args);
+                            const result = await Reflect.apply(
+                              fnTarget,
+                              target,
+                              args,
+                            );
                             if (prop === 'all' && Array.isArray(result)) {
-                              span.setAttribute('db.result.rows_count', result.length);
+                              span.setAttribute(
+                                'db.result.rows_count',
+                                result.length,
+                              );
                             } else if (prop === 'first' && result) {
                               span.setAttribute('db.result.exists', true);
                             }
@@ -456,7 +513,10 @@ export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string)
                             span.recordException(error as Error);
                             span.setStatus({
                               code: SpanStatusCode.ERROR,
-                              message: error instanceof Error ? error.message : String(error),
+                              message:
+                                error instanceof Error
+                                  ? error.message
+                                  : String(error),
                             });
                             throw error;
                           } finally {
@@ -467,23 +527,24 @@ export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string)
                     },
                   });
                 }
-                
+
                 return value;
               },
             };
-            
+
             return wrap(prepared, preparedHandler);
           },
         });
       }
-      
+
       if (prop === 'exec' && typeof value === 'function') {
         return new Proxy(value, {
           apply: (fnTarget, _thisArg, args) => {
             const [query] = args as [string];
             const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
             const activeConfig = getActiveConfig();
-            const captureMode: DbStatementCapture = activeConfig?.dataSafety?.captureDbStatement ?? 'full';
+            const captureMode: DbStatementCapture =
+              activeConfig?.dataSafety?.captureDbStatement ?? 'full';
             const statement = sanitizeStatement(query, captureMode);
             const attributes: Record<string, any> = {
               'db.system': 'cloudflare-d1',
@@ -510,7 +571,8 @@ export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string)
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {
@@ -521,11 +583,11 @@ export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string)
           },
         });
       }
-      
+
       return value;
     },
   };
-  
+
   return wrap(d1, d1Handler);
 }
 
@@ -538,7 +600,10 @@ export function instrumentD1<D extends D1Database>(d1: D, databaseName?: string)
  * directly on the original binding instead of using `Reflect.apply` on a
  * detached function reference.
  */
-export function instrumentServiceBinding<F extends Fetcher>(fetcher: F, serviceName?: string): F {
+export function instrumentServiceBinding<F extends Fetcher>(
+  fetcher: F,
+  serviceName?: string,
+): F {
   const name = serviceName || 'service';
 
   const fetcherHandler: ProxyHandler<F> = {
@@ -548,7 +613,10 @@ export function instrumentServiceBinding<F extends Fetcher>(fetcher: F, serviceN
         // This avoids detaching the native method from its binding, which would
         // cause "Illegal invocation" on Cloudflare's native Fetcher objects.
         const tracedFetch = (...args: any[]) => {
-          const [input, init] = args as [RequestInfo | URL, RequestInit | undefined];
+          const [input, init] = args as [
+            RequestInfo | URL,
+            RequestInit | undefined,
+          ];
           const request = new Request(input, init);
           const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
 
@@ -575,7 +643,8 @@ export function instrumentServiceBinding<F extends Fetcher>(fetcher: F, serviceN
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -609,7 +678,7 @@ const hasMethod = (obj: any, m: string): boolean =>
   typeof obj?.[m] === 'function';
 
 const hasExactMethods = (obj: any, methods: string[]): boolean =>
-  methods.every(m => hasMethod(obj, m));
+  methods.every((m) => hasMethod(obj, m));
 
 /**
  * Auto-instrument all Cloudflare bindings in the environment
@@ -632,7 +701,9 @@ const hasExactMethods = (obj: any, methods: string[]): boolean =>
  */
 const envCache = new WeakMap<object, Record<string, any>>();
 
-export function instrumentBindings(env: Record<string, any>): Record<string, any> {
+export function instrumentBindings(
+  env: Record<string, any>,
+): Record<string, any> {
   const cached = envCache.get(env);
   if (cached) return cached;
 
@@ -657,7 +728,10 @@ export function instrumentBindings(env: Record<string, any>): Record<string, any
     }
 
     // 2. KV — like R2 but without head
-    if (hasExactMethods(value, ['get', 'put', 'delete', 'list']) && !('head' in value)) {
+    if (
+      hasExactMethods(value, ['get', 'put', 'delete', 'list']) &&
+      !('head' in value)
+    ) {
       instrumented[key] = instrumentKV(value as KVNamespace, key);
       continue;
     }
@@ -681,7 +755,11 @@ export function instrumentBindings(env: Record<string, any>): Record<string, any
     }
 
     // 6. Hyperdrive — connect + connection properties
-    if (hasMethod(value, 'connect') && 'connectionString' in value && 'host' in value) {
+    if (
+      hasMethod(value, 'connect') &&
+      'connectionString' in value &&
+      'host' in value
+    ) {
       instrumented[key] = instrumentHyperdrive(value as Hyperdrive, key);
       continue;
     }
@@ -694,7 +772,10 @@ export function instrumentBindings(env: Record<string, any>): Record<string, any
 
     // 8. Analytics Engine
     if (hasMethod(value, 'writeDataPoint')) {
-      instrumented[key] = instrumentAnalyticsEngine(value as AnalyticsEngineDataset, key);
+      instrumented[key] = instrumentAnalyticsEngine(
+        value as AnalyticsEngineDataset,
+        key,
+      );
       continue;
     }
 
@@ -717,4 +798,3 @@ export function instrumentBindings(env: Record<string, any>): Record<string, any
   envCache.set(env, instrumented);
   return instrumented;
 }
-

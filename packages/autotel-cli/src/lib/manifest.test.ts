@@ -24,7 +24,10 @@ describe('manifest drift', () => {
 
   it('every manifest command exists in the dispatcher', () => {
     const missing = [...manifestNames].filter((n) => !dispatchedNames.has(n));
-    expect(missing, `Manifest describes commands not in dispatcher: ${missing.join(', ')}`).toEqual([]);
+    expect(
+      missing,
+      `Manifest describes commands not in dispatcher: ${missing.join(', ')}`,
+    ).toEqual([]);
   });
 
   it('every dispatched command is described in the manifest (or is intentionally hidden)', () => {
@@ -33,11 +36,11 @@ describe('manifest drift', () => {
     // like "codemod trace" and "schema errors").
     const allowMissing = new Set(['help', 'codemod', 'telemetry']);
     const undocumented = [...dispatchedNames].filter(
-      (n) => !manifestNames.has(n) && !allowMissing.has(n)
+      (n) => !manifestNames.has(n) && !allowMissing.has(n),
     );
     expect(
       undocumented,
-      `Dispatcher exposes commands not in manifest: ${undocumented.join(', ')}`
+      `Dispatcher exposes commands not in manifest: ${undocumented.join(', ')}`,
     ).toEqual([]);
   });
 
@@ -54,7 +57,10 @@ describe('error catalogue', () => {
     const declared = new Set(Object.values(AutotelErrorCodes));
     const catalogued = new Set(ERROR_CATALOGUE.map((e) => e.code));
     const missing = [...declared].filter((c) => !catalogued.has(c));
-    expect(missing, `Codes missing from catalogue: ${missing.join(', ')}`).toEqual([]);
+    expect(
+      missing,
+      `Codes missing from catalogue: ${missing.join(', ')}`,
+    ).toEqual([]);
   });
 });
 

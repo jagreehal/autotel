@@ -66,7 +66,8 @@ export class CloudWatchLogExporter implements LogRecordExporter {
       );
     }
     const logGroup = config.logGroup ?? process.env.AWS_LAMBDA_LOG_GROUP_NAME;
-    const logStream = config.logStream ?? process.env.AWS_LAMBDA_LOG_STREAM_NAME;
+    const logStream =
+      config.logStream ?? process.env.AWS_LAMBDA_LOG_STREAM_NAME;
     if (!logGroup || !logStream) {
       throw new Error(
         'CloudWatchLogExporter: `logGroup` and `logStream` are required ' +

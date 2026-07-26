@@ -35,7 +35,9 @@ export interface DependencyAudit {
 /**
  * Get all installed packages from package.json
  */
-export function getInstalledPackages(packageJson: PackageJson): InstalledPackage[] {
+export function getInstalledPackages(
+  packageJson: PackageJson,
+): InstalledPackage[] {
   const installed: InstalledPackage[] = [];
 
   const deps = packageJson.dependencies ?? {};
@@ -60,17 +62,25 @@ export function getInstalledPackages(packageJson: PackageJson): InstalledPackage
  */
 export function isPackageInstalled(
   packageJson: PackageJson,
-  packageName: string
+  packageName: string,
 ): { installed: boolean; version: string | null; isDev: boolean } {
   const deps = packageJson.dependencies ?? {};
   const devDeps = packageJson.devDependencies ?? {};
 
   if (deps[packageName]) {
-    return { installed: true, version: deps[packageName] ?? null, isDev: false };
+    return {
+      installed: true,
+      version: deps[packageName] ?? null,
+      isDev: false,
+    };
   }
 
   if (devDeps[packageName]) {
-    return { installed: true, version: devDeps[packageName] ?? null, isDev: true };
+    return {
+      installed: true,
+      version: devDeps[packageName] ?? null,
+      isDev: true,
+    };
   }
 
   return { installed: false, version: null, isDev: false };
@@ -82,7 +92,7 @@ export function isPackageInstalled(
 export function findMissingPackages(
   packageJson: PackageJson,
   required: string[],
-  reason?: string
+  reason?: string,
 ): MissingPackage[] {
   const missing: MissingPackage[] = [];
 
@@ -102,19 +112,32 @@ export function findMissingPackages(
 /**
  * Check version compatibility between autotel packages
  */
-export function checkAutotelVersions(
-  packageJson: PackageJson
-): { compatible: boolean; packages: Array<{ name: string; version: string }> } {
-  const autotelPackages = ['autotel', 'autotel-backends', 'autotel-plugins', 'autotel-subscribers'];
+export function checkAutotelVersions(packageJson: PackageJson): {
+  compatible: boolean;
+  packages: Array<{ name: string; version: string }>;
+} {
+  const autotelPackages = [
+    'autotel',
+    'autotel-backends',
+    'autotel-plugins',
+    'autotel-subscribers',
+  ];
   const installed: Array<{ name: string; version: string; major: number }> = [];
 
   for (const pkg of autotelPackages) {
-    const { installed: isInstalled, version } = isPackageInstalled(packageJson, pkg);
+    const { installed: isInstalled, version } = isPackageInstalled(
+      packageJson,
+      pkg,
+    );
     if (isInstalled && version) {
       const cleanVersion = version.replace(/^[\^~]/, '');
       const parsed = semver.parse(cleanVersion);
       if (parsed) {
-        installed.push({ name: pkg, version: cleanVersion, major: parsed.major });
+        installed.push({
+          name: pkg,
+          version: cleanVersion,
+          major: parsed.major,
+        });
       }
     }
   }
@@ -136,7 +159,7 @@ export function checkAutotelVersions(
 export function auditPresetDependencies(
   packageJson: PackageJson,
   requiredPackages: string[],
-  presetName: string
+  presetName: string,
 ): DependencyAudit {
   const installed = getInstalledPackages(packageJson);
   const missing: MissingPackage[] = [];

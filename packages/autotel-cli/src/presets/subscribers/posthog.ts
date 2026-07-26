@@ -9,10 +9,7 @@ export const posthog: SubscriberPreset = {
   type: 'subscriber',
   description: 'Send events to PostHog for product analytics',
   packages: {
-    required: [
-      'autotel-subscribers',
-      'posthog-node',
-    ],
+    required: ['autotel-subscribers', 'posthog-node'],
     optional: [],
     devOnly: [],
   },

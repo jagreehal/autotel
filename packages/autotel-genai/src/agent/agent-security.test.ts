@@ -43,19 +43,23 @@ describe('agent-security', () => {
   beforeEach(() => {
     setAttribute.mockClear();
     setAttributes.mockClear();
-    vi.mocked(otelTrace.getActiveSpan).mockReturnValue();
+    vi.mocked(otelTrace.getActiveSpan).mockReset();
   });
 
   it('deriveActionRiskClass prefers explicit override', () => {
-    expect(
-      deriveActionRiskClass({ destructiveHint: true }, 'read'),
-    ).toBe('read');
+    expect(deriveActionRiskClass({ destructiveHint: true }, 'read')).toBe(
+      'read',
+    );
   });
 
   it('deriveActionRiskClass maps MCP hints', () => {
     expect(deriveActionRiskClass({ readOnlyHint: true })).toBe('read');
-    expect(deriveActionRiskClass({ destructiveHint: true })).toBe('destructive');
-    expect(deriveActionRiskClass({ openWorldHint: true })).toBe('exfiltration_capable');
+    expect(deriveActionRiskClass({ destructiveHint: true })).toBe(
+      'destructive',
+    );
+    expect(deriveActionRiskClass({ openWorldHint: true })).toBe(
+      'exfiltration_capable',
+    );
   });
 
   it('recordInputProvenance sets provenance attr', () => {

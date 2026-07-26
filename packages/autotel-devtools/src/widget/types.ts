@@ -126,10 +126,7 @@ export type TabType =
   | 'security';
 
 export type CornerPosition =
-  | 'top-left'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-right';
+  'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 export type DockPosition = 'left' | 'right' | 'top' | 'bottom' | null;
 
 export interface WidgetPosition {
@@ -143,6 +140,13 @@ export interface PanelSize {
   vertical: number;
   /** Width when docked left/right. */
   horizontal: number;
+}
+
+/** A span plus its resolved children/depth, used by the waterfall view. */
+export interface SpanNode {
+  span: SpanData;
+  children: SpanNode[];
+  depth: number;
 }
 
 export interface WidgetState {

@@ -11,10 +11,7 @@ export const datadogDirect: BackendPreset = {
   protocol: 'http',
   exporter: 'otlp-http',
   packages: {
-    required: [
-      'autotel-backends',
-      '@opentelemetry/exporter-trace-otlp-http',
-    ],
+    required: ['autotel-backends', '@opentelemetry/exporter-trace-otlp-http'],
     optional: [
       '@opentelemetry/sdk-logs',
       '@opentelemetry/exporter-logs-otlp-http',
@@ -88,10 +85,7 @@ export const datadogAgent: BackendPreset = {
   protocol: 'http',
   exporter: 'otlp-http',
   packages: {
-    required: [
-      'autotel-backends',
-      '@opentelemetry/exporter-trace-otlp-http',
-    ],
+    required: ['autotel-backends', '@opentelemetry/exporter-trace-otlp-http'],
     optional: [
       '@opentelemetry/sdk-logs',
       '@opentelemetry/exporter-logs-otlp-http',

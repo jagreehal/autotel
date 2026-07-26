@@ -1,4 +1,4 @@
-import type { TraceData } from 'autotel-devtools/server'
+import type { TraceData } from 'autotel-devtools/server';
 
 // A QueryAdapter knows how to talk to ONE specific OTel-compatible backend
 // (Tempo, Jaeger, Honeycomb, Datadog, Logfire, Signoz/ClickHouse, …) and
@@ -11,68 +11,74 @@ import type { TraceData } from 'autotel-devtools/server'
 //    expects (especially `gen_ai.*` for the GenAI view to keep working).
 
 export interface QueryAdapterContext {
-  baseUrl: string
+  baseUrl: string;
   /** Optional dataset / project / scope ID required by some backends (Honeycomb dataset, Logfire project, …). */
-  dataset?: string
+  dataset?: string;
   /** Read-only access to credentials. Adapters MUST NOT log secrets. */
   secrets: {
-    get(key: string): Promise<string | undefined>
-  }
-  abortSignal: AbortSignal
+    get(key: string): Promise<string | undefined>;
+  };
+  abortSignal: AbortSignal;
   /** Optional per-call timeout in ms. Adapter respects this in addition to abortSignal. */
-  timeoutMs?: number
+  timeoutMs?: number;
 }
 
 /** Standard secret key per adapter id. Each adapter reads from this key only. */
 export function credentialKey(adapterId: string): string {
-  return `autotel.backend.${adapterId}.token`
+  return `autotel.backend.${adapterId}.token`;
 }
 
 export interface TraceQuery {
   /** Free-text search across span names / attributes (backend-interpreted). */
-  text?: string
+  text?: string;
   /** Service name filter. */
-  service?: string
+  service?: string;
   /** Earliest start time (epoch ms). */
-  startMs?: number
+  startMs?: number;
   /** Latest start time (epoch ms). */
-  endMs?: number
+  endMs?: number;
   /** Result cap. Default 100. */
-  limit?: number
+  limit?: number;
   /** Only return traces with at least one errored span. */
-  errorsOnly?: boolean
+  errorsOnly?: boolean;
 }
 
 export interface QueryAdapter {
   /** Unique adapter id, e.g. 'jaeger', 'tempo', 'honeycomb'. */
-  readonly id: string
+  readonly id: string;
   /** Human-readable label for the picker. */
-  readonly label: string
+  readonly label: string;
 
   /** Health check — returns true if the backend is reachable + auth works. */
-  ping(ctx: QueryAdapterContext): Promise<boolean>
+  ping(ctx: QueryAdapterContext): Promise<boolean>;
 
   /** List distinct service names. */
-  listServices(ctx: QueryAdapterContext): Promise<string[]>
+  listServices(ctx: QueryAdapterContext): Promise<string[]>;
 
   /** Search traces matching the query. */
-  searchTraces(ctx: QueryAdapterContext, query: TraceQuery): Promise<TraceData[]>
+  searchTraces(
+    ctx: QueryAdapterContext,
+    query: TraceQuery,
+  ): Promise<TraceData[]>;
 
   /** Fetch a single trace by id. */
-  getTrace(ctx: QueryAdapterContext, traceId: string): Promise<TraceData | undefined>
+  getTrace(
+    ctx: QueryAdapterContext,
+    traceId: string,
+  ): Promise<TraceData | undefined>;
 }
 
 // Registry — adapters self-register by id. The picker reads from this map.
-const REGISTRY = new Map<string, QueryAdapter>()
+const REGISTRY = new Map<string, QueryAdapter>();
 
 export function registerAdapter(adapter: QueryAdapter): void {
-  REGISTRY.set(adapter.id, adapter)
+  REGISTRY.set(adapter.id, adapter);
 }
 
 export function getAdapter(id: string): QueryAdapter | undefined {
-  return REGISTRY.get(id)
+  return REGISTRY.get(id);
 }
 
 export function listAdapters(): QueryAdapter[] {
-  return [...REGISTRY.values()]
+  return [...REGISTRY.values()];
 }

@@ -129,7 +129,9 @@ describe('DevtoolsServer', () => {
       });
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(() => server!.addTrace(makeTrace({ traceId: 't1' }))).not.toThrow();
+      expect(() =>
+        server!.addTrace(makeTrace({ traceId: 't1' })),
+      ).not.toThrow();
       expect(server!.getCurrentData().traces).toHaveLength(1);
     });
   });

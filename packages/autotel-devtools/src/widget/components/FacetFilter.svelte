@@ -179,7 +179,8 @@
                   <span class="flex-1 truncate" title={opt.value}
                     >{opt.value}</span
                   >
-                  <span class="flex-shrink-0 font-mono tabular-nums text-fg-subtle"
+                  <span
+                    class="flex-shrink-0 font-mono tabular-nums text-fg-subtle"
                     >{opt.count}</span
                   >
                 </button>

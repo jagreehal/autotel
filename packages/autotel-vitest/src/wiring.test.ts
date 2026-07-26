@@ -52,7 +52,9 @@ vi.mock('autotel/processors', () => ({
 // _otelTestSpan won't be available and these tests fail.
 import { test } from './index';
 
-test('_otelTestSpan fixture is registered and auto-activates', ({ _otelTestSpan }) => {
+test('_otelTestSpan fixture is registered and auto-activates', ({
+  _otelTestSpan,
+}) => {
   // auto: true means the fixture injects automatically.
   // If the fixture key is missing from base.extend(), this will be undefined.
   expect(_otelTestSpan).toBeDefined();

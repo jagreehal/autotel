@@ -37,12 +37,19 @@
         --gh-accent: #316dca;
         --autotel-orange: #ff8a3d;
 
-        --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --sans:
+          'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         --mono: 'IBM Plex Mono', ui-monospace, monospace;
       }
 
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
 
       body {
         background: var(--gh-canvas);
@@ -54,7 +61,12 @@
       }
 
       .demo-ribbon {
-        background: linear-gradient(90deg, rgba(255, 138, 61, 0.16), rgba(255, 138, 61, 0.06) 70%, transparent);
+        background: linear-gradient(
+          90deg,
+          rgba(255, 138, 61, 0.16),
+          rgba(255, 138, 61, 0.06) 70%,
+          transparent
+        );
         border-bottom: 1px solid rgba(255, 138, 61, 0.32);
         padding: 0.55rem 1.5rem;
         display: flex;
@@ -66,10 +78,22 @@
         text-transform: uppercase;
         color: var(--autotel-orange);
       }
-      .demo-ribbon strong { color: #ffd6b3; font-weight: 500; letter-spacing: 0.18em; }
-      .demo-ribbon .sep { color: var(--gh-text-muted); }
-      .demo-ribbon a { color: var(--gh-text-muted); text-decoration: none; border-bottom: 1px solid var(--gh-border); }
-      .demo-ribbon a:hover { color: var(--gh-text); }
+      .demo-ribbon strong {
+        color: #ffd6b3;
+        font-weight: 500;
+        letter-spacing: 0.18em;
+      }
+      .demo-ribbon .sep {
+        color: var(--gh-text-muted);
+      }
+      .demo-ribbon a {
+        color: var(--gh-text-muted);
+        text-decoration: none;
+        border-bottom: 1px solid var(--gh-border);
+      }
+      .demo-ribbon a:hover {
+        color: var(--gh-text);
+      }
 
       /* GitHub header */
       .gh-header {
@@ -86,11 +110,27 @@
         border-radius: 50%;
         background: var(--gh-text);
       }
-      .gh-mark svg { display: block; width: 100%; height: 100%; }
-      .gh-breadcrumb { color: var(--gh-text); font-weight: 600; }
-      .gh-breadcrumb .slash { color: var(--gh-text-muted); margin: 0 4px; font-weight: 400; }
-      .gh-breadcrumb a { color: var(--gh-text-link); text-decoration: none; }
-      .gh-breadcrumb a:hover { text-decoration: underline; }
+      .gh-mark svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .gh-breadcrumb {
+        color: var(--gh-text);
+        font-weight: 600;
+      }
+      .gh-breadcrumb .slash {
+        color: var(--gh-text-muted);
+        margin: 0 4px;
+        font-weight: 400;
+      }
+      .gh-breadcrumb a {
+        color: var(--gh-text-link);
+        text-decoration: none;
+      }
+      .gh-breadcrumb a:hover {
+        text-decoration: underline;
+      }
 
       /* PR title + state */
       .pr-head {
@@ -104,7 +144,10 @@
         margin: 0 0 8px;
         color: var(--gh-text);
       }
-      .pr-title .num { color: var(--gh-text-muted); font-weight: 300; }
+      .pr-title .num {
+        color: var(--gh-text-muted);
+        font-weight: 300;
+      }
       .pr-meta {
         display: flex;
         align-items: center;
@@ -130,8 +173,13 @@
         border-radius: 50%;
         background: white;
       }
-      .pr-meta a { color: var(--gh-text-link); text-decoration: none; }
-      .pr-meta a:hover { text-decoration: underline; }
+      .pr-meta a {
+        color: var(--gh-text-link);
+        text-decoration: none;
+      }
+      .pr-meta a:hover {
+        text-decoration: underline;
+      }
       .pr-meta code {
         font-family: var(--mono);
         background: var(--gh-canvas-3);
@@ -189,10 +237,17 @@
       }
 
       @media (max-width: 900px) {
-        main { grid-template-columns: 1fr; }
+        main {
+          grid-template-columns: 1fr;
+        }
       }
 
-      .timeline { display: flex; flex-direction: column; gap: 16px; position: relative; }
+      .timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        position: relative;
+      }
       .timeline::before {
         content: '';
         position: absolute;
@@ -245,8 +300,13 @@
         align-items: center;
         gap: 6px;
       }
-      .comment-head .who { font-weight: 600; color: var(--gh-text); }
-      .comment-head .when { color: var(--gh-text-muted); }
+      .comment-head .who {
+        font-weight: 600;
+        color: var(--gh-text);
+      }
+      .comment-head .when {
+        color: var(--gh-text-muted);
+      }
       .comment-head .bot-badge {
         background: transparent;
         border: 1px solid var(--gh-border);
@@ -258,7 +318,11 @@
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
-      .comment-body { padding: 16px; font-size: 14px; color: var(--gh-text); }
+      .comment-body {
+        padding: 16px;
+        font-size: 14px;
+        color: var(--gh-text);
+      }
 
       .comment-body h1 {
         font-size: 24px;
@@ -280,9 +344,16 @@
         margin: 16px 0 8px;
         font-weight: 600;
       }
-      .comment-body p { margin: 8px 0; }
-      .comment-body ul { margin: 8px 0; padding-left: 26px; }
-      .comment-body li { margin: 3px 0; }
+      .comment-body p {
+        margin: 8px 0;
+      }
+      .comment-body ul {
+        margin: 8px 0;
+        padding-left: 26px;
+      }
+      .comment-body li {
+        margin: 3px 0;
+      }
       .comment-body code {
         font-family: var(--mono);
         font-size: 0.92em;
@@ -291,9 +362,17 @@
         border-radius: 3px;
         color: #e6edf3;
       }
-      .comment-body strong { font-weight: 600; color: #e6edf3; }
-      .comment-body em { color: var(--gh-text-muted); font-style: italic; }
-      .comment-body a { color: var(--gh-text-link); }
+      .comment-body strong {
+        font-weight: 600;
+        color: #e6edf3;
+      }
+      .comment-body em {
+        color: var(--gh-text-muted);
+        font-style: italic;
+      }
+      .comment-body a {
+        color: var(--gh-text-link);
+      }
 
       .check-block {
         margin-top: 8px;
@@ -322,8 +401,15 @@
       .check-block .icon.pass {
         background: var(--gh-text-success);
       }
-      .check-block .name { font-weight: 600; color: var(--gh-text); }
-      .check-block .desc { font-size: 13px; color: var(--gh-text-muted); margin-top: 2px; }
+      .check-block .name {
+        font-weight: 600;
+        color: var(--gh-text);
+      }
+      .check-block .desc {
+        font-size: 13px;
+        color: var(--gh-text-muted);
+        margin-top: 2px;
+      }
       .check-block .details {
         margin-left: auto;
         color: var(--gh-text-link);
@@ -333,7 +419,11 @@
       }
 
       /* Right sidebar */
-      aside { display: flex; flex-direction: column; gap: 24px; }
+      aside {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
       .side-section {
         font-size: 12px;
       }
@@ -366,7 +456,10 @@
         color: var(--gh-text-muted);
         line-height: 1.5;
       }
-      .side-section .review strong { color: var(--gh-text); font-weight: 500; }
+      .side-section .review strong {
+        color: var(--gh-text);
+        font-weight: 500;
+      }
 
       /* "What you're looking at" callout */
       .explainer {
@@ -377,7 +470,10 @@
         color: var(--gh-text-muted);
         line-height: 1.55;
       }
-      .explainer strong { color: var(--autotel-orange); font-weight: 600; }
+      .explainer strong {
+        color: var(--autotel-orange);
+        font-weight: 600;
+      }
 
       .toolbar {
         position: fixed;
@@ -392,14 +488,20 @@
         color: var(--gh-text-muted);
         z-index: 50;
       }
-      .toolbar a { color: var(--autotel-orange); text-decoration: none; }
+      .toolbar a {
+        color: var(--autotel-orange);
+        text-decoration: none;
+      }
     </style>
   </head>
   <body>
     <div class="demo-ribbon">
       <strong>Live mock</strong>
       <span class="sep">·</span>
-      <span>What an actual PR comment looks like, rendered against the running snapshot</span>
+      <span
+        >What an actual PR comment looks like, rendered against the running
+        snapshot</span
+      >
       <span class="sep">·</span>
       <a href="/">← back to live dashboard</a>
     </div>
@@ -407,7 +509,9 @@
     <header class="gh-header">
       <div class="gh-mark">
         <svg viewBox="0 0 24 24" fill="#0d1117" aria-hidden="true">
-          <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/>
+          <path
+            d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"
+          />
         </svg>
       </div>
       <div class="gh-breadcrumb">
@@ -415,7 +519,9 @@
         <span class="slash">/</span>
         <a href="#">autotel-commerce</a>
         <span class="slash">·</span>
-        <span style="color:var(--gh-text-muted);font-weight:400;">Pull request #142</span>
+        <span style="color: var(--gh-text-muted); font-weight: 400"
+          >Pull request #142</span
+        >
       </div>
     </header>
 
@@ -426,7 +532,9 @@
       </h1>
       <div class="pr-meta">
         <span class="state-pill"><span class="dot"></span>Open</span>
-        <span><strong style="color:var(--gh-text)">jagreehal</strong> wants to merge <strong style="color:var(--gh-text)">3</strong> commits into
+        <span
+          ><strong style="color: var(--gh-text)">jagreehal</strong> wants to
+          merge <strong style="color: var(--gh-text)">3</strong> commits into
           <code>main</code> from <code>feat/personalization-seed</code>
         </span>
       </div>
@@ -435,16 +543,18 @@
     <nav class="pr-tabs">
       <div class="pr-tab active">Conversation <span class="count">8</span></div>
       <div class="pr-tab">Commits <span class="count">3</span></div>
-      <div class="pr-tab">Checks <span class="count" id="check-count">1</span></div>
+      <div class="pr-tab">
+        Checks <span class="count" id="check-count">1</span>
+      </div>
       <div class="pr-tab">Files changed <span class="count">5</span></div>
     </nav>
 
     <div class="explainer">
-      <strong>What you're looking at:</strong> a faithful reproduction of the
-      PR conversation page. The "autotel-eventcatalog" comment below is
-      generated from the live drift report this server is serving right now.
-      Refresh after editing the snapshot and the comment updates with the
-      real markdown that would post on a real PR.
+      <strong>What you're looking at:</strong> a faithful reproduction of the PR
+      conversation page. The "autotel-eventcatalog" comment below is generated
+      from the live drift report this server is serving right now. Refresh after
+      editing the snapshot and the comment updates with the real markdown that
+      would post on a real PR.
     </div>
 
     <main>
@@ -454,13 +564,15 @@
           <div class="comment">
             <div class="comment-head">
               <span class="who">jagreehal</span>
-              <span class="when">opened this pull request 14 minutes ago · 3 commits</span>
+              <span class="when"
+                >opened this pull request 14 minutes ago · 3 commits</span
+              >
             </div>
             <div class="comment-body">
               <p>
                 Adds a per-order personalization seed to the recommendation
-                payload so the LLM stays stable across retries. Behind a
-                feature flag for now.
+                payload so the LLM stays stable across retries. Behind a feature
+                flag for now.
               </p>
               <p>
                 Touches: <code>services/recommendations</code>,
@@ -501,8 +613,12 @@
         <div class="check-block" id="check-block">
           <div class="icon" id="check-icon">×</div>
           <div>
-            <div class="name" id="check-name">eventcatalog drift / drift — Failing</div>
-            <div class="desc" id="check-desc">Catalog and runtime have diverged. See the comment above.</div>
+            <div class="name" id="check-name">
+              eventcatalog drift / drift — Failing
+            </div>
+            <div class="desc" id="check-desc">
+              Catalog and runtime have diverged. See the comment above.
+            </div>
           </div>
           <a class="details" href="#">Details</a>
         </div>
@@ -528,7 +644,8 @@
     </main>
 
     <div class="toolbar">
-      live · <a href="/snapshot.json">snapshot.json</a> · <a href="/drift.md">drift.md</a>
+      live · <a href="/snapshot.json">snapshot.json</a> ·
+      <a href="/drift.md">drift.md</a>
     </div>
 
     <script>
@@ -539,17 +656,37 @@
         const lines = md.split('\n');
         const out = [];
         let inList = false;
-        const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+        const closeList = () => {
+          if (inList) {
+            out.push('</ul>');
+            inList = false;
+          }
+        };
         for (const raw of lines) {
-          const line = raw.replace(/`([^`]+)`/g, '<code>$1</code>')
-                          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                          .replace(/_([^_]+)_/g, '<em>$1</em>');
-          if (/^# /.test(line))       { closeList(); out.push('<h1>'    + line.slice(2)  + '</h1>'); }
-          else if (/^## /.test(line)) { closeList(); out.push('<h2>'    + line.slice(3)  + '</h2>'); }
-          else if (/^### /.test(line)){ closeList(); out.push('<h3>'    + line.slice(4)  + '</h3>'); }
-          else if (/^- /.test(line))  { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + line.slice(2) + '</li>'); }
-          else if (line.trim() === '')  closeList();
-          else                          { closeList(); out.push('<p>' + line + '</p>'); }
+          const line = raw
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/_([^_]+)_/g, '<em>$1</em>');
+          if (/^# /.test(line)) {
+            closeList();
+            out.push('<h1>' + line.slice(2) + '</h1>');
+          } else if (/^## /.test(line)) {
+            closeList();
+            out.push('<h2>' + line.slice(3) + '</h2>');
+          } else if (/^### /.test(line)) {
+            closeList();
+            out.push('<h3>' + line.slice(4) + '</h3>');
+          } else if (/^- /.test(line)) {
+            if (!inList) {
+              out.push('<ul>');
+              inList = true;
+            }
+            out.push('<li>' + line.slice(2) + '</li>');
+          } else if (line.trim() === '') closeList();
+          else {
+            closeList();
+            out.push('<p>' + line + '</p>');
+          }
         }
         closeList();
         return out.join('\n');
@@ -566,22 +703,29 @@
           const findings =
             drift.events.observedButUndocumented.length +
             drift.events.documentedButUnseen.length +
-            drift.events.fieldDrift.reduce((s, fd) => s + fd.extra.length + fd.missing.length, 0) +
+            drift.events.fieldDrift.reduce(
+              (s, fd) => s + fd.extra.length + fd.missing.length,
+              0,
+            ) +
             drift.services.observedButUndocumented.length +
             drift.channels.observedButUndocumented.length;
 
           if (findings === 0) {
             $('check-icon').classList.add('pass');
             $('check-icon').textContent = '✓';
-            $('check-name').textContent = 'eventcatalog drift / drift — Passing';
+            $('check-name').textContent =
+              'eventcatalog drift / drift — Passing';
             $('check-desc').textContent = 'Catalog and runtime agree.';
             $('check-count').textContent = '1';
           } else {
             $('check-icon').classList.remove('pass');
             $('check-icon').textContent = '×';
-            $('check-name').textContent = 'eventcatalog drift / drift — Failing';
+            $('check-name').textContent =
+              'eventcatalog drift / drift — Failing';
             $('check-desc').textContent =
-              findings + ' drift finding' + (findings === 1 ? '' : 's') +
+              findings +
+              ' drift finding' +
+              (findings === 1 ? '' : 's') +
               ' — see the comment above.';
             $('check-count').textContent = '1';
           }

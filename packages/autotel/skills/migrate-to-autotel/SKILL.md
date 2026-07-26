@@ -12,7 +12,7 @@ license: MIT
 
 # Migrate to autotel
 
-Replacing tracing in a live service is risky — you can lose data, change span shapes, or break dashboards your on-call team relies on. This skill covers the safe paths from each major source, what to change in your code, and how to verify the cutover before turning the old stack off.
+Replacing tracing in a live service is risky. You can lose data, change span shapes, or break dashboards your on-call team relies on. This skill covers the safe paths from each major source, what to change in your code, and how to verify the cutover before turning the old stack off.
 
 ## Choose your starting point
 
@@ -34,11 +34,11 @@ Replacing tracing in a live service is risky — you can lose data, change span 
 4. **Disable the old stack.** Remove old SDK imports + processors; redeploy.
 5. **Decommission.** Remove old packages from `package.json` and lock files; archive old dashboards.
 
-Don't compress this into a single PR. The riskiest step is "disable old stack" — keep it last.
+Don't compress this into a single PR. The riskiest step is "disable old stack". Keep it last.
 
 ## From raw `@opentelemetry/sdk-node`
 
-The smoothest migration. autotel layers on top of OTel — your span attributes, propagators, and exporters can stay.
+The smoothest migration. autotel layers on top of OTel. Your span attributes, propagators, and exporters can stay.
 
 ### Drop-in init
 
@@ -76,15 +76,15 @@ init({
 
 ### What you gain immediately
 
-- `useLogger().set({ … })` flattens onto the active span — no more `span.setAttribute('user.id', id)` boilerplate.
-- `attributeRedactor: 'default'` — PII masking for free in production.
+- `useLogger().set({ … })` flattens onto the active span: no more `span.setAttribute('user.id', id)` boilerplate.
+- `attributeRedactor: 'default'`: PII masking for free in production.
 - `destinations: [...]` for straightforward OTLP multi-backend fan-out.
 - Cloudflare Workers + Edge support out of the box (`defineWorkerFetch`).
 
 ### What stays the same
 
 - Your propagator (`W3CTraceContextPropagator` is the default).
-- Your exporters — pass them via `spanProcessors` if you want to keep custom ones.
+- Your exporters: pass them via `spanProcessors` if you want to keep custom ones.
 - Your resource attributes.
 
 ## From Sentry performance tracing
@@ -148,7 +148,7 @@ Datadog APM uses its own format and proprietary tracer. The migration path is OT
 
 ### Step 1: Stop importing `dd-trace`
 
-`dd-trace` patches every supported library on import — keeping it in the bundle while autotel runs causes double-instrumentation. Remove `import 'dd-trace'` (or the `--require dd-trace/init` arg).
+`dd-trace` patches every supported library on import. Keeping it in the bundle while autotel runs causes double-instrumentation. Remove `import 'dd-trace'` (or the `--require dd-trace/init` arg).
 
 ### Step 2: Point autotel at Datadog OTLP intake
 
@@ -166,7 +166,7 @@ For the EU site use `datadoghq.eu`; for US3 / US5 see Datadog's region matrix.
 
 ### Step 3: Map Datadog span tags
 
-Datadog uses `service`, `resource`, `operation` — OTel uses `service.name`, `http.route`, span name. autotel handles the conversion automatically when exporting via `dd-api-key`. If you have custom Datadog tags in dashboards, rename them in code:
+Datadog uses `service`, `resource`, `operation`. OTel uses `service.name`, `http.route`, span name. autotel handles the conversion automatically when exporting via `dd-api-key`. If you have custom Datadog tags in dashboards, rename them in code:
 
 | Datadog tag | OTel attribute              |
 | ----------- | --------------------------- |
@@ -185,7 +185,7 @@ Datadog uses `service`, `resource`, `operation` — OTel uses `service.name`, `h
 
 ## From New Relic Node agent
 
-New Relic's agent is invasive — it patches Node internals. Plan a maintenance window for the cutover.
+New Relic's agent is invasive. It patches Node internals. Plan a maintenance window for the cutover.
 
 ### Step 1: Remove `--require newrelic`
 
@@ -214,7 +214,7 @@ For EU: `https://otlp.eu01.nr-data.net/v1/traces`.
 
 ## From Honeycomb Beelines
 
-Beelines for Node was Honeycomb's pre-OTel SDK. Migration is straightforward — Honeycomb supports OTLP natively.
+Beelines for Node was Honeycomb's pre-OTel SDK. Migration is straightforward. Honeycomb supports OTLP natively.
 
 ```typescript
 init({
@@ -234,7 +234,7 @@ init({
 
 Both are deprecated; the migration is "rewrite the tracer setup, leave call sites alone." OpenTracing's `Tracer.startSpan` and OpenCensus's `tracer.startRootSpan` shapes are similar enough that a script can replace them with `trace()` calls in most files.
 
-For libraries you don't control that still use OpenTracing, the OTel project ships a [shim](https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-shim-opentracing) — wire it once, then migrate at your own pace.
+For libraries you don't control that still use OpenTracing, the OTel project ships a [shim](https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-shim-opentracing). Wire it once, then migrate at your own pace.
 
 ## From unstructured logging
 
@@ -249,21 +249,21 @@ See [`review-otel-patterns`](../review-otel-patterns/SKILL.md) for the framework
 
 ## Verifying the cutover
 
-| Check                       | How                                                                                           |
-| --------------------------- | --------------------------------------------------------------------------------------------- |
-| **Span volume matches**     | Compare `count(spans)` per route over 24h; should be within ±5 %                              |
-| **p99 latency unchanged**   | Histograms on both backends                                                                   |
-| **Error rate unchanged**    | `count(spans where status=error)`                                                             |
-| **Trace correlation works** | Pick 10 random `traceId`s; confirm cross-service spans resolve                                |
-| **Bundle size acceptable**  | `pnpm bundle-size` — moving from heavy agents (New Relic, Datadog) often _shrinks_ the bundle |
+| Check                       | How                                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| **Span volume matches**     | Compare `count(spans)` per route over 24h; should be within ±5 %                             |
+| **p99 latency unchanged**   | Histograms on both backends                                                                  |
+| **Error rate unchanged**    | `count(spans where status=error)`                                                            |
+| **Trace correlation works** | Pick 10 random `traceId`s; confirm cross-service spans resolve                               |
+| **Bundle size acceptable**  | `pnpm bundle-size`: moving from heavy agents (New Relic, Datadog) often _shrinks_ the bundle |
 
 ## Anti-patterns
 
 | Anti-pattern                                              | Fix                                                                                                                           |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Both old SDK and autotel running on the same library      | Pick one — double-instrumentation duplicates spans                                                                            |
+| Both old SDK and autotel running on the same library      | Pick one: double-instrumentation duplicates spans                                                                             |
 | Removing the old SDK in the same PR as adding autotel     | Run both side-by-side for 24–48 h first                                                                                       |
 | Changing span names during migration                      | Preserve names; rename in a separate PR after dashboards re-pointed                                                           |
 | No metric snapshot before cutover                         | Take p50/p95/p99 + error-rate baselines first                                                                                 |
-| Migrating prod before staging                             | Always staging first — at least 24 h                                                                                          |
+| Migrating prod before staging                             | Always staging first: at least 24 h                                                                                           |
 | Trusting the old vendor agent's auto-instrumentation list | autotel's targeted instrumentations (`autotel-drizzle`, `autotel-mongoose`, …) are faster and tighter; expect to add a couple |

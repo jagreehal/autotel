@@ -26,9 +26,9 @@ jobs:
     # the protected release path.
     environment: release
     permissions:
-      contents: write       # changesets: version commit, tags, GitHub release
-      pull-requests: write  # changesets: open the "Version Packages" PR
-      id-token: write       # OIDC trusted publishing / provenance — scoped to THIS job only
+      contents: write # changesets: version commit, tags, GitHub release
+      pull-requests: write # changesets: open the "Version Packages" PR
+      id-token: write # OIDC trusted publishing / provenance — scoped to THIS job only
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -63,8 +63,8 @@ jobs:
         with:
           version: pnpm version-packages
           publish: pnpm release
-          commit: "chore: release packages"
-          title: "chore: release packages"
+          commit: 'chore: release packages'
+          title: 'chore: release packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: true

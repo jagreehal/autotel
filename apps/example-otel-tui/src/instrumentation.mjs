@@ -26,7 +26,7 @@ init({
     new BatchLogRecordProcessor(
       new OTLPLogExporter({
         url: `${endpoint}/v1/logs`,
-      })
+      }),
     ),
   ],
   // Enable pino instrumentation to inject trace_id/span_id into logs

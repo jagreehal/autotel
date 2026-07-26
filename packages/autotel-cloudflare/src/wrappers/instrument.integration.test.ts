@@ -1,7 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { instrument } from './instrument';
 import { trace } from 'autotel-edge';
-import type { ExportedHandler } from '@cloudflare/workers-types';
+import type {
+  ExportedHandler,
+  IncomingRequestCfProperties,
+} from '@cloudflare/workers-types';
+
+// Build a Request typed as an incoming CF request (the shape handlers receive),
+// which `new Request()` does not produce because its cf defaults to CfProperties.
+const incomingRequest = (...args: ConstructorParameters<typeof Request>) =>
+  new Request(...args) as Request<unknown, IncomingRequestCfProperties>;
 
 describe('Handler Instrumentation - Integration Tests', () => {
   interface Env {
@@ -12,7 +20,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
   describe('instrument() for Fetch Handlers', () => {
     it('should instrument a basic fetch handler', async () => {
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Hello World', { status: 200 });
         },
       };
@@ -36,7 +44,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
       let handlerCalled = false;
 
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           handlerCalled = true;
           return new Response('Hello World', { status: 200 });
         },
@@ -46,21 +54,21 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'test-worker' },
       });
 
-      const request = new Request('http://example.com/test');
+      const request = incomingRequest('http://example.com/test');
       const env = {} as Env;
       const ctx = {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
       } as any;
 
-      await instrumented.fetch(request, env, ctx);
+      await instrumented.fetch!(request, env, ctx);
 
       expect(handlerCalled).toBe(true);
     });
 
     it('should call waitUntil to flush spans', async () => {
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Hello World', { status: 200 });
         },
       };
@@ -69,7 +77,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'test-worker' },
       });
 
-      const request = new Request('http://example.com/test');
+      const request = incomingRequest('http://example.com/test');
       const env = {} as Env;
       const waitUntilSpy = vi.fn();
       const ctx = {
@@ -77,7 +85,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
         passThroughOnException: vi.fn(),
       } as any;
 
-      await instrumented.fetch(request, env, ctx);
+      await instrumented.fetch!(request, env, ctx);
 
       // waitUntil should be called to flush spans
       expect(waitUntilSpy).toHaveBeenCalled();
@@ -85,7 +93,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
     it('should preserve handler errors', async () => {
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           throw new Error('Handler error');
         },
       };
@@ -94,14 +102,16 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'test-worker' },
       });
 
-      const request = new Request('http://example.com/test');
+      const request = incomingRequest('http://example.com/test');
       const env = {} as Env;
       const ctx = {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
       } as any;
 
-      await expect(instrumented.fetch(request, env, ctx)).rejects.toThrow('Handler error');
+      await expect(instrumented.fetch!(request, env, ctx)).rejects.toThrow(
+        'Handler error',
+      );
     });
 
     it('should work with trace() functions inside handler', async () => {
@@ -110,7 +120,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           const user = await createUser('test@example.com');
           return Response.json(user);
         },
@@ -120,14 +130,14 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'test-worker' },
       });
 
-      const request = new Request('http://example.com/users');
+      const request = incomingRequest('http://example.com/users');
       const env = {} as Env;
       const ctx = {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
       } as any;
 
-      const response = await instrumented.fetch(request, env, ctx);
+      const response = await instrumented.fetch!(request, env, ctx);
       const data = await response.json();
 
       expect(data).toEqual({ id: '123', email: 'test@example.com' });
@@ -135,7 +145,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
     it('should accept static config object', async () => {
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Hello', { status: 200 });
         },
       };
@@ -157,7 +167,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
     it('should accept config function', async () => {
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Hello', { status: 200 });
         },
       };
@@ -176,10 +186,10 @@ describe('Handler Instrumentation - Integration Tests', () => {
       let scheduledCalled = false;
 
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Hello', { status: 200 });
         },
-        async scheduled(event, env, ctx) {
+        async scheduled(_event, _env, _ctx) {
           scheduledCalled = true;
         },
       };
@@ -191,7 +201,10 @@ describe('Handler Instrumentation - Integration Tests', () => {
       expect(instrumented.scheduled).toBeDefined();
 
       if (instrumented.scheduled) {
-        const event = { scheduledTime: Date.now(), cron: '0 0 * * *' } as ScheduledController;
+        const event = {
+          scheduledTime: Date.now(),
+          cron: '0 0 * * *',
+        } as ScheduledController;
         const env = {} as Env;
         const ctx = {
           waitUntil: vi.fn(),
@@ -212,7 +225,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
       let messageCount = 0;
 
       const handler: ExportedHandler<Env> = {
-        async queue(batch, env, ctx) {
+        async queue(batch, _env, _ctx) {
           queueCalled = true;
           messageCount = batch.messages.length;
         },
@@ -227,12 +240,27 @@ describe('Handler Instrumentation - Integration Tests', () => {
       if (instrumented.queue) {
         const batch = {
           messages: [
-            { id: '1', body: 'message1', timestamp: new Date() },
-            { id: '2', body: 'message2', timestamp: new Date() },
+            {
+              id: '1',
+              body: 'message1',
+              timestamp: new Date(),
+              attempts: 1,
+              ack: vi.fn(),
+              retry: vi.fn(),
+            },
+            {
+              id: '2',
+              body: 'message2',
+              timestamp: new Date(),
+              attempts: 1,
+              ack: vi.fn(),
+              retry: vi.fn(),
+            },
           ],
           queue: 'test-queue',
           ackAll: vi.fn(),
           retryAll: vi.fn(),
+          metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
         } as MessageBatch;
         const env = {} as Env;
         const ctx = {
@@ -250,7 +278,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
     it('should track message ack operations', async () => {
       const handler: ExportedHandler<Env> = {
-        async queue(batch, env, ctx) {
+        async queue(batch, _env, _ctx) {
           // Ack individual messages
           batch.messages[0].ack();
           batch.messages[1].ack();
@@ -263,14 +291,29 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
       if (instrumented.queue) {
         const messages = [
-          { id: '1', body: 'message1', timestamp: new Date(), ack: vi.fn(), retry: vi.fn() },
-          { id: '2', body: 'message2', timestamp: new Date(), ack: vi.fn(), retry: vi.fn() },
+          {
+            id: '1',
+            body: 'message1',
+            timestamp: new Date(),
+            attempts: 1,
+            ack: vi.fn(),
+            retry: vi.fn(),
+          },
+          {
+            id: '2',
+            body: 'message2',
+            timestamp: new Date(),
+            attempts: 1,
+            ack: vi.fn(),
+            retry: vi.fn(),
+          },
         ];
         const batch = {
           messages,
           queue: 'test-queue',
           ackAll: vi.fn(),
           retryAll: vi.fn(),
+          metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
         } as MessageBatch;
         const env = {} as Env;
         const ctx = {
@@ -288,7 +331,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
     it('should track message retry operations', async () => {
       const handler: ExportedHandler<Env> = {
-        async queue(batch, env, ctx) {
+        async queue(batch, _env, _ctx) {
           // Retry a message
           batch.messages[0].retry();
         },
@@ -300,13 +343,21 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
       if (instrumented.queue) {
         const messages = [
-          { id: '1', body: 'message1', timestamp: new Date(), ack: vi.fn(), retry: vi.fn() },
+          {
+            id: '1',
+            body: 'message1',
+            timestamp: new Date(),
+            attempts: 1,
+            ack: vi.fn(),
+            retry: vi.fn(),
+          },
         ];
         const batch = {
           messages,
           queue: 'test-queue',
           ackAll: vi.fn(),
           retryAll: vi.fn(),
+          metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
         } as MessageBatch;
         const env = {} as Env;
         const ctx = {
@@ -323,7 +374,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
     it('should track ackAll operation', async () => {
       const handler: ExportedHandler<Env> = {
-        async queue(batch, env, ctx) {
+        async queue(batch, _env, _ctx) {
           batch.ackAll();
         },
       };
@@ -336,12 +387,27 @@ describe('Handler Instrumentation - Integration Tests', () => {
         const ackAllFn = vi.fn();
         const batch = {
           messages: [
-            { id: '1', body: 'message1', timestamp: new Date() },
-            { id: '2', body: 'message2', timestamp: new Date() },
+            {
+              id: '1',
+              body: 'message1',
+              timestamp: new Date(),
+              attempts: 1,
+              ack: vi.fn(),
+              retry: vi.fn(),
+            },
+            {
+              id: '2',
+              body: 'message2',
+              timestamp: new Date(),
+              attempts: 1,
+              ack: vi.fn(),
+              retry: vi.fn(),
+            },
           ],
           queue: 'test-queue',
           ackAll: ackAllFn,
           retryAll: vi.fn(),
+          metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
         } as MessageBatch;
         const env = {} as Env;
         const ctx = {
@@ -361,7 +427,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
       let emailCalled = false;
 
       const handler: ExportedHandler<Env> = {
-        async email(message, env, ctx) {
+        async email(_message, _env, _ctx) {
           emailCalled = true;
         },
       };
@@ -401,7 +467,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
 
       const handler: ExportedHandler<Env> = {
         async fetch(_request, _env, _ctx) {
-          const { trace: traceApi, context: contextApi } = await import('@opentelemetry/api');
+          const { trace: traceApi, context: _contextApi } =
+            await import('@opentelemetry/api');
           const span = traceApi.getActiveSpan();
           capturedTraceId = span?.spanContext().traceId;
           capturedParentSpanId = (span as any)?.parentSpanId;
@@ -413,9 +480,9 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'test-worker' },
       });
 
-      const request = new Request('http://example.com/test', {
+      const request = incomingRequest('http://example.com/test', {
         headers: {
-          'traceparent': `00-${incomingTraceId}-${incomingSpanId}-01`,
+          traceparent: `00-${incomingTraceId}-${incomingSpanId}-01`,
         },
       });
       const env = {} as Env;
@@ -424,7 +491,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
         passThroughOnException: vi.fn(),
       } as any;
 
-      await instrumented.fetch(request, env, ctx);
+      await instrumented.fetch!(request, env, ctx);
 
       // The server span must inherit the traceId from the incoming traceparent header
       expect(capturedTraceId).toBe(incomingTraceId);
@@ -436,7 +503,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
   describe('Fetch handler span status based on HTTP status code', () => {
     it('should set OK status for 2xx responses', async () => {
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('OK', { status: 200 });
         },
       };
@@ -445,20 +512,20 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'test-worker' },
       });
 
-      const request = new Request('http://example.com/test');
+      const request = incomingRequest('http://example.com/test');
       const env = {} as Env;
       const ctx = {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
       } as any;
 
-      const response = await instrumented.fetch(request, env, ctx);
+      const response = await instrumented.fetch!(request, env, ctx);
       expect(response.status).toBe(200);
     });
 
     it('should set OK status for 404 responses (client error, not server fault)', async () => {
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Not Found', { status: 404 });
         },
       };
@@ -467,20 +534,20 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'test-worker' },
       });
 
-      const request = new Request('http://example.com/missing');
+      const request = incomingRequest('http://example.com/missing');
       const env = {} as Env;
       const ctx = {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
       } as any;
 
-      const response = await instrumented.fetch(request, env, ctx);
+      const response = await instrumented.fetch!(request, env, ctx);
       expect(response.status).toBe(404);
     });
 
     it('should return 500 responses correctly (span ERROR status applied internally)', async () => {
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Internal Server Error', { status: 500 });
         },
       };
@@ -489,14 +556,14 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'test-worker' },
       });
 
-      const request = new Request('http://example.com/fail');
+      const request = incomingRequest('http://example.com/fail');
       const env = {} as Env;
       const ctx = {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
       } as any;
 
-      const response = await instrumented.fetch(request, env, ctx);
+      const response = await instrumented.fetch!(request, env, ctx);
       expect(response.status).toBe(500);
     });
 
@@ -505,16 +572,16 @@ describe('Handler Instrumentation - Integration Tests', () => {
       let postProcessResponse: Response | undefined;
 
       const handler: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Server Error', { status: 503 });
         },
       };
 
-      const instrumented = instrument(handler, (env: Env) => ({
+      const instrumented = instrument(handler, (_env: Env) => ({
         service: { name: 'test-worker' },
         handlers: {
           fetch: {
-            postProcess(span, { response }) {
+            postProcess(_span, { response }) {
               postProcessCalled = true;
               postProcessResponse = response;
             },
@@ -522,14 +589,14 @@ describe('Handler Instrumentation - Integration Tests', () => {
         },
       }));
 
-      const request = new Request('http://example.com/fail');
+      const request = incomingRequest('http://example.com/fail');
       const env = {} as Env;
       const ctx = {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
       } as any;
 
-      const response = await instrumented.fetch(request, env, ctx);
+      const response = await instrumented.fetch!(request, env, ctx);
       expect(response.status).toBe(503);
       expect(postProcessCalled).toBe(true);
       expect(postProcessResponse?.status).toBe(503);
@@ -539,13 +606,13 @@ describe('Handler Instrumentation - Integration Tests', () => {
   describe('Multiple Handlers', () => {
     it('should instrument multiple handlers independently', async () => {
       const handler1: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Handler 1', { status: 200 });
         },
       };
 
       const handler2: ExportedHandler<Env> = {
-        async fetch(request, env, ctx) {
+        async fetch(_request, _env, _ctx) {
           return new Response('Handler 2', { status: 200 });
         },
       };
@@ -558,15 +625,15 @@ describe('Handler Instrumentation - Integration Tests', () => {
         service: { name: 'worker-2' },
       });
 
-      const request = new Request('http://example.com/test');
+      const request = incomingRequest('http://example.com/test');
       const env = {} as Env;
       const ctx = {
         waitUntil: vi.fn(),
         passThroughOnException: vi.fn(),
       } as any;
 
-      const response1 = await instrumented1.fetch(request, env, ctx);
-      const response2 = await instrumented2.fetch(request, env, ctx);
+      const response1 = await instrumented1.fetch!(request, env, ctx);
+      const response2 = await instrumented2.fetch!(request, env, ctx);
 
       const text1 = await response1.text();
       const text2 = await response2.text();

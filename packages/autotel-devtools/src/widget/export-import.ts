@@ -245,11 +245,15 @@ export function parseImportedJson(jsonString: string): ImportResult {
   const data = parsed as Record<string, unknown>;
 
   // Check for version (optional but helpful)
-  if (data.version && typeof data.version === 'string' && data.version !== EXPORT_VERSION) {
-      warnings.push(
-        `Version mismatch: expected ${EXPORT_VERSION}, got ${data.version}`,
-      );
-    }
+  if (
+    data.version &&
+    typeof data.version === 'string' &&
+    data.version !== EXPORT_VERSION
+  ) {
+    warnings.push(
+      `Version mismatch: expected ${EXPORT_VERSION}, got ${data.version}`,
+    );
+  }
 
   // Determine format: single trace or bundle
   if (data.trace && typeof data.trace === 'object') {
@@ -436,10 +440,7 @@ export function parseImportedSnapshot(
   if (root.kind && root.kind !== 'autotel-devtools-snapshot') {
     warnings.push(`Unexpected snapshot kind: ${String(root.kind)}`);
   }
-  if (
-    typeof root.version === 'string' &&
-    root.version !== EXPORT_VERSION
-  ) {
+  if (typeof root.version === 'string' && root.version !== EXPORT_VERSION) {
     warnings.push(
       `Version mismatch: expected ${EXPORT_VERSION}, got ${root.version}`,
     );

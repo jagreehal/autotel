@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PACT_ATTRS } from './attrs.js';
-import { flushLedgerWrites, readLedger, resetLedgerWriteChainForTests } from './ledger.js';
+import { readLedger, resetLedgerWriteChainForTests } from './ledger.js';
 import { PactLedgerSpanProcessor } from './processor.js';
 
 let workDir: string;
@@ -43,7 +43,8 @@ describe('PactLedgerSpanProcessor', () => {
 
     const entries = readLedger({ runId: 'prod-1' });
     expect(entries).toHaveLength(1);
-    if (entries[0]!.type === 'provider_verification_run') throw new Error('expected interaction');
+    if (entries[0]!.type === 'provider_verification_run')
+      throw new Error('expected interaction');
     expect(entries[0]).toMatchObject({
       source: 'production',
       role: 'consumer',

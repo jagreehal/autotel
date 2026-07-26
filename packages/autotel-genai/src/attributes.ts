@@ -30,12 +30,7 @@ import {
  * what `TraceContext.setAttributes` accepts.
  */
 export type GenAiAttributeValue =
-  | string
-  | number
-  | boolean
-  | string[]
-  | number[]
-  | boolean[];
+  string | number | boolean | string[] | number[] | boolean[];
 
 /** Flat attribute map (canonical keys → primitive/array values). */
 export type GenAiAttributeMap = Record<string, GenAiAttributeValue>;
@@ -61,11 +56,7 @@ function setInt(
 }
 
 /** Set `key` to the JSON-serialised `value` (spec types these as `any`), unless absent. */
-function setJson(
-  target: GenAiAttributeMap,
-  key: string,
-  value: unknown,
-): void {
+function setJson(target: GenAiAttributeMap, key: string, value: unknown): void {
   if (value === undefined) return;
   target[key] = typeof value === 'string' ? value : JSON.stringify(value);
 }
@@ -150,7 +141,9 @@ export interface GenAiUsageInput {
   costUsd?: number;
 }
 
-export function genAiUsageAttributes(input: GenAiUsageInput): GenAiAttributeMap {
+export function genAiUsageAttributes(
+  input: GenAiUsageInput,
+): GenAiAttributeMap {
   const attrs: GenAiAttributeMap = {};
   set(attrs, GEN_AI.USAGE_INPUT_TOKENS, input.inputTokens);
   set(attrs, GEN_AI.USAGE_OUTPUT_TOKENS, input.outputTokens);

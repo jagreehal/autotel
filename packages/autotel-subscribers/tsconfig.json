@@ -7,7 +7,7 @@
     "outDir": "./dist",
     "rootDir": ".",
     "paths": {
-      "autotel": ["../autotel/src"],
+      "autotel": ["../autotel/src"]
     },
     "declaration": true,
     "declarationMap": true,

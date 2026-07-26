@@ -81,7 +81,7 @@ userSchema.pre('save', async function () {
 
 The functions you add via `schema.statics`, `schema.methods`, and `schema.query`
 are invisible to the built-in Model/Query instrumentation. This package traces
-them automatically — **no manual `trace()` calls** and no behavioral side
+them automatically. **no manual `trace()` calls** and no behavioral side
 effects (same `this`, same return value, same error propagation). Each call
 gets an `INTERNAL` span named `mongoose.<Model>.<fn>`.
 
@@ -141,14 +141,14 @@ As JSON:
 
 Span attributes: `mongoose.method.name`, `mongoose.method.type`
 (`static` | `instance` | `query`), `mongoose.method.model`, `code.function.name`,
-and — when parameter capture is on — `mongoose.method.parameters` (+
+and, when parameter capture is on, `mongoose.method.parameters` (+
 `mongoose.method.parameter_count`).
 
 > **Behavior note (default on):** With no `customMethods` option, `instrumentMongoose(mongoose)`
 > wraps **all** custom functions and captures their arguments by default
 > (maximum observability). Arguments pass through the same redactor as
 > `db.query.text`, but custom-function args are often business payloads rather
-> than DB filters — redaction won't catch arbitrary fields. Use the options
+> than DB filters: redaction won't catch arbitrary fields. Use the options
 > below to scope this down for privacy/compliance.
 
 ### Opting out / scoping (privacy & compliance)

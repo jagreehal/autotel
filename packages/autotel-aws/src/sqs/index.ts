@@ -49,7 +49,12 @@
  * ```
  */
 
-import { trace, type TraceContext } from 'autotel';
+import {
+  trace,
+  type TraceContext,
+  withTracing,
+  getActiveTraceContext,
+} from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import { buildSQSAttributes } from '../attributes';
 import { wrapSDKClient } from '../common/sdk-wrapper';
@@ -105,8 +110,7 @@ export function traceSQS(config: TraceSQSConfig) {
     fn: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): (...args: TArgs) => Promise<TReturn> {
     // Use autotel's trace() which properly handles the factory pattern
-    return trace(
-      `sqs.${config.operation}`,
+    return withTracing({ name: `sqs.${config.operation}` })(
       (ctx: TraceContext) =>
         async (...args: TArgs): Promise<TReturn> => {
           // Set SQS semantic attributes
@@ -122,7 +126,7 @@ export function traceSQS(config: TraceSQSConfig) {
           const handler = fn(ctx);
           return handler(...args);
         },
-    );
+    ) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 
@@ -227,11 +231,11 @@ export interface SQSMessage {
  * ```
  */
 export class SQSProducer<
-   
   TClient extends { send: (command: any) => Promise<any> } = any,
 > {
   private client: TClient;
-  private config: Required<Pick<SQSProducerConfig, 'queueUrl'>> & SQSProducerConfig;
+  private config: Required<Pick<SQSProducerConfig, 'queueUrl'>> &
+    SQSProducerConfig;
   private queueName: string;
 
   constructor(client: TClient, config: SQSProducerConfig) {
@@ -261,10 +265,16 @@ export class SQSProducer<
     const result = { ...attributes };
 
     if (carrier.traceparent) {
-      result.traceparent = { StringValue: carrier.traceparent, DataType: 'String' };
+      result.traceparent = {
+        StringValue: carrier.traceparent,
+        DataType: 'String',
+      };
     }
     if (carrier.tracestate) {
-      result.tracestate = { StringValue: carrier.tracestate, DataType: 'String' };
+      result.tracestate = {
+        StringValue: carrier.tracestate,
+        DataType: 'String',
+      };
     }
     if (carrier.baggage) {
       result.baggage = { StringValue: carrier.baggage, DataType: 'String' };
@@ -284,7 +294,8 @@ export class SQSProducer<
     sequenceNumber?: string;
     md5OfMessageBody?: string;
   }> {
-    return trace(`sqs.send`, async (ctx: TraceContext) => {
+    return trace(`sqs.send`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildSQSAttributes({
           queueName: this.queueName,
@@ -298,11 +309,15 @@ export class SQSProducer<
         QueueUrl: this.config.queueUrl,
         MessageBody: message.body,
         MessageAttributes: this.injectContext(message.attributes),
-        ...(message.messageGroupId && { MessageGroupId: message.messageGroupId }),
+        ...(message.messageGroupId && {
+          MessageGroupId: message.messageGroupId,
+        }),
         ...(message.messageDeduplicationId && {
           MessageDeduplicationId: message.messageDeduplicationId,
         }),
-        ...(message.delaySeconds !== undefined && { DelaySeconds: message.delaySeconds }),
+        ...(message.delaySeconds !== undefined && {
+          DelaySeconds: message.delaySeconds,
+        }),
       };
 
       // Dynamically import the command to avoid requiring @aws-sdk/client-sqs at load time
@@ -328,7 +343,7 @@ export class SQSProducer<
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -338,10 +353,15 @@ export class SQSProducer<
    * @returns Promise with successful and failed message results
    */
   async sendBatch(messages: SQSMessage[]): Promise<{
-    successful: Array<{ id: string; messageId?: string; sequenceNumber?: string }>;
+    successful: Array<{
+      id: string;
+      messageId?: string;
+      sequenceNumber?: string;
+    }>;
     failed: Array<{ id: string; code?: string; message?: string }>;
   }> {
-    return trace(`sqs.sendBatch`, async (ctx: TraceContext) => {
+    return trace(`sqs.sendBatch`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildSQSAttributes({
           queueName: this.queueName,
@@ -356,11 +376,15 @@ export class SQSProducer<
         Id: String(index),
         MessageBody: message.body,
         MessageAttributes: this.injectContext(message.attributes),
-        ...(message.messageGroupId && { MessageGroupId: message.messageGroupId }),
+        ...(message.messageGroupId && {
+          MessageGroupId: message.messageGroupId,
+        }),
         ...(message.messageDeduplicationId && {
           MessageDeduplicationId: message.messageDeduplicationId,
         }),
-        ...(message.delaySeconds !== undefined && { DelaySeconds: message.delaySeconds }),
+        ...(message.delaySeconds !== undefined && {
+          DelaySeconds: message.delaySeconds,
+        }),
       }));
 
       try {
@@ -373,18 +397,26 @@ export class SQSProducer<
         );
 
         const successful =
-          result.Successful?.map((s: { Id?: string; MessageId?: string; SequenceNumber?: string }) => ({
-            id: s.Id!,
-            messageId: s.MessageId,
-            sequenceNumber: s.SequenceNumber,
-          })) || [];
+          result.Successful?.map(
+            (s: {
+              Id?: string;
+              MessageId?: string;
+              SequenceNumber?: string;
+            }) => ({
+              id: s.Id!,
+              messageId: s.MessageId,
+              sequenceNumber: s.SequenceNumber,
+            }),
+          ) || [];
 
         const failed =
-          result.Failed?.map((f: { Id?: string; Code?: string; Message?: string }) => ({
-            id: f.Id!,
-            code: f.Code,
-            message: f.Message,
-          })) || [];
+          result.Failed?.map(
+            (f: { Id?: string; Code?: string; Message?: string }) => ({
+              id: f.Id!,
+              code: f.Code,
+              message: f.Message,
+            }),
+          ) || [];
 
         ctx.setAttribute('messaging.sqs.successful_count', successful.length);
         ctx.setAttribute('messaging.sqs.failed_count', failed.length);
@@ -406,7 +438,7 @@ export class SQSProducer<
         });
         throw error;
       }
-    });
+    })();
   }
 }
 
@@ -486,7 +518,7 @@ export interface ReceivedSQSMessage {
   /**
    * Original AWS SDK message object
    */
-   
+
   raw: any;
 }
 
@@ -538,12 +570,14 @@ export type MessageProcessor = (
  * ```
  */
 export class SQSConsumer<
-   
   TClient extends { send: (command: any) => Promise<any> } = any,
 > {
   private client: TClient;
   private config: Required<
-    Pick<SQSConsumerConfig, 'queueUrl' | 'maxMessages' | 'visibilityTimeout' | 'waitTimeSeconds'>
+    Pick<
+      SQSConsumerConfig,
+      'queueUrl' | 'maxMessages' | 'visibilityTimeout' | 'waitTimeSeconds'
+    >
   > &
     SQSConsumerConfig;
   private queueName: string;
@@ -563,8 +597,10 @@ export class SQSConsumer<
   /**
    * Extract trace context from message attributes
    */
-   
-  private extractContext(messageAttributes: any): Record<string, string> | undefined {
+
+  private extractContext(
+    messageAttributes: any,
+  ): Record<string, string> | undefined {
     if (!this.config.extractTraceContext || !messageAttributes) {
       return undefined;
     }
@@ -587,12 +623,11 @@ export class SQSConsumer<
   /**
    * Parse AWS SDK message into our format
    */
-   
+
   private parseMessage(message: any): ReceivedSQSMessage {
     const attributes: Record<string, string> = {};
     if (message.MessageAttributes) {
       for (const [key, value] of Object.entries(message.MessageAttributes)) {
-         
         attributes[key] = (value as any).StringValue || '';
       }
     }
@@ -613,7 +648,8 @@ export class SQSConsumer<
    * @returns Array of received messages
    */
   async receive(): Promise<ReceivedSQSMessage[]> {
-    return trace(`sqs.receive`, async (ctx: TraceContext) => {
+    return trace(`sqs.receive`, async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes(
         buildSQSAttributes({
           queueName: this.queueName,
@@ -635,8 +671,9 @@ export class SQSConsumer<
           }),
         );
 
-         
-        const messages = (result.Messages || []).map((m: any) => this.parseMessage(m));
+        const messages = (result.Messages || []).map((m: any) =>
+          this.parseMessage(m),
+        );
         ctx.setAttribute('messaging.batch.message_count', messages.length);
         ctx.setStatus({ code: SpanStatusCode.OK });
 
@@ -648,7 +685,7 @@ export class SQSConsumer<
         });
         throw error;
       }
-    });
+    })();
   }
 
   /**
@@ -685,7 +722,8 @@ export class SQSConsumer<
 
       // Create processing span, optionally linked to producer
       const processMessage = async () => {
-        return trace(`sqs.process`, async (ctx: TraceContext) => {
+        return trace(`sqs.process`, async () => {
+          const ctx = getActiveTraceContext()!;
           ctx.setAttributes(
             buildSQSAttributes({
               queueName: this.queueName,
@@ -703,11 +741,12 @@ export class SQSConsumer<
           } catch (error) {
             ctx.setStatus({
               code: SpanStatusCode.ERROR,
-              message: error instanceof Error ? error.message : 'Processing failed',
+              message:
+                error instanceof Error ? error.message : 'Processing failed',
             });
             throw error;
           }
-        });
+        })();
       };
 
       // Run with extracted context if available

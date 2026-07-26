@@ -36,8 +36,16 @@
 
 import type { MiddlewareObj, Request } from '@middy/core';
 import type { Context as AWSLambdaContext } from 'aws-lambda';
-import { context, trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
-import type { Span, SpanContext, Context as OtelContext } from '@opentelemetry/api';
+import {
+  context,
+  trace as otelTrace,
+  SpanStatusCode,
+} from '@opentelemetry/api';
+import type {
+  Span,
+  SpanContext,
+  Context as OtelContext,
+} from '@opentelemetry/api';
 import type { LambdaEvent } from '../types';
 import type { LambdaInstrumentationConfig } from '../config';
 import { extractTraceContext, detectTriggerType } from './context-extractor';
@@ -85,8 +93,10 @@ function extractAccountIdFromArn(arn: string): string | undefined {
 }
 
 // Extended request type with our symbols
-interface TracingRequest<TEvent = LambdaEvent, TResult = unknown>
-  extends Request<TEvent, TResult, Error, AWSLambdaContext> {
+interface TracingRequest<
+  TEvent = LambdaEvent,
+  TResult = unknown,
+> extends Request<TEvent, TResult, Error, AWSLambdaContext> {
   [SPAN_SYMBOL]?: Span;
   [CONTEXT_SYMBOL]?: OtelContext;
 }
@@ -137,7 +147,9 @@ export function tracingMiddleware(
 
       // Extract parent trace context from event
       const shouldExtractContext = config?.extractTraceContext !== false;
-      const parentSpanContext = shouldExtractContext ? extractTraceContext(event) : undefined;
+      const parentSpanContext = shouldExtractContext
+        ? extractTraceContext(event)
+        : undefined;
 
       // Detect trigger type
       const trigger = detectTriggerType(event);
@@ -164,7 +176,9 @@ export function tracingMiddleware(
       );
 
       // Extract and set account ID from ARN
-      const accountId = extractAccountIdFromArn(lambdaContext.invokedFunctionArn);
+      const accountId = extractAccountIdFromArn(
+        lambdaContext.invokedFunctionArn,
+      );
       if (accountId) {
         span.setAttribute('cloud.account.id', accountId);
       }
@@ -229,10 +243,16 @@ export function tracingMiddleware(
 
         // Add exception attributes
         span.setAttribute('exception.type', error.name || 'Error');
-        span.setAttribute('exception.message', truncateErrorMessage(errorMessage));
+        span.setAttribute(
+          'exception.message',
+          truncateErrorMessage(errorMessage),
+        );
 
         if (error.stack) {
-          span.setAttribute('exception.stacktrace', error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH));
+          span.setAttribute(
+            'exception.stacktrace',
+            error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH),
+          );
         }
 
         // Record exception event
@@ -270,7 +290,9 @@ export const LambdaMiddleware = tracingMiddleware;
  * };
  * ```
  */
-export function getSpanFromRequest(request: Request<any, any, any, any>): Span | undefined {
+export function getSpanFromRequest(
+  request: Request<any, any, any, any>,
+): Span | undefined {
   return (request as TracingRequest)[SPAN_SYMBOL];
 }
 
@@ -280,6 +302,8 @@ export function getSpanFromRequest(request: Request<any, any, any, any>): Span |
  * @param request - Middy request object
  * @returns The active context, or undefined if not available
  */
-export function getContextFromRequest(request: Request<any, any, any, any>): OtelContext | undefined {
+export function getContextFromRequest(
+  request: Request<any, any, any, any>,
+): OtelContext | undefined {
   return (request as TracingRequest)[CONTEXT_SYMBOL];
 }

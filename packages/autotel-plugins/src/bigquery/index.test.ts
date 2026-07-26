@@ -1,9 +1,17 @@
+import type { BigQuery } from '@google-cloud/bigquery';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { instrumentBigQuery } from './index';
 import {
   SEMATTRS_DB_NAMESPACE,
   SEMATTRS_DB_QUERY_TEXT,
 } from '../common/constants';
+
+// The hand-rolled mocks below stand in for @google-cloud/bigquery's BigQuery
+// class, which has 36+ members that cannot be meaningfully implemented in a
+// test. Cast once, at the single boundary where a mock is handed to the
+// instrumentation API, instead of scattering casts across every call site.
+const asBigQuery = (mock?: MockBigQuery | null): BigQuery =>
+  mock as unknown as BigQuery;
 
 // Count spans and capture them for config tests
 const spanCount = vi.hoisted(() => ({ current: 0 }));
@@ -46,6 +54,12 @@ vi.mock('autotel/trace-helpers', () => ({
 }));
 
 // Mock BigQuery classes for testing
+type MockRow = { id: number; name: string };
+// Result methods (query / getRows / getQueryResults) return [rows, ...rest],
+// where tests reassign the prototype to append pagination elements.
+type ResultTuple = [MockRow[], ...unknown[]];
+type JobTuple = [MockJob, { jobReference: { jobId: string } }];
+
 class MockJob {
   id: string;
   projectId: string;
@@ -60,7 +74,7 @@ class MockJob {
     this.location = location;
   }
 
-  async getQueryResults(_options?: any) {
+  async getQueryResults(_options?: any): Promise<ResultTuple> {
     return [
       [
         { id: 1, name: 'Alice' },
@@ -87,14 +101,22 @@ class MockTable {
     this.parent = dataset.parent;
   }
 
-  async insert(_rows: any[], _options?: any) {
+  createReadStream?: () => AsyncIterable<MockRow[]>;
+
+  async insert(
+    _rows: any[],
+    _options?: any,
+  ): Promise<{
+    kind: string;
+    insertErrors: Array<{ index: number; errors: Array<{ reason: string }> }>;
+  }> {
     return {
       kind: 'bigquery#tableDataInsertAllResponse',
       insertErrors: [],
     };
   }
 
-  async getRows(_options?: any) {
+  async getRows(_options?: any): Promise<ResultTuple> {
     return [
       [
         { id: 1, name: 'Alice' },
@@ -104,17 +126,20 @@ class MockTable {
     ];
   }
 
-  async createLoadJob(_source: any, _metadata?: any) {
+  async createLoadJob(_source: any, _metadata?: any): Promise<JobTuple> {
     const job = new MockJob('load-job-123', this.parent, 'US');
     return [job, { jobReference: { jobId: job.id } }];
   }
 
-  async createCopyJob(_destination: any, _metadata?: any) {
+  async createCopyJob(_destination: any, _metadata?: any): Promise<JobTuple> {
     const job = new MockJob('copy-job-123', this.parent, 'US');
     return [job, { jobReference: { jobId: job.id } }];
   }
 
-  async createExtractJob(_destination: any, _metadata?: any) {
+  async createExtractJob(
+    _destination: any,
+    _metadata?: any,
+  ): Promise<JobTuple> {
     const job = new MockJob('extract-job-123', this.parent, 'US');
     return [job, { jobReference: { jobId: job.id } }];
   }
@@ -172,10 +197,10 @@ class MockBigQuery {
   }
 
   query(
-    query: string | { query: string },
+    query: string | { query: string; params?: Record<string, unknown> },
     optionsOrCallback?: any,
     cb?: (err: Error | null, rows?: any[], response?: any) => void,
-  ) {
+  ): void | Promise<ResultTuple> {
     const callback =
       typeof optionsOrCallback === 'function' ? optionsOrCallback : cb;
     const _options =
@@ -192,7 +217,7 @@ class MockBigQuery {
     return Promise.resolve([rows, response]);
   }
 
-  async createQueryJob(options: any) {
+  async createQueryJob(options: any): Promise<JobTuple> {
     const _queryText = typeof options === 'string' ? options : options.query;
     const job = new MockJob(
       'query-job-456',
@@ -227,7 +252,7 @@ describe('instrumentBigQuery', () => {
 
   it('should mark BigQuery instance as instrumented', () => {
     const bigquery = new MockBigQuery({ projectId: 'test-project' });
-    const result = instrumentBigQuery(bigquery);
+    const result = instrumentBigQuery(asBigQuery(bigquery));
 
     expect(result).toBe(bigquery);
     expect((bigquery as any).__autotelBigQueryInstrumented).toBe(true);
@@ -235,24 +260,24 @@ describe('instrumentBigQuery', () => {
 
   it('should not instrument twice', () => {
     const bigquery = new MockBigQuery({ projectId: 'test-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     // Try to instrument again - should return immediately
-    const result = instrumentBigQuery(bigquery);
+    const result = instrumentBigQuery(asBigQuery(bigquery));
     expect(result).toBe(bigquery);
   });
 
   it('should handle null/undefined gracefully', () => {
-    expect(instrumentBigQuery(null)).toBe(null);
-    expect(instrumentBigQuery()).toBe(undefined);
+    expect(instrumentBigQuery(asBigQuery(null))).toBe(null);
+    expect(instrumentBigQuery(asBigQuery())).toBe(undefined);
   });
 
   it('should not double-wrap when a second BigQuery instance is instrumented (one span per query)', async () => {
     const bigqueryA = new MockBigQuery({ projectId: 'project-a' });
     const bigqueryB = new MockBigQuery({ projectId: 'project-b' });
 
-    instrumentBigQuery(bigqueryA);
-    instrumentBigQuery(bigqueryB);
+    instrumentBigQuery(asBigQuery(bigqueryA));
+    instrumentBigQuery(asBigQuery(bigqueryB));
 
     await bigqueryB.query('SELECT 1');
 
@@ -265,8 +290,8 @@ describe('instrumentBigQuery', () => {
     const bigqueryA = new MockBigQuery({ projectId: 'project-a' });
     const bigqueryB = new MockBigQuery({ projectId: 'project-b' });
 
-    instrumentBigQuery(bigqueryA, { captureQueryText: 'never' });
-    instrumentBigQuery(bigqueryB, { captureQueryText: 'raw' });
+    instrumentBigQuery(asBigQuery(bigqueryA), { captureQueryText: 'never' });
+    instrumentBigQuery(asBigQuery(bigqueryB), { captureQueryText: 'raw' });
 
     await bigqueryB.query('SELECT 1 FROM t');
 
@@ -281,7 +306,7 @@ describe('instrumentBigQuery', () => {
 describe('BigQuery.query instrumentation', () => {
   it('should create a span for simple query', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     await bigquery.query('SELECT * FROM users');
 
@@ -292,14 +317,15 @@ describe('BigQuery.query instrumentation', () => {
 
   it('should handle parameterized queries', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const result = await bigquery.query({
       query: 'SELECT * FROM users WHERE id = @id',
       params: { id: 123 },
     });
 
-    expect(result).toBeDefined();
+    // Non-callback form resolves to the [rows, ...] tuple.
+    if (!Array.isArray(result)) throw new Error('expected rows tuple');
     expect(result[0]).toBeDefined();
   });
 
@@ -311,7 +337,7 @@ describe('BigQuery.query instrumentation', () => {
       throw new Error('Query failed');
     };
 
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     await expect(bigquery.query('SELECT * FROM users')).rejects.toThrow(
       'Query failed',
@@ -326,10 +352,11 @@ describe('BigQuery.query instrumentation', () => {
     };
 
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const result = await bigquery.query('SELECT * FROM t');
 
+    if (!Array.isArray(result)) throw new Error('expected rows tuple');
     expect(result).toHaveLength(1);
     expect(result[0]).toBe(rows);
   });
@@ -359,7 +386,7 @@ describe('BigQuery.query instrumentation', () => {
     };
 
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     bigquery.query('SELECT 1', {}, (err, rows, response) => {
       callbackInvoked = true;
@@ -379,7 +406,7 @@ describe('BigQuery.createQueryJob instrumentation', () => {
       projectId: 'my-project',
       location: 'US',
     });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const [job] = await bigquery.createQueryJob({
       query: 'SELECT * FROM large_table',
@@ -394,7 +421,7 @@ describe('BigQuery.createQueryJob instrumentation', () => {
 describe('Table.insert instrumentation', () => {
   it('should create a span for insert operation', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const dataset = bigquery.dataset('my_dataset');
     const table = dataset.table('my_table');
@@ -419,7 +446,7 @@ describe('Table.insert instrumentation', () => {
       insertErrors: [{ index: 0, errors: [{ reason: 'invalid' }] }],
     });
 
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const result = await table.insert([{ id: 1, name: 'Alice' }]);
     expect(result.insertErrors.length).toBe(1);
@@ -429,7 +456,7 @@ describe('Table.insert instrumentation', () => {
 describe('Table.getRows instrumentation', () => {
   it('should create a span for getRows operation', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const dataset = bigquery.dataset('my_dataset');
     const table = dataset.table('my_table');
@@ -453,7 +480,7 @@ describe('Table.getRows instrumentation', () => {
     };
 
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const result = await bigquery
       .dataset('my_dataset')
@@ -478,7 +505,7 @@ describe('Table.getRows instrumentation', () => {
     };
 
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const result = await bigquery
       .dataset('my_dataset')
@@ -495,7 +522,7 @@ describe('Table.getRows instrumentation', () => {
 describe('Table.createLoadJob instrumentation', () => {
   it('should create a span for load job', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const dataset = bigquery.dataset('my_dataset');
     const table = dataset.table('my_table');
@@ -512,7 +539,7 @@ describe('Table.createLoadJob instrumentation', () => {
 describe('Table.createCopyJob instrumentation', () => {
   it('should create a span for copy job', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const dataset = bigquery.dataset('my_dataset');
     const sourceTable = dataset.table('source_table');
@@ -528,7 +555,7 @@ describe('Table.createCopyJob instrumentation', () => {
 describe('Table.createExtractJob instrumentation', () => {
   it('should create a span for extract job', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const dataset = bigquery.dataset('my_dataset');
     const table = dataset.table('my_table');
@@ -548,7 +575,7 @@ describe('Job.getQueryResults instrumentation', () => {
       projectId: 'my-project',
       location: 'US',
     });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const job = bigquery.job('query-job-123');
     const [rows] = await job.getQueryResults();
@@ -573,7 +600,7 @@ describe('Job.getQueryResults instrumentation', () => {
       projectId: 'my-project',
       location: 'US',
     });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const result = await bigquery.job('query-job-123').getQueryResults();
 
@@ -589,7 +616,7 @@ describe('Admin operations instrumentation', () => {
     spans.length = 0;
 
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { instrumentAdminOps: true });
+    instrumentBigQuery(asBigQuery(bigquery), { instrumentAdminOps: true });
 
     await bigquery.createDataset('new_dataset');
 
@@ -603,7 +630,7 @@ describe('Admin operations instrumentation', () => {
   it('should invoke callback when BigQuery.createDataset is called with (id, options, callback)', async () => {
     let callbackInvoked = false;
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { instrumentAdminOps: true });
+    instrumentBigQuery(asBigQuery(bigquery), { instrumentAdminOps: true });
 
     bigquery.createDataset('my_dataset', {}, (err, dataset, apiResponse) => {
       callbackInvoked = true;
@@ -619,7 +646,7 @@ describe('Admin operations instrumentation', () => {
 
   it('should instrument dataset create when enabled', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { instrumentAdminOps: true });
+    instrumentBigQuery(asBigQuery(bigquery), { instrumentAdminOps: true });
 
     const dataset = bigquery.dataset('new_dataset');
     const [result] = await dataset.create();
@@ -629,7 +656,7 @@ describe('Admin operations instrumentation', () => {
 
   it('should instrument dataset delete when enabled', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { instrumentAdminOps: true });
+    instrumentBigQuery(asBigQuery(bigquery), { instrumentAdminOps: true });
 
     const dataset = bigquery.dataset('old_dataset');
     const [result] = await dataset.delete();
@@ -639,7 +666,7 @@ describe('Admin operations instrumentation', () => {
 
   it('should instrument table create when enabled', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { instrumentAdminOps: true });
+    instrumentBigQuery(asBigQuery(bigquery), { instrumentAdminOps: true });
 
     const dataset = bigquery.dataset('my_dataset');
     const table = dataset.table('new_table');
@@ -650,7 +677,7 @@ describe('Admin operations instrumentation', () => {
 
   it('should instrument table delete when enabled', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { instrumentAdminOps: true });
+    instrumentBigQuery(asBigQuery(bigquery), { instrumentAdminOps: true });
 
     const dataset = bigquery.dataset('my_dataset');
     const table = dataset.table('old_table');
@@ -661,7 +688,7 @@ describe('Admin operations instrumentation', () => {
 
   it('should not instrument admin ops when disabled', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { instrumentAdminOps: false });
+    instrumentBigQuery(asBigQuery(bigquery), { instrumentAdminOps: false });
 
     // Admin ops should still work, just not create spans
     const dataset = bigquery.dataset('my_dataset');
@@ -675,8 +702,8 @@ describe('Admin operations instrumentation', () => {
     const bigqueryA = new MockBigQuery({ projectId: 'project-a' });
     const bigqueryB = new MockBigQuery({ projectId: 'project-b' });
 
-    instrumentBigQuery(bigqueryA, { instrumentAdminOps: false });
-    instrumentBigQuery(bigqueryB, { instrumentAdminOps: true });
+    instrumentBigQuery(asBigQuery(bigqueryA), { instrumentAdminOps: false });
+    instrumentBigQuery(asBigQuery(bigqueryB), { instrumentAdminOps: true });
 
     await bigqueryB.dataset('new_dataset').create();
 
@@ -691,7 +718,7 @@ describe('Admin operations instrumentation', () => {
 describe('Query text handling', () => {
   it('should use summary mode by default', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { captureQueryText: 'summary' });
+    instrumentBigQuery(asBigQuery(bigquery), { captureQueryText: 'summary' });
 
     // Query should work normally
     const result = await bigquery.query('SELECT * FROM users WHERE id = 123');
@@ -700,7 +727,7 @@ describe('Query text handling', () => {
 
   it('should handle sanitized mode', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { captureQueryText: 'sanitized' });
+    instrumentBigQuery(asBigQuery(bigquery), { captureQueryText: 'sanitized' });
 
     const result = await bigquery.query(
       "SELECT * FROM users WHERE name = 'Alice' AND age = 25",
@@ -710,7 +737,7 @@ describe('Query text handling', () => {
 
   it('should handle never mode', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { captureQueryText: 'never' });
+    instrumentBigQuery(asBigQuery(bigquery), { captureQueryText: 'never' });
 
     const result = await bigquery.query('SELECT * FROM users');
     expect(result).toBeDefined();
@@ -718,7 +745,7 @@ describe('Query text handling', () => {
 
   it('should handle raw mode (not recommended)', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { captureQueryText: 'raw' });
+    instrumentBigQuery(asBigQuery(bigquery), { captureQueryText: 'raw' });
 
     const result = await bigquery.query('SELECT * FROM users');
     expect(result).toBeDefined();
@@ -728,7 +755,7 @@ describe('Query text handling', () => {
 describe('Query hash generation', () => {
   it('should include query hash by default', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { includeQueryHash: true });
+    instrumentBigQuery(asBigQuery(bigquery), { includeQueryHash: true });
 
     const result = await bigquery.query('SELECT * FROM users');
     expect(result).toBeDefined();
@@ -736,7 +763,7 @@ describe('Query hash generation', () => {
 
   it('should not include query hash when disabled', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { includeQueryHash: false });
+    instrumentBigQuery(asBigQuery(bigquery), { includeQueryHash: false });
 
     const result = await bigquery.query('SELECT * FROM users');
     expect(result).toBeDefined();
@@ -746,7 +773,7 @@ describe('Query hash generation', () => {
 describe('Configuration options', () => {
   it('should accept custom tracer name', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { tracerName: 'custom-tracer' });
+    instrumentBigQuery(asBigQuery(bigquery), { tracerName: 'custom-tracer' });
 
     const result = await bigquery.query('SELECT 1');
     expect(result).toBeDefined();
@@ -754,7 +781,7 @@ describe('Configuration options', () => {
 
   it('should accept project ID override', async () => {
     const bigquery = new MockBigQuery({ projectId: 'original-project' });
-    instrumentBigQuery(bigquery, { projectId: 'override-project' });
+    instrumentBigQuery(asBigQuery(bigquery), { projectId: 'override-project' });
 
     const result = await bigquery.query('SELECT 1');
     expect(result).toBeDefined();
@@ -762,7 +789,7 @@ describe('Configuration options', () => {
 
   it('should accept location override', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, { location: 'EU' });
+    instrumentBigQuery(asBigQuery(bigquery), { location: 'EU' });
 
     const result = await bigquery.query('SELECT 1');
     expect(result).toBeDefined();
@@ -770,7 +797,7 @@ describe('Configuration options', () => {
 
   it('should accept max query text length', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, {
+    instrumentBigQuery(asBigQuery(bigquery), {
       captureQueryText: 'raw',
       maxQueryTextLength: 100,
     });
@@ -790,7 +817,7 @@ describe('Legacy BigQueryInstrumentation class', () => {
       captureQueryText: 'summary',
     });
 
-    instrumentation.enable(bigquery);
+    instrumentation.enable(asBigQuery(bigquery));
 
     expect((bigquery as any).__autotelBigQueryInstrumented).toBe(true);
   });
@@ -799,7 +826,7 @@ describe('Legacy BigQueryInstrumentation class', () => {
 describe('Extract operation type', () => {
   it('should handle various SQL operations', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     // These should all work without errors
     await bigquery.query('SELECT * FROM users');
@@ -816,15 +843,17 @@ describe('Edge cases and error handling', () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
     bigquery.query = async () => [[], { totalRows: '0' }];
 
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
-    const [rows] = await bigquery.query('SELECT * FROM empty_table');
+    const result = await bigquery.query('SELECT * FROM empty_table');
+    if (!Array.isArray(result)) throw new Error('expected rows tuple');
+    const [rows] = result;
     expect(rows).toEqual([]);
   });
 
   it('should handle very long queries', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery, {
+    instrumentBigQuery(asBigQuery(bigquery), {
       captureQueryText: 'raw',
       maxQueryTextLength: 50,
     });
@@ -836,7 +865,7 @@ describe('Edge cases and error handling', () => {
 
   it('should handle queries with special characters', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const result = await bigquery.query(
       "SELECT * FROM `project.dataset.table` WHERE name LIKE '%test%'",
@@ -846,7 +875,7 @@ describe('Edge cases and error handling', () => {
 
   it('should handle empty query strings', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const result = await bigquery.query('');
     expect(result).toBeDefined();
@@ -854,7 +883,7 @@ describe('Edge cases and error handling', () => {
 
   it('should handle null/undefined query objects', async () => {
     const bigquery = new MockBigQuery({ projectId: 'my-project' });
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     // Should not throw
     const result = await bigquery.query({ query: '' });
@@ -880,7 +909,7 @@ describe('Streaming operations', () => {
       };
     }
 
-    instrumentBigQuery(bigquery);
+    instrumentBigQuery(asBigQuery(bigquery));
 
     const stream = table.createReadStream();
     const rows: any[] = [];

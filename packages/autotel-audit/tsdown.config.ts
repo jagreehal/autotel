@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown';
-import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 
 export default defineConfig({
   outExtensions: tsupCompatOutExtensions,

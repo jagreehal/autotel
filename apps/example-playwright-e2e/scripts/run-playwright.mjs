@@ -6,7 +6,12 @@ function canListen() {
     const server = createServer();
 
     server.once('error', (error) => {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'EPERM') {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'EPERM'
+      ) {
         resolve(false);
         return;
       }
@@ -23,7 +28,9 @@ function canListen() {
 const listenResult = await canListen();
 
 if (listenResult === false) {
-  console.log('Skipping Playwright E2E tests: this environment does not allow opening local TCP ports.');
+  console.log(
+    'Skipping Playwright E2E tests: this environment does not allow opening local TCP ports.',
+  );
   process.exit(0);
 }
 

@@ -124,7 +124,9 @@ describe('cloudwatch exporters', () => {
       timeoutMs: 1000,
     });
 
-    const temporality = exporter.selectAggregationTemporality('COUNTER' as never);
+    const temporality = exporter.selectAggregationTemporality(
+      'COUNTER' as never,
+    );
     expect(temporality).toBe(AggregationTemporality.DELTA);
 
     const result = await runExport((done) => {

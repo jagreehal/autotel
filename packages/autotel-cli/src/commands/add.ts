@@ -4,11 +4,7 @@ import { discoverProject } from '../lib/project';
 import { detectConfig, isFeatureConfigured } from '../lib/config-detector';
 import { getInstallCommand } from '../lib/package-manager';
 import { atomicWrite, readFileSafe } from '../lib/fs';
-import {
-  getPreset,
-  getPresetsByType,
-  listPresetSlugs,
-} from '../presets/index';
+import { getPreset, getPresetsByType, listPresetSlugs } from '../presets/index';
 import * as output from '../ui/output';
 import { createSpinner } from '../ui/spinner';
 
@@ -89,7 +85,12 @@ function showPresetHelp(preset: Preset): void {
  * Parse preset type from string
  */
 function parsePresetType(type: string): PresetType | null {
-  const validTypes: PresetType[] = ['backend', 'subscriber', 'plugin', 'platform'];
+  const validTypes: PresetType[] = [
+    'backend',
+    'subscriber',
+    'plugin',
+    'platform',
+  ];
   if (validTypes.includes(type as PresetType)) {
     return type as PresetType;
   }
@@ -99,10 +100,7 @@ function parsePresetType(type: string): PresetType | null {
 /**
  * Update instrumentation file with new preset
  */
-export function addPresetToFile(
-  content: string,
-  preset: Preset
-): string {
+export function addPresetToFile(content: string, preset: Preset): string {
   // This is a simplified implementation
   // In a full implementation, we'd parse the file and insert at the right sections
   // For now, we'll add imports and config at the end of each section
@@ -125,17 +123,28 @@ export function addPresetToFile(
         : `from '${imp.source}'`;
     if (!result.includes(importPattern)) {
       // Find the appropriate section marker and add after it
-      const sectionMarker = preset.type === 'backend' || preset.type === 'platform' ? '// --- AUTOTEL:BACKEND ---' :
-                            preset.type === 'plugin' ? '// --- AUTOTEL:PLUGINS ---' :
-                            preset.type === 'subscriber' ? '// --- AUTOTEL:SUBSCRIBERS ---' : null;
+      const sectionMarker =
+        preset.type === 'backend' || preset.type === 'platform'
+          ? '// --- AUTOTEL:BACKEND ---'
+          : preset.type === 'plugin'
+            ? '// --- AUTOTEL:PLUGINS ---'
+            : preset.type === 'subscriber'
+              ? '// --- AUTOTEL:SUBSCRIBERS ---'
+              : null;
 
       if (sectionMarker && result.includes(sectionMarker)) {
-        result = result.replace(sectionMarker, `${sectionMarker}\n${importLine}`);
+        result = result.replace(
+          sectionMarker,
+          `${sectionMarker}\n${importLine}`,
+        );
       } else {
         // Add at the end of imports section
         const initIndex = result.indexOf('init({');
         if (initIndex > 0) {
-          result = result.slice(0, initIndex) + `${importLine}\n\n` + result.slice(initIndex);
+          result =
+            result.slice(0, initIndex) +
+            `${importLine}\n\n` +
+            result.slice(initIndex);
         }
       }
     }
@@ -154,22 +163,32 @@ export function addPresetToFile(
       const afterMarker = result.slice(markerIndex + backendMarker.length);
 
       // Find where the config ends (next marker, subscribers:, or closing });)
-      const nextMarkerMatch = afterMarker.match(/\n\s*(\/\/ --- AUTOTEL:|subscribers:|}\);)/);
+      const nextMarkerMatch = afterMarker.match(
+        /\n\s*(\/\/ --- AUTOTEL:|subscribers:|}\);)/,
+      );
       const endIndex = nextMarkerMatch
         ? markerIndex + backendMarker.length + (nextMarkerMatch.index ?? 0)
         : markerIndex + backendMarker.length;
 
-      result = result.slice(0, markerIndex) +
-               backendMarker + '\n  ' + configCode + '\n' +
-               result.slice(endIndex);
+      result =
+        result.slice(0, markerIndex) +
+        backendMarker +
+        '\n  ' +
+        configCode +
+        '\n' +
+        result.slice(endIndex);
     } else {
       // Insert after init({ if no marker exists
       const initMatch = result.match(/init\(\{/);
       if (initMatch && initMatch.index !== undefined) {
         const insertPoint = initMatch.index + 'init({'.length;
-        result = result.slice(0, insertPoint) +
-                 '\n  ' + backendMarker + '\n  ' + configCode +
-                 result.slice(insertPoint);
+        result =
+          result.slice(0, insertPoint) +
+          '\n  ' +
+          backendMarker +
+          '\n  ' +
+          configCode +
+          result.slice(insertPoint);
       }
     }
   } else if (configSection === 'SUBSCRIBERS_CONFIG') {
@@ -180,7 +199,10 @@ export function addPresetToFile(
       const newSubscribers = existingSubscribers
         ? `${existingSubscribers}\n    ${configCode}`
         : `\n    ${configCode}\n  `;
-      result = result.replace(subscribersMatch[0], `subscribers: [${newSubscribers}]`);
+      result = result.replace(
+        subscribersMatch[0],
+        `subscribers: [${newSubscribers}]`,
+      );
     } else {
       // No subscribers array exists - create one
       // Find the closing }); of init() - it's the first }); after init({
@@ -191,10 +213,14 @@ export function addPresetToFile(
         const closingMatch = afterInit.match(/}\);/);
         if (closingMatch && closingMatch.index !== undefined) {
           const insertPoint = initStart + closingMatch.index;
-          result = result.slice(0, insertPoint) +
-                   '\n  ' + subscribersMarker + '\n  subscribers: [\n    ' +
-                   configCode + '\n  ],\n' +
-                   result.slice(insertPoint);
+          result =
+            result.slice(0, insertPoint) +
+            '\n  ' +
+            subscribersMarker +
+            '\n  subscribers: [\n    ' +
+            configCode +
+            '\n  ],\n' +
+            result.slice(insertPoint);
         }
       }
     }
@@ -217,7 +243,7 @@ export function addPresetToFile(
 export async function runAdd(
   type: string | undefined,
   name: string | undefined,
-  options: AddOptions
+  options: AddOptions,
 ): Promise<void> {
   // Set output mode
   if (options.verbose) {
@@ -271,7 +297,9 @@ export async function runAdd(
   // Validate name
   if (!name) {
     output.error(`Usage: autotel add ${type} <name>`);
-    output.info(`Available ${type}s: ${listPresetSlugs(presetType).join(', ')}`);
+    output.info(
+      `Available ${type}s: ${listPresetSlugs(presetType).join(', ')}`,
+    );
     process.exit(1);
   }
 
@@ -279,7 +307,9 @@ export async function runAdd(
   const preset = getPreset(presetType, name);
   if (!preset) {
     output.error(`Unknown ${type}: ${name}`);
-    output.info(`Available ${type}s: ${listPresetSlugs(presetType).join(', ')}`);
+    output.info(
+      `Available ${type}s: ${listPresetSlugs(presetType).join(', ')}`,
+    );
     process.exit(1);
   }
 
@@ -297,14 +327,19 @@ export async function runAdd(
 
   if (!project) {
     spinner.fail('No package.json found');
-    output.error('Run this command in a directory with a package.json, or use --cwd');
+    output.error(
+      'Run this command in a directory with a package.json, or use --cwd',
+    );
     process.exit(1);
   }
 
   spinner.succeed(`Found ${project.packageJson.name ?? 'project'}`);
 
   // Check if already installed
-  const deps = { ...project.packageJson.dependencies, ...project.packageJson.devDependencies };
+  const deps = {
+    ...project.packageJson.dependencies,
+    ...project.packageJson.devDependencies,
+  };
   const allInstalled = preset.packages.required.every((pkg) => deps[pkg]);
 
   // Check if already configured
@@ -312,7 +347,10 @@ export async function runAdd(
   let alreadyConfigured = false;
 
   if (config.instrumentationFile) {
-    alreadyConfigured = isFeatureConfigured(config.instrumentationFile, presetType);
+    alreadyConfigured = isFeatureConfigured(
+      config.instrumentationFile,
+      presetType,
+    );
   }
 
   // Idempotency check
@@ -334,12 +372,17 @@ export async function runAdd(
     output.heading('\nDry run - no changes will be made\n');
 
     if (!allInstalled) {
-      const cmd = getInstallCommand(project.packageManager, preset.packages.required);
+      const cmd = getInstallCommand(
+        project.packageManager,
+        preset.packages.required,
+      );
       output.info(`Would run: ${cmd}`);
     }
 
     if (!alreadyConfigured) {
-      output.info(`Would update instrumentation file with ${preset.name} config`);
+      output.info(
+        `Would update instrumentation file with ${preset.name} config`,
+      );
     }
 
     return;
@@ -393,10 +436,12 @@ export async function runAdd(
   }
 
   // Print next steps
-  console.log(output.formatFooter({
-    detected: `${project.packageManager}`,
-    next: preset.nextSteps[0],
-  }));
+  console.log(
+    output.formatFooter({
+      detected: `${project.packageManager}`,
+      next: preset.nextSteps[0],
+    }),
+  );
 
   if (preset.nextSteps.length > 1) {
     console.log('\nAdditional steps:');

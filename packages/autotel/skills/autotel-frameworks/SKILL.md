@@ -4,7 +4,7 @@ description: >
   Hono, Fastify, TanStack Start, Cloudflare Workers, NestJS, SvelteKit, Elysia, Nuxt. Middleware and init; getRequestLogger() in handlers. Load when adding Autotel to a web framework.
 ---
 
-# Autotel — Framework Integration
+# Autotel: Framework Integration
 
 This skill builds on autotel-instrumentation. Read it first for init() and span creation.
 
@@ -119,4 +119,7 @@ Source: packages/autotel-hono, docs/AGENT-GUIDE.md
 
 Targets autotel v2.23.x.
 
-See also: autotel-instrumentation/SKILL.md — init and spans. autotel-request-logging/SKILL.md — request logger usage.
+See also:
+
+- `autotel-instrumentation/SKILL.md` for init and spans
+- `autotel-request-logging/SKILL.md` for request logger usage

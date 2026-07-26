@@ -11,10 +11,7 @@ export const honeycomb: BackendPreset = {
   protocol: 'grpc',
   exporter: 'otlp-grpc',
   packages: {
-    required: [
-      'autotel-backends',
-      '@opentelemetry/exporter-trace-otlp-grpc',
-    ],
+    required: ['autotel-backends', '@opentelemetry/exporter-trace-otlp-grpc'],
     optional: [
       '@opentelemetry/sdk-logs',
       '@opentelemetry/exporter-logs-otlp-grpc',

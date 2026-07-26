@@ -59,7 +59,9 @@ const server = http.createServer((req, res) => {
   const timestamp = new Date().toISOString();
 
   console.log(`\n${'='.repeat(80)}`);
-  console.log(`${colors.bright}${colors.cyan}[${timestamp}] Request ${requestId}${colors.reset}`);
+  console.log(
+    `${colors.bright}${colors.cyan}[${timestamp}] Request ${requestId}${colors.reset}`,
+  );
   console.log(`${'='.repeat(80)}`);
   console.log(`${colors.green}→ Incoming Request:${colors.reset}`);
   console.log(`  Method: ${colors.bright}${req.method}${colors.reset}`);
@@ -94,7 +96,9 @@ const server = http.createServer((req, res) => {
       },
       (proxyRes) => {
         console.log(`\n${colors.green}← Datadog Response:${colors.reset}`);
-        console.log(`  Status: ${colors.bright}${proxyRes.statusCode} ${proxyRes.statusMessage}${colors.reset}`);
+        console.log(
+          `  Status: ${colors.bright}${proxyRes.statusCode} ${proxyRes.statusMessage}${colors.reset}`,
+        );
         console.log(`  Headers:`);
         console.log(formatHeaders(proxyRes.headers));
 
@@ -105,15 +109,21 @@ const server = http.createServer((req, res) => {
           const responseBody = Buffer.concat(responseChunks);
 
           console.log(`\n${colors.yellow}← Response Body:${colors.reset}`);
-          console.log(formatBody(responseBody, proxyRes.headers['content-type']));
+          console.log(
+            formatBody(responseBody, proxyRes.headers['content-type']),
+          );
 
           // Check for errors
           if (proxyRes.statusCode && proxyRes.statusCode >= 400) {
-            console.log(`\n${colors.bright}${colors.red}⚠️  ERROR RESPONSE FROM DATADOG${colors.reset}`);
+            console.log(
+              `\n${colors.bright}${colors.red}⚠️  ERROR RESPONSE FROM DATADOG${colors.reset}`,
+            );
             console.log(`Status: ${proxyRes.statusCode}`);
             console.log(`Body: ${responseBody.toString()}`);
           } else {
-            console.log(`\n${colors.green}✅ Request forwarded successfully${colors.reset}`);
+            console.log(
+              `\n${colors.green}✅ Request forwarded successfully${colors.reset}`,
+            );
           }
 
           console.log(`${'='.repeat(80)}\n`);
@@ -145,15 +155,25 @@ const server = http.createServer((req, res) => {
 
 server.listen(PROXY_PORT, () => {
   console.log(`\n${'='.repeat(80)}`);
-  console.log(`${colors.bright}${colors.green}🔍 Datadog OTLP Debug Proxy${colors.reset}`);
+  console.log(
+    `${colors.bright}${colors.green}🔍 Datadog OTLP Debug Proxy${colors.reset}`,
+  );
   console.log(`${'='.repeat(80)}`);
-  console.log(`${colors.cyan}Proxy listening on:${colors.reset}     http://localhost:${PROXY_PORT}`);
-  console.log(`${colors.cyan}Forwarding to:${colors.reset}         ${DATADOG_ENDPOINT}`);
-  console.log(`${colors.cyan}Datadog Site:${colors.reset}          ${DATADOG_SITE}`);
+  console.log(
+    `${colors.cyan}Proxy listening on:${colors.reset}     http://localhost:${PROXY_PORT}`,
+  );
+  console.log(
+    `${colors.cyan}Forwarding to:${colors.reset}         ${DATADOG_ENDPOINT}`,
+  );
+  console.log(
+    `${colors.cyan}Datadog Site:${colors.reset}          ${DATADOG_SITE}`,
+  );
   console.log(`\n${colors.yellow}📝 Instructions:${colors.reset}`);
   console.log(`1. Keep this proxy running`);
   console.log(`2. In another terminal, temporarily modify the example to use:`);
-  console.log(`   ${colors.bright}endpoint: 'http://localhost:${PROXY_PORT}'${colors.reset}`);
+  console.log(
+    `   ${colors.bright}endpoint: 'http://localhost:${PROXY_PORT}'${colors.reset}`,
+  );
   console.log(`3. Run: pnpm start`);
   console.log(`4. Watch this terminal for detailed request/response logs`);
   console.log(`${'='.repeat(80)}\n`);

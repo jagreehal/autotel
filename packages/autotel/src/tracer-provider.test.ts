@@ -69,7 +69,7 @@ describe('getForceFlushableProvider', () => {
 
   it('falls back to the global provider when the SDK handle yields nothing', () => {
     // sdk-node 0.220 shape: getTracerProvider() returns undefined.
-    const fakeSdk = { getTracerProvider: () => undefined };
+    const fakeSdk = { getTracerProvider: () => {} };
     const flushable = getForceFlushableProvider(fakeSdk);
     // The ambient global provider is force-flushable (or undefined in a bare
     // env); either way the SDK's undefined must not short-circuit resolution.

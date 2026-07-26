@@ -5,6 +5,7 @@ This demo shows the difference between regular logging and canonical log lines (
 ## What are Canonical Log Lines?
 
 Canonical log lines implement "wide events" pattern:
+
 - **One comprehensive log line per request** with ALL context
 - **High-cardinality, high-dimensionality data** for powerful queries
 - **Queryable as structured data** instead of string search
@@ -73,6 +74,7 @@ Watch the server console - when `/checkout/complete` is called, Autotel emits a 
 ### Regular Logging Mode
 
 Multiple log lines per request:
+
 ```
 [INFO] Checkout started userId=user-123
 [INFO] Cart loaded cartId=cart-1 itemCount=2
@@ -80,6 +82,7 @@ Multiple log lines per request:
 ```
 
 **Problems:**
+
 - Context scattered across multiple log lines
 - Hard to correlate (need to search for userId, then cartId, then orderId)
 - String search required to find related logs
@@ -88,6 +91,7 @@ Multiple log lines per request:
 ### Canonical Log Lines Mode
 
 One log line per request with ALL context:
+
 ```json
 {
   "level": "info",
@@ -120,6 +124,7 @@ One log line per request with ALL context:
 ```
 
 **Benefits:**
+
 - All context in one place
 - Queryable: `WHERE user.id = 'user-123' AND error.code IS NOT NULL`
 - High-cardinality fields (user.id, order.id) for powerful queries
@@ -136,7 +141,7 @@ WHERE user.subscription = 'premium'
   AND error.code IS NOT NULL;
 
 -- Group errors by code
-SELECT error.code, COUNT(*) 
+SELECT error.code, COUNT(*)
 FROM logs
 WHERE error.code IS NOT NULL
 GROUP BY error.code;
@@ -150,6 +155,7 @@ WHERE duration_ms > 200
 ## How It Works
 
 The canonical log line processor automatically:
+
 1. Captures ALL span attributes when a span ends
 2. Includes trace context (traceId, spanId, correlationId)
 3. Includes resource attributes (service.name, service.version)
@@ -158,14 +164,18 @@ The canonical log line processor automatically:
 No manual logging needed. Use `trace()` and `ctx.setAttributes()`:
 
 ```typescript
-export const processCheckout = trace((ctx) => async (req: CheckoutRequest) => {
-  setUser(ctx, { id: req.userId });
-  ctx.setAttributes({
-    'user.subscription': 'premium',
-    'cart.total_cents': req.total,
-  });
-  // Canonical log line automatically emitted with ALL context
-});
+import { withTracing } from 'autotel';
+
+export const processCheckout = withTracing({})(
+  (ctx) => async (req: CheckoutRequest) => {
+    setUser(ctx, { id: req.userId });
+    ctx.setAttributes({
+      'user.subscription': 'premium',
+      'cart.total_cents': req.total,
+    });
+    // Canonical log line automatically emitted with ALL context
+  },
+);
 ```
 
 In practice you'll want to redact PII. Autotel supports this via `attributeRedactor`.
@@ -174,6 +184,3 @@ In practice you'll want to redact PII. Autotel supports this via `attributeRedac
 
 - [Boris Tane's article on logging](https://boristane.com/blog/logging-sucks)
 - [Autotel README](../../packages/autotel/README.md)
-
-
-

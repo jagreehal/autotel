@@ -42,19 +42,20 @@ npx autotel init --dry-run
 
 **Key options:**
 
-| Option | Effect |
-|---|---|
-| `--yes / -y` | Non-interactive, accept defaults |
-| `--preset <name>` | Use a quick preset |
-| `--dry-run` | Print what would be done, no writes or installs |
-| `--no-install` | Generate files only, skip package installation |
-| `--print-install-cmd` | Output the install command instead of running it |
-| `--force` | Overwrite existing config (backs up the old file first) |
-| `--workspace-root` | Install at monorepo workspace root instead of package root |
+| Option                | Effect                                                     |
+| --------------------- | ---------------------------------------------------------- |
+| `--yes / -y`          | Non-interactive, accept defaults                           |
+| `--preset <name>`     | Use a quick preset                                         |
+| `--dry-run`           | Print what would be done, no writes or installs            |
+| `--no-install`        | Generate files only, skip package installation             |
+| `--print-install-cmd` | Output the install command instead of running it           |
+| `--force`             | Overwrite existing config (backs up the old file first)    |
+| `--workspace-root`    | Install at monorepo workspace root instead of package root |
 
 Generated files:
-- `src/instrumentation.mts` (or `.mjs`) — the instrumentation entry point with section markers
-- `.env.example` — env var template based on selected presets (written only if file does not exist)
+
+- `src/instrumentation.mts` (or `.mjs`): the instrumentation entry point with section markers
+- `.env.example`: env var template based on selected presets (written only if file does not exist)
 
 After init, start your app with `--import`:
 
@@ -110,12 +111,12 @@ npx autotel add backend datadog --help
 
 **Preset types:**
 
-| Type | Examples |
-|---|---|
-| `backend` | `datadog`, `honeycomb`, `otlp`, `local` |
+| Type         | Examples                                  |
+| ------------ | ----------------------------------------- |
+| `backend`    | `datadog`, `honeycomb`, `otlp`, `local`   |
 | `subscriber` | `posthog`, `mixpanel`, `segment`, `slack` |
-| `plugin` | `mongoose`, `drizzle` |
-| `platform` | AWS Lambda, Cloudflare Workers |
+| `plugin`     | `mongoose`, `drizzle`                     |
+| `platform`   | AWS Lambda, Cloudflare Workers            |
 
 **Key options:** `--dry-run`, `--no-install`, `--force`, `--json` (for `--list`).
 
@@ -169,6 +170,7 @@ npx autotel codemod trace "src/**/*.ts" --print-files
 ### Package manager detection
 
 Detected automatically from the nearest lockfile in this order:
+
 1. `pnpm-lock.yaml` → pnpm
 2. `bun.lockb` → bun
 3. `yarn.lock` → yarn
@@ -215,7 +217,7 @@ Do not remove these markers if you want `autotel add` to continue working on the
 
 ## Common Mistakes
 
-### HIGH — Forgetting `--import` when starting the app
+### HIGH: Forgetting `--import` when starting the app
 
 ```bash
 # Wrong: instrumentation never runs
@@ -227,7 +229,7 @@ node --import ./src/instrumentation.mts dist/index.js
 
 The instrumentation file must be loaded before any other module. The `--import` flag (Node.js 18.19+) is the correct mechanism. `require` or a top-level import inside app code is too late.
 
-### HIGH — Running `autotel add` before `autotel init`
+### HIGH: Running `autotel add` before `autotel init`
 
 ```bash
 # Wrong: no instrumentation file exists yet
@@ -240,7 +242,7 @@ npx autotel add plugin mongoose
 
 `add` reads and modifies the existing instrumentation file. It will fail if the file does not exist or is not CLI-owned (use `--force` for user-created files).
 
-### MEDIUM — Globbing without quotes
+### MEDIUM: Globbing without quotes
 
 ```bash
 # Wrong: shell expands the glob before the CLI sees it
@@ -250,11 +252,11 @@ npx autotel codemod trace src/**/*.ts
 npx autotel codemod trace "src/**/*.ts"
 ```
 
-### MEDIUM — Using `--force` on init without understanding the backup
+### MEDIUM: Using `--force` on init without understanding the backup
 
 `--force` on `init` overwrites an existing instrumentation file but creates a `.bak` backup first. The backup path is logged at `--verbose` level. If you ran `--force` accidentally, check for `instrumentation.mts.bak` in the same directory.
 
-### MEDIUM — Using `--dry-run` and expecting installs to have run
+### MEDIUM: Using `--dry-run` and expecting installs to have run
 
 `--dry-run` implies `--no-install` and `--print-install-cmd`. No files are written and no packages are installed. It is purely a preview mode.
 

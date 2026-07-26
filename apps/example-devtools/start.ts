@@ -133,18 +133,14 @@ function startService(
   entry: string,
   environment: Record<string, string>,
 ): ChildProcess {
-  const child = spawn(
-    pnpmCmd,
-    ['exec', 'tsx', entry],
-    {
-      cwd: __dirname,
-      env: {
-        ...process.env,
-        ...environment,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+  const child = spawn(pnpmCmd, ['exec', 'tsx', entry], {
+    cwd: __dirname,
+    env: {
+      ...process.env,
+      ...environment,
     },
-  );
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
   pipeOutput(child, name);
 
@@ -219,8 +215,12 @@ const children = [
 console.log('  Core trace paths to try:');
 console.log('  1. Catalog   → browser → shop-api → sqlite');
 console.log('  2. Profile   → browser → shop-api → shop-auth → sqlite');
-console.log('  3. Checkout  → browser → shop-api → shop-auth → sqlite → shop-worker → sqlite');
-console.log('  4. Report    → browser → shop-api → sqlite (slow recursive CTE)');
+console.log(
+  '  3. Checkout  → browser → shop-api → shop-auth → sqlite → shop-worker → sqlite',
+);
+console.log(
+  '  4. Report    → browser → shop-api → sqlite (slow recursive CTE)',
+);
 console.log('');
 console.log('  Press Ctrl-C to stop all services.');
 console.log('');

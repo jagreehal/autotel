@@ -31,13 +31,29 @@ function ensureCollector(): TestSpanCollector {
 }
 
 export type OtelFixtureFn = (
-  args: { task: { name: string; file?: { name: string }; suite?: { name: string }; meta: Record<string, unknown> } },
+  args: {
+    task: {
+      name: string;
+      file?: { name: string };
+      suite?: { name: string };
+      meta: Record<string, unknown>;
+    };
+  },
   use: (span: unknown) => Promise<void>,
 ) => Promise<void>;
 
 export const otelTestSpanFixture: [OtelFixtureFn, { auto: true }] = [
   async (
-    { task }: { task: { name: string; file?: { name: string }; suite?: { name: string }; meta: Record<string, unknown> } },
+    {
+      task,
+    }: {
+      task: {
+        name: string;
+        file?: { name: string };
+        suite?: { name: string };
+        meta: Record<string, unknown>;
+      };
+    },
     use: (span: unknown) => Promise<void>,
   ) => {
     ensureCollector();
@@ -54,7 +70,9 @@ export const otelTestSpanFixture: [OtelFixtureFn, { auto: true }] = [
       await otelContext.with(ctx, () => use(span));
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR });
-      span.recordException(error instanceof Error ? error : new Error(String(error)));
+      span.recordException(
+        error instanceof Error ? error : new Error(String(error)),
+      );
       throw error;
     } finally {
       span.end();

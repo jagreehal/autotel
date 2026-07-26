@@ -8,13 +8,13 @@ The receiver listens on `POST /v1/traces` and `POST /v1/logs` at `127.0.0.1:4318
 
 The activity bar has four views populated live from the in-memory buffer: Services, Traces, Logs, and Errors. Errors are grouped by fingerprint so the same exception across many traces collapses into a single row with a count.
 
-Opening a span (or **Open Devtools UI**) embeds the full `autotel-devtools` widget — Traces waterfall, Flow call graph, GenAI, Logs, Errors — in a VS Code webview, served from the same receiver and fed live. Clicking a span deep-links the widget straight to it. If a span carries `code.filepath` and `code.lineno`, **Reveal Source** opens the file at the right line; files outside the workspace are refused.
+Opening a span (or **Open Devtools UI**) embeds the full `autotel-devtools` widget, Traces waterfall, Flow call graph, GenAI, Logs, Errors, in a VS Code webview, served from the same receiver and fed live. Clicking a span deep-links the widget straight to it. If a span carries `code.filepath` and `code.lineno`, **Reveal Source** opens the file at the right line; files outside the workspace are refused.
 
 The status bar shows the receiver state and the configured port at a glance: `Autotel :4318 (12)` when running (port and buffered span count), `Autotel off :4318` when stopped, or a "busy" warning when the port could not bind. Click it to start when stopped, or stop when running.
 
 By default the receiver does **not** bind a port the moment VS Code opens. It auto-starts only in workspaces that depend on `autotel`; everywhere else it stays dormant until you run **Autotel: Start Receiver** (or click the status bar item). This keeps it from fighting a local collector or a second VS Code window over port 4318. Set `autotel.receiver.autoStart` to `"off"` to always start it by hand, or `"always"` to start it in every workspace.
 
-Auto-start is quiet: if the port is already taken (or the host is non-loopback and needs consent), it just reflects that in the status bar and logs to the **Autotel** output channel — no pop-ups. Starting by hand is loud: because you asked, you get a notification if it can't bind.
+Auto-start is quiet: if the port is already taken (or the host is non-loopback and needs consent), it just reflects that in the status bar and logs to the **Autotel** output channel. No pop-ups. Starting by hand is loud: because you asked, you get a notification if it can't bind.
 
 ## Getting started
 
@@ -26,30 +26,30 @@ If port 4318 is taken (most often by a local OpenTelemetry Collector), run **Aut
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `Autotel: Start Receiver` | Start the OTLP HTTP receiver. |
-| `Autotel: Stop Receiver` | Stop the receiver and free the port. |
-| `Autotel: Set Receiver Port` | Change the listen port (saved in workspace settings). |
-| `Autotel: Clear Buffered Data` | Drop all buffered spans, logs, and error groups. |
-| `Autotel: Reveal Span Source` | Jump to `code.filepath`:`code.lineno` for the selected span. |
-| `Autotel: Copy Span ID` | Copy the span ID to the clipboard. |
-| `Autotel: Open Span Detail` | Open the embedded Devtools widget focused on the selected span. |
-| `Autotel: Open Devtools UI` | Open the embedded `autotel-devtools` widget in a VS Code webview (or browser). |
+| Command                        | What it does                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `Autotel: Start Receiver`      | Start the OTLP HTTP receiver.                                                  |
+| `Autotel: Stop Receiver`       | Stop the receiver and free the port.                                           |
+| `Autotel: Set Receiver Port`   | Change the listen port (saved in workspace settings).                          |
+| `Autotel: Clear Buffered Data` | Drop all buffered spans, logs, and error groups.                               |
+| `Autotel: Reveal Span Source`  | Jump to `code.filepath`:`code.lineno` for the selected span.                   |
+| `Autotel: Copy Span ID`        | Copy the span ID to the clipboard.                                             |
+| `Autotel: Open Span Detail`    | Open the embedded Devtools widget focused on the selected span.                |
+| `Autotel: Open Devtools UI`    | Open the embedded `autotel-devtools` widget in a VS Code webview (or browser). |
 
 If you want a standalone Devtools UI process outside VS Code, run `npx autotel-devtools`.
 
 ## Settings
 
-| Setting | Default | Description |
-| --- | --- | --- |
+| Setting                      | Default            | Description                                                                                                                                                           |
+| ---------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `autotel.receiver.autoStart` | `onAutotelProject` | When to start the receiver. `off` = manual only; `onAutotelProject` = auto-start only in workspaces that depend on autotel; `always` = auto-start in every workspace. |
-| `autotel.receiver.host` | `127.0.0.1` | Bind host. `0.0.0.0` works but exposes telemetry beyond loopback, so the extension prompts before allowing it. |
-| `autotel.receiver.port` | `4318` | TCP port. |
-| `autotel.buffer.maxSpans` | `10000` | Span buffer cap. Older spans are dropped past the cap and the count shows in the status bar tooltip. |
-| `autotel.buffer.maxLogs` | `10000` | Log buffer cap. |
-| `autotel.buffer.maxAgeMs` | `1800000` | Reserved for future age-based eviction. |
-| `autotel.devtools.url` | `null` | Optional URL for an existing `autotel-devtools` UI. If unset, falls back to `http://<receiver.host>:<receiver.port>`. |
+| `autotel.receiver.host`      | `127.0.0.1`        | Bind host. `0.0.0.0` works but exposes telemetry beyond loopback, so the extension prompts before allowing it.                                                        |
+| `autotel.receiver.port`      | `4318`             | TCP port.                                                                                                                                                             |
+| `autotel.buffer.maxSpans`    | `10000`            | Span buffer cap. Older spans are dropped past the cap and the count shows in the status bar tooltip.                                                                  |
+| `autotel.buffer.maxLogs`     | `10000`            | Log buffer cap.                                                                                                                                                       |
+| `autotel.buffer.maxAgeMs`    | `1800000`          | Reserved for future age-based eviction.                                                                                                                               |
+| `autotel.devtools.url`       | `null`             | Optional URL for an existing `autotel-devtools` UI. If unset, falls back to `http://<receiver.host>:<receiver.port>`.                                                 |
 
 ## Security
 

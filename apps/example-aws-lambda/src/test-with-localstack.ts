@@ -1,6 +1,6 @@
 /**
  * Test Lambda handlers with LocalStack
- * 
+ *
  * This script tests the Lambda handlers using LocalStack for AWS services.
  * Make sure LocalStack is running: docker-compose up -d
  */
@@ -20,7 +20,8 @@ import type { LambdaContext } from 'autotel-aws';
 import type { TraceContext } from 'autotel';
 import { setupLocalStack } from './setup-localstack.js';
 
-const LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+const LOCALSTACK_ENDPOINT =
+  process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
 const REGION = process.env.AWS_DEFAULT_REGION || 'us-east-1';
 
 // Initialize autotel
@@ -40,7 +41,7 @@ const s3 = instrumentSDK(
       secretAccessKey: 'test',
     },
     forcePathStyle: true,
-  })
+  }),
 );
 
 const dynamodb = createTracedClient(DynamoDBClient, {
@@ -60,7 +61,7 @@ const sqs = instrumentSDK(
       accessKeyId: 'test',
       secretAccessKey: 'test',
     },
-  })
+  }),
 );
 
 // S3 operation helper - use trace() directly to avoid traceS3 argument issues
@@ -74,7 +75,7 @@ const processS3File = async (bucket: string, key: string) => {
       new GetObjectCommand({
         Bucket: bucket,
         Key: key,
-      })
+      }),
     );
 
     if (result.Body) {
@@ -111,7 +112,7 @@ const fetchUserData = async (userId: string) => {
           Key: {
             id: { S: userId },
           },
-        })
+        }),
       );
 
       if (result.Item) {
@@ -136,16 +137,22 @@ const fetchUserData = async (userId: string) => {
 import { trace } from 'autotel';
 import { buildSQSAttributes } from 'autotel-aws/attributes';
 
-const sendNotification = async (data: { bucket: string; key: string; userId?: string }) => {
-  const queueUrl = process.env.SQS_QUEUE_URL || 'http://localhost:4566/000000000000/notifications';
-  
+const sendNotification = async (data: {
+  bucket: string;
+  key: string;
+  userId?: string;
+}) => {
+  const queueUrl =
+    process.env.SQS_QUEUE_URL ||
+    'http://localhost:4566/000000000000/notifications';
+
   return autotelTrace('sqs.send', async (ctx) => {
     // Set SQS semantic attributes
     ctx.setAttribute('messaging.system', 'aws_sqs');
     ctx.setAttribute('messaging.destination.name', 'notifications');
     ctx.setAttribute('messaging.operation', 'send');
     ctx.setAttribute('aws.sqs.queue_url', queueUrl);
-    
+
     // Set custom attributes
     ctx.setAttribute('notification.type', 'file-processed');
     ctx.setAttribute('notification.bucket', data.bucket);
@@ -161,7 +168,7 @@ const sendNotification = async (data: { bucket: string; key: string; userId?: st
           userId: data.userId,
           timestamp: new Date().toISOString(),
         }),
-      })
+      }),
     );
 
     if (result.MessageId) {
@@ -174,47 +181,48 @@ const sendNotification = async (data: { bucket: string; key: string; userId?: st
 };
 
 // Lambda handler that processes S3 events
-const uploadHandler = traceLambda<S3Event, { statusCode: number; body: string }>(
-  (ctx) => async (event: S3Event, context: LambdaContext) => {
-    ctx.setAttribute('lambda.event.source', 's3');
-    ctx.setAttribute('lambda.event.record_count', event.Records.length);
+const uploadHandler = traceLambda<
+  S3Event,
+  { statusCode: number; body: string }
+>((ctx) => async (event: S3Event, context: LambdaContext) => {
+  ctx.setAttribute('lambda.event.source', 's3');
+  ctx.setAttribute('lambda.event.record_count', event.Records.length);
 
-    setXRayAnnotation('user.id', 'user-123');
-    setXRayAnnotation('operation.type', 'file-upload');
+  setXRayAnnotation('user.id', 'user-123');
+  setXRayAnnotation('operation.type', 'file-upload');
 
-    console.log(`\n📦 Processing ${event.Records.length} S3 record(s)...`);
+  console.log(`\n📦 Processing ${event.Records.length} S3 record(s)...`);
 
-    for (const record of event.Records) {
-      const bucket = record.s3.bucket.name;
-      const key = record.s3.object.key;
+  for (const record of event.Records) {
+    const bucket = record.s3.bucket.name;
+    const key = record.s3.object.key;
 
-      ctx.setAttribute('s3.bucket', bucket);
-      ctx.setAttribute('s3.key', key);
+    ctx.setAttribute('s3.bucket', bucket);
+    ctx.setAttribute('s3.key', key);
 
-      // Process S3 file
-      // Errors are automatically captured in traces by the library
-      const content = await processS3File(bucket, key);
-      if (content) {
-        console.log(`   ✅ Processed S3 file: ${key}`);
-      }
-
-      // Fetch user data
-      const userId = extractUserIdFromKey(key);
-      if (userId) {
-        // Errors are automatically captured in traces by the library
-        await fetchUserData(userId);
-      }
-
-      // Send notification
-      // Errors are automatically captured in traces by the library
-      await sendNotification({ bucket, key, userId });
+    // Process S3 file
+    // Errors are automatically captured in traces by the library
+    const content = await processS3File(bucket, key);
+    if (content) {
+      console.log(`   ✅ Processed S3 file: ${key}`);
     }
 
-    ctx.setAttribute('processing.complete', true);
+    // Fetch user data
+    const userId = extractUserIdFromKey(key);
+    if (userId) {
+      // Errors are automatically captured in traces by the library
+      await fetchUserData(userId);
+    }
 
-    return { statusCode: 200, body: 'Processed successfully' };
+    // Send notification
+    // Errors are automatically captured in traces by the library
+    await sendNotification({ bucket, key, userId });
   }
-);
+
+  ctx.setAttribute('processing.complete', true);
+
+  return { statusCode: 200, body: 'Processed successfully' };
+});
 
 function extractUserIdFromKey(key: string): string | undefined {
   const match = key.match(/user-(\w+)/);
@@ -241,9 +249,13 @@ async function testWithLocalStack() {
 
   // Setup resources (skip if already set up)
   // Note: Setup may fail if resources already exist, but that's OK
-  console.log('ℹ️  Skipping setup (resources should already exist from previous run)');
-  console.log('   Run "pnpm setup" separately if you need to recreate resources\n');
-  
+  console.log(
+    'ℹ️  Skipping setup (resources should already exist from previous run)',
+  );
+  console.log(
+    '   Run "pnpm setup" separately if you need to recreate resources\n',
+  );
+
   // Get queue URL for testing
   const { SQSClient, GetQueueUrlCommand } = await import('@aws-sdk/client-sqs');
   const setupSqs = new SQSClient({
@@ -251,7 +263,9 @@ async function testWithLocalStack() {
     region: REGION,
     credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
   });
-  const queueResult = await setupSqs.send(new GetQueueUrlCommand({ QueueName: 'notifications' }));
+  const queueResult = await setupSqs.send(
+    new GetQueueUrlCommand({ QueueName: 'notifications' }),
+  );
   if (queueResult.QueueUrl && !process.env.SQS_QUEUE_URL) {
     process.env.SQS_QUEUE_URL = queueResult.QueueUrl;
     console.log(`   ✅ Found queue: ${queueResult.QueueUrl}\n`);
@@ -262,7 +276,8 @@ async function testWithLocalStack() {
     awsRequestId: 'test-request-id-' + Date.now(),
     functionName: 'example-aws-lambda',
     functionVersion: '$LATEST',
-    invokedFunctionArn: 'arn:aws:lambda:us-east-1:123456789012:function:example-aws-lambda',
+    invokedFunctionArn:
+      'arn:aws:lambda:us-east-1:123456789012:function:example-aws-lambda',
     memoryLimitInMB: '128',
     getRemainingTimeInMillis: () => 30000,
     logGroupName: '/aws/lambda/example-aws-lambda',
@@ -328,6 +343,9 @@ async function testWithLocalStack() {
 }
 
 // Run tests if executed directly
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.includes('test-with-localstack')) {
+if (
+  import.meta.url === `file://${process.argv[1]}` ||
+  process.argv[1]?.includes('test-with-localstack')
+) {
   testWithLocalStack().catch(console.error);
 }

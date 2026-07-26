@@ -18,6 +18,7 @@ The official [@opentelemetry/instrumentation-mongoose](https://github.com/open-t
 **No manual instrumentation needed!** Just call `instrumentMongoose()` before defining schemas (and enable `instrumentHooks: true`):
 
 ### 1. All Mongoose Operations (Automatic)
+
 - `create()`, `insertMany()`, `bulkWrite()`
 - `find()`, `findOne()`, `findById()`
 - `findOneAndUpdate()`, `findByIdAndUpdate()`, `updateOne()`, `updateMany()`
@@ -26,11 +27,13 @@ The official [@opentelemetry/instrumentation-mongoose](https://github.com/open-t
 - Instance methods: `save()`, `remove()`
 
 ### 2. All Schema Hooks (Automatic - No Manual trace() Needed!)
+
 - **Pre hooks**: `pre('save')`, `pre('findOneAndUpdate')`, etc.
 - **Post hooks**: `post('save')`, `post('remove')`, etc.
 - **Built-in hooks**: `post('init')` (document hydration)
 
 ### 3. Custom Statics, Methods & Query Helpers (Automatic - No Manual trace() Needed!)
+
 - **Statics**: `userSchema.statics.findByEmail` → span `mongoose.User.findByEmail`
 - **Instance methods**: `userSchema.methods.describe` → span `mongoose.User.describe`
 - **Query helpers**: `userSchema.query.byEmailDomain` → span `mongoose.User.byEmailDomain`
@@ -38,6 +41,7 @@ The official [@opentelemetry/instrumentation-mongoose](https://github.com/open-t
 - On by default; scope with `customMethods` (see `init-mongoose.ts`)
 
 ### 4. Custom Business Logic (Manual with trace())
+
 - API endpoint handlers
 - Background jobs
 - Custom validation logic
@@ -344,11 +348,11 @@ import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   name: String,
-  email: String
+  email: String,
 });
 
 // Hooks are AUTOMATICALLY traced - no trace() calls needed!
-userSchema.pre('save', async function() {
+userSchema.pre('save', async function () {
   // This hook is automatically traced with:
   // - span name: mongoose.users.pre.save
   // - attributes: hook.type, hook.operation, hook.model, db.mongodb.collection
@@ -360,7 +364,7 @@ userSchema.pre('save', async function() {
   }
 });
 
-userSchema.post('save', function(doc) {
+userSchema.post('save', function (doc) {
   // This hook is automatically traced too!
   console.log(`User persisted: ${doc.email}`);
 });
@@ -486,11 +490,11 @@ instrumentMongoose(mongoose, {
 ### Before (Manual Instrumentation)
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
-userSchema.pre('save', async function() {
+userSchema.pre('save', async function () {
   // 😓 Lots of boilerplate code
-  await trace(ctx => async () => {
+  await withTracing({})((ctx) => async () => {
     console.log('Normalizing');
     ctx.setAttribute('hook.type', 'pre');
     ctx.setAttribute('hook.operation', 'save');
@@ -507,7 +511,7 @@ userSchema.pre('save', async function() {
 ```typescript
 // NO IMPORTS NEEDED!
 
-userSchema.pre('save', async function() {
+userSchema.pre('save', async function () {
   // ✨ Clean business logic - automatically traced!
   console.log('Normalizing');
   this.email = this.email.toLowerCase();

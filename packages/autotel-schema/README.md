@@ -29,13 +29,21 @@ export const contract = defineContract({
   service: 'checkout',
   version: '1.2.0', // semver of the *contract*, not the app
   commonAttributes: {
-    'user.id': { type: 'string', highCardinality: true, description: 'Authenticated user' },
+    'user.id': {
+      type: 'string',
+      highCardinality: true,
+      description: 'Authenticated user',
+    },
   },
   spans: {
     'checkout.charge': {
       description: 'Charge a payment method',
       attributes: {
-        'payment.provider': { type: 'string', required: true, enum: ['stripe', 'paypal'] },
+        'payment.provider': {
+          type: 'string',
+          required: true,
+          enum: ['stripe', 'paypal'],
+        },
         'payment.amount_cents': { type: 'number', required: true },
       },
     },
@@ -71,7 +79,8 @@ const violations = validateSpan(
   contract,
 );
 // → [missing_required payment.amount_cents, enum_violation payment.provider]
-if (hasErrors(violations)) violations.forEach((v) => console.error(formatViolation(v)));
+if (hasErrors(violations))
+  violations.forEach((v) => console.error(formatViolation(v)));
 ```
 
 Violation codes: `missing_required`, `type_mismatch`, `enum_violation`, `unknown_attribute` (with a "did you mean?" suggestion via edit distance), and `unknown_span`.
@@ -85,7 +94,10 @@ import { contractToSnapshot, serializeSnapshot } from 'autotel-schema';
 import { writeFileSync } from 'node:fs';
 import { contract } from './telemetry.contract';
 
-writeFileSync('telemetry.snapshot.json', serializeSnapshot(contractToSnapshot(contract)));
+writeFileSync(
+  'telemetry.snapshot.json',
+  serializeSnapshot(contractToSnapshot(contract)),
+);
 ```
 
 Then in CI, with the bundled `autotel-schema` CLI:
@@ -100,7 +112,11 @@ autotel-schema diff  telemetry.baseline.json telemetry.current.json --json
 Programmatically:
 
 ```ts
-import { diffSnapshots, hasBreakingChanges, formatDiff } from 'autotel-schema/diff';
+import {
+  diffSnapshots,
+  hasBreakingChanges,
+  formatDiff,
+} from 'autotel-schema/diff';
 
 const diff = diffSnapshots(baseline, current);
 if (hasBreakingChanges(diff)) throw new Error(formatDiff(diff));
@@ -117,22 +133,29 @@ import { contract } from './telemetry.contract';
 
 init({
   service: 'checkout',
-  attributeRedactor: { allowKeys: highCardinalityKeys(contract), preset: 'strict' },
+  attributeRedactor: {
+    allowKeys: highCardinalityKeys(contract),
+    preset: 'strict',
+  },
 });
 ```
 
 ## 5. Scenario conformance: contract one exercised flow
 
-Spans and attributes contract your telemetry *surface*. A **scenario** contracts the *behaviour* of one exercised flow: which events must fire, how many times, in what topology — and, for async flows, **when the observation is complete**, because without a completion boundary a missing event and an event that hasn't fired *yet* are indistinguishable.
+Spans and attributes contract your telemetry _surface_. A **scenario**contracts the _behaviour_ of one exercised flow: which events must fire, how many times, in what topology, and, for async flows,**when the observation is complete**, because without a completion boundary a missing event and an event that hasn't fired _yet_ are indistinguishable.
 
 ```ts
 export const contract = defineContract({
   service: 'transfer',
   version: '1.3.0',
-  spans: { /* ... */ },
+  spans: {/* ... */},
   scenarios: {
     'transfer.accept': {
-      completion: { mode: 'terminal-event', event: 'transfer.queued', observationBudgetMs: 5000 },
+      completion: {
+        mode: 'terminal-event',
+        event: 'transfer.queued',
+        observationBudgetMs: 5000,
+      },
       events: {
         'transfer.request': { cardinality: 'exactly 1' },
         'transfer.validate': { cardinality: 'exactly 1' },
@@ -145,7 +168,7 @@ export const contract = defineContract({
 });
 ```
 
-Checking yields **three** outcomes, not two — infrastructure slowness is not reported as behavioural regression:
+Checking yields **three** outcomes, not two. Infrastructure slowness is not reported as behavioural regression:
 
 ```ts
 import { checkScenario, formatScenarioResult } from 'autotel-schema';
@@ -159,17 +182,18 @@ const result = await checkScenario(
 //   'conformant'     — boundary closed, signature satisfied
 //   'non-conformant' — required behaviour missing or invalid (definitive)
 //   'incomplete'     — boundary didn't close within the observation budget
-if (result.outcome !== 'conformant') throw new Error(formatScenarioResult(result));
+if (result.outcome !== 'conformant')
+  throw new Error(formatScenarioResult(result));
 ```
 
 Semantics worth knowing:
 
 - **Absence is definitive only after closure** (closed-world). Excess is definitive immediately: an unexpected error span or an exceeded `max` cardinality fails fast while the flow is still open.
-- **Undeclared events are additive** — reported in `result.additions`, never a failure. Improving instrumentation must not break CI.
-- **The observation budget bounds how long the checker waits.** It is not a business SLO — assert deadlines separately on `result.spans`.
+- **Undeclared events are additive**: reported in `result.additions`, never a failure. Improving instrumentation must not break CI.
+- **The observation budget bounds how long the checker waits.** It is not a business SLO: assert deadlines separately on `result.spans`.
 - An `externally-reconciled` boundary never closes in-process: use it for phases verified by a deferred job keyed by a durable business ID.
 
-Don't hand-write the first draft — record it:
+Don't hand-write the first draft. Record it:
 
 ```ts
 import { proposeScenario } from 'autotel-schema';
@@ -182,7 +206,7 @@ Stable events become required cardinality, variable ones get ranges flagged for 
 
 ## What this is / isn't
 
-- **Is**: a contract for your telemetry surface: span names, attribute keys, types, enums, stability, and breaking-vs-additive evolution — and, per scenario, the behavioural signature of one exercised flow (events, cardinality, topology, completion).
+- **Is**: a contract for your telemetry surface: span names, attribute keys, types, enums, stability, and breaking-vs-additive evolution: and, per scenario, the behavioural signature of one exercised flow (events, cardinality, topology, completion).
 - **Isn't**: a contract for application message payloads (use [`autotel-message-contract`](../autotel-message-contract)) or evidence that contracted interactions ran (use [`autotel-pact`](../autotel-pact)). It does not require the OpenTelemetry SDK. The processor works against structural span types.
 
 ## License

@@ -31,7 +31,7 @@ an `exporter.url` to `wrapModule()` (see [Configuration](#configuration)).
 ## Quick start
 
 ```typescript
-import { wrapModule, trace } from 'autotel-cloudflare';
+import { wrapModule, trace, span, withTracing } from 'autotel-cloudflare';
 
 const processOrder = trace(async (orderId: string, kv: KVNamespace) => {
   const order = await kv.get(orderId); // auto-instrumented
@@ -60,7 +60,7 @@ inside it produces a child span automatically.
 Pick the style that matches the ecosystem you came from. All three accept the
 same config object.
 
-### `wrapModule(config, handler)` — recommended
+### `wrapModule(config, handler)`: recommended
 
 Compatible with `workers-honeycomb-logger`. Config first, handler second:
 
@@ -70,10 +70,18 @@ import { wrapModule } from 'autotel-cloudflare';
 export default wrapModule(
   { service: { name: 'my-worker' } },
   {
-    async fetch(req, env, ctx) { return new Response('Hello'); },
-    async scheduled(event, env, ctx) { /* cron */ },
-    async queue(batch, env, ctx) { /* queue consumer */ },
-    async email(message, env, ctx) { /* email handler */ },
+    async fetch(req, env, ctx) {
+      return new Response('Hello');
+    },
+    async scheduled(event, env, ctx) {
+      /* cron */
+    },
+    async queue(batch, env, ctx) {
+      /* queue consumer */
+    },
+    async email(message, env, ctx) {
+      /* email handler */
+    },
   },
 );
 ```
@@ -86,7 +94,11 @@ Compatible with `@microlabs/otel-cf-workers`. Handler first, config second:
 import { instrument } from 'autotel-cloudflare';
 
 export default instrument(
-  { async fetch(req, env, ctx) { return new Response('Hello'); } },
+  {
+    async fetch(req, env, ctx) {
+      return new Response('Hello');
+    },
+  },
   { service: { name: 'my-worker' } },
 );
 ```
@@ -96,14 +108,16 @@ export default instrument(
 For inner business logic. Combine with `wrapModule` for full coverage:
 
 ```typescript
-import { trace, span } from 'autotel-cloudflare';
+import { trace, span, withTracing, span } from 'autotel-cloudflare';
 
-export const processPayment = trace((ctx) => async (amount: number) => {
-  ctx.setAttribute('amount', amount);
-  await span({ name: 'validate.card' }, () => validateCard());
-  await span({ name: 'charge.card' }, () => chargeCard(amount));
-  return { success: true };
-});
+export const processPayment = withTracing({})(
+  (ctx) => async (amount: number) => {
+    ctx.setAttribute('amount', amount);
+    await span({ name: 'validate.card' }, () => validateCard());
+    await span({ name: 'charge.card' }, () => chargeCard(amount));
+    return { success: true };
+  },
+);
 ```
 
 ## Fetch route controls
@@ -140,20 +154,20 @@ All bindings are auto-instrumented when `instrumentBindings: true`. Each binding
 operation produces a span named `<Binding> <NAME>: <op>` (e.g.
 `KV ORDERS_KV: get`).
 
-| Binding             | Operations                                                       |
-| ------------------- | ---------------------------------------------------------------- |
-| **KV**              | `get`, `put`, `delete`, `list`, `getWithMetadata`                |
-| **R2**              | `head`, `get`, `put`, `delete`, `list`, `createMultipartUpload`  |
-| **D1**              | `prepare`, `batch`, `exec`, `dump`                               |
-| **Durable Objects** | `fetch`, `alarm` (use `wrapDurableObject` for the class itself)  |
-| **Workflows**       | `get`, `create`, `getInstance`                                   |
-| **Workers AI**      | `run`                                                            |
-| **Vectorize**       | `insert`, `query`, `getByIds`, `deleteByIds`, `upsert`           |
-| **Hyperdrive**      | All queries                                                      |
-| **Service Binding** | `fetch`                                                          |
-| **Queue**           | `send`, `sendBatch`                                              |
-| **Analytics Engine**| `writeDataPoint`                                                 |
-| **Email**           | `send`, `forward`                                                |
+| Binding              | Operations                                                      |
+| -------------------- | --------------------------------------------------------------- |
+| **KV**               | `get`, `put`, `delete`, `list`, `getWithMetadata`               |
+| **R2**               | `head`, `get`, `put`, `delete`, `list`, `createMultipartUpload` |
+| **D1**               | `prepare`, `batch`, `exec`, `dump`                              |
+| **Durable Objects**  | `fetch`, `alarm` (use `wrapDurableObject` for the class itself) |
+| **Workflows**        | `get`, `create`, `getInstance`                                  |
+| **Workers AI**       | `run`                                                           |
+| **Vectorize**        | `insert`, `query`, `getByIds`, `deleteByIds`, `upsert`          |
+| **Hyperdrive**       | All queries                                                     |
+| **Service Binding**  | `fetch`                                                         |
+| **Queue**            | `send`, `sendBatch`                                             |
+| **Analytics Engine** | `writeDataPoint`                                                |
+| **Email**            | `send`, `forward`                                               |
 
 Global instrumentations are enabled with `instrumentation.instrumentGlobalFetch`
 and `instrumentation.instrumentGlobalCache`.
@@ -275,12 +289,12 @@ wrapModule(
 );
 ```
 
-| Preset                             | Behaviour                                |
-| ---------------------------------- | ---------------------------------------- |
-| `SamplingPresets.development()`    | 100% sampling                            |
-| `SamplingPresets.production()`     | 10% baseline + 100% errors + slow >1s    |
-| `SamplingPresets.highTraffic()`    | 1% baseline + 100% errors + slow >1s     |
-| `SamplingPresets.debugging()`      | Errors only                              |
+| Preset                          | Behaviour                             |
+| ------------------------------- | ------------------------------------- |
+| `SamplingPresets.development()` | 100% sampling                         |
+| `SamplingPresets.production()`  | 10% baseline + 100% errors + slow >1s |
+| `SamplingPresets.highTraffic()` | 1% baseline + 100% errors + slow >1s  |
+| `SamplingPresets.debugging()`   | Errors only                           |
 
 Shorthand strings: `'adaptive'` → production preset, `'error-only'` → debugging
 preset.
@@ -293,7 +307,8 @@ import { SpanStatusCode } from '@opentelemetry/api';
 
 const sampler = createCustomTailSampler((trace) => {
   const span = trace.localRootSpan;
-  if (span.attributes['http.route']?.toString().startsWith('/api/')) return true;
+  if (span.attributes['http.route']?.toString().startsWith('/api/'))
+    return true;
   if (span.status.code === SpanStatusCode.ERROR) return true;
   const durationMs = (span.endTime[0] - span.startTime[0]) / 1_000_000;
   if (durationMs > 1000) return true;
@@ -384,9 +399,10 @@ export default wrapModule(
       disabled: false,
     },
     sampling: {
-      tailSampler: env.ENVIRONMENT === 'production'
-        ? SamplingPresets.production()
-        : SamplingPresets.development(),
+      tailSampler:
+        env.ENVIRONMENT === 'production'
+          ? SamplingPresets.production()
+          : SamplingPresets.development(),
     },
     exporter: {
       url: env.OTEL_ENDPOINT,
@@ -403,17 +419,17 @@ export default wrapModule(
 
 ## Entry points
 
-| Import                          | Contents                                |
-| ------------------------------- | --------------------------------------- |
-| `autotel-cloudflare`            | Functional API, handler wrappers, bindings instrumentation |
-| `autotel-cloudflare/bindings`   | `instrumentKV`, `instrumentR2`, etc.    |
-| `autotel-cloudflare/handlers`   | `instrumentDO`, handler wrappers        |
-| `autotel-cloudflare/logger`     | `createEdgeLogger`, `createWorkersLogger`, `runWithLogLevel` |
-| `autotel-cloudflare/sampling`   | `SamplingPresets`, `createCustomTailSampler`, etc. |
-| `autotel-cloudflare/events`     | `getEdgeSubscribers`, `createEdgeSubscribers` |
-| `autotel-cloudflare/agents`     | `createOtelObservability`, `createOtelObservabilityFromEnv` for the Agents SDK |
-| `autotel-cloudflare/actors`     | `tracedHandler`, `instrumentActor`, and storage/alarm/socket instrumenters |
-| `autotel-cloudflare/testing`    | Placeholder entrypoint (currently no runtime helpers) |
+| Import                        | Contents                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| `autotel-cloudflare`          | Functional API, handler wrappers, bindings instrumentation                     |
+| `autotel-cloudflare/bindings` | `instrumentKV`, `instrumentR2`, etc.                                           |
+| `autotel-cloudflare/handlers` | `instrumentDO`, handler wrappers                                               |
+| `autotel-cloudflare/logger`   | `createEdgeLogger`, `createWorkersLogger`, `runWithLogLevel`                   |
+| `autotel-cloudflare/sampling` | `SamplingPresets`, `createCustomTailSampler`, etc.                             |
+| `autotel-cloudflare/events`   | `getEdgeSubscribers`, `createEdgeSubscribers`                                  |
+| `autotel-cloudflare/agents`   | `createOtelObservability`, `createOtelObservabilityFromEnv` for the Agents SDK |
+| `autotel-cloudflare/actors`   | `tracedHandler`, `instrumentActor`, and storage/alarm/socket instrumenters     |
+| `autotel-cloudflare/testing`  | Placeholder entrypoint (currently no runtime helpers)                          |
 
 `autotel-cloudflare` now uses shared route-matching utilities from
 `autotel-edge`, so include/exclude glob behavior is consistent across edge
@@ -421,9 +437,9 @@ integrations.
 
 ## Examples
 
-- [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example) — KV, R2, D1, AI, Queues, Durable Objects, scheduled, email, custom sampling.
+- [`cloudflare-example`](https://github.com/jagreehal/autotel/tree/main/apps/cloudflare-example): KV, R2, D1, AI, Queues, Durable Objects, scheduled, email, custom sampling.
 
 ## Related
 
-- [Edge Runtimes](/autotel/frameworks/edge/) — vendor-agnostic foundation
-- [Adapters](/autotel/frameworks/adapters/) — `autotel-adapters/cloudflare`
+- [Edge Runtimes](/autotel/frameworks/edge/): vendor-agnostic foundation
+- [Adapters](/autotel/frameworks/adapters/): `autotel-adapters/cloudflare`

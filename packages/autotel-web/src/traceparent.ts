@@ -55,7 +55,7 @@ export function generateSpanId(): string {
  */
 export function createTraceparent(
   traceId?: string,
-  _parentSpanId?: string
+  _parentSpanId?: string,
 ): string {
   const tid = traceId ?? generateTraceId();
   const sid = generateSpanId();

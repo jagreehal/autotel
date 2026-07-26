@@ -13,6 +13,7 @@ import {
   type DistributedWorkflowContext,
   type DistributedStepContext,
 } from './workflow-distributed';
+import type { TraceContext } from './trace-context';
 
 // Mock the functional trace
 vi.mock('./functional', () => ({
@@ -23,6 +24,14 @@ vi.mock('./functional', () => ({
       return fn(...args);
     };
   }),
+  withTracing: vi.fn(
+    (_options: unknown) =>
+      (factory: (ctx: unknown) => (...a: unknown[]) => unknown) =>
+      (...args: unknown[]) => {
+        const mockCtx = createMockTraceContext();
+        return factory(mockCtx)(...args);
+      },
+  ),
 }));
 
 // Mock the business-baggage
@@ -51,14 +60,27 @@ vi.mock('@opentelemetry/api', () => ({
   },
 }));
 
-function createMockTraceContext() {
-  return {
+function createMockTraceContext(): TraceContext {
+  const mock = {
+    traceId: '00000000000000000000000000000001',
+    spanId: '0000000000000002',
+    correlationId: '0000000000000000',
     setAttribute: vi.fn(),
     setAttributes: vi.fn(),
-    addEvent: vi.fn(),
-    addLinks: vi.fn(),
-    recordException: vi.fn(),
     setStatus: vi.fn(),
+    addLink: vi.fn(),
+    addLinks: vi.fn(),
+    updateName: vi.fn(),
+    isRecording: vi.fn(() => true),
+    recordError: vi.fn(),
+    track: vi.fn(),
+    getBaggage: vi.fn(),
+    setBaggage: vi.fn((_key: string, value: string) => value),
+    deleteBaggage: vi.fn(),
+    getAllBaggage: vi.fn(() => new Map()),
+    // Deprecated span methods kept as runtime back-compat shims
+    addEvent: vi.fn(),
+    recordException: vi.fn(),
     getSpan: vi.fn(),
     getSpanContext: vi.fn(() => ({
       traceId: '00000000000000000000000000000001',
@@ -66,6 +88,7 @@ function createMockTraceContext() {
       traceFlags: 1,
     })),
   };
+  return mock;
 }
 
 describe('Workflow Distributed', () => {
@@ -129,10 +152,14 @@ describe('Workflow Distributed', () => {
 
       await workflow();
 
-      expect(capturedCtx).not.toBeNull();
-      expect(capturedCtx?.workflowId).toBe('wf-123');
-      expect(capturedCtx?.workflowName).toBe('TestWorkflow');
-      expect(capturedCtx?.workflowVersion).toBe('1.0.0');
+      // Widen back to the declared union: TS narrows a closure-assigned `let`
+      // to its initial `null` in the outer flow (it can't see the deferred
+      // assignment), so read through a snapshot to restore the real type.
+      const ctx = capturedCtx as DistributedWorkflowContext | null;
+      expect(ctx).not.toBeNull();
+      expect(ctx?.workflowId).toBe('wf-123');
+      expect(ctx?.workflowName).toBe('TestWorkflow');
+      expect(ctx?.workflowVersion).toBe('1.0.0');
     });
 
     it('should provide getWorkflowBaggage method', async () => {
@@ -150,11 +177,12 @@ describe('Workflow Distributed', () => {
 
       await workflow();
 
-      expect(baggage).not.toBeNull();
-      expect(baggage?.workflowId).toBe('wf-123');
-      expect(baggage?.workflowName).toBe('TestWorkflow');
-      expect(baggage?.workflowVersion).toBe('2.0.0');
-      expect(baggage?.priority).toBe('high');
+      const b = baggage as WorkflowBaggageValues | null;
+      expect(b).not.toBeNull();
+      expect(b?.workflowId).toBe('wf-123');
+      expect(b?.workflowName).toBe('TestWorkflow');
+      expect(b?.workflowVersion).toBe('2.0.0');
+      expect(b?.priority).toBe('high');
     });
 
     it('should provide getWorkflowHeaders method', async () => {
@@ -170,8 +198,9 @@ describe('Workflow Distributed', () => {
 
       await workflow();
 
-      expect(headers).not.toBeNull();
-      expect(headers?.traceparent).toBeDefined();
+      const h = headers as Record<string, string> | null;
+      expect(h).not.toBeNull();
+      expect(h?.traceparent).toBeDefined();
     });
 
     it('should support recordStepProgress', async () => {
@@ -292,10 +321,11 @@ describe('Workflow Distributed', () => {
 
       await step();
 
-      expect(capturedCtx).not.toBeNull();
-      expect(capturedCtx?.workflowId).toBe('wf-123');
-      expect(capturedCtx?.workflowName).toBe('OrderFulfillment');
-      expect(capturedCtx?.stepName).toBe('ChargePayment');
+      const ctx = capturedCtx as DistributedStepContext | null;
+      expect(ctx).not.toBeNull();
+      expect(ctx?.workflowId).toBe('wf-123');
+      expect(ctx?.workflowName).toBe('OrderFulfillment');
+      expect(ctx?.stepName).toBe('ChargePayment');
     });
 
     it('should handle missing workflow context gracefully', async () => {
@@ -312,10 +342,11 @@ describe('Workflow Distributed', () => {
 
       await step();
 
-      expect(capturedCtx).not.toBeNull();
-      expect(capturedCtx?.workflowId).toBeNull();
-      expect(capturedCtx?.workflowName).toBeNull();
-      expect(capturedCtx?.stepName).toBe('StandaloneStep');
+      const ctx = capturedCtx as DistributedStepContext | null;
+      expect(ctx).not.toBeNull();
+      expect(ctx?.workflowId).toBeNull();
+      expect(ctx?.workflowName).toBeNull();
+      expect(ctx?.stepName).toBe('StandaloneStep');
     });
 
     it('should support custom extractBaggage function', async () => {
@@ -354,7 +385,8 @@ describe('Workflow Distributed', () => {
 
       await step();
 
-      expect(capturedCtx?.workflowId).toBeNull();
+      const ctx = capturedCtx as DistributedStepContext | null;
+      expect(ctx?.workflowId).toBeNull();
     });
 
     it('should support idempotent flag', async () => {

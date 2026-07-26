@@ -26,12 +26,14 @@ describe('instrumentBindings() caching', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {
@@ -69,7 +71,7 @@ describe('instrumentBindings() caching', () => {
       API_KEY: 'secret',
     };
 
-    const first = instrumentBindings(env);
+    instrumentBindings(env);
     const second = instrumentBindings(env);
 
     // Cached result should have instrumented bindings

@@ -6,8 +6,8 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 When suggesting or reviewing **instrumentation** (traces, request context, errors, events) in this repo or in codebases that use Autotel:
 
-- **Read `AGENTS.md`** — single source of truth: core API, framework quick ref, invariants, review checklist, suggested review comments.
-- **Use `docs/AGENT-GUIDE.md`** — before/after examples, when to use trace/span/request logger/structured error, framework setup snippets, touchpoints for new integrations.
+- **Read `AGENTS.md`**: single source of truth: core API, framework quick ref, invariants, review checklist, suggested review comments.
+- **Use `docs/AGENT-GUIDE.md`**: before/after examples, when to use trace/span/request logger/structured error, framework setup snippets, touchpoints for new integrations.
 
 Together these make Autotel easy for AI agents to recommend correctly and consistently.
 
@@ -45,7 +45,7 @@ pnpm changeset          # Create a changeset
 - `packages/autotel-genai` - GenAI/LLM instrumentation: canonical `gen_ai.*` semconv, cost, metrics, events, agents (see `packages/autotel-genai/CLAUDE.md`)
 - `packages/autotel-agents` - Coding-agent observability: browser-safe domain layer that turns the OTel metrics + log events from Claude Code / opencode / Codex into a session model (adapter registry, reducers, MCP/sub-agent/skill taxonomy). Consumed by the autotel-devtools Agents tab (see `packages/autotel-agents/README.md`)
 - `packages/autotel-schema` - Telemetry surface as a typed, versioned contract: declare spans/attributes, validate live spans, diff for breaking changes (see `packages/autotel-schema/CLAUDE.md`)
-- `packages/autotel-message-contract` - Optional, standalone, test-time adjacent: brokerless message contract testing — pin serialized message shape + backward/forward version compatibility as unit tests (see `packages/autotel-message-contract/CLAUDE.md`)
+- `packages/autotel-message-contract` - Optional, standalone, test-time adjacent: brokerless message contract testing: pin serialized message shape + backward/forward version compatibility as unit tests (see `packages/autotel-message-contract/CLAUDE.md`)
 
 ## Documentation
 

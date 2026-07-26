@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { defineContract, type TelemetryContract } from './contract.js';
-import {
-  diffSnapshots,
-  formatDiff,
-  hasBreakingChanges,
-} from './diff.js';
+import { diffSnapshots, formatDiff, hasBreakingChanges } from './diff.js';
 import { highCardinalityKeys, isHighCardinalityKey } from './redaction.js';
 import {
   contractToSnapshot,
@@ -33,10 +29,14 @@ describe('snapshot round-trip', () => {
       service: 'checkout',
       spans: {
         'checkout.charge': {
-          attributes: { 'payment.provider': { type: 'string', required: true } },
+          attributes: {
+            'payment.provider': { type: 'string', required: true },
+          },
         },
       },
-      commonAttributes: { 'user.id': { type: 'string', highCardinality: true } },
+      commonAttributes: {
+        'user.id': { type: 'string', highCardinality: true },
+      },
     });
     expect(serializeSnapshot(contractToSnapshot(v1))).toBe(
       serializeSnapshot(contractToSnapshot(reordered)),
@@ -49,9 +49,9 @@ describe('snapshot round-trip', () => {
   });
 
   it('rejects an unknown snapshot spec', () => {
-    expect(() => parseSnapshot('{"spec":"nope/v9","service":"x","version":"1.0.0"}')).toThrowError(
-      /unexpected snapshot spec/,
-    );
+    expect(() =>
+      parseSnapshot('{"spec":"nope/v9","service":"x","version":"1.0.0"}'),
+    ).toThrowError(/unexpected snapshot spec/);
   });
 });
 

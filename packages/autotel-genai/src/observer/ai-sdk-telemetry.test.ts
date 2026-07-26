@@ -33,7 +33,9 @@ class AlsContextManager implements ContextManager {
     thisArg?: ThisParameterType<F>,
     ...args: A
   ): ReturnType<F> {
-    return this.als.run(context, () => fn.apply(thisArg as ThisParameterType<F>, args));
+    return this.als.run(context, () =>
+      fn.apply(thisArg as ThisParameterType<F>, args),
+    );
   }
   bind<T>(_context: Context, target: T): T {
     return target;
@@ -157,7 +159,11 @@ describe('autotelTelemetry — tool loop', () => {
     });
     t.onToolExecutionStart({
       callId: 'c2',
-      toolCall: { toolCallId: 'tc1', toolName: 'getWeather', input: { city: 'SF' } },
+      toolCall: {
+        toolCallId: 'tc1',
+        toolName: 'getWeather',
+        input: { city: 'SF' },
+      },
       recordInputs: true,
     });
     t.onToolExecutionEnd({
@@ -192,7 +198,11 @@ describe('autotelTelemetry — tool loop', () => {
 
   it('marks a tool span errored when the tool execution fails', () => {
     const t = autotelTelemetry({ tracer });
-    t.onStart({ callId: 'c3', operationId: 'ai.generateText', modelId: 'gpt-4o' });
+    t.onStart({
+      callId: 'c3',
+      operationId: 'ai.generateText',
+      modelId: 'gpt-4o',
+    });
     t.onToolExecutionStart({
       callId: 'c3',
       toolCall: { toolCallId: 'tc9', toolName: 'flaky' },
@@ -211,7 +221,11 @@ describe('autotelTelemetry — tool loop', () => {
 
   it('assigns distinct spans to anonymous tool executions', () => {
     const t = autotelTelemetry({ tracer });
-    t.onStart({ callId: 'c2a', operationId: 'ai.generateText', modelId: 'gpt-4o' });
+    t.onStart({
+      callId: 'c2a',
+      operationId: 'ai.generateText',
+      modelId: 'gpt-4o',
+    });
 
     t.onToolExecutionStart({
       callId: 'c2a',
@@ -242,8 +256,18 @@ describe('autotelTelemetry — concurrency', () => {
   it('keeps interleaved concurrent generations on separate trees', () => {
     const t = autotelTelemetry({ tracer });
 
-    t.onStart({ callId: 'A', operationId: 'ai.streamText', modelId: 'gpt-4o', functionId: 'a' });
-    t.onStart({ callId: 'B', operationId: 'ai.streamText', modelId: 'gpt-4o', functionId: 'b' });
+    t.onStart({
+      callId: 'A',
+      operationId: 'ai.streamText',
+      modelId: 'gpt-4o',
+      functionId: 'a',
+    });
+    t.onStart({
+      callId: 'B',
+      operationId: 'ai.streamText',
+      modelId: 'gpt-4o',
+      functionId: 'b',
+    });
     t.onLanguageModelCallStart({ callId: 'B', modelId: 'gpt-4o' });
     t.onLanguageModelCallStart({ callId: 'A', modelId: 'gpt-4o' });
     t.onLanguageModelCallEnd({
@@ -285,7 +309,11 @@ describe('autotelTelemetry — concurrency', () => {
 describe('autotelTelemetry — abort & embeddings', () => {
   it('force-closes an aborted run and marks the root errored', () => {
     const t = autotelTelemetry({ tracer });
-    t.onStart({ callId: 'c4', operationId: 'ai.streamText', modelId: 'gpt-4o' });
+    t.onStart({
+      callId: 'c4',
+      operationId: 'ai.streamText',
+      modelId: 'gpt-4o',
+    });
     t.onLanguageModelCallStart({ callId: 'c4', modelId: 'gpt-4o' });
     // No matching end — the stream is aborted mid-flight.
     t.onAbort({ callId: 'c4', reason: 'user cancelled' });
@@ -298,7 +326,11 @@ describe('autotelTelemetry — abort & embeddings', () => {
 
   it('emits a standalone embeddings span with token usage and cost', () => {
     const t = autotelTelemetry({ tracer });
-    t.onStart({ callId: 'e1', operationId: 'ai.embed', modelId: 'text-embedding-3-small' });
+    t.onStart({
+      callId: 'e1',
+      operationId: 'ai.embed',
+      modelId: 'text-embedding-3-small',
+    });
     t.onEmbedEnd({
       callId: 'e1',
       embedCallId: 'ec1',
@@ -320,7 +352,11 @@ describe('autotelTelemetry — abort & embeddings', () => {
 describe('autotelTelemetry — context runners', () => {
   it('nests a span created inside executeTool under the tool span', async () => {
     const t = autotelTelemetry({ tracer });
-    t.onStart({ callId: 'c5', operationId: 'ai.generateText', modelId: 'gpt-4o' });
+    t.onStart({
+      callId: 'c5',
+      operationId: 'ai.generateText',
+      modelId: 'gpt-4o',
+    });
     t.onToolExecutionStart({
       callId: 'c5',
       toolCall: { toolCallId: 'tc1', toolName: 'search' },
@@ -356,7 +392,11 @@ describe('autotelTelemetry — context runners', () => {
 
   it('nests a span created inside executeLanguageModelCall under the chat span', async () => {
     const t = autotelTelemetry({ tracer });
-    t.onStart({ callId: 'c6', operationId: 'ai.generateText', modelId: 'gpt-4o' });
+    t.onStart({
+      callId: 'c6',
+      operationId: 'ai.generateText',
+      modelId: 'gpt-4o',
+    });
     t.onLanguageModelCallStart({ callId: 'c6', modelId: 'gpt-4o' });
 
     await t.executeLanguageModelCall({
@@ -378,7 +418,11 @@ describe('autotelTelemetry — context runners', () => {
 
 describe('autotelTelemetry — content capture', () => {
   const run = (t: ReturnType<typeof autotelTelemetry>) => {
-    t.onStart({ callId: 'c7', operationId: 'ai.generateText', modelId: 'gpt-4o' });
+    t.onStart({
+      callId: 'c7',
+      operationId: 'ai.generateText',
+      modelId: 'gpt-4o',
+    });
     t.onLanguageModelCallStart({
       callId: 'c7',
       modelId: 'gpt-4o',
@@ -410,7 +454,10 @@ describe('autotelTelemetry — content capture', () => {
 
     const input = JSON.parse(String(chat.attributes[GEN_AI.INPUT_MESSAGES]));
     expect(input).toEqual([
-      { role: 'user', parts: [{ type: 'text', content: 'Capital of France?' }] },
+      {
+        role: 'user',
+        parts: [{ type: 'text', content: 'Capital of France?' }],
+      },
     ]);
 
     const system = JSON.parse(
@@ -433,7 +480,8 @@ describe('autotelTelemetry — content capture', () => {
       tracer,
       captureContent: true,
       exportContent: (event) => {
-        if (event.type === 'chat.start') return { ...event, inputMessages: '[redacted]' };
+        if (event.type === 'chat.start')
+          return { ...event, inputMessages: '[redacted]' };
         return; // drop output content entirely
       },
     });

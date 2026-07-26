@@ -15,7 +15,7 @@ let provider: BasicTracerProvider;
 let tracer: Tracer;
 let unsubscribe: () => void;
 
-const channel = tracingChannel<string, Record<string, unknown>>('ai:telemetry');
+const channel = tracingChannel<Record<string, unknown>, string>('ai:telemetry');
 
 beforeEach(() => {
   exporter = new InMemorySpanExporter();
@@ -91,7 +91,10 @@ describe('subscribeAiTelemetry', () => {
     trace(
       {
         type: 'executeTool',
-        event: { callId: 'c2', toolCall: { toolCallId: 't1', toolName: 'search' } },
+        event: {
+          callId: 'c2',
+          toolCall: { toolCallId: 't1', toolName: 'search' },
+        },
       },
       { output: { hits: 3 } },
     );
@@ -108,7 +111,11 @@ describe('subscribeAiTelemetry', () => {
     trace(
       {
         type: 'embed',
-        event: { callId: 'e1', modelId: 'text-embedding-3-small', provider: 'openai' },
+        event: {
+          callId: 'e1',
+          modelId: 'text-embedding-3-small',
+          provider: 'openai',
+        },
       },
       { usage: { tokens: 42 } },
     );
@@ -132,7 +139,9 @@ describe('subscribeAiTelemetry', () => {
     );
     const chat = one('chat gpt-4o');
     const input = JSON.parse(String(chat.attributes[GEN_AI.INPUT_MESSAGES]));
-    expect(input).toEqual([{ role: 'user', parts: [{ type: 'text', content: 'hi' }] }]);
+    expect(input).toEqual([
+      { role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+    ]);
     const output = JSON.parse(String(chat.attributes[GEN_AI.OUTPUT_MESSAGES]));
     expect(output[0].parts).toEqual([{ type: 'text', content: 'hello' }]);
   });

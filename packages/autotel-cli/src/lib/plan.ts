@@ -94,7 +94,8 @@ export function parsePlan(input: unknown): InitPlan {
     throw new AutotelError({
       type: 'validation',
       code: AutotelErrorCodes.E_INVALID_PLAN,
-      message: 'plan.packagesToInstall must be { prod: string[], dev: string[] }',
+      message:
+        'plan.packagesToInstall must be { prod: string[], dev: string[] }',
     });
   }
   return obj as unknown as InitPlan;

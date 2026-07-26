@@ -183,7 +183,8 @@
   // Navigate the open trace detail to another span in the same trace. Writing
   // the store signal re-selects the span live — TraceDetailView derives its
   // selected span from `selectedSpanIdSignal` (no tab switch, no panel resize).
-  const navigateToSpan = (spanId: string) => setSelectedTrace(trace.traceId, spanId);
+  const navigateToSpan = (spanId: string) =>
+    setSelectedTrace(trace.traceId, spanId);
 
   // Correlated logs
   const logs = $derived(logsSignal.value);
@@ -205,7 +206,10 @@
       <div class="flex items-center gap-2">
         <span class="text-fg-subtle font-medium">{attrKey}</span>
         <span
-          class={cn(BADGE, 'bg-amber-500/15 text-amber-600 border-amber-500/30')}
+          class={cn(
+            BADGE,
+            'bg-amber-500/15 text-amber-600 border-amber-500/30',
+          )}
         >
           json
         </span>
@@ -505,7 +509,8 @@
                     ? 'text-indigo-500 font-semibold'
                     : token.kind === 'string'
                       ? 'text-green-500'
-                      : ''}>{token.text}</span>{/each}</pre>
+                      : ''}>{token.text}</span
+                >{/each}</pre>
           </Copyable>
         {/if}
       </div>

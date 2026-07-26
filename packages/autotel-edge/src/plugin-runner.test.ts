@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPluginRunner, definePlugin, getEmptyPluginRunner } from './plugin-runner';
+import {
+  createPluginRunner,
+  definePlugin,
+  getEmptyPluginRunner,
+} from './plugin-runner';
 
 describe('plugin-runner', () => {
   it('de-duplicates plugins by name, last wins', async () => {

@@ -8,7 +8,11 @@ function ctxWithTracing() {
   const enterSpan = vi.fn((_name: string, cb: (s: any) => unknown) =>
     cb({ isTraced: true, setAttribute: vi.fn() }),
   );
-  return { tracing: { enterSpan }, waitUntil() {}, passThroughOnException() {} };
+  return {
+    tracing: { enterSpan },
+    waitUntil() {},
+    passThroughOnException() {},
+  };
 }
 
 describe('isNativeTracingAvailable', () => {
@@ -24,7 +28,9 @@ describe('isNativeTracingAvailable', () => {
     expect(isNativeTracingAvailable(undefined)).toBe(false);
     expect(isNativeTracingAvailable(null)).toBe(false);
     expect(isNativeTracingAvailable({ tracing: {} })).toBe(false);
-    expect(isNativeTracingAvailable({ tracing: { enterSpan: 123 } })).toBe(false);
+    expect(isNativeTracingAvailable({ tracing: { enterSpan: 123 } })).toBe(
+      false,
+    );
   });
 });
 
@@ -44,7 +50,10 @@ describe('getNativeTracerFromCtx', () => {
     });
 
     expect(result).toBe(7);
-    expect(ctx.tracing.enterSpan).toHaveBeenCalledWith('work', expect.any(Function));
+    expect(ctx.tracing.enterSpan).toHaveBeenCalledWith(
+      'work',
+      expect.any(Function),
+    );
   });
 
   it('attaches the supplied correlation id to the tracer', () => {

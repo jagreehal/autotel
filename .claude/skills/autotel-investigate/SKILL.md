@@ -8,24 +8,24 @@ description: >
 
 When the user asks about a production issue or telemetry data, drive the `autotel` CLI. Every command below emits one JSON document on stdout. Parse `result.data` on success or `result.error` on failure.
 
-## Backend selection — required for every command in this file
+## Backend selection: required for every command in this file
 
 Every command needs a backend. Pick one and reuse it:
 
-| Backend | Flags |
-|---|---|
-| Built-in OTLP collector (in-memory) | `--backend collector` |
-| Jaeger | `--backend jaeger --jaeger-base-url http://localhost:16686` |
-| Tempo | `--backend tempo --tempo-base-url http://localhost:3200` |
-| Prometheus | `--backend prometheus --prometheus-base-url http://localhost:9090` |
-| Loki | `--backend loki --loki-base-url http://localhost:3100` |
-| Tempo + Prom + Loki together | `--backend stack` + the three URL flags |
-| Auto-detect localhost | `--backend auto` |
-| Local JSON fixture | `--backend fixture --fixture-path ./telemetry.json` |
+| Backend                             | Flags                                                              |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| Built-in OTLP collector (in-memory) | `--backend collector`                                              |
+| Jaeger                              | `--backend jaeger --jaeger-base-url http://localhost:16686`        |
+| Tempo                               | `--backend tempo --tempo-base-url http://localhost:3200`           |
+| Prometheus                          | `--backend prometheus --prometheus-base-url http://localhost:9090` |
+| Loki                                | `--backend loki --loki-base-url http://localhost:3100`             |
+| Tempo + Prom + Loki together        | `--backend stack` + the three URL flags                            |
+| Auto-detect localhost               | `--backend auto`                                                   |
+| Local JSON fixture                  | `--backend fixture --fixture-path ./telemetry.json`                |
 
 Environment variables work too (`AUTOTEL_BACKEND`, `JAEGER_BASE_URL`, …). Flags win over env. If you're not sure which backend is configured, run `autotel health` first.
 
-## Decision tree — pick a command
+## Decision tree: pick a command
 
 1. **"Is anything broken?"** → `autotel diagnose errors` (recent error spans grouped by service/operation)
 2. **"What's slow?"** → `autotel diagnose anomalies` or `autotel llm slow` for LLM-heavy services
@@ -38,24 +38,28 @@ Environment variables work too (`AUTOTEL_BACKEND`, `JAEGER_BASE_URL`, …). Flag
 9. **"Are we under attack / any security signals?"** → `autotel security summary` (auth events, probes, denied responses)
 10. **"Any MCP prompt-injection / tool abuse?"** → `autotel security mcp` (injection verdicts, output-budget breaches, untrusted-content tool calls)
 
-## Reference — every command
+## Reference: every command
 
 ### Health
-- `autotel health` — backend reachable + signal coverage
-- `autotel capabilities` — which signals (traces/metrics/logs) the backend serves
+
+- `autotel health`: backend reachable + signal coverage
+- `autotel capabilities`: which signals (traces/metrics/logs) the backend serves
 
 ### Discovery
-- `autotel discover services` — services with cross-signal metadata
-- `autotel discover trace-fields [--search foo]` — span field names + example values
-- `autotel discover log-fields [--search foo]` — log field names + example values
+
+- `autotel discover services`: services with cross-signal metadata
+- `autotel discover trace-fields [--search foo]`: span field names + example values
+- `autotel discover log-fields [--search foo]`: log field names + example values
 
 ### Query (raw search)
-- `autotel query traces --service-name X --error-only --limit 20` — search traces
-- `autotel query spans --min-duration-ms 1000` — search individual spans
-- `autotel query metrics --metric-name http.server.duration` — list metric series
-- `autotel query logs --severity-text ERROR --text "timeout"` — search logs
+
+- `autotel query traces --service-name X --error-only --limit 20`: search traces
+- `autotel query spans --min-duration-ms 1000`: search individual spans
+- `autotel query metrics --metric-name http.server.duration`: list metric series
+- `autotel query logs --severity-text ERROR --text "timeout"`: search logs
 
 Common filters for `query traces` / `query spans`:
+
 - Service/op: `--service-name`, `--operation-name`
 - Time: `--lookback-minutes 60` OR `--from <iso> --to <iso>`
 - Errors: `--error-only`, `--status-code ERROR`
@@ -63,56 +67,65 @@ Common filters for `query traces` / `query spans`:
 - LLM: `--gen-ai-system openai`, `--gen-ai-request-model gpt-4`
 
 ### Trace lookup
-- `autotel trace get <traceId>` — full trace
-- `autotel trace summary <traceId>` — compact incident-friendly view
+
+- `autotel trace get <traceId>`: full trace
+- `autotel trace summary <traceId>`: compact incident-friendly view
 
 ### Topology
-- `autotel topology services` — list services
-- `autotel topology operations <serviceName>` — ops for one service
-- `autotel topology map [--lookback-minutes 60]` — service dependency graph
+
+- `autotel topology services`: list services
+- `autotel topology operations <serviceName>`: ops for one service
+- `autotel topology map [--lookback-minutes 60]`: service dependency graph
 
 ### Diagnosis
-- `autotel diagnose anomalies [--service X]` — statistical outliers
-- `autotel diagnose root-cause <traceId>` — bottleneck span
-- `autotel diagnose errors [--service X]` — error spans grouped by service/op
-- `autotel diagnose slos --service X --p99-latency-ms 500 --max-error-rate 0.01` — SLO violations
+
+- `autotel diagnose anomalies [--service X]`: statistical outliers
+- `autotel diagnose root-cause <traceId>`: bottleneck span
+- `autotel diagnose errors [--service X]`: error spans grouped by service/op
+- `autotel diagnose slos --service X --p99-latency-ms 500 --max-error-rate 0.01`: SLO violations
 
 ### Correlation
-- `autotel correlate trace <traceId>` — trace + metrics + logs in one call
-- `autotel correlate explain-slowdown --service X` — anomalies enriched with root cause + signals
+
+- `autotel correlate trace <traceId>`: trace + metrics + logs in one call
+- `autotel correlate explain-slowdown --service X`: anomalies enriched with root cause + signals
 
 ### Security
-- `autotel security summary` — posture: events by severity/category, probe signals, denied responses (401/403/429) with top clients
-- `autotel security events [--category X] [--severity Y]` — spans carrying `security.*` events
-- `autotel security mcp` — MCP protocol-boundary signals from `autotel-mcp-instrumentation`: prompt-injection verdicts (`mcp.security.injection.*`), output-budget breaches (`mcp.security.budget.exceeded`), untrusted-content tool calls (`mcp.tool.untrusted_content`). Returns `injection` (scanned/suspected/byVerdict/bySource/byTool), `budgetBreaches`, `untrustedContent`.
+
+- `autotel security summary`: posture: events by severity/category, probe signals, denied responses (401/403/429) with top clients
+- `autotel security events [--category X] [--severity Y]`: spans carrying `security.*` events
+- `autotel security mcp`: MCP protocol-boundary signals from `autotel-mcp-instrumentation`: prompt-injection verdicts (`mcp.security.injection.*`), output-budget breaches (`mcp.security.budget.exceeded`), untrusted-content tool calls (`mcp.tool.untrusted_content`). Returns `injection` (scanned/suspected/byVerdict/bySource/byTool), `budgetBreaches`, `untrustedContent`.
 
 ### LLM analytics
-- `autotel llm usage` — tokens + USD by model and service
-- `autotel llm models` — discover models in use
-- `autotel llm model-stats --model-name gpt-4` — per-model stats
-- `autotel llm expensive [--min-tokens 1000]` — top token-spend traces
-- `autotel llm slow [--min-duration-ms 5000]` — slowest LLM traces
-- `autotel llm tools` — tool/function spans grouped by tool
+
+- `autotel llm usage`: tokens + USD by model and service
+- `autotel llm models`: discover models in use
+- `autotel llm model-stats --model-name gpt-4`: per-model stats
+- `autotel llm expensive [--min-tokens 1000]`: top token-spend traces
+- `autotel llm slow [--min-duration-ms 5000]`: slowest LLM traces
+- `autotel llm tools`: tool/function spans grouped by tool
 
 ### Semantic conventions (no backend needed)
-- `autotel semconv list` — list namespaces
-- `autotel semconv get http` — groups for a namespace
-- `autotel semconv refresh` — clear cache
+
+- `autotel semconv list`: list namespaces
+- `autotel semconv get http`: groups for a namespace
+- `autotel semconv refresh`: clear cache
 
 ### Instrumentation scoring (no backend needed)
-- `autotel score < span.json` — score a span for instrumentation quality (JSON on stdin)
-- `autotel score explain` — explain the rubric
+
+- `autotel score < span.json`: score a span for instrumentation quality (JSON on stdin)
+- `autotel score explain`: explain the rubric
 
 ### Collector config + schema (no backend needed)
-- `autotel collector validate < config.json` — validate OTLP receiver config
-- `autotel collector suggest` — minimal OTLP receiver config
-- `autotel collector explain` — config shape + defaults
-- `autotel collector versions` — supported collector schema versions
-- `autotel collector components --version 0.110.0 --kind exporter` — components for a version
-- `autotel collector schema --kind exporter --name otlphttp` — JSON schema for one component
-- `autotel collector readme --kind exporter --name otlphttp` — README for one component
-- `autotel collector validate-component --kind exporter --name otlphttp < cfg.json` — validate component config
-- `autotel collector refresh` — refresh metadata cache
+
+- `autotel collector validate < config.json`: validate OTLP receiver config
+- `autotel collector suggest`: minimal OTLP receiver config
+- `autotel collector explain`: config shape + defaults
+- `autotel collector versions`: supported collector schema versions
+- `autotel collector components --version 0.110.0 --kind exporter`: components for a version
+- `autotel collector schema --kind exporter --name otlphttp`: JSON schema for one component
+- `autotel collector readme --kind exporter --name otlphttp`: README for one component
+- `autotel collector validate-component --kind exporter --name otlphttp < cfg.json`: validate component config
+- `autotel collector refresh`: refresh metadata cache
 
 ## Output contract
 
@@ -133,4 +146,4 @@ Always parse the JSON; never try to read prose from stdout.
 - Use this skill when: the user just wants an answer, you're driving a one-shot prompt, or no MCP server is configured.
 - Prefer `autotel-mcp` when: the session is an extended incident review with many follow-ups against a slow remote backend (the persistent connection wins on repeated queries).
 
-Both return the same data — pick the one with less ceremony for the situation.
+Both return the same data. Pick the one with less ceremony for the situation.

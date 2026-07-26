@@ -10,8 +10,8 @@ Playwright fixture that creates one OTel span per e2e test and propagates W3C tr
 
 Two independent features ship in this package:
 
-- **Test fixture** (`autotel-playwright`) — worker-side; spans follow each test, headers are injected per request.
-- **OTel Reporter** (`autotel-playwright/reporter`) — runner-side; creates spans for tests and steps from the Playwright runner process.
+- **Test fixture** (`autotel-playwright`): worker-side; spans follow each test, headers are injected per request.
+- **OTel Reporter** (`autotel-playwright/reporter`): runner-side; creates spans for tests and steps from the Playwright runner process.
 
 ## Setup
 
@@ -74,11 +74,11 @@ test('api health', async ({ requestWithTrace }) => {
 
 ### Fixtures
 
-| Fixture | Type | Description |
-|---|---|---|
-| `page` | `Page` | Standard Playwright `Page`; auto-injects trace headers for routes matching `API_BASE_URL` |
-| `requestWithTrace` | `APIRequestContext` | Wraps `request`; injects `traceparent` + `x-test-name` on all matching URLs |
-| `_otelTestSpan` | internal | Creates and manages the root test span; do not use directly |
+| Fixture            | Type                | Description                                                                               |
+| ------------------ | ------------------- | ----------------------------------------------------------------------------------------- |
+| `page`             | `Page`              | Standard Playwright `Page`; auto-injects trace headers for routes matching `API_BASE_URL` |
+| `requestWithTrace` | `APIRequestContext` | Wraps `request`; injects `traceparent` + `x-test-name` on all matching URLs               |
+| `_otelTestSpan`    | internal            | Creates and manages the root test span; do not use directly                               |
 
 ### Named steps as child spans
 
@@ -131,13 +131,13 @@ test('server function is traced', async ({ page, request }) => {
   await page.click('button#send');
 
   const spans = await spansClient.getSpans(request);
-  expect(spans.find(s => s.name === 'sendMoney.handler')).toBeDefined();
+  expect(spans.find((s) => s.name === 'sendMoney.handler')).toBeDefined();
 });
 ```
 
 ### OTel Reporter (runner-side)
 
-The reporter at `autotel-playwright/reporter` creates spans in the runner process — useful when you want test hierarchy in OTLP from outside the worker:
+The reporter at `autotel-playwright/reporter` creates spans in the runner process. Useful when you want test hierarchy in OTLP from outside the worker:
 
 ```ts
 // playwright.config.ts
@@ -149,7 +149,11 @@ This is separate from the fixture. Both can be used together: fixture spans flow
 ### Trace context helpers
 
 ```ts
-import { getTraceContext, resolveTraceUrl, isTracing } from 'autotel-playwright';
+import {
+  getTraceContext,
+  resolveTraceUrl,
+  isTracing,
+} from 'autotel-playwright';
 
 test('logs trace link', async ({ page }) => {
   if (isTracing()) {
@@ -163,15 +167,17 @@ test('logs trace link', async ({ page }) => {
 
 ### HIGH: Not calling `createGlobalSetup` (or `init()`) in globalSetup
 
-Without `init()`, no spans are exported — the fixture creates spans but they are never sent to the backend.
+Without `init()`, no spans are exported. The fixture creates spans but they are never sent to the backend.
 
 Wrong:
+
 ```ts
 // playwright.config.ts — no globalSetup
 export default defineConfig({ ... });
 ```
 
 Correct:
+
 ```ts
 // globalSetup.ts
 import { createGlobalSetup } from 'autotel-playwright';
@@ -186,12 +192,14 @@ export default defineConfig({ globalSetup: './globalSetup.ts', ... });
 The fixtures (`requestWithTrace`, trace-aware `page`) only exist on the extended `test` object.
 
 Wrong:
+
 ```ts
 import { test, expect } from '@playwright/test';
 // requestWithTrace fixture is not available
 ```
 
 Correct:
+
 ```ts
 import { test, expect } from 'autotel-playwright';
 ```
@@ -201,13 +209,14 @@ import { test, expect } from 'autotel-playwright';
 The package strips trailing slashes internally, but path-prefix matching only works if the env var is set correctly. Setting `API_BASE_URL=http://localhost:3000/api/` is fine, but setting `API_BASE_URL=http://localhost:3000` will inject trace headers on ALL requests to that origin, including unrelated paths like `/static/`.
 
 Use a path-scoped URL when you only want a subset of routes to receive headers:
+
 ```bash
 API_BASE_URL=http://localhost:3000/api
 ```
 
 ### MEDIUM: Confusing the fixture `page` with the reporter
 
-The fixture injects headers in the worker process per-test. The reporter creates spans in the runner process. They do not share span context — they produce separate traces. Use the fixture for test-to-API tracing; use the reporter for standalone test timing in OTLP.
+The fixture injects headers in the worker process per-test. The reporter creates spans in the runner process. They do not share span context. They produce separate traces. Use the fixture for test-to-API tracing; use the reporter for standalone test timing in OTLP.
 
 ### MEDIUM: Using `step()` outside a test span context
 

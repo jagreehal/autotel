@@ -60,7 +60,9 @@ test('requestWithTrace.get /users/:id', async ({ requestWithTrace }) => {
   expect(body).toMatchObject({ id: 'user-99', name: 'User user-99' });
 });
 
-test('requestWithTrace.post /users creates user', async ({ requestWithTrace }) => {
+test('requestWithTrace.post /users creates user', async ({
+  requestWithTrace,
+}) => {
   const res = await requestWithTrace.post(apiBase + '/users', {
     data: { name: 'Alice', email: 'alice@example.com' },
   });
@@ -69,7 +71,9 @@ test('requestWithTrace.post /users creates user', async ({ requestWithTrace }) =
   expect(body).toMatchObject({ id: 'new-1', name: 'Alice' });
 });
 
-test('requestWithTrace.get /error returns 500', async ({ requestWithTrace }) => {
+test('requestWithTrace.get /error returns 500', async ({
+  requestWithTrace,
+}) => {
   const res = await requestWithTrace.get(apiBase + '/error');
   expect(res.status()).toBe(500);
   const body = await res.json();

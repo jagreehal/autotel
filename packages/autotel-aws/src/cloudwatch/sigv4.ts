@@ -15,8 +15,7 @@ export interface AwsCredentialsLike {
 }
 
 export type AwsCredentialsProvider =
-  | AwsCredentialsLike
-  | (() => AwsCredentialsLike | Promise<AwsCredentialsLike>);
+  AwsCredentialsLike | (() => AwsCredentialsLike | Promise<AwsCredentialsLike>);
 
 export interface SignOtlpRequestInput {
   /** The full endpoint URL (e.g. https://xray.eu-west-1.amazonaws.com/v1/traces). */

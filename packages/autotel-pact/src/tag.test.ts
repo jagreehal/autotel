@@ -67,6 +67,9 @@ describe('tagPactInteraction', () => {
       interactionId: 'iid-123',
     });
 
-    expect(setAttribute).toHaveBeenCalledWith(PACT_ATTRS.INTERACTION_ID, 'iid-123');
+    expect(setAttribute).toHaveBeenCalledWith(
+      PACT_ATTRS.INTERACTION_ID,
+      'iid-123',
+    );
   });
 });

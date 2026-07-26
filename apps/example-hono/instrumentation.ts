@@ -10,5 +10,6 @@ import { init } from 'autotel';
 init({
   service: 'example-hono-service',
   debug: true,
-  endpoint: process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  endpoint:
+    process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
 });

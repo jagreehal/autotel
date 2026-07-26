@@ -40,7 +40,7 @@ Once the dashboard is running, use these keyboard controls:
 The example demonstrates the recommended pattern for using `autotel-terminal`:
 
 ```typescript
-import { init, trace, span } from 'autotel';
+import { init, trace, withTracing, span } from 'autotel';
 import {
   renderTerminal,
   StreamingSpanProcessor,
@@ -61,7 +61,7 @@ const terminalStream = createTerminalSpanStream(streamingProcessor);
 renderTerminal({ title: 'Example Dashboard' }, terminalStream);
 
 // 4. Your traced code will now appear in the dashboard
-const myOperation = trace((ctx) => async () => {
+const myOperation = withTracing({})((ctx) => async () => {
   ctx.setAttribute('example', 'value');
   // ... your code
 });
@@ -76,6 +76,7 @@ The example continuously generates traces for:
 3. **Payment processing** - Processes payments (randomly fails to demonstrate error tracking)
 
 The dashboard will show:
+
 - Recent spans in the left panel (color-coded by status)
 - Detailed span information in the right panel
 - Live statistics at the bottom (total spans, errors, average duration, P95)
@@ -127,6 +128,3 @@ The example sends traces to an OTLP endpoint. You can:
 
 - [autotel-terminal Documentation](../../packages/autotel-terminal/README.md)
 - [autotel Documentation](../../packages/autotel/README.md)
-
-
-

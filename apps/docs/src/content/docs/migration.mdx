@@ -107,6 +107,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 ### Step 4: Verify
 
 1. Start your app:
+
    ```bash
    npm start
    ```
@@ -147,7 +148,7 @@ async function createUser(data) {
 }
 
 // NEW: Automatic lifecycle
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 const createUser = trace(async (data) => {
   return await db.users.create(data);
 });
@@ -337,7 +338,7 @@ init({
 **Before**:
 
 ```typescript
-import { trace } from '@opentelemetry/api';
+import { trace, withTracing } from '@opentelemetry/api';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 const tracer = trace.getTracer('my-app');
@@ -375,10 +376,10 @@ const user = await createUser({ email: 'user@example.com', id: '123' });
 **After**:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 // Factory pattern (receives context parameter)
-const createUser = trace((ctx) => async (data) => {
+const createUser = withTracing({})((ctx) => async (data) => {
   // Span automatically created with function name as operation
   ctx.setAttribute('user.email', data.email);
   ctx.setAttribute('user.id', data.id);
@@ -396,14 +397,14 @@ const user = await createUser({ email: 'user@example.com', id: '123' });
 **Alternative**: Direct pattern (when you don't need context)
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 // Direct pattern (no context needed)
 const getUser = trace(async (id) => {
   return await db.users.findById(id);
 });
 
-// Autotel auto-detects the pattern and handles lifecycle
+// Autotel wraps the plain function and handles lifecycle
 const user = await getUser('123');
 ```
 
@@ -421,7 +422,7 @@ const user = await getUser('123');
 
 ```typescript
 import pino from 'pino';
-import { trace, context } from '@opentelemetry/api';
+import { trace, withTracing, context } from '@opentelemetry/api';
 
 const logger = pino();
 
@@ -446,7 +447,7 @@ async function handleRequest(req) {
 
 ```typescript
 import { createLogger } from 'autotel/logger';
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 const logger = createLogger({ name: 'my-service' });
 
@@ -572,7 +573,7 @@ function handleRequest(req) {
 **After**:
 
 ```typescript
-import { createCounter } from 'autotel/metrics';
+import { createCounter } from 'autotel';
 
 const requestCounter = createCounter('http.requests', {
   description: 'Total HTTP requests',
@@ -596,19 +597,19 @@ function handleRequest(req) {
 
 ## Feature Mapping Reference
 
-| OpenTelemetry API/SDK               | Autotel Equivalent                   | Notes                       |
-| ----------------------------------- | ------------------------------------ | --------------------------- |
-| `new NodeSDK({...})`                | `init({...})`                        | Simplified configuration    |
-| `tracer.startSpan()` + `span.end()` | `trace(fn)`                          | Automatic lifecycle         |
-| `span.setAttribute()`               | `ctx.setAttribute()`                 | Same API, different context |
-| `span.setStatus()`                  | Automatic                            | Based on exception/return   |
-| `span.recordException()`            | Automatic                            | All errors auto-recorded    |
-| `ParentBasedSampler`                | `sampler: new AdaptiveSampler()`     | Tail sampling instead       |
-| `getNodeAutoInstrumentations()`     | `integrations: true`                 | Same libraries instrumented |
-| `sdk.shutdown()`                    | `shutdown()`                         | Graceful shutdown           |
-| Manual log correlation              | `autotel/logger`                     | Built-in correlation        |
-| Manual context propagation          | Automatic                            | Works out of the box        |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`       | `endpoint`                           | Config over env vars        |
+| OpenTelemetry API/SDK               | Autotel Equivalent               | Notes                       |
+| ----------------------------------- | -------------------------------- | --------------------------- |
+| `new NodeSDK({...})`                | `init({...})`                    | Simplified configuration    |
+| `tracer.startSpan()` + `span.end()` | `trace(fn)`                      | Automatic lifecycle         |
+| `span.setAttribute()`               | `ctx.setAttribute()`             | Same API, different context |
+| `span.setStatus()`                  | Automatic                        | Based on exception/return   |
+| `span.recordException()`            | Automatic                        | All errors auto-recorded    |
+| `ParentBasedSampler`                | `sampler: new AdaptiveSampler()` | Tail sampling instead       |
+| `getNodeAutoInstrumentations()`     | `integrations: true`             | Same libraries instrumented |
+| `sdk.shutdown()`                    | `shutdown()`                     | Graceful shutdown           |
+| Manual log correlation              | `autotel/logger`                 | Built-in correlation        |
+| Manual context propagation          | Automatic                        | Works out of the box        |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`       | `endpoint`                       | Config over env vars        |
 
 ---
 
@@ -697,7 +698,7 @@ registerInstrumentations({
 **Before**:
 
 ```typescript
-import { context, trace } from '@opentelemetry/api';
+import { context, trace, withTracing } from '@opentelemetry/api';
 
 const span = tracer.startSpan('parent');
 const ctx = trace.setSpan(context.active(), span);
@@ -713,7 +714,7 @@ span.end();
 **After**:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 const parent = trace(async () => {
   // Context propagation automatic
@@ -878,7 +879,7 @@ const sdk = new opentelemetry.NodeSDK({
 sdk.start();
 
 // File: user-service.ts (25+ lines for a single function)
-import { trace } from '@opentelemetry/api';
+import { trace, withTracing } from '@opentelemetry/api';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 const tracer = trace.getTracer('user-service');
@@ -916,9 +917,9 @@ init({
 });
 
 // File: user-service.ts (7 lines)
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
-const createUser = trace((ctx) => async (data) => {
+const createUser = withTracing({})((ctx) => async (data) => {
   ctx.setAttribute('user.email', data.email);
   return await db.users.create(data);
 });

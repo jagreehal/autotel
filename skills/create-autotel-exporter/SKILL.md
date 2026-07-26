@@ -11,7 +11,7 @@ license: MIT
 
 # Create autotel exporter
 
-Most backends today accept OTLP HTTP/JSON or HTTP/protobuf — for those, no exporter is needed; just point `init({ exporter: { url, headers } })` at them. This skill is for backends that need:
+Most backends today accept OTLP HTTP/JSON or HTTP/protobuf. For those, no exporter is needed; just point `init({ exporter: { url, headers } })` at them. This skill is for backends that need:
 
 - A custom envelope wrapping OTLP spans (Sentry envelope, PostHog event shape).
 - A non-OTLP transport entirely (proprietary binary protocol, gRPC with custom auth).
@@ -25,16 +25,16 @@ feat: add {vendor} exporter
 
 ## Touchpoints checklist
 
-| # | File | Action |
-| --- | --- | --- |
-| 1 | `packages/autotel-{vendor}/src/index.ts` | `{Vendor}SpanExporter` class |
-| 2 | `packages/autotel-{vendor}/src/encode.ts` | Span → vendor envelope conversion |
-| 3 | `packages/autotel-{vendor}/src/index.test.ts` | Unit tests (encoding, retry, error) |
-| 4 | `packages/autotel-{vendor}/package.json` | Name, exports, peerDeps, `files` includes `skills` |
-| 5 | `packages/autotel-{vendor}/tsdown.config.ts` | Build entry |
-| 6 | `packages/autotel-{vendor}/skills/autotel-{vendor}/SKILL.md` | Per-vendor skill (auto-discovered via the `files` `skills` entry) |
-| 7 | `packages/autotel-backends/skills/autotel-backends/SKILL.md` | Add vendor row |
-| 8 | `bundle-size-baseline.json` | Update on green CI |
+| #   | File                                                         | Action                                                            |
+| --- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| 1   | `packages/autotel-{vendor}/src/index.ts`                     | `{Vendor}SpanExporter` class                                      |
+| 2   | `packages/autotel-{vendor}/src/encode.ts`                    | Span → vendor envelope conversion                                 |
+| 3   | `packages/autotel-{vendor}/src/index.test.ts`                | Unit tests (encoding, retry, error)                               |
+| 4   | `packages/autotel-{vendor}/package.json`                     | Name, exports, peerDeps, `files` includes `skills`                |
+| 5   | `packages/autotel-{vendor}/tsdown.config.ts`                 | Build entry                                                       |
+| 6   | `packages/autotel-{vendor}/skills/autotel-{vendor}/SKILL.md` | Per-vendor skill (auto-discovered via the `files` `skills` entry) |
+| 7   | `packages/autotel-backends/skills/autotel-backends/SKILL.md` | Add vendor row                                                    |
+| 8   | `bundle-size-baseline.json`                                  | Update on green CI                                                |
 
 ## Cross-runtime constraint
 
@@ -160,19 +160,22 @@ The `BatchSpanProcessor` already retries on `ExportResultCode.FAILED`. Don't dou
 If you do need vendor-aware retry:
 
 ```typescript
-async function withRetry<T>(fn: () => Promise<T>, opts: { tries: number; backoffMs: number }): Promise<T> {
-  let last: unknown
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { tries: number; backoffMs: number },
+): Promise<T> {
+  let last: unknown;
   for (let i = 0; i < opts.tries; i++) {
     try {
-      return await fn()
+      return await fn();
     } catch (err) {
-      last = err
-      const status = (err as { status?: number }).status
-      if (status && status < 500 && status !== 429) throw err  // 4xx — don't retry
-      await new Promise((r) => setTimeout(r, opts.backoffMs * 2 ** i))
+      last = err;
+      const status = (err as { status?: number }).status;
+      if (status && status < 500 && status !== 429) throw err; // 4xx — don't retry
+      await new Promise((r) => setTimeout(r, opts.backoffMs * 2 ** i));
     }
   }
-  throw last
+  throw last;
 }
 ```
 
@@ -229,12 +232,12 @@ init({
 
 ## Anti-patterns
 
-| Anti-pattern | Fix |
-| --- | --- |
-| Importing `node:http` for transport | Use `globalThis.fetch` |
-| Buffering inside the exporter | Let `BatchSpanProcessor` buffer |
-| Throwing instead of `resultCallback({ code: FAILED, error })` | The SDK uses callbacks, not promises |
-| Hard-coding endpoint with no env-var support | Read from constructor `config` |
-| No timeout | Always `AbortController` with a timeout |
-| Logging on every batch | Silent on success; log only when `console.error`-worthy |
-| Double-retry | The SDK retries on FAILED; don't compound it |
+| Anti-pattern                                                  | Fix                                                     |
+| ------------------------------------------------------------- | ------------------------------------------------------- |
+| Importing `node:http` for transport                           | Use `globalThis.fetch`                                  |
+| Buffering inside the exporter                                 | Let `BatchSpanProcessor` buffer                         |
+| Throwing instead of `resultCallback({ code: FAILED, error })` | The SDK uses callbacks, not promises                    |
+| Hard-coding endpoint with no env-var support                  | Read from constructor `config`                          |
+| No timeout                                                    | Always `AbortController` with a timeout                 |
+| Logging on every batch                                        | Silent on success; log only when `console.error`-worthy |
+| Double-retry                                                  | The SDK retries on FAILED; don't compound it            |

@@ -216,6 +216,10 @@ export interface AutotelEventContext {
 export function hashValue(value: string): string {
   let hash = 0;
   for (let i = 0; i < value.length; i++) {
+    // Keep charCodeAt. codePointAt returns a different number for astral
+    // characters, which would change the hash of any value containing one and
+    // break correlation with hashes already emitted.
+    // eslint-disable-next-line unicorn/prefer-code-point
     const char = value.charCodeAt(i);
     hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32-bit integer
@@ -230,6 +234,6 @@ export function hashValue(value: string): string {
  * Sorts the array first to ensure deterministic output regardless of order.
  */
 export function hashLinkedTraceIds(traceIds: string[]): string {
-  const sorted = [...traceIds].sort();
+  const sorted = traceIds.toSorted();
   return hashValue(sorted.join(','));
 }

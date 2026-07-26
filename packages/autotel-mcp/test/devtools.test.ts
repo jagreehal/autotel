@@ -23,21 +23,22 @@ interface DevtoolsTraceInput {
 }
 
 function trace(input: DevtoolsTraceInput) {
+  const spans = input.spans.map((s) => ({
+    kind: 'INTERNAL' as const,
+    endTime: s.startTime + s.duration,
+    attributes: {},
+    status: { code: 'UNSET' as const },
+    ...s,
+  }));
   return {
     traceId: input.traceId,
     service: input.service,
-    rootSpan: input.spans[0],
+    rootSpan: spans[0],
     startTime: Math.min(...input.spans.map((s) => s.startTime)),
     endTime: Math.max(...input.spans.map((s) => s.endTime ?? s.startTime)),
     duration: 0,
     status: 'OK' as const,
-    spans: input.spans.map((s) => ({
-      kind: 'INTERNAL' as const,
-      endTime: s.startTime + s.duration,
-      attributes: {},
-      status: { code: 'UNSET' as const },
-      ...s,
-    })),
+    spans,
   };
 }
 
@@ -45,7 +46,7 @@ function trace(input: DevtoolsTraceInput) {
 function stubFetch(traces: ReturnType<typeof trace>[]): string[] {
   const requests: string[] = [];
   vi.spyOn(globalThis, 'fetch').mockImplementation((async (
-    input: RequestInfo | URL,
+    input: Parameters<typeof fetch>[0],
   ) => {
     const url = typeof input === 'string' ? input : input.toString();
     requests.push(url);

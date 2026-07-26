@@ -9,7 +9,9 @@
  * Keep deliberately small — this is a safety net, not a billing source.
  */
 
-const PRICES: ReadonlyArray<readonly [match: string, input: number, output: number]> = [
+const PRICES: ReadonlyArray<
+  readonly [match: string, input: number, output: number]
+> = [
   ['claude-opus-4', 15, 75],
   ['claude-sonnet-4', 3, 15],
   ['claude-haiku-4', 0.8, 4],

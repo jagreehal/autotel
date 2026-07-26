@@ -1,6 +1,6 @@
 /**
  * Durable Objects instrumentation for Cloudflare Workers
- * 
+ *
  * Note: This file uses Cloudflare Workers types (DurableObjectId, DurableObjectState, etc.)
  * which are globally available via @cloudflare/workers-types when listed in tsconfig.json.
  * These types are devDependencies only - they're not runtime dependencies.
@@ -220,7 +220,7 @@ function instrumentDOInstance(
  * @param config - Configuration or configuration function
  * @returns Instrumented Durable Object class
  */
-export function instrumentDO<C extends new (state: DurableObjectState, env: any) => any>(
+export function instrumentDO<C extends new (...args: any[]) => any>(
   doClass: C,
   config: ConfigurationOption,
 ): C {

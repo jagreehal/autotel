@@ -1,13 +1,7 @@
 import type { SpanFilterState } from './filters';
 
 export type ViewMode =
-  | 'trace'
-  | 'span'
-  | 'log'
-  | 'service-summary'
-  | 'errors'
-  | 'topology'
-  | 'ai';
+  'trace' | 'span' | 'log' | 'service-summary' | 'errors' | 'topology' | 'ai';
 
 export interface DashboardState {
   viewMode: ViewMode;

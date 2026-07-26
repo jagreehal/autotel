@@ -15,7 +15,13 @@ import { googleCloud } from './backends/google-cloud';
 import { honeycomb } from './backends/honeycomb';
 import { otlpHttp, otlpGrpc, local } from './backends/otlp';
 import { posthog } from './subscribers/posthog';
-import { mixpanel, amplitude, segment, slack, webhook } from './subscribers/mixpanel';
+import {
+  mixpanel,
+  amplitude,
+  segment,
+  slack,
+  webhook,
+} from './subscribers/mixpanel';
 import { mongoose, drizzle } from './plugins/mongoose';
 import { sentry } from './plugins/sentry';
 import { hono } from './plugins/hono';

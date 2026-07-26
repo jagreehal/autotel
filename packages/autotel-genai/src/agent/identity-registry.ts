@@ -85,7 +85,8 @@ export function createAgentIdentityRegistry(
         );
       }
 
-      const rotatedAt = toIsoString(input.rotatedAt) ?? new Date().toISOString();
+      const rotatedAt =
+        toIsoString(input.rotatedAt) ?? new Date().toISOString();
       const record: AgentIdentityRecord = {
         ...existing,
         scopes: input.scopes ?? existing.scopes,
@@ -111,7 +112,8 @@ export function createAgentIdentityRegistry(
         );
       }
 
-      const revokedAt = toIsoString(input.revokedAt) ?? new Date().toISOString();
+      const revokedAt =
+        toIsoString(input.revokedAt) ?? new Date().toISOString();
       const record: AgentIdentityRecord = {
         ...existing,
         status: 'revoked',

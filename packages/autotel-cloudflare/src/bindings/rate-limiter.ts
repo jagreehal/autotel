@@ -2,11 +2,7 @@
  * Rate Limiter binding instrumentation
  */
 
-import {
-  trace,
-  SpanKind,
-  SpanStatusCode,
-} from '@opentelemetry/api';
+import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap, setAttr } from './common';
 
@@ -17,7 +13,10 @@ interface RateLimiterLike {
 /**
  * Instrument Rate Limiter binding (manual only — not auto-detected)
  */
-export function instrumentRateLimiter<T extends RateLimiterLike>(limiter: T, bindingName?: string): T {
+export function instrumentRateLimiter<T extends RateLimiterLike>(
+  limiter: T,
+  bindingName?: string,
+): T {
   const name = bindingName || 'rate-limiter';
 
   const handler: ProxyHandler<T> = {
@@ -49,7 +48,8 @@ export function instrumentRateLimiter<T extends RateLimiterLike>(limiter: T, bin
                   span.recordException(error as Error);
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                   throw error;
                 } finally {

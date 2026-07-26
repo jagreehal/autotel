@@ -19,24 +19,24 @@ redaction-safe, sampling-exempt security telemetry plus alertable metrics.
 
 ## The hooks
 
-| Explicit (you call at decision points) | Passive (wire once) |
-|---|---|
-| `securityEvent()` / `withSecurity()` | `createSecuritySignalProcessor()` |
-| `hashIdentifier()` | `startSecurityHeartbeat()` |
-| `defineValidator()` + `onValidationMismatch()` | `init({ attributeRedactor })` |
-| `withAudit()` (compliance trail) | `SecuritySubscriber` (routing) |
+| Explicit (you call at decision points)         | Passive (wire once)               |
+| ---------------------------------------------- | --------------------------------- |
+| `securityEvent()` / `withSecurity()`           | `createSecuritySignalProcessor()` |
+| `hashIdentifier()`                             | `startSecurityHeartbeat()`        |
+| `defineValidator()` + `onValidationMismatch()` | `init({ attributeRedactor })`     |
+| `withAudit()` (compliance trail)               | `SecuritySubscriber` (routing)    |
 
 ## The pieces
 
-| Piece | Package | What it gives you |
-|---|---|---|
-| `securityEvent()` / `withSecurity()` | `autotel-audit` | Typed events, stable `security.*` schema, force-keep through tail sampling, credential-key guard, auto counter |
-| `createSecuritySignalProcessor()` | `autotel-audit` | Zero-code signals from HTTP/LLM spans: probe detection, denied-response metrics, auth-failure bursts, token anomalies |
-| `startSecurityHeartbeat()` | `autotel-audit` | `autotel.security.heartbeat` counter; alert on the *absence* of telemetry |
-| `hashIdentifier()` | `autotel-audit` | Correlate emails/IPs across events without logging raw PII |
-| `SecuritySubscriber` | `autotel-subscribers/security` | Forward `security.*` events to webhook/SIEM/pager, severity-gated |
-| `autotel security summary` / `events` | `autotel-cli` | Incident triage from the terminal, JSON envelope output |
-| Security lens | `autotel-devtools` | Live **Security** tab surfacing `security.*` spans during local development |
+| Piece                                 | Package                        | What it gives you                                                                                                     |
+| ------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `securityEvent()` / `withSecurity()`  | `autotel-audit`                | Typed events, stable `security.*` schema, force-keep through tail sampling, credential-key guard, auto counter        |
+| `createSecuritySignalProcessor()`     | `autotel-audit`                | Zero-code signals from HTTP/LLM spans: probe detection, denied-response metrics, auth-failure bursts, token anomalies |
+| `startSecurityHeartbeat()`            | `autotel-audit`                | `autotel.security.heartbeat` counter; alert on the _absence_ of telemetry                                             |
+| `hashIdentifier()`                    | `autotel-audit`                | Correlate emails/IPs across events without logging raw PII                                                            |
+| `SecuritySubscriber`                  | `autotel-subscribers/security` | Forward `security.*` events to webhook/SIEM/pager, severity-gated                                                     |
+| `autotel security summary` / `events` | `autotel-cli`                  | Incident triage from the terminal, JSON envelope output                                                               |
+| Security lens                         | `autotel-devtools`             | Live **Security** tab surfacing `security.*` spans during local development                                           |
 
 ## Setup (one-time)
 
@@ -72,13 +72,13 @@ securityEvent({
 
 ## The metric schema
 
-| Metric | Attributes | Source |
-|---|---|---|
-| `autotel.security.events` | `event`, `category`, `outcome`, `severity` | every `securityEvent()` |
-| `autotel.security.http.denied` | `status` | 401/403/429 responses |
-| `autotel.security.http.suspicious` | `pattern` | probe-path detection |
-| `autotel.security.anomaly` | `signal`, (`status`) | bursts, LLM consumption |
-| `autotel.security.heartbeat` | custom | liveness |
+| Metric                             | Attributes                                 | Source                  |
+| ---------------------------------- | ------------------------------------------ | ----------------------- |
+| `autotel.security.events`          | `event`, `category`, `outcome`, `severity` | every `securityEvent()` |
+| `autotel.security.http.denied`     | `status`                                   | 401/403/429 responses   |
+| `autotel.security.http.suspicious` | `pattern`                                  | probe-path detection    |
+| `autotel.security.anomaly`         | `signal`, (`status`)                       | bursts, LLM consumption |
+| `autotel.security.heartbeat`       | custom                                     | liveness                |
 
 Span attributes: `security.event`, `security.category`, `security.outcome`,
 `security.severity`, `security.actor_id`, `security.tenant_id`,
@@ -104,7 +104,7 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: "Failed logins above baseline"
+          summary: 'Failed logins above baseline'
 
       # 2. Any critical security event
       - alert: CriticalSecurityEvent
@@ -150,7 +150,7 @@ groups:
         for: 5m
         labels: { severity: critical }
         annotations:
-          summary: "No security telemetry from api; pipeline dead or service compromised"
+          summary: 'No security telemetry from api; pipeline dead or service compromised'
 ```
 
 ### Datadog (monitor queries)
@@ -200,10 +200,10 @@ For teams without SIEM plumbing, `SecuritySubscriber` forwards events
 directly:
 
 ```typescript
-import { Events } from 'autotel/events';
+import { Event } from 'autotel/event';
 import { SecuritySubscriber } from 'autotel-subscribers/security';
 
-const events = new Events('api', {
+const events = new Event('api', {
   subscribers: [
     new SecuritySubscriber({
       webhookUrl: process.env.SECURITY_WEBHOOK_URL!,
@@ -218,15 +218,15 @@ const events = new Events('api', {
 You instrument the rows below at the relevant decision point. Autotel
 standardizes the telemetry; your backend runs detection.
 
-| OWASP 2025 | What Autotel makes visible |
-|---|---|
-| A01 Broken Access Control | `access.denied`, `access.tenant.violation` events; denied-response metrics |
-| A03 Software Supply Chain | `dependency.scan.failed`, `config.changed` events (emit from CI/deploy hooks) |
-| A05 Injection | `validation.failed` events; SQLi/XSS probe signals from the processor |
-| A07 Auth Failures | `auth.*` events; auth-failure burst anomalies |
+| OWASP 2025                      | What Autotel makes visible                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------- |
+| A01 Broken Access Control       | `access.denied`, `access.tenant.violation` events; denied-response metrics                |
+| A03 Software Supply Chain       | `dependency.scan.failed`, `config.changed` events (emit from CI/deploy hooks)             |
+| A05 Injection                   | `validation.failed` events; SQLi/XSS probe signals from the processor                     |
+| A07 Auth Failures               | `auth.*` events; auth-failure burst anomalies                                             |
 | A09 Logging & Alerting Failures | the whole feature set, plus the heartbeat for the meta-failure (logging silently stopped) |
-| LLM01 Prompt Injection | `llm.prompt_injection.detected` events |
-| LLM10 Unbounded Consumption | `llm_excessive_tokens` / `llm_token_budget_exceeded` signals |
+| LLM01 Prompt Injection          | `llm.prompt_injection.detected` events                                                    |
+| LLM10 Unbounded Consumption     | `llm_excessive_tokens` / `llm_token_budget_exceeded` signals                              |
 
 ## What NOT to log
 

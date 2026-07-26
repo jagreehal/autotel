@@ -14,7 +14,7 @@
  *   - Select a trace → see its span tree → see logs attached to spans
  */
 
-import { trace, span, shutdown, flush } from 'autotel';
+import { trace, span, shutdown, flush, getActiveTraceContext } from 'autotel';
 import pino from 'pino';
 
 const logger = pino({
@@ -25,17 +25,19 @@ const logger = pino({
 // --- Simulated service functions ---
 
 async function fetchUserFromDb(userId: string) {
-  return trace('db.users.find', async (ctx) => {
+  return trace('db.users.find', async () => {
+    const ctx = getActiveTraceContext()!;
     ctx.setAttribute('user.id', userId);
     logger.info({ userId }, 'querying user from database');
     await delay(30 + jitter(20));
     logger.debug({ userId, cached: false }, 'user record loaded');
     return { id: userId, name: 'Alice', plan: 'pro' };
-  });
+  })();
 }
 
 async function checkInventory(items: string[]) {
-  return trace('inventory.check', async (ctx) => {
+  return trace('inventory.check', async () => {
+    const ctx = getActiveTraceContext()!;
     ctx.setAttribute('inventory.item_count', items.length);
     logger.info({ items }, 'checking inventory availability');
     await delay(50 + jitter(30));
@@ -46,11 +48,12 @@ async function checkInventory(items: string[]) {
 
     logger.debug({ items, allAvailable: true }, 'inventory check complete');
     return { available: true, items };
-  });
+  })();
 }
 
 async function chargePayment(amount: number) {
-  return trace('payment.charge', async (ctx) => {
+  return trace('payment.charge', async () => {
+    const ctx = getActiveTraceContext()!;
     ctx.setAttribute('payment.amount', amount);
     ctx.setAttribute('payment.currency', 'USD');
 
@@ -68,23 +71,28 @@ async function chargePayment(amount: number) {
     ctx.setAttribute('payment.transaction_id', txId);
     logger.info({ txId, amount }, 'payment charged successfully');
     return { transactionId: txId, amount };
-  });
+  })();
 }
 
 async function sendConfirmationEmail(orderId: string) {
-  return trace('email.send', async (ctx) => {
+  return trace('email.send', async () => {
+    const ctx = getActiveTraceContext()!;
     ctx.setAttribute('email.template', 'order-confirmation');
     ctx.setAttribute('order.id', orderId);
-    logger.info({ template: 'order-confirmation', orderId }, 'sending confirmation email');
+    logger.info(
+      { template: 'order-confirmation', orderId },
+      'sending confirmation email',
+    );
     await delay(40 + jitter(20));
     logger.debug('email queued for delivery');
-  });
+  })();
 }
 
 // --- Top-level order flow: creates a rich trace with nested spans ---
 
 async function processOrder() {
-  return trace('order.process', async (ctx) => {
+  return trace('order.process', async () => {
+    const ctx = getActiveTraceContext()!;
     const orderId = `ord-${Date.now()}`;
     ctx.setAttribute('order.id', orderId);
     logger.info({ orderId }, 'starting order processing');
@@ -118,24 +126,30 @@ async function processOrder() {
     ctx.setStatus({ code: 1 });
     logger.info({ orderId, txId: payment.transactionId }, 'order completed');
     return { orderId, transactionId: payment.transactionId };
-  });
+  })();
 }
 
 // --- Health check trace (short, simple) ---
 
 async function healthCheck() {
-  return trace('health.check', async (ctx) => {
+  return trace('health.check', async () => {
+    const ctx = getActiveTraceContext()!;
     logger.debug('running health check');
     ctx.setAttribute('health.status', 'ok');
     await delay(5);
-    logger.info({ status: 'ok', uptime: process.uptime() }, 'health check passed');
-  });
+    logger.info(
+      { status: 'ok', uptime: process.uptime() },
+      'health check passed',
+    );
+  })();
 }
 
 // --- Main ---
 
 async function main() {
-  console.log('\n🔭 otel-tui demo — generating traces with correlated Pino logs\n');
+  console.log(
+    '\n🔭 otel-tui demo — generating traces with correlated Pino logs\n',
+  );
 
   for (let i = 0; i < 3; i++) {
     try {
@@ -152,7 +166,9 @@ async function main() {
   console.log('\n📤 Flushing telemetry...');
   await flush();
   await shutdown();
-  console.log('✅ Done — check otel-tui for traces, spans, and correlated logs\n');
+  console.log(
+    '✅ Done — check otel-tui for traces, spans, and correlated logs\n',
+  );
   process.exit(0);
 }
 

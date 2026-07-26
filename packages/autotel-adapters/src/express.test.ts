@@ -80,6 +80,8 @@ describe('express adapter', () => {
     const handler = withAutotel(() => {
       throw new Error('no-next');
     });
-    await expect(handler(req(), { statusCode: 500 })).rejects.toThrow('no-next');
+    await expect(handler(req(), { statusCode: 500 })).rejects.toThrow(
+      'no-next',
+    );
   });
 });

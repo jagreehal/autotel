@@ -4,7 +4,7 @@ import type { NodeSDK } from '@opentelemetry/sdk-node';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { mock, mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
-import { AlwaysSampler, NeverSampler } from './sampling';
+import { NeverSampler } from './sampling';
 
 type SdkRecord = {
   options: Record<string, unknown>;
@@ -109,6 +109,9 @@ async function loadInitWithMocks() {
     BatchLogRecordProcessor: MockBatchLogRecordProcessor,
   }));
 
+  // vi.doMock is not hoisted, so ./init must be imported after the mocks
+  // above are registered; a static import would bind the unmocked module.
+  // eslint-disable-next-line no-restricted-syntax
   const mod = await import('./init');
 
   return {
@@ -184,7 +187,7 @@ describe('init() customization', () => {
           }),
         } as any;
       }
-      return undefined;
+      return;
     });
 
     init({
@@ -205,7 +208,7 @@ describe('init() customization', () => {
     const { init, setOptionalRequireForTesting, traceExporterOptions } =
       await loadInitWithMocks();
 
-    setOptionalRequireForTesting(() => undefined);
+    setOptionalRequireForTesting(() => {});
 
     init({
       service: 'embedded-devtools-fallback-app',
@@ -257,10 +260,32 @@ describe('init() customization', () => {
     }
 
     const config = getConfig();
-    expect(config.service).toBe('resource-app');
-    expect(config.resourceAttributes).toMatchObject({
+    expect(config).not.toBeNull();
+    expect(config!.service).toBe('resource-app');
+    expect(config!.resourceAttributes).toMatchObject({
       'cloud.region': 'eu-central-1',
     });
+  });
+
+  it('passes the resolved service name to NodeSDK', async () => {
+    const previousServiceName = process.env.OTEL_SERVICE_NAME;
+    process.env.OTEL_SERVICE_NAME = 'service-from-environment';
+
+    try {
+      const { init, sdkInstances } = await loadInitWithMocks();
+
+      init({ service: 'service-from-code' });
+
+      expect(sdkInstances.at(-1)?.options.serviceName).toBe(
+        'service-from-code',
+      );
+    } finally {
+      if (previousServiceName === undefined) {
+        delete process.env.OTEL_SERVICE_NAME;
+      } else {
+        process.env.OTEL_SERVICE_NAME = previousServiceName;
+      }
+    }
   });
 
   it('creates a default OTLP metric reader when metrics enabled', async () => {

@@ -132,6 +132,6 @@ Switching persona updates W3C baggage fields such as `tenant.id`, `shop.persona`
 
 - The browser exports telemetry through the same-origin `/v1/traces` proxy exposed by `shop-api`. This keeps the browser setup simple and preserves browser-root traces in the dashboard.
 - Server-to-server hops use `injectTraceContext()` from `autotel/http` when calling `shop-auth` and `shop-worker`. This injects the W3C `traceparent` (and baggage) into the outbound `fetch`, so downstream services continue the same trace instead of starting new roots. Without it, the auth and worker calls would appear as disconnected traces and the Service Map would not link the services.
-- Every traced business function passes an explicit span name to `trace()` (for example `trace('createOrder', (ctx) => ...)`). Explicit names keep the waterfall readable and survive bundler minification, rather than relying on call-stack name inference.
+- Every traced business function passes an explicit span name to `trace()` (for example `trace('createOrder', async (order) => ...)`). Explicit names keep the waterfall readable and survive bundler minification, rather than relying on call-stack name inference. Use `getActiveTraceContext()` inside the function when span access is needed.
 - Static assets and the trace proxy endpoint are excluded from API telemetry so the dashboard stays focused on the showcase flows.
 - The example uses direct package builds from the monorepo, so it is intended to be run from this repository rather than copied as a standalone app.

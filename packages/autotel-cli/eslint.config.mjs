@@ -79,6 +79,7 @@ export default defineConfig(
       'unicorn/no-null': 'off',
       'unicorn/prefer-top-level-await': 'off',
       'unicorn/no-nested-ternary': 'off',
+      'unicorn/number-literal-case': 'off', // Conflicts with Prettier (Prettier uses lowercase)
       'unicorn/import-style': 'off',
       'unicorn/text-encoding-identifier-case': 'off',
       '@typescript-eslint/no-explicit-any': 'off',

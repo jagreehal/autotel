@@ -82,8 +82,7 @@ export function usePanelResize(
     }
   };
 
-  const onDblClick = () =>
-    resetSize(isVertical() ? 'vertical' : 'horizontal');
+  const onDblClick = () => resetSize(isVertical() ? 'vertical' : 'horizontal');
 
   return {
     get resizing() {

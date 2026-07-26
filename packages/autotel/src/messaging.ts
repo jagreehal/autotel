@@ -42,13 +42,9 @@
  */
 
 import { SpanKind, context, propagation } from '@opentelemetry/api';
-import type {
-  Attributes,
-  AttributeValue,
-  Link,
-  SpanContext,
-} from '@opentelemetry/api';
-import { trace } from './functional';
+import type { Attributes, Link, SpanContext } from '@opentelemetry/api';
+import { withTracing } from './functional';
+import { assertTraceFactory } from './trace-factory-validation';
 import type { TraceContext } from './trace-context';
 import { emitCorrelatedEvent } from './correlated-events';
 import { createLinkFromHeaders, extractLinksFromBatch } from './sampling';
@@ -133,10 +129,7 @@ export interface ProducerConfig {
    * })
    * ```
    */
-  customAttributes?: (
-    ctx: ProducerContext,
-    args: unknown[],
-  ) => Record<string, AttributeValue>;
+  customAttributes?: (ctx: ProducerContext, args: unknown[]) => Attributes;
 
   /**
    * Hook for custom header injection (beyond W3C traceparent)
@@ -269,10 +262,7 @@ export interface ConsumerConfig {
    * })
    * ```
    */
-  customAttributes?: (
-    ctx: ConsumerContext,
-    msg: unknown,
-  ) => Record<string, AttributeValue>;
+  customAttributes?: (ctx: ConsumerContext, msg: unknown) => Attributes;
 
   /**
    * Hook for custom context extraction (beyond W3C traceparent)
@@ -947,53 +937,69 @@ export interface ConsumerContext extends TraceContext {
  * });
  * ```
  */
-export function traceProducer<TArgs extends unknown[], TReturn>(
-  config: ProducerConfig,
-) {
-  const spanName = `${config.system}.publish ${config.destination}`;
+export function traceProducer(config: ProducerConfig) {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('traceProducer: config must be an object');
+  }
+  if (typeof config.system !== 'string' || config.system.trim() === '') {
+    throw new TypeError(
+      'traceProducer: config.system must be a non-empty string',
+    );
+  }
+  if (
+    typeof config.destination !== 'string' ||
+    config.destination.trim() === ''
+  ) {
+    throw new TypeError(
+      'traceProducer: config.destination must be a non-empty string',
+    );
+  }
+  const spanName = `publish ${config.destination}`;
 
-  return (
+  return <TArgs extends unknown[], TReturn>(
     fnFactory: (ctx: ProducerContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>(
-      { name: spanName, spanKind: SpanKind.PRODUCER },
-      (baseCtx) => {
-        // Extend context with producer-specific methods
-        const ctx = extendContextForProducer(baseCtx, config);
+    assertTraceFactory('traceProducer', fnFactory);
+    return withTracing<TArgs, TReturn>({
+      name: spanName,
+      spanKind: SpanKind.PRODUCER,
+    })((baseCtx) => {
+      // Extend context with producer-specific methods
+      const ctx = extendContextForProducer(baseCtx, config);
 
-        // Set semantic convention attributes
-        setProducerAttributes(ctx, config);
+      // Set semantic convention attributes
+      setProducerAttributes(ctx, config);
 
-        // Call beforeSend callback if provided
-        return (...args: TArgs) => {
-          // Extract dynamic attributes from args
-          setDynamicProducerAttributes(ctx, config, args);
+      // Call beforeSend callback if provided
+      return (...args: TArgs) => {
+        // Extract dynamic attributes from args
+        setDynamicProducerAttributes(ctx, config, args);
 
-          // Apply custom attributes hook if provided
-          if (config.customAttributes) {
-            const customAttrs = config.customAttributes(ctx, args);
-            for (const [key, value] of Object.entries(customAttrs)) {
-              if (value !== undefined && value !== null) {
-                ctx.setAttribute(key, value as string | number | boolean);
-              }
+        // Apply custom attributes hook if provided
+        if (config.customAttributes) {
+          const customAttrs = config.customAttributes(ctx, args);
+          for (const [key, value] of Object.entries(customAttrs)) {
+            if (value !== undefined && value !== null) {
+              ctx.setAttribute(key, value);
             }
           }
+        }
 
-          if (config.beforeSend) {
-            config.beforeSend(ctx, args);
+        if (config.beforeSend) {
+          config.beforeSend(ctx, args);
+        }
+
+        // Execute user's function
+        const userFn = fnFactory(ctx);
+        assertTraceFactory('traceProducer', userFn, 'result');
+        return Promise.resolve(userFn(...args)).catch((error) => {
+          if (config.onError) {
+            config.onError(error as Error, ctx);
           }
-
-          // Execute user's function
-          const userFn = fnFactory(ctx);
-          return userFn(...args).catch((error) => {
-            if (config.onError) {
-              config.onError(error as Error, ctx);
-            }
-            throw error;
-          });
-        };
-      },
-    );
+          throw error;
+        });
+      };
+    }) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 
@@ -1069,105 +1075,121 @@ export function traceProducer<TArgs extends unknown[], TReturn>(
  * });
  * ```
  */
-export function traceConsumer<TArgs extends unknown[], TReturn>(
-  config: ConsumerConfig,
-) {
+export function traceConsumer(config: ConsumerConfig) {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('traceConsumer: config must be an object');
+  }
+  if (typeof config.system !== 'string' || config.system.trim() === '') {
+    throw new TypeError(
+      'traceConsumer: config.system must be a non-empty string',
+    );
+  }
+  if (
+    typeof config.destination !== 'string' ||
+    config.destination.trim() === ''
+  ) {
+    throw new TypeError(
+      'traceConsumer: config.destination must be a non-empty string',
+    );
+  }
   const operation = config.batchMode ? 'receive' : 'process';
-  const spanName = `${config.system}.${operation} ${config.destination}`;
+  const spanName = `${operation} ${config.destination}`;
 
-  return (
+  return <TArgs extends unknown[], TReturn>(
     fnFactory: (ctx: ConsumerContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>(
-      { name: spanName, spanKind: SpanKind.CONSUMER },
-      (baseCtx) => {
-        // Create mutable storage for producer links (populated during extractAndAddLinks)
-        const linkStorage: ProducerLinkStorage = { links: [] };
+    assertTraceFactory('traceConsumer', fnFactory);
+    return withTracing<TArgs, TReturn>({
+      name: spanName,
+      spanKind: SpanKind.CONSUMER,
+    })((baseCtx) => {
+      // Create mutable storage for producer links (populated during extractAndAddLinks)
+      const linkStorage: ProducerLinkStorage = { links: [] };
 
-        // Create mutable ordering state (populated during extractOrdering)
-        const orderingState: OrderingState = {
-          sequenceNumber: null,
-          partitionKey: null,
-          messageId: null,
-          isDuplicate: false,
-          outOfOrderInfo: null,
-        };
+      // Create mutable ordering state (populated during extractOrdering)
+      const orderingState: OrderingState = {
+        sequenceNumber: null,
+        partitionKey: null,
+        messageId: null,
+        isDuplicate: false,
+        outOfOrderInfo: null,
+      };
 
-        // Create consumer group state
-        const groupTracking = config.consumerGroupTracking;
-        const groupState: ConsumerGroupStateInternal = {
-          memberId:
-            typeof groupTracking?.memberId === 'function'
-              ? (groupTracking.memberId() ?? null)
-              : (groupTracking?.memberId ?? null),
-          groupInstanceId:
-            typeof groupTracking?.groupInstanceId === 'function'
-              ? (groupTracking.groupInstanceId() ?? null)
-              : (groupTracking?.groupInstanceId ?? null),
-          assignedPartitions: [],
-          generation: null,
-          isActive: true,
-          lastHeartbeat: null,
-          state: null,
-        };
+      // Create consumer group state
+      const groupTracking = config.consumerGroupTracking;
+      const groupState: ConsumerGroupStateInternal = {
+        memberId:
+          typeof groupTracking?.memberId === 'function'
+            ? (groupTracking.memberId() ?? null)
+            : (groupTracking?.memberId ?? null),
+        groupInstanceId:
+          typeof groupTracking?.groupInstanceId === 'function'
+            ? (groupTracking.groupInstanceId() ?? null)
+            : (groupTracking?.groupInstanceId ?? null),
+        assignedPartitions: [],
+        generation: null,
+        isActive: true,
+        lastHeartbeat: null,
+        state: null,
+      };
 
-        // Extend context with consumer-specific methods
-        const ctx = extendContextForConsumer(
-          baseCtx,
-          config,
-          linkStorage,
-          orderingState,
-          groupState,
-        );
+      // Extend context with consumer-specific methods
+      const ctx = extendContextForConsumer(
+        baseCtx,
+        config,
+        linkStorage,
+        orderingState,
+        groupState,
+      );
 
-        // Set semantic convention attributes
-        setConsumerAttributes(ctx, config);
+      // Set semantic convention attributes
+      setConsumerAttributes(ctx, config);
 
-        return async (...args: TArgs) => {
-          // Extract links from message headers (includes customContextExtractor if provided)
-          // This also populates linkStorage.links for getProducerLinks() and DLQ auto-linking
-          await extractAndAddLinks(ctx, config, args, linkStorage);
+      return async (...args: TArgs) => {
+        // Extract links from message headers (includes customContextExtractor if provided)
+        // This also populates linkStorage.links for getProducerLinks() and DLQ auto-linking
+        await extractAndAddLinks(ctx, config, args, linkStorage);
 
-          // Extract and process ordering information
-          if (config.ordering) {
-            extractAndProcessOrdering(ctx, config, args, orderingState);
-          }
+        // Extract and process ordering information
+        if (config.ordering) {
+          extractAndProcessOrdering(ctx, config, args, orderingState);
+        }
 
-          // Extract lag metrics if configured
-          if (config.lagMetrics) {
-            await extractLagMetrics(ctx, config.lagMetrics, args);
-          }
+        // Extract lag metrics if configured
+        if (config.lagMetrics) {
+          await extractLagMetrics(ctx, config.lagMetrics, args);
+        }
 
-          // Apply custom attributes hook if provided
-          if (config.customAttributes) {
-            // For batch mode, extract first message; for single mode, use args[0] directly
-            const batch = args[0];
-            const msg =
-              config.batchMode && Array.isArray(batch) && batch.length > 0
-                ? batch[0]
-                : batch;
-            // Only call hook if we have a message
-            if (msg !== undefined) {
-              const customAttrs = config.customAttributes(ctx, msg);
-              for (const [key, value] of Object.entries(customAttrs)) {
-                if (value !== undefined && value !== null) {
-                  ctx.setAttribute(key, value as string | number | boolean);
-                }
+        // Apply custom attributes hook if provided
+        if (config.customAttributes) {
+          // For batch mode, extract first message; for single mode, use args[0] directly
+          const batch = args[0];
+          const msg =
+            config.batchMode && Array.isArray(batch) && batch.length > 0
+              ? batch[0]
+              : batch;
+          // Only call hook if we have a message
+          if (msg !== undefined) {
+            const customAttrs = config.customAttributes(ctx, msg);
+            for (const [key, value] of Object.entries(customAttrs)) {
+              if (value !== undefined && value !== null) {
+                ctx.setAttribute(key, value);
               }
             }
           }
+        }
 
-          // Execute user's function
-          const userFn = fnFactory(ctx);
-          return userFn(...args).catch((error) => {
-            if (config.onError) {
-              config.onError(error as Error, ctx);
-            }
-            throw error;
-          });
-        };
-      },
-    );
+        // Execute user's function
+        const userFn = fnFactory(ctx);
+        assertTraceFactory('traceConsumer', userFn, 'result');
+        return Promise.resolve(userFn(...args)).catch((error) => {
+          if (config.onError) {
+            config.onError(error as Error, ctx);
+          }
+          throw error;
+        });
+      };
+    }) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 
@@ -1688,6 +1710,8 @@ function setProducerAttributes(
   config: ProducerConfig,
 ): void {
   ctx.setAttribute('messaging.system', config.system);
+  ctx.setAttribute('messaging.operation.name', 'publish');
+  ctx.setAttribute('messaging.operation.type', 'send');
   ctx.setAttribute('messaging.operation', 'publish');
   ctx.setAttribute('messaging.destination.name', config.destination);
 
@@ -1747,6 +1771,14 @@ function setConsumerAttributes(
 ): void {
   ctx.setAttribute('messaging.system', config.system);
   ctx.setAttribute(
+    'messaging.operation.name',
+    config.batchMode ? 'receive' : 'process',
+  );
+  ctx.setAttribute(
+    'messaging.operation.type',
+    config.batchMode ? 'receive' : 'process',
+  );
+  ctx.setAttribute(
     'messaging.operation',
     config.batchMode ? 'receive' : 'process',
   );
@@ -1754,6 +1786,7 @@ function setConsumerAttributes(
 
   // Consumer group
   if (config.consumerGroup) {
+    ctx.setAttribute('messaging.consumer.group.name', config.consumerGroup);
     ctx.setAttribute('messaging.consumer.group', config.consumerGroup);
 
     // System-specific consumer group attribute

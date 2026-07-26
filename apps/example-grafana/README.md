@@ -4,10 +4,10 @@ This example sends **traces** (Tempo), **metrics** (Mimir), and **logs** (OTLP �
 
 ## Two Different APIs / Credentials
 
-| Use case | Base URL | Auth | Where to get credentials |
-|----------|----------|------|---------------------------|
-| **Sending data** (traces, metrics, logs) | OTLP gateway (e.g. `https://otlp-gateway-XXXX.grafana.net/otlp`) | Instance ID + API token (e.g. `Authorization: Basic ...`) | Grafana Cloud Portal → your stack → **Connections** → **OpenTelemetry** → **Configure** → copy env vars |
-| **Managing Grafana** (dashboards, folders, health, search) | `https://YOUR_STACK.grafana.net/api` | Service account token (e.g. `glsa_...`) | Grafana → Administration → Service accounts → Create token |
+| Use case                                                   | Base URL                                                         | Auth                                                      | Where to get credentials                                                                                |
+| ---------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Sending data** (traces, metrics, logs)                   | OTLP gateway (e.g. `https://otlp-gateway-XXXX.grafana.net/otlp`) | Instance ID + API token (e.g. `Authorization: Basic ...`) | Grafana Cloud Portal → your stack → **Connections** → **OpenTelemetry** → **Configure** → copy env vars |
+| **Managing Grafana** (dashboards, folders, health, search) | `https://YOUR_STACK.grafana.net/api`                             | Service account token (e.g. `glsa_...`)                   | Grafana → Administration → Service accounts → Create token                                              |
 
 **Important:** A Grafana API token (e.g. `glsa_...`) is for the **stack HTTP API** (dashboards, health, search). It is **not** used for OTLP ingestion. To send traces, metrics, and logs, you must get the **OTLP endpoint and headers** from the OpenTelemetry **Configure** tile in the Cloud Portal.
 

@@ -21,7 +21,11 @@ import {
   SEMATTRS_LINKED_TRACE_ID_HASH,
 } from './index';
 import { otelTrace as trace } from 'autotel';
-import { propagation } from '@opentelemetry/api';
+import {
+  propagation,
+  type SpanOptions,
+  type Context,
+} from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 
 describe('normalizeHeaders', () => {
@@ -104,7 +108,7 @@ describe('normalizeHeaders', () => {
   });
 
   it('should convert Buffer values in Map to strings', () => {
-    const map = new Map([
+    const map = new Map<string, string | Buffer>([
       ['traceparent', Buffer.from('00-abc-def-01')],
       ['key', 'string-value'],
     ]);
@@ -650,7 +654,11 @@ describe('withBatchConsumer', () => {
         const realTracer = realGetTracer(name);
         return {
           ...realTracer,
-          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+          startSpan: (
+            spanName: string,
+            options?: SpanOptions,
+            ctx?: Context,
+          ) => {
             spanNames.push(spanName);
             return realTracer.startSpan(spanName, options, ctx);
           },
@@ -720,7 +728,11 @@ describe('withBatchConsumer', () => {
         const realTracer = realGetTracer(name);
         return {
           ...realTracer,
-          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+          startSpan: (
+            spanName: string,
+            options?: SpanOptions,
+            ctx?: Context,
+          ) => {
             spanNames.push(spanName);
             return realTracer.startSpan(spanName, options, ctx);
           },
@@ -784,7 +796,11 @@ describe('withBatchConsumer', () => {
         const realTracer = realGetTracer(name);
         return {
           ...realTracer,
-          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+          startSpan: (
+            spanName: string,
+            options?: SpanOptions,
+            ctx?: Context,
+          ) => {
             const realSpan = realTracer.startSpan(spanName, options, ctx);
             const index = endCounts.length;
             endCounts.push(0);
@@ -829,9 +845,9 @@ describe('withBatchConsumer', () => {
           consumerGroup: 'test-group',
           perMessageSpans: 'all',
         },
-        async ({ batch, _resolveOffset }) => {
+        async ({ batch }) => {
           // Access first message (creates per-message span), then throw before resolveOffset
-          const first = batch.messages[0];
+          const first = batch.messages[0]!;
           void first.offset; // trigger span creation
           throw new Error('batch error');
         },
@@ -860,7 +876,11 @@ describe('withBatchConsumer', () => {
         const realTracer = realGetTracer(name);
         return {
           ...realTracer,
-          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+          startSpan: (
+            spanName: string,
+            options?: SpanOptions,
+            ctx?: Context,
+          ) => {
             spanNames.push(spanName);
             return realTracer.startSpan(spanName, options, ctx);
           },
@@ -929,7 +949,11 @@ describe('withBatchConsumer', () => {
         const realTracer = realGetTracer(name);
         return {
           ...realTracer,
-          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+          startSpan: (
+            spanName: string,
+            options?: SpanOptions,
+            ctx?: Context,
+          ) => {
             const span = realTracer.startSpan(spanName, options, ctx as never);
             if (spanName === 'test.batch') {
               batchSpan = span;
@@ -1000,7 +1024,11 @@ describe('withBatchConsumer', () => {
         const realTracer = realGetTracer(name);
         return {
           ...realTracer,
-          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+          startSpan: (
+            spanName: string,
+            options?: SpanOptions,
+            ctx?: Context,
+          ) => {
             const realSpan = realTracer.startSpan(spanName, options, ctx);
             const index = endCounts.length;
             endCounts.push(0);
@@ -1074,7 +1102,11 @@ describe('withBatchConsumer', () => {
         const realTracer = realGetTracer(name);
         return {
           ...realTracer,
-          startSpan: (spanName: string, options?: unknown, ctx?: unknown) => {
+          startSpan: (
+            spanName: string,
+            options?: SpanOptions,
+            ctx?: Context,
+          ) => {
             const span = realTracer.startSpan(spanName, options, ctx as never);
             if (spanName !== 'test.batch') {
               messageTraceIds.push(span.spanContext().traceId);

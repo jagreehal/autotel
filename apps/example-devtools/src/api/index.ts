@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { Hono, type Context } from 'hono';
-import { getTraceContext, trace, createStructuredError } from 'autotel';
+import { getTraceContext, createStructuredError, withTracing } from 'autotel';
 import { injectTraceContext } from 'autotel/http';
 import type { TraceContext } from 'autotel';
 import { useLogger } from 'autotel-adapters/hono';
@@ -30,13 +30,7 @@ const appStyles = readFileSync(join(webDir, 'style.css'), 'utf8');
 const faviconSvg = readFileSync(join(webDir, 'favicon.svg'));
 
 const db = createDb();
-const {
-  users,
-  products,
-  orders,
-  orderItems,
-  notificationJobs,
-} = schema;
+const { users, products, orders, orderItems, notificationJobs } = schema;
 
 export interface ApiServiceConfig {
   authUrl: string;
@@ -81,41 +75,48 @@ function attachTraceHeaders(c: Context, devtoolsUrl: string): void {
   c.header('Access-Control-Expose-Headers', 'x-trace-id, x-trace-url');
 }
 
-const fetchCatalog = trace('fetchCatalog', (ctx: TraceContext) => async (category: string | undefined) => {
-  ctx.setAttribute('shop.flow', 'catalog');
-  ctx.setAttribute('db.operation', 'select');
-  ctx.setAttribute('db.table', 'products');
-  if (category) {
-    ctx.setAttribute('shop.category', category);
-  }
+const fetchCatalog = withTracing({ name: 'fetchCatalog' })(
+  (ctx: TraceContext) => async (category: string | undefined) => {
+    ctx.setAttribute('shop.flow', 'catalog');
+    ctx.setAttribute('db.operation', 'select');
+    ctx.setAttribute('db.table', 'products');
+    if (category) {
+      ctx.setAttribute('shop.category', category);
+    }
 
-  return category
-    ? db.select().from(products).where(eq(products.category, category)).all()
-    : db.select().from(products).orderBy(desc(products.featured), products.name).all();
-});
+    return category
+      ? db.select().from(products).where(eq(products.category, category)).all()
+      : db
+          .select()
+          .from(products)
+          .orderBy(desc(products.featured), products.name)
+          .all();
+  },
+);
 
-const fetchProfile = trace('fetchProfile', (ctx: TraceContext) => async (userId: number) => {
-  ctx.setAttribute('shop.flow', 'profile');
-  ctx.setAttribute('shop.user_id', userId);
-  return db.query.users.findFirst({
-    where: eq(users.id, userId),
-    with: {
-      orders: {
-        with: {
-          items: {
-            with: {
-              product: true,
+const fetchProfile = withTracing({ name: 'fetchProfile' })(
+  (ctx: TraceContext) => async (userId: number) => {
+    ctx.setAttribute('shop.flow', 'profile');
+    ctx.setAttribute('shop.user_id', userId);
+    return db.query.users.findFirst({
+      where: eq(users.id, userId),
+      with: {
+        orders: {
+          with: {
+            items: {
+              with: {
+                product: true,
+              },
             },
           },
         },
+        notificationJobs: true,
       },
-      notificationJobs: true,
-    },
-  });
-});
+    });
+  },
+);
 
-const createOrder = trace(
-  'createOrder',
+const createOrder = withTracing({ name: 'createOrder' })(
   (ctx: TraceContext) =>
     async (
       userId: number,
@@ -193,12 +194,13 @@ const createOrder = trace(
     },
 );
 
-const slowInventoryReport = trace('slowInventoryReport', (ctx: TraceContext) => async () => {
-  ctx.setAttribute('shop.flow', 'inventory-report');
-  ctx.setAttribute('db.query.type', 'recursive-cte');
-  ctx.setAttribute('db.query.iterations', 1_200_000);
+const slowInventoryReport = withTracing({ name: 'slowInventoryReport' })(
+  (ctx: TraceContext) => async () => {
+    ctx.setAttribute('shop.flow', 'inventory-report');
+    ctx.setAttribute('db.query.type', 'recursive-cte');
+    ctx.setAttribute('db.query.iterations', 1_200_000);
 
-  const countRows = await db.all(sql`
+    const countRows = await db.all(sql`
     WITH RECURSIVE c(n) AS (
       SELECT 1
       UNION ALL
@@ -207,22 +209,24 @@ const slowInventoryReport = trace('slowInventoryReport', (ctx: TraceContext) => 
     SELECT count(*) AS total FROM c
   `);
 
-  const catalog = await db.select().from(products).all();
-  const seriesTotal = Number((countRows[0] as { total?: number })?.total ?? 0);
+    const catalog = await db.select().from(products).all();
+    const seriesTotal = Number(
+      (countRows[0] as { total?: number })?.total ?? 0,
+    );
 
-  return {
-    totalProducts: catalog.length,
-    lowStock: catalog.filter((product) => product.stock < 10).length,
-    totalValue: catalog.reduce(
-      (sum, product) => sum + product.price * product.stock,
-      0,
-    ),
-    recursiveCount: seriesTotal,
-  };
-});
+    return {
+      totalProducts: catalog.length,
+      lowStock: catalog.filter((product) => product.stock < 10).length,
+      totalValue: catalog.reduce(
+        (sum, product) => sum + product.price * product.stock,
+        0,
+      ),
+      recursiveCount: seriesTotal,
+    };
+  },
+);
 
-const callAiRecommendation = trace(
-  'callAiRecommendation',
+const callAiRecommendation = withTracing({ name: 'callAiRecommendation' })(
   (ctx: TraceContext) => async (category: string, budget: number) => {
     ctx.setAttribute('gen_ai.provider.name', 'openai');
     ctx.setAttribute('gen_ai.operation.name', 'chat');
@@ -236,7 +240,9 @@ const callAiRecommendation = trace(
       .from(products)
       .where(eq(products.category, category))
       .all();
-    const picks = matches.filter((product) => product.price <= budget).slice(0, 3);
+    const picks = matches
+      .filter((product) => product.price <= budget)
+      .slice(0, 3);
 
     await new Promise((resolveDelay) =>
       setTimeout(resolveDelay, 140 + Math.random() * 160),
@@ -255,97 +261,101 @@ const callAiRecommendation = trace(
   },
 );
 
-const callSupportCopilot = trace('callSupportCopilot', (ctx: TraceContext) => async (question: string) => {
-  ctx.setAttribute('gen_ai.provider.name', 'anthropic');
-  ctx.setAttribute('gen_ai.operation.name', 'chat');
-  ctx.setAttribute('gen_ai.request.model', 'claude-3-5-sonnet');
-  ctx.setAttribute('gen_ai.usage.input_tokens', 256);
-  ctx.setAttribute('gen_ai.usage.output_tokens', 176);
-  ctx.setAttribute('shop.flow', 'genai-support');
+const callSupportCopilot = withTracing({ name: 'callSupportCopilot' })(
+  (ctx: TraceContext) => async (question: string) => {
+    ctx.setAttribute('gen_ai.provider.name', 'anthropic');
+    ctx.setAttribute('gen_ai.operation.name', 'chat');
+    ctx.setAttribute('gen_ai.request.model', 'claude-3-5-sonnet');
+    ctx.setAttribute('gen_ai.usage.input_tokens', 256);
+    ctx.setAttribute('gen_ai.usage.output_tokens', 176);
+    ctx.setAttribute('shop.flow', 'genai-support');
 
-  await new Promise((resolveDelay) =>
-    setTimeout(resolveDelay, 180 + Math.random() * 120),
+    await new Promise((resolveDelay) =>
+      setTimeout(resolveDelay, 180 + Math.random() * 120),
+    );
+
+    return {
+      model: 'claude-3-5-sonnet',
+      confidence: 0.94,
+      tokens: { input: 256, output: 176 },
+      answer: `For "${question}", the fastest path is to open the order timeline in devtools, confirm auth succeeded, then follow the worker notification span to the final status.`,
+    };
+  },
+);
+
+const validateAuth = (authUrl: string) =>
+  withTracing({ name: 'validateSession' })(
+    (ctx: TraceContext) => async (token: string) => {
+      ctx.setAttribute('shop.flow', 'auth-hop');
+      ctx.setAttribute('auth.token_prefix', token.slice(0, 8));
+
+      const response = await fetch(`${authUrl}/validate`, {
+        method: 'POST',
+        // Inject W3C traceparent + baggage so shop-auth continues this trace
+        // instead of starting a new root. This is what links the browser-root
+        // trace through shop-api into shop-auth in the service map.
+        headers: injectTraceContext({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        throw createStructuredError({
+          message: 'Authentication failed',
+          status: response.status,
+          why: 'The auth service rejected the current session token.',
+          fix: 'Switch persona or re-run the request with an active session.',
+        });
+      }
+
+      return response.json() as Promise<{
+        userId: number;
+        email: string;
+        name: string;
+        segment: string;
+        sessionId: number;
+      }>;
+    },
   );
 
-  return {
-    model: 'claude-3-5-sonnet',
-    confidence: 0.94,
-    tokens: { input: 256, output: 176 },
-    answer: `For "${question}", the fastest path is to open the order timeline in devtools, confirm auth succeeded, then follow the worker notification span to the final status.`,
-  };
-});
-
-const validateAuth = (
-  authUrl: string,
-) =>
-  trace('validateSession', (ctx: TraceContext) => async (token: string) => {
-    ctx.setAttribute('shop.flow', 'auth-hop');
-    ctx.setAttribute('auth.token_prefix', token.slice(0, 8));
-
-    const response = await fetch(`${authUrl}/validate`, {
-      method: 'POST',
-      // Inject W3C traceparent + baggage so shop-auth continues this trace
-      // instead of starting a new root. This is what links the browser-root
-      // trace through shop-api into shop-auth in the service map.
-      headers: injectTraceContext({
-        'Content-Type': 'application/json',
-      }),
-      body: JSON.stringify({ token }),
-    });
-
-    if (!response.ok) {
-      throw createStructuredError({
-        message: 'Authentication failed',
-        status: response.status,
-        why: 'The auth service rejected the current session token.',
-        fix: 'Switch persona or re-run the request with an active session.',
-      });
-    }
-
-    return response.json() as Promise<{
-      userId: number;
-      email: string;
-      name: string;
-      segment: string;
-      sessionId: number;
-    }>;
-  });
-
 const notifyWorker = (workerUrl: string) =>
-  trace('sendWorkerNotification', (ctx: TraceContext) => async (orderId: number, userId: number) => {
-    ctx.setAttribute('shop.flow', 'worker-hop');
-    ctx.setAttribute('worker.order_id', orderId);
-    ctx.setAttribute('worker.user_id', userId);
+  withTracing({ name: 'sendWorkerNotification' })(
+    (ctx: TraceContext) => async (orderId: number, userId: number) => {
+      ctx.setAttribute('shop.flow', 'worker-hop');
+      ctx.setAttribute('worker.order_id', orderId);
+      ctx.setAttribute('worker.user_id', userId);
 
-    const response = await fetch(`${workerUrl}/notify`, {
-      method: 'POST',
-      // Inject W3C traceparent + baggage so shop-worker continues this trace
-      // and the worker notification hop shows up under the same checkout trace.
-      headers: injectTraceContext({
-        'Content-Type': 'application/json',
-      }),
-      body: JSON.stringify({
-        orderId,
-        userId,
-        type: 'order_confirmation',
-      }),
-    });
-
-    if (!response.ok) {
-      throw createStructuredError({
-        message: 'Worker notification failed',
-        status: response.status,
-        why: 'The worker could not persist or process the notification job.',
-        fix: 'Inspect the worker-service spans and retry the checkout flow.',
+      const response = await fetch(`${workerUrl}/notify`, {
+        method: 'POST',
+        // Inject W3C traceparent + baggage so shop-worker continues this trace
+        // and the worker notification hop shows up under the same checkout trace.
+        headers: injectTraceContext({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          orderId,
+          userId,
+          type: 'order_confirmation',
+        }),
       });
-    }
 
-    return response.json() as Promise<{
-      status: string;
-      jobId: number;
-      orderId: number;
-    }>;
-  });
+      if (!response.ok) {
+        throw createStructuredError({
+          message: 'Worker notification failed',
+          status: response.status,
+          why: 'The worker could not persist or process the notification job.',
+          fix: 'Inspect the worker-service spans and retry the checkout flow.',
+        });
+      }
+
+      return response.json() as Promise<{
+        status: string;
+        jobId: number;
+        orderId: number;
+      }>;
+    },
+  );
 
 export function createApiApp(config: ApiServiceConfig): Hono {
   const app = new Hono();
@@ -475,11 +485,9 @@ export function createApiApp(config: ApiServiceConfig): Hono {
   app.get('/api/users/:id', async (c) => {
     const log = useLogger(c);
     const userId = Number(c.req.param('id'));
-    const token =
-      (c.req.header('Authorization') || 'Bearer demo-token').replace(
-        'Bearer ',
-        '',
-      );
+    const token = (
+      c.req.header('Authorization') || 'Bearer demo-token'
+    ).replace('Bearer ', '');
 
     log.set({
       endpoint: '/api/users/:id',
@@ -525,11 +533,9 @@ export function createApiApp(config: ApiServiceConfig): Hono {
 
   app.post('/api/checkout', async (c) => {
     const log = useLogger(c);
-    const token =
-      (c.req.header('Authorization') || 'Bearer demo-token').replace(
-        'Bearer ',
-        '',
-      );
+    const token = (
+      c.req.header('Authorization') || 'Bearer demo-token'
+    ).replace('Bearer ', '');
     const { items } = await c.req.json<{
       items: Array<{ productId: number; quantity: number }>;
     }>();

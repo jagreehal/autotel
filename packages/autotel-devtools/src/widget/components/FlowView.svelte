@@ -76,12 +76,7 @@
 </script>
 
 <script lang="ts">
-  import {
-    Workflow,
-    MessageSquare,
-    Coins,
-    ExternalLink,
-  } from '@lucide/svelte';
+  import { Workflow, MessageSquare, Coins, ExternalLink } from '@lucide/svelte';
   import {
     tracesSignal,
     genAiRowsSignal,
@@ -157,9 +152,7 @@
   });
 
   const layout = $derived.by(() =>
-    trace
-      ? layoutFlow(buildFlowGraph(trace.spans, { metricsBySpanId }))
-      : null,
+    trace ? layoutFlow(buildFlowGraph(trace.spans, { metricsBySpanId })) : null,
   );
 
   const totalMetrics = $derived<FlowNodeMetrics>(
@@ -319,7 +312,9 @@
           {/each}
         </select>
       {:else}
-        <div class="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+        <div
+          class="flex items-center gap-1.5 text-xs font-medium text-fg-muted"
+        >
           <Workflow size={13} />
           {trace.rootSpan?.name ?? 'Flow'}
         </div>
@@ -360,7 +355,11 @@
         {/if}
         {#each LEGEND_ORDER as role (role)}
           <div class="flex items-center gap-1 text-[10px] text-fg-subtle">
-            <span class={cn('inline-block w-2 h-2 rounded-sm', ROLE_STYLES[role].dot)}
+            <span
+              class={cn(
+                'inline-block w-2 h-2 rounded-sm',
+                ROLE_STYLES[role].dot,
+              )}
             ></span>
             {ROLE_STYLES[role].label}
           </div>
@@ -500,9 +499,7 @@
                     width="28"
                     height="16"
                     rx="8"
-                    class={cn(
-                      errored ? 'fill-red-500' : 'fill-fg-muted',
-                    )}
+                    class={cn(errored ? 'fill-red-500' : 'fill-fg-muted')}
                   />
                   <text
                     x={node.x + node.width - 12}
@@ -525,10 +522,13 @@
       <!-- Detail panel -->
       {#if selectedNode}
         {@const style = ROLE_STYLES[selectedNode.role]}
-        <div class="w-80 shrink-0 border-l border-line overflow-y-auto bg-surface">
+        <div
+          class="w-80 shrink-0 border-l border-line overflow-y-auto bg-surface"
+        >
           <div class="px-3 py-2.5 border-b border-line">
             <div class="group flex items-center gap-1.5">
-              <span class={cn('inline-block w-2 h-2 rounded-sm', style.dot)}></span>
+              <span class={cn('inline-block w-2 h-2 rounded-sm', style.dot)}
+              ></span>
               <span class="font-mono text-sm font-medium text-fg truncate"
                 >{selectedNode.label}</span
               >
@@ -565,7 +565,9 @@
               >
               {#if selectedNode.errorCount > 0}
                 <span>·</span>
-                <span class="text-danger">{selectedNode.errorCount} errored</span>
+                <span class="text-danger"
+                  >{selectedNode.errorCount} errored</span
+                >
               {/if}
               {#if selectedNode.totalDurationMs > 0}
                 <span>·</span>
@@ -612,7 +614,9 @@
             </div>
           {/if}
           {#if selectedNode.sample.input === undefined && selectedNode.sample.output === undefined}
-            <div class="px-3 py-3 text-xs text-fg-subtle flex items-center gap-1.5">
+            <div
+              class="px-3 py-3 text-xs text-fg-subtle flex items-center gap-1.5"
+            >
               <MessageSquare size={13} />
               No input/output captured for this node.
             </div>

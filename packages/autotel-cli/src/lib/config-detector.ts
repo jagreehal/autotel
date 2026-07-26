@@ -1,5 +1,9 @@
 import * as path from 'node:path';
-import type { ConfigDetection, InstrumentationFile, InstrumentationSection } from '../types/index';
+import type {
+  ConfigDetection,
+  InstrumentationFile,
+  InstrumentationSection,
+} from '../types/index';
 import { fileExists, readFileSafe } from './fs';
 import { hasCliOwnershipHeader, getSectionMarkers } from './code-builder';
 
@@ -20,7 +24,9 @@ const INSTRUMENTATION_LOCATIONS = [
 /**
  * Find instrumentation file
  */
-export function findInstrumentationFile(packageRoot: string): InstrumentationFile | null {
+export function findInstrumentationFile(
+  packageRoot: string,
+): InstrumentationFile | null {
   for (const location of INSTRUMENTATION_LOCATIONS) {
     const filePath = path.join(packageRoot, location);
     if (fileExists(filePath)) {
@@ -32,7 +38,14 @@ export function findInstrumentationFile(packageRoot: string): InstrumentationFil
       const isCliOwned = hasCliOwnershipHeader(content);
       const markerStrings = getSectionMarkers(content);
       const sections = markerStrings.filter((m): m is InstrumentationSection =>
-        ['BACKEND', 'PLUGINS', 'SUBSCRIBERS', 'BACKEND_CONFIG', 'SUBSCRIBERS_CONFIG', 'PLUGIN_INIT'].includes(m)
+        [
+          'BACKEND',
+          'PLUGINS',
+          'SUBSCRIBERS',
+          'BACKEND_CONFIG',
+          'SUBSCRIBERS_CONFIG',
+          'PLUGIN_INIT',
+        ].includes(m),
       );
 
       return {
@@ -50,7 +63,12 @@ export function findInstrumentationFile(packageRoot: string): InstrumentationFil
  * Check for autotel.yaml config
  */
 export function findAutotelYaml(packageRoot: string): string | null {
-  const candidates = ['autotel.yaml', 'autotel.yml', '.autotelrc.yaml', '.autotelrc.yml'];
+  const candidates = [
+    'autotel.yaml',
+    'autotel.yml',
+    '.autotelrc.yaml',
+    '.autotelrc.yml',
+  ];
   for (const candidate of candidates) {
     const filePath = path.join(packageRoot, candidate);
     if (fileExists(filePath)) {
@@ -109,18 +127,24 @@ export function detectConfig(packageRoot: string): ConfigDetection {
  */
 export function isFeatureConfigured(
   instrumentationFile: InstrumentationFile,
-  feature: 'backend' | 'subscriber' | 'plugin' | 'platform'
+  feature: 'backend' | 'subscriber' | 'plugin' | 'platform',
 ): boolean {
   switch (feature) {
     case 'backend':
     case 'platform':
-      return instrumentationFile.sections.includes('BACKEND') ||
-             instrumentationFile.sections.includes('BACKEND_CONFIG');
+      return (
+        instrumentationFile.sections.includes('BACKEND') ||
+        instrumentationFile.sections.includes('BACKEND_CONFIG')
+      );
     case 'subscriber':
-      return instrumentationFile.sections.includes('SUBSCRIBERS') ||
-             instrumentationFile.sections.includes('SUBSCRIBERS_CONFIG');
+      return (
+        instrumentationFile.sections.includes('SUBSCRIBERS') ||
+        instrumentationFile.sections.includes('SUBSCRIBERS_CONFIG')
+      );
     case 'plugin':
-      return instrumentationFile.sections.includes('PLUGINS') ||
-             instrumentationFile.sections.includes('PLUGIN_INIT');
+      return (
+        instrumentationFile.sections.includes('PLUGINS') ||
+        instrumentationFile.sections.includes('PLUGIN_INIT')
+      );
   }
 }

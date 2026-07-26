@@ -17,11 +17,7 @@ import { AutotelError } from '../../lib/errors';
 import * as fs from 'node:fs';
 
 type ComponentKind =
-  | 'receiver'
-  | 'processor'
-  | 'exporter'
-  | 'connector'
-  | 'extension';
+  'receiver' | 'processor' | 'exporter' | 'connector' | 'extension';
 
 function readJsonFromStdinOrFile(file?: string): unknown {
   const raw = file ? fs.readFileSync(file, 'utf8') : fs.readFileSync(0, 'utf8');
@@ -106,7 +102,12 @@ export async function runCollectorSchema(
       flags.name,
       resolvedVersion,
     );
-    return { version: resolvedVersion, kind: flags.kind, name: flags.name, schema };
+    return {
+      version: resolvedVersion,
+      kind: flags.kind,
+      name: flags.name,
+      schema,
+    };
   });
 }
 
@@ -125,7 +126,12 @@ export async function runCollectorReadme(
       flags.name,
       resolvedVersion,
     );
-    return { version: resolvedVersion, kind: flags.kind, name: flags.name, readme };
+    return {
+      version: resolvedVersion,
+      kind: flags.kind,
+      name: flags.name,
+      readme,
+    };
   });
 }
 
@@ -147,7 +153,12 @@ export async function runCollectorValidateComponent(
       version: resolvedVersion,
       config,
     });
-    return { version: resolvedVersion, kind: flags.kind, name: flags.name, ...result };
+    return {
+      version: resolvedVersion,
+      kind: flags.kind,
+      name: flags.name,
+      ...result,
+    };
   });
 }
 
@@ -219,11 +230,7 @@ export function registerCollectorCommands(program: Command): void {
       await runCollectorSchema({
         ...staticFlagsFromOpts(o),
         kind: o.kind as
-          | 'receiver'
-          | 'processor'
-          | 'exporter'
-          | 'connector'
-          | 'extension',
+          'receiver' | 'processor' | 'exporter' | 'connector' | 'extension',
         name: o.name as string,
         version: o.version as string | undefined,
       });
@@ -238,18 +245,12 @@ export function registerCollectorCommands(program: Command): void {
       await runCollectorReadme({
         ...staticFlagsFromOpts(o),
         kind: o.kind as
-          | 'receiver'
-          | 'processor'
-          | 'exporter'
-          | 'connector'
-          | 'extension',
+          'receiver' | 'processor' | 'exporter' | 'connector' | 'extension',
         name: o.name as string,
         version: o.version as string | undefined,
       });
     });
-  const validateComponentCmd = addStaticFlags(
-    new Command('validate-component'),
-  )
+  const validateComponentCmd = addStaticFlags(new Command('validate-component'))
     .description('Validate component config against upstream schema')
     .requiredOption('--kind <kind>', 'Component kind')
     .requiredOption('--name <name>', 'Component name')
@@ -260,11 +261,7 @@ export function registerCollectorCommands(program: Command): void {
       await runCollectorValidateComponent({
         ...staticFlagsFromOpts(o),
         kind: o.kind as
-          | 'receiver'
-          | 'processor'
-          | 'exporter'
-          | 'connector'
-          | 'extension',
+          'receiver' | 'processor' | 'exporter' | 'connector' | 'extension',
         name: o.name as string,
         version: o.version as string | undefined,
         configFile: o.configFile as string | undefined,

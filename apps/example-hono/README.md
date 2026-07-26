@@ -28,10 +28,10 @@ import { useLogger } from 'autotel-adapters/hono';
 const app = new Hono();
 app.use('*', otel({ serviceName: 'my-service' }));
 app.get('/users/:id', (c) => {
-  const log = useLogger(c)
-  log.set({ userId: c.req.param('id') })
-  return c.json({ ok: true })
-})
+  const log = useLogger(c);
+  log.set({ userId: c.req.param('id') });
+  return c.json({ ok: true });
+});
 
 app.get('/users/:id', async (c) => {
   const user = await fetchUser(c.req.param('id'));

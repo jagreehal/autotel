@@ -516,10 +516,10 @@ describe('createSecuritySignalProcessor — suspicious action chains', () => {
 
     clock += 5000;
     const destructive = makeSpan({
-        'mcp.tool.destructive': true,
-        'mcp.tool.name': 'send_email',
-        spanContext: { traceId: 'trace-abc' },
-      });
+      'mcp.tool.destructive': true,
+      'mcp.tool.name': 'send_email',
+      spanContext: { traceId: 'trace-abc' },
+    });
     processor.onStart(destructive);
 
     expect(signals).toEqual([
@@ -587,7 +587,9 @@ describe('createSecuritySignalProcessor — suspicious action chains', () => {
     );
 
     expect(
-      signals.filter((signal) => signal.signal === 'llm_action_chain_suspicious'),
+      signals.filter(
+        (signal) => signal.signal === 'llm_action_chain_suspicious',
+      ),
     ).toHaveLength(1);
   });
 

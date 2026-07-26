@@ -8,7 +8,7 @@ description: >
 
 OpenTelemetry instrumentation for TanStack Start (React Start and Solid Start).
 
-## Quick Start — pick one approach
+## Quick Start: pick one approach
 
 ### Zero-config
 
@@ -88,7 +88,7 @@ tracingMiddleware({
 
 ## Common Mistakes
 
-- Do NOT use `tracingMiddleware()` in browser — it no-ops. Server functions run server-side only.
-- Do NOT forget to wrap the start handler — without it, there's no root span for requests.
-- Use `captureArgs: true` carefully — it serializes function arguments into span attributes. Avoid for large payloads.
-- Prefer middleware over explicit wrappers — middleware composes with TanStack's built-in patterns.
+- Do NOT use `tracingMiddleware()` in browser: it no-ops. Server functions run server-side only.
+- Do NOT forget to wrap the start handler: without it, there's no root span for requests.
+- Use `captureArgs: true` carefully: it serializes function arguments into span attributes. Avoid for large payloads.
+- Prefer middleware over explicit wrappers: middleware composes with TanStack's built-in patterns.

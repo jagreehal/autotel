@@ -11,7 +11,7 @@ vi.mock('./node-require', () => ({
     if (id === '@opentelemetry/exporter-logs-otlp-http') {
       return { OTLPLogExporter: mockOTLPLogExporter };
     }
-    return undefined;
+    return;
   }),
 }));
 
@@ -66,7 +66,7 @@ describe('buildPostHogLogProcessors', () => {
   });
 
   it('accepts a second stringRedactor parameter without error', () => {
-    const redactor = (s: string) => s.replace(/secret/g, '***');
+    const redactor = (s: string) => s.replaceAll('secret', '***');
     const result = buildPostHogLogProcessors(
       { url: 'https://us.i.posthog.com/i/v1/logs?token=phc_test' },
       redactor,
@@ -91,7 +91,7 @@ describe('buildPostHogLogProcessors', () => {
 
     const [processor] = buildPostHogLogProcessors(
       { url: 'https://us.i.posthog.com/i/v1/logs?token=phc_test' },
-      (value: string) => value.replace(/secret/g, '***'),
+      (value: string) => value.replaceAll('secret', '***'),
     );
 
     const record = {
@@ -101,7 +101,7 @@ describe('buildPostHogLogProcessors', () => {
       },
     };
 
-    processor.onEmit(record as any);
+    processor!.onEmit(record as any);
 
     expect(wrappedOnEmit).toHaveBeenCalledWith(
       expect.objectContaining({

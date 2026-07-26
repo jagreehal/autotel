@@ -81,10 +81,10 @@ Add to your Claude Desktop MCP configuration:
 Note: Change console exporter to OTLP exporter for production use:
 
 ```typescript
-import { init } from 'autotel'
+import { init } from 'autotel';
 
 init({
   service: 'mcp-weather-server',
   endpoint: 'http://localhost:4318', // or your OTLP endpoint
-})
+});
 ```

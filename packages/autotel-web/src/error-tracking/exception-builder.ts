@@ -1,4 +1,8 @@
-import type { ExceptionList, ExceptionMechanism, ExceptionRecord } from './types';
+import type {
+  ExceptionList,
+  ExceptionMechanism,
+  ExceptionRecord,
+} from './types';
 import type { StringRedactor } from './redact-values';
 import { parseStack } from './stack-parser';
 

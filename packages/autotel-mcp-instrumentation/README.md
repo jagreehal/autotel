@@ -12,7 +12,7 @@ Automatically instrument MCP servers and clients with OpenTelemetry tracing. Use
 - **Node.js runtime** - Full support for Node.js applications with `autotel`
 - **Tree-shakeable** - Import only what you need (~7KB total, 2-5KB per module)
 - **Zero MCP modifications** - Uses Proxy pattern, no changes to MCP SDK required
-- **Security observability** - Annotation hints, payload-size & character-budget signals, a pluggable prompt-injection classifier, and spotlighting helpers — the protocol-boundary half of the agentic-web defense-in-depth model ([see below](#security-observability))
+- **Security observability** - Annotation hints, payload-size & character-budget signals, a pluggable prompt-injection classifier, and spotlighting helpers: the protocol-boundary half of the agentic-web defense-in-depth model ([see below](#security-observability))
 
 ## Installation
 
@@ -321,14 +321,14 @@ MCP is where untrusted data crosses into your agent. The
 has two vectors: **malicious manifests** (hidden instructions in a tool's
 name/description/annotations) and **contaminated outputs** (injection smuggled
 inside otherwise-legitimate tool results). Detecting these in production is an
-_observability_ problem — and this package makes it observable at the MCP edge.
+_observability_ problem. And this package makes it observable at the MCP edge.
 
 > **Where this fits.** Deterministic kill-switches (cost/token/tool-call
 > ceilings, loop detection) live in
 > [`autotel-genai/guard`](../autotel-genai); identity/scope/policy lives in
 > [`autotel-genai/agent`](../autotel-genai). This package **observes and
-> signals** at the protocol boundary so those layers — and your backend's
-> alerting — have the data they need. It does not replace your agent runtime's
+> signals** at the protocol boundary so those layers: and your backend's
+> alerting: have the data they need. It does not replace your agent runtime's
 > guardrails.
 
 ### What you get for free
@@ -339,7 +339,7 @@ With no extra config, every instrumented tool span now carries:
   `mcp.tool.idempotent`, `mcp.tool.open_world`, `mcp.tool.untrusted_content`
   (read off the tool's `annotations` block).
 - **Payload sizes** → `mcp.tool.arguments.size` / `mcp.tool.result.size` (sizes
-  only — no content). A tool whose output suddenly balloons is a classic
+  only. No content). A tool whose output suddenly balloons is a classic
   injection / token-exhaustion tell.
 
 ```typescript
@@ -389,7 +389,7 @@ instrumentMcpServer(server, {
 ```
 
 > The built-in `heuristicInjectionClassifier()` is a cheap tripwire, not ground
-> truth — it produces false positives and misses novel attacks. Treat its signal
+> truth: it produces false positives and misses novel attacks. Treat its signal
 > as input to a critic / Model Armor, not as a verdict.
 
 ### Spotlight untrusted content before an LLM reads it
@@ -420,9 +420,9 @@ const violations = validateToolBudget({
 ### Workers / edge
 
 The `autotel-mcp-instrumentation/security` toolkit (classifier, `spotlight`,
-`validateToolBudget`, annotation/size/budget helpers) is **runtime-agnostic** —
-it depends only on `@opentelemetry/api`, with a `Buffer`→`btoa` base64 fallback —
-so it runs unchanged in Cloudflare Workers and other edge runtimes. Use it
+`validateToolBudget`, annotation/size/budget helpers) is **runtime-agnostic**.
+It depends only on `@opentelemetry/api`, with a `Buffer`→`btoa` base64 fallback.
+So it runs unchanged in Cloudflare Workers and other edge runtimes. Use it
 directly in an edge MCP server, or alongside `autotel-cloudflare`. The same
 `mcp.security.*` signals are emitted, so `autotel security mcp` queries work
 across Node and Workers deployments.

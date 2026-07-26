@@ -3,7 +3,13 @@
   "$id": "https://autotel.dev/schemas/inventory-reserved/1.0.0.json",
   "title": "InventoryReserved",
   "type": "object",
-  "required": ["orderId", "reservationId", "warehouseId", "items", "reservedAt"],
+  "required": [
+    "orderId",
+    "reservationId",
+    "warehouseId",
+    "items",
+    "reservedAt"
+  ],
   "properties": {
     "orderId": { "type": "string", "format": "uuid" },
     "reservationId": { "type": "string", "format": "uuid" },

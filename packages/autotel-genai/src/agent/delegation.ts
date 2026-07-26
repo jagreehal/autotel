@@ -43,7 +43,9 @@ export interface RecordAgentHandoffMetadata {
   governance?: GovernanceMetadata;
 }
 
-export function delegateToAgent(input: DelegateToAgentInput): DelegationContext {
+export function delegateToAgent(
+  input: DelegateToAgentInput,
+): DelegationContext {
   const authorityLineage = buildAuthorityLineage(
     input.parentIdentity,
     input.targetAgentId,
@@ -54,7 +56,9 @@ export function delegateToAgent(input: DelegateToAgentInput): DelegationContext 
     parentIdentity: input.parentIdentity,
     ...(input.scope !== undefined && { scope: input.scope }),
     ...(input.tokenId !== undefined && { tokenId: input.tokenId }),
-    ...(input.delegationId !== undefined && { delegationId: input.delegationId }),
+    ...(input.delegationId !== undefined && {
+      delegationId: input.delegationId,
+    }),
     authorityLineage,
     authorityLineageHash: hashPayload(authorityLineage),
     depth: Math.max(authorityLineage.length - 1, 0),
@@ -71,8 +75,10 @@ export function recordAgentHandoff(
   // so the "from" side of the handoff is recorded in the canonical, queryable
   // `delegation.authority_lineage` (and its hash) rather than surviving only in
   // the free-text reasoningSummary.
-  const authorityLineage =
-    metadata.authorityLineage ?? [metadata.parentIdentity, metadata.fromAgent.id];
+  const authorityLineage = metadata.authorityLineage ?? [
+    metadata.parentIdentity,
+    metadata.fromAgent.id,
+  ];
 
   const delegation = delegateToAgent({
     parentIdentity: metadata.parentIdentity,

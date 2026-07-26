@@ -2,15 +2,22 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentGlobalCache } from './cache';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 
+// `caches` is a Cloudflare global; `typeof globalThis` (Node lib) doesn't declare
+// it. Read it via a typed view of globalThis so property access stays safe at
+// runtime (undefined, not a ReferenceError) while being correctly typed.
+const globalWithCaches = globalThis as typeof globalThis & {
+  caches: CacheStorage;
+};
+
 describe('Global Cache Instrumentation', () => {
   let mockTracer: any;
   let mockSpan: any;
   let getTracerSpy: any;
-  let originalCaches: typeof globalThis.caches;
+  let originalCaches: typeof caches;
 
   beforeEach(() => {
     // Save original caches
-    originalCaches = globalThis.caches;
+    originalCaches = globalWithCaches.caches;
 
     mockSpan = {
       spanContext: () => ({
@@ -29,12 +36,14 @@ describe('Global Cache Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
 
     // Mock caches API
     const mockCache = {
@@ -55,7 +64,7 @@ describe('Global Cache Instrumentation', () => {
 
     (globalThis as any).caches = {
       default: mockCache,
-      open: vi.fn(async (name: string) => mockCache),
+      open: vi.fn(async (_name: string) => mockCache),
     };
   });
 
@@ -67,11 +76,11 @@ describe('Global Cache Instrumentation', () => {
 
   describe('instrumentGlobalCache()', () => {
     it('should wrap globalThis.caches', () => {
-      const originalCaches = globalThis.caches;
+      const originalCaches = globalWithCaches.caches;
       instrumentGlobalCache();
 
-      expect(globalThis.caches).not.toBe(originalCaches);
-      expect(globalThis.caches.default).toBeDefined();
+      expect(globalWithCaches.caches).not.toBe(originalCaches);
+      expect(globalWithCaches.caches.default).toBeDefined();
     });
 
     it('should instrument caches.default', async () => {
@@ -137,13 +146,17 @@ describe('Global Cache Instrumentation', () => {
     it('should sanitize URL in attributes', async () => {
       instrumentGlobalCache();
 
-      const request = new Request('https://example.com/api/data?secret=123&token=abc');
+      const request = new Request(
+        'https://example.com/api/data?secret=123&token=abc',
+      );
       await caches.default.match(request);
 
       const options = mockTracer.startActiveSpan.mock.calls[0][1];
 
       // URL should be sanitized (query params removed)
-      expect(options.attributes['cache.key']).toBe('https://example.com/api/data');
+      expect(options.attributes['cache.key']).toBe(
+        'https://example.com/api/data',
+      );
       expect(options.attributes['cache.key']).not.toContain('secret');
       expect(options.attributes['cache.key']).not.toContain('token');
     });
@@ -189,7 +202,7 @@ describe('Global Cache Instrumentation', () => {
 
     it('should handle errors in cache.put()', async () => {
       const errorCache = {
-        ...globalThis.caches.default,
+        ...globalWithCaches.caches.default,
         put: vi.fn(async () => {
           throw new Error('Cache error');
         }),
@@ -205,7 +218,9 @@ describe('Global Cache Instrumentation', () => {
       const request = new Request('https://example.com/test');
       const response = new Response('data');
 
-      await expect(caches.default.put(request, response)).rejects.toThrow('Cache error');
+      await expect(caches.default.put(request, response)).rejects.toThrow(
+        'Cache error',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalled();
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -285,7 +300,9 @@ describe('Global Cache Instrumentation', () => {
       const request = new Request('https://example.com/test');
       await caches.default.match(request);
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
       expect(mockSpan.end).toHaveBeenCalled();
     });
   });

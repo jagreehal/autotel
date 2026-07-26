@@ -47,11 +47,7 @@ export async function flush(options?: {
     // Flush events queue (or shutdown queue when tearing down)
     const eventsQueue = getEventQueue();
     if (eventsQueue) {
-      if (forShutdown) {
-        await eventsQueue.shutdown();
-      } else {
-        await eventsQueue.flush();
-      }
+      await (forShutdown ? eventsQueue.shutdown() : eventsQueue.flush());
     }
 
     // Flush OpenTelemetry spans

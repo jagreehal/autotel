@@ -57,12 +57,14 @@ describe('parseInstrumentation', () => {
 
   it('parses autoInstrumentations array', () => {
     expect(parseInstrumentation(CLI_OWNED_SAMPLE).autoInstrumentations).toEqual(
-      ['winston', 'bunyan']
+      ['winston', 'bunyan'],
     );
   });
 
   it('returns empty autoInstrumentations when absent', () => {
-    expect(parseInstrumentation(USER_OWNED_SAMPLE).autoInstrumentations).toEqual([]);
+    expect(
+      parseInstrumentation(USER_OWNED_SAMPLE).autoInstrumentations,
+    ).toEqual([]);
   });
 });
 

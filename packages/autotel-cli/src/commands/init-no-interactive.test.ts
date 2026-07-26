@@ -10,7 +10,8 @@ const { promptBackendMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../ui/prompts', async () => {
-  const actual = await vi.importActual<typeof import('../ui/prompts')>('../ui/prompts');
+  const actual =
+    await vi.importActual<typeof import('../ui/prompts')>('../ui/prompts');
   return {
     ...actual,
     promptBackend: promptBackendMock,
@@ -23,11 +24,13 @@ describe('init no-plan-source behavior', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autotel-init-no-interactive-test-'));
+    tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'autotel-init-no-interactive-test-'),
+    );
     fs.writeFileSync(
       path.join(tempDir, 'package.json'),
       JSON.stringify({ name: 'app', version: '1.0.0' }, null, 2),
-      'utf8'
+      'utf8',
     );
     promptBackendMock.mockClear();
   });

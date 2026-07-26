@@ -3,7 +3,7 @@ import { renderPlanPreview } from './preview';
 import type { InitPlan } from '../lib/plan';
 
 // Strip ANSI codes so the assertions don't depend on chalk's colour codes.
-const ESC = String.fromCodePoint(0x00_1B);
+const ESC = String.fromCodePoint(0x00_1b);
 const ANSI_RE = new RegExp(`${ESC}${String.raw`\[[0-9;]*m`}`, 'g');
 function stripAnsi(s: string): string {
   return s.replaceAll(ANSI_RE, '');
@@ -62,7 +62,9 @@ describe('renderPlanPreview', () => {
   });
 
   it('renders without the detected block when omitted', () => {
-    const out = stripAnsi(renderPlanPreview({ ...samplePlan, detected: undefined }));
+    const out = stripAnsi(
+      renderPlanPreview({ ...samplePlan, detected: undefined }),
+    );
     expect(out).not.toContain('Detected packages:');
   });
 });

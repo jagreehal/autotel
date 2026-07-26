@@ -1,10 +1,31 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { parseConfig, createInitialiser, getActiveConfig, setConfig } from './config';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  parseConfig,
+  createInitialiser,
+  getActiveConfig,
+  setConfig,
+} from './config';
 import type { EdgeConfig } from '../types';
 import { context as api_context } from '@opentelemetry/api';
 
 describe('Config System', () => {
   describe('parseConfig()', () => {
+    it('warns only once when no export path is configured', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const config: EdgeConfig = {
+        service: { name: 'test-service' },
+      };
+
+      parseConfig(config);
+      parseConfig(config);
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        '[autotel-edge] No exporter or spanProcessors configured — spans will not be exported.',
+      );
+      warn.mockRestore();
+    });
+
     it('should parse minimal config (only service.name)', () => {
       const config: EdgeConfig = {
         service: { name: 'test-service' },
@@ -146,13 +167,15 @@ describe('Config System', () => {
       const parsed = parseConfig(config);
 
       expect(parsed.propagator).toBeDefined();
-      expect(parsed.propagator.constructor.name).toBe('W3CTraceContextPropagator');
+      expect(parsed.propagator.constructor.name).toBe(
+        'W3CTraceContextPropagator',
+      );
     });
 
     it('should accept custom propagator', () => {
       const mockPropagator = {
         inject: () => {},
-        extract: () => ({} as any),
+        extract: () => ({}) as any,
         fields: () => [],
       };
 
@@ -274,13 +297,16 @@ describe('Config System', () => {
 
       expect(typeof initialiser).toBe('function');
 
-      const resolved = initialiser({ SERVICE_NAME: 'dynamic-service' }, { request: null as any });
+      const resolved = initialiser(
+        { SERVICE_NAME: 'dynamic-service' },
+        { request: null as any },
+      );
 
       expect(resolved.service.name).toBe('dynamic-service');
     });
 
     it('should pass env and trigger to config function', () => {
-      const configFn = vi.fn((env: any, trigger: any) => ({
+      const configFn = vi.fn((_env: any, _trigger: any) => ({
         service: { name: 'test' },
       }));
 

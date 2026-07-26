@@ -30,7 +30,8 @@ import { SimpleSpanProcessor } from 'autotel/processors';
 import { createLocalStackHelpers } from '../testing/localstack';
 
 // Skip if LocalStack is not available
-const LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+const LOCALSTACK_ENDPOINT =
+  process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
 const localstack = createLocalStackHelpers();
 const isLocalStackAvailable = await localstack.isAvailable();
 
@@ -61,7 +62,9 @@ describe.skipIf(!isLocalStackAvailable)('SQS Integration Tests', () => {
     // Create test queue
     queueName = `test-queue-${Date.now()}`;
     await sqs.send(new CreateQueueCommand({ QueueName: queueName }));
-    const urlResult = await sqs.send(new GetQueueUrlCommand({ QueueName: queueName }));
+    const urlResult = await sqs.send(
+      new GetQueueUrlCommand({ QueueName: queueName }),
+    );
     queueUrl = urlResult.QueueUrl || '';
   });
 
@@ -108,9 +111,9 @@ describe.skipIf(!isLocalStackAvailable)('SQS Integration Tests', () => {
       const producer = new SQSProducer(sqs, { queueUrl });
 
       const result = await producer.sendBatch([
-        { body: JSON.stringify({ id: '1' }), id: 'msg-1' },
-        { body: JSON.stringify({ id: '2' }), id: 'msg-2' },
-        { body: JSON.stringify({ id: '3' }), id: 'msg-3' },
+        { body: JSON.stringify({ id: '1' }) },
+        { body: JSON.stringify({ id: '2' }) },
+        { body: JSON.stringify({ id: '3' }) },
       ]);
 
       expect(result.successful.length).toBe(3);
@@ -223,7 +226,7 @@ describe.skipIf(!isLocalStackAvailable)('SQS Integration Tests', () => {
       });
 
       // Receive and verify trace context was extracted
-      await consumer.processMessages(async (message, ctx) => {
+      await consumer.processMessages(async (_message, ctx) => {
         // The consumer should have extracted the parent trace context
         // and created a child span linked to it
         ctx.setAttribute('processing.test', 'context-propagation');

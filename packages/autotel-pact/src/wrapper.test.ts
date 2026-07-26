@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readLedger } from './ledger.js';
-import { withPactInteraction, type MessageConsumerPactLike, type ReifiedMessage } from './wrapper.js';
+import { isInteractionLedgerEntry } from './types.js';
+import {
+  withPactInteraction,
+  type MessageConsumerPactLike,
+  type ReifiedMessage,
+} from './wrapper.js';
 
 class FakeMessagePact implements MessageConsumerPactLike {
   config = { consumer: 'OrderShipper', provider: 'OrderService' };
@@ -70,8 +75,11 @@ describe('withPactInteraction', () => {
       kind: 'message',
       outcome: 'passed',
     });
-    expect(entries[0]!.duration_ms).toBeGreaterThanOrEqual(0);
-    expect(entries[0]!.observed_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const entry = entries[0]!;
+    if (!isInteractionLedgerEntry(entry))
+      throw new Error('expected an interaction ledger entry');
+    expect(entry.duration_ms).toBeGreaterThanOrEqual(0);
+    expect(entry.observed_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('writes a failed ledger entry when the handler throws', async () => {
@@ -110,7 +118,10 @@ describe('withPactInteraction', () => {
     });
 
     const entries = readLedger({ runId: 'r-iid' });
-    expect(entries[0]!.interaction_id).toBe('order.created.v1');
+    const iidEntry = entries[0]!;
+    if (!isInteractionLedgerEntry(iidEntry))
+      throw new Error('expected an interaction ledger entry');
+    expect(iidEntry.interaction_id).toBe('order.created.v1');
   });
 
   it('writes interactionId into the pact message metadata so the audit can match both sides', async () => {

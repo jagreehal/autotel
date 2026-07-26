@@ -6,7 +6,7 @@
  */
 
 import 'dotenv/config';
-import { shutdown, trace } from 'autotel';
+import { shutdown, withTracing } from 'autotel';
 import pg from 'pg';
 
 console.log('🚀 Starting Postgres POC with separate instrumentation file');
@@ -16,7 +16,7 @@ const connectionString =
 const client = new pg.Client({ connectionString });
 let isConnected = false;
 
-const runScenario = trace((ctx) => async () => {
+const runScenario = withTracing({})((ctx) => async () => {
   ctx.setAttribute('db.system', 'postgresql');
   ctx.setAttribute('scenario', 'pg-demo');
 

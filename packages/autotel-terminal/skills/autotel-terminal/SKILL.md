@@ -54,31 +54,37 @@ node app.js
 ```typescript
 renderTerminal(
   {
-    title: 'My App Traces',   // Dashboard title
-    showStats: true,           // Show span count, error rate, avg duration
-    maxSpans: 200,             // Max spans to display (default: 100)
-    colors: true,              // Auto-detected from TTY if omitted
-    ai: {                      // Optional AI assistant config
-      provider: 'ollama',      // 'ollama' | 'openai' | 'openai-compatible'
-      model: 'granite4',       // Model name
-      apiKey: 'sk-...',        // For cloud providers
-      baseUrl: 'http://...',   // Custom endpoint
+    title: 'My App Traces', // Dashboard title
+    showStats: true, // Show span count, error rate, avg duration
+    maxSpans: 200, // Max spans to display (default: 100)
+    colors: true, // Auto-detected from TTY if omitted
+    ai: {
+      // Optional AI assistant config
+      provider: 'ollama', // 'ollama' | 'openai' | 'openai-compatible'
+      model: 'granite4', // Model name
+      apiKey: 'sk-...', // For cloud providers
+      baseUrl: 'http://...', // Custom endpoint
     },
   },
   stream,
 );
 ```
 
-### StreamingSpanProcessor — wrapping an existing processor
+### StreamingSpanProcessor: wrapping an existing processor
 
 Wrap a `BatchSpanProcessor` so spans go to both the terminal dashboard and your OTLP backend:
 
 ```typescript
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { StreamingSpanProcessor, createTerminalSpanStream } from 'autotel-terminal';
+import {
+  StreamingSpanProcessor,
+  createTerminalSpanStream,
+} from 'autotel-terminal';
 
-const exporter = new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' });
+const exporter = new OTLPTraceExporter({
+  url: 'http://localhost:4318/v1/traces',
+});
 const batchProcessor = new BatchSpanProcessor(exporter);
 const streamingProcessor = new StreamingSpanProcessor(batchProcessor);
 
@@ -116,12 +122,12 @@ autotel-terminal \
 
 CLI OTLP endpoints (all accept OTLP JSON format):
 
-| Endpoint | Signal |
-|---|---|
-| `POST /v1/traces` | Spans streamed into the TUI |
-| `POST /v1/logs` | Logs shown in logs view (`l`) |
-| `POST /v1/metrics` | Acknowledged and counted |
-| `GET /healthz` | Health check |
+| Endpoint           | Signal                        |
+| ------------------ | ----------------------------- |
+| `POST /v1/traces`  | Spans streamed into the TUI   |
+| `POST /v1/logs`    | Logs shown in logs view (`l`) |
+| `POST /v1/metrics` | Acknowledged and counted      |
+| `GET /healthz`     | Health check                  |
 
 ### AI assistant
 
@@ -129,35 +135,37 @@ Auto-detects Ollama (if running locally) or OpenAI (if `OPENAI_API_KEY` is set).
 
 ### Dashboard keyboard controls
 
-| Key | Action |
-|---|---|
-| `↑/↓` | Navigate |
-| `Enter` | Open selected trace (span tree) |
-| `Esc` | Back / exit search |
-| `t` | Toggle trace view / span list |
-| `l` | Toggle logs view |
-| `v` | Toggle service summary |
-| `E` | Toggle errors view |
-| `/` | Search by span name |
-| `e` | Toggle error-only filter |
-| `p` | Pause / resume live updates |
-| `r` | Record snapshot |
-| `c` | Clear all spans |
-| `J` | Export selected trace as JSON (stdout) |
-| `?` | Show help overlay |
-| `Ctrl+C` | Exit |
+| Key      | Action                                 |
+| -------- | -------------------------------------- |
+| `↑/↓`    | Navigate                               |
+| `Enter`  | Open selected trace (span tree)        |
+| `Esc`    | Back / exit search                     |
+| `t`      | Toggle trace view / span list          |
+| `l`      | Toggle logs view                       |
+| `v`      | Toggle service summary                 |
+| `E`      | Toggle errors view                     |
+| `/`      | Search by span name                    |
+| `e`      | Toggle error-only filter               |
+| `p`      | Pause / resume live updates            |
+| `r`      | Record snapshot                        |
+| `c`      | Clear all spans                        |
+| `J`      | Export selected trace as JSON (stdout) |
+| `?`      | Show help overlay                      |
+| `Ctrl+C` | Exit                                   |
 
 ## Common Mistakes
 
-### HIGH — Calling renderTerminal() before init()
+### HIGH: Calling renderTerminal() before init()
 
 Wrong:
+
 ```typescript
 renderTerminal({}, stream); // stream is empty, no provider wired
 init({ service: 'my-app', spanProcessors: [streamingProcessor] });
 ```
 
 Correct:
+
 ```typescript
 init({ service: 'my-app', spanProcessors: [streamingProcessor] });
 const stream = createTerminalSpanStream(streamingProcessor);
@@ -166,9 +174,10 @@ renderTerminal({ title: 'My App' }, stream);
 
 Explanation: `init()` must run first so the `StreamingSpanProcessor` is registered with the tracer provider before any spans are created.
 
-### HIGH — Not adding StreamingSpanProcessor to init()
+### HIGH: Not adding StreamingSpanProcessor to init()
 
 Wrong:
+
 ```typescript
 const streamingProcessor = new StreamingSpanProcessor(null);
 init({ service: 'my-app' }); // streamingProcessor not included
@@ -177,36 +186,41 @@ renderTerminal({}, stream); // Dashboard shows nothing
 ```
 
 Correct:
+
 ```typescript
 const streamingProcessor = new StreamingSpanProcessor(null);
 init({ service: 'my-app', spanProcessors: [streamingProcessor] });
 ```
 
-Explanation: `StreamingSpanProcessor` must be in the `spanProcessors` list passed to `init()` — it is not registered automatically.
+Explanation: `StreamingSpanProcessor` must be in the `spanProcessors` list passed to `init()`. It is not registered automatically.
 
-### MEDIUM — Using standard OTLP port 4318 for the CLI
+### MEDIUM: Using standard OTLP port 4318 for the CLI
 
 Wrong:
+
 ```bash
 npx autotel-terminal --port 4318
 # Now conflicts with any real OTLP collector also on 4318
 ```
 
 Correct:
+
 ```bash
 npx autotel-terminal # Default is 4319, avoids the standard port
 ```
 
 Explanation: The CLI defaults to port 4319 deliberately so it does not clash with an existing OTLP collector on 4318.
 
-### MEDIUM — Passing full protocol path to OTEL_EXPORTER_OTLP_ENDPOINT
+### MEDIUM: Passing full protocol path to OTEL_EXPORTER_OTLP_ENDPOINT
 
 Wrong:
+
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4319/v1/traces
 ```
 
 Correct:
+
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4319
 # The SDK appends /v1/traces automatically

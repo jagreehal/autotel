@@ -39,7 +39,7 @@ describe('defineEnricher', () => {
     const enricher = defineEnricher({
       name: 'noop-enricher',
       field: 'tenant',
-      compute: () => undefined,
+      compute: () => {},
     });
 
     const ctx = { event: { a: 1 } as Record<string, unknown> };

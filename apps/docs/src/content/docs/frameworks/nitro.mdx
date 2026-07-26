@@ -67,7 +67,11 @@ export default defineNitroPlugin(() => {
 
 ```typescript
 // server/api/checkout.post.ts
-import { withAutotelEventHandler, useLogger, parseError } from 'autotel-adapters/nitro';
+import {
+  withAutotelEventHandler,
+  useLogger,
+  parseError,
+} from 'autotel-adapters/nitro';
 import { createStructuredError } from 'autotel';
 
 export default withAutotelEventHandler(async (event) => {
@@ -103,12 +107,14 @@ export default withAutotelEventHandler(async (event) => {
 Use `trace()` from `autotel` for any function below the request boundary:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
-export const chargeCard = trace((ctx) => async (cardId: string, amount: number) => {
-  ctx.setAttribute('amount', amount);
-  return paymentProvider.charge(cardId, amount);
-});
+export const chargeCard = withTracing({})(
+  (ctx) => async (cardId: string, amount: number) => {
+    ctx.setAttribute('amount', amount);
+    return paymentProvider.charge(cardId, amount);
+  },
+);
 ```
 
 ### Auto-instrumentation
@@ -119,5 +125,5 @@ package once and it covers Nitro's H3 server too.
 
 ## Related
 
-- [Adapters](/autotel/frameworks/adapters/) — full `autotel-adapters` reference.
-- [Auto-Instrumentation](/autotel/integrations/auto-instrumentation/) — HTTP, databases, etc.
+- [Adapters](/autotel/frameworks/adapters/): full `autotel-adapters` reference.
+- [Auto-Instrumentation](/autotel/integrations/auto-instrumentation/): HTTP, databases, etc.

@@ -6,7 +6,6 @@ describe('createGoogleCloudConfig()', () => {
     it('should throw if projectId is missing', () => {
       expect(() => {
         createGoogleCloudConfig({
-          // @ts-expect-error - testing missing projectId
           projectId: '',
           service: 'test-service',
         });

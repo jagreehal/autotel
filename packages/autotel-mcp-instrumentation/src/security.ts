@@ -230,7 +230,9 @@ export interface ManifestAssessment {
  */
 export function validateToolBudget(
   tool: ToolBudgetInput,
-  budgets: Partial<typeof MCP_CHAR_BUDGETS> = MCP_CHAR_BUDGETS,
+  budgets: Partial<
+    Record<keyof typeof MCP_CHAR_BUDGETS, number>
+  > = MCP_CHAR_BUDGETS,
 ): BudgetViolation[] {
   const limits = { ...MCP_CHAR_BUDGETS, ...budgets };
   const violations: BudgetViolation[] = [];

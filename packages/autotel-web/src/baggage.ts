@@ -104,14 +104,17 @@ export function setBaggage(
 ): void {
   if (record == null || typeof record !== 'object') {
     if (debug) {
-      console.warn('[autotel-web] setBaggage: expected an object of string values');
+      console.warn(
+        '[autotel-web] setBaggage: expected an object of string values',
+      );
     }
     return;
   }
   for (const [key, value] of Object.entries(record)) {
     const reason = validateBaggageEntry(key, value);
     if (reason) {
-      if (debug) console.warn(`[autotel-web] setBaggage: dropped entry — ${reason}`);
+      if (debug)
+        console.warn(`[autotel-web] setBaggage: dropped entry — ${reason}`);
       continue;
     }
     entries.set(key, value as string);

@@ -31,7 +31,7 @@ export async function promptRuntime(): Promise<RuntimeSelection> {
  * Prompt for backend selection
  */
 export async function promptBackend(
-  backends: Map<string, Preset>
+  backends: Map<string, Preset>,
 ): Promise<string> {
   const choices = [
     { value: 'local', name: 'Local/Console (development only)' },
@@ -67,7 +67,7 @@ export async function promptLogging(): Promise<string | null> {
  * Prompt for database/ORM selection (multi-select)
  */
 export async function promptDatabases(
-  plugins: Map<string, Preset>
+  plugins: Map<string, Preset>,
 ): Promise<string[]> {
   const choices = [...plugins.entries()]
     .filter(([, preset]) => preset.type === 'plugin')
@@ -81,7 +81,8 @@ export async function promptDatabases(
   }
 
   return await checkbox({
-    message: 'Which databases/ORMs do you use? (space to select, enter to continue)',
+    message:
+      'Which databases/ORMs do you use? (space to select, enter to continue)',
     choices,
   });
 }
@@ -90,7 +91,7 @@ export async function promptDatabases(
  * Prompt for event subscribers (multi-select)
  */
 export async function promptSubscribers(
-  subscribers: Map<string, Preset>
+  subscribers: Map<string, Preset>,
 ): Promise<string[]> {
   const choices = [...subscribers.entries()].map(([slug, preset]) => ({
     value: slug,
@@ -110,13 +111,18 @@ export async function promptSubscribers(
 /**
  * Prompt for auto-instrumentation
  */
-export async function promptAutoInstrumentation(): Promise<'all' | 'none' | 'specific'> {
+export async function promptAutoInstrumentation(): Promise<
+  'all' | 'none' | 'specific'
+> {
   return await select({
     message: 'Auto-instrument common libraries?',
     choices: [
-      { value: 'all' as const, name: 'All (recommended) - http, express, pg, redis, etc.' },
+      {
+        value: 'all' as const,
+        name: 'All (recommended) - http, express, pg, redis, etc.',
+      },
       { value: 'specific' as const, name: 'Let me choose specific ones' },
-      { value: 'none' as const, name: 'None - I\'ll handle it manually' },
+      { value: 'none' as const, name: "None - I'll handle it manually" },
     ],
     default: 'all',
   });
@@ -126,18 +132,24 @@ export async function promptAutoInstrumentation(): Promise<'all' | 'none' | 'spe
  * Prompt for startup style
  */
 export async function promptStartupStyle(
-  hasTypeScript: boolean
+  hasTypeScript: boolean,
 ): Promise<StartupStyle> {
   const choices = hasTypeScript
     ? [
-        { value: 'node-esm' as const, name: 'Node ESM (node --import) - Recommended' },
+        {
+          value: 'node-esm' as const,
+          name: 'Node ESM (node --import) - Recommended',
+        },
         { value: 'tsx' as const, name: 'tsx (tsx --import) - For development' },
         { value: 'ts-node' as const, name: 'ts-node' },
         { value: 'nextjs' as const, name: 'Next.js' },
         { value: 'other' as const, name: 'Other / Manual' },
       ]
     : [
-        { value: 'node-esm' as const, name: 'Node ESM (node --import) - Recommended' },
+        {
+          value: 'node-esm' as const,
+          name: 'Node ESM (node --import) - Recommended',
+        },
         { value: 'nextjs' as const, name: 'Next.js' },
         { value: 'other' as const, name: 'Other / Manual' },
       ];
@@ -152,7 +164,10 @@ export async function promptStartupStyle(
 /**
  * Prompt for confirmation
  */
-export async function promptConfirm(message: string, defaultValue = true): Promise<boolean> {
+export async function promptConfirm(
+  message: string,
+  defaultValue = true,
+): Promise<boolean> {
   return await confirm({
     message,
     default: defaultValue,
@@ -162,12 +177,17 @@ export async function promptConfirm(message: string, defaultValue = true): Promi
 /**
  * Prompt for existing config action
  */
-export async function promptExistingConfigAction(): Promise<'update' | 'new' | 'abort'> {
+export async function promptExistingConfigAction(): Promise<
+  'update' | 'new' | 'abort'
+> {
   return await select({
     message: 'Existing instrumentation detected. What would you like to do?',
     choices: [
       { value: 'update' as const, name: 'Update existing file (recommended)' },
-      { value: 'new' as const, name: 'Create new file (src/autotel-config.mts)' },
+      {
+        value: 'new' as const,
+        name: 'Create new file (src/autotel-config.mts)',
+      },
       { value: 'abort' as const, name: 'Abort' },
     ],
     default: 'update',
@@ -179,7 +199,7 @@ export async function promptExistingConfigAction(): Promise<'update' | 'new' | '
  */
 export async function promptInput(
   message: string,
-  defaultValue?: string
+  defaultValue?: string,
 ): Promise<string> {
   return await input({
     message,
@@ -192,10 +212,10 @@ export async function promptInput(
  */
 export async function promptPresetFromType(
   type: PresetType,
-  presets: Map<string, Preset>
+  presets: Map<string, Preset>,
 ): Promise<string | null> {
   const filtered = [...presets.entries()].filter(
-    ([, preset]) => preset.type === type
+    ([, preset]) => preset.type === type,
   );
 
   if (filtered.length === 0) {

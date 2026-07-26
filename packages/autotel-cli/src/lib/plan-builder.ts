@@ -8,10 +8,7 @@
  */
 
 import * as path from 'node:path';
-import type {
-  DetectionResult,
-  PresetSlug,
-} from './dep-detector';
+import type { DetectionResult, PresetSlug } from './dep-detector';
 import type { InitPlan, InitPlanEnvVar } from './plan';
 import type { Preset, ProjectContext } from '../types/index';
 import { getPreset } from '../presets/index';
@@ -98,7 +95,7 @@ export function buildPlanFromDetection(opts: {
   // Files we'll write
   const instrumentationPath = getInstrumentationPath(
     project.packageRoot,
-    project.hasTypeScript
+    project.hasTypeScript,
   );
   const filesToWrite: InitPlan['filesToWrite'] = [
     {

@@ -32,11 +32,12 @@ import { createTraceCollector } from 'autotel/testing';
 ```
 
 **API:**
-- `collector.getSpans()` — returns all completed spans
-- `collector.getSpanByName(name)` — find a span by name
-- `collector.getSpansByName(name)` — find all spans with a name
-- `collector.reset()` — clear collected spans
-- `collector.shutdown()` — clean up resources
+
+- `collector.getSpans()`: returns all completed spans
+- `collector.getSpanByName(name)`: find a span by name
+- `collector.getSpansByName(name)`: find all spans with a name
+- `collector.reset()`: clear collected spans
+- `collector.shutdown()`: clean up resources
 
 ### InMemorySpanExporter (low-level)
 
@@ -67,8 +68,8 @@ afterAll(async () => {
 
 ### File Naming Convention
 
-- **Unit tests:** `*.test.ts` — test individual instrumented functions
-- **Integration tests:** `*.integration.test.ts` — test full request flows with OTel SDK
+- **Unit tests:** `*.test.ts`: test individual instrumented functions
+- **Integration tests:** `*.integration.test.ts`: test full request flows with OTel SDK
 
 Unit tests and integration tests use separate vitest configs in the autotel monorepo.
 
@@ -138,9 +139,7 @@ it('records the error on the span', async () => {
   expect(span).toBeDefined();
   expect(span!.status.code).toBe(2); // SpanStatusCode.ERROR
   expect(span!.events).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ name: 'exception' }),
-    ])
+    expect.arrayContaining([expect.objectContaining({ name: 'exception' })]),
   );
 });
 ```
@@ -170,7 +169,9 @@ it('emits request logger snapshot', async () => {
   expect(events.length).toBeGreaterThan(0);
 
   // Check that the snapshot event contains our attributes
-  const snapshot = events.find((e) => e.name === 'request.snapshot' || e.name === 'log');
+  const snapshot = events.find(
+    (e) => e.name === 'request.snapshot' || e.name === 'log',
+  );
   expect(snapshot).toBeDefined();
 });
 ```
@@ -199,7 +200,7 @@ it('tracks a product event', async () => {
     expect.objectContaining({
       name: 'order.completed',
       attributes: expect.objectContaining({ orderId: 'order-1' }),
-    })
+    }),
   );
 });
 ```
@@ -241,24 +242,26 @@ import { trace, getRequestLogger, createStructuredError } from 'autotel';
 
 // --- System under test ---
 
-const processCheckout = trace((ctx) => async (userId: string, items: string[]) => {
-  const log = getRequestLogger(ctx);
-  log.set({ user: { id: userId }, cart: { items: items.length } });
+const processCheckout = trace(
+  (ctx) => async (userId: string, items: string[]) => {
+    const log = getRequestLogger(ctx);
+    log.set({ user: { id: userId }, cart: { items: items.length } });
 
-  if (items.length === 0) {
-    throw createStructuredError({
-      message: 'Cart is empty',
-      status: 422,
-      why: 'Cannot checkout with an empty cart',
-      fix: 'Add items to your cart first',
-    });
-  }
+    if (items.length === 0) {
+      throw createStructuredError({
+        message: 'Cart is empty',
+        status: 422,
+        why: 'Cannot checkout with an empty cart',
+        fix: 'Add items to your cart first',
+      });
+    }
 
-  const orderId = `order-${Date.now()}`;
-  log.set({ order: { id: orderId } });
-  log.emitNow();
-  return { orderId };
-});
+    const orderId = `order-${Date.now()}`;
+    log.set({ order: { id: orderId } });
+    log.emitNow();
+    return { orderId };
+  },
+);
 
 // --- Tests ---
 
@@ -288,14 +291,14 @@ describe('processCheckout', () => {
   });
 
   it('records structured error for empty cart', async () => {
-    await expect(processCheckout('user-1', [])).rejects.toThrow('Cart is empty');
+    await expect(processCheckout('user-1', [])).rejects.toThrow(
+      'Cart is empty',
+    );
 
     const span = collector.getSpanByName('processCheckout');
     expect(span!.status.code).toBe(2); // ERROR
     expect(span!.events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'exception' }),
-      ])
+      expect.arrayContaining([expect.objectContaining({ name: 'exception' })]),
     );
   });
 
@@ -311,6 +314,6 @@ describe('processCheckout', () => {
 - **Always call `collector.reset()` in `beforeEach`** to isolate tests
 - **Call `collector.shutdown()` in `afterAll`** to clean up resources
 - **Flush event queues before assertions** when testing `track()` calls
-- **Check span.events for request logger output** — `.emitNow()` creates span events
+- **Check span.events for request logger output**: `.emitNow()` creates span events
 - **Check span.status.code** for error assertions: `0` = UNSET, `1` = OK, `2` = ERROR
 - **Use `getSpanByName()`** for targeted assertions instead of indexing into `getSpans()`

@@ -17,7 +17,11 @@ import { OrderWorkflow } from './workflow';
 
 function parseHeaders(raw?: string): Record<string, string> {
   if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 }
 
 // Export the Workflow class for binding configuration
@@ -64,19 +68,25 @@ const handler: ExportedHandler<Env> = {
           { productId: 'prod-1', quantity: 2, price: 29.99 },
           { productId: 'prod-2', quantity: 1, price: 49.99 },
         ];
-        const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const total = items.reduce(
+          (sum, item) => sum + item.price * item.quantity,
+          0,
+        );
 
         const instance = await env.ORDER_WORKFLOW.create({
           id: `wf-${orderId}`,
           params: { orderId, customerId, items, total },
         });
 
-        return Response.json({
-          instanceId: instance.id,
-          orderId,
-          total,
-          status: 'created',
-        }, { status: 201 });
+        return Response.json(
+          {
+            instanceId: instance.id,
+            orderId,
+            total,
+            status: 'created',
+          },
+          { status: 201 },
+        );
       } catch (error) {
         return Response.json(
           { error: error instanceof Error ? error.message : 'Unknown error' },
@@ -90,7 +100,10 @@ const handler: ExportedHandler<Env> = {
       try {
         const instanceId = url.pathname.split('/workflows/')[1];
         if (!instanceId) {
-          return Response.json({ error: 'Missing instance ID' }, { status: 400 });
+          return Response.json(
+            { error: 'Missing instance ID' },
+            { status: 400 },
+          );
         }
 
         const instance = await env.ORDER_WORKFLOW.get(instanceId);

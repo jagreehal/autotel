@@ -138,8 +138,7 @@ export const GEN_AI = {
   /** Seconds from request start to the final streamed chunk. */
   RESPONSE_TIME_TO_FINISH: 'gen_ai.response.time_to_finish',
   /** Output tokens divided by total response time (tokens/second). */
-  RESPONSE_OUTPUT_TOKENS_PER_SECOND:
-    'gen_ai.response.output_tokens_per_second',
+  RESPONSE_OUTPUT_TOKENS_PER_SECOND: 'gen_ai.response.output_tokens_per_second',
   /** Mean seconds between streamed output chunks. */
   RESPONSE_TIME_PER_OUTPUT_CHUNK: 'gen_ai.response.time_per_output_chunk',
 } as const;
@@ -200,8 +199,7 @@ export const GEN_AI_PROVIDER = {
 
 /** A well-known provider value, or any other vendor string. */
 export type GenAiProviderName =
-  | (typeof GEN_AI_PROVIDER)[keyof typeof GEN_AI_PROVIDER]
-  | (string & {});
+  (typeof GEN_AI_PROVIDER)[keyof typeof GEN_AI_PROVIDER] | (string & {});
 
 /** `gen_ai.token.type` values (metric dimension). */
 export const GEN_AI_TOKEN_TYPE = {

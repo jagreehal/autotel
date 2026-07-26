@@ -12,7 +12,10 @@
 
 import { mergeAttrs, readIdentity } from './identity';
 import { TOOL_CATEGORIES } from './tool-taxonomy';
-import { detectAdapterForEvent, detectAdapterForMetric } from './adapters/registry';
+import {
+  detectAdapterForEvent,
+  detectAdapterForMetric,
+} from './adapters/registry';
 import type { AgentMetricSignal, SessionIdentity } from './adapters/types';
 import type {
   AgentEvent,
@@ -72,7 +75,11 @@ function emptyRollup(): AgentSessionRollup {
   };
 }
 
-function createSession(id: string, agent: AgentKind, timestamp: number): AgentSession {
+function createSession(
+  id: string,
+  agent: AgentKind,
+  timestamp: number,
+): AgentSession {
   return {
     id,
     agent,
@@ -101,9 +108,12 @@ function getOrCreate(
 
 function applyIdentity(session: AgentSession, identity: SessionIdentity): void {
   if (!session.user && identity.user) session.user = identity.user;
-  if (!session.organization && identity.organization) session.organization = identity.organization;
-  if (!session.terminal && identity.terminal) session.terminal = identity.terminal;
-  if (!session.appVersion && identity.appVersion) session.appVersion = identity.appVersion;
+  if (!session.organization && identity.organization)
+    session.organization = identity.organization;
+  if (!session.terminal && identity.terminal)
+    session.terminal = identity.terminal;
+  if (!session.appVersion && identity.appVersion)
+    session.appVersion = identity.appVersion;
 }
 
 function touch(session: AgentSession, timestamp: number): void {
@@ -162,10 +172,12 @@ export function foldEvent(
       rollup.cacheCreationTokens += event.cacheCreationTokens ?? 0;
       if (event.costUsd !== undefined) {
         rollup.costUsd += event.costUsd;
-        if (event.costSource === 'estimated') rollup.costEstimatedUsd += event.costUsd;
+        if (event.costSource === 'estimated')
+          rollup.costEstimatedUsd += event.costUsd;
         else rollup.costReportedUsd += event.costUsd;
       }
-      if (event.model) rollup.models[event.model] = (rollup.models[event.model] ?? 0) + 1;
+      if (event.model)
+        rollup.models[event.model] = (rollup.models[event.model] ?? 0) + 1;
       break;
     }
     case 'api_error':
@@ -254,7 +266,11 @@ export function foldEvent(
  * `lines_of_code.count = 42` every interval would inflate the total without end.
  * A drop (counter reset / new process) is treated as a fresh delta.
  */
-function counterDelta(session: AgentSession, seriesKey: string, signal: AgentMetricSignal): number {
+function counterDelta(
+  session: AgentSession,
+  seriesKey: string,
+  signal: AgentMetricSignal,
+): number {
   if (signal.temporality !== 'cumulative') return signal.value;
   const last = session.metricState[seriesKey] ?? 0;
   session.metricState[seriesKey] = signal.value;
@@ -271,7 +287,10 @@ function seriesKey(signal: AgentMetricSignal): string {
 }
 
 /** Fold a metric-only signal (lines, commits, PRs, active time) into the rollup. */
-export function foldMetricSignal(session: AgentSession, signal: AgentMetricSignal): void {
+export function foldMetricSignal(
+  session: AgentSession,
+  signal: AgentMetricSignal,
+): void {
   touch(session, signal.timestamp);
   applyIdentity(session, signal.identity);
   const { rollup } = session;
@@ -279,7 +298,8 @@ export function foldMetricSignal(session: AgentSession, signal: AgentMetricSigna
   switch (signal.kind) {
     case 'lines_of_code': {
       const type = String(signal.attributes['type'] ?? '').toLowerCase();
-      if (type.includes('remov') || type.includes('delet')) rollup.linesRemoved += value;
+      if (type.includes('remov') || type.includes('delet'))
+        rollup.linesRemoved += value;
       else rollup.linesAdded += value;
       break;
     }
@@ -314,9 +334,21 @@ export function ingestEventRecord(
   const event = adapter.normalizeEvent(record);
   if (!event) return null;
 
-  const session = getOrCreate(store, event.sessionId, adapter.kind, event.timestamp);
-  applyIdentity(session, readIdentity(mergeAttrs(record.resource, record.attributes)));
-  return foldEvent(session, event, options.timelineLimit ?? DEFAULT_TIMELINE_LIMIT);
+  const session = getOrCreate(
+    store,
+    event.sessionId,
+    adapter.kind,
+    event.timestamp,
+  );
+  applyIdentity(
+    session,
+    readIdentity(mergeAttrs(record.resource, record.attributes)),
+  );
+  return foldEvent(
+    session,
+    event,
+    options.timelineLimit ?? DEFAULT_TIMELINE_LIMIT,
+  );
 }
 
 /** Ingest a decoded OTLP metric. Returns sessions touched (may be several). */
@@ -329,7 +361,12 @@ export function ingestMetricRecord(
   const touched = new Map<string, AgentSession>();
   for (const signal of adapter.normalizeMetric(record)) {
     if (!signal.sessionId) continue;
-    const session = getOrCreate(store, signal.sessionId, adapter.kind, signal.timestamp);
+    const session = getOrCreate(
+      store,
+      signal.sessionId,
+      adapter.kind,
+      signal.timestamp,
+    );
     foldMetricSignal(session, signal);
     touched.set(session.id, session);
   }
@@ -383,7 +420,9 @@ export interface AgentAggregate {
   hooks: HookStats;
 }
 
-export function summarizeSessions(sessions: Iterable<AgentSession>): AgentAggregate {
+export function summarizeSessions(
+  sessions: Iterable<AgentSession>,
+): AgentAggregate {
   const agg: AgentAggregate = {
     sessions: 0,
     costUsd: 0,
@@ -419,7 +458,8 @@ export function summarizeSessions(sessions: Iterable<AgentSession>): AgentAggreg
     for (const usage of Object.values(rollup.tools)) {
       agg.tools[usage.name] = (agg.tools[usage.name] ?? 0) + usage.count;
       if (usage.isMcp && usage.mcpServer) {
-        agg.mcpServers[usage.mcpServer] = (agg.mcpServers[usage.mcpServer] ?? 0) + usage.count;
+        agg.mcpServers[usage.mcpServer] =
+          (agg.mcpServers[usage.mcpServer] ?? 0) + usage.count;
       }
     }
     for (const category of TOOL_CATEGORIES) {

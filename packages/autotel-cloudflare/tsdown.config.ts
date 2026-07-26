@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown';
-import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -38,11 +38,11 @@ export default defineConfig({
   },
   deps: {
     neverBundle: [
-    'node:async_hooks',
-    'node:events',
-    'node:buffer',
-    'cloudflare:workers',
-    'autotel-edge',
-  ],
+      'node:async_hooks',
+      'node:events',
+      'node:buffer',
+      'cloudflare:workers',
+      'autotel-edge',
+    ],
   },
 });

@@ -135,7 +135,8 @@ export function buildServiceMap(traces: TraceData[]): {
       if (span.kind === 'CLIENT') {
         const childServerSpan = trace.spans.find(
           (candidate) =>
-            candidate.parentSpanId === span.spanId && candidate.kind === 'SERVER',
+            candidate.parentSpanId === span.spanId &&
+            candidate.kind === 'SERVER',
         );
         // The caller is the span's own resource service (service.name /
         // trace.service) — NOT inferResourceName, which would pick up the

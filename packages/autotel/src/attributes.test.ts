@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createTraceCollector, TraceCollector } from './testing';
-import { trace, TraceContext } from './functional';
+import type { AttributeValue } from './trace-context';
+import { createTraceCollector, type TraceCollector } from './testing';
+import { withTracing, type TraceContext } from './functional';
 import {
   attrs,
   setUser,
@@ -20,7 +21,7 @@ describe('attributes', () => {
 
   describe('Pattern A: Key builders', () => {
     it('should create user.id attribute', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         ctx.setAttributes(attrs.user.id('user-123'));
       });
 
@@ -34,7 +35,7 @@ describe('attributes', () => {
     });
 
     it('should create http.request.method attribute', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         ctx.setAttributes(attrs.http.request.method('GET'));
       });
 
@@ -48,13 +49,13 @@ describe('attributes', () => {
     });
 
     it('should create multiple attributes from key builders', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         ctx.setAttributes(
           mergeAttrs(
             attrs.user.id('user-123'),
             attrs.http.request.method('GET'),
             attrs.session.id('session-456'),
-          ),
+          ) as Record<string, AttributeValue>,
         );
       });
 
@@ -72,12 +73,12 @@ describe('attributes', () => {
 
   describe('Pattern B: Object builders', () => {
     it('should create user attributes from object', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         const userAttrs = attrs.user.data({
           id: 'user-123',
           email: 'test@example.com',
         });
-        ctx.setAttributes(userAttrs);
+        ctx.setAttributes(userAttrs as Record<string, AttributeValue>);
       });
 
       await testFn();
@@ -91,13 +92,13 @@ describe('attributes', () => {
     });
 
     it('should create HTTP server attributes from object', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         const httpAttrs = attrs.http.server({
           method: 'POST',
           route: '/users/:id',
           statusCode: 200,
         });
-        ctx.setAttributes(httpAttrs);
+        ctx.setAttributes(httpAttrs as Record<string, AttributeValue>);
       });
 
       await testFn();
@@ -114,7 +115,7 @@ describe('attributes', () => {
 
   describe('Attachers: attachers', () => {
     it('setUser should set user attributes on span (PII redacted by default)', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         setUser(ctx, { id: 'user-123', email: 'test@example.com' });
       });
 
@@ -129,7 +130,7 @@ describe('attributes', () => {
     });
 
     it('httpServer should set HTTP attributes and update span name', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         httpServer(ctx, {
           method: 'GET',
           route: '/api/users',
@@ -150,7 +151,7 @@ describe('attributes', () => {
     });
 
     it('identify should bundle user, session, and device attributes', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         identify(ctx, {
           user: { id: 'user-123', name: 'John Doe' },
           session: { id: 'session-456' },
@@ -174,7 +175,7 @@ describe('attributes', () => {
 
   describe('Domains: domains', () => {
     it('transaction should bundle request attributes', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         transaction(ctx, {
           method: 'GET',
           route: '/api/users',
@@ -198,7 +199,7 @@ describe('attributes', () => {
 
   describe('Validators: validators', () => {
     it('should redact PII attributes with default policy', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         safeSetAttributes(
           ctx,
           attrs.user.data({ email: 'sensitive@example.com' }),
@@ -216,7 +217,7 @@ describe('attributes', () => {
     });
 
     it('should allow PII when guardrails pii is "allow"', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         safeSetAttributes(
           ctx,
           attrs.user.data({ email: 'sensitive@example.com' }),
@@ -234,7 +235,7 @@ describe('attributes', () => {
     });
 
     it('should hash PII when guardrails pii is "hash"', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         safeSetAttributes(
           ctx,
           attrs.user.data({ email: 'sensitive@example.com' }),
@@ -254,7 +255,7 @@ describe('attributes', () => {
     it('should log warning for deprecated attributes', async () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn');
 
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         // Use an actually deprecated attribute (http.method -> http.request.method)
         safeSetAttributes(
           ctx,
@@ -274,7 +275,7 @@ describe('attributes', () => {
     });
 
     it('should truncate values exceeding maxLength', async () => {
-      const testFn = trace((ctx: TraceContext) => async () => {
+      const testFn = withTracing({})((ctx: TraceContext) => async () => {
         safeSetAttributes(ctx, attrs.user.data({ id: 'a'.repeat(300) }), {
           guardrails: { maxLength: 255 },
         });

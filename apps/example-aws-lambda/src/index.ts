@@ -47,14 +47,18 @@ const dynamodb = createTracedClient(DynamoDBClient, { region: 'us-east-1' });
 const sqs = instrumentSDK(new SQSClient({ region: 'us-east-1' }));
 
 // Example 1: Simple handler wrapper
-export const simpleHandler = wrapHandler(async (event: { message: string }, context: LambdaContext) => {
-  console.log('Processing message:', event.message);
-  return { statusCode: 200, body: JSON.stringify({ message: 'Success' }) };
-});
+export const simpleHandler = wrapHandler(
+  async (event: { message: string }, context: LambdaContext) => {
+    console.log('Processing message:', event.message);
+    return { statusCode: 200, body: JSON.stringify({ message: 'Success' }) };
+  },
+);
 
 // Example 2: Handler with context access using traceLambda
-export const uploadHandler = traceLambda<S3Event, { statusCode: number; body: string }>(
-  (ctx) => async (event: S3Event, context: LambdaContext) => {
+export const uploadHandler = traceLambda<
+  S3Event,
+  { statusCode: number; body: string }
+>((ctx) => async (event: S3Event, context: LambdaContext) => {
   // Set custom attributes (ctx is TraceContext)
   ctx.setAttribute('lambda.event.source', 's3');
   ctx.setAttribute('lambda.event.record_count', event.Records.length);
@@ -74,7 +78,7 @@ export const uploadHandler = traceLambda<S3Event, { statusCode: number; body: st
     // Use service-specific semantic helpers
     // Errors are automatically captured in traces by the library
     await processS3File(bucket, key);
-    
+
     // Fetch user data from DynamoDB
     const userId = extractUserIdFromKey(key);
     if (userId) {
@@ -83,7 +87,7 @@ export const uploadHandler = traceLambda<S3Event, { statusCode: number; body: st
 
     // Send notification (commented out for local testing - requires AWS services)
     // await sendNotification({ bucket, key, userId });
-    
+
     // Set more attributes using context
     ctx.setAttribute('processing.complete', true);
   }
@@ -104,7 +108,7 @@ const processS3File = traceS3({
     new GetObjectCommand({
       Bucket: bucket,
       Key: key,
-    })
+    }),
   );
 
   // Process file content
@@ -131,7 +135,7 @@ const fetchUserData = traceDynamoDB({
       Key: {
         id: { S: userId },
       },
-    })
+    }),
   );
 
   if (result.Item) {
@@ -158,7 +162,8 @@ const sendNotification = traceSQS({
 
   const result = await sqs.send(
     new SendMessageCommand({
-      QueueUrl: 'https://sqs.us-east-1.amazonaws.com/123456789012/notifications',
+      QueueUrl:
+        'https://sqs.us-east-1.amazonaws.com/123456789012/notifications',
       MessageBody: JSON.stringify({
         event: 'file-processed',
         bucket: data.bucket,
@@ -186,7 +191,10 @@ function extractUserIdFromKey(key: string): string | undefined {
 
 // Example handler for API Gateway events
 export const apiHandler = wrapHandler(
-  async (event: { httpMethod: string; path: string; body?: string }, context: LambdaContext) => {
+  async (
+    event: { httpMethod: string; path: string; body?: string },
+    context: LambdaContext,
+  ) => {
     console.log(`${event.httpMethod} ${event.path}`);
 
     if (event.path === '/health') {
@@ -214,7 +222,7 @@ export const apiHandler = wrapHandler(
   {
     captureResponse: true,
     extractTraceContext: true,
-  }
+  },
 );
 
 // Local testing (simulates Lambda execution)
@@ -227,7 +235,8 @@ if (process.env.RUN_TESTS === 'true') {
     awsRequestId: 'test-request-id',
     functionName: 'example-aws-lambda',
     functionVersion: '$LATEST',
-    invokedFunctionArn: 'arn:aws:lambda:us-east-1:123456789012:function:example-aws-lambda',
+    invokedFunctionArn:
+      'arn:aws:lambda:us-east-1:123456789012:function:example-aws-lambda',
     memoryLimitInMB: '128',
     getRemainingTimeInMillis: () => 30_000,
     logGroupName: '/aws/lambda/example-aws-lambda',
@@ -238,7 +247,10 @@ if (process.env.RUN_TESTS === 'true') {
   // Test simple handler
   console.log('1. Testing simpleHandler...');
   try {
-    const result1 = await simpleHandler({ message: 'Hello from Lambda!' }, mockContext);
+    const result1 = await simpleHandler(
+      { message: 'Hello from Lambda!' },
+      mockContext,
+    );
     console.log('✅ Result:', result1);
   } catch (error) {
     console.error('❌ Error:', error);
@@ -252,7 +264,7 @@ if (process.env.RUN_TESTS === 'true') {
         httpMethod: 'GET',
         path: '/health',
       },
-      mockContext
+      mockContext,
     );
     console.log('✅ Result:', result2);
   } catch (error) {
@@ -260,14 +272,18 @@ if (process.env.RUN_TESTS === 'true') {
   }
 
   console.log('\n✨ All tests completed!');
-  console.log('\n💡 Note: Some operations may fail in local testing (AWS services not available)');
-  console.log('   This is expected - the instrumentation still works and creates traces');
+  console.log(
+    '\n💡 Note: Some operations may fail in local testing (AWS services not available)',
+  );
+  console.log(
+    '   This is expected - the instrumentation still works and creates traces',
+  );
   console.log('\n💡 To test with real AWS services:');
   console.log('   1. Use LocalStack: pnpm test:localstack');
   console.log('   2. Or deploy to AWS Lambda');
   console.log('   3. Set OTEL_EXPORTER_OTLP_ENDPOINT environment variable');
   console.log('   4. View traces in your observability backend');
-  
+
   // Exit successfully even if some AWS calls failed (this is a demo)
   process.exit(0);
 }

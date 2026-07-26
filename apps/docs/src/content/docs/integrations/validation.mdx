@@ -14,17 +14,17 @@ data enters. Declare the expected shape once; every mismatch becomes a
 
 :::note[PII-safe by construction]
 Only field **paths**, issue **codes**, and the declared **type** are ever
-recorded — never the offending value, and never a validator's error `message`
+recorded. Never the offending value, and never a validator's error `message`
 (which routinely embeds the received value). The secret in a bad SSN field
 never reaches your spans.
 :::
 
 ## Two modes
 
-| Mode | Behaviour |
-| --- | --- |
+| Mode               | Behaviour                                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
 | `reject` (default) | Record telemetry, then throw a 400-shaped [structured error](/autotel/introduction) so the boundary fails cleanly |
-| `observe` | Record telemetry, return the raw input so the handler continues — measure real-world drift before you enforce it |
+| `observe`          | Record telemetry, return the raw input so the handler continues: measure real-world drift before you enforce it   |
 
 ## Usage
 
@@ -61,15 +61,15 @@ and never throws.
 
 On the active span:
 
-| Attribute | Example |
-| --- | --- |
-| `validation.name` | `POST /orders` |
-| `validation.boundary` | `http` |
-| `validation.mode` | `reject` |
-| `validation.issue.count` | `2` |
-| `validation.issue.paths` | `items.0.qty,items.1.sku` |
-| `validation.issue.codes` | `invalid_type,too_small` |
-| `validation.hash` | sha256 of the declared shape (when `toJsonSchema` is given) |
+| Attribute                | Example                                                     |
+| ------------------------ | ----------------------------------------------------------- |
+| `validation.name`        | `POST /orders`                                              |
+| `validation.boundary`    | `http`                                                      |
+| `validation.mode`        | `reject`                                                    |
+| `validation.issue.count` | `2`                                                         |
+| `validation.issue.paths` | `items.0.qty,items.1.sku`                                   |
+| `validation.issue.codes` | `invalid_type,too_small`                                    |
+| `validation.hash`        | sha256 of the declared shape (when `toJsonSchema` is given) |
 
 Plus the counter `autotel.validation.mismatches`, labelled
 `{ boundary, validation, mode }`.
@@ -78,24 +78,24 @@ The attribute keys are exported as `VALIDATION_ATTR` from
 `autotel/validation-attributes` (dependency-free) for dashboards, CLI filters,
 and alert rules.
 
-## Alerting — reuse what you have
+## Alerting: reuse what you have
 
-Validation telemetry is **first-class on its own metric — not a security
+Validation telemetry is **first-class on its own metric. Not a security
 event**. A malformed body is usually a bug or version skew, not an attack. So:
 
 - **Metrics / paging:** alert on `autotel_validation_mismatches_total` (e.g. a
   spike on one `validation` label after a deploy).
 - **Agent triage:** filter spans by `validation.name` / `validation.boundary`.
 
-If a *specific* validator genuinely is a security signal (injection-shaped
-input), escalate it explicitly — never automatically:
+If a _specific_ validator genuinely is a security signal (injection-shaped
+input), escalate it explicitly. Never automatically:
 
 ```ts
 import { onValidationMismatch } from 'autotel/validate';
 
 // opt in, e.g. forward to autotel-audit's securityEvent for the cases you choose
 const off = onValidationMismatch((m) => {
-  if (m.name === 'POST /login') securityEvent({ /* ... */ });
+  if (m.name === 'POST /login') securityEvent({/* ... */});
 });
 ```
 
@@ -116,12 +116,12 @@ a handler.
 - **Not Zod-specific:** any object with a `safeParse(input)` returning
   `{ success, data }` or `{ success: false, error }` works.
 - **Fail-open:** a bug in the recorder never breaks the validated boundary.
-- **Backward compatible:** `defineEvent` is unchanged — it still throws on a bad
+- **Backward compatible:** `defineEvent` is unchanged: it still throws on a bad
   payload. `defineValidator` is the new, observable path.
 
 ## Related
 
-- [Configuration](/autotel/configuration) — `init()` sets up the meter the
+- [Configuration](/autotel/configuration): `init()` sets up the meter the
   counter writes to.
-- [Security Observability](/autotel/integrations/security) — where you'd route
+- [Security Observability](/autotel/integrations/security): where you'd route
   the narrow subset of mismatches that are genuinely security signals.

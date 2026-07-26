@@ -29,7 +29,9 @@ export interface FastifyReplyLike {
 export interface FastifyWithAutotelOptions extends RouteAdapterOptions {
   spanName?: string | ((request: FastifyRequestLike) => string);
   requestLoggerOptions?: RequestLoggerOptions;
-  enrichRequest?: (request: FastifyRequestLike) => Record<string, unknown> | undefined;
+  enrichRequest?: (
+    request: FastifyRequestLike,
+  ) => Record<string, unknown> | undefined;
   autoEmit?: boolean;
 }
 

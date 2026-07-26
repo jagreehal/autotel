@@ -38,7 +38,10 @@ pnpm add autotel-aws autotel
 import { init } from 'autotel';
 import { wrapHandler } from 'autotel-aws/lambda';
 
-init({ service: 'my-lambda', endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT });
+init({
+  service: 'my-lambda',
+  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
 
 export const handler = wrapHandler(async (event, context) => {
   // Your handler code - automatically traced
@@ -120,9 +123,12 @@ await consumer.processMessages(async (message, ctx) => {
 });
 
 // Continuous polling
-await consumer.poll(async (message, ctx) => {
-  return await processOrder(message.body);
-}, { maxIterations: 100 });
+await consumer.poll(
+  async (message, ctx) => {
+    return await processOrder(message.body);
+  },
+  { maxIterations: 100 },
+);
 ```
 
 ## SNS Publisher
@@ -181,7 +187,10 @@ const consumer = new KinesisConsumer(kinesis, {
   streamName: 'my-stream',
 });
 
-const shardIterator = await consumer.getShardIterator('shardId-000000000000', 'TRIM_HORIZON');
+const shardIterator = await consumer.getShardIterator(
+  'shardId-000000000000',
+  'TRIM_HORIZON',
+);
 
 await consumer.processRecords(shardIterator, async (record, ctx) => {
   ctx.setAttribute('order.id', record.orderId);
@@ -194,14 +203,18 @@ await consumer.processRecords(shardIterator, async (record, ctx) => {
 Orchestrate workflows with distributed tracing across state machines:
 
 ```typescript
-import { StepFunctionsExecutor, StepFunctionsActivityWorker } from 'autotel-aws/step-functions';
+import {
+  StepFunctionsExecutor,
+  StepFunctionsActivityWorker,
+} from 'autotel-aws/step-functions';
 import { SFNClient } from '@aws-sdk/client-sfn';
 
 const sfn = new SFNClient({ region: 'us-east-1' });
 
 // Executor - starts workflows with trace context injection
 const executor = new StepFunctionsExecutor(sfn, {
-  stateMachineArn: 'arn:aws:states:us-east-1:123456789:stateMachine:OrderProcessor',
+  stateMachineArn:
+    'arn:aws:states:us-east-1:123456789:stateMachine:OrderProcessor',
 });
 
 // Start async execution
@@ -231,7 +244,10 @@ await worker.poll(async (input, taskToken, ctx) => {
 ### Lambda Invoked by Step Functions
 
 ```typescript
-import { extractStepFunctionsContext, stripTraceContext } from 'autotel-aws/step-functions';
+import {
+  extractStepFunctionsContext,
+  stripTraceContext,
+} from 'autotel-aws/step-functions';
 import { wrapHandler } from 'autotel-aws/lambda';
 
 export const handler = wrapHandler(async (event) => {
@@ -277,7 +293,10 @@ await publisher.putEvents([
 ### Lambda Invoked by EventBridge
 
 ```typescript
-import { extractEventBridgeContext, stripEventBridgeContext } from 'autotel-aws/eventbridge';
+import {
+  extractEventBridgeContext,
+  stripEventBridgeContext,
+} from 'autotel-aws/eventbridge';
 import { wrapHandler } from 'autotel-aws/lambda';
 
 export const handler = wrapHandler(async (event) => {
@@ -304,8 +323,9 @@ const baseHandler = async (event, context) => {
   return { statusCode: 200 };
 };
 
-export const handler = middy(baseHandler)
-  .use(tracingMiddleware({ captureResponse: true }));
+export const handler = middy(baseHandler).use(
+  tracingMiddleware({ captureResponse: true }),
+);
 ```
 
 ## Service-Specific Semantic Helpers
@@ -349,15 +369,15 @@ export const publishEvent = traceKinesis({
 
 ## CloudWatch native OTLP endpoints
 
-As of late 2025 / early 2026, CloudWatch accepts OTLP/HTTP directly — no collector required. Three SigV4-authed endpoints:
+As of late 2025 / early 2026, CloudWatch accepts OTLP/HTTP directly. No collector required. Three SigV4-authed endpoints:
 
-| Signal | Endpoint | Lands in |
-|---|---|---|
-| Traces | `https://xray.<region>.amazonaws.com/v1/traces` | X-Ray + Application Signals + Transaction Search |
-| Logs | `https://logs.<region>.amazonaws.com/v1/logs` | CloudWatch Logs (Logs Insights / LiveTail) |
-| Metrics | `https://monitoring.<region>.amazonaws.com/v1/metrics` | CloudWatch Metrics (PromQL-queryable) |
+| Signal  | Endpoint                                               | Lands in                                         |
+| ------- | ------------------------------------------------------ | ------------------------------------------------ |
+| Traces  | `https://xray.<region>.amazonaws.com/v1/traces`        | X-Ray + Application Signals + Transaction Search |
+| Logs    | `https://logs.<region>.amazonaws.com/v1/logs`          | CloudWatch Logs (Logs Insights / LiveTail)       |
+| Metrics | `https://monitoring.<region>.amazonaws.com/v1/metrics` | CloudWatch Metrics (PromQL-queryable)            |
 
-`autotel-aws/cloudwatch` ships SpanExporter / LogRecordExporter / PushMetricExporter implementations that serialize OTLP/JSON, sign with SigV4, and POST via `globalThis.fetch` — usable directly from a Lambda or any Node 18+ runtime, no sidecar.
+`autotel-aws/cloudwatch` ships SpanExporter / LogRecordExporter / PushMetricExporter implementations that serialize OTLP/JSON, sign with SigV4, and POST via `globalThis.fetch`. Usable directly from a Lambda or any Node 18+ runtime, no sidecar.
 
 ### Install the optional peers
 
@@ -390,14 +410,17 @@ init({
 });
 ```
 
-In Lambda, call `provider.forceFlush()` before the handler returns, or use `SimpleSpanProcessor` for synchronous export — otherwise the runtime freezes the process before the batch ships.
+In Lambda, call `provider.forceFlush()` before the handler returns, or use `SimpleSpanProcessor` for synchronous export. Otherwise the runtime freezes the process before the batch ships.
 
 ### Logs
 
 The logs exporter needs an existing CloudWatch log group + stream. In Lambda the runtime provisions both and exposes them as `AWS_LAMBDA_LOG_GROUP_NAME` / `AWS_LAMBDA_LOG_STREAM_NAME` (read by default).
 
 ```typescript
-import { BatchLogRecordProcessor, LoggerProvider } from '@opentelemetry/sdk-logs';
+import {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+} from '@opentelemetry/sdk-logs';
 import { CloudWatchLogExporter } from 'autotel-aws/cloudwatch';
 
 const provider = new LoggerProvider({
@@ -408,7 +431,10 @@ const provider = new LoggerProvider({
 ### Metrics
 
 ```typescript
-import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import { CloudWatchMetricExporter } from 'autotel-aws/cloudwatch';
 
 const provider = new MeterProvider({
@@ -425,14 +451,14 @@ const provider = new MeterProvider({
 
 You have two integration paths:
 
-| | In-process (`autotel-aws/cloudwatch`) | ADOT Lambda extension layer |
-|---|---|---|
-| Sidecar | None | Yes (extension layer) |
-| Export latency | In the billed handler time | Outside billed time |
-| Cold start cost | Bundle size + SigV4 init | Layer init |
-| Best for | Low-volume functions, custom transports | Higher-throughput functions |
+|                 | In-process (`autotel-aws/cloudwatch`)   | ADOT Lambda extension layer |
+| --------------- | --------------------------------------- | --------------------------- |
+| Sidecar         | None                                    | Yes (extension layer)       |
+| Export latency  | In the billed handler time              | Outside billed time         |
+| Cold start cost | Bundle size + SigV4 init                | Layer init                  |
+| Best for        | Low-volume functions, custom transports | Higher-throughput functions |
 
-Pick one — running both ships duplicate spans.
+Pick one. Running both ships duplicate spans.
 
 ### ADOT collector config (SigV4)
 
@@ -465,6 +491,7 @@ service:
 ```
 
 For logs/metrics use the same pattern with:
+
 - logs endpoint `https://logs.<region>.amazonaws.com/v1/logs`, service `logs`
 - metrics endpoint `https://monitoring.<region>.amazonaws.com/v1/metrics`, service `monitoring`
 
@@ -587,13 +614,13 @@ export const handler = wrapHandler(async (event, context) => {
 
 ### Key Migration Points
 
-| X-Ray SDK | autotel-aws | Notes |
-|-----------|-------------|-------|
-| `AWSXRay.captureAWSv3Client(client)` | `instrumentSDK(client)` or `autoInstrumentAWS()` | Global auto-instrumentation available |
-| `AWSXRay.getSegment().addAnnotation()` | `setXRayAnnotation()` | Same X-Ray filtering capability |
-| `AWSXRay.getSegment().addMetadata()` | `setXRayMetadata()` | Same X-Ray metadata storage |
-| `new AWSXRay.Segment()` | `trace('name', ...)` or `wrapHandler()` | Automatic span management |
-| X-Ray daemon | Any OTLP collector | X-Ray, CloudWatch Agent, or third-party |
+| X-Ray SDK                              | autotel-aws                                      | Notes                                   |
+| -------------------------------------- | ------------------------------------------------ | --------------------------------------- |
+| `AWSXRay.captureAWSv3Client(client)`   | `instrumentSDK(client)` or `autoInstrumentAWS()` | Global auto-instrumentation available   |
+| `AWSXRay.getSegment().addAnnotation()` | `setXRayAnnotation()`                            | Same X-Ray filtering capability         |
+| `AWSXRay.getSegment().addMetadata()`   | `setXRayMetadata()`                              | Same X-Ray metadata storage             |
+| `new AWSXRay.Segment()`                | `trace('name', ...)` or `wrapHandler()`          | Automatic span management               |
+| X-Ray daemon                           | Any OTLP collector                               | X-Ray, CloudWatch Agent, or third-party |
 
 ### Environment Variables
 
@@ -619,50 +646,56 @@ DD_API_KEY=YOUR_API_KEY
 
 ### Entry Points
 
-| Import | Description |
-|--------|-------------|
-| `autotel-aws/lambda` | Lambda handler wrappers + Middy middleware |
-| `autotel-aws/lambda/auto` | Zero-config Lambda auto-init |
-| `autotel-aws/sdk` | AWS SDK v3 instrumentation |
-| `autotel-aws/s3` | S3 semantic helpers |
-| `autotel-aws/dynamodb` | DynamoDB semantic helpers |
-| `autotel-aws/sqs` | SQS helpers + Producer/Consumer |
-| `autotel-aws/sns` | SNS helpers + Publisher |
-| `autotel-aws/kinesis` | Kinesis helpers + Producer/Consumer |
+| Import                       | Description                                      |
+| ---------------------------- | ------------------------------------------------ |
+| `autotel-aws/lambda`         | Lambda handler wrappers + Middy middleware       |
+| `autotel-aws/lambda/auto`    | Zero-config Lambda auto-init                     |
+| `autotel-aws/sdk`            | AWS SDK v3 instrumentation                       |
+| `autotel-aws/s3`             | S3 semantic helpers                              |
+| `autotel-aws/dynamodb`       | DynamoDB semantic helpers                        |
+| `autotel-aws/sqs`            | SQS helpers + Producer/Consumer                  |
+| `autotel-aws/sns`            | SNS helpers + Publisher                          |
+| `autotel-aws/kinesis`        | Kinesis helpers + Producer/Consumer              |
 | `autotel-aws/step-functions` | Step Functions Executor/Worker + context helpers |
-| `autotel-aws/eventbridge` | EventBridge Publisher + context helpers |
-| `autotel-aws/xray` | X-Ray annotation/metadata helpers |
-| `autotel-aws/testing` | Test utilities for Lambda |
-| `autotel-aws/attributes` | Semantic attribute builders |
+| `autotel-aws/eventbridge`    | EventBridge Publisher + context helpers          |
+| `autotel-aws/xray`           | X-Ray annotation/metadata helpers                |
+| `autotel-aws/testing`        | Test utilities for Lambda                        |
+| `autotel-aws/attributes`     | Semantic attribute builders                      |
 
 ### Semantic Attributes
 
 All instrumentation follows [OpenTelemetry AWS Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/cloud-providers/aws-sdk/):
 
 **Lambda:**
+
 - `faas.name`, `faas.version`, `faas.invocation_id`
 - `faas.coldstart`, `faas.trigger`
 - `cloud.provider`, `cloud.region`, `cloud.account.id`
 
 **AWS SDK:**
+
 - `rpc.system` (aws-api), `rpc.service`, `rpc.method`
 - `aws.request_id`, `http.status_code`
 
 **Messaging (SQS/SNS/Kinesis):**
+
 - `messaging.system`, `messaging.destination.name`
 - `messaging.operation`, `messaging.message.id`
 - `messaging.batch.message_count` (for batch operations)
 
 **Database (DynamoDB):**
+
 - `db.system`, `db.operation`, `db.name`
 - `aws.dynamodb.table_names`
 
 **Step Functions:**
+
 - `aws.stepfunctions.state_machine_arn`
 - `aws.stepfunctions.execution_arn`
 - `aws.stepfunctions.activity_arn`
 
 **EventBridge:**
+
 - `aws.eventbridge.event_bus`
 - `aws.eventbridge.source`
 - `aws.eventbridge.detail_type`

@@ -8,7 +8,7 @@ export const MODEL_OPS = new Set([
   'text_completion',
   'generate_content',
   'embeddings',
-])
+]);
 
 /** Operations that invoke an agent. */
-export const AGENT_OPS = new Set(['invoke_agent', 'create_agent'])
+export const AGENT_OPS = new Set(['invoke_agent', 'create_agent']);

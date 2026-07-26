@@ -46,7 +46,10 @@ export {
   isAgentMetric,
   isAgentEvent,
 } from './adapters/registry';
-export { createPrefixAdapter, HANDLED_EVENT_NAMES } from './adapters/prefix-adapter';
+export {
+  createPrefixAdapter,
+  HANDLED_EVENT_NAMES,
+} from './adapters/prefix-adapter';
 export {
   claudeCodeAdapter,
   CLAUDE_CODE_EVENT_CONTRACT,

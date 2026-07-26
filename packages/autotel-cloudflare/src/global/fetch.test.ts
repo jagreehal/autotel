@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentGlobalFetch } from './fetch';
-import { trace, SpanStatusCode, SpanKind, context as api_context } from '@opentelemetry/api';
+import {
+  trace,
+  SpanStatusCode,
+  SpanKind,
+  context as api_context,
+} from '@opentelemetry/api';
 import { setConfig, parseConfig } from 'autotel-edge';
 
 describe('Global Fetch Instrumentation', () => {
@@ -30,12 +35,14 @@ describe('Global Fetch Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, fn) => {
+      startActiveSpan: vi.fn((_name, _options, fn) => {
         return fn(mockSpan);
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
 
     // Mock underlying fetch to return test responses
     globalThis.fetch = vi.fn(async (_input) => {
@@ -98,7 +105,9 @@ describe('Global Fetch Instrumentation', () => {
         const options = mockTracer.startActiveSpan.mock.calls[0][1];
         expect(options.kind).toBe(SpanKind.CLIENT);
         expect(options.attributes['http.request.method']).toBe('POST');
-        expect(options.attributes['url.full']).toBe('https://api.example.com/users');
+        expect(options.attributes['url.full']).toBe(
+          'https://api.example.com/users',
+        );
         expect(options.attributes['server.address']).toBe('api.example.com');
         expect(options.attributes['url.scheme']).toBe('https');
       });
@@ -119,11 +128,13 @@ describe('Global Fetch Instrumentation', () => {
 
         // Find the call with response attributes
         const responseAttributesCall = mockSpan.setAttributes.mock.calls.find(
-          (call: any) => call[0]['http.response.status_code'] !== undefined
+          (call: any) => call[0]['http.response.status_code'] !== undefined,
         );
 
         expect(responseAttributesCall).toBeDefined();
-        expect(responseAttributesCall[0]['http.response.status_code']).toBe(200);
+        expect(responseAttributesCall[0]['http.response.status_code']).toBe(
+          200,
+        );
       });
     });
 
@@ -163,7 +174,7 @@ describe('Global Fetch Instrumentation', () => {
 
       // Should not have tried to inject traceparent
       const traceparentCalls = headersSpy.mock.calls.filter(
-        (call) => call[0] === 'traceparent'
+        (call) => call[0] === 'traceparent',
       );
       expect(traceparentCalls.length).toBe(0);
 
@@ -221,7 +232,9 @@ describe('Global Fetch Instrumentation', () => {
       await api_context.with(ctx, async () => {
         await fetch('https://api.example.com/users');
 
-        expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+        expect(mockSpan.setStatus).toHaveBeenCalledWith({
+          code: SpanStatusCode.OK,
+        });
         expect(mockSpan.end).toHaveBeenCalled();
       });
     });
@@ -242,7 +255,9 @@ describe('Global Fetch Instrumentation', () => {
       await api_context.with(ctx, async () => {
         await fetch('https://api.example.com/users');
 
-        expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
+        expect(mockSpan.setStatus).toHaveBeenCalledWith({
+          code: SpanStatusCode.ERROR,
+        });
         expect(mockSpan.end).toHaveBeenCalled();
       });
     });
@@ -261,7 +276,9 @@ describe('Global Fetch Instrumentation', () => {
       instrumentGlobalFetch();
 
       await api_context.with(ctx, async () => {
-        await expect(fetch('https://api.example.com/users')).rejects.toThrow('Network error');
+        await expect(fetch('https://api.example.com/users')).rejects.toThrow(
+          'Network error',
+        );
 
         expect(mockSpan.recordException).toHaveBeenCalled();
         expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -355,7 +372,9 @@ describe('Global Fetch Instrumentation', () => {
         await fetch('https://api.example.com/users?token=secret&page=1');
 
         const options = mockTracer.startActiveSpan.mock.calls[0][1];
-        expect(options.attributes['url.full']).toBe('https://api.example.com/users?token=secret&page=1');
+        expect(options.attributes['url.full']).toBe(
+          'https://api.example.com/users?token=secret&page=1',
+        );
         expect(options.attributes['url.query']).toBe('?token=secret&page=1');
       });
     });
@@ -373,7 +392,9 @@ describe('Global Fetch Instrumentation', () => {
         await fetch('https://api.example.com/users?token=secret&page=1');
 
         const options = mockTracer.startActiveSpan.mock.calls[0][1];
-        expect(options.attributes['url.full']).toBe('https://api.example.com/users');
+        expect(options.attributes['url.full']).toBe(
+          'https://api.example.com/users',
+        );
         expect(options.attributes['url.query']).toBe('[REDACTED]');
       });
     });
@@ -391,7 +412,9 @@ describe('Global Fetch Instrumentation', () => {
         await fetch('https://api.example.com/users');
 
         const options = mockTracer.startActiveSpan.mock.calls[0][1];
-        expect(options.attributes['url.full']).toBe('https://api.example.com/users');
+        expect(options.attributes['url.full']).toBe(
+          'https://api.example.com/users',
+        );
         expect(options.attributes['url.query']).toBe('');
       });
     });

@@ -53,7 +53,11 @@ function seedTraces() {
         traceId: 'trace-1',
         duration: 12,
         startTime: now - 1000,
-        rootSpan: makeSpan({ name: 'GET /', duration: 12, startTime: now - 1000 }),
+        rootSpan: makeSpan({
+          name: 'GET /',
+          duration: 12,
+          startTime: now - 1000,
+        }),
       }),
       makeTrace({
         traceId: 'trace-2',
@@ -95,10 +99,16 @@ export const BottomDock: Story = {
   play: async ({ canvas }) => {
     seedTraces();
     await expect(await canvas.findByText('autotel')).toBeInTheDocument();
-    await expect(canvas.getByRole('button', { name: 'Traces' })).toBeInTheDocument();
-    await expect(canvas.getByRole('button', { name: 'Close devtools' })).toBeInTheDocument();
+    await expect(
+      canvas.getByRole('button', { name: 'Traces' }),
+    ).toBeInTheDocument();
+    await expect(
+      canvas.getByRole('button', { name: 'Close devtools' }),
+    ).toBeInTheDocument();
     // No modal backdrop should exist.
-    await expect(canvas.queryByLabelText('Close panel')).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByLabelText('Close panel'),
+    ).not.toBeInTheDocument();
   },
 };
 
@@ -147,7 +157,9 @@ export const CycleDock: Story = {
   play: async ({ canvas, userEvent }) => {
     seedTraces();
     expect(widgetDockedSignal.value).toBe('bottom');
-    const dockBtn = canvas.getByRole('button', { name: 'Change dock position' });
+    const dockBtn = canvas.getByRole('button', {
+      name: 'Change dock position',
+    });
     await userEvent.click(dockBtn);
     expect(widgetDockedSignal.value).toBe('right');
     await userEvent.click(dockBtn);

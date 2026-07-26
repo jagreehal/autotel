@@ -20,9 +20,19 @@
  */
 
 import 'dotenv/config';
-import { init, trace, shutdown, Metric, type TraceContext } from 'autotel';
+import {
+  init,
+  trace,
+  shutdown,
+  Metric,
+  type TraceContext,
+  withTracing,
+} from 'autotel';
 import { createBuiltinLogger, LOG_LEVEL, type LogLevel } from 'autotel/logger';
-import { createDatadogConfig, type DatadogSite } from 'autotel-backends/datadog';
+import {
+  createDatadogConfig,
+  type DatadogSite,
+} from 'autotel-backends/datadog';
 
 // ============================================================================
 // Constants
@@ -59,7 +69,9 @@ function loadConfig(): AppConfig {
   if (!apiKey) {
     console.error('❌ Error: DATADOG_API_KEY environment variable is required');
     console.error('   Copy .env.example to .env and add your API key');
-    console.error('   Get your key from: https://app.datadoghq.com/organization-settings/api-keys');
+    console.error(
+      '   Get your key from: https://app.datadoghq.com/organization-settings/api-keys',
+    );
     process.exit(1);
   }
 
@@ -102,11 +114,11 @@ displayConfig(config);
 
 /** Simulate async delay (e.g., API calls, processing time) */
 const delay = (ms: number): Promise<void> =>
-  new Promise(resolve => setTimeout(resolve, ms));
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Simulate random failures for testing error handling */
 const shouldSimulateFailure = (probability: number): boolean =>
-  Math.random() > (1 - probability);
+  Math.random() > 1 - probability;
 
 // ============================================================================
 // Initialize Autotel with Datadog OTLP
@@ -132,13 +144,11 @@ init(
     environment: config.environment,
     version: config.version,
     enableLogs: config.enableLogExport,
-  })
+  }),
 );
 
 logger.info('✅ Autotel initialized with Datadog OTLP');
-logger.info(
-  `   Sending telemetry to https://otlp.${config.site}`,
-);
+logger.info(`   Sending telemetry to https://otlp.${config.site}`);
 
 // Note: Adaptive sampling is enabled by default (10% baseline, 100% errors/slow)
 // This reduces costs while ensuring you capture all important traces
@@ -154,134 +164,156 @@ const metrics = new Metric('datadog-example', { logger });
  * Example 1: Simple traced function
  * Demonstrates basic trace() usage with custom attributes
  */
-const processOrder = trace((ctx: TraceContext) => async (orderId: string, amount: number) => {
-  logger.info('Processing order', { orderId, amount });
+const processOrder = withTracing({})(
+  (ctx: TraceContext) => async (orderId: string, amount: number) => {
+    logger.info('Processing order', { orderId, amount });
 
-  // Add custom attributes to the trace
-  ctx.setAttribute('order.id', orderId);
-  ctx.setAttribute('order.amount', amount);
-  ctx.setAttribute('order.currency', DEFAULT_CURRENCY);
+    // Add custom attributes to the trace
+    ctx.setAttribute('order.id', orderId);
+    ctx.setAttribute('order.amount', amount);
+    ctx.setAttribute('order.currency', DEFAULT_CURRENCY);
 
-  // Simulate processing
-  await delay(SIMULATION_DELAYS.ORDER_PROCESSING);
+    // Simulate processing
+    await delay(SIMULATION_DELAYS.ORDER_PROCESSING);
 
-  // Track business metric
-  metrics.trackEvent('order.processed', {
-    currency: DEFAULT_CURRENCY,
-    environment: config.environment,
-  });
+    // Track business metric
+    metrics.trackEvent('order.processed', {
+      currency: DEFAULT_CURRENCY,
+      environment: config.environment,
+    });
 
-  logger.info('Order processed successfully', { orderId, traceId: ctx.traceId });
+    logger.info('Order processed successfully', {
+      orderId,
+      traceId: ctx.traceId,
+    });
 
-  return { orderId, status: 'completed' as const, amount };
-});
+    return { orderId, status: 'completed' as const, amount };
+  },
+);
 
 /**
  * Example 2: Nested traced functions
  * Demonstrates parent-child span relationships
  */
-const validatePayment = trace((ctx: TraceContext) => async (orderId: string, amount: number) => {
-  logger.info('Validating payment', { orderId });
+const validatePayment = withTracing({})(
+  (ctx: TraceContext) => async (orderId: string, amount: number) => {
+    logger.info('Validating payment', { orderId });
 
-  ctx.setAttribute('payment.amount', amount);
+    ctx.setAttribute('payment.amount', amount);
 
-  // Simulate validation
-  await delay(SIMULATION_DELAYS.PAYMENT_VALIDATION);
+    // Simulate validation
+    await delay(SIMULATION_DELAYS.PAYMENT_VALIDATION);
 
-  if (amount < 0) {
-    throw new Error('Invalid payment amount');
-  }
+    if (amount < 0) {
+      throw new Error('Invalid payment amount');
+    }
 
-  return { valid: true };
-});
+    return { valid: true };
+  },
+);
 
-const chargeCard = trace((ctx: TraceContext) => async (orderId: string) => {
-  logger.info('Charging card', { orderId });
+const chargeCard = withTracing({})(
+  (ctx: TraceContext) => async (orderId: string) => {
+    logger.info('Charging card', { orderId });
 
-  ctx.setAttribute('payment.method', 'credit_card');
+    ctx.setAttribute('payment.method', 'credit_card');
 
-  // Simulate charging
-  await delay(SIMULATION_DELAYS.CARD_CHARGING);
+    // Simulate charging
+    await delay(SIMULATION_DELAYS.CARD_CHARGING);
 
-  return { transactionId: `txn_${Date.now()}` };
-});
+    return { transactionId: `txn_${Date.now()}` };
+  },
+);
 
-const processPayment = trace((ctx: TraceContext) => async (orderId: string, amount: number) => {
-  logger.info('Processing payment', { orderId, amount });
+const processPayment = withTracing({})(
+  (ctx: TraceContext) => async (orderId: string, amount: number) => {
+    logger.info('Processing payment', { orderId, amount });
 
-  ctx.setAttribute('order.id', orderId);
-  ctx.setAttribute('payment.amount', amount);
+    ctx.setAttribute('order.id', orderId);
+    ctx.setAttribute('payment.amount', amount);
 
-  // These create child spans automatically
-  await validatePayment(orderId, amount);
-  const charge = await chargeCard(orderId);
+    // These create child spans automatically
+    await validatePayment(orderId, amount);
+    const charge = await chargeCard(orderId);
 
-  logger.info('Payment completed', { orderId, transactionId: charge.transactionId });
+    logger.info('Payment completed', {
+      orderId,
+      transactionId: charge.transactionId,
+    });
 
-  return charge;
-});
+    return charge;
+  },
+);
 
 /**
  * Example 3: Error handling and capture
  * Demonstrates how errors are automatically captured in traces
  */
-const processRefund = trace((ctx: TraceContext) => async (orderId: string) => {
-  logger.info('Processing refund', { orderId });
+const processRefund = withTracing({})(
+  (ctx: TraceContext) => async (orderId: string) => {
+    logger.info('Processing refund', { orderId });
 
-  ctx.setAttribute('refund.order_id', orderId);
+    ctx.setAttribute('refund.order_id', orderId);
 
-  // Simulate error scenario
-  if (shouldSimulateFailure(REFUND_FAILURE_PROBABILITY)) {
-    // Error is automatically captured in the trace with full stack trace
-    const error = new Error('Refund failed: insufficient funds');
-    logger.error('Refund failed: insufficient funds', error, { orderId });
-    throw error;
-  }
+    // Simulate error scenario
+    if (shouldSimulateFailure(REFUND_FAILURE_PROBABILITY)) {
+      // Error is automatically captured in the trace with full stack trace
+      const error = new Error('Refund failed: insufficient funds');
+      logger.error('Refund failed: insufficient funds', error, { orderId });
+      throw error;
+    }
 
-  await delay(SIMULATION_DELAYS.REFUND_PROCESSING);
+    await delay(SIMULATION_DELAYS.REFUND_PROCESSING);
 
-  logger.info('Refund processed successfully', { orderId });
+    logger.info('Refund processed successfully', { orderId });
 
-  return { orderId, status: 'refunded' as const };
-});
+    return { orderId, status: 'refunded' as const };
+  },
+);
 
 /**
  * Example 4: Complex operation with multiple metrics
  * Demonstrates metrics recording alongside traces
  */
-const generateReport = trace((ctx: TraceContext) => async (reportType: string) => {
-  logger.info('Generating report', { reportType });
+const generateReport = withTracing({})(
+  (ctx: TraceContext) => async (reportType: string) => {
+    logger.info('Generating report', { reportType });
 
-  ctx.setAttribute('report.type', reportType);
+    ctx.setAttribute('report.type', reportType);
 
-  const startTime = Date.now();
+    const startTime = Date.now();
 
-  // Simulate report generation
-  await delay(SIMULATION_DELAYS.REPORT_GENERATION);
+    // Simulate report generation
+    await delay(SIMULATION_DELAYS.REPORT_GENERATION);
 
-  const duration = Date.now() - startTime;
-  const recordCount = Math.floor(Math.random() * 1000) + 100;
+    const duration = Date.now() - startTime;
+    const recordCount = Math.floor(Math.random() * 1000) + 100;
 
-  // Track multiple metrics
-  metrics.trackEvent('report.generated', {
-    report_type: reportType,
-  });
+    // Track multiple metrics
+    metrics.trackEvent('report.generated', {
+      report_type: reportType,
+    });
 
-  metrics.trackValue('report.duration_ms', duration, {
-    report_type: reportType,
-  });
+    metrics.trackValue('report.duration_ms', duration, {
+      report_type: reportType,
+    });
 
-  metrics.trackValue('report.records', recordCount, {
-    report_type: reportType,
-  });
+    metrics.trackValue('report.records', recordCount, {
+      report_type: reportType,
+    });
 
-  ctx.setAttribute('report.records', recordCount);
-  ctx.setAttribute('report.duration_ms', duration);
+    ctx.setAttribute('report.records', recordCount);
+    ctx.setAttribute('report.duration_ms', duration);
 
-  logger.info('Report generated successfully', { reportType, recordCount, duration });
+    logger.info('Report generated successfully', {
+      reportType,
+      recordCount,
+      duration,
+    });
 
-  return { reportType, recordCount, duration };
-});
+    return { reportType, recordCount, duration };
+  },
+);
 
 // ============================================================================
 // Main Execution
@@ -294,7 +326,7 @@ async function main() {
     // Example 1: Process multiple orders
     console.log('📦 Example 1: Processing orders');
     const order1 = await processOrder('ORD-001', 99.99);
-    const order2 = await processOrder('ORD-002', 149.50);
+    const order2 = await processOrder('ORD-002', 149.5);
     console.log(`   ✅ Processed ${order1.orderId} and ${order2.orderId}\n`);
 
     // Example 2: Process payment with nested spans
@@ -318,8 +350,12 @@ async function main() {
     console.log('📊 Example 4: Generating reports (with metrics)');
     const report1 = await generateReport('daily_sales');
     const report2 = await generateReport('monthly_summary');
-    console.log(`   ✅ Generated ${report1.reportType}: ${report1.recordCount} records`);
-    console.log(`   ✅ Generated ${report2.reportType}: ${report2.recordCount} records\n`);
+    console.log(
+      `   ✅ Generated ${report1.reportType}: ${report1.recordCount} records`,
+    );
+    console.log(
+      `   ✅ Generated ${report2.reportType}: ${report2.recordCount} records\n`,
+    );
 
     // Wait for data to be exported
     console.log('⏳ Waiting 3 seconds for data to be exported to Datadog...');
@@ -327,17 +363,25 @@ async function main() {
 
     console.log('\n✅ Examples completed successfully!\n');
     console.log('📊 View your data in Datadog:');
-    console.log(`   Traces: https://app.${config.site}/apm/traces?query=service%3A${config.service}`);
-    console.log(`   Logs:   https://app.${config.site}/logs?query=service%3A${config.service}`);
-    console.log(`   Metrics: https://app.${config.site}/metric/explorer?query=${config.service}`);
+    console.log(
+      `   Traces: https://app.${config.site}/apm/traces?query=service%3A${config.service}`,
+    );
+    console.log(
+      `   Logs:   https://app.${config.site}/logs?query=service%3A${config.service}`,
+    );
+    console.log(
+      `   Metrics: https://app.${config.site}/metric/explorer?query=${config.service}`,
+    );
     console.log('\n💡 Tips:');
     console.log('   - Logs include trace_id and span_id for correlation');
     console.log('   - Failed refunds have error traces with full stack traces');
     console.log('   - Custom metrics are prefixed with your service name');
     console.log('   - Adaptive sampling captures all errors automatically');
-
   } catch (error) {
-    logger.error('Application error', error instanceof Error ? error : new Error(String(error)));
+    logger.error(
+      'Application error',
+      error instanceof Error ? error : new Error(String(error)),
+    );
     console.error('❌ Error:', error);
   } finally {
     // Graceful shutdown: flush all pending traces, logs, and metrics

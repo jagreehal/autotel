@@ -111,7 +111,9 @@ describe('structured-error helpers', () => {
       recordException: vi.fn(),
       setStatus: vi.fn(),
       setAttributes: vi.fn(),
-    } as unknown as TraceContext;
+    } as unknown as TraceContext & {
+      recordException: (error: unknown) => void;
+    };
 
     const err = createStructuredError({
       message: 'Checkout failed',
@@ -171,7 +173,7 @@ describe('ctx.recordError', () => {
     ctx.recordError('boom');
 
     expect(recordException).toHaveBeenCalledTimes(1);
-    const recorded = recordException.mock.calls[0][0];
+    const recorded = recordException.mock.calls[0]![0];
     expect(recorded).toBeInstanceOf(Error);
     expect(recorded.message).toBe('boom');
     expect(setStatus).toHaveBeenCalledWith({ code: 2, message: 'boom' });

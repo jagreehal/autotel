@@ -27,7 +27,8 @@ import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 import { createLocalStackHelpers } from '../testing/localstack';
 
-const LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+const LOCALSTACK_ENDPOINT =
+  process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
 const localstack = createLocalStackHelpers();
 const isLocalStackAvailable = await localstack.isAvailable();
 
@@ -63,7 +64,9 @@ describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
     // Clean up
     if (eventBusName) {
       try {
-        await eventBridge.send(new DeleteEventBusCommand({ Name: eventBusName }));
+        await eventBridge.send(
+          new DeleteEventBusCommand({ Name: eventBusName }),
+        );
       } catch {
         // Ignore cleanup errors
       }
@@ -99,9 +102,15 @@ describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
       // Should have created a span for the publish operation
       const publishSpan = spans.find((s) => s.name === 'eventbridge.PutEvents');
       expect(publishSpan).toBeDefined();
-      expect(publishSpan?.attributes['aws.eventbridge.event_bus']).toBe(eventBusName);
-      expect(publishSpan?.attributes['aws.eventbridge.source']).toBe('com.test.integration');
-      expect(publishSpan?.attributes['aws.eventbridge.detail_type']).toBe('TestEvent');
+      expect(publishSpan?.attributes['aws.eventbridge.event_bus']).toBe(
+        eventBusName,
+      );
+      expect(publishSpan?.attributes['aws.eventbridge.source']).toBe(
+        'com.test.integration',
+      );
+      expect(publishSpan?.attributes['aws.eventbridge.detail_type']).toBe(
+        'TestEvent',
+      );
     });
 
     it('should publish batch events', async () => {
@@ -123,7 +132,9 @@ describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
       await flush();
       const spans = exporter.getFinishedSpans();
 
-      const batchSpan = spans.find((s) => s.name === 'eventbridge.PutEvents.batch');
+      const batchSpan = spans.find(
+        (s) => s.name === 'eventbridge.PutEvents.batch',
+      );
       expect(batchSpan).toBeDefined();
       expect(batchSpan?.attributes['aws.eventbridge.batch_size']).toBe(3);
       expect(batchSpan?.attributes['aws.eventbridge.successful_count']).toBe(3);
@@ -149,7 +160,9 @@ describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
 
       const publishSpan = spans.find((s) => s.name === 'eventbridge.PutEvents');
       expect(publishSpan).toBeDefined();
-      expect(publishSpan?.attributes['aws.eventbridge.source']).toBe('com.test.custom');
+      expect(publishSpan?.attributes['aws.eventbridge.source']).toBe(
+        'com.test.custom',
+      );
     });
   });
 
@@ -205,9 +218,8 @@ describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
   describe('Context Extraction', () => {
     it('should extract trace context from EventBridge Lambda event', async () => {
       // Import the extraction function
-      const { extractEventBridgeContext, stripEventBridgeContext } = await import(
-        '../eventbridge/index'
-      );
+      const { extractEventBridgeContext, stripEventBridgeContext } =
+        await import('../eventbridge/index');
 
       // Simulate an EventBridge Lambda event
       const event = {
@@ -222,7 +234,8 @@ describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
         detail: {
           orderId: '123',
           _traceContext: {
-            traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+            traceparent:
+              '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
             tracestate: 'rojo=00f067aa0ba902b7',
           },
         },
@@ -238,7 +251,8 @@ describe.skipIf(!isLocalStackAvailable)('EventBridge Integration Tests', () => {
     });
 
     it('should handle events without trace context', async () => {
-      const { extractEventBridgeContext } = await import('../eventbridge/index');
+      const { extractEventBridgeContext } =
+        await import('../eventbridge/index');
 
       const event = {
         version: '0',

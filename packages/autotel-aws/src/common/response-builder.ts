@@ -7,9 +7,9 @@ import type { AWSCommandMetadata } from '../types';
 /**
  * Extract response metadata from AWS SDK v3 response
  */
-export function extractResponseMetadata(
-  response: { $metadata?: Record<string, unknown> }
-): Partial<AWSCommandMetadata> {
+export function extractResponseMetadata(response: {
+  $metadata?: Record<string, unknown>;
+}): Partial<AWSCommandMetadata> {
   const metadata = response.$metadata || {};
   return {
     requestId: metadata.requestId as string | undefined,

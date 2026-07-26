@@ -38,10 +38,12 @@ import { GEN_AI_METRIC } from './semconv.js';
  * advice for `gen_ai.client.operation.duration` and the streaming-timing
  * metrics (`time_to_first_chunk`, `time_per_output_chunk`).
  */
-export const GEN_AI_DURATION_BUCKETS_SECONDS: readonly number[] = Object.freeze([
-  0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48,
-  40.96, 81.92,
-]);
+export const GEN_AI_DURATION_BUCKETS_SECONDS: readonly number[] = Object.freeze(
+  [
+    0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48,
+    40.96, 81.92,
+  ],
+);
 
 /**
  * Token-count buckets for `gen_ai.client.token.usage`. Matches the spec's
@@ -105,15 +107,16 @@ export function llmHistogramAdvice(kind: GenAiHistogramKind): {
 export function genAiMetricViews(
   extra: { instrumentName: string; kind: GenAiHistogramKind }[] = [],
 ): ViewOptions[] {
-  const defaults: Array<{ instrumentName: string; kind: GenAiHistogramKind }> = [
-    { instrumentName: GEN_AI_METRIC.OPERATION_DURATION, kind: 'duration' },
-    { instrumentName: GEN_AI_METRIC.TIME_TO_FIRST_CHUNK, kind: 'duration' },
-    { instrumentName: GEN_AI_METRIC.TIME_PER_OUTPUT_CHUNK, kind: 'duration' },
-    { instrumentName: GEN_AI_METRIC.WORKFLOW_DURATION, kind: 'duration' },
-    { instrumentName: GEN_AI_METRIC.TOKEN_USAGE, kind: 'tokens' },
-    // Autotel-emitted cost metric. No-op if you don't emit it.
-    { instrumentName: 'gen_ai.client.cost.usd', kind: 'cost' },
-  ];
+  const defaults: Array<{ instrumentName: string; kind: GenAiHistogramKind }> =
+    [
+      { instrumentName: GEN_AI_METRIC.OPERATION_DURATION, kind: 'duration' },
+      { instrumentName: GEN_AI_METRIC.TIME_TO_FIRST_CHUNK, kind: 'duration' },
+      { instrumentName: GEN_AI_METRIC.TIME_PER_OUTPUT_CHUNK, kind: 'duration' },
+      { instrumentName: GEN_AI_METRIC.WORKFLOW_DURATION, kind: 'duration' },
+      { instrumentName: GEN_AI_METRIC.TOKEN_USAGE, kind: 'tokens' },
+      // Autotel-emitted cost metric. No-op if you don't emit it.
+      { instrumentName: 'gen_ai.client.cost.usd', kind: 'cost' },
+    ];
 
   return [...defaults, ...extra].map(
     ({ instrumentName, kind }) =>

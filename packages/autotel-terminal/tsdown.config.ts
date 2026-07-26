@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown';
-import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 
 export default defineConfig({
   outExtensions: tsupCompatOutExtensions,
@@ -15,7 +15,13 @@ export default defineConfig({
   treeshake: true,
   minify: false,
   deps: {
-    neverBundle: ['autotel', 'ai', 'ai-sdk-ollama', '@ai-sdk/openai', '@ai-sdk/openai-compatible'],
+    neverBundle: [
+      'autotel',
+      'ai',
+      'ai-sdk-ollama',
+      '@ai-sdk/openai',
+      '@ai-sdk/openai-compatible',
+    ],
   },
   target: false,
 });

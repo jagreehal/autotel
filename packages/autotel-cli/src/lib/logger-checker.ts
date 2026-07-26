@@ -18,9 +18,7 @@ const LOGGER_INSTRUMENTATION = {
  * - autoInstrumentations: true
  * - autoInstrumentations: { winston: { enabled: true } }
  */
-export function extractAutoInstrumentations(
-  content: string
-): string[] {
+export function extractAutoInstrumentations(content: string): string[] {
   const instrumentations: string[] = [];
 
   // Pattern 1: Array format: autoInstrumentations: ['winston', 'bunyan']
@@ -60,8 +58,8 @@ export function findSourceFiles(packageRoot: string): string[] {
   const srcDir = path.join(packageRoot, 'src');
 
   // Check common source directories
-  const dirsToCheck = [packageRoot, srcDir].filter((dir) =>
-    fs.existsSync(dir) && fs.statSync(dir).isDirectory()
+  const dirsToCheck = [packageRoot, srcDir].filter(
+    (dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory(),
   );
 
   for (const dir of dirsToCheck) {
@@ -90,7 +88,7 @@ export function findSourceFiles(packageRoot: string): string[] {
  */
 export function checkLoggerInstrumentation(
   packageRoot: string,
-  deps: Record<string, string>
+  deps: Record<string, string>,
 ): {
   logger: 'winston' | 'bunyan' | 'pino' | null;
   hasLogger: boolean;

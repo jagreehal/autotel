@@ -9,7 +9,9 @@ import { AUDIT_MATRIX_SPEC, LEDGER_ENTRY_SPEC } from './types.js';
 const NOW = new Date('2026-06-01T00:00:00.000Z');
 const DAY = 24 * 60 * 60 * 1000;
 
-function entry(overrides: Partial<InteractionLedgerEntry>): InteractionLedgerEntry {
+function entry(
+  overrides: Partial<InteractionLedgerEntry>,
+): InteractionLedgerEntry {
   return {
     type: 'interaction',
     spec: LEDGER_ENTRY_SPEC,
@@ -30,17 +32,28 @@ function entry(overrides: Partial<InteractionLedgerEntry>): InteractionLedgerEnt
 describe('computeAuditMatrix', () => {
   it('marks contracted-and-seen-in-test as OK', () => {
     const m = computeAuditMatrix({
-      contracted: [{ consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' }],
+      contracted: [
+        { consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' },
+      ],
       ledger: [entry({})],
       now: NOW,
     });
-    expect(m.counts).toMatchObject({ contracted_and_test_seen: 1, contracted_not_test_seen: 0 });
-    expect(m.rows[0]).toMatchObject({ contracted: true, test_seen: true, observed: true });
+    expect(m.counts).toMatchObject({
+      contracted_and_test_seen: 1,
+      contracted_not_test_seen: 0,
+    });
+    expect(m.rows[0]).toMatchObject({
+      contracted: true,
+      test_seen: true,
+      observed: true,
+    });
   });
 
   it('flags contracted-but-not-seen-in-test (STALE)', () => {
     const m = computeAuditMatrix({
-      contracted: [{ consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' }],
+      contracted: [
+        { consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' },
+      ],
       ledger: [],
       now: NOW,
     });
@@ -60,7 +73,9 @@ describe('computeAuditMatrix', () => {
 
   it('tracks prod_seen separately from test_seen', () => {
     const m = computeAuditMatrix({
-      contracted: [{ consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' }],
+      contracted: [
+        { consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' },
+      ],
       ledger: [entry({ source: 'production' })],
       now: NOW,
     });
@@ -73,10 +88,10 @@ describe('computeAuditMatrix', () => {
 
   it('sets provider_verified only for provider role passed entries', () => {
     const m = computeAuditMatrix({
-      contracted: [{ consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' }],
-      ledger: [
-        entry({ role: 'provider', outcome: 'passed' }),
+      contracted: [
+        { consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' },
       ],
+      ledger: [entry({ role: 'provider', outcome: 'passed' })],
       now: NOW,
     });
     expect(m.rows[0]!.provider_verified).toBe(true);
@@ -85,7 +100,9 @@ describe('computeAuditMatrix', () => {
 
   it('ignores provider_verification_run for per-interaction columns', () => {
     const m = computeAuditMatrix({
-      contracted: [{ consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' }],
+      contracted: [
+        { consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' },
+      ],
       ledger: [
         {
           type: 'provider_verification_run',
@@ -113,7 +130,12 @@ describe('computeAuditMatrix', () => {
       ],
       ledger: [],
       brokerVerifications: [
-        { consumer: 'A', provider: 'B', success: true, verifiedAt: NOW.toISOString() },
+        {
+          consumer: 'A',
+          provider: 'B',
+          success: true,
+          verifiedAt: NOW.toISOString(),
+        },
       ],
       now: NOW,
     });
@@ -126,7 +148,9 @@ describe('computeAuditMatrix', () => {
       observed_at: new Date(NOW.getTime() - 20 * DAY).toISOString(),
     });
     const m = computeAuditMatrix({
-      contracted: [{ consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' }],
+      contracted: [
+        { consumer: 'A', provider: 'B', interaction: 'evt', kind: 'message' },
+      ],
       ledger: [oldEntry],
       windowDays: 14,
       now: NOW,
@@ -178,7 +202,10 @@ describe('runAuditSync (integration)', () => {
       interaction: 'an OrderCreated event',
       observed_at: new Date().toISOString(),
     });
-    writeFileSync('.autotel-pact/ledger-x.jsonl', JSON.stringify(observed) + '\n');
+    writeFileSync(
+      '.autotel-pact/ledger-x.jsonl',
+      JSON.stringify(observed) + '\n',
+    );
 
     const m = runAuditSync({});
 

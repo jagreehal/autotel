@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { trace } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { SamplingDecision, type SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import {
+  SamplingDecision,
+  type SpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
 import { WorkerTracerProvider } from './provider';
 
 const noopProcessor: SpanProcessor = {

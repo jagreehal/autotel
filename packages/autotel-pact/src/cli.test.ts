@@ -19,14 +19,18 @@ beforeEach(() => {
   process.chdir(workDir);
   stdoutChunks = [];
   stderrChunks = [];
-  stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
-    stdoutChunks.push(String(chunk));
-    return true;
-  });
-  stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
-    stderrChunks.push(String(chunk));
-    return true;
-  });
+  stdoutSpy = vi
+    .spyOn(process.stdout, 'write')
+    .mockImplementation((chunk: unknown) => {
+      stdoutChunks.push(String(chunk));
+      return true;
+    });
+  stderrSpy = vi
+    .spyOn(process.stderr, 'write')
+    .mockImplementation((chunk: unknown) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    });
 });
 
 afterEach(() => {
@@ -49,7 +53,9 @@ function writeLedger(entries: InteractionLedgerEntry[]): void {
   );
 }
 
-function freshEntry(overrides: Partial<InteractionLedgerEntry> = {}): InteractionLedgerEntry {
+function freshEntry(
+  overrides: Partial<InteractionLedgerEntry> = {},
+): InteractionLedgerEntry {
   return {
     type: 'interaction',
     spec: LEDGER_ENTRY_SPEC,
@@ -75,7 +81,11 @@ describe('cli', () => {
   });
 
   it('default mode prints a table and exits 0 even with stale confidence', async () => {
-    writePact('A-B.json', { consumer: { name: 'A' }, provider: { name: 'B' }, messages: [{ description: 'evt' }] });
+    writePact('A-B.json', {
+      consumer: { name: 'A' },
+      provider: { name: 'B' },
+      messages: [{ description: 'evt' }],
+    });
     const code = await main([]);
     expect(code).toBe(0);
     expect(stdoutChunks.join('')).toMatch(/STALE/);
@@ -83,7 +93,11 @@ describe('cli', () => {
   });
 
   it('--gate exits 1 when contracted interactions are not seen in test', async () => {
-    writePact('A-B.json', { consumer: { name: 'A' }, provider: { name: 'B' }, messages: [{ description: 'evt' }] });
+    writePact('A-B.json', {
+      consumer: { name: 'A' },
+      provider: { name: 'B' },
+      messages: [{ description: 'evt' }],
+    });
     const code = await main(['--gate']);
     expect(code).toBe(1);
   });
@@ -95,14 +109,22 @@ describe('cli', () => {
   });
 
   it('--gate=strict succeeds when all interactions are contracted and seen in test', async () => {
-    writePact('A-B.json', { consumer: { name: 'A' }, provider: { name: 'B' }, messages: [{ description: 'evt' }] });
+    writePact('A-B.json', {
+      consumer: { name: 'A' },
+      provider: { name: 'B' },
+      messages: [{ description: 'evt' }],
+    });
     writeLedger([freshEntry()]);
     const code = await main(['--gate=strict']);
     expect(code).toBe(0);
   });
 
   it('--json emits parseable JSON', async () => {
-    writePact('A-B.json', { consumer: { name: 'A' }, provider: { name: 'B' }, messages: [{ description: 'evt' }] });
+    writePact('A-B.json', {
+      consumer: { name: 'A' },
+      provider: { name: 'B' },
+      messages: [{ description: 'evt' }],
+    });
     const code = await main(['--json']);
     expect(code).toBe(0);
     const parsed = JSON.parse(stdoutChunks.join(''));

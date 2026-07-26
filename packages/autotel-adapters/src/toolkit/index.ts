@@ -1,9 +1,5 @@
-export {
-  extendDeferredDrain,
-} from './deferred-drain';
-export {
-  attachForkToLogger,
-} from './fork';
+export { extendDeferredDrain } from './deferred-drain';
+export { attachForkToLogger } from './fork';
 export {
   bindStreamingResponseLifecycle,
   isStreamingResponse,
@@ -39,7 +35,4 @@ export {
   type FrameworkRequestHandle,
   type IntegratedCompletionOptions,
 } from './integration';
-export {
-  createLoggerStorage,
-  createStorageForkLifecycle,
-} from './storage';
+export { createLoggerStorage, createStorageForkLifecycle } from './storage';

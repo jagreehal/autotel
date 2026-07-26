@@ -93,6 +93,8 @@ Autotel re-exports common OpenTelemetry utilities in modules organized by purpos
 **`autotel/testing`** - High-level testing utilities with assertions:
 
 - `createTraceCollector()` - Auto-configured trace collector with helpers
+- Trace-tree helpers: `getSpansByTraceId()`, `getRootSpans()`, `getDescendants()`
+- `expectSpan(nameOrCriteria)` - Require exactly one match by name, IDs, kind, and/or attributes
 - `assertTraceCreated()`, `assertTraceSucceeded()`, `assertTraceFailed()`, etc.
 - Events and metrics testing utilities
 
@@ -147,6 +149,8 @@ import { createTraceCollector, assertTraceCreated } from 'autotel/testing';
 const collector = createTraceCollector();
 await myService.doSomething();
 assertTraceCreated(collector, 'myService.doSomething');
+const root = collector.expectSpan('myService.doSomething');
+expect(collector.getSpansByTraceId(root.traceId)).not.toHaveLength(0);
 
 // Low-level testing (when you need raw OTel spans)
 import { InMemorySpanExporter } from 'autotel/exporters';

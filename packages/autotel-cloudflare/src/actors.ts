@@ -47,4 +47,8 @@ export { tracedHandler, wrapHandler } from './actors/traced-handler';
 export { instrumentActorStorage } from './actors/storage';
 export { instrumentActorAlarms } from './actors/alarms';
 export { instrumentActorSockets } from './actors/sockets';
-export type { ActorConfig, ActorInstrumentationOptions, ActorLifecycle } from './actors/types';
+export type {
+  ActorConfig,
+  ActorInstrumentationOptions,
+  ActorLifecycle,
+} from './actors/types';

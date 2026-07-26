@@ -9,10 +9,7 @@ import type { InitPlan } from '../lib/plan';
  * --dry-run`, which emits the same `InitPlan` as machine-parseable JSON.
  */
 export function renderPlanPreview(plan: InitPlan): string {
-  const lines: string[] = [
-    chalk.bold('autotel init — proposed plan'),
-    '',
-  ];
+  const lines: string[] = [chalk.bold('autotel init — proposed plan'), ''];
 
   if (plan.detected) {
     const det = plan.detected;
@@ -20,23 +17,23 @@ export function renderPlanPreview(plan: InitPlan): string {
       .map((p) => `${p.name}@${p.version}`)
       .join(', ');
     lines.push(
-      `${chalk.dim('Detected packages:')} ${pkgList || chalk.dim('(none)')}`
+      `${chalk.dim('Detected packages:')} ${pkgList || chalk.dim('(none)')}`,
     );
     if (det.primaryLogger !== null) {
       lines.push(
         `${chalk.dim('Logger:')} ${chalk.bold(det.primaryLogger)} ${chalk.dim('(first-class)')}` +
           (det.autoInstrumentLoggers.length > 0
             ? `, ${chalk.dim('+ auto-instrumented:')} ${det.autoInstrumentLoggers.join(', ')}`
-            : '')
+            : ''),
       );
     }
     if (det.autoInstrumentedDeps.length > 0) {
       lines.push(
-        `${chalk.dim('Covered by auto-instrumentations-node:')} ${det.autoInstrumentedDeps.join(', ')}`
+        `${chalk.dim('Covered by auto-instrumentations-node:')} ${det.autoInstrumentedDeps.join(', ')}`,
       );
     }
     lines.push(
-      `${chalk.dim('Backend:')} ${chalk.bold(det.backend.slug)} ${chalk.dim(`(${det.backend.source}${det.backend.detail ? `: ${det.backend.detail}` : ''})`)}`
+      `${chalk.dim('Backend:')} ${chalk.bold(det.backend.slug)} ${chalk.dim(`(${det.backend.source}${det.backend.detail ? `: ${det.backend.detail}` : ''})`)}`,
     );
     if (det.platform !== null) {
       lines.push(`${chalk.dim('Platform:')} ${chalk.bold(det.platform)}`);
@@ -52,12 +49,12 @@ export function renderPlanPreview(plan: InitPlan): string {
   lines.push('');
   if (plan.packagesToInstall.prod.length > 0) {
     lines.push(
-      `${chalk.bold('Install:')} ${plan.packagesToInstall.prod.join(', ')}`
+      `${chalk.bold('Install:')} ${plan.packagesToInstall.prod.join(', ')}`,
     );
   }
   if (plan.packagesToInstall.dev.length > 0) {
     lines.push(
-      `${chalk.bold('Install (dev):')} ${plan.packagesToInstall.dev.join(', ')}`
+      `${chalk.bold('Install (dev):')} ${plan.packagesToInstall.dev.join(', ')}`,
     );
   }
 
@@ -86,7 +83,7 @@ export function renderPlanPreview(plan: InitPlan): string {
  * Returns the (possibly edited) plan, or null if aborted.
  */
 export async function confirmOrEditPlan(
-  plan: InitPlan
+  plan: InitPlan,
 ): Promise<InitPlan | null> {
   console.log(renderPlanPreview(plan));
   console.log('');
@@ -124,7 +121,7 @@ export async function confirmOrEditPlan(
  * Workspace multi-select. Returns absolute package paths the user chose.
  */
 export async function promptWorkspaceSelection(
-  packages: { path: string; relativePath: string; name: string | null }[]
+  packages: { path: string; relativePath: string; name: string | null }[],
 ): Promise<string[]> {
   const chosen = await checkbox({
     message: 'Which workspace packages do you want to instrument?',

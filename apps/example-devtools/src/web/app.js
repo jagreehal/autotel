@@ -6,7 +6,8 @@ const PERSONAS = {
   demo: {
     id: 'demo',
     name: 'Demo User',
-    summary: 'Standard storefront customer with an active checkout-capable session.',
+    summary:
+      'Standard storefront customer with an active checkout-capable session.',
     token: 'demo-token',
     userId: 1,
     segment: 'growth',
@@ -14,7 +15,8 @@ const PERSONAS = {
   alice: {
     id: 'alice',
     name: 'Alice Johnson',
-    summary: 'VIP customer with prior order history and fast-path support treatment.',
+    summary:
+      'VIP customer with prior order history and fast-path support treatment.',
     token: 'alice-token',
     userId: 2,
     segment: 'vip',
@@ -22,7 +24,8 @@ const PERSONAS = {
   ops: {
     id: 'ops',
     name: 'Ops Analyst',
-    summary: 'Internal persona for investigating reports and following worker job traces.',
+    summary:
+      'Internal persona for investigating reports and following worker job traces.',
     token: 'ops-token',
     userId: 3,
     segment: 'internal',
@@ -152,10 +155,7 @@ window.loadProfile = async function loadProfile() {
     data.profile.notificationJobs.length === 0
       ? 'No notification jobs yet.'
       : data.profile.notificationJobs
-          .map(
-            (job) =>
-              `Job #${job.id} — ${job.type} (${job.status})`,
-          )
+          .map((job) => `Job #${job.id} — ${job.type} (${job.status})`)
           .join('\n');
 
   setResult(

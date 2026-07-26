@@ -46,7 +46,9 @@ export function classifyAWSError(error: unknown): {
 /**
  * Extract error attributes from AWS error
  */
-export function extractErrorAttributes(error: unknown): Record<string, string | number> {
+export function extractErrorAttributes(
+  error: unknown,
+): Record<string, string | number> {
   if (!error || typeof error !== 'object') {
     return {};
   }

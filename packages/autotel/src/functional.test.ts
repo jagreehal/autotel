@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { SpanKind, context, propagation } from '@opentelemetry/api';
 import {
   trace,
   withTracing,
@@ -7,41 +8,51 @@ import {
   ctx,
   span,
   withBaggage,
-  markAsImmediate,
+  getActiveTraceContext,
 } from './functional';
-import type { TraceContext } from './trace-helpers';
+import type { TraceContext } from './trace-context';
 import type { TracingOptions } from './functional';
 
+// The `(ctx) => (...args) => result` factory form now lives on withTracing().
+// These thin helpers keep the existing factory-shaped tests concise.
 function traceFactory<Args extends unknown[], Return>(
   factory: (ctx: TraceContext) => (...args: Args) => Return,
 ): (...args: Args) => Return {
-  return trace(
-    factory as (ctx: TraceContext) => (...args: Args) => Return,
-  ) as unknown as (...args: Args) => Return;
+  return withTracing<Args, Return>({})(factory) as (...args: Args) => Return;
 }
 
 function traceNamedFactory<Args extends unknown[], Return>(
   name: string,
   factory: (ctx: TraceContext) => (...args: Args) => Return,
 ): (...args: Args) => Return {
-  return trace(
-    name,
-    factory as (ctx: TraceContext) => (...args: Args) => Return,
-  ) as unknown as (...args: Args) => Return;
+  return withTracing<Args, Return>({ name })(factory) as (
+    ...args: Args
+  ) => Return;
 }
 
 function traceOptionsFactory<Args extends unknown[], Return>(
   options: TracingOptions<Args, Return>,
   factory: (ctx: TraceContext) => (...args: Args) => Return,
 ): (...args: Args) => Return {
-  return trace(
-    options,
-    factory as (ctx: TraceContext) => (...args: Args) => Return,
-  ) as unknown as (...args: Args) => Return;
+  return withTracing<Args, Return>(options)(factory) as (
+    ...args: Args
+  ) => Return;
 }
 import { createTraceCollector } from './testing';
 import { AlwaysSampler, NeverSampler } from './sampling';
 import { init } from './init';
+
+// The runtime ctx keeps deprecated OTel span methods (recordException/addEvent)
+// as back-compat shims even though the public TraceContext type deliberately
+// hides them (OTEP 4430). These tests verify the shims still work at runtime.
+type LegacyCtx = TraceContext & {
+  recordException(error: unknown): void;
+  addEvent(name: string, attributes?: Record<string, unknown>): void;
+};
+
+// instrument() deliberately tolerates non-function values at runtime while the
+// public type requires all values be functions; these tests feed mixed input.
+type FnRecord = Record<string, (...args: unknown[]) => unknown>;
 
 describe('Functional API', () => {
   beforeEach(() => {
@@ -49,6 +60,27 @@ describe('Functional API', () => {
     // Initialize for all tests
     init({
       service: 'test-service',
+    });
+  });
+
+  describe('getActiveTraceContext()', () => {
+    it('returns the active context inside a traced function', () => {
+      const collector = createTraceCollector();
+
+      const handler = trace('ambient.handler', (id: string) => {
+        const active = getActiveTraceContext();
+        active?.setAttribute('user.id', id);
+        return id;
+      });
+      handler('user_42');
+
+      const spans = collector.getSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0]!.attributes['user.id']).toBe('user_42');
+    });
+
+    it('returns undefined when no span is active', () => {
+      expect(getActiveTraceContext()).toBeUndefined();
     });
   });
 
@@ -77,13 +109,58 @@ describe('Functional API', () => {
 
     it('records spans created via the string-name shorthand', async () => {
       const collector = createTraceCollector();
-      await span('shorthand.recorded', async () => undefined);
+      await span('shorthand.recorded', async () => {});
       const names = collector.getSpans().map((s) => s.name);
       expect(names).toContain('shorthand.recorded');
+    });
+
+    it('applies spanKind from options', () => {
+      const collector = createTraceCollector();
+      span({ name: 'client.operation', spanKind: SpanKind.CLIENT }, () => {});
+
+      expect(collector.getSpansByName('client.operation')[0]?.kind).toBe(
+        SpanKind.CLIENT,
+      );
     });
   });
 
   describe('trace()', () => {
+    it('honors isError for async factory functions', async () => {
+      const collector = createTraceCollector();
+      const signal = { type: 'control-flow' };
+      const traced = traceOptionsFactory(
+        { name: 'factory.async.control-flow', isError: () => false },
+        (_ctx: TraceContext) => async () => {
+          throw signal;
+        },
+      );
+
+      await expect(traced()).rejects.toBe(signal);
+
+      const [span] = collector.getSpansByName('factory.async.control-flow');
+      expect(span).toBeDefined();
+      expect(span!.status.code).toBe(1);
+      expect(span!.attributes.error).not.toBe(true);
+    });
+
+    it('honors isError for sync factory functions', () => {
+      const collector = createTraceCollector();
+      const signal = { type: 'control-flow' };
+      const traced = traceOptionsFactory(
+        { name: 'factory.sync.control-flow', isError: () => false },
+        (_ctx: TraceContext) => () => {
+          throw signal;
+        },
+      );
+
+      expect(() => traced()).toThrow(signal);
+
+      const [span] = collector.getSpansByName('factory.sync.control-flow');
+      expect(span).toBeDefined();
+      expect(span!.status.code).toBe(1);
+      expect(span!.attributes.error).not.toBe(true);
+    });
+
     it('does not execute sync function during instrumentation', () => {
       let executions = 0;
       const traced = trace(function add(a: number, b: number) {
@@ -100,7 +177,7 @@ describe('Functional API', () => {
     it('detects ctx factories by parameter name', async () => {
       const collector = createTraceCollector();
 
-      const traced = trace(
+      const traced = withTracing({})(
         (_ctx: TraceContext) =>
           async function detected(name: string) {
             _ctx.setAttribute('user.name', name);
@@ -189,69 +266,6 @@ describe('Functional API', () => {
         expect(spans).toHaveLength(1);
         expect(spans[0]!.status.code).toBe(2); // ERROR
         expect(spans[0]!.attributes['exception.message']).toBe('Test error');
-      });
-    });
-
-    describe('zero-arg factory pattern (no ctx parameter)', () => {
-      it('should detect zero-arg sync factory and execute inner function', () => {
-        const collector = createTraceCollector();
-
-        const addOne = trace(() => (i: number) => {
-          return i + 1;
-        });
-
-        const result = addOne(1);
-
-        expect(result).toBe(2);
-        expect(result).not.toBeInstanceOf(Promise);
-
-        const spans = collector.getSpans();
-        expect(spans).toHaveLength(1);
-      });
-
-      it('should detect zero-arg async factory and execute inner function', async () => {
-        const collector = createTraceCollector();
-
-        const fetchData = trace(() => async (query: string) => {
-          return query.toUpperCase();
-        });
-
-        const result = await fetchData('test');
-
-        expect(result).toBe('TEST');
-
-        const spans = collector.getSpans();
-        expect(spans).toHaveLength(1);
-      });
-
-      it('should work with named zero-arg factory', () => {
-        const collector = createTraceCollector();
-
-        const addOne = trace('addOne', () => (i: number) => {
-          return i + 1;
-        });
-
-        const result = addOne(1);
-
-        expect(result).toBe(2);
-
-        const spans = collector.getSpans();
-        expect(spans).toHaveLength(1);
-        expect(spans[0]!.name).toBe('addOne');
-      });
-
-      it('should handle multiple zero-arg factories combined', () => {
-        const collector = createTraceCollector();
-
-        const addOne = trace('addOne', () => (i: number) => i + 1);
-        const addTwo = trace('addTwo', () => (i: number) => i + 2);
-
-        const result = addOne(1) + addTwo(1);
-
-        expect(result).toBe(5);
-
-        const spans = collector.getSpans();
-        expect(spans).toHaveLength(2);
       });
     });
 
@@ -413,16 +427,16 @@ describe('Functional API', () => {
     it('should create reusable wrapper', async () => {
       const collector = createTraceCollector();
 
-      const trace = withTracing({ serviceName: 'user' });
+      const tracer = withTracing({ serviceName: 'user' });
 
-      const createUser = trace(
+      const createUser = tracer(
         (_ctx: TraceContext) =>
           async function reusableCreate(name: string) {
             return { id: '123', name };
           },
       );
 
-      const updateUser = trace(
+      const updateUser = tracer(
         (_ctx: TraceContext) =>
           async function reusableUpdate(id: string, name: string) {
             return { id, name };
@@ -485,6 +499,26 @@ describe('Functional API', () => {
   });
 
   describe('instrument()', () => {
+    it('should instrument a single function with { key, fn }', async () => {
+      const collector = createTraceCollector();
+      const double = instrument({
+        key: 'math.double',
+        fn: async (value: number) => value * 2,
+      });
+
+      await expect(double(21)).resolves.toBe(42);
+      expect(collector.expectSpan('math.double').name).toBe('math.double');
+    });
+
+    it('should reject malformed single-function options clearly', () => {
+      expect(() => instrument({ key: '', fn: () => {} })).toThrow(
+        'instrument: "key" must be a non-empty string',
+      );
+      expect(() =>
+        instrument({ key: 'valid', fn: undefined } as never),
+      ).toThrow('instrument: "fn" must be a function');
+    });
+
     it('should instrument all functions', async () => {
       const collector = createTraceCollector();
 
@@ -606,7 +640,7 @@ describe('Functional API', () => {
           fn: async () => 'function',
           value: 42,
           obj: { nested: true },
-        },
+        } as unknown as FnRecord,
         serviceName: 'test',
       });
 
@@ -632,18 +666,18 @@ describe('Functional API', () => {
       };
 
       const instrumented = instrument({
-        functions: svc,
+        functions: svc as unknown as FnRecord,
         serviceName: 'svc',
-      }) as typeof svc;
+      });
 
       // Test that this.prefix is accessible
-      const result1 = await instrumented.build('123');
+      const result1 = await instrumented.build!('123');
       expect(result1).toBe('user-123'); // Should not be 'undefined-123'
 
       // Test that this.count is accessible and modifiable
-      const result2 = await instrumented.increment();
+      const result2 = await instrumented.increment!();
       expect(result2).toBe(1);
-      const result3 = await instrumented.increment();
+      const result3 = await instrumented.increment!();
       expect(result3).toBe(2);
 
       const spans = collector.getSpans();
@@ -910,7 +944,7 @@ describe('Functional API', () => {
       const failingFn = traceFactory((_ctx: TraceContext) => async () => {
         const error = new Error('Test exception');
         if (ctx.traceId) {
-          ctx.recordException(error);
+          (ctx as LegacyCtx).recordException(error);
         }
         throw error;
       });
@@ -923,242 +957,9 @@ describe('Functional API', () => {
     });
   });
 
-  describe('Immediate execution pattern', () => {
-    it('should execute async function immediately with context', async () => {
-      const collector = createTraceCollector();
-
-      const result = await trace(async (ctx: TraceContext) => {
-        ctx.setAttribute('test.key', 'value');
-        return { data: 'test' };
-      });
-
-      expect(result).toEqual({ data: 'test' });
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0]!.attributes['test.key']).toBe('value');
-    });
-
-    it('should execute sync function immediately with context', () => {
-      const collector = createTraceCollector();
-
-      const result = trace((ctx: TraceContext) => {
-        ctx.setAttribute('test.key', 'sync-value');
-        return 42;
-      });
-
-      expect(result).toBe(42);
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0]!.attributes['test.key']).toBe('sync-value');
-    });
-
-    it('should support custom name with immediate execution', async () => {
-      const collector = createTraceCollector();
-
-      const result = await trace(
-        'custom.operation',
-        async (ctx: TraceContext) => {
-          ctx.setAttribute('operation.id', '123');
-          return 'success';
-        },
-      );
-
-      expect(result).toBe('success');
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0]!.name).toBe('custom.operation');
-      expect(spans[0]!.attributes['operation.id']).toBe('123');
-    });
-
-    // Regression: when esbuild/terser minifies the inner function, the
-    // `ctx` parameter gets renamed to a single letter and the name-allowlist
-    // in looksLikeTraceFactory stops matching. Library authors who wrap user
-    // handlers (e.g. autotel-aws/lambda's wrapHandler) should use
-    // `markAsImmediate` to opt the inner function into immediate execution
-    // regardless of parameter naming.
-    it('honors markAsImmediate so dispatch survives minified parameter names', async () => {
-      const collector = createTraceCollector();
-
-      // Parameter named `d` simulates the post-minification shape.
-      const inner = markAsImmediate(async (d: TraceContext) => {
-        d.setAttribute('test.minified', true);
-        return 'ok';
-      });
-      const result = await trace('minified.handler', inner);
-
-      expect(result).toBe('ok');
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0]!.name).toBe('minified.handler');
-      expect(spans[0]!.attributes['test.minified']).toBe(true);
-    });
-
-    it('should support options with immediate execution', async () => {
-      const collector = createTraceCollector();
-
-      const result = await trace(
-        { name: 'options.test', withMetrics: true },
-        async (ctx: TraceContext) => {
-          ctx.setAttribute('test.option', 'enabled');
-          return 100;
-        },
-      );
-
-      expect(result).toBe(100);
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0]!.name).toBe('options.test');
-      expect(spans[0]!.attributes['test.option']).toBe('enabled');
-    });
-
-    it('should distinguish between factory and immediate execution', async () => {
-      const collector = createTraceCollector();
-
-      // Factory pattern - returns a function
-      const factory = trace((ctx: TraceContext) => async (name: string) => {
-        ctx.setAttribute('user.name', name);
-        return { name };
-      });
-
-      // Immediate execution - returns result directly
-      const immediate = await trace(async (ctx: TraceContext) => {
-        ctx.setAttribute('immediate', true);
-        return 'done';
-      });
-
-      expect(typeof factory).toBe('function');
-      expect(immediate).toBe('done');
-
-      // Now call the factory
-      const factoryResult = await factory('Alice');
-      expect(factoryResult).toEqual({ name: 'Alice' });
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(2);
-
-      // First span is from immediate execution
-      expect(spans[0]!.attributes['immediate']).toBe(true);
-
-      // Second span is from factory call
-      expect(spans[1]!.attributes['user.name']).toBe('Alice');
-    });
-
-    it('should work with wrapper function pattern from feedback', async () => {
-      const collector = createTraceCollector();
-
-      // The exact use case from the feedback
-      function timed<T>(
-        requestId: string,
-        operation: string,
-        fn: () => Promise<T>,
-      ): Promise<T> {
-        return trace(operation, async (ctx: TraceContext) => {
-          ctx.setAttributes({
-            'request.id': requestId,
-            'operation.name': operation,
-          });
-
-          const result = await fn();
-          return result;
-        });
-      }
-
-      // Test it
-      const mockFn = async () => {
-        return { userId: '123', status: 'active' };
-      };
-
-      const result = await timed('req-456', 'fetchUser', mockFn);
-
-      expect(result).toEqual({ userId: '123', status: 'active' });
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0]!.name).toBe('fetchUser');
-      expect(spans[0]!.attributes['request.id']).toBe('req-456');
-      expect(spans[0]!.attributes['operation.name']).toBe('fetchUser');
-    });
-
-    it('should not create orphan spans when nesting span() inside trace() immediate execution', async () => {
-      const collector = createTraceCollector();
-
-      // This was causing a bug where span() was called during pattern detection,
-      // creating an orphan span outside of the trace() context
-      await trace('user-request-trace', async (ctx: TraceContext) => {
-        ctx.setAttribute('input.query', 'What is the capital of France?');
-
-        // Nested span should be a child of user-request-trace
-        await span(
-          {
-            name: 'llm-call',
-            attributes: { model: 'gpt-4' },
-          },
-          async () => {
-            // Simulate LLM call
-            return 'The capital of France is Paris.';
-          },
-        );
-
-        ctx.setAttribute('output', 'Successfully answered.');
-      });
-
-      const spans = collector.getSpans();
-
-      // KEY ASSERTION: Should have exactly 2 spans, NOT 3
-      // Before the fix, there would be 3 spans:
-      // 1. An orphan llm-call (created during pattern detection)
-      // 2. user-request-trace (the parent)
-      // 3. llm-call (proper child)
-      expect(spans).toHaveLength(2);
-
-      // Verify we have the correct span names
-      const spanNames = spans.map((s) => s.name).toSorted();
-      expect(spanNames).toEqual(['llm-call', 'user-request-trace']);
-
-      // Verify attributes on each span
-      const parentSpan = spans.find((s) => s.name === 'user-request-trace');
-      const childSpan = spans.find((s) => s.name === 'llm-call');
-
-      expect(parentSpan).toBeDefined();
-      expect(childSpan).toBeDefined();
-
-      expect(parentSpan!.attributes['input.query']).toBe(
-        'What is the capital of France?',
-      );
-      expect(parentSpan!.attributes['output']).toBe('Successfully answered.');
-      expect(childSpan!.attributes['model']).toBe('gpt-4');
-    });
-
-    it('should not execute async function during pattern detection', async () => {
-      const collector = createTraceCollector();
-      let executionCount = 0;
-
-      // This async function should only be executed ONCE, not twice
-      // (once during pattern detection + once for actual execution = BUG)
-      await trace('single-execution', async (ctx: TraceContext) => {
-        executionCount++;
-        ctx.setAttribute('execution.count', executionCount);
-        return 'done';
-      });
-
-      // Function should have been executed exactly once
-      expect(executionCount).toBe(1);
-
-      const spans = collector.getSpans();
-      expect(spans).toHaveLength(1);
-      expect(spans[0]!.attributes['execution.count']).toBe(1);
-    });
-  });
-
   describe('baggage', () => {
     it('should get baggage entry from context', async () => {
       const collector = createTraceCollector();
-      const { context, propagation } = await import('@opentelemetry/api');
 
       // Create context with baggage
       const activeContext = context.active();
@@ -1172,7 +973,7 @@ describe('Functional API', () => {
       );
 
       await context.with(contextWithBaggage, async () => {
-        await trace((ctx) => async () => {
+        await withTracing({})((ctx) => async () => {
           const tenantId = ctx.getBaggage('tenant.id');
           expect(tenantId).toBe('tenant-123');
           return 'done';
@@ -1185,7 +986,7 @@ describe('Functional API', () => {
     it('withBaggage should set baggage for child spans', async () => {
       const collector = createTraceCollector();
 
-      await trace((ctx) => async () => {
+      await withTracing({})((ctx) => async () => {
         return await withBaggage({
           baggage: { 'tenant.id': 'tenant-456', 'user.id': 'user-789' },
           fn: async () => {
@@ -1194,7 +995,7 @@ describe('Functional API', () => {
             expect(ctx.getBaggage('user.id')).toBe('user-789');
 
             // Create child span - should inherit baggage
-            await trace((childCtx) => async () => {
+            await withTracing({})((childCtx) => async () => {
               expect(childCtx.getBaggage('tenant.id')).toBe('tenant-456');
               return 'child-done';
             })();
@@ -1210,7 +1011,7 @@ describe('Functional API', () => {
     it('withBaggage should work with sync functions', () => {
       let capturedBaggage: string | undefined;
 
-      trace((ctx) => () => {
+      withTracing({})((ctx) => () => {
         return withBaggage({
           baggage: { key: 'value' },
           fn: () => {
@@ -1225,7 +1026,6 @@ describe('Functional API', () => {
 
     it('withBaggage should merge with existing baggage', async () => {
       const collector = createTraceCollector();
-      const { context, propagation } = await import('@opentelemetry/api');
 
       // Set initial baggage
       const activeContext = context.active();
@@ -1239,7 +1039,7 @@ describe('Functional API', () => {
       );
 
       await context.with(contextWithBaggage, async () => {
-        await trace((ctx) => async () => {
+        await withTracing({})((ctx) => async () => {
           // New baggage should be available
           expect(ctx.getBaggage('new.key')).toBeUndefined(); // Not set yet
 
@@ -1262,7 +1062,7 @@ describe('Functional API', () => {
     it('withBaggage should not leak baggage after callback completes', async () => {
       const collector = createTraceCollector();
 
-      await trace((ctx) => async () => {
+      await withTracing({})((ctx) => async () => {
         expect(ctx.getBaggage('tenant.id')).toBeUndefined();
 
         await withBaggage({
@@ -1274,7 +1074,7 @@ describe('Functional API', () => {
 
         // Child spans created after withBaggage must not inherit scoped baggage.
         // (Same-ctx after await may still see baggage due to async context propagation.)
-        await trace((childCtx) => async () => {
+        await withTracing({})((childCtx) => async () => {
           expect(childCtx.getBaggage('tenant.id')).toBeUndefined();
         })();
       })();
@@ -1284,7 +1084,6 @@ describe('Functional API', () => {
 
     it('ctx.getAllBaggage should return all baggage entries', async () => {
       const collector = createTraceCollector();
-      const { context, propagation } = await import('@opentelemetry/api');
 
       // Create context with multiple baggage entries
       const activeContext = context.active();
@@ -1294,7 +1093,7 @@ describe('Functional API', () => {
       const contextWithBaggage = propagation.setBaggage(activeContext, baggage);
 
       await context.with(contextWithBaggage, async () => {
-        await trace((ctx) => async () => {
+        await withTracing({})((ctx) => async () => {
           const allBaggage = ctx.getAllBaggage();
           expect(allBaggage.size).toBeGreaterThanOrEqual(2);
           expect(allBaggage.get('key1')?.value).toBe('value1');
@@ -1311,10 +1110,11 @@ describe('Functional API', () => {
     it('should support string array attributes', async () => {
       const collector = createTraceCollector();
 
-      await trace(async (ctx: TraceContext) => {
+      await trace(async () => {
+        const ctx = getActiveTraceContext()!;
         ctx.setAttribute('tags', ['qa', 'test', 'automated']);
         return 'done';
-      });
+      })();
 
       const spans = collector.getSpans();
       expect(spans).toHaveLength(1);
@@ -1324,10 +1124,11 @@ describe('Functional API', () => {
     it('should support number array attributes', async () => {
       const collector = createTraceCollector();
 
-      await trace(async (ctx: TraceContext) => {
+      await trace(async () => {
+        const ctx = getActiveTraceContext()!;
         ctx.setAttribute('scores', [95, 87, 92]);
         return 'done';
-      });
+      })();
 
       const spans = collector.getSpans();
       expect(spans).toHaveLength(1);
@@ -1337,10 +1138,11 @@ describe('Functional API', () => {
     it('should support boolean array attributes', async () => {
       const collector = createTraceCollector();
 
-      await trace(async (ctx: TraceContext) => {
+      await trace(async () => {
+        const ctx = getActiveTraceContext()!;
         ctx.setAttribute('flags', [true, false, true]);
         return 'done';
-      });
+      })();
 
       const spans = collector.getSpans();
       expect(spans).toHaveLength(1);
@@ -1350,7 +1152,8 @@ describe('Functional API', () => {
     it('should support mixed attributes including arrays via setAttributes', async () => {
       const collector = createTraceCollector();
 
-      await trace(async (ctx: TraceContext) => {
+      await trace(async () => {
+        const ctx = getActiveTraceContext()!;
         ctx.setAttributes({
           'user.id': 'user_123',
           environment: 'development',
@@ -1359,7 +1162,7 @@ describe('Functional API', () => {
           scores: [1, 2, 3],
         });
         return 'done';
-      });
+      })();
 
       const spans = collector.getSpans();
       expect(spans).toHaveLength(1);
@@ -1375,11 +1178,12 @@ describe('Functional API', () => {
       const collector = createTraceCollector();
 
       // Verify the method can be called without error
-      const result = await trace(async (ctx: TraceContext) => {
-        ctx.addEvent('order.started', { 'order.id': '123' });
-        ctx.addEvent('items.fetched', { 'item.count': 5 });
+      const result = await trace(async () => {
+        const ctx = getActiveTraceContext()!;
+        (ctx as LegacyCtx).addEvent('order.started', { 'order.id': '123' });
+        (ctx as LegacyCtx).addEvent('items.fetched', { 'item.count': 5 });
         return 'done';
-      });
+      })();
 
       expect(result).toBe('done');
       expect(collector.getSpans()).toHaveLength(1);
@@ -1388,10 +1192,11 @@ describe('Functional API', () => {
     it('should support updateName for dynamic span naming', async () => {
       const collector = createTraceCollector();
 
-      await trace('initial.name', async (ctx: TraceContext) => {
+      await trace('initial.name', async () => {
+        const ctx = getActiveTraceContext()!;
         ctx.updateName('updated.name');
         return 'done';
-      });
+      })();
 
       const spans = collector.getSpans();
       expect(spans).toHaveLength(1);
@@ -1402,10 +1207,11 @@ describe('Functional API', () => {
       const collector = createTraceCollector();
       let wasRecording = false;
 
-      await trace(async (ctx: TraceContext) => {
+      await trace(async () => {
+        const ctx = getActiveTraceContext()!;
         wasRecording = ctx.isRecording();
         return 'done';
-      });
+      })();
 
       expect(wasRecording).toBe(true);
       expect(collector.getSpans()).toHaveLength(1);
@@ -1422,10 +1228,11 @@ describe('Functional API', () => {
       };
 
       // Verify the method can be called without error
-      const result = await trace(async (ctx: TraceContext) => {
+      const result = await trace(async () => {
+        const ctx = getActiveTraceContext()!;
         ctx.addLink({ context: linkContext });
         return 'done';
-      });
+      })();
 
       expect(result).toBe('done');
       expect(collector.getSpans()).toHaveLength(1);
@@ -1452,10 +1259,11 @@ describe('Functional API', () => {
       ];
 
       // Verify the method can be called without error
-      const result = await trace(async (ctx: TraceContext) => {
+      const result = await trace(async () => {
+        const ctx = getActiveTraceContext()!;
         ctx.addLinks(links);
         return 'done';
-      });
+      })();
 
       expect(result).toBe('done');
       expect(collector.getSpans()).toHaveLength(1);

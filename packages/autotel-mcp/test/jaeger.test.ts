@@ -305,7 +305,7 @@ describe('JaegerBackend', () => {
   it('searchTraces with hasError over-fetches without sending tags (Jaeger cannot index bool error tag)', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       const url = typeof input === 'string' ? input : input.toString();
       requests.push(url);
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
@@ -328,7 +328,7 @@ describe('JaegerBackend', () => {
   it('searchTraces forwards explicit time window as Jaeger start/end (μs)', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       requests.push(typeof input === 'string' ? input : input.toString());
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
     }) as typeof fetch;
@@ -352,7 +352,7 @@ describe('JaegerBackend', () => {
   it('searchTraces defaults to 60m lookback when no time window is given', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       requests.push(typeof input === 'string' ? input : input.toString());
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
     }) as typeof fetch;
@@ -372,7 +372,7 @@ describe('JaegerBackend', () => {
   it('searchTraces forwards min/max duration as Jaeger ms strings', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       requests.push(typeof input === 'string' ? input : input.toString());
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
     }) as typeof fetch;

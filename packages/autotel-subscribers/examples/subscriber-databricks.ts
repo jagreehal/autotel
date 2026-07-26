@@ -39,10 +39,10 @@
  *
  * Usage:
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { DatabricksSubscriber } from './adapter-databricks';
  *
- * const events = new Events('app', {
+ * const events = new Event('app', {
  *   subscribers: [
  *     new DatabricksSubscriber({
  *       host: 'https://dbc-1234567-890.cloud.databricks.com',
@@ -161,7 +161,7 @@ export class DatabricksSubscriber extends EventSubscriber {
           ? Object.entries(event.attributes)
               .map(
                 ([key, value]) =>
-                  `'${this.escapeSql(key)}', '${this.escapeSql(String(value))}'`
+                  `'${this.escapeSql(key)}', '${this.escapeSql(String(value))}'`,
               )
               .join(', ')
           : '';
@@ -192,28 +192,23 @@ export class DatabricksSubscriber extends EventSubscriber {
 
   private async executeSql(sql: string): Promise<void> {
     // Execute SQL via Databricks SQL API
-    const response = await fetch(
-      `${this.config.host}/api/2.0/sql/statements`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.config.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          statement: sql,
-          warehouse_id: this.config.warehouseId,
-          wait_timeout: `${this.config.timeout / 1000}s`,
-        }),
-        signal: AbortSignal.timeout(this.config.timeout),
-      }
-    );
+    const response = await fetch(`${this.config.host}/api/2.0/sql/statements`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        statement: sql,
+        warehouse_id: this.config.warehouseId,
+        wait_timeout: `${this.config.timeout / 1000}s`,
+      }),
+      signal: AbortSignal.timeout(this.config.timeout),
+    });
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(
-        `Databricks API returned ${response.status}: ${error}`
-      );
+      throw new Error(`Databricks API returned ${response.status}: ${error}`);
     }
 
     const result: SQLExecutionResponse = await response.json();
@@ -229,7 +224,7 @@ export class DatabricksSubscriber extends EventSubscriber {
 
   private escapeSql(value: string): string {
     // Escape single quotes for SQL
-    return value.replaceAll('\'', "''");
+    return value.replaceAll("'", "''");
   }
 
   protected handleError(error: Error, payload: EventPayload): void {
@@ -239,25 +234,25 @@ export class DatabricksSubscriber extends EventSubscriber {
       {
         eventName: payload.name,
         attributes: payload.attributes,
-      }
+      },
     );
 
     // Databricks-specific error handling
     if (error.message.includes('401')) {
       console.error(
-        '[DatabricksSubscriber] Authentication failed - check your token'
+        '[DatabricksSubscriber] Authentication failed - check your token',
       );
     }
 
     if (error.message.includes('warehouse')) {
       console.error(
-        '[DatabricksSubscriber] SQL warehouse error - check warehouse ID and status'
+        '[DatabricksSubscriber] SQL warehouse error - check warehouse ID and status',
       );
     }
 
     if (error.message.includes('timeout')) {
       console.error(
-        '[DatabricksSubscriber] Timeout - consider increasing timeout or reducing batch size'
+        '[DatabricksSubscriber] Timeout - consider increasing timeout or reducing batch size',
       );
     }
   }

@@ -23,19 +23,22 @@ describe('init() with privacy controls', () => {
 
     // Mock the underlying fetch that will be called by the patched version
     //  This needs to happen BEFORE init() so it's in place when fetch is patched
-    const mockFetch = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      // Track the call with its headers
-      // Convert Headers object to plain object for easier testing
-      const headersObj = init?.headers instanceof Headers 
-        ? Object.fromEntries(init.headers.entries())
-        : init?.headers;
-      callTracker.push([input, { ...init, headers: headersObj }]);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({}),
-      } as Response);
-    });
+    const mockFetch = vi
+      .fn()
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        // Track the call with its headers
+        // Convert Headers object to plain object for easier testing
+        const headersObj =
+          init?.headers instanceof Headers
+            ? Object.fromEntries(init.headers.entries())
+            : init?.headers;
+        callTracker.push([input, { ...init, headers: headersObj }]);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({}),
+        } as Response);
+      });
 
     global.fetch = mockFetch;
     if (typeof window !== 'undefined') {
@@ -86,12 +89,12 @@ describe('init() with privacy controls', () => {
 
       // Check that fetch was called without traceparent
       const [_, requestInit] = callTracker[0];
-      const headers = requestInit?.headers instanceof Headers 
-        ? requestInit.headers 
-        : new Headers(requestInit?.headers);
+      const headers =
+        requestInit?.headers instanceof Headers
+          ? requestInit.headers
+          : new Headers(requestInit?.headers);
       expect(headers.has('traceparent')).toBe(false);
     });
-
   });
 
   describe('Global Privacy Control (GPC)', () => {
@@ -112,9 +115,10 @@ describe('init() with privacy controls', () => {
 
       // Check that fetch was called without traceparent
       const [_, requestInit] = callTracker[0];
-      const headers = requestInit?.headers instanceof Headers 
-        ? requestInit.headers 
-        : new Headers(requestInit?.headers);
+      const headers =
+        requestInit?.headers instanceof Headers
+          ? requestInit.headers
+          : new Headers(requestInit?.headers);
       expect(headers.has('traceparent')).toBe(false);
     });
   });
@@ -132,14 +136,13 @@ describe('init() with privacy controls', () => {
 
       // Check that fetch was called without traceparent
       const [_, requestInit] = callTracker[0];
-      const headers = requestInit?.headers instanceof Headers 
-        ? requestInit.headers 
-        : new Headers(requestInit?.headers);
+      const headers =
+        requestInit?.headers instanceof Headers
+          ? requestInit.headers
+          : new Headers(requestInit?.headers);
       expect(headers.has('traceparent')).toBe(false);
     });
-
   });
-
 
   describe('Combined Privacy Controls', () => {
     afterEach(() => {
@@ -171,9 +174,5 @@ describe('init() with privacy controls', () => {
       const headers = new Headers(requestInit?.headers);
       expect(headers.has('traceparent')).toBe(false);
     });
-
   });
-
-
-
 });

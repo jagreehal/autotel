@@ -1,7 +1,15 @@
 <script lang="ts" module>
   import type { TraceKind, TraceNode } from '../../genai/trace';
   import { formatDuration } from '../../utils';
-  import { Bot, Layers, Cpu, Brain, Wrench, MessageSquare, ArrowRight } from '@lucide/svelte';
+  import {
+    Bot,
+    Layers,
+    Cpu,
+    Brain,
+    Wrench,
+    MessageSquare,
+    ArrowRight,
+  } from '@lucide/svelte';
 
   const KIND_STYLE: Record<
     TraceKind,
@@ -12,8 +20,16 @@
     step: { icon: Cpu, dot: 'bg-blue-500', text: 'text-fg' },
     reasoning: { icon: Brain, dot: 'bg-amber-500', text: 'text-amber-600' },
     tool: { icon: Wrench, dot: 'bg-purple-500', text: 'text-purple-600' },
-    text: { icon: MessageSquare, dot: 'bg-emerald-500', text: 'text-emerald-600' },
-    handoff: { icon: ArrowRight, dot: 'bg-violet-500', text: 'text-violet-600' },
+    text: {
+      icon: MessageSquare,
+      dot: 'bg-emerald-500',
+      text: 'text-emerald-600',
+    },
+    handoff: {
+      icon: ArrowRight,
+      dot: 'bg-violet-500',
+      text: 'text-violet-600',
+    },
   };
 
   function tokenText(tokens?: TraceNode['tokens']): string {
@@ -63,7 +79,8 @@
           {#if node.depth > 0}
             <span class="text-line-subtle select-none">·</span>
           {/if}
-          <span class={cn('w-1.5 h-1.5 rounded-full shrink-0', style.dot)}></span>
+          <span class={cn('w-1.5 h-1.5 rounded-full shrink-0', style.dot)}
+          ></span>
           <Icon size={12} class={cn('shrink-0', style.text)} />
         </span>
 
@@ -77,7 +94,9 @@
           <span class="flex-1"></span>
         {/if}
 
-        <span class="shrink-0 flex items-center gap-2 text-fg-subtle tabular-nums">
+        <span
+          class="shrink-0 flex items-center gap-2 text-fg-subtle tabular-nums"
+        >
           {#if tokenText(node.tokens)}
             <span title="tokens in → out">{tokenText(node.tokens)}</span>
           {/if}

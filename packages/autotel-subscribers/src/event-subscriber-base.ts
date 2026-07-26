@@ -75,7 +75,10 @@ import type {
 } from 'autotel/event-subscriber';
 
 // Re-export types for convenience
-export type { AutotelEventContext, EventTrackingOptions } from 'autotel/event-subscriber';
+export type {
+  AutotelEventContext,
+  EventTrackingOptions,
+} from 'autotel/event-subscriber';
 
 /**
  * Payload sent to destination
@@ -392,7 +395,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
     if (this.pendingRequests.size > 0) {
       console.warn(
         `[${this.name}] Shutdown completed with ${this.pendingRequests.size} pending requests still in-flight. ` +
-        `This may indicate a bug in the subscriber or extremely slow destination.`
+          `This may indicate a bug in the subscriber or extremely slow destination.`,
       );
     }
   }
@@ -414,9 +417,7 @@ export abstract class EventSubscriber implements IEventSubscriber {
   /**
    * Internal: Send with error handling
    */
-  private async sendWithErrorHandling(
-    payload: EventPayload,
-  ): Promise<void> {
+  private async sendWithErrorHandling(payload: EventPayload): Promise<void> {
     try {
       await this.sendToDestination(payload);
     } catch (error) {

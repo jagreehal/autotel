@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type {
-  ExceptionRecord,
-  ExceptionList,
-} from './types';
+import type { ExceptionRecord, ExceptionList } from './types';
 
 describe('error-tracking types', () => {
   it('ExceptionRecord satisfies the expected shape', () => {
@@ -28,8 +25,16 @@ describe('error-tracking types', () => {
 
   it('ExceptionList supports cause chains', () => {
     const list: ExceptionList = [
-      { type: 'Error', value: 'root cause', mechanism: { type: 'generic', handled: false } },
-      { type: 'TypeError', value: 'outer error', mechanism: { type: 'onerror', handled: false } },
+      {
+        type: 'Error',
+        value: 'root cause',
+        mechanism: { type: 'generic', handled: false },
+      },
+      {
+        type: 'TypeError',
+        value: 'outer error',
+        mechanism: { type: 'onerror', handled: false },
+      },
     ];
     expect(list).toHaveLength(2);
     expect(list[0].value).toBe('root cause');

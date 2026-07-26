@@ -1,5 +1,5 @@
-import { defineConfig } from 'tsdown'
-import { tsupCompatOutExtensions } from "../../tsdown.shared.mjs";
+import { defineConfig } from 'tsdown';
+import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 
 export default defineConfig({
   outExtensions: tsupCompatOutExtensions,
@@ -20,14 +20,14 @@ export default defineConfig({
   minify: false,
   deps: {
     neverBundle: [
-    'ws',
-    '@opentelemetry/api',
-    '@opentelemetry/sdk-trace-base',
-    '@opentelemetry/sdk-logs',
-    '@opentelemetry/core',
-    'autotel',
-  ],
+      'ws',
+      '@opentelemetry/api',
+      '@opentelemetry/sdk-trace-base',
+      '@opentelemetry/sdk-logs',
+      '@opentelemetry/core',
+      'autotel',
+    ],
   },
   clean: false,
   target: false,
-})
+});

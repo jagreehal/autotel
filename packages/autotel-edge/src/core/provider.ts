@@ -4,7 +4,10 @@
 
 import { trace } from '@opentelemetry/api';
 import type { Resource } from '@opentelemetry/resources';
-import type { SpanProcessor, TracerConfig } from '@opentelemetry/sdk-trace-base';
+import type {
+  SpanProcessor,
+  TracerConfig,
+} from '@opentelemetry/sdk-trace-base';
 import { WorkerTracer } from './tracer';
 import { ensureGlobalContextManager } from './context';
 
@@ -21,7 +24,11 @@ export class WorkerTracerProvider {
   /**
    * Get the tracer instance
    */
-  getTracer(_name: string, _version?: string, _config?: TracerConfig): WorkerTracer {
+  getTracer(
+    _name: string,
+    _version?: string,
+    _config?: TracerConfig,
+  ): WorkerTracer {
     return this.tracer;
   }
 

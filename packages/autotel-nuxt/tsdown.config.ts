@@ -16,5 +16,12 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   target: false,
-  external: ['@nuxt/kit', 'nuxt', 'nitropack', 'autotel-adapters', 'autotel-adapters/nitro', 'autotel'],
+  external: [
+    '@nuxt/kit',
+    'nuxt',
+    'nitropack',
+    'autotel-adapters',
+    'autotel-adapters/nitro',
+    'autotel',
+  ],
 });

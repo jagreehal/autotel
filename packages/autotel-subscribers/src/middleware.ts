@@ -90,17 +90,24 @@ export type IdempotencyStore<TResult = unknown> = {
   set(key: string, result: TResult, ttlMs: number): Promise<void>;
 };
 
-export type SubscriberMiddleware<TCtxIn = Record<string, unknown>, TCtxOut = TCtxIn> = (
-  params: {
-    event: EventsEvent;
-    ctx: TCtxIn;
-    subscriber: Pick<EventSubscriber, 'name' | 'version'>;
-    next: (update?: { event?: EventsEvent; ctxPatch?: Partial<TCtxOut> }) => Promise<void>;
-  },
-) => Promise<void>;
+export type SubscriberMiddleware<
+  TCtxIn = Record<string, unknown>,
+  TCtxOut = TCtxIn,
+> = (params: {
+  event: EventsEvent;
+  ctx: TCtxIn;
+  subscriber: Pick<EventSubscriber, 'name' | 'version'>;
+  next: (update?: {
+    event?: EventsEvent;
+    ctxPatch?: Partial<TCtxOut>;
+  }) => Promise<void>;
+}) => Promise<void>;
 
 /** Type-safe middleware factory helper */
-export const createMiddleware = <TCtxIn = Record<string, unknown>, TCtxOut = TCtxIn>(
+export const createMiddleware = <
+  TCtxIn = Record<string, unknown>,
+  TCtxOut = TCtxIn,
+>(
   fn: SubscriberMiddleware<TCtxIn, TCtxOut>,
 ): SubscriberMiddleware<TCtxIn, TCtxOut> => fn;
 
@@ -123,14 +130,22 @@ function defaultContextFactory() {
   return {} as Record<string, unknown>;
 }
 
-async function dispatchEvent(subscriber: EventSubscriber, event: EventsEvent): Promise<void> {
+async function dispatchEvent(
+  subscriber: EventSubscriber,
+  event: EventsEvent,
+): Promise<void> {
   switch (event.type) {
     case 'event': {
       await subscriber.trackEvent(event.name, event.attributes, event.options);
       return;
     }
     case 'funnel': {
-      await subscriber.trackFunnelStep(event.funnel, event.step, event.attributes, event.options);
+      await subscriber.trackFunnelStep(
+        event.funnel,
+        event.step,
+        event.attributes,
+        event.options,
+      );
       return;
     }
     case 'outcome': {
@@ -143,7 +158,12 @@ async function dispatchEvent(subscriber: EventSubscriber, event: EventsEvent): P
       return;
     }
     case 'value': {
-      await subscriber.trackValue(event.name, event.value, event.attributes, event.options);
+      await subscriber.trackValue(
+        event.name,
+        event.value,
+        event.attributes,
+        event.options,
+      );
     }
   }
 }
@@ -167,9 +187,15 @@ export function applyMiddleware<TCtx = Record<string, unknown>>(
   options?: { initialContext?: () => TCtx },
 ): EventSubscriber {
   const runChain = async (initialEvent: EventsEvent): Promise<void> => {
-    const baseCtx = (options?.initialContext ?? defaultContextFactory)() as TCtx;
+    const baseCtx = (
+      options?.initialContext ?? defaultContextFactory
+    )() as TCtx;
 
-    const execute = async (index: number, event: EventsEvent, ctx: TCtx): Promise<void> => {
+    const execute = async (
+      index: number,
+      event: EventsEvent,
+      ctx: TCtx,
+    ): Promise<void> => {
       const middleware = middlewares[index];
       if (!middleware) {
         await dispatchEvent(subscriber, event);
@@ -201,7 +227,13 @@ export function applyMiddleware<TCtx = Record<string, unknown>>(
     trackFunnelStep: async (funnel, step, attributes, options_) =>
       runChain({ type: 'funnel', funnel, step, attributes, options: options_ }),
     trackOutcome: async (operation, outcome, attributes, options_) =>
-      runChain({ type: 'outcome', operation, outcome, attributes, options: options_ }),
+      runChain({
+        type: 'outcome',
+        operation,
+        outcome,
+        attributes,
+        options: options_,
+      }),
     trackValue: async (name, value, attributes, options_) =>
       runChain({ type: 'value', name, value, attributes, options: options_ }),
     shutdown: async () => {
@@ -233,7 +265,9 @@ export function retryMiddleware(options: {
         lastError = error instanceof Error ? error : new Error(String(error));
         if (attempt < maxRetries) {
           onRetry?.(attempt, lastError, event);
-          await new Promise((resolve) => setTimeout(resolve, delayMs * 2 ** (attempt - 1)));
+          await new Promise((resolve) =>
+            setTimeout(resolve, delayMs * 2 ** (attempt - 1)),
+          );
         }
       }
     }
@@ -248,7 +282,8 @@ export function retryMiddleware(options: {
  * Only passes through a percentage of events based on the rate (0.0 to 1.0)
  */
 export function samplingMiddleware(rate: number): SubscriberMiddleware {
-  if (rate < 0 || rate > 1) throw new Error('Sample rate must be between 0 and 1');
+  if (rate < 0 || rate > 1)
+    throw new Error('Sample rate must be between 0 and 1');
 
   return async ({ next }) => {
     if (Math.random() < rate) await next();
@@ -260,7 +295,9 @@ export function samplingMiddleware(rate: number): SubscriberMiddleware {
  *
  * Apply a transformation function to each event before sending
  */
-export function enrichmentMiddleware(enricher: (event: EventsEvent) => EventsEvent): SubscriberMiddleware {
+export function enrichmentMiddleware(
+  enricher: (event: EventsEvent) => EventsEvent,
+): SubscriberMiddleware {
   return async ({ event, next }) => {
     await next({ event: enricher(event) });
   };
@@ -271,7 +308,9 @@ export function enrichmentMiddleware(enricher: (event: EventsEvent) => EventsEve
  *
  * Logs event type and name (optionally full event) to console
  */
-export function loggingMiddleware(options: { prefix?: string; logAttributes?: boolean } = {}): SubscriberMiddleware {
+export function loggingMiddleware(
+  options: { prefix?: string; logAttributes?: boolean } = {},
+): SubscriberMiddleware {
   const { prefix = '[Events]', logAttributes = false } = options;
 
   return async ({ event, next }) => {
@@ -289,7 +328,9 @@ export function loggingMiddleware(options: { prefix?: string; logAttributes?: bo
  *
  * Only forwards events that match the predicate
  */
-export function filterMiddleware(predicate: (event: EventsEvent) => boolean): SubscriberMiddleware {
+export function filterMiddleware(
+  predicate: (event: EventsEvent) => boolean,
+): SubscriberMiddleware {
   return async ({ event, next }) => {
     if (predicate(event)) await next();
   };
@@ -300,7 +341,9 @@ export function filterMiddleware(predicate: (event: EventsEvent) => boolean): Su
  *
  * Similar to enrichment but replaces entire event
  */
-export function transformMiddleware(transformer: (event: EventsEvent) => EventsEvent): SubscriberMiddleware {
+export function transformMiddleware(
+  transformer: (event: EventsEvent) => EventsEvent,
+): SubscriberMiddleware {
   return async ({ event, next }) => {
     await next({ event: transformer(event) });
   };
@@ -357,7 +400,9 @@ export function batchingMiddleware(options: {
  *
  * Enforces a maximum rate of events sent per second
  */
-export function rateLimitMiddleware(options: { requestsPerSecond: number }): SubscriberMiddleware {
+export function rateLimitMiddleware(options: {
+  requestsPerSecond: number;
+}): SubscriberMiddleware {
   const intervalMs = 1000 / options.requestsPerSecond;
   let lastAt = 0;
 
@@ -419,10 +464,15 @@ export function circuitBreakerMiddleware(options: {
  *
  * Rejects the event if processing exceeds the specified timeout
  */
-export function timeoutMiddleware(options: { timeoutMs: number }): SubscriberMiddleware {
+export function timeoutMiddleware(options: {
+  timeoutMs: number;
+}): SubscriberMiddleware {
   return async ({ next }) => {
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error(`Timeout after ${options.timeoutMs}ms`)), options.timeoutMs);
+      setTimeout(
+        () => reject(new Error(`Timeout after ${options.timeoutMs}ms`)),
+        options.timeoutMs,
+      );
     });
 
     await Promise.race([next(), timeoutPromise]);
@@ -446,7 +496,9 @@ export function createIdempotencyStore<TResult = unknown>(options: {
  *
  * Useful for testing or single-process applications
  */
-export function inMemoryIdempotencyStore<TResult = unknown>(): IdempotencyStore<TResult> {
+export function inMemoryIdempotencyStore<
+  TResult = unknown,
+>(): IdempotencyStore<TResult> {
   type Entry = { result: TResult; expiresAtMs: number };
   const map = new Map<string, Entry>();
 
@@ -534,7 +586,8 @@ export function withIdempotency(options: {
   ttlMs: number;
 }): SubscriberMiddleware {
   return async ({ event, next }) => {
-    const key = typeof options.key === 'function' ? options.key(event) : options.key;
+    const key =
+      typeof options.key === 'function' ? options.key(event) : options.key;
     const cached = await options.store.get(key);
     if (cached) return;
 
@@ -568,11 +621,18 @@ export function withRateLimit(options: {
   const algorithm = options.algorithm ?? 'fixed';
 
   return async ({ event, next }) => {
-    const key = typeof options.key === 'function' ? options.key(event) : options.key;
-    const { count, resetAtMs } = await options.store.record(key, options.windowMs, algorithm);
+    const key =
+      typeof options.key === 'function' ? options.key(event) : options.key;
+    const { count, resetAtMs } = await options.store.record(
+      key,
+      options.windowMs,
+      algorithm,
+    );
     if (count > options.max) {
       const retryAfterMs = Math.max(0, resetAtMs - Date.now());
-      throw new Error(`Rate limited for key "${key}". Retry after ${retryAfterMs}ms.`);
+      throw new Error(
+        `Rate limited for key "${key}". Retry after ${retryAfterMs}ms.`,
+      );
     }
     await next();
   };
@@ -594,7 +654,9 @@ export function withRateLimit(options: {
  * })
  * ```
  */
-export function withEventLogger(options: { sink: SendEventSink }): SubscriberMiddleware {
+export function withEventLogger(options: {
+  sink: SendEventSink;
+}): SubscriberMiddleware {
   return async ({ event, next, subscriber }) => {
     const startedAt = new Date();
     const start = performance.now();

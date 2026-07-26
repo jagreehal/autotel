@@ -51,7 +51,10 @@ describe('checkout flow → architecture snapshot', () => {
     await placeOrder(sampleOrder);
     const msg: OrderPlacedMessage = { type: 'OrderPlaced', ...sampleOrder };
     await Promise.all([handleOrderPlaced(msg), generateRecommendation(msg)]);
-    await handlePaymentCaptured({ orderId: sampleOrder.id, items: sampleOrder.items });
+    await handlePaymentCaptured({
+      orderId: sampleOrder.id,
+      items: sampleOrder.items,
+    });
 
     const snap = snapshot.toSnapshot();
 

@@ -5,10 +5,10 @@
  *
  * @example
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { MixpanelSubscriber } from 'autotel-subscribers/mixpanel';
  *
- * const events = new Events('checkout', {
+ * const events = new Event('checkout', {
  *   subscribers: [
  *     new MixpanelSubscriber({
  *       token: process.env.MIXPANEL_TOKEN!

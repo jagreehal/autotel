@@ -7,6 +7,7 @@ import {
   type StoredTraceContext,
   type CallbackContext,
 } from './webhook';
+import * as functionalModule from './functional';
 
 // Mock the functional trace
 vi.mock('./functional', () => ({
@@ -17,6 +18,14 @@ vi.mock('./functional', () => ({
       return fn(...args);
     };
   }),
+  withTracing: vi.fn(
+    (_options: unknown) =>
+      (factory: (ctx: unknown) => (...a: unknown[]) => unknown) =>
+      (...args: unknown[]) => {
+        const mockCtx = createMockTraceContext();
+        return factory(mockCtx)(...args);
+      },
+  ),
 }));
 
 // Mock OpenTelemetry trace
@@ -408,10 +417,13 @@ describe('Webhook Parking Lot', () => {
 
       await handler();
 
-      expect(capturedCtx).not.toBeNull();
-      expect(capturedCtx?.parkedContext).not.toBeNull();
-      expect(capturedCtx?.parkedContext?.metadata?.customerId).toBe('cust-456');
-      expect(capturedCtx?.correlationKey).toBe('payment:order-123');
+      // Read through a snapshot: TS narrows the closure-assigned `let` to its
+      // initial `null` in the outer flow, so widen back to the declared union.
+      const ctx = capturedCtx as CallbackContext | null;
+      expect(ctx).not.toBeNull();
+      expect(ctx?.parkedContext).not.toBeNull();
+      expect(ctx?.parkedContext?.metadata?.customerId).toBe('cust-456');
+      expect(ctx?.correlationKey).toBe('payment:order-123');
     });
 
     it('should calculate elapsed time', async () => {
@@ -455,8 +467,9 @@ describe('Webhook Parking Lot', () => {
 
       await handler();
 
-      expect(capturedCtx?.parkedContext).toBeNull();
-      expect(capturedCtx?.elapsedMs).toBeNull();
+      const ctx = capturedCtx as CallbackContext | null;
+      expect(ctx?.parkedContext).toBeNull();
+      expect(ctx?.elapsedMs).toBeNull();
     });
 
     it('should throw when requireParkedContext is true and context missing', async () => {
@@ -477,14 +490,20 @@ describe('Webhook Parking Lot', () => {
       await parkingLot.park('payment:order-123');
 
       const mockCtx = createMockTraceContext();
-      vi.mocked(
-        await import('./functional').then((m) => m.trace),
-      ).mockImplementationOnce((options, factory) => {
-        return (...args: unknown[]) => {
-          const fn = factory(mockCtx as any);
-          return fn(...args);
-        };
-      });
+      vi.mocked(functionalModule.trace).mockImplementationOnce(
+        (_options, factory) => {
+          // trace is heavily overloaded; vi.mocked resolves `factory` to the
+          // plain-function overload, but traceCallback passes the curried factory
+          // form (ctx) => (...args) => result, which this mock executes.
+          const curried = factory as unknown as (
+            ctx: unknown,
+          ) => (...args: unknown[]) => Promise<unknown>;
+          return (...args: unknown[]) => {
+            const fn = curried(mockCtx as any);
+            return fn(...args);
+          };
+        },
+      );
 
       const handler = parkingLot.traceCallback({
         name: 'webhook.test',
@@ -580,8 +599,9 @@ describe('Webhook Parking Lot', () => {
       });
 
       expect(result).toEqual({ success: true });
-      expect(webhookCtx?.parkedContext?.metadata?.amount).toBe('99.99');
-      expect(webhookCtx?.correlationKey).toBe(`payment:${orderId}`);
+      const ctx = webhookCtx as CallbackContext | null;
+      expect(ctx?.parkedContext?.metadata?.amount).toBe('99.99');
+      expect(ctx?.correlationKey).toBe(`payment:${orderId}`);
     });
 
     it('should handle human approval workflow', async () => {

@@ -11,6 +11,8 @@ export interface SentryOtlpConfig {
 /** Minimal Sentry SDK interface needed by linkSentryErrors(). */
 export interface SentryLinkable {
   getGlobalScope(): {
-    addEventProcessor(fn: (event: Record<string, unknown>) => Record<string, unknown>): void;
+    addEventProcessor(
+      fn: (event: Record<string, unknown>) => Record<string, unknown>,
+    ): void;
   };
 }

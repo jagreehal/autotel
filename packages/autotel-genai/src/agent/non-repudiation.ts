@@ -2,10 +2,7 @@ import { AGENT_AUDIT_SCHEMA_VERSION } from './constants.js';
 import { canonicalizeForHash, hashPayload } from './hash.js';
 import { normalizeMetadata } from './metadata.js';
 import { sanitizeAuditPayload, type PrivacyProfileInput } from './privacy.js';
-import type {
-  AgentActionMetadata,
-  AgentAuditEventEnvelope,
-} from './types.js';
+import type { AgentActionMetadata, AgentAuditEventEnvelope } from './types.js';
 
 function toIsoString(value?: string | Date): string {
   if (!value) return new Date().toISOString();

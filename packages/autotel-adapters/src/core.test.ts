@@ -16,7 +16,9 @@ describe('createUseLogger', () => {
 
 describe('getHeader', () => {
   it('reads from Headers-like object with get()', () => {
-    const headers = { get: (name: string) => (name === 'x-request-id' ? 'req-1' : null) };
+    const headers = {
+      get: (name: string) => (name === 'x-request-id' ? 'req-1' : null),
+    };
     expect(getHeader(headers, 'x-request-id')).toBe('req-1');
     expect(getHeader(headers, 'x-missing')).toBeUndefined();
   });

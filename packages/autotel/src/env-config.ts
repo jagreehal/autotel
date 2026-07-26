@@ -126,7 +126,7 @@ function parseRatioSamplerArg(
   samplerArg: string | undefined,
 ): number {
   if (samplerArg === undefined) {
-    return 1.0;
+    return 1;
   }
 
   const ratio = Number(samplerArg);
@@ -134,7 +134,7 @@ function parseRatioSamplerArg(
     console.error(
       `[autotel] Invalid OTEL_TRACES_SAMPLER_ARG="${samplerArg}" for ${samplerName}. Expected a number in [0..1]. Falling back to 1.0.`,
     );
-    return 1.0;
+    return 1;
   }
 
   return ratio;
@@ -160,40 +160,48 @@ export function createSamplerFromEnv(
   }
 
   switch (samplerName) {
-    case 'always_on':
+    case 'always_on': {
       warnOnUnusedSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG);
       return new AlwaysOnSampler();
-    case 'always_off':
+    }
+    case 'always_off': {
       warnOnUnusedSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG);
       return new AlwaysOffSampler();
-    case 'traceidratio':
+    }
+    case 'traceidratio': {
       return new TraceIdRatioBasedSampler(
         parseRatioSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG),
       );
-    case 'parentbased_always_on':
+    }
+    case 'parentbased_always_on': {
       warnOnUnusedSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG);
       return new ParentBasedSampler({ root: new AlwaysOnSampler() });
-    case 'parentbased_always_off':
+    }
+    case 'parentbased_always_off': {
       warnOnUnusedSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG);
       return new ParentBasedSampler({ root: new AlwaysOffSampler() });
-    case 'parentbased_traceidratio':
+    }
+    case 'parentbased_traceidratio': {
       return new ParentBasedSampler({
         root: new TraceIdRatioBasedSampler(
           parseRatioSamplerArg(samplerName, env.OTEL_TRACES_SAMPLER_ARG),
         ),
       });
+    }
     case 'jaeger_remote':
     case 'parentbased_jaeger_remote':
-    case 'xray':
+    case 'xray': {
       console.error(
         `[autotel] OTEL_TRACES_SAMPLER="${samplerName}" is not supported yet by autotel. Falling back to the next sampler source.`,
       );
       return undefined;
-    default:
+    }
+    default: {
       console.error(
         `[autotel] Unknown OTEL_TRACES_SAMPLER="${samplerName}". Falling back to the next sampler source.`,
       );
       return undefined;
+    }
   }
 }
 

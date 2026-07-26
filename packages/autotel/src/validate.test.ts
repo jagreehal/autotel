@@ -71,7 +71,7 @@ describe('formatValidationIssues — PII guard', () => {
 
   it('returns [] for unrecognised errors', () => {
     expect(formatValidationIssues(new Error('boom'))).toEqual([]);
-    expect(formatValidationIssues()).toEqual([]);
+    expect(formatValidationIssues(undefined)).toEqual([]);
     expect(formatValidationIssues('nope')).toEqual([]);
   });
 
@@ -122,7 +122,7 @@ describe('recordValidationMismatch', () => {
   });
 
   it('skips span attributes when there is no active span (fail-open)', () => {
-    vi.spyOn(trace, 'getActiveSpan').mockReturnValue();
+    vi.spyOn(trace, 'getActiveSpan').mockReturnValue(undefined);
     expect(() => recordValidationMismatch(mismatch)).not.toThrow();
   });
 
@@ -280,7 +280,7 @@ describe('defineValidator', () => {
       toJsonSchema: () => ({ type: 'object' }),
     });
     v.safeParse({});
-    const attrs = setAttributes.mock.calls[0][0];
+    const attrs = setAttributes.mock.calls[0]![0];
     expect(typeof attrs[VALIDATION_ATTR.hash]).toBe('string');
     expect(attrs[VALIDATION_ATTR.hash]).toHaveLength(64); // sha256 hex
   });

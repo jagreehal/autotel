@@ -4,7 +4,7 @@ import { enterOrRun } from './trace-context';
 type Box<T> = { value: T };
 
 function createFakeStorage<T>(initialValue?: T) {
-  let currentStore =
+  let currentStore: Box<T> | undefined =
     initialValue === undefined ? undefined : { value: initialValue };
   const runCalls: Array<Box<T>> = [];
   const enterWithCalls: Array<Box<T>> = [];

@@ -5,7 +5,7 @@
  * Run: bun run src/index.ts  (or from repo root: pnpm --filter @jagreehal/example-bun-fullstack start)
  */
 
-import { init, getTracer, trace, type TraceContext } from 'autotel';
+import { init, getTracer, type TraceContext, withTracing } from 'autotel';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -18,7 +18,7 @@ init({
 const tracer = getTracer('example-bun-fullstack', '1.0.0');
 
 // Simplest traced value: a function that returns a value under a span
-const getHealth = trace((_ctx: TraceContext) => () => {
+const getHealth = withTracing({})((_ctx: TraceContext) => () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
 

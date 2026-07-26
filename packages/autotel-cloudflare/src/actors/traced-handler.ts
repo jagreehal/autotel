@@ -68,7 +68,9 @@ interface WorkerHandler<E = unknown> {
 export function tracedHandler<E, A extends ActorLike>(
   actorClass: ActorConstructor<A> & {
     nameFromRequest?(request: Request): Promise<string | undefined>;
-    configuration?(request: Request): { locationHint?: DurableObjectLocationHint };
+    configuration?(request: Request): {
+      locationHint?: DurableObjectLocationHint;
+    };
   },
   config: ActorConfig | ((env: E, trigger?: unknown) => ActorConfig),
 ): WorkerHandler<E> {
@@ -78,7 +80,11 @@ export function tracedHandler<E, A extends ActorLike>(
   // This handler wraps the Worker entrypoint that routes to the DO.
 
   return {
-    async fetch(request: Request, env: E, _ctx: ExecutionContext): Promise<Response> {
+    async fetch(
+      request: Request,
+      env: E,
+      _ctx: ExecutionContext,
+    ): Promise<Response> {
       // Initialize telemetry for this request
       const telemetryConfig = initialiser(env, { type: 'http' });
       const configContext = setConfig(telemetryConfig);
@@ -124,10 +130,13 @@ export function tracedHandler<E, A extends ActorLike>(
 
             // Find the binding name for this Actor class
             const bindingName = Object.keys(envObj).find((key) => {
-              const binding = (env as Record<string, unknown>).__DURABLE_OBJECT_BINDINGS as
-                | Record<string, { class_name?: string }>
-                | undefined;
-              return key === actorClassName || binding?.[key]?.class_name === actorClassName;
+              const binding = (env as Record<string, unknown>)
+                .__DURABLE_OBJECT_BINDINGS as
+                Record<string, { class_name?: string }> | undefined;
+              return (
+                key === actorClassName ||
+                binding?.[key]?.class_name === actorClassName
+              );
             });
 
             if (!bindingName) {
@@ -140,7 +149,10 @@ export function tracedHandler<E, A extends ActorLike>(
                   error: 'Configuration Error',
                   message: `No Durable Object binding found for actor class ${actorClassName}`,
                 },
-                { status: 500, headers: { 'Content-Type': 'application/json' } },
+                {
+                  status: 500,
+                  headers: { 'Content-Type': 'application/json' },
+                },
               );
             }
 
@@ -148,14 +160,17 @@ export function tracedHandler<E, A extends ActorLike>(
             const idString = actorName || 'default';
 
             // Get location hint if available
-            const locationHint = actorClass.configuration?.(request)?.locationHint;
+            const locationHint =
+              actorClass.configuration?.(request)?.locationHint;
 
             // Get the Durable Object stub
             const stub = namespace.getByName(idString, { locationHint });
 
             // Set the name on the stub (as @cloudflare/actors does)
             if ('setName' in stub && typeof stub.setName === 'function') {
-              (stub as unknown as { setName(id: string): void }).setName(idString);
+              (stub as unknown as { setName(id: string): void }).setName(
+                idString,
+              );
             }
 
             // Inject trace context into the request for propagation to the DO
@@ -195,7 +210,8 @@ export function tracedHandler<E, A extends ActorLike>(
             return Response.json(
               {
                 error: 'Internal Server Error',
-                message: error instanceof Error ? error.message : 'Unknown error',
+                message:
+                  error instanceof Error ? error.message : 'Unknown error',
               },
               { status: 500, headers: { 'Content-Type': 'application/json' } },
             );
@@ -233,7 +249,11 @@ export function wrapHandler<E>(
   const initialiser = createInitialiser(config as ConfigurationOption);
 
   return {
-    async fetch(request: Request, env: E, ctx: ExecutionContext): Promise<Response> {
+    async fetch(
+      request: Request,
+      env: E,
+      ctx: ExecutionContext,
+    ): Promise<Response> {
       // Initialize telemetry for this request
       const telemetryConfig = initialiser(env, { type: 'http' });
       const configContext = setConfig(telemetryConfig);
@@ -270,7 +290,11 @@ export function wrapHandler<E>(
               redirect: request.redirect,
             });
 
-            const response = await originalHandler.fetch(tracedRequest, env, ctx);
+            const response = await originalHandler.fetch(
+              tracedRequest,
+              env,
+              ctx,
+            );
 
             span.setAttributes({
               'http.response.status_code': response.status,

@@ -185,8 +185,18 @@ export const SortByDurationColumn: Story = {
     const now = Date.now();
     updateWidgetData({
       traces: [
-        makeTrace({ traceId: 'fast', duration: 20, rootSpan: makeSpan({ name: 'fast op', duration: 20 }), startTime: now }),
-        makeTrace({ traceId: 'slow', duration: 900, rootSpan: makeSpan({ name: 'slow op', duration: 900 }), startTime: now - 1000 }),
+        makeTrace({
+          traceId: 'fast',
+          duration: 20,
+          rootSpan: makeSpan({ name: 'fast op', duration: 20 }),
+          startTime: now,
+        }),
+        makeTrace({
+          traceId: 'slow',
+          duration: 900,
+          rootSpan: makeSpan({ name: 'slow op', duration: 900 }),
+          startTime: now - 1000,
+        }),
       ],
     });
     await expect(await canvas.findByText('fast op')).toBeInTheDocument();

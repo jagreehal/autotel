@@ -13,18 +13,21 @@ This example demonstrates how to use **Winston logger** with autotel for applica
 ## Setup
 
 1. **Install dependencies:**
+
    ```bash
    cd apps/example-winston
    pnpm install
    ```
-   
+
    **Note:** While `@opentelemetry/auto-instrumentations-node` includes Winston instrumentation, you may need to install `@opentelemetry/instrumentation-winston` separately to ensure it's available:
+
    ```bash
    pnpm add @opentelemetry/instrumentation-winston
    ```
 
 2. **Configure OTLP endpoint (optional):**
    Create a `.env` file:
+
    ```bash
    OTLP_ENDPOINT=http://localhost:4318
    # Or for Grafana Cloud:
@@ -64,6 +67,7 @@ logger.info('User created', { userId: '123' });
 When you run the example, you'll see:
 
 1. **Winston logs** with trace context automatically injected:
+
    ```
    2025-01-27T10:30:00.000Z [info]: Creating user {"name":"Alice","email":"alice@example.com","traceId":"abc123","spanId":"def456"}
    ```
@@ -85,6 +89,7 @@ pnpm --filter example-winston exec npx autotel doctor
 ```
 
 This will check:
+
 - ✅ Winston is installed
 - ✅ Auto-instrumentation is configured
 - ✅ OTLP endpoint is reachable

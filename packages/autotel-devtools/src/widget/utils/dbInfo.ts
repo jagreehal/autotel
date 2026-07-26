@@ -37,7 +37,11 @@ function firstNumber(
   for (const key of keys) {
     const v = attributes[key];
     if (typeof v === 'number' && Number.isFinite(v)) return v;
-    if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) {
+    if (
+      typeof v === 'string' &&
+      v.trim() !== '' &&
+      Number.isFinite(Number(v))
+    ) {
       return Number(v);
     }
   }
@@ -72,12 +76,58 @@ export interface SqlToken {
 }
 
 const SQL_KEYWORDS = new Set([
-  'select', 'from', 'where', 'insert', 'into', 'values', 'update', 'set',
-  'delete', 'join', 'left', 'right', 'inner', 'outer', 'full', 'cross', 'on',
-  'and', 'or', 'not', 'in', 'is', 'null', 'as', 'order', 'by', 'group',
-  'having', 'limit', 'offset', 'distinct', 'union', 'all', 'returning',
-  'with', 'using', 'between', 'like', 'asc', 'desc', 'count', 'case', 'when',
-  'then', 'else', 'end', 'exists', 'create', 'table', 'alter', 'drop', 'index',
+  'select',
+  'from',
+  'where',
+  'insert',
+  'into',
+  'values',
+  'update',
+  'set',
+  'delete',
+  'join',
+  'left',
+  'right',
+  'inner',
+  'outer',
+  'full',
+  'cross',
+  'on',
+  'and',
+  'or',
+  'not',
+  'in',
+  'is',
+  'null',
+  'as',
+  'order',
+  'by',
+  'group',
+  'having',
+  'limit',
+  'offset',
+  'distinct',
+  'union',
+  'all',
+  'returning',
+  'with',
+  'using',
+  'between',
+  'like',
+  'asc',
+  'desc',
+  'count',
+  'case',
+  'when',
+  'then',
+  'else',
+  'end',
+  'exists',
+  'create',
+  'table',
+  'alter',
+  'drop',
+  'index',
 ]);
 
 // Split into string literals, identifier/word runs, and everything else, so we
@@ -89,7 +139,10 @@ export function highlightSql(sql: string): SqlToken[] {
   for (const [chunk] of sql.matchAll(SQL_TOKEN_RE)) {
     if (chunk.startsWith("'")) {
       tokens.push({ text: chunk, kind: 'string' });
-    } else if (/^[A-Za-z_]/.test(chunk) && SQL_KEYWORDS.has(chunk.toLowerCase())) {
+    } else if (
+      /^[A-Za-z_]/.test(chunk) &&
+      SQL_KEYWORDS.has(chunk.toLowerCase())
+    ) {
       tokens.push({ text: chunk, kind: 'keyword' });
     } else {
       tokens.push({ text: chunk, kind: 'text' });

@@ -51,7 +51,7 @@ describe('detectLoggers', () => {
       new Map([
         ['winston', {}],
         ['pino', {}],
-      ])
+      ]),
     );
     expect(result.primary).toBe('pino');
     expect(result.autoInstrument).toEqual(['winston']);
@@ -74,13 +74,15 @@ describe('collectEnvKeys', () => {
   it('reads .env.example without consent', () => {
     fs.writeFileSync(
       path.join(tmp, '.env.example'),
-      '# comment\nDATADOG_API_KEY=\nFOO=bar\n'
+      '# comment\nDATADOG_API_KEY=\nFOO=bar\n',
     );
     const { keys, sources } = collectEnvKeys({
       packageRoot: tmp,
       envConsent: false,
     });
-    expect([...keys]).toEqual(expect.arrayContaining(['DATADOG_API_KEY', 'FOO']));
+    expect([...keys]).toEqual(
+      expect.arrayContaining(['DATADOG_API_KEY', 'FOO']),
+    );
     expect(sources).toContain('.env.example');
   });
 
@@ -169,17 +171,17 @@ describe('detectInProject', () => {
           '@sentry/node': '^8.0.0',
           express: '^4.18.0',
         },
-      })
+      }),
     );
     const project = makeProject(
       tmp,
-      JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'), 'utf8'))
+      JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'), 'utf8')),
     );
 
     const result = detectInProject({ project, envConsent: false });
 
     expect(result.presets).toEqual(
-      expect.arrayContaining(['hono', 'posthog', 'sentry'])
+      expect.arrayContaining(['hono', 'posthog', 'sentry']),
     );
     expect(result.primaryLogger).toBe('pino');
     expect(result.autoInstrumentedDeps).toContain('express');
@@ -190,12 +192,12 @@ describe('detectInProject', () => {
   it('detects cloudflare platform from wrangler.toml', () => {
     fs.writeFileSync(
       path.join(tmp, 'package.json'),
-      JSON.stringify({ name: 'demo', dependencies: { hono: '^4' } })
+      JSON.stringify({ name: 'demo', dependencies: { hono: '^4' } }),
     );
     fs.writeFileSync(path.join(tmp, 'wrangler.toml'), 'name = "demo"\n');
     const project = makeProject(
       tmp,
-      JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'), 'utf8'))
+      JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'), 'utf8')),
     );
     const result = detectInProject({ project, envConsent: false });
     expect(result.platform).toBe('cloudflare');
@@ -208,17 +210,17 @@ describe('detectInProject', () => {
     fs.mkdirSync(sub, { recursive: true });
     fs.writeFileSync(
       path.join(root, 'package.json'),
-      JSON.stringify({ name: 'root', dependencies: { pino: '^9' } })
+      JSON.stringify({ name: 'root', dependencies: { pino: '^9' } }),
     );
     fs.writeFileSync(
       path.join(sub, 'package.json'),
-      JSON.stringify({ name: 'api', dependencies: { hono: '^4' } })
+      JSON.stringify({ name: 'api', dependencies: { hono: '^4' } }),
     );
 
     const project: ProjectContext = {
       ...makeProject(
         sub,
-        JSON.parse(fs.readFileSync(path.join(sub, 'package.json'), 'utf8'))
+        JSON.parse(fs.readFileSync(path.join(sub, 'package.json'), 'utf8')),
       ),
       workspace: {
         isMonorepo: true,
@@ -237,12 +239,12 @@ describe('detectInProject', () => {
   it('Datadog env var promotes backend to datadog', () => {
     fs.writeFileSync(
       path.join(tmp, 'package.json'),
-      JSON.stringify({ name: 'demo' })
+      JSON.stringify({ name: 'demo' }),
     );
     fs.writeFileSync(path.join(tmp, '.env.example'), 'DD_API_KEY=\n');
     const project = makeProject(
       tmp,
-      JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'), 'utf8'))
+      JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'), 'utf8')),
     );
     const result = detectInProject({ project, envConsent: false });
     expect(result.backend.slug).toBe('datadog');
@@ -254,7 +256,7 @@ describe('enumerateWorkspacePackages', () => {
   it('reads pnpm-workspace.yaml packages glob', () => {
     fs.writeFileSync(
       path.join(tmp, 'pnpm-workspace.yaml'),
-      'packages:\n  - "apps/*"\n  - "packages/*"\n'
+      'packages:\n  - "apps/*"\n  - "packages/*"\n',
     );
     fs.mkdirSync(path.join(tmp, 'apps/api'), { recursive: true });
     fs.mkdirSync(path.join(tmp, 'apps/web'), { recursive: true });
@@ -274,7 +276,7 @@ describe('enumerateWorkspacePackages', () => {
   it('reads npm/yarn workspaces from root package.json', () => {
     fs.writeFileSync(
       path.join(tmp, 'package.json'),
-      JSON.stringify({ name: 'root', workspaces: ['apps/*'] })
+      JSON.stringify({ name: 'root', workspaces: ['apps/*'] }),
     );
     fs.mkdirSync(path.join(tmp, 'apps/a'), { recursive: true });
     fs.writeFileSync(path.join(tmp, 'apps/a/package.json'), '{}');
@@ -286,11 +288,11 @@ describe('enumerateWorkspacePackages', () => {
   it('dedupes when both pnpm-workspace.yaml and package.json declare overlap', () => {
     fs.writeFileSync(
       path.join(tmp, 'pnpm-workspace.yaml'),
-      'packages:\n  - "apps/*"\n'
+      'packages:\n  - "apps/*"\n',
     );
     fs.writeFileSync(
       path.join(tmp, 'package.json'),
-      JSON.stringify({ name: 'root', workspaces: ['apps/*'] })
+      JSON.stringify({ name: 'root', workspaces: ['apps/*'] }),
     );
     fs.mkdirSync(path.join(tmp, 'apps/a'), { recursive: true });
     fs.writeFileSync(path.join(tmp, 'apps/a/package.json'), '{}');

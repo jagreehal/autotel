@@ -1,11 +1,7 @@
 import { Command } from 'commander';
 import { detectAnomalies, findRootCause } from 'autotel-mcp';
 import { runInvestigate, type InvestigateFlags } from './runtime';
-import {
-  addBackendFlags,
-  backendFlagsFromOpts,
-  intArg,
-} from './cli-helpers';
+import { addBackendFlags, backendFlagsFromOpts, intArg } from './cli-helpers';
 
 export async function runCorrelate(
   flags: InvestigateFlags & { traceId: string },

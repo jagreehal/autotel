@@ -1,4 +1,4 @@
-import type { SpanData } from '../types'
+import type { SpanData } from '../types';
 
 // A span belongs to the GenAI view if it carries any of the load-bearing
 // semconv markers. These are stable across the migration from `gen_ai.system`
@@ -10,12 +10,12 @@ const GENAI_MARKERS = [
   'gen_ai.provider.name',
   'gen_ai.operation.name',
   'ai.model.provider',
-] as const
+] as const;
 
 export function isGenAiSpan(span: SpanData): boolean {
-  const attrs = span.attributes ?? {}
+  const attrs = span.attributes ?? {};
   for (const key of GENAI_MARKERS) {
-    if (attrs[key] != null) return true
+    if (attrs[key] != null) return true;
   }
-  return false
+  return false;
 }

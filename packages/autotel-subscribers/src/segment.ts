@@ -5,10 +5,10 @@
  *
  * @example
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { SegmentSubscriber } from 'autotel-subscribers/segment';
  *
- * const events = new Events('checkout', {
+ * const events = new Event('checkout', {
  *   subscribers: [
  *     new SegmentSubscriber({
  *       writeKey: process.env.SEGMENT_WRITE_KEY!
@@ -123,7 +123,11 @@ export class SegmentSubscriber implements EventSubscriber {
     });
   }
 
-  async trackValue(name: string, value: number, attributes?: EventAttributes): Promise<void> {
+  async trackValue(
+    name: string,
+    value: number,
+    attributes?: EventAttributes,
+  ): Promise<void> {
     if (!this.enabled) return;
 
     await this.ensureInitialized();
@@ -145,4 +149,3 @@ export class SegmentSubscriber implements EventSubscriber {
     }
   }
 }
-

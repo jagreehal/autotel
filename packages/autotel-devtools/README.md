@@ -43,8 +43,8 @@ node app.js
 
 The endpoints accept **both OTLP/JSON and OTLP/protobuf** (`application/x-protobuf`),
 selected automatically from the request `Content-Type`. That means SDKs that default
-to protobuf over OTLP HTTP — including the Python, Java, and Go OpenTelemetry SDKs —
-work without any extra configuration:
+to protobuf over OTLP HTTP, including the Python, Java, and Go OpenTelemetry SDKs.
+Work without any extra configuration:
 
 ```bash
 # Python / Java / Go SDKs default to http/protobuf — just point them at the receiver
@@ -84,7 +84,7 @@ Or programmatically:
 Use in Node.js with autotel:
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, withTracing } from 'autotel';
 import { createDevtools } from 'autotel-devtools';
 
 const { server, httpServer, exporter, port, close } = createDevtools({
@@ -100,7 +100,7 @@ init({
 });
 
 // Your traced code
-const myFunction = trace((ctx) => async () => {
+const myFunction = withTracing({ name: 'example.run' })((ctx) => async () => {
   // ... this span appears in devtools
 });
 ```
@@ -117,19 +117,20 @@ const myFunction = trace((ctx) => async () => {
 Every response carries an `x-autotel-devtools: <version>` header, and `GET /healthz`
 returns `{ ok, service: "autotel-devtools", version, clients }`. Use either to confirm
 you are talking to autotel-devtools rather than another OTLP collector that happens to
-share the port — for example before pointing an exporter at `:4318`:
+share the port. For example before pointing an exporter at `:4318`:
 
 ```ts
-import { probePortHolder } from 'autotel-devtools/server'
+import { probePortHolder } from 'autotel-devtools/server';
 
 // 'autotel-devtools' | 'foreign' | 'none'
-const holder = await probePortHolder('127.0.0.1', 4318)
+const holder = await probePortHolder('127.0.0.1', 4318);
 ```
 
-If you start the receiver and the requested port is held by a *foreign* process (some
+If you start the receiver and the requested port is held by a _foreign_ process (some
 IDEs run their own OTLP collector on `:4318`), the CLI falls forward to the next free
 port and warns that exporters still aimed at the busy port are reaching that other
-process — point them at the bound port, or free the original.
+process. Point them at the bound port, or free the original.
+
 - **Exporters** - OpenTelemetry span/log exporters
 
 ### Widget (Svelte 5)
@@ -150,7 +151,7 @@ process — point them at the bound port, or free the original.
 - ✅ Service map visualization
 - ✅ Resources view (derived from telemetry)
 - ✅ GenAI run summaries + narrated walkthrough
-- ✅ **Agents view** — observe coding agents (Claude Code, opencode) from their OTel metrics + log events
+- ✅ **Agents view**: observe coding agents (Claude Code, opencode) from their OTel metrics + log events
 - ✅ Search with debounce (300ms)
 - ✅ Configurable telemetry limits (env vars)
 - ✅ Widget position persistence (localStorage)
@@ -163,7 +164,7 @@ When your app emits OpenTelemetry GenAI spans (Vercel AI SDK, Pydantic AI, OpenA
 Agents, Anthropic, Google GenAI, LangChain, …), the **GenAI** tab gives two extras
 on top of the per-span detail:
 
-- A **run summary strip** sits above the detail for any multi-span run — total
+- A **run summary strip** sits above the detail for any multi-span run: total
   cost (table-priced; a trailing `+` marks a lower bound when some calls are
   unpriced), input→output tokens, reasoning tokens, model calls, tool
   executions, sub-agents, duration and errors.
@@ -176,8 +177,8 @@ on top of the per-span detail:
 ### Agents: observe Claude Code (and other coding agents)
 
 Coding agents like **Claude Code** emit OpenTelemetry **metrics and log events**
-(no traces). The **Agents** tab reconstructs them into a session-centric view —
-powered by the [`autotel-agents`](../autotel-agents) package, which also handles
+(no traces). The **Agents** tab reconstructs them into a session-centric view.
+Powered by the [`autotel-agents`](../autotel-agents) package, which also handles
 opencode and is one adapter away from Codex.
 
 One command starts the receiver _and_ launches Claude Code wired to it:
@@ -186,21 +187,21 @@ One command starts the receiver _and_ launches Claude Code wired to it:
 npx autotel-devtools claude
 ```
 
-This sets the telemetry env for a live local view — OTLP **`http/protobuf`** to
+This sets the telemetry env for a live local view. OTLP **`http/protobuf`** to
 this receiver (not the gRPC setup in most guides, which this receiver doesn't
 speak), 1s export intervals, and `session.id` kept on metrics. Then open the UI
 and switch to **Agents**.
 
-- `--print-env` — print the env block instead of launching (for managed-settings
+- `--print-env`: print the env block instead of launching (for managed-settings
   / MDM / VS Code), e.g. `npx autotel-devtools claude --print-env`.
-- `--log-prompts` — capture prompt _text_ (default is private: length only).
+- `--log-prompts`: capture prompt _text_ (default is private: length only).
 
 What you get per session: a **timeline** (prompts → tool calls → API requests →
 decisions), a **rollup** (cost, tokens, requests, lines changed), and breakdowns
 by **tool category**, **MCP server** (`mcp__server__tool`), **sub-agent** (`Task`)
-and **skill** (`Skill`) — plus an aggregate strip across all sessions. Cost uses
+and **skill** (`Skill`). Plus an aggregate strip across all sessions. Cost uses
 the agent's reported `cost_usd`, falling back to a token estimate (badged). MCP
-protocol internals are out of scope here — that's `autotel-mcp-instrumentation`.
+protocol internals are out of scope here. That's `autotel-mcp-instrumentation`.
 
 ## Configuration
 
@@ -247,7 +248,7 @@ not a silent black hole.
 ## Behind a dev-server proxy
 
 If your app's dev server proxies `/v1/traces` to the receiver, two classic
-bugs make spans vanish with **no error** — both worth knowing:
+bugs make spans vanish with **no error**. Both worth knowing:
 
 ```ts
 // Express / http-proxy-middleware
@@ -274,7 +275,7 @@ app.use(
 ## Verifying ingestion in tests
 
 The receiver exposes an HTTP read-back so a test can assert the collector
-**actually received** spans — instead of asserting "the client tried to send",
+**actually received** spans. Instead of asserting "the client tried to send",
 which a browser-level route intercept can fake (it fulfils the request before
 it reaches any server):
 
@@ -287,7 +288,7 @@ DELETE /v1/traces   # clear captured telemetry (reset between tests)
 // Playwright / integration test — bypass any page.route() intercept and ask
 // the collector directly.
 await fetch(`${RECEIVER}/v1/traces`, { method: 'DELETE' }); // reset
-await runTheUserFlow();                                      // app emits spans
+await runTheUserFlow(); // app emits spans
 await expect
   .poll(async () => (await (await fetch(`${RECEIVER}/v1/traces`)).json()).count)
   .toBeGreaterThan(0);
@@ -299,7 +300,7 @@ by the origin guard below.
 ## Read-surface origin guard
 
 OTLP **ingestion** (`POST /v1/{traces,logs,metrics}`), `GET /widget.js` and
-`GET /healthz` are open to any origin — browser apps on arbitrary dev origins
+`GET /healthz` are open to any origin. Browser apps on arbitrary dev origins
 must be able to send telemetry and load the embeddable widget. The **read**
 surface is not: `GET /v1/traces`, `DELETE /v1/traces` and the `/ws` WebSocket are
 origin-checked so a web page you happen to be visiting can't `fetch()` or stream
@@ -310,7 +311,7 @@ your locally captured prompts, responses and tokens.
   rebinding) is also rejected. `--host 0.0.0.0` opts into network exposure and
   applies only the `Origin` check.
 
-The embedded widget keeps working — it connects from a loopback origin
+The embedded widget keeps working. It connects from a loopback origin
 (`http://localhost:<your-app-port>`). Server-side reads with no `Origin` pass.
 
 ## License

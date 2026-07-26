@@ -36,10 +36,10 @@ import express from 'express';
 ## 3. Trace Functions
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
 // Factory pattern (receives ctx)
-export const createUser = trace((ctx) => async (data: UserData) => {
+export const createUser = withTracing({})((ctx) => async (data: UserData) => {
   ctx.setAttribute('user.email', data.email);
   const user = await db.users.create(data);
   return user;
@@ -54,9 +54,9 @@ export const getUser = trace(async (id: string) => {
 ## 4. Request-Scoped Logging
 
 ```typescript
-import { trace, getRequestLogger } from 'autotel';
+import { trace, withTracing, getRequestLogger } from 'autotel';
 
-export const postCheckout = trace((ctx) => async (req, res) => {
+export const postCheckout = withTracing({})((ctx) => async (req, res) => {
   const log = getRequestLogger(ctx);
   const user = await getAuth(req);
   log.set({ user: { id: user.id } });
@@ -123,14 +123,14 @@ track('user.signup', { userId: '123', plan: 'pro' });
 
 ## Examples
 
-- [`example-basic`](https://github.com/jagreehal/autotel/tree/main/apps/example-basic) — Core features: `trace()`, nested spans, metrics, `track()`, Pino integration, error handling.
-- [`example-http`](https://github.com/jagreehal/autotel/tree/main/apps/example-http) — Express server with manual `trace()` in route handlers and `--import` flag.
-- [`example-bun-fullstack`](https://github.com/jagreehal/autotel/tree/main/apps/example-bun-fullstack) — Bun runtime with `Bun.serve` and `trace()`.
+- [`example-basic`](https://github.com/jagreehal/autotel/tree/main/apps/example-basic): Core features: `trace()`, nested spans, metrics, `track()`, Pino integration, error handling.
+- [`example-http`](https://github.com/jagreehal/autotel/tree/main/apps/example-http): Express server with manual `trace()` in route handlers and `--import` flag.
+- [`example-bun-fullstack`](https://github.com/jagreehal/autotel/tree/main/apps/example-bun-fullstack): Bun runtime with `Bun.serve` and `trace()`.
 
 ## Next Steps
 
-- [Configuration](/autotel/configuration/) — env vars, YAML config, and precedence
-- [Architecture](/autotel/architecture/) — patterns and conventions
-- [Agent Guide](/autotel/agent-guide/) — before/after examples for instrumentation
+- [Configuration](/autotel/configuration/): env vars, YAML config, and precedence
+- [Architecture](/autotel/architecture/): patterns and conventions
+- [Agent Guide](/autotel/agent-guide/): before/after examples for instrumentation
 - [Security Observability](/autotel/integrations/security/): hooks for auth, access control, and zero-code probe/401 signals
 - [Validation Telemetry](/autotel/integrations/validation/): observable `safeParse` mismatches at API boundaries

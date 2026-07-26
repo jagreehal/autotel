@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { defineContract, type TelemetryContract } from './contract.js';
-import {
-  formatViolation,
-  hasErrors,
-  validateSpan,
-} from './validate.js';
+import { formatViolation, hasErrors, validateSpan } from './validate.js';
 
 const contract: TelemetryContract = defineContract({
   service: 'checkout',
@@ -14,7 +10,11 @@ const contract: TelemetryContract = defineContract({
   spans: {
     'checkout.charge': {
       attributes: {
-        'payment.provider': { type: 'string', required: true, enum: ['stripe', 'paypal'] },
+        'payment.provider': {
+          type: 'string',
+          required: true,
+          enum: ['stripe', 'paypal'],
+        },
         'payment.amount_cents': { type: 'number', required: true },
       },
     },
@@ -26,7 +26,10 @@ describe('validateSpan', () => {
     const v = validateSpan(
       {
         name: 'checkout.charge',
-        attributes: { 'payment.provider': 'stripe', 'payment.amount_cents': 999 },
+        attributes: {
+          'payment.provider': 'stripe',
+          'payment.amount_cents': 999,
+        },
       },
       contract,
     );
@@ -39,7 +42,10 @@ describe('validateSpan', () => {
       contract,
     );
     expect(v).toHaveLength(1);
-    expect(v[0]).toMatchObject({ code: 'missing_required', attribute: 'payment.amount_cents' });
+    expect(v[0]).toMatchObject({
+      code: 'missing_required',
+      attribute: 'payment.amount_cents',
+    });
     expect(hasErrors(v)).toBe(true);
   });
 
@@ -47,7 +53,10 @@ describe('validateSpan', () => {
     const v = validateSpan(
       {
         name: 'checkout.charge',
-        attributes: { 'payment.provider': 'stripe', 'payment.amount_cents': '999' },
+        attributes: {
+          'payment.provider': 'stripe',
+          'payment.amount_cents': '999',
+        },
       },
       contract,
     );
@@ -58,7 +67,10 @@ describe('validateSpan', () => {
     const v = validateSpan(
       {
         name: 'checkout.charge',
-        attributes: { 'payment.provider': 'bitcoin', 'payment.amount_cents': 1 },
+        attributes: {
+          'payment.provider': 'bitcoin',
+          'payment.amount_cents': 1,
+        },
       },
       contract,
     );
@@ -83,7 +95,9 @@ describe('validateSpan', () => {
   });
 
   it('ignores unknown spans unless strictSpanNames is set', () => {
-    expect(validateSpan({ name: 'mystery', attributes: {} }, contract)).toEqual([]);
+    expect(validateSpan({ name: 'mystery', attributes: {} }, contract)).toEqual(
+      [],
+    );
     const strict = validateSpan({ name: 'mystery', attributes: {} }, contract, {
       strictSpanNames: true,
     });
@@ -95,6 +109,8 @@ describe('validateSpan', () => {
       { name: 'checkout.charge', attributes: { 'payment.provider': 'stripe' } },
       contract,
     );
-    expect(formatViolation(v[0])).toMatch(/\[error\] missing_required @ checkout.charge.payment.amount_cents/);
+    expect(formatViolation(v[0])).toMatch(
+      /\[error\] missing_required @ checkout.charge.payment.amount_cents/,
+    );
   });
 });

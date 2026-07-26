@@ -68,11 +68,14 @@ describe('PostHogSubscriber.captureException', () => {
   it('applies the configured string redactor to captured exception payloads', async () => {
     const redactingSubscriber = new PostHogSubscriber({
       apiKey: 'phc_test',
-      stringRedactor: (value: string) => value.replaceAll(/secret-\w+/g, '[REDACTED]'),
+      stringRedactor: (value: string) =>
+        value.replaceAll(/secret-\w+/g, '[REDACTED]'),
     });
     await new Promise((r) => setTimeout(r, 50));
 
-    await redactingSubscriber.captureException(new Error('failed with secret-token'));
+    await redactingSubscriber.captureException(
+      new Error('failed with secret-token'),
+    );
 
     expect(mockCapture).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -90,7 +93,8 @@ describe('PostHogSubscriber.captureException', () => {
   it('redacts additionalProperties passed to captureException', async () => {
     const redactingSubscriber = new PostHogSubscriber({
       apiKey: 'phc_test',
-      stringRedactor: (value: string) => value.replaceAll(/secret-\w+/g, '[REDACTED]'),
+      stringRedactor: (value: string) =>
+        value.replaceAll(/secret-\w+/g, '[REDACTED]'),
     });
     await new Promise((r) => setTimeout(r, 50));
 
@@ -119,7 +123,8 @@ describe('PostHogSubscriber.captureException', () => {
 
     const subscriber = new PostHogSubscriber({
       useGlobalClient: true,
-      stringRedactor: (value: string) => value.replaceAll(/secret-\w+/g, '[REDACTED]'),
+      stringRedactor: (value: string) =>
+        value.replaceAll(/secret-\w+/g, '[REDACTED]'),
     });
     await new Promise((r) => setTimeout(r, 50));
 
@@ -140,7 +145,12 @@ describe('PostHogSubscriber.captureException', () => {
   });
 
   it('does not throw when disabled', async () => {
-    const disabled = new PostHogSubscriber({ apiKey: 'phc_test', enabled: false });
-    await expect(disabled.captureException(new Error('test'))).resolves.not.toThrow();
+    const disabled = new PostHogSubscriber({
+      apiKey: 'phc_test',
+      enabled: false,
+    });
+    await expect(
+      disabled.captureException(new Error('test')),
+    ).resolves.not.toThrow();
   });
 });

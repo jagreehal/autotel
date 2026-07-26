@@ -24,7 +24,10 @@ export function configureXRay(config: XRayConfig): void {
 // Track annotations per span (since we can't read attributes back from spans)
 const annotationMap = new WeakMap<object, Set<string>>();
 
-export function setXRayAnnotation(key: string, value: string | number | boolean): void {
+export function setXRayAnnotation(
+  key: string,
+  value: string | number | boolean,
+): void {
   const span = trace.getActiveSpan();
   if (!span) return;
 
@@ -37,7 +40,7 @@ export function setXRayAnnotation(key: string, value: string | number | boolean)
     annotations = new Set<string>();
     annotationMap.set(span, annotations);
   }
-  
+
   if (!annotations.has(key)) {
     annotations.add(key);
     // Store annotation list as comma-separated string (X-Ray format)
@@ -51,7 +54,10 @@ export function setXRayAnnotation(key: string, value: string | number | boolean)
  * Metadata is not indexed but can be viewed in X-Ray console.
  * It's stored as regular span attributes.
  */
-export function setXRayMetadata(key: string, value: string | number | boolean | object): void {
+export function setXRayMetadata(
+  key: string,
+  value: string | number | boolean | object,
+): void {
   const span = trace.getActiveSpan();
   if (!span) return;
 

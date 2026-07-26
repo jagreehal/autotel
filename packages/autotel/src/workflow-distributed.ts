@@ -50,7 +50,7 @@
 import { context, propagation, SpanKind } from '@opentelemetry/api';
 import { createSafeBaggageSchema } from './business-baggage';
 import { emitCorrelatedEvent } from './correlated-events';
-import { trace } from './functional';
+import { withTracing } from './functional';
 import type { TraceContext } from './trace-context';
 
 // ============================================================================
@@ -332,140 +332,138 @@ export interface DistributedStepContext extends TraceContext {
  * });
  * ```
  */
-export function traceDistributedWorkflow<TArgs extends unknown[], TReturn>(
-  config: DistributedWorkflowConfig,
-) {
+export function traceDistributedWorkflow(config: DistributedWorkflowConfig) {
   const spanName = `workflow.${config.name}`;
 
-  return (
+  return <TArgs extends unknown[], TReturn>(
     fnFactory: (
       ctx: DistributedWorkflowContext,
     ) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>(
-      { name: spanName, spanKind: SpanKind.INTERNAL },
-      (baseCtx) => {
-        return async (...args: TArgs) => {
-          // Extract workflow ID from arguments (spread to allow multi-arg access)
-          const workflowId = config.workflowIdFrom(...args);
-          const startedAt = new Date().toISOString();
+    return withTracing<TArgs, TReturn>({
+      name: spanName,
+      spanKind: SpanKind.INTERNAL,
+    })((baseCtx) => {
+      return async (...args: TArgs) => {
+        // Extract workflow ID from arguments (spread to allow multi-arg access)
+        const workflowId = config.workflowIdFrom(...args);
+        const startedAt = new Date().toISOString();
 
-          // Initialize workflow baggage
-          const baggageValues: WorkflowBaggageValues = {
-            workflowId,
-            workflowName: config.name,
-            workflowVersion: config.version,
-            stepIndex: 0,
-            totalSteps: config.totalSteps,
-            parentWorkflowId: config.parentWorkflowId,
-            correlationId: config.correlationId,
-            priority: config.priority,
-            initiatedBy: config.initiatedBy,
-            startedAt,
-          };
+        // Initialize workflow baggage
+        const baggageValues: WorkflowBaggageValues = {
+          workflowId,
+          workflowName: config.name,
+          workflowVersion: config.version,
+          stepIndex: 0,
+          totalSteps: config.totalSteps,
+          parentWorkflowId: config.parentWorkflowId,
+          correlationId: config.correlationId,
+          priority: config.priority,
+          initiatedBy: config.initiatedBy,
+          startedAt,
+        };
 
-          // Set baggage
-          WorkflowBaggage.set(baseCtx, baggageValues);
+        // Set baggage
+        WorkflowBaggage.set(baseCtx, baggageValues);
 
-          // Set span attributes
-          baseCtx.setAttribute('workflow.id', workflowId);
-          baseCtx.setAttribute('workflow.name', config.name);
-          if (config.version) {
-            baseCtx.setAttribute('workflow.version', config.version);
+        // Set span attributes
+        baseCtx.setAttribute('workflow.id', workflowId);
+        baseCtx.setAttribute('workflow.name', config.name);
+        if (config.version) {
+          baseCtx.setAttribute('workflow.version', config.version);
+        }
+        if (config.totalSteps) {
+          baseCtx.setAttribute('workflow.total_steps', config.totalSteps);
+        }
+        if (config.parentWorkflowId) {
+          baseCtx.setAttribute('workflow.parent_id', config.parentWorkflowId);
+        }
+        if (config.priority) {
+          baseCtx.setAttribute('workflow.priority', config.priority);
+        }
+        if (config.initiatedBy) {
+          baseCtx.setAttribute('workflow.initiated_by', config.initiatedBy);
+        }
+        baseCtx.setAttribute('workflow.started_at', startedAt);
+
+        // Apply custom attributes
+        if (config.attributes) {
+          for (const [key, value] of Object.entries(config.attributes)) {
+            baseCtx.setAttribute(key, value);
           }
-          if (config.totalSteps) {
-            baseCtx.setAttribute('workflow.total_steps', config.totalSteps);
-          }
-          if (config.parentWorkflowId) {
-            baseCtx.setAttribute('workflow.parent_id', config.parentWorkflowId);
-          }
-          if (config.priority) {
-            baseCtx.setAttribute('workflow.priority', config.priority);
-          }
-          if (config.initiatedBy) {
-            baseCtx.setAttribute('workflow.initiated_by', config.initiatedBy);
-          }
-          baseCtx.setAttribute('workflow.started_at', startedAt);
+        }
 
-          // Apply custom attributes
-          if (config.attributes) {
-            for (const [key, value] of Object.entries(config.attributes)) {
-              baseCtx.setAttribute(key, value);
-            }
-          }
+        // Create extended context
+        const workflowCtx: DistributedWorkflowContext = {
+          ...baseCtx,
+          workflowId,
+          workflowName: config.name,
+          workflowVersion: config.version,
 
-          // Create extended context
-          const workflowCtx: DistributedWorkflowContext = {
-            ...baseCtx,
-            workflowId,
-            workflowName: config.name,
-            workflowVersion: config.version,
+          getWorkflowBaggage(): WorkflowBaggageValues {
+            return { ...baggageValues };
+          },
 
-            getWorkflowBaggage(): WorkflowBaggageValues {
-              return { ...baggageValues };
-            },
+          setWorkflowBaggage(values: Partial<WorkflowBaggageValues>): void {
+            Object.assign(baggageValues, values);
+            WorkflowBaggage.set(baseCtx, baggageValues);
+          },
 
-            setWorkflowBaggage(values: Partial<WorkflowBaggageValues>): void {
-              Object.assign(baggageValues, values);
-              WorkflowBaggage.set(baseCtx, baggageValues);
-            },
+          getWorkflowHeaders(): Record<string, string> {
+            const headers: Record<string, string> = {};
+            const ctx = context.active();
+            propagation.inject(ctx, headers);
+            return headers;
+          },
 
-            getWorkflowHeaders(): Record<string, string> {
-              const headers: Record<string, string> = {};
-              const ctx = context.active();
-              propagation.inject(ctx, headers);
-              return headers;
-            },
+          recordStepProgress(stepName: string, stepIndex: number): void {
+            baggageValues.stepName = stepName;
+            baggageValues.stepIndex = stepIndex;
+            WorkflowBaggage.set(baseCtx, baggageValues);
 
-            recordStepProgress(stepName: string, stepIndex: number): void {
-              baggageValues.stepName = stepName;
-              baggageValues.stepIndex = stepIndex;
-              WorkflowBaggage.set(baseCtx, baggageValues);
+            emitCorrelatedEvent(baseCtx, 'workflow.step_progress', {
+              'workflow.step.name': stepName,
+              'workflow.step.index': stepIndex,
+            });
+          },
+        };
 
-              emitCorrelatedEvent(baseCtx, 'workflow.step_progress', {
-                'workflow.step.name': stepName,
-                'workflow.step.index': stepIndex,
-              });
-            },
-          };
+        // Call onStart callback
+        config.onStart?.(workflowCtx);
 
-          // Call onStart callback
-          config.onStart?.(workflowCtx);
+        // Add start event
+        emitCorrelatedEvent(baseCtx, 'workflow.started', {
+          'workflow.id': workflowId,
+          'workflow.name': config.name,
+        });
 
-          // Add start event
-          emitCorrelatedEvent(baseCtx, 'workflow.started', {
+        try {
+          const userFn = fnFactory(workflowCtx);
+          const result = await userFn(...args);
+
+          // Call onComplete callback
+          config.onComplete?.(workflowCtx, result);
+
+          // Add completion event
+          emitCorrelatedEvent(baseCtx, 'workflow.completed', {
             'workflow.id': workflowId,
-            'workflow.name': config.name,
           });
 
-          try {
-            const userFn = fnFactory(workflowCtx);
-            const result = await userFn(...args);
+          return result;
+        } catch (error) {
+          // Call onError callback
+          config.onError?.(workflowCtx, error as Error);
 
-            // Call onComplete callback
-            config.onComplete?.(workflowCtx, result);
+          // Add error event
+          emitCorrelatedEvent(baseCtx, 'workflow.failed', {
+            'workflow.id': workflowId,
+            'workflow.error': (error as Error).message,
+          });
 
-            // Add completion event
-            emitCorrelatedEvent(baseCtx, 'workflow.completed', {
-              'workflow.id': workflowId,
-            });
-
-            return result;
-          } catch (error) {
-            // Call onError callback
-            config.onError?.(workflowCtx, error as Error);
-
-            // Add error event
-            emitCorrelatedEvent(baseCtx, 'workflow.failed', {
-              'workflow.id': workflowId,
-              'workflow.error': (error as Error).message,
-            });
-
-            throw error;
-          }
-        };
-      },
-    );
+          throw error;
+        }
+      };
+    }) as (...args: TArgs) => Promise<TReturn>; // async factory always returns a Promise
   };
 }
 
@@ -512,181 +510,177 @@ export function traceDistributedWorkflow<TArgs extends unknown[], TReturn>(
  * });
  * ```
  */
-export function traceDistributedStep<TArgs extends unknown[], TReturn>(
-  config: DistributedStepConfig,
-) {
+export function traceDistributedStep(config: DistributedStepConfig) {
   const spanName = `workflow.step.${config.name}`;
 
-  return (
+  return <TArgs extends unknown[], TReturn>(
     fnFactory: (
       ctx: DistributedStepContext,
     ) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>(
-      { name: spanName, spanKind: SpanKind.INTERNAL },
-      (baseCtx) => {
-        return async (...args: TArgs) => {
-          // Extract workflow baggage
-          let baggageValues: WorkflowBaggageValues | null = null;
+    return withTracing<TArgs, TReturn>({
+      name: spanName,
+      spanKind: SpanKind.INTERNAL,
+    })((baseCtx) => {
+      return async (...args: TArgs) => {
+        // Extract workflow baggage
+        let baggageValues: WorkflowBaggageValues | null = null;
 
-          const extractBaggage = config.extractBaggage ?? true;
-          if (typeof extractBaggage === 'function') {
-            baggageValues = extractBaggage(args);
-          } else if (extractBaggage) {
-            // Read from current context
-            const extracted = WorkflowBaggage.get(baseCtx);
-            if (extracted.workflowId && extracted.workflowName) {
-              baggageValues = extracted as WorkflowBaggageValues;
-            }
+        const extractBaggage = config.extractBaggage ?? true;
+        if (typeof extractBaggage === 'function') {
+          baggageValues = extractBaggage(args);
+        } else if (extractBaggage) {
+          // Read from current context
+          const extracted = WorkflowBaggage.get(baseCtx);
+          if (extracted.workflowId && extracted.workflowName) {
+            baggageValues = extracted as WorkflowBaggageValues;
           }
+        }
 
-          // Determine step index
-          // If explicit stepIndex provided in config, use it
-          // Otherwise, auto-increment from baggage if available
-          let stepIndex: number | null;
-          if (config.stepIndex !== undefined) {
-            stepIndex = config.stepIndex;
-          } else if (baggageValues?.stepIndex === undefined) {
-            stepIndex = null;
-          } else {
-            // Auto-increment from previous step
-            stepIndex = baggageValues.stepIndex + 1;
-          }
+        // Determine step index
+        // If explicit stepIndex provided in config, use it
+        // Otherwise, auto-increment from baggage if available
+        let stepIndex: number | null;
+        if (config.stepIndex !== undefined) {
+          stepIndex = config.stepIndex;
+        } else if (baggageValues?.stepIndex === undefined) {
+          stepIndex = null;
+        } else {
+          // Auto-increment from previous step
+          stepIndex = baggageValues.stepIndex + 1;
+        }
 
-          // Update baggage with current step
-          if (baggageValues) {
-            baggageValues.stepName = config.name;
-            if (stepIndex !== null) {
-              baggageValues.stepIndex = stepIndex;
-            }
-            WorkflowBaggage.set(baseCtx, baggageValues);
-          }
-
-          // Set span attributes
-          baseCtx.setAttribute('workflow.step.name', config.name);
+        // Update baggage with current step
+        if (baggageValues) {
+          baggageValues.stepName = config.name;
           if (stepIndex !== null) {
-            baseCtx.setAttribute('workflow.step.index', stepIndex);
+            baggageValues.stepIndex = stepIndex;
           }
-          if (config.idempotent !== undefined) {
-            baseCtx.setAttribute('workflow.step.idempotent', config.idempotent);
-          }
-          if (config.isCompensation) {
-            baseCtx.setAttribute('workflow.step.is_compensation', true);
-          }
+          WorkflowBaggage.set(baseCtx, baggageValues);
+        }
 
-          // Add workflow context attributes if available
-          if (baggageValues) {
-            baseCtx.setAttribute('workflow.id', baggageValues.workflowId);
-            baseCtx.setAttribute('workflow.name', baggageValues.workflowName);
-            if (baggageValues.workflowVersion) {
-              baseCtx.setAttribute(
-                'workflow.version',
-                baggageValues.workflowVersion,
-              );
+        // Set span attributes
+        baseCtx.setAttribute('workflow.step.name', config.name);
+        if (stepIndex !== null) {
+          baseCtx.setAttribute('workflow.step.index', stepIndex);
+        }
+        if (config.idempotent !== undefined) {
+          baseCtx.setAttribute('workflow.step.idempotent', config.idempotent);
+        }
+        if (config.isCompensation) {
+          baseCtx.setAttribute('workflow.step.is_compensation', true);
+        }
+
+        // Add workflow context attributes if available
+        if (baggageValues) {
+          baseCtx.setAttribute('workflow.id', baggageValues.workflowId);
+          baseCtx.setAttribute('workflow.name', baggageValues.workflowName);
+          if (baggageValues.workflowVersion) {
+            baseCtx.setAttribute(
+              'workflow.version',
+              baggageValues.workflowVersion,
+            );
+          }
+          if (baggageValues.totalSteps) {
+            baseCtx.setAttribute(
+              'workflow.total_steps',
+              baggageValues.totalSteps,
+            );
+          }
+        }
+
+        // Apply custom attributes
+        if (config.attributes) {
+          for (const [key, value] of Object.entries(config.attributes)) {
+            baseCtx.setAttribute(key, value);
+          }
+        }
+
+        // Compensation data storage
+        let compensationData: Record<string, unknown> | undefined;
+
+        // Create extended context
+        const stepCtx: DistributedStepContext = {
+          ...baseCtx,
+          workflowId: baggageValues?.workflowId ?? null,
+          workflowName: baggageValues?.workflowName ?? null,
+          stepName: config.name,
+          stepIndex,
+          isCompensation: config.isCompensation ?? false,
+
+          getWorkflowBaggage(): WorkflowBaggageValues | null {
+            return baggageValues ? { ...baggageValues } : null;
+          },
+
+          updateWorkflowBaggage(values: Partial<WorkflowBaggageValues>): void {
+            if (baggageValues) {
+              Object.assign(baggageValues, values);
+              WorkflowBaggage.set(baseCtx, baggageValues);
             }
-            if (baggageValues.totalSteps) {
-              baseCtx.setAttribute(
-                'workflow.total_steps',
-                baggageValues.totalSteps,
-              );
-            }
-          }
+          },
 
-          // Apply custom attributes
-          if (config.attributes) {
-            for (const [key, value] of Object.entries(config.attributes)) {
-              baseCtx.setAttribute(key, value);
-            }
-          }
+          getWorkflowHeaders(): Record<string, string> {
+            const headers: Record<string, string> = {};
+            const ctx = context.active();
+            propagation.inject(ctx, headers);
+            return headers;
+          },
 
-          // Compensation data storage
-          let compensationData: Record<string, unknown> | undefined;
+          requiresCompensation(data?: Record<string, unknown>): void {
+            compensationData = data;
+            baseCtx.setAttribute('workflow.step.requires_compensation', true);
+            emitCorrelatedEvent(
+              baseCtx,
+              'workflow.step.compensation_registered',
+              {
+                'workflow.step.name': config.name,
+                ...(data && {
+                  'workflow.step.compensation_data': JSON.stringify(data),
+                }),
+              },
+            );
+          },
+        };
 
-          // Create extended context
-          const stepCtx: DistributedStepContext = {
-            ...baseCtx,
-            workflowId: baggageValues?.workflowId ?? null,
-            workflowName: baggageValues?.workflowName ?? null,
-            stepName: config.name,
-            stepIndex,
-            isCompensation: config.isCompensation ?? false,
+        // Call onStart callback
+        config.onStart?.(stepCtx);
 
-            getWorkflowBaggage(): WorkflowBaggageValues | null {
-              return baggageValues ? { ...baggageValues } : null;
-            },
+        // Add start event
+        emitCorrelatedEvent(baseCtx, 'workflow.step.started', {
+          'workflow.step.name': config.name,
+          ...(baggageValues && { 'workflow.id': baggageValues.workflowId }),
+        });
 
-            updateWorkflowBaggage(
-              values: Partial<WorkflowBaggageValues>,
-            ): void {
-              if (baggageValues) {
-                Object.assign(baggageValues, values);
-                WorkflowBaggage.set(baseCtx, baggageValues);
-              }
-            },
+        try {
+          const userFn = fnFactory(stepCtx);
+          const result = await userFn(...args);
 
-            getWorkflowHeaders(): Record<string, string> {
-              const headers: Record<string, string> = {};
-              const ctx = context.active();
-              propagation.inject(ctx, headers);
-              return headers;
-            },
+          // Call onComplete callback
+          config.onComplete?.(stepCtx, result);
 
-            requiresCompensation(data?: Record<string, unknown>): void {
-              compensationData = data;
-              baseCtx.setAttribute('workflow.step.requires_compensation', true);
-              emitCorrelatedEvent(
-                baseCtx,
-                'workflow.step.compensation_registered',
-                {
-                  'workflow.step.name': config.name,
-                  ...(data && {
-                    'workflow.step.compensation_data': JSON.stringify(data),
-                  }),
-                },
-              );
-            },
-          };
-
-          // Call onStart callback
-          config.onStart?.(stepCtx);
-
-          // Add start event
-          emitCorrelatedEvent(baseCtx, 'workflow.step.started', {
+          // Add completion event
+          emitCorrelatedEvent(baseCtx, 'workflow.step.completed', {
             'workflow.step.name': config.name,
-            ...(baggageValues && { 'workflow.id': baggageValues.workflowId }),
           });
 
-          try {
-            const userFn = fnFactory(stepCtx);
-            const result = await userFn(...args);
+          return result;
+        } catch (error) {
+          // Call onError callback
+          config.onError?.(stepCtx, error as Error);
 
-            // Call onComplete callback
-            config.onComplete?.(stepCtx, result);
+          // Add error event with compensation info if registered
+          emitCorrelatedEvent(baseCtx, 'workflow.step.failed', {
+            'workflow.step.name': config.name,
+            'workflow.step.error': (error as Error).message,
+            ...(compensationData && {
+              'workflow.step.requires_compensation': true,
+            }),
+          });
 
-            // Add completion event
-            emitCorrelatedEvent(baseCtx, 'workflow.step.completed', {
-              'workflow.step.name': config.name,
-            });
-
-            return result;
-          } catch (error) {
-            // Call onError callback
-            config.onError?.(stepCtx, error as Error);
-
-            // Add error event with compensation info if registered
-            emitCorrelatedEvent(baseCtx, 'workflow.step.failed', {
-              'workflow.step.name': config.name,
-              'workflow.step.error': (error as Error).message,
-              ...(compensationData && {
-                'workflow.step.requires_compensation': true,
-              }),
-            });
-
-            throw error;
-          }
-        };
-      },
-    );
+          throw error;
+        }
+      };
+    }) as (...args: TArgs) => Promise<TReturn>; // async factory always returns a Promise
   };
 }
 

@@ -59,8 +59,8 @@ describe('exitCodeForError', () => {
           type: 'validation',
           code: AutotelErrorCodes.E_INVALID_FLAG,
           message: 'x',
-        })
-      )
+        }),
+      ),
     ).toBe(2);
     expect(
       exitCodeForError(
@@ -68,8 +68,8 @@ describe('exitCodeForError', () => {
           type: 'conflict',
           code: AutotelErrorCodes.E_EXISTING_CONFIG,
           message: 'x',
-        })
-      )
+        }),
+      ),
     ).toBe(2);
   });
 
@@ -80,8 +80,8 @@ describe('exitCodeForError', () => {
           type: 'runtime',
           code: AutotelErrorCodes.E_UNKNOWN,
           message: 'x',
-        })
-      )
+        }),
+      ),
     ).toBe(1);
     expect(
       exitCodeForError(
@@ -89,8 +89,8 @@ describe('exitCodeForError', () => {
           type: 'install',
           code: AutotelErrorCodes.E_INSTALL_FAILED,
           message: 'x',
-        })
-      )
+        }),
+      ),
     ).toBe(1);
   });
 });

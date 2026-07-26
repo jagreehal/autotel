@@ -18,7 +18,7 @@ When a span you expect isn't in the backend, the cause is somewhere in this chai
 code → SDK init → head sampler → processor → exporter → network → backend ingest → backend index
 ```
 
-This skill walks each link in order with a quick check you can run. Don't skip steps — the cause is rarely where you'd guess.
+This skill walks each link in order with a quick check you can run. Don't skip steps. The cause is rarely where you'd guess.
 
 ## Step 0: Reproduce locally with the pretty exporter
 
@@ -31,7 +31,7 @@ init({
 });
 ```
 
-If you see the span in stdout, the SDK + sampler are fine — skip to "exporter / network". If you don't, keep reading.
+If you see the span in stdout, the SDK + sampler are fine. Skip to "exporter / network". If you don't, keep reading.
 
 ## Step 1: Is the SDK actually initialised?
 
@@ -60,9 +60,9 @@ console.log('[autotel-debug] sampling:', getActiveConfig()?.sampling);
 
 Common gotchas:
 
-- `sampling.rates: { server: 5 }` — 5 % means 95 % of spans never start.
+- `sampling.rates: { server: 5 }`: 5 % means 95 % of spans never start.
 - Inheriting `OTEL_TRACES_SAMPLER_ARG=0.01` from the environment via the OTel default sampler.
-- Your test happens to hit the unsampled branch — instrument with `sampling: { rates: { server: 100 } }` while reproducing.
+- Your test happens to hit the unsampled branch: instrument with `sampling: { rates: { server: 100 } }` while reproducing.
 
 To force sampling for one request, send a `traceparent` with the sampled flag set:
 
@@ -72,13 +72,13 @@ traceparent: 00-<traceid>-<spanid>-01
 
 (`-01` at the end = sampled.) autotel's parent-based sampler will respect it.
 
-## Step 3: Cloudflare Workers — `ctx.waitUntil`
+## Step 3: Cloudflare Workers: `ctx.waitUntil`
 
 The single biggest cause of missing spans on the edge: **the response returned before the exporter flushed**.
 
 If you're using `addEventListener('fetch', …)` or a hand-rolled `fetch` in a module worker without wiring `ctx.waitUntil(…)` to the export call, async drains drop silently.
 
-Fix — switch to `defineWorkerFetch` or `wrapModule`, both of which wire `waitUntil` automatically:
+Fix. Switch to `defineWorkerFetch` or `wrapModule`, both of which wire `waitUntil` automatically:
 
 ```typescript
 import { defineWorkerFetch } from 'autotel-cloudflare';
@@ -164,16 +164,16 @@ curl -v -X POST $OTLP_ENDPOINT \
   -d '{"resourceSpans":[]}'
 ```
 
-Should return `200`. If it doesn't, the problem is between you and the Collector — not autotel.
+Should return `200`. If it doesn't, the problem is between you and the Collector. Not autotel.
 
 For Cloudflare Workers, run `wrangler tail` and look for `OTLPExporter` errors.
 
-## Step 7: Backend ingest — silent rejection
+## Step 7: Backend ingest: silent rejection
 
 Some backends accept the request with a 200 but drop the events:
 
 - **Honeycomb**: dataset must exist _and_ the API key must have write access to it. Mismatched key/dataset → silent drop.
-- **Datadog**: check `service` is set (resource attribute `service.name`) — they ignore spans without it.
+- **Datadog**: check `service` is set (resource attribute `service.name`): they ignore spans without it.
 - **Sentry**: SDK version mismatch on envelope → 200 but events disappear.
 - **Grafana Cloud Tempo**: spans without `service.name` go to a fallback service called `unknown_service`.
 
@@ -219,9 +219,9 @@ Don't conclude the span is missing until you've waited > 2× the expected lag.
 
 Some spans land, some don't:
 
-- **Trace context broken between services** — outbound HTTP calls aren't propagating `traceparent`. Confirm autotel's global fetch instrumentation is on (`instrumentation.instrumentGlobalFetch: true`, default).
-- **Async boundary loses context** — a `setTimeout` / queue callback ran outside the AsyncLocalStorage scope. Wrap with `trace()` or use `context.with()`.
-- **Cross-runtime call** — Node service → Workers → browser; verify `traceparent` arrives at each leg via response headers / network panel.
+- **Trace context broken between services**: outbound HTTP calls aren't propagating `traceparent`. Confirm autotel's global fetch instrumentation is on (`instrumentation.instrumentGlobalFetch: true`, default).
+- **Async boundary loses context**: a `setTimeout` / queue callback ran outside the AsyncLocalStorage scope. Wrap with `trace()` or use `context.with()`.
+- **Cross-runtime call**: Node service → Workers → browser; verify `traceparent` arrives at each leg via response headers / network panel.
 
 ## When the SDK itself crashes
 

@@ -10,8 +10,8 @@ Bridges Autotel (OpenTelemetry) traces into Sentry for performance monitoring an
 
 Two exports ship in this package:
 
-- **`SentrySpanProcessor`** — converts OTel spans to Sentry transactions/child spans as they start and end.
-- **`SentryPropagator`** — injects and extracts `sentry-trace` and `baggage` headers for distributed tracing and dynamic sampling.
+- **`SentrySpanProcessor`**: converts OTel spans to Sentry transactions/child spans as they start and end.
+- **`SentryPropagator`**: injects and extracts `sentry-trace` and `baggage` headers for distributed tracing and dynamic sampling.
 
 ## Setup
 
@@ -38,7 +38,7 @@ init({
 
 ## Configuration / Core Patterns
 
-### `createSentrySpanProcessor(sentry)` — factory function
+### `createSentrySpanProcessor(sentry)`: factory function
 
 Preferred over constructing `new SentrySpanProcessor(sentry)` directly. Both are equivalent.
 
@@ -52,12 +52,12 @@ The processor accepts any object implementing the `SentryLike` interface (three 
 
 ### Span lifecycle mapping
 
-| OTel concept | Sentry concept |
-|---|---|
-| Root span (no OTel parent) | Sentry transaction |
-| Child span | Sentry child span |
+| OTel concept                   | Sentry concept                 |
+| ------------------------------ | ------------------------------ |
+| Root span (no OTel parent)     | Sentry transaction             |
+| Child span                     | Sentry child span              |
 | OTel exception event on a span | `Sentry.captureException` call |
-| Span status ERROR | Sentry span status error |
+| Span status ERROR              | Sentry span status error       |
 
 ### Error context enrichment
 
@@ -68,21 +68,24 @@ The processor automatically calls `addGlobalEventProcessor` on Sentry so that an
 throw new Error('payment failed'); // Sentry error will have OTel trace context attached
 ```
 
-### `SentryPropagator` — header injection/extraction
+### `SentryPropagator`: header injection/extraction
 
 Use when you need outgoing requests to carry `sentry-trace` and `baggage` headers so Sentry can stitch distributed traces and apply dynamic sampling:
 
 ```ts
 import { init } from 'autotel';
 import { SentryPropagator } from 'autotel-sentry';
-import { CompositePropagator, W3CTraceContextPropagator } from '@opentelemetry/core';
+import {
+  CompositePropagator,
+  W3CTraceContextPropagator,
+} from '@opentelemetry/core';
 
 init({
   service: 'my-app',
   textMapPropagator: new CompositePropagator({
     propagators: [
       new W3CTraceContextPropagator(), // standard traceparent/tracestate
-      new SentryPropagator(),          // adds sentry-trace + baggage
+      new SentryPropagator(), // adds sentry-trace + baggage
     ],
   }),
   spanProcessors: [createSentrySpanProcessor(Sentry)],
@@ -100,7 +103,7 @@ import { SENTRY_PROPAGATION_KEY } from 'autotel-sentry';
 
 The processor silently skips any span whose URL matches your Sentry DSN host. This prevents a loop where spans for Sentry ingestion requests themselves get sent to Sentry, which would generate more spans.
 
-No configuration needed — it is automatic when `getCurrentHub().getClient().getDsn()` is available.
+No configuration needed. It is automatic when `getCurrentHub().getClient().getDsn()` is available.
 
 ### Using `SentryLike` interface for testing / custom Sentry builds
 
@@ -109,8 +112,12 @@ import type { SentryLike } from 'autotel-sentry';
 
 const mockSentry: SentryLike = {
   getCurrentHub: () => mockHub,
-  addGlobalEventProcessor: (cb) => { /* noop */ },
-  captureException: (err, opts) => { /* noop */ },
+  addGlobalEventProcessor: (cb) => {
+    /* noop */
+  },
+  captureException: (err, opts) => {
+    /* noop */
+  },
 };
 
 const processor = createSentrySpanProcessor(mockSentry);
@@ -123,15 +130,23 @@ const processor = createSentrySpanProcessor(mockSentry);
 If `autotel.init()` runs first, spans may start before the processor has a valid Sentry hub, causing spans to be silently dropped or mapped to incorrect transactions.
 
 Wrong:
+
 ```ts
-init({ service: 'my-app', spanProcessors: [createSentrySpanProcessor(Sentry)] });
+init({
+  service: 'my-app',
+  spanProcessors: [createSentrySpanProcessor(Sentry)],
+});
 Sentry.init({ dsn: '...', instrumenter: 'otel' }); // too late
 ```
 
 Correct:
+
 ```ts
 Sentry.init({ dsn: '...', instrumenter: 'otel' });
-init({ service: 'my-app', spanProcessors: [createSentrySpanProcessor(Sentry)] });
+init({
+  service: 'my-app',
+  spanProcessors: [createSentrySpanProcessor(Sentry)],
+});
 ```
 
 ### HIGH: Omitting `instrumenter: 'otel'` in `Sentry.init()`
@@ -139,11 +154,13 @@ init({ service: 'my-app', spanProcessors: [createSentrySpanProcessor(Sentry)] })
 Without this flag, Sentry's own auto-instrumentation runs alongside OTel, causing duplicate transactions and spans for every operation.
 
 Wrong:
+
 ```ts
 Sentry.init({ dsn: '...', tracesSampleRate: 1.0 }); // missing instrumenter
 ```
 
 Correct:
+
 ```ts
 Sentry.init({ dsn: '...', tracesSampleRate: 1.0, instrumenter: 'otel' });
 ```

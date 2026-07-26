@@ -1,7 +1,11 @@
 import { createStructuredError } from 'autotel';
 import { securityEvent } from 'autotel-audit';
 import { sanitizeAuditPayload, type PrivacyProfileInput } from './privacy.js';
-import { recordDecisionBasis, recordPolicyDecision, withAgentToolCall } from './runtime.js';
+import {
+  recordDecisionBasis,
+  recordPolicyDecision,
+  withAgentToolCall,
+} from './runtime.js';
 import { hashPayload } from './hash.js';
 import type {
   AgentActionOptions,
@@ -19,10 +23,7 @@ function normalizeScopes(scope?: string | string[]): string[] {
   return Array.isArray(scope) ? scope : [scope];
 }
 
-function missingScopes(
-  delegated: string[],
-  required: string[],
-): string[] {
+function missingScopes(delegated: string[], required: string[]): string[] {
   return required.filter((scope) => !delegated.includes(scope));
 }
 
@@ -70,7 +71,10 @@ function resolveScopeDenial(
 }
 
 function resolveDelegation(
-  definition: Pick<ScopedToolDefinition<unknown>, 'agent' | 'delegation' | 'identityRegistry'>,
+  definition: Pick<
+    ScopedToolDefinition<unknown>,
+    'agent' | 'delegation' | 'identityRegistry'
+  >,
 ): DelegationContext | undefined {
   const registry = definition.identityRegistry;
   if (registry) {
@@ -98,7 +102,10 @@ function buildDecision(
 ): AgentDecisionMetadata | undefined {
   if (!decision) return undefined;
 
-  const sanitizedInput = sanitizeAuditPayload(input, privacyProfile ?? 'strict');
+  const sanitizedInput = sanitizeAuditPayload(
+    input,
+    privacyProfile ?? 'strict',
+  );
   return {
     ...decision,
     inputHash: decision.inputHash ?? hashPayload(sanitizedInput),
@@ -171,7 +178,10 @@ export async function withScopedTool<TInput, TOutput>(
         targetId: definition.tool.name,
         policyId: definition.policyId,
       },
-      { ctx: options.ctx, onMissingContext: options.onMissingContext ?? 'warn' },
+      {
+        ctx: options.ctx,
+        onMissingContext: options.onMissingContext ?? 'warn',
+      },
     );
 
     throw createStructuredError({

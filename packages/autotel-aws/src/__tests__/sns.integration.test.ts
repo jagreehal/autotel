@@ -27,7 +27,8 @@ import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 import { createLocalStackHelpers } from '../testing/localstack';
 
-const LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+const LOCALSTACK_ENDPOINT =
+  process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
 const localstack = createLocalStackHelpers();
 const isLocalStackAvailable = await localstack.isAvailable();
 
@@ -136,7 +137,9 @@ describe.skipIf(!isLocalStackAvailable)('SNS Integration Tests', () => {
 
       const publishSpan = spans.find((s) => s.name === 'sns.publish');
       expect(publishSpan).toBeDefined();
-      expect(publishSpan?.attributes['messaging.message.id']).toBe(result.messageId);
+      expect(publishSpan?.attributes['messaging.message.id']).toBe(
+        result.messageId,
+      );
     });
   });
 

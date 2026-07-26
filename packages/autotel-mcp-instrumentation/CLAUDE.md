@@ -21,7 +21,7 @@ You are working on the MCP instrumentation package. You understand MCP protocol,
 - **Transport-Agnostic**: Works with stdio, HTTP, SSE, or any MCP transport (context in JSON payload, not headers)
 - **Proxy-Based Pattern**: Similar to autotel-cloudflare bindings instrumentation (no MCP SDK modifications)
 - **Runtime Support**: Both Node.js (autotel) and Edge (autotel-edge)
-- **Security Observability** (`src/security.ts`): protocol-boundary signals for the agentic-web threat model — annotation hints (`mcp.tool.*`), payload sizes, output char budgets, a pluggable `securityClassifier` (`mcp.security.injection.*` + events), `spotlight()` and `validateToolBudget()` helpers. **This package observes and signals; it does NOT enforce.** Deterministic kill-switches live in `autotel-genai/guard`; identity/scope/policy in `autotel-genai/agent`. Do not duplicate those here.
+- **Security Observability** (`src/security.ts`): protocol-boundary signals for the agentic-web threat model: annotation hints (`mcp.tool.*`), payload sizes, output char budgets, a pluggable `securityClassifier` (`mcp.security.injection.*` + events), `spotlight()` and `validateToolBudget()` helpers. **This package observes and signals; it does NOT enforce.** Deterministic kill-switches live in `autotel-genai/guard`; identity/scope/policy in `autotel-genai/agent`. Do not duplicate those here.
 
 ## Entry Points
 

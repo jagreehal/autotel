@@ -23,7 +23,7 @@
 
 import 'dotenv/config';
 import { faker } from '@faker-js/faker';
-import { init, trace, shutdown } from 'autotel';
+import { init, trace, shutdown, withTracing } from 'autotel';
 
 // IMPORTANT: Instrument mongoose BEFORE importing schemas to enable automatic hook tracing
 import './init-mongoose';
@@ -45,325 +45,362 @@ init({
 // a developer's global env var; use MONGOOSE_EXAMPLE_MONGO_URL instead.
 
 // Example: Create a user with autotel tracing
-export const createUser = trace('createUser', (ctx) => async (email: string, name?: string) => {
-  console.log(`\n📝 Creating user: ${email}`);
+export const createUser = withTracing({ name: 'createUser' })(
+  (ctx) => async (email: string, name?: string) => {
+    console.log(`\n📝 Creating user: ${email}`);
 
-  // Set custom attributes for better observability
-  ctx.setAttribute('user.email', email);
-  if (name) {
-    ctx.setAttribute('user.name', name);
-  }
+    // Set custom attributes for better observability
+    ctx.setAttribute('user.email', email);
+    if (name) {
+      ctx.setAttribute('user.name', name);
+    }
 
-  const user = await User.create({ email, name });
+    const user = await User.create({ email, name });
 
-  console.log(`✅ User created with ID: ${user._id}`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
+    console.log(`✅ User created with ID: ${user._id}`);
+    console.log(`📊 Trace ID: ${ctx.traceId}`);
 
-  return user;
-});
+    return user;
+  },
+);
 
 // Example: Create a post for a user
-export const createPost = trace('createPost', (ctx) => async (
-  userId: mongoose.Types.ObjectId,
-  title: string,
-  content?: string
-) => {
-  console.log(`\n📝 Creating post for user ${userId}: ${title}`);
+export const createPost = withTracing({ name: 'createPost' })(
+  (ctx) =>
+    async (
+      userId: mongoose.Types.ObjectId,
+      title: string,
+      content?: string,
+    ) => {
+      console.log(`\n📝 Creating post for user ${userId}: ${title}`);
 
-  ctx.setAttribute('post.userId', userId.toString());
-  ctx.setAttribute('post.title', title);
+      ctx.setAttribute('post.userId', userId.toString());
+      ctx.setAttribute('post.title', title);
 
-  const post = await Post.create({
-    title,
-    content,
-    author: userId,
-  });
+      const post = await Post.create({
+        title,
+        content,
+        author: userId,
+      });
 
-  console.log(`✅ Post created with ID: ${post._id}`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
-
-  return post;
-});
-
-// Example: Find user by email
-export const findUserByEmail = trace('findUserByEmail', (ctx) => async (email: string) => {
-  console.log(`\n🔍 Finding user by email: ${email}`);
-
-  ctx.setAttribute('search.email', email);
-
-  const user = await User.findOne({ email });
-
-  if (user) {
-    console.log(`✅ Found user: ${user._id}`);
-  } else {
-    console.log(`❌ User not found`);
-  }
-
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
-
-  return user;
-});
-
-// Example: Find posts by user with population
-export const findUserPosts = trace('findUserPosts', (ctx) => async (userId: mongoose.Types.ObjectId) => {
-  console.log(`\n🔍 Finding posts for user: ${userId}`);
-
-  ctx.setAttribute('user.id', userId.toString());
-
-  const posts = await Post
-    .find({ author: userId })
-    .populate('author')
-    .sort({ createdAt: -1 });
-
-  console.log(`✅ Found ${posts.length} posts`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
-
-  return posts;
-});
-
-// Example: Update user
-export const updateUser = trace('updateUser', (ctx) => async (
-  userId: mongoose.Types.ObjectId,
-  updates: { name?: string; email?: string }
-) => {
-  console.log(`\n✏️  Updating user: ${userId}`);
-
-  ctx.setAttribute('user.id', userId.toString());
-  ctx.setAttribute('updates', JSON.stringify(updates));
-
-  const user = await User.findByIdAndUpdate(
-    userId,
-    updates,
-    { new: true, runValidators: true }
-  );
-
-  if (user) {
-    console.log(`✅ User updated`);
-  } else {
-    console.log(`❌ User not found`);
-  }
-
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
-
-  return user;
-});
-
-// Example: Aggregation pipeline
-export const getUserStats = trace('getUserStats', (ctx) => async () => {
-  console.log(`\n📊 Getting user statistics`);
-
-  const stats = await User.aggregate([
-    {
-      $lookup: {
-        from: 'posts',
-        localField: '_id',
-        foreignField: 'author',
-        as: 'posts',
-      },
-    },
-    {
-      $project: {
-        email: 1,
-        name: 1,
-        postCount: { $size: '$posts' },
-      },
-    },
-    {
-      $sort: { postCount: -1 },
-    },
-  ]);
-
-  console.log(`✅ Retrieved stats for ${stats.length} users`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
-
-  return stats;
-});
-
-// Example: Delete operation
-export const deletePost = trace('deletePost', (ctx) => async (postId: mongoose.Types.ObjectId) => {
-  console.log(`\n🗑️  Deleting post: ${postId}`);
-
-  ctx.setAttribute('post.id', postId.toString());
-
-  const result = await Post.deleteOne({ _id: postId });
-
-  if (result.deletedCount > 0) {
-    console.log(`✅ Post deleted`);
-  } else {
-    console.log(`❌ Post not found`);
-  }
-
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
-
-  return result;
-});
-
-// Example: Error handling - errors are automatically recorded in spans
-export const findUserOrFail = trace('findUserOrFail', (ctx) => async (email: string) => {
-  console.log(`\n🔍 Finding user (with error handling): ${email}`);
-
-  ctx.setAttribute('search.email', email);
-
-  const user = await User.findOne({ email });
-
-  if (!user) {
-    // This error will be automatically captured in the span
-    const error = new Error(`User not found: ${email}`);
-    ctx.recordError(error);
-    ctx.setStatus({ code: 2, message: error.message }); // SpanStatusCode.ERROR = 2
-    console.log(`❌ Error recorded in span: ${error.message}`);
-    throw error;
-  }
-
-  console.log(`✅ Found user: ${user._id}`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
-
-  return user;
-});
-
-// Example: Transaction with session.withTransaction()
-export const transferPostOwnership = trace('transferPostOwnership', (ctx) => async (
-  postId: mongoose.Types.ObjectId,
-  fromUserId: mongoose.Types.ObjectId,
-  toUserId: mongoose.Types.ObjectId
-) => {
-  console.log(`\n🔄 Transferring post ${postId} from ${fromUserId} to ${toUserId}`);
-
-  ctx.setAttribute('post.id', postId.toString());
-  ctx.setAttribute('from.userId', fromUserId.toString());
-  ctx.setAttribute('to.userId', toUserId.toString());
-
-  const session = await mongoose.startSession();
-
-  try {
-    const result = await session.withTransaction(async () => {
-      // Update post author
-      const post = await Post.findByIdAndUpdate(
-        postId,
-        { author: toUserId },
-        { session, new: true }
-      );
-
-      if (!post) {
-        throw new Error('Post not found');
-      }
-
-      // Log the transfer (in a real app, you might have an audit log collection)
-      console.log(`  📝 Post "${post.title}" transferred`);
+      console.log(`✅ Post created with ID: ${post._id}`);
+      console.log(`📊 Trace ID: ${ctx.traceId}`);
 
       return post;
-    });
+    },
+);
 
-    console.log(`✅ Transfer completed in transaction`);
+// Example: Find user by email
+export const findUserByEmail = withTracing({ name: 'findUserByEmail' })(
+  (ctx) => async (email: string) => {
+    console.log(`\n🔍 Finding user by email: ${email}`);
+
+    ctx.setAttribute('search.email', email);
+
+    const user = await User.findOne({ email });
+
+    if (user) {
+      console.log(`✅ Found user: ${user._id}`);
+    } else {
+      console.log(`❌ User not found`);
+    }
+
+    console.log(`📊 Trace ID: ${ctx.traceId}`);
+
+    return user;
+  },
+);
+
+// Example: Find posts by user with population
+export const findUserPosts = withTracing({ name: 'findUserPosts' })(
+  (ctx) => async (userId: mongoose.Types.ObjectId) => {
+    console.log(`\n🔍 Finding posts for user: ${userId}`);
+
+    ctx.setAttribute('user.id', userId.toString());
+
+    const posts = await Post.find({ author: userId })
+      .populate('author')
+      .sort({ createdAt: -1 });
+
+    console.log(`✅ Found ${posts.length} posts`);
+    console.log(`📊 Trace ID: ${ctx.traceId}`);
+
+    return posts;
+  },
+);
+
+// Example: Update user
+export const updateUser = withTracing({ name: 'updateUser' })(
+  (ctx) =>
+    async (
+      userId: mongoose.Types.ObjectId,
+      updates: { name?: string; email?: string },
+    ) => {
+      console.log(`\n✏️  Updating user: ${userId}`);
+
+      ctx.setAttribute('user.id', userId.toString());
+      ctx.setAttribute('updates', JSON.stringify(updates));
+
+      const user = await User.findByIdAndUpdate(userId, updates, {
+        new: true,
+        runValidators: true,
+      });
+
+      if (user) {
+        console.log(`✅ User updated`);
+      } else {
+        console.log(`❌ User not found`);
+      }
+
+      console.log(`📊 Trace ID: ${ctx.traceId}`);
+
+      return user;
+    },
+);
+
+// Example: Aggregation pipeline
+export const getUserStats = withTracing({ name: 'getUserStats' })(
+  (ctx) => async () => {
+    console.log(`\n📊 Getting user statistics`);
+
+    const stats = await User.aggregate([
+      {
+        $lookup: {
+          from: 'posts',
+          localField: '_id',
+          foreignField: 'author',
+          as: 'posts',
+        },
+      },
+      {
+        $project: {
+          email: 1,
+          name: 1,
+          postCount: { $size: '$posts' },
+        },
+      },
+      {
+        $sort: { postCount: -1 },
+      },
+    ]);
+
+    console.log(`✅ Retrieved stats for ${stats.length} users`);
+    console.log(`📊 Trace ID: ${ctx.traceId}`);
+
+    return stats;
+  },
+);
+
+// Example: Delete operation
+export const deletePost = withTracing({ name: 'deletePost' })(
+  (ctx) => async (postId: mongoose.Types.ObjectId) => {
+    console.log(`\n🗑️  Deleting post: ${postId}`);
+
+    ctx.setAttribute('post.id', postId.toString());
+
+    const result = await Post.deleteOne({ _id: postId });
+
+    if (result.deletedCount > 0) {
+      console.log(`✅ Post deleted`);
+    } else {
+      console.log(`❌ Post not found`);
+    }
+
     console.log(`📊 Trace ID: ${ctx.traceId}`);
 
     return result;
-  } finally {
-    await session.endSession();
-  }
-});
+  },
+);
+
+// Example: Error handling - errors are automatically recorded in spans
+export const findUserOrFail = withTracing({ name: 'findUserOrFail' })(
+  (ctx) => async (email: string) => {
+    console.log(`\n🔍 Finding user (with error handling): ${email}`);
+
+    ctx.setAttribute('search.email', email);
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      // This error will be automatically captured in the span
+      const error = new Error(`User not found: ${email}`);
+      ctx.recordError(error);
+      ctx.setStatus({ code: 2, message: error.message }); // SpanStatusCode.ERROR = 2
+      console.log(`❌ Error recorded in span: ${error.message}`);
+      throw error;
+    }
+
+    console.log(`✅ Found user: ${user._id}`);
+    console.log(`📊 Trace ID: ${ctx.traceId}`);
+
+    return user;
+  },
+);
+
+// Example: Transaction with session.withTransaction()
+export const transferPostOwnership = withTracing({
+  name: 'transferPostOwnership',
+})(
+  (ctx) =>
+    async (
+      postId: mongoose.Types.ObjectId,
+      fromUserId: mongoose.Types.ObjectId,
+      toUserId: mongoose.Types.ObjectId,
+    ) => {
+      console.log(
+        `\n🔄 Transferring post ${postId} from ${fromUserId} to ${toUserId}`,
+      );
+
+      ctx.setAttribute('post.id', postId.toString());
+      ctx.setAttribute('from.userId', fromUserId.toString());
+      ctx.setAttribute('to.userId', toUserId.toString());
+
+      const session = await mongoose.startSession();
+
+      try {
+        const result = await session.withTransaction(async () => {
+          // Update post author
+          const post = await Post.findByIdAndUpdate(
+            postId,
+            { author: toUserId },
+            { session, new: true },
+          );
+
+          if (!post) {
+            throw new Error('Post not found');
+          }
+
+          // Log the transfer (in a real app, you might have an audit log collection)
+          console.log(`  📝 Post "${post.title}" transferred`);
+
+          return post;
+        });
+
+        console.log(`✅ Transfer completed in transaction`);
+        console.log(`📊 Trace ID: ${ctx.traceId}`);
+
+        return result;
+      } finally {
+        await session.endSession();
+      }
+    },
+);
 
 // Example: Bulk operations - insertMany
-export const createPostsBulk = trace('createPostsBulk', (ctx) => async (
-  userId: mongoose.Types.ObjectId,
-  posts: Array<{ title: string; content?: string }>
-) => {
-  console.log(`\n📦 Bulk creating ${posts.length} posts for user ${userId}`);
+export const createPostsBulk = withTracing({ name: 'createPostsBulk' })(
+  (ctx) =>
+    async (
+      userId: mongoose.Types.ObjectId,
+      posts: Array<{ title: string; content?: string }>,
+    ) => {
+      console.log(
+        `\n📦 Bulk creating ${posts.length} posts for user ${userId}`,
+      );
 
-  ctx.setAttribute('user.id', userId.toString());
-  ctx.setAttribute('posts.count', posts.length);
+      ctx.setAttribute('user.id', userId.toString());
+      ctx.setAttribute('posts.count', posts.length);
 
-  const postsWithAuthor = posts.map(p => ({
-    ...p,
-    author: userId,
-  }));
+      const postsWithAuthor = posts.map((p) => ({
+        ...p,
+        author: userId,
+      }));
 
-  const result = await Post.insertMany(postsWithAuthor);
+      const result = await Post.insertMany(postsWithAuthor);
 
-  console.log(`✅ Created ${result.length} posts via insertMany`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
+      console.log(`✅ Created ${result.length} posts via insertMany`);
+      console.log(`📊 Trace ID: ${ctx.traceId}`);
 
-  return result;
-});
+      return result;
+    },
+);
 
 // Example: Bulk operations - bulkWrite
-export const bulkUpdatePosts = trace('bulkUpdatePosts', (ctx) => async (
-  operations: Array<{ postId: mongoose.Types.ObjectId; published: boolean }>
-) => {
-  console.log(`\n📦 Bulk updating ${operations.length} posts`);
+export const bulkUpdatePosts = withTracing({ name: 'bulkUpdatePosts' })(
+  (ctx) =>
+    async (
+      operations: Array<{
+        postId: mongoose.Types.ObjectId;
+        published: boolean;
+      }>,
+    ) => {
+      console.log(`\n📦 Bulk updating ${operations.length} posts`);
 
-  ctx.setAttribute('operations.count', operations.length);
+      ctx.setAttribute('operations.count', operations.length);
 
-  const bulkOps = operations.map(op => ({
-    updateOne: {
-      filter: { _id: op.postId },
-      update: { $set: { published: op.published } },
+      const bulkOps = operations.map((op) => ({
+        updateOne: {
+          filter: { _id: op.postId },
+          update: { $set: { published: op.published } },
+        },
+      }));
+
+      const result = await Post.bulkWrite(bulkOps);
+
+      console.log(`✅ Bulk write: ${result.modifiedCount} modified`);
+      console.log(`📊 Trace ID: ${ctx.traceId}`);
+
+      return result;
     },
-  }));
-
-  const result = await Post.bulkWrite(bulkOps);
-
-  console.log(`✅ Bulk write: ${result.modifiedCount} modified`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
-
-  return result;
-});
+);
 
 // Example: Instance method - doc.save() instead of Model.create()
-export const createUserWithSave = trace('createUserWithSave', (ctx) => async (
-  email: string,
-  name?: string
-) => {
-  console.log(`\n📝 Creating user with doc.save(): ${email}`);
+export const createUserWithSave = withTracing({ name: 'createUserWithSave' })(
+  (ctx) => async (email: string, name?: string) => {
+    console.log(`\n📝 Creating user with doc.save(): ${email}`);
 
-  ctx.setAttribute('user.email', email);
-  if (name) {
-    ctx.setAttribute('user.name', name);
-  }
+    ctx.setAttribute('user.email', email);
+    if (name) {
+      ctx.setAttribute('user.name', name);
+    }
 
-  // Create document instance and save (triggers pre/post save hooks)
-  const user = new User({ email, name });
-  await user.save();
+    // Create document instance and save (triggers pre/post save hooks)
+    const user = new User({ email, name });
+    await user.save();
 
-  console.log(`✅ User created with doc.save(): ${user._id}`);
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
+    console.log(`✅ User created with doc.save(): ${user._id}`);
+    console.log(`📊 Trace ID: ${ctx.traceId}`);
 
-  return user;
-});
+    return user;
+  },
+);
 
 // Example: User-defined statics, instance methods, and query helpers.
 // These are traced automatically by autotel-mongoose — note there are NO
 // trace() calls on findByEmail/describe/countByDomain/byEmailDomain themselves.
-export const demoCustomMethods = trace('demoCustomMethods', (ctx) => async (email: string) => {
-  console.log(`\n🧩 Exercising custom statics/methods/query helpers for: ${email}`);
+export const demoCustomMethods = withTracing({ name: 'demoCustomMethods' })(
+  (ctx) => async (email: string) => {
+    console.log(
+      `\n🧩 Exercising custom statics/methods/query helpers for: ${email}`,
+    );
 
-  const domain = email.split('@')[1] ?? 'example.com';
-  ctx.setAttribute('search.email', email);
-  ctx.setAttribute('search.domain', domain);
+    const domain = email.split('@')[1] ?? 'example.com';
+    ctx.setAttribute('search.email', email);
+    ctx.setAttribute('search.domain', domain);
 
-  // Static (returns a Query → span covers the exec)
-  const user = await User.findByEmail(email);
-  if (user) {
-    // Instance method (synchronous)
-    console.log(`  👤 describe(): ${user.describe()}`);
-  }
+    // Static (returns a Query → span covers the exec)
+    const user = await User.findByEmail(email);
+    if (user) {
+      // Instance method (synchronous)
+      console.log(`  👤 describe(): ${user.describe()}`);
+    }
 
-  // Static returning a Promise<number>
-  const count = await User.countByDomain(domain);
-  console.log(`  🔢 countByDomain(${domain}): ${count}`);
+    // Static returning a Promise<number>
+    const count = await User.countByDomain(domain);
+    console.log(`  🔢 countByDomain(${domain}): ${count}`);
 
-  // Query helper (chainable)
-  const sameDomain = await User.find().byEmailDomain(domain).limit(5);
-  console.log(`  🔍 byEmailDomain(${domain}) found: ${sameDomain.length}`);
+    // Query helper (chainable)
+    const sameDomain = await User.find().byEmailDomain(domain).limit(5);
+    console.log(`  🔍 byEmailDomain(${domain}) found: ${sameDomain.length}`);
 
-  console.log(`📊 Trace ID: ${ctx.traceId}`);
+    console.log(`📊 Trace ID: ${ctx.traceId}`);
 
-  return { user, count, sameDomainCount: sameDomain.length };
-});
+    return { user, count, sameDomainCount: sameDomain.length };
+  },
+);
 
 // Single parent span that wraps the entire sample workflow so every helper span
 // (and auto-instrumented Mongoose span) becomes a child of one trace.
-const runScenario = trace('runScenario', (ctx) => async () => {
+const runScenario = withTracing({ name: 'runScenario' })((ctx) => async () => {
   ctx.setAttribute('scenario.name', 'mongoose-demo');
   ctx.setAttribute('scenario.runId', faker.string.uuid());
 
@@ -391,8 +428,16 @@ const runScenario = trace('runScenario', (ctx) => async () => {
   const charlie = await createUserWithSave(charlieEmail, 'Charlie');
 
   // Create posts
-  await createPost(alice._id, 'Getting Started with Mongoose', 'Mongoose is a great ODM for MongoDB...');
-  await createPost(alice._id, 'OpenTelemetry Tracing', 'Learn how to add tracing to your app...');
+  await createPost(
+    alice._id,
+    'Getting Started with Mongoose',
+    'Mongoose is a great ODM for MongoDB...',
+  );
+  await createPost(
+    alice._id,
+    'OpenTelemetry Tracing',
+    'Learn how to add tracing to your app...',
+  );
   await createPost(bob._id, 'My First Post', 'Hello from Bob!');
 
   // Find user
@@ -420,7 +465,9 @@ const runScenario = trace('runScenario', (ctx) => async () => {
   ]);
 
   // bulkWrite - update multiple posts at once
-  await bulkUpdatePosts(bulkPosts.map(p => ({ postId: p._id, published: true })));
+  await bulkUpdatePosts(
+    bulkPosts.map((p) => ({ postId: p._id, published: true })),
+  );
 
   // ===== Transactions =====
 
@@ -432,7 +479,9 @@ const runScenario = trace('runScenario', (ctx) => async () => {
       await transferPostOwnership(alicePosts[0]._id, alice._id, bob._id);
     } catch (err: any) {
       if (err?.code === 20 || err?.message?.includes('replica set')) {
-        console.log(`  ℹ️  Transaction skipped: requires MongoDB replica set (standalone mode detected)`);
+        console.log(
+          `  ℹ️  Transaction skipped: requires MongoDB replica set (standalone mode detected)`,
+        );
       } else {
         throw err;
       }
@@ -470,7 +519,6 @@ async function main() {
     await runScenario();
     console.log('\n✅ Example completed successfully!');
     console.log('📊 Check your observability backend for traces');
-
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {

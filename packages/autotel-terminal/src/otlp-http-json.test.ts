@@ -130,58 +130,77 @@ describe('parseOtlpEvents', () => {
 
   it('parses span events from OTLP payload', () => {
     const payload = {
-      resourceSpans: [{
-        scopeSpans: [{
-          spans: [{
-            traceId: 'abcdef1234567890abcdef1234567890',
-            spanId: '1234567890abcdef',
-            name: 'GET /users',
-            startTimeUnixNano: '1700000000000000000',
-            endTimeUnixNano: '1700000000050000000',
-            events: [
-              {
-                timeUnixNano: '1700000000025000000',
-                name: 'exception',
-                attributes: [
-                  { key: 'exception.message', value: { stringValue: 'not found' } },
-                ],
-              },
-            ],
-          }],
-        }],
-      }],
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: 'abcdef1234567890abcdef1234567890',
+                  spanId: '1234567890abcdef',
+                  name: 'GET /users',
+                  startTimeUnixNano: '1700000000000000000',
+                  endTimeUnixNano: '1700000000050000000',
+                  events: [
+                    {
+                      timeUnixNano: '1700000000025000000',
+                      name: 'exception',
+                      attributes: [
+                        {
+                          key: 'exception.message',
+                          value: { stringValue: 'not found' },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
     };
 
     const events = parseOtlpEvents(payload);
     expect(events[0].events).toHaveLength(1);
     expect(events[0].events![0].name).toBe('exception');
     expect(events[0].events![0].timeMs).toBeCloseTo(1_700_000_000_025, 0);
-    expect(events[0].events![0].attributes).toEqual({ 'exception.message': 'not found' });
+    expect(events[0].events![0].attributes).toEqual({
+      'exception.message': 'not found',
+    });
   });
 
   it('parses span links from OTLP payload', () => {
     const payload = {
-      resourceSpans: [{
-        scopeSpans: [{
-          spans: [{
-            name: 'consumer',
-            links: [
-              {
-                traceId: 'aaaa0000000000000000000000000001',
-                spanId: 'bbbb000000000001',
-                attributes: [
-                  { key: 'link.type', value: { stringValue: 'parent' } },
-                ],
-              },
-            ],
-          }],
-        }],
-      }],
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  name: 'consumer',
+                  links: [
+                    {
+                      traceId: 'aaaa0000000000000000000000000001',
+                      spanId: 'bbbb000000000001',
+                      attributes: [
+                        { key: 'link.type', value: { stringValue: 'parent' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
     };
 
     const events = parseOtlpEvents(payload);
     expect(events[0].links).toHaveLength(1);
-    expect(events[0].links![0].traceId).toBe('aaaa0000000000000000000000000001');
+    expect(events[0].links![0].traceId).toBe(
+      'aaaa0000000000000000000000000001',
+    );
     expect(events[0].links![0].spanId).toBe('bbbb000000000001');
     expect(events[0].links![0].attributes).toEqual({ 'link.type': 'parent' });
   });

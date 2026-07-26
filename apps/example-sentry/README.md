@@ -68,11 +68,11 @@ AUTOTEL_DEBUG=1 pnpm start
 
 ## Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SENTRY_DSN` | Yes | Sentry project DSN |
-| `THROW_FOR_DEMO` | No | Set to `1` to capture a demo error |
-| `AUTOTEL_DEBUG` | No | Set to `1` for debug logging |
+| Variable         | Required | Description                        |
+| ---------------- | -------- | ---------------------------------- |
+| `SENTRY_DSN`     | Yes      | Sentry project DSN                 |
+| `THROW_FOR_DEMO` | No       | Set to `1` to capture a demo error |
+| `AUTOTEL_DEBUG`  | No       | Set to `1` for debug logging       |
 
 ## Key code
 
@@ -82,12 +82,16 @@ import { sentryOtlpConfig, linkSentryErrors } from 'autotel-sentry';
 const config = sentryOtlpConfig(process.env.SENTRY_DSN!);
 
 Sentry.init({ dsn: config.dsn, skipOpenTelemetrySetup: true });
-init({ service: 'example-sentry', endpoint: config.endpoint, headers: config.headers });
+init({
+  service: 'example-sentry',
+  endpoint: config.endpoint,
+  headers: config.headers,
+});
 linkSentryErrors(Sentry);
 ```
 
 ## References
 
-- [autotel-sentry](../../packages/autotel-sentry) — the helpers used in this example
+- [autotel-sentry](../../packages/autotel-sentry): the helpers used in this example
 - [Sentry OTLP Integration spec](https://develop.sentry.dev/sdk/telemetry/traces/otlp/)
 - [Sentry OTLP docs](https://docs.sentry.io/concepts/otlp/)

@@ -6,7 +6,7 @@ description: Let AI assistants query and analyze your OpenTelemetry traces via M
 Instead of manually searching through trace dashboards, you can ask Claude (or any MCP-compatible AI) natural language questions about your application's traces. The AI uses the OpenTelemetry MCP server to query your observability backend and returns insights.
 
 :::note[Emitting GenAI telemetry]
-This page is about **querying** traces. To **emit** GenAI telemetry — `gen_ai.*` attributes, token usage, and cost — applications use the [`autotel-genai`](https://github.com/jagreehal/autotel/tree/main/packages/autotel-genai) package: `traceGenAI` and `recordGenAiUsage` from `autotel-genai/trace`, plus `genAiMetricViews` from `autotel-genai/metrics`. That instrumentation is what makes the `get_llm_usage` and `list_llm_models` MCP tools below return data.
+This page is about **querying** traces. To **emit** GenAI telemetry (`gen_ai.*` attributes, token usage, and cost), applications use the [`autotel-genai`](https://github.com/jagreehal/autotel/tree/main/packages/autotel-genai) package: `traceGenAI` and `recordGenAiUsage` from `autotel-genai/trace`, plus `genAiMetricViews` from `autotel-genai/metrics`. That instrumentation is what makes the `get_llm_usage` and `list_llm_models` MCP tools below return data.
 :::
 
 ## How It Works
@@ -65,7 +65,14 @@ docker compose up -d
 ### 2. Instrument Your App
 
 ```typescript
-import { init, trace, span, type TraceContext } from 'autotel';
+import {
+  init,
+  trace,
+  span,
+  withTracing,
+  span,
+  type TraceContext,
+} from 'autotel';
 
 init({
   service: 'my-api',
@@ -79,43 +86,47 @@ init({
 The AI can only query what you capture. Add attributes that matter for debugging:
 
 ```typescript
-const queryOrders = trace((ctx: TraceContext) => async (userId: string) => {
-  // Database attributes
-  ctx.setAttribute('db.system', 'postgresql');
-  ctx.setAttribute('db.operation', 'SELECT');
-  ctx.setAttribute('db.table', 'orders');
-  ctx.setAttribute('db.user_id', userId);
+const queryOrders = withTracing({})(
+  (ctx: TraceContext) => async (userId: string) => {
+    // Database attributes
+    ctx.setAttribute('db.system', 'postgresql');
+    ctx.setAttribute('db.operation', 'SELECT');
+    ctx.setAttribute('db.table', 'orders');
+    ctx.setAttribute('db.user_id', userId);
 
-  const queryTime = Math.random() * 150;
-  const orders = await db.query('SELECT * FROM orders WHERE user_id = $1', [
-    userId,
-  ]);
+    const queryTime = Math.random() * 150;
+    const orders = await db.query('SELECT * FROM orders WHERE user_id = $1', [
+      userId,
+    ]);
 
-  ctx.setAttribute('db.query_time_ms', queryTime);
-  ctx.setAttribute('db.rows_returned', orders.length);
-  ctx.setAttribute('db.slow_query', queryTime > 100);
+    ctx.setAttribute('db.query_time_ms', queryTime);
+    ctx.setAttribute('db.rows_returned', orders.length);
+    ctx.setAttribute('db.slow_query', queryTime > 100);
 
-  return orders;
-});
+    return orders;
+  },
+);
 
-const processPayment = trace((ctx: TraceContext) => async (amount: number) => {
-  ctx.setAttribute('payment.gateway', 'stripe');
-  ctx.setAttribute('payment.amount', amount);
-  ctx.setAttribute('payment.currency', 'USD');
+const processPayment = withTracing({})(
+  (ctx: TraceContext) => async (amount: number) => {
+    ctx.setAttribute('payment.gateway', 'stripe');
+    ctx.setAttribute('payment.amount', amount);
+    ctx.setAttribute('payment.currency', 'USD');
 
-  try {
-    const result = await stripe.charges.create({ amount });
-    ctx.setAttribute('payment.status', 'success');
-    ctx.setAttribute('payment.transaction_id', result.id);
-    return result;
-  } catch (err) {
-    ctx.setAttribute('payment.status', 'failed');
-    ctx.setAttribute('payment.error', err.message);
-    throw err;
-  }
-});
+    try {
+      const result = await stripe.charges.create({ amount });
+      ctx.setAttribute('payment.status', 'success');
+      ctx.setAttribute('payment.transaction_id', result.id);
+      return result;
+    } catch (err) {
+      ctx.setAttribute('payment.status', 'failed');
+      ctx.setAttribute('payment.error', err.message);
+      throw err;
+    }
+  },
+);
 
-const processOrder = trace(
+const processOrder = withTracing({})(
   (ctx: TraceContext) =>
     async (userId: string, items: unknown[], total: number) => {
       ctx.setAttribute('order.user_id', userId);
@@ -295,9 +306,9 @@ The more semantic attributes you set, the more useful the AI becomes. Focus on:
 
 **Flags for filtering:**
 
-- `db.slow_query` — boolean for slow queries
-- `notification.sent` — boolean for delivery status
-- `report.expensive` — boolean for heavy operations
+- `db.slow_query`: boolean for slow queries
+- `notification.sent`: boolean for delivery status
+- `report.expensive`: boolean for heavy operations
 
 ## Supported Backends
 
@@ -333,4 +344,4 @@ For production, replace Jaeger with a managed backend:
 
 ## Examples
 
-- [`example-mcp-observability`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability) — Complete working demo: Express app → Jaeger → MCP server → Claude Desktop. Includes `generate-traffic.sh` script and 50+ example queries in `EXAMPLE_QUERIES.md`.
+- [`example-mcp-observability`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability): Complete working demo: Express app → Jaeger → MCP server → Claude Desktop. Includes `generate-traffic.sh` script and 50+ example queries in `EXAMPLE_QUERIES.md`.

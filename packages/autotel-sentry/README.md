@@ -42,7 +42,9 @@ linkSentryErrors(Sentry);
 Parses a Sentry DSN and returns the three values needed to wire Autotel to Sentry's OTLP ingestion endpoint.
 
 ```typescript
-const config = sentryOtlpConfig('https://<key>@o<org>.ingest.sentry.io/<project>');
+const config = sentryOtlpConfig(
+  'https://<key>@o<org>.ingest.sentry.io/<project>',
+);
 // config.dsn      — normalized DSN string (pass to Sentry.init)
 // config.endpoint — OTLP base URL (pass to Autotel init as `endpoint`)
 // config.headers  — auth headers (pass to Autotel init as `headers`)
@@ -58,9 +60,9 @@ Installs a global Sentry event processor that reads the active OTel span from `@
 
 ```typescript
 interface SentryOtlpConfig {
-  dsn: string;                       // Normalized DSN for Sentry.init
-  endpoint: string;                  // OTLP base endpoint (Autotel appends /v1/traces)
-  headers: Record<string, string>;   // Auth headers for OTLP requests
+  dsn: string; // Normalized DSN for Sentry.init
+  endpoint: string; // OTLP base endpoint (Autotel appends /v1/traces)
+  headers: Record<string, string>; // Auth headers for OTLP requests
 }
 ```
 
@@ -71,7 +73,9 @@ Minimal interface required by `linkSentryErrors()`. `@sentry/node` >= 10.47.0 sa
 ```typescript
 interface SentryLinkable {
   getGlobalScope(): {
-    addEventProcessor(fn: (event: Record<string, unknown>) => Record<string, unknown>): void;
+    addEventProcessor(
+      fn: (event: Record<string, unknown>) => Record<string, unknown>,
+    ): void;
   };
 }
 ```
@@ -80,10 +84,10 @@ interface SentryLinkable {
 
 Earlier versions of this package used a `SentrySpanProcessor` / `SentryPropagator` bridge that relied on deprecated Sentry Hub APIs. That approach is removed.
 
-Sentry SDK v8+ ships with its own OTel SDK internally. The recommended path is now to let Autotel own OTel and export traces directly to Sentry's OTLP endpoint — no custom span processor needed. Remove any references to `createSentrySpanProcessor`, `SentrySpanProcessor`, `SentryPropagator`, and `instrumenter: 'otel'` from your setup and replace them with the quick start above.
+Sentry SDK v8+ ships with its own OTel SDK internally. The recommended path is now to let Autotel own OTel and export traces directly to Sentry's OTLP endpoint. No custom span processor needed. Remove any references to `createSentrySpanProcessor`, `SentrySpanProcessor`, `SentryPropagator`, and `instrumenter: 'otel'` from your setup and replace them with the quick start above.
 
 ## References
 
-- [Sentry OTLP Integration spec](https://develop.sentry.dev/sdk/telemetry/traces/otlp/) — protocol this package targets
-- [Sentry OTLP docs](https://docs.sentry.io/concepts/otlp/) — Sentry-side OTLP configuration
-- [Autotel](https://github.com/jagreehal/autotel) — `init()` and `endpoint`/`headers` options
+- [Sentry OTLP Integration spec](https://develop.sentry.dev/sdk/telemetry/traces/otlp/): protocol this package targets
+- [Sentry OTLP docs](https://docs.sentry.io/concepts/otlp/): Sentry-side OTLP configuration
+- [Autotel](https://github.com/jagreehal/autotel): `init()` and `endpoint`/`headers` options

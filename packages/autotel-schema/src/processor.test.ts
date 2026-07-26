@@ -12,12 +12,18 @@ const contract: TelemetryContract = defineContract({
   version: '1.0.0',
   spans: {
     'checkout.charge': {
-      attributes: { 'payment.amount_cents': { type: 'number', required: true } },
+      attributes: {
+        'payment.amount_cents': { type: 'number', required: true },
+      },
     },
   },
 });
 
-function endSpan(p: SchemaValidationSpanProcessor, name: string, attributes: Record<string, unknown>) {
+function endSpan(
+  p: SchemaValidationSpanProcessor,
+  name: string,
+  attributes: Record<string, unknown>,
+) {
   p.onEnd({ name, attributes });
 }
 
@@ -37,13 +43,25 @@ describe('SchemaValidationSpanProcessor', () => {
   });
 
   it('throws on the first error in throw mode', () => {
-    const p = createSchemaValidationProcessor({ contract, mode: 'throw', enabledInProduction: true });
-    expect(() => endSpan(p, 'checkout.charge', {})).toThrowError(/contract violation/);
+    const p = createSchemaValidationProcessor({
+      contract,
+      mode: 'throw',
+      enabledInProduction: true,
+    });
+    expect(() => endSpan(p, 'checkout.charge', {})).toThrowError(
+      /contract violation/,
+    );
   });
 
   it('does not throw for a conformant span', () => {
-    const p = createSchemaValidationProcessor({ contract, mode: 'throw', enabledInProduction: true });
-    expect(() => endSpan(p, 'checkout.charge', { 'payment.amount_cents': 1 })).not.toThrow();
+    const p = createSchemaValidationProcessor({
+      contract,
+      mode: 'throw',
+      enabledInProduction: true,
+    });
+    expect(() =>
+      endSpan(p, 'checkout.charge', { 'payment.amount_cents': 1 }),
+    ).not.toThrow();
   });
 
   it('warns through the injected sink, deduplicated within the interval', () => {

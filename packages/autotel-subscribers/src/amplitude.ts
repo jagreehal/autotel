@@ -5,10 +5,10 @@
  *
  * @example
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { AmplitudeSubscriber } from 'autotel-subscribers/amplitude';
  *
- * const events = new Events('checkout', {
+ * const events = new Event('checkout', {
  *   subscribers: [
  *     new AmplitudeSubscriber({
  *       apiKey: process.env.AMPLITUDE_API_KEY!
@@ -125,7 +125,11 @@ export class AmplitudeSubscriber implements EventSubscriber {
     });
   }
 
-  async trackValue(name: string, value: number, attributes?: EventAttributes): Promise<void> {
+  async trackValue(
+    name: string,
+    value: number,
+    attributes?: EventAttributes,
+  ): Promise<void> {
     if (!this.enabled) return;
 
     await this.ensureInitialized();
@@ -147,4 +151,3 @@ export class AmplitudeSubscriber implements EventSubscriber {
     }
   }
 }
-

@@ -2,18 +2,18 @@
 
 ## Anti-Pattern Detection
 
-| Anti-Pattern | Severity | Fix |
-|---|---|---|
-| `console.log` for request context | High | Use `getRequestLogger(ctx)` with `log.set()` |
-| `console.error` in catch blocks | High | Use `log.error(err)` or `recordStructuredError(ctx, err)` |
-| `throw new Error('...')` without context | Medium | Use `createStructuredError({ message, why, fix })` |
-| `catch (e) { throw e }` (rethrow without recording) | Medium | Add `log.error(e)` before rethrowing |
-| `catch (e) { res.json({ error: e.message }) }` | Medium | Use `parseError(e)` for consistent shape |
-| Manual request ID generation | Low | Use `ctx.correlationId` from trace context |
-| Separate timing logic (`Date.now()` diffs) | Low | `trace()` handles duration automatically |
-| `JSON.stringify` for log output | High | Use `log.set()` - attributes flatten automatically |
-| No error context beyond message | Medium | Add `why`, `fix`, `link` fields |
-| Logging at start AND end of function | Low | `trace()` handles span lifecycle |
+| Anti-Pattern                                        | Severity | Fix                                                       |
+| --------------------------------------------------- | -------- | --------------------------------------------------------- |
+| `console.log` for request context                   | High     | Use `getRequestLogger(ctx)` with `log.set()`              |
+| `console.error` in catch blocks                     | High     | Use `log.error(err)` or `recordStructuredError(ctx, err)` |
+| `throw new Error('...')` without context            | Medium   | Use `createStructuredError({ message, why, fix })`        |
+| `catch (e) { throw e }` (rethrow without recording) | Medium   | Add `log.error(e)` before rethrowing                      |
+| `catch (e) { res.json({ error: e.message }) }`      | Medium   | Use `parseError(e)` for consistent shape                  |
+| Manual request ID generation                        | Low      | Use `ctx.correlationId` from trace context                |
+| Separate timing logic (`Date.now()` diffs)          | Low      | `trace()` handles duration automatically                  |
+| `JSON.stringify` for log output                     | High     | Use `log.set()` - attributes flatten automatically        |
+| No error context beyond message                     | Medium   | Add `why`, `fix`, `link` fields                           |
+| Logging at start AND end of function                | Low      | `trace()` handles span lifecycle                          |
 
 ## Review Questions
 
@@ -42,7 +42,7 @@ export async function createUser(data: CreateUserData) {
 // After
 import { trace } from 'autotel';
 
-export const createUser = trace(ctx => async (data: CreateUserData) => {
+export const createUser = trace((ctx) => async (data: CreateUserData) => {
   ctx.setAttributes({ 'user.email': data.email });
   const user = await db.users.create(data);
   ctx.setAttribute('user.id', user.id);
@@ -55,7 +55,7 @@ export const createUser = trace(ctx => async (data: CreateUserData) => {
 ```typescript
 import { trace, getRequestLogger } from 'autotel';
 
-export const createUser = trace(ctx => async (data: CreateUserData) => {
+export const createUser = trace((ctx) => async (data: CreateUserData) => {
   const log = getRequestLogger(ctx);
   log.set({ feature: 'signup', plan: data.plan });
 
@@ -71,7 +71,7 @@ export const createUser = trace(ctx => async (data: CreateUserData) => {
 ```typescript
 import { trace, getRequestLogger, createStructuredError } from 'autotel';
 
-export const createUser = trace(ctx => async (data: CreateUserData) => {
+export const createUser = trace((ctx) => async (data: CreateUserData) => {
   const log = getRequestLogger(ctx);
   log.set({ feature: 'signup', plan: data.plan });
 

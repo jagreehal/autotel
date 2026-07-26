@@ -22,7 +22,14 @@ export const test = base.extend({
   _otelTestSpan: otelTestSpanFixture as never,
 });
 
-export { expect, describe, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+export {
+  expect,
+  describe,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from 'vitest';
 
 // Re-export all autotel/testing utilities
 export {

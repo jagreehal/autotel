@@ -10,7 +10,17 @@
 
 import 'dotenv/config';
 import pino from 'pino';
-import { init, trace, span, Metric, track, shutdown, type TraceContext } from 'autotel';
+import {
+  init,
+  trace,
+  span,
+  Metric,
+  track,
+  shutdown,
+  type TraceContext,
+  withTracing,
+  getActiveTraceContext,
+} from 'autotel';
 
 // Create Pino logger first. Autotel's logger contract is Pino-style: object first, message second.
 const logger = pino({
@@ -31,7 +41,8 @@ init({
   service: 'example-pino-service',
   logger,
   debug: true,
-  endpoint: process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  endpoint:
+    process.env.OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
 });
 
 const metrics = new Metric('example-pino');
@@ -40,93 +51,105 @@ const metrics = new Metric('example-pino');
 // Example: Basic traced function with Pino logging (object first, message second)
 // ============================================================================
 
-export const createUser = trace((ctx) => async (name: string, email: string) => {
-  logger.info({ name, email }, 'Creating user');
+export const createUser = withTracing({})(
+  (ctx) => async (name: string, email: string) => {
+    logger.info({ name, email }, 'Creating user');
 
-  ctx.setAttribute('user.name', name);
-  ctx.setAttribute('user.email', email);
+    ctx.setAttribute('user.name', name);
+    ctx.setAttribute('user.email', email);
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-  metrics.trackEvent('user.created', { name, email });
-  track('user.signup', {
-    userId: `user-${Date.now()}`,
-    name,
-    email,
-    plan: 'free',
-  });
+    metrics.trackEvent('user.created', { name, email });
+    track('user.signup', {
+      userId: `user-${Date.now()}`,
+      name,
+      email,
+      plan: 'free',
+    });
 
-  const userId = `user-${Date.now()}`;
-  logger.info({ userId, name, email }, 'User created successfully');
+    const userId = `user-${Date.now()}`;
+    logger.info({ userId, name, email }, 'User created successfully');
 
-  return { id: userId, name, email };
-});
+    return { id: userId, name, email };
+  },
+);
 
 // ============================================================================
 // Example: Function with error handling
 // ============================================================================
 
-export const processPayment = trace((ctx: TraceContext) => async (amount: number, userId: string) => {
-  logger.info({ amount, userId }, 'Processing payment');
+export const processPayment = withTracing({})(
+  (ctx: TraceContext) => async (amount: number, userId: string) => {
+    logger.info({ amount, userId }, 'Processing payment');
 
-  ctx.setAttribute('payment.amount', amount);
-  ctx.setAttribute('payment.userId', userId);
+    ctx.setAttribute('payment.amount', amount);
+    ctx.setAttribute('payment.userId', userId);
 
-  await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
-  if (Math.random() > 0.7) {
-    const error = new Error('Payment processing failed');
-    ctx.setStatus({ code: 2, message: 'Payment failed' });
-    ctx.recordError(error);
-    logger.error({ err: error, amount, userId }, 'Payment processing failed');
-    throw error;
-  }
+    if (Math.random() > 0.7) {
+      const error = new Error('Payment processing failed');
+      ctx.setStatus({ code: 2, message: 'Payment failed' });
+      ctx.recordError(error);
+      logger.error({ err: error, amount, userId }, 'Payment processing failed');
+      throw error;
+    }
 
-  metrics.trackEvent('payment.processed', { amount, userId });
-  track('payment.completed', { amount, userId, currency: 'USD' });
+    metrics.trackEvent('payment.processed', { amount, userId });
+    track('payment.completed', { amount, userId, currency: 'USD' });
 
-  const transactionId = `tx-${Date.now()}`;
-  logger.info({ transactionId, amount, userId }, 'Payment processed successfully');
+    const transactionId = `tx-${Date.now()}`;
+    logger.info(
+      { transactionId, amount, userId },
+      'Payment processed successfully',
+    );
 
-  ctx.setStatus({ code: 1 });
-  return { transactionId, amount, userId };
-});
+    ctx.setStatus({ code: 1 });
+    return { transactionId, amount, userId };
+  },
+);
 
 // ============================================================================
 // Example: Nested traces
 // ============================================================================
 
-export const createOrder = trace((ctx: TraceContext) => async (userId: string, items: string[]) => {
-  logger.info({ userId, itemCount: items.length }, 'Creating order');
+export const createOrder = withTracing({})(
+  (ctx: TraceContext) => async (userId: string, items: string[]) => {
+    logger.info({ userId, itemCount: items.length }, 'Creating order');
 
-  ctx.setAttribute('order.userId', userId);
-  ctx.setAttribute('order.itemCount', items.length);
+    ctx.setAttribute('order.userId', userId);
+    ctx.setAttribute('order.itemCount', items.length);
 
-  const user = await createUser(`User-${userId}`, `user${userId}@example.com`);
-  logger.info({ user }, 'User created for order');
+    const user = await createUser(
+      `User-${userId}`,
+      `user${userId}@example.com`,
+    );
+    logger.info({ user }, 'User created for order');
 
-  const total = items.length * 10;
-  const payment = await processPayment(total, userId);
+    const total = items.length * 10;
+    const payment = await processPayment(total, userId);
 
-  metrics.trackEvent('order.created', {
-    userId,
-    itemCount: items.length,
-    total,
-  });
-  track('order.completed', {
-    orderId: payment.transactionId,
-    userId,
-    itemCount: items.length,
-    total,
-  });
+    metrics.trackEvent('order.created', {
+      userId,
+      itemCount: items.length,
+      total,
+    });
+    track('order.completed', {
+      orderId: payment.transactionId,
+      userId,
+      itemCount: items.length,
+      total,
+    });
 
-  logger.info(
-    { orderId: payment.transactionId, userId, items, total },
-    'Order created successfully',
-  );
+    logger.info(
+      { orderId: payment.transactionId, userId, items, total },
+      'Order created successfully',
+    );
 
-  return { orderId: payment.transactionId, userId, items, total };
-});
+    return { orderId: payment.transactionId, userId, items, total };
+  },
+);
 
 // ============================================================================
 // Main function to run examples
@@ -136,8 +159,12 @@ async function main() {
   logger.info('Starting autotel Pino example');
 
   try {
-    logger.info({}, 'TEST: trace() with nested span() - should create exactly 2 spans');
-    await trace('user-request-trace', async (ctx) => {
+    logger.info(
+      {},
+      'TEST: trace() with nested span() - should create exactly 2 spans',
+    );
+    await span('user-request-trace', async () => {
+      const ctx = getActiveTraceContext()!;
       ctx.setAttributes({
         'input.query': 'What is the capital of France?',
       });
@@ -161,8 +188,11 @@ async function main() {
       ctx.setAttributes({
         output: 'Successfully answered.',
       });
-    });
-    logger.info({}, 'TEST PASSED: exactly 2 spans (user-request-trace + llm-call) with same traceId');
+    })();
+    logger.info(
+      {},
+      'TEST PASSED: exactly 2 spans (user-request-trace + llm-call) with same traceId',
+    );
 
     logger.info({}, 'Example 1: Creating user');
     const user = await createUser('Alice', 'alice@example.com');

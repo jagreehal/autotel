@@ -43,14 +43,14 @@ surfaces spans carrying the `security.*` schema (see
 
 **CLI options:**
 
-- `-p, --port <port>` — Port (default: `4318`). If the port is taken, falls
+- `-p, --port <port>`: Port (default: `4318`). If the port is taken, falls
   forward to the next free port and prints a warning. When the original port is
   held by a **foreign** process (not another autotel-devtools), the warning
   explains that any OTLP exporter still pointed at the busy port is reaching
-  that process — point the exporter at the bound port, or free the original and
+  that process. Point the exporter at the bound port, or free the original and
   restart.
-- `-H, --host <host>` — Host (default: `127.0.0.1`)
-- `-t, --title <title>` — Dashboard title
+- `-H, --host <host>`: Host (default: `127.0.0.1`)
+- `-t, --title <title>`: Dashboard title
 
 ## Embedded Widget
 
@@ -71,7 +71,7 @@ For tighter integration, wire the exporter directly into `init()` so spans flow
 to devtools without going over HTTP:
 
 ```typescript
-import { init, trace } from 'autotel';
+import { init, trace, withTracing } from 'autotel';
 import { createDevtools } from 'autotel-devtools';
 
 const { exporter, close } = createDevtools({
@@ -85,7 +85,7 @@ init({
   spanProcessors: [exporter],
 });
 
-const checkout = trace((ctx) => async (req, res) => {
+const checkout = withTracing({})((ctx) => async (req, res) => {
   // spans appear in the devtools UI in real time
 });
 ```
@@ -94,8 +94,8 @@ Call `close()` on shutdown to release the port and WebSocket clients.
 
 ## GenAI runs
 
-When your app emits OpenTelemetry GenAI spans — for example spans with
-`gen_ai.provider.name` and `gen_ai.operation.name` — the **GenAI** tab turns
+When your app emits OpenTelemetry GenAI spans. For example spans with
+`gen_ai.provider.name` and `gen_ai.operation.name`. The **GenAI** tab turns
 them into a readable view of each LLM and agent run. It works with anything that
 follows the spec, including the Vercel AI SDK via
 `registerTelemetry(autotelTelemetry())` or `subscribeAiTelemetry()`,
@@ -104,23 +104,23 @@ OpenLLMetry.
 
 Per span you get the model, provider, parameters, token usage (with the cached
 and reasoning share called out), estimated cost, and the full conversation
-transcript — messages, tool calls and their results.
+transcript. Messages, tool calls and their results.
 
 On top of the per-span detail, three things make a multi-span run readable at a
 glance:
 
-- **Run summary strip** — a KPI row above the detail showing the run's total
+- **Run summary strip**: a KPI row above the detail showing the run's total
   cost, input→output tokens, reasoning tokens, model calls, tool executions,
   sub-agents, duration and errors. Cost is summed only from priced calls and
   marked with a trailing `+` when some calls are unpriced (a lower bound, never a
   fabricated total). Wrapper/aggregate spans and tool calls replayed across turns
   are de-duplicated, so counts and totals don't double-count.
-- **Explain run** — a guided, narrated walkthrough for demos. It steps through
+- **Explain run**: a guided, narrated walkthrough for demos. It steps through
   the run in order with plain-language narration of each step ("the model decides
   what to do", "a tool is real code the agent ran", "the model writes the
   answer"). Auto-play, step with the arrow keys / Space, Esc to exit; clicking a
   span jumps the tour to that step.
-- **Trace** — decomposes the selected run into a depth-indented tree of what
+- **Trace**: decomposes the selected run into a depth-indented tree of what
   happened inside it: each model call broken into its reasoning, the tools it
   called (with arguments and results) and the text it wrote, with nested
   sub-agents underneath. A **Timeline** view shows the same run as time-aligned
@@ -128,14 +128,14 @@ glance:
 
 ## Configuration
 
-| Variable                    | Default        | Description                  |
-| --------------------------- | -------------- | ---------------------------- |
-| `AUTOTEL_DEVTOOLS_PORT`     | `4318`         | Server port                  |
-| `AUTOTEL_DEVTOOLS_HOST`     | `127.0.0.1`    | Bind host                    |
-| `AUTOTEL_DEVTOOLS_TITLE`    | _unset_        | Dashboard title              |
-| `AUTOTEL_MAX_TRACE_COUNT`   | `100`          | Max traces kept in memory    |
-| `AUTOTEL_MAX_LOG_COUNT`     | `100`          | Max log records kept         |
-| `AUTOTEL_MAX_METRIC_COUNT`  | `100`          | Max metric data points kept  |
+| Variable                   | Default     | Description                 |
+| -------------------------- | ----------- | --------------------------- |
+| `AUTOTEL_DEVTOOLS_PORT`    | `4318`      | Server port                 |
+| `AUTOTEL_DEVTOOLS_HOST`    | `127.0.0.1` | Bind host                   |
+| `AUTOTEL_DEVTOOLS_TITLE`   | _unset_     | Dashboard title             |
+| `AUTOTEL_MAX_TRACE_COUNT`  | `100`       | Max traces kept in memory   |
+| `AUTOTEL_MAX_LOG_COUNT`    | `100`       | Max log records kept        |
+| `AUTOTEL_MAX_METRIC_COUNT` | `100`       | Max metric data points kept |
 
 Bump the limits when you need a longer scrollback during a development session.
 
@@ -143,17 +143,17 @@ Bump the limits when you need a longer scrollback during a development session.
 
 The standalone server exposes:
 
-| Path           | Method | Purpose                                  |
-| -------------- | ------ | ---------------------------------------- |
-| `/v1/traces`   | POST   | OTLP/HTTP traces ingest (JSON or protobuf) |
-| `/v1/traces`   | GET    | Read back received traces                |
-| `/v1/traces`   | DELETE | Clear all captured telemetry             |
-| `/v1/logs`     | POST   | OTLP/HTTP logs ingest (JSON or protobuf) |
-| `/v1/metrics`  | POST   | OTLP/HTTP metrics ingest (JSON or protobuf) |
-| `/`            | GET    | Full-page dashboard UI                   |
-| `/widget.js`   | GET    | Embeddable widget bundle                 |
-| `/healthz`     | GET    | Health + identity (`{ ok, service, version, clients }`) |
-| `/ws`          | WS     | WebSocket stream (live updates + replay) |
+| Path          | Method | Purpose                                                 |
+| ------------- | ------ | ------------------------------------------------------- |
+| `/v1/traces`  | POST   | OTLP/HTTP traces ingest (JSON or protobuf)              |
+| `/v1/traces`  | GET    | Read back received traces                               |
+| `/v1/traces`  | DELETE | Clear all captured telemetry                            |
+| `/v1/logs`    | POST   | OTLP/HTTP logs ingest (JSON or protobuf)                |
+| `/v1/metrics` | POST   | OTLP/HTTP metrics ingest (JSON or protobuf)             |
+| `/`           | GET    | Full-page dashboard UI                                  |
+| `/widget.js`  | GET    | Embeddable widget bundle                                |
+| `/healthz`    | GET    | Health + identity (`{ ok, service, version, clients }`) |
+| `/ws`         | WS     | WebSocket stream (live updates + replay)                |
 
 Every response carries an `x-autotel-devtools: <version>` header. Use it to
 confirm you are talking to autotel-devtools rather than another OTLP collector
@@ -186,6 +186,16 @@ const holder = await probePortHolder('127.0.0.1', 4318);
 `/healthz` `service` field. Use it in test setup scripts to verify the
 receiver is ready, or in tooling that needs to decide whether to start a new
 instance.
+
+## Use with autotel-mcp
+
+[`autotel-mcp`](/autotel/integrations/mcp/) also binds port 4318 by default,
+because it starts its own OTLP collector. Rather than run two collectors, let
+the agent read through devtools: start devtools on 4318 and run the MCP server
+with `AUTOTEL_BACKEND=devtools`. One receiver owns the port, the dashboard and
+the agent read the same traces. The
+[Run alongside autotel-devtools](/autotel/integrations/mcp/#run-alongside-autotel-devtools)
+recipe has the full setup and the traces-only caveat.
 
 ## Devtools vs. Terminal Viewer
 

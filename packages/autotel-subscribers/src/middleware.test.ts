@@ -8,7 +8,12 @@ import {
   withIdempotency,
   withRateLimit,
 } from './middleware';
-import type { EventSubscriber, EventAttributes, FunnelStatus, OutcomeStatus } from 'autotel/event-subscriber';
+import type {
+  EventSubscriber,
+  EventAttributes,
+  FunnelStatus,
+  OutcomeStatus,
+} from 'autotel/event-subscriber';
 
 class RecorderSubscriber implements EventSubscriber {
   readonly name = 'Recorder';
@@ -20,7 +25,10 @@ class RecorderSubscriber implements EventSubscriber {
   async trackFunnelStep(funnel: string, _step: FunnelStatus): Promise<void> {
     this.calls.push(funnel);
   }
-  async trackOutcome(operation: string, _outcome: OutcomeStatus): Promise<void> {
+  async trackOutcome(
+    operation: string,
+    _outcome: OutcomeStatus,
+  ): Promise<void> {
     this.calls.push(operation);
   }
   async trackValue(name: string): Promise<void> {

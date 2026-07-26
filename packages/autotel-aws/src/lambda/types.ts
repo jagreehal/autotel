@@ -9,10 +9,11 @@ import type { LambdaEvent, LambdaContext } from '../types';
  */
 export type LambdaHandler<TEvent = LambdaEvent, TResult = unknown> = (
   event: TEvent,
-  context: LambdaContext
+  context: LambdaContext,
 ) => Promise<TResult>;
 
 /**
  * Lambda trigger type
  */
-export type LambdaTrigger = 'http' | 'pubsub' | 'datasource' | 'timer' | 'other';
+export type LambdaTrigger =
+  'http' | 'pubsub' | 'datasource' | 'timer' | 'other';

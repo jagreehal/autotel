@@ -121,9 +121,11 @@ export class WebhookSubscriber implements EventSubscriber {
 
   private trackRequest(request: Promise<void>): void {
     this.pendingRequests.add(request);
-    void request.catch(() => {}).finally(() => {
-      this.pendingRequests.delete(request);
-    });
+    void request
+      .catch(() => {})
+      .finally(() => {
+        this.pendingRequests.delete(request);
+      });
   }
 
   async shutdown(): Promise<void> {

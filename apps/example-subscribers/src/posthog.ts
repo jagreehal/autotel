@@ -18,9 +18,8 @@ import { randomUUID } from 'node:crypto';
 import 'dotenv/config';
 import pino from 'pino';
 
-import { init, shutdown } from 'autotel';
+import { init, shutdown, span, getActiveTraceContext } from 'autotel';
 import { Event } from 'autotel/event';
-import { trace } from 'autotel/functional';
 import { PostHogSubscriber } from 'autotel-subscribers/posthog';
 
 const logger = pino({
@@ -41,7 +40,9 @@ const posthogHost = process.env.POSTHOG_HOST || 'https://us.i.posthog.com';
 const posthogEnvId = process.env.POSTHOG_ENV_ID || 'development';
 
 if (!posthogKey) {
-  logger.error('POSTHOG_KEY is required. Check apps/example-adapters/.env.example');
+  logger.error(
+    'POSTHOG_KEY is required. Check apps/example-adapters/.env.example',
+  );
   process.exit(1);
 }
 
@@ -96,7 +97,8 @@ async function runDemo(): Promise<void> {
   );
 
   for (let i = 0; i < 3; i++) {
-    await trace('posthog.demo.checkout', async (ctx) => {
+    await span('posthog.demo.checkout', async () => {
+      const ctx = getActiveTraceContext()!;
       const userId = `user_${randomUUID().slice(0, 6)}`;
       const order = createDemoOrder(userId);
 
@@ -159,7 +161,7 @@ async function runDemo(): Promise<void> {
         ...order,
         environmentId: posthogEnvId,
       });
-    });
+    })();
 
     await sleep(500);
   }

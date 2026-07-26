@@ -10,25 +10,27 @@
  */
 
 interface DocumentPiP {
-  requestWindow(opts?: { width?: number; height?: number }): Promise<Window>
+  requestWindow(opts?: { width?: number; height?: number }): Promise<Window>;
 }
 
 function pipApi(): DocumentPiP | null {
-  if (typeof window === 'undefined') return null
-  return (window as unknown as { documentPictureInPicture?: DocumentPiP })
-    .documentPictureInPicture ?? null
+  if (typeof window === 'undefined') return null;
+  return (
+    (window as unknown as { documentPictureInPicture?: DocumentPiP })
+      .documentPictureInPicture ?? null
+  );
 }
 
 export function isPipSupported(): boolean {
-  return pipApi() !== null
+  return pipApi() !== null;
 }
 
-let pipWindow: Window | null = null
-let placeholder: Comment | null = null
+let pipWindow: Window | null = null;
+let placeholder: Comment | null = null;
 
 export interface PipOptions {
-  width?: number
-  height?: number
+  width?: number;
+  height?: number;
 }
 
 /**
@@ -42,47 +44,47 @@ export async function openPip(
   onClose: () => void,
   { width = 720, height = 560 }: PipOptions = {},
 ): Promise<boolean> {
-  const api = pipApi()
-  if (!api || pipWindow) return false
+  const api = pipApi();
+  if (!api || pipWindow) return false;
 
-  const win = await api.requestWindow({ width, height })
-  pipWindow = win
-  win.document.title = 'autotel devtools'
+  const win = await api.requestWindow({ width, height });
+  pipWindow = win;
+  win.document.title = 'autotel devtools';
 
-  const reset = win.document.createElement('style')
+  const reset = win.document.createElement('style');
   reset.textContent =
-    'html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:transparent}'
-  win.document.head.appendChild(reset)
+    'html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:transparent}';
+  win.document.head.appendChild(reset);
 
-  placeholder = host.ownerDocument.createComment('autotel-pip-placeholder')
-  host.replaceWith(placeholder)
-  win.document.body.appendChild(host)
+  placeholder = host.ownerDocument.createComment('autotel-pip-placeholder');
+  host.replaceWith(placeholder);
+  win.document.body.appendChild(host);
 
-  win.addEventListener('pagehide', () => restore(onClose), { once: true })
-  return true
+  win.addEventListener('pagehide', () => restore(onClose), { once: true });
+  return true;
 }
 
 /** Reparent the host back to the page and close the PiP window. */
 export function closePip(onClose?: () => void): void {
-  if (!pipWindow) return
-  const win = pipWindow
-  restore(onClose)
+  if (!pipWindow) return;
+  const win = pipWindow;
+  restore(onClose);
   try {
-    win.close()
+    win.close();
   } catch {
     /* window already tearing down */
   }
 }
 
 function restore(onClose?: () => void): void {
-  const win = pipWindow
-  if (!win) return
-  pipWindow = null
-  const host = win.document.body.firstElementChild as HTMLElement | null
+  const win = pipWindow;
+  if (!win) return;
+  pipWindow = null;
+  const host = win.document.body.firstElementChild as HTMLElement | null;
   if (host) {
-    if (placeholder?.isConnected) placeholder.replaceWith(host)
-    else document.body.appendChild(host)
+    if (placeholder?.isConnected) placeholder.replaceWith(host);
+    else document.body.appendChild(host);
   }
-  placeholder = null
-  onClose?.()
+  placeholder = null;
+  onClose?.();
 }

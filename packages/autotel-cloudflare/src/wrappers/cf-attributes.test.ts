@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrument } from './instrument';
-import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
+import type { IncomingRequestCfProperties } from '@cloudflare/workers-types';
+
+const incomingRequest = (...args: ConstructorParameters<typeof Request>) =>
+  new Request(...args) as Request<unknown, IncomingRequestCfProperties>;
 
 describe('CF Attributes extraction via instrument()', () => {
   let mockTracer: any;
@@ -41,7 +45,9 @@ describe('CF Attributes extraction via instrument()', () => {
       forceFlush: vi.fn(async () => {}),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {
@@ -57,7 +63,7 @@ describe('CF Attributes extraction via instrument()', () => {
 
   it('should extract CF attributes when request has .cf object', async () => {
     const handler = {
-      async fetch(request: Request) {
+      async fetch(_request: Request) {
         return new Response('OK', { status: 200 });
       },
     };
@@ -66,7 +72,7 @@ describe('CF Attributes extraction via instrument()', () => {
       service: { name: 'test-worker' },
     });
 
-    const request = new Request('http://example.com/test');
+    const request = incomingRequest('http://example.com/test');
     // Attach .cf properties to the request (Cloudflare Workers runtime does this)
     Object.defineProperty(request, 'cf', {
       value: {
@@ -113,7 +119,7 @@ describe('CF Attributes extraction via instrument()', () => {
 
   it('should extract CF ray_id from cf-ray header', async () => {
     const handler = {
-      async fetch(request: Request) {
+      async fetch(_request: Request) {
         return new Response('OK', { status: 200 });
       },
     };
@@ -122,7 +128,7 @@ describe('CF Attributes extraction via instrument()', () => {
       service: { name: 'test-worker' },
     });
 
-    const request = new Request('http://example.com/test', {
+    const request = incomingRequest('http://example.com/test', {
       headers: {
         'cf-ray': '8a1b2c3d4e5f6-SJC',
       },
@@ -146,7 +152,7 @@ describe('CF Attributes extraction via instrument()', () => {
 
   it('should not include CF attributes when request.cf is undefined', async () => {
     const handler = {
-      async fetch(request: Request) {
+      async fetch(_request: Request) {
         return new Response('OK', { status: 200 });
       },
     };
@@ -156,7 +162,7 @@ describe('CF Attributes extraction via instrument()', () => {
     });
 
     // Standard request without .cf (local dev / Miniflare scenario)
-    const request = new Request('http://example.com/test');
+    const request = incomingRequest('http://example.com/test');
     const env = {} as any;
     const ctx = createMockCtx();
 
@@ -170,13 +176,15 @@ describe('CF Attributes extraction via instrument()', () => {
     expect(attrs['url.full']).toBe('http://example.com/test');
 
     // No cloudflare.* attributes should be present
-    const cfKeys = Object.keys(attrs).filter(k => k.startsWith('cloudflare.'));
+    const cfKeys = Object.keys(attrs).filter((k) =>
+      k.startsWith('cloudflare.'),
+    );
     expect(cfKeys).toHaveLength(0);
   });
 
   it('should correctly map all CF fields to cloudflare.* attribute names', async () => {
     const handler = {
-      async fetch(request: Request) {
+      async fetch(_request: Request) {
         return new Response('OK', { status: 200 });
       },
     };
@@ -185,7 +193,7 @@ describe('CF Attributes extraction via instrument()', () => {
       service: { name: 'test-worker' },
     });
 
-    const request = new Request('http://example.com/test', {
+    const request = incomingRequest('http://example.com/test', {
       headers: { 'cf-ray': 'abc123-LAX' },
     });
     Object.defineProperty(request, 'cf', {
@@ -233,7 +241,9 @@ describe('CF Attributes extraction via instrument()', () => {
       'cloudflare.client_tcp_rtt': ['clientTcpRtt', 10],
     };
 
-    for (const [attrKey, [, expectedValue]] of Object.entries(expectedMappings)) {
+    for (const [attrKey, [, expectedValue]] of Object.entries(
+      expectedMappings,
+    )) {
       expect(attrs[attrKey]).toBe(expectedValue);
     }
   });
@@ -249,7 +259,7 @@ describe('CF Attributes extraction via instrument()', () => {
       service: { name: 'test-worker' },
     });
 
-    const request = new Request('http://example.com/test');
+    const request = incomingRequest('http://example.com/test');
     Object.defineProperty(request, 'cf', {
       value: {
         latitude: 0,
@@ -290,7 +300,7 @@ describe('CF Attributes extraction via instrument()', () => {
       },
     });
 
-    const request = new Request('http://example.com/health');
+    const request = incomingRequest('http://example.com/health');
     const env = {} as any;
     const ctx = createMockCtx();
 
@@ -320,7 +330,7 @@ describe('CF Attributes extraction via instrument()', () => {
       },
     });
 
-    const request = new Request('http://example.com/api/auth/login');
+    const request = incomingRequest('http://example.com/api/auth/login');
     const env = {} as any;
     const ctx = createMockCtx();
 

@@ -1,5 +1,10 @@
 import { hashIdentifier } from 'autotel-audit';
-import { resolveContext, resolveContextSafe, toAttributeValue, type AgentContext } from './context.js';
+import {
+  resolveContext,
+  resolveContextSafe,
+  toAttributeValue,
+  type AgentContext,
+} from './context.js';
 
 /** Canonical agent security attribute keys (Google SAIF / human-control aligned). */
 export const AGENT_SECURITY_ATTR = {
@@ -29,11 +34,7 @@ export type AgentInputProvenance =
   | 'external_untrusted';
 
 export type AgentActionRiskClass =
-  | 'read'
-  | 'write'
-  | 'destructive'
-  | 'financial'
-  | 'exfiltration_capable';
+  'read' | 'write' | 'destructive' | 'financial' | 'exfiltration_capable';
 
 export type AgentConsentOutcome = 'approved' | 'denied' | 'timeout' | 'revoked';
 
@@ -119,8 +120,10 @@ function setSecurityAttrs(
   attrs: Record<string, unknown>,
 ): void {
   const traceCtx = resolveContext(ctx);
-  const mapped: Record<string, string | number | boolean | string[] | number[] | boolean[]> =
-    {};
+  const mapped: Record<
+    string,
+    string | number | boolean | string[] | number[] | boolean[]
+  > = {};
   for (const [key, value] of Object.entries(attrs)) {
     const attr = toAttributeValue(value);
     if (attr !== undefined) {
@@ -159,22 +162,31 @@ export function recordControllerId(input: RecordControllerInput): void {
 }
 
 export function recordInputProvenance(input: RecordInputProvenanceInput): void {
-  setSecurityAttr(input.ctx, AGENT_SECURITY_ATTR.inputProvenance, input.provenance);
+  setSecurityAttr(
+    input.ctx,
+    AGENT_SECURITY_ATTR.inputProvenance,
+    input.provenance,
+  );
 }
 
 export function recordHumanApproval(input: RecordHumanApprovalInput): void {
   const attrs: Record<string, unknown> = {
     [AGENT_SECURITY_ATTR.consentRequired]: input.required ?? true,
-    [AGENT_SECURITY_ATTR.consentOutcome]: input.approved ? 'approved' : 'denied',
+    [AGENT_SECURITY_ATTR.consentOutcome]: input.approved
+      ? 'approved'
+      : 'denied',
     'tool.call.id': input.toolCallId,
   };
   if (input.toolName) {
     attrs['tool.name'] = input.toolName;
   }
   if (input.controllerId) {
-    attrs[AGENT_SECURITY_ATTR.controllerId] = hashIdentifier(input.controllerId, {
-      salt: input.hashSalt,
-    });
+    attrs[AGENT_SECURITY_ATTR.controllerId] = hashIdentifier(
+      input.controllerId,
+      {
+        salt: input.hashSalt,
+      },
+    );
   }
   setSecurityAttrs(input.ctx, attrs);
 }
@@ -228,7 +240,9 @@ export function recordRenderOutput(input: RecordRenderOutputInput): void {
 }
 
 /** Best-effort variant — no throw when trace context is missing. */
-export function tryRecordHumanApproval(input: RecordHumanApprovalInput): boolean {
+export function tryRecordHumanApproval(
+  input: RecordHumanApprovalInput,
+): boolean {
   const ctx = resolveContextSafe(input.ctx);
   if (!ctx) return false;
   recordHumanApproval({ ...input, ctx });

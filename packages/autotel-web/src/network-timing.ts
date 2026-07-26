@@ -21,7 +21,7 @@ export interface NetworkTimingObserverConfig {
 /** Map PerformanceResourceTiming to event attributes. timeOrigin is performance.timeOrigin. */
 function timingToAttributes(
   entry: PerformanceResourceTiming,
-  timeOrigin: number
+  timeOrigin: number,
 ): Record<string, number> {
   const attrs: Record<string, number> = {};
 
@@ -56,7 +56,7 @@ function timingToAttributes(
 /** Optional: add resource size/status from Resource Timing when useful */
 function addResourceAttributes(
   entry: PerformanceResourceTiming,
-  attrs: Record<string, number | string>
+  attrs: Record<string, number | string>,
 ): void {
   if (entry.transferSize > 0) {
     attrs['http.response.size'] = entry.transferSize;
@@ -64,13 +64,17 @@ function addResourceAttributes(
   if (entry.encodedBodySize > 0) {
     attrs['http.response.body.size'] = entry.encodedBodySize;
   }
-  const status = (entry as PerformanceResourceTiming & { responseStatus?: number }).responseStatus;
+  const status = (
+    entry as PerformanceResourceTiming & { responseStatus?: number }
+  ).responseStatus;
   if (status != null && status > 0) {
     attrs['http.response.status_code'] = status;
   }
 }
 
-export function setupNetworkTimingObserver(config: NetworkTimingObserverConfig): void {
+export function setupNetworkTimingObserver(
+  config: NetworkTimingObserverConfig,
+): void {
   if (typeof window === 'undefined' || !window.PerformanceObserver) {
     return;
   }
@@ -86,7 +90,10 @@ export function setupNetworkTimingObserver(config: NetworkTimingObserverConfig):
         if (initiator !== 'fetch' && initiator !== 'xmlhttprequest') continue;
         if (resource.duration <= 0) continue;
 
-        const attrs: Record<string, number | string> = timingToAttributes(resource, timeOrigin);
+        const attrs: Record<string, number | string> = timingToAttributes(
+          resource,
+          timeOrigin,
+        );
         addResourceAttributes(resource, attrs);
 
         // Emit as span event: attach to active span when available (same trace as HTTP span)
@@ -94,7 +101,10 @@ export function setupNetworkTimingObserver(config: NetworkTimingObserverConfig):
         if (activeSpan) {
           activeSpan.addEvent(EVENT_NAME, attrs);
         } else if (config.debug) {
-          console.debug('[autotel-web] network_timing: no active span for', resource.name);
+          console.debug(
+            '[autotel-web] network_timing: no active span for',
+            resource.name,
+          );
         }
       }
     });

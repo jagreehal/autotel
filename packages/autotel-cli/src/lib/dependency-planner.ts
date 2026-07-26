@@ -43,7 +43,10 @@ export function addPresetToPlan(plan: DependencyPlan, preset: Preset): void {
 /**
  * Add multiple presets to dependency plan
  */
-export function addPresetsToPlan(plan: DependencyPlan, presets: Preset[]): void {
+export function addPresetsToPlan(
+  plan: DependencyPlan,
+  presets: Preset[],
+): void {
   for (const preset of presets) {
     addPresetToPlan(plan, preset);
   }
@@ -75,7 +78,7 @@ export function addCorePackages(plan: DependencyPlan): void {
  */
 export function addAutoInstrumentationPackages(
   plan: DependencyPlan,
-  selection: 'all' | 'none' | string[]
+  selection: 'all' | 'none' | string[],
 ): void {
   if (selection === 'none') {
     return;
@@ -117,7 +120,7 @@ export function buildDependencyPlan(options: {
  * Combine package requirements
  */
 export function combinePackageRequirements(
-  requirements: PackageRequirements[]
+  requirements: PackageRequirements[],
 ): PackageRequirements {
   const combined: PackageRequirements = {
     required: [],

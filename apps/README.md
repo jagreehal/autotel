@@ -11,6 +11,7 @@ Simple working examples demonstrating autotel functionality.
 ## Setup
 
 1. **Build the library:**
+
    ```bash
    # From repo root
    pnpm install
@@ -19,13 +20,15 @@ Simple working examples demonstrating autotel functionality.
 
 2. **Configure OTLP endpoint:**
    Create a `.env` file in each example directory with your Grafana Cloud OTLP endpoint:
+
    ```bash
    cd apps/example-basic
    # Create .env file
    echo "OTLP_ENDPOINT=https://otlp-gateway-prod-us-central-0.grafana.net/otlp" > .env
    ```
-   
+
    Or use a local OTLP collector:
+
    ```bash
    echo "OTLP_ENDPOINT=http://localhost:4318" > .env
    ```
@@ -44,6 +47,7 @@ pnpm start:canonical # Canonical log lines (one wide event per request)
 ```
 
 **What it does:**
+
 - Shows the difference between regular logging and canonical log lines
 - Demonstrates wide events with high-cardinality, high-dimensionality data
 - Shows how canonical log lines enable structured queries instead of string search
@@ -73,6 +77,7 @@ python3 -m http.server 8000
 Then open http://localhost:8000 and check DevTools Network tab for `traceparent` headers!
 
 **What it does:**
+
 - Demonstrates `init()` for browser SDK
 - Shows automatic `traceparent` header injection on fetch/XHR
 - Displays trace IDs in the browser
@@ -93,6 +98,7 @@ pnpm start
 ```
 
 **What it does:**
+
 - Creates traced functions with `trace()`
 - Tracks business metrics
 - Sends events events
@@ -123,12 +129,14 @@ pnpm start
 ```
 
 Then visit:
+
 - `http://localhost:3000/health` - Health check
 - `http://localhost:3000/users/user-123` - Fetch user
 - `http://localhost:3000/users/user-123/orders` - Fetch orders
 - `http://localhost:3000/error` - Error example
 
 **What it does:**
+
 - Automatic HTTP request tracing
 - Manual database query tracing
 - Error tracking
@@ -145,12 +153,14 @@ pnpm start
 ```
 
 **What it does:**
+
 - Real-time span streaming to terminal dashboard
 - Interactive navigation with keyboard controls
 - Error filtering and live statistics
 - Demonstrates nested spans and error tracking
 
 **Controls:**
+
 - ↑/↓: Navigate spans
 - `p`: Pause/resume
 - `e`: Toggle error-only filter
@@ -171,6 +181,7 @@ pnpm start:rag          # RAG pipeline
 ```
 
 **What it does:**
+
 - Multi-agent orchestration (Triage → Specialist → QA)
 - RAG pipeline (Embeddings → Search → Generate)
 - Correlation ID propagation across agents
@@ -187,7 +198,7 @@ pnpm start:rag          # RAG pipeline
 
 #### Langfuse + autotel-devtools
 
-**`example-langfuse`** - Instrument once with `autotel-genai` and fan the same canonical `gen_ai.*` spans to [Langfuse](https://langfuse.com), [autotel-devtools](../packages/autotel-devtools), and your console — using autotel's native OTLP `destinations`, with **no `@langfuse/otel` and no `@opentelemetry/*` exporter packages**. Langfuse is a destination, not a span source; the semconv is the integration. See [example-langfuse/README.md](./example-langfuse/README.md).
+**`example-langfuse`** - Instrument once with `autotel-genai` and fan the same canonical `gen_ai.*` spans to [Langfuse](https://langfuse.com), [autotel-devtools](../packages/autotel-devtools), and your console. Using autotel's native OTLP `destinations`, with **no `@langfuse/otel` and no `@opentelemetry/*` exporter packages**. Langfuse is a destination, not a span source; the semconv is the integration. See [example-langfuse/README.md](./example-langfuse/README.md).
 
 ## Verifying in Grafana
 
@@ -203,12 +214,15 @@ pnpm start:rag          # RAG pipeline
 ### No traces appearing in Grafana
 
 1. **Check OTLP endpoint:**
+
    ```bash
    echo $OTLP_ENDPOINT
    ```
+
    Should match your Grafana Cloud endpoint.
 
 2. **Check network connectivity:**
+
    ```bash
    curl -v $OTLP_ENDPOINT/v1/traces
    ```
@@ -216,19 +230,19 @@ pnpm start:rag          # RAG pipeline
 3. **Enable debug logging:**
    ```typescript
    import { createLogger } from 'autotel/logger';
-   
+
    init({
      service: 'my-app',
-     logger: createLogger('my-app', { level: 'debug' })
+     logger: createLogger('my-app', { level: 'debug' }),
    });
    ```
 
 ### Environment variables not loading
 
 Make sure `.env` file exists in the app directory:
+
 ```bash
 cd apps/example-basic
 cp .env.example .env
 # Edit .env with your OTLP_ENDPOINT
 ```
-

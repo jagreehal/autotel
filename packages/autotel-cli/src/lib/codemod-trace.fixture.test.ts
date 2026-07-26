@@ -7,7 +7,11 @@ import { transformFile } from './codemod-trace';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, '../__fixtures__/codemod-trace');
 
-function loadFixture(category: string, name: string, type: 'before' | 'after'): string {
+function loadFixture(
+  category: string,
+  name: string,
+  type: 'before' | 'after',
+): string {
   const filePath = path.join(FIXTURES_DIR, category, type, name);
   return fs.readFileSync(filePath, 'utf8');
 }
@@ -46,12 +50,18 @@ describe('codemod-trace fixtures', () => {
     });
 
     it('skips already wrapped functions', () => {
-      const before = loadFixture('skip-scenarios', 'already-wrapped.ts', 'before');
+      const before = loadFixture(
+        'skip-scenarios',
+        'already-wrapped.ts',
+        'before',
+      );
       const result = transformFile(before, '/fake/src/already-wrapped.ts', {});
 
       expect(result.changed).toBe(false);
       expect(result.wrappedCount).toBe(0);
-      expect(result.skipped.some((s) => s.reason === 'already wrapped')).toBe(true);
+      expect(result.skipped.some((s) => s.reason === 'already wrapped')).toBe(
+        true,
+      );
     });
 
     it('skips constructors', () => {
@@ -63,7 +73,11 @@ describe('codemod-trace fixtures', () => {
     });
 
     it('skips generator methods', () => {
-      const before = loadFixture('skip-scenarios', 'generator-method.ts', 'before');
+      const before = loadFixture(
+        'skip-scenarios',
+        'generator-method.ts',
+        'before',
+      );
       const result = transformFile(before, '/fake/src/generator-method.ts', {});
 
       expect(result.changed).toBe(false);
@@ -71,7 +85,11 @@ describe('codemod-trace fixtures', () => {
     });
 
     it('skips getters and setters', () => {
-      const before = loadFixture('skip-scenarios', 'getter-setter.ts', 'before');
+      const before = loadFixture(
+        'skip-scenarios',
+        'getter-setter.ts',
+        'before',
+      );
       const result = transformFile(before, '/fake/src/getter-setter.ts', {});
 
       expect(result.changed).toBe(false);
@@ -79,23 +97,45 @@ describe('codemod-trace fixtures', () => {
     });
 
     it('skips methods with super calls', () => {
-      const before = loadFixture('skip-scenarios', 'method-with-super.ts', 'before');
-      const result = transformFile(before, '/fake/src/method-with-super.ts', {});
+      const before = loadFixture(
+        'skip-scenarios',
+        'method-with-super.ts',
+        'before',
+      );
+      const result = transformFile(
+        before,
+        '/fake/src/method-with-super.ts',
+        {},
+      );
 
       // Base class method gets wrapped, derived class with super is skipped
       expect(result.skipped.some((s) => s.reason === 'super')).toBe(true);
     });
 
     it('skips anonymous default exports', () => {
-      const before = loadFixture('skip-scenarios', 'anonymous-default.ts', 'before');
-      const result = transformFile(before, '/fake/src/anonymous-default.ts', {});
+      const before = loadFixture(
+        'skip-scenarios',
+        'anonymous-default.ts',
+        'before',
+      );
+      const result = transformFile(
+        before,
+        '/fake/src/anonymous-default.ts',
+        {},
+      );
 
       expect(result.changed).toBe(false);
-      expect(result.skipped.some((s) => s.reason === 'anonymous default export')).toBe(true);
+      expect(
+        result.skipped.some((s) => s.reason === 'anonymous default export'),
+      ).toBe(true);
     });
 
     it('handles mixed wrap/skip scenarios', () => {
-      const before = loadFixture('skip-scenarios', 'mixed-wrap-skip.ts', 'before');
+      const before = loadFixture(
+        'skip-scenarios',
+        'mixed-wrap-skip.ts',
+        'before',
+      );
       const result = transformFile(before, '/fake/src/mixed-wrap-skip.ts', {});
 
       // Some functions wrapped, some skipped
@@ -159,7 +199,11 @@ describe('codemod-trace fixtures', () => {
 
     it('preserves JSX syntax in function components', () => {
       const before = loadFixture('jsx', 'component-function.tsx', 'before');
-      const result = transformFile(before, '/fake/src/component-function.tsx', {});
+      const result = transformFile(
+        before,
+        '/fake/src/component-function.tsx',
+        {},
+      );
 
       expect(result.changed).toBe(true);
       expect(result.modified).toContain('<button');
@@ -171,34 +215,64 @@ describe('codemod-trace fixtures', () => {
     it('adds trace import when none exists', () => {
       const before = loadFixture('imports', 'no-existing-import.ts', 'before');
       const expected = loadFixture('imports', 'no-existing-import.ts', 'after');
-      const result = transformFile(before, '/fake/src/no-existing-import.ts', {});
+      const result = transformFile(
+        before,
+        '/fake/src/no-existing-import.ts',
+        {},
+      );
 
       expect(result.changed).toBe(true);
-      expect(result.modified).toContain("import { trace } from");
+      expect(result.modified).toContain('import { trace } from');
       expect(result.modified.trim()).toBe(expected.trim());
     });
 
     it('does not duplicate existing trace import', () => {
-      const before = loadFixture('imports', 'existing-trace-import.ts', 'before');
-      const expected = loadFixture('imports', 'existing-trace-import.ts', 'after');
-      const result = transformFile(before, '/fake/src/existing-trace-import.ts', {});
+      const before = loadFixture(
+        'imports',
+        'existing-trace-import.ts',
+        'before',
+      );
+      const expected = loadFixture(
+        'imports',
+        'existing-trace-import.ts',
+        'after',
+      );
+      const result = transformFile(
+        before,
+        '/fake/src/existing-trace-import.ts',
+        {},
+      );
 
       expect(result.changed).toBe(true);
       // Count occurrences of trace import - should only be one
-      const traceImportMatches = result.modified.match(/import.*trace.*from.*autotel/g);
+      const traceImportMatches = result.modified.match(
+        /import.*trace.*from.*autotel/g,
+      );
       expect(traceImportMatches?.length).toBe(1);
       expect(result.modified.trim()).toBe(expected.trim());
     });
 
     it('adds trace to existing autotel import', () => {
-      const before = loadFixture('imports', 'existing-other-import.ts', 'before');
-      const expected = loadFixture('imports', 'existing-other-import.ts', 'after');
-      const result = transformFile(before, '/fake/src/existing-other-import.ts', {});
+      const before = loadFixture(
+        'imports',
+        'existing-other-import.ts',
+        'before',
+      );
+      const expected = loadFixture(
+        'imports',
+        'existing-other-import.ts',
+        'after',
+      );
+      const result = transformFile(
+        before,
+        '/fake/src/existing-other-import.ts',
+        {},
+      );
 
       expect(result.changed).toBe(true);
       // Should have trace import (added) and init import (original)
-      expect(result.modified).toContain("import { trace }");
-      expect(result.modified).toContain("import { init }");
+      expect(result.modified).toContain('import { trace }');
+      expect(result.modified).toContain('import { init }');
       expect(result.modified.trim()).toBe(expected.trim());
     });
   });
@@ -214,7 +288,9 @@ describe('codemod-trace fixtures', () => {
 
     it('applies {name} pattern', () => {
       const before = loadFixture('name-patterns', 'basic.ts', 'before');
-      const result = transformFile(before, '/fake/src/basic.ts', { namePattern: '{name}' });
+      const result = transformFile(before, '/fake/src/basic.ts', {
+        namePattern: '{name}',
+      });
 
       expect(result.modified).toContain("trace('createUser'");
       expect(result.modified).toContain("trace('updateUser'");
@@ -222,7 +298,9 @@ describe('codemod-trace fixtures', () => {
 
     it('applies {file}.{name} pattern', () => {
       const before = loadFixture('name-patterns', 'basic.ts', 'before');
-      const result = transformFile(before, '/fake/src/basic.ts', { namePattern: '{file}.{name}' });
+      const result = transformFile(before, '/fake/src/basic.ts', {
+        namePattern: '{file}.{name}',
+      });
 
       expect(result.modified).toContain("trace('basic.createUser'");
       expect(result.modified).toContain("trace('basic.updateUser'");
@@ -233,10 +311,16 @@ describe('codemod-trace fixtures', () => {
       // Use a path that's relative to cwd for predictable output
       const cwd = process.cwd();
       const filePath = path.join(cwd, 'src/users/basic.ts');
-      const result = transformFile(before, filePath, { namePattern: '{path}:{name}' });
+      const result = transformFile(before, filePath, {
+        namePattern: '{path}:{name}',
+      });
 
-      expect(result.modified).toContain("trace('src/users/basic.ts:createUser'");
-      expect(result.modified).toContain("trace('src/users/basic.ts:updateUser'");
+      expect(result.modified).toContain(
+        "trace('src/users/basic.ts:createUser'",
+      );
+      expect(result.modified).toContain(
+        "trace('src/users/basic.ts:updateUser'",
+      );
     });
   });
 
@@ -246,10 +330,16 @@ describe('codemod-trace fixtures', () => {
 function _internal() { return 1; }
 function publicFn() { return 2; }
 `;
-      const result = transformFile(input, '/fake/src/test.ts', { skip: [/^_/] });
+      const result = transformFile(input, '/fake/src/test.ts', {
+        skip: [/^_/],
+      });
 
       expect(result.wrappedCount).toBe(1);
-      expect(result.skipped.some((s) => s.name === '_internal' && s.reason === 'name match')).toBe(true);
+      expect(
+        result.skipped.some(
+          (s) => s.name === '_internal' && s.reason === 'name match',
+        ),
+      ).toBe(true);
       expect(result.modified).toContain("trace('publicFn'");
       expect(result.modified).not.toContain("trace('_internal'");
     });
@@ -260,10 +350,14 @@ function _internal() { return 1; }
 function helperFn() { return 2; }
 function publicFn() { return 3; }
 `;
-      const result = transformFile(input, '/fake/src/test.ts', { skip: [/^_/, /helper/] });
+      const result = transformFile(input, '/fake/src/test.ts', {
+        skip: [/^_/, /helper/],
+      });
 
       expect(result.wrappedCount).toBe(1);
-      expect(result.skipped.filter((s) => s.reason === 'name match').length).toBe(2);
+      expect(
+        result.skipped.filter((s) => s.reason === 'name match').length,
+      ).toBe(2);
     });
   });
 
@@ -280,12 +374,20 @@ function publicFn() { return 3; }
     });
 
     it('transforms plain JS function declarations', () => {
-      const before = loadFixture('javascript', 'function-declaration.js', 'before');
-      const result = transformFile(before, '/fake/src/function-declaration.js', {});
+      const before = loadFixture(
+        'javascript',
+        'function-declaration.js',
+        'before',
+      );
+      const result = transformFile(
+        before,
+        '/fake/src/function-declaration.js',
+        {},
+      );
 
       expect(result.changed).toBe(true);
       expect(result.modified).toContain("trace('createUser'");
-      expect(result.modified).toContain("import { trace } from");
+      expect(result.modified).toContain('import { trace } from');
     });
 
     it('transforms JS arrow functions', () => {

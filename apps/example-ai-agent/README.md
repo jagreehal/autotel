@@ -9,11 +9,13 @@ Demonstrates instrumentation patterns for AI/LLM applications using Autotel.
 **Best for:** Learning instrumentation patterns without needing API keys
 
 Demonstrates a three-agent escalation system using **simulated LLM calls**:
+
 - **Triage Agent**: Analyzes requests and creates plans
 - **Specialist Agent**: Executes detailed analysis
 - **QA Agent**: Reviews and validates output
 
 **Key Patterns:**
+
 - Multi-step workflow orchestration
 - Correlation ID propagation across agents
 - Agent handoff tracking
@@ -21,6 +23,7 @@ Demonstrates a three-agent escalation system using **simulated LLM calls**:
 - Conditional workflow paths
 
 **Run:**
+
 ```bash
 pnpm start:multi-agent
 ```
@@ -32,12 +35,14 @@ pnpm start:multi-agent
 **Best for:** Production patterns with real LLM instrumentation
 
 The **recommended approach** showing OpenLLMetry + autotel + @openai/agents integration:
+
 - **@openai/agents**: Official OpenAI framework for multi-agent orchestration and handoffs
 - **OpenLLMetry**: Automatic instrumentation of OpenAI SDK calls (prompts, tokens, completions)
 - **autotel trace()**: Manual instrumentation for workflow orchestration and business metrics
 - **Perfect integration**: All three layers appear in the same trace with shared correlation IDs
 
 **Prerequisites:**
+
 ```bash
 # Required: Ollama running locally with gpt-oss:20b model
 ollama pull gpt-oss:20b
@@ -48,17 +53,20 @@ export OTLP_ENDPOINT=http://localhost:4318
 ```
 
 **Note:** This example uses Ollama's OpenAI-compatible API endpoint (`http://localhost:11434/v1`), which allows:
+
 - @openai/agents framework to work with local models (requires `setOpenAIAPI('chat_completions')`)
 - OpenLLMetry to automatically instrument the LLM calls as if they were OpenAI API calls
 
 **Important:** Ollama only supports the Chat Completions API, not the Responses API. The example configures this with `setOpenAIAPI('chat_completions')`.
 
 **Run:**
+
 ```bash
 pnpm start:multi-agent-openllmetry
 ```
 
 **What you'll observe:**
+
 - **4 spans total** (all share the same traceId):
   - `workflow.multi_agent_escalation` - Root span from autotel `trace()`
   - `openai.chat` (×2) - LLM call spans auto-created by OpenLLMetry (one per agent)
@@ -68,26 +76,29 @@ pnpm start:multi-agent-openllmetry
 - Console output shows spans when using `ConsoleSpanExporter` (default in example)
 
 **Key Differences from Simulated Version:**
-| Aspect | Simulated | Real (OpenLLMetry) |
-|--------|-----------|-------------------|
-| **LLM Calls** | `simulateLLMCall()` | OpenAI SDK via @openai/agents |
-| **Setup** | Not required | Ollama + gpt-oss:20b model |
-| **Agent Framework** | Manual implementation | @openai/agents v0.3.2 |
-| **LLM Instrumentation** | Manual attributes only | Automatic via OpenLLMetry |
-| **Prompts/Completions** | Not captured | Fully captured by OpenLLMetry |
-| **Token Usage** | Simulated | Real token counts from model |
-| **Cost** | Free | Free (runs locally) |
-| **Use Case** | Learning, testing | Production patterns |
+
+| Aspect                  | Simulated              | Real (OpenLLMetry)            |
+| ----------------------- | ---------------------- | ----------------------------- |
+| **LLM Calls**           | `simulateLLMCall()`    | OpenAI SDK via @openai/agents |
+| **Setup**               | Not required           | Ollama + gpt-oss:20b model    |
+| **Agent Framework**     | Manual implementation  | @openai/agents v0.3.2         |
+| **LLM Instrumentation** | Manual attributes only | Automatic via OpenLLMetry     |
+| **Prompts/Completions** | Not captured           | Fully captured by OpenLLMetry |
+| **Token Usage**         | Simulated              | Real token counts from model  |
+| **Cost**                | Free                   | Free (runs locally)           |
+| **Use Case**            | Learning, testing      | Production patterns           |
 
 ### 3. RAG Pipeline (`src/rag-pipeline.ts`)
 
 Demonstrates a complete Retrieval-Augmented Generation pipeline:
+
 - **Embeddings**: Query vectorization
 - **Search**: Vector database retrieval
 - **Context Assembly**: Combining retrieved chunks
 - **Generation**: LLM response with context
 
 **Key Patterns:**
+
 - Pipeline stage tracking
 - Vector search observability
 - Context assembly metrics
@@ -95,6 +106,7 @@ Demonstrates a complete Retrieval-Augmented Generation pipeline:
 - Source attribution
 
 **Run:**
+
 ```bash
 pnpm start:rag
 ```
@@ -154,24 +166,26 @@ import { init } from 'autotel';
 // Console-only mode (no backend needed)
 init({
   service: 'my-app',
-  debug: true  // Outputs spans to console
+  debug: true, // Outputs spans to console
 });
 
 // Later: add endpoint for console + backend
 init({
   service: 'my-app',
   debug: true,
-  endpoint: 'https://otlp.datadoghq.com'  // Now sends to both
+  endpoint: 'https://otlp.datadoghq.com', // Now sends to both
 });
 ```
 
 **How it works:**
+
 - `debug: true` - Print spans to console AND send to backend (if endpoint configured)
   - No endpoint = console-only (perfect for local development)
   - With endpoint = console + backend (verify before choosing provider)
 - No debug flag - Send to backend only (default)
 
 This is especially useful for:
+
 - Testing AI workflows locally without Grafana/Datadog/etc.
 - Debugging LLM instrumentation to see what OpenLLMetry captures
 - Verifying traces before deploying to production
@@ -179,6 +193,7 @@ This is especially useful for:
 ## Understanding the Output
 
 Each example shows:
+
 1. **Console output**: Human-readable workflow progress
 2. **Telemetry**: Sent to OTLP endpoint (view in your observability backend)
 3. **Correlation IDs**: Track requests across all operations
@@ -186,11 +201,13 @@ Each example shows:
 ### Correlation IDs
 
 Every workflow generates a correlation ID automatically:
+
 ```
 Correlation ID: 1a2b3c4d5e6f7g8h
 ```
 
 Use this ID to:
+
 - Filter traces in your observability backend
 - Track workflows across multiple services
 - Debug issues in production
@@ -216,11 +233,13 @@ This repo includes **two versions** of the multi-agent workflow to demonstrate d
 - **When to use:** Production applications, understanding full observability
 
 **Key Insight:** See `multi-agent-workflow-with-openllmetry.ts` for the **recommended production pattern** that combines:
+
 1. **@openai/agents** for agent orchestration and handoffs
 2. **OpenLLMetry** for automatic LLM instrumentation (enabled via `init()`)
 3. **autotel trace()** for workflow orchestration (business context)
 
 **Initialization Pattern:**
+
 ```typescript
 // Everything configured in one place - the recommended approach
 init({
@@ -274,9 +293,11 @@ export OTLP_ENDPOINT=https://api.honeycomb.io/v1/traces
 ### 1. Nested Spans (Parent-Child Hierarchies)
 
 ```typescript
-export const workflow = trace('workflow', ctx => async () => {
+import { span, withTracing } from 'autotel';
+
+export const workflow = withTracing({ name: 'workflow' })((ctx) => async () => {
   // This creates a parent span
-  const step1 = await trace('step1', async () => {
+  const step1 = await span('step1', async () => {
     // Child span
     return result;
   });
@@ -286,7 +307,9 @@ export const workflow = trace('workflow', ctx => async () => {
 ### 2. Correlation IDs
 
 ```typescript
-export const workflow = trace('workflow', ctx => async () => {
+import { withTracing } from 'autotel';
+
+export const workflow = withTracing({ name: 'workflow' })((ctx) => async () => {
   // Auto-available!
   console.log(ctx.correlationId);
 

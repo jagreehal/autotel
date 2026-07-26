@@ -32,11 +32,11 @@ stop trusting the catalog.
 
 The teams using the catalog keep asking:
 
-- *"Is this event still in production? When was it last fired?"*
-- *"Did someone add a field nobody declared in the schema?"*
-- *"Which producer still emits this event nobody consumes?"*
-- *"Did the LLM token cost change since last release?"*
-- *"Does the catalog match what the code does at runtime?"*
+- _"Is this event still in production? When was it last fired?"_
+- _"Did someone add a field nobody declared in the schema?"_
+- _"Which producer still emits this event nobody consumes?"_
+- _"Did the LLM token cost change since last release?"_
+- _"Does the catalog match what the code does at runtime?"_
 
 ---
 
@@ -83,10 +83,10 @@ emitted. Schema, producer, consumers, and channel all live inside the
 payload:
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 import { orderPlacedEvent } from '../shared/events';
 
-export const placeOrder = trace((ctx) => async (order) => {
+export const placeOrder = withTracing({})((ctx) => async (order) => {
   ctx.setAttribute('order.customer_id', order.customerId);
   ctx.setAttribute('order.value_cents', order.totalCents);
 
@@ -114,11 +114,11 @@ export const placeOrder = trace((ctx) => async (order) => {
 
 Three primitives:
 
-| Primitive | What it captures |
-| --- | --- |
-| `trace()` | Top-level span per use case, plus span attributes |
-| `span()` | Nested I/O (e.g. `payment.capture` retries, `wms.reserve`) |
-| `defineEvent(...).track()` | Typed domain event with a declared schema |
+| Primitive                  | What it captures                                           |
+| -------------------------- | ---------------------------------------------------------- |
+| `trace()`                  | Top-level span per use case, plus span attributes          |
+| `span()`                   | Nested I/O (e.g. `payment.capture` retries, `wms.reserve`) |
+| `defineEvent(...).track()` | Typed domain event with a declared schema                  |
 
 The `_autotel` payload key is the bridge to EventCatalog. The channel,
 producer, and consumer list become the catalog's architecture-graph edges.
@@ -148,11 +148,13 @@ export const orderPlacedEvent = defineEvent(
     customerId: z.string(),
     totalCents: z.number(),
     currency: z.string(),
-    items: z.array(z.object({
-      sku: z.string(),
-      quantity: z.number(),
-      priceCents: z.number(),
-    })),
+    items: z.array(
+      z.object({
+        sku: z.string(),
+        quantity: z.number(),
+        priceCents: z.number(),
+      }),
+    ),
     shipping: z.object({ addressId: z.string() }),
     metadata: z.object({ source: z.string() }),
     _autotel: z.object({
@@ -233,16 +235,16 @@ and updates the catalog.
 
 What gets caught:
 
-| Drift class | Example finding |
-|---|---|
-| **Events observed but undocumented** | `order.cancelled` emitted by code; no entry in catalog |
-| **Events documented but never observed** | `LegacyEvent` in catalog; never seen in tests |
-| **Field-path drift (extra)** | `personalization_seed` in payload; not declared in schema |
-| **Field-path drift (missing)** | `customerId` declared in schema; never present in payloads |
-| **Type drift** | `amount` declared `number`; observed `string` |
-| **Value drift (enum mismatch)** | `status: "placed"` observed; schema enum excludes it |
-| **Services observed but undocumented** | `OrdersService` is a producer; no service page |
-| **Channels observed but undocumented** | `orders.events` carries messages; no channel page |
+| Drift class                              | Example finding                                            |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| **Events observed but undocumented**     | `order.cancelled` emitted by code; no entry in catalog     |
+| **Events documented but never observed** | `LegacyEvent` in catalog; never seen in tests              |
+| **Field-path drift (extra)**             | `personalization_seed` in payload; not declared in schema  |
+| **Field-path drift (missing)**           | `customerId` declared in schema; never present in payloads |
+| **Type drift**                           | `amount` declared `number`; observed `string`              |
+| **Value drift (enum mismatch)**          | `status: "placed"` observed; schema enum excludes it       |
+| **Services observed but undocumented**   | `OrdersService` is a producer; no service page             |
+| **Channels observed but undocumented**   | `orders.events` carries messages; no channel page          |
 
 ---
 
@@ -280,10 +282,12 @@ asserts the deeper claim: `fieldStats` actually capture types and sample
 values.
 
 ```typescript
-expect(snap.events['order.placed'].fieldStats?.totalCents?.types)
-  .toContain('number');
-expect(snap.events['order.placed'].fieldStats?.currency?.sampleValues)
-  .toContain('GBP');
+expect(snap.events['order.placed'].fieldStats?.totalCents?.types).toContain(
+  'number',
+);
+expect(
+  snap.events['order.placed'].fieldStats?.currency?.sampleValues,
+).toContain('GBP');
 ```
 
 If autotel stops capturing those runtime types and sample values, the
@@ -309,7 +313,7 @@ In practice this gives you **catalog honesty for what your test suite
 covers**. Two consequences:
 
 1. **Adding a new documented event is a two-step change.** Add it to the
-   catalog, *and* extend `services/src/build-snapshot.ts` so a test run
+   catalog, _and_ extend `services/src/build-snapshot.ts` so a test run
    emits it. If you only do step one, `catalog-drift.integration.test.ts`
    fails with `documentedButUnseen` and the message tells you to run
    `pnpm services:snapshot`.
@@ -332,12 +336,12 @@ pnpm catalog:dev
 
 Open <http://localhost:3000>.
 
-| URL | What it shows |
-|---|---|
-| [`/docs/flows/CheckoutFlow/1.0.0`](http://localhost:3000/docs/flows/CheckoutFlow/1.0.0) | Happy-path checkout with evidence callouts at every step |
-| [`/docs/flows/PaymentRecoveryFlow/1.0.0`](http://localhost:3000/docs/flows/PaymentRecoveryFlow/1.0.0) | Failure path: declined payment, retry budget, recovery email |
-| [`/docs/events/RecommendationGenerated/1.0.0`](http://localhost:3000/docs/events/RecommendationGenerated/1.0.0) | An event page with runtime evidence stamped between markers |
-| [`/visualiser/domains/E-Commerce/1.0.0`](http://localhost:3000/visualiser/domains/E-Commerce/1.0.0) | The full architecture rendered as a node graph |
+| URL                                                                                                             | What it shows                                                |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`/docs/flows/CheckoutFlow/1.0.0`](http://localhost:3000/docs/flows/CheckoutFlow/1.0.0)                         | Happy-path checkout with evidence callouts at every step     |
+| [`/docs/flows/PaymentRecoveryFlow/1.0.0`](http://localhost:3000/docs/flows/PaymentRecoveryFlow/1.0.0)           | Failure path: declined payment, retry budget, recovery email |
+| [`/docs/events/RecommendationGenerated/1.0.0`](http://localhost:3000/docs/events/RecommendationGenerated/1.0.0) | An event page with runtime evidence stamped between markers  |
+| [`/visualiser/domains/E-Commerce/1.0.0`](http://localhost:3000/visualiser/domains/E-Commerce/1.0.0)             | The full architecture rendered as a node graph               |
 
 The evidence callouts on each page (counts, last-seen, sample values) come
 from `autotel-eventcatalog stamp` writing between idempotent markers in the
@@ -357,7 +361,7 @@ The package ships a composite GitHub Action. One step gates every PR:
 ```yaml
 # .github/workflows/eventcatalog-drift.yml
 - run: pnpm install --frozen-lockfile
-- run: pnpm services:snapshot       # or whatever produces your snapshot
+- run: pnpm services:snapshot # or whatever produces your snapshot
 
 - uses: jagreehal/autotel-eventcatalog@v0
   with:
@@ -370,8 +374,8 @@ The package ships a composite GitHub Action. One step gates every PR:
 
 What lands on the PR:
 
-- A sticky comment titled *"Architecture drift: what this change introduces"*
-- The check fails only when the PR introduces *new* drift; pre-existing drift
+- A sticky comment titled _"Architecture drift: what this change introduces"_
+- The check fails only when the PR introduces _new_ drift; pre-existing drift
   is reported for context but does not block
 - The drift report is also written to `$RUNNER_TEMP/autotel-eventcatalog-drift.md`
   and printed in the job log
@@ -422,15 +426,15 @@ covers the full loop: code, snapshot, drift, GitHub Action, stamped catalog.
 
 ## Roadmap
 
-| Step | Status | Output |
-|---|---|---|
-| 1. Hand-curate the destination catalog | done | the `catalog/` you see |
-| 2. `ArchitectureSnapshotSubscriber` in `autotel-subscribers` | done | `services/test/snapshot.json` from a real test run |
-| 3. `autotel-eventcatalog` drift diff + CLI | done | `pnpm catalog:drift` reports real findings |
-| 4. `autotel-eventcatalog generate` scaffolding | done | services / events / channels + producer↔event↔channel edges generated from snapshot |
-| 5. Live HTTP+SSE dashboard | done | `pnpm services:live` → real-time updates at :4000 |
-| 6. Snapshot-vs-base PR comparison + GitHub Action | done | `.github/workflows/eventcatalog-drift.yml` |
-| 7. Frontmatter-level annotations + opt-in writes | in progress | `stamp` writes evidence blocks between markers in event pages |
+| Step                                                         | Status      | Output                                                                              |
+| ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------- |
+| 1. Hand-curate the destination catalog                       | done        | the `catalog/` you see                                                              |
+| 2. `ArchitectureSnapshotSubscriber` in `autotel-subscribers` | done        | `services/test/snapshot.json` from a real test run                                  |
+| 3. `autotel-eventcatalog` drift diff + CLI                   | done        | `pnpm catalog:drift` reports real findings                                          |
+| 4. `autotel-eventcatalog generate` scaffolding               | done        | services / events / channels + producer↔event↔channel edges generated from snapshot |
+| 5. Live HTTP+SSE dashboard                                   | done        | `pnpm services:live` → real-time updates at :4000                                   |
+| 6. Snapshot-vs-base PR comparison + GitHub Action            | done        | `.github/workflows/eventcatalog-drift.yml`                                          |
+| 7. Frontmatter-level annotations + opt-in writes             | in progress | `stamp` writes evidence blocks between markers in event pages                       |
 
 ---
 

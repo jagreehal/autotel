@@ -3,11 +3,15 @@ import { trace } from '@opentelemetry/api';
 import { linkSentryErrors } from './link';
 
 function createMockSentry() {
-  const processors: Array<(event: Record<string, unknown>) => Record<string, unknown>> = [];
+  const processors: Array<
+    (event: Record<string, unknown>) => Record<string, unknown>
+  > = [];
   return {
     sentry: {
       getGlobalScope: () => ({
-        addEventProcessor: (fn: (event: Record<string, unknown>) => Record<string, unknown>) => {
+        addEventProcessor: (
+          fn: (event: Record<string, unknown>) => Record<string, unknown>,
+        ) => {
           processors.push(fn);
         },
       }),

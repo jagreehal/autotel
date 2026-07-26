@@ -47,12 +47,13 @@ describe('wrapHookHandler — arity preservation', () => {
   it('preserves the handler arity so Kareem sees the real length', () => {
     // Kareem compares `fn.length` with exact arithmetic; a `...args` wrapper
     // reporting 0 would break error-middleware detection and callback awaiting.
-    expect(wrap(function (doc: any) {}, 'save', 'post').length).toBe(1);
-    expect(wrap(function (doc: any, next: any) {}, 'save', 'post').length).toBe(
-      2,
-    );
+    expect(wrap(function (_doc: any) {}, 'save', 'post').length).toBe(1);
     expect(
-      wrap(function (err: any, doc: any, next: any) {}, 'save', 'post').length,
+      wrap(function (_doc: any, _next: any) {}, 'save', 'post').length,
+    ).toBe(2);
+    expect(
+      wrap(function (_err: any, _doc: any, _next: any) {}, 'save', 'post')
+        .length,
     ).toBe(3);
   });
 });

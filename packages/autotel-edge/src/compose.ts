@@ -110,7 +110,7 @@ export function pipe<TInput, TOutput>(
  */
 export function when<TConfig = unknown>(
   predicate: (config?: TConfig) => boolean,
-  fn: (config?: TConfig) => void
+  fn: (config?: TConfig) => void,
 ): (config?: TConfig) => void {
   return (config?: TConfig) => {
     if (predicate(config)) {
@@ -134,7 +134,7 @@ export function when<TConfig = unknown>(
  */
 export function whenAsync<TConfig = unknown>(
   predicate: (config?: TConfig) => Promise<boolean> | boolean,
-  fn: (config?: TConfig) => Promise<void>
+  fn: (config?: TConfig) => Promise<void>,
 ): (config?: TConfig) => Promise<void> {
   return async (config?: TConfig) => {
     if (await predicate(config)) {
@@ -184,9 +184,12 @@ export function tap<T>(fn: (value: T) => void): (value: T) => T {
  * ```
  */
 export function memoize<TArgs extends any[], TReturn>(
-  fn: (...args: TArgs) => TReturn
+  fn: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => TReturn {
-  const cached: { hasValue: boolean; value: TReturn } = { hasValue: false, value: undefined as any };
+  const cached: { hasValue: boolean; value: TReturn } = {
+    hasValue: false,
+    value: undefined as any,
+  };
 
   return (...args: TArgs) => {
     if (!cached.hasValue) {
@@ -218,7 +221,7 @@ export function retry<TArgs extends any[], TReturn>(
     maxAttempts?: number;
     delayMs?: number;
     onRetry?: (attempt: number, error: Error) => void;
-  } = {}
+  } = {},
 ): (...args: TArgs) => Promise<TReturn> {
   const { maxAttempts = 3, delayMs = 1000, onRetry } = options;
 
@@ -233,7 +236,7 @@ export function retry<TArgs extends any[], TReturn>(
 
         if (attempt < maxAttempts) {
           onRetry?.(attempt, lastError);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
       }
     }

@@ -8,13 +8,20 @@ import type { AgentAdapter } from './types';
  * specific (dedicated scope), so it leads. Add Codex here when its contract
  * lands — one line, no other changes.
  */
-export const adapters: readonly AgentAdapter[] = [claudeCodeAdapter, opencodeAdapter];
+export const adapters: readonly AgentAdapter[] = [
+  claudeCodeAdapter,
+  opencodeAdapter,
+];
 
-export function detectAdapterForMetric(record: OtelMetricRecord): AgentAdapter | undefined {
+export function detectAdapterForMetric(
+  record: OtelMetricRecord,
+): AgentAdapter | undefined {
   return adapters.find((adapter) => adapter.matchesMetric(record));
 }
 
-export function detectAdapterForEvent(record: AgentRawEvent): AgentAdapter | undefined {
+export function detectAdapterForEvent(
+  record: AgentRawEvent,
+): AgentAdapter | undefined {
   return adapters.find((adapter) => adapter.matchesEvent(record));
 }
 

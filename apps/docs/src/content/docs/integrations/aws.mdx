@@ -87,13 +87,13 @@ const consumer = new SQSConsumer(sqs, {
 
 As of late 2025 / early 2026, CloudWatch accepts OTLP/HTTP directly. No collector required for low-volume workloads.
 
-| Signal  | Endpoint                                                     | Lands in                                                |
-| ------- | ------------------------------------------------------------ | ------------------------------------------------------- |
-| Traces  | `https://xray.<region>.amazonaws.com/v1/traces`              | X-Ray + Application Signals + Transaction Search        |
-| Logs    | `https://logs.<region>.amazonaws.com/v1/logs`                | CloudWatch Logs (Logs Insights / LiveTail)              |
-| Metrics | `https://monitoring.<region>.amazonaws.com/v1/metrics`       | CloudWatch Metrics (PromQL-queryable)                   |
+| Signal  | Endpoint                                               | Lands in                                         |
+| ------- | ------------------------------------------------------ | ------------------------------------------------ |
+| Traces  | `https://xray.<region>.amazonaws.com/v1/traces`        | X-Ray + Application Signals + Transaction Search |
+| Logs    | `https://logs.<region>.amazonaws.com/v1/logs`          | CloudWatch Logs (Logs Insights / LiveTail)       |
+| Metrics | `https://monitoring.<region>.amazonaws.com/v1/metrics` | CloudWatch Metrics (PromQL-queryable)            |
 
-`autotel-aws/cloudwatch` ships SigV4-signing OTLP/JSON exporters that hit these endpoints directly — no sidecar, no extra layer.
+`autotel-aws/cloudwatch` ships SigV4-signing OTLP/JSON exporters that hit these endpoints directly. No sidecar, no extra layer.
 
 ### Install peer dependencies
 
@@ -126,14 +126,17 @@ init({
 });
 ```
 
-In Lambda, force-flush before the handler returns (or use `SimpleSpanProcessor`) — the runtime freezes the process before the batch ships.
+In Lambda, force-flush before the handler returns (or use `SimpleSpanProcessor`). The runtime freezes the process before the batch ships.
 
 ### Logs
 
 The exporter reads `AWS_LAMBDA_LOG_GROUP_NAME` / `AWS_LAMBDA_LOG_STREAM_NAME` by default (set automatically by the Lambda runtime).
 
 ```typescript
-import { BatchLogRecordProcessor, LoggerProvider } from '@opentelemetry/sdk-logs';
+import {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+} from '@opentelemetry/sdk-logs';
 import { CloudWatchLogExporter } from 'autotel-aws/cloudwatch';
 
 const provider = new LoggerProvider({
@@ -144,7 +147,10 @@ const provider = new LoggerProvider({
 ### Metrics
 
 ```typescript
-import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import { CloudWatchMetricExporter } from 'autotel-aws/cloudwatch';
 
 const provider = new MeterProvider({
@@ -159,14 +165,14 @@ const provider = new MeterProvider({
 
 ### Direct vs ADOT collector layer
 
-|                  | In-process (`autotel-aws/cloudwatch`) | ADOT Lambda extension layer       |
-| ---------------- | ------------------------------------- | --------------------------------- |
-| Sidecar          | None                                  | Yes (extension layer)             |
-| Export latency   | In the billed handler time            | Outside billed time               |
-| Cold start cost  | Bundle size + SigV4 init              | Layer init                        |
-| Best for         | Low/medium volume Lambdas             | Higher-throughput functions       |
+|                 | In-process (`autotel-aws/cloudwatch`) | ADOT Lambda extension layer |
+| --------------- | ------------------------------------- | --------------------------- |
+| Sidecar         | None                                  | Yes (extension layer)       |
+| Export latency  | In the billed handler time            | Outside billed time         |
+| Cold start cost | Bundle size + SigV4 init              | Layer init                  |
+| Best for        | Low/medium volume Lambdas             | Higher-throughput functions |
 
-Pick one — running both ships duplicate spans.
+Pick one. Running both ships duplicate spans.
 
 ### ADOT collector config (SigV4)
 
@@ -198,6 +204,7 @@ service:
 ```
 
 For logs/metrics, use the same pattern with endpoint + service pairs:
+
 - logs: `https://logs.<region>.amazonaws.com/v1/logs`, service `logs`
 - metrics: `https://monitoring.<region>.amazonaws.com/v1/metrics`, service `monitoring`
 
@@ -245,7 +252,10 @@ canonical span attributes for you. `AWS_ATTRS` holds the semantic-convention
 keys; the `build*` helpers turn a service operation into the attribute object.
 
 ```typescript
-import { buildLambdaAttributes, buildDynamoDBAttributes } from 'autotel-aws/attributes';
+import {
+  buildLambdaAttributes,
+  buildDynamoDBAttributes,
+} from 'autotel-aws/attributes';
 
 span.setAttributes(
   buildLambdaAttributes({
@@ -275,19 +285,19 @@ expect(result.statusCode).toBe(200);
 
 ## Examples
 
-- [`example-aws-lambda`](https://github.com/jagreehal/autotel/tree/main/apps/example-aws-lambda) — Lambda with `wrapHandler()`, AWS SDK v3 auto-instrumentation, S3/DynamoDB/SQS helpers, and LocalStack support.
+- [`example-aws-lambda`](https://github.com/jagreehal/autotel/tree/main/apps/example-aws-lambda): Lambda with `wrapHandler()`, AWS SDK v3 auto-instrumentation, S3/DynamoDB/SQS helpers, and LocalStack support.
 
 ## Entry Points
 
-- `autotel-aws/lambda` — Lambda handler wrapping
-- `autotel-aws/lambda/auto` — Zero-config Lambda
-- `autotel-aws/sdk` — AWS SDK instrumentation
-- `autotel-aws/sqs` — SQS producer/consumer
-- `autotel-aws/sns` — SNS publisher
-- `autotel-aws/kinesis` — Kinesis producer/consumer
-- `autotel-aws/step-functions` — Step Functions
-- `autotel-aws/eventbridge` — EventBridge publisher
-- `autotel-aws/xray` — X-Ray compatibility
-- `autotel-aws/cloudwatch` — SigV4-signed OTLP exporters for CloudWatch's native endpoints
-- `autotel-aws/attributes` — Attribute builders for hand-rolled instrumentation
-- `autotel-aws/testing` — Test utilities
+- `autotel-aws/lambda`: Lambda handler wrapping
+- `autotel-aws/lambda/auto`: Zero-config Lambda
+- `autotel-aws/sdk`: AWS SDK instrumentation
+- `autotel-aws/sqs`: SQS producer/consumer
+- `autotel-aws/sns`: SNS publisher
+- `autotel-aws/kinesis`: Kinesis producer/consumer
+- `autotel-aws/step-functions`: Step Functions
+- `autotel-aws/eventbridge`: EventBridge publisher
+- `autotel-aws/xray`: X-Ray compatibility
+- `autotel-aws/cloudwatch`: SigV4-signed OTLP exporters for CloudWatch's native endpoints
+- `autotel-aws/attributes`: Attribute builders for hand-rolled instrumentation
+- `autotel-aws/testing`: Test utilities

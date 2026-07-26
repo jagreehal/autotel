@@ -4,11 +4,7 @@ import { runHealth, runCapabilities } from './health';
 import { runDiscoverServices } from './discovery';
 import { runQueryLogs, runQueryMetrics } from './signals';
 import { runQueryTraces, runQuerySpans, runTraceGet } from './investigation';
-import {
-  runListServices,
-  runListOperations,
-  runServiceMap,
-} from './topology';
+import { runListServices, runListOperations, runServiceMap } from './topology';
 import { runDiagnoseAnomalies, runDiagnoseErrors } from './diagnosis';
 import { runCorrelate } from './correlation';
 import { runLlmUsage } from './llm';
@@ -63,7 +59,10 @@ describe('investigate commands (fixture backend)', () => {
 
   function expectOk(commandName: string): unknown {
     const env = capturedEnvelope();
-    expect(env.ok, `command="${env.command}" error=${JSON.stringify(env.error)}`).toBe(true);
+    expect(
+      env.ok,
+      `command="${env.command}" error=${JSON.stringify(env.error)}`,
+    ).toBe(true);
     expect(env.command).toBe(commandName);
     expect(env.data).toBeDefined();
     return env.data;
@@ -133,7 +132,7 @@ describe('investigate commands (fixture backend)', () => {
     ).services;
     expect(svcs.length).toBeGreaterThan(0);
     stdoutChunks = [];
-    await runListOperations({ ...flags, serviceName: svcs[0].name });
+    await runListOperations({ ...flags, serviceName: svcs[0]!.name });
     const data = expectOk('topology operations') as { operations: unknown[] };
     expect(Array.isArray(data.operations)).toBe(true);
   });
@@ -168,9 +167,11 @@ describe('investigate commands (fixture backend)', () => {
 
   it('trace get: returns the trace by ID', async () => {
     await runQueryTraces({ ...flags, limit: 1 });
-    const traceId = (
+    const traceItems = (
       capturedEnvelope().data as { items: Array<{ traceId: string }> }
-    ).items[0].traceId;
+    ).items;
+    expect(traceItems.length).toBeGreaterThan(0);
+    const traceId = traceItems[0]!.traceId;
     stdoutChunks = [];
     await runTraceGet({ ...flags, traceId });
     const data = expectOk('trace get') as { traceId: string };
@@ -179,9 +180,11 @@ describe('investigate commands (fixture backend)', () => {
 
   it('correlate trace: returns correlated signals envelope', async () => {
     await runQueryTraces({ ...flags, limit: 1 });
-    const traceId = (
+    const correlateItems = (
       capturedEnvelope().data as { items: Array<{ traceId: string }> }
-    ).items[0].traceId;
+    ).items;
+    expect(correlateItems.length).toBeGreaterThan(0);
+    const traceId = correlateItems[0]!.traceId;
     stdoutChunks = [];
     await runCorrelate({ ...flags, traceId });
     const env = capturedEnvelope();

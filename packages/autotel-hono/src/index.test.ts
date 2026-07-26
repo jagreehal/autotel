@@ -15,13 +15,11 @@ function createMockSpan() {
   };
 }
 
-function createMockTracer(
-  spanCollector: {
-    span: ReturnType<typeof createMockSpan>;
-    options: unknown;
-    parentContext?: unknown;
-  },
-) {
+function createMockTracer(spanCollector: {
+  span: ReturnType<typeof createMockSpan>;
+  options: unknown;
+  parentContext?: unknown;
+}) {
   const tracer: Tracer = {
     startActiveSpan: vi.fn(
       (
@@ -30,11 +28,11 @@ function createMockTracer(
         parentContext: unknown,
         callback: (span: Span) => Promise<unknown>,
       ) => {
-        const span = createMockSpan() as unknown as Span;
-        spanCollector.span = span as ReturnType<typeof createMockSpan>;
+        const span = createMockSpan();
+        spanCollector.span = span;
         spanCollector.options = options;
         spanCollector.parentContext = parentContext;
-        return callback(span);
+        return callback(span as unknown as Span);
       },
     ),
   } as unknown as Tracer;
@@ -67,13 +65,21 @@ describe('otel middleware', () => {
       options: unknown;
     } = { span: null!, options: null };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
-    const app = new Hono().use(otel({ tracer, meter })).get('/hello', (c) => c.text('ok'));
+    const app = new Hono()
+      .use(otel({ tracer, meter }))
+      .get('/hello', (c) => c.text('ok'));
 
     const res = await app.request('http://localhost/hello', { method: 'GET' });
     expect(res.status).toBe(200);
@@ -89,31 +95,53 @@ describe('otel middleware', () => {
       'http.response.status_code',
       200,
     );
-    expect(spanCollector.span.setAttribute).toHaveBeenCalledWith('http.route', '/hello');
+    expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
+      'http.route',
+      '/hello',
+    );
     expect(spanCollector.span.updateName).toHaveBeenCalledWith('GET /hello');
     expect(spanCollector.span.end).toHaveBeenCalled();
 
-    expect(recordCollector.activeAdds.filter((a) => a.delta === 1)).toHaveLength(1);
-    expect(recordCollector.activeAdds.filter((a) => a.delta === -1)).toHaveLength(1);
+    expect(
+      recordCollector.activeAdds.filter((a) => a.delta === 1),
+    ).toHaveLength(1);
+    expect(
+      recordCollector.activeAdds.filter((a) => a.delta === -1),
+    ).toHaveLength(1);
     expect(recordCollector.durationRecords).toHaveLength(1);
-    expect(recordCollector.durationRecords[0].duration).toBeGreaterThanOrEqual(0);
-    expect(recordCollector.durationRecords[0].attrs['http.response.status_code']).toBe(200);
+    expect(recordCollector.durationRecords[0]!.duration).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(
+      recordCollector.durationRecords[0]!.attrs['http.response.status_code'],
+    ).toBe(200);
   });
 
   it('sets serviceName and serviceVersion on span and metrics', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
     const app = new Hono()
-      .use(otel({ tracer, meter, serviceName: 'my-api', serviceVersion: '1.2.3' }))
+      .use(
+        otel({ tracer, meter, serviceName: 'my-api', serviceVersion: '1.2.3' }),
+      )
       .get('/v1/foo', (c) => c.json({}));
 
     await app.request('http://localhost/v1/foo', { method: 'GET' });
@@ -124,18 +152,32 @@ describe('otel middleware', () => {
         'service.version': '1.2.3',
       }),
     });
-    expect(recordCollector.durationRecords[0].attrs['service.name']).toBe('my-api');
-    expect(recordCollector.durationRecords[0].attrs['service.version']).toBe('1.2.3');
+    expect(recordCollector.durationRecords).toHaveLength(1);
+    expect(recordCollector.durationRecords[0]!.attrs['service.name']).toBe(
+      'my-api',
+    );
+    expect(recordCollector.durationRecords[0]!.attrs['service.version']).toBe(
+      '1.2.3',
+    );
   });
 
   it('captures request and response headers when configured', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
@@ -156,7 +198,10 @@ describe('otel middleware', () => {
 
     await app.request('http://localhost/r', {
       method: 'GET',
-      headers: { 'x-request-id': 'req-123', 'content-type': 'application/json' },
+      headers: {
+        'x-request-id': 'req-123',
+        'content-type': 'application/json',
+      },
     });
 
     expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
@@ -174,22 +219,29 @@ describe('otel middleware', () => {
   });
 
   it('sets ERROR status and records exception when handler throws', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
-    const app = new Hono()
-      .use(otel({ tracer, meter }))
-      .get('/err', () => {
-        throw new Error('boom');
-      });
+    const app = new Hono().use(otel({ tracer, meter })).get('/err', () => {
+      throw new Error('boom');
+    });
 
     // Hono logs unhandled errors to console.error by default. The test
     // intentionally throws to verify span behavior — silence the framework
@@ -207,13 +259,22 @@ describe('otel middleware', () => {
   });
 
   it('does not throw when recordException receives non-Error (robustness)', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const baseSpan = createMockSpan();
     baseSpan.recordException = vi.fn((_e: unknown) => {
@@ -243,15 +304,23 @@ describe('otel middleware', () => {
 
     // Hono surfaces the string throw via console.error; silence for the test.
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(app.request('http://localhost/bad', { method: 'GET' })).rejects.toBe('string throw');
+    await expect(
+      app.request('http://localhost/bad', { method: 'GET' }),
+    ).rejects.toBe('string throw');
     expect(baseSpan.end).toHaveBeenCalled();
     errSpy.mockRestore();
   });
 
   it('when disableTracing is true, does not create span but still records metrics', async () => {
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const meter = createMockMeter(recordCollector);
 
@@ -259,10 +328,16 @@ describe('otel middleware', () => {
       .use(otel({ disableTracing: true, meter }))
       .get('/no-span', (c) => c.text('ok'));
 
-    const res = await app.request('http://localhost/no-span', { method: 'GET' });
+    const res = await app.request('http://localhost/no-span', {
+      method: 'GET',
+    });
     expect(res.status).toBe(200);
-    expect(recordCollector.activeAdds.filter((a) => a.delta === 1)).toHaveLength(1);
-    expect(recordCollector.activeAdds.filter((a) => a.delta === -1)).toHaveLength(1);
+    expect(
+      recordCollector.activeAdds.filter((a) => a.delta === 1),
+    ).toHaveLength(1);
+    expect(
+      recordCollector.activeAdds.filter((a) => a.delta === -1),
+    ).toHaveLength(1);
     expect(recordCollector.durationRecords).toHaveLength(1);
   });
 
@@ -275,8 +350,14 @@ describe('otel middleware', () => {
 
     try {
       const recordCollector = {
-        durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-        activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+        durationRecords: [] as Array<{
+          duration: number;
+          attrs: Record<string, unknown>;
+        }>,
+        activeAdds: [] as Array<{
+          delta: number;
+          attrs: Record<string, unknown>;
+        }>,
       };
       const meter = createMockMeter(recordCollector);
 
@@ -284,7 +365,9 @@ describe('otel middleware', () => {
         .use(otel({ disableTracing: true, meter }))
         .get('/disable-tracing', (c) => c.text('ok'));
 
-      const res = await app.request('http://localhost/disable-tracing', { method: 'GET' });
+      const res = await app.request('http://localhost/disable-tracing', {
+        method: 'GET',
+      });
       expect(res.status).toBe(200);
       expect(extractSpy).not.toHaveBeenCalled();
     } finally {
@@ -293,13 +376,22 @@ describe('otel middleware', () => {
   });
 
   it('uses spanNameFactory when provided', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
@@ -319,17 +411,28 @@ describe('otel middleware', () => {
     expect(spanCollector.options).toMatchObject({
       attributes: expect.any(Object),
     });
-    expect(spanCollector.span.updateName).toHaveBeenCalledWith('HTTP GET /custom-name');
+    expect(spanCollector.span.updateName).toHaveBeenCalledWith(
+      'HTTP GET /custom-name',
+    );
   });
 
   it('sets correct span name and route for subapp route', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
@@ -341,7 +444,9 @@ describe('otel middleware', () => {
 
     await app.request('http://localhost/subapp/hello', { method: 'GET' });
 
-    expect(spanCollector.span.updateName).toHaveBeenCalledWith('GET /subapp/hello');
+    expect(spanCollector.span.updateName).toHaveBeenCalledWith(
+      'GET /subapp/hello',
+    );
     expect(spanCollector.span.setAttribute).toHaveBeenCalledWith(
       'http.route',
       '/subapp/hello',
@@ -349,13 +454,22 @@ describe('otel middleware', () => {
   });
 
   it('handles header names case-insensitively (request and response)', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
@@ -402,13 +516,22 @@ describe('otel middleware', () => {
   });
 
   it('does not capture headers not in the allow list', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
@@ -431,8 +554,9 @@ describe('otel middleware', () => {
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'text/plain' },
     });
 
-    const setAttributeCalls = (spanCollector.span.setAttribute as ReturnType<typeof vi.fn>).mock
-      .calls as Array<[string, unknown]>;
+    const setAttributeCalls = (
+      spanCollector.span.setAttribute as ReturnType<typeof vi.fn>
+    ).mock.calls as Array<[string, unknown]>;
     const attrKeys = setAttributeCalls.map(([k]) => k);
     expect(attrKeys).not.toContain('http.request.header.authorization');
     expect(attrKeys).not.toContain('http.response.header.x-secret');
@@ -444,8 +568,14 @@ describe('otel middleware', () => {
       options: unknown;
     } = { span: null!, options: null };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
@@ -462,13 +592,22 @@ describe('otel middleware', () => {
   });
 
   it('marks span error for 5xx response without thrown exception', async () => {
-    const spanCollector: { span: ReturnType<typeof createMockSpan>; options: unknown } = {
+    const spanCollector: {
+      span: ReturnType<typeof createMockSpan>;
+      options: unknown;
+    } = {
       span: null!,
       options: null,
     };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
@@ -488,21 +627,27 @@ describe('otel middleware', () => {
 
   it('does not crash without meter or tracer (uses global providers)', async () => {
     const app = new Hono().use(otel({})).get('/no-config', (c) => c.text('ok'));
-    const res = await app.request('http://localhost/no-config', { method: 'GET' });
+    const res = await app.request('http://localhost/no-config', {
+      method: 'GET',
+    });
     expect(res.status).toBe(200);
   });
 
   it('records duration metrics for subapp routes', async () => {
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const meter = createMockMeter(recordCollector);
 
     const subapp = new Hono().get('/nested', (c) => c.text('nested'));
-    const app = new Hono()
-      .use(otel({ meter }))
-      .route('/api', subapp);
+    const app = new Hono().use(otel({ meter })).route('/api', subapp);
 
     await app.request('http://localhost/api/nested', { method: 'GET' });
 
@@ -515,8 +660,14 @@ describe('otel middleware', () => {
 
   it('records metrics for different HTTP methods and status codes', async () => {
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const meter = createMockMeter(recordCollector);
 
@@ -531,36 +682,58 @@ describe('otel middleware', () => {
     await app.request('http://localhost/created', { method: 'POST' });
     await app.request('http://localhost/not-found');
 
-    const routes = recordCollector.durationRecords.map((r) => r.attrs['http.route']);
+    const routes = recordCollector.durationRecords.map(
+      (r) => r.attrs['http.route'],
+    );
     expect(routes).toContain('/success');
     expect(routes).toContain('/created');
     expect(routes).toContain('/not-found');
-    const methods = recordCollector.durationRecords.map((r) => r.attrs['http.request.method']);
+    const methods = recordCollector.durationRecords.map(
+      (r) => r.attrs['http.request.method'],
+    );
     expect(methods).toContain('GET');
     expect(methods).toContain('POST');
   });
 
   it('active requests increment and decrement use identical attributes', async () => {
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const meter = createMockMeter(recordCollector);
 
-    const app = new Hono().use(otel({ meter })).get('/attrs', (c) => c.text('ok'));
+    const app = new Hono()
+      .use(otel({ meter }))
+      .get('/attrs', (c) => c.text('ok'));
     await app.request('http://localhost/attrs', { method: 'GET' });
 
     expect(recordCollector.activeAdds).toHaveLength(2);
-    expect(recordCollector.activeAdds[0].delta).toBe(1);
-    expect(recordCollector.activeAdds[1].delta).toBe(-1);
-    expect(recordCollector.activeAdds[0].attrs).toEqual(recordCollector.activeAdds[1].attrs);
-    expect(recordCollector.activeAdds[0].attrs['http.request.method']).toBe('GET');
+    expect(recordCollector.activeAdds[0]!.delta).toBe(1);
+    expect(recordCollector.activeAdds[1]!.delta).toBe(-1);
+    expect(recordCollector.activeAdds[0]!.attrs).toEqual(
+      recordCollector.activeAdds[1]!.attrs,
+    );
+    expect(recordCollector.activeAdds[0]!.attrs['http.request.method']).toBe(
+      'GET',
+    );
   });
 
   it('does not track active requests when captureActiveRequests is false', async () => {
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const meter = createMockMeter(recordCollector);
 
@@ -576,18 +749,24 @@ describe('otel middleware', () => {
 
   it('records duration metric when handler throws', async () => {
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const meter = createMockMeter(recordCollector);
 
-    const app = new Hono()
-      .use(otel({ meter }))
-      .get('/err-metric', () => {
-        throw new Error('fail');
-      });
+    const app = new Hono().use(otel({ meter })).get('/err-metric', () => {
+      throw new Error('fail');
+    });
 
-    await app.request('http://localhost/err-metric', { method: 'GET' }).catch(() => {});
+    await Promise.resolve(
+      app.request('http://localhost/err-metric', { method: 'GET' }),
+    ).catch(() => {});
 
     const errRecord = recordCollector.durationRecords.find(
       (r) => r.attrs['http.route'] === '/err-metric',
@@ -603,13 +782,21 @@ describe('otel middleware', () => {
       parentContext?: unknown;
     } = { span: null!, options: null };
     const recordCollector = {
-      durationRecords: [] as Array<{ duration: number; attrs: Record<string, unknown> }>,
-      activeAdds: [] as Array<{ delta: number; attrs: Record<string, unknown> }>,
+      durationRecords: [] as Array<{
+        duration: number;
+        attrs: Record<string, unknown>;
+      }>,
+      activeAdds: [] as Array<{
+        delta: number;
+        attrs: Record<string, unknown>;
+      }>,
     };
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
-    const app = new Hono().use(otel({ tracer, meter })).get('/child', (c) => c.text('ok'));
+    const app = new Hono()
+      .use(otel({ tracer, meter }))
+      .get('/child', (c) => c.text('ok'));
 
     const parentSpan = createMockSpan() as unknown as Span;
     const ctxWithParent = otelTrace.setSpan(context.active(), parentSpan);

@@ -4,7 +4,19 @@ type InitModule = typeof import('./init');
 
 async function loadInitModule(): Promise<InitModule> {
   vi.resetModules();
+  // resetModules clears the registry, so ./init must be re-imported here to
+  // get a fresh instance; a static import would return the stale module.
+  // eslint-disable-next-line no-restricted-syntax
   return import('./init');
+}
+
+// safeRequire is generic (<T>(id) => T | undefined); a fixed stub module can't
+// be generic, so adapt it to the loader shape (returns the stub for any id).
+type OptionalRequire = Parameters<
+  InitModule['_setOptionalRequireForTesting']
+>[0];
+function stubRequire(module: unknown): OptionalRequire {
+  return (() => module) as OptionalRequire;
 }
 
 function createSdkFactory() {
@@ -42,10 +54,12 @@ describe('init() OpenLLMetry integration', () => {
     const sdk = createSdkFactory();
     const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
 
-    mod._setOptionalRequireForTesting(() => ({
-      initialize: (options?: Record<string, unknown>) =>
-        traceloopInitializeCalls.push(options ?? {}),
-    }));
+    mod._setOptionalRequireForTesting(
+      stubRequire({
+        initialize: (options?: Record<string, unknown>) =>
+          traceloopInitializeCalls.push(options ?? {}),
+      }),
+    );
 
     mod.init({ service: 'test-app', sdkFactory: sdk.sdkFactory });
 
@@ -58,10 +72,12 @@ describe('init() OpenLLMetry integration', () => {
     const sdk = createSdkFactory();
     const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
 
-    mod._setOptionalRequireForTesting(() => ({
-      initialize: (options?: Record<string, unknown>) =>
-        traceloopInitializeCalls.push(options ?? {}),
-    }));
+    mod._setOptionalRequireForTesting(
+      stubRequire({
+        initialize: (options?: Record<string, unknown>) =>
+          traceloopInitializeCalls.push(options ?? {}),
+      }),
+    );
 
     mod.init({
       service: 'test-app',
@@ -79,10 +95,12 @@ describe('init() OpenLLMetry integration', () => {
     const sdk = createSdkFactory();
     const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
 
-    mod._setOptionalRequireForTesting(() => ({
-      initialize: (options?: Record<string, unknown>) =>
-        traceloopInitializeCalls.push(options ?? {}),
-    }));
+    mod._setOptionalRequireForTesting(
+      stubRequire({
+        initialize: (options?: Record<string, unknown>) =>
+          traceloopInitializeCalls.push(options ?? {}),
+      }),
+    );
 
     mod.init({
       service: 'test-app',
@@ -109,10 +127,12 @@ describe('init() OpenLLMetry integration', () => {
     const sdk = createSdkFactory();
     const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
 
-    mod._setOptionalRequireForTesting(() => ({
-      initialize: (options?: Record<string, unknown>) =>
-        traceloopInitializeCalls.push(options ?? {}),
-    }));
+    mod._setOptionalRequireForTesting(
+      stubRequire({
+        initialize: (options?: Record<string, unknown>) =>
+          traceloopInitializeCalls.push(options ?? {}),
+      }),
+    );
 
     mod.init({
       service: 'test-app',
@@ -135,7 +155,7 @@ describe('init() OpenLLMetry integration', () => {
       instrumentations: [{ name: 'openai' }, { name: 'langchain' }],
     };
 
-    mod._setOptionalRequireForTesting(() => mockTraceloop);
+    mod._setOptionalRequireForTesting(stubRequire(mockTraceloop));
 
     mod.init({
       service: 'test-app',
@@ -155,7 +175,7 @@ describe('init() OpenLLMetry integration', () => {
   it('should handle missing @traceloop/node-server-sdk gracefully', async () => {
     const mod = await loadInitModule();
     const sdk = createSdkFactory();
-    mod._setOptionalRequireForTesting(() => undefined);
+    mod._setOptionalRequireForTesting(() => {});
 
     expect(() => {
       mod.init({
@@ -172,10 +192,12 @@ describe('init() OpenLLMetry integration', () => {
     const sdk = createSdkFactory();
     const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
 
-    mod._setOptionalRequireForTesting(() => ({
-      initialize: (options?: Record<string, unknown>) =>
-        traceloopInitializeCalls.push(options ?? {}),
-    }));
+    mod._setOptionalRequireForTesting(
+      stubRequire({
+        initialize: (options?: Record<string, unknown>) =>
+          traceloopInitializeCalls.push(options ?? {}),
+      }),
+    );
 
     mod.init({
       service: 'test-app',

@@ -1,5 +1,9 @@
 import { AGENT_AUDIT_SCHEMA_VERSION } from './constants.js';
-import { resolveContext, toAttributeValue, type AgentContext } from './context.js';
+import {
+  resolveContext,
+  toAttributeValue,
+  type AgentContext,
+} from './context.js';
 import { defaultEventKind, normalizeMetadata } from './metadata.js';
 import type {
   AgentActionMetadata,
@@ -13,12 +17,7 @@ import type {
 } from './types.js';
 
 type AttributeValue =
-  | string
-  | number
-  | boolean
-  | string[]
-  | number[]
-  | boolean[];
+  string | number | boolean | string[] | number[] | boolean[];
 
 type AttributeMap = Record<string, AttributeValue>;
 
@@ -29,7 +28,10 @@ function setIfPresent(target: AttributeMap, key: string, value: unknown): void {
   }
 }
 
-function appendIdentityAttributes(attrs: AttributeMap, agent: AgentIdentity): void {
+function appendIdentityAttributes(
+  attrs: AttributeMap,
+  agent: AgentIdentity,
+): void {
   setIfPresent(attrs, 'agent.id', agent.id);
   setIfPresent(attrs, 'agent.version', agent.version);
   setIfPresent(attrs, 'agent.framework', agent.framework);
@@ -48,7 +50,11 @@ function appendDelegationAttributes(
   setIfPresent(attrs, 'delegation.scope', delegation.scope);
   setIfPresent(attrs, 'delegation.token_id', delegation.tokenId);
   setIfPresent(attrs, 'delegation.id', delegation.delegationId);
-  setIfPresent(attrs, 'delegation.authority_lineage', delegation.authorityLineage);
+  setIfPresent(
+    attrs,
+    'delegation.authority_lineage',
+    delegation.authorityLineage,
+  );
   setIfPresent(
     attrs,
     'delegation.authority_lineage_hash',
@@ -59,7 +65,10 @@ function appendDelegationAttributes(
   setIfPresent(attrs, 'delegation.expires_at', delegation.expiresAt);
 }
 
-function appendToolAttributes(attrs: AttributeMap, tool?: ToolCallMetadata): void {
+function appendToolAttributes(
+  attrs: AttributeMap,
+  tool?: ToolCallMetadata,
+): void {
   if (!tool) return;
   setIfPresent(attrs, 'tool.name', tool.name);
   setIfPresent(attrs, 'tool.call.id', tool.callId);
@@ -69,7 +78,10 @@ function appendToolAttributes(attrs: AttributeMap, tool?: ToolCallMetadata): voi
   setIfPresent(attrs, 'tool.execution_ms', tool.executionMs);
 }
 
-function appendPolicyAttributes(attrs: AttributeMap, policy?: PolicyMetadata): void {
+function appendPolicyAttributes(
+  attrs: AttributeMap,
+  policy?: PolicyMetadata,
+): void {
   if (!policy) return;
   setIfPresent(attrs, 'policy.decision', policy.decision);
   setIfPresent(attrs, 'policy.id', policy.policyId);
@@ -85,7 +97,11 @@ function appendGovernanceAttributes(
   setIfPresent(attrs, 'governance.review_required', governance.reviewRequired);
   setIfPresent(attrs, 'governance.reviewer_id', governance.reviewerId);
   setIfPresent(attrs, 'governance.control_id', governance.controlId);
-  setIfPresent(attrs, 'governance.documentation_url', governance.documentationUrl);
+  setIfPresent(
+    attrs,
+    'governance.documentation_url',
+    governance.documentationUrl,
+  );
   setIfPresent(attrs, 'governance.lifecycle_stage', governance.lifecycleStage);
   setIfPresent(attrs, 'governance.framework', governance.framework);
 }
@@ -109,7 +125,11 @@ function appendDecisionAttributes(
   setIfPresent(attrs, 'decision.summary', decision.summary);
   setIfPresent(attrs, 'decision.input_hash', decision.inputHash);
   setIfPresent(attrs, 'decision.policy_ids', decision.policyIds);
-  setIfPresent(attrs, 'decision.justification_codes', decision.justificationCodes);
+  setIfPresent(
+    attrs,
+    'decision.justification_codes',
+    decision.justificationCodes,
+  );
   setIfPresent(attrs, 'decision.evidence_ids', decision.evidenceIds);
   setIfPresent(attrs, 'decision.review_required', decision.reviewRequired);
   setIfPresent(attrs, 'decision.confidence', decision.confidence);

@@ -1,6 +1,6 @@
 /**
  * Kitchen Sink Example - Comprehensive awaitly + autotel integration
- * 
+ *
  * This demonstrates:
  * - Successful workflows with visualization
  * - Error handling with visualization
@@ -38,11 +38,13 @@ type CardDeclined = { type: 'CARD_DECLINED'; amount: number; reason: string };
 type EmailFailed = { type: 'EMAIL_FAILED'; to: string; error: string };
 
 const fetchUser = async (
-  id: string
-): Promise<Result<
-  { id: string; name: string; email: string; isPremium: boolean },
-  UserNotFound
->> => {
+  id: string,
+): Promise<
+  Result<
+    { id: string; name: string; email: string; isPremium: boolean },
+    UserNotFound
+  >
+> => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   if (id === 'error-user') {
     return err({ type: 'USER_NOT_FOUND', userId: id });
@@ -56,11 +58,13 @@ const fetchUser = async (
 };
 
 const chargeCard = async (
-  amount: number
-): Promise<Result<
-  { transactionId: string; amount: number; status: string },
-  CardDeclined
->> => {
+  amount: number,
+): Promise<
+  Result<
+    { transactionId: string; amount: number; status: string },
+    CardDeclined
+  >
+> => {
   await new Promise((resolve) => setTimeout(resolve, 100));
   if (amount > 1000) {
     return err({
@@ -78,8 +82,10 @@ const chargeCard = async (
 
 const sendEmail = async (
   to: string,
-  subject: string
-): Promise<Result<{ sent: boolean; to: string; subject: string }, EmailFailed>> => {
+  subject: string,
+): Promise<
+  Result<{ sent: boolean; to: string; subject: string }, EmailFailed>
+> => {
   await new Promise((resolve) => setTimeout(resolve, 30));
   if (to.includes('fail')) {
     return err({
@@ -96,7 +102,7 @@ const sendEmail = async (
 };
 
 const fetchPremiumData = async (
-  userId: string
+  userId: string,
 ): Promise<Result<{ premiumFeatures: string[]; userId: string }, never>> => {
   await new Promise((resolve) => setTimeout(resolve, 40));
   return ok({
@@ -106,7 +112,7 @@ const fetchPremiumData = async (
 };
 
 const fetchBasicData = async (
-  userId: string
+  userId: string,
 ): Promise<Result<{ basicFeatures: string[]; userId: string }, never>> => {
   await new Promise((resolve) => setTimeout(resolve, 20));
   return ok({
@@ -121,7 +127,9 @@ const fetchBasicData = async (
 
 async function example1_SuccessfulWorkflow() {
   logger.info('\n✅ Example 1: Successful Workflow');
-  logger.info('   Demonstrates successful execution with all observability features\n');
+  logger.info(
+    '   Demonstrates successful execution with all observability features\n',
+  );
 
   const autotel = createAutotelAdapter({
     serviceName: 'checkout-service',
@@ -169,14 +177,17 @@ async function example1_SuccessfulWorkflow() {
 
     const email = await step(
       () => deps.sendEmail(user.email, 'Order confirmation'),
-      { name: 'Send email' }
+      { name: 'Send email' },
     );
 
     return { user, charge, email };
   });
 
   if (result.ok) {
-    logger.info({ result: result.value }, '✅ Checkout completed successfully\n');
+    logger.info(
+      { result: result.value },
+      '✅ Checkout completed successfully\n',
+    );
   } else {
     logger.error({ error: result.error }, '❌ Checkout failed\n');
   }
@@ -234,7 +245,10 @@ async function example2_ErrorHandling() {
   if (result.ok) {
     logger.info({ result: result.value }, '✅ Workflow succeeded\n');
   } else {
-    logger.error({ error: result.error }, '❌ Expected error (user not found)\n');
+    logger.error(
+      { error: result.error },
+      '❌ Expected error (user not found)\n',
+    );
   }
 
   // Show metrics
@@ -385,7 +399,7 @@ async function example4_CacheBehavior() {
       cacheMisses: metrics.cacheMisses,
       stepDurations: metrics.stepDurations,
     },
-    '📊 Cache statistics'
+    '📊 Cache statistics',
   );
 
   // Show visualization
@@ -438,23 +452,28 @@ async function example5_WithAutotelTracing() {
         const charge = await step(() => deps.chargeCard(199.99), {
           name: 'Charge card',
         });
-        const email = await step(
-          () => deps.sendEmail(user.email, 'Welcome!'),
-          { name: 'Send welcome email' }
-        );
+        const email = await step(() => deps.sendEmail(user.email, 'Welcome!'), {
+          name: 'Send welcome email',
+        });
         return { user, charge, email };
       });
     },
     {
       workflow: 'checkout',
       version: '1.0',
-    }
+    },
   );
 
   if (workflowResult.ok) {
-    logger.info({ result: workflowResult.value }, '✅ Complete checkout finished\n');
+    logger.info(
+      { result: workflowResult.value },
+      '✅ Complete checkout finished\n',
+    );
   } else {
-    logger.error({ error: workflowResult.error }, '❌ Combined approach failed\n');
+    logger.error(
+      { error: workflowResult.error },
+      '❌ Combined approach failed\n',
+    );
   }
 
   // Show visualization
@@ -526,10 +545,9 @@ async function example6_MultipleErrors() {
     const user = await step(() => deps.fetchUser('user-123'), {
       name: 'Fetch user',
     });
-    const email = await step(
-      () => deps.sendEmail('fail@example.com', 'Test'),
-      { name: 'Send email' }
-    );
+    const email = await step(() => deps.sendEmail('fail@example.com', 'Test'), {
+      name: 'Send email',
+    });
     return { user, email };
   });
   logger.info({ ok: result3.ok, error: result3.ok ? null : result3.error }, '');

@@ -86,7 +86,6 @@ export function HttpInstrumented(options: HttpInstrumentedOptions = {}) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-empty-object-type
   return function <T extends { new (...args: any[]): {} }>(
     target: T,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _context: ClassDecoratorContext,
   ) {
     return class extends target {
@@ -343,9 +342,9 @@ function extractStatusCode(result: unknown): number | undefined {
  *
  * @example With baggage
  * ```typescript
- * import { trace, withBaggage, injectTraceContext } from 'autotel'
+ * import { trace, withTracing, withBaggage, injectTraceContext } from 'autotel'
  *
- * export const createOrder = trace((ctx) => async (order: Order) => {
+ * export const createOrder = withTracing({})((ctx) => async (order: Order) => {
  *   return await withBaggage({
  *     baggage: { 'tenant.id': order.tenantId },
  *     fn: async () => {
@@ -382,7 +381,7 @@ export function injectTraceContext(
  *
  * @example
  * ```typescript
- * import { extractTraceContext, trace } from 'autotel'
+ * import { extractTraceContext, trace, withTracing } from 'autotel'
  * import { context } from 'autotel'
  *
  * // In Express middleware
@@ -396,7 +395,7 @@ export function injectTraceContext(
  *
  * @example In a traced function
  * ```typescript
- * export const handleWebhook = trace((ctx) => async (req: Request) => {
+ * export const handleWebhook = withTracing({})((ctx) => async (req: Request) => {
  *   const extractedContext = extractTraceContext(req.headers);
  *   return await context.with(extractedContext, async () => {
  *     // Now ctx.getBaggage() will return baggage from the incoming request

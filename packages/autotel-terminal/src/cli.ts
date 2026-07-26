@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import path from 'node:path';
 import { renderTerminal } from './index';
 import { listenLoopbackDualStack } from './listen';

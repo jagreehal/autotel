@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CanonicalLogLineProcessor } from './canonical-log-line-processor';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import {
+  SpanKind,
+  SpanStatusCode,
+  type Attributes,
+  type AttributeValue,
+} from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { logs } from '@opentelemetry/api-logs';
 import type { Logger } from '../logger';
@@ -91,7 +96,7 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.level).toBe('info');
       expect(call.message).toContain('test.operation');
       expect(call.attrs).toMatchObject({
@@ -113,7 +118,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs).toMatchObject({
         'service.name': 'test-service',
         'service.version': '1.0.0',
@@ -129,7 +134,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs).not.toHaveProperty('service.name');
       expect(call.attrs).not.toHaveProperty('service.version');
     });
@@ -142,7 +147,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs.duration_ms).toBeCloseTo(2500, 1);
     });
 
@@ -154,7 +159,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs.timestamp).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
       );
@@ -245,9 +250,9 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       expect(mockLogger.error).toHaveBeenCalledTimes(1);
-      expect(logEntries[0].level).toBe('error');
-      expect(logEntries[0].attrs.status_code).toBe(SpanStatusCode.ERROR);
-      expect(logEntries[0].attrs.status_message).toBe('Something went wrong');
+      expect(logEntries[0]!.level).toBe('error');
+      expect(logEntries[0]!.attrs.status_code).toBe(SpanStatusCode.ERROR);
+      expect(logEntries[0]!.attrs.status_message).toBe('Something went wrong');
     });
 
     it('should use info level for successful spans', () => {
@@ -259,7 +264,7 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
-      expect(logEntries[0].level).toBe('info');
+      expect(logEntries[0]!.level).toBe('info');
     });
 
     it('should use explicit autotel.log.level attribute when provided', () => {
@@ -273,7 +278,7 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       expect(mockLogger.warn).toHaveBeenCalledTimes(1);
-      expect(logEntries[0].level).toBe('warn');
+      expect(logEntries[0]!.level).toBe('warn');
     });
   });
 
@@ -318,7 +323,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      expect(logEntries[0].message).toBe('[SUCCESS] test.operation');
+      expect(logEntries[0]!.message).toBe('[SUCCESS] test.operation');
     });
   });
 
@@ -338,7 +343,7 @@ describe('CanonicalLogLineProcessor', () => {
     });
 
     it('should call drain after emit with canonical event context', async () => {
-      const drain = vi.fn(async () => {});
+      const drain = vi.fn(async (_event: unknown) => {});
       const processor = new CanonicalLogLineProcessor({
         logger: mockLogger,
         drain,
@@ -350,7 +355,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
       expect(drain).toHaveBeenCalledTimes(1);
-      expect(drain.mock.calls[0][0]).toMatchObject({
+      expect(drain.mock.calls[0]![0]).toMatchObject({
         level: 'info',
         message: expect.stringContaining('test.operation'),
         event: expect.objectContaining({
@@ -395,7 +400,7 @@ describe('CanonicalLogLineProcessor', () => {
       expect(mockGetLogger).toHaveBeenCalledWith('autotel.canonical-log-line');
       expect(mockOTelLogger.emit).toHaveBeenCalledTimes(1);
       const emitCall = (mockOTelLogger.emit as ReturnType<typeof vi.fn>).mock
-        .calls[0][0];
+        .calls[0]![0];
       expect(emitCall.body).toContain('test.operation');
       expect(emitCall.attributes).toMatchObject({
         operation: 'test.operation',
@@ -414,7 +419,7 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs).toHaveProperty('operation');
       expect(call.attrs).toHaveProperty('traceId');
       expect(call.attrs).toHaveProperty('spanId');
@@ -422,7 +427,7 @@ describe('CanonicalLogLineProcessor', () => {
 
     it('should handle spans with many attributes', () => {
       const processor = new CanonicalLogLineProcessor({ logger: mockLogger });
-      const manyAttrs: Record<string, unknown> = {};
+      const manyAttrs: Attributes = {};
       for (let i = 0; i < 100; i++) {
         manyAttrs[`attr.${i}`] = `value-${i}`;
       }
@@ -431,7 +436,7 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       expect(mockLogger.info).toHaveBeenCalledTimes(1);
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(Object.keys(call.attrs).length).toBeGreaterThan(100);
     });
 
@@ -443,14 +448,14 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs.status_message).toBeUndefined();
     });
   });
 
   describe('attribute redaction', () => {
     it('should apply attribute redactor to span attributes', () => {
-      const redactor = vi.fn((key: string, value: unknown) => {
+      const redactor = vi.fn((key: string, value: AttributeValue) => {
         if (key === 'user.password') return '[REDACTED]';
         if (key === 'user.email' && typeof value === 'string') {
           return value.replace(/@.*/, '@[REDACTED]');
@@ -472,7 +477,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs['user.id']).toBe('user-123');
       expect(call.attrs['user.email']).toBe('alice@[REDACTED]');
       expect(call.attrs['user.password']).toBe('[REDACTED]');
@@ -488,7 +493,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs['user.password']).toBe('secret123');
     });
   });
@@ -510,7 +515,7 @@ describe('CanonicalLogLineProcessor', () => {
 
       processor.onEnd(span);
 
-      const call = logEntries[0];
+      const call = logEntries[0]!;
       expect(call.attrs.traceId).toBe('4bf92f3577b34da6a3ce929d0e0e4736');
       expect(call.attrs.spanId).toBe('00f067aa0ba902b7');
       expect(call.attrs.operation).toBe('test.operation');

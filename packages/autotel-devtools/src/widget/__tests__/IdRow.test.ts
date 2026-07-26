@@ -34,7 +34,12 @@ describe('IdRow', () => {
   it('calls onActivate when the link is clicked', async () => {
     const onActivate = vi.fn();
     render(IdRow, {
-      props: { label: 'Trace ID', value: 't1', onActivate, activateTitle: 'Go' },
+      props: {
+        label: 'Trace ID',
+        value: 't1',
+        onActivate,
+        activateTitle: 'Go',
+      },
     });
     screen.getByTitle('Go').click();
     expect(onActivate).toHaveBeenCalledOnce();

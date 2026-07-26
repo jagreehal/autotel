@@ -16,6 +16,8 @@ function report(
       observedButUndocumented: overrides.observedButUndocumented ?? [],
       documentedButUnseen: overrides.documentedButUnseen ?? [],
       fieldDrift: overrides.fieldDrift ?? [],
+      typeDrift: overrides.typeDrift ?? [],
+      valueDrift: overrides.valueDrift ?? [],
     },
     services: { observedButUndocumented: [] },
     channels: { observedButUndocumented: [] },

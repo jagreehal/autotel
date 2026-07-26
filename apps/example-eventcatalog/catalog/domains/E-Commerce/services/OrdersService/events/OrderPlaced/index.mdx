@@ -46,16 +46,15 @@ Volume **27,431 / 7d**. p95 publish latency **8ms**. Last seen **12s ago**.
 **Drift status**: clean. All observed field paths match the declared schema.
 
 Sample trace: `trace-9f2a7b3c-1a2b`.
+
 </div>
 
 ## Consumers
 
-| Service | Why it cares |
-|---|---|
-| [[service\|PaymentService]] | Capture payment against the recorded total |
-| [[service\|RecommendationsService]] | Generate post-purchase recommendation |
-
-
+| Service                             | Why it cares                               |
+| ----------------------------------- | ------------------------------------------ |
+| [[service\|PaymentService]]         | Capture payment against the recorded total |
+| [[service\|RecommendationsService]] | Generate post-purchase recommendation      |
 
 <!-- autotel:stamp-start -->
 
@@ -65,6 +64,7 @@ Sample trace: `trace-9f2a7b3c-1a2b`.
 **Volume**: 5 events · **Last seen**: 2026-05-22 05:33 UTC · **Producer**: OrdersService · **Channel**: `orders.events`
 
 **Field paths observed**: `currency`, `customerId`, `items`, `items[].priceCents`, `items[].quantity`, `items[].sku`, `metadata`, `metadata.source`, `orderId`, `shipping`, `shipping.addressId`, `totalCents`
+
 </div>
 
 <!-- autotel:stamp-end -->

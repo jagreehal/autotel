@@ -9,9 +9,7 @@ export const mongoose: PluginPreset = {
   type: 'plugin',
   description: 'Instrument Mongoose ODM for MongoDB tracing',
   packages: {
-    required: [
-      'autotel-plugins',
-    ],
+    required: ['autotel-plugins'],
     optional: [],
     devOnly: [],
   },
@@ -49,9 +47,7 @@ export const drizzle: PluginPreset = {
   type: 'plugin',
   description: 'Instrument Drizzle ORM for database tracing',
   packages: {
-    required: [
-      'autotel-plugins',
-    ],
+    required: ['autotel-plugins'],
     optional: [],
     devOnly: [],
   },

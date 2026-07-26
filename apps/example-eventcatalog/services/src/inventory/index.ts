@@ -1,11 +1,15 @@
 // InventoryService — reserves stock against a confirmed payment.
 
-import { trace, span } from 'autotel';
+import { span, withTracing } from 'autotel';
 import { traceConsumer } from 'autotel/messaging';
 import { inventoryReservedEvent } from '../shared/events';
 import { isoNow } from '../shared/clock';
 
-type ReserveItems = Array<{ sku: string; quantity: number; priceCents: number }>;
+type ReserveItems = Array<{
+  sku: string;
+  quantity: number;
+  priceCents: number;
+}>;
 
 type WmsStub = {
   reserve: (items: ReserveItems) => Promise<{ id: string }>;
@@ -22,30 +26,33 @@ export function setWmsStub(next: WmsStub): void {
   wms = next;
 }
 
-export const reserveStock = trace((ctx) => async (orderId: string, items: ReserveItems) => {
-  ctx.setAttribute('inventory.order_id', orderId);
-  ctx.setAttribute('inventory.item_count', items.length);
+export const reserveStock = withTracing({})(
+  (ctx) => async (orderId: string, items: ReserveItems) => {
+    ctx.setAttribute('inventory.order_id', orderId);
+    ctx.setAttribute('inventory.item_count', items.length);
 
-  const reservation = await span('wms.reserve', async (s) => {
-    s.setAttribute('wms.system', 'manhattan');
-    return wms.reserve(items);
-  });
+    const reservation = await span('wms.reserve', async (s) => {
+      s.setAttribute('wms.system', 'manhattan');
+      return wms.reserve(items);
+    });
 
-  inventoryReservedEvent.track({
-    orderId,
-    reservationId: reservation.id,
-    warehouseId: 'wh-eu-1',
-    items,
-    reservedAt: isoNow(),
-    _autotel: { channel: 'inventory.events', producer: 'InventoryService' },
-  });
+    inventoryReservedEvent.track({
+      orderId,
+      reservationId: reservation.id,
+      warehouseId: 'wh-eu-1',
+      items,
+      reservedAt: isoNow(),
+      _autotel: { channel: 'inventory.events', producer: 'InventoryService' },
+    });
 
-  return reservation;
-});
+    return reservation;
+  },
+);
 
 export const handlePaymentCaptured = traceConsumer({
   system: 'kafka',
   destination: 'payments.events',
-})(() => async (msg: { orderId: string; items: ReserveItems }) =>
-  reserveStock(msg.orderId, msg.items),
+})(
+  () => async (msg: { orderId: string; items: ReserveItems }) =>
+    reserveStock(msg.orderId, msg.items),
 );

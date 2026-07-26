@@ -5,7 +5,11 @@ import type {
   RequestLoggerOptions,
   TraceContext,
 } from 'autotel';
-import { createNoopRequestLogger, getRequestLogger, trace } from 'autotel';
+import {
+  createNoopRequestLogger,
+  getRequestLogger,
+  withTracing,
+} from 'autotel';
 import { attachForkToLogger } from './fork';
 import { createStorageForkLifecycle } from './storage';
 import {
@@ -266,10 +270,11 @@ export function defineFrameworkIntegration<TCtx>(
       const spanName =
         options?.spanName ?? resolveSpanName(spec, ctx, extracted);
 
-      return trace({ name: spanName }, (traceCtx) => async () => {
+      // The wrapped factory is async, so the call always yields a Promise.
+      return withTracing({ name: spanName })((traceCtx) => async () => {
         const handle = buildHandle(spec, ctx, traceCtx, options ?? {});
         return handler(handle);
-      })();
+      })() as ReturnType<typeof handler>;
     },
   };
 }

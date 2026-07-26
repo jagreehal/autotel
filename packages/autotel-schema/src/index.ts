@@ -12,10 +12,7 @@
  * anywhere (browser, edge, CLI) without pulling in the OpenTelemetry SDK.
  */
 
-export {
-  SCHEMA_ATTRS,
-  SNAPSHOT_SPEC,
-} from './attrs.js';
+export { SCHEMA_ATTRS, SNAPSHOT_SPEC } from './attrs.js';
 export type { SchemaAttributeKey } from './attrs.js';
 
 export {
@@ -44,11 +41,7 @@ export type {
   ContractSnapshot,
 } from './snapshot.js';
 
-export {
-  validateSpan,
-  hasErrors,
-  formatViolation,
-} from './validate.js';
+export { validateSpan, hasErrors, formatViolation } from './validate.js';
 export type {
   ViolationSeverity,
   ViolationCode,
@@ -70,11 +63,7 @@ export type {
   SchemaValidationProcessorOptions,
 } from './processor.js';
 
-export {
-  diffSnapshots,
-  hasBreakingChanges,
-  formatDiff,
-} from './diff.js';
+export { diffSnapshots, hasBreakingChanges, formatDiff } from './diff.js';
 export type {
   ChangeKind,
   ChangeType,
@@ -107,9 +96,6 @@ export type {
   ScenarioProposal,
 } from './scenario.js';
 
-export {
-  highCardinalityKeys,
-  isHighCardinalityKey,
-} from './redaction.js';
+export { highCardinalityKeys, isHighCardinalityKey } from './redaction.js';
 
 export { AGENT_SECURITY_TELEMETRY_CONTRACT } from './contracts/agent-security.js';

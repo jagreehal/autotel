@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TraceFlags } from '@opentelemetry/api';
-import type { Link, SpanContext } from '@opentelemetry/api';
+import type { Link, SpanContext, Attributes } from '@opentelemetry/api';
 import {
   RandomSampler,
   AlwaysSampler,
@@ -545,10 +545,7 @@ describe('Sampling', () => {
     });
 
     // Helper to create a Link
-    const createLink = (
-      sampled: boolean,
-      attributes?: Record<string, unknown>,
-    ): Link => ({
+    const createLink = (sampled: boolean, attributes?: Attributes): Link => ({
       context: createSpanContext(sampled),
       attributes: attributes ?? {},
     });
@@ -871,10 +868,10 @@ describe('Sampling', () => {
         const links = extractLinksFromBatch(messages);
 
         expect(links).toHaveLength(2);
-        expect(links[0].context.traceId).toBe(
+        expect(links[0]!.context.traceId).toBe(
           '0af7651916cd43dd8448eb211c80319c',
         );
-        expect(links[1].context.traceId).toBe(
+        expect(links[1]!.context.traceId).toBe(
           '1af7651916cd43dd8448eb211c80319c',
         );
       });
@@ -899,8 +896,8 @@ describe('Sampling', () => {
 
         const links = extractLinksFromBatch(messages);
 
-        expect(links[0].attributes?.['messaging.batch.message_index']).toBe(0);
-        expect(links[1].attributes?.['messaging.batch.message_index']).toBe(1);
+        expect(links[0]!.attributes?.['messaging.batch.message_index']).toBe(0);
+        expect(links[1]!.attributes?.['messaging.batch.message_index']).toBe(1);
       });
 
       it('should use custom headers key', () => {
@@ -955,7 +952,7 @@ describe('Sampling', () => {
         const links = extractLinksFromBatch(messages);
 
         expect(links).toHaveLength(1);
-        expect(links[0].context.traceId).toBe(
+        expect(links[0]!.context.traceId).toBe(
           '0af7651916cd43dd8448eb211c80319c',
         );
       });
@@ -1015,7 +1012,7 @@ describe('Sampling', () => {
     });
 
     it('production() accepts overrides', () => {
-      const sampler = samplingPresets.production({ baselineSampleRate: 1.0 });
+      const sampler = samplingPresets.production({ baselineSampleRate: 1 });
       sampler.shouldSample(context);
       // With 100% baseline, all healthy traffic is kept
       expect(

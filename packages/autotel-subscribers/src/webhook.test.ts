@@ -137,8 +137,12 @@ describe('WebhookSubscriber', () => {
       url: 'https://hooks.example.com/webhook',
     });
 
-    const first = subscriber.trackEvent('order.completed', { userId: 'user-1' });
-    const second = subscriber.trackEvent('order.completed', { userId: 'user-2' });
+    const first = subscriber.trackEvent('order.completed', {
+      userId: 'user-1',
+    });
+    const second = subscriber.trackEvent('order.completed', {
+      userId: 'user-2',
+    });
 
     await subscriber.shutdown();
     await Promise.all([first, second]);

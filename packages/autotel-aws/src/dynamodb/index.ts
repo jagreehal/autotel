@@ -48,7 +48,7 @@
  * ```
  */
 
-import { trace, type TraceContext } from 'autotel';
+import { type TraceContext, withTracing } from 'autotel';
 import { buildDynamoDBAttributes } from '../attributes';
 
 /**
@@ -96,8 +96,7 @@ export function traceDynamoDB(config: TraceDynamoDBConfig) {
     fn: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): (...args: TArgs) => Promise<TReturn> {
     // Use autotel's trace() which properly handles the factory pattern
-    return trace(
-      `dynamodb.${config.operation}`,
+    return withTracing({ name: `dynamodb.${config.operation}` })(
       (ctx: TraceContext) =>
         async (...args: TArgs): Promise<TReturn> => {
           // Set DynamoDB semantic attributes
@@ -112,6 +111,6 @@ export function traceDynamoDB(config: TraceDynamoDBConfig) {
           const handler = fn(ctx);
           return handler(...args);
         },
-    );
+    ) as (...args: TArgs) => Promise<TReturn>;
   };
 }

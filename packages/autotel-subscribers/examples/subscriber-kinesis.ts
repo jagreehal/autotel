@@ -30,10 +30,10 @@
  *
  * Usage:
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { KinesisSubscriber } from './adapter-kinesis';
  *
- * const events = new Events('app', {
+ * const events = new Event('app', {
  *   subscribers: [
  *     new KinesisSubscriber({
  *       streamName: 'events-events',
@@ -108,7 +108,9 @@ export class KinesisSubscriber extends StreamingEventSubscriber {
   readonly version = '1.0.0';
 
   private client: KinesisClient;
-  private subscriberConfig: Required<Omit<KinesisSubscriberConfig, 'credentials'>> & {
+  private subscriberConfig: Required<
+    Omit<KinesisSubscriberConfig, 'credentials'>
+  > & {
     credentials?: KinesisSubscriberConfig['credentials'];
   };
 
@@ -206,7 +208,7 @@ export class KinesisSubscriber extends StreamingEventSubscriber {
    */
   private async sendWithRetry(
     records: PutRecordsRequestEntry[],
-    attempt = 1
+    attempt = 1,
   ): Promise<void> {
     try {
       const command = new PutRecordsCommand({
@@ -220,27 +222,31 @@ export class KinesisSubscriber extends StreamingEventSubscriber {
       if (result.FailedRecordCount && result.FailedRecordCount > 0) {
         const failedRecords: PutRecordsRequestEntry[] = [];
 
-        if (result.Records) for (const [index, record] of result.Records.entries()) {
-          if (record.ErrorCode) {
-            console.error(
-              `[KinesisSubscriber] Record ${index} failed: ${record.ErrorCode} - ${record.ErrorMessage}`
-            );
-            failedRecords.push(records[index]);
+        if (result.Records)
+          for (const [index, record] of result.Records.entries()) {
+            if (record.ErrorCode) {
+              console.error(
+                `[KinesisSubscriber] Record ${index} failed: ${record.ErrorCode} - ${record.ErrorMessage}`,
+              );
+              failedRecords.push(records[index]);
+            }
           }
-        }
 
         // Retry failed records
-        if (failedRecords.length > 0 && attempt < this.adapterConfig.maxRetries) {
+        if (
+          failedRecords.length > 0 &&
+          attempt < this.adapterConfig.maxRetries
+        ) {
           const backoffMs = Math.min(1000 * Math.pow(2, attempt), 30_000);
           console.warn(
-            `[KinesisSubscriber] Retrying ${failedRecords.length} failed records (attempt ${attempt}) after ${backoffMs}ms`
+            `[KinesisSubscriber] Retrying ${failedRecords.length} failed records (attempt ${attempt}) after ${backoffMs}ms`,
           );
 
           await new Promise((resolve) => setTimeout(resolve, backoffMs));
           await this.sendWithRetry(failedRecords, attempt + 1);
         } else if (failedRecords.length > 0) {
           throw new Error(
-            `Failed to send ${failedRecords.length} records after ${this.adapterConfig.maxRetries} attempts`
+            `Failed to send ${failedRecords.length} records after ${this.adapterConfig.maxRetries} attempts`,
           );
         }
       }
@@ -248,14 +254,14 @@ export class KinesisSubscriber extends StreamingEventSubscriber {
       // Success - log metrics
       if (process.env.DEBUG) {
         console.log(
-          `[KinesisSubscriber] Sent ${records.length} records successfully`
+          `[KinesisSubscriber] Sent ${records.length} records successfully`,
         );
       }
     } catch (error: any) {
       // Handle specific Kinesis errors
       if (error.name === 'ProvisionedThroughputExceededException') {
         console.error(
-          '[KinesisSubscriber] Provisioned throughput exceeded - consider increasing shard count or reducing rate'
+          '[KinesisSubscriber] Provisioned throughput exceeded - consider increasing shard count or reducing rate',
         );
 
         // Backpressure: Wait before retry
@@ -269,7 +275,7 @@ export class KinesisSubscriber extends StreamingEventSubscriber {
 
       if (error.name === 'ResourceNotFoundException') {
         console.error(
-          `[KinesisSubscriber] Stream not found: ${this.adapterConfig.streamName}`
+          `[KinesisSubscriber] Stream not found: ${this.adapterConfig.streamName}`,
         );
       }
 
@@ -288,7 +294,7 @@ export class KinesisSubscriber extends StreamingEventSubscriber {
         eventName: payload.name,
         partitionKey: this.getPartitionKey(payload),
         streamName: this.adapterConfig.streamName,
-      }
+      },
     );
   }
 

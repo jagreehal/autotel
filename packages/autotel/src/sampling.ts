@@ -34,6 +34,56 @@ export const AUTOTEL_SAMPLING_TAIL_EVALUATED =
   'autotel.sampling.tail.evaluated';
 
 /**
+ * How many events each kept event stands for, expressed as "1 in N".
+ *
+ * A query that counts sampled spans undercounts the population. Multiplying
+ * each kept event by this rate restores the estimate. Autotel records the
+ * attribute only when N exceeds 1, so fully captured spans stay clean.
+ */
+export const AUTOTEL_SAMPLING_RATE = 'autotel.sampling.rate';
+
+/**
+ * Convert a keep probability into the "1 in N" rate reported on spans.
+ *
+ * Keeping 10% of traces means each survivor stands for 10, so the two numbers
+ * are reciprocals and easy to publish the wrong way round.
+ */
+function toSampleRate(probability: number): number {
+  return probability > 0 ? 1 / probability : 0;
+}
+
+/**
+ * Map a string to a stable, evenly spread position in the unit interval.
+ *
+ * Two processes that hash the same key reach the same number, which is what
+ * lets independent services agree on one trace's sampling decision.
+ *
+ * The spread matters as much as the stability. Real sampling keys share long
+ * prefixes: `user_1000`, `user_1001`, `checkout-trace-0001`. A plain
+ * multiply-and-add hash lets that shared prefix dominate the high bits, so a
+ * whole key family lands in one narrow band and a rate of 0.1 keeps all of
+ * them or none of them. FNV-1a followed by the murmur3 finalizer mixes the
+ * low bits back through the word, so keys that differ in one character land
+ * far apart.
+ */
+export function hashUnitInterval(value: string): number {
+  let hash = 0x81_1c_9d_c5; // FNV-1a 32-bit offset basis
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.codePointAt(i) ?? 0;
+    hash = Math.imul(hash, 0x01_00_01_93); // FNV prime
+  }
+
+  // murmur3 fmix32 avalanche
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85_eb_ca_6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2_b2_ae_35);
+  hash ^= hash >>> 16;
+
+  return (hash >>> 0) / 4_294_967_296;
+}
+
+/**
  * Sampler interface - return true to trace, false to skip
  */
 export interface Sampler {
@@ -62,6 +112,17 @@ export interface Sampler {
    * @returns true if this trace should be kept, false to drop it
    */
   shouldKeepTrace?(context: SamplingContext, result: OperationResult): boolean;
+
+  /**
+   * How many events a kept event represents, as "1 in N".
+   *
+   * Autotel writes the result to {@link AUTOTEL_SAMPLING_RATE} so an analyst
+   * can reweight counts. Return 1 when the sampler keeps everything.
+   *
+   * @param context - Sampling context
+   * @returns Events represented per kept event
+   */
+  sampleRate?(context: SamplingContext): number;
 }
 
 /**
@@ -99,15 +160,18 @@ export interface OperationResult {
  * ```
  */
 export class RandomSampler implements Sampler {
-  constructor(private readonly sampleRate: number) {
-    if (sampleRate < 0 || sampleRate > 1) {
+  constructor(private readonly rate: number) {
+    if (rate < 0 || rate > 1) {
       throw new Error('Sample rate must be between 0 and 1');
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSample(_context: SamplingContext): boolean {
-    return Math.random() < this.sampleRate;
+    return Math.random() < this.rate;
+  }
+
+  sampleRate(): number {
+    return toSampleRate(this.rate);
   }
 }
 
@@ -115,7 +179,6 @@ export class RandomSampler implements Sampler {
  * Always sample (100% tracing)
  */
 export class AlwaysSampler implements Sampler {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSample(_context: SamplingContext): boolean {
     return true;
   }
@@ -125,7 +188,6 @@ export class AlwaysSampler implements Sampler {
  * Never sample (0% tracing)
  */
 export class NeverSampler implements Sampler {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSample(_context: SamplingContext): boolean {
     return false;
   }
@@ -388,13 +450,151 @@ export class UserIdSampler implements Sampler {
    * Simple hash function for consistent user sampling
    */
   private hashString(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.codePointAt(i) ?? 0;
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32-bit integer
+    return hashUnitInterval(str);
+  }
+}
+
+/**
+ * Consistent sampler: every service reaches the same verdict for one trace.
+ *
+ * `RandomSampler` rolls the dice per process, so an upstream service can keep
+ * a trace that its downstream drops, leaving a waterfall with holes in it.
+ * Hashing a key that travels with the request removes the disagreement. Pass
+ * the trace id, or any identifier every hop already shares.
+ *
+ * @example
+ * ```typescript
+ * new DeterministicSampler({
+ *   sampleRate: 0.1,
+ *   key: (context) => trace.getActiveSpan()?.spanContext().traceId,
+ * })
+ * ```
+ */
+export class DeterministicSampler implements Sampler {
+  private readonly rate: number;
+  private readonly key: (context: SamplingContext) => string | undefined;
+
+  constructor(options: {
+    /** Fraction of traces to keep, 0-1. */
+    sampleRate: number;
+    /** Identifier shared by every hop of the trace. */
+    key: (context: SamplingContext) => string | undefined;
+  }) {
+    if (options.sampleRate < 0 || options.sampleRate > 1) {
+      throw new Error('Sample rate must be between 0 and 1');
     }
-    return Math.abs(hash) / 2_147_483_647; // Normalize to 0-1
+    this.rate = options.sampleRate;
+    this.key = options.key;
+  }
+
+  shouldSample(context: SamplingContext): boolean {
+    const key = this.key(context);
+    // No shared key means no agreement to preserve, so fall back to chance.
+    if (key === undefined) {
+      return Math.random() < this.rate;
+    }
+    return hashUnitInterval(key) < this.rate;
+  }
+
+  sampleRate(): number {
+    return toSampleRate(this.rate);
+  }
+}
+
+/** Bucket for keys seen after the tracked map fills up. */
+const OVERFLOW_KEY = '__overflow__';
+
+/**
+ * Per-key target-rate sampler for workloads with uneven traffic.
+ *
+ * A single rate serves a skewed workload badly: 1% floods storage with the
+ * busiest endpoint and still loses the rare tenant whose failures you need.
+ * This sampler counts traffic per key over a rolling window, then sets each
+ * key its own rate so every key contributes roughly `targetPerKey` events.
+ * Quiet keys survive intact; loud keys get thinned.
+ *
+ * The first window keeps everything, because no traffic history exists yet.
+ * Rates take effect from the second window onward.
+ *
+ * @example
+ * ```typescript
+ * new KeyTargetRateSampler({
+ *   key: (context) => context.operationName,
+ *   targetPerKey: 10,     // ~10 events per key per window
+ *   windowMs: 30_000,
+ * })
+ * ```
+ */
+export class KeyTargetRateSampler implements Sampler {
+  private readonly key: (context: SamplingContext) => string | undefined;
+  private readonly targetPerKey: number;
+  private readonly windowMs: number;
+  private readonly maxKeys: number;
+  private counts = new Map<string, number>();
+  private rates = new Map<string, number>();
+  private windowStart = Date.now();
+
+  constructor(options: {
+    /** Groups traffic. Use the operation, route, tenant, or status. */
+    key: (context: SamplingContext) => string | undefined;
+    /** Events to keep per key per window. Default 10. */
+    targetPerKey?: number;
+    /** Length of the counting window in milliseconds. Default 30000. */
+    windowMs?: number;
+    /** Distinct keys to track before overflowing into one bucket. Default 1000. */
+    maxKeys?: number;
+  }) {
+    this.key = options.key;
+    this.targetPerKey = options.targetPerKey ?? 10;
+    this.windowMs = options.windowMs ?? 30_000;
+    this.maxKeys = options.maxKeys ?? 1000;
+
+    if (this.targetPerKey <= 0) {
+      throw new Error('Target per key must be greater than 0');
+    }
+    if (this.windowMs <= 0) {
+      throw new Error('Window must be greater than 0');
+    }
+  }
+
+  /** Turn the window's observed counts into the next window's rates. */
+  private roll(now: number): void {
+    if (now - this.windowStart < this.windowMs) {
+      return;
+    }
+    const rates = new Map<string, number>();
+    for (const [key, count] of this.counts) {
+      rates.set(key, Math.max(1, count / this.targetPerKey));
+    }
+    this.rates = rates;
+    this.counts = new Map();
+    this.windowStart = now;
+  }
+
+  /**
+   * Resolve the key, collapsing into one bucket once the map is full.
+   *
+   * An unbounded key function would otherwise grow the map without limit,
+   * which turns a sampler meant to cut cost into a memory leak.
+   */
+  private resolveKey(context: SamplingContext): string {
+    const key = this.key(context) ?? OVERFLOW_KEY;
+    if (this.counts.has(key) || this.counts.size < this.maxKeys) {
+      return key;
+    }
+    return OVERFLOW_KEY;
+  }
+
+  shouldSample(context: SamplingContext): boolean {
+    this.roll(Date.now());
+    const key = this.resolveKey(context);
+    this.counts.set(key, (this.counts.get(key) ?? 0) + 1);
+    const rate = this.rates.get(key) ?? 1;
+    return rate <= 1 || Math.random() < 1 / rate;
+  }
+
+  sampleRate(context: SamplingContext): number {
+    return this.rates.get(this.resolveKey(context)) ?? 1;
   }
 }
 
@@ -565,18 +765,23 @@ export const samplingPresets = {
  */
 export function resolveSamplingPreset(preset: SamplingPreset): Sampler {
   switch (preset) {
-    case 'development':
+    case 'development': {
       return samplingPresets.development();
-    case 'errors-only':
+    }
+    case 'errors-only': {
       return samplingPresets.errorsOnly();
-    case 'production':
+    }
+    case 'production': {
       return samplingPresets.production();
-    case 'off':
+    }
+    case 'off': {
       return samplingPresets.off();
-    default:
+    }
+    default: {
       throw new Error(
         `Unknown sampling preset: "${preset}". Valid presets: development, errors-only, production, off`,
       );
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { createStructuredError, trace } from 'autotel';
+import { createStructuredError, withTracing } from 'autotel';
 import type { TraceContext } from 'autotel';
 import { useLogger } from 'autotel-adapters/hono';
 import { otel } from 'autotel-hono';
@@ -21,8 +21,7 @@ export function createWorkerApp(serviceName: string): Hono {
     }),
   );
 
-  const queueNotification = trace(
-    'queueNotification',
+  const queueNotification = withTracing({ name: 'queueNotification' })(
     (ctx: TraceContext) =>
       async (orderId: number, userId: number, type: string) => {
         ctx.setAttribute('shop.flow', 'worker-queue');
@@ -40,22 +39,24 @@ export function createWorkerApp(serviceName: string): Hono {
       },
   );
 
-  const deliverNotification = trace('deliverNotification', (ctx: TraceContext) => async (jobId: number) => {
-    ctx.setAttribute('shop.flow', 'worker-delivery');
-    ctx.setAttribute('worker.job_id', jobId);
-    await new Promise((resolveDelay) =>
-      setTimeout(resolveDelay, 90 + Math.random() * 110),
-    );
-    return db
-      .update(notificationJobs)
-      .set({
-        status: 'delivered',
-        attempts: 1,
-        processedAt: new Date(),
-      })
-      .where(eq(notificationJobs.id, jobId))
-      .run();
-  });
+  const deliverNotification = withTracing({ name: 'deliverNotification' })(
+    (ctx: TraceContext) => async (jobId: number) => {
+      ctx.setAttribute('shop.flow', 'worker-delivery');
+      ctx.setAttribute('worker.job_id', jobId);
+      await new Promise((resolveDelay) =>
+        setTimeout(resolveDelay, 90 + Math.random() * 110),
+      );
+      return db
+        .update(notificationJobs)
+        .set({
+          status: 'delivered',
+          attempts: 1,
+          processedAt: new Date(),
+        })
+        .where(eq(notificationJobs.id, jobId))
+        .run();
+    },
+  );
 
   app.get('/health', (c) =>
     c.json({

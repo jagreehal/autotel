@@ -10,7 +10,10 @@
  * combine functions / processors that already work in isolation.
  */
 import type { Span } from '@opentelemetry/api';
-import type { ReadableSpan as SdkReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type {
+  ReadableSpan as SdkReadableSpan,
+  SpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
 import type {
   EdgeConfig,
   EdgeEvent,
@@ -36,7 +39,9 @@ type Awaitable<T> = T | Promise<T>;
  * })
  * ```
  */
-export function defineConfig<T extends EdgeConfig | ResolveConfigFn>(config: T): T {
+export function defineConfig<T extends EdgeConfig | ResolveConfigFn>(
+  config: T,
+): T {
   return config;
 }
 
@@ -91,7 +96,9 @@ export function composePostProcessors(
  * attribute redactor + the default batch processor without having to author a
  * single processor that knows about all three.
  */
-export function composeSpanProcessors(processors: SpanProcessor[]): SpanProcessor {
+export function composeSpanProcessors(
+  processors: SpanProcessor[],
+): SpanProcessor {
   const safe = (label: string, fn: () => Awaitable<void>) =>
     Promise.resolve()
       .then(fn)
@@ -103,7 +110,10 @@ export function composeSpanProcessors(processors: SpanProcessor[]): SpanProcesso
     onStart(span: Span, parentContext) {
       for (const processor of processors) {
         try {
-          processor.onStart(span as unknown as SdkReadableSpan & Span, parentContext);
+          processor.onStart(
+            span as unknown as SdkReadableSpan & Span,
+            parentContext,
+          );
         } catch (err) {
           console.error('[autotel-edge/compose-span-processors:onStart]', err);
         }

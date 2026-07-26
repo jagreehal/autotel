@@ -22,11 +22,13 @@ export interface NextRequestLike {
   method?: string;
   url?: string;
   headers?:
-    | { get(name: string): string | null }
-    | Record<string, string | undefined>;
+    { get(name: string): string | null } | Record<string, string | undefined>;
 }
 
-export interface NextWithAutotelOptions extends Omit<FrameworkHandlerOptions, 'spanName'> {
+export interface NextWithAutotelOptions extends Omit<
+  FrameworkHandlerOptions,
+  'spanName'
+> {
   spanName?: string | ((request?: NextRequestLike) => string);
   enrichRequest?: (
     request?: NextRequestLike,
@@ -34,7 +36,9 @@ export interface NextWithAutotelOptions extends Omit<FrameworkHandlerOptions, 's
 }
 
 const { storage: nextLoggerStorage, useLogger: storageUseLogger } =
-  createLoggerStorage('request context. Wrap handlers with withAutotel() first.');
+  createLoggerStorage(
+    'request context. Wrap handlers with withAutotel() first.',
+  );
 
 function enrichFromRequest(
   request?: NextRequestLike,

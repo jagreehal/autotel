@@ -119,7 +119,10 @@
   // The agent run (conversation group) the selected span belongs to. Scopes
   // both the summary strip and the guided tour to one run.
   const runRows = $derived(
-    runRowsFor(rows, selected?.normalized.spanId ?? selectedSpanId ?? undefined),
+    runRowsFor(
+      rows,
+      selected?.normalized.spanId ?? selectedSpanId ?? undefined,
+    ),
   );
   const runSummary = $derived(summarizeRun(runRows.map((r) => r.normalized)));
   const runTrace = $derived(buildRunTrace(runRows.map((r) => r.normalized)));
@@ -346,9 +349,13 @@
 
 {#snippet spanList()}
   <div class="px-3 py-2 border-b border-line bg-subtle/50">
-    <div class="mb-1.5 flex items-center justify-between gap-2 text-[11px] font-medium text-fg-muted">
+    <div
+      class="mb-1.5 flex items-center justify-between gap-2 text-[11px] font-medium text-fg-muted"
+    >
       <span>
-        Spans ({isFiltered ? `${filtered.length} of ${rows.length}` : rows.length})
+        Spans ({isFiltered
+          ? `${filtered.length} of ${rows.length}`
+          : rows.length})
       </span>
       <span>{runCount} run{runCount === 1 ? '' : 's'}</span>
     </div>

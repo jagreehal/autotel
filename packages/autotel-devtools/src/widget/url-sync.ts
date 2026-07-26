@@ -119,14 +119,17 @@ export function formatNavHash(state: NavState): string {
   if (state.traceId) params.set('trace', state.traceId);
   if (state.traceId && state.spanId) params.set('span', state.spanId);
   if (state.q) params.set('q', state.q);
-  if (state.status && state.status !== 'all') params.set('status', state.status);
+  if (state.status && state.status !== 'all')
+    params.set('status', state.status);
   if (state.minDuration && state.minDuration > 0)
     params.set('min', String(state.minDuration));
   if (state.timeRange && state.timeRange !== 'all')
     params.set('range', state.timeRange);
   if (
     state.sort &&
-    !(state.sort.key === DEFAULT_SORT.key && state.sort.dir === DEFAULT_SORT.dir)
+    !(
+      state.sort.key === DEFAULT_SORT.key && state.sort.dir === DEFAULT_SORT.dir
+    )
   )
     params.set('sort', `${state.sort.key}:${state.sort.dir}`);
   if (state.genaiQuery) params.set('gq', state.genaiQuery);

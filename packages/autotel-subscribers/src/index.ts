@@ -11,10 +11,10 @@
  *
  * @example Multi-platform tracking
  * ```typescript
- * import { Events } from 'autotel/events';
+ * import { Event } from 'autotel/event';
  * import { PostHogSubscriber, MixpanelSubscriber } from 'autotel-subscribers';
  *
- * const events = new Events('checkout', {
+ * const events = new Event('checkout', {
  *   subscribers: [
  *     new PostHogSubscriber({ apiKey: 'phc_...' }),
  *     new MixpanelSubscriber({ token: '...' })
@@ -62,4 +62,3 @@ export { EventSubscriber, type EventPayload } from './event-subscriber-base';
 
 // Specialized base class for streaming platforms (Kafka, Kinesis, Pub/Sub)
 export { StreamingEventSubscriber } from './streaming-event-subscriber';
-

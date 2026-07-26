@@ -1,16 +1,10 @@
 <script lang="ts" module>
-  import type { SpanData } from '../types';
-
-  export interface SpanNode {
-    span: SpanData;
-    children: SpanNode[];
-    depth: number;
-  }
+  import type { SpanData, SpanNode as SpanTreeNode } from '../types';
 
   /**
    * Count all descendants of a node
    */
-  export function countDescendants(node: SpanNode): number {
+  export function countDescendants(node: SpanTreeNode): number {
     let count = node.children.length;
     for (const child of node.children) count += countDescendants(child);
     return count;
@@ -94,7 +88,7 @@
   } from '@lucide/svelte';
   import { cn } from '../utils/cn';
   import { formatDuration } from '../utils';
-  import type { TraceData } from '../types';
+  import type { SpanNode, TraceData } from '../types';
   import { packEventLanes, classifyEvent } from '../utils/spanEvents';
 
   interface Props {
@@ -343,10 +337,7 @@
   <!-- Duration column -->
   <div class="w-[80px] shrink-0 px-2 py-2 text-right">
     <span
-      class={cn(
-        'text-xs font-mono',
-        isError ? 'text-danger' : 'text-fg-muted',
-      )}
+      class={cn('text-xs font-mono', isError ? 'text-danger' : 'text-fg-muted')}
     >
       {formatDuration(span.duration)}
     </span>

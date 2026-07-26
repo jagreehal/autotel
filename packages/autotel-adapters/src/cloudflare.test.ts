@@ -11,12 +11,9 @@ describe('cloudflare adapter', () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     });
 
-    const handler = withAutotelFetch(
-      async () => Response.json({ ok: true }),
-      {
-        requestLoggerOptions: { onEmit },
-      },
-    );
+    const handler = withAutotelFetch(async () => Response.json({ ok: true }), {
+      requestLoggerOptions: { onEmit },
+    });
 
     await handler(
       { method: 'GET', url: 'https://example.com/api/health' },

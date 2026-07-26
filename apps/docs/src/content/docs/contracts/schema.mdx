@@ -31,13 +31,21 @@ export const contract = defineContract({
   service: 'checkout',
   version: '1.2.0', // semver of the contract, not the app
   commonAttributes: {
-    'user.id': { type: 'string', highCardinality: true, description: 'Authenticated user' },
+    'user.id': {
+      type: 'string',
+      highCardinality: true,
+      description: 'Authenticated user',
+    },
   },
   spans: {
     'checkout.charge': {
       description: 'Charge a payment method',
       attributes: {
-        'payment.provider': { type: 'string', required: true, enum: ['stripe', 'paypal'] },
+        'payment.provider': {
+          type: 'string',
+          required: true,
+          enum: ['stripe', 'paypal'],
+        },
         'payment.amount_cents': { type: 'number', required: true },
       },
     },
@@ -77,18 +85,19 @@ const violations = validateSpan(
   { name: 'checkout.charge', attributes: { 'payment.provider': 'bitcoin' } },
   contract,
 );
-if (hasErrors(violations)) violations.forEach((v) => console.error(formatViolation(v)));
+if (hasErrors(violations))
+  violations.forEach((v) => console.error(formatViolation(v)));
 ```
 
 The validator reports six violation classes:
 
-| Code | Meaning |
-| --- | --- |
-| `missing_required` | A required attribute never showed up on the span. |
-| `type_mismatch` | The value's type does not match the declared type. |
-| `enum_violation` | The value falls outside the declared `enum` set. |
+| Code                | Meaning                                                          |
+| ------------------- | ---------------------------------------------------------------- |
+| `missing_required`  | A required attribute never showed up on the span.                |
+| `type_mismatch`     | The value's type does not match the declared type.               |
+| `enum_violation`    | The value falls outside the declared `enum` set.                 |
 | `unknown_attribute` | An attribute is not declared, with a "did you mean?" suggestion. |
-| `unknown_span` | A span name is not in the contract (under `strictSpanNames`). |
+| `unknown_span`      | A span name is not in the contract (under `strictSpanNames`).    |
 
 ## 3. Gate breaking changes in CI
 
@@ -101,7 +110,10 @@ import { contractToSnapshot, serializeSnapshot } from 'autotel-schema';
 import { writeFileSync } from 'node:fs';
 import { contract } from './telemetry.contract';
 
-writeFileSync('telemetry.snapshot.json', serializeSnapshot(contractToSnapshot(contract)));
+writeFileSync(
+  'telemetry.snapshot.json',
+  serializeSnapshot(contractToSnapshot(contract)),
+);
 ```
 
 Then gate the merge with the bundled CLI:
@@ -115,7 +127,11 @@ autotel-schema diff  telemetry.baseline.json telemetry.current.json --json
 Or call the diff directly:
 
 ```typescript
-import { diffSnapshots, hasBreakingChanges, formatDiff } from 'autotel-schema/diff';
+import {
+  diffSnapshots,
+  hasBreakingChanges,
+  formatDiff,
+} from 'autotel-schema/diff';
 
 const diff = diffSnapshots(baseline, current);
 if (hasBreakingChanges(diff)) throw new Error(formatDiff(diff));
@@ -136,7 +152,10 @@ import { contract } from './telemetry.contract';
 
 init({
   service: 'checkout',
-  attributeRedactor: { allowKeys: highCardinalityKeys(contract), preset: 'strict' },
+  attributeRedactor: {
+    allowKeys: highCardinalityKeys(contract),
+    preset: 'strict',
+  },
 });
 ```
 

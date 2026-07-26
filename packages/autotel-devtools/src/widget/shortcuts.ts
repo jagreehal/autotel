@@ -12,7 +12,10 @@ export interface Shortcut {
 export const GLOBAL_SHORTCUTS: Shortcut[] = [
   { keys: ['1-6'], description: 'Switch between tabs (Traces through Errors)' },
   { keys: ['?'], description: 'Show/hide this shortcuts help' },
-  { keys: ['Esc'], description: 'Close shortcuts help / go back from trace detail' },
+  {
+    keys: ['Esc'],
+    description: 'Close shortcuts help / go back from trace detail',
+  },
   { keys: ['/'], description: 'Focus search filter' },
 ];
 
@@ -28,7 +31,10 @@ export const TRACE_DETAIL_SHORTCUTS: Shortcut[] = [
   { keys: ['w'], description: 'Switch to waterfall view' },
   { keys: ['f'], description: 'Switch to flame graph view' },
   { keys: ['l'], description: 'Switch to list view' },
-  { keys: ['↑', '↓', 'Enter'], description: 'Navigate spans / select in waterfall' },
+  {
+    keys: ['↑', '↓', 'Enter'],
+    description: 'Navigate spans / select in waterfall',
+  },
   { keys: ['e', 'Shift+E'], description: 'Next / previous error span' },
   { keys: ['/'], description: 'Search spans in this trace' },
   { keys: ['?'], description: 'Show/hide keyboard shortcuts' },

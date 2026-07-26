@@ -7,7 +7,7 @@ Run through this list when adding observability to a new service or auditing an 
 - [ ] **Service name set.** `service.name` resource attribute is unique per deployable unit (not just `"app"`).
 - [ ] **OTLP endpoint configured** via `OTLP_ENDPOINT` env var. Don't hard-code per-vendor URLs.
 - [ ] **No global SDK init in handlers.** Init runs once at module load (Next.js `instrumentation.ts`, Workers top of module, Node `--require`).
-- [ ] **Production redaction on.** `attributeRedactor: 'default'` (or `'strict'` / `'pci-dss'`) — autotel turns it on automatically when `NODE_ENV === 'production'`.
+- [ ] **Production redaction on.** `attributeRedactor: 'default'` (or `'strict'` / `'pci-dss'`): autotel turns it on automatically when `NODE_ENV === 'production'`.
 - [ ] **Sampling configured.** Don't ship 100% in production unless volume is genuinely tiny. `sampling.rates: { server: 25 }` is a reasonable starting point.
 
 ## Spans
@@ -31,8 +31,8 @@ Run through this list when adding observability to a new service or auditing an 
 - [ ] **`useLogger().set({ … })` instead of `console.log`.** Logger fields land on the active span automatically.
 - [ ] **No PII in attributes** (or rely on redactor). Don't log raw email / cards / phones / JWTs.
 - [ ] **Group fields with objects.** `{ user: { id, plan } }`, not flat `userId` / `userPlan`.
-- [ ] **Decisions captured.** Which branch, which fallback, which feature flag — not just inputs.
-- [ ] **Background work uses `log.fork()`** — gets its own span and `_parentCorrelationId` for correlation.
+- [ ] **Decisions captured.** Which branch, which fallback, which feature flag: not just inputs.
+- [ ] **Background work uses `log.fork()`**: gets its own span and `_parentCorrelationId` for correlation.
 
 ## Errors
 
@@ -44,7 +44,7 @@ Run through this list when adding observability to a new service or auditing an 
 ## Metrics
 
 - [ ] **Use OTel meter API**, not service-specific clients.
-- [ ] **Counters for events, histograms for durations, gauges for snapshots** — match the right type.
+- [ ] **Counters for events, histograms for durations, gauges for snapshots**: match the right type.
 - [ ] **Bounded label cardinality.** Don't put `userId` on a metric label.
 
 ## AI / LLM

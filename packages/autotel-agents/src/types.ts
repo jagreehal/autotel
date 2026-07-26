@@ -14,12 +14,7 @@ import type { ToolCategory } from './tool-taxonomy';
 export type { ToolCategory } from './tool-taxonomy';
 
 export type AttrValue =
-  | string
-  | number
-  | boolean
-  | null
-  | AttrValue[]
-  | { [key: string]: AttrValue };
+  string | number | boolean | null | AttrValue[] | { [key: string]: AttrValue };
 
 export type Attributes = Record<string, AttrValue>;
 

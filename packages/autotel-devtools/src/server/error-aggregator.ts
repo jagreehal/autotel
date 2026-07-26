@@ -387,9 +387,7 @@ export class ErrorAggregator {
    * Get error groups sorted by count (most frequent first)
    */
   getErrorGroupsByFrequency(): ErrorGroup[] {
-    return [...this.errorGroups.values()].sort(
-      (a, b) => b.count - a.count,
-    );
+    return [...this.errorGroups.values()].sort((a, b) => b.count - a.count);
   }
 
   /**

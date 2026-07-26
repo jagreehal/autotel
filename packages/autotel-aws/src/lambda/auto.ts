@@ -33,7 +33,7 @@ if (process.env.OTEL_SERVICE_NAME) {
           process.env.OTEL_EXPORTER_OTLP_HEADERS.split(',').map((pair) => {
             const [key, ...valueParts] = pair.split('=');
             return [key.trim(), valueParts.join('=').trim()];
-          })
+          }),
         )
       : undefined,
   });

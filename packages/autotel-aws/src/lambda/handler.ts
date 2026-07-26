@@ -24,11 +24,15 @@
  * ```
  */
 
-import { context, trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
+import {
+  context,
+  trace as otelTrace,
+  SpanStatusCode,
+} from '@opentelemetry/api';
 import type { SpanContext, Context } from '@opentelemetry/api';
 import {
-  markAsImmediate,
   trace as autotelTrace,
+  getActiveTraceContext,
   type TraceContext,
 } from 'autotel';
 import type { LambdaHandler } from './types';
@@ -125,7 +129,10 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
   config?: LambdaInstrumentationConfig,
 ): LambdaHandler<TEvent, TResult> {
   // Return the wrapped handler
-  return async (event: TEvent, lambdaContext: LambdaContext): Promise<TResult> => {
+  return async (
+    event: TEvent,
+    lambdaContext: LambdaContext,
+  ): Promise<TResult> => {
     const functionName = lambdaContext.functionName;
 
     // Detect cold start (first invocation for this function instance)
@@ -152,7 +159,8 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
     const executeWithTracing = async (): Promise<TResult> => {
       return autotelTrace(
         `lambda.${functionName}`,
-        markAsImmediate(async (ctx: TraceContext): Promise<TResult> => {
+        async (): Promise<TResult> => {
+          const ctx = getActiveTraceContext()!;
           // Set Lambda semantic attributes
           ctx.setAttributes(
             buildLambdaAttributes({
@@ -165,7 +173,9 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
           );
 
           // Extract and set account ID from ARN
-          const accountId = extractAccountIdFromArn(lambdaContext.invokedFunctionArn);
+          const accountId = extractAccountIdFromArn(
+            lambdaContext.invokedFunctionArn,
+          );
           if (accountId) {
             ctx.setAttribute('cloud.account.id', accountId);
           }
@@ -199,24 +209,34 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
             return result;
           } catch (error) {
             // Record error details
-            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
             ctx.setStatus({
               code: SpanStatusCode.ERROR,
               message: truncateErrorMessage(errorMessage),
             });
 
             // Add exception attributes
-            ctx.setAttribute('exception.type', error instanceof Error ? error.constructor.name : 'Error');
-            ctx.setAttribute('exception.message', truncateErrorMessage(errorMessage));
+            ctx.setAttribute(
+              'exception.type',
+              error instanceof Error ? error.constructor.name : 'Error',
+            );
+            ctx.setAttribute(
+              'exception.message',
+              truncateErrorMessage(errorMessage),
+            );
 
             if (error instanceof Error && error.stack) {
-              ctx.setAttribute('exception.stacktrace', error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH));
+              ctx.setAttribute(
+                'exception.stacktrace',
+                error.stack.slice(0, MAX_ERROR_MESSAGE_LENGTH),
+              );
             }
 
             throw error;
           }
-        }),
-      );
+        },
+      )();
     };
 
     // Execute with proper parent context if available
@@ -268,7 +288,10 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
   factory: (ctx: TraceContext) => LambdaHandler<TEvent, TResult>,
   config?: LambdaInstrumentationConfig,
 ): LambdaHandler<TEvent, TResult> {
-  return async (event: TEvent, lambdaContext: LambdaContext): Promise<TResult> => {
+  return async (
+    event: TEvent,
+    lambdaContext: LambdaContext,
+  ): Promise<TResult> => {
     const functionName = lambdaContext.functionName;
 
     // Detect cold start
@@ -291,7 +314,8 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
     const executeWithTracing = async (): Promise<TResult> => {
       return autotelTrace(
         `lambda.${functionName}`,
-        markAsImmediate(async (ctx: TraceContext): Promise<TResult> => {
+        async (): Promise<TResult> => {
+          const ctx = getActiveTraceContext()!;
           // Set Lambda semantic attributes
           ctx.setAttributes(
             buildLambdaAttributes({
@@ -304,7 +328,9 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
           );
 
           // Extract and set account ID from ARN
-          const accountId = extractAccountIdFromArn(lambdaContext.invokedFunctionArn);
+          const accountId = extractAccountIdFromArn(
+            lambdaContext.invokedFunctionArn,
+          );
           if (accountId) {
             ctx.setAttribute('cloud.account.id', accountId);
           }
@@ -318,8 +344,8 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
           // Create handler with context access and execute
           const handler = factory(ctx);
           return handler(event, lambdaContext);
-        }),
-      );
+        },
+      )();
     };
 
     // Execute with proper parent context if available

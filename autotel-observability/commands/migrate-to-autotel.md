@@ -1,6 +1,6 @@
 ---
 description: Migrate from vanilla OpenTelemetry SDK or console.log to autotel
-argument-hint: "<file-or-directory> — e.g. src/ or src/routes/checkout.ts"
+argument-hint: '<file-or-directory> — e.g. src/ or src/routes/checkout.ts'
 ---
 
 # Migrate to Autotel
@@ -10,6 +10,7 @@ You are an autotel migration specialist. Convert vanilla OpenTelemetry SDK code 
 ## Context
 
 The user has existing code with either:
+
 1. Vanilla OpenTelemetry SDK instrumentation (`@opentelemetry/sdk-trace-node`, `tracer.startActiveSpan()`, manual `span.end()`)
 2. Scattered `console.log` / `console.error` calls for observability
 3. A mix of both
@@ -27,6 +28,7 @@ $ARGUMENTS
 Search the target files for these patterns:
 
 **Vanilla OTel SDK patterns:**
+
 - `@opentelemetry/sdk-trace-node` or `@opentelemetry/sdk-trace-base` imports
 - `@opentelemetry/api` imports (`trace.getTracer()`, `tracer.startActiveSpan()`)
 - `NodeSDK`, `NodeTracerProvider` setup
@@ -35,12 +37,14 @@ Search the target files for these patterns:
 - `registerInstrumentations()` calls
 
 **Scattered logging patterns:**
+
 - `console.log()`, `console.error()`, `console.warn()` used for request/business context
 - Multiple log calls within a single handler that should be a single snapshot
 
 ### Step 2: Migrate Init / SDK Setup
 
 **Before (vanilla OTel):**
+
 ```typescript
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -48,13 +52,16 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 
 const sdk = new NodeSDK({
   serviceName: 'my-service',
-  traceExporter: new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' }),
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }),
   instrumentations: [getNodeAutoInstrumentations()],
 });
 sdk.start();
 ```
 
 **After (autotel):**
+
 ```typescript
 import { init } from 'autotel';
 
@@ -66,7 +73,8 @@ init({
 ```
 
 **Key differences:**
-- `init()` is synchronous — no `await sdk.start()`
+
+- `init()` is synchronous: no `await sdk.start()`
 - Endpoint is the base URL (autotel appends `/v1/traces`)
 - Auto-instrumentations can be configured in `autotel.yaml` under `autoInstrumentations`
 - Env vars work: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`
@@ -74,6 +82,7 @@ init({
 ### Step 3: Migrate Span Creation
 
 **Before (manual span lifecycle):**
+
 ```typescript
 import { trace } from '@opentelemetry/api';
 
@@ -98,6 +107,7 @@ export async function getUser(id: string) {
 ```
 
 **After (autotel functional API):**
+
 ```typescript
 import { trace } from 'autotel';
 
@@ -110,14 +120,16 @@ export const getUser = trace((ctx) => async (id: string) => {
 ```
 
 **Key differences:**
-- No manual `span.end()` — `trace()` handles lifecycle
-- No try/catch/finally for span management — errors are recorded automatically
-- No `tracer.getTracer()` — `trace()` uses the global tracer
-- No `SpanStatusCode` — autotel sets status based on success/failure
+
+- No manual `span.end()`: `trace()` handles lifecycle
+- No try/catch/finally for span management: errors are recorded automatically
+- No `tracer.getTracer()`: `trace()` uses the global tracer
+- No `SpanStatusCode`: autotel sets status based on success/failure
 
 ### Step 4: Migrate Attributes and Context
 
 **Before (span.setAttribute throughout):**
+
 ```typescript
 tracer.startActiveSpan('checkout', async (span) => {
   span.setAttribute('user.id', user.id);
@@ -129,6 +141,7 @@ tracer.startActiveSpan('checkout', async (span) => {
 ```
 
 **After (request logger for one snapshot):**
+
 ```typescript
 const postCheckout = trace((ctx) => async (req, res) => {
   const log = getRequestLogger(ctx);
@@ -145,6 +158,7 @@ Use `getRequestLogger()` when there are multiple attributes to set throughout a 
 ### Step 5: Migrate Error Handling
 
 **Before (generic Error):**
+
 ```typescript
 throw new Error('Payment failed');
 // or
@@ -152,6 +166,7 @@ span.recordException(error);
 ```
 
 **After (structured error):**
+
 ```typescript
 import { createStructuredError } from 'autotel';
 
@@ -167,6 +182,7 @@ throw createStructuredError({
 ### Step 6: Migrate Console.log
 
 **Before (scattered logs):**
+
 ```typescript
 export async function handleCheckout(req, res) {
   console.log('Checkout started');
@@ -181,6 +197,7 @@ export async function handleCheckout(req, res) {
 ```
 
 **After (request logger):**
+
 ```typescript
 import { trace, getRequestLogger } from 'autotel';
 
@@ -203,11 +220,11 @@ export const handleCheckout = trace((ctx) => async (req, res) => {
 
 After migration:
 
-1. **Remove old OTel SDK setup** — `NodeSDK`, `NodeTracerProvider`, `tracer.getTracer()`, manual exporters
-2. **Remove span lifecycle code** — `span.end()`, `span.setStatus()`, `SpanStatusCode` imports
-3. **Remove scattered console.log** — replaced by request logger
-4. **Keep auto-instrumentations** — if using `@opentelemetry/auto-instrumentations-node`, configure them in `autotel.yaml` under `autoInstrumentations` instead
-5. **Update dependencies** — add `autotel` (and framework package if applicable), remove `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, etc. (keep `@opentelemetry/api` if needed for types)
+1. **Remove old OTel SDK setup**: `NodeSDK`, `NodeTracerProvider`, `tracer.getTracer()`, manual exporters
+2. **Remove span lifecycle code**: `span.end()`, `span.setStatus()`, `SpanStatusCode` imports
+3. **Remove scattered console.log**: replaced by request logger
+4. **Keep auto-instrumentations**: if using `@opentelemetry/auto-instrumentations-node`, configure them in `autotel.yaml` under `autoInstrumentations` instead
+5. **Update dependencies**: add `autotel` (and framework package if applicable), remove `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, etc. (keep `@opentelemetry/api` if needed for types)
 
 ### Step 8: Output Migration Summary
 

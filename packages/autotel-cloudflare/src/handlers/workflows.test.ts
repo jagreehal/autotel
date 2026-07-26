@@ -28,7 +28,7 @@ describe('Workflow Instrumentation', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, options, context, fn) => {
+      startActiveSpan: vi.fn((_name, options, context, fn) => {
         if (typeof options === 'function') return options(mockSpan);
         if (typeof context === 'function') return context(mockSpan);
         if (typeof fn === 'function') return fn(mockSpan);
@@ -36,7 +36,9 @@ describe('Workflow Instrumentation', () => {
       }),
     };
 
-    getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
+    getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(mockTracer as any);
   });
 
   afterEach(() => {
@@ -46,7 +48,10 @@ describe('Workflow Instrumentation', () => {
   describe('instrumentWorkflow()', () => {
     it('should wrap workflow class constructor', () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
         async run() {}
       }
 
@@ -60,8 +65,13 @@ describe('Workflow Instrumentation', () => {
 
     it('should create workflow instance with instrumented run()', () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run() { return 'done'; }
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run() {
+          return 'done';
+        }
       }
 
       const Instrumented = instrumentWorkflow(TestWorkflow, 'test-workflow', {
@@ -76,7 +86,10 @@ describe('Workflow Instrumentation', () => {
 
     it('should accept static config', () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
         async run() {}
       }
 
@@ -90,7 +103,10 @@ describe('Workflow Instrumentation', () => {
 
     it('should accept config function', () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
         async run() {}
       }
 
@@ -98,10 +114,14 @@ describe('Workflow Instrumentation', () => {
         OTLP_ENDPOINT: string;
       }
 
-      const Instrumented = instrumentWorkflow(TestWorkflow, 'test-workflow', (env: Env) => ({
-        service: { name: 'test' },
-        exporter: { url: env.OTLP_ENDPOINT },
-      }));
+      const Instrumented = instrumentWorkflow(
+        TestWorkflow,
+        'test-workflow',
+        (env: Env) => ({
+          service: { name: 'test' },
+          exporter: { url: env.OTLP_ENDPOINT },
+        }),
+      );
 
       expect(Instrumented).toBeDefined();
     });
@@ -112,8 +132,11 @@ describe('Workflow Instrumentation', () => {
       const output = { status: 'ok', orderId: 'ord-123' };
 
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run(event: any, step: any) {
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, _step: any) {
           return output;
         }
       }
@@ -123,7 +146,11 @@ describe('Workflow Instrumentation', () => {
       });
 
       const instance = new Instrumented({}, {});
-      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-return' };
+      const event = {
+        payload: {},
+        timestamp: new Date(),
+        instanceId: 'wf-return',
+      };
       const step = { do: vi.fn(), sleep: vi.fn(), sleepUntil: vi.fn() };
 
       await expect(instance.run(event, step)).resolves.toEqual(output);
@@ -131,8 +158,11 @@ describe('Workflow Instrumentation', () => {
 
     it('should create span for run() with workflow attributes', async () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run(event: any, step: any) {}
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, _step: any) {}
       }
 
       const Instrumented = instrumentWorkflow(TestWorkflow, 'test-workflow', {
@@ -140,7 +170,11 @@ describe('Workflow Instrumentation', () => {
       });
 
       const instance = new Instrumented({}, {});
-      const event = { payload: { foo: 'bar' }, timestamp: new Date(), instanceId: 'wf-123' };
+      const event = {
+        payload: { foo: 'bar' },
+        timestamp: new Date(),
+        instanceId: 'wf-123',
+      };
       const step = { do: vi.fn(), sleep: vi.fn(), sleepUntil: vi.fn() };
 
       await instance.run(event, step);
@@ -159,8 +193,11 @@ describe('Workflow Instrumentation', () => {
 
     it('should track cold starts', async () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run(event: any, step: any) {}
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, _step: any) {}
       }
 
       const Instrumented = instrumentWorkflow(TestWorkflow, 'cold-test', {
@@ -183,8 +220,11 @@ describe('Workflow Instrumentation', () => {
 
     it('should handle run() errors', async () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run() {
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, _step: any) {
           throw new Error('Workflow failed');
         }
       }
@@ -194,10 +234,16 @@ describe('Workflow Instrumentation', () => {
       });
 
       const instance = new Instrumented({}, {});
-      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-err' };
+      const event = {
+        payload: {},
+        timestamp: new Date(),
+        instanceId: 'wf-err',
+      };
       const step = { do: vi.fn(), sleep: vi.fn(), sleepUntil: vi.fn() };
 
-      await expect(instance.run(event, step)).rejects.toThrow('Workflow failed');
+      await expect(instance.run(event, step)).rejects.toThrow(
+        'Workflow failed',
+      );
 
       expect(mockSpan.recordException).toHaveBeenCalled();
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
@@ -213,8 +259,11 @@ describe('Workflow Instrumentation', () => {
         .mockReturnValue(mockSpan as any);
 
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run() {
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, _step: any) {
           const log = getWorkflowLogger();
           log.set({ workflow: { id: 'wf-logger' } });
           log.info('workflow started', { provider: { name: 'curvepay' } });
@@ -227,7 +276,11 @@ describe('Workflow Instrumentation', () => {
       });
 
       const instance = new Instrumented({}, {});
-      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-logger' };
+      const event = {
+        payload: {},
+        timestamp: new Date(),
+        instanceId: 'wf-logger',
+      };
       const step = { do: vi.fn(), sleep: vi.fn(), sleepUntil: vi.fn() };
 
       const snapshot = await instance.run(event, step);
@@ -255,11 +308,13 @@ describe('Workflow Instrumentation', () => {
   describe('step.do() instrumentation', () => {
     it('should create span for step.do() calls', async () => {
       const stepDoResult = { paymentId: 'pay_123' };
-      const mockStepDo = vi.fn().mockResolvedValue(stepDoResult);
 
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run(event: any, step: any) {
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, step: any) {
           return await step.do('process payment', async () => stepDoResult);
         }
       }
@@ -269,7 +324,11 @@ describe('Workflow Instrumentation', () => {
       });
 
       const instance = new Instrumented({}, {});
-      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-step' };
+      const event = {
+        payload: {},
+        timestamp: new Date(),
+        instanceId: 'wf-step',
+      };
       const step = {
         do: vi.fn(async (_name: string, cb: () => Promise<any>) => cb()),
         sleep: vi.fn(),
@@ -279,18 +338,25 @@ describe('Workflow Instrumentation', () => {
       await instance.run(event, step);
 
       // Should have spans for both run() and step.do()
-      expect(mockTracer.startActiveSpan.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(
+        mockTracer.startActiveSpan.mock.calls.length,
+      ).toBeGreaterThanOrEqual(2);
 
       const stepSpanCall = mockTracer.startActiveSpan.mock.calls[1];
       expect(stepSpanCall[0]).toBe('Workflow step-test: process payment');
-      expect(stepSpanCall[1].attributes['workflow.step.name']).toBe('process payment');
+      expect(stepSpanCall[1].attributes['workflow.step.name']).toBe(
+        'process payment',
+      );
       expect(stepSpanCall[1].attributes['workflow.name']).toBe('step-test');
     });
 
     it('should handle step.do() errors', async () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run(event: any, step: any) {
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, step: any) {
           await step.do('failing step', async () => {
             throw new Error('Step failed');
           });
@@ -302,7 +368,11 @@ describe('Workflow Instrumentation', () => {
       });
 
       const instance = new Instrumented({}, {});
-      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-step-err' };
+      const event = {
+        payload: {},
+        timestamp: new Date(),
+        instanceId: 'wf-step-err',
+      };
       const step = {
         do: vi.fn(async (_name: string, cb: () => Promise<any>) => cb()),
         sleep: vi.fn(),
@@ -319,8 +389,11 @@ describe('Workflow Instrumentation', () => {
   describe('step.sleep() instrumentation', () => {
     it('should create span for step.sleep() calls', async () => {
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run(event: any, step: any) {
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, step: any) {
           await step.sleep('wait for settlement', '2 hours');
         }
       }
@@ -330,7 +403,11 @@ describe('Workflow Instrumentation', () => {
       });
 
       const instance = new Instrumented({}, {});
-      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-sleep' };
+      const event = {
+        payload: {},
+        timestamp: new Date(),
+        instanceId: 'wf-sleep',
+      };
       const step = {
         do: vi.fn(),
         sleep: vi.fn().mockResolvedValue(undefined),
@@ -340,9 +417,15 @@ describe('Workflow Instrumentation', () => {
       await instance.run(event, step);
 
       const sleepSpanCall = mockTracer.startActiveSpan.mock.calls[1];
-      expect(sleepSpanCall[0]).toBe('Workflow sleep-test: sleep wait for settlement');
-      expect(sleepSpanCall[1].attributes['workflow.sleep.name']).toBe('wait for settlement');
-      expect(sleepSpanCall[1].attributes['workflow.sleep.duration']).toBe('2 hours');
+      expect(sleepSpanCall[0]).toBe(
+        'Workflow sleep-test: sleep wait for settlement',
+      );
+      expect(sleepSpanCall[1].attributes['workflow.sleep.name']).toBe(
+        'wait for settlement',
+      );
+      expect(sleepSpanCall[1].attributes['workflow.sleep.duration']).toBe(
+        '2 hours',
+      );
       expect(sleepSpanCall[1].attributes['workflow.name']).toBe('sleep-test');
     });
 
@@ -350,18 +433,29 @@ describe('Workflow Instrumentation', () => {
       const wakeAt = new Date('2026-04-09T10:00:00.000Z');
 
       class TestWorkflow {
-        constructor(public ctx: any, public env: any) {}
-        async run(event: any, step: any) {
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, step: any) {
           await step.sleepUntil('wait until tomorrow', wakeAt);
         }
       }
 
-      const Instrumented = instrumentWorkflow(TestWorkflow, 'sleep-until-test', {
-        service: { name: 'test' },
-      });
+      const Instrumented = instrumentWorkflow(
+        TestWorkflow,
+        'sleep-until-test',
+        {
+          service: { name: 'test' },
+        },
+      );
 
       const instance = new Instrumented({}, {});
-      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-sleep-until' };
+      const event = {
+        payload: {},
+        timestamp: new Date(),
+        instanceId: 'wf-sleep-until',
+      };
       const step = {
         do: vi.fn(),
         sleep: vi.fn(),
@@ -390,8 +484,11 @@ describe('Workflow Instrumentation', () => {
     it('should preserve this context in run()', async () => {
       class TestWorkflow {
         private value = 42;
-        constructor(public ctx: any, public env: any) {}
-        async run(event: any, step: any) {
+        constructor(
+          public ctx: any,
+          public env: any,
+        ) {}
+        async run(_event: any, _step: any) {
           return this.value;
         }
       }
@@ -401,7 +498,11 @@ describe('Workflow Instrumentation', () => {
       });
 
       const instance = new Instrumented({}, {});
-      const event = { payload: {}, timestamp: new Date(), instanceId: 'wf-this' };
+      const event = {
+        payload: {},
+        timestamp: new Date(),
+        instanceId: 'wf-this',
+      };
       const step = { do: vi.fn(), sleep: vi.fn(), sleepUntil: vi.fn() };
 
       // Should not throw — this.value should be accessible

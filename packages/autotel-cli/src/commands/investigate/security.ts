@@ -38,10 +38,7 @@ const DEFAULT_LIMIT = 500;
 const DEFAULT_DENIED_STATUSES = [401, 403, 429];
 const SAMPLE_TRACE_IDS = 10;
 
-function countBy(
-  spans: SpanRecord[],
-  tagKey: string,
-): Record<string, number> {
+function countBy(spans: SpanRecord[], tagKey: string): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const span of spans) {
     const value = span.tags[tagKey];
@@ -128,9 +125,7 @@ export async function runSecuritySummary(
       }),
       backend.searchSpans({
         ...base,
-        filters: [
-          { field: 'security.suspicious_request', operator: 'exists' },
-        ],
+        filters: [{ field: 'security.suspicious_request', operator: 'exists' }],
       }),
       backend.searchSpans({
         ...base,

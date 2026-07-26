@@ -12,7 +12,7 @@
  *
  * Run: `node scripts/capture-evidence.mjs`
  */
-import { wrapModule, trace, span } from 'autotel-cloudflare';
+import { wrapModule, trace, withTracing, span } from 'autotel-cloudflare';
 
 // ── Mock bindings (shape-detected by autotel in OTLP mode) ──────────────────
 const kv = {
@@ -39,12 +39,11 @@ const d1 = {
 const env = { MY_KV: kv, MY_D1: d1 };
 
 // ── Kitchen-sink business logic (same trace()/span() API in both modes) ─────
-const priceOrder = trace(
-  {
-    name: 'order.price',
-    attributesFromArgs: ([id]) => ({ 'order.id': id }),
-    attributesFromResult: (r) => ({ 'order.total': r.total }),
-  },
+const priceOrder = withTracing({
+  name: 'order.price',
+  attributesFromArgs: ([id]) => ({ 'order.id': id }),
+  attributesFromResult: (r) => ({ 'order.total': r.total }),
+})(
   (ctx) =>
     async function priceOrder(id, e) {
       const subtotal = await span('order.subtotal', async (s) => {
@@ -62,19 +61,20 @@ const priceOrder = trace(
     },
 );
 
-const createUser = trace('user.create', (ctx) =>
-  async function createUser(e) {
-    const exists = await span('db.checkDuplicate', async () => {
-      const row = await e.MY_D1.prepare('SELECT id FROM users WHERE email=?')
-        .bind('a@b.com')
-        .first();
-      return !!row;
-    });
-    if (exists) {
-      ctx.setAttribute('user.duplicate', true);
-    }
-    return { created: !exists };
-  },
+const createUser = withTracing({ name: 'user.create' })(
+  (ctx) =>
+    async function createUser(e) {
+      const exists = await span('db.checkDuplicate', async () => {
+        const row = await e.MY_D1.prepare('SELECT id FROM users WHERE email=?')
+          .bind('a@b.com')
+          .first();
+        return !!row;
+      });
+      if (exists) {
+        ctx.setAttribute('user.duplicate', true);
+      }
+      return { created: !exists };
+    },
 );
 
 const failing = trace('payment.charge', async () => {
@@ -105,7 +105,9 @@ function summariseOtlp(spans) {
       status: STATUS[s.status?.code] ?? 'UNSET',
       attributes: Object.fromEntries(
         Object.entries(s.attributes ?? {}).filter(([k]) =>
-          /^(order|user|payment|db|kv|cache|code|error|exception|correlation)/.test(k),
+          /^(order|user|payment|db|kv|cache|code|error|exception|correlation)/.test(
+            k,
+          ),
         ),
       ),
     };
@@ -120,7 +122,9 @@ function printTree(rows, parentKey) {
     if (!byParent.has(p)) byParent.set(p, []);
     byParent.get(p).push(r);
   }
-  const roots = rows.filter((r) => !rows.some((o) => o.spanId === r[parentKey]));
+  const roots = rows.filter(
+    (r) => !rows.some((o) => o.spanId === r[parentKey]),
+  );
   const walk = (r, depth) => {
     const ind = '  '.repeat(depth);
     const attrs = Object.entries(r.attributes)
@@ -145,11 +149,17 @@ async function captureOtlp() {
   };
 
   const handler = wrapModule(
-    { service: { name: 'kitchen-sink' }, nativeTracing: 'off', spanProcessors: [processor] },
-    { async fetch(_req, e) {
+    {
+      service: { name: 'kitchen-sink' },
+      nativeTracing: 'off',
+      spanProcessors: [processor],
+    },
+    {
+      async fetch(_req, e) {
         await runScenarios(e);
         return new Response('ok');
-      } },
+      },
+    },
   );
 
   await handler.fetch(new Request('https://x/orders'), env, {
@@ -158,8 +168,12 @@ async function captureOtlp() {
   });
 
   const rows = summariseOtlp(captured);
-  console.log('\n=== MODE 1 — autotel OTLP pipeline (local dev / non-Workers / nativeTracing:"off") ===');
-  console.log(`captured ${rows.length} spans (incl. autotel-instrumented bindings)\n`);
+  console.log(
+    '\n=== MODE 1 — autotel OTLP pipeline (local dev / non-Workers / nativeTracing:"off") ===',
+  );
+  console.log(
+    `captured ${rows.length} spans (incl. autotel-instrumented bindings)\n`,
+  );
   printTree(rows, 'parentSpanId');
   return rows;
 }
@@ -200,25 +214,35 @@ async function captureNative() {
 
   const handler = wrapModule(
     { service: { name: 'kitchen-sink' } }, // nativeTracing defaults to 'auto'
-    { async fetch(_req, e) {
+    {
+      async fetch(_req, e) {
         await runScenarios(e);
         return new Response('ok');
-      } },
+      },
+    },
   );
 
   await handler.fetch(
-    new Request('https://x/orders', { headers: { 'cf-ray': '8f1c2d3e4a5b6c7d-LHR' } }),
+    new Request('https://x/orders', {
+      headers: { 'cf-ray': '8f1c2d3e4a5b6c7d-LHR' },
+    }),
     env,
     { waitUntil() {}, passThroughOnException() {}, tracing },
   );
 
-  console.log('\n=== MODE 2 — Cloudflare native tracing (autotel routes to ctx.tracing.enterSpan) ===');
-  console.log('these nest under Cloudflare\'s automatic platform spans (fetch/KV/handler) on deploy\n');
+  console.log(
+    '\n=== MODE 2 — Cloudflare native tracing (autotel routes to ctx.tracing.enterSpan) ===',
+  );
+  console.log(
+    "these nest under Cloudflare's automatic platform spans (fetch/KV/handler) on deploy\n",
+  );
   const walk = (n, d) => {
     const attrs = Object.entries(n.attributes)
       .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
       .join(' ');
-    console.log(`${'  '.repeat(d)}• ${n.name} [${n.status}]${attrs ? '  ' + attrs : ''}`);
+    console.log(
+      `${'  '.repeat(d)}• ${n.name} [${n.status}]${attrs ? '  ' + attrs : ''}`,
+    );
     n.children.forEach((c) => walk(c, d + 1));
   };
   tree.forEach((n) => walk(n, 0));

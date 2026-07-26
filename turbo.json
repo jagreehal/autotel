@@ -4,16 +4,8 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "!dist/**",
-        "!.next/**",
-        "!coverage/**"
-      ],
-      "outputs": [
-        "dist/**",
-        ".next/**"
-      ]
+      "inputs": ["$TURBO_DEFAULT$", "!dist/**", "!.next/**", "!coverage/**"],
+      "outputs": ["dist/**", ".next/**"]
     },
     "dev": {
       "cache": false,
@@ -22,46 +14,27 @@
     "lint": {
       "dependsOn": ["^build"]
     },
-    "format": {
-      "outputs": [],
-      "cache": false
-    },
     "type-check": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "!dist/**"
-      ]
+      "inputs": ["$TURBO_DEFAULT$", "!dist/**"]
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "!dist/**",
-        "!coverage/**"
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!dist/**", "!coverage/**"],
       "outputs": []
     },
     "build-storybook": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "!dist/**",
-        "!storybook-static/**"
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!dist/**", "!storybook-static/**"],
       "outputs": ["storybook-static/**"]
     },
     "test:integration": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "!dist/**",
-        "!coverage/**"
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!dist/**", "!coverage/**"],
       "outputs": []
     },
     "clean": {
       "cache": false
     }
-  },
+  }
 }

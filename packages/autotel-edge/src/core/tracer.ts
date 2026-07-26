@@ -130,10 +130,14 @@ export class WorkerTracer implements Tracer {
     const spanId = idGenerator.generateSpanId();
     const parentSpanId = parentSpanContext?.spanId;
 
-    const sampleFlag =
-      decision === SamplingDecision.RECORD_AND_SAMPLED ? 1 : 0; // TraceFlags.SAMPLED : TraceFlags.NONE
+    const sampleFlag = decision === SamplingDecision.RECORD_AND_SAMPLED ? 1 : 0; // TraceFlags.SAMPLED : TraceFlags.NONE
     const traceFlags = sampleFlag + randomTraceFlag;
-    const spanContext: SpanContext = { traceId, spanId, traceFlags, traceState };
+    const spanContext: SpanContext = {
+      traceId,
+      spanId,
+      traceFlags,
+      traceState,
+    };
 
     const span = new SpanImpl({
       attributes: sanitizeAttributes(attributes),
@@ -206,7 +210,10 @@ function getTraceInfo(parentSpanContext?: SpanContext): {
 } {
   if (parentSpanContext && trace.isSpanContextValid(parentSpanContext)) {
     const { traceId, traceFlags } = parentSpanContext;
-    return { traceId, randomTraceFlag: getFlagAt(traceFlags, 2) as NewTraceFlagValues };
+    return {
+      traceId,
+      randomTraceFlag: getFlagAt(traceFlags, 2) as NewTraceFlagValues,
+    };
   } else {
     return {
       traceId: idGenerator.generateTraceId(),

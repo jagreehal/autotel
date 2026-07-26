@@ -105,7 +105,9 @@ const verboseTracing = createMiddleware({ type: 'function' }).server(
 
 export const sensitiveOperation = createServerFn({ method: 'POST' })
   .middleware([verboseTracing])
-  .handler(async ({ data }) => { /* ... */ });
+  .handler(async ({ data }) => {
+    /* ... */
+  });
 ```
 
 ## Route loaders
@@ -128,48 +130,48 @@ export const Route = createFileRoute('/users/$userId')({
 
 `createTracingServerHandler` accepts:
 
-| Option              | Type                                           | Default       | Description                                                       |
-| ------------------- | ---------------------------------------------- | ------------- | ----------------------------------------------------------------- |
-| `type`              | `'request' \| 'function'`                      | `'request'`   | Span kind for this middleware                                     |
-| `captureHeaders`    | `string[]`                                     | `[]`          | Request headers to attach as span attributes                      |
-| `captureArgs`       | `boolean`                                      | `true`        | Record server-function arguments                                  |
-| `captureResults`    | `boolean`                                      | `false`       | Record server-function results (off by default; PII risk)         |
-| `excludePaths`      | `string[]`                                     | `[]`          | Glob paths to skip                                                |
-| `sampling`          | `'always' \| 'adaptive' \| 'never'`            | `'adaptive'`  | Sampling strategy                                                 |
-| `customAttributes`  | `({ type, name, request }) => Attributes`      | —             | Per-span custom attributes                                        |
+| Option             | Type                                      | Default      | Description                                               |
+| ------------------ | ----------------------------------------- | ------------ | --------------------------------------------------------- |
+| `type`             | `'request' \| 'function'`                 | `'request'`  | Span kind for this middleware                             |
+| `captureHeaders`   | `string[]`                                | `[]`         | Request headers to attach as span attributes              |
+| `captureArgs`      | `boolean`                                 | `true`       | Record server-function arguments                          |
+| `captureResults`   | `boolean`                                 | `false`      | Record server-function results (off by default; PII risk) |
+| `excludePaths`     | `string[]`                                | `[]`         | Glob paths to skip                                        |
+| `sampling`         | `'always' \| 'adaptive' \| 'never'`       | `'adaptive'` | Sampling strategy                                         |
+| `customAttributes` | `({ type, name, request }) => Attributes` | —            | Per-span custom attributes                                |
 
 ## Span attributes
 
 ### HTTP request spans
 
-- `http.request.method` — `GET`, `POST`, etc.
+- `http.request.method`: `GET`, `POST`, etc.
 - `url.path`, `url.query`
 - `http.response.status_code`
 - `tanstack.request.duration_ms`
 
 ### Server function spans
 
-- `rpc.system` — `tanstack-start`
-- `rpc.method` — function name
+- `rpc.system`: `tanstack-start`
+- `rpc.method`: function name
 - `tanstack.server_function.name`
 - `tanstack.server_function.method`
-- `tanstack.server_function.args` — when `captureArgs: true`
+- `tanstack.server_function.args`: when `captureArgs: true`
 
 ### Loader spans
 
 - `tanstack.loader.route_id`
-- `tanstack.loader.type` — `loader` or `beforeLoad`
+- `tanstack.loader.type`: `loader` or `beforeLoad`
 - `tanstack.loader.params`
 
 ## Environment variables
 
-| Variable                       | Description                              | Example                       |
-| ------------------------------ | ---------------------------------------- | ----------------------------- |
-| `OTEL_SERVICE_NAME`            | Service name reported on every span      | `my-app`                      |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`  | OTLP collector URL                       | `https://api.honeycomb.io`    |
-| `OTEL_EXPORTER_OTLP_HEADERS`   | Auth headers (`key=value,key=value`)     | `x-honeycomb-team=YOUR_KEY`   |
-| `AUTOTEL_DEBUG`                | Enable debug logging                     | `true`                        |
-| `E2E`                          | Switch to in-memory exporter for tests   | `1`                           |
+| Variable                      | Description                            | Example                     |
+| ----------------------------- | -------------------------------------- | --------------------------- |
+| `OTEL_SERVICE_NAME`           | Service name reported on every span    | `my-app`                    |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector URL                     | `https://api.honeycomb.io`  |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Auth headers (`key=value,key=value`)   | `x-honeycomb-team=YOUR_KEY` |
+| `AUTOTEL_DEBUG`               | Enable debug logging                   | `true`                      |
+| `E2E`                         | Switch to in-memory exporter for tests | `1`                         |
 
 ## Distributed tracing
 
@@ -236,16 +238,16 @@ describe('getUser', () => {
 
 ## Entry points
 
-| Import                              | Contents                                            |
-| ----------------------------------- | --------------------------------------------------- |
-| `autotel-tanstack`                  | Everything                                          |
-| `autotel-tanstack/auto`             | Zero-config auto-instrumentation                    |
-| `autotel-tanstack/middleware`       | `createTracingServerHandler`                        |
-| `autotel-tanstack/server-functions` | `traceServerFn` (explicit wrapper)                  |
-| `autotel-tanstack/loaders`          | `traceLoader`, `traceBeforeLoad`                    |
-| `autotel-tanstack/handlers`         | `wrapStartHandler` (handler-level wrapping)         |
-| `autotel-tanstack/context`          | `createTracedHeaders`, `extractContextFromRequest`  |
-| `autotel-tanstack/testing`          | `createTestCollector`, `createTestSpansHandlers`    |
+| Import                              | Contents                                           |
+| ----------------------------------- | -------------------------------------------------- |
+| `autotel-tanstack`                  | Everything                                         |
+| `autotel-tanstack/auto`             | Zero-config auto-instrumentation                   |
+| `autotel-tanstack/middleware`       | `createTracingServerHandler`                       |
+| `autotel-tanstack/server-functions` | `traceServerFn` (explicit wrapper)                 |
+| `autotel-tanstack/loaders`          | `traceLoader`, `traceBeforeLoad`                   |
+| `autotel-tanstack/handlers`         | `wrapStartHandler` (handler-level wrapping)        |
+| `autotel-tanstack/context`          | `createTracedHeaders`, `extractContextFromRequest` |
+| `autotel-tanstack/testing`          | `createTestCollector`, `createTestSpansHandlers`   |
 
 ## Supported frameworks
 
@@ -254,4 +256,4 @@ describe('getUser', () => {
 
 ## Examples
 
-- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start) — full-stack with request and server-function middleware, route loaders, and `autotel-web` for browser trace propagation.
+- [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start): full-stack with request and server-function middleware, route loaders, and `autotel-web` for browser trace propagation.

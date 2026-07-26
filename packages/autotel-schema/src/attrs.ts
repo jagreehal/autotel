@@ -17,7 +17,8 @@ export const SCHEMA_ATTRS = {
   VERSION: 'telemetry.schema.version',
 } as const;
 
-export type SchemaAttributeKey = (typeof SCHEMA_ATTRS)[keyof typeof SCHEMA_ATTRS];
+export type SchemaAttributeKey =
+  (typeof SCHEMA_ATTRS)[keyof typeof SCHEMA_ATTRS];
 
 /** Snapshot file spec marker — bump only on a breaking snapshot format change. */
 export const SNAPSHOT_SPEC = 'autotel-schema-snapshot/v1' as const;

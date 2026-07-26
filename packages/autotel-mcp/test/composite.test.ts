@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CompositeBackend } from '../src/backends/composite/index';
 import type { TelemetryBackend } from '../src/backends/telemetry';
 import type {

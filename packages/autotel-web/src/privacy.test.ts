@@ -24,7 +24,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
-        false
+        false,
       );
     });
 
@@ -39,7 +39,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
-        true
+        true,
       );
     });
 
@@ -54,7 +54,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
-        true
+        true,
       );
     });
 
@@ -69,7 +69,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
-        true
+        true,
       );
     });
   });
@@ -97,7 +97,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
-        false
+        false,
       );
     });
 
@@ -112,7 +112,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
-        true
+        true,
       );
     });
 
@@ -127,7 +127,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
-        true
+        true,
       );
     });
   });
@@ -139,10 +139,10 @@ describe('PrivacyManager', () => {
       });
 
       expect(
-        manager.shouldInjectTraceparent('https://analytics.google.com/collect')
+        manager.shouldInjectTraceparent('https://analytics.google.com/collect'),
       ).toBe(false);
       expect(
-        manager.shouldInjectTraceparent('https://www.facebook.com/track')
+        manager.shouldInjectTraceparent('https://www.facebook.com/track'),
       ).toBe(false);
     });
 
@@ -152,7 +152,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(
-        manager.shouldInjectTraceparent('https://api.myapp.com/users')
+        manager.shouldInjectTraceparent('https://api.myapp.com/users'),
       ).toBe(true);
     });
 
@@ -162,7 +162,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(
-        manager.shouldInjectTraceparent('https://analytics.google.com/collect')
+        manager.shouldInjectTraceparent('https://analytics.google.com/collect'),
       ).toBe(false);
     });
 
@@ -172,10 +172,10 @@ describe('PrivacyManager', () => {
       });
 
       expect(
-        manager.shouldInjectTraceparent('https://analytics.google.com/collect')
+        manager.shouldInjectTraceparent('https://analytics.google.com/collect'),
       ).toBe(false);
       expect(
-        manager.shouldInjectTraceparent('https://www.google.com/search')
+        manager.shouldInjectTraceparent('https://www.google.com/search'),
       ).toBe(false);
     });
   });
@@ -187,10 +187,10 @@ describe('PrivacyManager', () => {
       });
 
       expect(
-        manager.shouldInjectTraceparent('https://api.myapp.com/users')
+        manager.shouldInjectTraceparent('https://api.myapp.com/users'),
       ).toBe(true);
       expect(manager.shouldInjectTraceparent('https://myapp.com/api')).toBe(
-        true
+        true,
       );
     });
 
@@ -200,7 +200,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(
-        manager.shouldInjectTraceparent('https://api.otherapp.com/data')
+        manager.shouldInjectTraceparent('https://api.otherapp.com/data'),
       ).toBe(false);
     });
 
@@ -210,7 +210,7 @@ describe('PrivacyManager', () => {
       });
 
       expect(
-        manager.shouldInjectTraceparent('https://api.myapp.com/users')
+        manager.shouldInjectTraceparent('https://api.myapp.com/users'),
       ).toBe(true);
     });
 
@@ -220,10 +220,10 @@ describe('PrivacyManager', () => {
       });
 
       expect(
-        manager.shouldInjectTraceparent('https://api.myapp.com/users')
+        manager.shouldInjectTraceparent('https://api.myapp.com/users'),
       ).toBe(true);
       expect(
-        manager.shouldInjectTraceparent('https://admin.myapp.com/dashboard')
+        manager.shouldInjectTraceparent('https://admin.myapp.com/dashboard'),
       ).toBe(true);
     });
   });
@@ -237,12 +237,12 @@ describe('PrivacyManager', () => {
 
       // Allowed domain
       expect(
-        manager.shouldInjectTraceparent('https://api.myapp.com/users')
+        manager.shouldInjectTraceparent('https://api.myapp.com/users'),
       ).toBe(true);
 
       // Blocked domain (takes precedence even though myapp.com is in allowlist)
       expect(
-        manager.shouldInjectTraceparent('https://analytics.myapp.com/track')
+        manager.shouldInjectTraceparent('https://analytics.myapp.com/track'),
       ).toBe(false);
     });
   });
@@ -288,11 +288,11 @@ describe('PrivacyManager', () => {
     it('should allow all origins when no privacy config provided', () => {
       const manager = new PrivacyManager({});
 
+      expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
+        true,
+      );
       expect(
-        manager.shouldInjectTraceparent('https://api.example.com')
-      ).toBe(true);
-      expect(
-        manager.shouldInjectTraceparent('https://analytics.google.com')
+        manager.shouldInjectTraceparent('https://analytics.google.com'),
       ).toBe(true);
     });
 
@@ -312,9 +312,9 @@ describe('PrivacyManager', () => {
       });
 
       // Empty allowlist means no explicit allowlist, so default to allow
-      expect(
-        manager.shouldInjectTraceparent('https://api.example.com')
-      ).toBe(true);
+      expect(manager.shouldInjectTraceparent('https://api.example.com')).toBe(
+        true,
+      );
     });
   });
 
@@ -368,7 +368,7 @@ describe('PrivacyManager', () => {
 
       const reason = getDenialReason(
         manager,
-        'https://analytics.google.com/collect'
+        'https://analytics.google.com/collect',
       );
       expect(reason).toContain('is in blockedOrigins list');
     });

@@ -15,7 +15,7 @@
  * ```
  */
 
-import { Events } from 'autotel/events';
+import { Event } from 'autotel/event';
 import { PostHogSubscriber } from 'autotel-subscribers/posthog';
 import { PostHog } from 'posthog-node';
 
@@ -24,7 +24,7 @@ import { PostHog } from 'posthog-node';
 // ============================================================================
 
 async function basicEventTracking() {
-  const events = new Events('my-app', {
+  const events = new Event('my-app', {
     subscribers: [
       new PostHogSubscriber({
         apiKey: process.env.POSTHOG_API_KEY!,
@@ -78,7 +78,10 @@ async function featureFlagsExample() {
   const userId = 'user-123';
 
   // Check if a feature is enabled (boolean)
-  const hasNewCheckout = await subscriber.isFeatureEnabled('new-checkout', userId);
+  const hasNewCheckout = await subscriber.isFeatureEnabled(
+    'new-checkout',
+    userId,
+  );
 
   if (hasNewCheckout) {
     console.log('Show new checkout UI');
@@ -87,7 +90,10 @@ async function featureFlagsExample() {
   }
 
   // Get feature flag value (for multivariate tests)
-  const experimentVariant = await subscriber.getFeatureFlag('pricing-experiment', userId);
+  const experimentVariant = await subscriber.getFeatureFlag(
+    'pricing-experiment',
+    userId,
+  );
 
   switch (experimentVariant) {
     case 'control': {
@@ -113,24 +119,32 @@ async function featureFlagsExample() {
   // { 'new-checkout': true, 'pricing-experiment': 'test-1', ... }
 
   // Feature flags with person properties
-  const isPremiumFeatureEnabled = await subscriber.getFeatureFlag('premium-events', userId, {
-    personProperties: {
-      plan: 'premium',
-      signupDate: '2025-01-01',
+  const isPremiumFeatureEnabled = await subscriber.getFeatureFlag(
+    'premium-events',
+    userId,
+    {
+      personProperties: {
+        plan: 'premium',
+        signupDate: '2025-01-01',
+      },
     },
-  });
+  );
   console.log('Premium events enabled:', isPremiumFeatureEnabled);
 
   // Feature flags with group context (for B2B features)
-  const isBetaEnabled = await subscriber.isFeatureEnabled('beta-features', userId, {
-    groups: { company: 'acme-corp' },
-    groupProperties: {
-      company: {
-        plan: 'enterprise',
-        employees: 500,
+  const isBetaEnabled = await subscriber.isFeatureEnabled(
+    'beta-features',
+    userId,
+    {
+      groups: { company: 'acme-corp' },
+      groupProperties: {
+        company: {
+          plan: 'enterprise',
+          employees: 500,
+        },
       },
     },
-  });
+  );
   console.log('Beta features enabled:', isBetaEnabled);
 
   // Reload feature flags from server (without restarting)
@@ -222,7 +236,7 @@ async function serverlessConfiguration() {
 
   // In a Lambda handler:
   // exports.handler = async (event) => {
-  //   const events = new Events('my-lambda', {
+  //   const events = new Event('my-lambda', {
   //     subscribers: [adapter]
   //   });
   //
@@ -258,7 +272,7 @@ async function customClientExample() {
   });
 
   // Now you can use the subscriber with your custom client configuration
-  const events = new Events('my-app', {
+  const events = new Event('my-app', {
     subscribers: [adapter],
   });
 
@@ -289,7 +303,7 @@ async function errorHandlingExample() {
     },
   });
 
-  const events = new Events('my-app', {
+  const events = new Event('my-app', {
     subscribers: [adapter],
   });
 
@@ -310,7 +324,7 @@ async function completeSaaSExample() {
     onError: (error) => console.error('PostHog error:', error),
   });
 
-  const events = new Events('my-saas-app', {
+  const events = new Event('my-saas-app', {
     subscribers: [adapter],
   });
 
@@ -344,9 +358,13 @@ async function completeSaaSExample() {
   });
 
   // 3. Check if company has access to beta features
-  const hasBetaAccess = await subscriber.isFeatureEnabled('beta-features', userId, {
-    groups: { company: companyId },
-  });
+  const hasBetaAccess = await subscriber.isFeatureEnabled(
+    'beta-features',
+    userId,
+    {
+      groups: { company: companyId },
+    },
+  );
 
   if (hasBetaAccess) {
     // 4. Track feature usage with company context

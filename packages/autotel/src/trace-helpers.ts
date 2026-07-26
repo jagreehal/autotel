@@ -546,9 +546,9 @@ export async function createDeterministicTraceId(
  * @example Basic metadata flattening
  * ```typescript
  * import { flattenMetadata } from 'autotel/trace-helpers'
- * import { trace } from 'autotel'
+ * import { trace, withTracing } from 'autotel'
  *
- * export const processOrder = trace(ctx => async (orderId: string) => {
+ * export const processOrder = withTracing({})(ctx => async (orderId: string) => {
  *   const order = await getOrder(orderId)
  *
  *   // Flatten complex order metadata
@@ -573,9 +573,9 @@ export async function createDeterministicTraceId(
  * @example Custom prefix for semantic conventions
  * ```typescript
  * import { flattenMetadata } from 'autotel/trace-helpers'
- * import { trace } from 'autotel'
+ * import { trace, withTracing } from 'autotel'
  *
- * export const fetchUser = trace(ctx => async (userId: string) => {
+ * export const fetchUser = withTracing({})(ctx => async (userId: string) => {
  *   const user = await db.users.findOne({ id: userId })
  *
  *   // Use semantic convention prefix
@@ -601,9 +601,9 @@ export async function createDeterministicTraceId(
  * @example With complex objects (auto-serialized)
  * ```typescript
  * import { flattenMetadata } from 'autotel/trace-helpers'
- * import { trace } from 'autotel'
+ * import { trace, withTracing } from 'autotel'
  *
- * export const analyzeRequest = trace(ctx => async (req: Request) => {
+ * export const analyzeRequest = withTracing({})(ctx => async (req: Request) => {
  *   const metadata = flattenMetadata({
  *     headers: req.headers,  // Object - will be JSON serialized
  *     query: req.query,       // Object - will be JSON serialized
@@ -650,7 +650,7 @@ export function resolveTraceUrl(
 ): string | undefined {
   const t = template ?? process.env.OTEL_TRACE_URL_TEMPLATE;
   if (!t) return undefined;
-  return t.replace(/\{traceId\}/g, traceId);
+  return t.replaceAll('{traceId}', traceId);
 }
 
 export function flattenMetadata(

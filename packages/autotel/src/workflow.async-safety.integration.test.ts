@@ -134,11 +134,10 @@ describe('Workflow Async Safety', () => {
   });
 
   it('should isolate isInWorkflow() across concurrent workflows', async () => {
-    let outsideWorkflow = true;
     const insideWorkflow: boolean[] = [];
 
     // Check outside
-    outsideWorkflow = isInWorkflow();
+    const outsideWorkflow = isInWorkflow();
 
     const workflow1 = traceWorkflow({
       name: 'Workflow1',

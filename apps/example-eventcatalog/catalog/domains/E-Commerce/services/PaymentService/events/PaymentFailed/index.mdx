@@ -34,7 +34,7 @@ and the customer-facing recovery path.
 <div class="evidence-callout">
 <strong>Observed in production</strong>
 
-Volume **183 / 7d** — the rare event. p95 time-to-fail **2.4s** (covers three
+Volume **183 / 7d**. The rare event. p95 time-to-fail **2.4s** (covers three
 PSP attempts with exponential backoff).
 
 **Decline code distribution**: `insufficient_funds` 42%, `card_declined` 31%,
@@ -43,6 +43,7 @@ PSP attempts with exponential backoff).
 **Recovery rate after retry email**: 94.5% within 24h.
 
 Sample trace: `trace-7a3c1e9b-44de`.
+
 </div>
 
 <Footer />

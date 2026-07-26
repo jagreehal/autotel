@@ -57,7 +57,9 @@ Parses a Sentry DSN and returns the three values that wire Autotel to Sentry's
 OTLP ingestion endpoint. Throws when the DSN is missing or cannot be parsed.
 
 ```typescript
-const config = sentryOtlpConfig('https://<key>@o<org>.ingest.sentry.io/<project>');
+const config = sentryOtlpConfig(
+  'https://<key>@o<org>.ingest.sentry.io/<project>',
+);
 // config.dsn      normalized DSN string (pass to Sentry.init)
 // config.endpoint OTLP base URL (pass to Autotel init as `endpoint`)
 // config.headers  auth headers (pass to Autotel init as `headers`)

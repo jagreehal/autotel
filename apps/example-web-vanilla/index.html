@@ -1,185 +1,334 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Autotel Web - Vanilla JS Example</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <div class="max-w-4xl mx-auto px-6 py-12">
-    <h1 class="text-4xl font-bold text-gray-900 mb-8">🔍 Autotel Web - Vanilla JS Example</h1>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Autotel Web - Vanilla JS Example</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-50 min-h-screen">
+    <div class="max-w-4xl mx-auto px-6 py-12">
+      <h1 class="text-4xl font-bold text-gray-900 mb-8">
+        🔍 Autotel Web - Vanilla JS Example
+      </h1>
 
-    <div class="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-6 mb-8">
-      <p class="font-semibold text-gray-900 mb-3">What this demonstrates (lean mode):</p>
-      <ul class="space-y-2 text-gray-700">
-        <li class="flex items-start">
-          <span class="mr-2">•</span>
-          <span>Browser SDK initialization with <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">init()</code></span>
-        </li>
-        <li class="flex items-start">
-          <span class="mr-2">•</span>
-          <span>Automatic <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> header injection on fetch requests</span>
-        </li>
-        <li class="flex items-start">
-          <span class="mr-2">•</span>
-          <span>Distributed tracing from browser → backend (mock API)</span>
-        </li>
-        <li class="flex items-start">
-          <span class="mr-2">•</span>
-          <span>Per-tenant context with <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">setBaggage()</code> → W3C <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">baggage</code> header (fail-closed, same-origin by default)</span>
-        </li>
-        <li class="flex items-start">
-          <span class="mr-2">•</span>
-          <span>Trace context in <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">trace(ctx => ...)</code> (traceId, spanId, correlationId)</span>
-        </li>
-      </ul>
-      <p class="text-sm text-gray-600 mt-3">For real browser spans and <code class="bg-gray-100 px-1 rounded font-mono">setAttribute</code> / network timing, use <code class="bg-gray-100 px-1 rounded font-mono">initFull</code> from <code class="bg-gray-100 px-1 rounded font-mono">autotel-web/full</code> (see README).</p>
-    </div>
-
-    <div class="bg-purple-50 border-l-4 border-purple-500 rounded-lg p-6 mb-8">
-      <p class="font-semibold text-gray-900 mb-3">Per-tenant tracing with <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">setBaggage()</code>:</p>
-      <p class="text-gray-700 mb-4">Attach business context (e.g. <code class="bg-gray-100 px-1 rounded font-mono">tenant.id</code>) once. It rides along as a W3C <code class="bg-gray-100 px-1 rounded font-mono">baggage</code> header on every instrumented request and is tagged onto every browser span — and your backend's <code class="bg-gray-100 px-1 rounded font-mono">BaggageSpanProcessor</code> copies it onto server spans. One attribute, end-to-end.</p>
-      <div class="flex flex-wrap items-center gap-3">
-        <input id="tenantInput" type="text" value="acme-corp" placeholder="tenant.id"
-          class="px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm" />
-        <button onclick="setTenant()" class="bg-purple-600 hover:bg-purple-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
-          Set Tenant Context
-        </button>
-        <button onclick="clearTenant()" class="bg-gray-500 hover:bg-gray-600 text-white font-medium px-6 py-3 rounded-lg transition-colors">
-          Clear Tenant
-        </button>
+      <div class="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-6 mb-8">
+        <p class="font-semibold text-gray-900 mb-3">
+          What this demonstrates (lean mode):
+        </p>
+        <ul class="space-y-2 text-gray-700">
+          <li class="flex items-start">
+            <span class="mr-2">•</span>
+            <span
+              >Browser SDK initialization with
+              <code
+                class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+                >init()</code
+              ></span
+            >
+          </li>
+          <li class="flex items-start">
+            <span class="mr-2">•</span>
+            <span
+              >Automatic
+              <code
+                class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+                >traceparent</code
+              >
+              header injection on fetch requests</span
+            >
+          </li>
+          <li class="flex items-start">
+            <span class="mr-2">•</span>
+            <span>Distributed tracing from browser → backend (mock API)</span>
+          </li>
+          <li class="flex items-start">
+            <span class="mr-2">•</span>
+            <span
+              >Per-tenant context with
+              <code
+                class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+                >setBaggage()</code
+              >
+              → W3C
+              <code
+                class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+                >baggage</code
+              >
+              header (fail-closed, same-origin by default)</span
+            >
+          </li>
+          <li class="flex items-start">
+            <span class="mr-2">•</span>
+            <span
+              >Trace context in
+              <code
+                class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+                >trace(ctx => ...)</code
+              >
+              (traceId, spanId, correlationId)</span
+            >
+          </li>
+        </ul>
+        <p class="text-sm text-gray-600 mt-3">
+          For real browser spans and
+          <code class="bg-gray-100 px-1 rounded font-mono">setAttribute</code> /
+          network timing, use
+          <code class="bg-gray-100 px-1 rounded font-mono">initFull</code> from
+          <code class="bg-gray-100 px-1 rounded font-mono"
+            >autotel-web/full</code
+          >
+          (see README).
+        </p>
       </div>
-      <p id="tenantStatus" class="text-sm text-gray-600 mt-3 font-mono">No tenant context set.</p>
-    </div>
 
-    <div class="mb-8">
-      <h2 class="text-2xl font-semibold text-gray-900 mb-4">Try it out:</h2>
-      <div class="flex flex-wrap gap-3">
-        <button onclick="makeSimpleRequest()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
-          Make Simple Request
-        </button>
-        <button onclick="makeTracedRequest()" class="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
-          Make Traced Request
-        </button>
-        <button onclick="showTraceContext()" class="bg-orange-600 hover:bg-orange-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
-          Show Current Trace Context
-        </button>
+      <div
+        class="bg-purple-50 border-l-4 border-purple-500 rounded-lg p-6 mb-8"
+      >
+        <p class="font-semibold text-gray-900 mb-3">
+          Per-tenant tracing with
+          <code
+            class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+            >setBaggage()</code
+          >:
+        </p>
+        <p class="text-gray-700 mb-4">
+          Attach business context (e.g.
+          <code class="bg-gray-100 px-1 rounded font-mono">tenant.id</code>)
+          once. It rides along as a W3C
+          <code class="bg-gray-100 px-1 rounded font-mono">baggage</code> header
+          on every instrumented request and is tagged onto every browser span —
+          and your backend's
+          <code class="bg-gray-100 px-1 rounded font-mono"
+            >BaggageSpanProcessor</code
+          >
+          copies it onto server spans. One attribute, end-to-end.
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+          <input
+            id="tenantInput"
+            type="text"
+            value="acme-corp"
+            placeholder="tenant.id"
+            class="px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+          />
+          <button
+            onclick="setTenant()"
+            class="bg-purple-600 hover:bg-purple-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+          >
+            Set Tenant Context
+          </button>
+          <button
+            onclick="clearTenant()"
+            class="bg-gray-500 hover:bg-gray-600 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+          >
+            Clear Tenant
+          </button>
+        </div>
+        <p id="tenantStatus" class="text-sm text-gray-600 mt-3 font-mono">
+          No tenant context set.
+        </p>
       </div>
-    </div>
 
-    <div id="result" class="bg-gray-100 rounded-lg p-6 min-h-[150px] font-mono text-sm text-gray-800 whitespace-pre-wrap"></div>
+      <div class="mb-8">
+        <h2 class="text-2xl font-semibold text-gray-900 mb-4">Try it out:</h2>
+        <div class="flex flex-wrap gap-3">
+          <button
+            onclick="makeSimpleRequest()"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+          >
+            Make Simple Request
+          </button>
+          <button
+            onclick="makeTracedRequest()"
+            class="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+          >
+            Make Traced Request
+          </button>
+          <button
+            onclick="showTraceContext()"
+            class="bg-orange-600 hover:bg-orange-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+          >
+            Show Current Trace Context
+          </button>
+        </div>
+      </div>
 
-  <script type="module">
-    // Import autotel-web
-    import { init, trace, getActiveContext, setBaggage, clearBaggage } from '../../packages/autotel-web/dist/index.js'
+      <div
+        id="result"
+        class="bg-gray-100 rounded-lg p-6 min-h-[150px] font-mono text-sm text-gray-800 whitespace-pre-wrap"
+      ></div>
 
-    // Initialize the SDK (lean mode: header injection only, no real spans)
-    init({
-      service: 'vanilla-js-example',
-      debug: true,
-      // Business-context baggage is same-origin-only by default (fail-closed).
-      // This demo calls the cross-origin jsonplaceholder API, so we opt that
-      // host in here. Without this, baggage would NOT be sent to it.
-      baggage: { allowedOrigins: ['jsonplaceholder.typicode.com'] }
-    })
+      <script type="module">
+        // Import autotel-web
+        import {
+          init,
+          trace,
+          getActiveContext,
+          setBaggage,
+          clearBaggage,
+        } from '../../packages/autotel-web/dist/index.js';
 
-    console.log('✅ Autotel Web initialized!')
+        // Initialize the SDK (lean mode: header injection only, no real spans)
+        init({
+          service: 'vanilla-js-example',
+          debug: true,
+          // Business-context baggage is same-origin-only by default (fail-closed).
+          // This demo calls the cross-origin jsonplaceholder API, so we opt that
+          // host in here. Without this, baggage would NOT be sent to it.
+          baggage: { allowedOrigins: ['jsonplaceholder.typicode.com'] },
+        });
 
-    // Simple fetch request
-    window.makeSimpleRequest = async function() {
-      const result = document.getElementById('result')
-      result.textContent = 'Making request...'
+        console.log('✅ Autotel Web initialized!');
 
-      try {
-        // This request will automatically include traceparent header
-        const response = await fetch('https://jsonplaceholder.typicode.com/posts/1')
-        const data = await response.json()
+        // Simple fetch request
+        window.makeSimpleRequest = async function () {
+          const result = document.getElementById('result');
+          result.textContent = 'Making request...';
 
-        result.textContent = `✅ Success!\n\n` +
-          `Response:\n${JSON.stringify(data, null, 2)}\n\n` +
-          `Check the Network tab in DevTools to see the traceparent header!`
-      } catch (error) {
-        result.textContent = `❌ Error: ${error.message}`
-      }
-    }
+          try {
+            // This request will automatically include traceparent header
+            const response = await fetch(
+              'https://jsonplaceholder.typicode.com/posts/1',
+            );
+            const data = await response.json();
 
-    // Traced fetch request (with context – lean mode: ctx has traceId, spanId, correlationId)
-    window.makeTracedRequest = trace(ctx => async function() {
-      const result = document.getElementById('result')
-      result.textContent = 'Making traced request...'
+            result.textContent =
+              `✅ Success!\n\n` +
+              `Response:\n${JSON.stringify(data, null, 2)}\n\n` +
+              `Check the Network tab in DevTools to see the traceparent header!`;
+          } catch (error) {
+            result.textContent = `❌ Error: ${error.message}`;
+          }
+        };
 
-      try {
-        const response = await fetch('https://jsonplaceholder.typicode.com/users/1')
-        const data = await response.json()
+        // Traced fetch request (with context – lean mode: ctx has traceId, spanId, correlationId)
+        window.makeTracedRequest = trace(
+          (ctx) =>
+            async function () {
+              const result = document.getElementById('result');
+              result.textContent = 'Making traced request...';
 
-        result.textContent = `✅ Traced request completed!\n\n` +
-          `Trace ID: ${ctx.traceId}\n` +
-          `Span ID: ${ctx.spanId}\n` +
-          `Correlation ID: ${ctx.correlationId}\n\n` +
-          `Response:\n${JSON.stringify(data, null, 2)}\n\n` +
-          `(This request included the traceparent header – check the Network tab.)`
-      } catch (error) {
-        result.textContent = `❌ Error: ${error.message}`
-      }
-    })
+              try {
+                const response = await fetch(
+                  'https://jsonplaceholder.typicode.com/users/1',
+                );
+                const data = await response.json();
 
-    // Set per-tenant baggage context
-    window.setTenant = function() {
-      const id = document.getElementById('tenantInput').value.trim()
-      if (!id) {
-        document.getElementById('tenantStatus').textContent = 'Enter a tenant.id first.'
-        return
-      }
-      setBaggage({ 'tenant.id': id })
-      document.getElementById('tenantStatus').textContent =
-        `✅ baggage set → tenant.id=${id}  (sent on the next instrumented request)`
-    }
+                result.textContent =
+                  `✅ Traced request completed!\n\n` +
+                  `Trace ID: ${ctx.traceId}\n` +
+                  `Span ID: ${ctx.spanId}\n` +
+                  `Correlation ID: ${ctx.correlationId}\n\n` +
+                  `Response:\n${JSON.stringify(data, null, 2)}\n\n` +
+                  `(This request included the traceparent header – check the Network tab.)`;
+              } catch (error) {
+                result.textContent = `❌ Error: ${error.message}`;
+              }
+            },
+        );
 
-    // Clear per-tenant baggage context (e.g. on logout)
-    window.clearTenant = function() {
-      clearBaggage()
-      document.getElementById('tenantStatus').textContent =
-        'Cleared — subsequent requests carry no baggage.'
-    }
+        // Set per-tenant baggage context
+        window.setTenant = function () {
+          const id = document.getElementById('tenantInput').value.trim();
+          if (!id) {
+            document.getElementById('tenantStatus').textContent =
+              'Enter a tenant.id first.';
+            return;
+          }
+          setBaggage({ 'tenant.id': id });
+          document.getElementById('tenantStatus').textContent =
+            `✅ baggage set → tenant.id=${id}  (sent on the next instrumented request)`;
+        };
 
-    // Show current trace context
-    window.showTraceContext = function() {
-      const result = document.getElementById('result')
-      const ctx = getActiveContext()
+        // Clear per-tenant baggage context (e.g. on logout)
+        window.clearTenant = function () {
+          clearBaggage();
+          document.getElementById('tenantStatus').textContent =
+            'Cleared — subsequent requests carry no baggage.';
+        };
 
-      if (ctx) {
-        result.textContent = `📊 Active Trace Context:\n\n` +
-          `Trace ID: ${ctx.traceId}\n` +
-          `Span ID: ${ctx.spanId}\n` +
-          `Correlation ID: ${ctx.correlationId}`
-      } else {
-        result.textContent = `ℹ️ No active trace context.\n\n` +
-          `Trace context is only available inside traced functions.\n` +
-          `Try clicking "Make Traced Request" first!`
-      }
-    }
-  </script>
+        // Show current trace context
+        window.showTraceContext = function () {
+          const result = document.getElementById('result');
+          const ctx = getActiveContext();
 
-    <div class="mt-12 pt-8 border-t border-gray-200">
-      <h3 class="text-xl font-semibold text-gray-900 mb-4">How to verify trace propagation:</h3>
-      <ol class="space-y-2 text-gray-700 list-decimal list-inside mb-8">
-        <li>Open DevTools (F12)</li>
-        <li>Go to the Network tab</li>
-        <li>Click <strong>Set Tenant Context</strong>, then click one of the request buttons above</li>
-        <li>Click on the request in the Network tab</li>
-        <li>Look for <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> in the Request Headers section</li>
-        <li>You should see: <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent: 00-{trace-id}-{span-id}-01</code></li>
-        <li>You should also see: <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">baggage: tenant.id=acme-corp</code></li>
-        <li>Now click <strong>Clear Tenant</strong> and repeat — the <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">baggage</code> header is gone, <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> remains</li>
-      </ol>
+          if (ctx) {
+            result.textContent =
+              `📊 Active Trace Context:\n\n` +
+              `Trace ID: ${ctx.traceId}\n` +
+              `Span ID: ${ctx.spanId}\n` +
+              `Correlation ID: ${ctx.correlationId}`;
+          } else {
+            result.textContent =
+              `ℹ️ No active trace context.\n\n` +
+              `Trace context is only available inside traced functions.\n` +
+              `Try clicking "Make Traced Request" first!`;
+          }
+        };
+      </script>
 
-      <h3 class="text-xl font-semibold text-gray-900 mb-4">What happens in a real app:</h3>
-      <p class="text-gray-700 mb-4">
-        In a production setup, your backend would extract the <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">traceparent</code> header
-        and continue the trace. For example:
-      </p>
-      <pre class="bg-gray-100 p-6 rounded-lg overflow-x-auto text-sm">
+      <div class="mt-12 pt-8 border-t border-gray-200">
+        <h3 class="text-xl font-semibold text-gray-900 mb-4">
+          How to verify trace propagation:
+        </h3>
+        <ol class="space-y-2 text-gray-700 list-decimal list-inside mb-8">
+          <li>Open DevTools (F12)</li>
+          <li>Go to the Network tab</li>
+          <li>
+            Click <strong>Set Tenant Context</strong>, then click one of the
+            request buttons above
+          </li>
+          <li>Click on the request in the Network tab</li>
+          <li>
+            Look for
+            <code
+              class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+              >traceparent</code
+            >
+            in the Request Headers section
+          </li>
+          <li>
+            You should see:
+            <code
+              class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+              >traceparent: 00-{trace-id}-{span-id}-01</code
+            >
+          </li>
+          <li>
+            You should also see:
+            <code
+              class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+              >baggage: tenant.id=acme-corp</code
+            >
+          </li>
+          <li>
+            Now click <strong>Clear Tenant</strong> and repeat — the
+            <code
+              class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+              >baggage</code
+            >
+            header is gone,
+            <code
+              class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+              >traceparent</code
+            >
+            remains
+          </li>
+        </ol>
+
+        <h3 class="text-xl font-semibold text-gray-900 mb-4">
+          What happens in a real app:
+        </h3>
+        <p class="text-gray-700 mb-4">
+          In a production setup, your backend would extract the
+          <code
+            class="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800"
+            >traceparent</code
+          >
+          header and continue the trace. For example:
+        </p>
+        <pre class="bg-gray-100 p-6 rounded-lg overflow-x-auto text-sm">
 <span class="text-gray-600">// Backend (Express + Autotel)</span>
 <span class="text-blue-600">import</span> { init, trace } <span class="text-blue-600">from</span> <span class="text-green-600">'autotel'</span>
 
@@ -193,7 +342,7 @@ app.<span class="text-blue-600">get</span>(<span class="text-green-600">'/api/us
   res.json(user)
 })
       </pre>
+      </div>
     </div>
-  </div>
-</body>
+  </body>
 </html>

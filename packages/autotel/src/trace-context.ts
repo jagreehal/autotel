@@ -3,6 +3,8 @@
  */
 
 import type {
+  AttributeValue as OtelAttributeValue,
+  Attributes,
   Span,
   SpanStatusCode,
   BaggageEntry,
@@ -119,8 +121,7 @@ export interface TraceContextBase {
  * Attribute value types following OpenTelemetry specification.
  * Supports primitive values and arrays of homogeneous primitives.
  */
-export type AttributeValue =
-  string | number | boolean | string[] | number[] | boolean[];
+export type AttributeValue = OtelAttributeValue;
 
 /**
  * Span methods available on trace context
@@ -129,7 +130,7 @@ export interface SpanMethods {
   /** Set a single attribute on the span */
   setAttribute(key: string, value: AttributeValue): void;
   /** Set multiple attributes on the span */
-  setAttributes(attrs: Record<string, AttributeValue>): void;
+  setAttributes(attrs: Attributes): void;
   /** Set the status of the span */
   setStatus(status: { code: SpanStatusCode; message?: string }): void;
   /** Add a link to another span */
@@ -240,14 +241,14 @@ export interface BaggageMethods<
 /**
  * Complete trace context that merges base context, span methods, and baggage methods
  *
- * This is the ctx parameter passed to factory functions in trace().
- * It provides access to trace IDs, span manipulation methods, and baggage operations.
+ * This is the ctx parameter passed to `withTracing()` factories and the value
+ * returned by `getActiveTraceContext()` inside plain `trace()` wrappers.
  *
  * @template TBaggage - Optional type for typed baggage support
  *
  * @example Untyped (default)
  * ```typescript
- * export const handler = trace((ctx) => async () => {
+ * export const handler = withTracing({})((ctx) => async () => {
  *   ctx.getBaggage('key'); // returns string | undefined
  * });
  * ```
@@ -256,7 +257,8 @@ export interface BaggageMethods<
  * ```typescript
  * type TenantBaggage = { tenantId: string; region?: string };
  *
- * export const handler = trace<TenantBaggage>((ctx) => async () => {
+ * export const handler = trace(async () => {
+ *   const ctx = getActiveTraceContext<TenantBaggage>()!;
  *   // Use typed schema helper for type-safe access
  *   const schema = defineBaggageSchema<TenantBaggage>('tenant');
  *   const tenant = schema.get(ctx); // Partial<TenantBaggage> | undefined

@@ -57,7 +57,8 @@
 import * as nodeAsyncHooks from 'node:async_hooks';
 import type { Attributes, Link, SpanContext } from '@opentelemetry/api';
 import { emitCorrelatedEvent } from './correlated-events';
-import { trace } from './functional';
+import { withTracing } from './functional';
+import { assertTraceFactory } from './trace-factory-validation';
 import type { TraceContext } from './trace-context';
 import { getActiveSpan } from './trace-helpers';
 
@@ -134,8 +135,15 @@ export interface StepConfig {
   /** Additional attributes */
   attributes?: Attributes;
 
-  /** Compensation handler for saga rollback */
-  compensate?: (error: Error) => Promise<void> | void;
+  /**
+   * Compensation handler for saga rollback.
+   *
+   * The two-arg `(ctx, error)` form is detected via `Function.length`, so it
+   * must not use default or rest parameters (they reduce the reported arity).
+   */
+  compensate?:
+    | ((error: Error) => Promise<void> | void)
+    | ((ctx: StepContext, error: Error) => Promise<void> | void);
 
   /** Whether this step is idempotent */
   idempotent?: boolean;
@@ -161,7 +169,7 @@ interface StepMetadata {
   index: number;
   status: StepStatus;
   spanContext?: SpanContext;
-  compensate?: (error: Error) => Promise<void> | void;
+  compensate?: StepConfig['compensate'];
   startTime: number;
   endTime?: number;
 }
@@ -282,15 +290,32 @@ const workflowContextStorage =
  * });
  * ```
  */
-export function traceWorkflow<TArgs extends unknown[], TReturn>(
-  config: WorkflowConfig<TArgs>,
+export function traceWorkflow<TConfigArgs extends unknown[] = unknown[]>(
+  config: WorkflowConfig<TConfigArgs>,
 ) {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('traceWorkflow: config must be an object');
+  }
+  if (typeof config.name !== 'string' || config.name.trim() === '') {
+    throw new TypeError(
+      'traceWorkflow: config.name must be a non-empty string',
+    );
+  }
+  if (
+    typeof config.workflowId !== 'string' &&
+    typeof config.workflowId !== 'function'
+  ) {
+    throw new TypeError(
+      'traceWorkflow: config.workflowId must be a string or function',
+    );
+  }
   const spanName = `workflow.${config.name}`;
 
-  return (
+  return <TArgs extends TConfigArgs, TReturn>(
     fnFactory: (ctx: WorkflowContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
-    return trace<TArgs, TReturn>(spanName, (baseCtx) => {
+    assertTraceFactory('traceWorkflow', fnFactory);
+    return withTracing<TArgs, TReturn>({ name: spanName })((baseCtx) => {
       return async (...args: TArgs) => {
         // Generate or extract workflow ID
         const workflowId =
@@ -324,6 +349,7 @@ export function traceWorkflow<TArgs extends unknown[], TReturn>(
           try {
             // Execute workflow
             const userFn = fnFactory(ctx);
+            assertTraceFactory('traceWorkflow', userFn, 'result');
             const result = await userFn(...args);
 
             // Mark as completed
@@ -358,7 +384,7 @@ export function traceWorkflow<TArgs extends unknown[], TReturn>(
           }
         });
       };
-    });
+    }) as (...args: TArgs) => Promise<TReturn>;
   };
 }
 
@@ -384,15 +410,33 @@ export function traceWorkflow<TArgs extends unknown[], TReturn>(
  * });
  * ```
  */
-export function traceStep<TArgs extends unknown[], TReturn>(
+type StepHandler<TArgs extends unknown[], TReturn> = (
+  ...args: TArgs
+) => TReturn | Promise<TReturn>;
+
+export function traceStep(
   config: StepConfig,
-) {
-  return (
-    fn: (...args: TArgs) => Promise<TReturn>,
-  ): ((...args: TArgs) => Promise<TReturn>) => {
+): <TArgs extends unknown[], TReturn>(
+  handler: StepHandler<TArgs, TReturn>,
+) => StepHandler<TArgs, TReturn> {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('traceStep: config must be an object');
+  }
+  if (typeof config.name !== 'string' || config.name.trim() === '') {
+    throw new TypeError('traceStep: config.name must be a non-empty string');
+  }
+
+  return (<TArgs extends unknown[], TReturn>(
+    handler: StepHandler<TArgs, TReturn>,
+  ): StepHandler<TArgs, TReturn> => {
+    if (typeof handler !== 'function') {
+      throw new TypeError(
+        'traceStep(config)(handler): handler must be a function',
+      );
+    }
     const spanName = `step.${config.name}`;
 
-    return trace<TArgs, TReturn>(spanName, (baseCtx) => {
+    return withTracing<TArgs, TReturn>({ name: spanName })((baseCtx) => {
       return async (...args: TArgs) => {
         // Get workflow context from AsyncLocalStorage (async-safe)
         const workflowCtx = workflowContextStorage.getStore() ?? null;
@@ -427,7 +471,20 @@ export function traceStep<TArgs extends unknown[], TReturn>(
 
         // Register compensation if provided
         if (config.compensate && workflowCtx) {
-          workflowCtx.registerCompensation(config.name, config.compensate);
+          const compensate = config.compensate;
+          workflowCtx.registerCompensation(config.name, (error) => {
+            if (compensate.length >= 2) {
+              return (
+                compensate as (
+                  stepCtx: StepContext,
+                  cause: Error,
+                ) => Promise<void> | void
+              )(ctx, error);
+            }
+            return (compensate as (cause: Error) => Promise<void> | void)(
+              error,
+            );
+          });
         }
 
         // Execute with optional retry
@@ -449,7 +506,9 @@ export function traceStep<TArgs extends unknown[], TReturn>(
               }
             }
 
-            const result = await fn(...args);
+            // The step is a plain handler; it receives its real arguments.
+            // Reach the step span via getActiveTraceContext() inside the body.
+            const result = await handler(...args);
 
             // Mark as completed
             ctx.setAttribute('workflow.step.status', 'completed');
@@ -477,7 +536,9 @@ export function traceStep<TArgs extends unknown[], TReturn>(
         throw lastError;
       };
     });
-  };
+  }) as <TFunctionArgs extends unknown[], TFunctionReturn>(
+    handler: StepHandler<TFunctionArgs, TFunctionReturn>,
+  ) => StepHandler<TFunctionArgs, TFunctionReturn>;
 }
 
 // ============================================================================

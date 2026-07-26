@@ -26,11 +26,15 @@ describe('fs utilities', () => {
 
   describe('isPathWithinRoot', () => {
     it('should return true for path within root', () => {
-      expect(isPathWithinRoot(path.join(tempDir, 'file.txt'), tempDir)).toBe(true);
+      expect(isPathWithinRoot(path.join(tempDir, 'file.txt'), tempDir)).toBe(
+        true,
+      );
     });
 
     it('should return true for nested path within root', () => {
-      expect(isPathWithinRoot(path.join(tempDir, 'a', 'b', 'c.txt'), tempDir)).toBe(true);
+      expect(
+        isPathWithinRoot(path.join(tempDir, 'a', 'b', 'c.txt'), tempDir),
+      ).toBe(true);
     });
 
     it('should return false for path outside root', () => {
@@ -38,7 +42,9 @@ describe('fs utilities', () => {
     });
 
     it('should return false for path traversal attempt', () => {
-      expect(isPathWithinRoot(path.join(tempDir, '..', 'other'), tempDir)).toBe(false);
+      expect(isPathWithinRoot(path.join(tempDir, '..', 'other'), tempDir)).toBe(
+        false,
+      );
     });
 
     it('should return true for root itself', () => {
@@ -125,7 +131,10 @@ describe('fs utilities', () => {
     it('should create backup when requested', () => {
       const filePath = path.join(tempDir, 'test.txt');
       fs.writeFileSync(filePath, 'original');
-      const { backupPath } = atomicWrite(filePath, 'new content', { root: tempDir, backup: true });
+      const { backupPath } = atomicWrite(filePath, 'new content', {
+        root: tempDir,
+        backup: true,
+      });
       expect(backupPath).toBe(`${filePath}.bak`);
       expect(fs.readFileSync(backupPath!, 'utf-8')).toBe('original');
       expect(fs.readFileSync(filePath, 'utf-8')).toBe('new content');
@@ -134,7 +143,7 @@ describe('fs utilities', () => {
     it('should throw on path traversal', () => {
       const filePath = path.join(tempDir, '..', 'outside.txt');
       expect(() => atomicWrite(filePath, 'content', { root: tempDir })).toThrow(
-        /Path traversal detected/
+        /Path traversal detected/,
       );
     });
   });

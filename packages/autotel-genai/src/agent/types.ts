@@ -8,18 +8,11 @@ export type { OnMissingContext } from 'autotel-audit';
 export type { ModelPricing, TokenUsage } from '../cost.js';
 
 export type PolicyDecision =
-  | 'permit'
-  | 'deny'
-  | 'challenge'
-  | 'observe'
-  | 'error';
+  'permit' | 'deny' | 'challenge' | 'observe' | 'error';
 export type ToolStatus = 'planned' | 'complete' | 'error' | 'blocked';
 export type AgentOutcome = 'success' | 'failure';
 export type AgentEventKind =
-  | 'action'
-  | 'tool_call'
-  | 'policy_decision'
-  | 'handoff';
+  'action' | 'tool_call' | 'policy_decision' | 'handoff';
 export type AiLifecycleStage =
   | 'plan'
   | 'design'
@@ -28,17 +21,9 @@ export type AiLifecycleStage =
   | 'operate'
   | 'monitor'
   | 'decommission';
-export type AgentIdentityStatus =
-  | 'active'
-  | 'rotated'
-  | 'revoked'
-  | 'expired';
+export type AgentIdentityStatus = 'active' | 'rotated' | 'revoked' | 'expired';
 export type AgentSessionStatus =
-  | 'active'
-  | 'completed'
-  | 'failed'
-  | 'revoked'
-  | 'expired';
+  'active' | 'completed' | 'failed' | 'revoked' | 'expired';
 export type PrivacyProfileName = 'strict' | 'pci' | 'healthcare';
 
 export interface AgentIdentity {
@@ -210,8 +195,7 @@ export type AgentActionFactory<TArgs extends unknown[], TResult> = (
  * call arguments (so call-specific fields like `tool.input` can be hashed).
  */
 export type AgentMetadataInput<TArgs extends unknown[], TMetadata> =
-  | TMetadata
-  | ((...args: TArgs) => TMetadata);
+  TMetadata | ((...args: TArgs) => TMetadata);
 
 export interface PrivacyProfile {
   name: string;

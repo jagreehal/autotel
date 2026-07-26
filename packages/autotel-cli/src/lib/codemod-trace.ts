@@ -40,7 +40,7 @@ function expandNamePattern(
   pattern: string,
   name: string,
   filePath: string,
-  cwd: string
+  cwd: string,
 ): string {
   const file = path.basename(filePath, path.extname(filePath));
   const relPath = path.relative(cwd, filePath).replaceAll('\\', '/');
@@ -53,10 +53,15 @@ function expandNamePattern(
 function getSpanName(
   name: string,
   filePath: string,
-  options: TransformOptions
+  options: TransformOptions,
 ): string {
   if (options.namePattern) {
-    return expandNamePattern(options.namePattern, name, filePath, process.cwd());
+    return expandNamePattern(
+      options.namePattern,
+      name,
+      filePath,
+      process.cwd(),
+    );
   }
   return name;
 }
@@ -88,7 +93,9 @@ function isInsideTraceCall(node: Node): boolean {
   let current: Node | undefined = node.getParent();
   while (current) {
     if (current.getKind() === SyntaxKind.CallExpression) {
-      const expr = (current as Node & { getExpression(): Node }).getExpression?.();
+      const expr = (
+        current as Node & { getExpression(): Node }
+      ).getExpression?.();
       if (expr?.getText() === 'trace') return true;
     }
     current = current.getParent();
@@ -103,7 +110,7 @@ function isInsideTraceCall(node: Node): boolean {
 export function transformFile(
   content: string,
   filePath: string,
-  options: TransformOptions
+  options: TransformOptions,
 ): TransformResult {
   const skipped: { name: string; reason: string }[] = [];
   let wrappedCount = 0;
@@ -148,11 +155,26 @@ export function transformFile(
       skip(spanName, 'already wrapped');
       continue;
     }
-    const mod = fn.getModifiers().map((m) => m.getText()).join(' ');
-    const modPrefix = mod ? mod + ' ' : '';
+    // `export` belongs on the generated const; `async` belongs on the inner
+    // function expression, since `async const` is not valid syntax.
+    const modifiers = fn.getModifiers().map((m) => m.getText());
+    const isAsync = modifiers.includes('async');
+    const declModifiers = modifiers.filter((m) => m !== 'async');
+    const modPrefix =
+      declModifiers.length > 0 ? declModifiers.join(' ') + ' ' : '';
     const fnText = fn.getText();
-    const rest = fnText.replace(/^function\s*\w*\s*/, '');
-    const newText = `${modPrefix}const ${name} = trace('${spanName}', function ${name}${rest};`;
+    // Strip every leading modifier plus `function`, an optional generator
+    // star, and the name, leaving the parameter list onward.
+    const rest = fnText.replace(
+      /^(?:\b(?:export|default|async|declare)\b\s*)*function\s*(\*?)\s*\w*\s*/,
+      '',
+    );
+    const star =
+      /^(?:\b(?:export|default|async|declare)\b\s*)*function\s*\*/.test(fnText)
+        ? '*'
+        : '';
+    const asyncPrefix = isAsync ? 'async ' : '';
+    const newText = `${modPrefix}const ${name} = trace('${spanName}', ${asyncPrefix}function${star} ${name}${rest});`;
     edits.push({ node: fn, newText });
     wrappedCount += 1;
   }
@@ -167,12 +189,15 @@ export function transformFile(
       if (shouldSkipName(spanName, options)) {
         skip(spanName, 'name match');
       } else {
-        const fn = defaultFn as Node & { getParameters(): Node[]; getBody(): Node | undefined };
+        const fn = defaultFn as Node & {
+          getParameters(): Node[];
+          getBody(): Node | undefined;
+        };
         const params = fn.getParameters?.() ?? [];
         const paramsText = params.map((p) => p.getText()).join(', ');
         const body = fn.getBody?.();
         const bodyText = body?.getText() ?? '{}';
-        const decl = `const ${name} = trace('${spanName}', function ${name}(${paramsText}) ${bodyText};`;
+        const decl = `const ${name} = trace('${spanName}', function ${name}(${paramsText}) ${bodyText});`;
         const full = decl + '\nexport default ' + name + ';';
         edits.push({ node: defaultFn, newText: full });
         wrappedCount += 1;
@@ -190,8 +215,10 @@ export function transformFile(
       const isFnExpr = kind === SyntaxKind.FunctionExpression;
       const isCall = kind === SyntaxKind.CallExpression;
       if (isCall) {
-        const callExpr = init as Node & { getExpression(): Node };
-        const exprText = callExpr.getExpression().getText();
+        const exprText = init
+          .asKindOrThrow(SyntaxKind.CallExpression)
+          .getExpression()
+          .getText();
         if (exprText === 'trace') {
           const name = decl.getName();
           if (typeof name === 'string') {
@@ -239,7 +266,11 @@ export function transformFile(
         continue;
       }
       const methodName = method.getName();
-      const spanName = getSpanName(`${className}.${methodName}`, filePath, options);
+      const spanName = getSpanName(
+        `${className}.${methodName}`,
+        filePath,
+        options,
+      );
       if (shouldSkipName(spanName, options)) {
         skip(spanName, 'name match');
         continue;
@@ -264,11 +295,16 @@ export function transformFile(
   for (const stmt of sourceFile.getVariableStatements()) {
     for (const decl of stmt.getDeclarationList().getDeclarations()) {
       const init = decl.getInitializer();
-      if (!init || init.getKind() !== SyntaxKind.ObjectLiteralExpression) continue;
-      const obj = init as { getProperties(): Node[] };
+      if (!init || init.getKind() !== SyntaxKind.ObjectLiteralExpression)
+        continue;
+      const obj = init.asKindOrThrow(SyntaxKind.ObjectLiteralExpression);
       for (const prop of obj.getProperties()) {
         if (prop.getKind() !== SyntaxKind.MethodDeclaration) continue;
-        const method = prop as Node & { getName(): string; getBody(): Node; isGenerator?(): boolean };
+        const method = prop as Node & {
+          getName(): string;
+          getBody(): Node;
+          isGenerator?(): boolean;
+        };
         const methodName = method.getName();
         const spanName = getSpanName(methodName, filePath, options);
         if (shouldSkipName(spanName, options)) {

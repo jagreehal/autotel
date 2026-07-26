@@ -44,10 +44,7 @@
  * ```
  */
 
-import {
-  EventSubscriber,
-  type EventPayload,
-} from './event-subscriber-base';
+import { EventSubscriber, type EventPayload } from './event-subscriber-base';
 
 /**
  * Buffer overflow strategy
@@ -197,7 +194,7 @@ export abstract class StreamingEventSubscriber extends EventSubscriber {
         // Drop oldest event to make space
         this.buffer.shift();
         console.warn(
-          `[${this.name}] Buffer full (${this.config.maxBufferSize}), dropped oldest event`
+          `[${this.name}] Buffer full (${this.config.maxBufferSize}), dropped oldest event`,
         );
         break;
       }
@@ -205,7 +202,7 @@ export abstract class StreamingEventSubscriber extends EventSubscriber {
       case 'block': {
         // Wait for flush to complete (backpressure)
         console.warn(
-          `[${this.name}] Buffer full (${this.config.maxBufferSize}), blocking until space available`
+          `[${this.name}] Buffer full (${this.config.maxBufferSize}), blocking until space available`,
         );
         await this.flushBuffer();
 
@@ -219,7 +216,7 @@ export abstract class StreamingEventSubscriber extends EventSubscriber {
 
       case 'disk': {
         throw new Error(
-          `[${this.name}] Disk overflow strategy not implemented yet`
+          `[${this.name}] Disk overflow strategy not implemented yet`,
         );
       }
     }
@@ -239,21 +236,24 @@ export abstract class StreamingEventSubscriber extends EventSubscriber {
     } catch (error) {
       console.error(
         `[${this.name}] Failed to send batch of ${batch.length} events:`,
-        error
+        error,
       );
 
       // On failure, put events back in buffer (at front)
       this.buffer.unshift(...batch);
 
       // If we're near capacity, we need to make a decision
-      if (this.buffer.length >= this.config.maxBufferSize * 0.9 && this.config.bufferOverflowStrategy === 'drop') {
-          // Drop oldest to prevent runaway growth
-          const toDrop = Math.floor(this.config.maxBufferSize * 0.1);
-          this.buffer.splice(0, toDrop);
-          console.warn(
-            `[${this.name}] After failed flush, dropped ${toDrop} oldest events to prevent overflow`
-          );
-        }
+      if (
+        this.buffer.length >= this.config.maxBufferSize * 0.9 &&
+        this.config.bufferOverflowStrategy === 'drop'
+      ) {
+        // Drop oldest to prevent runaway growth
+        const toDrop = Math.floor(this.config.maxBufferSize * 0.1);
+        this.buffer.splice(0, toDrop);
+        console.warn(
+          `[${this.name}] After failed flush, dropped ${toDrop} oldest events to prevent overflow`,
+        );
+      }
     }
   }
 
@@ -313,9 +313,7 @@ export abstract class StreamingEventSubscriber extends EventSubscriber {
    * Override this if your streaming platform supports compression.
    * Only called if compressionEnabled = true.
    */
-  protected async compressPayload(
-    payload: string
-  ): Promise<Buffer | string> {
+  protected async compressPayload(payload: string): Promise<Buffer | string> {
     // Default: no compression
     // Override with gzip, snappy, lz4, etc.
     return payload;

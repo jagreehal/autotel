@@ -57,8 +57,10 @@ export function parseEnvFile(content: string): Map<string, string> {
       let value = trimmed.slice(eqIndex + 1).trim();
 
       // Remove quotes if present
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
         value = value.slice(1, -1);
       }
 
@@ -99,7 +101,7 @@ export async function findEnvFiles(packageRoot: string): Promise<string[]> {
 export async function checkEnvVarPresent(
   packageRoot: string,
   varName: string,
-  specificFile?: string
+  specificFile?: string,
 ): Promise<{ found: boolean; file: string | null }> {
   const files = specificFile
     ? [path.resolve(packageRoot, specificFile)]
@@ -126,7 +128,7 @@ export async function checkEnvVarPresent(
 export async function checkEnvVarsPresent(
   packageRoot: string,
   varNames: string[],
-  specificFile?: string
+  specificFile?: string,
 ): Promise<Map<string, { found: boolean; file: string | null }>> {
   const results = new Map<string, { found: boolean; file: string | null }>();
 

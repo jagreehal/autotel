@@ -36,7 +36,14 @@ describe('code-builder', () => {
 
     it('should add import to backend section', () => {
       const file = createCodeFile();
-      addImport(file, { source: 'autotel-backends/datadog', specifiers: ['createDatadogConfig'] }, 'backend');
+      addImport(
+        file,
+        {
+          source: 'autotel-backends/datadog',
+          specifiers: ['createDatadogConfig'],
+        },
+        'backend',
+      );
       expect(file.backendImports).toHaveLength(1);
       expect(file.imports).toHaveLength(0);
     });
@@ -49,7 +56,14 @@ describe('code-builder', () => {
 
     it('should add import to subscriber section', () => {
       const file = createCodeFile();
-      addImport(file, { source: 'autotel-subscribers/posthog', specifiers: ['PostHogSubscriber'] }, 'subscriber');
+      addImport(
+        file,
+        {
+          source: 'autotel-subscribers/posthog',
+          specifiers: ['PostHogSubscriber'],
+        },
+        'subscriber',
+      );
       expect(file.subscriberImports).toHaveLength(1);
     });
   });
@@ -63,7 +77,9 @@ describe('code-builder', () => {
 
       const output = renderCodeFile(file);
 
-      expect(output).toContain('autotel instrumentation - managed by autotel-cli');
+      expect(output).toContain(
+        'autotel instrumentation - managed by autotel-cli',
+      );
       expect(output).toContain("import 'autotel/register';");
       expect(output).toContain("import { init } from 'autotel';");
       expect(output).toContain('init({');
@@ -87,7 +103,14 @@ describe('code-builder', () => {
       const file = createCodeFile();
       addImport(file, { source: 'autotel/register', sideEffect: true });
       addImport(file, { source: 'autotel', specifiers: ['init'] });
-      addImport(file, { source: 'autotel-backends/datadog', specifiers: ['createDatadogConfig'] }, 'backend');
+      addImport(
+        file,
+        {
+          source: 'autotel-backends/datadog',
+          specifiers: ['createDatadogConfig'],
+        },
+        'backend',
+      );
       setBackendConfig(file, '...createDatadogConfig({})');
 
       const output = renderCodeFile(file);
@@ -100,7 +123,14 @@ describe('code-builder', () => {
       const file = createCodeFile();
       addImport(file, { source: 'autotel/register', sideEffect: true });
       addImport(file, { source: 'autotel', specifiers: ['init'] });
-      addImport(file, { source: 'autotel-subscribers/posthog', specifiers: ['PostHogSubscriber'] }, 'subscriber');
+      addImport(
+        file,
+        {
+          source: 'autotel-subscribers/posthog',
+          specifiers: ['PostHogSubscriber'],
+        },
+        'subscriber',
+      );
       addSubscriberConfig(file, 'new PostHogSubscriber({}),');
 
       const output = renderCodeFile(file);
@@ -115,7 +145,14 @@ describe('code-builder', () => {
       const file = createCodeFile();
       addImport(file, { source: 'autotel/register', sideEffect: true });
       addImport(file, { source: 'autotel', specifiers: ['init'] });
-      addImport(file, { source: 'autotel-plugins/mongoose', specifiers: ['instrumentMongoose'] }, 'plugin');
+      addImport(
+        file,
+        {
+          source: 'autotel-plugins/mongoose',
+          specifiers: ['instrumentMongoose'],
+        },
+        'plugin',
+      );
       addImport(file, { source: 'mongoose', default: 'mongoose' }, 'plugin');
       addPluginInit(file, 'instrumentMongoose(mongoose);');
 
@@ -197,7 +234,9 @@ instrumentMongoose(mongoose);`;
     it('should produce valid minimal file', () => {
       const output = buildMinimalInstrumentation();
 
-      expect(output).toContain('autotel instrumentation - managed by autotel-cli');
+      expect(output).toContain(
+        'autotel instrumentation - managed by autotel-cli',
+      );
       expect(output).toContain("import 'autotel/register';");
       expect(output).toContain("import { init } from 'autotel';");
       expect(output).toContain('init({');
@@ -210,20 +249,34 @@ instrumentMongoose(mongoose);`;
       const file = createCodeFile();
       addImport(file, { source: 'autotel/register', sideEffect: true });
       addImport(file, { source: 'autotel', specifiers: ['init'] });
-      addImport(file, { source: 'autotel-backends/datadog', specifiers: ['createDatadogConfig'] }, 'backend');
-      setBackendConfig(file, `...createDatadogConfig({
+      addImport(
+        file,
+        {
+          source: 'autotel-backends/datadog',
+          specifiers: ['createDatadogConfig'],
+        },
+        'backend',
+      );
+      setBackendConfig(
+        file,
+        `...createDatadogConfig({
     apiKey: process.env.DATADOG_API_KEY,
     site: process.env.DATADOG_SITE,
-  }),`);
+  }),`,
+      );
 
       const output = renderCodeFile(file);
 
       // Verify structure without exact snapshot
-      expect(output).toContain('autotel instrumentation - managed by autotel-cli');
+      expect(output).toContain(
+        'autotel instrumentation - managed by autotel-cli',
+      );
       expect(output).toContain("import 'autotel/register';");
       expect(output).toContain("import { init } from 'autotel';");
       expect(output).toContain('// --- AUTOTEL:BACKEND ---');
-      expect(output).toContain("import { createDatadogConfig } from 'autotel-backends/datadog';");
+      expect(output).toContain(
+        "import { createDatadogConfig } from 'autotel-backends/datadog';",
+      );
       expect(output).toContain('// --- AUTOTEL:BACKEND_CONFIG ---');
       expect(output).toContain('createDatadogConfig');
       expect(output).toContain('DATADOG_API_KEY');
@@ -233,14 +286,34 @@ instrumentMongoose(mongoose);`;
       const file = createCodeFile();
       addImport(file, { source: 'autotel/register', sideEffect: true });
       addImport(file, { source: 'autotel', specifiers: ['init'] });
-      addImport(file, { source: 'autotel-backends/honeycomb', specifiers: ['createHoneycombConfig'] }, 'backend');
-      addImport(file, { source: 'autotel-subscribers/posthog', specifiers: ['PostHogSubscriber'] }, 'subscriber');
-      setBackendConfig(file, `...createHoneycombConfig({
+      addImport(
+        file,
+        {
+          source: 'autotel-backends/honeycomb',
+          specifiers: ['createHoneycombConfig'],
+        },
+        'backend',
+      );
+      addImport(
+        file,
+        {
+          source: 'autotel-subscribers/posthog',
+          specifiers: ['PostHogSubscriber'],
+        },
+        'subscriber',
+      );
+      setBackendConfig(
+        file,
+        `...createHoneycombConfig({
     apiKey: process.env.HONEYCOMB_API_KEY,
-  }),`);
-      addSubscriberConfig(file, `new PostHogSubscriber({
+  }),`,
+      );
+      addSubscriberConfig(
+        file,
+        `new PostHogSubscriber({
       apiKey: process.env.POSTHOG_API_KEY,
-    }),`);
+    }),`,
+      );
 
       const output = renderCodeFile(file);
 
@@ -255,7 +328,14 @@ instrumentMongoose(mongoose);`;
       const file = createCodeFile();
       addImport(file, { source: 'autotel/register', sideEffect: true });
       addImport(file, { source: 'autotel', specifiers: ['init'] });
-      addImport(file, { source: 'autotel-plugins/mongoose', specifiers: ['instrumentMongoose'] }, 'plugin');
+      addImport(
+        file,
+        {
+          source: 'autotel-plugins/mongoose',
+          specifiers: ['instrumentMongoose'],
+        },
+        'plugin',
+      );
       addImport(file, { source: 'mongoose', default: 'mongoose' }, 'plugin');
       setBackendConfig(file, '// Local mode');
       addPluginInit(file, 'instrumentMongoose(mongoose);');
@@ -263,7 +343,9 @@ instrumentMongoose(mongoose);`;
       const output = renderCodeFile(file);
 
       expect(output).toContain('// --- AUTOTEL:PLUGINS ---');
-      expect(output).toContain("import { instrumentMongoose } from 'autotel-plugins/mongoose';");
+      expect(output).toContain(
+        "import { instrumentMongoose } from 'autotel-plugins/mongoose';",
+      );
       expect(output).toContain("import mongoose from 'mongoose';");
       expect(output).toContain('// --- AUTOTEL:PLUGIN_INIT ---');
       expect(output).toContain('instrumentMongoose(mongoose);');

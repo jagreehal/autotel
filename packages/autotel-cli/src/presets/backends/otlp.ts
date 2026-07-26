@@ -11,10 +11,7 @@ export const otlpHttp: BackendPreset = {
   protocol: 'http',
   exporter: 'otlp-http',
   packages: {
-    required: [
-      'autotel-backends',
-      '@opentelemetry/exporter-trace-otlp-http',
-    ],
+    required: ['autotel-backends', '@opentelemetry/exporter-trace-otlp-http'],
     optional: [
       '@opentelemetry/sdk-logs',
       '@opentelemetry/exporter-logs-otlp-http',
@@ -75,10 +72,7 @@ export const otlpGrpc: BackendPreset = {
   protocol: 'grpc',
   exporter: 'otlp-grpc',
   packages: {
-    required: [
-      'autotel-backends',
-      '@opentelemetry/exporter-trace-otlp-grpc',
-    ],
+    required: ['autotel-backends', '@opentelemetry/exporter-trace-otlp-grpc'],
     optional: [
       '@opentelemetry/sdk-logs',
       '@opentelemetry/exporter-logs-otlp-grpc',

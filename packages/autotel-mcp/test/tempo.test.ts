@@ -152,7 +152,7 @@ describe('TempoBackend — wiring', () => {
   it('searchTraces sends TraceQL and unix-second time range', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       requests.push(typeof input === 'string' ? input : input.toString());
       return new Response(JSON.stringify({ traces: [] }), { status: 200 });
     }) as typeof fetch;
@@ -188,7 +188,7 @@ describe('TempoBackend — wiring', () => {
   it('listServices prefers tag-values API when available', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       const url = typeof input === 'string' ? input : input.toString();
       requests.push(url);
       return new Response(JSON.stringify({ tagValues: ['api', 'worker'] }), {

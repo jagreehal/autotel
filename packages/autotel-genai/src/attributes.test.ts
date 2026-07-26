@@ -83,7 +83,10 @@ describe('genAiAgentAttributes', () => {
 
   it('drops agent.id on internal spans (breaking change #242)', () => {
     expect(
-      genAiAgentAttributes({ id: 'agent-1', name: 'planner' }, { internal: true }),
+      genAiAgentAttributes(
+        { id: 'agent-1', name: 'planner' },
+        { internal: true },
+      ),
     ).toEqual({ 'gen_ai.agent.name': 'planner' });
   });
 });

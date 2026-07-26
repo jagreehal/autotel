@@ -11,10 +11,7 @@ import {
   type Attributes,
   type Span,
 } from '@opentelemetry/api';
-import {
-  agentContextFromSpan,
-  recordHumanApproval,
-} from 'autotel-genai/agent';
+import { agentContextFromSpan, recordHumanApproval } from 'autotel-genai/agent';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   WorkerTracer,
@@ -253,7 +250,8 @@ function getDefaultSpanName(event: ObservabilityEvent): string {
     case 'workflow:resumed':
     case 'workflow:restarted': {
       return `agent.${formatTypeSegment(event.type)} ${
-        getPayloadName(payload, 'workflowName', 'workflowId', 'eventType') ?? 'unknown'
+        getPayloadName(payload, 'workflowName', 'workflowId', 'eventType') ??
+        'unknown'
       }`;
     }
     case 'email:receive':
@@ -293,11 +291,7 @@ function isPrimitiveAttributeValue(
   );
 }
 
-function setIfPresent(
-  attrs: Attributes,
-  key: string,
-  value: unknown,
-): void {
+function setIfPresent(attrs: Attributes, key: string, value: unknown): void {
   if (value === undefined || value === null) return;
   if (isPrimitiveAttributeValue(value)) {
     attrs[key] = value;
@@ -422,7 +416,8 @@ function inferErrorMessage(event: ObservabilityEvent): string | undefined {
 
 function isErrorEvent(event: ObservabilityEvent): boolean {
   if (event.type === 'workflow:rejected') return true;
-  if (event.type.endsWith(':error') || event.type.endsWith(':failed')) return true;
+  if (event.type.endsWith(':error') || event.type.endsWith(':failed'))
+    return true;
 
   if ('error' in event.payload) {
     return typeof (event.payload as Record<string, unknown>).error === 'string';
@@ -456,15 +451,20 @@ async function exportSpans(
   const tracer = trace.getTracer('autotel-cloudflare/agents');
   if (tracer instanceof WorkerTracer) {
     try {
-      const scheduler = ctx && 'scheduler' in ctx
-        ? (ctx.scheduler as { wait?: (ms: number) => Promise<void> } | undefined)
-        : undefined;
+      const scheduler =
+        ctx && 'scheduler' in ctx
+          ? (ctx.scheduler as
+              { wait?: (ms: number) => Promise<void> } | undefined)
+          : undefined;
       if (scheduler?.wait) {
         await scheduler.wait(1);
       }
       await tracer.forceFlush(traceId);
     } catch (error) {
-      console.error('[autotel-cloudflare/agents] Failed to export spans:', error);
+      console.error(
+        '[autotel-cloudflare/agents] Failed to export spans:',
+        error,
+      );
     }
   }
 }

@@ -44,7 +44,7 @@
  * ```
  */
 
-import { trace, propagation, context, TraceFlags } from '@opentelemetry/api';
+import { trace, propagation, context } from '@opentelemetry/api';
 import { type Logger } from './logger';
 import {
   getLogger,
@@ -64,11 +64,7 @@ import { type EventCollector } from './event-testing';
 import { CircuitBreaker, CircuitOpenError } from './circuit-breaker';
 import { validateEvent } from './validation';
 import { getOperationContext } from './operation-context';
-import {
-  type EnrichFromBaggageConfig,
-  hashValue,
-  hashLinkedTraceIds,
-} from './events-config';
+import { type EnrichFromBaggageConfig, hashValue } from './events-config';
 import { getOrCreateCorrelationId } from './correlation-id';
 
 // Re-export types for convenience

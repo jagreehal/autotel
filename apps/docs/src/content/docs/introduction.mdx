@@ -14,18 +14,18 @@ Autotel is a zero-boilerplate OpenTelemetry wrapper for TypeScript. It replaces 
 
 ## Core API
 
-| Need                        | API / entry point                                                               |
-| --------------------------- | ------------------------------------------------------------------------------- |
-| Wrap a function with a span | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                        |
-| Request-scoped attributes   | `getRequestLogger(ctx?)`                                                        |
-| Structured throw            | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })` |
-| Parse API errors (client)   | `parseError(err)`                                                               |
-| Product/analytics events    | `track(name, attributes)`                                                       |
-| Init (once at startup)      | `init({ service, ... })`                                                        |
-| Testing                     | `createTraceCollector()` from `autotel/testing`                                 |
-| Security observability hooks | `securityEvent()` from `autotel-audit`. See [Security Observability](/autotel/integrations/security/). |
-| Input validation telemetry  | `defineValidator()` from `autotel/validate`. See [Validation Telemetry](/autotel/integrations/validation/). |
-| Audit / compliance trail    | `withAudit()` from `autotel-audit`. See [Audit Logging](/autotel/integrations/audit/). |
+| Need                         | API / entry point                                                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Wrap a function with a span  | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                                                    |
+| Request-scoped attributes    | `getRequestLogger(ctx?)`                                                                                    |
+| Structured throw             | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })`                             |
+| Parse API errors (client)    | `parseError(err)`                                                                                           |
+| Product/analytics events     | `track(name, attributes)`                                                                                   |
+| Init (once at startup)       | `init({ service, ... })`                                                                                    |
+| Testing                      | `createTraceCollector()` from `autotel/testing`                                                             |
+| Security observability hooks | `securityEvent()` from `autotel-audit`. See [Security Observability](/autotel/integrations/security/).      |
+| Input validation telemetry   | `defineValidator()` from `autotel/validate`. See [Validation Telemetry](/autotel/integrations/validation/). |
+| Audit / compliance trail     | `withAudit()` from `autotel-audit`. See [Audit Logging](/autotel/integrations/audit/).                      |
 
 ## Related integrations
 

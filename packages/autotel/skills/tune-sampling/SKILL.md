@@ -30,14 +30,14 @@ Total cost = (spans/sec × $/span) + (storage_GB × $/GB-month)
 Head sampling reduces this directly.
 ```
 
-Head sampling makes a decision **at span start** — fast, but coarse (it doesn't know if the span will fail).
-Tail sampling makes the decision **at span end** — slower, more storage upfront, but precise.
+Head sampling makes a decision **at span start**: fast but coarse, since it cannot know whether the span will fail.
+Tail sampling makes the decision **at span end**: slower and heavier on storage, but precise.
 
 The right mix:
 
 - **Head sample at the entry point** to keep volume tractable.
 - **Tail keep** the high-value subset (errors, slow, AI, debug-headered).
-- **Don't sample audit spans** — separate processor, see [`build-audit-trails`](../build-audit-trails/SKILL.md).
+- **Don't sample audit spans**: separate processor, see [`build-audit-trails`](../build-audit-trails/SKILL.md).
 
 ## Head sampling recipes
 
@@ -73,7 +73,7 @@ sampling: {
 
 ### Cloudflare Workers (per-colo budget)
 
-Workers run distributed — head sampling is your friend because there's no central queue:
+Workers run distributed. Head sampling is your friend because there's no central queue:
 
 ```typescript
 defineWorkerFetch(
@@ -85,7 +85,7 @@ defineWorkerFetch(
 );
 ```
 
-## Tail sampling — keep interesting traces
+## Tail sampling: keep interesting traces
 
 Tail sampling looks at the full trace (root span + children) before deciding. autotel ships `TailSamplingProcessor`:
 
@@ -138,9 +138,9 @@ spanProcessors: composeSpanProcessors([
 
 LLM calls produce 5–50 spans per request and are 100× more expensive than a typical handler call. Tradeoffs:
 
-- **Don't head-sample AI handlers below 50 %** — debugging "why did the model loop" requires the full chain.
-- **Always tail-keep AI traces** — the `gen_ai.*` attributes flag them.
-- **Cost-aware sampling** — keep all calls above a $ threshold:
+- **Don't head-sample AI handlers below 50 %**: debugging "why did the model loop" requires the full chain.
+- **Always tail-keep AI traces**: the `gen_ai.*` attributes flag them.
+- **Cost-aware sampling**: keep all calls above a $ threshold:
 
 ```typescript
 keep: (trace) => {
@@ -176,7 +176,79 @@ if (request.headers.get('x-debug-trace') === '1') {
 }
 ```
 
-Now any user can mark a request as "trace this fully" by sending the header — invaluable for reproducing customer reports.
+Now any user can mark a request as "trace this fully" by sending the header. Invaluable for reproducing customer reports.
+
+## Keeping the trace whole across services
+
+`RandomSampler` rolls the dice in each process. The API can keep a trace its
+worker drops, which leaves a waterfall with holes and no way to tell a dropped
+span from a fast one. `DeterministicSampler` hashes a key that travels with the
+request, so every service reaches the same verdict:
+
+```typescript
+import { DeterministicSampler } from 'autotel/sampling';
+import { trace } from '@opentelemetry/api';
+
+init({
+  service: 'checkout',
+  sampler: new DeterministicSampler({
+    sampleRate: 0.1,
+    key: () => trace.getActiveSpan()?.spanContext().traceId,
+  }),
+});
+```
+
+Give every service the same rate and the same key. Different rates break the
+agreement again.
+
+## Per-key target rates
+
+A single rate cannot fit skewed traffic. At 1 % your busiest endpoint still
+floods storage while the rare tenant whose failures you need disappears.
+`KeyTargetRateSampler` counts traffic per key over a rolling window and gives
+each key its own rate, so every key contributes about the same number of
+events:
+
+```typescript
+import { KeyTargetRateSampler } from 'autotel/sampling';
+
+new KeyTargetRateSampler({
+  key: (context) => context.operationName,
+  targetPerKey: 10, // ~10 events per key per window
+  windowMs: 30_000,
+  maxKeys: 1000, // keys past this share one overflow bucket
+});
+```
+
+The first window keeps everything, because no traffic history exists yet. Rates
+apply from the second window on.
+
+## Recording the rate
+
+Sampled counts lie unless you record what you discarded. A query over a 1 %
+sample reports a hundredth of your traffic, and the number looks plausible
+enough to act on.
+
+autotel writes `autotel.sampling.rate` on the span as "1 in N", so
+`COUNT * rate` estimates the population. It appears only when N exceeds 1, so
+fully captured spans stay clean. A custom sampler joins in by implementing
+`sampleRate()`:
+
+```typescript
+import type { Sampler } from 'autotel/sampling';
+
+class TenantSampler implements Sampler {
+  shouldSample(context) {
+    /* … */
+  }
+  sampleRate() {
+    return 20; // each kept event stands for 20
+  }
+}
+```
+
+Reach for `hashUnitInterval` from `autotel/sampling` when you need the same
+spread for your own keys.
 
 ## Sizing the rate
 
@@ -188,11 +260,11 @@ spans/sec ≈ requests/sec × spans_per_request × head_rate × tail_keep_rate
 
 Worked example for a 100 req/s API with 8 spans/req:
 
-| Head rate | Tail keep                        | Result                                       |
-| --------- | -------------------------------- | -------------------------------------------- |
-| 100 %     | 100 %                            | 800 spans/sec — expensive                    |
-| 10 %      | 100 % (errors + slow + AI ≈ 5 %) | ≈ 110 spans/sec — sweet spot                 |
-| 1 %       | 100 %                            | ≈ 18 spans/sec — too sparse for p99 alerting |
+| Head rate | Tail keep                        | Result                                      |
+| --------- | -------------------------------- | ------------------------------------------- |
+| 100 %     | 100 %                            | 800 spans/sec: expensive                    |
+| 10 %      | 100 % (errors + slow + AI ≈ 5 %) | ≈ 110 spans/sec: sweet spot                 |
+| 1 %       | 100 %                            | ≈ 18 spans/sec: too sparse for p99 alerting |
 
 For per-vendor pricing:
 
@@ -208,8 +280,11 @@ For per-vendor pricing:
 | 1 % sampling with no tail keep               | You'll miss every interesting failure                         |
 | Forgetting to tail-keep errors               | Sampled traces with errors → silent customer pain             |
 | Same rate for `server` and `internal`        | Internal sub-spans are 5–20× more numerous; sample harder     |
-| Ratio-based sampling on service entry point  | Use parent-based — children of a sampled trace stay together  |
+| Ratio-based sampling on service entry point  | Use parent-based: children of a sampled trace stay together   |
 | Head-sampling AI calls below 50 %            | Debugging tool loops requires the full chain                  |
 | Audit spans subject to sampling              | Route them to a separate processor (see `build-audit-trails`) |
 | Tail processor before exporter (loses spans) | Tail processor goes between head sampler and remote exporter  |
-| Rate-by-route hand-coded in handlers         | Use head sampler + tail keep — declarative, one place         |
+| Rate-by-route hand-coded in handlers         | Use head sampler + tail keep: declarative, one place          |
+| Counting sampled spans as the population     | Multiply by `autotel.sampling.rate`                           |
+| `RandomSampler` on a multi-service trace     | `DeterministicSampler` keyed on the trace id keeps it whole   |
+| One flat rate over skewed traffic            | `KeyTargetRateSampler` gives rare keys their own rate         |

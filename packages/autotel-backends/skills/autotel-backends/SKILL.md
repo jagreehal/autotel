@@ -106,7 +106,7 @@ When `enableLogs: true`, the preset auto-sets `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
 
 ### Google Cloud
 
-**Via OpenTelemetry Collector (recommended — no auth in app):**
+**Via OpenTelemetry Collector (recommended, no auth in app):**
 
 ```typescript
 import { init } from 'autotel';
@@ -184,7 +184,7 @@ Grafana preset also enables `metrics: true` by default. Logs go to `/v1/logs` on
 
 ## Common Mistakes
 
-### HIGH — Passing apiKey to Datadog with useAgent: true
+### HIGH: Passing apiKey to Datadog with useAgent: true
 
 ```typescript
 // WRONG: apiKey is ignored and Agent mode doesn't use it
@@ -207,7 +207,7 @@ init(
 );
 ```
 
-### HIGH — Calling init() without apiKey in direct Datadog mode
+### HIGH: Calling init() without apiKey in direct Datadog mode
 
 `createDatadogConfig` throws at call-time if `!useAgent && !apiKey`. This is a startup crash, not a runtime one.
 
@@ -217,7 +217,7 @@ init(createDatadogConfig({ service: 'my-app' }));
 // throws: "Datadog API key is required..."
 ```
 
-### HIGH — Trying Google Cloud direct export without google-auth-library installed
+### HIGH: Trying Google Cloud direct export without google-auth-library installed
 
 ```typescript
 // WRONG: throws at runtime if package is absent
@@ -236,11 +236,11 @@ init(createGoogleCloudConfig({
 }));
 ```
 
-### MEDIUM — Using wrong Honeycomb API key type
+### MEDIUM: Using wrong Honeycomb API key type
 
 Modern Honeycomb environments use a team-level API key. Classic environments use dataset-specific keys. If traces are missing, verify key type in Honeycomb's account settings. The `dataset` option is only needed for classic accounts.
 
-### MEDIUM — Setting OTEL*EXPORTER_OTLP_LOGS*\* env vars before calling createDatadogConfig with enableLogs
+### MEDIUM: Setting OTEL*EXPORTER_OTLP_LOGS*\* env vars before calling createDatadogConfig with enableLogs
 
 The Datadog preset respects existing env vars and skips overwriting them. If you set `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` manually to the wrong value before calling the preset, the preset's correct value is silently skipped.
 
@@ -252,7 +252,7 @@ init(createDatadogConfig({ apiKey: key, service: 'app', enableLogs: true }));
 
 Clear or unset conflicting env vars before calling the preset, or pass `logRecordProcessors` directly.
 
-### MEDIUM — Stripping the /v1/traces suffix from Grafana endpoint
+### MEDIUM: Stripping the /v1/traces suffix from Grafana endpoint
 
 ```typescript
 // WRONG: Grafana gateway expects the full base URL; the SDK appends /v1/traces

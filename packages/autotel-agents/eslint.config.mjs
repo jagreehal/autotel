@@ -38,7 +38,8 @@ export default defineConfig(
           patterns: [
             {
               group: ['node:*'],
-              message: 'autotel-agents must stay browser-safe — no node:* imports.',
+              message:
+                'autotel-agents must stay browser-safe — no node:* imports.',
             },
           ],
           paths: [
@@ -54,7 +55,8 @@ export default defineConfig(
             'protobufjs',
           ].map((name) => ({
             name,
-            message: 'autotel-agents must stay browser-safe — server-only module.',
+            message:
+              'autotel-agents must stay browser-safe — server-only module.',
           })),
         },
       ],
@@ -74,7 +76,8 @@ export default defineConfig(
         'error',
         {
           selector: 'TSEnumDeclaration',
-          message: 'Enums are not allowed. Use union types or const assertions instead.',
+          message:
+            'Enums are not allowed. Use union types or const assertions instead.',
         },
       ],
     },

@@ -83,7 +83,10 @@ describe('package-manager', () => {
 
   describe('getInstallCommand', () => {
     it('should generate npm install command', () => {
-      const cmd = getInstallCommand('npm', ['autotel', '@opentelemetry/sdk-trace-base']);
+      const cmd = getInstallCommand('npm', [
+        'autotel',
+        '@opentelemetry/sdk-trace-base',
+      ]);
       expect(cmd).toBe('npm install autotel @opentelemetry/sdk-trace-base');
     });
 
@@ -103,7 +106,9 @@ describe('package-manager', () => {
     });
 
     it('should generate pnpm add -w command for workspace root', () => {
-      const cmd = getInstallCommand('pnpm', ['autotel'], { workspaceRoot: true });
+      const cmd = getInstallCommand('pnpm', ['autotel'], {
+        workspaceRoot: true,
+      });
       expect(cmd).toBe('pnpm add -w autotel');
     });
 
@@ -130,7 +135,10 @@ describe('package-manager', () => {
 
   describe('detectWorkspaceRoot', () => {
     it('should detect pnpm workspace from pnpm-workspace.yaml', () => {
-      fs.writeFileSync(path.join(tempDir, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*');
+      fs.writeFileSync(
+        path.join(tempDir, 'pnpm-workspace.yaml'),
+        'packages:\n  - packages/*',
+      );
       const result = detectWorkspaceRoot(tempDir);
       expect(result.workspaceRoot).toBe(tempDir);
       expect(result.workspaceType).toBe('pnpm');
@@ -146,7 +154,7 @@ describe('package-manager', () => {
     it('should detect npm/yarn workspace from package.json workspaces field', () => {
       fs.writeFileSync(
         path.join(tempDir, 'package.json'),
-        JSON.stringify({ workspaces: ['packages/*'] })
+        JSON.stringify({ workspaces: ['packages/*'] }),
       );
       const result = detectWorkspaceRoot(tempDir);
       expect(result.workspaceRoot).toBe(tempDir);
@@ -156,7 +164,7 @@ describe('package-manager', () => {
     it('should detect yarn workspace when yarn.lock present', () => {
       fs.writeFileSync(
         path.join(tempDir, 'package.json'),
-        JSON.stringify({ workspaces: ['packages/*'] })
+        JSON.stringify({ workspaces: ['packages/*'] }),
       );
       fs.writeFileSync(path.join(tempDir, 'yarn.lock'), '');
       const result = detectWorkspaceRoot(tempDir);

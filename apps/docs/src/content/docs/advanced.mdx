@@ -29,9 +29,9 @@ Automatically flatten nested objects into dot-notation span attributes:
 
 ```typescript
 import { flattenMetadata } from 'autotel/trace-helpers';
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 
-export const processOrder = trace((ctx) => async (order: Order) => {
+export const processOrder = withTracing({})((ctx) => async (order: Order) => {
   const metadata = flattenMetadata({
     user: { id: order.userId, tier: 'premium' },
     payment: { method: 'card', processor: 'stripe' },
@@ -100,9 +100,7 @@ export const generateText = traceGenAI({
   operation: 'chat',
   provider: 'openai',
 })((ctx) => async (prompt: string) => {
-  const response = await openai.chat.completions.create({
-    /* ... */
-  });
+  const response = await openai.chat.completions.create({/* ... */});
   // Records gen_ai.usage.input_tokens / gen_ai.usage.output_tokens
   recordGenAiUsage(ctx, 'gpt-4-turbo', {
     inputTokens: response.usage.prompt_tokens,
@@ -117,18 +115,19 @@ export const getUser = traceDB({
   operation: 'SELECT',
   database: 'app_db',
   collection: 'users',
+  querySummary: 'SELECT users',
 })((ctx) => async (userId: string) => {
-  const query = 'SELECT * FROM users WHERE id = $1';
-  ctx.setAttribute('db.statement', query);
-  return await pool.query(query, [userId]);
+  return await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
 });
 
 // HTTP client operations (HTTP semantic conventions)
 export const fetchUser = traceHTTP({
   method: 'GET',
-  url: 'https://api.example.com/users/:id',
+  urlTemplate: '/users/{id}',
 })((ctx) => async (userId: string) => {
-  const response = await fetch(`https://api.example.com/users/${userId}`);
+  const url = `https://api.example.com/users/${userId}`;
+  ctx.setAttribute('url.full', url);
+  const response = await fetch(url);
   ctx.setAttribute('http.response.status_code', response.status);
   return response.json();
 });
@@ -147,16 +146,18 @@ export const publishEvent = traceMessaging({
 **Benefits:**
 
 - Automatic semantic attributes following OTel specs
+- Stable low-cardinality span names and correct client/producer/consumer kinds
+- Direct `traceDB(config, fn)` / `traceHTTP(config, fn)` forms when context is not needed
 - Type-safe configuration interfaces
 - Reduces boilerplate by 60-70%
 - Links to official OTel semantic convention docs in JSDoc
 
 **Available helpers:**
 
-- `traceGenAI()` (from `autotel-genai/trace`) — Gen AI operations (chat, completion, embedding)
-- `traceDB()` — Database operations (SQL, NoSQL, Redis)
-- `traceHTTP()` — HTTP client requests
-- `traceMessaging()` — Queue/messaging operations (Kafka, RabbitMQ, SQS)
+- `traceGenAI()` (from `autotel-genai/trace`): Gen AI operations (chat, completion, embedding)
+- `traceDB()`: Database operations (SQL, NoSQL, Redis)
+- `traceHTTP()`: HTTP client requests
+- `traceMessaging()`: Queue/messaging operations (Kafka, RabbitMQ, SQS)
 
 ## Event-Driven Observability
 
@@ -281,7 +282,8 @@ export const orderSaga = traceWorkflow({
 - `traceStep` creates child spans with `workflow.step.name`, `workflow.step.index`
 - `linkToPrevious: true` creates span links for step sequencing
 - Compensations run in reverse order on failure
-- `ctx.getWorkflowId()`, `ctx.getWorkflowName()`, `ctx.getStepIndex()` context methods
+- Workflow context: `ctx.getWorkflowId()`, `ctx.getWorkflowName()`
+- Step context: `ctx.getStepName()`, `ctx.getStepIndex()`, `ctx.getWorkflowContext()`
 - WeakMap-based state isolation tied to span lifecycle
 
 ## Distributed Workflows Across Services
@@ -325,7 +327,7 @@ A webhook or payment callback can land hours after the request that triggered it
 links the later callback span back to it.
 
 ```typescript
-import { trace } from 'autotel';
+import { trace, withTracing } from 'autotel';
 import { createParkingLot, InMemoryTraceContextStore } from 'autotel/webhook';
 
 const parkingLot = createParkingLot({
@@ -333,14 +335,17 @@ const parkingLot = createParkingLot({
   defaultTTLMs: 24 * 60 * 60 * 1000,
 });
 
-export const initiatePayment = trace((ctx) => async (orderId: string) => {
-  await parkingLot.park(`payment:${orderId}`);
-  await stripe.createPaymentIntent({ metadata: { orderId } });
-});
+export const initiatePayment = withTracing({})(
+  (ctx) => async (orderId: string) => {
+    await parkingLot.park(`payment:${orderId}`);
+    await stripe.createPaymentIntent({ metadata: { orderId } });
+  },
+);
 
 export const handleStripeWebhook = parkingLot.traceCallback({
   name: 'stripe.webhook.payment_intent.succeeded',
-  correlationKeyFrom: (event) => `payment:${event.data.object.metadata.orderId}`,
+  correlationKeyFrom: (event) =>
+    `payment:${event.data.object.metadata.orderId}`,
 })((ctx) => async (event) => {
   // ctx.elapsedMs reports how long the callback took to arrive
   await fulfillOrder(event.data.object);
@@ -430,4 +435,130 @@ const send = createDrainPipeline<LogEvent>({
 send(event);
 await send.flush();
 await send.shutdown();
+```
+
+## Core Analysis Loop
+
+An alert tells you checkout got slower. It does not tell you which requests.
+`autotel/analysis` answers that: give `compareCohorts()` the events you are
+investigating plus a comparable baseline, and it ranks the field and value
+pairs that separate them.
+
+```typescript
+import { compareCohorts } from 'autotel/analysis';
+
+const isSlow = (event) => Number(event['checkout.duration_ms']) >= 800;
+
+const ranked = compareCohorts({
+  outlier: events.filter(isSlow),
+  baseline: events.filter((event) => !isSlow(event)),
+});
+
+console.log(ranked[0]);
+// {
+//   field: 'payment.provider',
+//   value: 'bank-beta',
+//   outlierFraction: 1,
+//   baselineFraction: 0.33,
+//   difference: 0.67,
+//   outlierCount: 20,
+//   baselineCount: 20,
+// }
+```
+
+Any array of flat records works: wide events from `getRequestLogger()`,
+`TestSpan.attributes` from `autotel/testing`, or rows from a backend query.
+
+**Options:**
+
+| Option              | Default          | Purpose                                  |
+| ------------------- | ---------------- | ---------------------------------------- |
+| `outlier`           | required         | The events you are investigating         |
+| `baseline`          | required         | A normal population from the same window |
+| `fields`            | every field seen | Restrict the scan                        |
+| `ignoreFields`      | none             | Skip identifiers you know are unique     |
+| `maxValuesPerField` | `50`             | Absolute cardinality cap                 |
+| `maxUniqueRatio`    | `0.5`            | Skip a field whose values barely repeat  |
+| `minDifference`     | `0.1`            | Drop weak signals                        |
+| `limit`             | `20`             | Results returned, strongest first        |
+
+**Why fields get skipped:** a field whose values never repeat cannot name a
+cohort. A request id takes a fresh value on every event, so it would bury the
+real answer. Two guards remove those fields, an absolute cap for large
+populations and a ratio for small ones. Numeric fields hit the same guard, so
+bucket durations and payload sizes when you instrument them:
+
+```typescript
+log.set({ 'payload.size_bucket': size < 1024 ? 'small' : 'large' });
+```
+
+The ranking is a hypothesis, not a cause. Open two traces from the named cohort
+and confirm the mechanism before you act on it.
+
+## Choosing a Sampler
+
+| Sampler                | Decides on               | Use when                                              |
+| ---------------------- | ------------------------ | ----------------------------------------------------- |
+| `AdaptiveSampler`      | Outcome, after execution | Default. Keeps every error and slow request.          |
+| `DeterministicSampler` | Hash of a shared key     | Several services must agree on one trace.             |
+| `KeyTargetRateSampler` | Observed traffic per key | Traffic is skewed and rare operations matter.         |
+| `RandomSampler`        | Chance, per process      | Single service, no cross-process trace to keep whole. |
+| `UserIdSampler`        | User identity            | Debugging named users or VIP accounts.                |
+
+### Consistent Sampling
+
+`RandomSampler` rolls the dice in each process, so an API can keep a trace that
+its worker drops and leave you a waterfall with holes in it.
+`DeterministicSampler` hashes a key that travels with the request, so every
+service reaches the same verdict:
+
+```typescript
+import { DeterministicSampler } from 'autotel/sampling';
+import { trace } from '@opentelemetry/api';
+
+const sampler = new DeterministicSampler({
+  sampleRate: 0.1,
+  key: () => trace.getActiveSpan()?.spanContext().traceId,
+});
+```
+
+### Per-Key Target Rates
+
+One rate serves a skewed workload badly. A 1% rate floods storage with your
+busiest endpoint and still loses the rare tenant whose failures you need.
+`KeyTargetRateSampler` counts traffic per key over a rolling window, then gives
+each key its own rate so every key contributes about `targetPerKey` events. The
+first window keeps everything, because no traffic history exists yet.
+
+```typescript
+import { KeyTargetRateSampler } from 'autotel/sampling';
+
+const sampler = new KeyTargetRateSampler({
+  key: (context) => context.operationName,
+  targetPerKey: 10, // ~10 events per key per window
+  windowMs: 30_000,
+  maxKeys: 1000, // keys beyond this share one overflow bucket
+});
+```
+
+### Recording the Sample Rate
+
+A query over a 1% sample reports a hundredth of your traffic, and the number
+looks plausible. Autotel writes `autotel.sampling.rate` on the span as "1 in N",
+so `COUNT * rate` estimates the population. The attribute appears only when N
+exceeds 1, so fully captured spans stay clean.
+
+Implement `sampleRate()` on a custom sampler to take part:
+
+```typescript
+import type { Sampler } from 'autotel/sampling';
+
+class TenantSampler implements Sampler {
+  shouldSample(context) {
+    /* ... */
+  }
+  sampleRate() {
+    return 20; // each kept event represents 20
+  }
+}
 ```

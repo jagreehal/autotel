@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WorkerTracer } from './tracer';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { SamplingDecision, type SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import {
+  SamplingDecision,
+  type SpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
 
 describe('WorkerTracer', () => {
   let tracer: WorkerTracer;

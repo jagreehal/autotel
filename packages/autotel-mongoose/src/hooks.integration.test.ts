@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
+import type {
+  CallbackWithoutResultAndOptionalError,
+  PreSaveMiddlewareFunction,
+} from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import {
@@ -109,11 +113,17 @@ describe('instrumentHooks: true with timestamps', () => {
       value: { type: Number, required: true },
     });
 
-    // Callback-style hook with explicit next parameter
-    schema.pre('save', function (next) {
+    // Callback-style hook with explicit next parameter. Mongoose 9's public
+    // types model only the promise form of pre('save') (PreSaveMiddlewareFunction
+    // takes SaveOptions, not a `next` callback), but the runtime still supports
+    // the legacy callback form this test pins — hence the cast at the boundary.
+    const callbackPreSave = function (
+      next: CallbackWithoutResultAndOptionalError,
+    ) {
       hookCalled = true;
       next();
-    });
+    };
+    schema.pre('save', callbackPreSave as unknown as PreSaveMiddlewareFunction);
 
     const CallbackModel = mongooseInstance.model('CallbackHookTest', schema);
 

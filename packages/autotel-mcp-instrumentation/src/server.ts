@@ -1,5 +1,5 @@
 import { context, SpanStatusCode } from '@opentelemetry/api';
-import { trace, SpanKind, type TraceContext } from 'autotel';
+import { withTracing, SpanKind, type TraceContext } from 'autotel';
 import { extractOtelContextFromMeta } from './context';
 import {
   type McpInstrumentationConfig,
@@ -162,240 +162,237 @@ function wrapHandler<T extends (...args: any[]) => any>(
 
     // Run handler in parent context
     return context.with(parentContext, async () => {
-      return trace(
-        { name: spanName, spanKind: SpanKind.SERVER },
-        async (ctx: TraceContext) => {
-          const startTime = performance.now();
+      return withTracing({
+        name: spanName,
+        spanKind: SpanKind.SERVER,
+      })((ctx: TraceContext) => async () => {
+        const startTime = performance.now();
 
-          // Required: mcp.method.name
-          ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
+        // Required: mcp.method.name
+        ctx.setAttribute(MCP_SEMCONV.METHOD_NAME, methodName);
 
-          // Conditionally required: type-specific name attribute
-          switch (type) {
-            case 'tool': {
-              ctx.setAttribute(MCP_SEMCONV.TOOL_NAME, name);
-              ctx.setAttribute(MCP_SEMCONV.OPERATION_NAME, 'execute_tool');
-              break;
-            }
-            case 'resource': {
-              ctx.setAttribute(MCP_SEMCONV.RESOURCE_URI, resourceUri ?? name);
-              break;
-            }
-            case 'prompt': {
-              ctx.setAttribute(MCP_SEMCONV.PROMPT_NAME, name);
-              break;
-            }
+        // Conditionally required: type-specific name attribute
+        switch (type) {
+          case 'tool': {
+            ctx.setAttribute(MCP_SEMCONV.TOOL_NAME, name);
+            ctx.setAttribute(MCP_SEMCONV.OPERATION_NAME, 'execute_tool');
+            break;
           }
-
-          // Recommended: network transport and session
-          if (config.networkTransport) {
-            ctx.setAttribute(
-              MCP_SEMCONV.NETWORK_TRANSPORT,
-              config.networkTransport,
-            );
+          case 'resource': {
+            ctx.setAttribute(MCP_SEMCONV.RESOURCE_URI, resourceUri ?? name);
+            break;
           }
-          if (config.sessionId) {
-            ctx.setAttribute(MCP_SEMCONV.SESSION_ID, config.sessionId);
+          case 'prompt': {
+            ctx.setAttribute(MCP_SEMCONV.PROMPT_NAME, name);
+            break;
           }
+        }
 
-          if (manifestAssessmentPromise) {
-            applyManifestAssessment(
+        // Recommended: network transport and session
+        if (config.networkTransport) {
+          ctx.setAttribute(
+            MCP_SEMCONV.NETWORK_TRANSPORT,
+            config.networkTransport,
+          );
+        }
+        if (config.sessionId) {
+          ctx.setAttribute(MCP_SEMCONV.SESSION_ID, config.sessionId);
+        }
+
+        if (manifestAssessmentPromise) {
+          applyManifestAssessment(
+            ctx,
+            await manifestAssessmentPromise,
+            getEntityAttributes(type, name, resourceUri),
+            securityBridge(config, type === 'tool' ? name : undefined),
+          );
+        }
+
+        // Security: annotation hints (tool trust profile / malicious-manifest vector)
+        if (type === 'tool' && config.captureToolAnnotations) {
+          applyToolAnnotations(ctx, annotations);
+        }
+
+        // Security: argument size signal + classifier (inbound vector)
+        if (args[0] !== undefined) {
+          if (config.recordPayloadSize) {
+            recordPayloadSize(
               ctx,
-              await manifestAssessmentPromise,
-              getEntityAttributes(type, name, resourceUri),
-              securityBridge(config, type === 'tool' ? name : undefined),
+              getPayloadSizeAttribute(type, 'arguments'),
+              args[0],
             );
           }
+          await classify(ctx, config, 'arguments', type, name, args[0]);
+        }
 
-          // Security: annotation hints (tool trust profile / malicious-manifest vector)
-          if (type === 'tool' && config.captureToolAnnotations) {
-            applyToolAnnotations(ctx, annotations);
+        // Opt-in: tool arguments
+        if (
+          type === 'tool' &&
+          config.captureToolArgs &&
+          args[0] !== undefined
+        ) {
+          try {
+            ctx.setAttribute(
+              MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+              JSON.stringify(args[0]),
+            );
+          } catch {
+            ctx.setAttribute(
+              MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+              '[Circular or non-serializable]',
+            );
           }
+        }
 
-          // Security: argument size signal + classifier (inbound vector)
-          if (args[0] !== undefined) {
-            if (config.recordPayloadSize) {
-              recordPayloadSize(
+        // Custom attributes (pre-call)
+        if (config.customAttributes) {
+          const customAttrs = config.customAttributes({
+            type,
+            name,
+            args: args[0],
+          });
+          ctx.setAttributes(
+            customAttrs as Record<string, string | number | boolean>,
+          );
+        }
+
+        try {
+          const result = await handler(...args);
+
+          // Security: result size signal, output budget, classifier (contaminated-output vector)
+          if (result !== undefined) {
+            const resultSize = config.recordPayloadSize
+              ? recordPayloadSize(
+                  ctx,
+                  getPayloadSizeAttribute(type, 'result'),
+                  result,
+                )
+              : safeStringify(result).length;
+            if (config.outputCharBudget !== undefined) {
+              enforceOutputBudget(
                 ctx,
-                getPayloadSizeAttribute(type, 'arguments'),
-                args[0],
+                resultSize,
+                config.outputCharBudget,
+                {
+                  ...getEntityAttributes(type, name, resourceUri),
+                },
+                securityBridge(config, name),
               );
             }
-            await classify(ctx, config, 'arguments', type, name, args[0]);
+            await classify(ctx, config, 'result', type, name, result);
           }
 
-          // Opt-in: tool arguments
+          // Opt-in: tool results
           if (
             type === 'tool' &&
-            config.captureToolArgs &&
-            args[0] !== undefined
+            config.captureToolResults &&
+            result !== undefined
           ) {
             try {
               ctx.setAttribute(
-                MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
-                JSON.stringify(args[0]),
+                MCP_SEMCONV.TOOL_CALL_RESULT,
+                JSON.stringify(result),
               );
             } catch {
               ctx.setAttribute(
-                MCP_SEMCONV.TOOL_CALL_ARGUMENTS,
+                MCP_SEMCONV.TOOL_CALL_RESULT,
                 '[Circular or non-serializable]',
               );
             }
           }
 
-          // Custom attributes (pre-call)
+          // Error handling: tool error via isError
+          if (result?.isError) {
+            ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, 'tool_error');
+            ctx.setStatus({ code: SpanStatusCode.ERROR });
+          } else {
+            ctx.setStatus({ code: SpanStatusCode.OK });
+          }
+
+          // Custom attributes (post-call with result)
           if (config.customAttributes) {
             const customAttrs = config.customAttributes({
               type,
               name,
               args: args[0],
+              result,
             });
             ctx.setAttributes(
               customAttrs as Record<string, string | number | boolean>,
             );
           }
 
-          try {
-            const result = await handler(...args);
-
-            // Security: result size signal, output budget, classifier (contaminated-output vector)
-            if (result !== undefined) {
-              const resultSize = config.recordPayloadSize
-                ? recordPayloadSize(
-                    ctx,
-                    getPayloadSizeAttribute(type, 'result'),
-                    result,
-                  )
-                : safeStringify(result).length;
-              if (config.outputCharBudget !== undefined) {
-                enforceOutputBudget(
-                  ctx,
-                  resultSize,
-                  config.outputCharBudget,
-                  {
-                    ...getEntityAttributes(type, name, resourceUri),
-                  },
-                  securityBridge(config, name),
-                );
+          // Record metric
+          if (config.enableMetrics) {
+            const durationS = (performance.now() - startTime) / 1000;
+            const metricAttrs: Record<string, string> = {
+              [MCP_SEMCONV.METHOD_NAME]: methodName,
+            };
+            switch (type) {
+              case 'tool': {
+                metricAttrs[MCP_SEMCONV.TOOL_NAME] = name;
+                break;
               }
-              await classify(ctx, config, 'result', type, name, result);
-            }
-
-            // Opt-in: tool results
-            if (
-              type === 'tool' &&
-              config.captureToolResults &&
-              result !== undefined
-            ) {
-              try {
-                ctx.setAttribute(
-                  MCP_SEMCONV.TOOL_CALL_RESULT,
-                  JSON.stringify(result),
-                );
-              } catch {
-                ctx.setAttribute(
-                  MCP_SEMCONV.TOOL_CALL_RESULT,
-                  '[Circular or non-serializable]',
-                );
+              case 'resource': {
+                metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
+                break;
+              }
+              case 'prompt': {
+                metricAttrs[MCP_SEMCONV.PROMPT_NAME] = name;
+                break;
               }
             }
-
-            // Error handling: tool error via isError
             if (result?.isError) {
-              ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, 'tool_error');
-              ctx.setStatus({ code: SpanStatusCode.ERROR });
-            } else {
-              ctx.setStatus({ code: SpanStatusCode.OK });
+              metricAttrs[MCP_SEMCONV.ERROR_TYPE] = 'tool_error';
             }
-
-            // Custom attributes (post-call with result)
-            if (config.customAttributes) {
-              const customAttrs = config.customAttributes({
-                type,
-                name,
-                args: args[0],
-                result,
-              });
-              ctx.setAttributes(
-                customAttrs as Record<string, string | number | boolean>,
-              );
-            }
-
-            // Record metric
-            if (config.enableMetrics) {
-              const durationS = (performance.now() - startTime) / 1000;
-              const metricAttrs: Record<string, string> = {
-                [MCP_SEMCONV.METHOD_NAME]: methodName,
-              };
-              switch (type) {
-                case 'tool': {
-                  metricAttrs[MCP_SEMCONV.TOOL_NAME] = name;
-                  break;
-                }
-                case 'resource': {
-                  metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
-                  break;
-                }
-                case 'prompt': {
-                  metricAttrs[MCP_SEMCONV.PROMPT_NAME] = name;
-                  break;
-                }
-              }
-              if (result?.isError) {
-                metricAttrs[MCP_SEMCONV.ERROR_TYPE] = 'tool_error';
-              }
-              recordServerOperationDuration(durationS, metricAttrs);
-            }
-
-            return result;
-          } catch (error) {
-            // Record exception if configured
-            if (config.captureErrors) {
-              if (
-                'recordError' in ctx &&
-                typeof ctx.recordError === 'function'
-              ) {
-                ctx.recordError(error);
-              } else if (
-                'recordException' in ctx &&
-                typeof ctx.recordException === 'function'
-              ) {
-                ctx.recordException(error);
-              }
-              ctx.setAttribute(
-                MCP_SEMCONV.ERROR_TYPE,
-                (error as Error).name || 'Error',
-              );
-            }
-
-            // Record metric on error
-            if (config.enableMetrics) {
-              const durationS = (performance.now() - startTime) / 1000;
-              const metricAttrs: Record<string, string> = {
-                [MCP_SEMCONV.METHOD_NAME]: methodName,
-                [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
-              };
-              switch (type) {
-                case 'tool': {
-                  metricAttrs[MCP_SEMCONV.TOOL_NAME] = name;
-                  break;
-                }
-                case 'resource': {
-                  metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
-                  break;
-                }
-                case 'prompt': {
-                  metricAttrs[MCP_SEMCONV.PROMPT_NAME] = name;
-                  break;
-                }
-              }
-              recordServerOperationDuration(durationS, metricAttrs);
-            }
-
-            throw error;
+            recordServerOperationDuration(durationS, metricAttrs);
           }
-        },
-      );
+
+          return result;
+        } catch (error) {
+          // Record exception if configured
+          if (config.captureErrors) {
+            if ('recordError' in ctx && typeof ctx.recordError === 'function') {
+              ctx.recordError(error);
+            } else if (
+              'recordException' in ctx &&
+              typeof ctx.recordException === 'function'
+            ) {
+              ctx.recordException(error);
+            }
+            ctx.setAttribute(
+              MCP_SEMCONV.ERROR_TYPE,
+              (error as Error).name || 'Error',
+            );
+          }
+
+          // Record metric on error
+          if (config.enableMetrics) {
+            const durationS = (performance.now() - startTime) / 1000;
+            const metricAttrs: Record<string, string> = {
+              [MCP_SEMCONV.METHOD_NAME]: methodName,
+              [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+            };
+            switch (type) {
+              case 'tool': {
+                metricAttrs[MCP_SEMCONV.TOOL_NAME] = name;
+                break;
+              }
+              case 'resource': {
+                metricAttrs[MCP_SEMCONV.RESOURCE_URI] = resourceUri ?? name;
+                break;
+              }
+              case 'prompt': {
+                metricAttrs[MCP_SEMCONV.PROMPT_NAME] = name;
+                break;
+              }
+            }
+            recordServerOperationDuration(durationS, metricAttrs);
+          }
+
+          throw error;
+        }
+      })();
     });
   }) as T;
 }

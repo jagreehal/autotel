@@ -91,7 +91,7 @@ This script demonstrates that you can `require()` instrumentation **before** `pg
 
 ## See Also
 
-- [`apps/example-mongoose`](../example-mongoose/README.md) :  similar pattern for MongoDB
+- [`apps/example-mongoose`](../example-mongoose/README.md) : similar pattern for MongoDB
 - [autotel documentation](../../packages/autotel/README.md)
 - [Official pg instrumentation](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/plugins/node/instrumentation-pg)
 - [OpenTelemetry JS instrumentation guide](https://opentelemetry.io/docs/languages/js/instrumentation/)

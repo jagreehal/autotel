@@ -86,9 +86,13 @@ export const MultipleLogs: Story = {
         }),
       ],
     });
-    await expect(await canvas.findByText('Connecting to database')).toBeInTheDocument();
+    await expect(
+      await canvas.findByText('Connecting to database'),
+    ).toBeInTheDocument();
     await expect(canvas.getByText('Cache initialized')).toBeInTheDocument();
-    await expect(canvas.getByText('Server listening on port 3000')).toBeInTheDocument();
+    await expect(
+      canvas.getByText('Server listening on port 3000'),
+    ).toBeInTheDocument();
   },
 };
 
@@ -154,8 +158,12 @@ export const WithTraceLink: Story = {
         }),
       ],
     });
-    await expect(await canvas.findByText('Processing request')).toBeInTheDocument();
-    await expect(canvas.getAllByRole('button', { name: /Go to trace/i })).toHaveLength(2);
+    await expect(
+      await canvas.findByText('Processing request'),
+    ).toBeInTheDocument();
+    await expect(
+      canvas.getAllByRole('button', { name: /Go to trace/i }),
+    ).toHaveLength(2);
   },
 };
 
@@ -231,7 +239,9 @@ export const MultipleResources: Story = {
         }),
       ],
     });
-    await expect(await canvas.findByText('API server started')).toBeInTheDocument();
+    await expect(
+      await canvas.findByText('API server started'),
+    ).toBeInTheDocument();
     await expect(canvas.getByText('Worker initialized')).toBeInTheDocument();
     await expect(canvas.getByText('Job processed')).toBeInTheDocument();
   },
@@ -241,7 +251,11 @@ export const PausedWithBuffer: Story = {
   play: async ({ canvas }) => {
     updateWidgetData({
       logs: [
-        makeLog({ id: 'shown-1', body: 'Application ready', severityText: 'INFO' }),
+        makeLog({
+          id: 'shown-1',
+          body: 'Application ready',
+          severityText: 'INFO',
+        }),
       ],
     });
     setPaused(true);

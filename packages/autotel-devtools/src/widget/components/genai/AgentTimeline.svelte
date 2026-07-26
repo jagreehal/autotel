@@ -127,7 +127,8 @@
       }
       if (sec.guardStopped) badges.add('guard:stop');
       if (sec.securityEvent) badges.add(sec.securityEvent);
-      if (sec.planStepIndex !== undefined) badges.add(`plan:#${sec.planStepIndex}`);
+      if (sec.planStepIndex !== undefined)
+        badges.add(`plan:#${sec.planStepIndex}`);
     }
     return [...badges];
   }
@@ -150,7 +151,9 @@
           ? `trace ${group.conversationId.slice(6, 14)}…`
           : `conversation ${group.conversationId.slice(0, 12)}…`}
       </span>
-      <span class="text-xs text-fg-subtle ml-auto flex items-center gap-1.5 flex-wrap justify-end">
+      <span
+        class="text-xs text-fg-subtle ml-auto flex items-center gap-1.5 flex-wrap justify-end"
+      >
         {#each securityBadges(group) as badge (badge)}
           <span
             class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/20 font-mono"

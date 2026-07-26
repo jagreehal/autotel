@@ -25,4 +25,6 @@ instrumentMongoose(mongoose, {
   instrumentHooks: true,
 });
 
-console.log('✅ Mongoose instrumented (operations + hooks will be automatically traced)');
+console.log(
+  '✅ Mongoose instrumented (operations + hooks will be automatically traced)',
+);

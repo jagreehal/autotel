@@ -3,7 +3,7 @@
  * trace() with name parameter returns unknown type
  */
 
-import { trace } from './functional';
+import { withTracing } from './functional';
 
 // This test file should be checked with: npx tsc --noEmit
 
@@ -15,17 +15,20 @@ type IsUnknown<T> = unknown extends T
   : false;
 
 // Test 1: With explicit TraceContext type - this should always work
-const withExplicitType = trace('test-span', () => async () => {
+const withExplicitType = withTracing({ name: 'test-span' })(() => async () => {
   return { foo: 'bar' };
 });
 
 // Type assertion - this line should compile without error if type is inferred correctly
-const _test1: () => Promise<{ foo: string }> = withExplicitType;
+const _test1: () => { foo: string } | Promise<{ foo: string }> =
+  withExplicitType;
 
 // Test 2: Without explicit TraceContext type - this is the bug scenario
-const withoutExplicitType = trace('test-span', () => async () => {
-  return { foo: 'bar' };
-});
+const withoutExplicitType = withTracing({ name: 'test-span' })(
+  () => async () => {
+    return { foo: 'bar' };
+  },
+);
 
 // Get the inner type of the Promise returned by the function
 type InnerReturnType = Awaited<ReturnType<typeof withoutExplicitType>>;
@@ -39,7 +42,8 @@ const _bugCheck: IsBugPresent extends false ? 'fixed' : never = 'fixed';
 
 // Type assertion - if the bug exists, this line will fail compilation
 // because the return type would be () => Promise<unknown>
-const _test2: () => Promise<{ foo: string }> = withoutExplicitType;
+const _test2: () => { foo: string } | Promise<{ foo: string }> =
+  withoutExplicitType;
 
 // Test 3: Alternative - check if we can access .foo on the result
 async function testAccess() {

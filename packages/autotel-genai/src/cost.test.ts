@@ -9,9 +9,9 @@ import {
 describe('estimateLLMCost', () => {
   it('prices a known model from input + output tokens', () => {
     // gpt-4o: 2.5/1M in, 10/1M out
-    expect(estimateLLMCost('gpt-4o', { inputTokens: 1000, outputTokens: 500 })).toBe(
-      0.0075,
-    );
+    expect(
+      estimateLLMCost('gpt-4o', { inputTokens: 1000, outputTokens: 500 }),
+    ).toBe(0.0075);
   });
 
   it('resolves versioned ids by longest-prefix match', () => {
@@ -21,7 +21,9 @@ describe('estimateLLMCost', () => {
   });
 
   it('returns undefined for an unknown model', () => {
-    expect(estimateLLMCost('mystery-model', { inputTokens: 100 })).toBeUndefined();
+    expect(
+      estimateLLMCost('mystery-model', { inputTokens: 100 }),
+    ).toBeUndefined();
   });
 
   it('prices cache-read tokens at the cached rate (subset of input)', () => {
@@ -76,7 +78,9 @@ describe('recordLLMCost', () => {
 
   it('records nothing for an unknown model', () => {
     const setAttribute = vi.fn();
-    expect(recordLLMCost({ setAttribute }, 'mystery', { inputTokens: 1 })).toBeUndefined();
+    expect(
+      recordLLMCost({ setAttribute }, 'mystery', { inputTokens: 1 }),
+    ).toBeUndefined();
     expect(setAttribute).not.toHaveBeenCalled();
   });
 });

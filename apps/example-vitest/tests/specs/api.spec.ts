@@ -1,18 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
-import {
-  test,
-  expect,
-  beforeAll,
-  afterAll,
-  describe,
-} from 'autotel-vitest';
+import { test, expect, beforeAll, afterAll, describe } from 'autotel-vitest';
 import { injectTraceContext } from 'autotel/http';
 
 // Use a random port when not set to avoid EADDRINUSE when 3000 is in use (e.g. other apps or parallel runs).
 const defaultPort =
-  Number(process.env.PORT) ||
-  30000 + Math.floor(Math.random() * 1000);
+  Number(process.env.PORT) || 30000 + Math.floor(Math.random() * 1000);
 const apiBase = process.env.API_BASE_URL ?? `http://localhost:${defaultPort}`;
 
 let serverProcess: ChildProcess | undefined;
@@ -22,7 +15,12 @@ async function canListenOnLoopback(): Promise<boolean> {
     const server = createServer();
 
     server.once('error', (error) => {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'EPERM') {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'EPERM'
+      ) {
         resolve(false);
         return;
       }
@@ -66,12 +64,8 @@ beforeAll(async () => {
     return;
   }
 
-  const port = process.env.API_BASE_URL
-    ? undefined
-    : String(defaultPort);
-  const env = port
-    ? { ...process.env, PORT: port }
-    : process.env;
+  const port = process.env.API_BASE_URL ? undefined : String(defaultPort);
+  const env = port ? { ...process.env, PORT: port } : process.env;
 
   serverProcess = spawn('node', ['server.mjs'], {
     cwd: new URL('../../', import.meta.url),

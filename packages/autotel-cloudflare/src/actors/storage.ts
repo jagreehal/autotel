@@ -72,7 +72,8 @@ export function instrumentActorStorage(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -115,7 +116,8 @@ export function instrumentActorStorage(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -128,7 +130,10 @@ export function instrumentActorStorage(
 
       // Instrument get method
       if (prop === 'get' && typeof value === 'function') {
-        return async function instrumentedGet(this: unknown, key: string): Promise<unknown> {
+        return async function instrumentedGet(
+          this: unknown,
+          key: string,
+        ): Promise<unknown> {
           const tracer = getTracer();
           const spanName = `Actor ${actorName}: storage.get`;
 
@@ -156,7 +161,8 @@ export function instrumentActorStorage(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -198,7 +204,8 @@ export function instrumentActorStorage(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {
@@ -211,7 +218,10 @@ export function instrumentActorStorage(
 
       // Instrument delete method
       if (prop === 'delete' && typeof value === 'function') {
-        return async function instrumentedDelete(this: unknown, key: string): Promise<boolean> {
+        return async function instrumentedDelete(
+          this: unknown,
+          key: string,
+        ): Promise<boolean> {
           const tracer = getTracer();
           const spanName = `Actor ${actorName}: storage.delete`;
 
@@ -239,7 +249,8 @@ export function instrumentActorStorage(
                 span.recordException(error as Error);
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
-                  message: error instanceof Error ? error.message : String(error),
+                  message:
+                    error instanceof Error ? error.message : String(error),
                 });
                 throw error;
               } finally {

@@ -32,10 +32,13 @@ import {
   type SpanContext,
   type TimeInput,
   type Exception,
+  type Link,
   type SpanOptions,
   type Context as OtelContext,
   type Tracer,
+  type SpanKind,
 } from '@opentelemetry/api';
+import * as nodeAsyncHooks from 'node:async_hooks';
 import { type Logger } from './logger';
 import { configure } from './config';
 
@@ -50,6 +53,11 @@ export {
   type EventsOutcome,
   type EventsValue,
 } from './event-testing';
+export {
+  TestSpanCollector,
+  serializeSpan,
+  type SerializedSpan,
+} from './test-span-collector';
 
 /**
  * Note: OpenTelemetry exporters and processors have moved to dedicated modules
@@ -87,12 +95,27 @@ export {
  * Simplified span representation for testing
  */
 export interface TestSpan {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  kind?: SpanKind;
   name: string;
   status: SpanStatus;
   attributes: Attributes;
+  events: Array<{ name: string; attributes?: Attributes }>;
+  links: Link[];
   startTime: number;
   endTime: number;
   duration: number;
+}
+
+export interface SpanMatch {
+  name?: string;
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  kind?: SpanKind;
+  attributes?: Record<string, unknown>;
 }
 
 /**
@@ -105,6 +128,14 @@ export interface TraceCollector {
   getSpansByName(name: string): TestSpan[];
   /** Get spans matching attributes */
   getSpansByAttributes(attributes: Record<string, unknown>): TestSpan[];
+  /** Get spans belonging to a trace */
+  getSpansByTraceId(traceId: string): TestSpan[];
+  /** Get spans without a recorded parent */
+  getRootSpans(): TestSpan[];
+  /** Get all descendants of a span, ordered by completion */
+  getDescendants(rootSpanId: string): TestSpan[];
+  /** Find exactly one span or throw an actionable assertion error */
+  expectSpan(criteria: string | SpanMatch): TestSpan;
   /** Clear all collected spans */
   clear(): void;
   /** Record a span (internal use) */
@@ -139,21 +170,37 @@ export interface TraceCollector {
  */
 export function createTraceCollector(): TraceCollector {
   const spans: TestSpan[] = [];
+  const activeMockSpanStorage = new nodeAsyncHooks.AsyncLocalStorage<Span>();
+  let nextTraceId = 1;
+  let nextSpanId = 1;
+
+  const hexId = (value: number, length: number) =>
+    value.toString(16).padStart(length, '0');
 
   // Create mock span that captures data and implements full Span interface
-  const createMockSpan = (name: string, startTime: number): Span => {
+  const createMockSpan = (
+    name: string,
+    startTime: number,
+    parentSpanContext?: SpanContext,
+    options?: SpanOptions,
+  ): Span => {
+    const spanContextData: SpanContext = {
+      traceId: parentSpanContext?.traceId ?? hexId(nextTraceId++, 32),
+      spanId: hexId(nextSpanId++, 16),
+      traceFlags: 1,
+      isRemote: false,
+    };
     const spanData: Partial<TestSpan> = {
+      traceId: spanContextData.traceId,
+      spanId: spanContextData.spanId,
+      parentSpanId: parentSpanContext?.spanId,
+      kind: options?.kind,
       name,
       startTime,
       attributes: {},
+      events: [],
+      links: [],
       status: { code: SpanStatusCode.OK },
-    };
-
-    const spanContextData: SpanContext = {
-      traceId: '1234567890abcdef1234567890abcdef', // 128-bit trace ID (32 hex chars)
-      spanId: '1234567890abcdef', // 64-bit span ID (16 hex chars)
-      traceFlags: 1,
-      isRemote: false,
     };
 
     const mockSpan: Span = {
@@ -180,21 +227,26 @@ export function createTraceCollector(): TraceCollector {
         attributesOrStartTime?: Attributes | TimeInput,
         startTime?: TimeInput,
       ) {
-        void name;
-        void attributesOrStartTime;
+        const attributes =
+          attributesOrStartTime &&
+          !Array.isArray(attributesOrStartTime) &&
+          typeof attributesOrStartTime === 'object'
+            ? (attributesOrStartTime as Attributes)
+            : undefined;
+        spanData.events!.push({ name, attributes });
         void startTime;
         return this;
       },
 
       addLink(link: { context: SpanContext; attributes?: Attributes }) {
-        void link;
+        spanData.links!.push(link);
         return this;
       },
 
       addLinks(
         links: Array<{ context: SpanContext; attributes?: Attributes }>,
       ) {
-        void links;
+        spanData.links!.push(...links);
         return this;
       },
 
@@ -216,9 +268,15 @@ export function createTraceCollector(): TraceCollector {
         void endTimeArg;
         const endTime = performance.now();
         spans.push({
+          traceId: spanData.traceId!,
+          spanId: spanData.spanId!,
+          parentSpanId: spanData.parentSpanId,
+          kind: spanData.kind,
           name: spanData.name!,
           status: spanData.status!,
           attributes: spanData.attributes || {},
+          events: spanData.events || [],
+          links: spanData.links || [],
           startTime: spanData.startTime!,
           endTime,
           duration: endTime - spanData.startTime!,
@@ -232,10 +290,11 @@ export function createTraceCollector(): TraceCollector {
   // Create mock tracer
   const mockTracer: Tracer = {
     startSpan(name: string, options?: SpanOptions, ctx?: OtelContext): Span {
-      void options;
-      void ctx;
       const startTime = performance.now();
-      return createMockSpan(name, startTime);
+      const parent =
+        (ctx ? otelTrace.getSpan(ctx)?.spanContext() : undefined) ??
+        activeMockSpanStorage.getStore()?.spanContext();
+      return createMockSpan(name, startTime, parent, options);
     },
 
     startActiveSpan<F extends (span: Span) => unknown>(
@@ -258,11 +317,24 @@ export function createTraceCollector(): TraceCollector {
       })();
 
       const startTime = performance.now();
-      const mockSpan = createMockSpan(name, startTime);
+      const suppliedContext =
+        typeof optionsOrFn === 'function'
+          ? context.active()
+          : typeof contextOrFn === 'function' || contextOrFn === undefined
+            ? context.active()
+            : contextOrFn;
+      const parent =
+        otelTrace.getSpan(suppliedContext)?.spanContext() ??
+        activeMockSpanStorage.getStore()?.spanContext();
+      const spanOptions =
+        typeof optionsOrFn === 'function' ? undefined : optionsOrFn;
+      const mockSpan = createMockSpan(name, startTime, parent, spanOptions);
 
       // Set span as active in context (makes otelTrace.getActiveSpan() work)
-      const ctx = otelTrace.setSpan(context.active(), mockSpan);
-      return context.with(ctx, () => callback(mockSpan)) as ReturnType<F>;
+      const ctx = otelTrace.setSpan(suppliedContext, mockSpan);
+      return activeMockSpanStorage.run(mockSpan, () => {
+        return context.with(ctx, () => callback(mockSpan)) as ReturnType<F>;
+      });
     },
   };
 
@@ -284,6 +356,75 @@ export function createTraceCollector(): TraceCollector {
           ([key, value]) => span.attributes[key] === value,
         );
       });
+    },
+
+    getSpansByTraceId(traceId: string): TestSpan[] {
+      return spans.filter((span) => span.traceId === traceId);
+    },
+
+    getRootSpans(): TestSpan[] {
+      return spans.filter((span) => span.parentSpanId === undefined);
+    },
+
+    getDescendants(rootSpanId: string): TestSpan[] {
+      const included = new Set([rootSpanId]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const span of spans) {
+          if (
+            span.parentSpanId &&
+            included.has(span.parentSpanId) &&
+            !included.has(span.spanId)
+          ) {
+            included.add(span.spanId);
+            changed = true;
+          }
+        }
+      }
+      included.delete(rootSpanId);
+      return spans.filter((span) => included.has(span.spanId));
+    },
+
+    expectSpan(criteria: string | SpanMatch): TestSpan {
+      const matches =
+        typeof criteria === 'string'
+          ? spans.filter((span) => span.name === criteria)
+          : spans.filter((span) => {
+              if (criteria.name !== undefined && span.name !== criteria.name) {
+                return false;
+              }
+              if (
+                criteria.traceId !== undefined &&
+                span.traceId !== criteria.traceId
+              ) {
+                return false;
+              }
+              if (
+                criteria.spanId !== undefined &&
+                span.spanId !== criteria.spanId
+              ) {
+                return false;
+              }
+              if (
+                criteria.parentSpanId !== undefined &&
+                span.parentSpanId !== criteria.parentSpanId
+              ) {
+                return false;
+              }
+              if (criteria.kind !== undefined && span.kind !== criteria.kind) {
+                return false;
+              }
+              return Object.entries(criteria.attributes ?? {}).every(
+                ([key, value]) => span.attributes[key] === value,
+              );
+            });
+      if (matches.length !== 1) {
+        throw new Error(
+          `Expected exactly one span matching ${JSON.stringify(criteria)}, found ${matches.length}`,
+        );
+      }
+      return matches[0]!;
     },
 
     clear(): void {

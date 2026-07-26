@@ -17,7 +17,7 @@ license: MIT
 
 # Review OpenTelemetry patterns
 
-Review and improve OpenTelemetry instrumentation in TypeScript/JavaScript codebases using autotel. Replace ad-hoc tracing with idiomatic OTel-native spans, metrics and structured logs that work across every major framework and edge runtime — without vendor lock-in.
+Review and improve OpenTelemetry instrumentation in TypeScript/JavaScript codebases using autotel. Replace ad-hoc tracing with idiomatic OTel-native spans, metrics and structured logs that work across every major framework and edge runtime. Without vendor lock-in.
 
 ## When to use
 
@@ -64,7 +64,7 @@ npm install autotel-sentry        # Sentry exporter via OTLP
 
 ### Next.js (App Router)
 
-Step 1 — Initialise once in `instrumentation.ts`:
+Step 1: Initialise once in `instrumentation.ts`:
 
 ```typescript
 // instrumentation.ts
@@ -82,7 +82,7 @@ export function register() {
 }
 ```
 
-Step 2 — Wrap route handlers:
+Step 2: Wrap route handlers:
 
 ```typescript
 // app/api/checkout/route.ts
@@ -96,9 +96,9 @@ export const POST = withAutotel(async (request: Request) => {
 });
 ```
 
-Step 3 — Tag Server Actions the same way (`withAutotel`).
+Step 3: Tag Server Actions the same way (`withAutotel`).
 
-Step 4 — Browser → server trace propagation: drop in `<TraceProvider />` from `autotel-web` so the W3C `traceparent` header is forwarded automatically.
+Step 4: Browser to server trace propagation: drop in `<TraceProvider />` from `autotel-web` so the W3C `traceparent` header is forwarded automatically.
 
 ### Nuxt + Nitro v3
 
@@ -167,7 +167,7 @@ The `autotel-adapters` toolkit ships a uniform shape for these: `withAutotel` mi
 
 ### Cloudflare Workers (with auto `waitUntil`)
 
-`defineWorkerFetch` instruments the handler **and** wires `ctx.waitUntil` for span exports — without it, async exports silently drop:
+`defineWorkerFetch` instruments the handler **and** wires `ctx.waitUntil` for span exports. Without it, async exports silently drop:
 
 ```typescript
 import { defineWorkerFetch } from 'autotel-cloudflare';
@@ -181,7 +181,7 @@ export default defineWorkerFetch(
 );
 ```
 
-For broader use cases (`scheduled`, `queue`, `email` handlers, Durable Objects, Workflows), use `wrapModule` / `wrapDurableObject` / `instrumentWorkflow` — same auto-`waitUntil` semantics.
+For broader use cases (`scheduled`, `queue`, `email` handlers, Durable Objects, Workflows), use `wrapModule` / `wrapDurableObject` / `instrumentWorkflow`. Same auto-`waitUntil` semantics.
 
 ### AWS Lambda
 
@@ -244,16 +244,19 @@ Enrichers turn raw request data into standard, low-cardinality span attributes. 
 | `requestSize(reqHeaders, resHeaders?)` | `http.request.body.size`, `http.response.body.size`                          | `content-length` headers        |
 
 ```typescript
+import { withTracing } from 'autotel';
 import { userAgent, geo, requestSize } from 'autotel/enrichers';
 
-export const handler = trace((ctx) => async (request: Request) => {
-  ctx.setAttributes({
-    ...userAgent(request.headers),
-    ...geo(request.headers),
-    ...requestSize(request.headers),
-  });
-  // ... handle request
-});
+export const handler = withTracing({ name: 'http.request' })(
+  (ctx) => async (request: Request) => {
+    ctx.setAttributes({
+      ...userAgent(request.headers),
+      ...geo(request.headers),
+      ...requestSize(request.headers),
+    });
+    // ... handle request
+  },
+);
 ```
 
 For your own derived fields on a request's wide event, build a reusable enricher with `defineEnricher` (from `autotel`) instead of scattering ad-hoc field writes. `compute` returns an object that is merged into the named `field`; return `undefined` to skip. Keep the output low-cardinality (bucket or hash high-cardinality values):
@@ -278,7 +281,7 @@ const enrichTier = defineEnricher<
 
 ## Backends (multi-vendor OTLP)
 
-Switch backends with **no code changes** — autotel speaks OTLP HTTP/JSON and HTTP/protobuf out of the box.
+Switch backends with **no code changes**. Autotel speaks OTLP HTTP/JSON and HTTP/protobuf out of the box.
 
 | Backend                          | Endpoint                                                   | Headers                               |
 | -------------------------------- | ---------------------------------------------------------- | ------------------------------------- |
@@ -333,7 +336,7 @@ const config: AttributeRedactorConfig = {
 init({ attributeRedactor: config });
 ```
 
-For free-text fields outside the span pipeline (logs, error messages, frontend payloads), use `createStringRedactor('default')` — same masks, returns a `(s: string) => string`.
+For free-text fields outside the span pipeline (logs, error messages, frontend payloads), use `createStringRedactor('default')`. Same masks, returns a `(s: string) => string`.
 
 ---
 
@@ -364,7 +367,7 @@ export const otelConfig = defineConfig({
 });
 ```
 
-Errors are isolated per item — one bad processor cannot break the others. See [references/processor-pipeline.md](references/processor-pipeline.md) for the full pipeline cookbook.
+Errors are isolated per item. One bad processor cannot break the others. See [references/processor-pipeline.md](references/processor-pipeline.md) for the full pipeline cookbook.
 
 ---
 
@@ -379,15 +382,15 @@ Errors are isolated per item — one bad processor cannot break the others. See 
 | `BaggageSpanProcessor`         | Lift baggage entries onto every span                        |
 | `PrettyConsoleExporter`        | Hierarchical colourised output for local dev                |
 
-Compose them at build time with `composeSpanProcessors([...])` — no boilerplate.
+Compose them at build time with `composeSpanProcessors([...])`. No boilerplate.
 
 ---
 
 ## AI SDK integration (gen-ai semantic conventions)
 
-autotel implements the **OTel gen-ai semantic conventions** out of the box. Token usage, tool calls, model info, latency, cost — captured as standard attributes (`gen_ai.usage.input_tokens`, `gen_ai.tool.name`, `gen_ai.response.finish_reasons`, …) so any backend that understands OTel can render LLM telemetry without custom mapping.
+autotel implements the **OTel gen-ai semantic conventions** out of the box. Token usage, tool calls, model info, latency, cost. Captured as standard attributes (`gen_ai.usage.input_tokens`, `gen_ai.tool.name`, `gen_ai.response.finish_reasons`, …) so any backend that understands OTel can render LLM telemetry without custom mapping.
 
-> Node.js apps get the same canonical `gen_ai.*` conventions (plus cost, metric views, and agent governance) from the `autotel-genai` package — `traceGenAI` / `recordGenAiUsage` from `autotel-genai/trace` and `genAiMetricViews` from `autotel-genai/metrics`. `withAiTelemetry` below is the edge-runtime entry point.
+> Node.js apps get the same canonical `gen_ai.*` conventions (plus cost, metric views, and agent governance) from the `autotel-genai` package. `traceGenAI` / `recordGenAiUsage` from `autotel-genai/trace` and `genAiMetricViews` from `autotel-genai/metrics`. `withAiTelemetry` below is the edge-runtime entry point.
 
 ```typescript
 import { trace } from 'autotel';
@@ -422,7 +425,7 @@ Anti-patterns to detect:
 
 ## Structured errors
 
-Throw rich errors that carry status, audience, and remediation hints — and consume them at HTTP boundaries:
+Throw rich errors that carry status, audience, and remediation hints. And consume them at HTTP boundaries:
 
 ```typescript
 import { createStructuredError, parseError } from 'autotel';
@@ -491,21 +494,21 @@ pnpm --filter autotel run test:e2e
 
 ## Anti-patterns to detect
 
-| Anti-pattern                                        | Fix                                                                 |
-| --------------------------------------------------- | ------------------------------------------------------------------- |
-| `console.log` in handlers                           | Use `useLogger()` — fields land on the active span                  |
-| Manual `tracer.startSpan` boilerplate               | `trace(fn)` — auto-named, auto-ended, auto-status                   |
-| `try { … } catch (e) { console.error(e); throw e }` | Replace with `createStructuredError({ … })`                         |
-| `throw new Error('something went wrong')`           | `createStructuredError({ message, status, why, fix })`              |
-| Ad-hoc `span.setAttribute('user_id', id)`           | Use `useLogger().set({ user: { id } })` — flattens with stable keys |
-| Multiple exporters wired in parallel by hand        | `composeSpanProcessors([…])`                                        |
-| PII in attributes                                   | `attributeRedactor: 'default'` (on in prod by default)              |
-| Cloudflare Workers without `waitUntil`              | Use `defineWorkerFetch` / `wrapModule`                              |
-| High-cardinality span names (`/users/123`)          | `SpanNameNormalizingProcessor`                                      |
-| AI SDK token logs                                   | `withAiTelemetry()` + gen-ai semantic conventions                   |
-| Health checks blowing up trace volume               | `FilteringSpanProcessor`                                            |
-| No tests for instrumentation                        | `InMemorySpanExporter` + `autotel-vitest` matchers                  |
-| Manual context propagation in fetch                 | `instrumentation.instrumentGlobalFetch: true` (default)             |
+| Anti-pattern                                        | Fix                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------ |
+| `console.log` in handlers                           | Use `useLogger()`: fields land on the active span                  |
+| Manual `tracer.startSpan` boilerplate               | `trace(fn)`: auto-named, auto-ended, auto-status                   |
+| `try { … } catch (e) { console.error(e); throw e }` | Replace with `createStructuredError({ … })`                        |
+| `throw new Error('something went wrong')`           | `createStructuredError({ message, status, why, fix })`             |
+| Ad-hoc `span.setAttribute('user_id', id)`           | Use `useLogger().set({ user: { id } })`: flattens with stable keys |
+| Multiple exporters wired in parallel by hand        | `composeSpanProcessors([…])`                                       |
+| PII in attributes                                   | `attributeRedactor: 'default'` (on in prod by default)             |
+| Cloudflare Workers without `waitUntil`              | Use `defineWorkerFetch` / `wrapModule`                             |
+| High-cardinality span names (`/users/123`)          | `SpanNameNormalizingProcessor`                                     |
+| AI SDK token logs                                   | `withAiTelemetry()` + gen-ai semantic conventions                  |
+| Health checks blowing up trace volume               | `FilteringSpanProcessor`                                           |
+| No tests for instrumentation                        | `InMemorySpanExporter` + `autotel-vitest` matchers                 |
+| Manual context propagation in fetch                 | `instrumentation.instrumentGlobalFetch: true` (default)            |
 
 See [references/code-review.md](references/code-review.md) for the full checklist.
 
@@ -529,7 +532,7 @@ See [references/code-review.md](references/code-review.md) for the full checklis
 
 ## Loading reference files
 
-Load based on what you're working on — **do not load all at once**:
+Load based on what you're working on. **do not load all at once**:
 
 - Designing spans → [references/wide-spans.md](references/wide-spans.md)
 - Improving errors → [references/structured-errors.md](references/structured-errors.md)

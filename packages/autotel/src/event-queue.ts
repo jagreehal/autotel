@@ -471,15 +471,14 @@ export class EventQueue {
         const failedEventIndices = new Set(
           failedDeliveries.map((f) => f.eventIndex),
         );
-        const failedEventIndicesOrdered = [...failedEventIndices].sort(
+        const failedEventIndicesOrdered = [...failedEventIndices].toSorted(
           (a, b) => a - b,
         );
         const eventsToRetry = failedEventIndicesOrdered.map(
           (i) => events[i],
         ) as EventData[];
         const failedSubscribersByRetryIndex = new Map<number, Set<string>>();
-        for (let j = 0; j < failedEventIndicesOrdered.length; j++) {
-          const origIndex = failedEventIndicesOrdered[j];
+        for (const [j, origIndex] of failedEventIndicesOrdered.entries()) {
           const set = new Set<string>();
           for (const { eventIndex, subscriberName } of failedDeliveries) {
             if (eventIndex === origIndex) set.add(subscriberName);
@@ -548,16 +547,14 @@ export class EventQueue {
     };
 
     if (!this.rateLimiter) {
-      for (let i = 0; i < events.length; i++) {
-        const event = events[i];
+      for (const [i, event] of events.entries()) {
         if (event) await sendOne(event, i);
       }
       return failedDeliveries;
     }
 
-    for (let i = 0; i < events.length; i++) {
+    for (const [i, event] of events.entries()) {
       await this.rateLimiter.waitForToken();
-      const event = events[i];
       if (event) await sendOne(event, i);
     }
 

@@ -73,7 +73,11 @@ export {
   createOtelObservabilityFromEnv,
   OtelObservability,
 } from './agents/otel-observability';
-export { channels, genericObservability, subscribe } from './agents/observability';
+export {
+  channels,
+  genericObservability,
+  subscribe,
+} from './agents/observability';
 export type {
   BaseEvent,
   OtelObservabilityConfig,

@@ -21,8 +21,7 @@ export interface CloudflareRequestLike {
   method?: string;
   url?: string;
   headers?:
-    | { get(name: string): string | null }
-    | Record<string, string | undefined>;
+    { get(name: string): string | null } | Record<string, string | undefined>;
   cf?: Record<string, unknown>;
 }
 
@@ -41,8 +40,10 @@ export interface CloudflareHandlerContext<
   executionContext: TContext;
 }
 
-export interface CloudflareWithAutotelOptions<TEnv = unknown>
-  extends Omit<FrameworkHandlerOptions, 'spanName'> {
+export interface CloudflareWithAutotelOptions<TEnv = unknown> extends Omit<
+  FrameworkHandlerOptions,
+  'spanName'
+> {
   spanName?: string | ((request: CloudflareRequestLike, env: TEnv) => string);
   enrichRequest?: (
     request: CloudflareRequestLike,
@@ -76,7 +77,9 @@ function enrichFromRequest(
     ...(request.url ? { 'url.full': request.url } : {}),
     ...(route ? { 'http.route': route } : {}),
     ...(requestId ? { 'http.request.id': requestId } : {}),
-    ...(request.cf?.country ? { 'cloudflare.country': request.cf.country } : {}),
+    ...(request.cf?.country
+      ? { 'cloudflare.country': request.cf.country }
+      : {}),
     ...(request.cf?.colo ? { 'cloudflare.colo': request.cf.colo } : {}),
     ...(request.cf?.city ? { 'cloudflare.city': request.cf.city } : {}),
   };
@@ -109,7 +112,11 @@ function resolvePath(request: CloudflareRequestLike): string {
 
 function createIntegration<TEnv>() {
   return defineFrameworkIntegration<
-    CloudflareHandlerContext<TEnv, CloudflareRequestLike, CloudflareExecutionContextLike>
+    CloudflareHandlerContext<
+      TEnv,
+      CloudflareRequestLike,
+      CloudflareExecutionContextLike
+    >
   >({
     name: 'cloudflare',
     extractRequest: ({ request }) => ({
@@ -158,11 +165,7 @@ export function withAutotelFetch<
     ctx: TContext,
   ) => TReturn | Promise<TReturn>,
   options?: CloudflareWithAutotelOptions<TEnv>,
-): (
-  request: TRequest,
-  env: TEnv,
-  ctx: TContext,
-) => Promise<TReturn> {
+): (request: TRequest, env: TEnv, ctx: TContext) => Promise<TReturn> {
   return async (
     request: TRequest,
     env: TEnv,

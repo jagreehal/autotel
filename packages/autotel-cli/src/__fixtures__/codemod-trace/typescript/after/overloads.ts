@@ -7,4 +7,4 @@ const greet = trace('greet', function greet(name: string, formal?: boolean): str
     return `Hello, ${name}`;
   }
   return `Hi, ${name}`;
-};
+});

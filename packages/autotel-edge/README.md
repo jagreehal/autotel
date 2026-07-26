@@ -17,6 +17,7 @@ If you're using Cloudflare Workers, use **[autotel-cloudflare](../autotel-cloudf
 ### When to Use autotel-edge Directly
 
 Use this package directly if you're:
+
 - Building for Vercel Edge Functions
 - Building for Netlify Edge Functions
 - Building for Deno Deploy
@@ -50,36 +51,38 @@ yarn add autotel-edge
 ### Basic Usage
 
 ```typescript
-import { trace, init } from 'autotel-edge'
+import { trace, init } from 'autotel-edge';
 
 // Initialize once at startup
 init({
   service: { name: 'my-edge-function' },
   exporter: {
-    url: process.env.OTEL_ENDPOINT || 'http://localhost:4318/v1/traces'
-  }
-})
+    url: process.env.OTEL_ENDPOINT || 'http://localhost:4318/v1/traces',
+  },
+});
 
 // Zero-boilerplate function tracing
 export const handler = trace(async (request: Request) => {
-  return new Response('Hello World')
-})
+  return new Response('Hello World');
+});
 ```
 
 ### Factory Pattern (for context access)
 
 ```typescript
-import { trace } from 'autotel-edge'
+import { withTracing } from 'autotel-edge';
 
 // Factory pattern - receives context, returns handler
-export const processOrder = trace(ctx => async (orderId: string) => {
-  ctx.setAttribute('order.id', orderId)
+export const processOrder = withTracing({ name: 'order.process' })(
+  (ctx) => async (orderId: string) => {
+    ctx.setAttribute('order.id', orderId);
 
-  // Your business logic
-  const order = await getOrder(orderId)
+    // Your business logic
+    const order = await getOrder(orderId);
 
-  return order
-})
+    return order;
+  },
+);
 ```
 
 ## Entry Points (Tree-Shaking)
@@ -88,19 +91,19 @@ The package provides multiple entry points for optimal tree-shaking:
 
 ```typescript
 // Core API
-import { trace, span, init } from 'autotel-edge'
+import { trace, span, withTracing, init } from 'autotel-edge';
 
 // Sampling strategies
-import { createAdaptiveSampler, SamplingPresets } from 'autotel-edge/sampling'
+import { createAdaptiveSampler, SamplingPresets } from 'autotel-edge/sampling';
 
 // Events system
-import { createEdgeSubscribers, publishEvent } from 'autotel-edge/events'
+import { createEdgeSubscribers, publishEvent } from 'autotel-edge/events';
 
 // Logger
-import { createEdgeLogger } from 'autotel-edge/logger'
+import { createEdgeLogger } from 'autotel-edge/logger';
 
 // Testing utilities
-import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing'
+import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
 ```
 
 ## Sampling Strategies
@@ -108,57 +111,57 @@ import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing'
 ### Adaptive Sampling (Recommended for Production)
 
 ```typescript
-import { SamplingPresets } from 'autotel-edge/sampling'
+import { SamplingPresets } from 'autotel-edge/sampling';
 
 init({
   service: { name: 'my-app' },
   exporter: { url: '...' },
   sampling: {
-    tailSampler: SamplingPresets.production()
+    tailSampler: SamplingPresets.production(),
     // 10% baseline, 100% errors, 100% slow requests (>1s)
-  }
-})
+  },
+});
 ```
 
 ### Available Presets
 
 ```typescript
-import { SamplingPresets } from 'autotel-edge/sampling'
+import { SamplingPresets } from 'autotel-edge/sampling';
 
 // Development - 100% sampling
-SamplingPresets.development()
+SamplingPresets.development();
 
 // Production - 10% baseline, all errors, slow >1s
-SamplingPresets.production()
+SamplingPresets.production();
 
 // High traffic - 1% baseline, all errors, slow >1s
-SamplingPresets.highTraffic()
+SamplingPresets.highTraffic();
 
 // Debugging - errors only
-SamplingPresets.debugging()
+SamplingPresets.debugging();
 ```
 
 ### Custom Sampling
 
 ```typescript
-import { createCustomTailSampler } from 'autotel-edge/sampling'
+import { createCustomTailSampler } from 'autotel-edge/sampling';
 
 const customSampler = createCustomTailSampler((trace) => {
-  const span = trace.localRootSpan
+  const span = trace.localRootSpan;
 
   // Sample all /api/* requests
   if (span.attributes['http.route']?.toString().startsWith('/api/')) {
-    return true
+    return true;
   }
 
   // Sample errors
   if (span.status.code === SpanStatusCode.ERROR) {
-    return true
+    return true;
   }
 
   // Drop everything else
-  return false
-})
+  return false;
+});
 ```
 
 ## Events Integration
@@ -166,7 +169,7 @@ const customSampler = createCustomTailSampler((trace) => {
 Track product events with automatic trace correlation:
 
 ```typescript
-import { publishEvent } from 'autotel-edge/events'
+import { publishEvent } from 'autotel-edge/events';
 
 // Track user events
 await publishEvent({
@@ -174,10 +177,10 @@ await publishEvent({
   userId: '123',
   properties: {
     orderId: 'abc',
-    amount: 99.99
-  }
+    amount: 99.99,
+  },
   // Automatically includes current trace ID
-})
+});
 ```
 
 ## Logger
@@ -185,26 +188,26 @@ await publishEvent({
 Zero-dependency logger with trace context:
 
 ```typescript
-import { createEdgeLogger } from 'autotel-edge/logger'
+import { createEdgeLogger } from 'autotel-edge/logger';
 
-const log = createEdgeLogger('my-service')
+const log = createEdgeLogger('my-service');
 
-log.info('Processing request', { userId: '123' })
-log.error('Request failed', { error })
+log.info('Processing request', { userId: '123' });
+log.error('Request failed', { error });
 // Automatically includes trace ID, span ID
 ```
 
 ## Testing
 
 ```typescript
-import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing'
+import { createTraceCollector, assertTraceCreated } from 'autotel-edge/testing';
 
 // In your tests
-const collector = createTraceCollector()
+const collector = createTraceCollector();
 
-await myFunction()
+await myFunction();
 
-assertTraceCreated(collector, 'myFunction')
+assertTraceCreated(collector, 'myFunction');
 ```
 
 ## Supported Runtimes
@@ -225,9 +228,9 @@ init({
   service: {
     name: 'my-edge-function',
     version: '1.0.0',
-    namespace: 'production'
-  }
-})
+    namespace: 'production',
+  },
+});
 ```
 
 ### Exporter Configuration
@@ -237,10 +240,10 @@ init({
   exporter: {
     url: 'https://api.honeycomb.io/v1/traces',
     headers: {
-      'x-honeycomb-team': process.env.HONEYCOMB_API_KEY
-    }
-  }
-})
+      'x-honeycomb-team': process.env.HONEYCOMB_API_KEY,
+    },
+  },
+});
 ```
 
 ### Dynamic Configuration
@@ -249,8 +252,8 @@ init({
 // Configuration can be a function
 init((env) => ({
   service: { name: env.SERVICE_NAME },
-  exporter: { url: env.OTEL_ENDPOINT }
-}))
+  exporter: { url: env.OTEL_ENDPOINT },
+}));
 ```
 
 ### Fetch Route Controls
@@ -271,7 +274,7 @@ init({
       },
     },
   },
-})
+});
 ```
 
 ## API Reference
@@ -285,24 +288,29 @@ Zero-boilerplate function tracing with automatic span management.
 ```typescript
 // Simple function
 const handler = trace(async (request: Request) => {
-  return new Response('OK')
-})
+  return new Response('OK');
+});
 
 // With options
-const handler = trace({
-  name: 'custom-name',
-  attributesFromArgs: ([request]) => ({
-    'http.method': request.method
-  })
-}, async (request: Request) => {
-  return new Response('OK')
-})
+const handler = trace(
+  {
+    name: 'custom-name',
+    attributesFromArgs: ([request]) => ({
+      'http.method': request.method,
+    }),
+  },
+  async (request: Request) => {
+    return new Response('OK');
+  },
+);
 
 // Factory pattern (for context access)
-const handler = trace(ctx => async (request: Request) => {
-  ctx.setAttribute('custom', 'value')
-  return new Response('OK')
-})
+const handler = withTracing({ name: 'http.request' })(
+  (ctx) => async (request: Request) => {
+    ctx.setAttribute('custom', 'value');
+    return new Response('OK');
+  },
+);
 ```
 
 #### `span(options, fn)`
@@ -313,11 +321,11 @@ Create a named span for a code block.
 const result = await span(
   { name: 'database.query', attributes: { table: 'users' } },
   async (span) => {
-    const data = await db.query('SELECT * FROM users')
-    span.setAttribute('rows', data.length)
-    return data
-  }
-)
+    const data = await db.query('SELECT * FROM users');
+    span.setAttribute('rows', data.length);
+    return data;
+  },
+);
 ```
 
 #### `init(config)`
@@ -328,22 +336,22 @@ Initialize the OpenTelemetry SDK.
 init({
   service: { name: 'my-app' },
   exporter: { url: '...' },
-  sampling: { tailSampler: SamplingPresets.production() }
-})
+  sampling: { tailSampler: SamplingPresets.production() },
+});
 ```
 
 ## Native tracing bridge
 
-`trace()` / `span()` / `enterSpan()` can transparently emit *platform-native*
+`trace()` / `span()` / `enterSpan()` can transparently emit _platform-native_
 spans instead of going through autotel's OTLP exporter. A runtime adapter (e.g.
 [autotel-cloudflare](../autotel-cloudflare), wrapping Cloudflare's
 `tracing.enterSpan()`) installs a `NativeTracer` into the active context with
 `withNativeTracer()`; the functional API reads it via `getActiveNativeTracer()`
-and routes to it when present. autotel-edge never imports any runtime module —
-the seam (`NativeTracer` / `NativeSpanHandle`, degradation adapters) only depends
+and routes to it when present. autotel-edge never imports any runtime module.
+The seam (`NativeTracer` / `NativeSpanHandle`, degradation adapters) only depends
 on `@opentelemetry/api` and is tree-shaken away when unused.
 
-This is what lets the *same* instrumented code light up Cloudflare's native
+This is what lets the _same_ instrumented code light up Cloudflare's native
 trace waterfall in production and export over OTLP locally. Config:
 `nativeTracing: 'auto' | 'on' | 'off'` (default `'auto'`). See
 [docs/CLOUDFLARE-NATIVE-TRACING.md](../../docs/CLOUDFLARE-NATIVE-TRACING.md).
@@ -362,9 +370,9 @@ trace waterfall in production and export over OTLP locally. Config:
 
 ## See also
 
-- [autotel-cloudflare](../autotel-cloudflare) — Cloudflare Workers wrappers + bindings (KV, R2, D1, DO)
-- [autotel](../autotel) — Node SDK with auto-instrumentation
-- [autotel-drizzle](../autotel-drizzle) — Drizzle ORM spans (Node only)
+- [autotel-cloudflare](../autotel-cloudflare): Cloudflare Workers wrappers + bindings (KV, R2, D1, DO)
+- [autotel](../autotel): Node SDK with auto-instrumentation
+- [autotel-drizzle](../autotel-drizzle): Drizzle ORM spans (Node only)
 
 ## License
 

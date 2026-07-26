@@ -27,7 +27,7 @@ You are working on the Sentry OTLP integration package. You understand Sentry DS
 
 Single entry point with tree-shakeable exports:
 
-- `autotel-sentry` — `sentryOtlpConfig`, `linkSentryErrors`, `SentryOtlpConfig`, `SentryLinkable`
+- `autotel-sentry`: `sentryOtlpConfig`, `linkSentryErrors`, `SentryOtlpConfig`, `SentryLinkable`
 
 ## Commands
 
@@ -86,7 +86,7 @@ export function linkSentryErrors(sentry: SentryLinkable): void {
 
 ## Testing
 
-- **Unit tests**: `config.test.ts` (7 tests — DSN parsing, malformed input, header shape), `link.test.ts` (4 tests — processor installed, trace context attached, no-op when no active span)
+- **Unit tests**: `config.test.ts` (7 tests: DSN parsing, malformed input, header shape), `link.test.ts` (4 tests: processor installed, trace context attached, no-op when no active span)
 - Use a stub for `SentryLinkable` (object with `getGlobalScope()` returning a mock scope)
 - Mock `@opentelemetry/api`'s `trace.getActiveSpan()` to control span context in link tests
 
@@ -96,7 +96,7 @@ export function linkSentryErrors(sentry: SentryLinkable): void {
 
 1. `@sentry/node` >= 10.47.0 must be installed
 2. Call `sentryOtlpConfig(dsn)` before either `Sentry.init()` or `init()`
-3. Pass `skipOpenTelemetrySetup: true` to `Sentry.init()` (required — Sentry SDK v8+ registers its own OTel SDK otherwise)
+3. Pass `skipOpenTelemetrySetup: true` to `Sentry.init()` (required: Sentry SDK v8+ registers its own OTel SDK otherwise)
 4. Call `linkSentryErrors(Sentry)` after both SDKs are initialized
 
 **Minimal setup:**
@@ -115,6 +115,6 @@ linkSentryErrors(Sentry);
 
 ## References
 
-- [Sentry OTLP Integration spec](https://develop.sentry.dev/sdk/telemetry/traces/otlp/) — protocol this package targets
-- [Sentry OTLP docs](https://docs.sentry.io/concepts/otlp/) — Sentry-side configuration
-- [OpenTelemetry JS API](https://opentelemetry.io/docs/instrumentation/js/) — `trace.getActiveSpan()`
+- [Sentry OTLP Integration spec](https://develop.sentry.dev/sdk/telemetry/traces/otlp/): protocol this package targets
+- [Sentry OTLP docs](https://docs.sentry.io/concepts/otlp/): Sentry-side configuration
+- [OpenTelemetry JS API](https://opentelemetry.io/docs/instrumentation/js/): `trace.getActiveSpan()`

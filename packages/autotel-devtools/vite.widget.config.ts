@@ -1,7 +1,7 @@
-import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { resolve } from 'node:path'
-import tailwindcss from '@tailwindcss/postcss'
+import { defineConfig } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { resolve } from 'node:path';
+import tailwindcss from '@tailwindcss/postcss';
 
 // Widget build — IIFE for browser, CSS inlined
 export default defineConfig({
@@ -34,4 +34,4 @@ export default defineConfig({
     // root (component <style> blocks are forbidden, see MIGRATION.md).
     svelte({ emitCss: false }),
   ],
-})
+});

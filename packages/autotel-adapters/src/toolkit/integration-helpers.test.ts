@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RequestLogger } from 'autotel';
-import { applyLoggerEnrichment, completeIntegratedRequest } from './integration';
+import {
+  applyLoggerEnrichment,
+  completeIntegratedRequest,
+} from './integration';
 import { createMiddlewareLogger } from './middleware';
 
 describe('integration helpers', () => {
@@ -24,7 +27,11 @@ describe('integration helpers', () => {
       finishResponse: vi.fn(),
     };
 
-    const result = await completeIntegratedRequest(handle as never, {}, { ok: true });
+    const result = await completeIntegratedRequest(
+      handle as never,
+      {},
+      { ok: true },
+    );
     expect(result).toEqual({ ok: true });
     expect(finish).toHaveBeenCalledTimes(1);
   });

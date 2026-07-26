@@ -79,11 +79,11 @@ pnpm pact:audit:broker     # exit 1 if a Pact Broker is configured and any contr
 
 [`src/index.ts`](./src/index.ts) is a single self-contained script. Each slice maps to one v0.2 evidence path.
 
-1. **`exerciseOrderCreated` / `exerciseOrderShipped`** — the canonical consumer-side pattern. `new MessageConsumerPact(...)`, fluent `.given().expectsToReceive().withContent()`, then `withPactInteraction(pact, handler, { interactionId })`. The handler parses `message.contents` (Pact-JS types it as `unknown`) through a Zod schema before calling the business handler, which makes the type boundary explicit and surfaces drift between the pact file and the consumer code as a clear validation error. `interactionId` keeps audit rows stable across rewrites of the `expectsToReceive` text.
-2. **`injectStalePactFile`** — appends a message to the pact file by hand to simulate a contract that some other test no longer runs.
-3. **`recordShadowObservation`** — `appendLedgerEntry` with a consumer the pact files do not mention.
-4. **`runProviderVerification`** — `withProviderVerification` with `skipVerifier: true`. The wrapper parses the pact file and fans out one ledger row per interaction with `role: 'provider'` without loading or calling the real Verifier. In production drop the option and `@pact-foundation/pact` runs against a real provider service.
-5. **`simulateProductionObservation`** — `trace('handleOrderCreated', () => { tagPactInteraction({...}); handler(); })`. The `PactLedgerSpanProcessor` registered at `init()` time catches the span and writes a `source: production` row.
+1. **`exerciseOrderCreated` / `exerciseOrderShipped`**: the canonical consumer-side pattern. `new MessageConsumerPact(...)`, fluent `.given().expectsToReceive().withContent()`, then `withPactInteraction(pact, handler, { interactionId })`. The handler parses `message.contents` (Pact-JS types it as `unknown`) through a Zod schema before calling the business handler, which makes the type boundary explicit and surfaces drift between the pact file and the consumer code as a clear validation error. `interactionId` keeps audit rows stable across rewrites of the `expectsToReceive` text.
+2. **`injectStalePactFile`**: appends a message to the pact file by hand to simulate a contract that some other test no longer runs.
+3. **`recordShadowObservation`**: `appendLedgerEntry` with a consumer the pact files do not mention.
+4. **`runProviderVerification`**: `withProviderVerification` with `skipVerifier: true`. The wrapper parses the pact file and fans out one ledger row per interaction with `role: 'provider'` without loading or calling the real Verifier. In production drop the option and `@pact-foundation/pact` runs against a real provider service.
+5. **`simulateProductionObservation`**: `trace('handleOrderCreated', () => { tagPactInteraction({...}); handler(); })`. The `PactLedgerSpanProcessor` registered at `init()` time catches the span and writes a `source: production` row.
 
 In a real codebase the consumer-side pattern is the one you write per test. The other four are demo plumbing that simulates failure modes the audit catches.
 
@@ -106,6 +106,6 @@ If there is no local OTLP collector the demo still works; spans just have nowher
 
 ## Related
 
-- [`autotel-pact`](../../packages/autotel-pact/README.md) — the package this demo uses
+- [`autotel-pact`](../../packages/autotel-pact/README.md): the package this demo uses
 - [Pact documentation](https://docs.pact.io)
 - [Pact-Message overview](https://docs.pact.io/getting_started/how_pact_works#message-pact)

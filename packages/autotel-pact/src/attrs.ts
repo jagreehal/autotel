@@ -46,8 +46,6 @@ export function buildPactAttributes(
  * Helper that returns just the outcome attribute — stamped after the
  * handler resolves or rejects.
  */
-export function outcomeAttribute(
-  outcome: PactOutcome,
-): Record<string, string> {
+export function outcomeAttribute(outcome: PactOutcome): Record<string, string> {
   return { [PACT_ATTRS.OUTCOME]: outcome };
 }
