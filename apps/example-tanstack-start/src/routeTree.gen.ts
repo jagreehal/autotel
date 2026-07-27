@@ -11,9 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DemoBeforeLoadRouteImport } from './routes/demo/before-load'
+import { Route as DemoDistributedTracingRouteImport } from './routes/demo/distributed-tracing'
 import { Route as DemoErrorTrackingRouteImport } from './routes/demo/error-tracking'
 import { Route as DemoPlaygroundRouteImport } from './routes/demo/playground'
 import { Route as DemoTanstackQueryRouteImport } from './routes/demo/tanstack-query'
+import { Route as DemoApiDownstreamRouteImport } from './routes/demo/api.downstream'
 import { Route as DemoApiNamesRouteImport } from './routes/demo/api.names'
 import { Route as DemoApiTqTodosRouteImport } from './routes/demo/api.tq-todos'
 import { Route as DemoStartApiRequestRouteImport } from './routes/demo/start.api-request'
@@ -33,6 +35,11 @@ const DemoBeforeLoadRoute = DemoBeforeLoadRouteImport.update({
   path: '/demo/before-load',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoDistributedTracingRoute = DemoDistributedTracingRouteImport.update({
+  id: '/demo/distributed-tracing',
+  path: '/demo/distributed-tracing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoErrorTrackingRoute = DemoErrorTrackingRouteImport.update({
   id: '/demo/error-tracking',
   path: '/demo/error-tracking',
@@ -46,6 +53,11 @@ const DemoPlaygroundRoute = DemoPlaygroundRouteImport.update({
 const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   id: '/demo/tanstack-query',
   path: '/demo/tanstack-query',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoApiDownstreamRoute = DemoApiDownstreamRouteImport.update({
+  id: '/demo/api/downstream',
+  path: '/demo/api/downstream',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoApiNamesRoute = DemoApiNamesRouteImport.update({
@@ -92,9 +104,11 @@ const DemoStartSsrSpaModeRoute = DemoStartSsrSpaModeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/demo/before-load': typeof DemoBeforeLoadRoute
+  '/demo/distributed-tracing': typeof DemoDistributedTracingRoute
   '/demo/error-tracking': typeof DemoErrorTrackingRoute
   '/demo/playground': typeof DemoPlaygroundRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/demo/api/downstream': typeof DemoApiDownstreamRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/api/tq-todos': typeof DemoApiTqTodosRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
@@ -107,9 +121,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/demo/before-load': typeof DemoBeforeLoadRoute
+  '/demo/distributed-tracing': typeof DemoDistributedTracingRoute
   '/demo/error-tracking': typeof DemoErrorTrackingRoute
   '/demo/playground': typeof DemoPlaygroundRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/demo/api/downstream': typeof DemoApiDownstreamRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/api/tq-todos': typeof DemoApiTqTodosRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
@@ -123,9 +139,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/demo/before-load': typeof DemoBeforeLoadRoute
+  '/demo/distributed-tracing': typeof DemoDistributedTracingRoute
   '/demo/error-tracking': typeof DemoErrorTrackingRoute
   '/demo/playground': typeof DemoPlaygroundRoute
   '/demo/tanstack-query': typeof DemoTanstackQueryRoute
+  '/demo/api/downstream': typeof DemoApiDownstreamRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/api/tq-todos': typeof DemoApiTqTodosRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
@@ -140,9 +158,11 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/demo/before-load'
+    | '/demo/distributed-tracing'
     | '/demo/error-tracking'
     | '/demo/playground'
     | '/demo/tanstack-query'
+    | '/demo/api/downstream'
     | '/demo/api/names'
     | '/demo/api/tq-todos'
     | '/demo/start/api-request'
@@ -155,9 +175,11 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/demo/before-load'
+    | '/demo/distributed-tracing'
     | '/demo/error-tracking'
     | '/demo/playground'
     | '/demo/tanstack-query'
+    | '/demo/api/downstream'
     | '/demo/api/names'
     | '/demo/api/tq-todos'
     | '/demo/start/api-request'
@@ -170,9 +192,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/demo/before-load'
+    | '/demo/distributed-tracing'
     | '/demo/error-tracking'
     | '/demo/playground'
     | '/demo/tanstack-query'
+    | '/demo/api/downstream'
     | '/demo/api/names'
     | '/demo/api/tq-todos'
     | '/demo/start/api-request'
@@ -186,9 +210,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DemoBeforeLoadRoute: typeof DemoBeforeLoadRoute
+  DemoDistributedTracingRoute: typeof DemoDistributedTracingRoute
   DemoErrorTrackingRoute: typeof DemoErrorTrackingRoute
   DemoPlaygroundRoute: typeof DemoPlaygroundRoute
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute
+  DemoApiDownstreamRoute: typeof DemoApiDownstreamRoute
   DemoApiNamesRoute: typeof DemoApiNamesRoute
   DemoApiTqTodosRoute: typeof DemoApiTqTodosRoute
   DemoStartApiRequestRoute: typeof DemoStartApiRequestRoute
@@ -215,6 +241,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoBeforeLoadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo/distributed-tracing': {
+      id: '/demo/distributed-tracing'
+      path: '/demo/distributed-tracing'
+      fullPath: '/demo/distributed-tracing'
+      preLoaderRoute: typeof DemoDistributedTracingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/error-tracking': {
       id: '/demo/error-tracking'
       path: '/demo/error-tracking'
@@ -234,6 +267,13 @@ declare module '@tanstack/react-router' {
       path: '/demo/tanstack-query'
       fullPath: '/demo/tanstack-query'
       preLoaderRoute: typeof DemoTanstackQueryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo/api/downstream': {
+      id: '/demo/api/downstream'
+      path: '/demo/api/downstream'
+      fullPath: '/demo/api/downstream'
+      preLoaderRoute: typeof DemoApiDownstreamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/api/names': {
@@ -298,9 +338,11 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DemoBeforeLoadRoute: DemoBeforeLoadRoute,
+  DemoDistributedTracingRoute: DemoDistributedTracingRoute,
   DemoErrorTrackingRoute: DemoErrorTrackingRoute,
   DemoPlaygroundRoute: DemoPlaygroundRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
+  DemoApiDownstreamRoute: DemoApiDownstreamRoute,
   DemoApiNamesRoute: DemoApiNamesRoute,
   DemoApiTqTodosRoute: DemoApiTqTodosRoute,
   DemoStartApiRequestRoute: DemoStartApiRequestRoute,

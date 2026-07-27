@@ -1,6 +1,7 @@
 import {
   context,
   propagation,
+  trace as otelTrace,
   type Context,
   ROOT_CONTEXT,
 } from '@opentelemetry/api';
@@ -141,4 +142,33 @@ export function runInContext<T>(parentContext: Context, fn: () => T): T {
  */
 export function getActiveContext(): Context {
   return context.active();
+}
+
+/**
+ * The `traceparent` header value for the active context, or `''` when there is
+ * no active span. Use it to log the id you send downstream.
+ */
+export function getTraceParent(ctx?: Context): string {
+  const carrier: Record<string, string> = {};
+  propagation.inject(ctx ?? context.active(), carrier);
+  return carrier.traceparent ?? '';
+}
+
+/**
+ * The `tracestate` header value for the active context, or `''` when unset.
+ */
+export function getTraceState(ctx?: Context): string {
+  const carrier: Record<string, string> = {};
+  propagation.inject(ctx ?? context.active(), carrier);
+  return carrier.tracestate ?? '';
+}
+
+/** Trace id of the active span, or `undefined` outside a span. */
+export function getCurrentTraceId(ctx?: Context): string | undefined {
+  return otelTrace.getSpanContext(ctx ?? context.active())?.traceId;
+}
+
+/** Span id of the active span, or `undefined` outside a span. */
+export function getCurrentSpanId(ctx?: Context): string | undefined {
+  return otelTrace.getSpanContext(ctx ?? context.active())?.spanId;
 }

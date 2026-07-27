@@ -89,8 +89,7 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "README.md",
-    "skills"
+    "README.md"
   ],
   "scripts": {
     "build": "tsdown",

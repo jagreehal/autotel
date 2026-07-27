@@ -43,7 +43,7 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 | `pnpm format`  | Format with Prettier                     |
 | `pnpm quality` | Build + lint + format + typecheck + test |
 
-**Agent Skills:** Skills ship inside each package under `skills/` (e.g. `packages/autotel/skills/`, `packages/autotel-cloudflare/skills/`). They follow the open [Agent Skills specification](https://agentskills.io/specification). Skill-aware agents discover them by scanning the filesystem for `SKILL.md` files, no consumer-side CLI required.
+**Agent Skills:** Skills live at the repo root under `skills/`, grouped into `core/`, `frameworks/`, `integrations/`, and `extending/` (build-your-own on the public extension points). They follow the open [Agent Skills specification](https://agentskills.io/specification). The [skills CLI](https://github.com/vercel-labs/skills) discovers `skills/<category>/<name>/SKILL.md` at the repo root, so consumers add them by name (`npx skills add jagreehal/autotel --skill autotel-tanstack`). Skills no longer ship inside the npm package tarballs; the repo-root layout is the single source of truth.
 
 ---
 
