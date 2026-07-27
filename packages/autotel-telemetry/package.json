@@ -1,6 +1,6 @@
 {
   "name": "autotel-telemetry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Opt-in CLI usage telemetry for Autotel-powered tools",
   "license": "Apache-2.0",
   "private": true,
