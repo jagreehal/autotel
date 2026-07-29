@@ -53,21 +53,22 @@ Wrap a handler and autotel emits one canonical wide event per request (full cont
 
 ## Agent Skills
 
-autotel ships **35 Agent Skills** for AI assistants (Claude Code, Cursor, Windsurf, Continue, …): one per package, plus a `review-otel-patterns` skill that surveys 13+ frameworks. Compatible agents discover them automatically.
+autotel ships **45 Agent Skills** for AI assistants (Claude Code, Cursor, Windsurf, Continue, …), organized under [`skills/`](./skills) by `core/`, `frameworks/`, `integrations/`, and `extending/` (build your own subscriber, exporter, or framework adapter). Add one, or the whole catalog, with the skills CLI:
 
 ```bash
-npx skills add https://github.com/jagreehal/autotel
+npx skills add jagreehal/autotel                     # browse and pick
+npx skills add jagreehal/autotel --skill autotel-core
+npx skills add jagreehal/autotel --skill autotel-tanstack
 ```
 
-Or browse the [`skills/`](./skills) directory directly. Highlights:
+Highlights:
 
-- **[`review-otel-patterns`](./packages/autotel/skills/review-otel-patterns/SKILL.md)**: audit a codebase for OTel anti-patterns. Covers Next.js, Nuxt, Nitro, TanStack Start, Hono, Express, Fastify, Elysia, NestJS, Cloudflare Workers, AWS Lambda, edge runtimes, and standalone Node.
-- **[`analyze-traces`](./packages/autotel/skills/analyze-traces/SKILL.md)**: read OTLP traces from any backend, local dump, or in-memory exporter to debug failures, latency, and cardinality issues.
-- **[`migrate-to-autotel`](./packages/autotel/skills/migrate-to-autotel/SKILL.md)**: cut over from raw OTel SDK, Sentry, Datadog APM, New Relic, Honeycomb Beelines, or OpenTracing.
-- **[`tune-sampling`](./packages/autotel/skills/tune-sampling/SKILL.md)**: head and tail sampling strategies, AI-aware and Cloudflare-aware.
-- **[`build-audit-trails`](./packages/autotel/skills/build-audit-trails/SKILL.md)**: tamper-aware audit logs on top of OTel spans.
-- **[`debug-missing-spans`](./packages/autotel/skills/debug-missing-spans/SKILL.md)**: top-to-bottom troubleshooting walkthrough.
-- **[`create-autotel-adapter`](./skills/create-autotel-adapter/SKILL.md)** / **[`create-autotel-instrumentation`](./skills/create-autotel-instrumentation/SKILL.md)** / **[`create-autotel-exporter`](./skills/create-autotel-exporter/SKILL.md)**: author new packages following autotel conventions, with templates included.
+- **[`review-otel-patterns`](./skills/core/review-otel-patterns/SKILL.md)**: audit a codebase for OTel anti-patterns. Covers Next.js, Nuxt, Nitro, TanStack Start, Hono, Express, Fastify, Elysia, NestJS, Cloudflare Workers, AWS Lambda, edge runtimes, and standalone Node.
+- **[`analyze-traces`](./skills/core/analyze-traces/SKILL.md)**: read OTLP traces from any backend, local dump, or in-memory exporter to debug failures, latency, and cardinality issues.
+- **[`migrate-to-autotel`](./skills/core/migrate-to-autotel/SKILL.md)**: cut over from raw OTel SDK, Sentry, Datadog APM, New Relic, Honeycomb Beelines, or OpenTracing.
+- **[`tune-sampling`](./skills/core/tune-sampling/SKILL.md)**: head and tail sampling strategies, AI-aware and Cloudflare-aware.
+- **[`build-audit-trails`](./skills/core/build-audit-trails/SKILL.md)**: tamper-aware audit logs on top of OTel spans.
+- **[`debug-missing-spans`](./skills/core/debug-missing-spans/SKILL.md)**: top-to-bottom troubleshooting walkthrough.
 
 See [`skills/README.md`](./skills/README.md) for the full index.
 

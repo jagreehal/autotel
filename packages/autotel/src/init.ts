@@ -79,6 +79,12 @@ import {
 } from './processors/canonical-log-line-processor';
 import type { EventsConfig } from './events-config';
 import { resolveDevtoolsConfig, type AutotelDevtoolsConfig } from './devtools';
+import {
+  installProcessHandlers,
+  uninstallProcessHandlers,
+  type ProcessHandlersConfig,
+} from './process-handlers';
+import { shutdown } from './shutdown';
 
 /**
  * Silent logger (no-op) - used as default when user doesn't provide one.
@@ -332,6 +338,16 @@ function formatEndpointUrl(
 export interface AutotelConfig {
   /** Service name (required) */
   service: string;
+
+  /**
+   * Opt-in Node.js process handlers installed after telemetry is initialized.
+   *
+   * `true` (or `{}`) enables the defaults: flush-and-exit on SIGTERM/SIGINT
+   * and on fatal errors, bounded by a 2s shutdown timeout. Pass a config
+   * object to override individual defaults. Omit (or pass `false`) to leave
+   * process lifecycle management to the application.
+   */
+  processHandlers?: boolean | ProcessHandlersConfig;
 
   /**
    * Local developer UX for autotel-devtools.
@@ -2103,6 +2119,15 @@ export function init(cfg: AutotelConfig): void {
   }
 
   initialized = true;
+  const processHandlers = mergedConfig.processHandlers;
+  if (processHandlers) {
+    installProcessHandlers(
+      processHandlers === true ? {} : processHandlers,
+      shutdown,
+    );
+  } else {
+    uninstallProcessHandlers();
+  }
 }
 
 /**

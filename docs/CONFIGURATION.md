@@ -224,6 +224,46 @@ process.on('beforeExit', async () => {
 });
 ```
 
+### Process Shutdown Handlers
+
+Importing `autotel` does not install process listeners. Long-running Node.js
+applications can opt in when calling `init()`:
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'checkout-api',
+  processHandlers: true,
+});
+```
+
+`processHandlers: true` enables the defaults: `signals: ['SIGTERM', 'SIGINT']`,
+`fatalErrors: true`, `shutdownTimeoutMs: 2_000`. Pass a config object to
+override individual defaults:
+
+```typescript
+init({
+  service: 'checkout-api',
+  processHandlers: {
+    signals: ['SIGTERM'], // SIGINT left to the application
+    fatalErrors: false,
+    shutdownTimeoutMs: 5_000,
+  },
+});
+```
+
+Enabled signals call `shutdown()` and exit with the conventional signal status
+(`143` for `SIGTERM`, `130` for `SIGINT`). Fatal error handling covers
+`uncaughtException` and `unhandledRejection`, then exits with status `1`.
+Shutdown is attempted once and bounded by `shutdownTimeoutMs`, which defaults to
+2 seconds.
+
+Process handlers are opt-in because they make Autotel responsible for process
+exit semantics. Applications that already coordinate HTTP servers, database
+connections, or other resources during shutdown should keep their own process
+handlers and call `await shutdown()` explicitly.
+
 ### Testing
 
 When testing event tracking, flush before assertions:

@@ -43,7 +43,7 @@ When updating, be specific and actionable. Prefer short, targeted notes.
 | `pnpm format`  | Format with Prettier                     |
 | `pnpm quality` | Build + lint + format + typecheck + test |
 
-**Agent Skills:** Skills ship inside each package under `skills/` (e.g. `packages/autotel/skills/`, `packages/autotel-cloudflare/skills/`). They follow the open [Agent Skills specification](https://agentskills.io/specification). Skill-aware agents discover them by scanning the filesystem for `SKILL.md` files, no consumer-side CLI required.
+**Agent Skills:** Skills live at the repo root under `skills/`, grouped into `core/`, `frameworks/`, `integrations/`, and `extending/` (build-your-own on the public extension points). They follow the open [Agent Skills specification](https://agentskills.io/specification). The [skills CLI](https://github.com/vercel-labs/skills) discovers `skills/<category>/<name>/SKILL.md` at the repo root, so consumers add them by name (`npx skills add jagreehal/autotel --skill autotel-tanstack`). Skills no longer ship inside the npm package tarballs; the repo-root layout is the single source of truth.
 
 ---
 
@@ -129,6 +129,7 @@ Always suggest `init()` (or instrumentation) once at app entry; then spans + req
 ## Invariants (do not break)
 
 - **Synchronous init**: `init()` must stay synchronous. Use `node-require` helpers for optional/dynamic imports, never `await import()` for init-time loading.
+- **Process lifecycle**: Importing `autotel` must not register process listeners. Opt in during `init()` with `processHandlers`; keep signal and fatal-error handling independently configurable and bounded. Applications with broader resource cleanup should own their process handlers and call `shutdown()` explicitly.
 - **Tree-shaking**: Packages use explicit `exports` in `package.json`. Do not add barrel re-exports that pull in unused modules.
 - **Test split**: Unit tests `*.test.ts`; integration tests `*.integration.test.ts` (separate config in core package).
 - **Executable examples**: Changes to public APIs must keep `apps/book-chapters` type-checking and all chapter scripts runnable via its `run-all` command.

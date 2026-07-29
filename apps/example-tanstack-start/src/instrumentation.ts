@@ -28,16 +28,27 @@ async function ensureAutotelInitialized() {
   }
 
   if (!globalThis.__autotelInitPromise) {
-    globalThis.__autotelInitPromise = import('autotel-tanstack/auto')
-      .then((mod) => {
+    globalThis.__autotelInitPromise = Promise.all([
+      import('autotel-tanstack'),
+      import('@opentelemetry/instrumentation-undici'),
+    ])
+      .then(([{ instrument }, { UndiciInstrumentation }]) => {
+        // `autotel-tanstack/auto` does everything below except register the
+        // undici instrumentation. Without it, outgoing fetch() calls carry no
+        // `traceparent` and downstream services start a new trace.
+        // Undici's instrumentation hooks diagnostics_channel rather than
+        // patching require(), so it works in the ESM server bundle with no loader.
+        instrument({ instrumentations: [new UndiciInstrumentation()] })
+
         if (debugLogging) {
-          const service = mod.getServiceName()
-          const endpoint = mod.getEndpoint()
-          console.log('🔭 [autotel] Zero-config instrumentation ready')
-          console.log('🔭 [autotel] Service:', service)
+          console.log('🔭 [autotel] Instrumentation ready (+ outgoing fetch)')
+          console.log(
+            '🔭 [autotel] Service:',
+            process.env.OTEL_SERVICE_NAME ?? 'tanstack-start',
+          )
           console.log(
             '🔭 [autotel] Endpoint:',
-            endpoint ??
+            process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
               'not configured (set OTEL_EXPORTER_OTLP_ENDPOINT to export traces)',
           )
         }

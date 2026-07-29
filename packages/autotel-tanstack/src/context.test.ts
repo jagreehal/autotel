@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import * as serverContext from './context';
+import * as browserContext from './browser/context';
 import {
   extractContextFromRequest,
   injectContextToHeaders,
@@ -85,6 +87,23 @@ describe('context', () => {
       });
       expect(headers.get('Content-Type')).toBe('application/json');
       expect(headers.get('X-Custom')).toBe('value');
+    });
+  });
+
+  // The browser build is swapped in via package.json "browser" exports, so an
+  // export present in only one half is a runtime crash on the other.
+  it('server and browser builds expose the same exports', () => {
+    expect(Object.keys(serverContext).sort()).toEqual(
+      Object.keys(browserContext).sort(),
+    );
+  });
+
+  describe('active-context accessors outside a span', () => {
+    it('return empty/undefined rather than throwing', () => {
+      expect(serverContext.getTraceParent()).toBe('');
+      expect(serverContext.getTraceState()).toBe('');
+      expect(serverContext.getCurrentTraceId()).toBeUndefined();
+      expect(serverContext.getCurrentSpanId()).toBeUndefined();
     });
   });
 });
