@@ -59,6 +59,11 @@ export {
   createTracedHeaders,
   runInContext,
   getActiveContext,
+  getTraceParent,
+  getTraceState,
+  getCurrentTraceId,
+  getCurrentSpanId,
+  type HeadersInitType,
 } from './context';
 
 // Debug Headers

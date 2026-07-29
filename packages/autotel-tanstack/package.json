@@ -96,8 +96,7 @@
   },
   "files": [
     "dist",
-    "README.md",
-    "skills"
+    "README.md"
   ],
   "scripts": {
     "build": "tsdown",

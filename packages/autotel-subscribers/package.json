@@ -76,8 +76,7 @@
   "files": [
     "dist",
     "examples",
-    "README.md",
-    "skills"
+    "README.md"
   ],
   "scripts": {
     "build": "tsdown",

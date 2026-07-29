@@ -7,6 +7,52 @@ import { getEventQueue, resetEventQueue } from './track';
 import { resetEvents } from './event';
 import { resetMetrics } from './metric';
 import { getForceFlushableProvider } from './tracer-provider';
+import { uninstallProcessHandlers } from './process-handlers';
+
+/**
+ * Error codes that mean "the OTLP endpoint wasn't reachable" — expected and
+ * harmless when no collector is configured. Deliberately limited to
+ * connection-establishment failures (refused / DNS), not post-connection
+ * errors like ECONNRESET or ETIMEDOUT, which can indicate a real problem
+ * talking to a configured backend and should surface.
+ */
+const UNREACHABLE_ENDPOINT_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+
+function errorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return undefined;
+}
+
+/**
+ * True when the error (or every error it wraps) is an unreachable-endpoint
+ * failure. Traverses `AggregateError.errors` and the `cause` chain, since the
+ * SDK often wraps the underlying network error.
+ */
+function isUnreachableEndpointError(error: unknown, depth = 0): boolean {
+  if (depth > 5 || error === null || typeof error !== 'object') return false;
+
+  if (error instanceof AggregateError) {
+    return (
+      error.errors.length > 0 &&
+      error.errors.every((e) => isUnreachableEndpointError(e, depth + 1))
+    );
+  }
+
+  const code = errorCode(error);
+  if (code && UNREACHABLE_ENDPOINT_CODES.has(code)) return true;
+
+  const cause = (error as { cause?: unknown }).cause;
+  return cause !== undefined && cause !== error
+    ? isUnreachableEndpointError(cause, depth + 1)
+    : false;
+}
 
 /**
  * Flush all pending telemetry
@@ -151,22 +197,19 @@ export async function shutdown(): Promise<void> {
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
 
-    // Ignore ECONNREFUSED errors - this happens when no OTLP endpoint was configured
-    // The SDK tries to flush exporters that don't exist, which is harmless
-    const isConnectionRefused =
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ECONNREFUSED';
-
-    if (!isConnectionRefused) {
-      // Only store/log non-connection errors
+    // Ignore unreachable-endpoint errors - this happens when no OTLP endpoint
+    // was configured. The SDK tries to flush exporters that can't connect,
+    // which is harmless. Checks the cause chain / AggregateError too, since the
+    // SDK usually wraps the underlying network error.
+    if (!isUnreachableEndpointError(error)) {
+      // Only store/log real shutdown errors
       if (!shutdownError) {
         shutdownError = err;
       }
       logger.error({ err }, '[autotel] SDK shutdown failed');
     }
   } finally {
+    uninstallProcessHandlers();
     await _closeEmbeddedDevtools();
 
     // Clean up singleton Maps and queues to prevent memory leaks
@@ -186,49 +229,3 @@ export async function shutdown(): Promise<void> {
     throw shutdownError;
   }
 }
-
-/**
- * Register automatic shutdown hooks for common signals
- *
- * Handles:
- * - SIGTERM (Docker/K8s graceful shutdown)
- * - SIGINT (Ctrl+C)
- *
- * @internal Called automatically on module load
- */
-function registerShutdownHooks(): void {
-  if (typeof process === 'undefined') return; // Not in Node.js
-
-  const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
-  let shuttingDown = false;
-
-  for (const signal of signals) {
-    process.on(signal, async () => {
-      if (shuttingDown) return; // Prevent double shutdown
-      shuttingDown = true;
-
-      if (process.env.NODE_ENV !== 'test') {
-        getLogger().info(
-          {},
-          `[autotel] Received ${signal}, flushing telemetry...`,
-        );
-      }
-
-      try {
-        await shutdown();
-      } catch (error) {
-        getLogger().error(
-          {
-            err: error instanceof Error ? error : undefined,
-          },
-          '[autotel] Error during shutdown',
-        );
-      } finally {
-        process.exit(0);
-      }
-    });
-  }
-}
-
-// Auto-register shutdown hooks
-registerShutdownHooks();

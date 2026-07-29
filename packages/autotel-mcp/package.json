@@ -20,7 +20,6 @@
     "dist",
     "bin",
     "fixtures",
-    "skills",
     "README.md"
   ],
   "scripts": {

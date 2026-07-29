@@ -36,6 +36,7 @@ export {
   isLoggerLocked,
   type AutotelConfig,
 } from './init';
+export type { ProcessHandlersConfig } from './process-handlers';
 
 // Baggage span processor
 export {
