@@ -1,5 +1,17 @@
 # autotel-tanstack
 
+## 1.13.45
+
+### Patch Changes
+
+- 756345d: Skills no longer ship inside the npm package tarballs. They now live at the repo root under `skills/`, grouped into `core/`, `frameworks/`, `integrations/`, and `contributing/`, as a single source of truth discovered by the skills CLI (`npx skills add jagreehal/autotel --skill <name>`). `skills` is removed from each package's `files` field, so installing a package no longer adds its skill to `node_modules`. Install skills explicitly with the CLI instead.
+- 756345d: Add the server implementations of `getTraceParent`, `getTraceState`, `getCurrentTraceId` and `getCurrentSpanId`. The browser build exported all four, the server build exported none of them, so importing any of the four from `autotel-tanstack/context` crashed on the server. A new test compares the export keys of both builds, so the next mismatch fails in CI instead of at runtime.
+- Updated dependencies [756345d]
+- Updated dependencies [756345d]
+  - autotel@6.0.0
+  - autotel-adapters@2.0.1
+  - autotel-edge@4.0.1
+
 ## 1.13.44
 
 ### Patch Changes

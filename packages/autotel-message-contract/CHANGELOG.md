@@ -1,5 +1,13 @@
 # autotel-message-contract
 
+## 5.0.0
+
+### Patch Changes
+
+- Updated dependencies [756345d]
+- Updated dependencies [756345d]
+  - autotel@6.0.0
+
 ## 4.0.0
 
 ### Patch Changes
