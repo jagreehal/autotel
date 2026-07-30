@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 11.0.0
+
+### Patch Changes
+
+- Updated dependencies [85a0e88]
+  - autotel@6.1.0
+
 ## 10.0.0
 
 ### Patch Changes

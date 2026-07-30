@@ -1,5 +1,11 @@
 # @jagreehal/example-ai-sdk-observer
 
+## 0.0.9
+
+### Patch Changes
+
+- autotel-genai@0.3.10
+
 ## 0.0.8
 
 ### Patch Changes
