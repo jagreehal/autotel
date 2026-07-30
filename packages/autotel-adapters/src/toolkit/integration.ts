@@ -33,6 +33,8 @@ export interface ExtractedRequest {
 
 export interface IntegratedCompletionOptions {
   autoEmit?: boolean;
+  /** Return false for framework control-flow throws that are not failures. */
+  isError?: (error: unknown) => boolean;
 }
 
 export type TracedOptionInput = RouteAdapterOptions & {
@@ -71,6 +73,7 @@ export interface FrameworkIntegrationHelpers<TCtx> {
     ctx: TCtx,
     options: FrameworkHandlerOptions | undefined,
     handler: (handle: FrameworkRequestHandle) => Promise<T>,
+    completion?: Pick<IntegratedCompletionOptions, 'isError'>,
   ) => Promise<T>;
 }
 
@@ -116,9 +119,13 @@ export async function runWithIntegratedHandle<T>(
     return completeIntegratedRequest(handle, options, result);
   } catch (error) {
     if (options?.autoEmit !== false) {
-      await handle.finish({
-        error: error instanceof Error ? error : new Error(String(error)),
-      });
+      if (options?.isError?.(error) === false) {
+        await handle.finish({});
+      } else {
+        await handle.finish({
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
+      }
     }
     throw error;
   }
@@ -259,7 +266,7 @@ export function defineFrameworkIntegration<TCtx>(
       return buildHandle(spec, ctx, traceCtx, options);
     },
 
-    runTraced(ctx, options, handler) {
+    runTraced(ctx, options, handler, completion) {
       const extracted = spec.extractRequest(ctx);
       if (
         !shouldInstrumentPath(extracted.path, toRouteAdapterOptions(options))
@@ -271,10 +278,12 @@ export function defineFrameworkIntegration<TCtx>(
         options?.spanName ?? resolveSpanName(spec, ctx, extracted);
 
       // The wrapped factory is async, so the call always yields a Promise.
-      return withTracing({ name: spanName })((traceCtx) => async () => {
-        const handle = buildHandle(spec, ctx, traceCtx, options ?? {});
-        return handler(handle);
-      })() as ReturnType<typeof handler>;
+      return withTracing({ name: spanName, isError: completion?.isError })(
+        (traceCtx) => async () => {
+          const handle = buildHandle(spec, ctx, traceCtx, options ?? {});
+          return handler(handle);
+        },
+      )() as ReturnType<typeof handler>;
     },
   };
 }

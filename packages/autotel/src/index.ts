@@ -143,6 +143,7 @@ export {
   hasRequestContext,
   runWithRequestContext,
   type RequestLogger,
+  type RequestLogLevel,
   type RequestLogSnapshot,
   type RequestLoggerOptions,
   type ForkLifecycle,

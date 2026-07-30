@@ -65,4 +65,56 @@ describe('createDrainPipeline', () => {
     await drain.flush();
     expect(batchDrain).toHaveBeenCalledWith([2, 3]);
   });
+
+  it('drops permanent failures without retrying them', async () => {
+    const error = new Error('bad request');
+    const batchDrain = vi.fn(async () => {
+      throw error;
+    });
+    const onDropped = vi.fn();
+    const shouldRetry = vi.fn(() => false);
+    const drain = createDrainPipeline<number>({
+      batch: { size: 1, intervalMs: 1000 },
+      retry: {
+        maxAttempts: 3,
+        initialDelayMs: 1,
+        jitter: false,
+        shouldRetry,
+      },
+      onDropped,
+    })(batchDrain);
+
+    drain(7);
+    await drain.flush();
+
+    expect(batchDrain).toHaveBeenCalledTimes(1);
+    expect(shouldRetry).toHaveBeenCalledWith(error, 1, [7]);
+    expect(onDropped).toHaveBeenCalledWith([7], error);
+  });
+
+  it('stops deterministically when retry classification throws', async () => {
+    const classifierError = new Error('classifier failed');
+    const batchDrain = vi.fn(async () => {
+      throw new Error('transient');
+    });
+    const onDropped = vi.fn();
+    const drain = createDrainPipeline<number>({
+      batch: { size: 1, intervalMs: 1000 },
+      retry: {
+        maxAttempts: 3,
+        initialDelayMs: 1,
+        jitter: false,
+        shouldRetry: () => {
+          throw classifierError;
+        },
+      },
+      onDropped,
+    })(batchDrain);
+
+    drain(9);
+    await drain.flush();
+
+    expect(batchDrain).toHaveBeenCalledTimes(1);
+    expect(onDropped).toHaveBeenCalledWith([9], classifierError);
+  });
 });

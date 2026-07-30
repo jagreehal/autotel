@@ -211,6 +211,77 @@ export const COMMANDS: CommandSpec[] = [
     supportsJson: true,
   },
   {
+    name: 'map',
+    description:
+      'Score the observability of every entry point in your project (static analysis)',
+    args: [
+      {
+        name: 'entry',
+        required: false,
+        description: 'Inspect one entry point by route or file path',
+      },
+    ],
+    flags: [
+      ...GLOBAL_FLAGS,
+      ...AGENT_FLAGS,
+      {
+        name: '--framework',
+        takesValue: true,
+        description:
+          'Override framework detection (next, nitro, tanstack-start, sveltekit, hono, express, fastify, elysia, cloudflare)',
+      },
+      {
+        name: '--all',
+        description: 'Show every entry point as a check matrix',
+      },
+      {
+        name: '--min-score',
+        takesValue: true,
+        description: 'Exit 1 when the global score is below this threshold',
+      },
+      {
+        name: '--baseline',
+        takesValue: true,
+        description:
+          'Compare against a committed autotel.map.json and exit 1 on regression (path, or git:<ref>)',
+      },
+      { name: '--no-write', description: 'Skip writing autotel.map.json' },
+      {
+        name: '--workspace-root',
+        description: 'Scan from the workspace root',
+      },
+    ],
+    mutating: false,
+    network: false,
+    writesFiles: true,
+    supportsDryRun: false,
+    requiresPackageJson: true,
+    mayReadEnv: false,
+    supportsJson: true,
+    examples: [
+      {
+        description: 'Score this project and write autotel.map.json',
+        command: 'autotel map',
+      },
+      {
+        description: 'Every entry point, as a check matrix',
+        command: 'autotel map --all',
+      },
+      {
+        description: 'Explain one entry point and how to fix it',
+        command: 'autotel map app/api/checkout/route.ts',
+      },
+      {
+        description: 'Gate CI on a minimum score',
+        command: 'autotel map --min-score 70 --json',
+      },
+      {
+        description: 'Fail the build when a check regresses against main',
+        command: 'autotel map --baseline git:origin/main',
+      },
+    ],
+  },
+  {
     name: 'codemod trace',
     description:
       'Wrap functions in trace() with span name from function/variable/method name',

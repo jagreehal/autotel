@@ -1,7 +1,11 @@
 ---
 name: autotel-core
 description: >
-  When to use trace vs span vs request logger vs events in Autotel. Init once at startup, package exports (autotel, autotel/event, autotel/testing). Use for setup and choosing the right API.
+  Explains when to reach for trace vs span vs request logger vs events in Autotel,
+  and the package exports each lives behind. Use this skill when setting up autotel,
+  calling init(), or choosing between the core APIs. Do not use for a specific
+  framework's wiring — use skill autotel-frameworks or skill autotel-adapters — or
+  for finding which handlers are uninstrumented — use skill find-observability-gaps.
 ---
 
 # Autotel: Core
@@ -20,9 +24,14 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 | Parse API errors (client)             | `parseError(err)` → `message`, `why`, `fix`, `link`              | `autotel`                              |
 | Product/analytics events              | `track(name, attrs)` or `Event` from `autotel/event`             | `autotel`, `autotel/event`             |
 | Init (once at startup)                | `init({ service, ... })`                                         | `autotel` or `autotel/instrumentation` |
+| Same error thrown from many places    | `defineErrorCatalog(ns, entries)` → typed builders + `.match()`  | `autotel`                              |
+| Error budgets and burn-rate alerts    | `createSloTracker()`, `evaluateBurnRateAlert()`                  | `autotel/slo`                          |
+| Flush telemetry on SIGTERM / crash    | `init({ processHandlers: true })`                                | `autotel`                              |
 | Testing                               | `createTraceCollector()`, `InMemorySpanExporter`                 | `autotel/testing`, `autotel/exporters` |
 
 Request logger requires an active span. Wrap HTTP handlers with `trace()` or framework middleware that creates a span, then call `getRequestLogger()` inside.
+
+`processHandlers` is opt-in: importing `autotel` registers no process listeners. Pass `true` for the defaults (SIGTERM/SIGINT plus fatal errors, 2s shutdown timeout), or an object to override `signals`, `fatalErrors`, or `shutdownTimeoutMs`. Leave it off and call `shutdown()` from your own handler when the app already owns its lifecycle.
 
 Backend config rule of thumb: use `endpoint` for one OTLP destination, `destinations` for explicit OTLP fan-out, and `spanProcessors` / `spanExporters` only when you need full manual control.
 

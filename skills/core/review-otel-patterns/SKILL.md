@@ -18,6 +18,14 @@ description: >
 
 Review and improve OpenTelemetry instrumentation in TypeScript/JavaScript codebases using autotel. Replace ad-hoc tracing with idiomatic OTel-native spans, metrics and structured logs that work across every major framework and edge runtime. Without vendor lock-in.
 
+## Start with the scanner
+
+Before reviewing a whole repo by hand, run `npx autotel map --json --no-write`. It
+finds every entry point, names which are dark, and carries a `fix` with each
+finding. Work its ranked list first, then use this skill for the judgement it
+cannot make: span naming, cardinality, what belongs in a wide event, processor
+and backend configuration. Skill `find-observability-gaps` covers the scanner.
+
 ## When to use
 
 - Setting up autotel in a new or existing project (any supported framework)

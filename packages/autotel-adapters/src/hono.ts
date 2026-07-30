@@ -74,7 +74,10 @@ export function autotelMiddleware(options: HonoWithAutotelOptions = {}) {
       try {
         await handle.runWith(() => next());
         if (options.autoEmit !== false) {
-          await handle.finish({ status: c.res.status });
+          /* Hono finalizes `c.res` after middleware returns. Assign the observed
+             response here so stream completion, cancellation, and failure
+             drive the request snapshot without locking the original body. */
+          c.res = await handle.finishResponse(c.res);
         }
       } catch (error) {
         if (options.autoEmit !== false) {

@@ -110,6 +110,33 @@ They serve different purposes:
 
 Use **both together**: Pino for continuous logging + `getRequestLogger()` for the one snapshot at the end of each request.
 
+## Snapshot severity
+
+The request snapshot carries an `autotel.log.level` attribute. Calling
+`.warn()` sets it to `warn` and `.error()` sets it to `error`, so most requests
+never need you to touch it.
+
+Two cases need you to say it out loud. A request that degraded without logging
+anything, and a request that logged a warning you do not want colouring the
+whole snapshot:
+
+```typescript
+const log = getRequestLogger(ctx);
+
+const inventory = await checkStock(sku);
+if (inventory.stale) {
+  log.setLevel('warn'); // served from a stale cache, nothing to log
+}
+```
+
+`setLevel()` takes `'debug' | 'info' | 'warn' | 'error'`, adds no log event, and
+records no exception. An explicit level wins: a later `.warn()` or `.error()`
+leaves your choice alone rather than overwriting it. Calls after `.emitNow()`
+are ignored, because the snapshot has already left.
+
+Use it to make severity searchable when the interesting thing is the outcome
+rather than a message.
+
 ## Examples
 
 - [`example-pino`](https://github.com/jagreehal/autotel/tree/main/apps/example-pino): Pino as first-class logger with `init({ logger })` and trace context injection.

@@ -131,6 +131,26 @@ export interface AddOptions extends GlobalOptions {
 }
 
 /**
+ * Map command options
+ */
+export interface MapOptions extends GlobalOptions {
+  /** Inspect one entry point by route path or file path. */
+  entry?: string;
+  /** Override framework detection. */
+  framework?: string;
+  /** Show every entry point as a check matrix. */
+  all: boolean;
+  /** Exit 1 when the global score is below this threshold. */
+  minScore?: string;
+  /** Compare against a committed map: a path, `git:<ref>`, or `true`. */
+  baseline?: string | boolean;
+  /** Write `autotel.map.json`. */
+  write: boolean;
+  json: boolean;
+  outputFile?: string;
+}
+
+/**
  * Codemod trace command options
  */
 export interface CodemodTraceOptions extends GlobalOptions {

@@ -28,6 +28,7 @@ export type {
   InitOptions,
   DoctorOptions,
   AddOptions,
+  MapOptions,
   CodemodTraceOptions,
 } from './project';
 

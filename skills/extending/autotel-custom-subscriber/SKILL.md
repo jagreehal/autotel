@@ -1,7 +1,13 @@
 ---
 name: autotel-custom-subscriber
 description: >
-  Use this skill when routing autotel product events (track(), Event) to a destination that has no built-in subscriber — a data warehouse, an internal queue, a custom HTTP sink. Implement the EventSubscriber interface (trackEvent, trackFunnelStep, trackOutcome, trackValue) with zero runtime deps, or extend the base class for retry and graceful shutdown, then register via init({ subscribers }). Also covers defineEnricher for adding computed fields to every event.
+  Routes autotel product events (track(), Event) to a destination with no built-in
+  subscriber by implementing the EventSubscriber interface or extending its base
+  class for retry and graceful shutdown, plus defineEnricher for computed fields.
+  Use this skill when sending events to a warehouse, internal queue, or custom HTTP
+  sink. Do not use for the shipped PostHog, Mixpanel, Amplitude, Segment, Slack, or
+  webhook sinks — use skill autotel-subscribers — or for exporting spans, which
+  skill autotel-custom-exporter covers.
 ---
 
 # autotel-custom-subscriber
@@ -123,6 +129,18 @@ export class WarehouseSubscriber extends EventSubscriber {
 ```
 
 The base normalizes every track call into one `EventPayload`, so you write one `sendToDestination` instead of four track methods.
+
+When you build the sink yourself with `createDrainPipeline` from `autotel/drain-pipeline`, classify failures so permanent ones are not retried:
+
+```ts
+retry: {
+  maxAttempts: 3,
+  backoff: 'exponential',
+  shouldRetry: (error) => !isClientError(error), // 4xx will fail again
+}
+```
+
+`shouldRetry(error, attempt, batch)` defaults to retrying everything. Returning `false` drops the batch after the current attempt. A classifier that throws stops the retries and surfaces its own error.
 
 ## Enrich every event
 

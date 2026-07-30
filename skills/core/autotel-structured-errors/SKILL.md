@@ -1,7 +1,12 @@
 ---
 name: autotel-structured-errors
 description: >
-  createStructuredError, parseError, recordStructuredError. API errors with message, why, fix, link; client parsing for UI. Use in API routes and client catch blocks.
+  Throws and parses errors that explain themselves with message, why, fix, link, and
+  status, including reusable catalogs via defineErrorCatalog. Use this skill when
+  writing API-route errors, surfacing an API error in UI with parseError, or folding
+  repeated inline errors into one catalog. Do not use for recording an already-caught
+  error on a span — skill autotel-request-logging covers .error() — or for audit and
+  security events, which skill build-audit-trails covers.
 ---
 
 # Autotel: Structured Errors
@@ -59,6 +64,38 @@ try {
   });
 }
 ```
+
+**Same error from several places:** define it once with `defineErrorCatalog` instead of copying the wording.
+
+```typescript
+import { defineErrorCatalog } from 'autotel';
+
+export const billing = defineErrorCatalog('billing', {
+  PAYMENT_DECLINED: {
+    status: 402,
+    message: 'Card declined',
+    why: 'The issuer rejected the charge',
+    fix: 'Try a different payment method',
+  },
+  INSUFFICIENT_FUNDS: {
+    status: 402,
+    message: ({
+      available,
+      required,
+    }: {
+      available: number;
+      required: number;
+    }) => `Insufficient funds: $${available} of $${required}`,
+  },
+});
+
+throw billing.PAYMENT_DECLINED({ cause: stripeError });
+throw billing.INSUFFICIENT_FUNDS({ available: 5, required: 100 });
+
+if (billing.PAYMENT_DECLINED.match(err)) retryWithDifferentCard();
+```
+
+Builders return the same `StructuredError`, so `parseError()` still works. Codes default to `namespace.KEY`. A function `message` or `why` takes typed params enforced at every call site. `.match()` compares the catalog code, so renaming an entry breaks the compile instead of skipping the branch.
 
 **Record on current span:** Use `recordStructuredError(ctx, error)` or the request logger's `.error(error, fields)` so the span gets error attributes and status.
 

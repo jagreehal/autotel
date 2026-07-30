@@ -415,6 +415,72 @@ if (location?.['geo.country']) {
 }
 ```
 
+## Error Catalogs
+
+The fourth handler that throws "Card declined" gets its own wording and its own
+status. Now the same failure reads three ways in your dashboard, and the support
+runbook covers one of them.
+
+`defineErrorCatalog` names each failure once and hands back a builder per code:
+
+```typescript
+import { defineErrorCatalog } from 'autotel';
+
+export const billing = defineErrorCatalog('billing', {
+  PAYMENT_DECLINED: {
+    status: 402,
+    message: 'Card declined',
+    why: 'The issuer rejected the charge',
+    fix: 'Try a different payment method',
+    link: 'https://docs.example.com/errors/payment-declined',
+  },
+  INSUFFICIENT_FUNDS: {
+    status: 402,
+    message: ({
+      available,
+      required,
+    }: {
+      available: number;
+      required: number;
+    }) => `Insufficient funds: $${available} of $${required}`,
+  },
+});
+
+throw billing.PAYMENT_DECLINED({ cause: stripeError });
+throw billing.INSUFFICIENT_FUNDS({ available: 5, required: 100 });
+```
+
+Each builder produces the same `StructuredError` that `createStructuredError`
+returns, so `parseError()` on the client keeps working. Codes default to
+`billing.PAYMENT_DECLINED`, and `message`, `why`, `fix`, `status`, and `link`
+travel with the entry rather than with the call site.
+
+A `message` or `why` written as a function takes typed parameters, and the type
+flows to every call site. Passing `{ available: 5 }` without `required` fails to
+compile.
+
+### Catching without magic strings
+
+`.match()` identifies an error by the catalog entry that built it:
+
+```typescript
+try {
+  await charge(order);
+} catch (error) {
+  if (billing.PAYMENT_DECLINED.match(error)) {
+    return retryWithDifferentCard();
+  }
+  throw error;
+}
+```
+
+Matching reads a symbol the builder attached, so renaming an entry breaks the
+compile rather than skipping the branch in silence. Comparing `error.message`
+gives you neither.
+
+[`autotel map`](/autotel/tools/map/) reports repeated inline errors once a
+project has a catalog, so you find the copies worth folding in.
+
 ## Drain Pipeline
 
 `autotel/drain-pipeline` batches async work, retries with backoff, and flushes on
@@ -436,6 +502,35 @@ send(event);
 await send.flush();
 await send.shutdown();
 ```
+
+### Retrying only what can succeed
+
+By default every failed attempt gets retried until `maxAttempts` runs out. A
+sink that rejects a batch with HTTP 400 rejects it three times, and the last two
+attempts buy you nothing but latency and log noise.
+
+`shouldRetry` classifies the failure. Return `false` and the batch is dropped
+after the first attempt:
+
+```typescript
+const send = createDrainPipeline<LogEvent>({
+  batch: { size: 50, intervalMs: 5000 },
+  retry: {
+    maxAttempts: 3,
+    backoff: 'exponential',
+    shouldRetry: (error) => !isClientError(error),
+  },
+})(async (batch) => {
+  await logService.send(batch);
+});
+```
+
+The classifier receives the error, the attempt number, and the batch. A
+classifier that throws stops the retries and surfaces its own error, so a bug in
+your classification never turns into an infinite loop.
+
+Keep retrying timeouts, connection resets, and 5xx responses. Stop on 4xx,
+schema rejections, and anything an identical retry cannot fix.
 
 ## Core Analysis Loop
 
@@ -494,6 +589,84 @@ log.set({ 'payload.size_bucket': size < 1024 ? 'small' : 'large' });
 
 The ranking is a hypothesis, not a cause. Open two traces from the named cohort
 and confirm the mechanism before you act on it.
+
+## Service Level Objectives
+
+An error rate tells you what is happening now. An error budget tells you whether
+you can keep spending it until Friday. `autotel/slo` calculates both from the
+outcomes you already know.
+
+```typescript
+import { createSloTracker } from 'autotel/slo';
+
+const checkout = createSloTracker({
+  name: 'checkout.availability',
+  target: 0.99, // 99% of eligible events must succeed
+  windowMs: 60 * 60_000, // rolling one-hour window
+});
+
+const snapshot = checkout.record(response.ok ? 'good' : 'bad');
+```
+
+Every `record()` returns the state of the window:
+
+| Field             | Meaning                                               |
+| ----------------- | ----------------------------------------------------- |
+| `sli`             | Observed good ratio. Undefined until the first event. |
+| `budgetConsumed`  | Fraction of the permitted failures already spent      |
+| `budgetRemaining` | What is left. Negative means overspend.               |
+| `burnRate`        | Observed failure ratio over permitted failure ratio   |
+| `meetsTarget`     | Whether the window currently satisfies `target`       |
+
+A burn rate of 1 spends the budget exactly over the window. A burn rate of 14
+spends an hour's budget in four minutes.
+
+The tracker records an `autotel.slo.outcomes` counter and an
+`autotel.slo.burn_rate` histogram. Pass `{ recordMetrics: false }` when you
+calculate outside an initialised SDK, and `{ now }` to control the clock in
+tests.
+
+### Alerting on burn rate
+
+One window alerts too late or too often. Google's SRE workbook pairs a fast
+window with a slow one, and `evaluateBurnRateAlert` decides from both:
+
+```typescript
+import { evaluateBurnRateAlert } from 'autotel/slo';
+
+const decision = evaluateBurnRateAlert({
+  shortWindow: fastTracker.snapshot(), // 5 minutes
+  longWindow: slowTracker.snapshot(), // 1 hour
+  shortThreshold: 14,
+  longThreshold: 6,
+});
+
+if (decision.alerting) page(decision.reason);
+```
+
+Both windows have to breach. The short window catches a real outage in minutes;
+the long window stops a thirty-second blip from waking anyone. When the decision
+is quiet, `reason` names which window held it back.
+
+### Forecasting exhaustion
+
+`forecast()` projects the recent failure rate forward and reports when the
+budget runs out:
+
+```typescript
+const forecast = checkout.forecast({
+  baselineMs: 6 * 60 * 60_000, // estimate from the last six hours
+  lookaheadMs: 24 * 60 * 60_000, // project the next day
+});
+
+forecast.alerting; // true when the projection exhausts the budget
+forecast.timeToExhaustionMs; // when, if it keeps going
+forecast.reason; // 'projected-budget-exhaustion' | 'within-budget' | 'no-baseline-traffic'
+```
+
+The lookahead cannot exceed four times the baseline. Projecting a day from five
+minutes of traffic produces a number with no evidence behind it, so the call
+throws instead.
 
 ## Choosing a Sampler
 

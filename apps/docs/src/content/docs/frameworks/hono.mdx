@@ -48,6 +48,39 @@ app.get('/orders/:id', (c) => {
 });
 ```
 
+## Streaming responses
+
+A handler returning an SSE, NDJSON, or AI stream returns before the work
+finishes. Emit the request snapshot at that moment and you capture a request
+that has barely started, while everything the stream adds later lands nowhere.
+
+`autotelMiddleware()` from `autotel-adapters/hono` waits for the body. Use it in
+place of `otel()` when you stream: it creates the span, the request logger, and
+emits the snapshot once the stream closes, errors, or gets cancelled.
+
+```typescript
+import { autotelMiddleware, useLogger } from 'autotel-adapters/hono';
+
+app.use('*', autotelMiddleware());
+
+app.get('/chat', (c) => {
+  const log = useLogger(c);
+  return streamSSE(c, async (stream) => {
+    for await (const token of model.stream(prompt)) {
+      await stream.writeSSE({ data: token });
+    }
+    log.set({ 'chat.tokens': tokenCount }); // still lands in the snapshot
+  });
+});
+```
+
+A client that disconnects mid-stream still produces a snapshot, so an abandoned
+generation reads as a cancelled stream rather than a request that never
+finished. The middleware wraps the response without locking the original body,
+so the client receives exactly what it would have without it.
+
+Pass `autoEmit: false` when you want to call `.emitNow()` yourself.
+
 ## Options
 
 The `otel()` middleware accepts options for customizing tracing behavior:

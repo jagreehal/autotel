@@ -91,6 +91,10 @@ export const POST = withAutotel(async (request: Request) => {
 });
 ```
 
+Navigation helpers such as `redirect()` and `notFound()` remain framework
+control flow: `withAutotel()` rethrows their signals without recording a
+phantom request error, including when a signal is wrapped in `cause`.
+
 ## Nitro
 
 ```ts
@@ -116,6 +120,10 @@ app.get('/orders/:id', (c) => {
   return c.json({ ok: true });
 });
 ```
+
+`autotelMiddleware()` also observes SSE, NDJSON, and AI response streams. The
+request snapshot is emitted once when the body closes, errors, or is cancelled,
+so context added during streaming is retained.
 
 ## Cloudflare Workers
 

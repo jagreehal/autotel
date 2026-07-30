@@ -71,6 +71,21 @@ describe('post-emit warnings', () => {
     );
   });
 
+  it('warns and drops setLevel() after emitNow()', () => {
+    log.emitNow();
+    log.setLevel('error');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '[autotel] log.setLevel() called after the wide event was emitted',
+      ),
+    );
+    expect(ctx.setAttribute).not.toHaveBeenCalledWith(
+      'autotel.log.level',
+      'error',
+    );
+  });
+
   it('warns when info() is called after emitNow()', () => {
     log.emitNow();
     log.info('after emit', { extra: 'data' });
@@ -395,6 +410,31 @@ describe('getRequestLogger', () => {
       duration_ms: 1350,
     });
     expect(ctx.setAttribute).toHaveBeenCalledWith('autotel.log.level', 'warn');
+  });
+
+  it('sets severity explicitly without creating a log event or exception', () => {
+    const ctx = createMockContext();
+    const log = getRequestLogger(ctx);
+
+    log.setLevel('debug');
+
+    expect(ctx.setAttribute).toHaveBeenCalledWith('autotel.log.level', 'debug');
+    expect(ctx.addEvent).not.toHaveBeenCalled();
+    expect(ctx.recordException).not.toHaveBeenCalled();
+  });
+
+  it('keeps explicit severity when later warn and error calls infer levels', () => {
+    const ctx = createMockContext();
+    const log = getRequestLogger(ctx);
+
+    log.setLevel('info');
+    log.warn('slow');
+    log.error(new Error('failed'));
+
+    const levelCalls = vi
+      .mocked(ctx.setAttribute)
+      .mock.calls.filter(([key]) => key === 'autotel.log.level');
+    expect(levelCalls).toEqual([['autotel.log.level', 'info']]);
   });
 
   it('records and annotates errors with structured diagnostics', () => {

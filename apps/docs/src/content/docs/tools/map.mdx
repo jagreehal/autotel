@@ -1,0 +1,322 @@
+---
+title: Observability Map
+description: A static score for every entry point in your codebase. Find the handlers that will tell you nothing when they break.
+---
+
+Pick a handler in your codebase. If it throws at 2am, what does the trace tell
+you? For most handlers the honest answer is a method, a path, and a status code.
+You find that out during the incident.
+
+`autotel map` reads your source, finds every entry point, and scores what
+context each one would give you. Nothing runs. Nothing leaves the machine. The
+scan takes about a second on a typical app.
+
+Instrumentation rots because nothing counts it. A reviewer catches a missing
+`trace()` when they happen to remember. Grepping for `trace(` tells you a file
+contains one, not whether the handler taking payments uses it. Dashboards only
+show the routes that already report. So the checkout route stays dark until the
+day it matters.
+
+## Quick start
+
+```bash
+npx autotel map
+```
+
+```
+Observability map — @jagreehal/example-hono (hono)
+
+  82/100  good
+  5 entry points · 3 instrumented · 1 partial · 0 dark · 1 exempt
+
+Fix these first
+  1. GET /users/:userId/orders [money]
+     no audit trail (money: path says "order") — withAudit() survives tail sampling
+     src/index.ts:71  (75/100)
+  2. *
+     no request-scoped attributes — the span says what failed, not for whom
+     src/index.ts:17  (75/100)
+  3. GET /error
+     throws a bare Error — no why, fix, or status for the caller
+     src/index.ts:87  (85/100)
+
+Suggestions
+  · sensitive routes but init() sets no attributeRedactor (instrumentation.ts)
+
+Next: autotel map --all  ·  autotel map <route|file>  ·  autotel map --json
+```
+
+The report names three. Run `--all` when you want the whole list.
+
+## What it checks
+
+Each check asks one question about one entry point. Failures cost score points,
+weighted by how much of the picture goes missing.
+
+| Check                 | Weight | Applies to | Question                                           | Passes when                                                           |
+| --------------------- | ------ | ---------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| `trace`               | 40     | handlers   | Does this entry point produce a span?              | `trace()`, `span()`, `instrument()`, or a framework wrapper covers it |
+| `context`             | 25     | handlers   | Does the span carry business context?              | `getRequestLogger()` plus `.set()` / `.info()`                        |
+| `audit`               | 25     | handlers   | Does this money or auth path leave an audit trail? | `withAudit()` or `securityEvent()` from `autotel-audit`               |
+| `page-error-handling` | 20     | pages      | Does this page handle its data request failing?    | Every fetch on the page has an error path                             |
+| `structured-errors`   | 15     | handlers   | Do thrown errors explain themselves?               | `createStructuredError()` carrying `why` and `fix`                    |
+| `error-handling`      | 10     | handlers   | Does every catch block record the failure?         | The catch logs the error or rethrows it                               |
+
+A handler with a span and no attributes scores 75. A handler with neither scores 35. Sensitive routes count double in the project score, so one dark payment
+endpoint moves the number more than one dark search endpoint.
+
+`structured-errors` reads the object you throw, not just the constructor. A
+`createStructuredError({ message, status })` with no `why` or `fix` still fails,
+and the message names what is missing.
+
+`audit` only applies to routes the scan classifies as sensitive. Classification
+reads resolved imports and whole path segments: importing `stripe` counts, and
+so does a path segment matching `checkout` or `login`. A file that mentions
+Stripe in a comment does not, because the scan reads the AST rather than raw
+text. Whole segments matter too, so `/api/authors` never reads as an auth route.
+
+### Suggestions
+
+Five rules never cost points, and each stays quiet until your project already
+has the thing it suggests using:
+
+- **`audit-coverage`**: a route that writes state in a project that records
+  audit signals elsewhere. Suggests a
+  [`securityEvent()`](/autotel/integrations/security/).
+- **`error-catalog`**: the same literal status and message appears in several
+  files in a project that already uses `defineErrorCatalog()`. Suggests one
+  typed catalog entry instead of copies that can drift.
+- **`genai`**: an LLM SDK call with no `gen_ai.*` span. Suggests
+  [`traceGenAI()`](/autotel/ai-workflows/) for tokens and cost.
+- **`validation`**: input parsed with Zod and no telemetry. Suggests
+  [`defineValidator()`](/autotel/integrations/validation/) to record which field
+  failed.
+- **`redaction`**: sensitive routes with no `attributeRedactor` in `init()`.
+  Raised once for the project rather than once per route.
+
+You never lose points for a feature you have not adopted.
+
+## Views
+
+The default view answers "how am I doing". Two more views answer the other
+questions you have.
+
+### Every entry point
+
+```bash
+npx autotel map --all
+```
+
+```
+entry point                        span    context errors  catch   fetch   audit   score
+*                                  ✓       ✗       –       –       –       –       75
+GET /health                        –       –       –       –       –       –       100
+GET /users/:userId                 ✓       ✓       –       ✓       –       –       100
+GET /users/:userId/orders [money]  ✓       ✓       –       ✓       –       ✗       75
+GET /error                         ✓       ✓       ✗       –       –       –       85
+
+✓ pass   ✗ fail   – not applicable
+```
+
+`–` means the question makes no sense here. `/health` is exempt, and a route
+that throws nothing has no `errors` verdict to give.
+
+### One entry point
+
+Pass a route path or a file path:
+
+```bash
+npx autotel map src/routes/checkout.ts
+npx autotel map /checkout
+```
+
+```
+POST /checkout [money]
+src/routes/checkout.ts:24 · api · 40/100
+sensitive: money: path says "checkout", money: imports stripe
+
+✓ span
+  Does this entry point produce a span?
+
+✗ context
+  Does the span carry business context, or only method and status?
+  no request-scoped attributes — the span says what failed, not for whom
+  24| app.post('/checkout', async (c) => {
+  → const log = getRequestLogger(); log.set({ 'user.id': userId });
+
+✗ audit
+  Does this money or auth path leave an audit trail?
+  no audit trail (money: path says "checkout") — withAudit() survives tail sampling
+  24| app.post('/checkout', async (c) => {
+  → withAudit({ action: 'checkout', resource: '…', actorId }, async (ctx, log) => { /* … */ });
+```
+
+Every failure names the line it found and the code that fixes it.
+
+## Waiving a check
+
+Health checks, liveness probes, metrics endpoints, and telemetry ingest routes
+are exempt. Pages that fetch nothing are exempt too: a static page has no
+failure to handle.
+
+For anything else, waive it where the decision lives:
+
+```ts
+// autotel-map-disable error-handling -- the fallback response is the product behaviour
+app.get('/preview', async (c) => {
+  try {
+    return c.json(await render());
+  } catch {
+    return c.json({ preview: null });
+  }
+});
+```
+
+Use `autotel-map-disable-next-line <check>` to waive the next finding or
+`autotel-map-disable-line <check>` for a trailing same-line decision. Check ids
+can be comma-separated, and omitting them waives every finding in that scope.
+
+A waived check costs no score and never counts as coverage.
+`summary.suppressedChecks` reports how many there are, so a reviewer can see how
+much of a green score arrived by suppression.
+
+Waiving a check the scan does not run produces a warning rather than silence:
+
+```
+! src/routes/checkout.ts:12 disables "audit-trail", which is not a check autotel map runs
+```
+
+## Gating CI
+
+`autotel map` writes `autotel.map.json` next to your `package.json`. Commit it.
+The score becomes a number you can watch, and the file becomes your baseline.
+
+### A floor
+
+```bash
+npx autotel map --min-score 70
+```
+
+Exits 1 below the threshold. Set a bar, hold it.
+
+### A ratchet
+
+```bash
+npx autotel map --baseline git:origin/main
+```
+
+Compares check by check rather than score to score. A refactor that instruments
+one route and breaks another leaves the average untouched, and this still fails:
+
+```
+Baseline (git:origin/main)
+  74 → 74 (+0)
+  ✗ POST /checkout — "context" now fail
+    src/routes/checkout.ts
+  ✓ GET /orders/:id — "errors" fixed
+  1 new entry point with no instrumentation
+    POST /refunds (src/routes/refunds.ts)
+```
+
+Turning a passing check into a disable comment counts as a regression, so you
+cannot silence your way back to green.
+
+New dark routes get reported without failing the build, because `--min-score`
+owns that bar. A run that detects a regression refuses to overwrite the baseline
+it compared against, so the ratchet cannot slip down on a second run.
+
+`--baseline` reads from disk or through `git show`. No network, no token, no
+repository access, so a private repo gates like a public one.
+
+### GitHub Actions
+
+```yaml
+- run: npx autotel map --baseline git:origin/${{ github.base_ref }} --json
+```
+
+## For agents
+
+Every finding in `--json` carries evidence and a fix, so an agent works from
+your code instead of guessing:
+
+```jsonc
+{
+  "path": "/checkout",
+  "method": "POST",
+  "file": "src/routes/checkout.ts",
+  "score": 40,
+  "sensitivity": { "level": "high", "reasons": ["money: imports stripe"] },
+  "checks": {
+    "trace": { "status": "pass" },
+    "context": {
+      "status": "fail",
+      "message": "no request-scoped attributes — the span says what failed, not for whom",
+      "fix": "const log = getRequestLogger(); log.set({ 'user.id': userId });",
+      "evidence": {
+        "file": "src/routes/checkout.ts",
+        "line": 24,
+        "snippet": "app.post('/checkout', async (c) => {",
+      },
+    },
+  },
+}
+```
+
+Point an agent at `autotel map --json --no-write` before it suggests any
+instrumentation. See the [Agent Guide](/autotel/agent-guide/).
+
+## Frameworks
+
+Detection reads your `package.json` and your `wrangler` config. Override it with
+`--framework <name>`.
+
+| Framework        | Entry points found                                                              |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `next`           | App Router `route.ts` per method, `page.tsx`, `pages/`, `middleware.ts`         |
+| `nitro`          | `server/api`, `server/routes`, `server/middleware`, `pages/`                    |
+| `sveltekit`      | `+server.ts` per method, `+page.server.ts`, `+page.ts`, `hooks.server.ts`       |
+| `tanstack-start` | `createServerFileRoute`, `createServerFn`, and route components in `src/routes` |
+| `cloudflare`     | The `fetch` export of your Worker entry                                         |
+| `hono`           | `app.get(path, handler)` and friends                                            |
+| `express`        | Same                                                                            |
+| `fastify`        | Same                                                                            |
+| `elysia`         | Same                                                                            |
+
+For frameworks that register many routes in one file, the scan reads each
+handler's own body. Forty routes in one `index.ts` get forty scores rather than
+one.
+
+## Options
+
+| Flag                   | What it does                                             |
+| ---------------------- | -------------------------------------------------------- |
+| `--all`                | Every entry point as a check matrix                      |
+| `--framework <name>`   | Override framework detection                             |
+| `--min-score <n>`      | Exit 1 below this score                                  |
+| `--baseline [source]`  | Compare against a committed map (path or `git:<ref>`)    |
+| `--no-write`           | Skip writing `autotel.map.json`                          |
+| `--json`               | Machine-readable output                                  |
+| `--output-file <path>` | Persist the JSON payload                                 |
+| `--workspace-root`     | Scan from the workspace root instead of the package root |
+
+## What it cannot see
+
+The scan reads source, so it reports what your code says rather than what your
+process does. A handler wrapped by middleware registered somewhere the scan does
+not recognise as wiring reads as untraced. A framework outside the table above
+yields no entry points at all.
+
+Treat the score as a map of your source and the traces in
+[devtools](/autotel/tools/devtools/) as the record of production. The two
+disagreeing is a finding in itself.
+
+## Related
+
+- [CLI](/autotel/tools/cli/): the rest of the command surface.
+- [Agent Guide](/autotel/agent-guide/): before/after examples for the gaps the map finds.
+- [Audit Logging](/autotel/integrations/audit/): what `withAudit()` gives the `audit` check.
+- [Validation Telemetry](/autotel/integrations/validation/): what `defineValidator()` gives the `validation` suggestion.
+
+Back to the handler you picked. It has a score now, and the failing lines name
+the fix. Commit `autotel.map.json`, add `--baseline` to CI, and the routes you
+instrument today stay instrumented through the next refactor.

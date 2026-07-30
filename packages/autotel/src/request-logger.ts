@@ -53,6 +53,8 @@ export function runWithRequestContext<T>(ctx: TraceContext, fn: () => T): T {
 
 export interface RequestLogger {
   set(fields: Record<string, unknown>): void;
+  /** Set snapshot severity without adding a log event or exception. */
+  setLevel(level: RequestLogLevel): void;
   info(message: string, fields?: Record<string, unknown>): void;
   warn(message: string, fields?: Record<string, unknown>): void;
   error(error: Error | string, fields?: Record<string, unknown>): void;
@@ -64,6 +66,8 @@ export interface RequestLogger {
     options?: ForkOptions,
   ): void;
 }
+
+export type RequestLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface RequestLogSnapshot {
   timestamp: string;
@@ -116,6 +120,7 @@ export function getRequestLogger(
   const contextState: Record<string, unknown> = {};
   let emitted = false;
   let lastSnapshot: RequestLogSnapshot | null = null;
+  let hasExplicitLevel = false;
 
   const addLogEvent = (
     level: 'info' | 'warn' | 'error',
@@ -146,6 +151,13 @@ export function getRequestLogger(
       activeContext.setAttributes(flattenToAttributes(fields));
     },
 
+    setLevel(level: RequestLogLevel) {
+      sealCheck('log.setLevel()', ['autotel.log.level']);
+      if (emitted) return;
+      hasExplicitLevel = true;
+      activeContext.setAttribute('autotel.log.level', level);
+    },
+
     info(message: string, fields?: Record<string, unknown>) {
       const keys = fields
         ? ['message', ...Object.keys(fields).filter((k) => k !== 'requestLogs')]
@@ -166,7 +178,9 @@ export function getRequestLogger(
       sealCheck('log.warn()', keys);
       if (emitted) return;
       addLogEvent('warn', message, fields);
-      activeContext.setAttribute('autotel.log.level', 'warn');
+      if (!hasExplicitLevel) {
+        activeContext.setAttribute('autotel.log.level', 'warn');
+      }
       if (fields) {
         mergeInto(contextState, fields);
         activeContext.setAttributes(flattenToAttributes(fields));
@@ -185,7 +199,9 @@ export function getRequestLogger(
         mergeInto(contextState, fields);
         activeContext.setAttributes(flattenToAttributes(fields));
       }
-      activeContext.setAttribute('autotel.log.level', 'error');
+      if (!hasExplicitLevel) {
+        activeContext.setAttribute('autotel.log.level', 'error');
+      }
     },
 
     getContext() {
@@ -329,6 +345,7 @@ export function createNoopRequestLogger(): RequestLogger {
 
   return {
     set() {},
+    setLevel() {},
     info() {},
     warn() {},
     error() {},

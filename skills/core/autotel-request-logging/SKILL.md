@@ -1,7 +1,12 @@
 ---
 name: autotel-request-logging
 description: >
-  getRequestLogger(), set(), info/warn/error, emitNow(). One snapshot per request; requires active span. Use when adding request-scoped context or replacing scattered console.log.
+  Accumulates request-scoped context and emits one wide-event snapshot per request
+  with getRequestLogger(), set(), setLevel(), info/warn/error, and emitNow(). Use
+  this skill when adding request-scoped attributes, building canonical log lines, or
+  replacing scattered console.log. Do not use for product and analytics events —
+  use skill autotel-events — or for span creation itself, which skill
+  autotel-instrumentation covers.
 ---
 
 # Autotel: Request Logging
@@ -57,6 +62,14 @@ log.set({ payment: { method: body.method } });
 log.error(err, { step: 'payment' });
 log.emitNow();
 ```
+
+**Set severity without logging:** `.warn()` and `.error()` set `autotel.log.level` for you. Use `setLevel()` when the request degraded but there is nothing to log, or when a warning should not colour the whole snapshot.
+
+```typescript
+if (inventory.stale) log.setLevel('warn'); // served from a stale cache
+```
+
+Takes `'debug' | 'info' | 'warn' | 'error'`. Adds no log event and records no exception. An explicit level wins: a later `.warn()` / `.error()` leaves it alone. Ignored after `emitNow()`.
 
 **RequestLogSnapshot:** `emitNow()` returns `{ timestamp, traceId, spanId, correlationId, context }`. You can pass `onEmit` in options to forward it.
 

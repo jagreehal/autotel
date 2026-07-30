@@ -1,9 +1,9 @@
 ---
 title: CLI
-description: Setup wizard, diagnostics, and codemods for autotel.
+description: Setup wizard, observability scoring, diagnostics, and codemods for autotel.
 ---
 
-`autotel-cli` provides an interactive setup wizard, diagnostics, incremental feature additions, and telemetry investigation commands.
+`autotel-cli` provides an interactive setup wizard, a static observability score for your codebase, diagnostics, incremental feature additions, and telemetry investigation commands.
 
 ## Installation
 
@@ -39,6 +39,23 @@ npx autotel init --dry-run
 - `node-datadog-agent`: Node.js + Datadog Agent (local dev)
 - `node-honeycomb`: Node.js + Honeycomb
 - `node-otlp`: Node.js + Generic OTLP endpoint
+
+### `autotel map`
+
+Score the observability of every entry point in your codebase. Static analysis,
+so nothing runs and nothing leaves the machine:
+
+```bash
+npx autotel map                              # score + the three to fix first
+npx autotel map --all                        # every entry point as a matrix
+npx autotel map src/routes/checkout.ts       # one entry point and its fixes
+npx autotel map --json --no-write            # for agents
+npx autotel map --min-score 70               # CI floor
+npx autotel map --baseline git:origin/main   # CI ratchet
+```
+
+See [Observability Map](/autotel/tools/map/) for the checks, the scoring, and
+the `autotel.map.json` contract.
 
 ### `autotel doctor`
 
@@ -115,10 +132,6 @@ All backend-touching commands accept:
 
 Use `--output-file <path>` to persist command JSON and `--no-secrets-in-output` to redact secret-shaped values.
 
-## Examples
-
-See any example app. `autotel init` generates the `instrumentation.ts` file used across all examples.
-
 ### `autotel codemod trace <path>`
 
 Wrap functions with `trace()`:
@@ -127,8 +140,13 @@ Wrap functions with `trace()`:
 npx autotel codemod trace ./src
 ```
 
+## Examples
+
+See any example app. `autotel init` generates the `instrumentation.ts` file used across all examples.
+
 ## Related
 
+- [Observability Map](/autotel/tools/map/): the `autotel map` scoring surface in full.
 - [MCP](/autotel/integrations/mcp/): the `autotel-mcp` server this CLI investigate surface mirrors.
 - [Claude Code Skill](/autotel/tools/claude-code-skill/): using these commands from a Claude skill workflow.
 - [Devtools](/autotel/tools/devtools/): local OTLP receiver UI. Run it with `npx autotel-devtools` (not `npx autotel dev tools`).

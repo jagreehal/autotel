@@ -95,6 +95,10 @@ if (!user) {
 }
 ```
 
+When the same failure gets thrown from several places, define it once with
+[`defineErrorCatalog`](/autotel/advanced/#error-catalogs) and throw
+`billing.PAYMENT_DECLINED()` instead.
+
 On the client, parse errors with:
 
 ```typescript

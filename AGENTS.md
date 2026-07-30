@@ -81,7 +81,7 @@ When the user wants observability, suggest these entry points. All from `autotel
 | Need                                       | API / entry point                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Wrap a function with a span                | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                                                                                                                                                                                                                                                                                                                                                                                         |
-| Request-scoped attributes                  | `getRequestLogger(ctx?)` → `.set()`, `.info()` / `.warn()` / `.error()`, `.emitNow()`, `.fork()`                                                                                                                                                                                                                                                                                                                                                 |
+| Request-scoped attributes                  | `getRequestLogger(ctx?)` → `.set()`, `.setLevel()`, `.info()` / `.warn()` / `.error()`, `.emitNow()`, `.fork()`                                                                                                                                                                                                                                                                                                                                  |
 | Structured throw                           | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })`                                                                                                                                                                                                                                                                                                                                                                  |
 | Parse API errors (client)                  | `parseError(err)` → `{ message, status, why?, fix?, link?, raw }`                                                                                                                                                                                                                                                                                                                                                                                |
 | Lock init (framework)                      | `lockLogger()`, `isLoggerLocked()`                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -134,6 +134,33 @@ Always suggest `init()` (or instrumentation) once at app entry; then spans + req
 - **Test split**: Unit tests `*.test.ts`; integration tests `*.integration.test.ts` (separate config in core package).
 - **Executable examples**: Changes to public APIs must keep `apps/book-chapters` type-checking and all chapter scripts runnable via its `run-all` command.
 - **No secrets**: Never commit API keys, tokens, or secrets. Do not log sensitive data in examples or docs.
+
+---
+
+## Start With the Map (before suggesting instrumentation)
+
+Do not guess which handlers are dark. `autotel map` reads the source, finds every
+entry point for the detected framework, and reports per-check verdicts with
+evidence and a fix:
+
+```bash
+npx autotel map --json --no-write            # whole project
+npx autotel map --json --no-write <route|file>  # one entry point
+npx autotel map --min-score 70               # CI gate (exit 1 below threshold)
+npx autotel map --baseline git:origin/main   # CI gate (exit 1 on regression)
+```
+
+Each entry in `map.routes[].checks` carries `status`, `message`, `evidence`
+(`file`, `line`, `snippet`) and `fix`. Work from those. The checks map directly
+onto the checklist below: `trace` → span exists, `context` → request logger with
+attributes, `structured-errors` → `createStructuredError`, `error-handling` →
+catch blocks that record, `audit` → a security event on money and auth paths,
+and `page-error-handling` → data-loading pages have an error path.
+
+`autotel.map.json` is committed, so the score is trackable over time. A check
+that should not apply is waived in code with an
+`// autotel-map-disable <check> -- reason` comment rather than by lowering the
+threshold.
 
 ---
 

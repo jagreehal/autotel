@@ -1827,6 +1827,8 @@ export const checkout = withTracing({})((ctx) => async (order: Order) => {
   log.set({
     cart: { total_cents: order.totalCents, item_count: order.items.length },
   });
+  // Set snapshot severity without fabricating a log event or exception.
+  log.setLevel('info');
 
   try {
     await processPayment(order);
@@ -1849,6 +1851,9 @@ export const checkout = withTracing({})((ctx) => async (order: Order) => {
 You also get:
 
 - `log.getContext()` to inspect the accumulated request context.
+- `log.setLevel('debug' | 'info' | 'warn' | 'error')` to set canonical snapshot
+  severity explicitly. An explicit level wins over later inferred warn/error
+  levels.
 - `log.emitNow(overrides?)` to capture an immediate snapshot (emits a correlated log-style snapshot
   and returns `{ timestamp, traceId, spanId, correlationId, context }`).
 
@@ -1862,7 +1867,15 @@ import { createDrainPipeline, init } from 'autotel';
 
 const pipeline = createDrainPipeline({
   batch: { size: 50, intervalMs: 2000 },
-  retry: { maxAttempts: 3, backoff: 'exponential' },
+  retry: {
+    maxAttempts: 3,
+    backoff: 'exponential',
+    // Do not retry permanent client errors. Keep 429 retryable if desired.
+    shouldRetry: (error) =>
+      !(error instanceof HttpError) ||
+      error.status === 429 ||
+      error.status >= 500,
+  },
   maxBufferSize: 1000,
 });
 
