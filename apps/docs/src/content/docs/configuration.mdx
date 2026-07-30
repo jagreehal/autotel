@@ -55,6 +55,51 @@ init({
 });
 ```
 
+## Process Handlers
+
+A container gets `SIGTERM`, your process exits, and the last few seconds of
+telemetry never leave the buffer. Importing `autotel` registers no process
+listeners, so you opt in:
+
+```typescript
+init({
+  service: 'my-app',
+  processHandlers: true, // flush and exit on SIGTERM/SIGINT and fatal errors
+});
+```
+
+`true` (or `{}`) installs the defaults. Pass an object to change one of them:
+
+```typescript
+init({
+  service: 'my-app',
+  processHandlers: {
+    signals: ['SIGTERM', 'SIGINT'], // default
+    fatalErrors: true, // flush on uncaughtException / unhandledRejection
+    shutdownTimeoutMs: 2000, // give up waiting and exit anyway
+  },
+});
+```
+
+Autotel prints fatal errors to stderr before flushing. Registering an
+`uncaughtException` listener overrides Node's default stack trace, so without
+that print a crash under `fatalErrors` would exit in silence.
+
+Leave `processHandlers` off when your application already owns its lifecycle.
+Applications with their own resource cleanup should call `shutdown()` from their
+existing handler instead:
+
+```typescript
+import { shutdown } from 'autotel';
+
+process.on('SIGTERM', async () => {
+  await Promise.all([closeDatabase(), shutdown()]);
+  process.exit(0);
+});
+```
+
+Two handlers fighting over the same signal is the failure mode this avoids.
+
 ## Init Locking
 
 Framework plugins can lock `init()` to prevent accidental re-initialization from user code:

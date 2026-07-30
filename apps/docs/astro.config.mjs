@@ -115,6 +115,7 @@ export default defineConfig({
           label: 'Tools',
           items: [
             { label: 'CLI', slug: 'tools/cli' },
+            { label: 'Observability Map', slug: 'tools/map' },
             { label: 'Devtools', slug: 'tools/devtools' },
             { label: 'VS Code Extension', slug: 'tools/vscode' },
             { label: 'Terminal Viewer', slug: 'tools/terminal' },

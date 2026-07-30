@@ -16,6 +16,15 @@ export interface DrainPipelineOptions<T = unknown> {
     maxDelayMs?: number;
     /** Add random jitter to delays. @default true */
     jitter?: boolean;
+    /**
+     * Decide whether a failed attempt is safe to repeat. Return false for
+     * permanent failures such as an HTTP 4xx response. @default always retry
+     */
+    shouldRetry?: (
+      error: Error,
+      attempt: number,
+      batch: readonly T[],
+    ) => boolean;
   };
   /** Max buffered events before dropping. @default 1000 */
   maxBufferSize?: number;
@@ -52,6 +61,7 @@ export function createDrainPipeline<T = unknown>(
   const initialDelayMs = options?.retry?.initialDelayMs ?? 1000;
   const maxDelayMs = options?.retry?.maxDelayMs ?? 30_000;
   const jitter = options?.retry?.jitter ?? true;
+  const shouldRetry = options?.retry?.shouldRetry;
   const dropPolicy = options?.dropPolicy ?? 'oldest';
   const onDropped = options?.onDropped;
 
@@ -111,8 +121,22 @@ export function createDrainPipeline<T = unknown>(
           return;
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
-          if (attempt < maxAttempts) {
+          let retry = attempt < maxAttempts;
+          if (retry && shouldRetry) {
+            try {
+              retry = shouldRetry(lastError, attempt, batch);
+            } catch (classifierError) {
+              lastError =
+                classifierError instanceof Error
+                  ? classifierError
+                  : new Error(String(classifierError));
+              retry = false;
+            }
+          }
+          if (retry) {
             await wait(computeDelay(attempt));
+          } else {
+            break;
           }
         }
       }

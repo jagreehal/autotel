@@ -1,7 +1,13 @@
 ---
 name: autotel-adapters
 description: >
-  Use this skill when adding request-scoped logging and tracing to Next.js, Nitro, Cloudflare Workers, Hono, or TanStack Start through autotel's uniform adapter shape — withAutotel middleware and useLogger() reachable from anywhere in the call stack.
+  Wires request-scoped logging and tracing into Next.js, Nitro, Cloudflare Workers,
+  Hono, and TanStack Start through autotel's uniform adapter shape: a withAutotel
+  handler wrapper plus useLogger() reachable anywhere in the call stack. Use this
+  skill when adding autotel to a framework handler or debugging a useLogger() call
+  that returns no context. Do not use for the Hono otel() HTTP-metrics middleware —
+  use skill autotel-hono — or for a framework with no packaged adapter, which skill
+  autotel-custom-framework covers.
 ---
 
 # autotel-adapters
@@ -63,6 +69,8 @@ export const withTracing = (handler) => withAutotel(handler, autotelOptions);
 
 `withAutotel` accepts any function whose first argument is `NextRequestLike`. The `spanName` option can be a static string or a function receiving the request. The auto-enrichment sets `http.request.method`, `url.full`, `http.route`, and `http.request.header.x-request-id`.
 
+`redirect()` and `notFound()` work by throwing. `withAutotel` asks Next itself to classify each throw and rethrows navigation signals untouched, so they leave no phantom error on the span. This covers signals wrapped in `cause`. Do not add your own `NEXT_REDIRECT` message matching.
+
 ### Nitro
 
 ```typescript
@@ -115,6 +123,12 @@ app.get('/', (c) => {
 Register `autotelMiddleware()` before your routes; it opens a span per request and
 binds the logger to `AsyncLocalStorage`, so `useLogger()` (no argument) resolves
 inside any downstream handler.
+
+For SSE, NDJSON, and AI response streams the handler returns before the work
+finishes. `autotelMiddleware()` holds the snapshot until the body closes, errors,
+or is cancelled, so `log.set()` calls made during streaming still land. The
+response is wrapped without locking the original body. Pass `autoEmit: false` to
+call `.emitNow()` yourself.
 
 ### TanStack Start
 

@@ -126,6 +126,65 @@ glance:
   sub-agents underneath. A **Timeline** view shows the same run as time-aligned
   lanes.
 
+## Coding agents
+
+Claude Code and opencode emit no traces. They emit OpenTelemetry metrics and log
+events: `api_request`, `tool_result`, `tool_decision`, `user_prompt`, plus token
+and cost counters. The **Agents** tab reassembles those into one session per run.
+
+One command starts the receiver and launches Claude Code wired to it:
+
+```bash
+npx autotel-devtools claude
+```
+
+That sets OTLP `http/protobuf` against this receiver, a 1s export interval, and
+keeps `session.id` on metrics. Most Claude Code telemetry guides configure gRPC,
+which this receiver does not speak, so use this command rather than copying an
+env block from elsewhere.
+
+```bash
+npx autotel-devtools claude --print-env    # print the env block, launch nothing
+npx autotel-devtools claude --log-prompts  # capture prompt text (default: length only)
+```
+
+Use `--print-env` when the env belongs somewhere else, such as managed settings,
+MDM, or a VS Code profile.
+
+Per session you get a timeline (prompts, tool calls, API requests, accept and
+reject decisions), a rollup (cost, tokens, requests, lines changed), and
+breakdowns by tool category, MCP server, sub-agent, and skill. Claude Code names
+MCP tools `mcp__<server>__<tool>`, so usage splits by server without any extra
+configuration. Cost uses the agent's reported `cost_usd` and falls back to a
+badged token estimate.
+
+The session model lives in `autotel-agents`, a browser-safe package with no I/O.
+The devtools server decodes OTLP and feeds it plain objects:
+
+```ts
+import {
+  ingestEventRecord,
+  ingestMetricRecord,
+  summarizeSessions,
+} from 'autotel-agents';
+import type { AgentSessionStore } from 'autotel-agents';
+
+const store: AgentSessionStore = new Map();
+
+ingestEventRecord(store, decodedLogRecord);
+ingestMetricRecord(store, decodedMetric);
+
+const aggregate = summarizeSessions([...store.values()]);
+```
+
+Events are authoritative for the timeline and for cost and token totals. Metrics
+fill the gaps events do not cover, such as lines of code and commits. Token and
+cost metrics get recognised and never summed, because they overlap `api_request`
+events and summing both would double-count.
+
+For what happens inside the MCP protocol itself, see
+[MCP](/autotel/integrations/mcp/). This tab covers the agent, not the wire.
+
 ## Configuration
 
 | Variable                   | Default     | Description                 |

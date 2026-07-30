@@ -32,6 +32,27 @@ Every command supports `--json`. Errors are returned as a structured envelope
 - `1`: runtime / unexpected failure
 - `2`: validation / conflict / refusal (caller-fixable)
 
+## Understanding a codebase's observability
+
+`autotel map` is the read-only command to reach for before suggesting instrumentation:
+it finds every entry point, says which are dark, and carries the fix with each finding.
+
+```bash
+# Every entry point, its checks, its score, and the fix for each failure
+npx autotel map --json --no-write
+
+# One entry point in detail
+npx autotel map --json --no-write app/api/checkout/route.ts
+
+# Gate: exit 1 below a score, or when a passing check regresses
+npx autotel map --min-score 70 --json
+npx autotel map --baseline git:origin/main --json
+```
+
+Each failing check in `map.routes[].checks` carries `message`, `evidence`
+(`file`, `line`, `snippet`), and `fix` — the code that would make it pass. Read
+those instead of guessing what a handler is missing.
+
 ## Agent-native init
 
 ```bash

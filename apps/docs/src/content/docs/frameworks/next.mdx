@@ -78,6 +78,29 @@ export const POST = withAutotel(async (request: Request) => {
 `withAutotel` creates the span and the request logger; `useLogger(request)`
 returns the logger bound to the active request.
 
+### Navigation is not an error
+
+`redirect()` and `notFound()` work by throwing. Next catches the throw and turns
+it into a response, so the throw is control flow rather than a failure.
+
+`withAutotel` asks Next itself to classify each throw, then rethrows navigation
+signals untouched. A redirect leaves no phantom error on the span and no error
+in your dashboards:
+
+```typescript
+export const GET = withAutotel(async (request: Request) => {
+  const session = await getSession(request);
+  if (!session) redirect('/login'); // span stays ok
+  if (!session.team) notFound(); // span stays ok
+
+  throw new Error('boom'); // this one is recorded
+});
+```
+
+Delegating to Next rather than matching on error messages means a signal wrapped
+in `cause` still reads as navigation, and new signal types stay covered without
+an autotel release.
+
 ## Patterns
 
 ### Server components and server actions

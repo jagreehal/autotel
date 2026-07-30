@@ -3,11 +3,13 @@ import type {
   InitOptions,
   DoctorOptions,
   AddOptions,
+  MapOptions,
   CodemodTraceOptions,
 } from './types/index';
 import { runInit } from './commands/init';
 import { runDoctor } from './commands/doctor';
 import { runAdd } from './commands/add';
+import { runMap } from './commands/map';
 import { runCodemodTrace } from './commands/codemod-trace';
 import {
   runSchema,
@@ -200,6 +202,55 @@ export function createProgram(): Command {
 
   addGlobalOptions(addCmd);
   program.addCommand(addCmd);
+
+  // Map command — static observability score for every entry point.
+  const mapCmd = new Command('map')
+    .description('Score the observability of every entry point in your project')
+    .argument('[entry]', 'Inspect one entry point by route or file path')
+    .option(
+      '--framework <name>',
+      'Override framework detection (next, nitro, tanstack-start, sveltekit, hono, express, fastify, elysia, cloudflare)',
+    )
+    .option('--all', 'Show every entry point as a check matrix')
+    .option(
+      '--min-score <n>',
+      'Exit 1 when the global score is below this threshold',
+    )
+    .option(
+      '--baseline [source]',
+      'Compare against a committed autotel.map.json and exit 1 on regression (path, or git:<ref>)',
+    )
+    .option('--no-write', 'Skip writing autotel.map.json')
+    .option('--json', 'Output machine-readable JSON')
+    .option('--output-file <path>', 'Persist JSON output to this path')
+    .option(
+      '--workspace-root',
+      'Scan from the workspace root instead of the package root',
+    )
+    .action((entry: string | undefined, opts) => {
+      const options: MapOptions = {
+        cwd: opts.cwd ?? process.cwd(),
+        dryRun: false,
+        noInstall: false,
+        printInstallCmd: false,
+        verbose: opts.verbose ?? false,
+        quiet: opts.quiet ?? false,
+        workspaceRoot: opts.workspaceRoot ?? false,
+        entry,
+        framework: opts.framework,
+        all: opts.all ?? false,
+        minScore: opts.minScore,
+        baseline: opts.baseline,
+        // Commander maps --no-write to opts.write = false.
+        write: opts.write !== false,
+        json: opts.json ?? false,
+        outputFile: opts.outputFile,
+      };
+      runMap(options);
+    });
+
+  addGlobalOptions(mapCmd);
+  program.addCommand(mapCmd);
 
   // Codemod command
   const codemodCmd = new Command('codemod').description(

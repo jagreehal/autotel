@@ -1,7 +1,13 @@
 ---
 name: autotel-cli
 description: >
-  Use this skill when running autotel CLI commands to set up, configure, or extend OpenTelemetry instrumentation in a Node.js project — including init, doctor, add, and codemod trace.
+  Runs the autotel CLI to set up, diagnose, extend, and score OpenTelemetry
+  instrumentation in a Node.js project: init, doctor, add, map, and codemod trace.
+  Use this skill when installing autotel from the command line, diagnosing a setup
+  that is not exporting, or adding a backend, subscriber, or plugin. Do not use for
+  acting on an observability score in detail — use skill find-observability-gaps —
+  or for querying telemetry from a running service, which skill analyze-traces
+  covers.
 ---
 
 # autotel-cli
@@ -82,6 +88,25 @@ npx autotel doctor --env-file .env.production  # Check a specific env file
 ```
 
 Exit codes: `0` = all passed, `1` = warnings, `2` = errors.
+
+`doctor` checks the setup. `map` checks the code. Run both.
+
+---
+
+### `autotel map`
+
+Score the observability of every entry point. Static analysis of the source: nothing runs, nothing leaves the machine.
+
+```bash
+npx autotel map                              # score + the three to fix first
+npx autotel map --all                        # every entry point as a matrix
+npx autotel map src/routes/checkout.ts       # one entry point and its fixes
+npx autotel map --json --no-write            # every finding with evidence + fix
+npx autotel map --min-score 70               # exit 1 below the threshold
+npx autotel map --baseline git:origin/main   # exit 1 when a check regresses
+```
+
+Writes `autotel.map.json` next to `package.json`; commit it so `--baseline` has something to compare against. For the checks, scoring, and waiver comments, use skill `find-observability-gaps`.
 
 ---
 

@@ -44,4 +44,48 @@ describe('next adapter', () => {
     await handler();
     expect(onEmit).not.toHaveBeenCalled();
   });
+
+  it('does not record Next navigation signals as request errors', async () => {
+    const onEmit = vi.fn();
+    const signal = { digest: 'NEXT_REDIRECT;replace;/login;307;' };
+    const handler = withAutotel(
+      async () => {
+        throw signal;
+      },
+      { requestLoggerOptions: { onEmit } },
+    );
+
+    await expect(handler()).rejects.toBe(signal);
+    expect(onEmit).toHaveBeenCalledTimes(1);
+    expect(onEmit.mock.calls[0]?.[0].context).not.toHaveProperty(
+      'error_message',
+    );
+  });
+
+  it('unwraps a navigation signal from cause and leaves real errors alone', async () => {
+    const signal = { digest: 'NEXT_HTTP_ERROR_FALLBACK;404' };
+    const wrapped = new Error('framework wrapper', { cause: signal });
+    const handler = withAutotel(async () => {
+      throw wrapped;
+    });
+
+    await expect(handler()).rejects.toBe(signal);
+  });
+
+  it('still records real application errors', async () => {
+    const onEmit = vi.fn();
+    const error = new Error('database unavailable');
+    const handler = withAutotel(
+      async () => {
+        throw error;
+      },
+      { requestLoggerOptions: { onEmit } },
+    );
+
+    await expect(handler()).rejects.toBe(error);
+    expect(onEmit.mock.calls[0]?.[0].context).toMatchObject({
+      error_message: 'database unavailable',
+      'http.response.status_code': 500,
+    });
+  });
 });

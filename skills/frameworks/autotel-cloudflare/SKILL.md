@@ -1,7 +1,12 @@
 ---
 name: autotel-cloudflare
 description: >
-  Use this skill when instrumenting a Cloudflare Worker with OpenTelemetry — tracing fetch handlers, wrapping bindings (KV, R2, D1, AI, Vectorize, Queues, Durable Objects), or wiring ctx.waitUntil so spans export before the Worker exits.
+  Instruments Cloudflare Workers end to end: fetch, scheduled, queue and email
+  handlers, every binding (KV, R2, D1, AI, Vectorize, Queues, Durable Objects),
+  ctx.waitUntil draining, and Cloudflare's native tracing. Use this skill when
+  tracing a Worker or deciding between native tracing and autotel's OTLP exporter.
+  Do not use for non-Cloudflare edge runtimes — use skill autotel-edge — or for
+  browser-side tracing, which skill autotel-web covers.
 ---
 
 # autotel-cloudflare
@@ -66,6 +71,18 @@ Every Cloudflare binding has a wrapper. Each creates spans for all operations.
 | Durable Objects | `instrumentDO(DOClass)` or `wrapDurableObject(config, DOClass)` | same                                |
 
 Or use `instrumentBindings(env)` to auto-instrument all bindings at once.
+
+## Native tracing
+
+With `[observability.traces] enabled = true` in `wrangler`, Cloudflare instruments bindings and exports OTLP itself. autotel detects `ctx.tracing` and nests your `trace()` / `span()` / `enterSpan()` calls in the platform waterfall, skips its own binding instrumentation, and registers no second exporter. You get one set of spans, not two.
+
+| `nativeTracing` | Behaviour                                                  |
+| --------------- | ---------------------------------------------------------- |
+| `'auto'`        | Default. Native when `ctx.tracing` exists, otherwise OTLP. |
+| `'on'`          | Prefer native; warn once and fall back when absent.        |
+| `'off'`         | Always autotel's OTLP exporter.                            |
+
+Leave it at `'auto'`. `wrangler dev` does not export native traces locally, so the fallback carries local development to `npx autotel-devtools`.
 
 ## Handler Types
 

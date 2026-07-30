@@ -413,6 +413,61 @@ export default wrapModule(
 );
 ```
 
+## Native tracing
+
+Cloudflare Workers ship native tracing in beta. Turn it on and the platform
+instruments fetch, KV, R2, D1, and Durable Objects for you, then exports OTLP to
+whichever destination you configure in the dashboard. No exporter code in the
+Worker.
+
+Autotel detects it. The same `trace()`, `span()`, and `enterSpan()` calls you
+already wrote nest inside Cloudflare's native waterfall when native tracing is
+on, and fall back to autotel's own OTLP pipeline everywhere else: other edge
+runtimes, native off, local `wrangler dev`.
+
+```toml
+[observability.traces]
+enabled = true
+# head_sampling_rate = 0.1
+# destinations = ["honeycomb-traces"]
+```
+
+Keep your handler wrapper as it is. On each request the wrapper spots
+`ctx.tracing`, wraps it as a tracer, and installs it into the active context.
+Your `trace()` calls route to Cloudflare's tracer, including calls buried inside
+utility functions and libraries.
+
+When native tracing is active, autotel steps aside. It does not proxy-instrument
+bindings, because Cloudflare already traces them, and it registers no second
+provider or exporter, because Cloudflare exports everything. You get one set of
+spans.
+
+Control it with `nativeTracing`, which defaults to `'auto'`:
+
+| Value    | Behaviour                                                        |
+| -------- | ---------------------------------------------------------------- |
+| `'auto'` | Native when `ctx.tracing` is present, otherwise OTLP             |
+| `'on'`   | Prefer native; warn once and fall back to OTLP when it is absent |
+| `'off'`  | Always use autotel's OTLP exporter, even on Workers              |
+
+```typescript
+export default wrapModule(
+  { service: { name: 'my-worker' }, nativeTracing: 'auto' },
+  handler,
+);
+```
+
+`wrangler dev` does not export native traces to a local receiver, so local
+development uses the OTLP fallback. Start
+[devtools](/autotel/tools/devtools/) and point `exporter.url` at it:
+
+```bash
+npx autotel-devtools
+```
+
+The runtime-agnostic seam lives in `autotel-edge`; this package supplies the
+Cloudflare adapter.
+
 ## Testing
 
 `autotel-cloudflare` does not expose dedicated runtime testing helpers. Use your existing Worker test runner (Vitest/Miniflare/Wrangler) and assert on responses plus exporter output in integration tests.

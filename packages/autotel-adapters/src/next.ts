@@ -5,6 +5,7 @@ import {
   type RequestLogger,
   type RequestLoggerOptions,
 } from 'autotel';
+import { unstable_rethrow as unstableRethrow } from 'next/navigation.js';
 import {
   createUseLogger,
   getHeader,
@@ -33,6 +34,24 @@ export interface NextWithAutotelOptions extends Omit<
   enrichRequest?: (
     request?: NextRequestLike,
   ) => Record<string, unknown> | undefined;
+}
+
+/**
+ * Next navigation helpers throw internal values that the framework converts
+ * into responses. Delegate classification to Next itself so new signal types
+ * and signals wrapped in `cause` stay covered without duplicating its internals.
+ */
+function findNextControlFlowSignal(error: unknown): unknown | null {
+  try {
+    unstableRethrow(error);
+    return null;
+  } catch (signal) {
+    return signal;
+  }
+}
+
+function isRealNextError(error: unknown): boolean {
+  return findNextControlFlowSignal(error) === null;
 }
 
 const { storage: nextLoggerStorage, useLogger: storageUseLogger } =
@@ -116,19 +135,33 @@ export function withAutotel<TArgs extends unknown[], TReturn>(
 ): (...args: TArgs) => Promise<TReturn> {
   return async (...args: TArgs): Promise<TReturn> => {
     const request = args[0] as NextRequestLike | undefined;
+    const tracedOptions = buildTracedOptions(
+      options,
+      resolveSpanName(request, options),
+    );
 
     return integration.runTraced(
       request,
-      buildTracedOptions(options, resolveSpanName(request, options)),
+      tracedOptions,
       async (handle) =>
-        runWithIntegratedHandle(handle, options, async () => {
-          applyLoggerEnrichment(
-            handle.logger,
-            enrichFromRequest(request),
-            options?.enrichRequest?.(request),
-          );
-          return handler(...args);
-        }),
+        runWithIntegratedHandle(
+          handle,
+          { autoEmit: tracedOptions.autoEmit, isError: isRealNextError },
+          async () => {
+            applyLoggerEnrichment(
+              handle.logger,
+              enrichFromRequest(request),
+              options?.enrichRequest?.(request),
+            );
+            try {
+              return await handler(...args);
+            } catch (error) {
+              const signal = findNextControlFlowSignal(error);
+              throw signal ?? error;
+            }
+          },
+        ),
+      { isError: isRealNextError },
     );
   };
 }

@@ -178,6 +178,72 @@ npx autotel add backend datadog --help
 - `--dry-run` - Skip installation and print what would be done
 - `--force` - Overwrite non-CLI-owned config (creates backup first)
 
+### `autotel map`
+
+Reads your source, finds every entry point, and scores what context you would have when each one breaks. Static analysis only — nothing runs, nothing is sent anywhere.
+
+```bash
+# Score the project and write autotel.map.json
+npx autotel map
+
+# Every entry point as a check matrix
+npx autotel map --all
+
+# Explain one entry point and how to fix it
+npx autotel map app/api/checkout/route.ts
+npx autotel map /api/checkout
+
+# Machine-readable, for agents and CI
+npx autotel map --json
+
+# Fail CI below a threshold
+npx autotel map --min-score 70
+
+# Fail CI when a check that used to pass now fails
+npx autotel map --baseline git:origin/main
+```
+
+**Detected frameworks:** `next`, `nitro` (Nuxt), `tanstack-start`, `sveltekit`, `hono`, `express`, `fastify`, `elysia`, `cloudflare`. Override with `--framework <name>`.
+
+**Checks:**
+
+| Check                 | Weight | Question                                                              |
+| --------------------- | ------ | --------------------------------------------------------------------- |
+| `trace`               | 40     | Does this entry point produce a span?                                 |
+| `context`             | 25     | Does the span carry business context, or only method and status?      |
+| `audit`               | 25     | Does this money or auth path leave an audit trail? (sensitive routes) |
+| `structured-errors`   | 15     | Do thrown errors explain why they failed and how to fix them?         |
+| `error-handling`      | 10     | Does every catch block record the failure?                            |
+| `page-error-handling` | 20     | Does a data-loading page handle its request failing?                  |
+
+Suggestions never cost points. They cover untraced GenAI calls, validation
+without telemetry, missing redaction, repeated inline errors that can use an
+existing error catalog, and uncovered writes in a project that already records
+security events.
+
+Health checks, probes, and telemetry endpoints are exempt. Anything else can be waived in code:
+
+```ts
+// autotel-map-disable error-handling -- returns a safe fallback on purpose
+// autotel-map-disable-next-line audit, context -- internal-only route
+handler(); // autotel-map-disable-line structured-errors -- delegated upstream
+```
+
+Omit the check id to waive every finding in the selected scope. A waived check
+costs no score and is never counted as coverage;
+`summary.suppressedChecks` reports how many there are.
+
+**`autotel.map.json`** is written next to `package.json` and is meant to be committed: `--baseline` compares against it per check, so a refactor that instruments one route and breaks another still fails. A run that detects a regression does not overwrite the file it compared against.
+
+**Options:**
+
+- `--all` - Show every entry point as a check matrix
+- `--framework <name>` - Override framework detection
+- `--min-score <n>` - Exit 1 when the global score is below this threshold
+- `--baseline [source]` - Compare against a committed map (path, or `git:<ref>`); exit 1 on regression
+- `--no-write` - Skip writing `autotel.map.json`
+- `--json` / `--output-file <path>` - Machine-readable output
+
 ### `autotel codemod trace <path>`
 
 Wrap functions in `trace()` with a span name derived from the function/variable/method name. Use this to adopt autotel on existing code without changing function bodies.

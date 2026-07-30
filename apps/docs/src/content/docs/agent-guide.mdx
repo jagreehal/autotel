@@ -3,6 +3,29 @@ title: Agent Guide
 description: Before/after examples, when-to-use-what rules, and framework setup snippets for Autotel.
 ---
 
+## Start With the Map
+
+Do not guess which handlers are dark. Read them:
+
+```bash
+npx autotel map --json --no-write                  # every entry point
+npx autotel map --json --no-write <route|file>     # one entry point
+```
+
+Each entry in `map.routes[].checks` carries a `status`, a `message`, `evidence`
+(`file`, `line`, `snippet`), and a `fix`. Work from those. The checks land on
+the table below: `trace` wants a span, `context` wants a request logger with
+attributes, `structured-errors` wants `createStructuredError` with `why` and
+`fix`, `error-handling` wants catch blocks that record, `audit` wants
+`withAudit()` on money and auth paths.
+
+`autotel.map.json` gets committed, so the score is trackable. A check that
+should not apply gets waived in code with
+`// autotel-map-disable <check> -- reason` rather than by lowering the CI
+threshold. See [Observability Map](/autotel/tools/map/).
+
+---
+
 ## When to Use What
 
 | Scenario                           | Use                                                                                 | Example                                  |
@@ -12,6 +35,8 @@ description: Before/after examples, when-to-use-what rules, and framework setup 
 | Need span context (set attributes) | Factory: `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })` | Attach attributes inside the function    |
 | One snapshot per request           | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()`         | HTTP request handlers, background jobs   |
 | Throw an error with why/fix/link   | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`            | API routes, services, validation         |
+| Same error thrown from many places | `defineErrorCatalog('billing', { PAYMENT_DECLINED: { … } })`                        | Repeated failures, `.match()` in catches |
+| Set snapshot severity explicitly   | `log.setLevel('warn')`                                                              | Degraded response with nothing to log    |
 | Show API error in UI (client)      | `parseError(caught)` → use `message`, `why`, `fix`, `link`                          | Toasts, error banners, forms             |
 | Product/analytics events           | `track('event.name', attributes)` or `Event` from `autotel/event`                   | Clicks, signups, conversions             |
 | Record error on current span       | `recordStructuredError(ctx, error)` or request logger `.error()`                    | Inside catch blocks when you have a span |
