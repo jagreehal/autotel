@@ -1,5 +1,12 @@
 # Changelog
 
+## 14.0.0
+
+### Patch Changes
+
+- Updated dependencies [756345d]
+  - autotel-subscribers@44.0.0
+
 ## 13.0.0
 
 ### Patch Changes

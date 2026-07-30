@@ -1,5 +1,13 @@
 # autotel-pact
 
+## 10.0.0
+
+### Patch Changes
+
+- Updated dependencies [756345d]
+- Updated dependencies [756345d]
+  - autotel@6.0.0
+
 ## 9.0.0
 
 ### Patch Changes
