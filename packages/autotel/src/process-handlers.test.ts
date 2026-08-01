@@ -400,13 +400,11 @@ describe('process handler lifecycle', () => {
   it('swallows an unreachable-endpoint error wrapped in a cause during shutdown', async () => {
     const sdk = {
       start: vi.fn(),
-      shutdown: vi
-        .fn()
-        .mockRejectedValue(
-          new Error('exporter flush failed', {
-            cause: { code: 'ECONNREFUSED' },
-          }),
-        ),
+      shutdown: vi.fn().mockRejectedValue(
+        new Error('exporter flush failed', {
+          cause: { code: 'ECONNREFUSED' },
+        }),
+      ),
       getTracerProvider: () => undefined,
     };
     const { init, shutdown } = await import('./index');
@@ -425,7 +423,9 @@ describe('process handler lifecycle', () => {
   it('rethrows a real SDK shutdown error', async () => {
     const sdk = {
       start: vi.fn(),
-      shutdown: vi.fn().mockRejectedValue(new Error('exporter is misconfigured')),
+      shutdown: vi
+        .fn()
+        .mockRejectedValue(new Error('exporter is misconfigured')),
       getTracerProvider: () => undefined,
     };
     const { init, shutdown } = await import('./index');
