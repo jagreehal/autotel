@@ -22,7 +22,7 @@ export default defineConfig({
   },
   format: ['esm', 'cjs'],
   dts: true,
-  sourcemap: true,
+  sourcemap: false,
   outDir: 'dist',
   clean: true,
   treeshake: true,

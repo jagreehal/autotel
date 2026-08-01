@@ -56,7 +56,7 @@ export default defineConfig({
   format: ['esm', 'cjs'], // Build both ESM and CJS formats
   tsconfig: 'tsconfig.build.json',
   dts: true,
-  sourcemap: true,
+  sourcemap: false,
   outDir: 'dist',
   clean: true,
   treeshake: true, // Enable aggressive tree-shaking

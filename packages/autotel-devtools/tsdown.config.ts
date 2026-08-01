@@ -15,7 +15,7 @@ export default defineConfig({
   },
   format: ['esm', 'cjs'],
   dts: true,
-  sourcemap: true,
+  sourcemap: false,
   treeshake: true,
   minify: false,
   deps: {
