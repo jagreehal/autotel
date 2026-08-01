@@ -13,8 +13,8 @@
     "autotel-adapters": "workspace:*",
     "autotel-web": "workspace:*",
     "next": "16.2.10",
-    "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

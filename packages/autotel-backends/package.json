@@ -31,6 +31,16 @@
       "types": "./dist/grafana.d.ts",
       "import": "./dist/grafana.js",
       "require": "./dist/grafana.cjs"
+    },
+    "./logfire": {
+      "types": "./dist/logfire.d.ts",
+      "import": "./dist/logfire.js",
+      "require": "./dist/logfire.cjs"
+    },
+    "./langfuse": {
+      "types": "./dist/langfuse.d.ts",
+      "import": "./dist/langfuse.js",
+      "require": "./dist/langfuse.cjs"
     }
   },
   "files": [
@@ -71,14 +81,14 @@
   "license": "Apache-2.0",
   "dependencies": {
     "autotel": "workspace:*",
-    "@opentelemetry/exporter-logs-otlp-http": ">=0.220.0",
-    "@opentelemetry/sdk-logs": ">=0.220.0"
+    "@opentelemetry/exporter-logs-otlp-http": ">=0.221.0",
+    "@opentelemetry/sdk-logs": ">=0.221.0"
   },
   "peerDependencies": {
-    "@opentelemetry/exporter-metrics-otlp-http": ">=0.220.0",
-    "@opentelemetry/exporter-trace-otlp-http": ">=0.220.0",
-    "@opentelemetry/sdk-metrics": ">=2.9.0",
-    "google-auth-library": ">=10.9.0"
+    "@opentelemetry/exporter-metrics-otlp-http": ">=0.221.0",
+    "@opentelemetry/exporter-trace-otlp-http": ">=0.221.0",
+    "@opentelemetry/sdk-metrics": ">=2.10.0",
+    "google-auth-library": ">=10.9.1"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/exporter-metrics-otlp-http": {
@@ -95,12 +105,12 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^64.0.0",
-    "tsdown": "^0.22.12",
+    "tsdown": "^0.22.14",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },
