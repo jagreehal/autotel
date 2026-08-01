@@ -1,3 +1,8 @@
+// The build takes nine minutes and everyone has a theory about which job is to
+// blame. A pipeline is a request that happens to run for nine minutes. Give the
+// run a root span, give each job a child, and the critical path shows up as the
+// widest bar in the same waterfall you already read.
+
 import { span, withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
 
@@ -20,5 +25,7 @@ if (children.length !== 3) {
   throw new Error(`Expected 3 pipeline jobs, received ${children.length}`);
 }
 
-console.log('OE 18: represented one delivery pipeline as a trace');
-console.log(`  jobs: ${children.map((child) => child.name).join(', ')}`);
+console.log('OE 18: one pipeline run, read as one trace');
+console.log(
+  `  ${children.length} jobs under ci.pipeline: ${children.map((child) => child.name).join(', ')}`,
+);

@@ -1,3 +1,7 @@
+// Checkout starts failing for some customers. You have no dashboard for this,
+// because you never predicted it. You do have every field you recorded on every
+// checkout request. Group by each one until a cohort separates from the rest.
+
 import { withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
 
@@ -37,5 +41,9 @@ if (failures.length !== 2 || failures.some((value) => value !== 'bank-beta')) {
   throw new Error('Expected the failed cohort to use bank-beta');
 }
 
-console.log('OE 1: grouped an unplanned failure question by payment.provider');
-console.log(`  failed requests: ${failures.length}, provider: bank-beta`);
+console.log(
+  'OE 1: no dashboard for it, and the recorded fields answered anyway',
+);
+console.log(
+  `  ${failures.length} of ${requests.length} checkouts failed, and both ran through bank-beta`,
+);

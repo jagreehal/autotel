@@ -267,7 +267,8 @@ don't need Jaeger, Tempo, or Grafana.
 - **All three signals.** Traces, metrics, and logs with cross-signal correlation.
 - **Agent-optimised.** 41 tools designed for progressive investigation:
   discover → diagnose → correlate → root-cause.
-- **Zero infrastructure.** In-memory by default; persistent with `--persist`.
+- **Zero infrastructure.** In-memory by default; set `AUTOTEL_PERSIST` to a
+  libsql file path for persistence.
 
 ### Requirements
 
@@ -365,7 +366,7 @@ requires a read-scope token and its regional query host; Datadog requires both
 an API key and an application key. These three backends return an explicit
 `unsupported` capability for metrics and logs.
 
-To pass a backend through the MCP client config, add it to `args` or `env`:
+To select a backend through the MCP client config, add it to `env`:
 
 ```json
 {

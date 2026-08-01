@@ -1,3 +1,8 @@
+// A burn alert that fires on every blip trains the team to ignore it. Two
+// windows fix that: a short one to catch the spike, a long one to prove it
+// lasted. Then project the recent failure rate forward and ask whether the
+// error budget survives the next day.
+
 import {
   createSloTracker,
   evaluateBurnRateAlert,
@@ -53,10 +58,10 @@ if (!forecast.alerting || forecast.projectedSli === undefined) {
   throw new Error('Expected the forecast to exhaust the error budget');
 }
 
-console.log('OE 12: relative and predictive burn alerts');
+console.log('OE 12: the spike is real, and it is still burning');
 console.log(
-  `  short: ${decision.shortBurnRate.toFixed(1)}x, long: ${decision.longBurnRate.toFixed(1)}x`,
+  `  5 minutes at ${decision.shortBurnRate.toFixed(1)}x and 1 hour at ${decision.longBurnRate.toFixed(1)}x, both past threshold`,
 );
 console.log(
-  `  projected SLI after 24 hours: ${(forecast.projectedSli * 100).toFixed(1)}%`,
+  `  projected 24 hours out: ${(forecast.projectedSli * 100).toFixed(1)}% against a 99% target, so page now`,
 );

@@ -154,6 +154,11 @@ regional OTLP host selected by `createLogfireConfig`, while
 `LOGFIRE_BASE_URL` for reads must name the same region (`logfire-us` /
 `logfire-eu`). SigNoz reads use its Query Builder v5 API.
 
+Hosted read APIs retry HTTP 429 responses with bounded backoff and honour
+`Retry-After`. If the retry budget is exhausted, command JSON reports
+`AUTOTEL_E_RATE_LIMITED` with `retryable: true`; agents should wait for the
+vendor's rate-limit window and retry instead of interpreting it as “no data”.
+
 ### Ingest lag
 
 ```bash

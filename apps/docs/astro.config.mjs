@@ -5,10 +5,6 @@ import starlight from '@astrojs/starlight';
 export default defineConfig({
   site: 'https://jagreehal.github.io',
   base: '/autotel',
-  markdown: {
-    // GFM is enabled by default; keep it explicit so tables/strikethrough render.
-    gfm: true,
-  },
   integrations: [
     preact({ devtools: false }),
     starlight({
