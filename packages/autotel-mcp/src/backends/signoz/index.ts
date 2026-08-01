@@ -1,4 +1,4 @@
-import { jsonGet } from '../../lib/http';
+import { jsonPost } from '../../lib/http';
 import type {
   BackendCapabilities,
   BackendHealth,
@@ -17,6 +17,7 @@ import type {
   SpanSearchQuery,
   SpanSearchResult,
   SpanStatusCode,
+  TagValue,
   TraceRecord,
   TraceSearchQuery,
   TraceSearchResult,
@@ -31,27 +32,30 @@ import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
 import { normalizeTagValue } from '../span-mapping';
 
-/**
- * SigNoz — trace-only backend over the ClickHouse-backed HTTP API.
- *
- *   GET /api/v1/services      list APM services
- *   GET /api/v1/traces/{id}   fetch one trace's spans
- *
- * Auth is the `SIGNOZ-API-KEY` header on SigNoz Cloud. Self-hosted instances
- * commonly run unauthenticated on a private network, so an absent key is a
- * supported configuration rather than an error.
- *
- * Timestamps are nanoseconds (`startTime`, `durationNano`) and status is the
- * numeric OTLP code rather than a string.
- */
+/** SigNoz trace reads over the supported Query Builder v5 API. */
 
 const NS_PER_MS = 1_000_000;
+const DEFAULT_LOOKBACK_MS = 60 * 60 * 1000;
+const TRACE_LOOKUP_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_RAW_ROWS = 1000;
 
-/** Number of traces to sample per service when assembling a search or map. */
-const SERVICE_SAMPLE_LIMIT = 20;
+interface SignozRawRow {
+  timestamp?: string;
+  data?: Record<string, unknown>;
+}
 
-interface SignozService {
-  serviceName?: string;
+interface SignozRawResult {
+  queryName?: string;
+  rows?: SignozRawRow[];
+}
+
+interface SignozQueryRangeResponse {
+  type?: string;
+  data?: { results?: SignozRawResult[] };
+}
+
+interface SignozApiEnvelope {
+  data?: SignozQueryRangeResponse;
 }
 
 interface SignozSpan {
@@ -60,13 +64,16 @@ interface SignozSpan {
   parentSpanID?: string;
   name?: string;
   serviceName?: string;
-  /** Nanoseconds since the epoch. */
   startTime?: number;
   durationNano?: number;
-  /** OTLP numeric status: 0 unset, 1 ok, 2 error. */
   statusCode?: number;
-  statusMessage?: string;
-  attributes?: Record<string, unknown> | null;
+  hasError?: boolean;
+  attributes?: Record<string, unknown>;
+}
+
+interface SelectField {
+  name: string;
+  fieldContext?: 'resource' | 'span' | 'attribute';
 }
 
 export interface SignozBackendOptions {
@@ -76,11 +83,15 @@ export interface SignozBackendOptions {
   apiKey?: string;
 }
 
-/** OTLP numeric status → the string form the rest of the codebase uses. */
+/** OTLP numeric status -> the string form the rest of the codebase uses. */
 export function toStatusCode(status: number | undefined): SpanStatusCode {
   if (status === 2) return 'ERROR';
   if (status === 1) return 'OK';
   return 'UNSET';
+}
+
+function escapeFilterString(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
 }
 
 export class SignozBackend implements TelemetryBackend {
@@ -98,10 +109,43 @@ export class SignozBackend implements TelemetryBackend {
     return this.apiKey ? { 'SIGNOZ-API-KEY': this.apiKey } : {};
   }
 
-  private get<T>(path: string): Promise<T> {
-    return jsonGet<T>(new URL(path, this.baseUrl).toString(), {
-      headers: this.headers(),
-    });
+  private async queryRows(options: {
+    startMs: number;
+    endMs: number;
+    filter?: string;
+    limit: number;
+    selectFields?: SelectField[];
+  }): Promise<SignozRawRow[]> {
+    const body = await jsonPost<SignozApiEnvelope | SignozQueryRangeResponse>(
+      new URL('/api/v5/query_range', this.baseUrl).toString(),
+      {
+        start: options.startMs,
+        end: options.endMs,
+        requestType: 'raw',
+        variables: {},
+        compositeQuery: {
+          queries: [
+            {
+              type: 'builder_query',
+              spec: {
+                name: 'A',
+                signal: 'traces',
+                filter: { expression: options.filter ?? '' },
+                selectFields: options.selectFields ?? [
+                  { name: 'service.name', fieldContext: 'resource' },
+                ],
+                order: [{ key: { name: 'timestamp' }, direction: 'desc' }],
+                limit: Math.min(options.limit, MAX_RAW_ROWS),
+                offset: 0,
+                disabled: false,
+              },
+            },
+          ],
+        },
+      },
+      this.headers(),
+    );
+    return rawRows(body);
   }
 
   async healthCheck(): Promise<BackendHealth> {
@@ -128,19 +172,26 @@ export class SignozBackend implements TelemetryBackend {
   }
 
   async listServices(_query?: ServiceQuery): Promise<ServiceListResult> {
-    const body = await this.get<{ data?: SignozService[] }>('/api/v1/services');
+    const endMs = Date.now();
+    const rows = await this.queryRows({
+      startMs: endMs - TRACE_LOOKUP_LOOKBACK_MS,
+      endMs,
+      limit: MAX_RAW_ROWS,
+      selectFields: [{ name: 'service.name', fieldContext: 'resource' }],
+    });
     return {
-      services: (body.data ?? [])
-        .map((service) => service.serviceName ?? '')
-        .filter((name) => name.length > 0),
+      services: Array.from(
+        new Set(
+          rows
+            .map((row) => readString(row.data, 'serviceName', 'service.name'))
+            .filter((name): name is string => Boolean(name)),
+        ),
+      ),
     };
   }
 
   async listOperations(serviceName: string): Promise<OperationListResult> {
-    const traces = await this.searchTraces({
-      service: serviceName,
-      limit: SERVICE_SAMPLE_LIMIT,
-    });
+    const traces = await this.searchTraces({ service: serviceName, limit: 50 });
     const operations = new Set<string>();
     for (const trace of traces.items) {
       for (const span of trace.spans) {
@@ -151,59 +202,69 @@ export class SignozBackend implements TelemetryBackend {
     return { operations: Array.from(operations) };
   }
 
-  /**
-   * SigNoz's trace listing lives behind its generic `query_range` builder,
-   * whose payload shape moves between releases. Rather than pin to a shape that
-   * silently breaks on upgrade, assemble results from the stable endpoints:
-   * take the services list, pull recent traces per service, and filter here.
-   *
-   * ponytail: per-service fan-out, swap for query_range if it costs too much on a big install
-   */
   async searchTraces(query: TraceSearchQuery): Promise<TraceSearchResult> {
+    const endMs = query.endTimeUnixMs ?? Date.now();
+    const startMs = query.startTimeUnixMs ?? endMs - DEFAULT_LOOKBACK_MS;
     const limit = query.limit ?? 20;
-    const services = query.service
-      ? [query.service]
-      : (await this.listServices()).services;
+    const filters: string[] = [];
+    if (query.service) {
+      filters.push(`service.name = '${escapeFilterString(query.service)}'`);
+    }
+    if (query.operation) {
+      filters.push(`name = '${escapeFilterString(query.operation)}'`);
+    }
+    if (query.hasError || query.statusCode === 'ERROR') {
+      filters.push('has_error = true');
+    }
 
-    const traceIdsBySvc = await Promise.all(
-      services.map((service) => this.recentTraceIds(service)),
+    const rows = await this.queryRows({
+      startMs,
+      endMs,
+      filter: filters.join(' AND '),
+      limit: Math.min(limit * 20, MAX_RAW_ROWS),
+    });
+    const traceIds = Array.from(
+      new Set(
+        rows
+          .map((row) => readString(row.data, 'traceID', 'trace_id'))
+          .filter((traceId): traceId is string => Boolean(traceId)),
+      ),
+    ).slice(0, limit);
+    const hydrated = await Promise.all(
+      traceIds.map((traceId) => this.getTraceInWindow(traceId, startMs, endMs)),
     );
-    const traceIds = Array.from(new Set(traceIdsBySvc.flat())).slice(
-      0,
-      limit * 2,
-    );
-
-    const traces = await Promise.all(traceIds.map((id) => this.getTrace(id)));
-    const items = traces
+    const items = hydrated
       .filter((trace): trace is TraceRecord => trace !== null)
       .filter((trace) => traceMatchesQuery(trace, query))
       .slice(0, limit);
     return { items, totalCount: items.length };
   }
 
-  /** Recent trace ids for one service, via the top-operations sample endpoint. */
-  private async recentTraceIds(service: string): Promise<string[]> {
-    try {
-      const body = await this.get<{ data?: Array<{ traceID?: string }> }>(
-        `/api/v1/traces?service=${encodeURIComponent(service)}&limit=${SERVICE_SAMPLE_LIMIT}`,
-      );
-      return (body.data ?? [])
-        .map((row) => row.traceID ?? '')
-        .filter((id) => id.length > 0);
-    } catch {
-      // A SigNoz build without this listing shape shouldn't fail the whole
-      // search — other services may still return results.
-      return [];
-    }
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    const endMs = Date.now();
+    return this.getTraceInWindow(
+      traceId,
+      endMs - TRACE_LOOKUP_LOOKBACK_MS,
+      endMs,
+    );
   }
 
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
-    const body = await this.get<{ data?: SignozSpan[] }>(
-      `/api/v1/traces/${encodeURIComponent(traceId)}`,
-    );
-    const spans = (body.data ?? []).map((span) => toSpanRecord(span, traceId));
-    if (spans.length === 0) return null;
-    return { traceId, spans };
+  private async getTraceInWindow(
+    traceId: string,
+    startMs: number,
+    endMs: number,
+  ): Promise<TraceRecord | null> {
+    const rows = await this.queryRows({
+      startMs,
+      endMs,
+      filter: `trace_id = '${escapeFilterString(traceId)}'`,
+      limit: MAX_RAW_ROWS,
+    });
+    const spans = rows
+      .map(rowToSignozSpan)
+      .filter((span) => span.traceID === traceId)
+      .map((span) => toSpanRecord(span, traceId));
+    return spans.length > 0 ? { traceId, spans } : null;
   }
 
   async searchSpans(query: SpanSearchQuery): Promise<SpanSearchResult> {
@@ -223,8 +284,7 @@ export class SignozBackend implements TelemetryBackend {
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
     const trace = await this.getTrace(traceId);
-    if (!trace) return null;
-    return summarizeTrace(trace) as unknown as TraceSummary;
+    return trace ? (summarizeTrace(trace) as unknown as TraceSummary) : null;
   }
 
   async listMetrics(_query?: MetricSearchQuery): Promise<MetricSearchResult> {
@@ -258,6 +318,90 @@ export class SignozBackend implements TelemetryBackend {
   }
 }
 
+function rawRows(
+  body: SignozApiEnvelope | SignozQueryRangeResponse,
+): SignozRawRow[] {
+  const response =
+    body.data && 'type' in body.data
+      ? body.data
+      : (body as SignozQueryRangeResponse);
+  return response.data?.results?.flatMap((result) => result.rows ?? []) ?? [];
+}
+
+function readString(
+  data: Record<string, unknown> | undefined,
+  ...keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = data?.[key];
+    if (typeof value === 'string' && value !== '') return value;
+  }
+  return undefined;
+}
+
+function readNumber(
+  data: Record<string, unknown> | undefined,
+  ...keys: string[]
+): number | undefined {
+  for (const key of keys) {
+    const value = data?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value !== '') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return undefined;
+}
+
+function groupedAttributes(
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const groups = [
+    'attributes',
+    'attributes_bool',
+    'attributes_float64',
+    'attributes_int64',
+    'attributes_number',
+    'attributes_string',
+    'resources_bool',
+    'resources_float64',
+    'resources_int64',
+    'resources_number',
+    'resources_string',
+  ];
+  return Object.assign(
+    {},
+    ...groups.map((key) => {
+      const value = data[key];
+      return value && typeof value === 'object' && !Array.isArray(value)
+        ? value
+        : {};
+    }),
+  ) as Record<string, unknown>;
+}
+
+function rowToSignozSpan(row: SignozRawRow): SignozSpan {
+  const data = row.data ?? {};
+  const statusCode = readNumber(data, 'statusCode', 'status_code');
+  const hasError = data.hasError === true || data.has_error === true;
+  const timestampMs = row.timestamp ? Date.parse(row.timestamp) : Number.NaN;
+  return {
+    traceID: readString(data, 'traceID', 'trace_id'),
+    spanID: readString(data, 'spanID', 'span_id'),
+    parentSpanID: readString(data, 'parentSpanID', 'parent_span_id'),
+    name: readString(data, 'name', 'span_name'),
+    serviceName: readString(data, 'serviceName', 'service.name'),
+    startTime:
+      readNumber(data, 'startTime', 'start_time', 'timestamp') ??
+      (Number.isNaN(timestampMs) ? 0 : timestampMs * NS_PER_MS),
+    durationNano: readNumber(data, 'durationNano', 'duration_nano'),
+    statusCode: statusCode ?? (hasError ? 2 : undefined),
+    hasError,
+    attributes: groupedAttributes(data),
+  };
+}
+
 function toSpanRecord(span: SignozSpan, fallbackTraceId: string): SpanRecord {
   const statusCode = toStatusCode(span.statusCode);
   return {
@@ -273,8 +417,8 @@ function toSpanRecord(span: SignozSpan, fallbackTraceId: string): SpanRecord {
         key,
         normalizeTagValue(value),
       ]),
-    ),
-    hasError: statusCode === 'ERROR',
+    ) as Record<string, TagValue>,
+    hasError: span.hasError === true || statusCode === 'ERROR',
     statusCode,
   };
 }

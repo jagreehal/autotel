@@ -14,7 +14,7 @@ export interface OtelEnvVars {
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
   OTEL_EXPORTER_OTLP_HEADERS?: string;
   OTEL_RESOURCE_ATTRIBUTES?: string;
-  OTEL_EXPORTER_OTLP_PROTOCOL?: 'http' | 'grpc';
+  OTEL_EXPORTER_OTLP_PROTOCOL?: 'http' | 'http/protobuf' | 'grpc';
   OTEL_TRACES_SAMPLER?: string;
   OTEL_TRACES_SAMPLER_ARG?: string;
 }
@@ -40,7 +40,7 @@ export interface OtlpHeaders {
 export interface EnvConfig {
   service?: string;
   endpoint?: string;
-  protocol?: 'http' | 'grpc';
+  protocol?: 'http' | 'http/protobuf' | 'grpc';
   headers?: Record<string, string>;
   resourceAttributes?: Record<string, string>;
   otelSampler?: OtelSampler;
@@ -96,10 +96,14 @@ export function resolveOtelEnv(): OtelEnvVars {
     }
   }
 
-  // OTEL_EXPORTER_OTLP_PROTOCOL - optional enum ('http' | 'grpc')
+  // OTEL_EXPORTER_OTLP_PROTOCOL - the spec's values are grpc, http/protobuf
+  // and http/json; `http` is accepted as a long-standing alias for the JSON
+  // encoding. http/protobuf is a distinct wire format, not a synonym for http.
   if (process.env.OTEL_EXPORTER_OTLP_PROTOCOL) {
     const value = process.env.OTEL_EXPORTER_OTLP_PROTOCOL.trim().toLowerCase();
-    if (value === 'http' || value === 'grpc') {
+    if (value === 'http' || value === 'http/json') {
+      env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http';
+    } else if (value === 'http/protobuf' || value === 'grpc') {
       env.OTEL_EXPORTER_OTLP_PROTOCOL = value;
     }
   }

@@ -34,10 +34,11 @@ const searchResponse = {
         span_id: 'span-root',
         service: 'checkout',
         resource_name: 'POST /orders',
-        start: '1785500000000000000',
-        duration: 250_000_000,
+        start_timestamp: '2026-07-31T11:33:20.000Z',
+        end_timestamp: '2026-07-31T11:33:20.250Z',
         status: 'ok',
-        tags: { env: 'prod' },
+        tags: ['env:prod'],
+        attributes: { 'gen_ai.request.model': 'gpt-5' },
       },
     },
     {
@@ -49,8 +50,8 @@ const searchResponse = {
         parent_id: 'span-root',
         service: 'payments',
         resource_name: 'charge',
-        start: '1785500000100000000',
-        duration: 50_000_000,
+        start_timestamp: '2026-07-31T11:33:20.100Z',
+        end_timestamp: '2026-07-31T11:33:20.150Z',
         status: 'error',
       },
     },
@@ -79,7 +80,13 @@ describe('DatadogBackend', () => {
   });
 
   it('sends both Datadog auth headers', async () => {
-    const fetchSpy = respond({ data: [] });
+    const fetchSpy = respond({
+      data: {
+        attributes: { services: [] },
+        id: 'services',
+        type: 'services_list',
+      },
+    });
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
     await backend().listServices();
@@ -91,7 +98,25 @@ describe('DatadogBackend', () => {
     });
   });
 
-  it('groups spans into traces by trace_id', async () => {
+  it('uses the APM service-list endpoint and response shape', async () => {
+    const fetchSpy = respond({
+      data: {
+        attributes: { services: ['checkout', 'payments'] },
+        id: 'services',
+        type: 'services_list',
+      },
+    });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    await expect(backend().listServices()).resolves.toEqual({
+      services: ['checkout', 'payments'],
+    });
+    expect(fetchSpy.mock.calls[0]![0]).toBe(
+      'https://api.datadoghq.com/api/v2/apm/services?filter%5Benv%5D=*',
+    );
+  });
+
+  it('groups spans into traces by trace_id and preserves span attributes', async () => {
     globalThis.fetch = respond(searchResponse) as unknown as typeof fetch;
 
     const result = await backend().searchTraces({ limit: 10 });
@@ -104,6 +129,8 @@ describe('DatadogBackend', () => {
     expect(trace.spans[0]!.operationName).toBe('POST /orders');
     expect(trace.spans[0]!.parentSpanId).toBeNull();
     expect(trace.spans[1]!.parentSpanId).toBe('span-root');
+    expect(trace.spans[0]!.tags['gen_ai.request.model']).toBe('gpt-5');
+    expect(trace.spans[0]!.tags.env).toBe('prod');
   });
 
   it('converts nanosecond start and duration into ms', async () => {
@@ -111,7 +138,9 @@ describe('DatadogBackend', () => {
 
     const trace = (await backend().searchTraces({})).items[0]!;
 
-    expect(trace.spans[0]!.startTimeUnixMs).toBe(1_785_500_000_000);
+    expect(trace.spans[0]!.startTimeUnixMs).toBe(
+      Date.parse('2026-07-31T11:33:20.000Z'),
+    );
     expect(trace.spans[0]!.durationMs).toBe(250);
   });
 
@@ -127,8 +156,8 @@ describe('DatadogBackend', () => {
             span_id: 's',
             service: 'api',
             resource_name: 'GET /',
-            start: '2026-07-27T21:53:20.000Z',
-            duration: 1_000_000,
+            start_timestamp: '2026-07-27T21:53:20.000Z',
+            end_timestamp: '2026-07-27T21:53:20.001Z',
           },
         },
       ],
@@ -163,6 +192,35 @@ describe('DatadogBackend', () => {
     expect(body.data.attributes.filter.query).toBe(
       'service:checkout status:error',
     );
+  });
+
+  it('hydrates every matching trace so service filters retain downstream spans', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ data: [searchResponse.data[0]] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => searchResponse,
+      });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await backend().searchTraces({ service: 'checkout' });
+
+    expect(result.items[0]!.spans.map((span) => span.serviceName)).toEqual([
+      'checkout',
+      'payments',
+    ]);
+    const hydrationBody = JSON.parse(
+      (fetchSpy.mock.calls[1]![1] as RequestInit).body as string,
+    );
+    expect(hydrationBody.data.attributes.filter.query).toBe('trace_id:trace-1');
   });
 
   // A search with no `from`/`to` falls back to Datadog's short default window,
@@ -204,7 +262,7 @@ describe('DatadogBackend', () => {
     }).listServices();
 
     expect(fetchSpy.mock.calls[0]![0]).toBe(
-      'https://api.datadoghq.eu/api/v2/services',
+      'https://api.datadoghq.eu/api/v2/apm/services?filter%5Benv%5D=*',
     );
   });
 

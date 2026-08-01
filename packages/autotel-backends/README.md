@@ -153,11 +153,36 @@ init(
 
 **Features**:
 
-- Forces OTLP/HTTP — Logfire rejects gRPC, which most OTel SDKs default to
+- Forces OTLP/HTTP **protobuf** — Logfire rejects gRPC and silently drops a JSON body, so either default loses your traces without an error
 - Defaults to the token-routed ingest host, so an EU token doesn't 401 against a US endpoint; pin with `region: 'us' | 'eu'` or override `endpoint` for self-hosted
 - Sends the write token bare, as Logfire's ingest expects (its query API wants `Bearer <read-token>` instead — different credential, different format)
 
 [View full Logfire configuration options →](./src/logfire.ts)
+
+### 🦔 PostHog
+
+[PostHog](https://posthog.com) ingests OTLP traces, logs and metrics, so product analytics and distributed traces can share a destination. (For product _events_, see `autotel-subscribers/posthog` — a separate path.)
+
+```typescript
+import { createPostHogConfig } from 'autotel-backends/posthog';
+
+init(
+  createPostHogConfig({
+    projectToken: process.env.POSTHOG_PROJECT_TOKEN!,
+    service: 'my-app',
+    region: 'eu', // or 'us'
+  }),
+);
+```
+
+**Features**:
+
+- OTLP/HTTP **protobuf** — PostHog's docs steer away from the JSON exporter, and a JSON body is dropped rather than rejected
+- Handles the `/i` path prefix its OTLP receiver lives under, so signals land on `/i/v1/traces`, `/i/v1/logs` and `/i/v1/metrics`
+- US and EU cloud regions, plus a self-hosted `host` override
+- Bearer auth with the `phc_…` project token
+
+[View full PostHog configuration options →](./src/posthog.ts)
 
 ### 🪢 Langfuse
 

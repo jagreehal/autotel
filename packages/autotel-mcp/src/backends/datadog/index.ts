@@ -57,16 +57,21 @@ const NS_PER_MS = 1_000_000;
 interface DatadogSpanAttributes {
   service?: string;
   resource_name?: string;
-  /** Epoch nanoseconds as a string, or an ISO timestamp — both are handled. */
+  /** Legacy/alternate epoch-nanosecond value. */
   start?: string | number;
-  /** Nanoseconds. */
+  start_timestamp?: string;
+  end_timestamp?: string;
+  /** Legacy/alternate duration in nanoseconds. */
   duration?: number;
   trace_id?: string;
   span_id?: string;
   parent_id?: string;
   type?: string;
   status?: string;
-  tags?: Record<string, string>;
+  /** Indexed tags are returned as `key:value` strings. */
+  tags?: string[] | Record<string, string>;
+  /** Original OTel span attributes. */
+  attributes?: Record<string, unknown>;
   custom?: Record<string, unknown>;
 }
 
@@ -81,7 +86,11 @@ interface DatadogSearchResponse {
 }
 
 interface DatadogServicesResponse {
-  data?: Array<{ id?: string; attributes?: { name?: string } }>;
+  data?: {
+    id?: string;
+    type?: string;
+    attributes?: { services?: string[] };
+  };
 }
 
 export interface DatadogBackendOptions {
@@ -212,14 +221,13 @@ export class DatadogBackend implements TelemetryBackend {
 
   async listServices(_query?: ServiceQuery): Promise<ServiceListResult> {
     const headers = this.authHeaders();
-    const body = await jsonGet<DatadogServicesResponse>(
-      new URL('/api/v2/services', this.baseUrl).toString(),
-      { headers },
-    );
+    const url = new URL('/api/v2/apm/services', this.baseUrl);
+    url.searchParams.set('filter[env]', '*');
+    const body = await jsonGet<DatadogServicesResponse>(url.toString(), {
+      headers,
+    });
     return {
-      services: (body.data ?? [])
-        .map((service) => service.attributes?.name ?? service.id ?? '')
-        .filter((name) => name.length > 0),
+      services: body.data?.attributes?.services ?? [],
     };
   }
 
@@ -247,8 +255,24 @@ export class DatadogBackend implements TelemetryBackend {
       .join(' ');
 
     const limit = query.limit ?? 20;
-    const events = await this.search(filter, fromMs, toMs, limit * 20);
-    const items = groupSpans(events)
+    const events = await this.search(
+      filter,
+      fromMs,
+      toMs,
+      Math.min(limit * 20, 1000),
+    );
+    const traceIds = Array.from(
+      new Set(
+        events
+          .map((event) => event.attributes?.trace_id)
+          .filter((traceId): traceId is string => Boolean(traceId)),
+      ),
+    ).slice(0, limit);
+    const hydrated = await Promise.all(
+      traceIds.map((traceId) => this.getTraceInWindow(traceId, fromMs, toMs)),
+    );
+    const items = hydrated
+      .filter((trace): trace is TraceRecord => trace !== null)
       .filter((trace) => traceMatchesQuery(trace, query))
       .slice(0, limit);
     return { items, totalCount: items.length };
@@ -256,13 +280,22 @@ export class DatadogBackend implements TelemetryBackend {
 
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     const toMs = Date.now();
-    const events = await this.search(
-      `trace_id:${traceId}`,
+    return this.getTraceInWindow(
+      traceId,
       toMs - TRACE_LOOKUP_LOOKBACK_MS,
       toMs,
-      1000,
     );
-    return groupSpans(events)[0] ?? null;
+  }
+
+  private async getTraceInWindow(
+    traceId: string,
+    fromMs: number,
+    toMs: number,
+  ): Promise<TraceRecord | null> {
+    const events = await this.search(`trace_id:${traceId}`, fromMs, toMs, 1000);
+    return (
+      groupSpans(events).find((trace) => trace.traceId === traceId) ?? null
+    );
   }
 
   async searchSpans(query: SpanSearchQuery): Promise<SpanSearchResult> {
@@ -333,15 +366,19 @@ export function groupSpans(events: DatadogSpanEvent[]): TraceRecord[] {
     const traceId = attributes.trace_id;
     if (!traceId) continue;
 
-    const startTimeUnixMs = parseStartMs(attributes.start);
+    const startTimeUnixMs = parseStartMs(
+      attributes.start_timestamp ?? attributes.start,
+    );
+    const endTimeUnixMs = attributes.end_timestamp
+      ? Date.parse(attributes.end_timestamp)
+      : Number.NaN;
+    const durationMs = Number.isNaN(endTimeUnixMs)
+      ? (attributes.duration ?? 0) / NS_PER_MS
+      : Math.max(0, endTimeUnixMs - startTimeUnixMs);
     const isError = attributes.status === 'error';
     const tags: Record<string, TagValue> = {
-      ...Object.fromEntries(
-        Object.entries(attributes.tags ?? {}).map(([key, value]) => [
-          key,
-          normalizeTagValue(value),
-        ]),
-      ),
+      ...datadogTags(attributes.tags),
+      ...normalizedEntries(attributes.attributes),
       ...Object.fromEntries(
         Object.entries(attributes.custom ?? {}).map(([key, value]) => [
           key,
@@ -358,7 +395,7 @@ export function groupSpans(events: DatadogSpanEvent[]): TraceRecord[] {
       operationName: attributes.resource_name ?? 'span',
       serviceName: attributes.service ?? 'unknown',
       startTimeUnixMs,
-      durationMs: (attributes.duration ?? 0) / NS_PER_MS,
+      durationMs,
       tags,
       hasError: isError,
       statusCode: isError ? 'ERROR' : 'OK',
@@ -370,4 +407,29 @@ export function groupSpans(events: DatadogSpanEvent[]): TraceRecord[] {
   }
 
   return Array.from(byTraceId, ([traceId, spans]) => ({ traceId, spans }));
+}
+
+function normalizedEntries(
+  values: Record<string, unknown> | undefined,
+): Record<string, TagValue> {
+  return Object.fromEntries(
+    Object.entries(values ?? {}).map(([key, value]) => [
+      key,
+      normalizeTagValue(value),
+    ]),
+  );
+}
+
+function datadogTags(
+  tags: string[] | Record<string, string> | undefined,
+): Record<string, TagValue> {
+  if (!Array.isArray(tags)) return normalizedEntries(tags);
+  return Object.fromEntries(
+    tags.map((tag) => {
+      const separator = tag.indexOf(':');
+      return separator < 0
+        ? [tag, true]
+        : [tag.slice(0, separator), tag.slice(separator + 1)];
+    }),
+  );
 }

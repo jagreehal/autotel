@@ -12,6 +12,7 @@ export default defineConfig({
     grafana: 'src/grafana.ts',
     logfire: 'src/logfire.ts',
     langfuse: 'src/langfuse.ts',
+    posthog: 'src/posthog.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

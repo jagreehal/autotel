@@ -70,9 +70,6 @@ const SPAN_COLUMNS = [
 /** Fallback lookback when the caller gave no window, since a bound is mandatory. */
 const DEFAULT_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** How many spans to pull per trace when expanding a search into full traces. */
-const SPANS_PER_TRACE_ESTIMATE = 20;
-
 interface LogfireSpanRow {
   trace_id: string;
   span_id: string;
@@ -209,16 +206,36 @@ export class LogfireBackend implements TelemetryBackend {
       where.push(`span_name = '${escapeSqlString(query.operation)}'`);
     }
     if (query.hasError) where.push('is_exception = TRUE');
+    if (query.endTimeUnixMs !== undefined) {
+      where.push(
+        `start_timestamp <= '${new Date(query.endTimeUnixMs).toISOString()}'`,
+      );
+    }
     const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
 
     const limit = query.limit ?? 20;
+    const matches = await this.query<{ trace_id?: string | null }>(
+      `SELECT trace_id, max(start_timestamp) AS latest_start FROM records${clause} GROUP BY trace_id ORDER BY latest_start DESC LIMIT ${limit}`,
+      query.startTimeUnixMs,
+    );
+    const traceIds = Array.from(
+      new Set(
+        matches
+          .map((row) => row.trace_id ?? '')
+          .filter((traceId) => traceId.length > 0),
+      ),
+    );
+    if (traceIds.length === 0) return { items: [], totalCount: 0 };
+
+    const idList = traceIds
+      .map((traceId) => `'${escapeSqlString(traceId)}'`)
+      .join(', ');
     const rows = await this.query<LogfireSpanRow>(
-      `SELECT ${SPAN_COLUMNS} FROM records${clause} ORDER BY start_timestamp DESC LIMIT ${limit * SPANS_PER_TRACE_ESTIMATE}`,
+      `SELECT ${SPAN_COLUMNS} FROM records WHERE trace_id IN (${idList}) ORDER BY start_timestamp ASC LIMIT ${Math.min(traceIds.length * 1000, 10_000)}`,
       query.startTimeUnixMs,
     );
 
-    // Duration and error filters apply to the assembled trace, not the row, so
-    // they run client-side once the spans are grouped.
+    // Apply trace-level filters only after every selected trace is hydrated.
     const items = rowsToTraces(rows)
       .filter((trace) => traceMatchesQuery(trace, query))
       .slice(0, limit);

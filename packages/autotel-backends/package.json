@@ -41,6 +41,11 @@
       "types": "./dist/langfuse.d.ts",
       "import": "./dist/langfuse.js",
       "require": "./dist/langfuse.cjs"
+    },
+    "./posthog": {
+      "types": "./dist/posthog.d.ts",
+      "import": "./dist/posthog.js",
+      "require": "./dist/posthog.cjs"
     }
   },
   "files": [

@@ -12,6 +12,13 @@ export interface HealthFlags extends InvestigateFlags {
   otlpEncoding?: OtlpEncoding;
 }
 
+export function resolvedFreshnessEncoding(
+  requested: OtlpEncoding | undefined,
+  backend: Pick<{ kind: string }, 'kind'>,
+): OtlpEncoding {
+  return requested ?? (backend.kind === 'collector' ? 'json' : 'protobuf');
+}
+
 export async function runHealth(flags: HealthFlags): Promise<void> {
   await runInvestigate('health', flags, async (backend) => {
     const [health, capabilities] = await Promise.all([
@@ -24,9 +31,7 @@ export async function runHealth(flags: HealthFlags): Promise<void> {
     // Protobuf is what OTLP/HTTP receivers must accept and what several hosted
     // vendors accept exclusively — but our own in-process collector parses JSON
     // only, so it gets JSON unless the caller says otherwise.
-    const encoding =
-      flags.otlpEncoding ??
-      (flags.backend === 'collector' ? 'json' : 'protobuf');
+    const encoding = resolvedFreshnessEncoding(flags.otlpEncoding, backend);
 
     const freshness = await measureFreshness({
       backend,

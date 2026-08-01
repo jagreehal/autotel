@@ -105,6 +105,37 @@ describe('LogfireBackend', () => {
     expect(trace.spans[0]!.tags['gen_ai.request.model']).toBe('claude-opus-5');
   });
 
+  it('hydrates matching trace ids so service filters retain downstream spans', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          data: [{ trace_id: queryResponse.data[0]!.trace_id }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => queryResponse,
+      });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await backend().searchTraces({
+      service: 'travel-assistant',
+    });
+
+    expect(result.items[0]!.spans).toHaveLength(2);
+    const hydration = JSON.parse(
+      (fetchSpy.mock.calls[1]![1] as RequestInit).body as string,
+    );
+    expect(hydration.sql).toContain('WHERE trace_id IN');
+    expect(hydration.sql).not.toContain("service_name = 'travel-assistant'");
+  });
+
   it('converts timestamps to epoch ms and durations to ms', async () => {
     globalThis.fetch = respond(queryResponse) as unknown as typeof fetch;
 

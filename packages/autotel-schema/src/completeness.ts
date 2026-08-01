@@ -160,28 +160,51 @@ export function scoreGenAiCompleteness(
     fields.push(score('latency_per_span', 0, 'no span carries a duration'));
   }
 
-  const argCount = countSpansWith(spans, 'gen_ai.tool.call.arguments');
-  const resultCount = countSpansWith(spans, 'gen_ai.tool.call.result');
-  const toolSpans = countSpansWith(spans, 'gen_ai.tool.name');
-
-  fields.push(
-    argCount > 0
-      ? score('tool_call_args', 1, `${argCount} tool call(s) carry arguments`)
-      : score(
-          'tool_call_args',
-          0,
-          toolSpans > 0
-            ? `${toolSpans} tool span(s) but none carry gen_ai.tool.call.arguments`
-            : 'no tool calls in this trace',
-        ),
+  const toolCallSpans = spans.filter(
+    (span) =>
+      isNonEmpty(span.attributes?.['gen_ai.tool.name']) ||
+      isNonEmpty(span.attributes?.['gen_ai.tool.call.id']) ||
+      isNonEmpty(span.attributes?.['gen_ai.tool.call.arguments']) ||
+      isNonEmpty(span.attributes?.['gen_ai.tool.call.result']),
   );
+  const toolSpans = toolCallSpans.length;
+  const argCount = countSpansWith(toolCallSpans, 'gen_ai.tool.call.arguments');
+  const resultCount = countSpansWith(toolCallSpans, 'gen_ai.tool.call.result');
 
-  if (resultCount > 0 && resultCount >= argCount) {
+  if (toolSpans === 0) {
+    fields.push(score('tool_call_args', 0, 'no tool calls in this trace'));
+  } else if (argCount === toolSpans) {
+    fields.push(
+      score(
+        'tool_call_args',
+        1,
+        `all ${toolSpans} tool call(s) carry arguments`,
+      ),
+    );
+  } else if (argCount > 0) {
+    fields.push(
+      score(
+        'tool_call_args',
+        0.5,
+        `${argCount} of ${toolSpans} tool call(s) carry arguments`,
+      ),
+    );
+  } else {
+    fields.push(
+      score(
+        'tool_call_args',
+        0,
+        `${toolSpans} tool span(s) but none carry gen_ai.tool.call.arguments`,
+      ),
+    );
+  }
+
+  if (toolSpans > 0 && resultCount === toolSpans) {
     fields.push(
       score(
         'tool_call_results',
         1,
-        `${resultCount} tool call(s) carry results`,
+        `all ${toolSpans} tool call(s) carry results`,
       ),
     );
   } else if (resultCount > 0) {
@@ -189,19 +212,19 @@ export function scoreGenAiCompleteness(
       score(
         'tool_call_results',
         0.5,
-        `${resultCount} of ${argCount} tool call(s) carry a result`,
+        `${resultCount} of ${toolSpans} tool call(s) carry a result`,
       ),
     );
-  } else {
+  } else if (toolSpans > 0) {
     fields.push(
       score(
         'tool_call_results',
-        0,
-        toolSpans > 0
-          ? `${toolSpans} tool span(s) but none carry gen_ai.tool.call.result`
-          : 'no tool calls in this trace',
+        0.5,
+        `${toolSpans} tool call(s) recorded but no result landed`,
       ),
     );
+  } else {
+    fields.push(score('tool_call_results', 0, 'no tool calls in this trace'));
   }
 
   // A tree needs a child whose parent is actually in the set — a dangling

@@ -78,6 +78,13 @@ describe('investigate commands (fixture backend)', () => {
     expect(data.signals.traces).toBe('available');
   });
 
+  it('health: uses JSON for the resolved collector backend', async () => {
+    const { resolvedFreshnessEncoding } = await import('./health');
+    expect(resolvedFreshnessEncoding(undefined, { kind: 'collector' })).toBe(
+      'json',
+    );
+  });
+
   it('capabilities: returns signal availability', async () => {
     await runCapabilities(flags);
     const data = expectOk('capabilities') as { traces: string };

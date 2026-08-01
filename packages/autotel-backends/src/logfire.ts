@@ -97,8 +97,8 @@ export interface LogfirePresetConfig {
  * Create an autotel configuration for Pydantic Logfire.
  *
  * This preset handles:
- * - OTLP/HTTP protocol — Logfire does not accept gRPC, and OTel SDKs that
- *   default to it fail silently
+ * - OTLP/HTTP **protobuf** — Logfire accepts neither gRPC nor a JSON body, and
+ *   an SDK defaulting to either fails silently
  * - The regional ingest endpoint
  * - The bare-token `Authorization` header Logfire's ingest expects
  *
@@ -131,8 +131,10 @@ export function createLogfireConfig(
     service,
     environment,
     version,
-    // Logfire is HTTP-only; a gRPC exporter will not deliver anything.
-    protocol: 'http',
+    // Logfire is HTTP-only, and specifically OTLP **protobuf** — a gRPC
+    // exporter delivers nothing, and a JSON body is dropped silently, which
+    // looks exactly like emitting no telemetry at all.
+    protocol: 'http/protobuf',
     endpoint: config.endpoint ?? regionEndpoint,
     // Ingest takes the token bare — `Bearer <token>` is only for the query API.
     headers: { Authorization: writeToken },

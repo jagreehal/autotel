@@ -5,6 +5,8 @@ import {
   encodeProbe,
   measureFreshness,
   otlpHeadersFromEnv,
+  resolveOtlpTraceUrl,
+  sendOtlpTrace,
 } from './freshness';
 
 /** A backend that starts empty and serves the probe from the Nth read onward. */
@@ -38,19 +40,20 @@ const noSleep = async () => {};
 describe('measureFreshness', () => {
   it('reports the lag once the probe span becomes queryable', async () => {
     const { backend } = backendVisibleFromRead(3);
+    let currentMs = 1_000_000;
     const result = await measureFreshness({
       backend,
       otlpEndpoint: 'http://localhost:4318',
-      now: steppedClock(1_000_000, 500),
-      sleep: noSleep,
+      now: () => currentMs,
+      sleep: async (ms) => {
+        currentMs += ms;
+      },
       send: async () => {},
     });
 
     expect(result.timedOut).toBe(false);
     expect(result.attempts).toBe(3);
-    // Clock ticks at 500ms: start, timeout check after poll 1, after poll 2,
-    // then the read-back once poll 3 finds it → 1.5s elapsed.
-    expect(result.timeToQueryableSeconds).toBe(1.5);
+    expect(result.timeToQueryableSeconds).toBe(4);
   });
 
   it('writes the probe under the service name it then polls for', async () => {
@@ -90,25 +93,38 @@ describe('measureFreshness', () => {
     expect(result.attempts).toBeLessThan(10);
   });
 
-  it('keeps waiting when a read throws rather than failing the measurement', async () => {
-    let reads = 0;
-    const flaky = {
+  it('surfaces backend read failures instead of disguising them as stale data', async () => {
+    const unauthorized = {
       searchTraces: async () => {
-        reads++;
-        if (reads === 1) throw new Error('unknown service');
-        return { items: [{ traceId: 'probe' }], totalCount: 1 };
+        throw new Error('401 Unauthorized');
       },
     } as unknown as TelemetryBackend;
 
+    await expect(
+      measureFreshness({
+        backend: unauthorized,
+        otlpEndpoint: 'http://localhost:4318',
+        sleep: noSleep,
+        send: async () => {},
+      }),
+    ).rejects.toThrow(/401/);
+  });
+
+  it('bounds a backend read that never settles', async () => {
+    const hanging = {
+      searchTraces: async () => new Promise(() => {}),
+    } as unknown as TelemetryBackend;
+
     const result = await measureFreshness({
-      backend: flaky,
+      backend: hanging,
       otlpEndpoint: 'http://localhost:4318',
-      sleep: noSleep,
+      timeoutMs: 10,
+      pollIntervalMs: 1,
       send: async () => {},
     });
 
-    expect(result.timedOut).toBe(false);
-    expect(result.attempts).toBe(2);
+    expect(result.timedOut).toBe(true);
+    expect(result.attempts).toBe(1);
   });
 
   it('surfaces a rejected probe write instead of reporting a false timeout', async () => {
@@ -178,6 +194,42 @@ describe('probe authentication', () => {
       Record<string, string>,
     ];
     expect(call[2]).toEqual({ Authorization: 'write-token' });
+  });
+});
+
+describe('resolveOtlpTraceUrl', () => {
+  it('appends the trace path without discarding a vendor base path', () => {
+    expect(
+      resolveOtlpTraceUrl('https://cloud.langfuse.com/api/public/otel'),
+    ).toBe('https://cloud.langfuse.com/api/public/otel/v1/traces');
+    expect(resolveOtlpTraceUrl('https://grafana.example.com/otlp')).toBe(
+      'https://grafana.example.com/otlp/v1/traces',
+    );
+  });
+
+  it('does not append the trace path twice', () => {
+    expect(resolveOtlpTraceUrl('http://localhost:4318/v1/traces')).toBe(
+      'http://localhost:4318/v1/traces',
+    );
+  });
+
+  it('is used by the real probe sender', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await sendOtlpTrace(
+      'https://cloud.langfuse.com/api/public/otel',
+      buildProbeSpan('probe', 1_700_000_000_000),
+    );
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      'https://cloud.langfuse.com/api/public/otel/v1/traces',
+    );
+    vi.unstubAllGlobals();
   });
 });
 

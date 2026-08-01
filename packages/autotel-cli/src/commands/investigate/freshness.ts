@@ -148,7 +148,7 @@ export async function sendOtlpTrace(
   headers: Record<string, string> = {},
   encoding: OtlpEncoding = 'protobuf',
 ): Promise<void> {
-  const url = new URL('/v1/traces', endpoint).toString();
+  const url = resolveOtlpTraceUrl(endpoint);
   const { body, contentType } = encodeProbe(span, encoding);
   const response = await fetch(url, {
     method: 'POST',
@@ -162,6 +162,16 @@ export async function sendOtlpTrace(
         `Sent ${encoding}; if the receiver wants the other encoding, pass --otlp-encoding ${otherEncoding}.`,
     );
   }
+}
+
+/** Resolve an OTLP base endpoint without discarding vendor-specific paths. */
+export function resolveOtlpTraceUrl(endpoint: string): string {
+  const url = new URL(endpoint);
+  const basePath = url.pathname.replace(/\/+$/, '');
+  if (!basePath.endsWith('/v1/traces')) {
+    url.pathname = `${basePath}/v1/traces`;
+  }
+  return url.toString();
 }
 
 export interface FreshnessOptions {
@@ -210,12 +220,31 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const DEADLINE_REACHED = Symbol('freshness-deadline-reached');
+
+async function beforeDeadline<T>(
+  promise: Promise<T>,
+  remainingMs: number,
+): Promise<T | typeof DEADLINE_REACHED> {
+  if (remainingMs <= 0) return DEADLINE_REACHED;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<typeof DEADLINE_REACHED>((resolve) => {
+        timer = setTimeout(() => resolve(DEADLINE_REACHED), remainingMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 /**
  * Write one probe span and time how long the backend takes to serve it back.
  *
- * A read that throws is treated as "not yet" rather than fatal — backends
- * commonly 404 or error on a service they've never seen, and that's exactly the
- * state we're waiting out.
+ * An empty successful read means "not yet". Read failures are surfaced because
+ * authentication and configuration errors cannot become fresh by polling.
  */
 export async function measureFreshness(
   options: FreshnessOptions,
@@ -235,26 +264,41 @@ export async function measureFreshness(
   const probeService = `autotel-freshness-probe-${randomHex(6)}`;
   const startedAt = now();
 
-  await send(
+  const timedOutResult = (attempts: number): FreshnessResult => ({
+    probeService,
     otlpEndpoint,
-    buildProbeSpan(probeService, startedAt),
-    headers,
     encoding,
+    timeToQueryableSeconds: null,
+    timedOut: true,
+    attempts,
+    timeoutMs,
+  });
+
+  const sent = await beforeDeadline(
+    send(
+      otlpEndpoint,
+      buildProbeSpan(probeService, startedAt),
+      headers,
+      encoding,
+    ),
+    timeoutMs,
   );
+  if (sent === DEADLINE_REACHED) return timedOutResult(0);
 
   let attempts = 0;
   for (;;) {
     attempts++;
-    let found = false;
-    try {
-      const result = await backend.searchTraces({
+    const remainingMs = timeoutMs - (now() - startedAt);
+    const result = await beforeDeadline(
+      backend.searchTraces({
         service: probeService,
         limit: 1,
-      });
-      found = (result?.items?.length ?? 0) > 0;
-    } catch {
-      // Backend can't serve a service it has never seen — keep waiting.
-    }
+      }),
+      remainingMs,
+    );
+    if (result === DEADLINE_REACHED) return timedOutResult(attempts);
+
+    const found = (result.items?.length ?? 0) > 0;
 
     if (found) {
       return {
@@ -269,17 +313,9 @@ export async function measureFreshness(
     }
 
     if (now() - startedAt >= timeoutMs) {
-      return {
-        probeService,
-        otlpEndpoint,
-        encoding,
-        timeToQueryableSeconds: null,
-        timedOut: true,
-        attempts,
-        timeoutMs,
-      };
+      return timedOutResult(attempts);
     }
 
-    await sleep(pollIntervalMs);
+    await sleep(Math.min(pollIntervalMs, timeoutMs - (now() - startedAt)));
   }
 }

@@ -36,7 +36,9 @@ describe('createLogfireConfig()', () => {
 
       expect(config).toMatchObject({
         service: 'my-service',
-        protocol: 'http',
+        // Logfire accepts OTLP protobuf only; a JSON body is silently dropped,
+        // which is indistinguishable from emitting nothing.
+        protocol: 'http/protobuf',
         endpoint: 'https://logfire-api.pydantic.dev',
       });
     });

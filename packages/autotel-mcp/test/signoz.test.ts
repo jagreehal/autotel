@@ -17,30 +17,48 @@ const respond = (body: unknown) =>
 const backend = (apiKey = 'signoz-key') =>
   new SignozBackend({ baseUrl: 'https://signoz.example.com', apiKey });
 
-const traceResponse = {
-  data: [
-    {
-      traceID: 'trace-1',
-      spanID: 'span-root',
-      name: 'GET /orders',
-      serviceName: 'checkout',
-      startTime: 1_785_500_000_000_000_000,
-      durationNano: 250_000_000,
-      statusCode: 0,
-      attributes: { 'http.method': 'GET' },
+const traceRows = [
+  {
+    traceID: 'trace-1',
+    spanID: 'span-root',
+    name: 'GET /orders',
+    serviceName: 'checkout',
+    startTime: 1_785_500_000_000_000_000,
+    durationNano: 250_000_000,
+    statusCode: 0,
+    attributes: { 'http.method': 'GET' },
+  },
+  {
+    traceID: 'trace-1',
+    spanID: 'span-child',
+    parentSpanID: 'span-root',
+    name: 'charge',
+    serviceName: 'payments',
+    startTime: 1_785_500_000_100_000_000,
+    durationNano: 50_000_000,
+    statusCode: 2,
+  },
+];
+
+function queryResponse(rows: Array<Record<string, unknown>>): unknown {
+  return {
+    data: {
+      type: 'raw',
+      data: {
+        results: [
+          {
+            queryName: 'A',
+            rows: rows.map((data) => ({
+              timestamp: '2026-07-31T11:33:20.000Z',
+              data,
+            })),
+          },
+        ],
+      },
+      meta: { bytesScanned: 0, durationMs: 1, rowsScanned: rows.length },
     },
-    {
-      traceID: 'trace-1',
-      spanID: 'span-child',
-      parentSpanID: 'span-root',
-      name: 'charge',
-      serviceName: 'payments',
-      startTime: 1_785_500_000_100_000_000,
-      durationNano: 50_000_000,
-      statusCode: 2,
-    },
-  ],
-};
+  };
+}
 
 describe('SignozBackend', () => {
   it('declares traces available and the other signals unsupported', () => {
@@ -51,20 +69,24 @@ describe('SignozBackend', () => {
     });
   });
 
-  it('sends the SigNoz API key header when one is configured', async () => {
-    const fetchSpy = respond({ data: [] });
+  it('uses the v5 query endpoint with the API key', async () => {
+    const fetchSpy = respond(queryResponse([]));
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
     await backend().listServices();
 
-    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://signoz.example.com/api/v5/query_range');
+    expect(init.method).toBe('POST');
     expect(init.headers).toMatchObject({ 'SIGNOZ-API-KEY': 'signoz-key' });
+    const body = JSON.parse(init.body as string);
+    expect(body.requestType).toBe('raw');
+    expect(body.compositeQuery.queries[0].type).toBe('builder_query');
+    expect(body.compositeQuery.queries[0].spec.signal).toBe('traces');
   });
 
-  // Self-hosted SigNoz commonly runs unauthenticated on a private network, so
-  // an absent key must not be treated as a configuration error.
-  it('queries without an API key header when none is configured', async () => {
-    const fetchSpy = respond({ data: [] });
+  it('queries without an API key header for self-hosted instances', async () => {
+    const fetchSpy = respond(queryResponse([]));
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
     await backend('').listServices();
@@ -73,33 +95,65 @@ describe('SignozBackend', () => {
     expect(init.headers).not.toHaveProperty('SIGNOZ-API-KEY');
   });
 
-  it('lists service names', async () => {
-    globalThis.fetch = respond({
-      data: [{ serviceName: 'checkout' }, { serviceName: 'payments' }],
-    }) as unknown as typeof fetch;
+  it('lists unique service names from v5 raw rows', async () => {
+    globalThis.fetch = respond(
+      queryResponse([
+        { serviceName: 'checkout' },
+        { serviceName: 'payments' },
+        { serviceName: 'checkout' },
+      ]),
+    ) as unknown as typeof fetch;
 
     await expect(backend().listServices()).resolves.toEqual({
       services: ['checkout', 'payments'],
     });
   });
 
-  it('fetches a trace by id and groups its spans', async () => {
-    const fetchSpy = respond(traceResponse);
+  it('fetches a complete trace by id through the v5 query endpoint', async () => {
+    const fetchSpy = respond(queryResponse(traceRows));
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
     const trace = await backend().getTrace('trace-1');
 
-    expect(fetchSpy.mock.calls[0]![0]).toBe(
-      'https://signoz.example.com/api/v1/traces/trace-1',
-    );
     expect(trace!.traceId).toBe('trace-1');
     expect(trace!.spans).toHaveLength(2);
-    expect(trace!.spans[0]!.serviceName).toBe('checkout');
-    expect(trace!.spans[0]!.operationName).toBe('GET /orders');
+    const request = JSON.parse(
+      (fetchSpy.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(request.compositeQuery.queries[0].spec.filter.expression).toBe(
+      "trace_id = 'trace-1'",
+    );
+  });
+
+  it('hydrates matching trace ids so service filters retain downstream spans', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => queryResponse([traceRows[0]!]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => queryResponse(traceRows),
+      });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await backend().searchTraces({ service: 'checkout' });
+
+    expect(result.items[0]!.spans.map((span) => span.serviceName)).toEqual([
+      'checkout',
+      'payments',
+    ]);
   });
 
   it('converts nanosecond start and duration into ms', async () => {
-    globalThis.fetch = respond(traceResponse) as unknown as typeof fetch;
+    globalThis.fetch = respond(
+      queryResponse(traceRows),
+    ) as unknown as typeof fetch;
 
     const trace = (await backend().getTrace('trace-1'))!;
 
@@ -108,29 +162,21 @@ describe('SignozBackend', () => {
     expect(trace.spans[1]!.durationMs).toBe(50);
   });
 
-  // SigNoz uses the OTLP numeric status: 0 unset, 1 ok, 2 error.
-  it('maps the numeric OTLP status code onto span status', async () => {
-    globalThis.fetch = respond(traceResponse) as unknown as typeof fetch;
-
-    const trace = (await backend().getTrace('trace-1'))!;
-
-    expect(trace.spans[0]!.statusCode).toBe('UNSET');
-    expect(trace.spans[0]!.hasError).toBe(false);
-    expect(trace.spans[1]!.statusCode).toBe('ERROR');
-    expect(trace.spans[1]!.hasError).toBe(true);
-  });
-
-  it('maps parent links, leaving the root parent null', async () => {
-    globalThis.fetch = respond(traceResponse) as unknown as typeof fetch;
+  it('maps status and parent links', async () => {
+    globalThis.fetch = respond(
+      queryResponse(traceRows),
+    ) as unknown as typeof fetch;
 
     const trace = (await backend().getTrace('trace-1'))!;
 
     expect(trace.spans[0]!.parentSpanId).toBeNull();
     expect(trace.spans[1]!.parentSpanId).toBe('span-root');
+    expect(trace.spans[0]!.statusCode).toBe('UNSET');
+    expect(trace.spans[1]!.statusCode).toBe('ERROR');
   });
 
   it('returns null for a trace id with no spans', async () => {
-    globalThis.fetch = respond({ data: [] }) as unknown as typeof fetch;
+    globalThis.fetch = respond(queryResponse([])) as unknown as typeof fetch;
     await expect(backend().getTrace('missing')).resolves.toBeNull();
   });
 

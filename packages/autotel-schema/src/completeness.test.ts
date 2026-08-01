@@ -62,8 +62,9 @@ describe('scoreGenAiCompleteness', () => {
       ),
     }));
     const result = scoreGenAiCompleteness(noCostOrToolResults);
-    expect(result.score).toBe(8);
-    expect(result.missing).toEqual(['cost_usd', 'tool_call_results']);
+    expect(result.score).toBe(8.5);
+    expect(result.missing).toEqual(['cost_usd']);
+    expect(result.partial).toContain('tool_call_results');
   });
 
   it('gives half a point for token usage recorded in one direction only', () => {
@@ -101,5 +102,33 @@ describe('scoreGenAiCompleteness', () => {
       attributes: { ...span.attributes, 'gen_ai.output.messages': '' },
     }));
     expect(scoreGenAiCompleteness(blankOutput).missing).toContain('llm_output');
+  });
+
+  it('scores tool completeness per call instead of comparing aggregate counts', () => {
+    const mixedTools: ScenarioSpan[] = [
+      completeTrace[0],
+      completeTrace[1],
+      {
+        spanId: 'second-tool',
+        parentSpanId: completeTrace[0]!.spanId,
+        name: 'execute_tool reserve_hotel',
+        status: 'ok',
+        durationMs: 10,
+        attributes: {
+          'gen_ai.tool.name': 'reserve_hotel',
+          'gen_ai.tool.call.result': '{"ok":true}',
+        },
+      },
+    ];
+
+    const result = scoreGenAiCompleteness(mixedTools);
+    expect(
+      result.fields.find((field) => field.field === 'tool_call_args'),
+    ).toMatchObject({
+      points: 0.5,
+    });
+    expect(
+      result.fields.find((field) => field.field === 'tool_call_results'),
+    ).toMatchObject({ points: 1 });
   });
 });

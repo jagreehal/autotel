@@ -49,6 +49,12 @@ export {
 } from './logfire';
 
 export {
+  createPostHogConfig,
+  type PostHogPresetConfig,
+  type PostHogRegion,
+} from './posthog';
+
+export {
   createLangfuseConfig,
   type LangfusePresetConfig,
   type LangfuseRegion,
