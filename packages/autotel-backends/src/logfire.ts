@@ -29,13 +29,14 @@
 import type { AutotelConfig } from 'autotel';
 
 /**
- * Default ingest host. Logfire encodes the data region in the token and routes
- * accordingly, so this works for any project. Pinning a specific region host by
- * default would make a token from the other region fail with a bare 401.
+ * Region ingest endpoints.
+ *
+ * Verified against the live API: the shared `logfire-api.pydantic.dev` host
+ * returns 401 for ingest. Logfire's own SDK resolves the region host from the
+ * token client-side rather than relying on server-side routing, so the region
+ * has to be named — which is why it is required below rather than defaulted.
+ * Guessing it wrong produces a bare 401 that names neither cause.
  */
-const DEFAULT_ENDPOINT = 'https://logfire-api.pydantic.dev';
-
-/** Region-pinned ingest endpoints, for when you'd rather not rely on routing. */
 const REGION_ENDPOINTS = {
   us: 'https://logfire-us.pydantic.dev',
   eu: 'https://logfire-eu.pydantic.dev',
@@ -63,12 +64,13 @@ export interface LogfirePresetConfig {
   service: string;
 
   /**
-   * Pin the data region instead of letting the token route the request.
-   * Rarely needed — Logfire infers the region from the token.
+   * Data region the project lives in (required).
    *
-   * @default undefined (token-routed)
+   * Both ingest and the query API are region-specific, and a mismatch returns
+   * a bare 401, so this is explicit rather than guessed. Ignored when
+   * `endpoint` is set for a self-hosted instance.
    */
-  region?: LogfireRegion;
+  region: LogfireRegion;
 
   /**
    * Deployment environment (e.g., 'production', 'staging', 'development').
@@ -88,7 +90,7 @@ export interface LogfirePresetConfig {
    * Full OTLP endpoint override, for self-hosted Logfire.
    * Takes precedence over `region`.
    *
-   * @default the token-routed ingest host, or the pinned region's endpoint
+   * @default the named region's endpoint
    */
   endpoint?: string;
 }
@@ -116,15 +118,11 @@ export function createLogfireConfig(
     );
   }
 
-  let regionEndpoint = DEFAULT_ENDPOINT;
-  if (region !== undefined) {
-    const pinned = REGION_ENDPOINTS[region];
-    if (!pinned) {
-      throw new Error(
-        `Unknown Logfire region "${region}". Supported regions: ${Object.keys(REGION_ENDPOINTS).join(', ')}.`,
-      );
-    }
-    regionEndpoint = pinned;
+  const regionEndpoint = REGION_ENDPOINTS[region];
+  if (!regionEndpoint) {
+    throw new Error(
+      `Unknown Logfire region "${region}". Supported regions: ${Object.keys(REGION_ENDPOINTS).join(', ')}.`,
+    );
   }
 
   return {

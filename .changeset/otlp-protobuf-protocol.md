@@ -27,10 +27,19 @@ get protobuf** — which is what you asked for, but it means installing
 `@opentelemetry/exporter-trace-otlp-proto` or your exporter will fail loudly at
 startup rather than quietly sending the wrong encoding.
 
-**`createLogfireConfig` is fixed** — it previously emitted `protocol: 'http'`,
-so traces were serialized as JSON and Logfire discarded them. It now uses
-`http/protobuf`. Anyone who adopted the preset should upgrade; the old behaviour
-delivered nothing.
+**`createLogfireConfig` is fixed on two counts**, both confirmed by a live
+write-then-read round trip:
+
+- it emitted `protocol: 'http'`, so traces were serialized as JSON and Logfire
+  discarded them silently
+- it defaulted to the shared `logfire-api.pydantic.dev` host, which returns 401
+  for ingest. Logfire's own SDK resolves the region host from the token
+  client-side rather than relying on server-side routing
+
+`region` is now **required** — both ingest and the query API are region-specific,
+and a mismatch returns a bare 401 that names neither cause, so guessing it is
+worse than asking. Anyone who adopted this preset should upgrade; the previous
+version delivered nothing.
 
 **`createPostHogConfig`** is new. PostHog ingests OTLP traces, logs and metrics,
 so product analytics and distributed traces can share a destination:

@@ -147,6 +147,7 @@ init(
   createLogfireConfig({
     writeToken: process.env.LOGFIRE_WRITE_TOKEN!,
     service: 'my-app',
+    region: 'eu', // or 'us' — required
   }),
 );
 ```
@@ -154,7 +155,7 @@ init(
 **Features**:
 
 - Forces OTLP/HTTP **protobuf** — Logfire rejects gRPC and silently drops a JSON body, so either default loses your traces without an error
-- Defaults to the token-routed ingest host, so an EU token doesn't 401 against a US endpoint; pin with `region: 'us' | 'eu'` or override `endpoint` for self-hosted
+- `region` is required, because both ingest and the query API are region-specific and a mismatch returns a bare 401 that names neither cause. Override `endpoint` for self-hosted.
 - Sends the write token bare, as Logfire's ingest expects (its query API wants `Bearer <read-token>` instead — different credential, different format)
 
 [View full Logfire configuration options →](./src/logfire.ts)

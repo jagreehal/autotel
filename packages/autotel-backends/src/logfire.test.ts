@@ -6,20 +6,28 @@ describe('createLogfireConfig()', () => {
     it('should throw if writeToken is missing', () => {
       expect(() => {
         // @ts-expect-error - testing missing writeToken
-        createLogfireConfig({ service: 'test-service' });
+        createLogfireConfig({ service: 'test-service', region: 'us' });
       }).toThrow('Logfire write token is required');
     });
 
     it('should throw if writeToken is empty string', () => {
       expect(() =>
-        createLogfireConfig({ writeToken: '', service: 'test-service' }),
+        createLogfireConfig({
+          writeToken: '',
+          service: 'test-service',
+          region: 'us',
+        }),
       ).toThrow('Logfire write token is required');
     });
 
     it('should reject an unknown region', () => {
       expect(() =>
-        // @ts-expect-error - testing an unsupported region
-        createLogfireConfig({ writeToken: 't', service: 's', region: 'ap' }),
+        createLogfireConfig({
+          writeToken: 't',
+          service: 's',
+          // @ts-expect-error - testing an unsupported region
+          region: 'ap',
+        }),
       ).toThrow(/region/i);
     });
   });
@@ -28,10 +36,15 @@ describe('createLogfireConfig()', () => {
     // Logfire derives the data region from the token itself, so the default
     // ingest host routes by token. Defaulting to a *specific* region instead
     // makes an EU token fail against a US host with an opaque 401.
-    it('should default to the token-routed ingest host over OTLP/HTTP', () => {
+    // Verified against the live API: the shared logfire-api.pydantic.dev host
+    // returns 401 for ingest. Logfire's own SDK resolves the region host from
+    // the token client-side rather than relying on server-side routing, so the
+    // region has to be explicit here or every send fails with a bare 401.
+    it('should send to the named region host over OTLP/HTTP protobuf', () => {
       const config = createLogfireConfig({
         writeToken: 'lf-write-token',
         service: 'my-service',
+        region: 'eu',
       });
 
       expect(config).toMatchObject({
@@ -39,11 +52,11 @@ describe('createLogfireConfig()', () => {
         // Logfire accepts OTLP protobuf only; a JSON body is silently dropped,
         // which is indistinguishable from emitting nothing.
         protocol: 'http/protobuf',
-        endpoint: 'https://logfire-api.pydantic.dev',
+        endpoint: 'https://logfire-eu.pydantic.dev',
       });
     });
 
-    it('should use the US endpoint when the US region is pinned', () => {
+    it('should use the US endpoint when the US region is named', () => {
       const config = createLogfireConfig({
         writeToken: 'lf-write-token',
         service: 'my-service',
@@ -59,6 +72,7 @@ describe('createLogfireConfig()', () => {
       const config = createLogfireConfig({
         writeToken: 'lf-write-token',
         service: 'my-service',
+        region: 'eu',
       });
 
       expect(config.headers).toEqual({ Authorization: 'lf-write-token' });
@@ -68,16 +82,17 @@ describe('createLogfireConfig()', () => {
       const config = createLogfireConfig({
         writeToken: 'lf-write-token',
         service: 'my-service',
-        region: 'eu',
+        region: 'us',
       });
 
-      expect(config.endpoint).toBe('https://logfire-eu.pydantic.dev');
+      expect(config.endpoint).toBe('https://logfire-us.pydantic.dev');
     });
 
     it('should let a self-hosted endpoint override the region', () => {
       const config = createLogfireConfig({
         writeToken: 'lf-write-token',
         service: 'my-service',
+        region: 'eu',
         endpoint: 'https://logfire.internal.example.com',
       });
 
@@ -88,6 +103,7 @@ describe('createLogfireConfig()', () => {
       const config = createLogfireConfig({
         writeToken: 'lf-write-token',
         service: 'my-service',
+        region: 'us',
         environment: 'production',
         version: '2.1.0',
       });
