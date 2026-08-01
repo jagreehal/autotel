@@ -121,14 +121,55 @@ breaches, untrusted-content tool calls). See [MCP](/autotel/integrations/mcp/).
 All backend-touching commands accept:
 
 ```bash
---backend collector|jaeger|tempo|prometheus|loki|stack|auto|fixture
+--backend collector|jaeger|tempo|prometheus|loki|stack|auto|fixture|logfire|datadog|signoz
 --jaeger-base-url <url>
 --tempo-base-url <url>
 --prometheus-base-url <url>
 --loki-base-url <url>
 --collector-port <n>
 --fixture-path <path>
+--logfire-base-url <url>
+--datadog-site <site>
+--signoz-base-url <url>
 ```
+
+### Hosted vendors
+
+`logfire`, `datadog` and `signoz` are trace-only — `capabilities` reports their
+metrics and logs as `unsupported` rather than returning empty results, so you can
+tell "this backend can't answer that" from "there's nothing there".
+
+Their credentials are read from the environment and never accepted as flags,
+because argv is readable from the process table:
+
+| Backend   | Credentials                                                                         |
+| --------- | ----------------------------------------------------------------------------------- |
+| `logfire` | `LOGFIRE_READ_TOKEN` — must be **read**-scope; the query API rejects write tokens   |
+| `datadog` | `DD_API_KEY` **and** `DD_APP_KEY` — an application key is separate from the API key |
+| `signoz`  | `SIGNOZ_API_KEY` — omit for an unauthenticated self-hosted instance                 |
+
+`DD_SITE` accepts a bare site (`uk1.datadoghq.com`) or a full API URL. For
+Logfire, note that ingest and queries use different hosts: writes go to the
+token-routed `logfire-api.pydantic.dev`, while `LOGFIRE_BASE_URL` for reads must
+name the region (`logfire-us` / `logfire-eu`).
+
+### Ingest lag
+
+```bash
+npx autotel health --otlp-endpoint http://localhost:4318
+```
+
+Writes one probe span and polls until it reads back, reporting
+`freshness.timeToQueryableSeconds`. Backends differ by two orders of magnitude
+here, and on a slow one a write-then-read loop sees nothing and wrongly concludes
+no telemetry was emitted — so check this before trusting an empty result.
+
+The probe sends OTLP protobuf by default (the encoding every OTLP/HTTP receiver
+must accept); the built-in collector reads JSON and is switched automatically.
+Override with `--otlp-encoding json|protobuf`, bound the wait with
+`--freshness-timeout-ms`, and authenticate hosted endpoints through the standard
+`OTEL_EXPORTER_OTLP_HEADERS` — which for most vendors is the **write**
+credential, not the read token used for querying.
 
 Use `--output-file <path>` to persist command JSON and `--no-secrets-in-output` to redact secret-shaped values.
 

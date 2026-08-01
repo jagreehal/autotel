@@ -16,6 +16,9 @@ export interface InvestigateFlags {
   lokiBaseUrl?: string;
   collectorPort?: number;
   fixturePath?: string;
+  logfireBaseUrl?: string;
+  datadogSite?: string;
+  signozBaseUrl?: string;
   outputFile?: string;
   noSecrets?: boolean;
 }
@@ -39,6 +42,11 @@ function applyFlagsToEnv(flags: InvestigateFlags): void {
     process.env.AUTOTEL_COLLECTOR_PORT = String(flags.collectorPort);
   if (flags.fixturePath !== undefined)
     process.env.AUTOTEL_FIXTURE_PATH = flags.fixturePath;
+  if (flags.logfireBaseUrl !== undefined)
+    process.env.LOGFIRE_BASE_URL = flags.logfireBaseUrl;
+  if (flags.datadogSite !== undefined) process.env.DD_SITE = flags.datadogSite;
+  if (flags.signozBaseUrl !== undefined)
+    process.env.SIGNOZ_BASE_URL = flags.signozBaseUrl;
 }
 
 /**

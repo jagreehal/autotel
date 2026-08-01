@@ -15,26 +15,45 @@ export const floatArg = (v: string): number => Number.parseFloat(v);
  * investigate command. Applied to a Command in place (mutates + returns).
  */
 export function addBackendFlags(cmd: Command): Command {
-  return cmd
-    .option(
-      '--backend <kind>',
-      'Backend: collector|jaeger|tempo|prometheus|loki|stack|auto|fixture (env: AUTOTEL_BACKEND)',
-    )
-    .option('--jaeger-base-url <url>', 'Jaeger base URL (env: JAEGER_BASE_URL)')
-    .option('--tempo-base-url <url>', 'Tempo base URL (env: TEMPO_BASE_URL)')
-    .option(
-      '--prometheus-base-url <url>',
-      'Prometheus base URL (env: PROMETHEUS_BASE_URL)',
-    )
-    .option('--loki-base-url <url>', 'Loki base URL (env: LOKI_BASE_URL)')
-    .option(
-      '--collector-port <n>',
-      'OTLP receiver port for the collector backend',
-      intArg,
-    )
-    .option('--fixture-path <path>', 'Fixture JSON for the fixture backend')
-    .option('--output-file <path>', 'Persist JSON output to this file')
-    .option('--no-secrets-in-output', 'Redact secret-shaped values');
+  return (
+    cmd
+      .option(
+        '--backend <kind>',
+        'Backend: collector|jaeger|tempo|prometheus|loki|stack|auto|fixture|logfire|datadog|signoz (env: AUTOTEL_BACKEND)',
+      )
+      .option(
+        '--jaeger-base-url <url>',
+        'Jaeger base URL (env: JAEGER_BASE_URL)',
+      )
+      .option('--tempo-base-url <url>', 'Tempo base URL (env: TEMPO_BASE_URL)')
+      .option(
+        '--prometheus-base-url <url>',
+        'Prometheus base URL (env: PROMETHEUS_BASE_URL)',
+      )
+      .option('--loki-base-url <url>', 'Loki base URL (env: LOKI_BASE_URL)')
+      .option(
+        '--collector-port <n>',
+        'OTLP receiver port for the collector backend',
+        intArg,
+      )
+      .option('--fixture-path <path>', 'Fixture JSON for the fixture backend')
+      // Hosted vendor backends take a base URL by flag but their credentials by
+      // environment only — argv is readable from the process table.
+      .option(
+        '--logfire-base-url <url>',
+        'Logfire region URL (env: LOGFIRE_BASE_URL; token via LOGFIRE_READ_TOKEN)',
+      )
+      .option(
+        '--datadog-site <site>',
+        'Datadog site, e.g. datadoghq.eu, or a full API URL (env: DD_SITE; keys via DD_API_KEY + DD_APP_KEY)',
+      )
+      .option(
+        '--signoz-base-url <url>',
+        'SigNoz base URL (env: SIGNOZ_BASE_URL; key via SIGNOZ_API_KEY)',
+      )
+      .option('--output-file <path>', 'Persist JSON output to this file')
+      .option('--no-secrets-in-output', 'Redact secret-shaped values')
+  );
 }
 
 /**
@@ -58,6 +77,9 @@ export function backendFlagsFromOpts(
     lokiBaseUrl: opts.lokiBaseUrl as string | undefined,
     collectorPort: opts.collectorPort as number | undefined,
     fixturePath: opts.fixturePath as string | undefined,
+    logfireBaseUrl: opts.logfireBaseUrl as string | undefined,
+    datadogSite: opts.datadogSite as string | undefined,
+    signozBaseUrl: opts.signozBaseUrl as string | undefined,
     outputFile: opts.outputFile as string | undefined,
     noSecrets: opts.secretsInOutput === false,
   };

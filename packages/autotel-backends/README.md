@@ -136,6 +136,55 @@ init(
 
 [View full Datadog configuration options →](./src/datadog.ts)
 
+### 🔥 Logfire
+
+[Pydantic Logfire](https://pydantic.dev/logfire) keeps `gen_ai.*` semantic-convention attributes and W3C trace IDs intact on the read path, so GenAI traces come back the shape you emitted them.
+
+```typescript
+import { createLogfireConfig } from 'autotel-backends/logfire';
+
+init(
+  createLogfireConfig({
+    writeToken: process.env.LOGFIRE_WRITE_TOKEN!,
+    service: 'my-app',
+  }),
+);
+```
+
+**Features**:
+
+- Forces OTLP/HTTP — Logfire rejects gRPC, which most OTel SDKs default to
+- Defaults to the token-routed ingest host, so an EU token doesn't 401 against a US endpoint; pin with `region: 'us' | 'eu'` or override `endpoint` for self-hosted
+- Sends the write token bare, as Logfire's ingest expects (its query API wants `Bearer <read-token>` instead — different credential, different format)
+
+[View full Logfire configuration options →](./src/logfire.ts)
+
+### 🪢 Langfuse
+
+[Langfuse](https://langfuse.com) ingests plain OTLP, so autotel's GenAI spans land without a Langfuse SDK in your app.
+
+```typescript
+import { createLangfuseConfig } from 'autotel-backends/langfuse';
+
+init(
+  createLangfuseConfig({
+    publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+    secretKey: process.env.LANGFUSE_SECRET_KEY!,
+    service: 'my-app',
+    region: 'eu', // or 'us'
+  }),
+);
+```
+
+**Features**:
+
+- OTLP/HTTP only — Langfuse does not support gRPC
+- EU and US cloud regions, plus a self-hosted `baseUrl` override
+- Basic auth built from your public/secret key pair
+- Opts into v4 ingestion, which keeps traces queryable promptly
+
+[View full Langfuse configuration options →](./src/langfuse.ts)
+
 ## Why Use Backend Configs?
 
 ### Without backend configs (manual):

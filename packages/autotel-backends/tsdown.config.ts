@@ -10,6 +10,8 @@ export default defineConfig({
     datadog: 'src/datadog.ts',
     'google-cloud': 'src/google-cloud.ts',
     grafana: 'src/grafana.ts',
+    logfire: 'src/logfire.ts',
+    langfuse: 'src/langfuse.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
