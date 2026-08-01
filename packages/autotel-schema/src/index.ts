@@ -5,8 +5,10 @@
  * attribute keys are a **public API**. `defineContract()` makes that surface
  * explicit and versionable; `validateSpan` / `SchemaValidationSpanProcessor`
  * check live spans against it; `diffSnapshots` / `hasBreakingChanges` catch
- * breaking trace-surface changes before they ship; `highCardinalityKeys` feeds
- * a redaction allow-list so the fields most useful to an agent reader survive.
+ * breaking trace-surface changes before they ship; `scoreGenAiCompleteness`
+ * scores whether a GenAI trace still tells the whole agent story; and
+ * `highCardinalityKeys` feeds a redaction allow-list so the fields most useful
+ * to an agent reader survive.
  *
  * The contract model is dependency-free and side-effect-free — safe to import
  * anywhere (browser, edge, CLI) without pulling in the OpenTelemetry SDK.
@@ -95,6 +97,17 @@ export type {
   CheckScenarioOptions,
   ScenarioProposal,
 } from './scenario.js';
+
+export {
+  GENAI_COMPLETENESS_FIELDS,
+  scoreGenAiCompleteness,
+  formatCompleteness,
+} from './completeness.js';
+export type {
+  GenAiCompletenessField,
+  FieldScore,
+  CompletenessResult,
+} from './completeness.js';
 
 export { highCardinalityKeys, isHighCardinalityKey } from './redaction.js';
 

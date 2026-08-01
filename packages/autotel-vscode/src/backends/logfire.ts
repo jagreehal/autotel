@@ -1,9 +1,10 @@
 import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
+import { backendFetch } from './http';
 
 // Pydantic Logfire query API. Logfire spans live in a ClickHouse-backed
-// store accessed via a SQL-like read API at `/v1/query`.
+// store accessed via a SQL-like read API at `/v2/query`.
 //
 // Auth: `Authorization: Bearer <read-token>`. Read tokens are scoped to a
 // single project — the project ID is derived from the token itself, so we
@@ -32,21 +33,34 @@ interface LogfireSpanRow {
   }>;
 }
 
-interface LogfireQueryResponse {
-  rows?: LogfireSpanRow[];
+// The query API returns row-oriented JSON: `{schema: {fields}, data: [rowdict]}`.
+interface LogfireQueryResponse<Row = LogfireSpanRow> {
+  schema?: { fields?: Array<{ name: string; datatype?: string }> };
+  data?: Row[];
 }
+
+function rowsOf<Row>(body: LogfireQueryResponse<Row>): Row[] {
+  return body.data ?? [];
+}
+
+// The query API rejects a request with no `min_timestamp` (HTTP 422), so every
+// call needs one. Callers that know the window pass it; the rest fall back to
+// this lookback, which also bounds `getTrace` by id.
+// ponytail: single fixed lookback, make it a setting if someone needs older traces
+const DEFAULT_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function logfireFetch<T>(
   ctx: QueryAdapterContext,
   sql: string,
+  minTimestampMs?: number,
 ): Promise<T> {
   const token = await ctx.secrets.get(credentialKey('logfire'));
   if (!token)
     throw new Error(
       'Logfire read token missing. Run "Autotel: Set Remote Backend Credential" first.',
     );
-  const url = new URL('/v1/query', ctx.baseUrl).toString();
-  const res = await fetch(url, {
+  const url = new URL('/v2/query', ctx.baseUrl).toString();
+  const res = await backendFetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -54,7 +68,12 @@ async function logfireFetch<T>(
       Accept: 'application/json',
     },
     signal: ctx.abortSignal,
-    body: JSON.stringify({ sql }),
+    body: JSON.stringify({
+      sql,
+      min_timestamp: new Date(
+        minTimestampMs ?? Date.now() - DEFAULT_LOOKBACK_MS,
+      ).toISOString(),
+    }),
   });
   if (!res.ok) throw new Error(`Logfire ${res.status}: ${res.statusText}`);
   return (await res.json()) as T;
@@ -149,7 +168,7 @@ export const logfireAdapter: QueryAdapter = {
       ctx,
       'SELECT DISTINCT service_name FROM records WHERE service_name IS NOT NULL LIMIT 200',
     );
-    return (body.rows ?? [])
+    return rowsOf(body)
       .map(
         (r) => (r as unknown as { service_name?: string }).service_name ?? '',
       )
@@ -179,8 +198,12 @@ export const logfireAdapter: QueryAdapter = {
       `FROM records${whereClause} ` +
       `ORDER BY start_timestamp DESC ` +
       `LIMIT ${limit * 20}`;
-    const body = await logfireFetch<LogfireQueryResponse>(ctx, sql);
-    const traces = rowsToTraces(body.rows ?? []);
+    const body = await logfireFetch<LogfireQueryResponse>(
+      ctx,
+      sql,
+      query.startMs,
+    );
+    const traces = rowsToTraces(rowsOf(body));
     return traces.slice(0, limit);
   },
 
@@ -192,7 +215,7 @@ export const logfireAdapter: QueryAdapter = {
       `FROM records WHERE trace_id = '${escapeSqlString(traceId)}' ` +
       `ORDER BY start_timestamp ASC LIMIT 1000`;
     const body = await logfireFetch<LogfireQueryResponse>(ctx, sql);
-    return rowsToTraces(body.rows ?? [])[0];
+    return rowsToTraces(rowsOf(body))[0];
   },
 };
 

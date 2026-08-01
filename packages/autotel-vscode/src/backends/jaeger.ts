@@ -1,6 +1,7 @@
 import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { registerAdapter } from './types';
+import { backendFetch } from './http';
 
 // Minimal Jaeger query API adapter. Backend reference:
 //   GET /api/services
@@ -108,7 +109,7 @@ async function fetchJSON<T>(
       }, ctx.timeoutMs)
     : undefined;
   try {
-    const res = await fetch(url, { signal: ctx.abortSignal });
+    const res = await backendFetch(url, { signal: ctx.abortSignal });
     if (!res.ok) throw new Error(`Jaeger ${res.status}: ${res.statusText}`);
     return (await res.json()) as T;
   } finally {

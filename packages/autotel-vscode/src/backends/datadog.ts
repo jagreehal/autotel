@@ -1,6 +1,7 @@
 import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
+import { backendFetch } from './http';
 
 // Datadog APM query API (HTTPS):
 //   POST /api/v2/spans/events/search   — main search endpoint
@@ -72,7 +73,7 @@ async function ddFetch<T>(
     Accept: 'application/json',
   };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const res = await fetch(url, {
+  const res = await backendFetch(url, {
     method,
     headers,
     signal: ctx.abortSignal,
