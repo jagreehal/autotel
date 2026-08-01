@@ -39,14 +39,16 @@ With autotel, the same applies. `init()` honours `OTEL_EXPORTER_OTLP_ENDPOINT`,
 so no code change is needed:
 
 ```typescript
-import { init, trace, withTracing } from 'autotel';
+import { init, withTracing } from 'autotel';
 
 init({ service: 'my-app' });
 
-const checkout = withTracing({})((ctx) => async (req, res) => {
-  ctx.set('order.id', req.body.id);
-  // ...
-});
+const checkout = withTracing({ name: 'checkout' })(
+  (ctx) => async (req, res) => {
+    ctx.setAttribute('order.id', req.body.id);
+    // ...
+  },
+);
 ```
 
 ## What the activity bar shows
@@ -79,28 +81,61 @@ bundled webview script runs.
 
 ## Commands
 
-| Command                        | Description                                                |
-| ------------------------------ | ---------------------------------------------------------- |
-| `Autotel: Start Receiver`      | Start the OTLP HTTP receiver.                              |
-| `Autotel: Stop Receiver`       | Stop the receiver and free the port.                       |
-| `Autotel: Set Receiver Port`   | Change the listen port. Saved to workspace settings.       |
-| `Autotel: Clear Buffered Data` | Drop all buffered spans, logs, and error groups.           |
-| `Autotel: Reveal Span Source`  | Jump to `code.filepath:code.lineno` for the selected span. |
-| `Autotel: Copy Span ID`        | Copy the span ID to the clipboard.                         |
-| `Autotel: Open Span Detail`    | Open the span in the detail webview.                       |
+| Command                                    | Description                                                |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| `Autotel: Start Receiver`                  | Start the OTLP HTTP receiver.                              |
+| `Autotel: Stop Receiver`                   | Stop the receiver and free the port.                       |
+| `Autotel: Set Receiver Port`               | Change the listen port. Saved to workspace settings.       |
+| `Autotel: Clear Buffered Data`             | Drop all buffered spans, logs, and error groups.           |
+| `Autotel: Reveal Span Source`              | Jump to `code.filepath:code.lineno` for the selected span. |
+| `Autotel: Copy Span ID`                    | Copy the span ID to the clipboard.                         |
+| `Autotel: Open Span Detail`                | Open the span in the detail webview.                       |
+| `Autotel: Open Devtools UI`                | Open the receiver's embedded devtools UI.                  |
+| `Autotel: Open Metrics`                    | Show local service and operation latency/error summaries.  |
+| `Autotel: Open Service Map`                | Show cross-service edges from buffered traces.             |
+| `Autotel: Query Remote Backend`            | Pull recent traces from the configured read backend.       |
+| `Autotel: Set Remote Backend Credential`   | Save a backend credential in VS Code SecretStorage.        |
+| `Autotel: Clear Remote Backend Credential` | Remove a saved backend credential.                         |
 
 ## Settings
 
-| Setting                         | Default     | Description                                                         |
-| ------------------------------- | ----------- | ------------------------------------------------------------------- |
-| `autotel.receiver.enabled`      | `true`      | Boot the receiver on activation.                                    |
-| `autotel.receiver.host`         | `127.0.0.1` | Bind host. Non-loopback values trigger a confirmation prompt.       |
-| `autotel.receiver.port`         | `4318`      | TCP port. Standard OTLP/HTTP port.                                  |
-| `autotel.buffer.maxSpans`       | `10000`     | Span buffer cap. Older entries drop first.                          |
-| `autotel.buffer.maxLogs`        | `10000`     | Log buffer cap.                                                     |
-| `autotel.buffer.maxAgeMs`       | `1800000`   | Reserved for future age-based eviction.                             |
-| `autotel.source.workspaceRoot`  | `null`      | Override workspace root for source resolution. `null` auto-detects. |
-| `autotel.source.followSymlinks` | `false`     | Follow symlinks when resolving span source paths.                   |
+| Setting                      | Default            | Description                                                        |
+| ---------------------------- | ------------------ | ------------------------------------------------------------------ |
+| `autotel.receiver.autoStart` | `onAutotelProject` | `off`, start only for an Autotel workspace, or `always`.           |
+| `autotel.receiver.host`      | `127.0.0.1`        | Bind host. Non-loopback values require confirmation.               |
+| `autotel.receiver.port`      | `4318`             | TCP port. Standard OTLP/HTTP port.                                 |
+| `autotel.buffer.maxSpans`    | `10000`            | Span buffer cap. Older entries drop first.                         |
+| `autotel.buffer.maxLogs`     | `10000`            | Log buffer cap.                                                    |
+| `autotel.buffer.maxAgeMs`    | `1800000`          | Reserved for future age-based eviction.                            |
+| `autotel.devtools.url`       | `null`             | Devtools UI override; otherwise uses the receiver host and port.   |
+| `autotel.backend.type`       | `none`             | `jaeger`, `tempo`, `honeycomb`, `datadog`, `logfire`, or `signoz`. |
+| `autotel.backend.url`        | `null`             | Remote read API base URL.                                          |
+| `autotel.backend.dataset`    | `null`             | Dataset/scope required by backends such as Honeycomb.              |
+| `autotel.codeLens.enabled`   | `true`             | Show count, p50, p95, and error rate above instrumented functions. |
+
+The default auto-start mode scans workspace `package.json` files and binds the
+receiver only when it finds an `autotel` or `autotel-*` dependency. Use
+`Autotel: Start Receiver` in other workspaces.
+
+## Querying remote traces
+
+Choose `autotel.backend.type`, `autotel.backend.url`, and any required dataset
+in workspace settings. Store credentials with **Autotel: Set Remote Backend
+Credential**; they are written to VS Code SecretStorage, not `settings.json`.
+
+| Backend   | Credential entered in the command              |
+| --------- | ---------------------------------------------- |
+| Jaeger    | none                                           |
+| Tempo     | optional bearer token                          |
+| Honeycomb | API key; also set `autotel.backend.dataset`    |
+| Datadog   | `<api-key>:<application-key>`                  |
+| Logfire   | read-scope token                               |
+| SigNoz    | optional API key for authenticated deployments |
+
+Run **Autotel: Query Remote Backend**, select a service, and the extension pulls
+up to 50 recent traces into the same in-memory buffer used by the tree views,
+span detail, CodeLens, metrics panel, and embedded devtools UI. Vendor adapters
+retry HTTP 429 responses using `Retry-After` when provided.
 
 ## When the port is taken
 
@@ -119,11 +154,11 @@ to match.
   symlink games and `..` traversal cannot escape.
 - Maximum request body is 10 MB. Anything larger returns `413 Payload too
 large`.
-- No credentials live in settings. Remote-export support, planned for
-  v0.2, will use `vscode.SecretStorage`.
+- Remote-backend credentials live in `vscode.SecretStorage`; only backend type,
+  URL, and dataset live in workspace settings.
 
 ## Compatibility
 
-- VS Code `1.85` or later.
+- VS Code `1.120` or later.
 - OTLP/HTTP with JSON. Protobuf is not yet supported.
 - Works with autotel and with vanilla OpenTelemetry SDKs.

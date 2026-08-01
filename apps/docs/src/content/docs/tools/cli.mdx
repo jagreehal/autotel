@@ -150,8 +150,9 @@ because argv is readable from the process table:
 
 `DD_SITE` accepts a bare site (`uk1.datadoghq.com`) or a full API URL. For
 Logfire, note that ingest and queries use different hosts: writes go to the
-token-routed `logfire-api.pydantic.dev`, while `LOGFIRE_BASE_URL` for reads must
-name the region (`logfire-us` / `logfire-eu`).
+regional OTLP host selected by `createLogfireConfig`, while
+`LOGFIRE_BASE_URL` for reads must name the same region (`logfire-us` /
+`logfire-eu`). SigNoz reads use its Query Builder v5 API.
 
 ### Ingest lag
 
@@ -170,6 +171,11 @@ Override with `--otlp-encoding json|protobuf`, bound the wait with
 `--freshness-timeout-ms`, and authenticate hosted endpoints through the standard
 `OTEL_EXPORTER_OTLP_HEADERS` — which for most vendors is the **write**
 credential, not the read token used for querying.
+
+The timeout bounds both the write and every backend read. Authentication and
+configuration failures are returned immediately rather than being disguised as
+ingest lag. Vendor endpoint path prefixes are preserved when `/v1/traces` is
+appended.
 
 Use `--output-file <path>` to persist command JSON and `--no-secrets-in-output` to redact secret-shaped values.
 

@@ -842,6 +842,12 @@ export const ERROR_CATALOGUE: ErrorCodeEntry[] = [
     description: 'Failed to read a file',
   },
   {
+    code: AutotelErrorCodes.E_RATE_LIMITED,
+    type: 'runtime',
+    description:
+      'Backend rate limit outlasted the retry budget — wait and retry',
+  },
+  {
     code: AutotelErrorCodes.E_UNKNOWN,
     type: 'runtime',
     description: 'Unexpected error',
