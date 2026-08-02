@@ -366,6 +366,32 @@ requires a read-scope token and its regional query host; Datadog requires both
 an API key and an application key. These three backends return an explicit
 `unsupported` capability for metrics and logs.
 
+### Read from a local LGTM stack
+
+The `tempo`, `prometheus` and `loki` defaults above are already the ports
+[the LGTM stack](/autotel/local-stacks/) publishes, so one command covers all
+three signals:
+
+```bash
+docker compose -f docker/lgtm.yml up -d
+```
+
+```bash
+AUTOTEL_BACKEND=auto \
+TEMPO_BASE_URL=http://localhost:3200 \
+PROMETHEUS_BASE_URL=http://localhost:9090 \
+LOKI_BASE_URL=http://localhost:3100 \
+npx autotel-mcp
+```
+
+`auto` probes each and uses whatever answers, so the same command works whether
+you have the full stack up or only part of it. Use `stack` instead when you want
+to fail loudly on a backend that should be there and is not.
+
+Send telemetry to `http://localhost:4318` and events to Loki with
+[`LokiSubscriber`](/autotel/integrations/loki/), and the agent can investigate
+traces, metrics and logs from one local container.
+
 To select a backend through the MCP client config, add it to `env`:
 
 ```json

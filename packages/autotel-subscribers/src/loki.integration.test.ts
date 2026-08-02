@@ -4,7 +4,7 @@
  *
  * Start one with the repo's LGTM stack, then run this suite:
  *
- *   docker compose -f docker-compose.lgtm.yml up -d
+ *   docker compose -f docker/lgtm.yml up -d
  *   LOKI_ENDPOINT=http://localhost:3100 pnpm --filter autotel-subscribers test
  *
  * Without `LOKI_ENDPOINT` the suite skips rather than passing silently, so a

@@ -4,15 +4,16 @@
 # One container covers every signal autotel emits, which is why it beats wiring
 # four services by hand for local work. Not for production.
 #
-#   docker compose -f docker-compose.lgtm.yml up -d
+#   docker compose -f docker/lgtm.yml up -d
 #   open http://localhost:3000          # Grafana, anonymous admin
-#   docker compose -f docker-compose.lgtm.yml down -v
+#   docker compose -f docker/lgtm.yml down -v
 #
-# Point autotel at it:
-#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # traces + metrics
-#   LOKI_ENDPOINT=http://localhost:3100                 # LokiSubscriber
-#
-# Then query in Grafana with:  {service="my-app"} | json
+# See docker/README.md for pointing autotel, autotel-mcp and autotel-devtools
+# at it, and for the port clash with docker/jaeger.yml.
+
+# Explicit project name so the stack is identified by what it is, not by the
+# directory the compose file happens to live in.
+name: autotel-lgtm
 
 services:
   lgtm:
@@ -20,7 +21,9 @@ services:
     container_name: autotel-lgtm
     ports:
       - '3000:3000' # Grafana UI
-      - '3100:3100' # Loki push + query API
+      - '3100:3100' # Loki       push + query API  (LOKI_BASE_URL)
+      - '3200:3200' # Tempo      query API         (TEMPO_BASE_URL)
+      - '9090:9090' # Prometheus query API         (PROMETHEUS_BASE_URL)
       - '4317:4317' # OTLP gRPC
       - '4318:4318' # OTLP HTTP
     environment:

@@ -133,23 +133,23 @@ Fields holding objects or arrays are skipped rather than stringified, because a 
 
 Filter by label, then reach into the event with `| json`:
 
-```logql
+```text
 {service="checkout", environment="production"}
   | json
   | status >= 500
 ```
 
-```logql
+```text
 # Slow requests on one route
 {service="checkout"} | json | path="/api/orders" | durationMs > 1000
 ```
 
-```logql
+```text
 # One request end to end
 {service="checkout"} | json | requestId="req_4a8ff3a8"
 ```
 
-```logql
+```text
 # Error rate per service
 sum by (service) (rate({environment="production", level="error"}[5m]))
 ```
@@ -167,9 +167,9 @@ The flush timer is unref'd, so a partial batch never holds the process open.
 The repo ships Grafana's all-in-one LGTM stack — Loki, Grafana, Tempo and Mimir in one container:
 
 ```bash
-docker compose -f docker-compose.lgtm.yml up -d
+docker compose -f docker/lgtm.yml up -d
 LOKI_ENDPOINT=http://localhost:3100 pnpm --filter autotel-subscribers test
-docker compose -f docker-compose.lgtm.yml down -v
+docker compose -f docker/lgtm.yml down -v
 ```
 
 That runs a **round trip**: it pushes events, queries them back through Loki's range API, and asserts the label set, the JSON line and the timestamp all survived. Without `LOKI_ENDPOINT` the suite skips rather than passing silently, so a green run never implies Loki was exercised.

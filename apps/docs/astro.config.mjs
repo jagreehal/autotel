@@ -43,6 +43,7 @@ export default defineConfig({
             { label: 'Introduction', slug: 'introduction' },
             { label: 'Quick Start', slug: 'quick-start' },
             { label: 'Configuration', slug: 'configuration' },
+            { label: 'Local Stacks', slug: 'local-stacks' },
           ],
         },
         {
