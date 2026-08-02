@@ -37,8 +37,12 @@ describe('toLokiTimestamp', () => {
 
   it('falls back to now for an unparseable value', () => {
     const before = Date.now();
-    const result = Number(toLokiTimestamp('not-a-date')) / 1e6;
+    // Drop the nanosecond padding rather than dividing: the full value is past
+    // Number.MAX_SAFE_INTEGER, so parsing it loses the low bits and can land a
+    // fraction of a millisecond short of `before`.
+    const result = Number(toLokiTimestamp('not-a-date').slice(0, -6));
     expect(result).toBeGreaterThanOrEqual(before);
+    expect(result).toBeLessThanOrEqual(Date.now());
   });
 });
 
