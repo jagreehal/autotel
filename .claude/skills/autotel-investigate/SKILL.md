@@ -6,11 +6,29 @@ description: >
 
 # autotel-investigate
 
-When the user asks about a production issue or telemetry data, drive the `autotel` CLI. Every command below emits one JSON document on stdout. Parse `result.data` on success or `result.error` on failure.
+When the user asks about a production issue or telemetry data, drive the `autotel` CLI. Every command emits one JSON document on stdout. Parse `result.data` on success or `result.error` on failure.
 
-## Backend selection: required for every command in this file
+## Core principles
 
-Every command needs a backend. Pick one and reuse it:
+1. **Discover, don't recall.** The CLI publishes its own surface — `autotel commands`, `autotel schema`, `autotel <group> --help`. Use those for exact command names, flags and defaults rather than working from memory or from a list in a skill file; they can't go stale against the installed version, and a list here can.
+2. **Read what's there before querying it.** `autotel health` tells you whether the backend is even reachable and which signals it serves; `autotel discover trace-fields` tells you which attributes exist before you filter on one.
+3. **Answer from the data.** Never present a conclusion the JSON doesn't support. If a query returns nothing, say so — an empty result is a finding, not a failure to be papered over.
+
+## Discovering the command surface
+
+```bash
+autotel commands                 # compact listing: every command + whether it mutates, needs network, supports JSON
+autotel schema                   # full CLI manifest as JSON (large — prefer `commands` unless you need flag detail)
+autotel <group> --help           # flags and defaults for one group, e.g. `autotel query --help`
+autotel <group> <cmd> --help     # flags for one command, e.g. `autotel diagnose slos --help`
+autotel examples <command>       # copy-pasteable examples
+```
+
+`autotel commands` is the cheap default. Reach for `autotel schema` only when you need the full flag surface in one shot.
+
+## Backend selection: required for every query command
+
+Every command that reads telemetry needs a backend. Pick one and reuse it:
 
 | Backend                             | Flags                                                              |
 | ----------------------------------- | ------------------------------------------------------------------ |
@@ -23,109 +41,62 @@ Every command needs a backend. Pick one and reuse it:
 | Auto-detect localhost               | `--backend auto`                                                   |
 | Local JSON fixture                  | `--backend fixture --fixture-path ./telemetry.json`                |
 
-Environment variables work too (`AUTOTEL_BACKEND`, `JAEGER_BASE_URL`, …). Flags win over env. If you're not sure which backend is configured, run `autotel health` first.
+Hosted vendors (traces only — `capabilities` will report metrics and logs unsupported):
+
+| Backend          | Flags                                                                    | Credentials (environment only)                                                      |
+| ---------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Pydantic Logfire | `--backend logfire [--logfire-base-url https://logfire-eu.pydantic.dev]` | `LOGFIRE_READ_TOKEN` (must be **read**-scope; a write token is rejected)            |
+| Datadog APM      | `--backend datadog [--datadog-site datadoghq.eu]`                        | `DD_API_KEY` **and** `DD_APP_KEY` (an application key is separate from the API key) |
+| SigNoz           | `--backend signoz --signoz-base-url https://signoz.example.com`          | `SIGNOZ_API_KEY` (omit for an unauthenticated self-hosted instance)                 |
+
+Credentials are read from the environment and never accepted as flags — argv is visible to anything that can list the process table. Never ask the user to paste a key into the chat; ask them to export it.
+
+Environment variables work for backend selection too (`AUTOTEL_BACKEND`, `JAEGER_BASE_URL`, …). Flags win over env. If you're not sure which backend is configured, run `autotel health` first — a misconfigured vendor backend reports `healthy: false` with the missing variable named, rather than failing the command.
+
+Some commands need no backend at all — semantic-convention lookup, span scoring and collector-config work are all local. `autotel commands` marks which need network.
 
 ## Decision tree: pick a command
 
 1. **"Is anything broken?"** → `autotel diagnose errors` (recent error spans grouped by service/operation)
-2. **"What's slow?"** → `autotel diagnose anomalies` or `autotel llm slow` for LLM-heavy services
+2. **"What's slow?"** → `autotel diagnose anomalies`, or `autotel llm slow` for LLM-heavy services
 3. **"Show me trace `<id>`"** → `autotel trace get <id>` for raw, `autotel trace summary <id>` for incident-friendly
 4. **"Why did this trace fail?"** → `autotel diagnose root-cause <id>`, then `autotel correlate trace <id>` for the full picture
 5. **"Why is service X degraded?"** → `autotel correlate explain-slowdown --service X` (anomalies + root causes + logs)
 6. **"How much are we spending on LLMs?"** → `autotel llm usage`, then `autotel llm expensive` for top traces
 7. **"What services / ops / fields exist?"** → `autotel discover services` / `autotel topology services` / `autotel discover trace-fields`
-8. **"Are we meeting SLOs?"** → `autotel diagnose slos --service X --p99-latency-ms 500 --max-error-rate 0.01`
+8. **"Are we meeting SLOs?"** → `autotel diagnose slos --service X` (thresholds are flags — check `--help`)
 9. **"Are we under attack / any security signals?"** → `autotel security summary` (auth events, probes, denied responses)
 10. **"Any MCP prompt-injection / tool abuse?"** → `autotel security mcp` (injection verdicts, output-budget breaches, untrusted-content tool calls)
+11. **"Is my telemetry even arriving?"** → `autotel health --otlp-endpoint <url>` writes a probe span and reports ingest-to-queryable lag
 
-## Reference: every command
+## Command groups
 
-### Health
+Use these to know _where_ to look; use `--help` on the group for the exact commands and flags.
 
-- `autotel health`: backend reachable + signal coverage
-- `autotel capabilities`: which signals (traces/metrics/logs) the backend serves
+| Group                    | What it answers                                                                  | Needs a backend |
+| ------------------------ | -------------------------------------------------------------------------------- | --------------- |
+| `health`, `capabilities` | Is the backend reachable, which signals does it serve, how stale is the data     | yes             |
+| `discover`               | Which services exist, which span/log fields exist and their example values       | yes             |
+| `query`                  | Raw search over traces, spans, metrics, logs                                     | yes             |
+| `trace`                  | Fetch or summarise one trace by id                                               | yes             |
+| `topology`               | Services, operations, dependency map                                             | yes             |
+| `diagnose`               | Anomalies, root cause, error grouping, SLO checks                                | yes             |
+| `correlate`              | One trace across traces + metrics + logs; slowdown explanations                  | yes             |
+| `llm`                    | Token/cost usage, model stats, expensive and slow traces, tool spans             | yes             |
+| `security`               | `security.*` events, suspicious requests, denied responses, MCP boundary signals | yes             |
+| `semconv`                | OpenTelemetry semantic-convention lookup                                         | no              |
+| `score`                  | Score a span for instrumentation quality (JSON on stdin)                         | no              |
+| `collector`              | Validate, explain and generate OTLP Collector config                             | no              |
 
-### Discovery
+## Measuring ingest lag
 
-- `autotel discover services`: services with cross-signal metadata
-- `autotel discover trace-fields [--search foo]`: span field names + example values
-- `autotel discover log-fields [--search foo]`: log field names + example values
+`autotel health --otlp-endpoint http://localhost:4318` writes one probe span and polls until it reads back, reporting `freshness.timeToQueryableSeconds`.
 
-### Query (raw search)
+This matters before you trust a negative result: backends differ by two orders of magnitude in ingest lag, and on a slow one an agent that writes then immediately reads sees nothing and wrongly concludes the operation produced no telemetry. If a trace you expect is missing, check freshness before concluding it was never emitted. `--freshness-timeout-ms` bounds the wait (default 120000).
 
-- `autotel query traces --service-name X --error-only --limit 20`: search traces
-- `autotel query spans --min-duration-ms 1000`: search individual spans
-- `autotel query metrics --metric-name http.server.duration`: list metric series
-- `autotel query logs --severity-text ERROR --text "timeout"`: search logs
+Against a hosted endpoint the probe write needs auth, taken from the standard `OTEL_EXPORTER_OTLP_HEADERS` (`Authorization=<token>`) so no token lands in argv. Note this is the **write** credential, which for most vendors is a different token from the read one the query backend uses.
 
-Common filters for `query traces` / `query spans`:
-
-- Service/op: `--service-name`, `--operation-name`
-- Time: `--lookback-minutes 60` OR `--from <iso> --to <iso>`
-- Errors: `--error-only`, `--status-code ERROR`
-- Duration: `--min-duration-ms`, `--max-duration-ms`
-- LLM: `--gen-ai-system openai`, `--gen-ai-request-model gpt-4`
-
-### Trace lookup
-
-- `autotel trace get <traceId>`: full trace
-- `autotel trace summary <traceId>`: compact incident-friendly view
-
-### Topology
-
-- `autotel topology services`: list services
-- `autotel topology operations <serviceName>`: ops for one service
-- `autotel topology map [--lookback-minutes 60]`: service dependency graph
-
-### Diagnosis
-
-- `autotel diagnose anomalies [--service X]`: statistical outliers
-- `autotel diagnose root-cause <traceId>`: bottleneck span
-- `autotel diagnose errors [--service X]`: error spans grouped by service/op
-- `autotel diagnose slos --service X --p99-latency-ms 500 --max-error-rate 0.01`: SLO violations
-
-### Correlation
-
-- `autotel correlate trace <traceId>`: trace + metrics + logs in one call
-- `autotel correlate explain-slowdown --service X`: anomalies enriched with root cause + signals
-
-### Security
-
-- `autotel security summary`: posture: events by severity/category, probe signals, denied responses (401/403/429) with top clients
-- `autotel security events [--category X] [--severity Y]`: spans carrying `security.*` events
-- `autotel security mcp`: MCP protocol-boundary signals from `autotel-mcp-instrumentation`: prompt-injection verdicts (`mcp.security.injection.*`), output-budget breaches (`mcp.security.budget.exceeded`), untrusted-content tool calls (`mcp.tool.untrusted_content`). Returns `injection` (scanned/suspected/byVerdict/bySource/byTool), `budgetBreaches`, `untrustedContent`.
-
-### LLM analytics
-
-- `autotel llm usage`: tokens + USD by model and service
-- `autotel llm models`: discover models in use
-- `autotel llm model-stats --model-name gpt-4`: per-model stats
-- `autotel llm expensive [--min-tokens 1000]`: top token-spend traces
-- `autotel llm slow [--min-duration-ms 5000]`: slowest LLM traces
-- `autotel llm tools`: tool/function spans grouped by tool
-
-### Semantic conventions (no backend needed)
-
-- `autotel semconv list`: list namespaces
-- `autotel semconv get http`: groups for a namespace
-- `autotel semconv refresh`: clear cache
-
-### Instrumentation scoring (no backend needed)
-
-- `autotel score < span.json`: score a span for instrumentation quality (JSON on stdin)
-- `autotel score explain`: explain the rubric
-
-### Collector config + schema (no backend needed)
-
-- `autotel collector validate < config.json`: validate OTLP receiver config
-- `autotel collector suggest`: minimal OTLP receiver config
-- `autotel collector explain`: config shape + defaults
-- `autotel collector versions`: supported collector schema versions
-- `autotel collector components --version 0.110.0 --kind exporter`: components for a version
-- `autotel collector schema --kind exporter --name otlphttp`: JSON schema for one component
-- `autotel collector readme --kind exporter --name otlphttp`: README for one component
-- `autotel collector validate-component --kind exporter --name otlphttp < cfg.json`: validate component config
-- `autotel collector refresh`: refresh metadata cache
+The probe sends OTLP protobuf by default — the encoding every OTLP/HTTP receiver must accept, and the only one some vendors take. The built-in collector parses JSON only and is switched automatically; anything else can be forced with `--otlp-encoding json`. If a receiver rejects the payload, the error says which encoding was sent and which to try.
 
 ## Output contract
 

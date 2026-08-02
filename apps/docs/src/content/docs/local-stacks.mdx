@@ -1,0 +1,123 @@
+---
+title: Local Stacks
+description: Run Jaeger or Grafana's LGTM stack locally to see your telemetry while you develop.
+---
+
+Instrumenting code you cannot see the output of is guesswork. The repo ships compose files so a backend is one command away, with no account to create and nothing to bill you.
+
+| Stack  | Signals               | Start                                       | UI                       |
+| ------ | --------------------- | ------------------------------------------- | ------------------------ |
+| Jaeger | Traces                | `docker compose -f docker/jaeger.yml up -d` | [http://localhost:16686](http://localhost:16686) |
+| LGTM   | Traces, metrics, logs | `docker compose -f docker/lgtm.yml up -d`   | [http://localhost:3000](http://localhost:3000)  |
+
+Swap `up -d` for `down -v` to stop and discard the data.
+
+:::caution
+The two stacks cannot run at the same time. Both bind OTLP on 4317 and 4318, so bring one down before starting the other.
+:::
+
+Pick **Jaeger** when you only care about traces and want the smallest thing that works. Pick **LGTM** when you want metrics or logs as well, or when you want to query your telemetry back from [autotel-mcp](/autotel/integrations/mcp/).
+
+## Jaeger
+
+```bash
+docker compose -f docker/jaeger.yml up -d
+```
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+```typescript
+import { init } from 'autotel';
+
+init({ service: 'checkout-api' });
+```
+
+Traces land at [http://localhost:16686](http://localhost:16686).
+
+## LGTM
+
+Grafana's all-in-one image runs **L**oki, **G**rafana, **T**empo and Mimir in one container. Anonymous admin is on, so there is no password to look up.
+
+```bash
+docker compose -f docker/lgtm.yml up -d
+```
+
+| Port   | Service    | Used for         |
+| ------ | ---------- | ---------------- |
+| `3000` | Grafana    | The UI           |
+| `3100` | Loki       | Log push + query |
+| `3200` | Tempo      | Trace query      |
+| `9090` | Prometheus | Metric query     |
+| `4317` | OTLP gRPC  | Ingest           |
+| `4318` | OTLP HTTP  | Ingest           |
+
+The three query ports are published on purpose. Ingest alone would let you write telemetry you could never read back from a tool.
+
+### Traces and metrics
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+### Events into Loki
+
+```bash
+LOKI_ENDPOINT=http://localhost:3100
+```
+
+```typescript
+import { init } from 'autotel';
+import { LokiSubscriber } from 'autotel-subscribers/loki';
+
+init({
+  service: 'checkout-api',
+  eventSubscribers: [new LokiSubscriber()],
+});
+```
+
+Then in Grafana, filter by label and reach into the event with `| json`:
+
+```text
+{service="checkout-api"} | json | durationMs > 1000
+```
+
+See [Grafana Loki](/autotel/integrations/loki/) for label and cardinality guidance.
+
+## Investigate it with autotel-mcp
+
+Point the MCP server at the query ports and let it work out what is running:
+
+```bash
+AUTOTEL_BACKEND=auto \
+TEMPO_BASE_URL=http://localhost:3200 \
+PROMETHEUS_BASE_URL=http://localhost:9090 \
+LOKI_BASE_URL=http://localhost:3100 \
+npx autotel-mcp
+```
+
+Autodetection probes `/api/echo` on Tempo, `/api/v1/status/buildinfo` on Prometheus and `/ready` on Loki, then uses whichever answer. An agent can ask about a slow request and get it out of Tempo without you naming a backend.
+
+## Running autotel-devtools alongside
+
+[autotel-devtools](/autotel/tools/devtools/) listens on **4318 by default**, which is the port LGTM binds for OTLP HTTP. To run both, move devtools:
+
+```bash
+AUTOTEL_DEVTOOLS_PORT=4319 npx autotel-devtools
+```
+
+Send to whichever you want to read from: devtools at `http://127.0.0.1:4319` for a live view of the request you just made, LGTM at `http://localhost:4318` for history and querying.
+
+With Jaeger there is no clash, because Jaeger only takes the OTLP ports and devtools can keep 4318 if Jaeger is down.
+
+## Adding a stack
+
+One file per stack under `docker/`, so a new backend never means editing a shared file. Each should carry:
+
+- a `name:` matching the stack, so the compose project is stable wherever it is run from
+- a `container_name`, so `docker logs` is predictable
+- a `healthcheck` gating on the component that starts **last**, not on the UI — a healthy Grafana does not mean Loki is accepting writes
+- a comment naming any port that clashes with an existing stack
+
+See [`docker/README.md`](https://github.com/jagreehal/autotel/tree/main/docker) in the repo.

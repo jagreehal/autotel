@@ -7,6 +7,9 @@ import { TempoBackend } from './tempo/index';
 import { PrometheusBackend } from './prometheus/index';
 import { LokiBackend } from './loki/index';
 import { FixtureBackend } from './fixture/index';
+import { LogfireBackend } from './logfire/index';
+import { DatadogBackend } from './datadog/index';
+import { SignozBackend } from './signoz/index';
 import {
   CompositeBackend,
   type CompositeBackendParts,
@@ -55,6 +58,28 @@ export async function createBackend(config: AppConfig): Promise<BackendHandle> {
     }
     case 'loki': {
       backend = new LokiBackend(config.lokiBaseUrl);
+      break;
+    }
+    case 'logfire': {
+      backend = new LogfireBackend({
+        baseUrl: config.logfireBaseUrl,
+        readToken: config.logfireReadToken,
+      });
+      break;
+    }
+    case 'datadog': {
+      backend = new DatadogBackend({
+        baseUrl: config.datadogSite,
+        apiKey: config.datadogApiKey,
+        appKey: config.datadogAppKey,
+      });
+      break;
+    }
+    case 'signoz': {
+      backend = new SignozBackend({
+        baseUrl: config.signozBaseUrl,
+        apiKey: config.signozApiKey,
+      });
       break;
     }
     case 'stack': {

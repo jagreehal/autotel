@@ -2,8 +2,9 @@ import { withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
 import { compareCohorts } from 'autotel/analysis';
 
-// Checkout latency rose at 14:05. Nobody knows which requests are affected.
-// Record the dimensions you might want to split by, then let the loop rank them.
+// Checkout latency rose at 14:05. You do not know which requests are affected,
+// and opening traces one at a time will take the rest of the afternoon. Record
+// the dimensions worth splitting on, then let the loop rank them for you.
 const collector = createTraceCollector();
 
 const observeCheckout = withTracing({ name: 'checkout.observe' })(
@@ -61,7 +62,9 @@ if (top?.field !== 'payment.provider' || top.value !== 'bank-beta') {
   throw new Error('The analysis loop did not surface the payment provider');
 }
 
-console.log('OE 8: start wide, split on the symptom, rank the differences');
+console.log(
+  `OE 8: ${slow.length} slow checkouts against ${normal.length} normal ones, ranked by what differs`,
+);
 for (const difference of ranked.slice(0, 3)) {
   const outlier = (difference.outlierFraction * 100).toFixed(0);
   const baseline = (difference.baselineFraction * 100).toFixed(0);

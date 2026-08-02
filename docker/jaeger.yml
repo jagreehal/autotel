@@ -1,3 +1,7 @@
+# Explicit project name so the stack is identified by what it is, not by the
+# directory the compose file happens to live in.
+name: autotel-jaeger
+
 services:
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.11.0

@@ -1,347 +1,221 @@
 ---
 title: AI-Assisted Observability
-description: Let AI assistants query and analyze your OpenTelemetry traces via MCP.
+description: Connect an MCP-compatible agent to Autotel traces, metrics, and logs for progressive investigation.
 ---
 
-Instead of manually searching through trace dashboards, you can ask Claude (or any MCP-compatible AI) natural language questions about your application's traces. The AI uses the OpenTelemetry MCP server to query your observability backend and returns insights.
+`autotel-mcp` is Autotel's investigation server for Claude, Codex, Cursor,
+VS Code, Windsurf, and other MCP-compatible agents. It can receive all three
+OpenTelemetry signals itself or query an existing backend.
 
-:::note[Emitting GenAI telemetry]
-This page is about **querying** traces. To **emit** GenAI telemetry (`gen_ai.*` attributes, token usage, and cost), applications use the [`autotel-genai`](https://github.com/jagreehal/autotel/tree/main/packages/autotel-genai) package: `traceGenAI` and `recordGenAiUsage` from `autotel-genai/trace`, plus `genAiMetricViews` from `autotel-genai/metrics`. That instrumentation is what makes the `get_llm_usage` and `list_llm_models` MCP tools below return data.
+:::note[Two MCP packages, two jobs]
+Use `autotel-mcp` when an agent needs to **investigate telemetry**. Use
+`autotel-mcp-instrumentation` when your application needs to **instrument its
+own MCP client or server**. See [MCP](/autotel/integrations/mcp/) for both.
 :::
 
-## How It Works
+## How it works
 
-```
-┌─────────────────────┐
-│  Your Application   │
-│  (instrumented with │──┐
-│   autotel)          │  │ OTLP
-└─────────────────────┘  │
-                         ▼
-                    ┌──────────┐
-                    │ Jaeger / │
-                    │ Tempo /  │◄─────┐
-                    │ Honeycomb│      │ HTTP API
-                    └──────────┘      │
-                         ▲            │
-                    ┌─────────────────────────┐
-                    │ OpenTelemetry MCP Server│
-                    │  (queries your backend) │
-                    └─────────────────────────┘
-                              │
-                         MCP Protocol
-                              │
-                    ┌─────────────────┐
-                    │ Claude Desktop  │
-                    │  (AI Assistant) │
-                    └─────────────────┘
+```text
+Your app ──OTLP──> collector or vendor backend
+                         ▲
+                         │ traces / metrics / logs
+                    autotel-mcp
+                         ▲
+                         │ MCP
+                      AI agent
 ```
 
-**Your app** exports traces via OTLP → **Observability backend** stores them → **MCP server** provides query tools → **Claude** uses those tools to answer your questions.
+The server exposes 41 tools for progressive investigation: discover the
+available services and fields, search traces or spans, inspect a complete
+trace, diagnose anomalies and root causes, correlate logs and metrics, and
+analyse GenAI usage.
 
-## Setup
+## Fastest setup: built-in collector
 
-### 1. Start an Observability Backend
+The default backend starts an OTLP/HTTP JSON receiver on port 4318 and stores
+telemetry in memory.
 
-For local development, Jaeger is the simplest option:
-
-```yaml
-# docker-compose.yml
-services:
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    ports:
-      - '16686:16686' # Jaeger UI
-      - '4317:4317' # OTLP gRPC
-      - '4318:4318' # OTLP HTTP
-```
-
-```bash
-docker compose up -d
-```
-
-### 2. Instrument Your App
+### 1. Point your app at the receiver
 
 ```typescript
-import {
-  init,
-  trace,
-  span,
-  withTracing,
-  span,
-  type TraceContext,
-} from 'autotel';
+import { init } from 'autotel';
 
 init({
-  service: 'my-api',
-  endpoint: 'http://localhost:4318', // Jaeger OTLP endpoint
-  autoInstrumentations: ['express', 'http'],
+  service: 'checkout',
+  endpoint: 'http://127.0.0.1:4318',
+  protocol: 'http', // OTLP/HTTP JSON; the built-in collector's wire format
 });
 ```
 
-### 3. Add Semantic Attributes
+Wrap handlers with `trace()` or the relevant framework middleware, then attach
+the context an investigation will need with span attributes or
+`getRequestLogger()`.
 
-The AI can only query what you capture. Add attributes that matter for debugging:
+### 2. Add the MCP server to your client
 
-```typescript
-const queryOrders = withTracing({})(
-  (ctx: TraceContext) => async (userId: string) => {
-    // Database attributes
-    ctx.setAttribute('db.system', 'postgresql');
-    ctx.setAttribute('db.operation', 'SELECT');
-    ctx.setAttribute('db.table', 'orders');
-    ctx.setAttribute('db.user_id', userId);
-
-    const queryTime = Math.random() * 150;
-    const orders = await db.query('SELECT * FROM orders WHERE user_id = $1', [
-      userId,
-    ]);
-
-    ctx.setAttribute('db.query_time_ms', queryTime);
-    ctx.setAttribute('db.rows_returned', orders.length);
-    ctx.setAttribute('db.slow_query', queryTime > 100);
-
-    return orders;
-  },
-);
-
-const processPayment = withTracing({})(
-  (ctx: TraceContext) => async (amount: number) => {
-    ctx.setAttribute('payment.gateway', 'stripe');
-    ctx.setAttribute('payment.amount', amount);
-    ctx.setAttribute('payment.currency', 'USD');
-
-    try {
-      const result = await stripe.charges.create({ amount });
-      ctx.setAttribute('payment.status', 'success');
-      ctx.setAttribute('payment.transaction_id', result.id);
-      return result;
-    } catch (err) {
-      ctx.setAttribute('payment.status', 'failed');
-      ctx.setAttribute('payment.error', err.message);
-      throw err;
+```json
+{
+  "mcpServers": {
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp"]
     }
-  },
-);
-
-const processOrder = withTracing({})(
-  (ctx: TraceContext) =>
-    async (userId: string, items: unknown[], total: number) => {
-      ctx.setAttribute('order.user_id', userId);
-      ctx.setAttribute('order.item_count', items.length);
-      ctx.setAttribute('order.total', total);
-
-      await span({ name: 'validate-user' }, async (validateCtx) => {
-        validateCtx.setAttribute('validation.type', 'user');
-        // ...
-      });
-
-      await span({ name: 'process-payment' }, async () => {
-        await processPayment(total);
-      });
-
-      await span({ name: 'create-order-record' }, async (recordCtx) => {
-        recordCtx.setAttribute('db.operation', 'INSERT');
-        recordCtx.setAttribute('db.table', 'orders');
-        // ...
-      });
-
-      ctx.setAttribute('order.status', 'completed');
-      return { orderId: `order-${Date.now()}`, status: 'completed' };
-    },
-);
+  }
+}
 ```
 
-### 4. Install the MCP Server
+For Claude Code:
 
 ```bash
-# macOS
-brew install pipx
-pipx ensurepath
-
-# Or use uv (faster)
-brew install uv
+claude mcp add autotel npx autotel-mcp
 ```
 
-### 5. Configure Claude Desktop
+Restart the client after changing its MCP configuration. The server writes
+status messages to stderr so the stdio protocol on stdout stays valid.
 
-Add the MCP server to your Claude Desktop config:
+### 3. Ask an investigation question
+
+Good prompts give the agent a service, time range, and symptom:
+
+- “Why did `checkout` get slower in the last hour?”
+- “Find error traces for `payments`, then inspect the most recent complete trace.”
+- “Correlate logs and metrics for trace `<trace-id>`.”
+- “Which model used the most tokens today, and which traces drove that usage?”
+
+The agent can call `list_capabilities` first, so it knows which signals and
+tools the selected backend can answer.
+
+## Query an existing backend
+
+Set `AUTOTEL_BACKEND` and its connection variables in the MCP client's `env`.
+Credentials must stay in environment variables, not command arguments.
 
 ```json
 {
   "mcpServers": {
-    "opentelemetry": {
-      "command": "uvx",
-      "args": [
-        "opentelemetry-mcp",
-        "--backend",
-        "jaeger",
-        "--url",
-        "http://localhost:16686"
-      ]
+    "autotel": {
+      "command": "npx",
+      "args": ["autotel-mcp"],
+      "env": {
+        "AUTOTEL_BACKEND": "jaeger",
+        "JAEGER_BASE_URL": "http://localhost:16686"
+      }
     }
   }
 }
 ```
 
-Restart Claude Desktop. Look for the 🔌 icon to verify the connection.
+| Backend      | Connection variables                                                  | Signals read          |
+| ------------ | --------------------------------------------------------------------- | --------------------- |
+| `collector`  | `AUTOTEL_COLLECTOR_PORT`                                              | traces, metrics, logs |
+| `devtools`   | `DEVTOOLS_BASE_URL`                                                   | traces                |
+| `jaeger`     | `JAEGER_BASE_URL`                                                     | traces                |
+| `tempo`      | `TEMPO_BASE_URL`                                                      | traces                |
+| `prometheus` | `PROMETHEUS_BASE_URL`                                                 | metrics               |
+| `loki`       | `LOKI_BASE_URL`                                                       | logs                  |
+| `stack`      | one or more of the Tempo/Jaeger, Prometheus, and Loki variables above | configured signals    |
+| `auto`       | the self-hosted base URLs above                                       | detected signals      |
+| `fixture`    | `AUTOTEL_FIXTURE_PATH`                                                | fixture contents      |
+| `logfire`    | `LOGFIRE_BASE_URL`, `LOGFIRE_READ_TOKEN`                              | traces                |
+| `datadog`    | `DD_SITE`, `DD_API_KEY`, `DD_APP_KEY`                                 | traces                |
+| `signoz`     | `SIGNOZ_BASE_URL`, optional `SIGNOZ_API_KEY`                          | traces                |
 
-## MCP Server Tools
+`logfire`, `datadog`, and `signoz` are deliberately trace-only. Their
+capability response says metrics and logs are unsupported, which is different
+from a supported query returning no data. Trace searches discover matching
+trace IDs and then hydrate every complete trace before diagnosis.
 
-The OpenTelemetry MCP server provides 9 tools that Claude uses automatically:
+### Hosted-backend details
 
-| Tool                       | What It Does                                                |
-| -------------------------- | ----------------------------------------------------------- |
-| `search_traces`            | Query traces with filters (service, time range, attributes) |
-| `search_spans`             | Find specific spans by name or attributes                   |
-| `get_trace`                | Retrieve a complete trace with all spans and attributes     |
-| `find_errors`              | Locate traces containing errors                             |
-| `list_services`            | Show all instrumented services                              |
-| `get_llm_usage`            | Aggregate token usage (for LLM traces)                      |
-| `list_llm_models`          | Identify LLM models in use                                  |
-| `get_llm_model_stats`      | Compare model performance                                   |
-| `get_llm_expensive_traces` | Find high-token requests                                    |
+- Logfire querying needs a read-scope token and the regional query host. Its
+  ingest write token has a different scope and authorization format.
+- Datadog querying needs both the organization API key and a personal
+  application key. `DD_SITE` accepts a bare site such as
+  `uk1.datadoghq.com` or a complete API URL.
+- SigNoz uses the Query Builder v5 API. `SIGNOZ_API_KEY` can be omitted for an
+  unauthenticated self-hosted deployment.
 
-Claude decides which tool to use based on your question.
+## Investigation workflow
 
-## Query Examples
+The tools are grouped around a predictable loop:
 
-### Error Analysis
+1. `backend_health`, `backend_capabilities`, and `list_capabilities` establish
+   what is reachable and supported.
+2. `discover_services`, `discover_trace_fields`, and `discover_log_fields`
+   establish the searchable vocabulary.
+3. `search_traces`, `search_spans`, `search_logs`, and `list_metrics` narrow the
+   evidence.
+4. `get_trace` and `summarize_trace` retrieve the complete execution.
+5. `find_anomalies`, `find_errors`, `find_root_cause`, `correlate`, and
+   `explain_slowdown` turn the evidence into a diagnosis.
 
-> "Show me all traces with errors from the last 10 minutes"
+There are also dedicated GenAI analytics, semantic-convention discovery,
+instrumentation scoring, and OpenTelemetry Collector configuration tools. Use
+`list_capabilities` as the live tool manifest instead of hard-coding a list in
+an agent prompt.
 
-Claude calls `find_errors`, then analyzes common patterns across returned traces.
+## GenAI investigations
 
-> "Find all traces where payment.status is 'failed'"
+Applications emit LLM telemetry through `autotel-genai`, not core `autotel`:
 
-Claude uses `search_spans` with attribute filters.
+```typescript
+import { traceGenAI, recordGenAiUsage } from 'autotel-genai/trace';
 
-> "What's the failure rate for payments?"
+const chat = traceGenAI({
+  provider: 'openai',
+  operation: 'chat',
+  model: 'gpt-5',
+})((ctx) => async () => {
+  const response = await callModel();
+  recordGenAiUsage(ctx, 'gpt-5', {
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
+  });
+  return response;
+});
 
-Claude queries all payment spans, counts successes vs failures, calculates percentage.
-
-### Performance Analysis
-
-> "What are the slowest endpoints?"
-
-Claude uses `search_traces` sorted by duration.
-
-> "Find database queries that took longer than 100ms"
-
-Claude searches spans where `db.query_time_ms > 100`.
-
-> "Show me the span breakdown for the slowest request to /api/events/report"
-
-Claude gets the full trace and walks the span tree.
-
-### Business Logic
-
-> "Show me all orders with more than 5 items"
-
-Claude searches spans where `order.item_count > 5`.
-
-> "Find traces where validation failed"
-
-Claude searches for spans named `validate-user` with error status.
-
-> "Which endpoints have the highest error rate?"
-
-Claude compares error counts per endpoint across all traces.
-
-### Root Cause Analysis
-
-> "Show me the full trace for the most recent payment failure including all child spans"
-
-Claude calls `find_errors` → filters to payment failures → calls `get_trace` → walks the span tree.
-
-> "For the /api/orders endpoint, show me the span breakdown to identify bottlenecks"
-
-Claude gets a trace for that endpoint and analyzes duration of each child span.
-
-## Drilling Down
-
-Claude maintains context across messages, so you can drill down:
-
-```
-You: "Show me traces with errors"
-Claude: [Shows 3 error traces]
-
-You: "What do these errors have in common?"
-Claude: [Analyzes common attributes across traces]
-
-You: "Show me the full trace for the first error"
-Claude: [Displays complete span tree]
-
-You: "What was the value of payment.status in that trace?"
-Claude: [Shows payment.status = 'failed']
-
-You: "Find all traces where payment.status is 'failed' in the last hour"
-Claude: [Shows all payment failures]
-
-You: "What's the failure rate?"
-Claude: [Calculates percentage]
+const answer = await chat();
 ```
 
-## What to Instrument for AI Querying
+The MCP server reads the canonical `gen_ai.*` attributes for model, token,
+latency, cost, and tool-use analysis. Before relying on those results, use
+[`scoreGenAiCompleteness()`](/autotel/contracts/schema/#5-score-genai-trace-completeness)
+to catch traces that lost critical evidence.
 
-The more semantic attributes you set, the more useful the AI becomes. Focus on:
+## Verify ingest freshness
 
-**Database operations:**
+Reachability alone does not prove that a newly written span is queryable. Test
+the complete write/read loop with the CLI:
 
-- `db.system`, `db.operation`, `db.table`
-- `db.query_time_ms`, `db.rows_returned`
-- `db.slow_query` (boolean flag)
-
-**External API calls:**
-
-- `payment.gateway`, `payment.amount`, `payment.status`
-- `http.method`, `http.route`, `http.status_code`
-
-**Business logic:**
-
-- `order.user_id`, `order.item_count`, `order.total`, `order.status`
-- `validation.type`, `validation.passed`
-
-**Flags for filtering:**
-
-- `db.slow_query`: boolean for slow queries
-- `notification.sent`: boolean for delivery status
-- `report.expensive`: boolean for heavy operations
-
-## Supported Backends
-
-The MCP server works with any OpenTelemetry-compatible backend:
-
-| Backend         | MCP Flag                                        |
-| --------------- | ----------------------------------------------- |
-| Jaeger          | `--backend jaeger --url http://localhost:16686` |
-| Grafana Tempo   | `--backend tempo --url http://localhost:3200`   |
-| Traceloop Cloud | `--backend traceloop --api-key YOUR_KEY`        |
-| Honeycomb       | `--backend honeycomb --api-key YOUR_KEY`        |
-
-## Production Use
-
-For production, replace Jaeger with a managed backend:
-
-```json
-{
-  "mcpServers": {
-    "opentelemetry": {
-      "command": "uvx",
-      "args": [
-        "opentelemetry-mcp",
-        "--backend",
-        "tempo",
-        "--url",
-        "https://tempo-prod.example.com"
-      ]
-    }
-  }
-}
+```bash
+npx autotel health \
+  --backend jaeger \
+  --otlp-endpoint http://localhost:4318
 ```
 
-## Examples
+The result includes `freshness.timeToQueryableSeconds`. For hosted endpoints,
+provide the write credential through `OTEL_EXPORTER_OTLP_HEADERS`; backend read
+credentials remain in their vendor-specific environment variables. See the
+[CLI reference](/autotel/tools/cli/#ingest-lag).
 
-- [`example-mcp-observability`](https://github.com/jagreehal/autotel/tree/main/apps/example-mcp-observability): Complete working demo: Express app → Jaeger → MCP server → Claude Desktop. Includes `generate-traffic.sh` script and 50+ example queries in `EXAMPLE_QUERIES.md`.
+## Running beside autotel-devtools
+
+Both the default MCP collector and `autotel-devtools` want port 4318. To give
+the browser UI and agent the same traces, let devtools own the receiver and
+query it from MCP:
+
+```bash
+npx autotel-devtools
+AUTOTEL_BACKEND=devtools npx autotel-mcp
+```
+
+The devtools read API currently exposes traces only. Use the standalone MCP
+collector when the agent must query logs and metrics too.
+
+## Related
+
+- [MCP](/autotel/integrations/mcp/): complete server and instrumentation setup.
+- [CLI](/autotel/tools/cli/): the same investigation model from shell commands.
+- [AI / LLM Workflows](/autotel/ai-workflows/): emit canonical GenAI telemetry.
+- [Telemetry Schema](/autotel/contracts/schema/): validate trace contracts and
+  GenAI trace completeness.

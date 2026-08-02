@@ -1,215 +1,222 @@
-import { describe, expect, it } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  createTraceExporter,
+  formatEndpointUrl,
+  resolveProtocol,
+} from './init';
 
 /**
- * Unit tests for protocol switching helper functions
+ * Protocol selection and endpoint formatting, tested against the real exports.
  *
- * These tests verify the URL formatting and protocol resolution logic
- * without requiring dynamic module loading or complex mocking.
+ * The encoding tests hit a local HTTP server rather than mocking the exporter,
+ * because the defect they guard is the wire format itself: `protocol: 'http'`
+ * resolves to `@opentelemetry/exporter-trace-otlp-http`, which serializes JSON.
+ * A vendor that accepts only OTLP protobuf (Logfire, PostHog) then silently
+ * receives nothing. Only a real request proves which encoding went out.
  */
 
-// Helper functions copied from init.ts for testing
-function formatEndpointUrl(
-  endpoint: string,
-  signal: 'traces' | 'metrics',
-  protocol: 'http' | 'grpc',
-): string {
-  if (protocol === 'grpc') {
-    // gRPC: strip any paths, return base endpoint
-    return endpoint.replace(/\/(v1\/)?(traces|metrics|logs)$/, '');
-  }
-
-  // HTTP: append signal path if not present
-  if (!endpoint.endsWith(`/v1/${signal}`)) {
-    return `${endpoint}/v1/${signal}`;
-  }
-
-  return endpoint;
+interface CapturedRequest {
+  contentType: string | undefined;
+  bytes: number;
 }
 
-function resolveProtocol(
-  configProtocol?: 'http' | 'grpc',
-  envProtocol?: string,
-): 'http' | 'grpc' {
-  // 1. Check config parameter (highest priority)
-  if (configProtocol === 'grpc' || configProtocol === 'http') {
-    return configProtocol;
+let server: Server | undefined;
+
+afterEach(async () => {
+  if (server) {
+    const closing = server;
+    server = undefined;
+    await new Promise<void>((resolve) => closing.close(() => resolve()));
   }
+});
 
-  // 2. Check OTEL_EXPORTER_OTLP_PROTOCOL env var
-  if (envProtocol === 'grpc') return 'grpc';
-  if (envProtocol === 'http/protobuf' || envProtocol === 'http') return 'http';
+/** Start a throwaway OTLP receiver that records what it was sent. */
+async function captureOtlpRequest(): Promise<{
+  url: string;
+  next: () => Promise<CapturedRequest>;
+}> {
+  const captured: CapturedRequest[] = [];
+  const waiters: Array<(request: CapturedRequest) => void> = [];
 
-  // 3. Default to HTTP
-  return 'http';
+  const listener = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      const entry: CapturedRequest = {
+        contentType: request.headers['content-type'],
+        bytes: Buffer.concat(chunks).length,
+      };
+      const waiter = waiters.shift();
+      if (waiter) waiter(entry);
+      else captured.push(entry);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end('{}');
+    });
+  });
+  server = listener;
+
+  await new Promise<void>((resolve) =>
+    listener.listen(0, '127.0.0.1', resolve),
+  );
+  const { port } = listener.address() as AddressInfo;
+
+  return {
+    url: `http://127.0.0.1:${port}/v1/traces`,
+    next: () =>
+      new Promise<CapturedRequest>((resolve) => {
+        const ready = captured.shift();
+        if (ready) resolve(ready);
+        else waiters.push(resolve);
+      }),
+  };
 }
 
-describe('Protocol resolution logic', () => {
-  describe('resolveProtocol()', () => {
-    it('should return http by default', () => {
+/** Minimal finished span the OTLP serializers accept. */
+function probeSpan(): unknown {
+  return {
+    name: 'protocol-probe',
+    kind: 0,
+    spanContext: () => ({
+      traceId: '0'.repeat(31) + '1',
+      spanId: '0'.repeat(15) + '1',
+      traceFlags: 1,
+    }),
+    parentSpanContext: undefined,
+    startTime: [1_785_500_000, 0],
+    endTime: [1_785_500_000, 1_000_000],
+    duration: [0, 1_000_000],
+    status: { code: 0 },
+    attributes: {},
+    links: [],
+    events: [],
+    ended: true,
+    resource: { attributes: { 'service.name': 'probe' } },
+    instrumentationScope: { name: 'protocol-test' },
+    droppedAttributesCount: 0,
+    droppedEventsCount: 0,
+    droppedLinksCount: 0,
+  };
+}
+
+async function exportOneSpan(
+  protocol: 'http' | 'http/protobuf',
+  url: string,
+): Promise<void> {
+  const exporter = createTraceExporter(protocol, { url });
+  await new Promise<void>((resolve) => {
+    (
+      exporter as unknown as {
+        export: (spans: unknown[], done: () => void) => void;
+      }
+    ).export([probeSpan()], () => resolve());
+  });
+}
+
+function withEnvProtocol<T>(value: string | undefined, run: () => T): T {
+  const previous = process.env.OTEL_EXPORTER_OTLP_PROTOCOL;
+  if (value === undefined) delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL;
+  else process.env.OTEL_EXPORTER_OTLP_PROTOCOL = value;
+  try {
+    return run();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL;
+    } else {
+      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = previous;
+    }
+  }
+}
+
+describe('resolveProtocol', () => {
+  it('passes an explicit config protocol through', () => {
+    expect(resolveProtocol('grpc')).toBe('grpc');
+    expect(resolveProtocol('http')).toBe('http');
+    expect(resolveProtocol('http/protobuf')).toBe('http/protobuf');
+  });
+
+  it('defaults to http when nothing is configured', () => {
+    withEnvProtocol(undefined, () => {
       expect(resolveProtocol()).toBe('http');
     });
-
-    it('should respect config parameter over env var', () => {
-      expect(resolveProtocol('http', 'grpc')).toBe('http');
-      expect(resolveProtocol('grpc', 'http')).toBe('grpc');
-    });
-
-    it('should use grpc when env var is grpc', () => {
-      expect(resolveProtocol(undefined, 'grpc')).toBe('grpc');
-    });
-
-    it('should use http when env var is http', () => {
-      expect(resolveProtocol(undefined, 'http')).toBe('http');
-    });
-
-    it('should use http when env var is http/protobuf', () => {
-      expect(resolveProtocol(undefined, 'http/protobuf')).toBe('http');
-    });
-
-    it('should default to http for invalid env var', () => {
-      expect(resolveProtocol(undefined, 'invalid')).toBe('http');
-      expect(resolveProtocol(undefined, '')).toBe('http');
-    });
-
-    it('should prioritize config parameter', () => {
-      expect(resolveProtocol('grpc')).toBe('grpc');
-      expect(resolveProtocol('http')).toBe('http');
-    });
   });
 
-  describe('formatEndpointUrl() for HTTP protocol', () => {
-    it('should append /v1/traces for traces', () => {
-      expect(formatEndpointUrl('http://localhost:4318', 'traces', 'http')).toBe(
-        'http://localhost:4318/v1/traces',
-      );
-    });
-
-    it('should append /v1/metrics for metrics', () => {
-      expect(
-        formatEndpointUrl('http://localhost:4318', 'metrics', 'http'),
-      ).toBe('http://localhost:4318/v1/metrics');
-    });
-
-    it('should not double-append path if already present', () => {
-      expect(
-        formatEndpointUrl('http://localhost:4318/v1/traces', 'traces', 'http'),
-      ).toBe('http://localhost:4318/v1/traces');
-    });
-
-    it('should handle endpoints without http prefix', () => {
-      expect(formatEndpointUrl('localhost:4318', 'traces', 'http')).toBe(
-        'localhost:4318/v1/traces',
-      );
-    });
-
-    it('should handle HTTPS endpoints', () => {
-      expect(
-        formatEndpointUrl('https://otlp.example.com', 'traces', 'http'),
-      ).toBe('https://otlp.example.com/v1/traces');
-    });
-
-    it('should handle endpoints with trailing slash', () => {
-      expect(
-        formatEndpointUrl('http://localhost:4318/', 'traces', 'http'),
-      ).toBe('http://localhost:4318//v1/traces');
-    });
+  // The OTel spec defines http/protobuf as protobuf-encoded. Mapping it onto the
+  // JSON exporter, as this previously did, silently gave anyone who set the
+  // standard variable the wrong encoding.
+  it('honours the standard OTEL_EXPORTER_OTLP_PROTOCOL values', () => {
+    withEnvProtocol('http/protobuf', () =>
+      expect(resolveProtocol()).toBe('http/protobuf'),
+    );
+    withEnvProtocol('http/json', () => expect(resolveProtocol()).toBe('http'));
+    withEnvProtocol('grpc', () => expect(resolveProtocol()).toBe('grpc'));
   });
 
-  describe('formatEndpointUrl() for gRPC protocol', () => {
-    it('should not append paths for gRPC', () => {
-      expect(formatEndpointUrl('api.honeycomb.io:443', 'traces', 'grpc')).toBe(
-        'api.honeycomb.io:443',
-      );
-    });
-
-    it('should strip /v1/traces path from gRPC endpoints', () => {
-      expect(
-        formatEndpointUrl('api.example.com/v1/traces', 'traces', 'grpc'),
-      ).toBe('api.example.com');
-    });
-
-    it('should strip /v1/metrics path from gRPC endpoints', () => {
-      expect(
-        formatEndpointUrl('api.example.com/v1/metrics', 'metrics', 'grpc'),
-      ).toBe('api.example.com');
-    });
-
-    it('should strip /v1/logs path from gRPC endpoints', () => {
-      expect(
-        formatEndpointUrl('api.example.com/v1/logs', 'traces', 'grpc'),
-      ).toBe('api.example.com');
-    });
-
-    it('should strip paths without v1 prefix', () => {
-      expect(
-        formatEndpointUrl('api.example.com/traces', 'traces', 'grpc'),
-      ).toBe('api.example.com');
-    });
-
-    it('should handle gRPC URLs with grpc:// scheme', () => {
-      expect(formatEndpointUrl('grpc://localhost:4317', 'traces', 'grpc')).toBe(
-        'grpc://localhost:4317',
-      );
-    });
-
-    it('should handle gRPC URLs with port numbers', () => {
-      expect(
-        formatEndpointUrl('collector.example.com:4317', 'traces', 'grpc'),
-      ).toBe('collector.example.com:4317');
-    });
+  it('lets an explicit config protocol win over the environment', () => {
+    withEnvProtocol('grpc', () =>
+      expect(resolveProtocol('http/protobuf')).toBe('http/protobuf'),
+    );
   });
 
-  describe('Edge cases', () => {
-    it('should handle empty endpoint for HTTP', () => {
-      expect(formatEndpointUrl('', 'traces', 'http')).toBe('/v1/traces');
-    });
-
-    it('should handle empty endpoint for gRPC', () => {
-      expect(formatEndpointUrl('', 'traces', 'grpc')).toBe('');
-    });
-
-    it('should preserve query parameters in HTTP', () => {
-      expect(
-        formatEndpointUrl('http://localhost:4318?foo=bar', 'traces', 'http'),
-      ).toBe('http://localhost:4318?foo=bar/v1/traces');
-    });
-
-    it('should preserve query parameters in gRPC', () => {
-      expect(
-        formatEndpointUrl('api.example.com:443?foo=bar', 'traces', 'grpc'),
-      ).toBe('api.example.com:443?foo=bar');
-    });
+  it('falls back to http for an unrecognised value', () => {
+    withEnvProtocol('invalid', () => expect(resolveProtocol()).toBe('http'));
+    withEnvProtocol('', () => expect(resolveProtocol()).toBe('http'));
   });
 });
 
-describe('Protocol configuration documentation', () => {
-  it('should document HTTP as default protocol', () => {
-    const defaultProtocol = resolveProtocol();
-    expect(defaultProtocol).toBe('http');
-  });
-
-  it('should document Honeycomb endpoint format', () => {
-    const honeycombEndpoint = 'api.honeycomb.io:443';
-    const formattedForGrpc = formatEndpointUrl(
-      honeycombEndpoint,
-      'traces',
-      'grpc',
+describe('formatEndpointUrl', () => {
+  it('appends the signal path for HTTP protocols', () => {
+    expect(formatEndpointUrl('http://localhost:4318', 'traces', 'http')).toBe(
+      'http://localhost:4318/v1/traces',
     );
-
-    expect(formattedForGrpc).toBe('api.honeycomb.io:443');
+    expect(
+      formatEndpointUrl('http://localhost:4318', 'metrics', 'http/protobuf'),
+    ).toBe('http://localhost:4318/v1/metrics');
   });
 
-  it('should document local collector HTTP format', () => {
-    const httpEndpoint = 'http://localhost:4318';
-    const formattedForHttp = formatEndpointUrl(httpEndpoint, 'traces', 'http');
-
-    expect(formattedForHttp).toBe('http://localhost:4318/v1/traces');
+  it('does not double-append a path that is already there', () => {
+    expect(
+      formatEndpointUrl('http://localhost:4318/v1/traces', 'traces', 'http'),
+    ).toBe('http://localhost:4318/v1/traces');
   });
 
-  it('should document local collector gRPC format', () => {
-    const grpcEndpoint = 'localhost:4317';
-    const formattedForGrpc = formatEndpointUrl(grpcEndpoint, 'traces', 'grpc');
+  // PostHog serves OTLP under /i, so the vendor prefix has to survive.
+  it('preserves a vendor path prefix', () => {
+    expect(
+      formatEndpointUrl(
+        'https://eu.i.posthog.com/i',
+        'traces',
+        'http/protobuf',
+      ),
+    ).toBe('https://eu.i.posthog.com/i/v1/traces');
+  });
 
-    expect(formattedForGrpc).toBe('localhost:4317');
+  it('strips signal paths for gRPC, which addresses the base endpoint', () => {
+    expect(formatEndpointUrl('api.honeycomb.io:443', 'traces', 'grpc')).toBe(
+      'api.honeycomb.io:443',
+    );
+    expect(
+      formatEndpointUrl('api.example.com/v1/traces', 'traces', 'grpc'),
+    ).toBe('api.example.com');
+  });
+});
+
+describe('createTraceExporter wire encoding', () => {
+  it('sends protobuf when the protocol is http/protobuf', async () => {
+    const { url, next } = await captureOtlpRequest();
+    await exportOneSpan('http/protobuf', url);
+    const request = await next();
+
+    expect(request.contentType).toContain('application/x-protobuf');
+    expect(request.bytes).toBeGreaterThan(0);
+  });
+
+  it('still sends JSON for plain http, so existing setups are unchanged', async () => {
+    const { url, next } = await captureOtlpRequest();
+    await exportOneSpan('http', url);
+    const request = await next();
+
+    expect(request.contentType).toContain('application/json');
   });
 });

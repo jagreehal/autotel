@@ -12,6 +12,9 @@ const configSchema = z.object({
       'stack',
       'auto',
       'fixture',
+      'logfire',
+      'datadog',
+      'signoz',
     ])
     .default('collector'),
   transport: z.enum(['stdio', 'http', 'sse']).default('stdio'),
@@ -27,6 +30,16 @@ const configSchema = z.object({
   prometheusBaseUrl: z.string().default('http://localhost:9090'),
   lokiBaseUrl: z.string().default('http://localhost:3100'),
   fixturePath: z.string().default('./fixtures/telemetry.json'),
+  // Hosted vendor backends. Credentials come from the environment only, never
+  // from flags — argv is visible to any process that can list the process table.
+  logfireBaseUrl: z.string().default('https://logfire-us.pydantic.dev'),
+  logfireReadToken: z.string().default(''),
+  // Accepts a bare Datadog site (`datadoghq.eu`) or a full API URL.
+  datadogSite: z.string().default(''),
+  datadogApiKey: z.string().default(''),
+  datadogAppKey: z.string().default(''),
+  signozBaseUrl: z.string().default('http://localhost:8080'),
+  signozApiKey: z.string().default(''),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
@@ -47,6 +60,13 @@ export function loadConfig(): AppConfig {
     prometheusBaseUrl: process.env.PROMETHEUS_BASE_URL,
     lokiBaseUrl: process.env.LOKI_BASE_URL,
     fixturePath: process.env.AUTOTEL_FIXTURE_PATH,
+    logfireBaseUrl: process.env.LOGFIRE_BASE_URL,
+    logfireReadToken: process.env.LOGFIRE_READ_TOKEN,
+    datadogSite: process.env.DD_SITE,
+    datadogApiKey: process.env.DD_API_KEY,
+    datadogAppKey: process.env.DD_APP_KEY,
+    signozBaseUrl: process.env.SIGNOZ_BASE_URL,
+    signozApiKey: process.env.SIGNOZ_API_KEY,
   };
 
   const config = configSchema.parse(raw);

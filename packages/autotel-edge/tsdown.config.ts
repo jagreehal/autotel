@@ -22,7 +22,7 @@ export default defineConfig({
   },
   format: ['esm'], // ESM-only for edge runtimes
   dts: true,
-  sourcemap: true,
+  sourcemap: false,
   outDir: 'dist',
   clean: true,
   treeshake: true,

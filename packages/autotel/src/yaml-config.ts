@@ -60,11 +60,11 @@ export interface YamlConfig {
   };
   exporter?: {
     endpoint?: string;
-    protocol?: 'http' | 'grpc';
+    protocol?: 'http' | 'http/protobuf' | 'grpc';
     headers?: Record<string, string>;
     destinations?: Array<{
       endpoint: string;
-      protocol?: 'http' | 'grpc';
+      protocol?: 'http' | 'http/protobuf' | 'grpc';
       headers?: Record<string, string>;
       signals?: OtlpSignal[];
     }>;

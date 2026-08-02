@@ -17,7 +17,7 @@ You are working on the MCP investigation server. This is NOT the instrumentation
 
 ## Architecture
 
-- `src/backends/`: TelemetryBackend interface + implementations (collector, jaeger, fixture)
+- `src/backends/`: TelemetryBackend interface + implementations. Self-hosted/OSS: collector, jaeger, tempo, prometheus, loki, devtools, fixture, plus `composite` (per-signal fan-out) and `autodetect`. Hosted vendors, traces only: logfire, datadog, signoz — these declare `metrics`/`logs` as `unsupported` rather than returning empty results, so a caller can tell "this backend can't answer that" from "there is nothing there".
 - `src/tools/`: MCP tool registrations, split by investigation domain
 - `src/modules/`: Pure logic (no MCP dependency), testable in isolation
 - `src/resources/`: MCP resource registrations

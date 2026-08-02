@@ -1,0 +1,207 @@
+---
+title: Grafana Loki
+description: Push events to Grafana Loki with low-cardinality labels and full JSON querying.
+---
+
+The Loki subscriber pushes events to [Grafana Loki](https://grafana.com/docs/loki/latest/) via its push API. It works against a self-hosted single-tenant instance, a multi-tenant deployment, and Grafana Cloud.
+
+Each event is pushed as a **JSON log line** under a small label set. That split is the thing to get right in Loki: labels are indexed and billed by cardinality, while the log line is searched at query time. This subscriber labels only `service`, `environment` and `level` by default, and leaves everything else — request ids, paths, user ids, your own attributes — in the line, where `| json` reaches them.
+
+## Installation
+
+```bash
+npm install autotel autotel-subscribers
+```
+
+```typescript
+import { LokiSubscriber } from 'autotel-subscribers/loki';
+```
+
+## Quick start
+
+Set `LOKI_ENDPOINT` and register the subscriber.
+
+```typescript
+import { init } from 'autotel';
+import { LokiSubscriber } from 'autotel-subscribers/loki';
+
+init({
+  service: 'checkout-api',
+  eventSubscribers: [new LokiSubscriber()],
+});
+```
+
+```bash
+LOKI_ENDPOINT=http://localhost:3100
+```
+
+## Configuration
+
+### Environment variables
+
+| Variable         | Required | Description                                                                       |
+| ---------------- | -------- | --------------------------------------------------------------------------------- |
+| `LOKI_ENDPOINT`  | Yes      | Base URL, without the push path (`LOKI_URL` and `LOKI_BASE_URL` also accepted)    |
+| `LOKI_API_KEY`   | No       | Token. Basic with `LOKI_USER`, otherwise Bearer (`GRAFANA_API_KEY` also accepted) |
+| `LOKI_USER`      | No       | Grafana Cloud instance ID; switches auth to Basic (`GRAFANA_USER` also accepted)  |
+| `LOKI_TENANT_ID` | No       | Tenant for multi-tenant self-hosted Loki, sent as `X-Scope-OrgID`                 |
+
+Options passed to `new LokiSubscriber({ ... })` win over environment variables.
+
+### Options
+
+| Option            | Type                    | Default                             | Description                                 |
+| ----------------- | ----------------------- | ----------------------------------- | ------------------------------------------- |
+| `endpoint`        | `string`                | —                                   | Base URL, without `/loki/api/v1/push`       |
+| `apiKey`          | `string`                | —                                   | API token                                   |
+| `user`            | `string`                | —                                   | Grafana Cloud instance ID (enables Basic)   |
+| `tenantId`        | `string`                | —                                   | `X-Scope-OrgID` for multi-tenant Loki       |
+| `labelFields`     | `string[]`              | `['service','environment','level']` | Event fields promoted to labels             |
+| `labels`          | `Record<string,string>` | —                                   | Static labels merged into every stream      |
+| `batchSize`       | `number`                | `100`                               | Events buffered before a push               |
+| `flushIntervalMs` | `number`                | `5000`                              | Milliseconds before a partial batch is sent |
+| `timeoutMs`       | `number`                | `5000`                              | Request timeout                             |
+| `maxRetries`      | `number`                | `3`                                 | Attempts including the first                |
+
+## Deployment
+
+Loki runs the same either way; only authentication differs.
+
+### Self-hosted
+
+A single-tenant instance needs only the endpoint:
+
+```typescript
+new LokiSubscriber({ endpoint: 'http://localhost:3100' });
+```
+
+For a **multi-tenant** deployment, name the tenant. It is sent as `X-Scope-OrgID`:
+
+```typescript
+new LokiSubscriber({
+  endpoint: 'http://loki.internal:3100',
+  tenantId: 'team-checkout',
+});
+```
+
+If your instance sits behind an authenticating proxy, `apiKey` alone is sent as `Authorization: Bearer`.
+
+### Grafana Cloud
+
+Grafana Cloud authenticates with your **instance ID** plus an access policy token, sent together as HTTP Basic:
+
+```typescript
+new LokiSubscriber({
+  endpoint: 'https://logs-prod-eu-west-0.grafana.net',
+  user: '123456',
+  apiKey: process.env.GRAFANA_API_KEY,
+});
+```
+
+`user` is the numeric instance ID of the Loki datasource, found under **Connections → Data sources → Loki** in your stack. It is not your account email, and using the email is the usual cause of a `401`.
+
+### Which auth applies
+
+| `user` | `apiKey` | `tenantId` | Header sent                                |
+| ------ | -------- | ---------- | ------------------------------------------ |
+| ✓      | ✓        |            | `Authorization: Basic base64(user:apiKey)` |
+|        | ✓        |            | `Authorization: Bearer <apiKey>`           |
+|        |          | ✓          | `X-Scope-OrgID: <tenantId>`                |
+|        |          |            | none — unauthenticated instance            |
+
+`tenantId` is independent and combines with either auth mode.
+
+## Labels and cardinality
+
+:::caution
+Never promote a high-cardinality field to a label. Loki creates one stream per unique label combination, so labelling `requestId` or `userId` creates millions of streams and will degrade or break your instance.
+:::
+
+Add a label only for values you filter on that have a bounded set:
+
+```typescript
+new LokiSubscriber({
+  // `region` has a handful of values, so it is safe
+  labelFields: ['service', 'environment', 'level', 'region'],
+  labels: { cluster: 'prod-eu' },
+});
+```
+
+Fields holding objects or arrays are skipped rather than stringified, because a serialised object is exactly the unbounded label value that wrecks an instance. Everything else stays in the JSON line and remains queryable.
+
+## Querying in Grafana
+
+Filter by label, then reach into the event with `| json`:
+
+```text
+{service="checkout", environment="production"}
+  | json
+  | status >= 500
+```
+
+```text
+# Slow requests on one route
+{service="checkout"} | json | path="/api/orders" | durationMs > 1000
+```
+
+```text
+# One request end to end
+{service="checkout"} | json | requestId="req_4a8ff3a8"
+```
+
+```text
+# Error rate per service
+sum by (service) (rate({environment="production", level="error"}[5m]))
+```
+
+## Batching
+
+Events are buffered and pushed as grouped streams rather than one request per event. A push happens when `batchSize` is reached, when `flushIntervalMs` elapses, or on `shutdown()`.
+
+Events sharing a label set are grouped into one stream and sorted by timestamp, because Loki rejects out-of-order entries within a stream.
+
+The flush timer is unref'd, so a partial batch never holds the process open.
+
+## Verify it locally
+
+The repo ships Grafana's all-in-one LGTM stack — Loki, Grafana, Tempo and Mimir in one container:
+
+```bash
+docker compose -f docker/lgtm.yml up -d
+LOKI_ENDPOINT=http://localhost:3100 pnpm --filter autotel-subscribers test
+docker compose -f docker/lgtm.yml down -v
+```
+
+That runs a **round trip**: it pushes events, queries them back through Loki's range API, and asserts the label set, the JSON line and the timestamp all survived. Without `LOKI_ENDPOINT` the suite skips rather than passing silently, so a green run never implies Loki was exercised.
+
+To look at the result instead, open Grafana at `http://localhost:3000` and run `{service=~"autotel-e2e.+"}`.
+
+## Direct API usage
+
+Push without registering a subscriber:
+
+```typescript
+import { sendBatchToLoki, sendToLoki } from 'autotel-subscribers/loki';
+
+await sendToLoki(event, { endpoint: 'http://localhost:3100' });
+await sendBatchToLoki(events, { endpoint: 'http://localhost:3100' });
+```
+
+`buildLokiPayload()`, `toLokiLabels()`, `toLokiHeaders()` and `resolveLokiPushUrl()` are exported for custom transports.
+
+## Troubleshooting
+
+**Nothing is sent, and a warning mentions a missing endpoint** — `LOKI_ENDPOINT` is unset and no `endpoint` was passed. The subscriber warns once and then drops events, so a misconfiguration never fails the request path.
+
+**401 on Grafana Cloud** — check that `user` is the numeric instance ID of the Loki datasource, not your account email.
+
+**400 mentioning out-of-order entries** — older Loki versions reject entries older than the newest in a stream. Entries are sorted within each push; if you still hit this, enable `unordered_writes` in Loki or lower `flushIntervalMs`.
+
+**Nothing appears in Grafana** — confirm the label set you are querying. Run `{service=~".+"}` first to see which streams arrived.
+
+## Related
+
+- [Event Subscribers](/autotel/integrations/subscribers/) — the subscriber model and other destinations
+- [Backends](/autotel/integrations/backends/) — OTLP presets, including Grafana Cloud for traces and metrics
+- [Loki HTTP API](https://grafana.com/docs/loki/latest/reference/loki-http-api/)
+- [LogQL](https://grafana.com/docs/loki/latest/query/)

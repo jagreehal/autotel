@@ -29,7 +29,7 @@ export default defineConfig([
     },
     format: ['esm'],
     dts: true,
-    sourcemap: true,
+    sourcemap: false,
     outDir: 'dist',
     clean: true,
     treeshake: true,
@@ -58,7 +58,7 @@ export default defineConfig([
     },
     format: ['esm'],
     dts: true,
-    sourcemap: true,
+    sourcemap: false,
     outDir: 'dist',
     // Don't clean - already cleaned by server build
     clean: false,

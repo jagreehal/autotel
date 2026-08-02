@@ -41,3 +41,21 @@ export {
 } from './google-cloud';
 
 export { createGrafanaConfig, type GrafanaPresetConfig } from './grafana';
+
+export {
+  createLogfireConfig,
+  type LogfirePresetConfig,
+  type LogfireRegion,
+} from './logfire';
+
+export {
+  createPostHogConfig,
+  type PostHogPresetConfig,
+  type PostHogRegion,
+} from './posthog';
+
+export {
+  createLangfuseConfig,
+  type LangfusePresetConfig,
+  type LangfuseRegion,
+} from './langfuse';

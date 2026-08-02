@@ -37,12 +37,12 @@
     "autotel": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-unicorn": "^64.0.0",
-    "tsdown": "^0.22.12",
+    "tsdown": "^0.22.14",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"

@@ -1,5 +1,5 @@
 import type { AppConfig, BackendHandle, TelemetryBackend } from 'autotel-mcp';
-import { AutotelError } from '../../lib/errors';
+import { AutotelError, AutotelErrorCodes } from '../../lib/errors';
 import { configureJsonOutput, printJson } from '../../lib/json-output';
 
 /**
@@ -16,6 +16,9 @@ export interface InvestigateFlags {
   lokiBaseUrl?: string;
   collectorPort?: number;
   fixturePath?: string;
+  logfireBaseUrl?: string;
+  datadogSite?: string;
+  signozBaseUrl?: string;
   outputFile?: string;
   noSecrets?: boolean;
 }
@@ -39,6 +42,11 @@ function applyFlagsToEnv(flags: InvestigateFlags): void {
     process.env.AUTOTEL_COLLECTOR_PORT = String(flags.collectorPort);
   if (flags.fixturePath !== undefined)
     process.env.AUTOTEL_FIXTURE_PATH = flags.fixturePath;
+  if (flags.logfireBaseUrl !== undefined)
+    process.env.LOGFIRE_BASE_URL = flags.logfireBaseUrl;
+  if (flags.datadogSite !== undefined) process.env.DD_SITE = flags.datadogSite;
+  if (flags.signozBaseUrl !== undefined)
+    process.env.SIGNOZ_BASE_URL = flags.signozBaseUrl;
 }
 
 /**
@@ -152,6 +160,21 @@ export function toInvestigateError(
     });
   }
   const message = error instanceof Error ? error.message : String(error);
+
+  // Hosted vendor read APIs rate-limit aggressively — Logfire allows roughly ten
+  // queries a minute. The shared HTTP layer already rides out a short 429, so
+  // one reaching here means the limit outlasted the retry budget. Reporting it
+  // as non-retryable tells a caller the query failed for good, and an agent then
+  // answers "no data" rather than waiting and asking again.
+  if (/\bHTTP 429\b/.test(message)) {
+    return new AutotelError({
+      type: 'runtime',
+      code: AutotelErrorCodes.E_RATE_LIMITED,
+      message: `autotel ${command} failed: ${message} — the backend rate limit outlasted the retry budget. Wait for the limit window to reset and run the command again.`,
+      retryable: true,
+    });
+  }
+
   return new AutotelError({
     type: 'runtime',
     code: 'AUTOTEL_E_UNKNOWN',

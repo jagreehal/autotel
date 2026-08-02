@@ -43,6 +43,7 @@ export {
   type SecurityAlertSeverity,
 } from './security';
 export { WebhookSubscriber, type WebhookConfig } from './webhook';
+export { LokiSubscriber, type LokiConfig } from './loki';
 export {
   ArchitectureSnapshotSubscriber,
   ARCHITECTURE_SNAPSHOT_SPEC,

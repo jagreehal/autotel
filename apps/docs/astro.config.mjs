@@ -5,10 +5,6 @@ import starlight from '@astrojs/starlight';
 export default defineConfig({
   site: 'https://jagreehal.github.io',
   base: '/autotel',
-  markdown: {
-    // GFM is enabled by default; keep it explicit so tables/strikethrough render.
-    gfm: true,
-  },
   integrations: [
     preact({ devtools: false }),
     starlight({
@@ -47,6 +43,7 @@ export default defineConfig({
             { label: 'Introduction', slug: 'introduction' },
             { label: 'Quick Start', slug: 'quick-start' },
             { label: 'Configuration', slug: 'configuration' },
+            { label: 'Local Stacks', slug: 'local-stacks' },
           ],
         },
         {
@@ -87,6 +84,7 @@ export default defineConfig({
             { label: 'Prisma', slug: 'integrations/prisma' },
             { label: 'Drizzle ORM', slug: 'integrations/drizzle' },
             { label: 'Mongoose', slug: 'integrations/mongoose' },
+            { label: 'Grafana Loki', slug: 'integrations/loki' },
             { label: 'MCP', slug: 'integrations/mcp' },
             { label: 'Sentry', slug: 'integrations/sentry' },
             { label: 'Plugins', slug: 'integrations/plugins' },

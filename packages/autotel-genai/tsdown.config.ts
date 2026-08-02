@@ -18,7 +18,7 @@ export default defineConfig({
   ],
   format: ['esm', 'cjs'],
   dts: true,
-  sourcemap: true,
+  sourcemap: false,
   clean: true,
   minify: false,
   target: 'es2022',

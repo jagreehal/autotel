@@ -10,14 +10,14 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/sdk-trace-base": "^2.9.0",
-    "ai": "7.0.32",
-    "ai-sdk-ollama": "4.0.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0",
+    "ai": "7.0.41",
+    "ai-sdk-ollama": "4.1.0",
     "autotel-genai": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "tsx": "^4.23.1",
     "typescript": "^6.0.3"
   }

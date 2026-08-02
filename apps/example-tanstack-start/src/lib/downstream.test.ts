@@ -34,7 +34,11 @@ beforeAll(async () => {
 
     res.setHeader('content-type', 'application/json')
     res.end(
-      JSON.stringify({ service: 'downstream-api', traceparent, traceId: joined }),
+      JSON.stringify({
+        service: 'downstream-api',
+        traceparent,
+        traceId: joined,
+      }),
     )
   })
   await new Promise<void>((resolve) => server.listen(0, resolve))
@@ -76,7 +80,9 @@ describe('resolveDownstreamUrl', () => {
 
   it('uses DOWNSTREAM_API_URL when configured', () => {
     process.env.DOWNSTREAM_API_URL = 'https://orders.internal/api/downstream'
-    expect(resolveDownstreamUrl()).toBe('https://orders.internal/api/downstream')
+    expect(resolveDownstreamUrl()).toBe(
+      'https://orders.internal/api/downstream',
+    )
   })
 
   it('falls back to the pinned dev port (package.json uses --strictPort)', () => {

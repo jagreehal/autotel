@@ -29,8 +29,8 @@
     "lint": "eslint src"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
-    "tsdown": "^0.22.12",
+    "@types/node": "^26.1.2",
+    "tsdown": "^0.22.14",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },

@@ -256,6 +256,22 @@ the agent read the same traces. The
 [Run alongside autotel-devtools](/autotel/integrations/mcp/#run-alongside-autotel-devtools)
 recipe has the full setup and the traces-only caveat.
 
+## Use with a local stack
+
+The [LGTM stack](/autotel/local-stacks/) binds 4318 for OTLP HTTP, the same
+default devtools uses. Move devtools to run both:
+
+```bash
+AUTOTEL_DEVTOOLS_PORT=4319 npx autotel-devtools
+```
+
+Then send to whichever you want to read from: devtools at
+`http://127.0.0.1:4319` for a live view of the request you just made, LGTM at
+`http://localhost:4318` for history and Grafana queries.
+
+The Jaeger stack has no such clash — it only takes the OTLP ports, so devtools
+keeps 4318 whenever Jaeger is down.
+
 ## Devtools vs. Terminal Viewer
 
 Both ship as local OTLP receivers. Pick by surface:

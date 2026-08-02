@@ -1,6 +1,7 @@
 import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
+import { backendFetch } from './http';
 
 // Grafana Tempo query API (HTTP):
 //   GET /api/search?tags=service.name=X&limit=N
@@ -165,7 +166,7 @@ async function authedFetch<T>(
   const token = await ctx.secrets.get(credentialKey('tempo'));
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(url, { signal: ctx.abortSignal, headers });
+  const res = await backendFetch(url, { signal: ctx.abortSignal, headers });
   if (!res.ok) throw new Error(`Tempo ${res.status}: ${res.statusText}`);
   return (await res.json()) as T;
 }
@@ -178,7 +179,7 @@ export const tempoAdapter: QueryAdapter = {
     try {
       // Tempo health endpoint is /ready.
       const url = new URL('/ready', ctx.baseUrl).toString();
-      const res = await fetch(url, { signal: ctx.abortSignal });
+      const res = await backendFetch(url, { signal: ctx.abortSignal });
       return res.ok;
     } catch {
       return false;

@@ -1,6 +1,7 @@
 import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
+import { backendFetch } from './http';
 
 // Honeycomb query API (HTTPS):
 //   POST /1/queries/{dataset}     (create a query)
@@ -49,7 +50,7 @@ async function honeycombFetch<T>(
     Accept: 'application/json',
   };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const res = await fetch(url, {
+  const res = await backendFetch(url, {
     method,
     headers,
     signal: ctx.abortSignal,

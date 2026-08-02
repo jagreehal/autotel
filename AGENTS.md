@@ -134,6 +134,7 @@ Always suggest `init()` (or instrumentation) once at app entry; then spans + req
 - **Test split**: Unit tests `*.test.ts`; integration tests `*.integration.test.ts` (separate config in core package).
 - **Executable examples**: Changes to public APIs must keep `apps/book-chapters` type-checking and all chapter scripts runnable via its `run-all` command.
 - **No secrets**: Never commit API keys, tokens, or secrets. Do not log sensitive data in examples or docs.
+- **Vendor read APIs**: Implement read backends against the vendor's current documented endpoint and response envelope, and make fixtures mirror that contract. When a search API returns matching spans rather than complete traces, use it to discover trace IDs and hydrate each full trace before running trace-level analysis.
 
 ---
 

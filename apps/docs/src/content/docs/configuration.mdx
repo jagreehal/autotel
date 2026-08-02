@@ -14,7 +14,7 @@ Autotel supports standard OpenTelemetry environment variables for configuration.
 **Exporter Configuration:**
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP collector URL (e.g. `http://localhost:4318`)
-- `OTEL_EXPORTER_OTLP_PROTOCOL`: Protocol: `http` or `grpc`
+- `OTEL_EXPORTER_OTLP_PROTOCOL`: `http/json`, `http/protobuf`, or `grpc` (`http` remains an alias for JSON)
 - `OTEL_EXPORTER_OTLP_HEADERS`: Auth headers as comma-separated `key=value` pairs
 
 **Resource Attributes:**
@@ -54,6 +54,33 @@ init({
   ],
 });
 ```
+
+## OTLP wire protocol
+
+Autotel keeps the two OTLP/HTTP encodings distinct:
+
+| `init()` value  | Environment value | Wire format        | Trace exporter                                             |
+| --------------- | ----------------- | ------------------ | ---------------------------------------------------------- |
+| `http`          | `http/json`       | OTLP/HTTP JSON     | `@opentelemetry/exporter-trace-otlp-http` (included)       |
+| `http/protobuf` | `http/protobuf`   | OTLP/HTTP protobuf | `@opentelemetry/exporter-trace-otlp-proto` (optional peer) |
+| `grpc`          | `grpc`            | OTLP/gRPC          | `@opentelemetry/exporter-trace-otlp-grpc` (optional peer)  |
+
+`OTEL_EXPORTER_OTLP_PROTOCOL=http` is accepted as the long-standing JSON
+alias. `http/protobuf` is not interchangeable with `http`: it selects the
+protobuf exporter and fails clearly at startup if that optional package is not
+installed. Install the matching metric and log protobuf exporters as well when
+those signals are enabled.
+
+```typescript
+init({
+  service: 'my-service',
+  endpoint: 'https://otel.example.com',
+  protocol: 'http/protobuf',
+});
+```
+
+HTTP endpoints may include a path prefix. Autotel preserves it when appending
+the signal path, so an endpoint ending in `/i` sends traces to `/i/v1/traces`.
 
 ## Process Handlers
 

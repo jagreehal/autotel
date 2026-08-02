@@ -265,9 +265,10 @@ don't need Jaeger, Tempo, or Grafana.
 - **Backend-agnostic.** Built-in OTLP collector accepts data from any
   OTel-instrumented app.
 - **All three signals.** Traces, metrics, and logs with cross-signal correlation.
-- **Agent-optimised.** 33 tools designed for progressive investigation:
+- **Agent-optimised.** 41 tools designed for progressive investigation:
   discover → diagnose → correlate → root-cause.
-- **Zero infrastructure.** In-memory by default; persistent with `--persist`.
+- **Zero infrastructure.** In-memory by default; set `AUTOTEL_PERSIST` to a
+  libsql file path for persistence.
 
 ### Requirements
 
@@ -356,8 +357,42 @@ dashboard), or give each tool a separate port and export from your app to both.
 | `stack`      | Tempo/Jaeger + Prometheus + Loki, composed from whichever `*_BASE_URL` you set                        | the base URLs above                                  |
 | `auto`       | Probes Tempo, Jaeger, Prometheus and Loki, then reads from whatever answers (falls back to `fixture`) | the base URLs above                                  |
 | `fixture`    | A JSON file, for demos and tests                                                                      | `AUTOTEL_FIXTURE_PATH` (`./fixtures/telemetry.json`) |
+| `logfire`    | Pydantic Logfire query API (traces only)                                                              | `LOGFIRE_BASE_URL`, `LOGFIRE_READ_TOKEN`             |
+| `datadog`    | Datadog APM v2 APIs (traces only)                                                                     | `DD_SITE`, `DD_API_KEY`, `DD_APP_KEY`                |
+| `signoz`     | SigNoz Query Builder v5 API (traces only)                                                             | `SIGNOZ_BASE_URL`, optional `SIGNOZ_API_KEY`         |
 
-To pass a backend through the MCP client config, add it to `args` or `env`:
+Hosted-vendor credentials belong in `env`, never command arguments. Logfire
+requires a read-scope token and its regional query host; Datadog requires both
+an API key and an application key. These three backends return an explicit
+`unsupported` capability for metrics and logs.
+
+### Read from a local LGTM stack
+
+The `tempo`, `prometheus` and `loki` defaults above are already the ports
+[the LGTM stack](/autotel/local-stacks/) publishes, so one command covers all
+three signals:
+
+```bash
+docker compose -f docker/lgtm.yml up -d
+```
+
+```bash
+AUTOTEL_BACKEND=auto \
+TEMPO_BASE_URL=http://localhost:3200 \
+PROMETHEUS_BASE_URL=http://localhost:9090 \
+LOKI_BASE_URL=http://localhost:3100 \
+npx autotel-mcp
+```
+
+`auto` probes each and uses whatever answers, so the same command works whether
+you have the full stack up or only part of it. Use `stack` instead when you want
+to fail loudly on a backend that should be there and is not.
+
+Send telemetry to `http://localhost:4318` and events to Loki with
+[`LokiSubscriber`](/autotel/integrations/loki/), and the agent can investigate
+traces, metrics and logs from one local container.
+
+To select a backend through the MCP client config, add it to `env`:
 
 ```json
 {

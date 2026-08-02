@@ -160,7 +160,7 @@ export interface OtlpDestinationConfig {
   /**
    * Protocol for this destination. Falls back to top-level `protocol`.
    */
-  protocol?: 'http' | 'grpc';
+  protocol?: AutotelProtocol;
 
   /**
    * Signals to send to this destination.
@@ -170,6 +170,23 @@ export interface OtlpDestinationConfig {
 }
 
 // Lazy-load gRPC exporters (optional peer dependencies)
+/**
+ * OTLP wire protocols.
+ *
+ * `http` is OTLP/HTTP with a JSON body; `http/protobuf` is OTLP/HTTP with a
+ * protobuf body. They are not interchangeable: several vendors (Pydantic
+ * Logfire, PostHog) accept protobuf only and drop JSON silently, which looks
+ * exactly like emitting no telemetry at all.
+ */
+export type AutotelProtocol = 'http' | 'http/protobuf' | 'grpc';
+
+let OTLPTraceExporterPROTO:
+  (new (config: OTLPExporterConfig) => SpanExporter) | undefined;
+let OTLPMetricExporterPROTO:
+  (new (config: OTLPExporterConfig) => PushMetricExporter) | undefined;
+let OTLPLogExporterPROTO:
+  (new (config: OTLPExporterConfig) => LogRecordExporter) | undefined;
+
 let OTLPTraceExporterGRPC:
   (new (config: OTLPExporterConfig) => SpanExporter) | undefined;
 let OTLPMetricExporterGRPC:
@@ -224,10 +241,31 @@ function loadGRPCMetricExporter(): new (
 }
 
 /**
+ * Helper: Lazy-load protobuf trace exporter
+ */
+function loadProtoTraceExporter(): new (
+  config: OTLPExporterConfig,
+) => SpanExporter {
+  if (OTLPTraceExporterPROTO) return OTLPTraceExporterPROTO;
+
+  try {
+    const protoModule = requireModule<{
+      OTLPTraceExporter: new (config: OTLPExporterConfig) => SpanExporter;
+    }>('@opentelemetry/exporter-trace-otlp-proto');
+    OTLPTraceExporterPROTO = protoModule.OTLPTraceExporter;
+    return OTLPTraceExporterPROTO;
+  } catch {
+    throw new Error(
+      'Protobuf trace exporter not found. Install @opentelemetry/exporter-trace-otlp-proto',
+    );
+  }
+}
+
+/**
  * Helper: Create trace exporter based on protocol
  */
-function createTraceExporter(
-  protocol: 'http' | 'grpc',
+export function createTraceExporter(
+  protocol: AutotelProtocol,
   config: OTLPExporterConfig,
 ): SpanExporter {
   if (protocol === 'grpc') {
@@ -235,7 +273,12 @@ function createTraceExporter(
     return new Exporter(config);
   }
 
-  // Default: HTTP
+  if (protocol === 'http/protobuf') {
+    const Exporter = loadProtoTraceExporter();
+    return new Exporter(config);
+  }
+
+  // Default: HTTP with a JSON body
   return new OTLPTraceExporterHTTP(config);
 }
 
@@ -243,7 +286,7 @@ function createTraceExporter(
  * Helper: Create metric exporter based on protocol
  */
 function createMetricExporter(
-  protocol: 'http' | 'grpc',
+  protocol: AutotelProtocol,
   config: OTLPExporterConfig,
 ): PushMetricExporter {
   if (protocol === 'grpc') {
@@ -251,7 +294,24 @@ function createMetricExporter(
     return new Exporter(config);
   }
 
-  // Default: HTTP
+  if (protocol === 'http/protobuf') {
+    if (!OTLPMetricExporterPROTO) {
+      try {
+        OTLPMetricExporterPROTO = requireModule<{
+          OTLPMetricExporter: new (
+            config: OTLPExporterConfig,
+          ) => PushMetricExporter;
+        }>('@opentelemetry/exporter-metrics-otlp-proto').OTLPMetricExporter;
+      } catch {
+        throw new Error(
+          'Protobuf metric exporter not found. Install @opentelemetry/exporter-metrics-otlp-proto',
+        );
+      }
+    }
+    return new OTLPMetricExporterPROTO(config);
+  }
+
+  // Default: HTTP with a JSON body
   return new OTLPMetricExporterHTTP(config);
 }
 
@@ -280,7 +340,7 @@ function loadGRPCLogExporter(): new (
  * Helper: Create log exporter based on protocol
  */
 function createLogExporter(
-  protocol: 'http' | 'grpc',
+  protocol: AutotelProtocol,
   config: OTLPExporterConfig,
 ): LogRecordExporter {
   if (protocol === 'grpc') {
@@ -288,23 +348,50 @@ function createLogExporter(
     return new Exporter(config);
   }
 
-  // Default: HTTP
+  if (protocol === 'http/protobuf') {
+    if (!OTLPLogExporterPROTO) {
+      try {
+        OTLPLogExporterPROTO = requireModule<{
+          OTLPLogExporter: new (
+            config: OTLPExporterConfig,
+          ) => LogRecordExporter;
+        }>('@opentelemetry/exporter-logs-otlp-proto').OTLPLogExporter;
+      } catch {
+        throw new Error(
+          'Protobuf log exporter not found. Install @opentelemetry/exporter-logs-otlp-proto',
+        );
+      }
+    }
+    return new OTLPLogExporterPROTO(config);
+  }
+
+  // Default: HTTP with a JSON body
   return new OTLPLogExporterHTTP(config);
 }
 
 /**
  * Helper: Resolve protocol from config and environment
  */
-function resolveProtocol(configProtocol?: 'http' | 'grpc'): 'http' | 'grpc' {
+export function resolveProtocol(
+  configProtocol?: AutotelProtocol,
+): AutotelProtocol {
   // 1. Check config parameter (highest priority)
-  if (configProtocol === 'grpc' || configProtocol === 'http') {
+  if (
+    configProtocol === 'grpc' ||
+    configProtocol === 'http' ||
+    configProtocol === 'http/protobuf'
+  ) {
     return configProtocol;
   }
 
   // 2. Check OTEL_EXPORTER_OTLP_PROTOCOL env var
+  // The spec's values are `grpc`, `http/protobuf` and `http/json`. Mapping
+  // `http/protobuf` onto the JSON exporter, as this used to, silently gave
+  // anyone setting the standard variable the encoding they didn't ask for.
   const envProtocol = process.env.OTEL_EXPORTER_OTLP_PROTOCOL;
   if (envProtocol === 'grpc') return 'grpc';
-  if (envProtocol === 'http/protobuf' || envProtocol === 'http') return 'http';
+  if (envProtocol === 'http/protobuf') return 'http/protobuf';
+  if (envProtocol === 'http/json' || envProtocol === 'http') return 'http';
 
   // 3. Default to HTTP
   return 'http';
@@ -315,10 +402,10 @@ function resolveProtocol(configProtocol?: 'http' | 'grpc'): 'http' | 'grpc' {
  * gRPC exporters don't need the /v1/traces or /v1/metrics path
  * HTTP exporters need the full path
  */
-function formatEndpointUrl(
+export function formatEndpointUrl(
   endpoint: string,
   signal: 'traces' | 'metrics' | 'logs',
-  protocol: 'http' | 'grpc',
+  protocol: AutotelProtocol,
 ): string {
   if (protocol === 'grpc') {
     // gRPC: strip any paths, return base endpoint
@@ -683,7 +770,7 @@ export interface AutotelConfig {
    *
    * @default 'http'
    */
-  protocol?: 'http' | 'grpc';
+  protocol?: AutotelProtocol;
 
   /**
    * Optional factory to build a customised NodeSDK instance from our defaults.
@@ -1503,7 +1590,7 @@ function normalizeOtlpHeaders(
 
 type ResolvedOtlpDestination = {
   endpoint: string;
-  protocol: 'http' | 'grpc';
+  protocol: AutotelProtocol;
   headers?: Record<string, string>;
   signals?: Set<OtlpSignal>;
 };

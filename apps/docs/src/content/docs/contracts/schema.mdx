@@ -159,6 +159,32 @@ init({
 });
 ```
 
+## 5. Score GenAI trace completeness
+
+A trace can be schema-valid and still omit the evidence needed to debug an
+agent run. `scoreGenAiCompleteness()` scores one trace from 0–10 across LLM
+input/output, model, token usage, cost, latency, tool arguments/results, span
+tree integrity, and span count.
+
+```typescript
+import { formatCompleteness, scoreGenAiCompleteness } from 'autotel-schema';
+import { createTraceCollector } from 'autotel/testing';
+
+const collector = createTraceCollector();
+// Run the instrumented scenario, then inspect without consuming the trace.
+const result = scoreGenAiCompleteness(collector.peekTrace(traceId));
+
+if (result.score < 8) {
+  throw new Error(formatCompleteness(result));
+}
+```
+
+The scorer accepts the same dependency-free `ScenarioSpan` shape used by the
+scenario API. Partial evidence receives half credit—for example, token usage in
+only one direction, a tool call whose result never landed, a dangling parent,
+or a single-span trace. It is a fidelity check, not a semantic judgment about
+whether the model made a good decision.
+
 ## What this package does NOT do
 
 - **Does not contract message payloads.** For serialized application messages

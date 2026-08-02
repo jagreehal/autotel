@@ -41,6 +41,7 @@ export const AutotelErrorCodes = {
   E_WRITE_FAILED: 'AUTOTEL_E_WRITE_FAILED',
   E_READ_FAILED: 'AUTOTEL_E_READ_FAILED',
   // runtime
+  E_RATE_LIMITED: 'AUTOTEL_E_RATE_LIMITED',
   E_UNKNOWN: 'AUTOTEL_E_UNKNOWN',
 } as const;
 

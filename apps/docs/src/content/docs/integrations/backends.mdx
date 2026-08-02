@@ -1,6 +1,6 @@
 ---
 title: Backends
-description: Simplified setup helpers for Honeycomb, Datadog, Google Cloud, and Grafana.
+description: Vendor-ready OTLP configuration helpers for Honeycomb, Datadog, Google Cloud, Grafana, Logfire, Langfuse, and PostHog.
 ---
 
 `autotel-backends` provides vendor-specific configuration helpers that simplify `init()` for popular observability platforms.
@@ -52,14 +52,78 @@ init(
 );
 ```
 
+## Logfire
+
+Logfire requires regional OTLP/HTTP protobuf ingestion. Its write token is not
+the read token used by `autotel investigate --backend logfire`.
+
+```typescript
+import { init } from 'autotel';
+import { createLogfireConfig } from 'autotel-backends/logfire';
+
+init(
+  createLogfireConfig({
+    writeToken: process.env.LOGFIRE_WRITE_TOKEN!,
+    service: 'my-agent',
+    region: 'eu', // required: 'eu' | 'us'
+  }),
+);
+```
+
+The preset selects `http/protobuf`, the regional ingest endpoint, and Logfire's
+bare-token `Authorization` format. Use `endpoint` only for self-hosted Logfire.
+
+## Langfuse
+
+```typescript
+import { init } from 'autotel';
+import { createLangfuseConfig } from 'autotel-backends/langfuse';
+
+init(
+  createLangfuseConfig({
+    publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+    secretKey: process.env.LANGFUSE_SECRET_KEY!,
+    service: 'my-agent',
+    region: 'eu', // 'eu' (default) | 'us'
+  }),
+);
+```
+
+The preset builds Basic authentication, uses Langfuse's
+`/api/public/otel` receiver, and opts into ingestion v4. Set `baseUrl` for a
+self-hosted instance.
+
+## PostHog
+
+```typescript
+import { init } from 'autotel';
+import { createPostHogConfig } from 'autotel-backends/posthog';
+
+init(
+  createPostHogConfig({
+    projectToken: process.env.POSTHOG_PROJECT_TOKEN!,
+    service: 'my-app',
+    region: 'eu', // 'us' (default) | 'eu'
+  }),
+);
+```
+
+The preset sends traces, logs, and metrics as OTLP/HTTP protobuf, preserves
+PostHog's `/i` path prefix, and uses Bearer authentication. This is telemetry
+ingestion; `autotel-subscribers/posthog` remains the separate product-event
+integration.
+
 ## Available Backends
 
-| Backend      | Import                          |
-| ------------ | ------------------------------- |
-| Honeycomb    | `autotel-backends/honeycomb`    |
-| Datadog      | `autotel-backends/datadog`      |
-| Google Cloud | `autotel-backends/google-cloud` |
-| Grafana      | `autotel-backends/grafana`      |
+| Backend      | Import                          | Transport selected   |
+| ------------ | ------------------------------- | -------------------- |
+| Honeycomb    | `autotel-backends/honeycomb`    | gRPC                 |
+| Datadog      | `autotel-backends/datadog`      | Vendor/mode-specific |
+| Google Cloud | `autotel-backends/google-cloud` | Vendor-specific      |
+| Grafana      | `autotel-backends/grafana`      | OTLP/HTTP            |
+| Logfire      | `autotel-backends/logfire`      | OTLP/HTTP protobuf   |
+| Langfuse     | `autotel-backends/langfuse`     | OTLP/HTTP JSON       |
+| PostHog      | `autotel-backends/posthog`      | OTLP/HTTP protobuf   |
 
 ## Multi-backend fan-out
 

@@ -1,6 +1,7 @@
 import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
+import { backendFetch } from './http';
 
 // SigNoz query API (HTTP, ClickHouse-backed):
 //   POST /api/v3/query_range   — generic trace+metric query
@@ -54,7 +55,7 @@ async function signozFetch<T>(
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (token) headers['SIGNOZ-API-KEY'] = token;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const res = await fetch(url, {
+  const res = await backendFetch(url, {
     method,
     headers,
     signal: ctx.abortSignal,

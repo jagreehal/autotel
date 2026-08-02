@@ -60,3 +60,29 @@ describe('toInvestigateError', () => {
     expect(out.message).toContain('must be a thing');
   });
 });
+
+describe('toInvestigateError rate limiting', () => {
+  // A 429 is the one runtime failure that is definitely worth retrying. Marking
+  // it `retryable: false` tells an agent the query failed permanently, so it
+  // reports "no data" instead of backing off — a confident wrong answer.
+  it('marks a rate-limited backend as retryable', () => {
+    const error = toInvestigateError(
+      'discover services',
+      new Error('HTTP 429 for https://logfire-eu.pydantic.dev/v2/query'),
+    );
+
+    expect(error.retryable).toBe(true);
+    expect(error.code).toBe('AUTOTEL_E_RATE_LIMITED');
+    expect(error.message).toMatch(/rate limit/i);
+  });
+
+  it('leaves other runtime failures non-retryable', () => {
+    const error = toInvestigateError(
+      'discover services',
+      new Error('HTTP 500 for https://example.com/v2/query'),
+    );
+
+    expect(error.retryable).toBe(false);
+    expect(error.code).toBe('AUTOTEL_E_UNKNOWN');
+  });
+});

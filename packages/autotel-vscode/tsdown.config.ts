@@ -9,7 +9,7 @@ export default defineConfig({
   format: ['cjs'],
   target: 'node18',
   platform: 'node',
-  sourcemap: true,
+  sourcemap: false,
   clean: true,
   dts: false,
   // CRITICAL: bundle autotel-devtools (and subexports) into dist.
