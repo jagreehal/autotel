@@ -1,5 +1,90 @@
 # autotel-devtools
 
+## 17.0.0
+
+### Patch Changes
+
+- 0f518c6: Refresh dependencies to their latest minor and patch releases, most notably the
+  OpenTelemetry SDK (`0.220.x` → `0.221.x`, `2.9.x` → `2.10.x`).
+
+  Majors are deliberately held back for a separate change, including TypeScript 7,
+  pnpm 11, chalk 6, jsdom 30 and the ESLint toolchain.
+
+- 0f518c6: Stop publishing source maps. Every package is roughly half the size it was.
+
+  Published output across all packages drops from 18.7 MiB to 7.9 MiB. Installing
+  `autotel` downloads 500 KiB gzipped instead of 1,130 KiB. Nothing about the
+  shipped JavaScript or type declarations changed.
+
+  Source maps were 55–65% of every package, because each source byte was emitted
+  four times: once as ESM, once as CJS, and again inside each format's map, which
+  embedded `sourcesContent`. They never reached a consumer's application bundle —
+  bundlers read maps and discard them — so the cost was pure install weight in
+  exchange for TypeScript stack traces under `node --enable-source-maps`.
+
+  Best-in-class TypeScript libraries do not make that trade. Of fourteen surveyed,
+  twelve publish no maps at all (zod, hono, pino, fastify, vitest, vite, rollup,
+  undici, commander, tsdown, react, astro), and not one publishes `.d.ts.map`.
+  The OpenTelemetry packages do ship maps at around 50% of their size, which is
+  the convention this repo had been following.
+
+  The `.d.ts.map` declaration maps were broken regardless: `sourcesContent: false`
+  with sources pointing at `../src/*.ts`, which `files` never published, so they
+  resolved to nothing on a consumer's machine.
+
+  Maps are still generated for local development. `tsconfig.json` keeps
+  `sourceMap` and `declarationMap` on; only `tsconfig.build.json` disables them,
+  so debugging the workspace is unchanged.
+
+  This also fixes the bundle-size gate, which had been amplifying every ordinary
+  change by 4×. The three packages that were failing it (`autotel-backends` +43.9%,
+  `autotel-mcp` +14.4%, `autotel-schema` +12.0%) were not bloated — that growth was
+  legitimate new backend code, quadrupled by the build. The baseline is
+  regenerated.
+
+- 0f518c6: Add a Grafana Loki subscriber: `autotel-subscribers/loki`.
+
+  `LokiSubscriber` pushes events to Loki's push API as JSON log lines, and works
+  against a self-hosted single-tenant instance, a multi-tenant deployment, and
+  Grafana Cloud. Auth follows what each expects: `user` plus `apiKey` is sent as
+  HTTP Basic for Grafana Cloud, `apiKey` alone as Bearer for an authenticating
+  proxy, and `tenantId` as `X-Scope-OrgID` independently of either.
+
+  The label split is the part worth knowing about. Loki indexes labels and bills
+  by their cardinality, while the log line is searched at query time, so only
+  `service`, `environment` and `level` become labels by default. Everything else —
+  request ids, paths, user ids, your own attributes — stays in the line where
+  `| json` reaches it. Fields holding objects or arrays are skipped rather than
+  stringified, because a serialised object is exactly the unbounded label value
+  that breaks an instance.
+
+  Events are buffered and pushed as grouped streams rather than one request per
+  event, with entries sorted by timestamp within each stream, since Loki rejects
+  out-of-order pushes. The flush timer is unref'd so a partial batch never holds
+  the process open. A missing endpoint warns once and drops events instead of
+  failing the caller's request path.
+
+  `sendToLoki()`, `sendBatchToLoki()`, `buildLokiPayload()`, `toLokiLabels()`,
+  `toLokiHeaders()` and `resolveLokiPushUrl()` are exported for direct use.
+
+  Adds `docker-compose.lgtm.yml`, running Grafana's all-in-one LGTM image so Loki,
+  Grafana, Tempo and Mimir come up in one container. `loki.integration.test.ts`
+  uses it for a real round trip: push events, query them back through Loki's range
+  API, and assert the labels, the JSON line and the timestamp survived. Without
+  `LOKI_ENDPOINT` it skips rather than passing silently.
+
+  Also fixes `autotel-devtools` publishing stale build artifacts. Its tsdown step
+  had `clean: false`, so files removed from a build were never deleted from
+  `dist` — which is how the source maps dropped in the previous change came back.
+  tsdown runs before the vite widget build, and that build already sets
+  `emptyOutDir: false`, so cleaning is safe and the widget is unaffected.
+
+- Updated dependencies [0f518c6]
+- Updated dependencies [0f518c6]
+- Updated dependencies [0f518c6]
+  - autotel@6.2.0
+  - autotel-agents@0.3.1
+
 ## 16.0.0
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @jagreehal/example-mcp-server
 
+## 0.1.75
+
+### Patch Changes
+
+- Updated dependencies [0f518c6]
+- Updated dependencies [0f518c6]
+- Updated dependencies [0f518c6]
+  - autotel@6.2.0
+  - autotel-mcp-instrumentation@45.0.0
+
 ## 0.1.74
 
 ### Patch Changes
