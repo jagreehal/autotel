@@ -449,3 +449,69 @@ describe('countOtlpMetrics', () => {
     expect(countOtlpMetrics({ resourceMetrics: [] })).toBe(0);
   });
 });
+
+describe('parseOtlpTraces — partial traces', () => {
+  const span = (
+    spanId: string,
+    name: string,
+    startNano: string,
+    parentSpanId?: string,
+  ) => ({
+    traceId: 'aa',
+    spanId,
+    name,
+    kind: 1,
+    startTimeUnixNano: startNano,
+    endTimeUnixNano: '2000000000',
+    status: { code: 1 },
+    ...(parentSpanId ? { parentSpanId } : {}),
+  });
+
+  const payloadOf = (spans: unknown[]) => ({
+    resourceSpans: [
+      {
+        resource: {
+          attributes: [{ key: 'service.name', value: { stringValue: 'svc' } }],
+        },
+        scopeSpans: [{ scope: {}, spans }],
+      },
+    ],
+  });
+
+  it('marks a trace partial when every span has an absent parent', () => {
+    // What a sampled sender produces: the failed child was kept, the routine
+    // parent above it was dropped.
+    const traces = parseOtlpTraces(
+      payloadOf([span('bb', 'charge-card', '1000000000', 'cc')]),
+    );
+
+    expect(traces[0].partial).toBe(true);
+    expect(traces[0].rootSpan.name).toBe('charge-card');
+  });
+
+  it('does not mark a complete trace partial', () => {
+    const traces = parseOtlpTraces(
+      payloadOf([
+        span('bb', 'charge-card', '1100000000', 'aa1'),
+        span('aa1', 'checkout', '1000000000'),
+      ]),
+    );
+
+    expect(traces[0].partial).toBeUndefined();
+    expect(traces[0].rootSpan.name).toBe('checkout');
+  });
+
+  it('falls back to the highest ancestor present, not the earliest orphan', () => {
+    // 'child' starts earlier but hangs off 'mid', which did arrive. 'mid' is the
+    // fragment's real top: its own parent is missing.
+    const traces = parseOtlpTraces(
+      payloadOf([
+        span('child', 'child', '1000000000', 'mid'),
+        span('mid', 'mid', '1500000000', 'missing-root'),
+      ]),
+    );
+
+    expect(traces[0].partial).toBe(true);
+    expect(traces[0].rootSpan.name).toBe('mid');
+  });
+});

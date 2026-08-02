@@ -163,7 +163,20 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
   const traces: TraceData[] = [];
   for (const [traceId, { spans, service }] of traceMap) {
     const sorted = spans.sort((a, b) => a.startTime - b.startTime);
-    const rootSpan = sorted.find((s) => !s.parentSpanId) || sorted[0];
+
+    // A true root has no parent. Failing that the trace is a fragment, so fall
+    // back to the highest ancestor present — a span whose parent did not arrive
+    // — and mark it partial instead of presenting a child as the root. Sampling
+    // makes this ordinary: a sender may keep a failed span and drop the routine
+    // parent above it, and a receiver that hides the difference makes a
+    // half-trace look complete.
+    const present = new Set(sorted.map((s) => s.spanId));
+    const trueRoot = sorted.find((s) => !s.parentSpanId);
+    const orphan = sorted.find(
+      (s) => s.parentSpanId && !present.has(s.parentSpanId),
+    );
+    const rootSpan = trueRoot ?? orphan ?? sorted[0];
+
     const startTime = Math.min(...sorted.map((s) => s.startTime));
     const endTime = Math.max(...sorted.map((s) => s.endTime));
     const hasError = sorted.some((s) => s.status.code === 'ERROR');
@@ -178,6 +191,7 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
       duration: endTime - startTime,
       status: hasError ? 'ERROR' : 'OK',
       service,
+      ...(trueRoot ? {} : { partial: true }),
     });
   }
 

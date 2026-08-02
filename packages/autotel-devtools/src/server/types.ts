@@ -35,6 +35,14 @@ export interface TraceData {
   duration: number;
   status: 'OK' | 'ERROR' | 'UNSET';
   service: string;
+  /**
+   * True when no span in this trace is a true root: every span received has a
+   * parent that did not arrive. The trace is a fragment, normally because
+   * sampling kept only part of it or because the rest is still in flight.
+   * `rootSpan` is then the highest ancestor that did arrive rather than the real
+   * root, and the duration covers only the part present.
+   */
+  partial?: boolean;
 }
 
 export interface LogData {
