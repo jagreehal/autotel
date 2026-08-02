@@ -6,6 +6,7 @@ import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 import type { ExportResult, ExportResultCode } from '@opentelemetry/core';
 import type { DevtoolsServer } from './server';
 import type { TraceData, SpanData } from './types';
+import { pickRoot } from './trace-root';
 
 export class DevtoolsSpanExporter implements SpanExporter {
   private server: DevtoolsServer;
@@ -81,11 +82,10 @@ export class DevtoolsSpanExporter implements SpanExporter {
     // Convert spans
     const spanData: SpanData[] = spans.map((span) => this.convertSpan(span));
 
-    // Find root span (no parent)
-    const rootSpan = spanData.find((s) => !s.parentSpanId) || spanData[0];
-
-    // Sort spans by start time
+    // Sort before picking the root: pickRoot's fallbacks take the earliest
+    // candidate, not whichever span the SDK happened to hand us first.
     spanData.sort((a, b) => a.startTime - b.startTime);
+    const { rootSpan, partial } = pickRoot(spanData);
 
     const startTime = Math.min(...spanData.map((s) => s.startTime));
     const endTime = Math.max(...spanData.map((s) => s.endTime));
@@ -104,6 +104,7 @@ export class DevtoolsSpanExporter implements SpanExporter {
       duration: endTime - startTime,
       status: status as 'OK' | 'ERROR' | 'UNSET',
       service: this.serviceName,
+      ...(partial ? { partial: true } : {}),
     };
   }
 

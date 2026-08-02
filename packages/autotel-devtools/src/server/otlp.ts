@@ -9,6 +9,7 @@ import type {
   MetricTemporality,
 } from 'autotel-agents';
 import { getResourceName } from './resource-utils';
+import { pickRoot } from './trace-root';
 
 type OtlpAnyValue = {
   stringValue?: string;
@@ -163,7 +164,8 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
   const traces: TraceData[] = [];
   for (const [traceId, { spans, service }] of traceMap) {
     const sorted = spans.sort((a, b) => a.startTime - b.startTime);
-    const rootSpan = sorted.find((s) => !s.parentSpanId) || sorted[0];
+    const { rootSpan, partial } = pickRoot(sorted);
+
     const startTime = Math.min(...sorted.map((s) => s.startTime));
     const endTime = Math.max(...sorted.map((s) => s.endTime));
     const hasError = sorted.some((s) => s.status.code === 'ERROR');
@@ -178,6 +180,7 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
       duration: endTime - startTime,
       status: hasError ? 'ERROR' : 'OK',
       service,
+      ...(partial ? { partial: true } : {}),
     });
   }
 

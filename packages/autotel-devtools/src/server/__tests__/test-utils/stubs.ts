@@ -31,6 +31,7 @@ export function makeTrace(overrides: Partial<TraceData> = {}): TraceData {
     duration: overrides.duration ?? 100,
     status: overrides.status ?? 'OK',
     service: overrides.service ?? 'test-service',
+    ...(overrides.partial ? { partial: true } : {}),
   };
 }
 

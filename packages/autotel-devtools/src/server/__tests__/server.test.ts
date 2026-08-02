@@ -176,10 +176,12 @@ describe('DevtoolsServer', () => {
       const traceId = 'trace-root-recovery';
 
       // A downstream service exports its (child) span before the root service.
+      // The batch looks like a fragment on arrival, so it is flagged partial.
       server!.addTrace(
         makeTrace({
           traceId,
           service: 'shop-auth',
+          partial: true,
           rootSpan: makeSpan({
             traceId,
             spanId: 'auth',
@@ -223,6 +225,31 @@ describe('DevtoolsServer', () => {
       expect(data.traces[0].spans).toHaveLength(2);
       expect(data.traces[0].rootSpan.spanId).toBe('api');
       expect(data.traces[0].service).toBe('shop-api');
+      // The trace is whole once the root lands: partial must clear, or every
+      // complete trace whose children arrive first stays mislabelled forever.
+      expect(data.traces[0].partial).toBeUndefined();
+    });
+
+    it('keeps a merged trace partial while its root is still missing', async () => {
+      server = new DevtoolsServer({ port: 0 });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const traceId = 'trace-still-partial';
+      const fragment = (spanId: string, parentSpanId: string) =>
+        makeTrace({
+          traceId,
+          partial: true,
+          rootSpan: makeSpan({ traceId, spanId, parentSpanId }),
+          spans: [makeSpan({ traceId, spanId, parentSpanId })],
+        });
+
+      // Two sampled children of a parent that was dropped.
+      server!.addTrace(fragment('child-a', 'dropped'));
+      server!.addTrace(fragment('child-b', 'dropped'));
+
+      const data = server!.getCurrentData();
+      expect(data.traces[0].spans).toHaveLength(2);
+      expect(data.traces[0].partial).toBe(true);
     });
 
     it('updates trace status when error spans are added', async () => {
