@@ -71,6 +71,11 @@
       "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.js",
       "require": "./dist/testing/index.cjs"
+    },
+    "./loki": {
+      "types": "./dist/loki.d.ts",
+      "import": "./dist/loki.js",
+      "require": "./dist/loki.cjs"
     }
   },
   "files": [
@@ -96,6 +101,8 @@
     "amplitude",
     "segment",
     "webhook",
+    "loki",
+    "grafana",
     "adapters",
     "business-metrics",
     "product-analytics",

@@ -1,0 +1,53 @@
+# Grafana's all-in-one LGTM stack: Loki (logs), Grafana (UI), Tempo (traces),
+# Mimir/Prometheus (metrics), fronted by an OpenTelemetry Collector.
+#
+# One container covers every signal autotel emits, which is why it beats wiring
+# four services by hand for local work. Not for production.
+#
+#   docker compose -f docker-compose.lgtm.yml up -d
+#   open http://localhost:3000          # Grafana, anonymous admin
+#   docker compose -f docker-compose.lgtm.yml down -v
+#
+# Point autotel at it:
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # traces + metrics
+#   LOKI_ENDPOINT=http://localhost:3100                 # LokiSubscriber
+#
+# Then query in Grafana with:  {service="my-app"} | json
+
+services:
+  lgtm:
+    image: grafana/otel-lgtm:0.11.13
+    container_name: autotel-lgtm
+    ports:
+      - '3000:3000' # Grafana UI
+      - '3100:3100' # Loki push + query API
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
+    environment:
+      # Datasources are provisioned in the image; this only relaxes login for
+      # local use so there is no password to look up.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      # Survive a restart so a trace you were reading does not vanish.
+      - lgtm-data:/data
+    healthcheck:
+      # Loki is the slowest of the four to come up, so gate on it rather than
+      # on Grafana — a healthy Grafana does not mean pushes will be accepted.
+      # curl is the only HTTP client in this image — no wget, nc or python.
+      test:
+        ['CMD-SHELL', 'curl -sf http://localhost:3100/ready | grep -q ready']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    networks:
+      - observability
+
+volumes:
+  lgtm-data:
+
+networks:
+  observability:
+    driver: bridge

@@ -17,6 +17,7 @@ export default defineConfig({
     middleware: 'src/middleware.ts',
     'architecture-snapshot': 'src/architecture-snapshot.ts',
     file: 'src/file.ts',
+    loki: 'src/loki.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

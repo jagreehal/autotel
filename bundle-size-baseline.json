@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-01T23:08:18.378Z",
+  "generatedAt": "2026-08-02T07:40:36.889Z",
   "sizes": {
     "autotel": 1812885,
     "autotel-adapters": 143989,
@@ -25,7 +25,7 @@
     "autotel-plugins": 375947,
     "autotel-schema": 162040,
     "autotel-sentry": 6569,
-    "autotel-subscribers": 282028,
+    "autotel-subscribers": 308479,
     "autotel-tanstack": 274106,
     "autotel-telemetry": 27442,
     "autotel-terminal": 279896,

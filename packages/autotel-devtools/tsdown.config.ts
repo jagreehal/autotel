@@ -28,6 +28,9 @@ export default defineConfig({
       'autotel',
     ],
   },
-  clean: false,
+  // tsdown runs before the vite widget build, which sets emptyOutDir: false,
+  // so cleaning here only removes the previous run. Leaving it off let stale
+  // artifacts survive into the published package.
+  clean: true,
   target: false,
 });

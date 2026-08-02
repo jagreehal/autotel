@@ -83,6 +83,7 @@ export default defineConfig({
             { label: 'Prisma', slug: 'integrations/prisma' },
             { label: 'Drizzle ORM', slug: 'integrations/drizzle' },
             { label: 'Mongoose', slug: 'integrations/mongoose' },
+            { label: 'Grafana Loki', slug: 'integrations/loki' },
             { label: 'MCP', slug: 'integrations/mcp' },
             { label: 'Sentry', slug: 'integrations/sentry' },
             { label: 'Plugins', slug: 'integrations/plugins' },
