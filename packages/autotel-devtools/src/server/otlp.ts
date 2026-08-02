@@ -9,6 +9,7 @@ import type {
   MetricTemporality,
 } from 'autotel-agents';
 import { getResourceName } from './resource-utils';
+import { pickRoot } from './trace-root';
 
 type OtlpAnyValue = {
   stringValue?: string;
@@ -163,19 +164,7 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
   const traces: TraceData[] = [];
   for (const [traceId, { spans, service }] of traceMap) {
     const sorted = spans.sort((a, b) => a.startTime - b.startTime);
-
-    // A true root has no parent. Failing that the trace is a fragment, so fall
-    // back to the highest ancestor present — a span whose parent did not arrive
-    // — and mark it partial instead of presenting a child as the root. Sampling
-    // makes this ordinary: a sender may keep a failed span and drop the routine
-    // parent above it, and a receiver that hides the difference makes a
-    // half-trace look complete.
-    const present = new Set(sorted.map((s) => s.spanId));
-    const trueRoot = sorted.find((s) => !s.parentSpanId);
-    const orphan = sorted.find(
-      (s) => s.parentSpanId && !present.has(s.parentSpanId),
-    );
-    const rootSpan = trueRoot ?? orphan ?? sorted[0];
+    const { rootSpan, partial } = pickRoot(sorted);
 
     const startTime = Math.min(...sorted.map((s) => s.startTime));
     const endTime = Math.max(...sorted.map((s) => s.endTime));
@@ -191,7 +180,7 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
       duration: endTime - startTime,
       status: hasError ? 'ERROR' : 'OK',
       service,
-      ...(trueRoot ? {} : { partial: true }),
+      ...(partial ? { partial: true } : {}),
     });
   }
 

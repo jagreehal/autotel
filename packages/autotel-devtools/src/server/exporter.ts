@@ -6,6 +6,7 @@ import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 import type { ExportResult, ExportResultCode } from '@opentelemetry/core';
 import type { DevtoolsServer } from './server';
 import type { TraceData, SpanData } from './types';
+import { pickRoot } from './trace-root';
 
 export class DevtoolsSpanExporter implements SpanExporter {
   private server: DevtoolsServer;
@@ -81,23 +82,10 @@ export class DevtoolsSpanExporter implements SpanExporter {
     // Convert spans
     const spanData: SpanData[] = spans.map((span) => this.convertSpan(span));
 
-    // Sort spans by start time. This has to happen before the root is chosen:
-    // when there is no true root, the fallback should be the earliest span
-    // received, not whichever one the exporter happened to hand us first.
+    // Sort before picking the root: pickRoot's fallbacks take the earliest
+    // candidate, not whichever span the SDK happened to hand us first.
     spanData.sort((a, b) => a.startTime - b.startTime);
-
-    // A true root has no parent at all. Failing that, the trace is a fragment,
-    // so use the highest ancestor present — a span whose parent did not arrive —
-    // and record that the trace is partial rather than presenting a child as
-    // though it were the root. Sampling makes this ordinary: a backend may keep a
-    // failed span while dropping the routine parent above it.
-    const present = new Set(spanData.map((s) => s.spanId));
-    const trueRoot = spanData.find((s) => !s.parentSpanId);
-    const orphan = spanData.find(
-      (s) => s.parentSpanId && !present.has(s.parentSpanId),
-    );
-    const rootSpan = trueRoot ?? orphan ?? spanData[0];
-    const partial = !trueRoot;
+    const { rootSpan, partial } = pickRoot(spanData);
 
     const startTime = Math.min(...spanData.map((s) => s.startTime));
     const endTime = Math.max(...spanData.map((s) => s.endTime));

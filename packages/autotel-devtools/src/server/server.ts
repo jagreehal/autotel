@@ -18,6 +18,7 @@ import {
   type TelemetryLimits,
 } from './telemetry-limits';
 import { allowSensitiveRequest, hostHeaderIsLoopback } from './origin-guard';
+import { pickRoot } from './trace-root';
 
 export interface DevtoolsServerOptions {
   port?: number;
@@ -154,10 +155,18 @@ export class DevtoolsServer {
       existing.duration = existing.endTime - existing.startTime;
       if (trace.status === 'ERROR') existing.status = 'ERROR';
 
-      const root = existing.spans.find((s) => !s.parentSpanId);
-      if (root) {
-        existing.rootSpan = root;
-        const rootService = root.attributes?.['service.name'];
+      // Recompute the root from the merged set. `partial` is a fact about the
+      // spans held, not about a batch: a complete trace whose children arrived
+      // first is flagged partial until its root lands, so this has to clear the
+      // flag as well as set it.
+      existing.spans.sort((a, b) => a.startTime - b.startTime);
+      const { rootSpan, partial } = pickRoot(existing.spans);
+      existing.rootSpan = rootSpan;
+      if (partial) {
+        existing.partial = true;
+      } else {
+        delete existing.partial;
+        const rootService = rootSpan.attributes?.['service.name'];
         if (typeof rootService === 'string' && rootService.length > 0) {
           existing.service = rootService;
         }

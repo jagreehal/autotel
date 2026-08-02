@@ -299,6 +299,14 @@
       <span class="truncate text-sm text-fg" title={trace.rootSpan.name}>
         {trace.rootSpan.name || 'unknown'}
       </span>
+      {#if trace.partial}
+        <span
+          class="flex-shrink-0 px-1.5 py-0.5 rounded bg-warning-bg text-warning text-[10px] font-medium uppercase tracking-wide"
+          title="Partial trace: the root span has not arrived, so this row shows the highest span received and a duration covering only that part."
+        >
+          partial
+        </span>
+      {/if}
       <!-- One copy affordance per row (trace ID — the primary thing to grab).
            Correlation ID copy lives in the trace detail to avoid two identical
            icons cluttering the row. -->

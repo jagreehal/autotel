@@ -257,6 +257,12 @@
           {trace.rootSpan.name || 'Trace'}
         </h3>
         <div class="text-xs text-fg-subtle space-y-0.5">
+          {#if trace.partial}
+            <div class="text-warning">
+              Partial trace — the root span has not arrived. This is the highest
+              span received; the duration covers only the spans present.
+            </div>
+          {/if}
           <div>{formatDate(trace.startTime)}</div>
           <div class="font-mono flex items-center gap-1">
             <span class="truncate">Trace ID: {trace.traceId}</span>

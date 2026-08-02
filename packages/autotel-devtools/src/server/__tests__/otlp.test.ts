@@ -501,7 +501,7 @@ describe('parseOtlpTraces — partial traces', () => {
     expect(traces[0].rootSpan.name).toBe('checkout');
   });
 
-  it('falls back to the highest ancestor present, not the earliest orphan', () => {
+  it('falls back to the earliest span whose parent is absent, not the earliest span', () => {
     // 'child' starts earlier but hangs off 'mid', which did arrive. 'mid' is the
     // fragment's real top: its own parent is missing.
     const traces = parseOtlpTraces(

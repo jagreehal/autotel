@@ -47,8 +47,9 @@ export interface TraceData {
    * True when no span in this trace is a true root: every span received has a
    * parent that did not arrive. The trace is a fragment, normally because
    * sampling kept only part of it or because the rest is still in flight.
-   * `rootSpan` is then the highest ancestor that did arrive rather than the real
-   * root, and the duration covers only the part present.
+   * `rootSpan` is then the earliest span whose parent is absent rather than the
+   * real root, and the duration covers only the part present. Recomputed as
+   * spans merge, so it clears once the real root arrives.
    */
   partial?: boolean;
 }
