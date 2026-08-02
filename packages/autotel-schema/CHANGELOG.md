@@ -1,5 +1,70 @@
 # autotel-schema
 
+## 7.0.0
+
+### Minor Changes
+
+- 0f518c6: Score whether a GenAI trace still tells the whole agent story.
+
+  **`scoreGenAiCompleteness(spans)`** scores one trace 0–10 across the ten fields
+  root-cause analysis actually needs: LLM input and output, model name, token
+  usage, cost, per-span latency, tool call arguments and results, an intact span
+  tree, and a plausible span count. Half a point where a field is present but
+  partial — token usage recorded in one direction only, tool calls whose results
+  never landed, parent ids that resolve to no span, a single-span trace.
+
+  These are the fields agent-observability platforms are themselves benchmarked
+  on; a trace that loses them is unanalysable regardless of which backend it lands
+  in. Dependency-free like the rest of the package, and it takes the same
+  `ScenarioSpan` input as `scenario.ts`, so a `test-span-collector` trace feeds
+  straight in.
+
+  ```typescript
+  import { scoreGenAiCompleteness, formatCompleteness } from 'autotel-schema';
+
+  const result = scoreGenAiCompleteness(collector.peekTrace(traceId));
+  if (result.score < 8) throw new Error(formatCompleteness(result));
+  ```
+
+### Patch Changes
+
+- 0f518c6: Stop publishing source maps. Every package is roughly half the size it was.
+
+  Published output across all packages drops from 18.7 MiB to 7.9 MiB. Installing
+  `autotel` downloads 500 KiB gzipped instead of 1,130 KiB. Nothing about the
+  shipped JavaScript or type declarations changed.
+
+  Source maps were 55–65% of every package, because each source byte was emitted
+  four times: once as ESM, once as CJS, and again inside each format's map, which
+  embedded `sourcesContent`. They never reached a consumer's application bundle —
+  bundlers read maps and discard them — so the cost was pure install weight in
+  exchange for TypeScript stack traces under `node --enable-source-maps`.
+
+  Best-in-class TypeScript libraries do not make that trade. Of fourteen surveyed,
+  twelve publish no maps at all (zod, hono, pino, fastify, vitest, vite, rollup,
+  undici, commander, tsdown, react, astro), and not one publishes `.d.ts.map`.
+  The OpenTelemetry packages do ship maps at around 50% of their size, which is
+  the convention this repo had been following.
+
+  The `.d.ts.map` declaration maps were broken regardless: `sourcesContent: false`
+  with sources pointing at `../src/*.ts`, which `files` never published, so they
+  resolved to nothing on a consumer's machine.
+
+  Maps are still generated for local development. `tsconfig.json` keeps
+  `sourceMap` and `declarationMap` on; only `tsconfig.build.json` disables them,
+  so debugging the workspace is unchanged.
+
+  This also fixes the bundle-size gate, which had been amplifying every ordinary
+  change by 4×. The three packages that were failing it (`autotel-backends` +43.9%,
+  `autotel-mcp` +14.4%, `autotel-schema` +12.0%) were not bloated — that growth was
+  legitimate new backend code, quadrupled by the build. The baseline is
+  regenerated.
+
+- Updated dependencies [0f518c6]
+- Updated dependencies [0f518c6]
+- Updated dependencies [0f518c6]
+  - autotel@6.2.0
+
 ## 6.0.0
 
 ### Patch Changes
