@@ -17,11 +17,12 @@ CLI for autotel: interactive setup wizard, diagnostics, incremental feature addi
 ## Setup
 
 ```bash
-# One-off use (no global install needed)
+# No install needed
 npx autotel <command>
 
-# Or install globally
-npm install -g autotel-cli
+# Pin it in the project instead of installing globally, so every run and every
+# machine gets the same version
+pnpm add -D autotel-cli
 ```
 
 ## Commands

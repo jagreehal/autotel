@@ -1,0 +1,172 @@
+{
+  "uid": "carrier-gateway",
+  "title": "Carrier gateway",
+  "description": "Owned by the carrier-gateway repo. Edit this file, not the Grafana UI — provisioned dashboards are read-only and the next deploy overwrites drift.",
+  "tags": ["owner:logistics", "as-code"],
+  "editable": false,
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "metrics",
+        "label": "Metrics",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "prometheus" }
+      },
+      {
+        "name": "logs",
+        "label": "Logs",
+        "type": "datasource",
+        "query": "loki",
+        "current": { "text": "Loki", "value": "loki" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Auth failure ratio by carrier",
+      "description": "Same expression as the CarrierAuthFailures alert rule. If this panel and the alert ever disagree, one of them was edited outside the repo.",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${metrics}" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "legendFormat": "{{carrier}}",
+          "expr": "sum by (carrier) (rate(carrier_requests_total{status=\"failure\", reason=\"auth\"}[5m])) / sum by (carrier) (rate(carrier_requests_total[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Quote outcomes",
+      "description": "Every quote we ask a carrier for, split by outcome. A carrier can be broken while the blended rate looks fine, which is why the alert groups by carrier.",
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${metrics}" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "legendFormat": "{{carrier}} · {{status}} {{reason}}",
+          "expr": "sum by (carrier, status, reason) (rate(carrier_requests_total[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Auth failure ratio vs alert threshold",
+      "description": "The dashed line is the threshold the alert rule fires on, kept in the same file so it cannot drift.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${metrics}" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "legendFormat": "{{carrier}}",
+          "expr": "sum by (carrier) (rate(carrier_requests_total{status=\"failure\", reason=\"auth\"}[5m])) / sum by (carrier) (rate(carrier_requests_total[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Quote latency p95 by carrier",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${metrics}" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "legendFormat": "{{carrier}}",
+          "expr": "histogram_quantile(0.95, sum by (le, carrier) (rate(carrier_request_duration_ms_bucket[5m])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Failed quotes (canonical log lines)",
+      "description": "One line per span, so the trace id is right there — click through to Tempo instead of grepping.",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "loki", "uid": "${logs}" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "range",
+          "expr": "{service_name=\"carrier-gateway\"} | status_code=\"2\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    }
+  ]
+}

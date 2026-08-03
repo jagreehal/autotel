@@ -1,0 +1,18 @@
+# Runs the shared local LGTM stack with this repo's ./grafana folder mounted in.
+#
+#   docker compose -f grafana/lgtm.overlay.yml up -d
+#
+# The shared stack owns the datasources; the repo owns what is drawn and what
+# pages someone. `include` pulls in docker/lgtm.yml unchanged, so the two files
+# do not have to know about each other's contents. Needs Compose v2.20+.
+name: autotel-lgtm
+
+include:
+  - ../../../docker/lgtm.yml
+
+services:
+  lgtm:
+    volumes:
+      - ./dashboards:/repo/dashboards:ro
+      - ./provisioning/dashboards.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/carrier-gateway.yml:ro
+      - ./provisioning/alerting.yml:/otel-lgtm/grafana/conf/provisioning/alerting/carrier-gateway.yml:ro

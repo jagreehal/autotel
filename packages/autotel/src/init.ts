@@ -1483,6 +1483,19 @@ export function resolveAttributeRedactor(
   return environment === 'production' ? 'default' : undefined;
 }
 
+/**
+ * Read a duration-in-milliseconds environment variable, ignoring anything that
+ * is not a positive number so a typo falls back to the SDK default rather than
+ * throwing at startup.
+ */
+function readMillisEnv(name: string): number | undefined {
+  const raw = process.env[name]?.trim();
+  if (!raw) return undefined;
+
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 function detectEnvironmentAttributes(): Record<string, string> {
   const attrs: Record<string, string> = {};
 
@@ -1996,9 +2009,22 @@ export function init(cfg: AutotelConfig): void {
         headers: destination.headers,
       });
 
+      // PeriodicExportingMetricReader hardcodes 60s and only NodeSDK reads
+      // these env vars, but we build the reader ourselves — so honour them
+      // here. Without it a short-lived process exports once, on shutdown, and
+      // rate() over those metrics returns nothing.
+      // The keys are omitted rather than set to undefined: the SDK treats a
+      // present key as explicitly provided and throws on interval < timeout.
+      const exportIntervalMillis = readMillisEnv('OTEL_METRIC_EXPORT_INTERVAL');
+      const exportTimeoutMillis = readMillisEnv('OTEL_METRIC_EXPORT_TIMEOUT');
+
       metricReaders.push(
         new PeriodicExportingMetricReader({
           exporter: metricExporter,
+          ...(exportIntervalMillis === undefined
+            ? {}
+            : { exportIntervalMillis }),
+          ...(exportTimeoutMillis === undefined ? {} : { exportTimeoutMillis }),
         }),
       );
     }

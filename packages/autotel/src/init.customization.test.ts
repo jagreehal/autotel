@@ -298,6 +298,38 @@ describe('init() customization', () => {
     expect(metricExporterOptions).toHaveLength(1);
   });
 
+  it('honours OTEL_METRIC_EXPORT_INTERVAL, and omits the key when unset', async () => {
+    const previous = process.env.OTEL_METRIC_EXPORT_INTERVAL;
+
+    try {
+      process.env.OTEL_METRIC_EXPORT_INTERVAL = '5000';
+      const withEnv = await loadInitWithMocks();
+      withEnv.init({
+        service: 'fast-metrics',
+        endpoint: 'http://localhost:4318',
+      });
+      expect(withEnv.metricReaderOptions[0]?.exportIntervalMillis).toBe(5000);
+
+      // A present-but-undefined key counts as explicitly provided to the SDK
+      // and makes it throw on the default 30s timeout, so it must be absent.
+      delete process.env.OTEL_METRIC_EXPORT_INTERVAL;
+      const withoutEnv = await loadInitWithMocks();
+      withoutEnv.init({
+        service: 'default-metrics',
+        endpoint: 'http://localhost:4318',
+      });
+      expect(withoutEnv.metricReaderOptions[0]).not.toHaveProperty(
+        'exportIntervalMillis',
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OTEL_METRIC_EXPORT_INTERVAL;
+      } else {
+        process.env.OTEL_METRIC_EXPORT_INTERVAL = previous;
+      }
+    }
+  });
+
   it('skips default metric reader when metrics disabled', async () => {
     const { init, metricReaderOptions } = await loadInitWithMocks();
 

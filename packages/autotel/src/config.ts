@@ -80,6 +80,9 @@ export interface RuntimeConfig {
  * Internal configuration state
  */
 class Config {
+  /** Set when a caller passes a Meter instance, which then wins over the name. */
+  private customMeter = false;
+
   private config: Required<RuntimeConfig> = {
     tracerName: 'app',
     meterName: 'app',
@@ -111,6 +114,7 @@ class Config {
     }
     if (options.meter) {
       this.config.meter = options.meter;
+      this.customMeter = true;
     }
   }
 
@@ -118,6 +122,15 @@ class Config {
    * Get current configuration
    */
   get(): Required<RuntimeConfig> {
+    // The metrics API hands back a no-op meter until a MeterProvider is
+    // registered, and never revisits that decision. This class is constructed
+    // when the module is imported, which is always before init() runs, so the
+    // meter resolved above is a no-op — re-resolve on read unless the caller
+    // supplied their own instance. Without this every Metric instrument is
+    // silently a no-op and nothing reaches Prometheus.
+    if (!this.customMeter) {
+      this.config.meter = metrics.getMeter(this.config.meterName);
+    }
     return this.config;
   }
 
@@ -125,6 +138,7 @@ class Config {
    * Reset to defaults (mainly for testing)
    */
   reset(): void {
+    this.customMeter = false;
     this.config = {
       tracerName: 'app',
       meterName: 'app',
