@@ -105,18 +105,20 @@ pnpm start
 - Shows nested traces
 - Demonstrates error tracking
 
-### Grafana Cloud Example
+### Grafana Example (dashboards and alarms as code)
 
-**`example-grafana`**: Sends traces (Tempo), metrics (Mimir), and logs (OTLP → Loki) to Grafana Cloud. Configure via `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` from the Cloud Portal (Connections → OpenTelemetry → Configure).
+**`example-grafana`**: A carrier gateway that sends traces (Tempo), metrics (Mimir) and logs (Loki), plus a `grafana/` folder in the repo that owns the dashboard, the alert rule, its threshold, the routing and the runbook. One carrier's auth breaks partway through the run so you can watch the alarm fire against a local stack before it ever reaches production.
 
 ```bash
 cd apps/example-grafana
 pnpm install
-cp .env.example .env   # Add your Grafana Cloud OTLP endpoint and headers
-pnpm start
+docker compose -f grafana/lgtm.overlay.yml up -d   # local stack + this repo's dashboards
+pnpm start                                          # http://localhost:3000
 ```
 
-**See:** [example-grafana/README.md](./example-grafana/README.md) for credentials and where to view data in Grafana.
+Point it at Grafana Cloud instead with `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` from the Cloud Portal (Connections → OpenTelemetry → Configure).
+
+**See:** [example-grafana/README.md](./example-grafana/README.md) for credentials, and [example-grafana/grafana/README.md](./example-grafana/grafana/README.md) for the ownership model and how to apply the folder to a real stack.
 
 ### HTTP Server Example
 

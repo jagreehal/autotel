@@ -13,6 +13,20 @@ Composable building blocks for the autotel pipeline. Each helper is small enough
 
 All from `autotel-edge`.
 
+## Processors
+
+| Processor                      | Purpose                                                     |
+| ------------------------------ | ----------------------------------------------------------- |
+| `AttributeRedactingProcessor`  | PII masking with smart partial output                       |
+| `TailSamplingProcessor`        | Keep errors + slow + sampled-by-rate                        |
+| `FilteringSpanProcessor`       | Drop spans matching predicate (health checks, etc.)         |
+| `SpanNameNormalizingProcessor` | Normalise `/users/123` → `/users/{id}` to bound cardinality |
+| `BaggageSpanProcessor`         | Lift baggage entries onto every span                        |
+| `PrettyConsoleExporter`        | Hierarchical colourised output for local dev                |
+
+Compose them at build time with `composeSpanProcessors([...])`. Each recipe
+below builds on one of these.
+
 ## Multi-backend export
 
 ```typescript

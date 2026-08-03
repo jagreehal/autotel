@@ -1,0 +1,98 @@
+# The alarm, the threshold, the routing and the runbook link — reviewed in the
+# same PR as the code that can break them.
+#
+# Grafana loads this at startup from its provisioning directory. In Grafana
+# Cloud the same file is applied by Git Sync, Terraform or `grizzly apply`;
+# only the delivery mechanism changes.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: carrier-gateway
+    folder: carrier-gateway
+    interval: 1m
+    rules:
+      - uid: carrier-auth-failures
+        title: Carrier API auth failures
+        # Grouped by carrier, not blended across all of them: one carrier's
+        # token expiring is invisible in a global error rate once the healthy
+        # carrier is carrying most of the traffic.
+        condition: C
+        for: 2m
+        labels:
+          severity: critical
+          team: logistics
+        annotations:
+          summary: '{{ $labels.carrier }} is rejecting our quote requests with 401'
+          description: >-
+            {{ $labels.carrier }} auth failure ratio is {{ humanizePercentage $values.B.Value }}
+            over the last 5 minutes. Almost always an OAuth token that stopped
+            refreshing rather than anything we deployed.
+          runbook_url: https://github.com/jagreehal/autotel/blob/main/apps/example-grafana/grafana/README.md#carrier-api-auth-failures
+        # A carrier we send no traffic to reports no ratio at all, which is not
+        # the same as being healthy — so no data is not an alert.
+        noDataState: NoData
+        execErrState: Error
+        isPaused: false
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            # Environment-specific, unlike everything else in this file. The
+            # local LGTM stack calls its Prometheus 'prometheus'; substitute
+            # your own when applying this to a real stack.
+            datasourceUid: prometheus
+            model:
+              refId: A
+              editorMode: code
+              instant: false
+              range: true
+              expr: >-
+                sum by (carrier) (rate(carrier_requests_total{status="failure", reason="auth"}[5m]))
+                /
+                sum by (carrier) (rate(carrier_requests_total[5m]))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.05]
+
+contactPoints:
+  - orgId: 1
+    name: logistics-oncall
+    receivers:
+      - uid: logistics-webhook
+        type: webhook
+        settings:
+          # Point at your own Slack/PagerDuty/Alertmanager URL. Nothing listens
+          # on this locally, which is fine — the rule still fires and Grafana
+          # still shows the delivery attempt.
+          url: http://host.docker.internal:5001/alerts
+          httpMethod: POST
+
+policies:
+  - orgId: 1
+    # Provisioning replaces the whole root policy, so the default receiver is
+    # restated here rather than only the branch this repo cares about.
+    receiver: grafana-default-email
+    group_by: [grafana_folder, alertname, carrier]
+    routes:
+      - receiver: logistics-oncall
+        object_matchers:
+          - ['team', '=', 'logistics']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h

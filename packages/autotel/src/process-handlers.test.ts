@@ -42,15 +42,22 @@ afterEach(() => {
 });
 
 describe('process handler lifecycle', () => {
-  it('does not install process handlers when the package is imported', async () => {
-    const sigtermListeners = process.listenerCount('SIGTERM');
-    const sigintListeners = process.listenerCount('SIGINT');
+  // The assertion is instant; the cost is the first cold import of the whole
+  // barrel in this worker, which on a loaded CI runner has taken over the 5s
+  // default and failed the run on timing rather than behaviour.
+  it(
+    'does not install process handlers when the package is imported',
+    { timeout: 30_000 },
+    async () => {
+      const sigtermListeners = process.listenerCount('SIGTERM');
+      const sigintListeners = process.listenerCount('SIGINT');
 
-    await import('./index');
+      await import('./index');
 
-    expect(process.listenerCount('SIGTERM')).toBe(sigtermListeners);
-    expect(process.listenerCount('SIGINT')).toBe(sigintListeners);
-  });
+      expect(process.listenerCount('SIGTERM')).toBe(sigtermListeners);
+      expect(process.listenerCount('SIGINT')).toBe(sigintListeners);
+    },
+  );
 
   it('installs the default signal and fatal handlers with processHandlers: true', async () => {
     const sdk = {

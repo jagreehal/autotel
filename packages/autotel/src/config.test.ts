@@ -1,4 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { metrics } from '@opentelemetry/api';
+import {
+  AggregationTemporality,
+  InMemoryMetricExporter,
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import { configure, getConfig, resetConfig } from './config';
 
 describe('configure()', () => {
@@ -81,6 +88,32 @@ describe('configure()', () => {
     const config = getConfig();
     expect(config.tracerName).toBe('app');
     expect(config.meterName).toBe('app');
+  });
+
+  it('should resolve the meter registered after this module was imported', async () => {
+    // This module is imported before init() registers a MeterProvider, so the
+    // meter captured at construction is a no-op. Anything reading
+    // getConfig().meter must see the real provider once it exists.
+    const exporter = new InMemoryMetricExporter(AggregationTemporality.DELTA);
+    const provider = new MeterProvider({
+      readers: [new PeriodicExportingMetricReader({ exporter })],
+    });
+    metrics.setGlobalMeterProvider(provider);
+
+    try {
+      getConfig().meter.createCounter('probe').add(1);
+      await provider.forceFlush();
+
+      const names = exporter
+        .getMetrics()
+        .flatMap((resourceMetric) => resourceMetric.scopeMetrics)
+        .flatMap((scopeMetric) => scopeMetric.metrics)
+        .map((metric) => metric.descriptor.name);
+      expect(names).toContain('probe');
+    } finally {
+      await provider.shutdown();
+      metrics.disable();
+    }
   });
 
   it('should expose feature flags', () => {

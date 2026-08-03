@@ -3,7 +3,7 @@
   "version": "1.0.48",
   "private": true,
   "type": "module",
-  "description": "Example demonstrating Autotel with Grafana Cloud (traces, metrics, logs via OTLP)",
+  "description": "Example demonstrating Autotel with Grafana: traces, metrics and logs via OTLP, plus dashboards and alert rules owned by the repo",
   "scripts": {
     "start": "tsx src/index.ts"
   },

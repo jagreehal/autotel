@@ -1,0 +1,18 @@
+# Tells Grafana where this repo's dashboards live. The dashboards themselves
+# are the JSON files next door; this file is just the mount point.
+apiVersion: 1
+
+providers:
+  - name: carrier-gateway
+    orgId: 1
+    folder: carrier-gateway
+    type: file
+    # Provisioned dashboards are read-only in the UI on purpose: the repo is
+    # the source of truth, so a 3am edit in Grafana cannot silently become the
+    # thing nobody can reproduce.
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 10
+    options:
+      path: /repo/dashboards
+      foldersFromFilesStructure: false

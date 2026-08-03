@@ -1,93 +1,113 @@
-# Grafana Cloud + Autotel Example
+# Grafana + Autotel: dashboards and alarms that live in the repo
 
-This example sends **traces** (Tempo), **metrics** (Mimir), and **logs** (OTLP → Loki) to Grafana Cloud using only **autotel** and **autotel-backends** (no direct OpenTelemetry imports in app code).
+A service (`carrier-gateway`) that quotes shipments against two upstream
+carrier APIs, and a [`grafana/`](./grafana) folder that owns how it is watched:
+the dashboard, the alert rule, the threshold, the routing and the runbook.
 
-## Two Different APIs / Credentials
+The point of the example is the folder, not the service. Instrumenting code and
+then configuring the alarm by hand in a console splits one decision across two
+places: the team that can defend the threshold does not control it, and the
+console has no diff, no review and no history. Grafana takes both as files, so
+they can go in the repo with the code that makes them true.
 
-| Use case                                                   | Base URL                                                         | Auth                                                      | Where to get credentials                                                                                |
-| ---------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **Sending data** (traces, metrics, logs)                   | OTLP gateway (e.g. `https://otlp-gateway-XXXX.grafana.net/otlp`) | Instance ID + API token (e.g. `Authorization: Basic ...`) | Grafana Cloud Portal → your stack → **Connections** → **OpenTelemetry** → **Configure** → copy env vars |
-| **Managing Grafana** (dashboards, folders, health, search) | `https://YOUR_STACK.grafana.net/api`                             | Service account token (e.g. `glsa_...`)                   | Grafana → Administration → Service accounts → Create token                                              |
-
-**Important:** A Grafana API token (e.g. `glsa_...`) is for the **stack HTTP API** (dashboards, health, search). It is **not** used for OTLP ingestion. To send traces, metrics, and logs, you must get the **OTLP endpoint and headers** from the OpenTelemetry **Configure** tile in the Cloud Portal.
-
-### Get OTLP credentials (required for sending data)
-
-1. Sign in to [Grafana Cloud](https://grafana.com/auth/sign-in/).
-2. Open your **stack** (e.g. grafanajagreehal).
-3. Go to **Connections** (or **Add new connection**), then find **OpenTelemetry**.
-4. Click **Configure** on the OpenTelemetry tile.
-5. Copy the script or env vars shown there. You will get:
-   - **OTEL_EXPORTER_OTLP_ENDPOINT**: your stack’s OTLP gateway URL (not the generic `otlp-gateway-prod-*` unless it’s for your stack).
-   - **OTEL_EXPORTER_OTLP_HEADERS**: usually `Authorization=Basic <base64(instanceId:apiToken)>` (Instance ID and token from that page).
-
-Use those values in `.env`. Without them, the app runs but export will return 401 and data will not appear in Grafana.
-
-## Prerequisites
-
-1. **Grafana Cloud**: A stack with OpenTelemetry (OTLP) enabled
-2. **Node.js** 18+ and pnpm
-
-## Quick Start
-
-### 1. Install dependencies
-
-```bash
-pnpm install
+```
+apps/example-grafana/
+├── src/index.ts     emits the telemetry
+└── grafana/         owns what is watched, and what pages someone
 ```
 
-### 2. Configure environment variables
+## Run it
 
-Copy the example env file and add your Grafana Cloud OTLP credentials:
+Start the local stack with this repo's dashboards and alarms mounted in:
 
 ```bash
-cp .env.example .env
+docker compose -f grafana/lgtm.overlay.yml up -d
 ```
 
-Edit `.env`:
-
-- **OTEL_EXPORTER_OTLP_ENDPOINT**: From Grafana Cloud: Stack → Connections → OpenTelemetry → Configure (e.g. `https://otlp-gateway-XXXX.grafana.net/otlp`)
-- **OTEL_EXPORTER_OTLP_HEADERS**: From the same Configure tile (e.g. `Authorization=Basic <base64(instanceId:apiToken)>`)
-
-### 3. Run the example
+Then generate traffic. It runs healthy for 90 seconds, then one carrier's OAuth
+token stops refreshing:
 
 ```bash
 pnpm start
 ```
 
-The app will run a short demo (create user, process payment, create order), sending traces, metrics, and logs to Grafana Cloud, then exit.
+Watch it land:
 
-### 4. View in Grafana
+- Dashboard: <http://localhost:3000/d/carrier-gateway>
+- Alert rule: <http://localhost:3000/alerting/list> — `Carrier API auth
+failures` goes Normal → Pending → Firing, for `carrier=shipfast` only
 
-- **Traces:** Explore → Tempo (or Application Observability)
-- **Metrics:** Explore → Prometheus/Mimir
-- **Logs:** Explore → Loki (filter e.g. by `service_name="example-grafana"`)
-
-## Verify Grafana API (stack management)
-
-If you have a **Grafana API token** (service account token for the stack), you can call the Grafana HTTP API (dashboards, folders, health, etc.). This is separate from OTLP ingestion.
-
-Example (replace `YOUR_STACK` and use your token):
+Roughly four minutes from `pnpm start` to Firing: 90s of healthy traffic, a 5m
+rate window that has to fill, and `for: 2m` of sustained breach.
 
 ```bash
-# Health check
-curl -H "Authorization: Bearer $GRAFANA_API_TOKEN" \
-  https://YOUR_STACK.grafana.net/api/health
-
-# Search dashboards
-curl -H "Authorization: Bearer $GRAFANA_API_TOKEN" \
-  "https://YOUR_STACK.grafana.net/api/search?query="
+docker compose -f grafana/lgtm.overlay.yml down -v   # stop
 ```
 
-See [Grafana HTTP API](https://grafana.com/docs/grafana/latest/developers/http_api/) for more endpoints.
+| Env var                       | Default                 | Notes                                               |
+| ----------------------------- | ----------------------- | --------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Point at Grafana Cloud's OTLP gateway to send there |
+| `OTEL_METRIC_EXPORT_INTERVAL` | `60000`                 | `5000` locally, so `rate()` has points to work with |
+| `INCIDENT_AFTER_SECONDS`      | `90`                    | When the token stops refreshing                     |
+| `RUN_FOR_SECONDS`             | `600`                   | How long to keep quoting                            |
 
-## How it works
+## The metric the alarm is written against
 
-- **Traces:** `createGrafanaConfig()` from `autotel-backends/grafana` returns config with `endpoint` and `headers`; autotel’s default OTLP trace exporter sends to the Grafana Cloud OTLP gateway → Tempo.
-- **Metrics:** Same endpoint and headers; the preset sets `metrics: true` → Mimir.
-- **Logs:** The app uses `createBuiltinLogger()` from `autotel/logger` and passes `logger` plus `canonicalLogLines: { enabled: true }` into `init()`. Canonical log lines (one per span completion) are emitted to the OpenTelemetry Logs API and exported via the preset’s `logRecordProcessors` (OTLPLogExporter) → Loki. Application `logger.info()` / `logger.warn()` / etc. go to the console; span summaries are sent to Loki. Log libs are bundled in `autotel-backends`; no app-level install needed.
+```ts
+metrics.trackOutcome('carrier.quote', 'failure', {
+  carrier,
+  reason: 'auth',
+  http_status: 401,
+});
+```
+
+reaches Prometheus as `carrier_requests_total{carrier, status, reason,
+http_status}`, which the rule in
+[`grafana/provisioning/alerting.yml`](./grafana/provisioning/alerting.yml)
+reduces to a per-carrier ratio. The metric name is pinned explicitly in
+`src/index.ts` rather than derived from the service name, because renaming it
+silently breaks every query in `grafana/`.
+
+The `carrier` label is what makes the alarm possible: with two carriers sharing
+traffic, one failing every single request only moves a blended error rate to
+about 50%, so a global threshold either misses it or screams at everything.
+
+## Sending to Grafana Cloud
+
+Two different APIs, two different credentials — the common cause of a silent
+401:
+
+| Use case                    | Base URL                                                   | Auth                                   | Where                                                                   |
+| --------------------------- | ---------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------- |
+| Sending traces/metrics/logs | OTLP gateway, `https://otlp-gateway-XXXX.grafana.net/otlp` | Instance ID + API token, as Basic auth | Cloud Portal → your stack → Connections → OpenTelemetry → **Configure** |
+| Managing dashboards, alarms | `https://YOUR_STACK.grafana.net/api`                       | Service account token (`glsa_...`)     | Grafana → Administration → Service accounts                             |
+
+A `glsa_...` token is **not** an OTLP credential. Copy the endpoint and headers
+from the OpenTelemetry Configure tile into `.env`:
+
+```bash
+cp .env.example .env
+pnpm start
+```
+
+Then apply `grafana/` to the stack with Git Sync, `grizzly apply` or Terraform —
+see [`grafana/README.md`](./grafana/README.md#applying-it-to-a-real-grafana).
+Only the datasource UID and the contact point URL differ per environment.
+
+## How the telemetry gets there
+
+- **Traces** (Tempo) and **metrics** (Mimir): `createGrafanaConfig()` from
+  `autotel-backends/grafana` wires the OTLP exporters from one endpoint and
+  header pair.
+- **Logs** (Loki): `canonicalLogLines: { enabled: true }` emits one log record
+  per completed span through the OTel Logs API, carrying the trace id — which
+  is what makes the dashboard's log panel clickable through to the trace.
+  Note that `init({ logger })` also becomes the sink for canonical log lines,
+  so this example deliberately does not pass one; otherwise the lines go to the
+  console and Loki stays empty.
 
 ## Learn more
 
-- [Grafana Cloud: Send OTLP data](https://grafana.com/docs/grafana-cloud/send-data/otlp/send-data-otlp/)
+- [Grafana Cloud: send OTLP data](https://grafana.com/docs/grafana-cloud/send-data/otlp/send-data-otlp/)
+- [Grafana: provision alerting resources](https://grafana.com/docs/grafana/latest/alerting/set-up/provision-alerting-resources/)
 - [Autotel documentation](https://github.com/jagreehal/autotel)
