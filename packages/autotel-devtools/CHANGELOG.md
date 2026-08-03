@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 17.1.1
+
+### Patch Changes
+
+- Updated dependencies [7bad202]
+  - autotel@6.2.1
+
 ## 17.1.0
 
 ### Minor Changes
