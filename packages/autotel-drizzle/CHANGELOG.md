@@ -1,5 +1,12 @@
 # autotel-drizzle
 
+## 0.0.46
+
+### Patch Changes
+
+- Updated dependencies [7bad202]
+  - autotel@6.2.1
+
 ## 0.0.45
 
 ### Patch Changes

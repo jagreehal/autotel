@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 12.0.1
+
+### Patch Changes
+
+- Updated dependencies [7bad202]
+  - autotel@6.2.1
+
 ## 12.0.0
 
 ### Patch Changes
