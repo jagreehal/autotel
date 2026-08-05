@@ -32,7 +32,7 @@ describe('collector validation', () => {
 describe('capabilities', () => {
   it('lists the expected transport modes and core groups', () => {
     const doc = buildCapabilitiesDocument('best-otel-mcp');
-    expect(doc.transportModes).toEqual(['stdio', 'http', 'sse']);
+    expect(doc.transportModes).toEqual(['stdio', 'http']);
     expect(doc.groups.map((group) => group.name)).toEqual([
       'investigation',
       'signals',

@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
 import { buildCapabilitiesText } from '../modules/docs';
-import { respondSafe } from './shared';
+import { respondSafe, READ_ONLY } from './shared';
 
 export function registerHealthTools(
   server: McpServer,
@@ -13,6 +13,7 @@ export function registerHealthTools(
     {
       description:
         'Check backend health and readiness. Returns liveness plus the signal coverage map (traces / metrics / logs) so you can see at a glance what the backend can answer for, not just whether it is up.',
+      annotations: READ_ONLY,
       inputSchema: z.object({}),
     },
     async () =>
@@ -30,6 +31,7 @@ export function registerHealthTools(
     {
       description:
         'Describe which telemetry signals the active backend can serve.',
+      annotations: READ_ONLY,
       inputSchema: z.object({}),
     },
     async () =>
@@ -41,6 +43,7 @@ export function registerHealthTools(
     {
       description:
         'List the server capabilities, transports, tools, resources, and backend signals.',
+      annotations: READ_ONLY,
       inputSchema: z.object({}),
     },
     async () =>

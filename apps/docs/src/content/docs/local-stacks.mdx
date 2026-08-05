@@ -5,10 +5,11 @@ description: Run Jaeger or Grafana's LGTM stack locally to see your telemetry wh
 
 Instrumenting code you cannot see the output of is guesswork. The repo ships compose files so a backend is one command away, with no account to create and nothing to bill you.
 
-| Stack  | Signals               | Start                                       | UI                       |
-| ------ | --------------------- | ------------------------------------------- | ------------------------ |
-| Jaeger | Traces                | `docker compose -f docker/jaeger.yml up -d` | [http://localhost:16686](http://localhost:16686) |
-| LGTM   | Traces, metrics, logs | `docker compose -f docker/lgtm.yml up -d`   | [http://localhost:3000](http://localhost:3000)  |
+| Stack    | Signals                       | Start                                         | UI                                               |
+| -------- | ----------------------------- | --------------------------------------------- | ------------------------------------------------ |
+| Jaeger   | Traces                        | `docker compose -f docker/jaeger.yml up -d`   | [http://localhost:16686](http://localhost:16686) |
+| LGTM     | Traces, metrics, logs         | `docker compose -f docker/lgtm.yml up -d`     | [http://localhost:3000](http://localhost:3000)   |
+| Langfuse | LLM traces, cost, evaluations | `docker compose -f docker/langfuse.yml up -d` | [http://localhost:3000](http://localhost:3000)   |
 
 Swap `up -d` for `down -v` to stop and discard the data.
 
@@ -17,6 +18,10 @@ The two stacks cannot run at the same time. Both bind OTLP on 4317 and 4318, so 
 :::
 
 Pick **Jaeger** when you only care about traces and want the smallest thing that works. Pick **LGTM** when you want metrics or logs as well, or when you want to query your telemetry back from [autotel-mcp](/autotel/integrations/mcp/).
+
+Pick **Langfuse** when the thing you are debugging is an LLM call rather than a request: it reads `gen_ai.*` spans as generations, prices them, and keeps prompts and responses next to the trace.
+
+All three take OTLP straight from your app. Put a [collector](/autotel/collector/) in front once you want to sample whole traces, mask attributes autotel does not recognise, or count requests before anything is dropped.
 
 ## Jaeger
 
@@ -84,6 +89,53 @@ Then in Grafana, filter by label and reach into the event with `| json`:
 ```
 
 See [Grafana Loki](/autotel/integrations/loki/) for label and cardinality guidance.
+
+## Langfuse
+
+Langfuse ingests plain OTLP at `/api/public/otel`, so autotel reaches it through `destinations` and needs no Langfuse SDK.
+
+```bash
+docker compose -f docker/langfuse.yml up -d
+```
+
+Six containers, roughly two minutes to first boot. Langfuse needs Postgres, ClickHouse, Redis and MinIO, so there is no single-container version the way LGTM has one. Wait for it rather than guessing:
+
+```bash
+until curl -sf http://localhost:3000/api/public/health >/dev/null; do sleep 5; done
+```
+
+The project is provisioned on first start from `LANGFUSE_INIT_*`, so the keys are fixed and you never open the UI to copy one:
+
+```bash
+LANGFUSE_BASEURL=http://localhost:3000
+LANGFUSE_PUBLIC_KEY=pk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000001
+LANGFUSE_SECRET_KEY=sk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000002
+```
+
+```typescript
+import { init } from 'autotel';
+
+const auth = Buffer.from(
+  `${process.env.LANGFUSE_PUBLIC_KEY}:${process.env.LANGFUSE_SECRET_KEY}`,
+).toString('base64');
+
+init({
+  service: 'support-agent',
+  destinations: [
+    {
+      endpoint: `${process.env.LANGFUSE_BASEURL}/api/public/otel`,
+      headers: { Authorization: `Basic ${auth}` },
+      signals: ['traces'],
+    },
+  ],
+});
+```
+
+Langfuse turns a `chat` span into a generation, reads `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` as usage, and prices the call from its own model table. Sign in at [http://localhost:3000](http://localhost:3000) as `dev@example.com` / `localdevpassword`.
+
+:::caution
+Every credential in `docker/langfuse.yml` is a local development value, including the encryption key. Regenerate all of them before the stack goes anywhere but your machine.
+:::
 
 ## Investigate it with autotel-mcp
 

@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-02T07:40:36.889Z",
+  "generatedAt": "2026-08-05T05:32:42.628Z",
   "sizes": {
-    "autotel": 1812885,
+    "autotel": 1824112,
     "autotel-adapters": 143989,
     "autotel-agents": 85469,
     "autotel-audit": 77468,
@@ -9,13 +9,13 @@
     "autotel-backends": 77114,
     "autotel-cli": 311957,
     "autotel-cloudflare": 168470,
-    "autotel-devtools": 723151,
+    "autotel-devtools": 727927,
     "autotel-drizzle": 38533,
     "autotel-edge": 150398,
     "autotel-eventcatalog": 163472,
-    "autotel-genai": 532826,
+    "autotel-genai": 548650,
     "autotel-hono": 15168,
-    "autotel-mcp": 490240,
+    "autotel-mcp": 525573,
     "autotel-mcp-instrumentation": 175154,
     "autotel-message-contract": 58081,
     "autotel-mongoose": 80675,
@@ -30,7 +30,7 @@
     "autotel-telemetry": 27442,
     "autotel-terminal": 279896,
     "autotel-vitest": 17011,
-    "autotel-vscode": 861350,
+    "autotel-vscode": 863164,
     "autotel-web": 71841
   }
 }

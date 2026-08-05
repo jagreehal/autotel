@@ -3,22 +3,25 @@
 Compose files for running a backend on your machine while you develop. One file
 per stack, so adding another does not mean editing a shared one.
 
-| Stack                      | Signals               | Start                                       | UI                       |
-| -------------------------- | --------------------- | ------------------------------------------- | ------------------------ |
-| [`jaeger.yml`](jaeger.yml) | Traces                | `docker compose -f docker/jaeger.yml up -d` | <http://localhost:16686> |
-| [`lgtm.yml`](lgtm.yml)     | Traces, metrics, logs | `docker compose -f docker/lgtm.yml up -d`   | <http://localhost:3000>  |
+| Stack                          | Signals                       | Start                                         | UI                       |
+| ------------------------------ | ----------------------------- | --------------------------------------------- | ------------------------ |
+| [`jaeger.yml`](jaeger.yml)     | Traces                        | `docker compose -f docker/jaeger.yml up -d`   | <http://localhost:16686> |
+| [`lgtm.yml`](lgtm.yml)         | Traces, metrics, logs         | `docker compose -f docker/lgtm.yml up -d`     | <http://localhost:3000>  |
+| [`langfuse.yml`](langfuse.yml) | LLM traces, cost, evaluations | `docker compose -f docker/langfuse.yml up -d` | <http://localhost:3000>  |
 
 Stop either with `down -v` in place of `up -d`.
 
 Each file pins an explicit compose project name, so the stack is identified by
 what it is rather than by the directory the file sits in.
 
-> **They cannot both run.** Both bind OTLP on 4317 and 4318. Bring one down
-> before starting the other.
+> **Jaeger and LGTM cannot both run.** Both bind OTLP on 4317 and 4318. Bring
+> one down before starting the other. Langfuse does not touch those ports, but
+> it does serve its UI on 3000, which is Grafana's port in LGTM.
 
 Pick Jaeger when you only care about traces and want the smallest thing that
 works. Pick LGTM when you want metrics or logs too, or when you want to query
-from `autotel-mcp`.
+from `autotel-mcp`. Pick Langfuse when the thing you are debugging is an LLM
+call rather than a request.
 
 ## Jaeger
 
@@ -104,6 +107,49 @@ AUTOTEL_DEVTOOLS_PORT=4319 npx autotel-devtools
 Then send to whichever you want to read from — devtools at
 `http://127.0.0.1:4319` for a live local view, LGTM at `http://localhost:4318`
 for history and querying.
+
+## Langfuse
+
+Langfuse ingests plain OTLP at `/api/public/otel`, so autotel reaches it through
+`destinations` with no Langfuse SDK involved.
+
+```bash
+docker compose -f docker/langfuse.yml up -d
+```
+
+Six containers, and roughly two minutes before the web container answers.
+Langfuse needs Postgres, ClickHouse, Redis and MinIO, so there is no
+single-container version the way LGTM has one. Wait for it properly:
+
+```bash
+until curl -sf http://localhost:3000/api/public/health >/dev/null; do sleep 5; done
+```
+
+The project is provisioned at first start from `LANGFUSE_INIT_*`, so the keys
+are fixed and you never open the UI to copy one:
+
+```bash
+LANGFUSE_BASEURL=http://localhost:3000
+LANGFUSE_PUBLIC_KEY=pk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000001
+LANGFUSE_SECRET_KEY=sk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000002
+```
+
+Drop those three lines into `apps/example-langfuse/.env` and that example runs
+against your machine instead of Langfuse Cloud. Sign in at
+<http://localhost:3000> as `dev@example.com` / `localdevpassword`.
+
+| Port   | Service  | Used for                               |
+| ------ | -------- | -------------------------------------- |
+| `3000` | Langfuse | UI, public API, and OTLP ingest        |
+| `9190` | MinIO    | S3 API, needed from the host for media |
+| `9191` | MinIO    | Console, bound to localhost            |
+
+MinIO sits on 9190/9191 rather than the upstream 9090/9091, which would collide
+with the Prometheus port LGTM publishes.
+
+Every credential in the file is a local development value. The upstream compose
+file marks the full set with `# CHANGEME`; regenerate all of them before this
+goes anywhere but your machine.
 
 ## Adding a stack
 

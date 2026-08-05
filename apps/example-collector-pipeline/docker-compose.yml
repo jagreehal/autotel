@@ -1,0 +1,17 @@
+services:
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:0.157.0
+    container_name: example-otelcol
+    command: ['--config=/etc/otelcol/config.yaml']
+    volumes:
+      - ./otelcol.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - '4318:4318' # OTLP HTTP — the app sends here
+    depends_on:
+      - oteltui
+
+  oteltui:
+    image: ymtdzzz/otel-tui:latest
+    container_name: example-otel-tui-viewer
+    stdin_open: true
+    tty: true

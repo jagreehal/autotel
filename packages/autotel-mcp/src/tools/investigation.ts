@@ -1,14 +1,7 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
-import {
-  respondSafe,
-  traceQuerySchema,
-  toTraceSearchQuery,
-  toSpanSearchQuery,
-  type TraceQueryInput,
-  type SpanQueryInput,
-} from './shared';
+import { respondSafe, traceQuerySchema, toTraceSearchQuery, toSpanSearchQuery, type TraceQueryInput, type SpanQueryInput, READ_ONLY } from './shared';
 
 export function registerInvestigationTools(
   server: McpServer,
@@ -19,6 +12,7 @@ export function registerInvestigationTools(
     {
       description:
         'Search traces by service, operation, status, tags, time window, and error flag.',
+      annotations: READ_ONLY,
       inputSchema: traceQuerySchema,
     },
     async (input: TraceQueryInput) =>
@@ -33,6 +27,7 @@ export function registerInvestigationTools(
     {
       description:
         'Search spans by service, operation, status, tags, time window, duration, and error flag.',
+      annotations: READ_ONLY,
       inputSchema: traceQuerySchema.extend({
         minDurationMs: z.coerce.number().int().nonnegative().optional(),
         maxDurationMs: z.coerce.number().int().nonnegative().optional(),
@@ -49,6 +44,7 @@ export function registerInvestigationTools(
     'get_trace',
     {
       description: 'Get a trace by trace ID.',
+      annotations: READ_ONLY,
       inputSchema: z.object({ traceId: z.string().min(1) }),
     },
     async ({ traceId }: { traceId: string }) =>
@@ -59,6 +55,7 @@ export function registerInvestigationTools(
     'summarize_trace',
     {
       description: 'Summarize a trace into a compact incident-friendly view.',
+      annotations: READ_ONLY,
       inputSchema: z.object({ traceId: z.string().min(1) }),
     },
     async ({ traceId }: { traceId: string }) =>

@@ -1,14 +1,7 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
-import {
-  respondSafe,
-  tagValueSchema,
-  toMetricSearchQuery,
-  toLogSearchQuery,
-  type MetricsQueryInput,
-  type LogsQueryInput,
-} from './shared';
+import { respondSafe, tagValueSchema, toMetricSearchQuery, toLogSearchQuery, type MetricsQueryInput, type LogsQueryInput, READ_ONLY } from './shared';
 
 export function registerSignalTools(
   server: McpServer,
@@ -27,6 +20,7 @@ function registerMetricTools(
     'list_metrics',
     {
       description: 'List metric series if the backend supports metrics.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         metricName: z.string().min(1).optional(),
         serviceName: z.string().min(1).optional(),
@@ -54,6 +48,7 @@ function registerLogTools(server: McpServer, backend: TelemetryBackend): void {
     'search_logs',
     {
       description: 'Search logs if the backend supports logs.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         serviceName: z.string().min(1).optional(),
         traceId: z.string().min(1).optional(),

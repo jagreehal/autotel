@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { registerTools } from '../src/tools/index';
 import type { TelemetryBackend } from '../src/backends/telemetry';
 import { pickErrorMessage } from '../src/tools/diagnosis';

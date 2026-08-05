@@ -316,6 +316,12 @@ OpenTelemetry's ESM instrumentation uses `import-in-the-middle` to hook into mod
 - [`example-winston`](https://github.com/jagreehal/autotel/tree/main/apps/example-winston): Winston with auto-instrumentation for trace context injection.
 - [`example-otel-tui`](https://github.com/jagreehal/autotel/tree/main/apps/example-otel-tui): otel-tui terminal UI with Docker Compose for trace-to-log correlation.
 
+### Collector Examples
+
+- [`example-collector-pipeline`](https://github.com/jagreehal/autotel/tree/main/apps/example-collector-pipeline): OTTL redaction, health-check filtering, count-before-sampling, and tail sampling in front of the backend.
+- [`example-genai-metrics`](https://github.com/jagreehal/autotel/tree/main/apps/example-genai-metrics): canonical GenAI metrics derived from `gen_ai.*` spans with the `signal_to_metrics` connector, charted in Grafana LGTM.
+- [`example-genai-evals`](https://github.com/jagreehal/autotel/tree/main/apps/example-genai-evals): brevity, groundedness and prompt-injection evaluators scoring sampled answers into `gen_ai.evaluation.result` events, with an alertable pass rate in Loki.
+
 ### Build Outputs
 
 - ESM-first with CJS fallback for index.ts only

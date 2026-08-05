@@ -1,0 +1,212 @@
+# Langfuse v4, self-hosted. LLM traces, prompts, cost and evaluations, ingesting
+# plain OTLP at /api/public/otel — which is why autotel needs no Langfuse SDK to
+# reach it, just another entry in `destinations`.
+#
+#   docker compose -f docker/langfuse.yml up -d
+#   open http://localhost:3000          # dev@example.com / localdevpassword
+#   docker compose -f docker/langfuse.yml down -v
+#
+# Six containers and roughly two minutes to first boot. Langfuse needs Postgres
+# for metadata, ClickHouse for the trace data, Redis for queues and MinIO for
+# blobs, so there is no single-container version of this the way LGTM has one.
+#
+# The project keys below are fixed on purpose. Langfuse provisions them at first
+# start from the LANGFUSE_INIT_* variables, so an example can carry working
+# credentials and you never open the UI to copy a key.
+#
+#   LANGFUSE_BASEURL=http://localhost:3000
+#   LANGFUSE_PUBLIC_KEY=pk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000001
+#   LANGFUSE_SECRET_KEY=sk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000002
+#
+# Every credential here is a local development value. Nothing in this file is
+# safe on a network you do not own; see the upstream compose file for the full
+# set of secrets to change before that.
+#
+# See docker/README.md for the port clash with docker/lgtm.yml.
+
+# Explicit project name so the stack is identified by what it is, not by the
+# directory the compose file happens to live in.
+name: autotel-langfuse
+
+services:
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:4
+    container_name: autotel-langfuse-web
+    restart: always
+    depends_on: &langfuse-depends-on
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - '3000:3000' # UI + OTLP ingest at /api/public/otel — clashes with LGTM
+    environment: &langfuse-env
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: localdevsecret
+      SALT: localdevsalt
+      # Quoted, because YAML reads a bare run of digits as a number and
+      # Langfuse then sees `0` instead of 64 hex characters. Regenerate for
+      # anything but local use: openssl rand -hex 32
+      ENCRYPTION_KEY: '1f8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b'
+      TELEMETRY_ENABLED: 'false'
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: 'false'
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_AUTH: localdevredis
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9190
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: 'true'
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      # Provisioned once, at first start, on an empty database. Changing these
+      # later does nothing until you `down -v`.
+      LANGFUSE_INIT_ORG_ID: autotel
+      LANGFUSE_INIT_ORG_NAME: autotel
+      LANGFUSE_INIT_PROJECT_ID: autotel-local
+      LANGFUSE_INIT_PROJECT_NAME: autotel-local
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000001
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000002
+      # Must be a routable-looking address; Langfuse rejects `dev@localhost`.
+      LANGFUSE_INIT_USER_EMAIL: dev@example.com
+      LANGFUSE_INIT_USER_NAME: dev
+      LANGFUSE_INIT_USER_PASSWORD: localdevpassword
+    healthcheck:
+      # The web container runs migrations against Postgres and ClickHouse before
+      # it serves anything, so it is the last thing to come up. Gate on it, not
+      # on the databases: a healthy ClickHouse does not mean ingest is open.
+      #
+      # $$(hostname), not localhost: Next.js binds this container's IP and
+      # refuses connections on the loopback address.
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://$$(hostname):3000/api/public/health >/dev/null || exit 1',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    networks:
+      - langfuse
+
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:4
+    container_name: autotel-langfuse-worker
+    restart: always
+    depends_on: *langfuse-depends-on
+    environment: *langfuse-env
+    networks:
+      - langfuse
+
+  postgres:
+    image: docker.io/postgres:17
+    container_name: autotel-langfuse-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks:
+      - langfuse
+
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:25.12
+    container_name: autotel-langfuse-clickhouse
+    restart: always
+    user: '101:101'
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - langfuse-clickhouse:/var/lib/clickhouse
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://localhost:8123/ping >/dev/null || exit 1',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks:
+      - langfuse
+
+  redis:
+    image: docker.io/redis:7
+    container_name: autotel-langfuse-redis
+    restart: always
+    command: --requirepass localdevredis --maxmemory-policy noeviction
+    volumes:
+      - langfuse-redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--pass', 'localdevredis', 'ping']
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks:
+      - langfuse
+
+  minio:
+    image: docker.io/minio/minio
+    container_name: autotel-langfuse-minio
+    restart: always
+    entrypoint: sh
+    # Create the bucket before starting, so nothing has to provision it later.
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    ports:
+      # 9190/9191 rather than the upstream 9090/9091, which collide with the
+      # Prometheus port docker/lgtm.yml publishes.
+      - '9190:9000' # S3 API, needed from the host for media uploads
+      - '127.0.0.1:9191:9001' # console
+    volumes:
+      - langfuse-minio:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks:
+      - langfuse
+
+volumes:
+  langfuse-postgres:
+  langfuse-clickhouse:
+  langfuse-redis:
+  langfuse-minio:
+
+networks:
+  langfuse:
+    driver: bridge

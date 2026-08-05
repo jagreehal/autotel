@@ -8,7 +8,7 @@ You are working on the MCP investigation server. This is NOT the instrumentation
 
 ## Tech Stack
 
-- **MCP SDK**: @modelcontextprotocol/sdk ^1.29.0
+- **MCP SDK**: `@modelcontextprotocol/server` + `@modelcontextprotocol/node` ^2.0.0 (protocol `2026-07-28`). Not the v1 `@modelcontextprotocol/sdk`, which tops out at `2025-11-25`.
 - **Storage**: @libsql/client (in-memory or persistent)
 - **OTLP**: @opentelemetry/otlp-transformer for ingestion
 - **Validation**: zod
@@ -36,3 +36,5 @@ pnpm dev:http              # Watch mode (HTTP)
 - Tools are in `src/tools/`, logic is in `src/modules/`. Tools call modules, never the reverse.
 - Backends implement TelemetryBackend interface. Never access backend internals from tools.
 - The collector backend runs an OTLP receiver on a separate port from the MCP HTTP server.
+- `app.createServer` is a per-request factory, not a shared instance: 2026-07-28 has no handshake and no session, so a server instance must hold nothing between requests. Anything expensive (the backend, the signal probe) is built once in `createApp`/`start` and closed over.
+- Tools are read-only queries. Register them with `annotations: READ_ONLY` from `tools/shared.ts`.

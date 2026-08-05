@@ -238,6 +238,8 @@ export const GEN_AI_METRIC = {
   TIME_TO_FIRST_CHUNK: 'gen_ai.client.operation.time_to_first_chunk',
   TIME_PER_OUTPUT_CHUNK: 'gen_ai.client.operation.time_per_output_chunk',
   WORKFLOW_DURATION: 'gen_ai.workflow.duration',
+  /** Autotel extension — the spec publishes no cost metric. */
+  COST_USD: 'gen_ai.client.cost.usd',
 } as const;
 
 /** Canonical event names from the GenAI semantic conventions snapshot. */

@@ -258,3 +258,14 @@ function sanitizeFilters(
     return sanitized;
   });
 }
+
+/**
+ * Every tool here reads telemetry and nothing else: no writes, no side effects,
+ * and the same query twice gives the same answer. Saying so in the registration
+ * is what lets a client run one without stopping to ask a human first.
+ */
+export const READ_ONLY = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  openWorldHint: true,
+} as const;

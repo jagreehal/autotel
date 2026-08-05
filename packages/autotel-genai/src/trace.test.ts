@@ -13,10 +13,17 @@ vi.mock('autotel', () => ({
     },
 }));
 
+const recordedMetrics: unknown[] = [];
+vi.mock('./metrics.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./metrics.js')>()),
+  recordGenAiMetrics: (input: unknown) => recordedMetrics.push(input),
+}));
+
 const { traceGenAI, recordGenAiResponse, recordGenAiUsage } =
   await import('./trace.js');
 
 beforeEach(() => {
+  recordedMetrics.length = 0;
   traceCalls.length = 0;
   fakeCtx.setAttributes.mockClear();
   fakeCtx.setAttribute.mockClear();
@@ -53,6 +60,107 @@ describe('traceGenAI', () => {
     expect(fakeCtx.setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({ 'gen_ai.operation.name': 'chat' }),
     );
+  });
+
+  it('records error.type when the operation throws, and rethrows', async () => {
+    class RateLimitError extends Error {
+      override name = 'RateLimitError';
+    }
+    const run = traceGenAI({ model: 'gpt-4o' })(() => async () => {
+      throw new RateLimitError('429');
+    });
+
+    await expect(run()).rejects.toThrow('429');
+    expect(fakeCtx.setAttribute).toHaveBeenCalledWith(
+      'error.type',
+      'RateLimitError',
+    );
+  });
+
+  it('falls back to Error for a thrown non-Error', async () => {
+    const run = traceGenAI({ model: 'gpt-4o' })(() => async () => {
+      throw 'string failure';
+    });
+
+    await expect(run()).rejects.toBe('string failure');
+    expect(fakeCtx.setAttribute).toHaveBeenCalledWith('error.type', 'Error');
+  });
+
+  it('records the canonical metrics from what the handler wrote', async () => {
+    const chat = traceGenAI({
+      provider: 'openai',
+      model: 'gpt-4o',
+      operation: 'chat',
+    })((ctx) => async () => {
+      ctx.setAttributes({
+        'gen_ai.usage.input_tokens': 900,
+        'gen_ai.usage.output_tokens': 120,
+      });
+      ctx.setAttribute('gen_ai.usage.cost.usd', 0.0033);
+      ctx.setAttribute('gen_ai.response.time_to_first_chunk', 0.42);
+      return 'ok';
+    });
+
+    await chat();
+
+    expect(recordedMetrics).toHaveLength(1);
+    expect(recordedMetrics[0]).toMatchObject({
+      inputTokens: 900,
+      outputTokens: 120,
+      costUsd: 0.0033,
+      timeToFirstChunk: 0.42,
+      attributes: {
+        'gen_ai.operation.name': 'chat',
+        'gen_ai.provider.name': 'openai',
+        'gen_ai.request.model': 'gpt-4o',
+      },
+    });
+  });
+
+  it('carries error.type onto the metrics when the call fails', async () => {
+    const chat = traceGenAI({ model: 'gpt-4o' })(() => async () => {
+      throw new TypeError('bad tool schema');
+    });
+
+    await expect(chat()).rejects.toThrow('bad tool schema');
+    expect(recordedMetrics[0]).toMatchObject({
+      attributes: { 'error.type': 'TypeError' },
+    });
+  });
+
+  it('keeps the receiver so a traced method still sees its object', async () => {
+    // Core `withTracing` invokes the factory's function as `fn.call(this, ...)`
+    // precisely so methods keep working; an arrow wrapper would drop that.
+    traceGenAI({ model: 'gpt-4o' })(
+      () =>
+        async function (this: { model: string }) {
+          return this.model;
+        },
+    );
+    const handler = traceCalls[0]!.factory(fakeCtx) as (
+      this: unknown,
+    ) => Promise<string>;
+
+    await expect(handler.call({ model: 'gpt-4o' })).resolves.toBe('gpt-4o');
+  });
+
+  it('leaves the context spreadable', async () => {
+    // `logger.info({ ...ctx }, 'llm call')` is the documented way to correlate
+    // a log line; watching attributes must not cost the handler its traceId.
+    const ctxWithIds = { ...fakeCtx, traceId: 'abc', spanId: 'def' };
+    traceGenAI({ model: 'gpt-4o' })((ctx) => async () => ctx);
+    traceCalls[0]!.factory(ctxWithIds);
+
+    expect({ ...ctxWithIds }).toMatchObject({ traceId: 'abc', spanId: 'def' });
+  });
+
+  it('records nothing when metrics are switched off', async () => {
+    const chat = traceGenAI({ model: 'gpt-4o', metrics: false })(
+      () => async () => 'ok',
+    );
+
+    await chat();
+    expect(recordedMetrics).toHaveLength(0);
   });
 
   it('uses tool name for execute_tool spans', async () => {

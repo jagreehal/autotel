@@ -113,6 +113,12 @@ function getSubscriberName(subscriber: EventSubscriber): string {
 }
 
 /**
+ * Subscribers whose `shutdown()` has run. Terminal for the client they wrap, so
+ * a queue rebuilt from the same config must not reuse them.
+ */
+const shutDownSubscribers = new WeakSet<EventSubscriber>();
+
+/**
  * Events queue with batching and backpressure
  *
  * Features:
@@ -141,7 +147,23 @@ export class EventQueue {
   private subscriberHealthy: Map<string, boolean> = new Map();
 
   constructor(subscribers: EventSubscriber[], config?: Partial<QueueConfig>) {
-    this.subscribers = subscribers;
+    // `shutdown()` is terminal for a subscriber (PostHog, Mixpanel and Loki
+    // close their client), but the queue is not: shutdown() calls
+    // resetEventQueue() and the next track() rebuilds a queue from the same
+    // config objects. Keeping a spent subscriber means accepting events and
+    // dropping them with no error at all, so drop it here and say why.
+    const live = subscribers.filter((s) => !shutDownSubscribers.has(s));
+    if (live.length < subscribers.length) {
+      getLogger().warn(
+        {
+          subscribers: subscribers
+            .filter((s) => shutDownSubscribers.has(s))
+            .map((s) => getSubscriberName(s)),
+        },
+        '[autotel] Subscriber already shut down, events will not be delivered; pass new subscriber instances to init()',
+      );
+    }
+    this.subscribers = live;
     this.config = { ...DEFAULT_CONFIG, ...config };
 
     // Initialize rate limiter if configured
@@ -150,7 +172,7 @@ export class EventQueue {
       : null;
 
     // Initialize subscriber health tracking
-    for (const subscriber of subscribers) {
+    for (const subscriber of this.subscribers) {
       const name = getSubscriberName(subscriber);
       this.subscriberHealthy.set(name, true);
     }
@@ -644,6 +666,35 @@ export class EventQueue {
   async shutdown(): Promise<void> {
     this.isShuttingDown = true;
     await this.flush();
+
+    // Draining our queue into a subscriber is not delivery. Subscribers batch
+    // too, so one that holds a buffer (Loki, PostHog, Mixpanel) loses whatever
+    // is in it when a short-lived process exits: a Lambda, a CLI, a cron job.
+    // `shutdown()` is the documented place for them to drain, so call it.
+    const drains = await Promise.allSettled(
+      this.subscribers.map(async (subscriber) => {
+        if (!subscriber.shutdown) return;
+        // Marked before awaiting, not after: a shutdown that throws may have
+        // closed the client anyway, and a subscriber with no `shutdown()` was
+        // never closed at all, so it stays reusable.
+        shutDownSubscribers.add(subscriber);
+        return subscriber.shutdown();
+      }),
+    );
+
+    // A subscriber that cannot drain is losing the events it still holds, which
+    // is the failure this call exists to prevent. Say so rather than settling
+    // quietly, and mark it unhealthy so `getSubscriberHealth()` agrees.
+    for (const [index, drain] of drains.entries()) {
+      if (drain.status !== 'rejected') continue;
+
+      const subscriberName = getSubscriberName(this.subscribers[index]!);
+      this.subscriberHealthy.set(subscriberName, false);
+      getLogger().error(
+        { subscriber: subscriberName, err: drain.reason },
+        '[autotel] Subscriber shutdown failed, buffered events may be lost',
+      );
+    }
   }
 
   /**

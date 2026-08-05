@@ -6,6 +6,7 @@ export default new Map([
 ["src/content/docs/ai-observability.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fai-observability.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/ai-workflows.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fai-workflows.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/architecture.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Farchitecture.mdx&astroContentModuleFlag=true")],
+["src/content/docs/collector.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fcollector.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/configuration.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fconfiguration.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/contracts/message-contract.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fcontracts%2Fmessage-contract.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/contracts/pact.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fcontracts%2Fpact.mdx&astroContentModuleFlag=true")],
