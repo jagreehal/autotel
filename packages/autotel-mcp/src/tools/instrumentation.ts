@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import {
   scoreSpan,
   suggestInstrumentationFixes,
 } from '../modules/instrumentation';
 import { buildInstrumentationGuide } from '../modules/docs';
+import { READ_ONLY } from './shared';
 
 export function registerInstrumentationTools(server: McpServer): void {
   server.registerTool(
@@ -12,6 +13,7 @@ export function registerInstrumentationTools(server: McpServer): void {
     {
       description:
         'Score a span for instrumentation quality and semantic convention coverage.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         span: z.object({
           operationName: z.string(),
@@ -51,6 +53,7 @@ export function registerInstrumentationTools(server: McpServer): void {
     'explain_instrumentation_score',
     {
       description: 'Explain the instrumentation scoring rubric and fix ideas.',
+      annotations: READ_ONLY,
       inputSchema: z.object({}),
     },
     async () => ({

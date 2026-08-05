@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
 import { detectAnomalies } from '../modules/anomaly';
 import { findRootCause } from '../modules/correlator';
-import { respondJSON } from './shared';
+import { respondJSON, READ_ONLY } from './shared';
 
 /**
  * Extract the most informative error message from span tags. OTel
@@ -39,6 +39,7 @@ export function registerDiagnosisTools(
     {
       description:
         'Scan for statistical outliers: latency spikes, error rate jumps. Use after list_services to check a specific service.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         service: z.string().min(1).optional(),
         operation: z.string().min(1).optional(),
@@ -76,6 +77,7 @@ export function registerDiagnosisTools(
     {
       description:
         'Walk a trace span tree to identify the bottleneck span. Use after get_trace or search_traces when investigating a slow/errored trace.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         traceId: z.string().min(1),
       }),
@@ -95,6 +97,7 @@ export function registerDiagnosisTools(
     {
       description:
         'Aggregate error spans grouped by service and operation. Use to get an overview of what is failing.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         service: z.string().min(1).optional(),
         lookbackMinutes: z.coerce
@@ -181,6 +184,7 @@ export function registerDiagnosisTools(
     {
       description:
         'Report SLO violations. Provide p99 latency and error rate targets.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         service: z.string().min(1),
         p99LatencyMs: z.coerce.number().positive().optional(),

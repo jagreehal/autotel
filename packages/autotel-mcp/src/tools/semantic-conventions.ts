@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import {
   clearSemanticConventionCache,
   getSemanticConventionNamespace,
   listSemanticConventionNamespaces,
 } from '../modules/semantic-conventions';
-import { respondSafe } from './shared';
+import { respondSafe, READ_ONLY } from './shared';
 
 export function registerSemanticConventionTools(server: McpServer): void {
   server.registerTool(
@@ -13,6 +13,7 @@ export function registerSemanticConventionTools(server: McpServer): void {
     {
       description:
         'List OpenTelemetry semantic-convention namespaces available from upstream.',
+      annotations: READ_ONLY,
       inputSchema: z.object({}),
     },
     async () =>
@@ -26,6 +27,7 @@ export function registerSemanticConventionTools(server: McpServer): void {
     {
       description:
         'Get semantic-convention groups for one namespace (for example: http, rpc, database).',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         namespace: z.string().min(1),
       }),
@@ -39,6 +41,7 @@ export function registerSemanticConventionTools(server: McpServer): void {
     {
       description:
         'Clear semantic-conventions cache so subsequent calls fetch fresh upstream content.',
+      annotations: READ_ONLY,
       inputSchema: z.object({}),
     },
     async () =>

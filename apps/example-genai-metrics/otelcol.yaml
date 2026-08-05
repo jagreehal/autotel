@@ -1,0 +1,204 @@
+# Derives the canonical GenAI metrics from the gen_ai.* spans autotel already
+# emits. The application records no instruments of its own.
+#
+# Every bucket list below is copied verbatim from GEN_AI_DURATION_BUCKETS_SECONDS
+# or GEN_AI_TOKEN_USAGE_BUCKETS in autotel-genai/metrics, time_to_first_chunk
+# included, because traceGenAI gives that one the duration advice too. A service
+# emitting its own histograms and one relying on the collector then land in the
+# same buckets and chart together. Change a boundary here and that stops.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+connectors:
+  signal_to_metrics:
+    spans:
+      - name: gen_ai.client.operation.duration
+        description: GenAI operation duration
+        unit: s
+        conditions:
+          - span.attributes["gen_ai.operation.name"] != nil
+        attributes:
+          - key: gen_ai.operation.name
+          - key: gen_ai.provider.name
+            default_value: unknown
+          - key: gen_ai.request.model
+            default_value: none
+          # Present only on failures, which is what makes an error rate query
+          # possible: error_type!="" over the same metric.
+          - key: error.type
+            default_value: ''
+        histogram:
+          buckets:
+            [
+              0.01,
+              0.02,
+              0.04,
+              0.08,
+              0.16,
+              0.32,
+              0.64,
+              1.28,
+              2.56,
+              5.12,
+              10.24,
+              20.48,
+              40.96,
+              81.92,
+            ]
+          value: Seconds(span.end_time - span.start_time)
+
+      # The spec models tokens as one metric split by gen_ai.token.type. The
+      # spans carry two separate attributes, so declare the metric twice and
+      # let default_value stamp the type onto each data point.
+      - name: gen_ai.client.token.usage
+        description: Tokens consumed
+        unit: '{token}'
+        conditions:
+          - span.attributes["gen_ai.usage.input_tokens"] != nil
+        attributes:
+          - key: gen_ai.request.model
+          - key: gen_ai.provider.name
+            default_value: unknown
+          - key: gen_ai.token.type
+            default_value: input
+        histogram:
+          buckets:
+            [
+              1,
+              4,
+              16,
+              64,
+              256,
+              1024,
+              4096,
+              16384,
+              65536,
+              262144,
+              1048576,
+              4194304,
+              16777216,
+              67108864,
+            ]
+          value: Int(span.attributes["gen_ai.usage.input_tokens"])
+
+      - name: gen_ai.client.token.usage
+        description: Tokens consumed
+        unit: '{token}'
+        conditions:
+          - span.attributes["gen_ai.usage.output_tokens"] != nil
+        attributes:
+          - key: gen_ai.request.model
+          - key: gen_ai.provider.name
+            default_value: unknown
+          - key: gen_ai.token.type
+            default_value: output
+        histogram:
+          buckets:
+            [
+              1,
+              4,
+              16,
+              64,
+              256,
+              1024,
+              4096,
+              16384,
+              65536,
+              262144,
+              1048576,
+              4194304,
+              16777216,
+              67108864,
+            ]
+          value: Int(span.attributes["gen_ai.usage.output_tokens"])
+
+      # Cost is an autotel extension, and a running total answers "what did we
+      # spend" without a quantile in sight.
+      - name: gen_ai.client.cost.usd
+        description: Estimated spend in USD
+        unit: '{USD}'
+        conditions:
+          - span.attributes["gen_ai.usage.cost.usd"] != nil
+        attributes:
+          - key: gen_ai.request.model
+          - key: gen_ai.provider.name
+            default_value: unknown
+        sum:
+          value: Double(span.attributes["gen_ai.usage.cost.usd"])
+          monotonic: true
+
+      - name: gen_ai.client.time_to_first_chunk
+        description: Seconds from request start to the first streamed chunk
+        unit: s
+        conditions:
+          - span.attributes["gen_ai.response.time_to_first_chunk"] != nil
+        attributes:
+          - key: gen_ai.request.model
+        histogram:
+          buckets:
+            [
+              0.01,
+              0.02,
+              0.04,
+              0.08,
+              0.16,
+              0.32,
+              0.64,
+              1.28,
+              2.56,
+              5.12,
+              10.24,
+              20.48,
+              40.96,
+              81.92,
+            ]
+          value: Double(span.attributes["gen_ai.response.time_to_first_chunk"])
+
+      - name: gen_ai.client.tool.calls
+        description: Tool invocations
+        unit: '{call}'
+        conditions:
+          - span.attributes["gen_ai.operation.name"] == "execute_tool"
+        attributes:
+          - key: gen_ai.tool.name
+        sum:
+          value: Int(1)
+          monotonic: true
+
+processors:
+  batch:
+
+  # signal_to_metrics emits delta temporality. Prometheus stores cumulative, so
+  # convert before export or every write is rejected.
+  deltatocumulative:
+
+exporters:
+  otlp_grpc/lgtm:
+    endpoint: lgtm:4317
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [signal_to_metrics, otlp_grpc/lgtm]
+
+    metrics/derived:
+      receivers: [signal_to_metrics]
+      processors: [deltatocumulative]
+      exporters: [otlp_grpc/lgtm, debug]
+
+  telemetry:
+    logs:
+      level: info

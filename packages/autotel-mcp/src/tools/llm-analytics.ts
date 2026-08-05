@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
 import type { TraceRecord } from '../types';
 import {
@@ -10,7 +10,7 @@ import {
   rankSlowTraces,
   listToolUsage,
 } from '../modules/llm-analytics';
-import { respondJSON, toTraceSearchQuery } from './shared';
+import { respondJSON, toTraceSearchQuery, READ_ONLY } from './shared';
 
 type AnalyticsInput = {
   startTime?: string;
@@ -66,6 +66,7 @@ export function registerLlmAnalyticsTools(
     'get_llm_usage',
     {
       description: 'Aggregate LLM token usage by model and service.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         startTime: z.string().optional(),
         endTime: z.string().optional(),
@@ -116,6 +117,7 @@ export function registerLlmAnalyticsTools(
     'list_llm_models',
     {
       description: 'Discover LLM models in use and their usage frequency.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         startTime: z.string().optional(),
         endTime: z.string().optional(),
@@ -142,6 +144,7 @@ export function registerLlmAnalyticsTools(
     {
       description:
         'Get latency, token, and error statistics for one LLM model.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         modelName: z.string().min(1),
         startTime: z.string().optional(),
@@ -170,6 +173,7 @@ export function registerLlmAnalyticsTools(
     'get_llm_expensive_traces',
     {
       description: 'Find traces with the highest total LLM token usage.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         startTime: z.string().optional(),
         endTime: z.string().optional(),
@@ -205,6 +209,7 @@ export function registerLlmAnalyticsTools(
     'get_llm_slow_traces',
     {
       description: 'Find the slowest traces that include LLM spans.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         startTime: z.string().optional(),
         endTime: z.string().optional(),
@@ -240,6 +245,7 @@ export function registerLlmAnalyticsTools(
     'list_llm_tools',
     {
       description: 'Discover tool/function spans and group them by tool name.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         startTime: z.string().optional(),
         endTime: z.string().optional(),

@@ -16,7 +16,7 @@ export function buildCapabilitiesDocument(
 ): ServerCapabilitiesDocument {
   return {
     serverName,
-    transportModes: ['stdio', 'http', 'sse'],
+    transportModes: ['stdio', 'http'],
     groups: [
       {
         name: 'investigation',

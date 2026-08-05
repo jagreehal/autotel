@@ -30,8 +30,16 @@
  * ```
  */
 
+import {
+  metrics as otelMetrics,
+  type Attributes,
+  type Histogram,
+  type MeterProvider,
+} from '@opentelemetry/api';
 import { AggregationType, type ViewOptions } from '@opentelemetry/sdk-metrics';
-import { GEN_AI_METRIC } from './semconv.js';
+import { GEN_AI, GEN_AI_METRIC } from './semconv.js';
+
+const TOKEN_TYPE = GEN_AI.TOKEN_TYPE;
 
 /**
  * Duration buckets for GenAI operations, in **seconds**. Matches the spec's
@@ -115,7 +123,7 @@ export function genAiMetricViews(
       { instrumentName: GEN_AI_METRIC.WORKFLOW_DURATION, kind: 'duration' },
       { instrumentName: GEN_AI_METRIC.TOKEN_USAGE, kind: 'tokens' },
       // Autotel-emitted cost metric. No-op if you don't emit it.
-      { instrumentName: 'gen_ai.client.cost.usd', kind: 'cost' },
+      { instrumentName: GEN_AI_METRIC.COST_USD, kind: 'cost' },
     ];
 
   return [...defaults, ...extra].map(
@@ -128,4 +136,112 @@ export function genAiMetricViews(
         },
       }) satisfies ViewOptions,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Recording
+// ---------------------------------------------------------------------------
+
+/** One completed GenAI operation, as {@link recordGenAiMetrics} needs it. */
+export interface GenAiMetricInput {
+  /** Wall-clock seconds for the operation. */
+  durationSeconds: number;
+  /** Attributes shared by every instrument: operation, provider, model. */
+  attributes: Attributes;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  timeToFirstChunk?: number;
+}
+
+interface GenAiInstruments {
+  duration: Histogram;
+  tokens: Histogram;
+  cost: Histogram;
+  timeToFirstChunk: Histogram;
+}
+
+let instruments: GenAiInstruments | undefined;
+let instrumentsProvider: MeterProvider | undefined;
+
+/**
+ * Instruments are created on first record and cached against the provider they
+ * came from. Keyed on the provider because a `shutdown()` / `init()` cycle —
+ * hot reload, a test suite, a serverless container re-initialising — installs a
+ * new one, and instruments bound to the old one record into nothing.
+ */
+function getInstruments(): GenAiInstruments {
+  const provider = otelMetrics.getMeterProvider();
+  if (!instruments || instrumentsProvider !== provider) {
+    instrumentsProvider = provider;
+    const meter = provider.getMeter('autotel-genai');
+    instruments = {
+      duration: meter.createHistogram(GEN_AI_METRIC.OPERATION_DURATION, {
+        description: 'GenAI operation duration',
+        unit: 's',
+        ...llmHistogramAdvice('duration'),
+      }),
+      tokens: meter.createHistogram(GEN_AI_METRIC.TOKEN_USAGE, {
+        description: 'Tokens consumed by a GenAI operation',
+        unit: '{token}',
+        ...llmHistogramAdvice('tokens'),
+      }),
+      cost: meter.createHistogram(GEN_AI_METRIC.COST_USD, {
+        description: 'Estimated USD cost of a GenAI operation',
+        unit: '{USD}',
+        ...llmHistogramAdvice('cost'),
+      }),
+      timeToFirstChunk: meter.createHistogram(
+        GEN_AI_METRIC.TIME_TO_FIRST_CHUNK,
+        {
+          description: 'Seconds from request start to the first streamed chunk',
+          unit: 's',
+          ...llmHistogramAdvice('duration'),
+        },
+      ),
+    };
+  }
+  return instruments;
+}
+
+/**
+ * Drop the cached instruments so the next record rebuilds them against the
+ * current `MeterProvider`.
+ *
+ * @internal Exported for tests that swap providers between cases. Production
+ * code registers one provider in `init()` and never needs this.
+ */
+export function resetGenAiInstruments(): void {
+  instruments = undefined;
+  instrumentsProvider = undefined;
+}
+
+/**
+ * Record the canonical GenAI metrics for one completed operation.
+ *
+ * Called by `traceGenAI`; you only need it when instrumenting a GenAI call
+ * some other way. Without a registered `MeterProvider` every call is a no-op,
+ * so this costs nothing in a traces-only setup.
+ */
+export function recordGenAiMetrics(input: GenAiMetricInput): void {
+  const { duration, tokens, cost, timeToFirstChunk } = getInstruments();
+  const attributes = input.attributes;
+
+  duration.record(input.durationSeconds, attributes);
+
+  if (input.inputTokens !== undefined) {
+    tokens.record(input.inputTokens, { ...attributes, [TOKEN_TYPE]: 'input' });
+  }
+  if (input.outputTokens !== undefined) {
+    tokens.record(input.outputTokens, {
+      ...attributes,
+      [TOKEN_TYPE]: 'output',
+    });
+  }
+  if (input.costUsd !== undefined) {
+    cost.record(input.costUsd, attributes);
+  }
+  if (input.timeToFirstChunk !== undefined) {
+    timeToFirstChunk.record(input.timeToFirstChunk, attributes);
+  }
 }

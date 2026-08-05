@@ -33,6 +33,12 @@
  * ```
  */
 
+import {
+  trace as otelTrace,
+  type AttributeValue,
+  type Attributes,
+  type Span,
+} from '@opentelemetry/api';
 import { withTracing, type TraceContext } from 'autotel';
 import {
   genAiAgentAttributes,
@@ -53,7 +59,9 @@ import {
   type EstimateCostOptions,
   type TokenUsage,
 } from './cost.js';
+import { recordGenAiMetrics } from './metrics.js';
 import {
+  GEN_AI,
   GEN_AI_OPERATION,
   genAiSpanName,
   type GenAiOperationName,
@@ -73,6 +81,71 @@ export interface TraceGenAIConfig extends GenAiRequestInput {
   spanName?: string;
   /** Extra attributes to set on the span (any namespace). */
   attributes?: GenAiAttributeMap;
+  /**
+   * Record the canonical GenAI metrics alongside the span. On by default, and
+   * a no-op without a registered `MeterProvider`. Set `false` when something
+   * upstream already emits `gen_ai.client.*` and you would double-count.
+   */
+  metrics?: boolean;
+}
+
+/**
+ * What the metrics get to read: everything already on the span, overlaid with
+ * what the handler wrote through `ctx`.
+ *
+ * Neither alone is enough. `getActiveTraceContext()` hands out a *new* context
+ * object, so the documented ambient pattern
+ * (`getActiveTraceContext()?.setAttribute('gen_ai.usage.input_tokens', n)`) —
+ * and any helper that resolves the context itself — never passes through `ctx`.
+ * The span in turn holds nothing when sampling declined to record, and metrics
+ * are not sampled.
+ */
+function observed(seen: Record<string, unknown>): Record<string, unknown> {
+  const span = otelTrace.getActiveSpan() as RecordedSpan | undefined;
+  return { ...span?.attributes, ...seen };
+}
+
+/**
+ * A recording SDK span, which keeps the attributes set on it. The API `Span`
+ * type does not declare them — they are absent on a non-recording span, hence
+ * optional — and reading them is this module's business alone, so the shape is
+ * named here rather than pulling in an SDK dependency.
+ */
+interface RecordedSpan extends Span {
+  attributes?: Record<string, unknown>;
+}
+
+/**
+ * Record what is written through `ctx` into `seen`, and return the undo.
+ *
+ * The context is patched in place rather than wrapped: callers spread it
+ * (`logger.info({ ...ctx }, 'llm call')`), and a `Object.create(ctx)` wrapper
+ * spreads to nothing but the two overridden setters — no traceId, no spanId.
+ */
+function watchAttributes(
+  ctx: TraceContext,
+  seen: Record<string, unknown>,
+): () => void {
+  const { setAttribute, setAttributes } = ctx;
+  ctx.setAttribute = (key: string, value: AttributeValue) => {
+    seen[key] = value;
+    setAttribute.call(ctx, key, value);
+  };
+  ctx.setAttributes = (attributes: Attributes) => {
+    Object.assign(seen, attributes);
+    setAttributes.call(ctx, attributes);
+  };
+  return () => {
+    ctx.setAttribute = setAttribute;
+    ctx.setAttributes = setAttributes;
+  };
+}
+
+/** Narrow an observed attribute to a number, ignoring anything else. */
+function asNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function defaultSpanIdentifier(config: TraceGenAIConfig): string | undefined {
@@ -132,6 +205,33 @@ export function traceGenAI(config: TraceGenAIConfig) {
     ? genAiWorkflowAttributes(config.workflow)
     : {};
 
+  const emitMetrics = (
+    watched: Record<string, unknown>,
+    startedAt: number,
+  ): void => {
+    if (config.metrics === false) return;
+
+    const seen = observed(watched);
+    const attributes: Attributes = { [GEN_AI.OPERATION_NAME]: operation };
+    if (config.provider) attributes[GEN_AI.PROVIDER_NAME] = config.provider;
+    if (config.model) attributes[GEN_AI.REQUEST_MODEL] = config.model;
+    const responseModel = seen[GEN_AI.RESPONSE_MODEL];
+    if (typeof responseModel === 'string') {
+      attributes[GEN_AI.RESPONSE_MODEL] = responseModel;
+    }
+    const errorType = seen['error.type'];
+    if (typeof errorType === 'string') attributes['error.type'] = errorType;
+
+    recordGenAiMetrics({
+      durationSeconds: (Date.now() - startedAt) / 1000,
+      attributes,
+      inputTokens: asNumber(seen[GEN_AI.USAGE_INPUT_TOKENS]),
+      outputTokens: asNumber(seen[GEN_AI.USAGE_OUTPUT_TOKENS]),
+      costUsd: asNumber(seen[GEN_AI.USAGE_COST_USD]),
+      timeToFirstChunk: asNumber(seen[GEN_AI.RESPONSE_TIME_TO_FIRST_CHUNK]),
+    });
+  };
+
   return <TArgs extends unknown[], TReturn>(
     factory: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
@@ -142,6 +242,18 @@ export function traceGenAI(config: TraceGenAIConfig) {
     }
     return withTracing<TArgs, TReturn>({ name: spanName })(
       (ctx: TraceContext) => {
+        // Watch what the handler writes so the metrics can carry the token
+        // counts, cost and streaming timings the helpers put on the span. The
+        // alternative is asking callers to report the same numbers twice.
+        //
+        // The context is patched in place rather than wrapped: `withTracing`
+        // builds a fresh one per call, and callers spread it
+        // (`logger.info({ ...ctx })`), which a derived object would reduce to
+        // the two overridden setters — no traceId, no spanId.
+        const seen: Record<string, unknown> = {};
+        const unwatch =
+          config.metrics === false ? () => {} : watchAttributes(ctx, seen);
+
         ctx.setAttributes({
           ...requestAttributes,
           ...agentAttributes,
@@ -155,7 +267,27 @@ export function traceGenAI(config: TraceGenAIConfig) {
             'traceGenAI: factory must return a function; expected (ctx) => (...args) => result',
           );
         }
-        return handler;
+        // A real function, not an arrow: `withTracing` forwards the receiver
+        // with `fn.call(this, ...)` so a traced method still sees its object.
+        return async function (this: unknown, ...args: TArgs) {
+          const startedAt = Date.now();
+          try {
+            const result = await handler.call(this, ...args);
+            emitMetrics(seen, startedAt);
+            return result;
+          } catch (error) {
+            // The spec requires `error.type` on a failed GenAI operation, and
+            // `gen_ai.client.operation.duration` splits on it. Same shape as
+            // the rest of autotel: the error's name, or `Error` without one.
+            const errorType =
+              error instanceof Error ? error.name || 'Error' : 'Error';
+            ctx.setAttribute('error.type', errorType);
+            emitMetrics(seen, startedAt);
+            throw error;
+          } finally {
+            unwatch();
+          }
+        };
       },
     ) as (...args: TArgs) => Promise<TReturn>;
   };

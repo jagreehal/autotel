@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
-import { respondSafe } from './shared';
+import { respondSafe, READ_ONLY } from './shared';
 
 export function registerTopologyTools(
   server: McpServer,
@@ -9,7 +9,11 @@ export function registerTopologyTools(
 ): void {
   server.registerTool(
     'list_services',
-    { description: 'List known services.', inputSchema: z.object({}) },
+    {
+      description: 'List known services.',
+      annotations: READ_ONLY,
+      inputSchema: z.object({}),
+    },
     async () => respondSafe(() => backend.listServices(), 'list_services'),
   );
 
@@ -17,6 +21,7 @@ export function registerTopologyTools(
     'list_operations',
     {
       description: 'List operations for a service.',
+      annotations: READ_ONLY,
       inputSchema: z.object({ serviceName: z.string().min(1) }),
     },
     async ({ serviceName }: { serviceName: string }) =>
@@ -28,6 +33,7 @@ export function registerTopologyTools(
     {
       description:
         'Build a service dependency map with node and edge health metrics.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         lookbackMinutes: z.coerce
           .number()

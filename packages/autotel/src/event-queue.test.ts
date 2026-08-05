@@ -839,6 +839,97 @@ describe('EventQueue', () => {
       expect(adapter.events.length).toBe(1);
       expect(adapter.events[0]!.name).toBe('test1');
     });
+
+    it('shuts down subscribers so their own buffers drain', async () => {
+      // Subscribers batch too. Without this a short-lived process loses
+      // whatever a batching subscriber is still holding.
+      const drained: string[] = [];
+      const buffering = Object.assign(new MockAdapter(), {
+        name: 'buffering',
+        shutdown: async () => {
+          drained.push('buffering');
+        },
+      });
+      const plain = new MockAdapter();
+
+      const queue = new EventQueue([buffering, plain], { flushInterval: 100 });
+      queue.enqueue({ name: 'test', attributes: {}, timestamp: Date.now() });
+
+      await queue.shutdown();
+
+      expect(drained).toEqual(['buffering']);
+    });
+
+    it('does not reuse a subscriber whose shutdown has already run', async () => {
+      // shutdown() is terminal for the client a subscriber wraps, but the queue
+      // is not: shutdown() resets it and the next track() rebuilds one from the
+      // same config objects. A reused subscriber accepts events and drops them.
+      const delivered: string[] = [];
+      const subscriber = Object.assign(new MockAdapter(), {
+        name: 'spent',
+        trackEvent: async (name: string) => {
+          delivered.push(name);
+        },
+        shutdown: async () => {},
+      });
+
+      const first = new EventQueue([subscriber], { flushInterval: 10 });
+      first.enqueue({ name: 'before', attributes: {}, timestamp: Date.now() });
+      await first.shutdown();
+
+      const rebuilt = new EventQueue([subscriber], { flushInterval: 10 });
+      rebuilt.enqueue({ name: 'after', attributes: {}, timestamp: Date.now() });
+      await rebuilt.flush();
+
+      expect(delivered).toEqual(['before']);
+    });
+
+    it('keeps reusing a subscriber that has no shutdown of its own', async () => {
+      // Nothing was closed, so nothing is spent. Dropping it on the next queue
+      // would silence a perfectly healthy subscriber.
+      const delivered: string[] = [];
+      const subscriber = Object.assign(new MockAdapter(), {
+        name: 'no-shutdown',
+        trackEvent: async (name: string) => {
+          delivered.push(name);
+        },
+      });
+
+      const first = new EventQueue([subscriber], { flushInterval: 10 });
+      first.enqueue({ name: 'before', attributes: {}, timestamp: Date.now() });
+      await first.shutdown();
+
+      const rebuilt = new EventQueue([subscriber], { flushInterval: 10 });
+      rebuilt.enqueue({ name: 'after', attributes: {}, timestamp: Date.now() });
+      await rebuilt.flush();
+
+      expect(delivered).toEqual(['before', 'after']);
+    });
+
+    it('keeps shutting down the rest when one subscriber throws', async () => {
+      const drained: string[] = [];
+      const failing = Object.assign(new MockAdapter(), {
+        name: 'failing',
+        shutdown: async () => {
+          throw new Error('connection already closed');
+        },
+      });
+      const healthy = Object.assign(new MockAdapter(), {
+        name: 'healthy',
+        shutdown: async () => {
+          drained.push('healthy');
+        },
+      });
+
+      const queue = new EventQueue([failing, healthy], { flushInterval: 100 });
+      queue.enqueue({ name: 'test', attributes: {}, timestamp: Date.now() });
+
+      await expect(queue.shutdown()).resolves.toBeUndefined();
+      expect(drained).toEqual(['healthy']);
+      // The buffered events are gone; the health map has to say so.
+      expect(queue.isSubscriberHealthy('failing')).toBe(false);
+      expect(queue.isSubscriberHealthy('healthy')).toBe(true);
+    });
   });
 
   describe('Correlation ID enrichment', () => {

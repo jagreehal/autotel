@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
 import {
   discoverLogFields,
   discoverServices,
   discoverTraceFields,
 } from '../modules/discovery';
-import { respondSafe } from './shared';
+import { respondSafe, READ_ONLY } from './shared';
 
 const searchSchema = z.string().min(1).optional();
 
@@ -20,6 +20,7 @@ export function registerDiscoveryTools(
     {
       description:
         'Discover services with cross-signal metadata (operations, severities, metric names, and inferred language).',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         limitServices: z.coerce.number().int().positive().max(200).optional(),
         traceSample: z.coerce.number().int().positive().max(500).optional(),
@@ -70,6 +71,7 @@ export function registerDiscoveryTools(
       {
         description:
           'Discover trace/span field names, inferred types, and example values from sampled traces.',
+        annotations: READ_ONLY,
         inputSchema: z.object({
           search: searchSchema,
           sampleSize: z.coerce.number().int().positive().max(500).optional(),
@@ -95,6 +97,7 @@ export function registerDiscoveryTools(
       {
         description:
           'Discover log field names, inferred types, and example values from sampled logs.',
+        annotations: READ_ONLY,
         inputSchema: z.object({
           search: searchSchema,
           sampleSize: z.coerce.number().int().positive().max(500).optional(),

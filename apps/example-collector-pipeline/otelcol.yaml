@@ -1,0 +1,110 @@
+# Collector pipeline for the autotel example app.
+#
+# Traces arrive on 4318 and pass through four stages before anything is stored:
+#
+#   1. transform/redact  mask PII the app leaked into span attributes
+#   2. filter/health     drop /healthz traces
+#   3. count             count what is left, before any of it is thrown away
+#   4. tail_sampling     keep every failure and a quarter of the rest
+#
+# Counting happens before sampling, so request counts stay exact while only a
+# fraction of traces reach the backend.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  # The app sets user.email and payment.card on its spans. Mask both here so
+  # they never leave the collector. SDK-side redaction misses what it does not
+  # know about; this is the net underneath it.
+  transform/redact:
+    error_mode: ignore
+    trace_statements:
+      # alice.chen@example.com -> ***@example.com
+      - 'replace_pattern(span.attributes["user.email"], "^[^@]+", "***")'
+      # any 13-16 digit run in any string attribute
+      - 'replace_all_patterns(span.attributes, "value", "[0-9]{13,16}", "[redacted-card]")'
+
+  # Health checks are the highest-volume, lowest-value traces most services
+  # produce. Drop them before they cost anything.
+  filter/health:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["http.route"] == "/healthz"'
+
+  # Autotel samples per process, so it can only save the spans one service
+  # produced. The collector groups spans by trace ID across every service, waits
+  # for the trace to finish, then keeps every failure and a quarter of the rest.
+  tail_sampling:
+    decision_wait: 5s
+    policies:
+      - name: keep-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: sample-the-rest
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 25
+
+  batch:
+
+connectors:
+  # Counts every request that survives the filter, before tail_sampling throws
+  # traces away. Charts built on this metric stay accurate at any sample rate.
+  count:
+    spans:
+      app.requests:
+        description: Requests received, counted before sampling
+        conditions:
+          - IsRootSpan()
+        attributes:
+          - key: http.route
+    spanevents:
+      app.exceptions:
+        description: Exceptions recorded, counted before sampling
+        conditions:
+          - name == "exception"
+        attributes:
+          - key: exception.type
+
+  # Splits the receive pipeline so traces continue on to sampling while the
+  # count connector reads the same spans.
+  forward:
+
+exporters:
+  otlp_grpc/tui:
+    endpoint: oteltui:4317
+    tls:
+      insecure: true
+
+  # Prints a one-line summary per batch so `docker compose logs otelcol` shows
+  # how many spans survived.
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces/receive:
+      receivers: [otlp]
+      processors: [transform/redact, filter/health]
+      exporters: [count, forward]
+
+    traces/store:
+      receivers: [forward]
+      processors: [tail_sampling, batch]
+      exporters: [otlp_grpc/tui, debug]
+
+    metrics/derived:
+      receivers: [count]
+      exporters: [otlp_grpc/tui, debug]
+
+  telemetry:
+    logs:
+      level: info

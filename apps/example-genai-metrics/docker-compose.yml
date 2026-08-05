@@ -1,0 +1,18 @@
+services:
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:0.157.0
+    container_name: genai-metrics-otelcol
+    command: ['--config=/etc/otelcol/config.yaml']
+    volumes:
+      - ./otelcol.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - '4318:4318' # OTLP HTTP — the app sends here
+    depends_on:
+      - lgtm
+
+  lgtm:
+    image: grafana/otel-lgtm:0.11.13
+    container_name: genai-metrics-lgtm
+    ports:
+      - '3000:3000' # Grafana
+      - '9090:9090' # Prometheus query

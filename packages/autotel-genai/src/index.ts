@@ -50,8 +50,10 @@ export {
   GEN_AI_COST_USD_BUCKETS,
   llmHistogramAdvice,
   genAiMetricViews,
+  recordGenAiMetrics,
+  resetGenAiInstruments,
 } from './metrics.js';
-export type { GenAiHistogramKind } from './metrics.js';
+export type { GenAiHistogramKind, GenAiMetricInput } from './metrics.js';
 
 // --- Attribute builders ----------------------------------------------------
 export {

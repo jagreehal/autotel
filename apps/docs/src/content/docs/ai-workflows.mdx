@@ -865,6 +865,15 @@ cooperative cancellation, or catch `GEN_AI_GUARD_STOP` to wind the run down.
 
 Implement quality checks and iterative refinement with full observability.
 
+:::note[Scoring live traffic]
+`recordEvaluationResult` writes a `gen_ai.evaluation.result` event on the trace
+of the call it judges, which turns pass rate into a query you can alert on.
+[`example-genai-evals`](https://github.com/jagreehal/autotel/tree/main/apps/example-genai-evals)
+runs three model-free evaluators over a sample of answers and charts the result
+in Grafana. Events reach a backend through a subscriber, so configure one or
+`recordEvaluationResult` is a no-op.
+:::
+
 ```typescript
 import { trace, span, withTracing } from 'autotel';
 
@@ -972,6 +981,14 @@ Following the OpenTelemetry **GenAI** semantic conventions (`gen_ai.*`, semconv
 v1.42.0) ensures any OTLP backend renders your AI telemetry without custom
 mapping. Let `autotel-genai` emit the canonical names rather than inventing
 `llm.*` / `ai.*` attributes by hand.
+
+:::note[Metrics from these spans]
+`autotel-genai` writes the attributes and leaves the metric instruments to you.
+A collector can derive the canonical GenAI metrics from these spans instead, so
+cost per model, error rate, time to first chunk and tool usage need no extra
+application code. See [Derive the GenAI
+metrics](/autotel/collector/#derive-the-genai-metrics).
+:::
 
 **LLM attributes. Use `traceGenAI` + `recordGenAiUsage` (canonical `gen_ai.*`):**
 

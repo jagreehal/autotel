@@ -148,7 +148,7 @@ When you ask Claude Code to instrument code, review for observability, or work w
 
 The skill described above teaches Claude Code how to **write** instrumented code. Two integrations serve a second class of agent task, **investigating** telemetry: querying traces, diagnosing errors, and ranking expensive LLM calls. They are two interchangeable mechanisms:
 
-1. [`autotel-mcp`](/autotel/tools/autotel-mcp/): an MCP server the user wires into `.mcp.json`.
+1. [`autotel-mcp`](/autotel/integrations/mcp/): an MCP server the user wires into `.mcp.json`.
 2. The `autotel` CLI itself: the same investigation surface as one-shot subcommands that emit JSON on stdout.
 
 Both share the same backends (`packages/autotel-mcp/src/backends/`) and the same query helpers, so the answers are identical. The CLI route is useful when you'd rather not configure an MCP server, or when you're driving an agent harness that doesn't speak MCP.
@@ -250,4 +250,4 @@ A ready-made skill that maps prompts → CLI commands ships at `.claude/skills/a
 - [Agent Guide](/autotel/agent-guide/): when-to-use-what rules and before/after examples
 - [AI / LLM Workflows](/autotel/ai-workflows/): tracing AI agents, RAG pipelines, and streaming
 - [AI-Assisted Observability](/autotel/ai-observability/): querying traces with Claude via MCP
-- [`autotel-mcp`](/autotel/tools/autotel-mcp/): the MCP server this CLI surface mirrors
+- [`autotel-mcp`](/autotel/integrations/mcp/): the MCP server this CLI surface mirrors

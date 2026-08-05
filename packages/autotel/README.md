@@ -36,6 +36,7 @@ Replace `NODE_OPTIONS` and 30+ lines of SDK boilerplate with `init()`, wrap func
   - [LLM Observability with OpenLLMetry](#llm-observability-with-openllmetry)
     - [Installation](#installation)
     - [Usage](#usage)
+    - [Using the Vercel AI SDK?](#using-the-vercel-ai-sdk)
   - [Sampling](#sampling)
     - [Preset Shorthand](#preset-shorthand)
     - [Tuned Presets](#tuned-presets)
@@ -393,6 +394,33 @@ OpenLLMetry will automatically:
 - Reuse autotel's OpenTelemetry tracer provider for unified traces
 
 All LLM spans will appear alongside your application traces in your observability backend.
+
+### Using the Vercel AI SDK?
+
+OpenLLMetry instruments provider SDKs. It does not see the AI SDK, which runs
+its own telemetry pipeline, so `generateText`, `streamText` and `embed` produce
+no spans through the section above.
+
+The AI SDK's `telemetry: { functionId }` option does nothing on its own either.
+It emits lifecycle events, and something has to be registered to listen.
+Register [`autotel-genai`](../autotel-genai) once at startup, next to `init()`:
+
+```typescript
+import { registerTelemetry } from 'ai';
+import { init } from 'autotel';
+import { autotelTelemetry } from 'autotel-genai/observer';
+
+init({ service: 'my-llm-app', endpoint: process.env.OTLP_ENDPOINT });
+registerTelemetry(autotelTelemetry());
+```
+
+Every `generateText` / `streamText` / `embed` call now streams a canonical
+`gen_ai.*` span tree with token usage, cost and streaming timing.
+
+Miss that line and nothing breaks and nothing warns: the calls run, the app
+works, and every LLM span is silently absent. If `get_llm_usage` in
+[`autotel-mcp`](../autotel-mcp) reports zero requests while your app is plainly
+calling a model, this is why.
 
 **AI Workflow Patterns:** See [AI/LLM Workflow Documentation](../../docs/AI_WORKFLOWS.md) for comprehensive patterns including:
 
@@ -2586,7 +2614,28 @@ export async function handleRequest(req: Request) {
 
 ## Serverless & Short-lived Processes
 
-For serverless environments (AWS Lambda, Vercel, Cloud Functions) and other short-lived processes, telemetry may not export before the process ends. Autotel provides two approaches:
+A script that finishes and returns gets one flush for free. Autotel listens for
+`beforeExit`, so a CLI, a cron job or a CI step keeps its telemetry without
+calling anything:
+
+```typescript
+init({ service: 'my-cli' });
+await doWork();
+// event loop drains -> autotel flushes -> process exits
+```
+
+Turn it off with `flushOnExit: false` if your process manages its own exit and
+you would rather autotel added no listener.
+
+It flushes rather than shutting down — `beforeExit` fires on any event-loop
+drain, so a process that goes on to do more work keeps its telemetry — and it is
+bounded by `processHandlers.shutdownTimeoutMs` (default 2s), after which the
+process exits instead of waiting on an exporter that never answers.
+
+`beforeExit` does not fire on `process.exit()`, on a signal, or after an
+uncaught exception. For those, and for serverless (AWS Lambda, Vercel, Cloud
+Functions) where the runtime freezes the process between invocations rather
+than ending it, reach for one of these:
 
 ### Manual Flush (Recommended for Serverless)
 

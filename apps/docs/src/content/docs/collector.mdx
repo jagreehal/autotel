@@ -1,0 +1,215 @@
+---
+title: Collector
+description: 'What belongs in an OpenTelemetry Collector instead of the SDK: sampling, redaction, request counts, and noise.'
+---
+
+Autotel speaks OTLP, so a collector is optional. Add one when a decision needs
+the finished trace, or needs to change without a deploy.
+
+| Decision       | Autotel decides                            | The collector decides                               |
+| -------------- | ------------------------------------------ | --------------------------------------------------- |
+| Keep the trace | Per process, once the span ends            | Per trace, once every service has reported          |
+| Mask PII       | Known keys and value shapes, at export     | Any attribute, any pattern, edited without a deploy |
+| Count requests | Sampled spans plus `autotel.sampling.rate` | Exact, counted before anything is dropped           |
+| Drop noise     | In the app, one service at a time          | One rule covering every service                     |
+
+Everything below runs in [`example-collector-pipeline`](https://github.com/jagreehal/autotel/tree/main/apps/example-collector-pipeline).
+
+## Sample in one place
+
+Autotel's `production` preset keeps 10% of traces plus every error and every
+slow request. Put a collector in front that keeps 25% and you keep a quarter of
+what autotel already sent.
+
+| Autotel preset       | Collector | Baseline traces stored |
+| -------------------- | --------- | ---------------------- |
+| `production` (10%)   | 25%       | 2.5%                   |
+| `development` (100%) | 25%       | 25%                    |
+| `production` (10%)   | none      | 10%                    |
+
+Pick the layer that owns the decision and neutralise the other one:
+
+```typescript
+init({
+  service: 'checkout-api',
+  endpoint: 'http://localhost:4318',
+  sampling: 'development', // the collector samples, so autotel sends everything
+});
+```
+
+:::caution
+Neither layer reports what the other threw away, so a dashboard drawn from 2.5%
+of your traffic looks the same as one drawn from 10%.
+:::
+
+## Whole traces need the collector
+
+Autotel samples inside one process, so it can only save the spans that process
+produced. Say a payment service retries an upstream timeout, succeeds on the
+second attempt, and returns 200. Its own span carries the error. The checkout
+service that called it saw a clean response and drops its half of the trace at
+the baseline rate. You keep the failure and lose the request that caused it.
+
+A collector groups spans by trace ID across every service, waits for the trace
+to finish, then decides once:
+
+```yaml
+processors:
+  tail_sampling:
+    decision_wait: 5s
+    policies:
+      - name: keep-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: sample-the-rest
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 25
+```
+
+The collector keeps the whole trace when any span in it failed.
+
+## Redact in both layers
+
+Autotel masks emails, phone numbers, SSNs and card numbers by value shape, and
+redacts keys matching `password`, `secret`, `token`, `apiKey`, `auth` and
+`credential`. It turns itself on when `NODE_ENV` is `production`. See
+[Configuration](/autotel/configuration/) for the presets and how to extend them.
+
+The value shapes miss everything that reads like ordinary text: customer names,
+postal addresses, internal account IDs, LLM prompts and completions. You find
+those in your telemetry weeks later, while looking for something else. Fixing
+that in the app means a deploy. Fixing it in the collector means a config
+reload:
+
+```yaml
+processors:
+  transform/redact:
+    error_mode: ignore
+    trace_statements:
+      - 'replace_pattern(span.attributes["user.email"], "^[^@]+", "***")'
+      - 'replace_all_patterns(span.attributes, "value", "[0-9]{13,16}", "[redacted-card]")'
+```
+
+Keep both. The app-side rules cover what you know about today, and the collector
+covers what you learn tomorrow.
+
+## Count before you sample
+
+Store 10% of traces and a naive `COUNT` of your spans reports a tenth of your
+traffic. Autotel answers this with `autotel.sampling.rate`, which lets
+`COUNT * rate` estimate the population. See
+[Recording the Sample Rate](/autotel/advanced/#recording-the-sample-rate).
+
+A collector answers it with a real number. The `count` connector runs before the
+sampler and emits a metric from every span it sees:
+
+```yaml
+connectors:
+  count:
+    spans:
+      app.requests:
+        conditions:
+          - IsRootSpan()
+        attributes:
+          - key: http.route
+```
+
+Request and error counts now stay exact at any sample rate, so changing how many
+traces you keep leaves your dashboards alone.
+
+## Derive the GenAI metrics
+
+`autotel-genai` writes rich `gen_ai.*` spans and leaves the metric instruments
+to you. The `signal_to_metrics` connector fills that gap without a line of
+application code, reading the attributes already on the spans:
+
+```yaml
+connectors:
+  signal_to_metrics:
+    spans:
+      - name: gen_ai.client.cost.usd
+        unit: '{USD}'
+        conditions:
+          - span.attributes["gen_ai.usage.cost.usd"] != nil
+        attributes:
+          - key: gen_ai.request.model
+        sum:
+          value: Double(span.attributes["gen_ai.usage.cost.usd"])
+          monotonic: true
+```
+
+Repeat that for duration, tokens, time to first chunk and tool calls and you
+have cost per model, error rate, streaming latency and tool usage on a stack you
+run yourself.
+
+:::caution
+The connector emits delta temporality and Prometheus stores cumulative, so add
+`deltatocumulative` to the metrics pipeline. Without it every write is rejected
+and your own collector still reports a clean export.
+:::
+
+[`example-genai-metrics`](https://github.com/jagreehal/autotel/tree/main/apps/example-genai-metrics)
+runs the full config against Grafana LGTM, and
+[`grafana-llm.json`](https://github.com/jagreehal/autotel/tree/main/packages/autotel-mcp/src/resources/dashboards/grafana-llm.json)
+charts the result.
+
+## Drop what you never look at
+
+Health checks are the highest volume and lowest value traces most services
+produce. One rule removes them for every service that reports to the collector:
+
+```yaml
+processors:
+  filter/health:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["http.route"] == "/healthz"'
+```
+
+Order matters. Run the filter before the counter and health checks stay out of
+your request metric. Run it after and they inflate it.
+
+## Wiring it together
+
+The pipeline splits after redaction and filtering. One branch counts, the other
+samples:
+
+```yaml
+service:
+  pipelines:
+    traces/receive:
+      receivers: [otlp]
+      processors: [transform/redact, filter/health]
+      exporters: [count, forward]
+
+    traces/store:
+      receivers: [forward]
+      processors: [tail_sampling, batch]
+      exporters: [otlp_grpc/backend]
+
+    metrics/derived:
+      receivers: [count]
+      exporters: [otlp_grpc/backend]
+```
+
+The `forward` connector exists to feed the second traces pipeline, since `count`
+emits metrics and passes no spans along.
+
+## Run it
+
+[`example-collector-pipeline`](https://github.com/jagreehal/autotel/tree/main/apps/example-collector-pipeline)
+starts a collector and a viewer, sends 30 health checks and 20 orders, and
+prints what each stage should have done:
+
+```bash
+cd apps/example-collector-pipeline
+docker compose up -d
+pnpm install && pnpm start
+docker compose logs otelcol | tail -20
+```
+
+Twenty orders go in. Around seven traces come out, the counters still report 20
+requests and 4 exceptions, and the health checks leave nothing behind.

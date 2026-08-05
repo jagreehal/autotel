@@ -1,0 +1,8 @@
+services:
+  lgtm:
+    image: grafana/otel-lgtm:0.11.13
+    container_name: genai-evals-lgtm
+    ports:
+      - '3000:3000' # Grafana
+      - '3100:3100' # Loki push + query — the evaluation events land here
+      - '4318:4318' # OTLP HTTP — traces

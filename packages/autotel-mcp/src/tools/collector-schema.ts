@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import {
   getCollectorComponentReadme,
   getCollectorComponentSchema,
@@ -9,7 +9,7 @@ import {
   resolveCollectorVersion,
   validateCollectorComponentConfig,
 } from '../modules/collector-catalog';
-import { respondSafe } from './shared';
+import { respondSafe, READ_ONLY } from './shared';
 
 const componentKindSchema = z.enum([
   'receiver',
@@ -25,6 +25,7 @@ export function registerCollectorSchemaTools(server: McpServer): void {
     {
       description:
         'List available OpenTelemetry Collector schema versions supported by the upstream catalog.',
+      annotations: READ_ONLY,
       inputSchema: z.object({}),
     },
     async () =>
@@ -36,6 +37,7 @@ export function registerCollectorSchemaTools(server: McpServer): void {
     {
       description:
         'List collector components (receivers/processors/exporters/connectors/extensions) for a given version.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         version: z
           .string()
@@ -66,6 +68,7 @@ export function registerCollectorSchemaTools(server: McpServer): void {
     'collector_component_schema',
     {
       description: 'Get JSON Schema for a collector component configuration.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         version: z
           .string()
@@ -96,6 +99,7 @@ export function registerCollectorSchemaTools(server: McpServer): void {
     'collector_component_readme',
     {
       description: 'Get README/reference text for a collector component.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         version: z
           .string()
@@ -127,6 +131,7 @@ export function registerCollectorSchemaTools(server: McpServer): void {
     {
       description:
         'Validate collector component config against the versioned upstream JSON schema.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         version: z
           .string()
@@ -160,6 +165,7 @@ export function registerCollectorSchemaTools(server: McpServer): void {
     {
       description:
         'Refresh local in-memory collector metadata cache from upstream GitHub catalog.',
+      annotations: READ_ONLY,
       inputSchema: z.object({}),
     },
     async () => respondSafe(async () => refreshCollectorCatalog()),

@@ -1,7 +1,7 @@
 export { createApp, type App } from './app';
 export type { TelemetryBackend } from './backends/telemetry';
 export { createBackend, type BackendHandle } from './backends/factory';
-export { loadConfig, type AppConfig } from './config';
+export { loadConfig, resolveConfig, type AppConfig } from './config';
 // Query helpers reused by the CLI mirror — same input shapes the MCP tools
 // validate, so CLI commands behave identically to their MCP counterparts.
 export {

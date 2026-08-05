@@ -171,6 +171,71 @@ pnpm start
 
 **See:** [example-terminal/README.md](./example-terminal/README.md) for detailed instructions.
 
+### Collector Pipeline Example
+
+Puts an OpenTelemetry Collector between the app and the backend, and shows what
+belongs there rather than in the SDK:
+
+```bash
+cd apps/example-collector-pipeline
+docker compose up -d   # collector + otel-tui viewer
+pnpm install
+pnpm start
+docker compose logs otelcol | tail -20
+```
+
+**What it does:**
+
+- Masks `user.email` and a card number the app leaked into span attributes
+- Drops `/healthz` traces before they cost anything
+- Counts requests and exceptions before sampling, so the numbers stay exact
+- Keeps every failed trace and 25% of the rest with tail sampling
+- Explains why sampling in the SDK and the collector at once multiplies
+
+**See:** [example-collector-pipeline/README.md](./example-collector-pipeline/README.md) for the annotated config.
+
+### GenAI Metrics Example
+
+Derives the canonical GenAI metrics from `gen_ai.*` spans, so cost and latency
+dashboards need no metric instruments in application code:
+
+```bash
+cd apps/example-genai-metrics
+docker compose up -d   # collector + Grafana LGTM
+pnpm install
+pnpm start
+open http://localhost:3000   # import packages/autotel-mcp/src/resources/dashboards/grafana-llm.json
+```
+
+**What it does:**
+
+- Emits `gen_ai.*` spans with token usage, estimated cost and streaming timings
+- Derives duration, token usage, cost, time to first chunk and tool calls in the collector
+- Splits `gen_ai.client.token.usage` by `gen_ai.token.type`, matching the spec
+- Converts delta to cumulative, without which Prometheus rejects every write
+
+**See:** [example-genai-metrics/README.md](./example-genai-metrics/README.md) for the annotated connector config.
+
+### GenAI Evaluations Example
+
+Scores agent answers and turns pass rate into something you can alert on:
+
+```bash
+cd apps/example-genai-evals
+docker compose up -d          # Grafana LGTM
+pnpm install
+EVAL_SAMPLE_RATE=1 pnpm start
+```
+
+**What it does:**
+
+- Runs brevity, groundedness and prompt-injection evaluators, none of which needs a model
+- Emits each verdict as a `gen_ai.evaluation.result` event on the conversation's trace
+- Samples after the answer exists, so the sample is not biased towards the cheap path
+- Gives a pass-rate LogQL query ready for a Grafana alert rule
+
+**See:** [example-genai-evals/README.md](./example-genai-evals/README.md) for the evaluator design.
+
 ### AI/LLM Workflow Examples
 
 Demonstrates instrumentation patterns for AI/LLM applications:

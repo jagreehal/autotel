@@ -6,7 +6,7 @@ An MCP server that gives AI agents the ability to investigate OpenTelemetry trac
 
 - **Backend-agnostic.** Built-in OTLP collector on port 4318 accepts data from any OTel-instrumented app.
 - **All three signals.** Traces, metrics, and logs: with cross-signal correlation.
-- **Agent-optimized.** 33 tools designed for progressive investigation: discover → diagnose → correlate → root cause.
+- **Agent-optimized.** 41 tools designed for progressive investigation: discover → diagnose → correlate → root cause.
 - **Zero infrastructure.** In-memory by default, persistent with `--persist`.
 
 ### Requirements
@@ -230,7 +230,7 @@ AI Agent ──MCP──────────┘
 
 1. Your instrumented app sends traces/metrics/logs via OTLP to `http://localhost:4318`
 2. autotel-mcp stores the data in libsql (in-memory by default)
-3. Your AI agent connects via MCP and investigates using 33 tools
+3. Your AI agent connects via MCP and investigates using 41 tools
 
 ## Backends
 
@@ -273,27 +273,71 @@ Bundled snapshots ship under `fixtures/upstream/` and include a baseline collect
 
 ## Configuration
 
-### Environment Variables
+Flags override environment variables, which override defaults. `--help` lists
+everything.
 
-| Variable                 | Default                                       | Description                           |
-| ------------------------ | --------------------------------------------- | ------------------------------------- |
-| `AUTOTEL_BACKEND`        | `collector`                                   | Backend: `collector`, `jaeger`        |
-| `AUTOTEL_TRANSPORT`      | `stdio`                                       | MCP transport: `stdio`, `http`        |
-| `AUTOTEL_PORT`           | `3000`                                        | MCP HTTP port                         |
-| `AUTOTEL_HOST`           | `127.0.0.1`                                   | MCP HTTP bind address                 |
-| `AUTOTEL_COLLECTOR_PORT` | `4318`                                        | OTLP receiver port                    |
-| `AUTOTEL_PERSIST`        | —                                             | libsql file path (omit for in-memory) |
-| `AUTOTEL_RETENTION_MS`   | `3600000` (1h mem) / `86400000` (24h persist) | Data retention                        |
-| `AUTOTEL_MAX_TRACES`     | `10000`                                       | Max traces before eviction            |
-| `JAEGER_BASE_URL`        | `http://localhost:16686`                      | Jaeger API URL                        |
+### Flags and environment variables
+
+| Flag               | Variable                 | Default                                       | Description                           |
+| ------------------ | ------------------------ | --------------------------------------------- | ------------------------------------- |
+| `-b, --backend`    | `AUTOTEL_BACKEND`        | `collector`                                   | Backend: `collector`, `jaeger`, …     |
+| `-t, --transport`  | `AUTOTEL_TRANSPORT`      | `stdio`                                       | MCP transport: `stdio` or `http`      |
+| `-p, --port`       | `AUTOTEL_PORT`           | `3000`                                        | MCP HTTP port                         |
+| `-H, --host`       | `AUTOTEL_HOST`           | `127.0.0.1`                                   | MCP HTTP bind address                 |
+| `--collector-port` | `AUTOTEL_COLLECTOR_PORT` | `4318`                                        | OTLP receiver port                    |
+| `--persist`        | `AUTOTEL_PERSIST`        | —                                             | libsql file path (omit for in-memory) |
+| `--retention-ms`   | `AUTOTEL_RETENTION_MS`   | `3600000` (1h mem) / `86400000` (24h persist) | Data retention                        |
+| `--max-traces`     | `AUTOTEL_MAX_TRACES`     | `10000`                                       | Max traces before eviction            |
+| `--fixture`        | `AUTOTEL_FIXTURE_PATH`   | `./fixtures/telemetry.json`                   | Fixture backend data                  |
+| `--jaeger-url`     | `JAEGER_BASE_URL`        | `http://localhost:16686`                      | Jaeger API URL                        |
+| `--devtools-url`   | `DEVTOOLS_BASE_URL`      | `http://localhost:4318`                       | autotel-devtools URL                  |
+| `--tempo-url`      | `TEMPO_BASE_URL`         | `http://localhost:3200`                       | Tempo URL                             |
+| `--prometheus-url` | `PROMETHEUS_BASE_URL`    | `http://localhost:9090`                       | Prometheus URL                        |
+| `--loki-url`       | `LOKI_BASE_URL`          | `http://localhost:3100`                       | Loki URL                              |
+| `--datadog-site`   | `DD_SITE`                | `datadoghq.com`                               | Datadog region                        |
+
+Credentials have no flag form. `argv` is readable by any process that can list
+the process table, so `LOGFIRE_READ_TOKEN`, `DD_API_KEY`, `DD_APP_KEY` and
+`SIGNOZ_API_KEY` come from the environment only. Passing one as a flag is an
+error that names the variable to set instead.
+
+An unrecognised flag is reported on stderr and ignored, not treated as an error:
+this binary read no `argv` at all until recently, and client configs in the wild
+carry flags it never defined.
+
+### Embedding
+
+`createApp()` reads no `argv` of its own, so a host CLI's flags cannot collide
+with these:
+
+```ts
+import { createApp } from 'autotel-mcp';
+
+const app = await createApp(); // environment only
+// await createApp({ argv: process.argv.slice(2) })  // opt into flags
+// await createApp({ config })                       // already resolved
+
+await app.start();
+app.createServer(); // a server instance; see below
+```
+
+`app.createServer` is a factory, not an instance. Protocol `2026-07-28` removed
+the `initialize` handshake and the session header, so a server holds nothing
+between requests: the HTTP entry builds one per request, stdio builds one per
+connection, and the same definition of the same tools serves both.
 
 ### HTTP mode
 
-Run as a standalone HTTP server (for remote clients or environments without stdio):
+Run as a standalone Streamable HTTP server (for remote clients or environments
+without stdio):
 
 ```bash
 npx autotel-mcp --transport http --port 3000
 ```
+
+The endpoint validates the `Origin` and `Host` headers against localhost, which
+the spec requires of any local server: binding to `127.0.0.1` is not on its own
+a defence, because a page on any origin can post to it.
 
 Then configure your MCP client with:
 
@@ -307,9 +351,24 @@ Then configure your MCP client with:
 }
 ```
 
+## Protocol
+
+Speaks MCP `2026-07-28` — no `initialize` handshake, no session header,
+`server/discover` for capability discovery, and cacheable list results. 2025-era
+clients are served from the same tool definitions through the SDK's stateless
+legacy path, so existing MCP clients keep working unchanged.
+
+The HTTP+SSE transport is gone. It has been deprecated since `2025-03-26` and is
+scheduled for removal; `--transport http` is Streamable HTTP, which serves both
+eras from one endpoint.
+
+Every tool here reads telemetry and nothing else, and is registered with
+`readOnlyHint` / `idempotentHint` annotations to say so — a client that honours
+them can run an investigation without stopping to ask about each query.
+
 ## Tools
 
-33 tools organized by investigation workflow.
+41 tools organized by investigation workflow.
 
 <details>
 <summary><b>Discovery (5)</b></summary>

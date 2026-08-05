@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
 import { detectAnomalies } from '../modules/anomaly';
 import { findRootCause } from '../modules/correlator';
-import { respondJSON } from './shared';
+import { respondJSON, READ_ONLY } from './shared';
 
 export function registerCorrelationTools(
   server: McpServer,
@@ -14,6 +14,7 @@ export function registerCorrelationTools(
     {
       description:
         'Given a trace ID, return the trace + metrics from involved services + correlated logs. One call for the full picture.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         traceId: z.string().min(1),
       }),
@@ -29,6 +30,7 @@ export function registerCorrelationTools(
     {
       description:
         'Identify when and why a service degraded. Combines anomaly detection with cross-signal correlation.',
+      annotations: READ_ONLY,
       inputSchema: z.object({
         service: z.string().min(1),
         lookbackMinutes: z.coerce

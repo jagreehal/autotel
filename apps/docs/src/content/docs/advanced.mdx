@@ -678,6 +678,13 @@ throws instead.
 | `RandomSampler`        | Chance, per process      | Single service, no cross-process trace to keep whole. |
 | `UserIdSampler`        | User identity            | Debugging named users or VIP accounts.                |
 
+:::caution
+Sampling in a collector as well? The rates multiply. Autotel's `production`
+preset at 10% behind a tail sampler at 25% stores 2.5% of your baseline traffic.
+[Pick one layer](/autotel/collector/#sample-in-one-place) and set the other to
+`sampling: 'development'`.
+:::
+
 ### Consistent Sampling
 
 `RandomSampler` rolls the dice in each process, so an API can keep a trace that
