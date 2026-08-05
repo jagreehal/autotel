@@ -23,6 +23,7 @@ import type { EventsConfig } from './events-config';
 import type { AutotelDevtoolsConfig } from './devtools';
 import type { ProcessHandlersConfig } from './process-handlers';
 import type { SpanFilterPredicate } from './filtering-span-processor';
+import type { Policy } from './policy';
 import type { SpanNameNormalizerConfig } from './span-name-normalizer';
 import type {
   AttributeRedactorConfig,
@@ -767,6 +768,24 @@ export interface AutotelConfig {
    * ```
    */
   spanFilter?: SpanFilterPredicate;
+
+  /**
+   * Telemetry Policies (experimental) — OTEP 4738.
+   *
+   * Portable, fail-open rules deciding what telemetry is kept and how it is
+   * transformed. Pass a path to a `.json` file or a directory of them (reloaded
+   * on change), or an inline array.
+   *
+   * Composes with `spanFilter`: a span must pass both.
+   *
+   * @example
+   * ```typescript
+   * init({ service: 'api', policies: './policies' })
+   * ```
+   *
+   * @see `autotel/policy` for the supported subset of policy stages.
+   */
+  policies?: string | Policy[];
 
   /**
    * Normalize span names to reduce cardinality from dynamic path segments.

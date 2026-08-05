@@ -80,6 +80,8 @@ export interface YamlConfig {
     slow_threshold_ms?: number;
   };
   autoInstrumentations?: string[] | Record<string, { enabled?: boolean }>;
+  /** Path to a policy `.json` file or a directory of them (OTEP 4738). */
+  policies?: string;
   debug?: boolean;
 }
 
@@ -196,6 +198,9 @@ function yamlToAutotelConfig(yaml: YamlConfig): Partial<AutotelConfig> {
   // Integrations
   if (yaml.autoInstrumentations)
     config.autoInstrumentations = yaml.autoInstrumentations;
+
+  // Telemetry Policies (OTEP 4738)
+  if (yaml.policies) config.policies = yaml.policies;
 
   // Debug mode
   if (yaml.debug !== undefined) config.debug = yaml.debug;

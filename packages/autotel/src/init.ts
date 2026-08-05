@@ -45,6 +45,12 @@ import {
 import { TailSamplingSpanProcessor } from './tail-sampling-processor';
 import { BaggageSpanProcessor } from './baggage-span-processor';
 import { FilteringSpanProcessor } from './filtering-span-processor';
+import {
+  PolicyLogRecordProcessor,
+  policySpanFilter,
+  setPolicies,
+  watchPolicyFile,
+} from './policy';
 import { SpanNameNormalizingProcessor } from './span-name-normalizer';
 import {
   AttributeRedactingProcessor,
@@ -171,8 +177,6 @@ function toOtelSampler(sampler: Sampler): OtelSampler {
   };
 }
 
-
-
 // Internal state
 let initialized = false;
 let locked = false;
@@ -251,7 +255,6 @@ function wrapLogger(
     error: wrap(base.error, 'error'),
   };
 }
-
 
 /**
  * Initialize autotel - Write Once, Observe Everywhere
@@ -592,6 +595,20 @@ export function init(cfg: AutotelConfig): void {
     );
   }
 
+  // Telemetry Policies (OTEP 4738) — load the policy set, then compose the
+  // policy span filter with any user-supplied one. Both must pass to keep.
+  if (mergedConfig.policies) {
+    if (typeof mergedConfig.policies === 'string') {
+      watchPolicyFile(mergedConfig.policies);
+    } else {
+      setPolicies(mergedConfig.policies);
+    }
+    const userSpanFilter = mergedConfig.spanFilter;
+    mergedConfig.spanFilter = userSpanFilter
+      ? (span) => userSpanFilter(span) && policySpanFilter(span)
+      : policySpanFilter;
+  }
+
   // Step 3: Wrap with FilteringSpanProcessor (outermost - executes first in onEnd)
   // Filter sees original (unredacted) attributes, so it can match on sensitive values
   if (mergedConfig.spanFilter && spanProcessors.length > 0) {
@@ -697,6 +714,15 @@ export function init(cfg: AutotelConfig): void {
     }
     logRecordProcessors.push(...posthogProcessors);
     logger.info({}, '[autotel] PostHog OTLP logs configured');
+  }
+
+  // Wrap every log processor with the policy applier so `log` policies apply on
+  // all export paths. Gated on `policies` being configured, not on the policy
+  // set being non-empty — the set is reloaded at runtime.
+  if (mergedConfig.policies && logRecordProcessors) {
+    logRecordProcessors = logRecordProcessors.map(
+      (processor) => new PolicyLogRecordProcessor(processor),
+    );
   }
 
   // Handle instrumentations: merge manual instrumentations with auto-instrumentations
@@ -876,7 +902,6 @@ export function init(cfg: AutotelConfig): void {
   }
 }
 
-
 /**
  * Check if autotel has been initialized
  */
@@ -932,7 +957,6 @@ export function warnIfNotInitialized(context: string): void {
 export function getDefaultSampler(): Sampler {
   return config?.sampler || samplingPresets.production();
 }
-
 
 /**
  * Get the string redactor configured via init({ attributeRedactor }).

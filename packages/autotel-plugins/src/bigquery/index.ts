@@ -19,6 +19,10 @@ import {
   SEMATTRS_GCP_BIGQUERY_QUERY_HASH,
   SEMATTRS_GCP_BIGQUERY_ROWS_AFFECTED,
   SEMATTRS_GCP_BIGQUERY_ROWS_RETURNED,
+  SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_PROCESSED,
+  SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_BILLED,
+  SEMATTRS_GCP_BIGQUERY_TOTAL_SLOT_MS,
+  SEMATTRS_GCP_BIGQUERY_CACHE_HIT,
 } from '../common/constants';
 import { runWithSpan, finalizeSpan } from 'autotel/trace-helpers';
 
@@ -256,6 +260,15 @@ function extractTableReference(obj: any): {
   projectId?: string;
 } {
   try {
+    // Plain API reference, e.g. a job configuration's destinationTable
+    if (obj.tableId) {
+      return {
+        projectId: obj.projectId,
+        datasetId: obj.datasetId,
+        tableId: obj.tableId,
+      };
+    }
+
     // Direct properties
     if (obj.dataset?.id || obj.parent?.id) {
       return {
@@ -547,6 +560,320 @@ function instrumentCreateQueryJob(BigQuery: any): void {
 
             finalizeSpan(span);
             return [job, response];
+          })
+          .catch((error: unknown) => {
+            finalizeSpan(
+              span,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            throw error;
+          });
+      } catch (error) {
+        finalizeSpan(
+          span,
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        throw error;
+      }
+    });
+  };
+}
+
+/**
+ * Instruments BigQuery.createQueryStream() method.
+ *
+ * A streamed query is the read path for result sets too large to buffer. The
+ * call itself returns immediately, so the span is held open and closed when the
+ * stream ends or errors — that duration is the read, which is the thing worth
+ * measuring.
+ *
+ * ponytail: a stream that is never drained leaves its span open until the
+ * process exits. Add a configurable idle timeout if that shows up in practice.
+ */
+function instrumentCreateQueryStream(BigQuery: any): void {
+  const originalCreateQueryStream = BigQuery.prototype.createQueryStream;
+  if (typeof originalCreateQueryStream !== 'function') {
+    return;
+  }
+
+  BigQuery.prototype.createQueryStream = function instrumentedCreateQueryStream(
+    this: any,
+    options: any,
+  ): any {
+    const config = getInstanceConfig(this);
+    const tracer = getInstanceTracer(this);
+
+    if (!config || !tracer) {
+      return originalCreateQueryStream.call(this, options);
+    }
+
+    const queryText = typeof options === 'string' ? options : options?.query;
+    const projectId = extractProjectId(this);
+    const location = extractLocation(this, options);
+    const summary = queryText ? createQuerySummary(queryText) : undefined;
+
+    const span = createSpan(tracer, 'QUERY_STREAM', summary, projectId, config);
+
+    if (location) {
+      span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_LOCATION, location);
+    }
+
+    if (summary) {
+      span.setAttribute(SEMATTRS_DB_QUERY_SUMMARY, summary);
+    }
+
+    if (config.captureQueryText !== 'never' && queryText) {
+      if (config.captureQueryText === 'raw') {
+        span.setAttribute(
+          SEMATTRS_DB_QUERY_TEXT,
+          truncateText(queryText, config.maxQueryTextLength || 1000),
+        );
+      } else if (config.captureQueryText === 'sanitized') {
+        span.setAttribute(
+          SEMATTRS_DB_QUERY_TEXT,
+          truncateText(
+            sanitizeQuery(queryText),
+            config.maxQueryTextLength || 1000,
+          ),
+        );
+      }
+    }
+
+    if (config.includeQueryHash !== false && queryText) {
+      span.setAttribute(SEMATTRS_GCP_BIGQUERY_QUERY_HASH, hashQuery(queryText));
+    }
+
+    let stream: any;
+    try {
+      stream = originalCreateQueryStream.call(this, options);
+    } catch (error) {
+      finalizeSpan(
+        span,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      throw error;
+    }
+
+    if (typeof stream?.on !== 'function') {
+      // Not an event emitter — nothing to wait for, so close immediately.
+      finalizeSpan(span);
+      return stream;
+    }
+
+    let rowsReturned = 0;
+    let settled = false;
+    const settle = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      span.setAttribute(SEMATTRS_GCP_BIGQUERY_ROWS_RETURNED, rowsReturned);
+      finalizeSpan(span, error);
+    };
+
+    stream.on('data', () => {
+      rowsReturned += 1;
+    });
+    stream.on('end', () => {
+      settle();
+    });
+    stream.on('error', (error: unknown) => {
+      settle(error instanceof Error ? error : new Error(String(error)));
+    });
+    stream.on('close', () => {
+      settle();
+    });
+
+    return stream;
+  };
+}
+
+/**
+ * The job configuration keys BigQuery recognises, in the order we probe them.
+ */
+const JOB_CONFIGURATION_KINDS = ['load', 'query', 'copy', 'extract'] as const;
+
+/**
+ * Identifies which kind of job a createJob() configuration describes.
+ */
+function extractJobKind(options: any): string {
+  const configuration = options?.configuration;
+  if (configuration) {
+    for (const kind of JOB_CONFIGURATION_KINDS) {
+      if (configuration[kind]) return kind.toUpperCase();
+    }
+  }
+  return 'JOB';
+}
+
+/**
+ * Instruments BigQuery.createJob() method.
+ *
+ * `createJob()` is the generic escape hatch used for load/extract/copy jobs that
+ * `Table.createLoadJob()` and friends do not cover — notably GCS-to-BigQuery
+ * loads built from an explicit configuration object.
+ */
+function instrumentCreateJob(BigQuery: any): void {
+  const originalCreateJob = BigQuery.prototype.createJob;
+  if (typeof originalCreateJob !== 'function') {
+    return;
+  }
+
+  BigQuery.prototype.createJob = function instrumentedCreateJob(
+    this: any,
+    options: any,
+  ): any {
+    const config = getInstanceConfig(this);
+    const tracer = getInstanceTracer(this);
+
+    if (!config || !tracer) {
+      return originalCreateJob.call(this, options);
+    }
+
+    const kind = extractJobKind(options);
+    const projectId = extractProjectId(this);
+    const location = extractLocation(this, options);
+
+    const span = createSpan(
+      tracer,
+      `${kind}_JOB`,
+      undefined,
+      projectId,
+      config,
+    );
+
+    if (location) {
+      span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_LOCATION, location);
+    }
+
+    const destination =
+      options?.configuration?.load?.destinationTable ||
+      options?.configuration?.query?.destinationTable ||
+      options?.configuration?.copy?.destinationTable;
+    if (destination) {
+      const dest = extractTableReference(destination);
+      if (dest.tableId) {
+        span.setAttribute(
+          SEMATTRS_GCP_BIGQUERY_DESTINATION_TABLE,
+          dest.datasetId ? `${dest.datasetId}.${dest.tableId}` : dest.tableId,
+        );
+      }
+    }
+
+    return runWithSpan(span, () => {
+      try {
+        return Promise.resolve(originalCreateJob.call(this, options))
+          .then(([job, response]: [any, any]) => {
+            const jobId = job?.id ?? response?.jobReference?.jobId;
+            if (jobId) {
+              span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_ID, jobId);
+            }
+
+            finalizeSpan(span);
+            return [job, response];
+          })
+          .catch((error: unknown) => {
+            finalizeSpan(
+              span,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            throw error;
+          });
+      } catch (error) {
+        finalizeSpan(
+          span,
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        throw error;
+      }
+    });
+  };
+}
+
+/**
+ * BigQuery returns int64 statistics as strings over the REST API.
+ */
+function toNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Records job cost statistics on a span from whatever job metadata is already
+ * present.
+ *
+ * Statistics only exist once a job has completed, and only for job kinds that
+ * report them. Nothing is fetched — a job whose metadata has not been populated
+ * simply contributes no cost attributes.
+ */
+function recordJobStatistics(span: Span, job: any): void {
+  const statistics = job?.metadata?.statistics;
+  if (!statistics) return;
+
+  const query = statistics.query ?? {};
+
+  const bytesProcessed = toNumber(
+    query.totalBytesProcessed ?? statistics.totalBytesProcessed,
+  );
+  if (bytesProcessed !== undefined) {
+    span.setAttribute(
+      SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_PROCESSED,
+      bytesProcessed,
+    );
+  }
+
+  const bytesBilled = toNumber(query.totalBytesBilled);
+  if (bytesBilled !== undefined) {
+    span.setAttribute(SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_BILLED, bytesBilled);
+  }
+
+  const slotMs = toNumber(query.totalSlotMs ?? statistics.totalSlotMs);
+  if (slotMs !== undefined) {
+    span.setAttribute(SEMATTRS_GCP_BIGQUERY_TOTAL_SLOT_MS, slotMs);
+  }
+
+  if (typeof query.cacheHit === 'boolean') {
+    span.setAttribute(SEMATTRS_GCP_BIGQUERY_CACHE_HIT, query.cacheHit);
+  }
+}
+
+/**
+ * Instruments Job.promise() method.
+ *
+ * `createJob()` returns as soon as BigQuery accepts the job; `promise()` is the
+ * wait for it to finish. Without this span a multi-minute load looks
+ * instantaneous — the job creation is traced and the work is not.
+ */
+function instrumentJobPromise(Job: any): void {
+  const originalPromise = Job.prototype.promise;
+  if (typeof originalPromise !== 'function') {
+    return;
+  }
+
+  Job.prototype.promise = function instrumentedPromise(this: any): any {
+    const config = getInstanceConfig(this);
+    const tracer = getInstanceTracer(this);
+
+    if (!config || !tracer) {
+      return originalPromise.call(this);
+    }
+
+    const projectId = extractProjectId(this.parent || this);
+    const span = createSpan(tracer, 'JOB_WAIT', undefined, projectId, config);
+
+    if (this.id) {
+      span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_ID, this.id);
+    }
+    if (this.location) {
+      span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_LOCATION, this.location);
+    }
+
+    return runWithSpan(span, () => {
+      try {
+        return Promise.resolve(originalPromise.call(this))
+          .then((result: any) => {
+            recordJobStatistics(span, this);
+            finalizeSpan(span);
+            return result;
           })
           .catch((error: unknown) => {
             finalizeSpan(
@@ -1042,6 +1369,7 @@ function instrumentJobGetQueryResults(Job: any): void {
                 rows.length,
               );
             }
+            recordJobStatistics(span, this);
             finalizeSpan(span);
             return [rows, nextQuery, apiResponse];
           })
@@ -1484,6 +1812,8 @@ export function instrumentBigQuery(
     // Instrument core query methods
     instrumentQueryMethod(BigQuery);
     instrumentCreateQueryJob(BigQuery);
+    instrumentCreateJob(BigQuery);
+    instrumentCreateQueryStream(BigQuery);
     instrumentBigQueryCreateDataset(BigQuery);
 
     // Instrument Dataset operations (always patch, check config at runtime)
@@ -1536,6 +1866,7 @@ export function instrumentBigQuery(
         const Job = tempJob.constructor;
 
         instrumentJobGetQueryResults(Job);
+        instrumentJobPromise(Job);
 
         // Clean up temporary reference
         tempJob.job = null;

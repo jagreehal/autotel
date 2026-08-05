@@ -1,0 +1,215 @@
+---
+title: Telemetry Policies
+description: Portable, fail-open rules describing what telemetry to keep and how to transform it. Autotel implements the applier side of OpenTelemetry OTEP 4738.
+---
+
+A telemetry policy is a small, self-contained rule saying what to keep and what
+to change. The same JSON runs in an SDK, in a Collector, or in any other
+conforming implementation, so a rule you write once is not tied to one
+component's config format.
+
+This replaces the usual pattern of a single growing pipeline config where line
+847 exists for a reason nobody remembers. Each policy stands alone, so it can be
+reviewed and reverted on its own.
+
+**Official specification:** [OTEP 4738 — Telemetry Policies](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/4738-telemetry-policy.md).
+Read that first — it is the source of truth for the schema, the matcher
+semantics, and the merge rules. This page only documents what Autotel
+implements.
+
+:::caution[Experimental]
+The OTEP is merged but its protobuf schema is explicitly marked subject to
+change, and the SDK integration story is still being specified by the
+OpenTelemetry project group. `autotel/policy` is exported separately from the
+main entry point so the shape can change without a major version bump.
+:::
+
+## Enabling policies
+
+Point `init()` at a `.json` file or a directory of them:
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'my-app',
+  policies: './policies',
+});
+```
+
+Or in `autotel.yaml`:
+
+```yaml
+service:
+  name: my-app
+
+policies: ./policies
+```
+
+The path is watched. Editing, adding, or removing a policy file takes effect
+without restarting the process — policies are expected to change outside the
+lifecycle of a single process.
+
+You can also pass policies inline, which skips the file watcher:
+
+```typescript
+init({
+  service: 'my-app',
+  policies: [
+    {
+      id: 'drop-health-checks',
+      trace: {
+        match: [{ trace_field: 'name', contains: '/health' }],
+        keep: { percentage: 0 },
+      },
+    },
+  ],
+});
+```
+
+## Examples
+
+**Drop health check spans**
+
+```json
+{
+  "id": "drop-health-checks",
+  "name": "Drop health check spans",
+  "trace": {
+    "match": [{ "trace_field": "name", "contains": "/health" }],
+    "keep": { "percentage": 0 }
+  }
+}
+```
+
+**Sample database spans at 5%**
+
+```json
+{
+  "id": "sample-database-spans",
+  "name": "Sample database spans at 5%",
+  "description": "Database spans are high volume and low signal once you have the aggregate.",
+  "trace": {
+    "match": [{ "span_attribute": ["db.system"], "exists": true }],
+    "keep": { "percentage": 5 }
+  }
+}
+```
+
+Sampling is deterministic on the trace ID, so every span in a trace makes the
+same decision — you get whole traces, not fragments.
+
+**Drop debug and trace logs**
+
+```json
+{
+  "id": "drop-debug-logs",
+  "log": {
+    "match": [{ "log_field": "severity_text", "regex": "^(DEBUG|TRACE)$" }],
+    "keep": "none"
+  }
+}
+```
+
+**Redact credit card numbers**
+
+```json
+{
+  "id": "redact-ccs",
+  "log": {
+    "match": [{ "log_attribute": ["ccn"], "exists": true }],
+    "transform": { "redact": [{ "log_attribute": ["ccn"] }] }
+  }
+}
+```
+
+## How matching works
+
+Every matcher in `match` must pass — they are ANDed. Each matcher sets exactly
+one field selector and exactly one match operator.
+
+**Field selectors:** `trace_field` (`name`, `trace_id`, `span_id`,
+`status_message`), `log_field` (`body`, `severity_text`, `severity_number`,
+`event_name`, `trace_id`, `span_id`), `span_attribute`, `log_attribute`,
+`resource_attribute`, `scope_attribute`, `span_kind`, `span_status`.
+
+**Match operators:** `exact`, `regex`, `exists`, `starts_with`, `ends_with`,
+`contains`. Add `negate: true` to invert, `case_insensitive: true` to fold case.
+
+Attribute paths accept a string or an array — `"ccn"` and `["ccn"]` are the same.
+
+When several policies match the same telemetry, the most restrictive `keep`
+wins. Transforms run in the spec's fixed order: `remove` → `redact` → `rename` →
+`add`.
+
+## What Autotel implements
+
+Policies compile onto the hooks Autotel already has — `spanFilter` and the log
+record processor chain. There is no separate pipeline to reason about, and a
+policy `spanFilter` composes with one you wrote yourself: a span must pass both.
+
+| Stage                                                               | Status                                       |
+| ------------------------------------------------------------------- | -------------------------------------------- |
+| `trace.keep.percentage`                                             | Supported — deterministic per-trace sampling |
+| `log.keep` (`"all"` / `"none"` / percentage)                        | Supported                                    |
+| `log.transform` (`remove`, `redact`, `rename`, `add`)               | Supported for log record attributes and body |
+| `metric` targets                                                    | Not supported                                |
+| `trace.keep.mode`, `sampling_precision`, `hash_seed`, `fail_closed` | Not supported                                |
+| `event_attribute`, `link_trace_id` matchers                         | Not supported                                |
+
+`trace.keep.mode` requires the consistent-probability sampling scheme from
+[OTEP 235 / tracestate probability sampling](https://opentelemetry.io/docs/specs/otel/trace/tracestate-probability-sampling/),
+which Autotel's samplers do not implement yet. A policy that sets it is rejected
+rather than silently approximated with a different algorithm.
+
+Transforms on `resource_attribute` and `scope_attribute` are no-ops: those
+objects are shared across every record in the process, so mutating them would
+leak into unrelated telemetry. Matching on them works normally.
+
+## Fail-open behaviour
+
+The spec requires that policy problems never cost you telemetry, and Autotel
+follows it:
+
+- An invalid or unsupported policy is skipped with a warning. The telemetry is
+  not.
+- A policy that fails to evaluate leaves the telemetry unmodified by that policy.
+- Policies with `"enabled": false` are treated as though they do not exist.
+- An unreadable or malformed policy file yields no policies from that file and
+  never throws.
+
+## Regular expressions
+
+The spec mandates [RE2](https://github.com/google/re2/wiki/Syntax) so that a
+policy behaves identically in every implementation. Node's built-in `RegExp`
+backtracks instead, which means two things worth knowing:
+
+- A pattern using RE2-only or backtracking-only syntax can behave differently
+  here than in a Collector.
+- A pathological pattern against an untrusted log body is a denial-of-service
+  risk.
+
+Autotel bounds the second problem by not regex-matching values longer than 4096
+characters (`MAX_MATCH_LENGTH`, exported from `autotel/policy`). Prefer
+`contains`, `starts_with`, or `exact` where they will do — they have no such
+limit and are faster.
+
+## Running policies elsewhere
+
+The point of policies is portability. The same files you point `init()` at can
+be loaded by a Collector or a gateway, so you can move a rule closer to or
+further from the source without rewriting it. Applying a policy in more than one
+place is safe — policies are idempotent by design.
+
+Where to apply a given policy is a cost and fidelity tradeoff: dropping in the
+SDK saves egress and Collector CPU, while dropping at a gateway keeps the data
+available for a central decision. Redaction is the exception — apply it as early
+as possible, in the SDK, so sensitive values never leave the process.
+
+## Further reading
+
+- [OTEP 4738 — Telemetry Policies](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/4738-telemetry-policy.md) — the specification
+- [OpenTelemetry specification repository](https://github.com/open-telemetry/opentelemetry-specification) — where the follow-up policy specification is being written
+- [Tracestate probability sampling](https://opentelemetry.io/docs/specs/otel/trace/tracestate-probability-sampling/) — the sampling modes referenced by `trace.keep.mode`
+- [Sampling](/autotel/advanced/#choosing-a-sampler) — Autotel's own samplers, which run before policies
+- [Attribute Redaction](/autotel/configuration/#attribute-redaction) — pattern-based redaction that applies without any policy file

@@ -64,6 +64,17 @@ export const SEMATTRS_GCP_BIGQUERY_ROWS_RETURNED =
 export const SEMATTRS_GCP_BIGQUERY_SCHEMA_FIELDS =
   'gcp.bigquery.schema.fields' as const;
 
+// Job cost statistics — only available once a job has completed. These are the
+// signals that answer "which query burned the bytes/slots".
+export const SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_PROCESSED =
+  'gcp.bigquery.job.total_bytes_processed' as const;
+export const SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_BILLED =
+  'gcp.bigquery.job.total_bytes_billed' as const;
+export const SEMATTRS_GCP_BIGQUERY_TOTAL_SLOT_MS =
+  'gcp.bigquery.job.total_slot_ms' as const;
+export const SEMATTRS_GCP_BIGQUERY_CACHE_HIT =
+  'gcp.bigquery.job.cache_hit' as const;
+
 // RabbitMQ-specific attributes (aligned with OTel messaging semantic conventions)
 export const SEMATTRS_MESSAGING_RABBITMQ_DESTINATION_ROUTING_KEY =
   'messaging.rabbitmq.destination.routing_key' as const;

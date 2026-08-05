@@ -48,9 +48,9 @@ The plugin uses **runtime patching** (not module hooks) to instrument BigQuery o
 
 When you call `instrumentBigQuery()`, the plugin wraps methods on:
 
-- `BigQuery` class (query, createQueryJob)
+- `BigQuery` class (query, createQueryJob, createJob, createQueryStream)
 - `Table` class (insert, getRows, load, copy, extract)
-- `Job` class (getQueryResults)
+- `Job` class (getQueryResults, promise)
 - `Dataset` class (create, delete - optional)
 
 Each wrapped method creates an OpenTelemetry span with:
@@ -61,6 +61,47 @@ Each wrapped method creates an OpenTelemetry span with:
 - Query text (configurable sanitization)
 - Row counts
 - Job IDs for async operations
+- Job cost statistics, where BigQuery has reported them
+
+### Jobs that outlive their creation
+
+`createJob()` returns as soon as BigQuery accepts the job — the work happens
+afterwards. `Job.promise()` is the wait, and it gets its own `JOB_WAIT` span, so
+a multi-minute GCS load shows its real duration rather than appearing
+instantaneous:
+
+```typescript
+const [job] = await bigquery.createJob({
+  configuration: { load: { sourceUris: ['gs://bucket/*.avro'] /* ... */ } },
+});
+await job.promise(); // JOB_WAIT span covers the actual load
+```
+
+### Streaming reads
+
+`createQueryStream()` is instrumented for result sets too large to buffer. The
+call returns immediately, so its `QUERY_STREAM` span stays open and closes when
+the stream emits `end`, `error`, or `close` — the span duration is the read, and
+`gcp.bigquery.rows.returned` records how much came back.
+
+A stream that is created and never drained leaves its span open until the
+process exits.
+
+### Cost attributes
+
+Job statistics only exist once a job has completed, so they are recorded on
+`JOB_WAIT` and `GET_QUERY_RESULTS` spans:
+
+| Attribute                                | Source                                 |
+| ---------------------------------------- | -------------------------------------- |
+| `gcp.bigquery.job.total_bytes_processed` | `statistics.query.totalBytesProcessed` |
+| `gcp.bigquery.job.total_bytes_billed`    | `statistics.query.totalBytesBilled`    |
+| `gcp.bigquery.job.total_slot_ms`         | `statistics.query.totalSlotMs`         |
+| `gcp.bigquery.job.cache_hit`             | `statistics.query.cacheHit`            |
+
+Nothing is fetched to populate these — the plugin reads whatever job metadata is
+already present, so there is no extra API round trip and no added latency. Jobs
+whose metadata has not been populated simply contribute no cost attributes.
 
 ## Configuration
 
@@ -200,6 +241,15 @@ This plugin follows OpenTelemetry semantic conventions for databases:
 | `gcp.bigquery.query.hash`        | `"abc123"`        | Query fingerprint for matching |
 | `gcp.bigquery.rows.affected`     | `100`             | Rows inserted/loaded           |
 | `gcp.bigquery.rows.returned`     | `50`              | Rows returned from query       |
+
+Cost statistics, recorded once a job completes:
+
+| Attribute                                | Example    | Description                      |
+| ---------------------------------------- | ---------- | -------------------------------- |
+| `gcp.bigquery.job.total_bytes_processed` | `1048576`  | Bytes the job scanned            |
+| `gcp.bigquery.job.total_bytes_billed`    | `10485760` | Bytes you are charged for        |
+| `gcp.bigquery.job.total_slot_ms`         | `4200`     | Slot milliseconds consumed       |
+| `gcp.bigquery.job.cache_hit`             | `false`    | Whether cached results were used |
 
 ### Span Names
 

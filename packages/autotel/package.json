@@ -110,6 +110,11 @@
       "import": "./dist/filtering-span-processor.js",
       "require": "./dist/filtering-span-processor.cjs"
     },
+    "./policy": {
+      "types": "./dist/policy.d.ts",
+      "import": "./dist/policy.js",
+      "require": "./dist/policy.cjs"
+    },
     "./span-name-normalizer": {
       "types": "./dist/span-name-normalizer.d.ts",
       "import": "./dist/span-name-normalizer.js",
