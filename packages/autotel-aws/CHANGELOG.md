@@ -1,5 +1,12 @@
 # autotel-aws
 
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+
 ## 1.0.4
 
 ### Patch Changes

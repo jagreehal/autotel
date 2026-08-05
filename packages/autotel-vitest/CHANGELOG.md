@@ -1,5 +1,12 @@
 # autotel-vitest
 
+## 0.4.46
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+
 ## 0.4.45
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.52
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+
 ## 0.4.51
 
 ### Patch Changes

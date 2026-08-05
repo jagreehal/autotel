@@ -1,5 +1,12 @@
 # autotel-devtools
 
+## 18.0.0
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+
 ## 17.1.1
 
 ### Patch Changes

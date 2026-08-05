@@ -1,5 +1,13 @@
 # autotel-tanstack
 
+## 1.13.49
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+  - autotel-adapters@2.0.5
+
 ## 1.13.48
 
 ### Patch Changes

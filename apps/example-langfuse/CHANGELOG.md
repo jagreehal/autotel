@@ -1,5 +1,13 @@
 # @jagreehal/example-langfuse
 
+## 0.0.10
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+  - autotel-genai@0.4.0
+
 ## 0.0.9
 
 ### Patch Changes

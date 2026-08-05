@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 35.0.0
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+
 ## 34.0.1
 
 ### Patch Changes

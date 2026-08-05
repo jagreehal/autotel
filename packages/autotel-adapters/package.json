@@ -1,6 +1,6 @@
 {
   "name": "autotel-adapters",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "description": "Framework adapters and composable DX helpers for autotel",
   "license": "Apache-2.0",
   "type": "module",
