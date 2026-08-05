@@ -1,5 +1,15 @@
 # @autotel/book-chapters
 
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+  - autotel-genai@0.4.0
+  - autotel-devtools@18.0.0
+  - autotel-subscribers@47.0.0
+
 ## 1.0.6
 
 ### Patch Changes

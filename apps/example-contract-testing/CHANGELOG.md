@@ -1,5 +1,13 @@
 # @jagreehal/example-contract-testing
 
+## 0.2.22
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+  - autotel-pact@13.0.0
+
 ## 0.2.21
 
 ### Patch Changes

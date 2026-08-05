@@ -1,5 +1,12 @@
 # autotel-mongoose
 
+## 18.0.0
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+
 ## 17.0.0
 
 ### Patch Changes

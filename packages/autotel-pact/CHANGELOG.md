@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 13.0.0
+
+### Patch Changes
+
+- Updated dependencies [fb6bee2]
+  - autotel@6.3.0
+
 ## 12.0.1
 
 ### Patch Changes
