@@ -39,7 +39,8 @@ Options:
   -p, --port <port>    Port to listen on (default: 4318, env: AUTOTEL_DEVTOOLS_PORT).
                        If the port is taken, the next free port is used and a warning is shown.
   -H, --host <host>    Host to bind to (default: 127.0.0.1, env: AUTOTEL_DEVTOOLS_HOST)
-  -t, --title <title>  Dashboard title (env: AUTOTEL_DEVTOOLS_TITLE)
+  -t, --title <title>  Dashboard title, shown in the banner and browser tab
+                       (env: AUTOTEL_DEVTOOLS_TITLE)
   Env limits:          AUTOTEL_MAX_TRACE_COUNT, AUTOTEL_MAX_LOG_COUNT, AUTOTEL_MAX_METRIC_COUNT
   -h, --help           Show this help message
   -v, --version        Show version number
@@ -161,13 +162,20 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
     host: options.host,
     verbose: true,
   });
-  attachDevtoolsRoutes(httpServer, wsServer, { loopbackOnly });
+  attachDevtoolsRoutes(httpServer, wsServer, {
+    loopbackOnly,
+    title: options.title,
+  });
 
   const listeners = listenLoopbackDualStack({
     primary: httpServer,
     port: options.port,
     host: options.host,
-    attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer, { loopbackOnly }),
+    attachSecondary: (s) =>
+      attachDevtoolsRoutes(s, wsServer, {
+        loopbackOnly,
+        title: options.title,
+      }),
   });
 
   const { addresses, warnings, port: boundPort } = await listeners.ready;

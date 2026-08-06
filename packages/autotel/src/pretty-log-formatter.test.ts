@@ -68,6 +68,65 @@ describe('formatPrettyLogLine', () => {
     expect(output).toContain('234ms');
   });
 
+  it('names the operation instead of an HTTP status for non-HTTP spans', () => {
+    const ctx: CanonicalLogLineEvent = {
+      span: {} as any,
+      level: 'info',
+      message: '[support_agent.run] Request completed',
+      event: {
+        timestamp: '2025-01-24T16:45:31.060Z',
+        'service.name': 'support-rag-agent',
+        duration_ms: 11_242,
+        status_code: 1, // OTel SpanStatusCode.OK, not an HTTP status
+        operation: 'support_agent.run',
+        traceId: 'abc123',
+        spanId: 'def456',
+        correlationId: 'abc1',
+      },
+    };
+
+    const header = formatPrettyLogLine(ctx).split('\n')[0]!;
+    expect(header).toContain('support_agent.run');
+    expect(header).toContain('11s');
+    expect(header).not.toMatch(/\s1\s/);
+  });
+
+  it('marks a failed span whose level was overridden below error', () => {
+    const ctx: CanonicalLogLineEvent = {
+      span: {} as any,
+      level: 'info', // set via autotel.log.level, despite the span failing
+      message: '[support_agent.run] Request completed',
+      event: {
+        timestamp: '2025-01-24T16:45:31.060Z',
+        'service.name': 'support-rag-agent',
+        duration_ms: 120,
+        status_code: 2, // OTel SpanStatusCode.ERROR
+        operation: 'support_agent.run',
+      },
+    };
+
+    const header = formatPrettyLogLine(ctx).split('\n')[0]!;
+    expect(header).toContain('ERROR');
+  });
+
+  it('does not double-mark a span already logged at error level', () => {
+    const ctx: CanonicalLogLineEvent = {
+      span: {} as any,
+      level: 'error',
+      message: '[support_agent.run] Request failed',
+      event: {
+        timestamp: '2025-01-24T16:45:31.060Z',
+        'service.name': 'support-rag-agent',
+        duration_ms: 120,
+        status_code: 2,
+        operation: 'support_agent.run',
+      },
+    };
+
+    const header = formatPrettyLogLine(ctx).split('\n')[0]!;
+    expect(header.match(/ERROR/g)).toHaveLength(1);
+  });
+
   it('includes context attributes as tree', () => {
     const ctx: CanonicalLogLineEvent = {
       span: {} as any,

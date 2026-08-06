@@ -179,7 +179,10 @@ export function formatPrettyLogLine(ctx: CanonicalLogLineEvent): string {
   const service = event['service.name'] || event.service || '';
   const method = event['http.request.method'] || '';
   const path = event['http.route'] || event['url.path'] || '';
-  const status = event['http.response.status_code'] || event.status_code || '';
+  // HTTP status only. `event.status_code` is the OTel SpanStatusCode
+  // (0 unset, 1 ok, 2 error), so falling back to it renders a non-HTTP span as
+  // `1` in the status slot and colours an errored span green.
+  const status = event['http.response.status_code'] || '';
   const durationMs = Number(event.duration_ms ?? 0);
   const duration = formatDuration(durationMs);
 
@@ -190,11 +193,22 @@ export function formatPrettyLogLine(ctx: CanonicalLogLineEvent): string {
   if (service) parts.push(c(DIM, `[${service}]`));
   if (method) parts.push(c(BOLD, String(method)));
   if (path) parts.push(String(path));
+  // Non-HTTP spans have no method or route to identify them, so name the
+  // operation instead. The level already carries whether it failed.
+  if (!method && !path && event.operation) {
+    parts.push(c(BOLD, String(event.operation)));
+  }
   if (status) {
     const statusNum = Number(status);
     const statusColor =
       statusNum >= 500 ? RED : statusNum >= 400 ? YELLOW : GREEN;
     parts.push(c(statusColor, String(status)));
+  }
+  // `autotel.log.level` overrides the level the span status would have implied,
+  // so an errored span can print as INFO. `status_code` is in SKIP_KEYS too, so
+  // without this marker the failure appears nowhere in the output.
+  if (Number(event.status_code) === 2 && level !== 'error') {
+    parts.push(c(RED, 'ERROR'));
   }
   parts.push(c(DIM, `in ${duration}`));
 

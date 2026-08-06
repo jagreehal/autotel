@@ -150,12 +150,9 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
     // Detect trigger type for semantic attributes
     const trigger = detectTriggerType(event as LambdaEvent);
 
-    // Core tracing logic. `markAsImmediate` pins the inner function to
-    // immediate-execution dispatch so downstream bundlers (esbuild in
-    // `aws-lambda-nodejs`, etc.) that minify the `ctx` parameter name
-    // don't make autotel mis-dispatch into factory mode — which would
-    // return a function instead of awaiting the inner result and break
-    // the Lambda response with "Wrong arguments".
+    // Core tracing logic. The inner function takes no parameters and reads
+    // context via getActiveTraceContext() — the form trace() wraps directly.
+    // The explicit `(ctx) => (...args) => result` factory form is withTracing().
     const executeWithTracing = async (): Promise<TResult> => {
       return autotelTrace(
         `lambda.${functionName}`,
@@ -309,8 +306,7 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
     // Detect trigger type
     const trigger = detectTriggerType(event as LambdaEvent);
 
-    // Core tracing logic — see wrapHandler above for why we mark the inner
-    // function as immediate-execution.
+    // Core tracing logic — see wrapHandler above for the inner-function form.
     const executeWithTracing = async (): Promise<TResult> => {
       return autotelTrace(
         `lambda.${functionName}`,

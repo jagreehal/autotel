@@ -76,6 +76,22 @@ describe('HTTP server', () => {
     expect(html).toContain('autotel-devtools');
   });
 
+  it('uses the configured title as the page title, escaped', async () => {
+    httpServer = createServer();
+    wsServer = new DevtoolsServer({ server: httpServer });
+    attachDevtoolsRoutes(httpServer, wsServer, {
+      title: 'Checkout <svc> & "co"',
+    });
+    await new Promise<void>((r) => httpServer.listen(0, r));
+    const port = httpServer.address().port;
+
+    const html = await (await fetch(`http://localhost:${port}/`)).text();
+    expect(html).toContain(
+      '<title>Checkout &lt;svc&gt; &amp; &quot;co&quot;</title>',
+    );
+    expect(html).not.toContain('<svc>');
+  });
+
   it('returns health check at GET /healthz', async () => {
     httpServer = createServer();
     wsServer = new DevtoolsServer({ server: httpServer });
