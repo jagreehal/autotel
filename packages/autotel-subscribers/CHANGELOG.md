@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 48.0.0
+
+### Patch Changes
+
+- Updated dependencies [09888cd]
+  - autotel@6.4.0
+
 ## 47.0.0
 
 ### Patch Changes

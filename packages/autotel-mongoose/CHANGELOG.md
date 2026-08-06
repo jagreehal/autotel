@@ -1,5 +1,12 @@
 # autotel-mongoose
 
+## 19.0.0
+
+### Patch Changes
+
+- Updated dependencies [09888cd]
+  - autotel@6.4.0
+
 ## 18.0.0
 
 ### Patch Changes
