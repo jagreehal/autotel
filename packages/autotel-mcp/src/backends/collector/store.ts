@@ -268,8 +268,6 @@ export class CollectorStore {
   }
 
   async listMetrics(query: MetricSearchQuery): Promise<MetricSearchResult> {
-    let sql =
-      'SELECT DISTINCT metric_name, unit, attributes FROM metric_points';
     const conditions: string[] = [];
     const args: (string | number)[] = [];
 
@@ -277,13 +275,21 @@ export class CollectorStore {
       conditions.push('metric_name = ?');
       args.push(query.metricName);
     }
-    if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ');
-    }
-    sql += ' LIMIT ?';
-    args.push(query.limit ?? 100);
+    const where =
+      conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
 
-    const result = await this.db.execute({ sql, args });
+    // Series are keyed by metric_name below, so the true total is the distinct
+    // name count under the same predicate — not the post-LIMIT row count.
+    const countResult = await this.db.execute({
+      sql: `SELECT COUNT(DISTINCT metric_name) as cnt FROM metric_points${where}`,
+      args,
+    });
+    const totalCount = Number(countResult.rows[0]?.cnt ?? 0);
+
+    const result = await this.db.execute({
+      sql: `SELECT DISTINCT metric_name, unit, attributes FROM metric_points${where} LIMIT ?`,
+      args: [...args, query.limit ?? 100],
+    });
 
     const seriesMap = new Map<string, MetricSeries>();
     for (const row of result.rows) {
@@ -310,8 +316,7 @@ export class CollectorStore {
       }));
     }
 
-    const items = [...seriesMap.values()];
-    return { items, totalCount: items.length };
+    return { items: [...seriesMap.values()], totalCount };
   }
 
   async getMetricSeries(
@@ -391,7 +396,6 @@ export class CollectorStore {
   }
 
   async searchLogs(query: LogSearchQuery): Promise<LogSearchResult> {
-    let sql = 'SELECT * FROM log_records';
     const conditions: string[] = [];
     const args: (string | number)[] = [];
 
@@ -423,14 +427,35 @@ export class CollectorStore {
       conditions.push('timestamp_unix_ms <= ?');
       args.push(query.endTimeUnixMs);
     }
-
-    if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ');
+    for (const [key, value] of Object.entries(query.attributes ?? {})) {
+      // Attributes live in a JSON text column, so match in SQL rather than
+      // post-filtering: LIMIT has to apply after the filter, not before it.
+      // json_each takes the key as a bound value, so no JSON-path quoting is
+      // involved — `$."a.b"` would need escaping SQLite's path parser does not
+      // actually honour. SQLite has no boolean type, so JSON true/false reads
+      // back as 1/0.
+      conditions.push(
+        'EXISTS (SELECT 1 FROM json_each(log_records.attributes) WHERE key = ? AND value = ?)',
+      );
+      args.push(key, typeof value === 'boolean' ? Number(value) : value);
     }
-    sql += ' ORDER BY timestamp_unix_ms DESC LIMIT ?';
-    args.push(query.limit ?? 100);
 
-    const result = await this.db.execute({ sql, args });
+    const where =
+      conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
+
+    // Count against the same predicate but without LIMIT. Reporting
+    // `items.length` makes totalCount min(total, limit), so a caller cannot
+    // tell one matching log from one of four hundred.
+    const countResult = await this.db.execute({
+      sql: `SELECT COUNT(*) as cnt FROM log_records${where}`,
+      args,
+    });
+    const totalCount = Number(countResult.rows[0]?.cnt ?? 0);
+
+    const result = await this.db.execute({
+      sql: `SELECT * FROM log_records${where} ORDER BY timestamp_unix_ms DESC LIMIT ?`,
+      args: [...args, query.limit ?? 100],
+    });
     const items: LogRecord[] = result.rows.map((r) => ({
       timestampUnixMs: Number(r.timestamp_unix_ms),
       severityText: r.severity_text as string,
@@ -441,7 +466,7 @@ export class CollectorStore {
       attributes: JSON.parse((r.attributes as string) || '{}'),
     }));
 
-    return { items, totalCount: items.length };
+    return { items, totalCount };
   }
 
   private rowToSpan(row: Record<string, unknown>): SpanRecord {

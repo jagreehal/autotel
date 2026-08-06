@@ -85,7 +85,22 @@ function findPackageRoot(): string {
 const DEVTOOLS_FAVICON_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0f172a"/><text x="32" y="41" text-anchor="middle" font-size="32">🛰️</text></svg>';
 
-const FULLPAGE_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>autotel-devtools</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;width:100%;overflow:hidden}</style></head><body><script src="/widget.js?mode=fullpage"></script></body></html>`;
+/**
+ * The title is user-supplied (`--title` / `AUTOTEL_DEVTOOLS_TITLE`) and lands
+ * inside `<title>`, where an unescaped `<` would close the element early.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function renderFullpageHtml(title = 'autotel-devtools'): string {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtml(title)}</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;width:100%;overflow:hidden}</style></head><body><script src="/widget.js?mode=fullpage"></script></body></html>`;
+}
 
 let cachedVersion: string | null = null;
 function getVersion(): string {
@@ -130,6 +145,9 @@ export interface DevtoolsRoutesOptions {
   /** Bound to a loopback host (the default). Enables the DNS-rebinding `Host`
    *  check on read endpoints; an explicit non-loopback bind opts out. */
   loopbackOnly?: boolean;
+  /** Browser tab title for the fullpage UI. Without it every dashboard reads
+   *  `autotel-devtools`, which is unhelpful with several running at once. */
+  title?: string;
 }
 
 export function attachDevtoolsRoutes(
@@ -138,6 +156,7 @@ export function attachDevtoolsRoutes(
   options: DevtoolsRoutesOptions = {},
 ): void {
   const loopbackOnly = options.loopbackOnly ?? true;
+  const fullpageHtml = renderFullpageHtml(options.title);
   httpServer.on(
     'request',
     async (req: IncomingMessage, res: ServerResponse) => {
@@ -172,9 +191,9 @@ export function attachDevtoolsRoutes(
       if (req.method === 'GET' && url === '/') {
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Length': Buffer.byteLength(FULLPAGE_HTML),
+          'Content-Length': Buffer.byteLength(fullpageHtml),
         });
-        res.end(FULLPAGE_HTML);
+        res.end(fullpageHtml);
         return;
       }
 

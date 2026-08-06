@@ -16,7 +16,14 @@ function matchesTagValue(
   return actual === expected;
 }
 
-function matchesAllTags(
+/**
+ * Every expected key must be present with an identical value. The canonical
+ * in-memory matcher for span tags and log attributes alike — both are
+ * `Record<string, TagValue>`, so backends that filter in JS reuse this rather
+ * than growing their own copy. Backends that push the filter down to their
+ * store (SQL, LogQL) necessarily express it in that dialect instead.
+ */
+export function matchesAllTags(
   tags: Record<string, TagValue>,
   expectedTags: Record<string, TagValue>,
 ): boolean {

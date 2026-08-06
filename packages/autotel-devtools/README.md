@@ -237,7 +237,7 @@ Options:
 
 - `--port, -p` - Port to listen on (default: 4318). If the port is taken, the receiver walks forward to the next free port and prints a warning.
 - `--host, -H` - Host to bind to (default: 127.0.0.1)
-- `--title, -t` - Dashboard title
+- `--title, -t` - Dashboard title, used for the startup banner and the browser tab (default: `autotel-devtools`). Useful when several dashboards are open at once.
 
 When bound to a loopback host, the receiver listens on **both** `127.0.0.1`
 and `::1`, so a client connecting via `localhost` reaches it regardless of how

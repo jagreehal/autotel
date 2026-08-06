@@ -22,6 +22,7 @@ import type {
 } from '../../types';
 import type { TelemetryBackend } from '../telemetry';
 import {
+  matchesAllTags,
   spanMatchesQuery,
   traceMatchesQuery,
 } from '../../modules/query-filters';
@@ -180,7 +181,7 @@ export class FixtureBackend implements TelemetryBackend {
         return false;
       if (
         query.attributes &&
-        !matchesAttributes(record.attributes ?? {}, query.attributes)
+        !matchesAllTags(record.attributes ?? {}, query.attributes)
       )
         return false;
       return true;
@@ -239,13 +240,4 @@ export class FixtureBackend implements TelemetryBackend {
     const fixture = await this.loadFixture();
     return fixture.logs ?? [];
   }
-}
-
-function matchesAttributes(
-  actual: Record<string, string | number | boolean>,
-  expected: Record<string, string | number | boolean>,
-): boolean {
-  return Object.entries(expected).every(
-    ([key, value]) => actual[key] === value,
-  );
 }

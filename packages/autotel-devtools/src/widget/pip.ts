@@ -49,7 +49,8 @@ export async function openPip(
 
   const win = await api.requestWindow({ width, height });
   pipWindow = win;
-  win.document.title = 'autotel devtools';
+  // Inherit the host page's title so a configured --title carries into PiP too.
+  win.document.title = host.ownerDocument.title || 'autotel devtools';
 
   const reset = win.document.createElement('style');
   reset.textContent =
