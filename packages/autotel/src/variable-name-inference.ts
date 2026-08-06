@@ -41,13 +41,35 @@ function captureStackTrace(): string {
 }
 
 /**
+ * Modules whose stack frames sit between the user's `trace()` call and this
+ * file. Add a module here when you add a file to that call path.
+ *
+ * ponytail: frames are identified by filename, so renaming one of these files
+ * silently degrades inference to no name rather than failing loudly. The robust
+ * upgrade is threading the public entry function (`trace`/`instrument`/
+ * `withTracing`) down to `Error.captureStackTrace` as a boundary — that needs a
+ * non-V8 fallback, which is more code than this costs. Do it if a rename bites.
+ *
+ * The extension is anchored so `functional.ts` does not also match
+ * `functional.test.ts`.
+ */
+const INTERNAL_FRAME_MODULES = [
+  'variable-name-inference',
+  'functional',
+  'functional-wrapper',
+];
+const INTERNAL_FRAME = new RegExp(
+  String.raw`(?:${INTERNAL_FRAME_MODULES.join('|')})\.(?:ts|js)`,
+);
+
+/**
  * Parses the stack trace to find where trace() was called
  *
  * Stack trace format (Node.js):
  *   at functionName (file:line:column)
  *   at file:line:column
  *
- * We skip frames until we find one that's NOT in functional.ts or this file.
+ * We skip frames until we find one that's not in the functional API internals.
  * We also need to skip one additional frame (the trace/span/instrument function itself)
  * to get to the actual user code.
  */
@@ -56,14 +78,7 @@ function parseCallLocation(stack: string): CallLocation | undefined {
   let skippedExternalFrame = false;
 
   for (const line of lines) {
-    // Skip if line contains this file or functional.ts (internal frames)
-    // Be specific about the filename to avoid matching test files
-    if (
-      line.includes('variable-name-inference.ts') ||
-      line.includes('variable-name-inference.js') ||
-      line.includes('functional.ts') ||
-      line.includes('functional.js')
-    ) {
+    if (INTERNAL_FRAME.test(line)) {
       continue;
     }
 

@@ -59,7 +59,8 @@ pnpm lint               # Lint package
 
 ## File Structure
 
-- `src/functional.ts` - Core `trace()`, `span()`, `instrument()` functions
+- `src/functional.ts` - Public façade for `trace()`, `span()`, `instrument()`, and context helpers
+- `src/functional-wrapper.ts` - Internal functional tracing lifecycle (option types, naming, sampling, metrics, finalization, flushing, and active context)
 - `src/init.ts` - OpenTelemetry SDK initialization
 - `src/config.ts` - Runtime configuration
 - `src/attributes/` - Type-safe attribute builders

@@ -1,6 +1,7 @@
 ---
 'autotel': minor
 'autotel-plugins': minor
+'autotel-mcp': minor
 ---
 
 Add experimental Telemetry Policy support, and close the BigQuery job, stream, and cost gaps.
