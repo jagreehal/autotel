@@ -17,12 +17,8 @@ on:
       - '.github/workflows/vitest-compatibility.yml'
 
 jobs:
-  vitest-matrix:
+  vitest-compat:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        vitest-version: ['2.1.9', '3.2.4', '4.0.18']
 
     steps:
       - uses: actions/checkout@v4
@@ -53,9 +49,9 @@ jobs:
           pnpm --filter autotel build
           pnpm --filter autotel-vitest build
 
-      - name: Run autotel-vitest integration tests on Vitest ${{ matrix.vitest-version }}
-        run: |
-          cd packages/autotel-vitest
-          pnpm dlx vitest@${{ matrix.vitest-version }} run --config integration/vitest.config.ts
+      # Runs against the workspace's own Vitest (^4.1.10), so the version under
+      # test follows package.json instead of drifting from a pinned list here.
+      - name: Run autotel-vitest integration tests
+        run: pnpm --filter autotel-vitest test:compat
         env:
           NODE_ENV: test
