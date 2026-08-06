@@ -38,14 +38,23 @@ export function getContextStorage(): AsyncLocalStorage<AsyncLocalBox<Context>> {
 }
 
 /**
- * Get the active context, checking our stored context first
- * This ensures baggage setters work with OpenTelemetry's propagation
+ * Get the active OTel context with the latest stored baggage overlaid.
+ * Span identity always comes from the active OTel scope.
  */
 export function getActiveContextWithBaggage(): Context {
-  // Check stored context first (from setters), then fall back to active context
-  // This ensures ctx.setBaggage() changes are visible to OpenTelemetry operations
+  const activeContext = context.active();
   const stored = contextStorage.getStore()?.value;
-  return stored ?? context.active();
+  if (!stored) return activeContext;
+
+  // The stored context exists to retain baggage updates, not span identity.
+  // A nested operation can outlive the scope in which the store was last
+  // updated, leaving its span in the stored context after OTel has restored
+  // the parent as active. Overlaying only the baggage keeps propagation state
+  // while ensuring callers always see the span from the current OTel scope.
+  const storedBaggage = propagation.getBaggage(stored);
+  return storedBaggage
+    ? propagation.setBaggage(activeContext, storedBaggage)
+    : activeContext;
 }
 
 /**
@@ -312,10 +321,9 @@ export function createTraceContext<
 
     setBaggage(key: string, value: string): string {
       // OpenTelemetry contexts are immutable, so we create a new context with updated baggage
-      // Check active context first (may have baggage from withBaggage), then stored context
-      const activeCtx = context.active();
-      const storedContext = contextStorage.getStore()?.value;
-      const currentContext = storedContext ?? activeCtx;
+      // Merge stored baggage into the active context so updates never replace
+      // the current span with a span retained by an ancestor's storage scope.
+      const currentContext = getActiveContextWithBaggage();
       const baggage =
         propagation.getBaggage(currentContext) ?? propagation.createBaggage();
       const updated = baggage.setEntry(key, { value });
@@ -327,10 +335,7 @@ export function createTraceContext<
     },
 
     deleteBaggage(key: string): void {
-      // Check active context first, then stored context
-      const activeCtx = context.active();
-      const storedContext = contextStorage.getStore()?.value;
-      const currentContext = storedContext ?? activeCtx;
+      const currentContext = getActiveContextWithBaggage();
       const baggage = propagation.getBaggage(currentContext);
       if (baggage) {
         const updated = baggage.removeEntry(key);
@@ -400,10 +405,7 @@ export function createTraceContext<
       namespace: string | undefined,
       value: Partial<T>,
     ) => {
-      // Check active context first, then stored context
-      const activeCtx = context.active();
-      const storedContext = contextStorage.getStore()?.value;
-      const currentContext = storedContext ?? activeCtx;
+      const currentContext = getActiveContextWithBaggage();
       let baggage =
         propagation.getBaggage(currentContext) ?? propagation.createBaggage();
 

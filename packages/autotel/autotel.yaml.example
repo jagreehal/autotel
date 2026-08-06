@@ -70,3 +70,7 @@ autoInstrumentations:
 # Debug mode - prints spans to console
 # Useful for development without a collector
 debug: false
+
+# Telemetry Policies (experimental) - OTEP 4738
+# Path to a policy .json file, or a directory of them. Reloaded on change.
+# policies: ./policies

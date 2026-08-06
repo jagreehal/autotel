@@ -1,9 +1,16 @@
+import { PassThrough } from 'node:stream';
 import type { BigQuery } from '@google-cloud/bigquery';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { instrumentBigQuery } from './index';
 import {
   SEMATTRS_DB_NAMESPACE,
   SEMATTRS_DB_QUERY_TEXT,
+  SEMATTRS_GCP_BIGQUERY_DESTINATION_TABLE,
+  SEMATTRS_GCP_BIGQUERY_JOB_ID,
+  SEMATTRS_GCP_BIGQUERY_CACHE_HIT,
+  SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_BILLED,
+  SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_PROCESSED,
+  SEMATTRS_GCP_BIGQUERY_TOTAL_SLOT_MS,
 } from '../common/constants';
 
 // The hand-rolled mocks below stand in for @google-cloud/bigquery's BigQuery
@@ -16,7 +23,13 @@ const asBigQuery = (mock?: MockBigQuery | null): BigQuery =>
 // Count spans and capture them for config tests
 const spanCount = vi.hoisted(() => ({ current: 0 }));
 const spans = vi.hoisted(
-  () => [] as { setAttribute: ReturnType<typeof vi.fn> }[],
+  () =>
+    [] as {
+      name: string;
+      attributes: Record<string, unknown>;
+      setAttribute: ReturnType<typeof vi.fn>;
+      end: ReturnType<typeof vi.fn>;
+    }[],
 );
 vi.mock('autotel', async (importOriginal) => {
   const actual = await importOriginal<typeof import('autotel')>();
@@ -24,10 +37,17 @@ vi.mock('autotel', async (importOriginal) => {
     ...actual,
     otelTrace: {
       getTracer: () => ({
-        startSpan: (..._args: unknown[]) => {
+        startSpan: (name: string, options?: { attributes?: object }) => {
           spanCount.current += 1;
+          const attributes: Record<string, unknown> = {
+            ...options?.attributes,
+          };
           const span = {
-            setAttribute: vi.fn(),
+            name,
+            attributes,
+            setAttribute: vi.fn((key: string, value: unknown) => {
+              attributes[key] = value;
+            }),
             setStatus: vi.fn(),
             recordException: vi.fn(),
             end: vi.fn(),
@@ -39,6 +59,13 @@ vi.mock('autotel', async (importOriginal) => {
     },
   };
 });
+
+/** Finds an emitted span by name, so assertions do not depend on span ordering. */
+const spanNamed = (name: string) => spans.find((span) => span.name === name);
+
+/** Finds an emitted span whose name starts with the given operation. */
+const spanStarting = (prefix: string) =>
+  spans.find((span) => span.name.startsWith(prefix));
 
 // Mock autotel/trace-helpers
 vi.mock('autotel/trace-helpers', () => ({
@@ -75,6 +102,11 @@ class MockJob {
   }
 
   async getQueryResults(_options?: any): Promise<ResultTuple> {
+    this.metadata = {
+      statistics: {
+        query: { totalBytesBilled: '10485760', cacheHit: true },
+      },
+    };
     return [
       [
         { id: 1, name: 'Alice' },
@@ -82,6 +114,23 @@ class MockJob {
       ],
       { totalRows: '2', schema: { fields: [] } },
     ];
+  }
+
+  // BigQuery populates job metadata as the job completes, and returns int64
+  // fields as strings over the REST API.
+  async promise(): Promise<[MockJob, unknown]> {
+    this.metadata = {
+      statistics: {
+        totalBytesProcessed: '1048576',
+        query: {
+          totalBytesProcessed: '1048576',
+          totalBytesBilled: '2097152',
+          totalSlotMs: '4200',
+          cacheHit: false,
+        },
+      },
+    };
+    return [this, this.metadata];
   }
 
   async cancel() {
@@ -225,6 +274,17 @@ class MockBigQuery {
       options?.location || this.location,
     );
     return [job, { jobReference: { jobId: job.id } }];
+  }
+
+  // The real createQueryStream returns a paginator ResourceStream, which is a
+  // Node object-mode stream.
+  createQueryStream(_options: any): PassThrough {
+    return new PassThrough({ objectMode: true });
+  }
+
+  async createJob(options: any): Promise<JobTuple> {
+    const job = new MockJob('generic-job-789', this, this.location);
+    return [job, { jobReference: { jobId: job.id }, ...options }];
   }
 
   async createDataset(
@@ -592,6 +652,8 @@ describe('Job.getQueryResults instrumentation', () => {
     const nextQuery = { pageToken: 'token-xyz' };
     const apiResponse = { totalRows: '500', jobComplete: true };
 
+    // Restored below: leaving this patched leaks into every later test.
+    const originalGetQueryResults = MockJob.prototype.getQueryResults;
     MockJob.prototype.getQueryResults = async function () {
       return [rows, nextQuery, apiResponse];
     };
@@ -608,6 +670,8 @@ describe('Job.getQueryResults instrumentation', () => {
     expect(result[0]).toEqual(rows);
     expect(result[1]).toEqual(nextQuery);
     expect(result[2]).toEqual(apiResponse);
+
+    MockJob.prototype.getQueryResults = originalGetQueryResults;
   });
 });
 
@@ -918,5 +982,146 @@ describe('Streaming operations', () => {
     }
 
     expect(rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe('BigQuery.createJob instrumentation', () => {
+  beforeEach(() => {
+    spanCount.current = 0;
+    spans.length = 0;
+  });
+
+  it('should create a span for a generic load job', async () => {
+    const bigquery = new MockBigQuery({ projectId: 'test-project' });
+    instrumentBigQuery(asBigQuery(bigquery));
+
+    const [job] = await bigquery.createJob({
+      configuration: {
+        load: {
+          destinationTable: {
+            projectId: 'test-project',
+            datasetId: 'sales',
+            tableId: 'input',
+          },
+          sourceUris: ['gs://bucket/data.avro'],
+          sourceFormat: 'AVRO',
+        },
+      },
+    });
+
+    expect(job.id).toBe('generic-job-789');
+    expect(spans.length).toBe(1);
+    expect(spans[0]!.setAttribute).toHaveBeenCalledWith(
+      SEMATTRS_GCP_BIGQUERY_JOB_ID,
+      'generic-job-789',
+    );
+    expect(spans[0]!.setAttribute).toHaveBeenCalledWith(
+      SEMATTRS_GCP_BIGQUERY_DESTINATION_TABLE,
+      'sales.input',
+    );
+  });
+});
+
+describe('Job.promise instrumentation', () => {
+  beforeEach(() => {
+    spanCount.current = 0;
+    spans.length = 0;
+  });
+
+  it('should create a span covering the wait for job completion', async () => {
+    const bigquery = new MockBigQuery({ projectId: 'test-project' });
+    instrumentBigQuery(asBigQuery(bigquery));
+
+    const [job] = await bigquery.createJob({
+      configuration: { load: { sourceUris: ['gs://bucket/data.avro'] } },
+    });
+    await job.promise();
+
+    const waitSpan = spanNamed('JOB_WAIT');
+    expect(waitSpan).toBeDefined();
+    expect(waitSpan!.attributes[SEMATTRS_GCP_BIGQUERY_JOB_ID]).toBe(
+      'generic-job-789',
+    );
+    expect(waitSpan!.end).toHaveBeenCalled();
+  });
+});
+
+describe('job cost statistics', () => {
+  beforeEach(() => {
+    spanCount.current = 0;
+    spans.length = 0;
+  });
+
+  it('should record cost statistics as numbers once the job completes', async () => {
+    const bigquery = new MockBigQuery({ projectId: 'test-project' });
+    instrumentBigQuery(asBigQuery(bigquery));
+
+    const [job] = await bigquery.createJob({
+      configuration: { query: { query: 'SELECT 1' } },
+    });
+    await job.promise();
+
+    const waitSpan = spanNamed('JOB_WAIT');
+    expect(
+      waitSpan!.attributes[SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_PROCESSED],
+    ).toBe(1_048_576);
+    expect(waitSpan!.attributes[SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_BILLED]).toBe(
+      2_097_152,
+    );
+    expect(waitSpan!.attributes[SEMATTRS_GCP_BIGQUERY_TOTAL_SLOT_MS]).toBe(
+      4200,
+    );
+    expect(waitSpan!.attributes[SEMATTRS_GCP_BIGQUERY_CACHE_HIT]).toBe(false);
+  });
+});
+
+describe('BigQuery.createQueryStream instrumentation', () => {
+  beforeEach(() => {
+    spanCount.current = 0;
+    spans.length = 0;
+  });
+
+  it('should keep the span open until the stream ends', () => {
+    const bigquery = new MockBigQuery({ projectId: 'test-project' });
+    instrumentBigQuery(asBigQuery(bigquery));
+
+    const stream = bigquery.createQueryStream({
+      query: 'SELECT * FROM sales.input',
+    });
+
+    const streamSpan = spanStarting('QUERY_STREAM');
+    expect(streamSpan).toBeDefined();
+    expect(streamSpan!.end).not.toHaveBeenCalled();
+
+    stream.emit('end');
+    expect(streamSpan!.end).toHaveBeenCalled();
+  });
+
+  it('should close the span when the stream errors', () => {
+    const bigquery = new MockBigQuery({ projectId: 'test-project' });
+    instrumentBigQuery(asBigQuery(bigquery));
+
+    const stream = bigquery.createQueryStream({ query: 'SELECT 1' });
+    // A stream with no error listener would throw on emit.
+    stream.on('error', () => {});
+
+    const streamSpan = spanStarting('QUERY_STREAM');
+    stream.emit('error', new Error('stream blew up'));
+
+    expect(streamSpan!.end).toHaveBeenCalled();
+  });
+
+  it('should record cost statistics on the query results span', async () => {
+    const bigquery = new MockBigQuery({ projectId: 'test-project' });
+    instrumentBigQuery(asBigQuery(bigquery));
+
+    const [job] = await bigquery.createQueryJob({ query: 'SELECT 1' });
+    await job.getQueryResults();
+
+    const resultsSpan = spanStarting('GET_QUERY_RESULTS');
+    expect(
+      resultsSpan!.attributes[SEMATTRS_GCP_BIGQUERY_TOTAL_BYTES_BILLED],
+    ).toBe(10_485_760);
+    expect(resultsSpan!.attributes[SEMATTRS_GCP_BIGQUERY_CACHE_HIT]).toBe(true);
   });
 });

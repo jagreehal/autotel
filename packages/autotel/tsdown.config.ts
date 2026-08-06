@@ -25,6 +25,7 @@ export default defineConfig({
     config: 'src/config.ts',
     'tail-sampling-processor': 'src/tail-sampling-processor.ts',
     'filtering-span-processor': 'src/filtering-span-processor.ts',
+    policy: 'src/policy.ts',
     'span-name-normalizer': 'src/span-name-normalizer.ts',
     'attribute-redacting-processor': 'src/attribute-redacting-processor.ts',
     functional: 'src/functional.ts',

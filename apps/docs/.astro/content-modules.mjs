@@ -43,6 +43,7 @@ export default new Map([
 ["src/content/docs/introduction.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fintroduction.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/local-stacks.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Flocal-stacks.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/migration.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fmigration.mdx&astroContentModuleFlag=true")],
+["src/content/docs/policies.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fpolicies.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/quick-start.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fquick-start.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/testing/playwright.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftesting%2Fplaywright.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/testing/vitest.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftesting%2Fvitest.mdx&astroContentModuleFlag=true")],

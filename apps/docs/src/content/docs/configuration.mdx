@@ -192,6 +192,26 @@ init({
 
 **Built-in patterns:** `email`, `phone`, `creditCard`, `ipv4`, `jwt`, `bearer`, `iban`
 
+For redaction driven by portable rule files rather than presets, see
+[Telemetry Policies](/autotel/policies/).
+
+## Telemetry Policies
+
+Portable, fail-open rules describing what telemetry to keep and how to transform
+it, following [OTEP 4738](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/4738-telemetry-policy.md).
+Point `init()` at a `.json` file or a directory of them:
+
+```typescript
+init({
+  service: 'my-app',
+  policies: './policies',
+});
+```
+
+The path is watched, so policies can change without restarting the process. See
+[Telemetry Policies](/autotel/policies/) for the supported subset of the
+specification.
+
 ## YAML Configuration
 
 Create an `autotel.yaml` file in your project root:
@@ -227,6 +247,9 @@ autoInstrumentations:
   - express
   - http
   - pino
+
+# Telemetry Policies: a .json file or a directory of them, watched for changes
+# policies: ./policies
 
 debug: false
 ```
