@@ -1,5 +1,13 @@
 # @jagreehal/example-vitest
 
+## 1.0.54
+
+### Patch Changes
+
+- Updated dependencies [b37813b]
+  - autotel@6.4.1
+  - autotel-vitest@0.4.48
+
 ## 1.0.53
 
 ### Patch Changes

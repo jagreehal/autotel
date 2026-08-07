@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 48.0.1
+
+### Patch Changes
+
+- Updated dependencies [b37813b]
+  - autotel@6.4.1
+
 ## 48.0.0
 
 ### Patch Changes
