@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 14.0.1
+
+### Patch Changes
+
+- Updated dependencies [b37813b]
+  - autotel@6.4.1
+
 ## 14.0.0
 
 ### Patch Changes
