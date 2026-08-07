@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+  # Recovery hatch. A missed push webhook (an Actions incident, a throttled
+  # event) leaves changesets stranded: main carries a changeset, no run exists
+  # to consume it, and GitHub does not replay the event. Without this the only
+  # way back is an empty commit. The `release` environment still gates the
+  # publish, so this grants no ability a push does not already have.
+  workflow_dispatch:
 
 # Default-deny: the workflow itself gets no write scopes.
 # Only the publish job below is granted the tokens it needs.
