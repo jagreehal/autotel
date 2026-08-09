@@ -542,6 +542,60 @@ describe('init() customization', () => {
     expect(options.spanProcessors).toEqual([customProcessor]);
   });
 
+  it('adds spanEnrichers to the destination pipeline instead of replacing it', async () => {
+    // The distinction that matters: `spanProcessors` takes over the pipeline,
+    // so a processor that only decorates spans would silently switch off every
+    // configured destination. Enrichers compose with them, and run first so the
+    // exporters see the decorated span.
+    const { init, sdkInstances } = await loadInitWithMocks();
+    const enricher = mock<SpanProcessor>();
+    enricher.shutdown.mockResolvedValue();
+    enricher.forceFlush.mockResolvedValue();
+
+    init({
+      service: 'enriched',
+      endpoint: 'http://localhost:4318',
+      spanEnrichers: [enricher],
+    });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    const processors = options.spanProcessors as SpanProcessor[];
+    expect(processors[0]).toBe(enricher);
+    expect(processors.length).toBeGreaterThan(1);
+  });
+
+  it('keeps spanEnrichers outside the redaction wrapper', async () => {
+    // AttributeRedactingProcessor hands its wrapped processor a proxy whose
+    // `attributes` is a private redacted copy. An enricher wrapped by it would
+    // decorate that copy while every exporter received its own copy taken from
+    // the original span, so the enrichment would reach no destination, and only
+    // when redaction happened to be configured.
+    const { init, sdkInstances } = await loadInitWithMocks();
+    const enricher = mock<SpanProcessor>();
+    enricher.shutdown.mockResolvedValue();
+    enricher.forceFlush.mockResolvedValue();
+
+    init({
+      service: 'enriched-redacted',
+      endpoint: 'http://localhost:4318',
+      attributeRedactor: { patterns: [/password/] },
+      spanEnrichers: [enricher],
+    });
+
+    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    const processors = options.spanProcessors as SpanProcessor[];
+    // Identity, not just position: the enricher reaches the SDK unwrapped, so
+    // it mutates the real span. Compared by constructor name because
+    // `vi.resetModules()` gives `init` its own copy of the class.
+    expect(processors[0]).toBe(enricher);
+    expect(processors[0]?.constructor.name).not.toBe(
+      'AttributeRedactingProcessor',
+    );
+    // The exporting processors are still wrapped.
+    expect(processors.length).toBeGreaterThan(1);
+    expect(processors[1]?.constructor.name).toBe('AttributeRedactingProcessor');
+  });
+
   it('supports singular spanProcessor alias', async () => {
     const { init, sdkInstances } = await loadInitWithMocks();
     const customProcessor = mock<SpanProcessor>();

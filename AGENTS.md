@@ -58,7 +58,8 @@ autotel/
 │   ├── autotel-tanstack/      # TanStack Start
 │   ├── autotel-hono/         # Hono middleware
 │   ├── autotel-mcp-instrumentation/          # MCP instrumentation
-│   ├── autotel-genai/         # GenAI/LLM: traceGenAI, cost, metrics, events, ai-sdk, agent governance (autotel-genai/agent)
+│   ├── autotel-genai/         # GenAI/LLM: traceGenAI, cost, metrics, events, ai-sdk, mastra, agent governance (autotel-genai/agent)
+│   ├── autotel-langfuse/      # Langfuse: langfuseCompatibility() enricher, langfuseScores(), langfuseMedia()
 │   ├── autotel-subscribers/   # Event subscribers (PostHog, etc.)
 │   ├── autotel-web/           # Browser SDK: traceparent + W3C baggage propagation (setBaggage)
 │   └── ...

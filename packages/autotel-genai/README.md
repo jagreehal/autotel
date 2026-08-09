@@ -364,6 +364,7 @@ call exactly once.
 import {
   createGenAiObserver,
   createLangChainObserver, // LangChain / LangGraph callback handler
+  createMastraObserver, // Mastra ObservabilityExporter
   observeAiSdkResult, // Vercel AI SDK result walker
 } from 'autotel-genai/observer';
 
@@ -371,6 +372,19 @@ const observe = createGenAiObserver();
 
 // LangChain / LangGraph — one handler, runId/parentRunId → span tree:
 await graph.invoke(input, { callbacks: [createLangChainObserver(observe)] });
+
+// Mastra — one exporter on the observability pipeline:
+new Mastra({
+  agents,
+  observability: new Observability({
+    configs: {
+      autotel: {
+        serviceName: 'support-agent',
+        exporters: [createMastraObserver(observe)],
+      },
+    },
+  }),
+});
 
 // Vercel AI SDK — walk a generateText/streamText result:
 observeAiSdkResult(observe, await generateText({ model, prompt }), {
@@ -381,6 +395,22 @@ observeAiSdkResult(observe, await generateText({ model, prompt }), {
 ```
 
 See `apps/example-langchain-observer` for a runnable LangGraph + Ollama demo.
+
+Mastra maps `agent_run` → `invoke_agent`, `model_generation` → `chat`,
+`rag_embedding` → `embeddings`, every tool-call type → `execute_tool`, and
+`workflow_run`/`workflow_step` → `invoke_workflow`. Plumbing (model steps and
+chunks, processors, scorers, mappings) is dropped and its children reparent to
+the nearest kept ancestor. Pass `skipSpan` to drop additional supported span
+types; unsupported plumbing always stays dropped. `model_step` /
+`model_inference` are dropped deliberately: their usage is already summed on the
+enclosing `model_generation`, so keeping both would double-count
+`gen_ai.usage.*`.
+
+`@mastra/otel-exporter` also emits canonical `gen_ai.*`. Prefer this adapter
+when you want Mastra's spans to be _autotel's_ spans — Mastra dispatches events
+synchronously, so they nest under the request span you already opened, reach
+every `init()` destination, pass through your `spanEnrichers` (including
+`langfuseCompatibility`), and get priced.
 
 ## Semantic conventions
 

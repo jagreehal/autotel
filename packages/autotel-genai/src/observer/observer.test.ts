@@ -1,8 +1,12 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   context as otelContext,
+  ROOT_CONTEXT,
   SpanKind,
   SpanStatusCode,
   trace as otelTrace,
+  type Context,
+  type ContextManager,
   type Tracer,
 } from '@opentelemetry/api';
 import {
@@ -15,6 +19,37 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createGenAiObserver } from './observer.js';
 import type { GenAiObserverEvent } from './types.js';
 
+/**
+ * The API's default context manager is a no-op, so `context.with()` would not
+ * propagate and every ambient-parent assertion below would pass vacuously.
+ * Twelve lines of AsyncLocalStorage is cheaper than a dependency on
+ * `@opentelemetry/context-async-hooks` for one test file.
+ */
+class TestContextManager implements ContextManager {
+  private readonly storage = new AsyncLocalStorage<Context>();
+  active(): Context {
+    return this.storage.getStore() ?? ROOT_CONTEXT;
+  }
+  with<A extends unknown[], F extends (...args: A) => ReturnType<F>>(
+    activeContext: Context,
+    fn: F,
+    thisArg?: ThisParameterType<F>,
+    ...args: A
+  ): ReturnType<F> {
+    return this.storage.run(activeContext, () => fn.call(thisArg, ...args));
+  }
+  bind<T>(_context: Context, target: T): T {
+    return target;
+  }
+  enable(): this {
+    return this;
+  }
+  disable(): this {
+    this.storage.disable();
+    return this;
+  }
+}
+
 let exporter: InMemorySpanExporter;
 let provider: BasicTracerProvider;
 let tracer: Tracer;
@@ -25,9 +60,11 @@ beforeEach(() => {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
   tracer = provider.getTracer('observer-test');
+  otelContext.setGlobalContextManager(new TestContextManager());
 });
 
 afterEach(async () => {
+  otelContext.disable();
   await provider.shutdown();
 });
 
@@ -100,10 +137,45 @@ describe('createGenAiObserver — hierarchy', () => {
     expect(parentIdOf(one('chat gpt-4o'))).toBe(appSpan.spanContext().spanId);
   });
 
-  it('roots a span when there is no tracked or resolved parent', () => {
+  it('roots a span when there is no tracked parent and nothing is active', () => {
     const observe = createGenAiObserver({ tracer });
     observe({ type: 'chat.start', id: 'c', request: { model: 'gpt-4o' } });
     observe({ type: 'chat.end', id: 'c' });
+    expect(parentIdOf(one('chat gpt-4o'))).toBeUndefined();
+  });
+
+  it('attaches an untracked span to the ambient active span', () => {
+    // A framework that emits its events from application code is running inside
+    // whatever span the caller opened. Detaching from it strands every model
+    // call in a trace of its own, which backends that group by trace id, such
+    // as Langfuse, then show as unrelated to the pipeline that made the call.
+    const appSpan = tracer.startSpan('app.pipeline');
+    const observe = createGenAiObserver({ tracer });
+
+    otelContext.with(otelTrace.setSpan(otelContext.active(), appSpan), () => {
+      observe({ type: 'chat.start', id: 'c', request: { model: 'gpt-4o' } });
+      observe({ type: 'chat.end', id: 'c' });
+    });
+    appSpan.end();
+
+    expect(parentIdOf(one('chat gpt-4o'))).toBe(appSpan.spanContext().spanId);
+  });
+
+  it('keeps a detached root when the resolver asks for one', () => {
+    const appSpan = tracer.startSpan('app.pipeline');
+    const observe = createGenAiObserver({
+      tracer,
+      resolveParentContext() {
+        return;
+      },
+    });
+
+    otelContext.with(otelTrace.setSpan(otelContext.active(), appSpan), () => {
+      observe({ type: 'chat.start', id: 'c', request: { model: 'gpt-4o' } });
+      observe({ type: 'chat.end', id: 'c' });
+    });
+    appSpan.end();
+
     expect(parentIdOf(one('chat gpt-4o'))).toBeUndefined();
   });
 

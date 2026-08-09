@@ -42,7 +42,26 @@ exactly aligned with them.
   sensitive content behind an `exportContent` privacy callback, and keeps token
   usage on leaf `chat` spans only so aggregate `agent`/`workflow` spans never
   double-count `gen_ai.usage.*`. Ships framework glue: `createLangChainObserver`
-  (LangChain/LangGraph callback handler), `observeAiSdkResult` (Vercel AI SDK
+  (LangChain/LangGraph callback handler), `createMastraObserver` (a Mastra
+  `ObservabilityExporter`; maps `agent_run`/`model_generation`/`rag_embedding`/
+  tool calls/`workflow_*`, drops `model_step`+`model_inference` so usage is not
+  double-counted, and reparents the children of dropped plumbing spans. Mastra
+  `skipSpan` only adds exclusions; unsupported plumbing always stays dropped
+  because the adapter has no canonical mapping for it. Mastra
+  dispatches synchronously, so spans nest under the ambient autotel context —
+  the reason to prefer it over `@mastra/otel-exporter`, which owns its own
+  endpoint and processor and therefore misses `spanEnrichers` and cost. Keep it
+  assignable to Mastra's real `ObservabilityExporter` / `TracingEvent`:
+  compile-check against `/Users/jreehal/dev/ai/rag-examples/node_modules/@mastra/core`.
+  `attributes` is deliberately `unknown` — Mastra's per-type attribute union has
+  no member in common with a flattened view, so typing it breaks assignability.
+  Its module-scope lookup tables must stay **inert object literals**: static
+  keys, literal values, `satisfies` for the types. A computed key, a
+  `new Set(...)`, or a `GEN_AI_TOOL_TYPE.X` value is a member expression or call
+  a bundler must assume can throw, so it survives tree-shaking and costs every
+  app that imports a sibling of this module ~200 bytes gzipped for a Mastra
+  adapter it never calls. Verified at 0 bytes over baseline),
+  `observeAiSdkResult` (Vercel AI SDK
   result walker, pull-based), and `autotelTelemetry` (Vercel AI SDK `Telemetry`
   integration for `registerTelemetry()`, push-based / live). All dependency-free
   / structurally typed. `autotelTelemetry()` is the keystone AI SDK path: it

@@ -28,6 +28,7 @@ import { trace as otelTrace } from '@opentelemetry/api';
 import { registerTelemetry } from 'ai';
 import { init } from 'autotel';
 import { autotelTelemetry } from 'autotel-genai/observer';
+import { langfuseCompatibility } from 'autotel-langfuse';
 
 /**
  * Langfuse reads credentials from the environment (see `.env.example`):
@@ -74,6 +75,18 @@ const destinations = [
 
 init({
   service: 'example-langfuse',
+  // The one Langfuse-shaped line in the app, and it is optional. Canonical
+  // `gen_ai.*` spans already arrive as generations, embeddings, agents and
+  // tools; this fills the fields Langfuse keeps in dedicated columns and reads
+  // from its own attributes: the trace name, tags, release, and the absolute
+  // "time to first token" it derives from streaming timing. `spanEnrichers`
+  // adds to the pipeline, so `destinations` below still exports.
+  spanEnrichers: [
+    langfuseCompatibility({
+      tags: ['example', 'ollama'],
+      release: 'example-langfuse',
+    }),
+  ],
   // Pretty, hierarchical console output = a zero-infra local view, so the demo
   // always shows the spans. `destinations` fans the same spans out to Langfuse
   // and/or devtools over OTLP — every consumer is just another entry here.

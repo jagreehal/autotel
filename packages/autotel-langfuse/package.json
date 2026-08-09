@@ -1,0 +1,59 @@
+{
+  "name": "autotel-langfuse",
+  "version": "0.1.0",
+  "description": "Send autotel's canonical gen_ai.* spans to Langfuse over plain OTLP, with no Langfuse SDK required",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "clean": "rimraf dist",
+    "test:contract": "LANGFUSE_CONTRACT=1 vitest run src/contract.test.ts"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1"
+  },
+  "peerDependencies": {
+    "@opentelemetry/sdk-trace-base": ">=2.0.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0",
+    "@types/node": "^26.1.2",
+    "tsdown": "^0.22.14",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "langfuse",
+    "llm",
+    "gen_ai",
+    "tracing",
+    "observability",
+    "autotel"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagreehal/autotel",
+    "directory": "packages/autotel-langfuse"
+  }
+}

@@ -75,6 +75,11 @@ bare-token `Authorization` format. Use `endpoint` only for self-hosted Logfire.
 
 ## Langfuse
 
+> [!TIP]
+> This preset covers the connection. For the fields Langfuse keeps in its own
+> columns (trace name, tags, prompt links, time to first token) and for
+> evaluation results as scores, see [Langfuse](/autotel/integrations/langfuse/).
+
 ```typescript
 import { init } from 'autotel';
 import { createLangfuseConfig } from 'autotel-backends/langfuse';

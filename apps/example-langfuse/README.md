@@ -17,10 +17,15 @@ hand-rolled span processors.**
 import { registerTelemetry } from 'ai';
 import { init } from 'autotel';
 import { autotelTelemetry } from 'autotel-genai/observer';
+import { langfuseCompatibility } from 'autotel-langfuse';
 import { trace } from '@opentelemetry/api';
 
 init({
   service: 'example-langfuse',
+  // Optional. Fills the fields Langfuse keeps in its own columns: trace name,
+  // tags, release, time to first token. `spanEnrichers` composes with
+  // `destinations`, where `spanProcessors` would replace them.
+  spanEnrichers: [langfuseCompatibility({ tags: ['production'] })],
   debug: 'pretty', // zero-infra local console view
   destinations: [
     // Langfuse — plain OTLP + Basic auth (what LangfuseSpanProcessor does inside)
@@ -83,16 +88,43 @@ them out.
 
 ## What it shows
 
-1. **`generateText`**: `invoke_agent › chat` with token usage + cost.
-2. **`propagateAttributes`**: the one Langfuse-aware line: wrap a call to attach
-   `traceName` / `userId` / `sessionId` / `tags` so the run is a named,
-   user-scoped trace in Langfuse. The model call itself is a stock autotel-genai
-   tool loop.
+1. **`generateText`**: `invoke_agent › chat` with token usage and cost.
+2. **A user- and session-scoped run**: an app span opened with autotel's
+   `withTracing`, tagged with `setUser` / `setSession`. Langfuse reads `user.id`
+   and `session.id` under those standard names, so this needs no Langfuse
+   package. The AI SDK's spans nest inside the app span, so the pipeline and the
+   model calls it made are one trace.
 3. **`streamText`**: `time_to_first_chunk` / `output_tokens_per_second` ride
-   along as generation metadata.
+   along, and `langfuseCompatibility()` turns the first of those into the
+   absolute timestamp Langfuse stores as time to first token.
 4. **`embed`**: a standalone `embeddings` span with token usage.
 
-Each appears identically in Langfuse and in the devtools GenAI view.
+## What Langfuse does with them
+
+Verified against `docker/langfuse.yml`, reading the rows back out of ClickHouse:
+
+```text
+name                       type        parent   trace_name             user_id    tags
+support-chat               SPAN        (root)   support-chat           user-123   ['example','ollama']
+invoke_agent agent         AGENT       child
+chat granite4.1:3b         GENERATION  child
+multiply                   TOOL        child
+embeddings embeddinggemma  EMBEDDING   (root)   embeddings…            ['example','ollama']
+```
+
+Langfuse decided the observation types itself, from `gen_ai.operation.name`.
+Model, token usage, input/output messages, and `deployment.environment.name` map
+the same way, with no configuration. The `langfuse.*` attributes exist only for
+the handful of fields Langfuse keeps in dedicated columns and no OpenTelemetry
+convention covers, and `langfuseCompatibility()` fills those:
+
+| Field                        | Where it comes from                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| `trace_name`                 | the root span's name, or the `traceName` option                                      |
+| `tags`, `release`, `version` | options                                                                              |
+| `completion_start_time`      | `gen_ai.response.time_to_first_chunk` plus the span's start time                     |
+| `user_id`, `session_id`      | autotel's `setUser` / `setSession`, no mapping needed                                |
+| `cost_details`               | `gen_ai.usage.cost`, emitted by autotel-genai beside its own `gen_ai.usage.cost.usd` |
 
 ## Variations
 
@@ -104,14 +136,10 @@ Each appears identically in Langfuse and in the devtools GenAI view.
 - **Add a real OTLP backend.** Append another entry to `destinations` (Grafana,
   Datadog, Honeycomb, Jaeger…). Same spans, more consumers.
 
-- **Official Langfuse integration.** This example uses autotel's native OTLP for
-  zero extra deps. For Langfuse's richer features. Media handling (base64 →
-  Langfuse media refs), masking, and a `gen_ai`-only export filter. Use the
-  official [`LangfuseSpanProcessor`](https://www.npmjs.com/package/@langfuse/otel)
-  in `spanProcessors` instead. For prompt-version linking
-  (`runtimeContext.langfusePrompt`), add the
-  [`@langfuse/vercel-ai-sdk`](https://www.npmjs.com/package/@langfuse/vercel-ai-sdk)
-  integration alongside `autotelTelemetry()` (`registerTelemetry` is variadic).
+- **Media, masking, and filtering.** Use `langfuseMedia()` to replace base64
+  data URIs with Langfuse media references before setting content attributes.
+  Use Autotel's `attributeRedactor` and `spanFilter` for masking and filtering;
+  both apply to the whole export pipeline, not only the Langfuse destination.
 
 ## Related
 

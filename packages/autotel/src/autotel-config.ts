@@ -29,7 +29,7 @@ import type {
   AttributeRedactorConfig,
   AttributeRedactorPreset,
 } from './attribute-redacting-processor';
-import type { CanonicalLogLineOptions } from './processors/canonical-log-line-processor';
+import type { CanonicalLogLinesConfig } from './canonical-log-lines-config';
 import type { AutotelProtocol, OtlpDestinationConfig } from './otlp-exporters';
 
 export interface AutotelConfig {
@@ -248,6 +248,25 @@ export interface AutotelConfig {
    * ```
    */
   spanProcessors?: SpanProcessor[];
+
+  /**
+   * Span processors that decorate spans on the way out, running before every
+   * exporting processor.
+   *
+   * Unlike {@link spanProcessors}, which replaces the pipeline autotel would
+   * have built, these are added to it. Use them for processors that enrich
+   * rather than export, so `destinations` keeps working:
+   *
+   * @example
+   * ```typescript
+   * init({
+   *   service: 'support-agent',
+   *   destinations: [{ endpoint: `${langfuseUrl}/api/public/otel`, headers }],
+   *   spanEnrichers: [langfuseCompatibility({ tags: ['production'] })],
+   * })
+   * ```
+   */
+  spanEnrichers?: SpanProcessor[];
 
   /**
    * Custom span processor for traces (single-item alias of spanProcessors)
@@ -918,91 +937,8 @@ export interface AutotelConfig {
     options?: Record<string, unknown>;
   };
 
-  /**
-   * Canonical log lines - automatically emit spans as wide events (canonical log lines)
-   *
-   * When enabled, each span (or root span only) is automatically emitted as a
-   * comprehensive log record with ALL span attributes. This implements the
-   * "canonical log line" pattern: one comprehensive event per request with all context.
-   *
-   * **Benefits:**
-   * - One log line per request with all context (wide event)
-   * - High-cardinality, high-dimensionality data for powerful queries
-   * - Automatic - no manual logging needed
-   * - Queryable as structured data instead of string search
-   *
-   * @example Basic usage (one canonical log line per request)
-   * ```typescript
-   * init({
-   *   service: 'checkout-api',
-   *   canonicalLogLines: {
-   *     enabled: true,
-   *     rootSpansOnly: true, // One canonical log line per request
-   *   },
-   * });
-   * ```
-   *
-   * @example With custom logger
-   * ```typescript
-   * import pino from 'pino';
-   * const logger = pino();
-   * init({
-   *   service: 'my-app',
-   *   logger,
-   *   canonicalLogLines: {
-   *     enabled: true,
-   *     logger, // Use Pino for canonical log lines
-   *     rootSpansOnly: true,
-   *   },
-   * });
-   * ```
-   *
-   * @example Custom message format
-   * ```typescript
-   * init({
-   *   service: 'my-app',
-   *   canonicalLogLines: {
-   *     enabled: true,
-   *     messageFormat: (span) => {
-   *       const status = span.status.code === 2 ? 'ERROR' : 'SUCCESS';
-   *       return `${span.name} [${status}]`;
-   *     },
-   *   },
-   * });
-   * ```
-   */
-  canonicalLogLines?: {
-    enabled: boolean;
-    /** Logger to use for emitting canonical log lines (defaults to OTel Logs API) */
-    logger?: Logger;
-    /** Only emit canonical log lines for root spans (default: false) */
-    rootSpansOnly?: boolean;
-    /** Minimum log level for canonical log lines (default: 'info') */
-    minLevel?: 'debug' | 'info' | 'warn' | 'error';
-    /** Custom message format (default: uses span name) */
-    messageFormat?: (
-      span: import('@opentelemetry/sdk-trace-base').ReadableSpan,
-    ) => string;
-    /** Whether to include resource attributes (default: true) */
-    includeResourceAttributes?: boolean;
-    /** Predicate to decide whether to emit (runs after event is built). */
-    shouldEmit?: CanonicalLogLineOptions['shouldEmit'];
-    /**
-     * Declarative tail sampling conditions (OR logic).
-     * Ignored when `shouldEmit` is provided.
-     * @example keep: [{ status: 500 }, { durationMs: 1000 }]
-     */
-    keep?: CanonicalLogLineOptions['keep'];
-    /** Callback invoked after emit for custom fan-out. */
-    drain?: CanonicalLogLineOptions['drain'];
-    /** Handler for drain failures. */
-    onDrainError?: CanonicalLogLineOptions['onDrainError'];
-    /**
-     * Pretty-print canonical log lines to console.
-     * Defaults to true when NODE_ENV is 'development'.
-     */
-    pretty?: boolean;
-  };
+  /** Emit completed spans as canonical wide-event logs. */
+  canonicalLogLines?: CanonicalLogLinesConfig;
 
   /**
    * Suppress console output while keeping OTel exporters running.

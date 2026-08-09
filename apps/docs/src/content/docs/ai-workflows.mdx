@@ -60,18 +60,18 @@ OpenLLMetry to auto-instrument LLM SDK calls you don't wrap yourself. Both emit
 
 The package splits into focused subpath exports, so you import only what you use:
 
-| Subpath                   | Provides                                                                                                                                                                                       |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `autotel-genai/trace`     | `traceGenAI()`, `recordGenAiResponse()`, `recordGenAiUsage()`                                                                                                                                  |
-| `autotel-genai/cost`      | `estimateLLMCost()`, `recordLLMCost()`, `MODEL_PRICING` (cache-read/write aware)                                                                                                               |
-| `autotel-genai/metrics`   | `genAiMetricViews()` to re-bucket the canonical histograms                                                                                                                                     |
-| `autotel-genai/events`    | opt-in content events (input/output gating), `inference.operation.details`, `evaluation.result`, `recordModelWarnings()`                                                                       |
-| `autotel-genai/guard`     | inline cost/token/loop kill-switch: `createGenAiBudget()`, `createGenAiGuard()`, `parseGuardRules()`                                                                                           |
-| `autotel-genai/streaming` | streaming performance: `createStreamTimer()`, `recordStreamTiming()` (TTFC, throughput, inter-chunk distribution)                                                                              |
-| `autotel-genai/observer`  | `autotelTelemetry()` for `registerTelemetry()`, `subscribeAiTelemetry()` for the `ai:telemetry` channel, plus `createGenAiObserver()`, `createLangChainObserver()`, and `observeAiSdkResult()` |
-| `autotel-genai/ai-sdk`    | legacy Vercel AI SDK `ai.*` to `gen_ai.*` mapping plus cost, and `autotelEnrich()` for `@ai-sdk/otel`                                                                                          |
-| `autotel-genai/agent`     | agent identity, delegation, policy, audit, privacy, non-repudiation                                                                                                                            |
-| `autotel-genai/semconv`   | `GEN_AI_*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()`                                                                                                                      |
+| Subpath                   | Provides                                                                                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `autotel-genai/trace`     | `traceGenAI()`, `recordGenAiResponse()`, `recordGenAiUsage()`                                                                                                                                                            |
+| `autotel-genai/cost`      | `estimateLLMCost()`, `recordLLMCost()`, `MODEL_PRICING` (cache-read/write aware)                                                                                                                                         |
+| `autotel-genai/metrics`   | `genAiMetricViews()` to re-bucket the canonical histograms                                                                                                                                                               |
+| `autotel-genai/events`    | opt-in content events (input/output gating), `inference.operation.details`, `evaluation.result`, `recordModelWarnings()`                                                                                                 |
+| `autotel-genai/guard`     | inline cost/token/loop kill-switch: `createGenAiBudget()`, `createGenAiGuard()`, `parseGuardRules()`                                                                                                                     |
+| `autotel-genai/streaming` | streaming performance: `createStreamTimer()`, `recordStreamTiming()` (TTFC, throughput, inter-chunk distribution)                                                                                                        |
+| `autotel-genai/observer`  | `autotelTelemetry()` for `registerTelemetry()`, `subscribeAiTelemetry()` for the `ai:telemetry` channel, plus `createGenAiObserver()`, `createLangChainObserver()`, `createMastraObserver()`, and `observeAiSdkResult()` |
+| `autotel-genai/ai-sdk`    | legacy Vercel AI SDK `ai.*` to `gen_ai.*` mapping plus cost, and `autotelEnrich()` for `@ai-sdk/otel`                                                                                                                    |
+| `autotel-genai/agent`     | agent identity, delegation, policy, audit, privacy, non-repudiation                                                                                                                                                      |
+| `autotel-genai/semconv`   | `GEN_AI_*` keys, `GEN_AI_OPERATION`, `GEN_AI_PROVIDER`, `genAiSpanName()`                                                                                                                                                |
 
 :::note[Key Insight]
 For **workflow orchestration** (the steps, agents, and business logic _around_
@@ -115,6 +115,7 @@ SDK result or another framework lifecycle stream:
 import {
   createGenAiObserver,
   createLangChainObserver,
+  createMastraObserver,
   observeAiSdkResult,
 } from 'autotel-genai/observer';
 
@@ -122,6 +123,19 @@ const observe = createGenAiObserver();
 
 // LangChain / LangGraph: one callback handler turns runId/parentRunId into the tree.
 await graph.invoke(input, { callbacks: [createLangChainObserver(observe)] });
+
+// Mastra: an exporter on its observability pipeline.
+new Mastra({
+  agents,
+  observability: new Observability({
+    configs: {
+      autotel: {
+        serviceName: 'support-agent',
+        exporters: [createMastraObserver(observe)],
+      },
+    },
+  }),
+});
 
 // Vercel AI SDK legacy/result-walker path: walk a finished generateText/streamText result.
 observeAiSdkResult(observe, await generateText({ model, prompt }), {
@@ -136,6 +150,25 @@ Prompts, tool arguments, and tool results stay off spans by default. Pass an
 
 The `example-langchain-observer` app runs a LangGraph agent on a local Ollama
 model and prints the captured tree, token counts, and tool arguments.
+
+### Mastra
+
+`createMastraObserver()` maps Mastra's agent runs, model generations, RAG
+embeddings, tool calls, and workflow steps onto the observer's events. Mastra
+plumbing — model steps and chunks, processors, scorers, mappings — is dropped
+and its children reparent to the nearest kept ancestor. Pass `skipSpan` to drop
+additional supported span types; unsupported plumbing always stays dropped.
+Usage lands on the `model_generation` span (`model_step` /
+`model_inference` are dropped precisely so `gen_ai.usage.*` is not counted
+twice), and cost is estimated from it.
+
+`@mastra/otel-exporter` also emits canonical `gen_ai.*`, so pointing it at an
+OTLP endpoint works. Use this adapter instead when you want Mastra's spans to be
+_autotel's_ spans: Mastra dispatches its events synchronously, so the agent run
+nests inside the request span you already opened, flows to every `init()`
+destination, passes through your `spanEnrichers` (including
+`langfuseCompatibility`), and gets priced — none of which a separate exporter
+with its own endpoint and its own span processor can do.
 
 ## When to Use OpenLLMetry
 
