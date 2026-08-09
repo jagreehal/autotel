@@ -110,6 +110,14 @@ export const GEN_AI = {
    * the `gen_ai.usage.*` prefix so it sits beside the spec usage attributes.
    */
   USAGE_COST_USD: 'gen_ai.usage.cost.usd',
+  /**
+   * The same number under the name the ecosystem converged on before the spec
+   * covered cost at all. OpenLLMetry writes it, and Langfuse, among others,
+   * reads it to populate its cost column. Emitted alongside
+   * {@link GEN_AI.USAGE_COST_USD} so a backend finds the cost under whichever
+   * name it knows, and neither is load-bearing for the other.
+   */
+  USAGE_COST: 'gen_ai.usage.cost',
 
   // --- Session accumulators (autotel extension — not part of the spec) ------
   // Running totals for an in-process agent run, accumulated by the guard /

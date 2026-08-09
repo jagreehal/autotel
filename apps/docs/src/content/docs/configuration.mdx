@@ -156,6 +156,31 @@ init({
 
 Useful for platforms like GCP Cloud Run or AWS Lambda where stdout is managed externally.
 
+## spanEnrichers
+
+Span processors that decorate spans on the way out. Unlike `spanProcessors`,
+which **replaces** the pipeline autotel builds from `destinations`, enrichers are
+**added** to it:
+
+```typescript
+init({
+  service: 'support-agent',
+  destinations: [{ endpoint: 'https://collector.example.com' }],
+  spanEnrichers: [langfuseCompatibility({ tags: ['production'] })],
+});
+```
+
+Use them for anything that adds attributes rather than exporting: mapping
+canonical attributes onto a backend's own names, stamping a deployment id,
+deriving one attribute from another. A processor passed as `spanProcessors`
+would take the pipeline over and silently switch off every destination above it.
+
+Enrichers run first, and outside the redaction, normalizer and filter wrappers.
+That ordering is deliberate: they decorate the real span, and
+[Attribute Redaction](#attribute-redaction) downstream then sees the attributes
+they added rather than missing an enricher that copied a sensitive value into a
+new key.
+
 ## Attribute Redaction
 
 Automatically redact PII and sensitive data from span attributes for compliance:

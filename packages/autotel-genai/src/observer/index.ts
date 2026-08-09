@@ -33,6 +33,13 @@ export type {
   LangChainObserverHandler,
   LangChainObserverOptions,
 } from './langchain.js';
+export { createMastraObserver } from './mastra.js';
+export type {
+  MastraExportedSpan,
+  MastraObserverExporter,
+  MastraObserverOptions,
+  MastraTracingEvent,
+} from './mastra.js';
 export type {
   AgentEndEvent,
   AgentStartEvent,

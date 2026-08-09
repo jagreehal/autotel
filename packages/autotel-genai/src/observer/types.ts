@@ -214,9 +214,13 @@ export interface GenAiObserverOptions {
   exportContent?: (event: GenAiObserverEvent) => GenAiObserverEvent | undefined;
   /**
    * Resolve an OpenTelemetry parent context for an event that has no tracked
-   * parent. Return a context to attach the otherwise-root span to an
-   * application-owned span (e.g. the incoming request), or `undefined` to keep
-   * it a root.
+   * parent. Return a context to attach the span to one you choose (e.g. the
+   * incoming request), or `undefined` to keep it a detached root.
+   *
+   * Without this option the span attaches to whatever context is already
+   * active, which is what puts a model call inside the span the caller opened
+   * around it. Provide it only when the ambient context is the wrong parent,
+   * such as an event stream delivered from a queue or a background worker.
    */
   resolveParentContext?: (event: GenAiObserverEvent) => Context | undefined;
   /**

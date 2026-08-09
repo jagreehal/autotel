@@ -82,13 +82,29 @@ export function createGenAiObserver(
     options.tracer ?? otelTrace.getTracer('autotel-genai/observer');
   const registry = new SpanRegistry();
 
-  /** Parent context: a tracked parent span, else the resolver, else root. */
+  /**
+   * Parent context: a tracked parent span, else the resolver, else whatever is
+   * already active.
+   *
+   * The ambient fallback is what keeps a model call inside the span the caller
+   * opened around it. A framework that emits its events from application code,
+   * as the AI SDK does, is running inside that span's context, and detaching
+   * from it strands every generation in a trace of its own. Backends that group
+   * strictly by trace id, Langfuse included, then show the pipeline and the
+   * model calls it made as unrelated traces.
+   *
+   * Pass `resolveParentContext: () => undefined` to opt back into detached
+   * roots for an event stream that arrives from a queue or a background worker,
+   * where the ambient context belongs to something unrelated.
+   */
   function parentContext(event: StartEvent): Context | undefined {
     const parentSpan = event.parentId
       ? registry.spanFor(event.parentId)
       : undefined;
     if (parentSpan) return otelTrace.setSpan(otelContext.active(), parentSpan);
-    return options.resolveParentContext?.(event);
+    if (options.resolveParentContext)
+      return options.resolveParentContext(event);
+    return otelContext.active();
   }
 
   /** Start a span, register it under its parent, and return it. */

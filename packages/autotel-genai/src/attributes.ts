@@ -155,6 +155,9 @@ export function genAiUsageAttributes(
     input.cacheCreationInputTokens,
   );
   set(attrs, GEN_AI.USAGE_COST_USD, input.costUsd);
+  // Same value, second name: backends split on which one they read, and a cost
+  // that only lands under the name yours does not know is a cost you cannot see.
+  set(attrs, GEN_AI.USAGE_COST, input.costUsd);
   return attrs;
 }
 

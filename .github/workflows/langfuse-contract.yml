@@ -1,0 +1,92 @@
+# The Langfuse anti-drift alarm.
+#
+# `autotel-langfuse` is a set of bets about names Langfuse owns: which
+# attributes it reads on ingest, which dimensions it exposes on read. Unit tests
+# cannot check a bet like that — they only prove we emit what we meant to. So
+# this runs the contract suite against a real Langfuse and fails when the names
+# move.
+#
+# Deliberately **not** part of `ci.yml`. It needs six containers and a couple of
+# minutes to boot them, and the suite is young: two flakes during development,
+# both bugs in the test rather than in Langfuse. Blocking every pull request on
+# it would spend that boot time on changes that cannot possibly affect the
+# mapping, and would teach people to re-run a red build rather than read it.
+# Nightly gives it mileage; promote it to a gate once the record earns it.
+name: Langfuse contract
+
+on:
+  schedule:
+    # Nightly, off the hour: shared runners are busiest on it.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    # On a pull request only when the mapping itself moved, which is the only
+    # change this suite can have an opinion about.
+    paths:
+      - 'packages/autotel-langfuse/**'
+      - 'packages/autotel-backends/src/langfuse.ts'
+      - 'docker/langfuse.yml'
+      - '.github/workflows/langfuse-contract.yml'
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install pnpm
+        run: corepack prepare pnpm@latest --activate
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start Langfuse
+        run: docker compose -f docker/langfuse.yml up -d --wait
+
+      # `--wait` returns when the containers are healthy, which is not the same
+      # as Langfuse having run its migrations and provisioned the project keys
+      # the suite authenticates with. Poll the endpoint that needs both.
+      - name: Wait for the project keys
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -sf -u pk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000001:sk-lf-0d5c0dc9-3b4f-4f3c-9d3a-000000000002 \
+              http://localhost:3000/api/public/projects >/dev/null; then
+              echo "Langfuse is ready"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Langfuse did not become ready in five minutes"
+          docker compose -f docker/langfuse.yml logs --tail 100 langfuse-web
+          exit 1
+
+      - name: Run the contract suite
+        run: pnpm --filter autotel-langfuse test:contract
+
+      # The logs are the only way to tell "Langfuse changed" from "the stack
+      # never came up", and they are gone once the job ends.
+      - name: Langfuse logs
+        if: failure()
+        run: docker compose -f docker/langfuse.yml logs --tail 200
+
+      - name: Stop Langfuse
+        if: always()
+        run: docker compose -f docker/langfuse.yml down -v

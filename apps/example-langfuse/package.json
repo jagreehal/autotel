@@ -3,18 +3,18 @@
   "version": "0.0.12",
   "private": true,
   "type": "module",
-  "description": "Instrument once with autotel-genai's canonical gen_ai.* spans and fan them out to Langfuse and autotel-devtools using autotel's native OTLP destinations — no extra OpenTelemetry libs.",
+  "description": "Instrument once with autotel-genai's canonical gen_ai.* spans and fan them out to Langfuse and autotel-devtools using autotel's native OTLP destinations \u2014 no extra OpenTelemetry libs.",
   "scripts": {
     "start": "tsx src/index.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@langfuse/tracing": "^5.9.1",
     "@opentelemetry/api": "^1.9.1",
     "ai": "7.0.41",
     "ai-sdk-ollama": "4.1.0",
     "autotel": "workspace:*",
     "autotel-genai": "workspace:*",
+    "autotel-langfuse": "workspace:*",
     "dotenv": "^17.4.2",
     "zod": "^4.4.3"
   },

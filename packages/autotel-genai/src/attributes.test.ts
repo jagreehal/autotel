@@ -67,9 +67,19 @@ describe('genAiUsageAttributes', () => {
       'gen_ai.usage.input_tokens': 100,
       'gen_ai.usage.output_tokens': 50,
       'gen_ai.usage.cache_read.input_tokens': 20,
+      // Cost goes out under both names in use. Backends split on which one they
+      // read (Langfuse takes `gen_ai.usage.cost`), and a cost that lands only
+      // under the name yours does not know is a cost you cannot see.
       'gen_ai.usage.cost.usd': 0.001,
+      'gen_ai.usage.cost': 0.001,
     });
     expect(Object.keys(attrs)).not.toContain('gen_ai.usage.total_tokens');
+  });
+
+  it('omits both cost attributes when the model has no pricing', () => {
+    const attrs = genAiUsageAttributes({ inputTokens: 10, outputTokens: 5 });
+    expect(Object.keys(attrs)).not.toContain('gen_ai.usage.cost');
+    expect(Object.keys(attrs)).not.toContain('gen_ai.usage.cost.usd');
   });
 });
 

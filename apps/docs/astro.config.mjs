@@ -88,6 +88,7 @@ export default defineConfig({
             { label: 'Mongoose', slug: 'integrations/mongoose' },
             { label: 'Grafana Loki', slug: 'integrations/loki' },
             { label: 'MCP', slug: 'integrations/mcp' },
+            { label: 'Langfuse', slug: 'integrations/langfuse' },
             { label: 'Sentry', slug: 'integrations/sentry' },
             { label: 'Plugins', slug: 'integrations/plugins' },
             { label: 'Backends', slug: 'integrations/backends' },

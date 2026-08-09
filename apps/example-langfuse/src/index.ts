@@ -3,9 +3,9 @@
  *
  * `./instrumentation` wires autotel's `init()` pipeline so every `gen_ai.*` span
  * autotel-genai produces is exported to the console *and* to Langfuse. The
- * business code below never imports anything Langfuse-specific except
- * `propagateAttributes` (which only adds trace grouping metadata) — the spans
- * themselves come straight from `autotel-genai`.
+ * business code below imports nothing from Langfuse at all: the spans come from
+ * `autotel-genai`, and the few fields Langfuse keeps in its own columns are
+ * filled in by `langfuseCompatibility()` in `./instrumentation`.
  *
  * Prereqs: `ollama serve` running, `ollama pull llama3.2`, and (for Demo 4)
  * `ollama pull nomic-embed-text`. To send to Langfuse, set LANGFUSE_PUBLIC_KEY /
@@ -14,10 +14,15 @@
 
 import { devtoolsEnabled, langfuseEnabled } from './instrumentation.js'; // side-effect: pipeline + telemetry, must be first
 
-import { propagateAttributes } from '@langfuse/tracing';
 import { embed, stepCountIs, tool } from 'ai';
 import { generateText, ollama, streamText } from 'ai-sdk-ollama';
-import { shutdown } from 'autotel';
+import {
+  getActiveSpan,
+  setSession,
+  setUser,
+  shutdown,
+  withTracing,
+} from 'autotel';
 import { z } from 'zod';
 
 // granite4 by default — it drives the Demo 2 tool loop reliably, where
@@ -47,32 +52,29 @@ async function main(): Promise<void> {
   });
   console.log('model:', oneLine(explain.text));
 
-  // --- Demo 2: propagateAttributes — group the trace in Langfuse ------------
-  // The only Langfuse-aware line in the whole demo. It attaches trace name,
-  // user, session and tags to every span produced inside the callback, so the
-  // run shows up as a named, user-scoped trace in the Langfuse UI. The model
-  // call is still a stock autotel-genai tool loop.
+  // --- Demo 2: user, session and tags, with no Langfuse SDK ---------------
+  // Langfuse reads `user.id` and `session.id` under those standard names, which
+  // is exactly what autotel's `setUser` / `setSession` write. The trace name and
+  // tags come from `langfuseCompatibility()` in ./instrumentation. Nothing in
+  // this file imports a Langfuse package.
   console.log(
-    `\n=== Demo 2 · generateText + tool, wrapped in propagateAttributes ===`,
+    `\n=== Demo 2 · generateText + tool, scoped to a user and session ===`,
   );
-  const agent = await propagateAttributes(
-    {
-      traceName: 'support-chat',
-      userId: 'user-123',
-      sessionId: 'session-456',
-      tags: ['example', 'chat'],
-      metadata: { route: 'support-chat' },
-    },
-    () =>
-      generateText({
-        model,
-        prompt:
-          'What is 23 multiplied by 19? Use the multiply tool, then state the number.',
-        tools: { multiply },
-        stopWhen: stepCountIs(5),
-        telemetry: { functionId: 'agent' },
-      }),
-  );
+  const agent = await withTracing({ name: 'support-chat' })(() => async () => {
+    const span = getActiveSpan();
+    if (span) {
+      setUser(span, { id: 'user-123' });
+      setSession(span, { id: 'session-456' });
+    }
+    return generateText({
+      model,
+      prompt:
+        'What is 23 multiplied by 19? Use the multiply tool, then state the number.',
+      tools: { multiply },
+      stopWhen: stepCountIs(5),
+      telemetry: { functionId: 'agent' },
+    });
+  })();
   console.log('agent:', oneLine(agent.text));
 
   // --- Demo 3: streamText — adds streaming timing --------------------------
@@ -146,7 +148,7 @@ function isConnectionError(error: unknown): boolean {
   );
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   if (isConnectionError(error)) {
     console.error(
       `\nCould not reach Ollama.\n` +
@@ -156,5 +158,6 @@ main().catch((error) => {
   } else {
     console.error('\nExample failed:', error);
   }
-  process.exit(1);
+  await shutdown().catch(() => undefined);
+  process.exitCode = 1;
 });

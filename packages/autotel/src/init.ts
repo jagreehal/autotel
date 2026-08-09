@@ -28,6 +28,7 @@ import {
   AUTOTEL_SAMPLING_RATE,
 } from './sampling';
 import type { Logger } from './logger';
+import { silentLogger, wrapLogger } from './init-logger';
 import type { Attributes, Context, SpanKind, Link } from '@opentelemetry/api';
 import type { ValidationConfig } from './validation';
 import {
@@ -130,18 +131,6 @@ export {
 };
 
 /**
- * Silent logger (no-op) - used as default when user doesn't provide one.
- * Internal autotel logs are silent by default to avoid spam.
- * Users can import { autotelLogger } from 'autotel/logger' to create their own.
- */
-const silentLogger: Logger = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  debug: () => {},
-};
-
-/**
  * Adapts an Autotel Sampler to the OTel SDK Sampler interface.
  */
 function toOtelSampler(sampler: Sampler): OtelSampler {
@@ -206,9 +195,6 @@ function acceptsStringRedactor(
 let _optionalRequire: typeof safeRequire = safeRequire;
 let _devtoolsClose: (() => Promise<void> | void) | null = null;
 
-const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
-type LogLevelKey = keyof typeof LOG_LEVELS;
-
 /**
  * Lock the logger to prevent further `init()` calls.
  * Use this when framework plugins set up instrumentation and you want
@@ -223,37 +209,6 @@ export function lockLogger(): void {
  */
 export function isLoggerLocked(): boolean {
   return locked;
-}
-
-function createSilentLogger(): Logger {
-  return {
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-    debug: () => {},
-  };
-}
-
-function wrapLogger(
-  base: Logger,
-  silent: boolean,
-  minLevel: LogLevelKey,
-): Logger {
-  if (silent) return createSilentLogger();
-  const threshold = LOG_LEVELS[minLevel];
-  const wrap = (fn: Logger['info'], level: LogLevelKey): Logger['info'] => {
-    if (LOG_LEVELS[level] < threshold) {
-      return (() => {}) as Logger['info'];
-    }
-    return ((...args: Parameters<Logger['info']>) =>
-      fn(...args)) as Logger['info'];
-  };
-  return {
-    debug: wrap(base.debug, 'debug'),
-    info: wrap(base.info, 'info'),
-    warn: wrap(base.warn, 'warn'),
-    error: wrap(base.error, 'error'),
-  };
 }
 
 /**
@@ -618,6 +573,23 @@ export function init(cfg: AutotelConfig): void {
           filter: mergedConfig.spanFilter!,
         }),
     );
+  }
+
+  // Enrichers go on last so they sit OUTSIDE the wrappers above, and first in
+  // the array so they run before anything exports.
+  //
+  // Outside matters more than it looks. `AttributeRedactingProcessor` hands its
+  // wrapped processor a proxy whose `attributes` is a private redacted copy, so
+  // an enricher wrapped by it would decorate that copy while every exporter
+  // received its own copy taken from the original span: the enrichment would
+  // reach no destination at all, and only when redaction happened to be
+  // configured. Left outside, an enricher decorates the real span, and the
+  // redactor downstream then sees the attributes it added rather than missing
+  // an enricher that copied a sensitive value into a new key.
+  //
+  // Unlike `spanProcessors`, these add to the pipeline instead of replacing it.
+  if (mergedConfig.spanEnrichers && mergedConfig.spanEnrichers.length > 0) {
+    spanProcessors.unshift(...mergedConfig.spanEnrichers);
   }
 
   // Build array of metric readers (supports multiple)
