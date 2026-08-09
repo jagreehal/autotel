@@ -1,5 +1,11 @@
 # Changelog
 
+## 19.0.0
+
+### Patch Changes
+
+- autotel-subscribers@49.0.0
+
 ## 18.0.0
 
 ### Patch Changes

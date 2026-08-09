@@ -1,5 +1,12 @@
 # @jagreehal/example-langchain-observer
 
+## 0.0.19
+
+### Patch Changes
+
+- Updated dependencies [e8f2d0f]
+  - autotel-genai@0.5.0
+
 ## 0.0.18
 
 ### Patch Changes
