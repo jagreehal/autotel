@@ -10,11 +10,16 @@ import type { McpTraceMeta } from './types';
  * @param meta - The _meta object from MCP request
  * @returns OpenTelemetry context with extracted trace data
  *
+ * The keys are the bare `traceparent` / `tracestate` / `baggage` names the MCP
+ * spec reserves for W3C trace context — not the `io.modelcontextprotocol/*`
+ * envelope namespace — so they survive the SDK's envelope lift untouched.
+ *
  * @example
  * ```typescript
- * // In MCP tool handler
- * const handler = async (args, _meta) => {
- *   const parentContext = extractOtelContextFromMeta(_meta);
+ * // In an MCP 2026-07-28 tool handler: `_meta` rides the ServerContext,
+ * // not the validated arguments.
+ * const handler = async (args, ctx) => {
+ *   const parentContext = extractOtelContextFromMeta(ctx.mcpReq._meta);
  *   return context.with(parentContext, async () => {
  *     // Your traced code here
  *   });
@@ -64,9 +69,10 @@ export function extractOtelContextFromMeta(
  * @example
  * ```typescript
  * // In MCP client
- * const result = await client.callTool('get_weather', {
- *   location: 'NYC',
- *   _meta: injectOtelContextToMeta()
+ * const result = await client.callTool({
+ *   name: 'get_weather',
+ *   arguments: { location: 'NYC' },
+ *   _meta: injectOtelContextToMeta(),
  * });
  * ```
  */
@@ -95,8 +101,8 @@ export function injectOtelContextToMeta(ctx?: Context): McpTraceMeta {
  *
  * @example
  * ```typescript
- * const handler = async (args, _meta) => {
- *   const ctx = activateTraceContext(_meta);
+ * const handler = async (args, serverCtx) => {
+ *   const ctx = activateTraceContext(serverCtx.mcpReq._meta);
  *   return context.with(ctx, () => {
  *     // Traced code with parent context active
  *   });

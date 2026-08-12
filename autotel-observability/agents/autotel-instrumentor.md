@@ -97,7 +97,7 @@ When instrumenting code, detect the framework and use the right package:
 | **Hono**                    | `autotel-hono`                | `app.use(otel({ serviceName: 'my-api' }))`                     |
 | **TanStack Start**          | `autotel-tanstack`            | `tracingMiddleware()` in request middleware                    |
 | **Cloudflare Workers**      | `autotel-cloudflare`          | `instrument(handler, config)` or `wrapModule(config, handler)` |
-| **MCP**                     | `autotel-mcp-instrumentation` | `instrumentMCPServer(server, config)`                          |
+| **MCP**                     | `autotel-mcp-instrumentation` | `instrumentMcpServer(server, config)`                          |
 | **Edge runtimes**           | `autotel-edge`                | `trace()` from `autotel-edge`                                  |
 | **Express/Fastify/Next.js** | `autotel`                     | Wrap handlers with `trace()` + call `init()` at entry          |
 

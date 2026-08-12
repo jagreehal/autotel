@@ -9,10 +9,11 @@ You are working on the MCP investigation server. This is NOT the instrumentation
 ## Tech Stack
 
 - **MCP SDK**: `@modelcontextprotocol/server` + `@modelcontextprotocol/node` ^2.0.0 (protocol `2026-07-28`). Not the v1 `@modelcontextprotocol/sdk`, which tops out at `2025-11-25`.
+- **Both eras served, one factory**: `createMcpHandler` / `serveStdio` default to `legacy: 'stateless'`, so 2025-era clients (the v1 SDK that Claude Code, Claude Desktop and Cursor still ship) are answered from the same `app.createServer` definitions. `test/legacy-client.test.ts` drives a real v1 client against the real entry point — the claim is worthless without it. Do not switch to `legacy: 'reject'` without deleting that suite deliberately.
 - **Storage**: @libsql/client (in-memory or persistent)
 - **OTLP**: @opentelemetry/otlp-transformer for ingestion
 - **Validation**: zod
-- **Build**: tsup
+- **Build**: tsdown
 - **Testing**: vitest
 
 ## Architecture

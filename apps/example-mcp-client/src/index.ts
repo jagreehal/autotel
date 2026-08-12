@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { instrumentMcpClient } from 'autotel-mcp-instrumentation/client';
 import { heuristicInjectionClassifier } from 'autotel-mcp-instrumentation/security';
 import { createGenAiBudget } from 'autotel-genai/guard';
@@ -17,7 +17,9 @@ init({
 
 console.log('=== MCP Weather Client Example ===\n');
 
-// Create MCP client
+// Create MCP client. `versionNegotiation: 'auto'` probes with
+// `server/discover` (2026-07-28) and falls back to the 2025 `initialize`
+// handshake only if the server does not speak the current revision.
 const client = new Client(
   {
     name: 'weather-client',
@@ -25,6 +27,7 @@ const client = new Client(
   },
   {
     capabilities: {},
+    versionNegotiation: { mode: 'auto' },
   },
 );
 
@@ -61,7 +64,9 @@ const transport = new StdioClientTransport({
 
 await client.connect(transport);
 
-console.log('Connected to MCP Weather Server!\n');
+// 'modern' is the SDK's name for the 2026-07-28 envelope wire. There is no
+// session id to print — the protocol no longer has one.
+console.log(`Connected! Protocol era: ${client.getProtocolEra()}\n`);
 
 // Wrap all examples in a root trace to demonstrate distributed tracing
 const runExamples = withTracing({})((ctx) => async () => {
@@ -138,8 +143,9 @@ const runExamples = withTracing({})((ctx) => async () => {
   console.log('\nSpec-Compliant Spans:');
   console.log('- Span names: "tools/list", "tools/call get_weather"');
   console.log(
-    '- Attributes: mcp.method.name, gen_ai.tool.name, network.transport',
+    '- Attributes: mcp.method.name, gen_ai.tool.name, network.transport,',
   );
+  console.log('              mcp.protocol.version (per-request on 2026-07-28)');
   console.log('- Span kinds: CLIENT (client) / SERVER (server)');
   console.log(
     '- Metrics: mcp.client.operation.duration, mcp.server.operation.duration',

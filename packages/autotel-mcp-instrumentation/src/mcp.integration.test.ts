@@ -2,6 +2,26 @@ import { describe, it, expect } from 'vitest';
 import { trace as otelTrace, context } from '@opentelemetry/api';
 
 describe('Integration: MCP Distributed Tracing', () => {
+  it('pins the mirrored _meta keys to the real SDK constants', async () => {
+    // `semantic-conventions.ts` re-declares these literals so the package
+    // keeps no runtime dependency on an MCP SDK. That trade is only safe if
+    // something notices when the SDK renames or re-namespaces one — asserting
+    // against a hand-written fixture would pass right through a rename while
+    // the attribute silently vanished from production spans.
+    const [{ MCP_PROTOCOL_VERSION_META_KEY }, sdk] = await Promise.all([
+      import('./semantic-conventions.js'),
+      import('@modelcontextprotocol/server'),
+    ]);
+
+    expect(MCP_PROTOCOL_VERSION_META_KEY).toBe(sdk.PROTOCOL_VERSION_META_KEY);
+    // The trace-context keys are deliberately bare, NOT under the reserved
+    // `io.modelcontextprotocol/*` envelope namespace — that is what lets them
+    // survive the SDK's envelope lift and reach `ctx.mcpReq._meta`.
+    expect(sdk.TRACEPARENT_META_KEY).toBe('traceparent');
+    expect(sdk.TRACESTATE_META_KEY).toBe('tracestate');
+    expect(sdk.BAGGAGE_META_KEY).toBe('baggage');
+  });
+
   it('should inject W3C trace context into _meta field', async () => {
     const { injectOtelContextToMeta } = await import('./context.js');
 
@@ -94,6 +114,7 @@ describe('Integration: MCP Distributed Tracing', () => {
     expect(MCP_SEMCONV.ERROR_TYPE).toBe('error.type');
     expect(MCP_SEMCONV.OPERATION_NAME).toBe('gen_ai.operation.name');
     expect(MCP_SEMCONV.NETWORK_TRANSPORT).toBe('network.transport');
+    expect(MCP_SEMCONV.PROTOCOL_VERSION).toBe('mcp.protocol.version');
     expect(MCP_SEMCONV.SESSION_ID).toBe('mcp.session.id');
 
     // Verify method names
@@ -104,6 +125,7 @@ describe('Integration: MCP Distributed Tracing', () => {
     expect(MCP_METHODS.PROMPTS_GET).toBe('prompts/get');
     expect(MCP_METHODS.PROMPTS_LIST).toBe('prompts/list');
     expect(MCP_METHODS.PING).toBe('ping');
+    expect(MCP_METHODS.SERVER_DISCOVER).toBe('server/discover');
 
     // Verify metric names
     expect(MCP_METRICS.CLIENT_OPERATION_DURATION).toBe(

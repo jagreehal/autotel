@@ -29,6 +29,41 @@ describe('ErrorAggregator', () => {
       expect(group2.count).toBe(2);
     });
 
+    it('groups stackless errors that differ only in a number with a unit suffix', () => {
+      // With no stack trace the normalised message IS the fingerprint, so any
+      // run-specific value it fails to strip splits one bug into a new group
+      // per occurrence — and a duration is the most common such value.
+      const agg = new ErrorAggregator();
+      const base = {
+        spanName: 'GET /api',
+        service: 'svc',
+        timestamp: Date.now(),
+      };
+
+      const first = agg.addError({
+        ...base,
+        traceId: 't1',
+        spanId: 's1',
+        error: {
+          type: 'TimeoutError',
+          message: 'upstream timed out after 37ms',
+        },
+      });
+      const second = agg.addError({
+        ...base,
+        traceId: 't2',
+        spanId: 's2',
+        error: {
+          type: 'TimeoutError',
+          message: 'upstream timed out after 412ms',
+        },
+      });
+
+      expect(second.fingerprint).toBe(first.fingerprint);
+      expect(second.count).toBe(2);
+      expect(agg.getErrorGroups()).toHaveLength(1);
+    });
+
     it('creates separate groups for different error types', () => {
       const agg = new ErrorAggregator();
 

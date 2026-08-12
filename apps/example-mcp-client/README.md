@@ -80,11 +80,17 @@ Demonstrates error propagation and exception recording across the distributed tr
 2. **Client calls tool** → `instrumentMcpClient()` intercepts
 3. **Client creates child span** for the tool call
 4. **Client injects W3C context** into `_meta` field
-5. **Request sent** with `{ location: 'NYC', _meta: { traceparent, tracestate, baggage } }`
+5. **Request sent** with `{ name, arguments, _meta: { traceparent, tracestate, baggage } }`
 6. **Server receives request** → `instrumentMcpServer()` intercepts
-7. **Server extracts parent context** from `_meta` field
+7. **Server extracts parent context** from `ctx.mcpReq._meta` (the context
+   argument, not the tool arguments)
 8. **Server creates child span** with parent context
 9. **Complete distributed trace** visible in backend
+
+On MCP `2026-07-28` there is no session tying client and server together, and
+that is exactly why this works: `traceparent` always rode in `_meta`, and the
+revision makes `_meta` the mandatory per-request envelope. There is now always
+somewhere for it to ride, and no session for a trace to be orphaned from.
 
 ## Trace Context in _meta Field
 
@@ -94,9 +100,13 @@ The `_meta` field contains:
 {
   "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
   "tracestate": "vendor1=value1,vendor2=value2",
-  "baggage": "userId=123,sessionId=abc"
+  "baggage": "userId=123,tenant=acme"
 }
 ```
+
+These are the bare `traceparent` / `tracestate` / `baggage` keys, not the
+reserved `io.modelcontextprotocol/*` envelope namespace — which is what lets
+them survive the SDK's envelope lift and reach `ctx.mcpReq._meta`.
 
 This enables:
 

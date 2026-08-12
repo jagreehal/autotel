@@ -202,37 +202,55 @@ Cloudflare bindings (KV, R2, D1, Durable Objects, Workers AI, Vectorize, etc.) a
 pnpm add autotel-mcp-instrumentation
 ```
 
-**Server setup:**
+**Server setup (MCP 2026-07-28).** The protocol is stateless, so the SDK builds
+a server per request from a factory — instrument inside it. `instrumentMcpServer`
+returns a Proxy: **register on the returned value**, not on the original server,
+or nothing is traced.
 
 ```typescript
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { instrumentMCPServer } from 'autotel-mcp-instrumentation/server';
+import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
+import { instrumentMcpServer } from 'autotel-mcp-instrumentation/server';
 import { init } from 'autotel';
+import { z } from 'zod';
 
 init({ service: 'my-mcp-server' });
 
-const server = new Server({ name: 'my-server', version: '1.0.0' });
-instrumentMCPServer(server, {
-  service: 'my-mcp-server',
-  endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-});
+function createServer() {
+  const server = new McpServer(
+    { name: 'my-server', version: '1.0.0' },
+    { capabilities: { tools: {} } },
+  );
 
-// All registerTool(), registerResource(), registerPrompt() calls are now traced
-server.registerTool('my-tool', async (params) => {
-  // This handler gets a span automatically
-  return { result: 'done' };
-});
+  // Config here is instrumentation options, NOT init() options.
+  const traced = instrumentMcpServer(server, { networkTransport: 'tcp' });
+
+  // registerTool(name, config, handler) — on `traced`, not `server`.
+  traced.registerTool(
+    'my-tool',
+    { description: 'Does a thing', inputSchema: z.object({ id: z.string() }) },
+    async ({ id }) => ({ content: [{ type: 'text', text: id }] }),
+  );
+
+  return traced;
+}
+
+export default createMcpHandler(createServer);
 ```
+
+On a 2025-era server (`@modelcontextprotocol/sdk`) you hold one `Server` and
+instrument it once — same call, same rule about using the return value.
 
 **Client setup:**
 
 ```typescript
-import { instrumentMCPClient } from 'autotel-mcp-instrumentation/client';
+import { Client } from '@modelcontextprotocol/client';
+import { instrumentMcpClient } from 'autotel-mcp-instrumentation/client';
 
 const client = new Client({ name: 'my-client', version: '1.0.0' });
-instrumentMCPClient(client);
+const traced = instrumentMcpClient(client);
 
-// All callTool(), getResource(), getPrompt() calls are now traced
+// Call through `traced` — callTool/readResource/getPrompt are traced there.
+await traced.callTool({ name: 'my-tool', arguments: { id: '1' } });
 ```
 
 **Key points:**

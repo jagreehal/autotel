@@ -5,11 +5,12 @@
   "type": "module",
   "description": "Example MCP client with autotel-mcp-instrumentation and distributed tracing",
   "scripts": {
+    "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "dev": "tsx watch src/index.ts"
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/client": "^2.0.0",
     "autotel": "workspace:*",
     "autotel-genai": "workspace:*",
     "autotel-mcp-instrumentation": "workspace:*"

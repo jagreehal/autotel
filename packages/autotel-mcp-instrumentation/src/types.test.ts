@@ -32,7 +32,6 @@ describe('resolveConfig', () => {
     expect(resolved.classifyDescriptions).toBe(true);
     expect(resolved.validateToolBudgets).toBe(true);
     expect(resolved.networkTransport).toBeUndefined();
-    expect(resolved.sessionId).toBeUndefined();
   });
 
   it('should respect new config names', () => {
@@ -40,12 +39,10 @@ describe('resolveConfig', () => {
       captureToolArgs: true,
       captureToolResults: true,
       networkTransport: 'pipe',
-      sessionId: 'test-session',
     });
     expect(resolved.captureToolArgs).toBe(true);
     expect(resolved.captureToolResults).toBe(true);
     expect(resolved.networkTransport).toBe('pipe');
-    expect(resolved.sessionId).toBe('test-session');
   });
 
   it('should support deprecated captureArgs alias', () => {

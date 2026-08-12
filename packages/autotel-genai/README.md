@@ -210,6 +210,47 @@ governance attributes **and** canonical `gen_ai.*` when `ai` metadata is present
 It honours spec breaking change #242 (`gen_ai.agent.id` is dropped on internal
 `invoke_agent` spans via `genAiAgentAttributes(…, { internal: true })`).
 
+**Eval-sandbox incident replay.** When multiple eval agents share a writable
+registry (the OpenAI/HuggingFace pattern), use the agent IR helpers below.
+See the standalone demo at `agent-eval-sandbox-demo` (sibling to ai-sdk-guardrails).
+
+```ts
+import {
+  CrossAgentMonitor,
+  createHoneyTokenTool,
+  crossAgentDetectionsToSecurityEvents,
+  detectCrossAgentPattern,
+  EVAL_IDENTITY_ATTR,
+  querySpansForEvalIncident,
+  recordEvalRunIdentity,
+} from 'autotel-genai/agent';
+
+// Tag every run so its spans stay separable downstream
+// (eval.run_id / eval.task_id / eval.sandbox_id).
+recordEvalRunIdentity({ runId, taskId, sandboxId });
+
+// Live: emit agent.shared_channel.detected as tools run
+const monitor = new CrossAgentMonitor({ minAgents: 2, ctx });
+monitor.record({ agentId: 'eval-a', resource: 'artifactory:/notes' });
+
+// Offline: the same detection over events you collected yourself
+const alerts = crossAgentDetectionsToSecurityEvents(
+  detectCrossAgentPattern(collectedEvents, { minAgents: 2 }),
+);
+
+// Batch IR over an exported span array
+const ir = querySpansForEvalIncident(finishedSpans);
+ir.crossAgentEvents; // shared-channel alerts
+ir.evalRuns; // every EVAL_IDENTITY_ATTR.runId seen
+
+// Honey-token tool: a decoy credential that reports when an agent touches it
+const honeyToken = createHoneyTokenTool({
+  name: 'readLeakedCredential',
+  bait: 'AKIA_HONEY_TOKEN_DO_NOT_USE',
+  ctx,
+});
+```
+
 ### Vercel AI SDK
 
 Register `autotelTelemetry()` once and every `generateText` / `streamText` /
