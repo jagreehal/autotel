@@ -1,5 +1,13 @@
 # @jagreehal/example-playwright-e2e
 
+## 1.0.57
+
+### Patch Changes
+
+- Updated dependencies [e8f2d0f]
+  - autotel@6.5.0
+  - autotel-playwright@0.4.55
+
 ## 1.0.56
 
 ### Patch Changes

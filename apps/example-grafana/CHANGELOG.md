@@ -1,5 +1,13 @@
 # @jagreehal/example-grafana
 
+## 1.0.53
+
+### Patch Changes
+
+- Updated dependencies [e8f2d0f]
+  - autotel@6.5.0
+  - autotel-backends@2.13.5
+
 ## 1.0.52
 
 ### Patch Changes

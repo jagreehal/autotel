@@ -1,5 +1,13 @@
 # @jagreehal/example-genai-metrics
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [e8f2d0f]
+  - autotel-genai@0.5.0
+  - autotel@6.5.0
+
 ## 1.0.3
 
 ### Patch Changes
