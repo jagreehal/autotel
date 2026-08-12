@@ -214,6 +214,7 @@ AUTOTEL_MAX_METRIC_COUNT=50000   # Max metrics to keep (default: 100)
 AUTOTEL_DEVTOOLS_PORT=4318       # Server port (default: 4318)
 AUTOTEL_DEVTOOLS_HOST=127.0.0.1  # Bind host (default: 127.0.0.1)
 AUTOTEL_DEVTOOLS_TITLE="My App"  # Dashboard title (optional)
+AUTOTEL_DEVTOOLS_SOURCE_ROOT=.   # Root GET /source may read (default: cwd on a loopback bind, else off; `false` disables)
 ```
 
 ### CLI Options

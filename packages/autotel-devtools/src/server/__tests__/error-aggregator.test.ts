@@ -203,3 +203,37 @@ describe('ErrorAggregator', () => {
     });
   });
 });
+
+describe('stack traces written as error.stack', () => {
+  // `autotel`'s structured errors put the stack on the span as `error.stack`
+  // (packages/autotel/src/structured-error.ts), not as an `exception` event.
+  // Without this in the fallback chain the Errors tab has no frames to show,
+  // and the source peek has nothing to open.
+  it('picks up error.stack when there is no exception event', () => {
+    const agg = new ErrorAggregator();
+    const trace = makeTrace({
+      traceId: 't-structured',
+      status: 'ERROR',
+      rootSpan: {
+        traceId: 't-structured',
+        spanId: 's1',
+        name: 'POST /quote',
+        kind: 'SERVER',
+        startTime: 100,
+        endTime: 200,
+        duration: 100,
+        attributes: {
+          'error.type': 'ValidationError',
+          'error.message': 'shipment is required',
+          'error.stack':
+            'ValidationError: shipment is required\n    at validate (/proj/src/validate.ts:12:9)',
+        },
+        status: { code: 'ERROR', message: 'shipment is required' },
+        events: [],
+      },
+    });
+
+    const [group] = agg.addErrorsFromTrace(trace);
+    expect(group.stackTrace).toContain('/proj/src/validate.ts:12:9');
+  });
+});

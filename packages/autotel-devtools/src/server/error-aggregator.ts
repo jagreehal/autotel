@@ -163,6 +163,10 @@ export class ErrorAggregator {
     const stackTrace =
       (span.attributes['exception.stacktrace'] as string) ||
       (span.attributes['exception.stack'] as string) ||
+      // `autotel`'s structured errors write the stack here rather than emitting
+      // an `exception` event, so without this the Errors tab showed no frames
+      // for them at all.
+      (span.attributes['error.stack'] as string) ||
       this.extractStackFromEvents(span);
 
     return {

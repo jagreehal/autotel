@@ -35,7 +35,8 @@ node app.js
 
 Open [http://localhost:4318](http://localhost:4318) for the dashboard. It
 includes a traces waterfall, flame graph, log filtering by severity and
-resource, error aggregation, service map, resources view, a **GenAI** view for
+resource, error aggregation with clickable stack frames
+([see below](#errors-and-source-peek)), service map, resources view, a **GenAI** view for
 LLM and agent runs ([see below](#genai-runs)), and a **Security** lens that
 surfaces spans carrying the `security.*` schema (see
 [Security Observability](/autotel/integrations/security/)). Search debounces at
@@ -91,6 +92,45 @@ const checkout = withTracing({})((ctx) => async (req, res) => {
 ```
 
 Call `close()` on shutdown to release the port and WebSocket clients.
+
+## Errors and source peek
+
+The **Errors** tab groups identical failures and renders each group's stack as a
+list of frames rather than a wall of text. Frames are labelled by where they come
+from: your code, `node_modules`, or `runtime` (Node internals such as `node:fs`).
+Only your own frames are clickable, because they are the only ones with a file in
+the project. Click one and the lines around the failure appear underneath, with
+the real line numbers. The raw stack is still there under **Raw stack**, with the
+copy button, when you want to paste the whole thing somewhere.
+
+Stacks are read from `exception.stacktrace`, `exception.stack`, an `exception`
+span event, or `error.stack`. The last is what autotel's
+[structured errors](/autotel/quick-start/#5-structured-errors) write, so those
+now show frames too.
+
+Source comes from `AUTOTEL_DEVTOOLS_SOURCE_ROOT`, which defaults to the
+directory the receiver started in. Reads are confined to that directory —
+symlinks are resolved, so one pointing outside the project is refused — and
+`GET /source` sits behind the same loopback/Origin guard as the other read
+endpoints. Set `AUTOTEL_DEVTOOLS_SOURCE_ROOT=false` to turn it off; the route
+then 404s and devtools never touches the filesystem. A frame with no readable
+file just says so instead of failing.
+
+**Only on a loopback bind.** With `--host 0.0.0.0` the default flips to off. The
+Origin guard alone does not carry this route: a request with no `Origin` header
+at all — any `curl` on the network — passes it, and the root holds whatever else
+lives in your project, `.env` included. Set `AUTOTEL_DEVTOOLS_SOURCE_ROOT`
+explicitly if you want it there anyway.
+
+[`createDevtools()`](#programmatic-api) follows the same rule, and takes a
+`sourceRoot` option (`false` to opt out):
+
+```typescript
+const { exporter, close } = createDevtools({
+  port: 4318,
+  sourceRoot: process.cwd(), // default on a loopback bind; `false` disables
+});
+```
 
 ## GenAI runs
 
@@ -187,14 +227,15 @@ For what happens inside the MCP protocol itself, see
 
 ## Configuration
 
-| Variable                   | Default     | Description                 |
-| -------------------------- | ----------- | --------------------------- |
-| `AUTOTEL_DEVTOOLS_PORT`    | `4318`      | Server port                 |
-| `AUTOTEL_DEVTOOLS_HOST`    | `127.0.0.1` | Bind host                   |
-| `AUTOTEL_DEVTOOLS_TITLE`   | _unset_     | Dashboard title             |
-| `AUTOTEL_MAX_TRACE_COUNT`  | `100`       | Max traces kept in memory   |
-| `AUTOTEL_MAX_LOG_COUNT`    | `100`       | Max log records kept        |
-| `AUTOTEL_MAX_METRIC_COUNT` | `100`       | Max metric data points kept |
+| Variable                       | Default                          | Description                                   |
+| ------------------------------ | -------------------------------- | --------------------------------------------- |
+| `AUTOTEL_DEVTOOLS_PORT`        | `4318`                           | Server port                                   |
+| `AUTOTEL_DEVTOOLS_HOST`        | `127.0.0.1`                      | Bind host                                     |
+| `AUTOTEL_DEVTOOLS_TITLE`       | _unset_                          | Dashboard title                               |
+| `AUTOTEL_DEVTOOLS_SOURCE_ROOT` | cwd on a loopback bind, else off | Root `GET /source` may read; `false` disables |
+| `AUTOTEL_MAX_TRACE_COUNT`      | `100`                            | Max traces kept in memory                     |
+| `AUTOTEL_MAX_LOG_COUNT`        | `100`                            | Max log records kept                          |
+| `AUTOTEL_MAX_METRIC_COUNT`     | `100`                            | Max metric data points kept                   |
 
 Bump the limits when you need a longer scrollback during a development session.
 
@@ -212,6 +253,7 @@ The standalone server exposes:
 | `/`           | GET    | Full-page dashboard UI                                  |
 | `/widget.js`  | GET    | Embeddable widget bundle                                |
 | `/healthz`    | GET    | Health + identity (`{ ok, service, version, clients }`) |
+| `/source`     | GET    | Source lines around a stack frame (loopback bind only)  |
 | `/ws`         | WS     | WebSocket stream (live updates + replay)                |
 
 Every response carries an `x-autotel-devtools: <version>` header. Use it to
@@ -221,7 +263,7 @@ that happens to share the port.
 **Read surface is origin-guarded.** Ingestion (`POST`), `/widget.js` and
 `/healthz` are open to any origin so apps on arbitrary dev origins can send
 telemetry and load the widget. The read/clear endpoints (`GET`/`DELETE
-/v1/traces`) and the `/ws` stream reject cross-origin browser requests (a
+/v1/traces`), `GET /source` and the `/ws` stream reject cross-origin browser requests (a
 non-loopback `Origin`) with `403`, so a page you happen to be visiting can't read
 your captured prompts and responses. When bound to a loopback host (the default),
 a non-loopback `Host` is rejected too (DNS-rebinding defense); `--host 0.0.0.0`
