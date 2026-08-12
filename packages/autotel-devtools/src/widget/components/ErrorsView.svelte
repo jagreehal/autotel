@@ -40,6 +40,8 @@
   import { useListKeyboardNav } from './listNav.svelte';
   import { matchesNeedle } from '../utils/textMatch';
   import type { ErrorGroup } from '../types';
+  import StackTracePanel from './StackTracePanel.svelte';
+  import { loadSourceWindow } from '../source-client';
 
   function errorGroupMatches(group: ErrorGroup, query: string): boolean {
     return matchesNeedle(query.toLowerCase(), [
@@ -176,10 +178,23 @@
             <h5 class="text-xs font-semibold text-fg-muted mb-1.5">
               Stack Trace
             </h5>
-            <Copyable content={group.stackTrace}>
-              <pre
-                class="text-xs font-mono bg-code text-fg p-2 rounded overflow-x-auto whitespace-pre-wrap">{group.stackTrace}</pre>
-            </Copyable>
+            <!-- Frames first: the reader wants their own code, and only the
+                 app frames are clickable. The raw text stays below because
+                 copying the whole stack is a separate need. -->
+            <StackTracePanel
+              stackTrace={group.stackTrace}
+              loadSource={loadSourceWindow}
+            />
+            <details class="mt-2">
+              <summary
+                class="cursor-pointer text-[11px] text-fg-subtle hover:text-fg"
+                >Raw stack</summary
+              >
+              <Copyable content={group.stackTrace}>
+                <pre
+                  class="text-xs font-mono bg-code text-fg p-2 rounded overflow-x-auto whitespace-pre-wrap">{group.stackTrace}</pre>
+              </Copyable>
+            </details>
           </div>
         {/if}
 

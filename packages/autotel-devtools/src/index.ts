@@ -5,6 +5,7 @@ import { attachDevtoolsRoutes } from './server/http';
 import { listenLoopbackDualStack } from './server/listen';
 import { DevtoolsSpanExporter } from './server/exporter';
 import { hostHeaderIsLoopback } from './server/origin-guard';
+import { resolveSourceRoot } from './server/source-file';
 import type { Server } from 'node:http';
 
 export interface CreateDevtoolsOptions {
@@ -15,6 +16,14 @@ export interface CreateDevtoolsOptions {
   maxTraceCount?: number;
   maxLogCount?: number;
   maxMetricCount?: number;
+  /**
+   * Project root the Errors tab may read source from, so a stack frame can show
+   * the line that threw.
+   *
+   * Same default as the CLI: the working directory on a loopback bind, off
+   * otherwise. `false` disables it. See `resolveSourceRoot`.
+   */
+  sourceRoot?: string | false;
 }
 
 export interface DevtoolsInstance {
@@ -44,7 +53,16 @@ export function createDevtools(
     maxLogCount: options.maxLogCount,
     maxMetricCount: options.maxMetricCount,
   });
-  attachDevtoolsRoutes(httpServer, wsServer, { loopbackOnly });
+  // `false` and the env var's "off" spellings are the same answer, so both go
+  // through one resolver rather than being special-cased here.
+  const sourceRoot = resolveSourceRoot(
+    options.sourceRoot === false
+      ? 'false'
+      : (options.sourceRoot ?? process.env.AUTOTEL_DEVTOOLS_SOURCE_ROOT),
+    process.cwd(),
+    loopbackOnly,
+  );
+  attachDevtoolsRoutes(httpServer, wsServer, { loopbackOnly, sourceRoot });
 
   // Bind both loopback families when host is loopback, so a `localhost` client
   // reaches us whether it resolves to 127.0.0.1 or ::1. Stays synchronous:
@@ -53,7 +71,8 @@ export function createDevtools(
     primary: httpServer,
     port,
     host,
-    attachSecondary: (s) => attachDevtoolsRoutes(s, wsServer, { loopbackOnly }),
+    attachSecondary: (s) =>
+      attachDevtoolsRoutes(s, wsServer, { loopbackOnly, sourceRoot }),
   });
   if (options.verbose) {
     listeners.ready.then(({ warnings }) => {

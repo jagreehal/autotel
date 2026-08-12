@@ -26,6 +26,7 @@ import {
 } from './otlp-proto';
 import { DEVTOOLS_IDENTITY } from './identity';
 import { allowSensitiveRequest } from './origin-guard';
+import { readSourceWindow } from './source-file';
 import type { DevtoolsServer } from './server';
 
 type OtlpSignal = 'traces' | 'logs' | 'metrics';
@@ -148,6 +149,15 @@ export interface DevtoolsRoutesOptions {
   /** Browser tab title for the fullpage UI. Without it every dashboard reads
    *  `autotel-devtools`, which is unhelpful with several running at once. */
   title?: string;
+  /**
+   * Project root that `GET /source` may read from, so a stack frame can show
+   * the line that threw.
+   *
+   * Opt-in and absent by default: without it the route 404s and devtools never
+   * touches the filesystem. Reading is confined to this directory, symlinks
+   * included — see `resolveWithinRoot`.
+   */
+  sourceRoot?: string;
 }
 
 export function attachDevtoolsRoutes(
@@ -156,6 +166,7 @@ export function attachDevtoolsRoutes(
   options: DevtoolsRoutesOptions = {},
 ): void {
   const loopbackOnly = options.loopbackOnly ?? true;
+  const sourceRoot = options.sourceRoot;
   const fullpageHtml = renderFullpageHtml(options.title);
   httpServer.on(
     'request',
@@ -223,6 +234,48 @@ export function attachDevtoolsRoutes(
 
       // GET /healthz — also the canonical identity probe: `service` + `version`
       // let a caller positively confirm this is autotel-devtools.
+      // GET /source?file=&line=&context= — the few lines around a stack frame.
+      //
+      // Reads the developer's disk, so it is gated three ways: opt-in via
+      // `sourceRoot`, the same loopback/Origin guard as the other read
+      // endpoints, and containment inside the root (symlinks resolved).
+      // A refusal is always 404, never 403-with-detail: "outside the root",
+      // "not a file" and "does not exist" must be indistinguishable, or the
+      // route becomes a filesystem oracle.
+      if (req.method === 'GET' && url.split('?')[0] === '/source') {
+        if (!sourceRoot) {
+          sendJson(res, 404, { error: 'Not found' });
+          return;
+        }
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+
+        const query = new URL(url, 'http://localhost').searchParams;
+        const file = query.get('file');
+        const line = Number(query.get('line'));
+        // `context` is clamped rather than rejected — an absurd value is a
+        // caller bug, not an attack, and 0 is legitimate (just the one line).
+        const context = Math.min(
+          Math.max(Number(query.get('context') ?? 5) || 0, 0),
+          50,
+        );
+
+        if (!file || !Number.isInteger(line) || line < 1) {
+          sendJson(res, 400, { error: 'file and a positive integer line are required' });
+          return;
+        }
+
+        const window = readSourceWindow(sourceRoot, file, line, context);
+        if (window === null) {
+          sendJson(res, 404, { error: 'Not found' });
+          return;
+        }
+        sendJson(res, 200, { ...window });
+        return;
+      }
+
       if (req.method === 'GET' && url === '/healthz') {
         sendJson(res, 200, {
           ok: true,

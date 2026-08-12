@@ -7,6 +7,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DevtoolsServer } from './server/server';
 import { attachDevtoolsRoutes } from './server/http';
+import { resolveSourceRoot } from './server/source-file';
 import { hostHeaderIsLoopback } from './server/origin-guard';
 import { listenLoopbackDualStack } from './server/listen';
 import { probePortHolder } from './server/identity';
@@ -162,9 +163,16 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
     host: options.host,
     verbose: true,
   });
+  // Lets the Errors tab show the line that threw. See `resolveSourceRoot`.
+  const sourceRoot = resolveSourceRoot(
+    process.env.AUTOTEL_DEVTOOLS_SOURCE_ROOT,
+    process.cwd(),
+    loopbackOnly,
+  );
   attachDevtoolsRoutes(httpServer, wsServer, {
     loopbackOnly,
     title: options.title,
+    sourceRoot,
   });
 
   const listeners = listenLoopbackDualStack({
@@ -175,6 +183,7 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
       attachDevtoolsRoutes(s, wsServer, {
         loopbackOnly,
         title: options.title,
+        sourceRoot,
       }),
   });
 
