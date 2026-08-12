@@ -1,5 +1,12 @@
 # autotel-cloudflare
 
+## 8.0.0
+
+### Patch Changes
+
+- Updated dependencies [31fd178]
+  - autotel-genai@0.6.0
+
 ## 7.0.0
 
 ### Patch Changes
