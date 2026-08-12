@@ -218,27 +218,37 @@ See the standalone demo at `agent-eval-sandbox-demo` (sibling to ai-sdk-guardrai
 import {
   CrossAgentMonitor,
   createHoneyTokenTool,
-  detectCrossAgentPattern,
   crossAgentDetectionsToSecurityEvents,
+  detectCrossAgentPattern,
+  EVAL_IDENTITY_ATTR,
   querySpansForEvalIncident,
   recordEvalRunIdentity,
-  EVAL_IDENTITY_ATTR,
 } from 'autotel-genai/agent';
+
+// Tag every run so its spans stay separable downstream
+// (eval.run_id / eval.task_id / eval.sandbox_id).
+recordEvalRunIdentity({ runId, taskId, sandboxId });
 
 // Live: emit agent.shared_channel.detected as tools run
 const monitor = new CrossAgentMonitor({ minAgents: 2, ctx });
 monitor.record({ agentId: 'eval-a', resource: 'artifactory:/notes' });
 
-// Batch IR over exported spans
-const ir = querySpansForEvalIncident(finishedSpans, {
-  evalRunId: 'eval-agent-july-2026',
+// Offline: the same detection over events you collected yourself
+const alerts = crossAgentDetectionsToSecurityEvents(
+  detectCrossAgentPattern(collectedEvents, { minAgents: 2 }),
+);
+
+// Batch IR over an exported span array
+const ir = querySpansForEvalIncident(finishedSpans);
+ir.crossAgentEvents; // shared-channel alerts
+ir.evalRuns; // every EVAL_IDENTITY_ATTR.runId seen
+
+// Honey-token tool: a decoy credential that reports when an agent touches it
+const honeyToken = createHoneyTokenTool({
+  name: 'readLeakedCredential',
+  bait: 'AKIA_HONEY_TOKEN_DO_NOT_USE',
+  ctx,
 });
-
-// Tag eval runs for downstream queries
-recordEvalRunIdentity({ runId, sandboxId, taskId });
-
-// Honey-token tool for coordination detection
-const bait = createHoneyTokenTool({ tokenId: 'seek-note', ctx });
 ```
 
 ### Vercel AI SDK
