@@ -1,5 +1,12 @@
 # @jagreehal/example-genai-evals
 
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [31fd178]
+  - autotel-genai@0.6.0
+
 ## 1.0.4
 
 ### Patch Changes

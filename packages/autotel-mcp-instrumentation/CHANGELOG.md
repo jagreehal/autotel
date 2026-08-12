@@ -1,5 +1,138 @@
 # autotel-mcp
 
+## 49.0.0
+
+### Major Changes
+
+- 31fd178: Support MCP `2026-07-28` (stateless) alongside the 2025-era protocol
+
+  The protocol dropped the `initialize`/`initialized` handshake (SEP-2575) and the
+  `Mcp-Session-Id` header (SEP-2567). One `instrumentMcpServer` /
+  `instrumentMcpClient` call now covers both eras: the wrappers stay duck-typed
+  Proxies, so era is detected per request and no SDK is imported at runtime.
+
+  **Fixed: server spans were silently orphaned on the v2 SDK.** Neither era puts
+  `_meta` in a handler's first argument — both SDKs validate `arguments` and hand
+  the request metadata over on the context argument — but the v2 shape nests it at
+  `ctx.mcpReq._meta` rather than v1's `extra._meta`. Every `2026-07-28` server span
+  was starting a new trace instead of continuing the client's. The context is now
+  located by shape rather than position, which also fixes resource handlers
+  (`(uri, ctx)` and `(uri, variables, ctx)`).
+
+  **Era-dependent attributes are read off the request instead of from config:**
+
+  - `mcp.protocol.version` — from each request's
+    `io.modelcontextprotocol/protocolVersion` envelope key on `2026-07-28`. There
+    is no handshake left to pin it to.
+  - `mcp.session.id` — from a 2025-era request (server) or `client.transport`
+    (client). Absent on `2026-07-28`, which has no sessions.
+
+  **Fixed: a handler with no input schema is called as `(ctx)` on both SDKs**, so
+  treating `args[0]` as the arguments serialised the whole context. With
+  `captureToolArgs: true` behind OAuth that put `http.authInfo.token` into
+  `gen_ai.tool.call.arguments` and shipped it to the telemetry backend. The
+  payload is now only read when the context was not found at that position.
+  (Pre-existing; surfaced while adding the context lookup.)
+
+  **Breaking:**
+
+  - `MCP_METRICS.CLIENT_SESSION_DURATION` / `SERVER_SESSION_DURATION` and
+    `MCP_METHODS.INITIALIZE` removed — nothing recorded them, and `2026-07-28` has
+    nothing for them to measure.
+  - `McpInstrumentationConfig.sessionId` is now a _fallback_, consulted only when
+    the request carries no session of its own. Existing configs keep working; the
+    value is simply outranked by the live one where there is one. It remains the
+    only source for legacy stdio, whose transport has no session at all, and is
+    ignored by sessionless 2026-07-28 requests.
+  - Peer dependencies are now `@modelcontextprotocol/server` /
+    `@modelcontextprotocol/client` ^2.0.0 **and** `@modelcontextprotocol/sdk`
+    ^1.30.0, all optional. Install whichever you build against.
+
+  **Added:**
+
+  - `mcp.input_required` on the span and the duration metric when a `2026-07-28`
+    handler returns `inputRequired(...)` instead of a result, so a multi-round-trip
+    pause is not counted as completed work and the client's retry does not read as
+    a duplicate call. The span status is left UNSET rather than OK — a pause is
+    neither success nor failure. Detected with the SDK's own
+    `resultType === 'input_required'` discriminator, so a result that legitimately
+    carries a `requestState`/`inputRequests` field is not mistaken for a pause. The
+    key is not under `mcp.tool.*` because `prompts/get` and `resources/read` can
+    pause too, and a tool-namespaced label would split their duration series.
+  - `MCP_METHODS.SERVER_DISCOVER`; the v2 client's `discover()` is traced as a
+    discovery operation, in place of `initialize`.
+  - Client wrappers forward trailing arguments verbatim, so v1's
+    `callTool(params, resultSchema?, options?)` and v2's `callTool(params, options?)`
+    both pass through untouched.
+
+  **Examples migrated to 2026-07-28.** `example-mcp-server` now builds its server
+  from a factory behind `serveStdio`, and `example-mcp-client` uses the v2 client
+  with `versionNegotiation: 'auto'`. Both gained a `type-check` script — CI was
+  not type-checking either app before.
+
+  The server example also stopped writing spans to stdout. On a stdio MCP server
+  stdout _is_ the protocol wire, so `ConsoleSpanExporter` corrupts it; the example
+  now ships a small stderr exporter and says why.
+
+### Minor Changes
+
+- 31fd178: Group MCP failures by cause, and stop re-classifying unchanged manifests every request
+
+  **Fixed: a client span stayed OK when the tool it called reported failure.**
+  `isError: true` arrives inside a well-formed result, so nothing throws and the
+  call was being marked successful — leaving the caller's half of the trace
+  claiming success while the server's own span already said ERROR. `callTool` now
+  sets `error.type=tool_error` and an ERROR status on that result, matching the
+  server, and its duration metric carries the error too.
+
+  **Fixed (behaviour change): the guard bridge was told every non-throwing call
+  succeeded.** The recorded step hardcoded `error: false`, so a tool reporting
+  `isError` counted as a success and an error-loop rule could never accumulate on
+  the failure mode MCP tools actually use. The step now carries the tool's own
+  verdict. **If you pass a `guard`, expect it to trip on runs it previously let
+  through** — that is the point, but it is a live enforcement change, not just a
+  reporting one.
+
+  **Added: `mcp.failure.category` and `mcp.failure.fingerprint`.** `error.type`
+  already said a call failed; nothing said whether ten failures were one bug ten
+  times or ten separate bugs. Every failure path is covered on both sides of the
+  trace — a handler or a call that throws, and an `isError` result produced or
+  received — including `resources/read` and `prompts/get`, whose transport
+  failures reject rather than returning `isError`. Both ends fingerprint identical
+  text identically, so one bug is one group whichever side recorded it.
+
+  The fingerprint is a hash of the failure text with run-specific values removed
+  (UUIDs, long hex runs, every digit run, quoted values), so two occurrences of one
+  cause agree on it across processes. That is the property that matters on a
+  stateless deployment: with no session to accumulate against, correlation has to
+  happen on something every span already carries, and this is on the span whichever
+  instance served the call.
+
+  - Classification runs on the **raw** text, never the normalised form —
+    normalisation replaces digit runs, which would erase the `401`/`503` the
+    channel patterns key on. Channels are ordered most-specific-first, so
+    `504 Gateway Timeout` reads as `timeout` rather than `dependency`.
+  - Only the category reaches the duration metric. The fingerprint is one series
+    per distinct bug and stays on the span, where the volume is already per-call.
+  - A failure with no text gets neither attribute. Fingerprinting the empty string
+    would collapse every unrelated silent failure into one group, which reads as a
+    single high-frequency bug that does not exist.
+  - `classifyFailure`, `fingerprintFailure`, `normalizeFailureMessage`,
+    `extractFailureText` and `failureTextFromError` are exported, so the same
+    grouping can be applied to failures this package does not wrap.
+
+  **Fixed: a `securityClassifier` was billed once per request instead of once per
+  manifest.** Manifest assessment happens at registration time, and `2026-07-28`
+  builds a server per request — so `instrumentMcpServer` runs per request too, and
+  every request re-classified descriptions that had not changed. With an LLM-backed
+  classifier that is per-request latency and spend on a constant. Assessments are
+  now memoised at module scope, the only scope that outlives the per-request server.
+
+  The memo is keyed by classifier first, then by the normalised manifest surface:
+  two configs may disagree about the same text, and a shared verdict would
+  attribute one classifier's security finding to the other. A changed description
+  re-classifies, so a redeploy that edits a manifest is still caught.
+
 ## 48.0.0
 
 ### Patch Changes

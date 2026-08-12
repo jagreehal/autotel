@@ -1,5 +1,12 @@
 # @jagreehal/example-devtools
 
+## 1.0.27
+
+### Patch Changes
+
+- Updated dependencies [31fd178]
+  - autotel-devtools@20.0.1
+
 ## 1.0.26
 
 ### Patch Changes
