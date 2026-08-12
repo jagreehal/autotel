@@ -32,7 +32,20 @@ export {
   MCP_DURATION_BUCKETS,
   MCP_SECURITY_EVENT,
   MCP_CHAR_BUDGETS,
+  MCP_FAILURE_CATEGORY,
+  type McpFailureCategory,
 } from './semantic-conventions';
+
+// Failure grouping — the "is this the same failure?" half of error observability.
+// Exported as pure functions so the same grouping can be applied to failures
+// this package does not wrap.
+export {
+  classifyFailure,
+  extractFailureText,
+  failureTextFromError,
+  fingerprintFailure,
+  normalizeFailureMessage,
+} from './failure';
 
 export {
   recordClientOperationDuration,

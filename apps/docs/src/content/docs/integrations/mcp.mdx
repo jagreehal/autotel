@@ -20,54 +20,82 @@ If you want Claude / Cursor / Windsurf to investigate observability data
 ## autotel-mcp-instrumentation
 
 Automatic instrumentation for MCP servers and clients. W3C Trace Context
-propagates through the `_meta` field, which works across stdio, HTTP, SSE, or
-any custom transport. Bundle ~7KB total.
+propagates through the `_meta` field, which works across stdio, Streamable HTTP,
+or any custom transport. Bundle ~7KB total.
+
+Supports **both protocol eras** from the same call: MCP `2026-07-28` (the v2
+SDK) and the 2025-era v1 SDK. The era is detected per request, and no MCP SDK is
+imported at runtime.
 
 ### Installation
 
 ```bash
-npm install autotel-mcp-instrumentation @modelcontextprotocol/sdk autotel
+npm install autotel-mcp-instrumentation @modelcontextprotocol/server @modelcontextprotocol/client autotel
 ```
+
+For a 2025-era server, install `@modelcontextprotocol/sdk` instead. All MCP
+packages are optional peers, so install only what you build against.
 
 ### Server-side
 
+`2026-07-28` has no handshake and no session, so a server instance holds nothing
+between requests: the SDK builds one per request from a factory. Instrument
+inside the factory.
+
 ```typescript
-import { Server } from '@modelcontextprotocol/sdk/server/index';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
+import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { instrumentMcpServer } from 'autotel-mcp-instrumentation/server';
 import { init } from 'autotel';
+import { z } from 'zod';
 
+// Telemetry first: OpenTelemetry must be initialised before anything traced
+// is constructed.
 init({ service: 'mcp-weather-server', endpoint: 'http://localhost:4318' });
 
-const server = new Server({ name: 'weather', version: '1.0.0' });
+function createServer() {
+  const server = new McpServer(
+    { name: 'weather', version: '1.0.0' },
+    { capabilities: { tools: {} } },
+  );
 
-const instrumented = instrumentMcpServer(server, {
-  captureArgs: true,
-  captureResults: false, // off by default; PII concern
-});
+  // Instrument before registering, so the proxy wraps the real handlers.
+  const traced = instrumentMcpServer(server, {
+    networkTransport: 'tcp',
+    captureToolArgs: true, // opt-in
+    captureToolResults: false, // default; results may carry PII
+  });
 
-instrumented.registerTool({
-  name: 'get_weather',
-  description: 'Get current weather for a location',
-  inputSchema: {
-    type: 'object',
-    properties: { location: { type: 'string' } },
-    required: ['location'],
-  },
-  handler: async (args) => {
-    // Auto-traced; parent context extracted from _meta
-    const weather = await fetchWeather(args.location);
-    return { content: [{ type: 'text', text: `Temp: ${weather.temp}°F` }] };
-  },
-});
+  traced.registerTool(
+    'get_weather',
+    {
+      title: 'Get weather',
+      description: 'Get current weather for a location',
+      inputSchema: z.object({ location: z.string() }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ location }) => {
+      // Auto-traced, parented to the caller's span via ctx.mcpReq._meta
+      const weather = await fetchWeather(location);
+      return { content: [{ type: 'text', text: `Temp: ${weather.temp}°F` }] };
+    },
+  );
 
-await server.connect(new StdioServerTransport());
+  return traced;
+}
+
+export default createMcpHandler(createServer);
 ```
+
+On a 2025-era server you hold a single `Server` and instrument it once. Same
+call, same attributes.
 
 ### Client-side
 
 ```typescript
-import { Client } from '@modelcontextprotocol/sdk/client/index';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
 import { instrumentMcpClient } from 'autotel-mcp-instrumentation/client';
 import { init } from 'autotel';
 
@@ -75,64 +103,153 @@ init({ service: 'mcp-weather-client', endpoint: 'http://localhost:4318' });
 
 const client = new Client({ name: 'weather-client', version: '1.0.0' });
 
-const instrumented = instrumentMcpClient(client, {
-  captureArgs: true,
-  captureResults: false,
+const traced = instrumentMcpClient(client, {
+  networkTransport: 'tcp',
+  captureToolArgs: true,
 });
 
+await client.connect(new StreamableHTTPClientTransport(new URL(MCP_URL)));
+
 // _meta is injected with traceparent/tracestate/baggage automatically
-const result = await instrumented.callTool('get_weather', { location: 'NYC' });
+const result = await traced.callTool({
+  name: 'get_weather',
+  arguments: { location: 'NYC' },
+});
 ```
+
+### Protocol eras
+
+MCP `2026-07-28` dropped the `initialize`/`initialized` handshake (SEP-2575) and
+the `Mcp-Session-Id` header (SEP-2567). Every request is self-describing, so any
+request can land on any instance behind a plain round-robin balancer.
+
+Propagation got _easier_, not harder: `traceparent` always rode in `_meta`, never
+in the session or the transport. `2026-07-28` makes `_meta` the mandatory
+per-request envelope, so there is now always somewhere for it to ride, and no
+session for a trace to be orphaned from.
+
+| Signal                 | 2026-07-28                                      | 2025-era                          |
+| ---------------------- | ----------------------------------------------- | --------------------------------- |
+| `mcp.protocol.version` | per request, from the `_meta` envelope          | not set (fixed at `initialize`)   |
+| `mcp.session.id`       | not set — there are no sessions                 | from the request or the transport |
+| `server/discover`      | traced as a discovery operation                 | n/a — `initialize` instead        |
+| `mcp.input_required`   | set when a handler returns `inputRequired(...)` | n/a — elicitation is push-style   |
+
+:::caution[`_meta` is not in the handler's first argument]
+Both SDKs validate `arguments` and hand the request metadata over on the
+**context** argument — v2 `ctx.mcpReq._meta`, v1 `extra._meta`. Reading `_meta`
+off the arguments finds nothing and silently orphans every server span: the
+trace still looks fine locally, it just never joins the client's.
+`instrumentMcpServer` handles this for you; it only bites hand-rolled
+instrumentation.
+:::
+
+A handler that returns `inputRequired(...)` **paused** rather than completed.
+Its span gets `mcp.input_required=true` and its status is left UNSET, so
+"asked the user a question" is counted as neither completed work nor a success,
+and the client's retry does not read as a duplicate call.
 
 ### Configuration
 
 ```typescript
 interface McpInstrumentationConfig {
-  captureArgs?: boolean; // default true
-  captureResults?: boolean; // default false (PII risk)
+  captureToolArgs?: boolean; // default false (opt-in)
+  captureToolResults?: boolean; // default false (PII risk)
   captureErrors?: boolean; // default true
+  enableMetrics?: boolean; // default true
+  captureDiscoveryOperations?: boolean; // tools/list, server/discover, … default true
+  networkTransport?: 'pipe' | 'tcp' | string;
+  sessionId?: string; // fallback only; the request always wins
   customAttributes?: (ctx: { type; name; args; result }) => Attributes;
+  // …plus the security options below
 }
 ```
 
 ### Span attributes
 
-**Server spans:**
+Per the
+[OTel MCP semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/):
 
-- `mcp.type`: `tool`, `resource`, `prompt`
-- `mcp.tool.name` / `mcp.resource.name` / `mcp.prompt.name`
-- `mcp.tool.args` (when `captureArgs: true`)
-- `mcp.tool.result` (when `captureResults: true`)
+- `mcp.method.name`: `tools/call`, `resources/read`, `prompts/get`
+- `gen_ai.tool.name` / `gen_ai.prompt.name` / `mcp.resource.uri`
+- `gen_ai.operation.name`: `execute_tool` on tool spans
+- `mcp.protocol.version`, `mcp.session.id` (era-dependent, see above)
+- `error.type`: `tool_error` when the result carries `isError` — on the client
+  span as well as the server's, so the caller's half of the trace does not read
+  as a success
+- `mcp.failure.category` / `mcp.failure.fingerprint`: which failure, and whether
+  it is the same one as last time (see below)
+- `mcp.input_required`: the call paused for input instead of completing
+- `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` (opt-in only)
 
-**Client spans:**
+Client spans carry the same attributes with `SpanKind.CLIENT`. Traced client
+methods are `callTool`, `readResource`, `getPrompt`, plus `listTools`,
+`listResources`, `listPrompts`, `ping` and `discover`.
 
-- `mcp.client.operation`: `callTool`, `getResource`, `getPrompt`
-- `mcp.client.name`, `mcp.client.args`, `mcp.client.result`
+### Grouping failures
+
+`error.type` tells you a call failed. It does not tell you whether ten failures
+are one bug ten times or ten separate bugs, and the raw message cannot either —
+real failure text is full of ids, ports and durations that differ every run.
+
+Every failure path gets two more attributes, on both sides of the trace: a
+handler or a call that throws, and an `isError` result produced or received.
+That includes `resources/read` and `prompts/get`, which fail by rejecting rather
+than returning `isError`. Both ends fingerprint identical text identically, so
+one bug is one group whichever side recorded it:
+
+- **`mcp.failure.category`** — `auth`, `timeout`, `network`, `validation`,
+  `serialization`, `dependency`, or `internal`. Ordered most-specific-first, so
+  `504 Gateway Timeout` reads as `timeout`. Low cardinality, so it is also a
+  label on the duration metric.
+- **`mcp.failure.fingerprint`** — a hash of the failure text with run-specific
+  values stripped. Two occurrences of one cause produce the same value across
+  processes, so it works as a correlation key on a stateless deployment where
+  there is no session to accumulate against. Span-only: it is one series per
+  distinct bug, which is more than a metric backend should carry.
+
+A failure with no text to group on gets neither attribute, rather than a shared
+fingerprint of the empty string that would read as one very frequent bug.
+
+The same functions are exported for failures the instrumentation does not wrap:
+
+```typescript
+import {
+  classifyFailure,
+  fingerprintFailure,
+} from 'autotel-mcp-instrumentation';
+
+classifyFailure('ETIMEDOUT: upstream timed out after 30000ms'); // 'timeout'
+fingerprintFailure('user 0f9c2b1a-… not found after 37ms'); // stable hash
+```
 
 ### Distributed tracing via `_meta`
 
 Because trace context lives in the JSON payload's `_meta` field, the same
-propagation works across stdio, HTTP, SSE, WebSocket, or any custom transport
-without any header plumbing:
+propagation works across stdio, Streamable HTTP, or any custom transport without
+header plumbing. The keys are the bare `traceparent` / `tracestate` / `baggage`
+names, not the reserved `io.modelcontextprotocol/*` envelope namespace, so they
+survive the SDK's envelope lift untouched.
 
 ```typescript
 import {
   injectOtelContextToMeta,
   extractOtelContextFromMeta,
-  activateTraceContext,
 } from 'autotel-mcp-instrumentation/context';
 import { context } from '@opentelemetry/api';
 
 // Client side: inject
-const request = {
-  method: 'tools/call',
-  params: { name: 'my-tool', arguments: {} },
-  _meta: injectOtelContextToMeta({}),
-};
+await client.callTool({
+  name: 'my-tool',
+  arguments: {},
+  _meta: injectOtelContextToMeta(),
+});
 
-// Server side: extract and activate
-const ctx = activateTraceContext(request._meta);
-return context.with(ctx, () => runHandler(request));
+// Server side: extract from the context argument, not the arguments
+const handler = async (args, ctx) => {
+  const parent = extractOtelContextFromMeta(ctx.mcpReq._meta);
+  return context.with(parent, () => runHandler(args));
+};
 ```
 
 ### Custom attributes & PII redaction
@@ -142,7 +259,7 @@ business-specific tags:
 
 ```typescript
 const instrumented = instrumentMcpServer(server, {
-  captureArgs: false, // disable raw arg capture
+  captureToolArgs: false, // keep raw arguments off the span
   customAttributes: ({ type, name, args, result }) => ({
     'tool.location': args?.location, // safe to log
     'tenant.id': args?.tenantId,
@@ -223,6 +340,11 @@ const guard = createGenAiBudget({ maxToolCalls: 50, maxCostUsd: 5 });
 instrumentMcpClient(client, { guard }); // duck-typed — no genai dependency added
 ```
 
+A step's `error` flag is the tool's own verdict, so a result carrying `isError`
+is recorded as a failed step even though nothing threw. Error-loop rules
+therefore accumulate on the failure mode MCP tools actually use — if you have a
+guard configured, expect it to trip on runs it previously let through.
+
 **Signals reference**
 
 | Signal                             | Kind      | Meaning                                 |
@@ -274,6 +396,20 @@ don't need Jaeger, Tempo, or Grafana.
 
 - Node.js 20+
 - An MCP-compatible client
+
+### Protocol
+
+Speaks MCP `2026-07-28`: no `initialize` handshake, no session header,
+`server/discover` for capability discovery, and cacheable list results. Because
+every request is self-describing, any request can land on any instance — plain
+round-robin routing, no sticky sessions, no shared session store.
+
+2025-era clients (the v1 SDK that Claude Code, Claude Desktop and Cursor still
+ship) are served from the **same tool definitions** through the SDK's stateless
+legacy path, so existing MCP clients keep working unchanged.
+
+`--transport http` is Streamable HTTP. There is no SSE transport: HTTP+SSE has
+been deprecated since protocol `2025-03-26` and is gone.
 
 ### Standard config
 

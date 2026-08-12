@@ -5,11 +5,13 @@
   "type": "module",
   "description": "Example MCP server with autotel-mcp-instrumentation",
   "scripts": {
+    "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "dev": "tsx watch src/index.ts"
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0",
     "autotel": "workspace:*",
     "autotel-mcp-instrumentation": "workspace:*",
     "zod": "4.4.3"

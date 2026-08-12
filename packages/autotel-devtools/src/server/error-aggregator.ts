@@ -324,8 +324,13 @@ export class ErrorAggregator {
         )
         // Remove hex IDs
         .replaceAll(/\b[0-9a-f]{16,}\b/gi, '[ID]')
-        // Remove numbers
-        .replaceAll(/\b\d+\b/g, '[N]')
+        // Remove numbers. Deliberately unbounded: there is no word boundary
+        // between a digit and a letter, so `\b\d+\b` leaves `37ms` and `412ms`
+        // intact and two occurrences of one timeout never group. (The SQL
+        // normalisers elsewhere in the monorepo keep the bounded form on
+        // purpose — there it protects identifiers like `col1`. Message text has
+        // no such thing to protect.)
+        .replaceAll(/\d+/g, '[N]')
         // Remove quoted strings
         .replaceAll(/"[^"]*"/g, '"[STR]"')
         .replaceAll(/'[^']*'/g, "'[STR]'")

@@ -210,6 +210,37 @@ governance attributes **and** canonical `gen_ai.*` when `ai` metadata is present
 It honours spec breaking change #242 (`gen_ai.agent.id` is dropped on internal
 `invoke_agent` spans via `genAiAgentAttributes(…, { internal: true })`).
 
+**Eval-sandbox incident replay.** When multiple eval agents share a writable
+registry (the OpenAI/HuggingFace pattern), use the agent IR helpers below.
+See the standalone demo at `agent-eval-sandbox-demo` (sibling to ai-sdk-guardrails).
+
+```ts
+import {
+  CrossAgentMonitor,
+  createHoneyTokenTool,
+  detectCrossAgentPattern,
+  crossAgentDetectionsToSecurityEvents,
+  querySpansForEvalIncident,
+  recordEvalRunIdentity,
+  EVAL_IDENTITY_ATTR,
+} from 'autotel-genai/agent';
+
+// Live: emit agent.shared_channel.detected as tools run
+const monitor = new CrossAgentMonitor({ minAgents: 2, ctx });
+monitor.record({ agentId: 'eval-a', resource: 'artifactory:/notes' });
+
+// Batch IR over exported spans
+const ir = querySpansForEvalIncident(finishedSpans, {
+  evalRunId: 'eval-agent-july-2026',
+});
+
+// Tag eval runs for downstream queries
+recordEvalRunIdentity({ runId, sandboxId, taskId });
+
+// Honey-token tool for coordination detection
+const bait = createHoneyTokenTool({ tokenId: 'seek-note', ctx });
+```
+
 ### Vercel AI SDK
 
 Register `autotelTelemetry()` once and every `generateText` / `streamText` /

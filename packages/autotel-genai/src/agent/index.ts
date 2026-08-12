@@ -38,6 +38,24 @@ export {
   type CreateSignedEventEnvelopeOptions,
 } from './non-repudiation.js';
 export { withScopedTool } from './scoped-tool.js';
+export {
+  crossAgentDetectionsToSecurityEvents,
+  detectCrossAgentPattern,
+} from './cross-agent-detect.js';
+export { CrossAgentMonitor } from './cross-agent-monitor.js';
+export type { CrossAgentMonitorOptions } from './cross-agent-monitor.js';
+export { EVAL_IDENTITY_ATTR, recordEvalRunIdentity } from './eval-identity.js';
+export type { RecordEvalRunIdentityInput } from './eval-identity.js';
+export { createHoneyTokenTool } from './honey-token.js';
+export type {
+  HoneyTokenToolDefinition,
+  HoneyTokenToolOptions,
+} from './honey-token.js';
+export {
+  querySpansForEvalIncident,
+  spansToCrossAgentEvents,
+} from './forensic.js';
+export type { EvalIncidentQueryResult } from './forensic.js';
 import {
   AGENT_SECURITY_ATTR,
   deriveActionRiskClass,
@@ -102,6 +120,12 @@ export type {
   AgentPlanRiskVerdict,
   RecordPlanRiskAssessmentOptions,
 } from './agent-plan-classifier.js';
+export type {
+  CrossAgentDetection,
+  CrossAgentEvent,
+  CrossAgentSecurityEvent,
+  DetectCrossAgentPatternOptions,
+} from './cross-agent-detect.js';
 export type { AgentContext } from './context.js';
 export { agentContextFromSpan } from './context.js';
 export type {

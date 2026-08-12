@@ -17,97 +17,149 @@ Automatically instrument MCP servers and clients with OpenTelemetry tracing. Use
 ## Installation
 
 ```bash
-npm install autotel-mcp-instrumentation @modelcontextprotocol/sdk autotel
+npm install autotel-mcp-instrumentation @modelcontextprotocol/server @modelcontextprotocol/client autotel
 ```
+
+**Both MCP eras are supported from one call.** The v2 SDK
+(`@modelcontextprotocol/server` / `@modelcontextprotocol/client`, protocol
+`2026-07-28`) and the v1 `@modelcontextprotocol/sdk` (2025-era, still what most
+shipped MCP clients use) are all optional peers — install whichever you build
+against. Nothing is imported at runtime: the wrappers are duck-typed Proxies,
+so era differences are read off each request rather than compiled in.
 
 ## Quick Start
 
 ### Server-Side Instrumentation
 
+On `2026-07-28` there is no handshake and no session, so a server instance holds
+nothing between requests: the SDK builds one per request from a factory.
+Instrument inside that factory. (On the v1 SDK you hold a single `Server` and
+instrument it once — same call, same attributes.)
+
 ```typescript
-import { Server } from '@modelcontextprotocol/sdk/server/index';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
+import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { instrumentMcpServer } from 'autotel-mcp-instrumentation/server';
 import { init } from 'autotel';
+import { z } from 'zod';
 
-// Initialize OpenTelemetry
+// Telemetry first: OpenTelemetry must be initialised before anything traced
+// is constructed.
 init({
   service: 'mcp-weather-server',
   endpoint: 'http://localhost:4318',
 });
 
-const server = new Server({
-  name: 'weather',
-  version: '1.0.0',
-});
+function createServer() {
+  const server = new McpServer(
+    { name: 'weather', version: '1.0.0' },
+    { capabilities: { tools: {} } },
+  );
 
-// Instrument the server (automatic tracing for all tools/resources/prompts)
-const instrumented = instrumentMcpServer(server, {
-  captureArgs: true, // Log tool arguments
-  captureResults: false, // Don't log results (PII concerns)
-});
+  // Automatic tracing for all tools/resources/prompts registered below.
+  const traced = instrumentMcpServer(server, {
+    networkTransport: 'tcp',
+    captureToolArgs: true, // opt-in: arguments on the span
+    captureToolResults: false, // off by default: results may carry PII
+  });
 
-// Register tools normally - they're automatically traced!
-instrumented.registerTool({
-  name: 'get_weather',
-  description: 'Get current weather for a location',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      location: { type: 'string' },
+  traced.registerTool(
+    'get_weather',
+    {
+      title: 'Get weather',
+      description: 'Get current weather for a location',
+      inputSchema: z.object({ location: z.string() }),
+      annotations: { readOnlyHint: true },
     },
-    required: ['location'],
-  },
-  handler: async (args) => {
-    // This handler is automatically traced with parent context from _meta
-    const weather = await fetchWeather(args.location);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Temperature in ${args.location}: ${weather.temp}°F`,
-        },
-      ],
-    };
-  },
-});
+    async ({ location }) => {
+      // Traced, and parented to the caller's span via ctx.mcpReq._meta.
+      const weather = await fetchWeather(location);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Temperature in ${location}: ${weather.temp}F`,
+          },
+        ],
+      };
+    },
+  );
 
-await server.connect(new StdioServerTransport());
+  return traced;
+}
+
+export default createMcpHandler(createServer);
 ```
 
 ### Client-Side Instrumentation
 
 ```typescript
-import { Client } from '@modelcontextprotocol/sdk/client/index';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
 import { instrumentMcpClient } from 'autotel-mcp-instrumentation/client';
 import { init } from 'autotel';
 
-// Initialize OpenTelemetry
 init({
   service: 'mcp-weather-client',
   endpoint: 'http://localhost:4318',
 });
 
-const client = new Client({
-  name: 'weather-client',
-  version: '1.0.0',
-});
+const client = new Client({ name: 'weather-client', version: '1.0.0' });
 
 // Instrument the client (automatic trace context injection)
-const instrumented = instrumentMcpClient(client, {
-  captureArgs: true,
-  captureResults: false,
+const traced = instrumentMcpClient(client, {
+  networkTransport: 'tcp',
+  captureToolArgs: true,
 });
 
-await client.connect(new StdioClientTransport(/* ... */));
+await client.connect(new StreamableHTTPClientTransport(new URL(MCP_URL)));
 
-// Tool calls automatically create spans and inject _meta with trace context
-const result = await instrumented.callTool('get_weather', {
-  location: 'New York',
-  // _meta field is automatically injected with traceparent/tracestate/baggage
+// Tool calls create a span and inject _meta with traceparent/tracestate/baggage
+const result = await traced.callTool({
+  name: 'get_weather',
+  arguments: { location: 'New York' },
 });
 ```
+
+## Protocol eras
+
+MCP `2026-07-28` dropped the `initialize`/`initialized` handshake (SEP-2575) and
+the `Mcp-Session-Id` header (SEP-2567). Every request is self-describing, so any
+request can land on any instance behind a plain round-robin balancer. Instrument
+the same way for either era — the differences below are handled for you.
+
+**Propagation got easier, not harder.** `traceparent` always rode in `_meta`,
+never in the session or the transport. `2026-07-28` makes `_meta` the mandatory
+per-request envelope, so there is now always somewhere for it to ride, and no
+session for a trace to be orphaned from.
+
+**Where `_meta` lives.** Neither era puts it in the handler's first argument:
+both SDKs validate `arguments` and hand the request metadata over on the context
+argument. v2 nests it at `ctx.mcpReq._meta`; v1 has it at `extra._meta`. This
+package finds the context by shape, so it also works for resource handlers,
+which are `(uri, ctx)` or `(uri, variables, ctx)`.
+
+| Signal                 | 2026-07-28                                                                   | 2025-era                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `mcp.protocol.version` | per-request, from the `io.modelcontextprotocol/protocolVersion` envelope key | not set (fixed at `initialize`)                                                               |
+| `mcp.session.id`       | not set — there are no sessions                                              | from `extra.sessionId` (server) or the transport (client), falling back to `config.sessionId` |
+| `server/discover`      | traced as a discovery operation                                              | n/a — `initialize` instead                                                                    |
+| `mcp.input_required`   | set when a handler returns `inputRequired(...)`                              | n/a — elicitation is push-style                                                               |
+
+Both come off the request rather than from config, so one instrumented server
+answers many callers correctly, and neither can go stale across a reconnect.
+
+**Multi-round-trip pauses are visible.** A `2026-07-28` handler that returns
+`inputRequired(...)` instead of a result gets `mcp.input_required=true` on the
+span and on the duration metric, and its span status is left UNSET rather than
+OK. So "asked the user a question" neither lands in the same latency bucket as
+"did the work" nor counts as a success, and the client's retry does not read as
+a duplicate call. The key is deliberately not under `mcp.tool.*`: `prompts/get`
+and `resources/read` can pause too.
+
+The `mcp.*.session.duration` metrics are gone: they have nothing left to measure
+on the current revision.
 
 ## API Reference
 
@@ -115,11 +167,12 @@ const result = await instrumented.callTool('get_weather', {
 
 #### `instrumentMcpServer(server, config?)`
 
-Wraps an MCP server to automatically trace all registered tools, resources, and prompts.
+Wraps an MCP server to automatically trace all registered tools, resources, and
+prompts. Call it on each instance your factory builds.
 
 **Parameters:**
 
-- `server` - MCP Server instance
+- `server` - `McpServer` instance
 - `config` - Optional instrumentation configuration
 
 **Returns:** Instrumented server (Proxy)
@@ -128,52 +181,65 @@ Wraps an MCP server to automatically trace all registered tools, resources, and 
 
 ```typescript
 interface McpInstrumentationConfig {
-  captureArgs?: boolean; // Capture tool/resource arguments (default: true)
-  captureResults?: boolean; // Capture results - may contain PII (default: false)
-  captureErrors?: boolean; // Capture errors and exceptions (default: true)
+  captureToolArgs?: boolean; // Arguments as gen_ai.tool.call.arguments (default: false)
+  captureToolResults?: boolean; // Results - may contain PII (default: false)
+  captureErrors?: boolean; // Errors and exceptions (default: true)
+  enableMetrics?: boolean; // Operation-duration histograms (default: true)
+  captureDiscoveryOperations?: boolean; // tools/list, server/discover, ... (default: true)
+  // Read per request in preference to this, so it stays correct on a server
+  // handling many callers. Set it only for legacy stdio, whose transport has
+  // no session at all. Modern requests ignore it because they are sessionless.
+  sessionId?: string;
+  networkTransport?: 'pipe' | 'tcp' | string; // network.transport
   customAttributes?: (context) => Attributes; // Custom span attributes
+  // ...plus the security options documented below
 }
 ```
 
-**Span Attributes Set:**
+**Span Attributes Set** (per the
+[OTel MCP semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/)):
 
-- `mcp.type` - Operation type ('tool', 'resource', 'prompt')
-- `mcp.tool.name` / `mcp.resource.name` / `mcp.prompt.name` - Name
-- `mcp.tool.args` - Arguments (if `captureArgs: true`)
-- `mcp.tool.result` - Result (if `captureResults: true`)
+- `mcp.method.name` - `tools/call`, `resources/read`, `prompts/get`
+- `gen_ai.tool.name` / `gen_ai.prompt.name` / `mcp.resource.uri` - the entity
+- `gen_ai.operation.name` - `execute_tool` on tool spans
+- `mcp.protocol.version` - the revision this request declared (2026-07-28)
+- `mcp.session.id` - the connection's session (2025-era only)
+- `error.type` - `tool_error` when the result carries `isError`
+- `mcp.input_required` - the call paused for input instead of completing (span
+  status is left UNSET, since a pause is neither success nor failure)
+- `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` - opt-in only
 
 ### Client Instrumentation
 
 #### `instrumentMcpClient(client, config?)`
 
-Wraps an MCP client to automatically create spans and inject trace context for all requests.
+Wraps an MCP client to create spans and inject trace context into every request.
 
 **Parameters:**
 
-- `client` - MCP Client instance
+- `client` - `Client` instance
 - `config` - Optional instrumentation configuration
 
 **Returns:** Instrumented client (Proxy)
 
-**Span Attributes Set:**
+**Traced methods:** `callTool`, `readResource`, `getPrompt`, and (when
+`captureDiscoveryOperations` is on) `listTools`, `listResources`, `listPrompts`,
+`ping`, `discover`.
 
-- `mcp.client.operation` - Operation type ('callTool', 'getResource', 'getPrompt')
-- `mcp.client.name` - Tool/resource/prompt name
-- `mcp.client.args` - Arguments (if `captureArgs: true`)
-- `mcp.client.result` - Result (if `captureResults: true`)
+Client spans carry the same attributes as server spans, with `SpanKind.CLIENT`.
 
 ### Context Utilities
 
 #### `extractOtelContextFromMeta(meta?)`
 
-Extract OpenTelemetry context from MCP `_meta` field.
+Extract OpenTelemetry context from MCP `_meta`.
 
 ```typescript
 import { extractOtelContextFromMeta } from 'autotel-mcp-instrumentation/context';
 import { context } from '@opentelemetry/api';
 
-const handler = async (args, _meta) => {
-  const parentContext = extractOtelContextFromMeta(_meta);
+const handler = async (args, ctx) => {
+  const parentContext = extractOtelContextFromMeta(ctx.mcpReq._meta);
   return context.with(parentContext, async () => {
     // Your traced code with parent context
   });
@@ -182,7 +248,7 @@ const handler = async (args, _meta) => {
 
 #### `injectOtelContextToMeta(ctx?)`
 
-Inject OpenTelemetry context into MCP `_meta` field.
+Inject OpenTelemetry context into MCP `_meta`.
 
 ```typescript
 import { injectOtelContextToMeta } from 'autotel-mcp-instrumentation/context';
@@ -190,19 +256,23 @@ import { injectOtelContextToMeta } from 'autotel-mcp-instrumentation/context';
 const meta = injectOtelContextToMeta();
 // Returns: { traceparent, tracestate, baggage }
 
-await client.callTool('my_tool', { arg1: 'value', _meta: meta });
+await client.callTool({
+  name: 'my_tool',
+  arguments: { arg1: 'value' },
+  _meta: meta,
+});
 ```
 
 #### `activateTraceContext(meta?)`
 
-Extract and immediately activate trace context from `_meta` field.
+Extract and immediately activate trace context from `_meta`.
 
 ```typescript
 import { activateTraceContext } from 'autotel-mcp-instrumentation/context';
 import { context } from '@opentelemetry/api';
 
-const ctx = activateTraceContext(_meta);
-return context.with(ctx, () => {
+const traceCtx = activateTraceContext(serverCtx.mcpReq._meta);
+return context.with(traceCtx, () => {
   // Traced code with parent context active
 });
 ```
@@ -442,20 +512,20 @@ across Node and Workers deployments.
 
 ### PII in Arguments/Results
 
-By default, `captureResults` is disabled to prevent PII leakage:
+Both are opt-in, so nothing leaks unless you ask for it:
 
 ```typescript
 const instrumented = instrumentMcpServer(server, {
-  captureArgs: true, // May contain PII
-  captureResults: false, // DISABLED by default - may contain sensitive data
+  captureToolArgs: true, // May contain PII
+  captureToolResults: false, // Default - may contain sensitive data
 });
 ```
 
 For production:
 
 - Review what data is in tool arguments
-- Disable `captureArgs` if arguments contain PII
-- Never enable `captureResults` in production unless you control the data
+- Leave `captureToolArgs` off if arguments contain PII
+- Never enable `captureToolResults` in production unless you control the data
 
 ### Custom PII Redaction
 
@@ -463,7 +533,7 @@ Use `customAttributes` to redact PII:
 
 ```typescript
 const instrumented = instrumentMcpServer(server, {
-  captureArgs: false, // Disable default arg capture
+  captureToolArgs: false, // Keep raw arguments off the span
   customAttributes: ({ args }) => {
     // Manually redact PII before logging
     return {

@@ -884,9 +884,9 @@ importers:
 
   apps/example-mcp-client:
     dependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.30.0
-        version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@modelcontextprotocol/client':
+        specifier: ^2.0.0
+        version: 2.0.0
       autotel:
         specifier: workspace:*
         version: link:../../packages/autotel
@@ -937,9 +937,12 @@ importers:
 
   apps/example-mcp-server:
     dependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.30.0
-        version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@modelcontextprotocol/server':
+        specifier: ^2.0.0
+        version: 2.0.0
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.10.0
+        version: 2.10.0(@opentelemetry/api@1.9.1)
       autotel:
         specifier: workspace:*
         version: link:../../packages/autotel
@@ -2378,9 +2381,15 @@ importers:
         specifier: ^1.9.1
         version: 1.9.1
     devDependencies:
+      '@modelcontextprotocol/client':
+        specifier: ^2.0.0
+        version: 2.0.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@modelcontextprotocol/server':
+        specifier: ^2.0.0
+        version: 2.0.0
       '@opentelemetry/context-async-hooks':
         specifier: ^2.10.0
         version: 2.10.0(@opentelemetry/api@1.9.1)

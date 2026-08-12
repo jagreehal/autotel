@@ -45,7 +45,15 @@ export interface McpInstrumentationConfig {
   networkTransport?: 'pipe' | 'tcp' | string;
 
   /**
-   * MCP session ID. Maps to mcp.session.id attribute.
+   * Fallback for `mcp.session.id`, used only when the request itself carries
+   * no session.
+   *
+   * Prefer leaving this unset: a 2025-era request supplies its own session and
+   * that is always used in preference, so one instrumented server stays
+   * correct across many callers. This exists for legacy stdio, whose transport
+   * has no session at all and whose only meaningful identifier is one the
+   * process picks for itself. It is ignored on 2026-07-28, which has no
+   * sessions.
    */
   sessionId?: string;
 

@@ -4,6 +4,12 @@
  * Attribute names, method names, and metric names from the
  * OpenTelemetry MCP semantic conventions specification.
  *
+ * Covers both MCP eras. 2026-07-28 is stateless — no `initialize` handshake
+ * and no session — so the session-scoped keys are era-dependent: they are set
+ * when a 2025-era request carries them and simply absent otherwise. The
+ * `mcp.*.session.duration` metrics are gone, having nothing left to measure
+ * on the current revision.
+ *
  * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/
  */
 
@@ -22,7 +28,12 @@ export const MCP_SEMCONV = {
 
   // Recommended
   OPERATION_NAME: 'gen_ai.operation.name',
+  // Per-request as of MCP 2026-07-28: the client stamps its protocol revision
+  // into every request's `_meta` envelope, so this is read off the request
+  // rather than off a handshake that no longer happens.
   PROTOCOL_VERSION: 'mcp.protocol.version',
+  // 2025-era only — 2026-07-28 removed the session (SEP-2567). Read off the
+  // request, so it is simply absent on a stateless connection.
   SESSION_ID: 'mcp.session.id',
   NETWORK_TRANSPORT: 'network.transport',
   SERVER_ADDRESS: 'server.address',
@@ -46,6 +57,15 @@ export const MCP_SEMCONV = {
   TOOL_IDEMPOTENT: 'mcp.tool.idempotent', // idempotentHint
   TOOL_OPEN_WORLD: 'mcp.tool.open_world', // openWorldHint
   TOOL_UNTRUSTED_CONTENT: 'mcp.tool.untrusted_content', // untrustedContentHint
+
+  // Multi-round-trip (MCP 2026-07-28): the call returned `input_required`
+  // instead of a result — it paused for elicitation/sampling and will be
+  // retried. Without this, a latency histogram mixes "did the work" with
+  // "asked a question", and the retry looks like a duplicate call.
+  // Deliberately NOT under `mcp.tool.*`: `prompts/get` and `resources/read`
+  // can pause too, and a tool-namespaced key on those spans splits their
+  // duration series under a label nothing else there uses.
+  INPUT_REQUIRED: 'mcp.input_required',
 
   // Payload sizes (chars) — the "contaminated output" / token-exhaustion signal.
   PAYLOAD_ARGUMENTS_SIZE: 'mcp.arguments.size',
@@ -75,7 +95,54 @@ export const MCP_SEMCONV = {
 
   // Spotlighting (untrusted-content demarcation) applied to a payload.
   SECURITY_SPOTLIGHT_METHOD: 'mcp.security.spotlight.method', // delimit|base64
+
+  // === Failure grouping (autotel extensions) ===
+  // `error.type` says a call failed; these say whether it is the SAME failure
+  // as the last one. The fingerprint is derived from the failure text with
+  // run-specific values stripped, so two occurrences of one bug agree on it
+  // even across processes — which is what makes it usable as a correlation key
+  // on a stateless deployment, where there is no session to group by.
+  FAILURE_CATEGORY: 'mcp.failure.category', // low cardinality, safe on metrics
+  FAILURE_FINGERPRINT: 'mcp.failure.fingerprint', // span-only: one per cause
 } as const;
+
+/**
+ * Failure channels, ordered most specific first — {@link classifyFailure}
+ * returns the first that matches, so a "connection timed out" reads as a
+ * timeout rather than a network fault.
+ *
+ * Deliberately coarse. The category answers "who should look at this?" and is
+ * low-cardinality enough for a metric label; the fingerprint answers "is this
+ * the same bug?" and stays on the span.
+ */
+export const MCP_FAILURE_CATEGORY = {
+  /** Rejected credentials, scopes, or permissions. */
+  AUTH: 'auth',
+  /** Deadline elapsed before the work finished. */
+  TIMEOUT: 'timeout',
+  /** Could not reach the peer at all. */
+  NETWORK: 'network',
+  /** Arguments did not satisfy the tool's schema. */
+  VALIDATION: 'validation',
+  /** Payload could not be parsed or encoded. */
+  SERIALIZATION: 'serialization',
+  /** An upstream the tool depends on failed. */
+  DEPENDENCY: 'dependency',
+  /** Anything left: a bug in the tool itself, until proven otherwise. */
+  INTERNAL: 'internal',
+} as const;
+
+export type McpFailureCategory =
+  (typeof MCP_FAILURE_CATEGORY)[keyof typeof MCP_FAILURE_CATEGORY];
+
+/**
+ * `_meta` key carrying the protocol revision of a single request (MCP
+ * 2026-07-28 per-request envelope). Mirrors the SDK's
+ * `PROTOCOL_VERSION_META_KEY` — declared here so this package keeps its
+ * duck-typed, zero-runtime-dependency relationship with the MCP SDK.
+ */
+export const MCP_PROTOCOL_VERSION_META_KEY =
+  'io.modelcontextprotocol/protocolVersion';
 
 /** Security event names (emitted via ctx.track). */
 export const MCP_SECURITY_EVENT = {
@@ -107,15 +174,14 @@ export const MCP_METHODS = {
   PROMPTS_GET: 'prompts/get',
   PROMPTS_LIST: 'prompts/list',
   PING: 'ping',
-  INITIALIZE: 'initialize',
+  /** Replaces the `initialize` handshake removed in 2026-07-28 (SEP-2575). */
+  SERVER_DISCOVER: 'server/discover',
 } as const;
 
 /** Metric names from OTel MCP semantic conventions */
 export const MCP_METRICS = {
   CLIENT_OPERATION_DURATION: 'mcp.client.operation.duration',
   SERVER_OPERATION_DURATION: 'mcp.server.operation.duration',
-  CLIENT_SESSION_DURATION: 'mcp.client.session.duration',
-  SERVER_SESSION_DURATION: 'mcp.server.session.duration',
   /** Security signals counter (autotel extension). */
   SECURITY_EVENTS: 'mcp.security.events',
 } as const;

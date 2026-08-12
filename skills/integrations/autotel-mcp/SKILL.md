@@ -100,8 +100,8 @@ Tools are registered per backend capability. Agents only see tools the backend c
 | Variable                        | Default                  | Purpose                                                                                 |
 | ------------------------------- | ------------------------ | --------------------------------------------------------------------------------------- |
 | `AUTOTEL_BACKEND`               | `collector`              | `collector` / `jaeger` / `tempo` / `prometheus` / `loki` / `stack` / `auto` / `fixture` |
-| `AUTOTEL_TRANSPORT`             | `stdio`                  | `stdio` / `http` / `sse`                                                                |
-| `AUTOTEL_PORT` / `AUTOTEL_HOST` | `3000` / `127.0.0.1`     | HTTP/SSE bind                                                                           |
+| `AUTOTEL_TRANSPORT`             | `stdio`                  | `stdio` / `http`                                                                        |
+| `AUTOTEL_PORT` / `AUTOTEL_HOST` | `3000` / `127.0.0.1`     | HTTP bind                                                                           |
 | `AUTOTEL_COLLECTOR_PORT`        | `4318`                   | OTLP receiver port (collector backend)                                                  |
 | `AUTOTEL_PERSIST`               | —                        | libsql file path (persistent collector storage)                                         |
 | `AUTOTEL_RETENTION_MS`          | `3600000` / `86400000`   | Data retention (in-memory / persistent)                                                 |
@@ -127,17 +127,37 @@ Where `prices.json` is `{ "model-name": { "inputPerMtok": N, "outputPerMtok": N 
 
 ## Transports
 
-| Transport | Endpoint                                 | Use                                              |
-| --------- | ---------------------------------------- | ------------------------------------------------ |
-| `stdio`   | —                                        | Default. Claude Code, Cursor, Codex, Copilot CLI |
-| `http`    | `POST /mcp`                              | Streamable HTTP MCP clients                      |
-| `sse`     | `GET /sse`, `POST /messages?sessionId=…` | Legacy SSE MCP clients                           |
+| Transport | Endpoint    | Use                                              |
+| --------- | ----------- | ------------------------------------------------ |
+| `stdio`   | —           | Default. Claude Code, Cursor, Codex, Copilot CLI |
+| `http`    | `POST /mcp` | Streamable HTTP MCP clients                      |
 
-`GET /health` is always exposed when HTTP/SSE is active. Returns `{ status, backend, transport, signals, detail, version }` for k8s readiness probes.
+There is no `sse` transport: HTTP+SSE has been deprecated since protocol
+`2025-03-26` and is gone. `--transport http` is Streamable HTTP.
+
+`GET /health` is exposed when HTTP is active. Returns
+`{ status, backend, transport, protocol, signals, detail, version }` for k8s
+readiness probes, where `protocol` is `{ revision, legacy }`.
+
+## Protocol
+
+Speaks MCP `2026-07-28` — no `initialize` handshake, no session header,
+`server/discover` for capability discovery, cacheable list results. Because
+every request is self-describing, any request can land on any instance: plain
+round-robin routing, no sticky sessions, no shared session store, and nothing
+to keep warm between requests.
+
+2025-era clients (the v1 SDK that Claude Code, Claude Desktop and Cursor still
+ship) are served from the **same tool definitions** through the SDK's stateless
+legacy path, so existing MCP clients keep working unchanged.
+
+The HTTP entry builds a server instance per request and stdio builds one per
+connection, from one factory — an instance holds nothing between requests.
 
 ## Common Mistakes
 
 - Do NOT expect trace tools to register against a Prometheus-only backend: capability-aware registration hides them, and runtime probing hides tools whose backends are configured-but-unreachable. Check `otel://backend/capabilities` for the live view.
 - Do NOT confuse `autotel-mcp` (the query server) with `autotel-mcp-instrumentation` (the OTel plugin for instrumenting MCP servers themselves): they're separate packages.
+- Do NOT reach for an `sse` transport or a session header: neither exists. `http` is Streamable HTTP, and `2026-07-28` has no sessions at all.
 - Do NOT guess at backend endpoints: `AUTOTEL_BACKEND=auto` probes them for you and composes a `CompositeBackend` automatically.
 - Use `get_llm_expensive_traces` over `get_llm_slow_traces` when answering cost questions: slow traces are ranked by latency, expensive traces by USD spend.

@@ -294,8 +294,8 @@ Only import from these public entry points:
 | `autotel-cloudflare`                  | Cloudflare Workers wrappers                                                                     |
 | `autotel-cloudflare/bindings`         | Bindings instrumentation                                                                        |
 | `autotel-mcp-instrumentation`         | MCP instrumentation                                                                             |
-| `autotel-mcp-instrumentation/server`  | instrumentMCPServer()                                                                           |
-| `autotel-mcp-instrumentation/client`  | Client instrumentation                                                                          |
+| `autotel-mcp-instrumentation/server`  | instrumentMcpServer()                                                                           |
+| `autotel-mcp-instrumentation/client`  | instrumentMcpClient()                                                                           |
 | `autotel-mcp-instrumentation/context` | MCP context propagation                                                                         |
 | `autotel-edge`                        | Edge runtime core                                                                               |
 | `autotel-edge/sampling`               | Sampling strategies                                                                             |

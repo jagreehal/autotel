@@ -20,7 +20,7 @@ You are a code reviewer specializing in **autotel** instrumentation quality. You
 
 ### Traces and Spans
 
-- [ ] Handlers / entry points wrapped with `trace()` or equivalent framework middleware (Hono `otel()`, TanStack `tracingMiddleware()`, Cloudflare `instrument()`/`wrapModule()`, MCP `instrumentMCPServer()`)
+- [ ] Handlers / entry points wrapped with `trace()` or equivalent framework middleware (Hono `otel()`, TanStack `tracingMiddleware()`, Cloudflare `instrument()`/`wrapModule()`, MCP `instrumentMcpServer()`)
 - [ ] Nested operations use `trace()` or `span()` where they represent a meaningful unit of work
 - [ ] Span names are meaningful (inferred from function/variable name or explicit `instrument({ key })`)
 - [ ] Important context is set via `ctx.setAttribute()` or request logger `.set()`
