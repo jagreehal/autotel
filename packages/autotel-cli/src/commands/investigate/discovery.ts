@@ -7,6 +7,7 @@ import {
 } from 'autotel-mcp';
 import { runInvestigate, type InvestigateFlags } from './runtime';
 import { addBackendFlags, backendFlagsFromOpts, intArg } from './cli-helpers';
+import { numberOpt, stringOpt } from '../../lib/opts.js';
 
 export interface DiscoverServicesFlags extends InvestigateFlags {
   limitServices?: number;
@@ -106,10 +107,10 @@ export function registerDiscoveryCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runDiscoverServices({
         ...backendFlagsFromOpts(o),
-        limitServices: o.limitServices as number | undefined,
-        traceSample: o.traceSample as number | undefined,
-        logSample: o.logSample as number | undefined,
-        metricSample: o.metricSample as number | undefined,
+        limitServices: numberOpt(o, 'limitServices'),
+        traceSample: numberOpt(o, 'traceSample'),
+        logSample: numberOpt(o, 'logSample'),
+        metricSample: numberOpt(o, 'metricSample'),
       });
     });
   const traceFieldsCmd = new Command('trace-fields')
@@ -120,8 +121,8 @@ export function registerDiscoveryCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runDiscoverTraceFields({
         ...backendFlagsFromOpts(o),
-        search: o.search as string | undefined,
-        sampleSize: o.sampleSize as number | undefined,
+        search: stringOpt(o, 'search'),
+        sampleSize: numberOpt(o, 'sampleSize'),
       });
     });
   const logFieldsCmd = new Command('log-fields')
@@ -132,8 +133,8 @@ export function registerDiscoveryCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runDiscoverLogFields({
         ...backendFlagsFromOpts(o),
-        search: o.search as string | undefined,
-        sampleSize: o.sampleSize as number | undefined,
+        search: stringOpt(o, 'search'),
+        sampleSize: numberOpt(o, 'sampleSize'),
       });
     });
   addBackendFlags(discoverCmd);

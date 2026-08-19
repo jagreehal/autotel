@@ -28,9 +28,15 @@ export interface StandardSchemaLike<Output = unknown> {
   };
 }
 
+/** Where in the message an issue was found, as Standard Schema reports it. */
+export type IssuePath = ReadonlyArray<PropertyKey | { key: PropertyKey }>;
+
 interface StandardResult<Output> {
   value?: Output;
-  issues?: ReadonlyArray<{ readonly message: string; readonly path?: unknown }>;
+  issues?: ReadonlyArray<{
+    readonly message: string;
+    readonly path?: IssuePath;
+  }>;
 }
 
 /** A bare parse function: returns the typed value or throws. */
@@ -41,11 +47,13 @@ export type Reader<Output = unknown> =
   StandardSchemaLike<Output> | ParseFn<Output>;
 
 function isStandardSchema(reader: Reader): reader is StandardSchemaLike {
+  // SAFETY: a Reader is either a parse function or a Standard Schema object.
+  // The `in` check below is what distinguishes them, and the assertion only
+  // reads the property that check just established.
   return (
-    typeof reader === 'object' &&
-    reader !== null &&
+    reader instanceof Object &&
     '~standard' in reader &&
-    typeof (reader as StandardSchemaLike)['~standard']?.validate === 'function'
+    (reader as StandardSchemaLike)['~standard']?.validate !== undefined
   );
 }
 
@@ -77,6 +85,8 @@ export async function read<Output>(
           ),
         };
       }
+      // SAFETY: a Standard Schema result with no issues carries the parsed value,
+      // typed by the schema this reader was built from.
       return { ok: true, value: result.value as Output, issues: [] };
     } catch (error) {
       return { ok: false, issues: [errorMessage(error)] };
@@ -84,6 +94,8 @@ export async function read<Output>(
   }
 
   try {
+    // SAFETY: isStandardSchema returned false above, and a Reader is one of the
+    // two; the remaining case is the parse function.
     const parsed = (reader as ParseFn<Output>)(value);
     return { ok: true, value: parsed, issues: [] };
   } catch (error) {
@@ -91,14 +103,14 @@ export async function read<Output>(
   }
 }
 
-function formatIssue(message: string, path: unknown): string {
+function formatIssue(message: string, path: IssuePath | undefined): string {
   if (Array.isArray(path) && path.length > 0) {
     return `${path.map(String).join('.')}: ${message}`;
   }
   return message;
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+function errorMessage(cause: unknown): string {
+  if (cause instanceof Error) return cause.message;
+  return String(cause);
 }

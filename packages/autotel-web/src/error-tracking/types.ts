@@ -72,6 +72,15 @@ export interface ErrorTrackingConfig {
   captureConsoleErrors?: boolean;
   /** Skip autocapture if window.posthog is detected (default: true) */
   deferToPostHog?: boolean;
+  /**
+   * Drop exceptions thrown on a local origin (default: false).
+   *
+   * A dev server reloads on every keystroke and each reload can throw. Those
+   * exceptions group with the production ones — same code, same stack — so a
+   * real regression ends up buried under a day of local typos. Off by default,
+   * because plenty of teams do want their dev errors captured.
+   */
+  skipLocalhost?: boolean;
   /** Debug logging */
   debug?: boolean;
   /** String redactor for PII in error messages and stack traces */

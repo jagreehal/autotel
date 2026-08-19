@@ -1,4 +1,6 @@
 import type { CanonicalLogLineEvent } from './processors/canonical-log-line-processor';
+import type { UnknownRecord } from './values';
+import { asBoolean, asNumber, asRecord, asString, hasProcess } from './values';
 
 const RESET = '\u001B[0m';
 const DIM = '\u001B[2m';
@@ -9,12 +11,12 @@ const GREEN = '\u001B[32m';
 const CYAN = '\u001B[36m';
 const GRAY = '\u001B[90m';
 
-const LEVEL_COLORS: Record<string, string> = {
-  debug: GRAY,
-  info: GREEN,
-  warn: YELLOW,
-  error: RED,
-};
+const LEVEL_COLORS = new Map<string, string>([
+  ['debug', GRAY],
+  ['info', GREEN],
+  ['warn', YELLOW],
+  ['error', RED],
+]);
 
 /** Internal OTel attributes to skip in pretty output. */
 const SKIP_PREFIXES = [
@@ -44,12 +46,10 @@ const SKIP_KEYS = new Set([
 ]);
 
 function useColor(): boolean {
-  if (typeof process !== 'undefined') {
-    if (process.env.NO_COLOR) return false;
-    if (process.env.FORCE_COLOR) return true;
-    if (process.stdout?.isTTY) return true;
-  }
-  return false;
+  if (!hasProcess()) return false;
+  if (process.env.NO_COLOR) return false;
+  if (process.env.FORCE_COLOR) return true;
+  return process.stdout?.isTTY === true;
 }
 
 function c(color: string, text: string): string {
@@ -85,9 +85,10 @@ function formatTime(iso: string): string {
 }
 
 function formatValue(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean')
-    return String(value);
+  const text = asString(value);
+  if (text !== undefined) return text;
+  const scalar = asNumber(value) ?? asBoolean(value);
+  if (scalar !== undefined) return String(scalar);
   if (value == null) return '';
   try {
     return JSON.stringify(value);
@@ -100,10 +101,8 @@ function formatValue(value: unknown): string {
  * Group flat dot-notation attributes into a nested tree for pretty display.
  * e.g. { 'user.id': '1', 'user.plan': 'pro' } → { user: { id: '1', plan: 'pro' } }
  */
-function groupAttributes(
-  event: Record<string, unknown>,
-): Record<string, unknown> {
-  const tree: Record<string, unknown> = {};
+function groupAttributes(event: UnknownRecord): UnknownRecord {
+  const tree: UnknownRecord = {};
 
   for (const [key, value] of Object.entries(event)) {
     if (SKIP_KEYS.has(key)) continue;
@@ -117,10 +116,14 @@ function groupAttributes(
       let current = tree;
       for (let i = 0; i < parts.length - 1; i++) {
         const part = parts[i]!;
-        if (!(part in current) || typeof current[part] !== 'object') {
-          current[part] = {};
+        const branch = asRecord(current[part]);
+        if (branch) {
+          current = branch;
+        } else {
+          const created: UnknownRecord = {};
+          current[part] = created;
+          current = created;
         }
-        current = current[part] as Record<string, unknown>;
       }
       current[parts.at(-1)!] = value;
     }
@@ -130,7 +133,7 @@ function groupAttributes(
 }
 
 function renderTree(
-  obj: Record<string, unknown>,
+  obj: UnknownRecord,
   indent: string,
   isLast: boolean[],
 ): string[] {
@@ -142,13 +145,11 @@ function renderTree(
     const connector = last ? '\u2514\u2500' : '\u251C\u2500';
     const prefix = indent + connector + ' ';
 
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const nested = value as Record<string, unknown>;
+    const nested = asRecord(value);
+    if (nested) {
+      const nestedObjs = Object.entries(nested).filter(([, v]) => asRecord(v));
       const flatValues = Object.entries(nested).filter(
-        ([, v]) => typeof v !== 'object' || v === null,
-      );
-      const nestedObjs = Object.entries(nested).filter(
-        ([, v]) => typeof v === 'object' && v !== null && !Array.isArray(v),
+        ([, v]) => asRecord(v) === undefined,
       );
 
       if (nestedObjs.length === 0) {
@@ -186,7 +187,7 @@ export function formatPrettyLogLine(ctx: CanonicalLogLineEvent): string {
   const durationMs = Number(event.duration_ms ?? 0);
   const duration = formatDuration(durationMs);
 
-  const levelColor = LEVEL_COLORS[level] ?? '';
+  const levelColor = LEVEL_COLORS.get(level) ?? '';
   const levelStr = c(levelColor, level.toUpperCase().padEnd(5));
 
   const parts = [c(DIM, timestamp), levelStr];

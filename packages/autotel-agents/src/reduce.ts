@@ -39,9 +39,11 @@ export interface IngestOptions {
 }
 
 function emptyToolCategories(): Record<ToolCategory, number> {
-  const out = {} as Record<ToolCategory, number>;
-  for (const category of TOOL_CATEGORIES) out[category] = 0;
-  return out;
+  // SAFETY: Object.fromEntries widens its key type to string. TOOL_CATEGORIES is
+  // the full ToolCategory list, so every key of the result is one of them.
+  return Object.fromEntries(
+    TOOL_CATEGORIES.map((category) => [category, 0]),
+  ) as Record<ToolCategory, number>;
 }
 
 function emptyRollup(): AgentSessionRollup {

@@ -3,6 +3,7 @@ import {
   emitCorrelatedEvent,
   type CorrelatedEventTarget,
 } from './correlated-events';
+import { recordedAttributes } from './testing/doubles';
 
 function makeTarget(opts: { withAddEvent: boolean }): {
   target: CorrelatedEventTarget;
@@ -76,10 +77,7 @@ describe('emitCorrelatedEvent', () => {
       });
 
       expect(setAttributes).toHaveBeenCalledTimes(1);
-      const written = setAttributes.mock.calls[0]![0] as Record<
-        string,
-        unknown
-      >;
+      const written = recordedAttributes(setAttributes, 0);
 
       expect(written['autotel.event.1.workflow.started.name']).toBe(
         'workflow.started',
@@ -99,8 +97,8 @@ describe('emitCorrelatedEvent', () => {
       emitCorrelatedEvent(target, 'step_retry', { 'workflow.step.attempt': 2 });
 
       expect(setAttributes).toHaveBeenCalledTimes(2);
-      const first = setAttributes.mock.calls[0]![0] as Record<string, unknown>;
-      const second = setAttributes.mock.calls[1]![0] as Record<string, unknown>;
+      const first = recordedAttributes(setAttributes, 0);
+      const second = recordedAttributes(setAttributes, 1);
 
       expect(first['autotel.event.1.step_retry.workflow.step.attempt']).toBe(1);
       expect(second['autotel.event.2.step_retry.workflow.step.attempt']).toBe(
@@ -119,10 +117,7 @@ describe('emitCorrelatedEvent', () => {
 
       emitCorrelatedEvent(target, 'evt', { 'has spaces/and-bad!': 1 });
 
-      const written = setAttributes.mock.calls[0]![0] as Record<
-        string,
-        unknown
-      >;
+      const written = recordedAttributes(setAttributes, 0);
       const key = Object.keys(written).find((k) =>
         k.endsWith('has_spaces_and-bad_'),
       );
@@ -137,12 +132,8 @@ describe('emitCorrelatedEvent', () => {
       emitCorrelatedEvent(a.target, 'evt', {});
       emitCorrelatedEvent(b.target, 'evt', {});
 
-      const aKeys = Object.keys(
-        a.setAttributes.mock.calls[0]![0] as Record<string, unknown>,
-      );
-      const bKeys = Object.keys(
-        b.setAttributes.mock.calls[0]![0] as Record<string, unknown>,
-      );
+      const aKeys = Object.keys(recordedAttributes(a.setAttributes));
+      const bKeys = Object.keys(recordedAttributes(b.setAttributes));
 
       expect(aKeys.some((k) => k.startsWith('autotel.event.1.'))).toBe(true);
       expect(bKeys.some((k) => k.startsWith('autotel.event.1.'))).toBe(true);

@@ -54,11 +54,11 @@ function normalizeAttribute(spec: AttributeSpec): SnapshotAttribute {
 }
 
 function sortRecord<T>(record: Record<string, T>): Record<string, T> {
-  const out: Record<string, T> = {};
-  for (const key of Object.keys(record).toSorted()) {
-    out[key] = record[key];
-  }
-  return out;
+  return Object.fromEntries(
+    Object.keys(record)
+      .toSorted()
+      .map((key) => [key, record[key]]),
+  );
 }
 
 /**
@@ -106,6 +106,8 @@ export function serializeSnapshot(snapshot: ContractSnapshot): string {
 
 /** Parse and structurally validate a snapshot read from disk. */
 export function parseSnapshot(json: string): ContractSnapshot {
+  // SAFETY: the assertion is what this function then checks. Every field it
+  // relies on is validated below, and a file that does not match throws.
   const data = JSON.parse(json) as ContractSnapshot;
   if (data.spec !== SNAPSHOT_SPEC) {
     throw new Error(

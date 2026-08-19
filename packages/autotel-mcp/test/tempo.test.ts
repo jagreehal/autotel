@@ -4,6 +4,7 @@ import {
   buildTraceql,
   parseOtlpTrace,
 } from '../src/backends/tempo/index';
+import { installFetchHandler } from './helpers/fetch';
 
 describe('TempoBackend — TraceQL generation', () => {
   it('returns {} for empty query', () => {
@@ -152,10 +153,10 @@ describe('TempoBackend — wiring', () => {
   it('searchTraces sends TraceQL and unix-second time range', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      requests.push(typeof input === 'string' ? input : input.toString());
+    installFetchHandler(async (url) => {
+      requests.push(url);
       return new Response(JSON.stringify({ traces: [] }), { status: 200 });
-    }) as typeof fetch;
+    });
 
     try {
       const backend = new TempoBackend('http://localhost:3200');
@@ -188,13 +189,12 @@ describe('TempoBackend — wiring', () => {
   it('listServices prefers tag-values API when available', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      const url = typeof input === 'string' ? input : input.toString();
+    installFetchHandler(async (url) => {
       requests.push(url);
       return new Response(JSON.stringify({ tagValues: ['api', 'worker'] }), {
         status: 200,
       });
-    }) as typeof fetch;
+    });
 
     try {
       const backend = new TempoBackend('http://localhost:3200');

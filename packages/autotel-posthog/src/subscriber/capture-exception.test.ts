@@ -13,7 +13,7 @@ vi.mock('posthog-node', () => ({
 }));
 
 import 'posthog-node';
-import { PostHogSubscriber } from './posthog';
+import { PostHogSubscriber } from './index';
 
 describe('PostHogSubscriber.captureException', () => {
   let subscriber: PostHogSubscriber;

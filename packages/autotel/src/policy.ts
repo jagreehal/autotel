@@ -37,9 +37,12 @@
 // namespace import for browser-bundler compat — see node-require.ts
 import * as nodeFs from 'node:fs';
 import path from 'node:path';
-import type { Context } from '@opentelemetry/api';
+import type { AttributeValue, Context } from '@opentelemetry/api';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import type { LogRecordProcessor, SdkLogRecord } from '@opentelemetry/sdk-logs';
+import type { AnyValue } from '@opentelemetry/api-logs';
+import type { UnknownRecord } from './values';
+import { asNumber, asRecord, nonEmptyString } from './values';
 
 /** A path into an attribute. `"ccn"` and `["ccn"]` are equivalent. */
 export type AttributePath = string | string[];
@@ -162,10 +165,17 @@ const FIELD_SELECTORS = [
   'span_status',
 ] as const;
 
-function countSet(source: object, keys: readonly string[]): number {
-  return keys.filter(
-    (key) => (source as Record<string, unknown>)[key] !== undefined,
-  ).length;
+/** How many of these keys the value actually sets. */
+function countSet<TSource extends object>(
+  source: TSource,
+  keys: readonly string[],
+): number {
+  const present = new Set(
+    Object.entries(source)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key),
+  );
+  return keys.filter((key) => present.has(key)).length;
 }
 
 /**
@@ -175,7 +185,7 @@ function countSet(source: object, keys: readonly string[]): number {
  * policy — never the telemetry — when it meets one it does not understand.
  */
 export function unsupportedReason(policy: Policy): string | undefined {
-  if (!policy || typeof policy.id !== 'string' || policy.id === '') {
+  if (!policy || nonEmptyString(policy.id) === undefined) {
     return 'policy requires an id';
   }
   if (policy.metric !== undefined) return 'metric targets are not supported';
@@ -209,10 +219,7 @@ export function unsupportedReason(policy: Policy): string | undefined {
     }
     if (
       percentage !== undefined &&
-      (typeof percentage !== 'number' ||
-        Number.isNaN(percentage) ||
-        percentage < 0 ||
-        percentage > 100)
+      (asNumber(percentage) === undefined || percentage < 0 || percentage > 100)
     ) {
       return 'trace keep percentage must be between 0 and 100';
     }
@@ -281,11 +288,17 @@ function joinPath(attributePath: AttributePath): string {
   return Array.isArray(attributePath) ? attributePath.join('.') : attributePath;
 }
 
-function toText(value: unknown): string | undefined {
+/**
+ * A value read off a telemetry record, before a matcher looks at it: an
+ * attribute, a span field, or a log body - which may itself be structured.
+ */
+type RecordValue = AttributeValue | AnyValue | UnknownRecord | undefined;
+
+function toText(value: RecordValue): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (Array.isArray(value)) return value.map((item) => String(item)).join(',');
-  if (typeof value === 'object') return undefined;
-  return String(value);
+  // A nested object has no single text form to match against.
+  return asRecord(value) ? undefined : String(value);
 }
 
 /**
@@ -293,13 +306,13 @@ function toText(value: unknown): string | undefined {
  * spans and log records.
  */
 interface RecordView {
-  field(name: string): unknown;
-  attribute(path: string): unknown;
-  resource(path: string): unknown;
-  scope(path: string): unknown;
+  field(name: string): RecordValue;
+  attribute(path: string): RecordValue;
+  resource(path: string): RecordValue;
+  scope(path: string): RecordValue;
 }
 
-function matchesOperator(matcher: PolicyMatcher, raw: unknown): boolean {
+function matchesOperator(matcher: PolicyMatcher, raw: RecordValue): boolean {
   if (matcher.exists !== undefined) {
     return (raw !== undefined && raw !== null) === matcher.exists;
   }
@@ -329,7 +342,7 @@ function matchesOperator(matcher: PolicyMatcher, raw: unknown): boolean {
   return false;
 }
 
-function resolveField(matcher: PolicyMatcher, view: RecordView): unknown {
+function resolveField(matcher: PolicyMatcher, view: RecordView): RecordValue {
   if (matcher.log_field !== undefined) return view.field(matcher.log_field);
   if (matcher.trace_field !== undefined) return view.field(matcher.trace_field);
   if (matcher.span_kind !== undefined) return view.field('kind');
@@ -372,7 +385,7 @@ function hashUnitInterval(value: string): number {
 function parseKeep(keep: string | number | undefined): number {
   if (keep === undefined || keep === 'all') return 100;
   if (keep === 'none') return 0;
-  const percentage = typeof keep === 'number' ? keep : Number.parseFloat(keep);
+  const percentage = asNumber(keep) ?? Number.parseFloat(String(keep));
   if (Number.isNaN(percentage)) return 100;
   return Math.min(100, Math.max(0, percentage));
 }
@@ -468,6 +481,9 @@ function logView(record: SdkLogRecord): RecordView {
           return record.severityNumber;
         }
         case 'event_name': {
+          // SAFETY: `eventName` is on the log record in newer SDK versions
+          // and absent in older ones; reading it this way answers undefined
+          // rather than failing to compile against either.
           return (record as { eventName?: string }).eventName;
         }
         case 'trace_id': {
@@ -491,7 +507,7 @@ function logView(record: SdkLogRecord): RecordView {
 function applyField(
   record: SdkLogRecord,
   field: PolicyField,
-  apply: (target: Record<string, unknown>, key: string) => void,
+  apply: (target: UnknownRecord, key: string) => void,
   applyBody: () => void,
 ): void {
   if (field.log_field === 'body') {
@@ -499,10 +515,9 @@ function applyField(
     return;
   }
   if (field.log_attribute !== undefined) {
-    apply(
-      record.attributes as Record<string, unknown>,
-      joinPath(field.log_attribute),
-    );
+    // SAFETY: the policy rewrites one named attribute in place; OTel's
+    // Attributes is a bag of the same keys, read here as one to write into.
+    apply(record.attributes as UnknownRecord, joinPath(field.log_attribute));
   }
   // resource/scope attributes are shared across records — mutating them would
   // leak across log records, so they are left alone.
@@ -629,6 +644,9 @@ export function hasLogPolicies(): boolean {
 
 function readPolicyFile(filePath: string): Policy[] {
   const parsed: unknown = JSON.parse(nodeFs.readFileSync(filePath, 'utf8'));
+  // SAFETY: a policy file states policies; unsupportedReason() below is what
+  // actually checks each one, and a file holding something else is reported
+  // as unsupported rather than trusted.
   return Array.isArray(parsed) ? (parsed as Policy[]) : [parsed as Policy];
 }
 

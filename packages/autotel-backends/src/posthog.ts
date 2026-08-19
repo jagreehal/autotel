@@ -3,7 +3,7 @@
  *
  * PostHog ingests OTLP traces, logs and metrics, so product analytics and
  * distributed traces can share one destination. Note this is the *telemetry*
- * side; `autotel-subscribers/posthog` is the separate path for product events.
+ * side; `autotel-posthog/subscriber` is the separate path for product events.
  *
  * @example Send traces to PostHog Cloud
  * ```typescript

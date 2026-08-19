@@ -22,6 +22,15 @@ import {
   runClassifier,
   safeStringify,
 } from './security';
+import { errorName } from './error-name.js';
+import type { McpMetricAttributes } from './types.js';
+import {
+  asString,
+  callIfPresent,
+  callMethod,
+  isFunction,
+  member,
+} from './values.js';
 
 type ResolvedConfig = ReturnType<typeof resolveConfig>;
 
@@ -133,15 +142,11 @@ function applyConnectionAttributes(
   if (config.networkTransport) {
     ctx.setAttribute(MCP_SEMCONV.NETWORK_TRANSPORT, config.networkTransport);
   }
-  const protocolEra =
-    typeof target?.getProtocolEra === 'function'
-      ? target.getProtocolEra()
-      : undefined;
-  const protocolVersion =
-    typeof target?.getNegotiatedProtocolVersion === 'function'
-      ? target.getNegotiatedProtocolVersion()
-      : undefined;
-  if (protocolEra === 'modern' && typeof protocolVersion === 'string') {
+  const protocolEra = asString(callIfPresent(target, 'getProtocolEra'));
+  const protocolVersion = asString(
+    callIfPresent(target, 'getNegotiatedProtocolVersion'),
+  );
+  if (protocolEra === 'modern' && protocolVersion !== undefined) {
     ctx.setAttribute(MCP_SEMCONV.PROTOCOL_VERSION, protocolVersion);
   }
 
@@ -152,8 +157,9 @@ function applyConnectionAttributes(
     protocolEra === 'modern'
       ? undefined
       : (target?.transport?.sessionId ?? config.sessionId);
-  if (typeof sessionId === 'string') {
-    ctx.setAttribute(MCP_SEMCONV.SESSION_ID, sessionId);
+  const sessionIdText = asString(sessionId);
+  if (sessionIdText !== undefined) {
+    ctx.setAttribute(MCP_SEMCONV.SESSION_ID, sessionIdText);
   }
 }
 
@@ -194,7 +200,7 @@ function wrapDiscoveryMethod(
       applyConnectionAttributes(ctx, config, target);
 
       try {
-        const result = await Reflect.apply(originalFn, target, args);
+        const result = await callMethod(originalFn, target, args);
         ctx.setStatus({ code: SpanStatusCode.OK });
 
         if (config.enableMetrics) {
@@ -210,18 +216,15 @@ function wrapDiscoveryMethod(
 
         if (config.captureErrors) {
           ctx.recordError(error);
-          ctx.setAttribute(
-            MCP_SEMCONV.ERROR_TYPE,
-            (error as Error).name || 'Error',
-          );
+          ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
           applyFailureGrouping(ctx, failure.text);
         }
 
         if (config.enableMetrics) {
           const durationS = (performance.now() - startTime) / 1000;
-          const metricAttrs: Record<string, string> = {
+          const metricAttrs: McpMetricAttributes = {
             [MCP_SEMCONV.METHOD_NAME]: methodName,
-            [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+            [MCP_SEMCONV.ERROR_TYPE]: errorName(error),
           };
           if (failure.category) {
             metricAttrs[MCP_SEMCONV.FAILURE_CATEGORY] = failure.category;
@@ -280,14 +283,14 @@ export function instrumentMcpClient<T extends Record<string, any>>(
   const mergedConfig = resolveConfig(config);
 
   return new Proxy(client, {
-    get(target, prop, receiver) {
-      const value = Reflect.get(target, prop, receiver);
+    get(target, prop) {
+      const value = member(target, prop);
 
       // Wrap callTool. The trailing arguments differ by era — v1 is
       // `(params, resultSchema?, options?)`, 2026-07-28 is `(params, options?)`
       // — and this wrapper has no business knowing which: only `params` is
       // touched, the rest is forwarded verbatim.
-      if (prop === 'callTool' && typeof value === 'function') {
+      if (prop === 'callTool' && isFunction(value)) {
         return async function wrappedCallTool(
           this: any,
           params: { name: string; arguments?: any; _meta?: any },
@@ -350,6 +353,8 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 args,
               });
               ctx.setAttributes(
+                // SAFETY: custom attributes are the caller's own, already declared as
+                // span-attribute values by the options type they came from.
                 customAttrs as Record<string, string | number | boolean>,
               );
             }
@@ -366,7 +371,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 _meta: { ...params._meta, ...meta },
               };
 
-              const result = await Reflect.apply(value, target, [
+              const result = await callMethod(value, target, [
                 paramsWithMeta,
                 ...rest,
               ]);
@@ -442,6 +447,8 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                   result,
                 });
                 ctx.setAttributes(
+                  // SAFETY: custom attributes are the caller's own, already declared as
+                  // span-attribute values by the options type they came from.
                   customAttrs as Record<string, string | number | boolean>,
                 );
               }
@@ -463,7 +470,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
 
               if (mergedConfig.enableMetrics) {
                 const durationS = (performance.now() - startTime) / 1000;
-                const metricAttrs: Record<string, string> = {
+                const metricAttrs: McpMetricAttributes = {
                   [MCP_SEMCONV.METHOD_NAME]: methodName,
                   [MCP_SEMCONV.TOOL_NAME]: name,
                 };
@@ -482,19 +489,16 @@ export function instrumentMcpClient<T extends Record<string, any>>(
 
               if (mergedConfig.captureErrors) {
                 ctx.recordError(error);
-                ctx.setAttribute(
-                  MCP_SEMCONV.ERROR_TYPE,
-                  (error as Error).name || 'Error',
-                );
+                ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
                 applyFailureGrouping(ctx, failure.text);
               }
 
               if (mergedConfig.enableMetrics) {
                 const durationS = (performance.now() - startTime) / 1000;
-                const metricAttrs: Record<string, string> = {
+                const metricAttrs: McpMetricAttributes = {
                   [MCP_SEMCONV.METHOD_NAME]: methodName,
                   [MCP_SEMCONV.TOOL_NAME]: name,
-                  [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                  [MCP_SEMCONV.ERROR_TYPE]: errorName(error),
                 };
                 if (failure.category) {
                   metricAttrs[MCP_SEMCONV.FAILURE_CATEGORY] = failure.category;
@@ -519,7 +523,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
       }
 
       // Wrap readResource (Client API: readResource(params, options?))
-      if (prop === 'readResource' && typeof value === 'function') {
+      if (prop === 'readResource' && isFunction(value)) {
         return async function wrappedReadResource(
           this: any,
           params: any,
@@ -546,6 +550,8 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 args: params,
               });
               ctx.setAttributes(
+                // SAFETY: custom attributes are the caller's own, already declared as
+                // span-attribute values by the options type they came from.
                 customAttrs as Record<string, string | number | boolean>,
               );
             }
@@ -576,7 +582,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 _meta: { ...params._meta, ...meta },
               };
 
-              const result = await Reflect.apply(value, target, [
+              const result = await callMethod(value, target, [
                 paramsWithMeta,
                 ...rest,
               ]);
@@ -624,19 +630,16 @@ export function instrumentMcpClient<T extends Record<string, any>>(
 
               if (mergedConfig.captureErrors) {
                 ctx.recordError(error);
-                ctx.setAttribute(
-                  MCP_SEMCONV.ERROR_TYPE,
-                  (error as Error).name || 'Error',
-                );
+                ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
                 applyFailureGrouping(ctx, failure.text);
               }
 
               if (mergedConfig.enableMetrics) {
                 const durationS = (performance.now() - startTime) / 1000;
-                const metricAttrs: Record<string, string> = {
+                const metricAttrs: McpMetricAttributes = {
                   [MCP_SEMCONV.METHOD_NAME]: methodName,
                   [MCP_SEMCONV.RESOURCE_URI]: uri,
-                  [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                  [MCP_SEMCONV.ERROR_TYPE]: errorName(error),
                 };
                 if (failure.category) {
                   metricAttrs[MCP_SEMCONV.FAILURE_CATEGORY] = failure.category;
@@ -651,7 +654,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
       }
 
       // Wrap getPrompt (Client API: getPrompt(params, options?))
-      if (prop === 'getPrompt' && typeof value === 'function') {
+      if (prop === 'getPrompt' && isFunction(value)) {
         return async function wrappedGetPrompt(
           this: any,
           params: { name: string; arguments?: any; _meta?: any },
@@ -678,6 +681,8 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 args,
               });
               ctx.setAttributes(
+                // SAFETY: custom attributes are the caller's own, already declared as
+                // span-attribute values by the options type they came from.
                 customAttrs as Record<string, string | number | boolean>,
               );
             }
@@ -708,7 +713,7 @@ export function instrumentMcpClient<T extends Record<string, any>>(
                 _meta: { ...params._meta, ...meta },
               };
 
-              const result = await Reflect.apply(value, target, [
+              const result = await callMethod(value, target, [
                 paramsWithMeta,
                 ...rest,
               ]);
@@ -756,19 +761,16 @@ export function instrumentMcpClient<T extends Record<string, any>>(
 
               if (mergedConfig.captureErrors) {
                 ctx.recordError(error);
-                ctx.setAttribute(
-                  MCP_SEMCONV.ERROR_TYPE,
-                  (error as Error).name || 'Error',
-                );
+                ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
                 applyFailureGrouping(ctx, failure.text);
               }
 
               if (mergedConfig.enableMetrics) {
                 const durationS = (performance.now() - startTime) / 1000;
-                const metricAttrs: Record<string, string> = {
+                const metricAttrs: McpMetricAttributes = {
                   [MCP_SEMCONV.METHOD_NAME]: methodName,
                   [MCP_SEMCONV.PROMPT_NAME]: name,
-                  [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+                  [MCP_SEMCONV.ERROR_TYPE]: errorName(error),
                 };
                 if (failure.category) {
                   metricAttrs[MCP_SEMCONV.FAILURE_CATEGORY] = failure.category;

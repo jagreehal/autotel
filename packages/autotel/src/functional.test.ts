@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import type { Attributes } from '@opentelemetry/api';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SpanKind, context, propagation } from '@opentelemetry/api';
+import {
+  SpanKind,
+  SpanStatusCode,
+  context,
+  propagation,
+} from '@opentelemetry/api';
 import {
   trace,
   withTracing,
@@ -18,6 +24,8 @@ import type { TracingOptions } from './functional';
 function traceFactory<Args extends unknown[], Return>(
   factory: (ctx: TraceContext) => (...args: Args) => Return,
 ): (...args: Args) => Return {
+  // SAFETY: withTracing returns the factory's own signature; the helper's
+  // declared type restates it for the tests that call through it.
   return withTracing<Args, Return>({})(factory) as (...args: Args) => Return;
 }
 
@@ -25,6 +33,8 @@ function traceNamedFactory<Args extends unknown[], Return>(
   name: string,
   factory: (ctx: TraceContext) => (...args: Args) => Return,
 ): (...args: Args) => Return {
+  // SAFETY: withTracing returns the factory's own signature; the helper's
+  // declared type restates it for the tests that call through it.
   return withTracing<Args, Return>({ name })(factory) as (
     ...args: Args
   ) => Return;
@@ -34,6 +44,8 @@ function traceOptionsFactory<Args extends unknown[], Return>(
   options: TracingOptions<Args, Return>,
   factory: (ctx: TraceContext) => (...args: Args) => Return,
 ): (...args: Args) => Return {
+  // SAFETY: withTracing returns the factory's own signature; the helper's
+  // declared type restates it for the tests that call through it.
   return withTracing<Args, Return>(options)(factory) as (
     ...args: Args
   ) => Return;
@@ -46,13 +58,18 @@ import { init } from './init';
 // as back-compat shims even though the public TraceContext type deliberately
 // hides them (OTEP 4430). These tests verify the shims still work at runtime.
 type LegacyCtx = TraceContext & {
-  recordException(error: unknown): void;
-  addEvent(name: string, attributes?: Record<string, unknown>): void;
+  recordException(cause: unknown): void;
+  addEvent(name: string, attributes?: Attributes): void;
 };
 
 // instrument() deliberately tolerates non-function values at runtime while the
 // public type requires all values be functions; these tests feed mixed input.
-type FnRecord = Record<string, (...args: unknown[]) => unknown>;
+/**
+ * A bag of functions this suite hands to instrument(). The parameters are `any`
+ * because each service under test declares its own, and instrument() is generic
+ * over exactly that - the record here only names the shape, not the signatures.
+ */
+type FnRecord = Record<string, (...args: any[]) => unknown>;
 
 describe('Functional API', () => {
   beforeEach(() => {
@@ -67,10 +84,13 @@ describe('Functional API', () => {
     it('returns the active context inside a traced function', () => {
       const collector = createTraceCollector();
 
-      const handler = trace('ambient.handler', (id: string) => {
-        const active = getActiveTraceContext();
-        active?.setAttribute('user.id', id);
-        return id;
+      const handler = instrument({
+        key: 'ambient.handler',
+        fn: (id: string) => {
+          const active = getActiveTraceContext();
+          active?.setAttribute('user.id', id);
+          return id;
+        },
       });
       handler('user_42');
 
@@ -125,6 +145,42 @@ describe('Functional API', () => {
   });
 
   describe('trace()', () => {
+    it('runs a named operation immediately with an explicit TraceContext', async () => {
+      const collector = createTraceCollector();
+
+      const result = await trace.run('checkout.complete', async (ctx) => {
+        ctx.setAttribute('order.id', 'order_123');
+        ctx.setStatus({ code: SpanStatusCode.OK });
+        return 'done';
+      });
+
+      expect(result).toBe('done');
+      expect(collector.getSpansByName('checkout.complete')).toMatchObject([
+        {
+          attributes: expect.objectContaining({ 'order.id': 'order_123' }),
+          status: { code: SpanStatusCode.OK },
+        },
+      ]);
+    });
+
+    it('preserves an explicit status set by the operation', async () => {
+      const collector = createTraceCollector();
+
+      const result = trace.run('cache.fallback', (ctx) => {
+        ctx.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: 'primary cache unavailable',
+        });
+        return 'fallback';
+      });
+
+      expect(result).toBe('fallback');
+      expect(collector.getSpansByName('cache.fallback')[0]?.status).toEqual({
+        code: SpanStatusCode.ERROR,
+        message: 'primary cache unavailable',
+      });
+    });
+
     it('honors isError for async factory functions', async () => {
       const collector = createTraceCollector();
       const signal = { type: 'control-flow' };
@@ -269,7 +325,185 @@ describe('Functional API', () => {
       });
     });
 
-    describe('overload 2: trace(name, fn)', () => {
+    describe('overload: trace(name)(fn) wrapper factory', () => {
+      it('wraps a plain function under the explicit name', async () => {
+        const collector = createTraceCollector();
+
+        const createUser = trace('user.create')(async (name: string) => ({
+          id: '123',
+          name,
+        }));
+
+        const result = await createUser('Alice');
+
+        expect(result).toEqual({ id: '123', name: 'Alice' });
+        const spans = collector.getSpans();
+        expect(spans).toHaveLength(1);
+        expect(spans[0]!.name).toBe('user.create');
+      });
+
+      it('returns the wrapper without running the function', () => {
+        const collector = createTraceCollector();
+        const ran = vi.fn();
+
+        const wrapped = trace('never.run')(ran);
+
+        expect(typeof wrapped).toBe('function');
+        expect(ran).not.toHaveBeenCalled();
+        expect(collector.getSpans()).toHaveLength(0);
+      });
+
+      it('keeps a sync function synchronous', () => {
+        const collector = createTraceCollector();
+
+        const add = trace('math.add')((a: number, b: number) => a + b);
+        const result = add(2, 3);
+
+        expect(result).toBe(5);
+        expect(result).not.toBeInstanceOf(Promise);
+        expect(collector.getSpans()[0]!.name).toBe('math.add');
+      });
+
+      it('records the error and rethrows', async () => {
+        const collector = createTraceCollector();
+
+        const failing = trace('user.create')(async () => {
+          throw new Error('Test error');
+        });
+
+        await expect(failing()).rejects.toThrow('Test error');
+        const spans = collector.getSpans();
+        expect(spans[0]!.status.code).toBe(2);
+        expect(spans[0]!.attributes['exception.message']).toBe('Test error');
+      });
+
+      it('takes options as well as a name', async () => {
+        const collector = createTraceCollector();
+
+        const wrapped = trace({ name: 'user.create' })(async () => 'ok');
+
+        await expect(wrapped()).resolves.toBe('ok');
+        expect(collector.getSpans()[0]!.name).toBe('user.create');
+      });
+
+      // #166: dispatch used to read the callback's first parameter name, so a
+      // minifier renaming `ctx` to a single letter flipped trace into the wrong
+      // mode. `trace` and `trace.run` are separate names now, so no call shape
+      // is ambiguous and a mangled parameter name changes nothing.
+      it('never runs the function, whatever the parameter is called', async () => {
+        const collector = createTraceCollector();
+
+        // Single-parameter callbacks with minified names, both wrapper forms.
+        const curried = trace('wrapper.curried')(async (c: string) => c);
+        const twoArg = trace('wrapper.two-arg', async (c: string) => c);
+
+        expect(typeof curried).toBe('function');
+        expect(typeof twoArg).toBe('function');
+        expect(collector.getSpans()).toHaveLength(0);
+
+        await expect(curried('x')).resolves.toBe('x');
+        await expect(twoArg('y')).resolves.toBe('y');
+
+        const immediate = await trace.run('immediate.form', async (c) => {
+          c.setAttribute('checked', true);
+          return 'ran';
+        });
+        expect(immediate).toBe('ran');
+
+        expect(collector.getSpans().map((s) => s.name)).toEqual([
+          'wrapper.curried',
+          'wrapper.two-arg',
+          'immediate.form',
+        ]);
+      });
+    });
+
+    describe('trace(name, fn) wrapper - the v6.5.0 form, unchanged', () => {
+      it('wraps rather than running, so importing is side-effect free', async () => {
+        const collector = createTraceCollector();
+        const ran = vi.fn(async (name: string) => ({ id: '1', name }));
+
+        const createUser = trace('user.create', ran);
+
+        // The whole point: constructing the wrapper runs nothing.
+        expect(typeof createUser).toBe('function');
+        expect(ran).not.toHaveBeenCalled();
+        expect(collector.getSpans()).toHaveLength(0);
+
+        await expect(createUser('Alice')).resolves.toEqual({
+          id: '1',
+          name: 'Alice',
+        });
+        expect(collector.getSpansByName('user.create')).toHaveLength(1);
+      });
+
+      it('passes the caller arguments straight through', async () => {
+        createTraceCollector();
+
+        const add = trace('math.add', (a: number, b: number) => a + b);
+
+        expect(add(2, 3)).toBe(5);
+      });
+
+      it('takes options in place of a name', async () => {
+        const collector = createTraceCollector();
+
+        const wrapped = trace({ name: 'user.create' }, async () => 'ok');
+
+        await expect(wrapped()).resolves.toBe('ok');
+        expect(collector.getSpansByName('user.create')).toHaveLength(1);
+      });
+    });
+
+    describe('trace.run(name, operation)', () => {
+      it('runs immediately and returns the result', async () => {
+        const collector = createTraceCollector();
+
+        const result = await trace.run('checkout', async (ctx) => {
+          ctx.setAttribute('cart.items', 3);
+          return 'done';
+        });
+
+        expect(result).toBe('done');
+        expect(collector.getSpansByName('checkout')).toMatchObject([
+          { attributes: expect.objectContaining({ 'cart.items': 3 }) },
+        ]);
+      });
+
+      it('keeps a sync operation synchronous', () => {
+        const collector = createTraceCollector();
+
+        const result = trace.run('sync.op', () => 42);
+
+        expect(result).toBe(42);
+        expect(result).not.toBeInstanceOf(Promise);
+        expect(collector.getSpansByName('sync.op')).toHaveLength(1);
+      });
+
+      it('records the error and rethrows', async () => {
+        const collector = createTraceCollector();
+
+        await expect(
+          trace.run('failing.op', async () => {
+            throw new Error('Test error');
+          }),
+        ).rejects.toThrow('Test error');
+
+        const span = collector.getSpansByName('failing.op')[0]!;
+        expect(span.status.code).toBe(2);
+        expect(span.attributes['exception.message']).toBe('Test error');
+      });
+
+      it('rejects a non-function operation instead of guessing', () => {
+        createTraceCollector();
+
+        expect(() =>
+          (trace.run as (n: string, o?: unknown) => unknown)('oops'),
+        ).toThrow('operation must be a function');
+      });
+    });
+
+    describe('withTracing({ name })', () => {
       it('should use custom name', async () => {
         const collector = createTraceCollector();
 
@@ -288,7 +522,7 @@ describe('Functional API', () => {
       });
     });
 
-    describe('overload 3: trace(options, fn)', () => {
+    describe('withTracing(options)', () => {
       it('should use options', async () => {
         const collector = createTraceCollector();
 
@@ -336,7 +570,7 @@ describe('Functional API', () => {
           {
             name: 'user.create',
             attributesFromResult: (result) => ({
-              userId: (result as unknown as { id: string }).id,
+              userId: result.id,
             }),
           },
           (ctx: TraceContext) => async (name: string) => {
@@ -515,6 +749,8 @@ describe('Functional API', () => {
         'instrument: "key" must be a non-empty string',
       );
       expect(() =>
+        // SAFETY: forcing past the compiler is the point - a JavaScript caller
+        // can pass an undefined function, and instrument() must reject it.
         instrument({ key: 'valid', fn: undefined } as never),
       ).toThrow('instrument: "fn" must be a function');
     });
@@ -644,7 +880,7 @@ describe('Functional API', () => {
         serviceName: 'test',
       });
 
-      expect(typeof service.fn).toBe('function');
+      expect(service.fn).toBeTypeOf('function');
       expect(service.value).toBe(42);
       expect(service.obj).toEqual({ nested: true });
     });
@@ -666,6 +902,8 @@ describe('Functional API', () => {
       };
 
       const instrumented = instrument({
+        // SAFETY: the service under test is a plain object of functions, which
+        // is what instrument() takes; FnRecord names that without the generics.
         functions: svc as unknown as FnRecord,
         serviceName: 'svc',
       });
@@ -690,7 +928,7 @@ describe('Functional API', () => {
       // Mock expensive attribute extraction
       const expensiveAttributeExtraction = vi.fn((args: unknown[]) => {
         // Simulate expensive operation (JSON cloning, payload scrubbing, etc.)
-        return { arg0: args[0] };
+        return { arg0: String(args[0]) };
       });
 
       const service = instrument({
@@ -720,7 +958,7 @@ describe('Functional API', () => {
 
       // Mock attribute extraction
       const attributeExtraction = vi.fn((args: unknown[]) => {
-        return { arg0: args[0] };
+        return { arg0: String(args[0]) };
       });
 
       const service = instrument({
@@ -817,6 +1055,7 @@ describe('Functional API', () => {
       await expect(fn()).rejects.toThrow();
 
       const spans = collector.getSpans();
+      // SAFETY: a recorded exception writes its message as a string.
       const errorMsg = spans[0]!.attributes['exception.message'] as string;
       expect(errorMsg.length).toBeLessThan(600);
       expect(errorMsg).toContain('(truncated)');
@@ -881,9 +1120,9 @@ describe('Functional API', () => {
       const fn = traceFactory(
         (ctx: TraceContext) =>
           async (a: number, b: string, c: { x: boolean }): Promise<void> => {
-            expect(typeof a).toBe('number');
-            expect(typeof b).toBe('string');
-            expect(typeof c.x).toBe('boolean');
+            expect(a).toBeTypeOf('number');
+            expect(b).toBeTypeOf('string');
+            expect(c.x).toBeTypeOf('boolean');
           },
       );
 
@@ -944,6 +1183,7 @@ describe('Functional API', () => {
       const failingFn = traceFactory((_ctx: TraceContext) => async () => {
         const error = new Error('Test exception');
         if (ctx.traceId) {
+          // SAFETY: the legacy context surface is what this test exercises.
           (ctx as LegacyCtx).recordException(error);
         }
         throw error;
@@ -1180,7 +1420,9 @@ describe('Functional API', () => {
       // Verify the method can be called without error
       const result = await trace(async () => {
         const ctx = getActiveTraceContext()!;
+        // SAFETY: the legacy context surface is what this test exercises.
         (ctx as LegacyCtx).addEvent('order.started', { 'order.id': '123' });
+        // SAFETY: the legacy context surface is what this test exercises.
         (ctx as LegacyCtx).addEvent('items.fetched', { 'item.count': 5 });
         return 'done';
       })();
@@ -1192,10 +1434,13 @@ describe('Functional API', () => {
     it('should support updateName for dynamic span naming', async () => {
       const collector = createTraceCollector();
 
-      await trace('initial.name', async () => {
-        const ctx = getActiveTraceContext()!;
-        ctx.updateName('updated.name');
-        return 'done';
+      await instrument({
+        key: 'initial.name',
+        fn: async () => {
+          const ctx = getActiveTraceContext()!;
+          ctx.updateName('updated.name');
+          return 'done';
+        },
       })();
 
       const spans = collector.getSpans();

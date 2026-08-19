@@ -1,7 +1,6 @@
 import type { WorkerEnv } from './types';
 import {
   wrapModule,
-  trace,
   withTracing,
   span,
   isNativeTracingAvailable,
@@ -38,162 +37,181 @@ function withDebugLogging<T>(fn: () => T): T {
 }
 
 // Example traced function with attribute extractors
-const processRequest = trace(
-  {
-    name: 'request.process',
-    attributesFromArgs: ([request]) => {
-      const url = new URL(request.url);
-      return {
-        'http.route': url.pathname,
-        'http.method': request.method,
-      };
-    },
-    attributesFromResult: (result) => ({
-      'response.has_data': !!result,
-    }),
-  },
-  async function processRequest(request: Request) {
+const processRequest = withTracing({
+  name: 'request.process',
+  attributesFromArgs: ([request]) => {
     const url = new URL(request.url);
-    log.info({ path: url.pathname }, 'Processing request');
-
     return {
-      message: 'Hello from Alchemy!',
-      timestamp: new Date().toISOString(),
-      path: url.pathname,
+      'http.route': url.pathname,
+      'http.method': request.method,
     };
   },
+  attributesFromResult: (result) => ({
+    'response.has_data': !!result,
+  }),
+})(
+  () =>
+    async function processRequest(request: Request) {
+      const url = new URL(request.url);
+      log.info({ path: url.pathname }, 'Processing request');
+
+      return {
+        message: 'Hello from Alchemy!',
+        timestamp: new Date().toISOString(),
+        path: url.pathname,
+      };
+    },
 );
 
 // Example function that uses KV (automatically instrumented) with attribute extractors
-const getCachedValue = trace(
-  {
-    name: 'kv.get',
-    attributesFromArgs: ([key]) => ({ 'kv.key': key }),
-    attributesFromResult: (value) => ({ 'kv.cache_hit': !!value }),
-  },
-  async function getCachedValue(key: string, kv: KVNamespace) {
-    const value = await kv.get(key); // Creates span: "KV {namespace}: get"
-    return value;
-  },
+const getCachedValue = withTracing({
+  name: 'kv.get',
+  attributesFromArgs: ([key]) => ({ 'kv.key': key }),
+  attributesFromResult: (value) => ({ 'kv.cache_hit': !!value }),
+})(
+  () =>
+    async function getCachedValue(key: string, kv: KVNamespace) {
+      const value = await kv.get(key); // Creates span: "KV {namespace}: get"
+      return value;
+    },
 );
 
 // Example function that uses R2 (automatically instrumented)
-const getObject = trace(
-  {
-    name: 'r2.get',
-    attributesFromArgs: ([key]) => ({ 'r2.key': key }),
-  },
-  async function getObject(key: string, r2: R2Bucket) {
-    const object = await r2.get(key); // Creates span: "R2 {bucket}: get"
-    return object;
-  },
+const getObject = withTracing({
+  name: 'r2.get',
+  attributesFromArgs: ([key]) => ({ 'r2.key': key }),
+})(
+  () =>
+    async function getObject(key: string, r2: R2Bucket) {
+      const object = await r2.get(key); // Creates span: "R2 {bucket}: get"
+      return object;
+    },
 );
 
+/** A row of the users table this example queries. */
+type UserRow = {
+  id: number;
+  email: string;
+  name: string;
+};
+
+/** What this example puts on the queue. */
+type QueueMessage = {
+  event: string;
+  timestamp: number;
+};
+
 // Example function that uses D1 (automatically instrumented) with attribute extractors
-const queryUsers = trace(
-  {
-    name: 'd1.query',
-    attributesFromResult: (result: D1Result<Record<string, unknown>>) => ({
-      'db.rows_count': result.results?.length || 0,
-    }),
-  },
-  async function queryUsers(db: D1Database) {
-    const result = await db.prepare('SELECT * FROM users LIMIT 10').all(); // Creates span: "D1 {database}: all"
-    return result;
-  },
+const queryUsers = withTracing({
+  name: 'd1.query',
+  attributesFromResult: (result: D1Result<UserRow>) => ({
+    'db.rows_count': result.results?.length || 0,
+  }),
+})(
+  () =>
+    async function queryUsers(db: D1Database) {
+      // all<T>() is how D1 asks the caller to name the row it selected.
+      const result = await db
+        .prepare('SELECT * FROM users LIMIT 10')
+        .all<UserRow>(); // Creates span: "D1 {database}: all"
+      return result;
+    },
 );
 
 // Example: Workers AI with auto-traced model call
-const generateText = trace(
-  {
-    name: 'ai.generate',
-    attributesFromArgs: ([prompt]) => ({ 'ai.prompt_length': prompt.length }),
-    attributesFromResult: (result) => ({ 'ai.has_response': !!result }),
-  },
-  async function generateText(prompt: string, ai: Ai) {
-    // Workers AI model IDs are deprecated periodically — run `wrangler ai models`
-    // (or see https://developers.cloudflare.com/workers-ai/models/) for current IDs.
-    const result = await ai.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
-      messages: [{ role: 'user', content: prompt }],
-    });
-    return result;
-  },
+const generateText = withTracing({
+  name: 'ai.generate',
+  attributesFromArgs: ([prompt]) => ({ 'ai.prompt_length': prompt.length }),
+  attributesFromResult: (result) => ({ 'ai.has_response': !!result }),
+})(
+  () =>
+    async function generateText(prompt: string, ai: Ai) {
+      // Workers AI model IDs are deprecated periodically — run `wrangler ai models`
+      // (or see https://developers.cloudflare.com/workers-ai/models/) for current IDs.
+      const result = await ai.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
+        messages: [{ role: 'user', content: prompt }],
+      });
+      return result;
+    },
 );
 
 // Example: Vectorize with auto-traced vector search
-const searchVectors = trace(
-  {
-    name: 'vectorize.search',
-    attributesFromArgs: ([_vector, topK]) => ({ 'vectorize.top_k': topK }),
-    attributesFromResult: (result: VectorizeMatches) => ({
-      'vectorize.matches': result?.matches?.length || 0,
-    }),
-  },
-  async function searchVectors(
-    vector: number[],
-    topK: number,
-    index: VectorizeIndex,
-  ) {
-    const result = await index.query(vector, { topK });
-    return result;
-  },
+const searchVectors = withTracing({
+  name: 'vectorize.search',
+  attributesFromArgs: ([_vector, topK]) => ({ 'vectorize.top_k': topK }),
+  attributesFromResult: (result: VectorizeMatches) => ({
+    'vectorize.matches': result?.matches?.length || 0,
+  }),
+})(
+  () =>
+    async function searchVectors(
+      vector: number[],
+      topK: number,
+      index: VectorizeIndex,
+    ) {
+      const result = await index.query(vector, { topK });
+      return result;
+    },
 );
 
 // Example: Queue producer with auto-traced message send
-const enqueueMessage = trace(
-  {
-    name: 'queue.enqueue',
-    attributesFromArgs: ([data]) => ({ 'queue.message_type': typeof data }),
-  },
-  async function enqueueMessage(data: unknown, queue: Queue) {
-    await queue.send(data);
-  },
+const enqueueMessage = withTracing({
+  name: 'queue.enqueue',
+  attributesFromArgs: ([data]) => ({ 'queue.message_type': data.event }),
+})(
+  () =>
+    async function enqueueMessage(data: QueueMessage, queue: Queue) {
+      await queue.send(data);
+    },
 );
 
 // Example: Analytics Engine with auto-traced write
-const trackAnalytics = trace(
-  {
-    name: 'analytics.track',
-    attributesFromArgs: ([event]) => ({ 'analytics.event': event }),
-  },
-  function trackAnalytics(event: string, ae: AnalyticsEngineDataset) {
-    ae.writeDataPoint({
-      indexes: [event],
-      doubles: [Date.now()],
-      blobs: [event],
-    });
-  },
+const trackAnalytics = withTracing({
+  name: 'analytics.track',
+  attributesFromArgs: ([event]) => ({ 'analytics.event': event }),
+})(
+  () =>
+    function trackAnalytics(event: string, ae: AnalyticsEngineDataset) {
+      ae.writeDataPoint({
+        indexes: [event],
+        doubles: [Date.now()],
+        blobs: [event],
+      });
+    },
 );
 
 // Example: Combined AI → Vectorize → Queue pipeline (trace context propagation)
-const aiSearchPipeline = trace(
-  {
-    name: 'pipeline.ai-search',
-    attributesFromArgs: ([query]) => ({ 'pipeline.query': query }),
-    attributesFromResult: (result: VectorizeMatches) => ({
-      'pipeline.matches_found': result.matches?.length || 0,
-    }),
-  },
-  async function aiSearchPipeline(
-    query: string,
-    ai: Ai,
-    index: VectorizeIndex,
-    queue: Queue,
-  ) {
-    // Step 1: Generate embeddings with AI
-    const embedding = (await ai.run('@cf/baai/bge-base-en-v1.5', {
-      text: query,
-    })) as any;
-    const vector: number[] = embedding?.data?.[0] || [];
+const aiSearchPipeline = withTracing({
+  name: 'pipeline.ai-search',
+  attributesFromArgs: ([query]) => ({ 'pipeline.query': query }),
+  attributesFromResult: (result: VectorizeMatches) => ({
+    'pipeline.matches_found': result.matches?.length || 0,
+  }),
+})(
+  () =>
+    async function aiSearchPipeline(
+      query: string,
+      ai: Ai,
+      index: VectorizeIndex,
+      queue: Queue,
+    ) {
+      // SAFETY: Workers AI types run() by model name only from the bindings
+      // generated for a specific account, which this example does not generate.
+      // The shape read below - data[0] as a number[] - is what the bge model
+      // documents, and the `|| []` guards the case where it is absent.
+      const embedding = (await ai.run('@cf/baai/bge-base-en-v1.5', {
+        text: query,
+      })) as any;
+      const vector: number[] = embedding?.data?.[0] || [];
 
-    // Step 2: Search Vectorize for similar vectors
-    const searchResult = await index.query(vector, { topK: 5 });
+      // Step 2: Search Vectorize for similar vectors
+      const searchResult = await index.query(vector, { topK: 5 });
 
-    // Step 3: Queue the results for async processing
-    await queue.send({ query, matches: searchResult.matches });
+      // Step 3: Queue the results for async processing
+      await queue.send({ query, matches: searchResult.matches });
 
-    return searchResult;
-  },
+      return searchResult;
+    },
 );
 
 // Example with proper error handling and span status codes
@@ -242,80 +260,80 @@ const processPayment = withTracing({
 );
 
 // Example nested spans - validate and create user
-const validateInput = trace(
-  {
-    name: 'user.validate',
-    attributesFromArgs: ([data]) => ({ 'user.email': data.email }),
-  },
-  async function validateInput(data: { email: string; name: string }) {
-    if (!data.email) throw new Error('Email required');
-    if (!data.name) throw new Error('Name required');
-    if (!data.email.includes('@')) throw new Error('Invalid email format');
-    return data;
-  },
+const validateInput = withTracing({
+  name: 'user.validate',
+  attributesFromArgs: ([data]) => ({ 'user.email': data.email }),
+})(
+  () =>
+    async function validateInput(data: { email: string; name: string }) {
+      if (!data.email) throw new Error('Email required');
+      if (!data.name) throw new Error('Name required');
+      if (!data.email.includes('@')) throw new Error('Invalid email format');
+      return data;
+    },
 );
 
-const checkDuplicate = trace(
-  {
-    name: 'db.checkDuplicate',
-    attributesFromArgs: ([email]) => ({ 'user.email': email }),
-    attributesFromResult: (exists) => ({ 'user.exists': exists }),
-  },
-  async function checkDuplicate(email: string, db: D1Database) {
-    const result = await db
-      .prepare('SELECT id FROM users WHERE email = ?')
-      .bind(email)
-      .first();
-    return !!result;
-  },
+const checkDuplicate = withTracing({
+  name: 'db.checkDuplicate',
+  attributesFromArgs: ([email]) => ({ 'user.email': email }),
+  attributesFromResult: (exists) => ({ 'user.exists': exists }),
+})(
+  () =>
+    async function checkDuplicate(email: string, db: D1Database) {
+      const result = await db
+        .prepare('SELECT id FROM users WHERE email = ?')
+        .bind(email)
+        .first();
+      return !!result;
+    },
 );
 
-const insertUser = trace(
-  {
-    name: 'db.insertUser',
-    attributesFromArgs: ([user]) => ({ 'user.email': user.email }),
-    attributesFromResult: (user: {
-      id: string;
-      email: string;
-      name: string;
-    }) => ({ 'user.id': user.id }),
-  },
-  async function insertUser(
-    user: { email: string; name: string },
-    db: D1Database,
-  ) {
-    const id = crypto.randomUUID();
-    await db
-      .prepare('INSERT INTO users (id, email, name) VALUES (?, ?, ?)')
-      .bind(id, user.email, user.name)
-      .run();
-    return { id, ...user };
-  },
+const insertUser = withTracing({
+  name: 'db.insertUser',
+  attributesFromArgs: ([user]) => ({ 'user.email': user.email }),
+  attributesFromResult: (user: {
+    id: string;
+    email: string;
+    name: string;
+  }) => ({ 'user.id': user.id }),
+})(
+  () =>
+    async function insertUser(
+      user: { email: string; name: string },
+      db: D1Database,
+    ) {
+      const id = crypto.randomUUID();
+      await db
+        .prepare('INSERT INTO users (id, email, name) VALUES (?, ?, ?)')
+        .bind(id, user.email, user.name)
+        .run();
+      return { id, ...user };
+    },
 );
 
-const validateAndCreate = trace(
-  {
-    name: 'user.create',
-    attributesFromArgs: ([data]) => ({ 'user.email': data.email }),
-    attributesFromResult: (user: {
-      id: string;
-      email: string;
-      name: string;
-    }) => ({ 'user.id': user.id }),
-  },
-  async function validateAndCreate(
-    data: { email: string; name: string },
-    db: D1Database,
-  ) {
-    const valid = await validateInput(data);
-    const exists = await checkDuplicate(valid.email, db);
+const validateAndCreate = withTracing({
+  name: 'user.create',
+  attributesFromArgs: ([data]) => ({ 'user.email': data.email }),
+  attributesFromResult: (user: {
+    id: string;
+    email: string;
+    name: string;
+  }) => ({ 'user.id': user.id }),
+})(
+  () =>
+    async function validateAndCreate(
+      data: { email: string; name: string },
+      db: D1Database,
+    ) {
+      const valid = await validateInput(data);
+      const exists = await checkDuplicate(valid.email, db);
 
-    if (exists) {
-      throw new Error('User already exists');
-    }
+      if (exists) {
+        throw new Error('User already exists');
+      }
 
-    return await insertUser(valid, db);
-  },
+      return await insertUser(valid, db);
+    },
 );
 
 // Handler with automatic HTTP instrumentation and all features
@@ -484,6 +502,9 @@ const handler: ExportedHandler<WorkerEnv> = {
     // Error handling example with payment processing
     if (url.pathname === '/payment' && request.method === 'POST') {
       try {
+        // SAFETY: request.json() is typed `unknown` because a body can be
+        // anything. The fields read below are validated by processPayment,
+        // which rejects a missing amount or userId.
         const body = (await request.json()) as {
           amount: number;
           userId: string;
@@ -502,6 +523,8 @@ const handler: ExportedHandler<WorkerEnv> = {
     // Nested spans example - create user with validation
     if (url.pathname === '/users' && request.method === 'POST') {
       try {
+        // SAFETY: request.json() is typed `unknown` because a body can be
+        // anything; createUser below validates both fields before use.
         const data = (await request.json()) as { email: string; name: string };
         if (!env.MY_D1) {
           return Response.json(
@@ -596,6 +619,8 @@ export default wrapModule(
       version: '1.0.1',
     },
     // 'auto' | 'on' | 'off' — omit for the default ('auto').
+    // SAFETY: NATIVE_TRACING is a wrangler var, so it arrives as a string. Any
+    // value other than these three is treated as the 'auto' default downstream.
     nativeTracing: env.NATIVE_TRACING as 'auto' | 'on' | 'off' | undefined,
     // Adaptive sampling: 10% baseline, all errors, all slow requests (>1s)
     // Use SamplingPresets.highTraffic() for high-volume services

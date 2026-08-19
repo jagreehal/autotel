@@ -30,11 +30,7 @@ import {
   SpanStatusCode,
 } from '@opentelemetry/api';
 import type { SpanContext, Context } from '@opentelemetry/api';
-import {
-  trace as autotelTrace,
-  getActiveTraceContext,
-  type TraceContext,
-} from 'autotel';
+import { trace as autotelTrace, type TraceContext } from 'autotel';
 import type { LambdaHandler } from './types';
 import type { LambdaEvent, LambdaContext } from '../types';
 import { extractTraceContext, detectTriggerType } from './context-extractor';
@@ -150,14 +146,11 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
     // Detect trigger type for semantic attributes
     const trigger = detectTriggerType(event as LambdaEvent);
 
-    // Core tracing logic. The inner function takes no parameters and reads
-    // context via getActiveTraceContext() — the form trace() wraps directly.
-    // The explicit `(ctx) => (...args) => result` factory form is withTracing().
+    // Core tracing logic uses the direct named-operation form.
     const executeWithTracing = async (): Promise<TResult> => {
-      return autotelTrace(
+      return autotelTrace.run(
         `lambda.${functionName}`,
-        async (): Promise<TResult> => {
-          const ctx = getActiveTraceContext()!;
+        async (ctx): Promise<TResult> => {
           // Set Lambda semantic attributes
           ctx.setAttributes(
             buildLambdaAttributes({
@@ -233,7 +226,7 @@ export function wrapHandler<TEvent = LambdaEvent, TResult = unknown>(
             throw error;
           }
         },
-      )();
+      );
     };
 
     // Execute with proper parent context if available
@@ -308,10 +301,9 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
 
     // Core tracing logic — see wrapHandler above for the inner-function form.
     const executeWithTracing = async (): Promise<TResult> => {
-      return autotelTrace(
+      return autotelTrace.run(
         `lambda.${functionName}`,
-        async (): Promise<TResult> => {
-          const ctx = getActiveTraceContext()!;
+        async (ctx): Promise<TResult> => {
           // Set Lambda semantic attributes
           ctx.setAttributes(
             buildLambdaAttributes({
@@ -341,7 +333,7 @@ export function traceLambda<TEvent = LambdaEvent, TResult = unknown>(
           const handler = factory(ctx);
           return handler(event, lambdaContext);
         },
-      )();
+      );
     };
 
     // Execute with proper parent context if available

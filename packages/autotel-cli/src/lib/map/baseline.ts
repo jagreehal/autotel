@@ -120,6 +120,12 @@ function parseMapFile(raw: string, label: string): MapFile {
   return map as MapFile;
 }
 
+/** What loadBaseline() answers with. */
+interface LoadBaselineResult {
+  map: MapFile;
+  source: BaselineSource;
+}
+
 /**
  * Read the map to compare against. Local-only: no network, no token, no
  * repository access, so a private repo gates like a public one.
@@ -130,7 +136,7 @@ function parseMapFile(raw: string, label: string): MapFile {
 export function loadBaseline(
   projectRoot: string,
   spec?: string,
-): { map: MapFile; source: BaselineSource } {
+): LoadBaselineResult {
   if (spec?.startsWith('git:')) {
     const ref = spec.slice(4) || 'HEAD';
     const raw = readGitBaseline(projectRoot, ref);

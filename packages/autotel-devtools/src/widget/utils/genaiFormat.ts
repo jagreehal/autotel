@@ -47,15 +47,18 @@ export function formatSeconds(seconds?: number): string {
   return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`;
 }
 
+/** What summarizeToolCalls() answers with. */
+interface SummarizeToolCallsResult {
+  label: string;
+  details: string;
+}
+
 /**
  * Compact label for a list of tool-call names, collapsing repeats: a single
  * tool → `getWeather`; repeats → `getWeather (x3)`; many → `a, b, …` with the
  * full list in `details`. Takes names (primitive) so any caller can use it.
  */
-export function summarizeToolCalls(names: string[]): {
-  label: string;
-  details: string;
-} {
+export function summarizeToolCalls(names: string[]): SummarizeToolCallsResult {
   if (names.length === 0) return { label: '', details: '' };
   const counts = new Map<string, number>();
   for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);

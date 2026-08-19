@@ -16,24 +16,27 @@ export interface AWSError {
   StatusCode?: number;
 }
 
-/**
- * Classify AWS error for span status
- */
-export function classifyAWSError(error: unknown): {
+/** What classifyAWSError() answers with. */
+interface ClassifyAWSErrorResult {
   isError: boolean;
   statusCode?: number;
   errorCode?: string;
-} {
-  if (!error || typeof error !== 'object') {
+}
+
+/**
+ * Classify AWS error for span status
+ */
+export function classifyAWSError(cause: unknown): ClassifyAWSErrorResult {
+  if (!cause || typeof cause !== 'object') {
     return { isError: false };
   }
 
-  const awsError = error as AWSError;
+  const awsError = cause as AWSError;
 
   // Check for HTTP status code
   const statusCode = awsError.$metadata?.httpStatusCode || awsError.StatusCode;
 
-  // Determine if it's an error (4xx or 5xx)
+  // Determine if it's an cause (4xx or 5xx)
   const isError = statusCode !== undefined && statusCode >= 400;
 
   return {

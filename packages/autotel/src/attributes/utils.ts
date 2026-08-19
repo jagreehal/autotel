@@ -2,6 +2,7 @@
  * Attribute utility functions
  */
 
+import type { Attributes } from '@opentelemetry/api';
 import type { AttributeValue } from '../trace-context';
 import {
   validateAttribute,
@@ -18,9 +19,9 @@ type AttributeSetter = {
 };
 
 export function mergeAttrs(
-  ...attrSets: Array<Record<string, unknown> | undefined>
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
+  ...attrSets: Array<Attributes | undefined>
+): Attributes {
+  const result: Attributes = {};
   for (const attrSet of attrSets) {
     if (attrSet) {
       Object.assign(result, attrSet);
@@ -31,7 +32,7 @@ export function mergeAttrs(
 
 export function safeSetAttributes(
   span: AttributeSetter,
-  attrs: Record<string, unknown>,
+  attrs: Attributes,
   policy?: AttributePolicy,
 ): void {
   // Merge user-supplied guardrails with defaults so callers can tweak
@@ -54,8 +55,7 @@ export function safeSetAttributes(
       checkDeprecatedAttribute(key, effectivePolicy);
       const validatedValue = validateAttribute(key, value, effectivePolicy);
       if (validatedValue !== undefined) {
-        // Cast to AttributeValue since validateAttribute ensures valid types
-        sanitizedAttrs[key] = validatedValue as AttributeValue;
+        sanitizedAttrs[key] = validatedValue;
       }
     }
   }

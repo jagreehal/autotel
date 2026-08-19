@@ -21,6 +21,41 @@ import genaiGuard from '../genai/__fixtures__/autotel-genai-guard.json';
 // are unchanged — `GenAiView` renders the list + selected span header/panel, so
 // the same text is on screen.
 
+/**
+ * A recorded fixture, read back as the devtools' own span shape.
+ *
+ * SAFETY: these JSON files are span batches this devtools exported itself.
+ * TypeScript types an imported JSON module structurally - every field becomes
+ * required and every literal narrows - which does not match SpanData's declared
+ * optional members, so the shape has to be restated once here.
+ */
+function fixtureSpans(fixture: JsonFixture): SpanData[] {
+  // SAFETY: see the note above.
+  return fixture as unknown as SpanData[];
+}
+
+/**
+ * An imported fixture, before it is read as spans - the exact set of files
+ * imported above, so a fixture that changes shape is a compile error here
+ * rather than something the assertion quietly absorbs.
+ */
+type JsonFixture =
+  | typeof openaiChat
+  | typeof anthropicCache
+  | typeof openaiAgentsHandoff
+  | typeof aisdkOllama
+  | typeof aisdkTools
+  | typeof pydanticAi
+  | typeof gemini
+  | typeof langchain
+  | typeof genaiGuard;
+
+/** A single-span fixture, read back as the devtools' own span shape. */
+function fixtureSpan(fixture: JsonFixture): SpanData {
+  // SAFETY: see the note on fixtureSpans.
+  return fixture as unknown as SpanData;
+}
+
 function seedTraces(fixtures: SpanData[][]): () => void {
   const traces: TraceData[] = fixtures.map((spans, i) => ({
     traceId: `fixture-${i}`,
@@ -47,7 +82,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const OpenAiChat: Story = {
-  beforeEach: () => seedTraces([[openaiChat as unknown as SpanData]]),
+  beforeEach: () => seedTraces([[fixtureSpan(openaiChat)]]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('openai')).toBeInTheDocument();
     await expect(
@@ -58,7 +93,7 @@ export const OpenAiChat: Story = {
 };
 
 export const AnthropicCacheHit: Story = {
-  beforeEach: () => seedTraces([[anthropicCache as unknown as SpanData]]),
+  beforeEach: () => seedTraces([[fixtureSpan(anthropicCache)]]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('anthropic')).toBeInTheDocument();
     // ModelHeader spells out the cached token share inline, e.g. "176 (100 cached)".
@@ -67,7 +102,7 @@ export const AnthropicCacheHit: Story = {
 };
 
 export const OpenAiAgentsHandoff: Story = {
-  beforeEach: () => seedTraces([[openaiAgentsHandoff as unknown as SpanData]]),
+  beforeEach: () => seedTraces([[fixtureSpan(openaiAgentsHandoff)]]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('Agent handoff')).toBeInTheDocument();
     await expect(canvas.getAllByText('Triage Agent').length).toBeGreaterThan(0);
@@ -79,7 +114,7 @@ export const VercelAiSdkOllamaReal: Story = {
   beforeEach: () =>
     seedTraces([
       [
-        (aisdkOllama as unknown as SpanData[]).find(
+        fixtureSpans(aisdkOllama).find(
           (s) => s.name === 'ai.generateText.doGenerate',
         )!,
       ],
@@ -95,11 +130,7 @@ export const VercelAiSdkOllamaReal: Story = {
 export const PydanticAiLogfireReal: Story = {
   beforeEach: () =>
     seedTraces([
-      [
-        (pydanticAi as unknown as SpanData[]).find((s) =>
-          s.name.startsWith('chat '),
-        )!,
-      ],
+      [fixtureSpans(pydanticAi).find((s) => s.name.startsWith('chat '))!],
     ]),
   play: async ({ canvas }) => {
     // GenAiView renders the span list + selected detail, so provider/op labels
@@ -114,11 +145,7 @@ export const PydanticAiLogfireReal: Story = {
 export const GeminiPydanticReal: Story = {
   beforeEach: () =>
     seedTraces([
-      [
-        (gemini as unknown as SpanData[]).find((s) =>
-          s.name.startsWith('chat '),
-        )!,
-      ],
+      [fixtureSpans(gemini).find((s) => s.name.startsWith('chat '))!],
     ]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('google')).toBeInTheDocument();
@@ -127,7 +154,7 @@ export const GeminiPydanticReal: Story = {
 };
 
 export const LangChainOllamaReal: Story = {
-  beforeEach: () => seedTraces([[(langchain as unknown as SpanData[])[0]]]),
+  beforeEach: () => seedTraces([[fixtureSpans(langchain)[0]]]),
   play: async ({ canvas }) => {
     await expect((await canvas.findAllByText('ollama')).length).toBeGreaterThan(
       0,
@@ -139,14 +166,14 @@ export const LangChainOllamaReal: Story = {
 export const FullViewAllFixtures: Story = {
   beforeEach: () =>
     seedTraces([
-      [openaiChat as unknown as SpanData],
-      [anthropicCache as unknown as SpanData],
-      [openaiAgentsHandoff as unknown as SpanData],
-      aisdkOllama as unknown as SpanData[],
-      pydanticAi as unknown as SpanData[],
-      aisdkTools as unknown as SpanData[],
-      gemini as unknown as SpanData[],
-      langchain as unknown as SpanData[],
+      [fixtureSpan(openaiChat)],
+      [fixtureSpan(anthropicCache)],
+      [fixtureSpan(openaiAgentsHandoff)],
+      fixtureSpans(aisdkOllama),
+      fixtureSpans(pydanticAi),
+      fixtureSpans(aisdkTools),
+      fixtureSpans(gemini),
+      fixtureSpans(langchain),
     ]),
   play: async ({ canvas }) => {
     await expect(
@@ -160,7 +187,7 @@ export const FullViewAllFixtures: Story = {
 };
 
 export const VercelAiSdkToolsReal: Story = {
-  beforeEach: () => seedTraces([aisdkTools as unknown as SpanData[]]),
+  beforeEach: () => seedTraces([fixtureSpans(aisdkTools)]),
   play: async ({ canvas }) => {
     await expect(
       (await canvas.findAllByText(/ollama\/qwen2:latest/i)).length,
@@ -176,7 +203,7 @@ export const VercelAiSdkToolsReal: Story = {
 // Trace mode decomposes the selected run into a depth-indented tree of steps,
 // tools and text — switching to it surfaces the tool the model invoked.
 export const TraceMode: Story = {
-  beforeEach: () => seedTraces([aisdkTools as unknown as SpanData[]]),
+  beforeEach: () => seedTraces([fixtureSpans(aisdkTools)]),
   play: async ({ canvas }) => {
     const traceBtn = await canvas.findByRole('button', { name: /^Trace$/i });
     await userEvent.click(traceBtn);
@@ -190,7 +217,7 @@ export const TraceMode: Story = {
 // that stopped the run on a cost ceiling, and a provider warning — all surfaced
 // in the model header.
 export const GenAiGuardAndStreaming: Story = {
-  beforeEach: () => seedTraces([[genaiGuard as unknown as SpanData]]),
+  beforeEach: () => seedTraces([[fixtureSpan(genaiGuard)]]),
   play: async ({ canvas }) => {
     await expect(await canvas.findByText('openai')).toBeInTheDocument();
     // Guard chip shows the firing rule.
@@ -209,7 +236,7 @@ export const GenAiGuardAndStreaming: Story = {
 // steps through the run with plain-language narration; here we open it and
 // assert the first narrated step renders.
 export const RunSummaryAndGuidedTour: Story = {
-  beforeEach: () => seedTraces([aisdkTools as unknown as SpanData[]]),
+  beforeEach: () => seedTraces([fixtureSpans(aisdkTools)]),
   play: async ({ canvas }) => {
     // Run summary strip appears above the detail for a multi-span run.
     await expect((await canvas.findAllByText('Tokens')).length).toBeGreaterThan(
@@ -240,7 +267,7 @@ export const RunSummaryAndGuidedTour: Story = {
 // The `trace …` reference in the model header is a button that opens the trace
 // in the Traces waterfall (DX: jump straight from a generation to its trace).
 export const TraceReferenceIsClickable: Story = {
-  beforeEach: () => seedTraces([[openaiChat as unknown as SpanData]]),
+  beforeEach: () => seedTraces([[fixtureSpan(openaiChat)]]),
   play: async ({ canvas }) => {
     const traceLink = await canvas.findByTitle('Open trace in waterfall');
     await expect(traceLink).toBeInTheDocument();

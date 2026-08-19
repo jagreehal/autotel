@@ -12,6 +12,7 @@ import {
 import { trace } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { isFunction } from './values';
 
 describe('getForceFlushableProvider', () => {
   const original = trace.getTracerProvider();
@@ -69,13 +70,13 @@ describe('getForceFlushableProvider', () => {
 
   it('falls back to the global provider when the SDK handle yields nothing', () => {
     // sdk-node 0.220 shape: getTracerProvider() returns undefined.
-    const fakeSdk = { getTracerProvider: () => {} };
+    const fakeSdk = { getTracerProvider: () => undefined };
     const flushable = getForceFlushableProvider(fakeSdk);
     // The ambient global provider is force-flushable (or undefined in a bare
     // env); either way the SDK's undefined must not short-circuit resolution.
-    expect(
-      flushable === undefined || typeof flushable.forceFlush === 'function',
-    ).toBe(true);
+    expect(flushable === undefined || isFunction(flushable.forceFlush)).toBe(
+      true,
+    );
   });
 });
 
@@ -153,14 +154,14 @@ describe('Isolated Tracer Provider', () => {
       // Verify tracer is from custom provider
       // (We can't directly compare tracers, but we can verify it's not throwing)
       expect(tracer).toBeDefined();
-      expect(typeof tracer.startSpan).toBe('function');
+      expect(tracer.startSpan).toBeTypeOf('function');
     });
 
     it('should return tracer from global provider when no isolated provider is set', () => {
       const tracer = getAutotelTracer('test-tracer');
 
       expect(tracer).toBeDefined();
-      expect(typeof tracer.startSpan).toBe('function');
+      expect(tracer.startSpan).toBeTypeOf('function');
     });
 
     it('should use default tracer name when not specified', () => {
@@ -199,7 +200,7 @@ describe('Isolated Tracer Provider', () => {
       // Should be able to create spans
       const span = tracer.startSpan('test-span');
       expect(span).toBeDefined();
-      expect(typeof span.end).toBe('function');
+      expect(span.end).toBeTypeOf('function');
       span.end();
     });
 

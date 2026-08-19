@@ -39,8 +39,8 @@ import {
   normalizeProvider,
   toChatRequest,
   toTokenUsage,
-  type AiSdkUsageShape,
-} from './ai-sdk-shapes.js';
+  type AiSdkUsageFields,
+} from './ai-sdk-fields.js';
 import { createGenAiObserver } from './observer.js';
 import type { GenAiObserver, GenAiObserverEvent } from './types.js';
 
@@ -267,5 +267,5 @@ interface ResultView {
   finishReason?: string;
   output?: unknown;
   response?: { id?: string; modelId?: string };
-  usage?: AiSdkUsageShape;
+  usage?: AiSdkUsageFields;
 }

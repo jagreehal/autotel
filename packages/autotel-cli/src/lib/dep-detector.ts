@@ -32,6 +32,7 @@ export type PresetSlug =
   | 'local'
   // subscribers
   | 'posthog'
+  | 'posthog-web'
   | 'mixpanel'
   | 'amplitude'
   | 'segment'
@@ -91,51 +92,58 @@ export interface DetectionResult {
  *
  * Loggers handled separately (see `detectLoggers`).
  */
-const DEP_TO_PRESET: Record<string, PresetSlug | 'auto-instr'> = {
-  // First-party autotel wrappers
-  '@sentry/node': 'sentry',
-  '@sentry/bun': 'sentry',
-  hono: 'hono',
-  '@modelcontextprotocol/sdk': 'mcp',
-  '@tanstack/start': 'tanstack',
-  '@tanstack/start-server': 'tanstack',
-  '@tanstack/start-client': 'tanstack',
-  '@nestjs/core': 'nestjs',
-  '@sveltejs/kit': 'sveltekit',
-  elysia: 'elysia',
-  nuxt: 'nuxt',
+const DEP_TO_PRESET = new Map<string, PresetSlug | 'auto-instr'>(
+  Object.entries({
+    // First-party autotel wrappers
+    '@sentry/node': 'sentry',
+    '@sentry/bun': 'sentry',
+    hono: 'hono',
+    '@modelcontextprotocol/sdk': 'mcp',
+    '@tanstack/start': 'tanstack',
+    '@tanstack/start-server': 'tanstack',
+    '@tanstack/start-client': 'tanstack',
+    '@nestjs/core': 'nestjs',
+    '@sveltejs/kit': 'sveltekit',
+    elysia: 'elysia',
+    nuxt: 'nuxt',
 
-  // Subscribers
-  'posthog-node': 'posthog',
-  '@posthog/node': 'posthog',
-  mixpanel: 'mixpanel',
-  '@amplitude/analytics-node': 'amplitude',
-  '@segment/analytics-node': 'segment',
-  '@slack/web-api': 'slack',
-  '@slack/webhook': 'slack',
+    // Subscribers
+    'posthog-node': 'posthog',
+    '@posthog/node': 'posthog',
+    // The browser SDK wants the trace joined to the session it is already
+    // recording, which is a different package from the server-side subscriber.
+    'posthog-js': 'posthog-web',
+    mixpanel: 'mixpanel',
+    '@amplitude/analytics-node': 'amplitude',
+    '@segment/analytics-node': 'segment',
+    '@slack/web-api': 'slack',
+    '@slack/webhook': 'slack',
 
-  // Plugins (existing presets)
-  mongoose: 'mongoose',
-  'drizzle-orm': 'drizzle',
+    // Plugins (existing presets)
+    mongoose: 'mongoose',
+    'drizzle-orm': 'drizzle',
 
-  // Auto-instrumented (no first-party preset needed)
-  express: 'auto-instr',
-  fastify: 'auto-instr',
-  next: 'auto-instr',
-  pg: 'auto-instr',
-  mysql: 'auto-instr',
-  mysql2: 'auto-instr',
-  redis: 'auto-instr',
-  ioredis: 'auto-instr',
-  '@aws-sdk/client-s3': 'auto-instr',
-  graphql: 'auto-instr',
-};
+    // Auto-instrumented (no first-party preset needed)
+    express: 'auto-instr',
+    fastify: 'auto-instr',
+    next: 'auto-instr',
+    pg: 'auto-instr',
+    mysql: 'auto-instr',
+    mysql2: 'auto-instr',
+    redis: 'auto-instr',
+    ioredis: 'auto-instr',
+    '@aws-sdk/client-s3': 'auto-instr',
+    graphql: 'auto-instr',
+  }),
+);
 
-const LOGGER_DEPS: Record<string, LoggerKind> = {
-  pino: 'pino',
-  winston: 'winston',
-  bunyan: 'bunyan',
-};
+const LOGGER_DEPS = new Map<string, LoggerKind>(
+  Object.entries({
+    pino: 'pino',
+    winston: 'winston',
+    bunyan: 'bunyan',
+  }),
+);
 
 /** Backends inferable from env-var keys (values not used — only key presence). */
 const ENV_KEY_TO_BACKEND: { key: string; slug: PresetSlug }[] = [
@@ -177,16 +185,19 @@ function mergeDeps(
   return out;
 }
 
+/** What detectLoggers() answers with. */
+interface DetectLoggersResult {
+  primary: LoggerKind | null;
+  autoInstrument: LoggerKind[];
+}
+
 /**
  * Detect loggers, resolving conflict per the design: Pino wins as first-class
  * (`init({ logger })`); Winston/Bunyan become auto-instrumentations.
  */
-export function detectLoggers(deps: Map<string, unknown>): {
-  primary: LoggerKind | null;
-  autoInstrument: LoggerKind[];
-} {
+export function detectLoggers(deps: Map<string, unknown>): DetectLoggersResult {
   const present: LoggerKind[] = [];
-  for (const [name, kind] of Object.entries(LOGGER_DEPS)) {
+  for (const [name, kind] of LOGGER_DEPS) {
     if (deps.has(name)) present.push(kind);
   }
   if (present.length === 0) return { primary: null, autoInstrument: [] };
@@ -222,6 +233,12 @@ function parseEnvKeys(content: string): Set<string> {
   return out;
 }
 
+/** What collectEnvKeys() answers with. */
+interface CollectEnvKeysResult {
+  keys: Set<string>;
+  sources: string[];
+}
+
 /**
  * Collect env keys from .env.example (always) and .env/.env.local (only if
  * `envConsent` is true). Used for backend detection.
@@ -229,7 +246,7 @@ function parseEnvKeys(content: string): Set<string> {
 export function collectEnvKeys(opts: {
   packageRoot: string;
   envConsent: boolean;
-}): { keys: Set<string>; sources: string[] } {
+}): CollectEnvKeysResult {
   const keys = new Set<string>();
   const sources: string[] = [];
 
@@ -317,8 +334,8 @@ export function detectInProject(opts: {
   const autoInstrDeps: string[] = [];
 
   for (const [name, info] of deps.entries()) {
-    const mapping = DEP_TO_PRESET[name];
-    if (mapping === undefined && LOGGER_DEPS[name] === undefined) continue;
+    const mapping = DEP_TO_PRESET.get(name);
+    if (mapping === undefined && !LOGGER_DEPS.has(name)) continue;
 
     detectedPackages.push({
       name,

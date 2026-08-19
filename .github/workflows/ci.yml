@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check new packages are bootstrapped on npm
+        run: node scripts/check-publishable.mjs
+
       - name: Build packages
         run: pnpm build
         env:

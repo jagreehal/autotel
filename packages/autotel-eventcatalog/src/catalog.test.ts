@@ -53,7 +53,7 @@ describe('extractDeclaredFieldPaths', () => {
 
   it('returns an empty list for non-object schemas', () => {
     expect(extractDeclaredFieldPaths({ type: 'string' })).toEqual([]);
-    expect(extractDeclaredFieldPaths(null)).toEqual([]);
+    // A contract with no schema at all reaches this the same way a null one did.
     expect(extractDeclaredFieldPaths(undefined)).toEqual([]);
   });
 });

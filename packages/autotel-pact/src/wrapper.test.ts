@@ -12,19 +12,19 @@ import {
 
 class FakeMessagePact implements MessageConsumerPactLike {
   config = { consumer: 'OrderShipper', provider: 'OrderService' };
-  recordedMetadata: Record<string, unknown> = {};
+  recordedMetadata: Record<string, string | number | boolean> = {};
 
   constructor(
     private message: ReifiedMessage,
     private shouldFailHandler = false,
   ) {}
 
-  withMetadata(metadata: Record<string, unknown>): this {
+  withMetadata(metadata: Record<string, string | number | boolean>): this {
     Object.assign(this.recordedMetadata, metadata);
     return this;
   }
 
-  async verify(handler: (msg: ReifiedMessage) => unknown): Promise<unknown> {
+  async verify<R>(handler: (msg: ReifiedMessage) => Promise<R>): Promise<R> {
     if (this.shouldFailHandler) {
       throw new Error('handler rejected message');
     }
@@ -59,6 +59,8 @@ describe('withPactInteraction', () => {
     const pact = new FakeMessagePact(sampleMessage);
     const result = await withPactInteraction(
       pact,
+      // SAFETY: the message this test reifies carries an orderId; a handler is
+      // the caller's own code, which knows the contract it is verifying.
       (msg) => ({ processed: (msg.contents as { orderId: string }).orderId }),
       { runId: 'r-pass' },
     );

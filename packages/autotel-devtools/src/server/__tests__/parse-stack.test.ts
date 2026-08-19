@@ -40,7 +40,10 @@ describe('parseStackTrace', () => {
     // 4th line of the stack is `at file:///tmp/scratch/stackgen.mjs:11:9`.
     const anon = frames.find((f) => f.line === 11);
 
-    expect(anon).toMatchObject({ file: '/tmp/scratch/stackgen.mjs', column: 9 });
+    expect(anon).toMatchObject({
+      file: '/tmp/scratch/stackgen.mjs',
+      column: 9,
+    });
     expect(anon?.function).toBeUndefined();
   });
 

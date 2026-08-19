@@ -237,9 +237,9 @@ export const createUser = trace(async function createUser(
 
 - Named function expressions automatically become span names (`code.function`).
 - Errors are recorded, spans are ended, and status is set automatically.
-- When inference may be unreliable, use `trace('user.create', fn)` or
-  `instrument({ key: 'user.create', fn })`. For a module-sized batch, use
-  `instrument({ functions: { createUser, updateUser } })`.
+- When inference may be unreliable, name the wrapper explicitly with
+  `trace('user.create', fn)` or `instrument({ key: 'user.create', fn })`. For a
+  module-sized batch, use `instrument({ functions: { createUser, updateUser } })`.
 
 ### 4. See the value everywhere
 
@@ -553,7 +553,7 @@ These use the `autotel.*` namespace intentionally. OpenTelemetry does not define
 Wrap any sync/async function to create spans automatically.
 
 ```typescript
-import { trace, span, withTracing } from 'autotel';
+import { trace, span, instrument, withTracing } from 'autotel';
 
 export const updateUser = trace(async function updateUser(
   id: string,
@@ -563,8 +563,9 @@ export const updateUser = trace(async function updateUser(
 });
 
 // Explicit name (useful for anonymous/arrow functions)
-export const deleteUser = trace('user.delete', async (id: string) => {
-  return db.users.delete(id);
+export const deleteUser = instrument({
+  key: 'user.delete',
+  fn: async (id: string) => db.users.delete(id),
 });
 
 // Explicit factory form exposes the `ctx` helper
@@ -575,19 +576,22 @@ export const createOrder = withTracing({ name: 'order.create' })(
   },
 );
 
-// For one-off work, create the wrapper and call it
+// For one-off work, run a named operation directly
 function timed<T>(operation: string, fn: () => Promise<T>): Promise<T> {
-  return trace(operation, async () => {
-    getActiveTraceContext()?.setAttribute('operation', operation);
+  return trace(operation, async (ctx) => {
+    ctx.setAttribute('operation', operation);
     return await fn();
-  })();
+  });
 }
 ```
 
 **Context access:**
 
-1. Plain `trace(name?, fn)` wrappers receive their real arguments; use `getActiveTraceContext()` inside.
-2. Explicit factories use `withTracing({ name })(ctx => (...args) => result)`.
+1. Plain `trace(fn)` wrappers receive their real arguments; use `getActiveTraceContext()` inside.
+2. Reusable named wrappers use `trace(name, fn)` or `instrument({ key, fn })`; explicit factories use `withTracing({ name })(ctx => (...args) => result)`.
+3. `trace.run(name, ctx => result)` runs one operation immediately with explicit context.
+
+**`trace` wraps, `trace.run` runs.** No `trace(...)` form executes your function, so importing a module of them has no side effects. Reach the span inside any traced body through the ambient `ctx` import.
 
 - Automatic span lifecycle (`start`, `end`, status, and error recording).
 - Function names feed `operation.name`, `code.function`, and events enrichment.
@@ -1528,20 +1532,23 @@ Track user behavior, conversion funnels, and business outcomes alongside your Op
 **Recommended: Configure subscribers in `init()`, use global `track()` function:**
 
 ```typescript
-import { init, track, trace, span, withTracing } from 'autotel';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { init, instrument, track } from 'autotel';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 init({
   service: 'checkout',
   subscribers: [new PostHogSubscriber({ apiKey: process.env.POSTHOG_KEY! })],
 });
 
-export const signup = trace('user.signup', async (user) => {
-  // All events use subscribers from init() automatically
-  track('user.signup', { userId: user.id, plan: user.plan });
-  track.funnelStep('checkout', 'completed', { cartValue: user.cartTotal });
-  track.value('lifetimeValue', user.cartTotal, { currency: 'USD' });
-  track.outcome('user.signup', 'success', { cohort: user.cohort });
+export const signup = instrument({
+  key: 'user.signup',
+  fn: async (user) => {
+    // All events use subscribers from init() automatically
+    track('user.signup', { userId: user.id, plan: user.plan });
+    track.funnelStep('checkout', 'completed', { cartValue: user.cartTotal });
+    track.value('lifetimeValue', user.cartTotal, { currency: 'USD' });
+    track.outcome('user.signup', 'success', { cohort: user.cohort });
+  },
 });
 ```
 
@@ -2240,7 +2247,7 @@ Configure event subscribers globally to send product events to PostHog, Mixpanel
 
 ```typescript
 import { init } from 'autotel';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 init({
   service: 'my-app',
@@ -2735,10 +2742,10 @@ export default wrapModule(
 ## API Reference
 
 - `init(config)` : Bootstraps the SDK (call once).
-- `trace(fn | name, fn)` : Wraps functions with spans and optional context access.
+- `trace(fn)` wraps a reusable inferred-name function; `trace(name, fn)` wraps under an explicit name; `trace.run(name, ctx => result)` runs named work immediately.
 - `span(options, fn)` : Creates nested spans for ad-hoc blocks.
 - `withTracing(options)` : Produces reusable wrappers with shared configuration.
-- `instrument(target, options)` : Batch-wraps an object of functions.
+- `instrument({ key, fn })` is the options form of `trace(name, fn)`; `instrument({ functions })` batch-wraps a module.
 - `Trace` decorator : Adds tracing to class methods (TypeScript 5+).
 - `instrumentDatabase(db, options)` : Adds automatic DB spans (Drizzle, etc.).
 - `Metric` class & helpers (`createHistogram`, etc.) : Emit OpenTelemetry metrics.

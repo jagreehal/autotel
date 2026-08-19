@@ -15,6 +15,7 @@ import { googleCloud } from './backends/google-cloud';
 import { honeycomb } from './backends/honeycomb';
 import { otlpHttp, otlpGrpc, local } from './backends/otlp';
 import { posthog } from './subscribers/posthog';
+import { posthogWeb } from './plugins/posthog-web';
 import {
   mixpanel,
   amplitude,
@@ -72,6 +73,7 @@ export const plugins = new Map<string, PluginPreset>([
   ['sveltekit', sveltekit],
   ['elysia', elysia],
   ['nuxt', nuxt],
+  ['posthog-web', posthogWeb],
 ]);
 
 /**
@@ -217,6 +219,7 @@ export {
   otlpGrpc,
   local,
   posthog,
+  posthogWeb,
   mixpanel,
   amplitude,
   segment,

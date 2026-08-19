@@ -35,30 +35,42 @@ export type GenAiAttributeValue =
 /** Flat attribute map (canonical keys → primitive/array values). */
 export type GenAiAttributeMap = Record<string, GenAiAttributeValue>;
 
+/**
+ * A bag under construction. A Map rather than an object because these builders
+ * add a key only when the caller supplied a value, and the finished bag is
+ * handed back as a plain record by `built()`.
+ */
+type AttributeBuilder = Map<string, GenAiAttributeValue>;
+
+/** The finished bag. */
+function built(target: AttributeBuilder): GenAiAttributeMap {
+  return Object.fromEntries(target);
+}
+
 function set(
-  target: GenAiAttributeMap,
+  target: AttributeBuilder,
   key: string,
   value: GenAiAttributeValue | null | undefined,
 ): void {
   if (value === undefined || value === null) return;
   if (Array.isArray(value) && value.length === 0) return;
-  target[key] = value;
+  target.set(key, value);
 }
 
 /** Set `key` to the integer-truncated `value` (spec types these as int), unless absent. */
 function setInt(
-  target: GenAiAttributeMap,
+  target: AttributeBuilder,
   key: string,
   value: number | undefined,
 ): void {
   if (value === undefined) return;
-  target[key] = Math.trunc(value);
+  target.set(key, Math.trunc(value));
 }
 
 /** Set `key` to the JSON-serialised `value` (spec types these as `any`), unless absent. */
-function setJson(target: GenAiAttributeMap, key: string, value: unknown): void {
+function setJson(target: AttributeBuilder, key: string, value: unknown): void {
   if (value === undefined) return;
-  target[key] = typeof value === 'string' ? value : JSON.stringify(value);
+  target.set(key, typeof value === 'string' ? value : JSON.stringify(value));
 }
 
 /** Request-side inputs for a GenAI operation. */
@@ -88,7 +100,7 @@ export interface GenAiRequestInput {
 export function genAiRequestAttributes(
   input: GenAiRequestInput,
 ): GenAiAttributeMap {
-  const attrs: GenAiAttributeMap = {};
+  const attrs: AttributeBuilder = new Map();
   set(attrs, GEN_AI.OPERATION_NAME, input.operation);
   set(attrs, GEN_AI.PROVIDER_NAME, input.provider);
   set(attrs, GEN_AI.REQUEST_MODEL, input.model);
@@ -108,7 +120,7 @@ export function genAiRequestAttributes(
   set(attrs, GEN_AI.OUTPUT_TYPE, input.outputType);
   set(attrs, GEN_AI.SERVER_ADDRESS, input.serverAddress);
   setInt(attrs, GEN_AI.SERVER_PORT, input.serverPort);
-  return attrs;
+  return built(attrs);
 }
 
 /** Response-side inputs. */
@@ -122,12 +134,12 @@ export interface GenAiResponseInput {
 export function genAiResponseAttributes(
   input: GenAiResponseInput,
 ): GenAiAttributeMap {
-  const attrs: GenAiAttributeMap = {};
+  const attrs: AttributeBuilder = new Map();
   set(attrs, GEN_AI.RESPONSE_MODEL, input.model);
   set(attrs, GEN_AI.RESPONSE_ID, input.id);
   set(attrs, GEN_AI.RESPONSE_FINISH_REASONS, input.finishReasons);
   set(attrs, GEN_AI.RESPONSE_TIME_TO_FIRST_CHUNK, input.timeToFirstChunk);
-  return attrs;
+  return built(attrs);
 }
 
 /** Token-usage inputs (camelCase mirror of `gen_ai.usage.*`). */
@@ -144,7 +156,7 @@ export interface GenAiUsageInput {
 export function genAiUsageAttributes(
   input: GenAiUsageInput,
 ): GenAiAttributeMap {
-  const attrs: GenAiAttributeMap = {};
+  const attrs: AttributeBuilder = new Map();
   set(attrs, GEN_AI.USAGE_INPUT_TOKENS, input.inputTokens);
   set(attrs, GEN_AI.USAGE_OUTPUT_TOKENS, input.outputTokens);
   set(attrs, GEN_AI.USAGE_REASONING_OUTPUT_TOKENS, input.reasoningOutputTokens);
@@ -158,7 +170,7 @@ export function genAiUsageAttributes(
   // Same value, second name: backends split on which one they read, and a cost
   // that only lands under the name yours does not know is a cost you cannot see.
   set(attrs, GEN_AI.USAGE_COST, input.costUsd);
-  return attrs;
+  return built(attrs);
 }
 
 /** Agent inputs. */
@@ -181,12 +193,12 @@ export function genAiAgentAttributes(
   input: GenAiAgentInput,
   options: { internal?: boolean } = {},
 ): GenAiAttributeMap {
-  const attrs: GenAiAttributeMap = {};
+  const attrs: AttributeBuilder = new Map();
   if (!options.internal) set(attrs, GEN_AI.AGENT_ID, input.id);
   set(attrs, GEN_AI.AGENT_NAME, input.name);
   set(attrs, GEN_AI.AGENT_VERSION, input.version);
   set(attrs, GEN_AI.AGENT_DESCRIPTION, input.description);
-  return attrs;
+  return built(attrs);
 }
 
 /** Tool inputs. */
@@ -200,14 +212,14 @@ export interface GenAiToolInput {
 }
 
 export function genAiToolAttributes(input: GenAiToolInput): GenAiAttributeMap {
-  const attrs: GenAiAttributeMap = {};
+  const attrs: AttributeBuilder = new Map();
   set(attrs, GEN_AI.TOOL_NAME, input.name);
   set(attrs, GEN_AI.TOOL_TYPE, input.type);
   set(attrs, GEN_AI.TOOL_DESCRIPTION, input.description);
   set(attrs, GEN_AI.TOOL_CALL_ID, input.callId);
   setJson(attrs, GEN_AI.TOOL_CALL_ARGUMENTS, input.callArguments);
   setJson(attrs, GEN_AI.TOOL_CALL_RESULT, input.callResult);
-  return attrs;
+  return built(attrs);
 }
 
 export interface GenAiRetrievalInput {
@@ -219,11 +231,11 @@ export interface GenAiRetrievalInput {
 export function genAiRetrievalAttributes(
   input: GenAiRetrievalInput,
 ): GenAiAttributeMap {
-  const attrs: GenAiAttributeMap = {};
+  const attrs: AttributeBuilder = new Map();
   setInt(attrs, GEN_AI.RETRIEVAL_TOP_K, input.topK);
   set(attrs, GEN_AI.RETRIEVAL_QUERY_TEXT, input.queryText);
   setJson(attrs, GEN_AI.RETRIEVAL_DOCUMENTS, input.documents);
-  return attrs;
+  return built(attrs);
 }
 
 export interface GenAiMemoryInput {
@@ -237,13 +249,13 @@ export interface GenAiMemoryInput {
 export function genAiMemoryAttributes(
   input: GenAiMemoryInput,
 ): GenAiAttributeMap {
-  const attrs: GenAiAttributeMap = {};
+  const attrs: AttributeBuilder = new Map();
   set(attrs, GEN_AI.MEMORY_STORE_ID, input.storeId);
   set(attrs, GEN_AI.MEMORY_RECORD_ID, input.recordId);
   setInt(attrs, GEN_AI.MEMORY_RECORD_COUNT, input.recordCount);
   set(attrs, GEN_AI.MEMORY_QUERY_TEXT, input.queryText);
   setJson(attrs, GEN_AI.MEMORY_RECORDS, input.records);
-  return attrs;
+  return built(attrs);
 }
 
 export interface GenAiWorkflowInput {
@@ -254,8 +266,8 @@ export interface GenAiWorkflowInput {
 export function genAiWorkflowAttributes(
   input: GenAiWorkflowInput,
 ): GenAiAttributeMap {
-  const attrs: GenAiAttributeMap = {};
+  const attrs: AttributeBuilder = new Map();
   set(attrs, GEN_AI.WORKFLOW_NAME, input.workflowName);
   set(attrs, GEN_AI.PROMPT_NAME, input.promptName);
-  return attrs;
+  return built(attrs);
 }

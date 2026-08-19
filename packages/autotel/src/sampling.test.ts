@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TraceFlags } from '@opentelemetry/api';
 import type { Link, SpanContext, Attributes } from '@opentelemetry/api';
+import { invalidValue } from './testing/doubles';
+import {
+  asString,
+  asStringArray,
+  readProperty,
+  type UnknownRecord,
+} from './values';
 import {
   RandomSampler,
   AlwaysSampler,
@@ -13,6 +20,7 @@ import {
   extractLinksFromBatch,
   samplingPresets,
   resolveSamplingPreset,
+  type SamplingPreset,
   type SamplingContext,
 } from './sampling';
 import { type ILogger } from './logger';
@@ -256,10 +264,8 @@ describe('Sampling', () => {
   });
 
   describe('UserIdSampler', () => {
-    const extractUserId = (args: unknown[]) => {
-      const firstArg = args[0] as { userId?: string };
-      return firstArg?.userId;
-    };
+    const extractUserId = (args: unknown[]) =>
+      asString(readProperty(args[0], 'userId'));
 
     it('should always sample specific users', () => {
       const sampler = new UserIdSampler({
@@ -328,7 +334,7 @@ describe('Sampling', () => {
     it('should fallback to random sampling when no user ID', () => {
       const sampler = new UserIdSampler({
         baselineSampleRate: 1,
-        extractUserId: (args) => (args[0] as { userId?: string })?.userId,
+        extractUserId: (args) => asString(readProperty(args[0], 'userId')),
       });
 
       const noUserContext: SamplingContext = {
@@ -366,13 +372,10 @@ describe('Sampling', () => {
   });
 
   describe('FeatureFlagSampler', () => {
-    const extractFlags = (
-      args: unknown[],
-      metadata?: Record<string, unknown>,
-    ) => {
-      const firstArg = args[0] as { flags?: string[] };
-      return firstArg?.flags || (metadata?.featureFlags as string[]);
-    };
+    const extractFlags = (args: unknown[], metadata?: UnknownRecord) =>
+      asStringArray(readProperty(args[0], 'flags')) ??
+      asStringArray(metadata?.featureFlags) ??
+      [];
 
     it('should always sample requests with monitored flags', () => {
       const sampler = new FeatureFlagSampler({
@@ -484,10 +487,8 @@ describe('Sampling', () => {
     });
 
     it('should always trace VIP users', () => {
-      const extractUserId = (args: unknown[]) => {
-        const firstArg = args[0] as { userId?: string };
-        return firstArg?.userId;
-      };
+      const extractUserId = (args: unknown[]) =>
+        asString(readProperty(args[0], 'userId'));
 
       const sampler = new UserIdSampler({
         baselineSampleRate: 0.01, // 1% of normal users
@@ -504,10 +505,8 @@ describe('Sampling', () => {
     });
 
     it('should always trace A/B test variants for correlation', () => {
-      const extractFlags = (args: unknown[]) => {
-        const firstArg = args[0] as { experimentFlags?: string[] };
-        return firstArg?.experimentFlags;
-      };
+      const extractFlags = (args: unknown[]) =>
+        asStringArray(readProperty(args[0], 'experimentFlags')) ?? [];
 
       const sampler = new FeatureFlagSampler({
         baselineSampleRate: 0.05,
@@ -1049,7 +1048,9 @@ describe('Sampling', () => {
     });
 
     it('throws on invalid preset with helpful message', () => {
-      expect(() => resolveSamplingPreset('banana' as any)).toThrow(
+      expect(() =>
+        resolveSamplingPreset(invalidValue<SamplingPreset>('banana')),
+      ).toThrow(
         /Unknown sampling preset: "banana".*Valid presets: development, errors-only, production, off/,
       );
     });

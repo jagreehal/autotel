@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { context as api_context, SpanStatusCode } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import type { AttributeValue } from '@opentelemetry/api';
 import {
   withNativeTracer,
@@ -11,9 +12,9 @@ import {
 } from './native-bridge';
 
 function fakeSpan(isTraced = true): NativeSpanHandle & {
-  attributes: Record<string, unknown>;
+  attributes: Attributes;
 } {
-  const attributes: Record<string, unknown> = {};
+  const attributes: Attributes = {};
   return {
     isTraced,
     attributes,

@@ -4,7 +4,7 @@
 
 import type { Mongoose } from 'mongoose';
 import { otelTrace as trace, context, SpanKind } from 'autotel';
-import type { Span, Tracer } from 'autotel';
+import type { Attributes as SpanAttributes, Span, Tracer } from 'autotel';
 import {
   runWithSpan,
   finalizeSpan,
@@ -28,14 +28,15 @@ import {
   DB_SYSTEM_NAME_VALUE_MONGODB,
 } from './constants';
 import type {
+  CustomMethodType,
+  CustomMethodsConfig,
   InstrumentMongooseConfig,
+  MethodSelector,
+  MongoDocument,
   ResolvedConfig,
   ResolvedCustomMethods,
-  CustomMethodsConfig,
-  CustomMethodType,
-  MethodSelector,
   SerializerPayload,
-} from './types';
+} from './types.js';
 import { DEFAULT_TRACER_NAME } from './types';
 import {
   createStatementCapture,
@@ -43,8 +44,43 @@ import {
   defaultSerializer,
   type StatementCaptureFn,
 } from './statement';
+import {
+  asFunction,
+  asRecord,
+  asString,
+  callFunction,
+  isFunction,
+  readProperty,
+  toError,
+} from './values.js';
 
 const INSTRUMENTED_FLAG = '__autotelMongooseInstrumented' as const;
+/**
+ * Autotel marks what it has already wrapped so a second install is a no-op.
+ * The marker lives on functions and prototypes this package does not own, so
+ * these two helpers hold the only assertions needed to read and write it.
+ */
+type MarkerKey = string | symbol;
+
+/** What a marker holds: that the value was wrapped, or the span stored on it. */
+type MarkerValue = boolean | Span | undefined;
+
+type Marked = Record<MarkerKey, MarkerValue>;
+
+function hasMarker(target: object, key: MarkerKey): boolean {
+  // SAFETY: reading an own property that may not exist; absent reads undefined.
+  return Boolean((target as Marked)[key]);
+}
+
+function setMarker(
+  target: object,
+  key: MarkerKey,
+  value: MarkerValue = true,
+): void {
+  // SAFETY: the marker is autotel's own key on a value autotel just wrapped.
+  (target as Marked)[key] = value;
+}
+
 const WRAPPED_HOOK_FLAG = '__autotelWrappedHook' as const;
 const WRAPPED_METHOD_FLAG = '__autotelWrappedMethod' as const;
 const MODEL_PATCHED_FLAG = '__autotelModelPatched' as const;
@@ -137,7 +173,7 @@ function createSpan(
       ? `${operation} ${modelName}`
       : `mongoose.${operation}`;
 
-  const attributes: Record<string, any> = {
+  const attributes: SpanAttributes = {
     [ATTR_DB_SYSTEM_NAME]: DB_SYSTEM_NAME_VALUE_MONGODB,
     [ATTR_DB_OPERATION_NAME]: operation,
   };
@@ -169,6 +205,19 @@ function createSpan(
  * and the span must be ended exactly once. The first call wins; later calls are
  * no-ops. A non-Error rejection is normalized to an `Error`.
  */
+/**
+ * A value Mongoose handed back, read as the document shape the serializer
+ * expects.
+ *
+ * SAFETY: a query's filter, update, options and projection are plain objects
+ * of BSON-serialisable values, which is what MongoDocument says. The
+ * serializer walks them field by field and stringifies anything it does not
+ * recognise.
+ */
+function mongoDocument(value: unknown): MongoDocument | undefined {
+  return asRecord(value) as MongoDocument | undefined;
+}
+
 function createSpanFinalizer(span: Span): (error?: unknown) => void {
   let done = false;
   return (error?: unknown): void => {
@@ -178,11 +227,7 @@ function createSpanFinalizer(span: Span): (error?: unknown) => void {
     done = true;
     finalizeSpan(
       span,
-      error === undefined || error === null
-        ? undefined
-        : error instanceof Error
-          ? error
-          : new Error(String(error)),
+      error === undefined || error === null ? undefined : toError(error),
     );
   };
 }
@@ -199,8 +244,9 @@ function createSpanFinalizer(span: Span): (error?: unknown) => void {
  * "the span ends when the work ends" lives in exactly one place.
  */
 function settleSpan(result: any, finalize: (error?: unknown) => void): any {
-  if (result && typeof result.exec === 'function') {
-    const originalExec = result.exec.bind(result);
+  const exec = asFunction(readProperty(result, 'exec'));
+  if (exec) {
+    const originalExec = exec.bind(result);
     result.exec = function wrappedExec(): Promise<any> {
       try {
         return Promise.resolve(originalExec()).then(
@@ -221,7 +267,8 @@ function settleSpan(result: any, finalize: (error?: unknown) => void): any {
     return result;
   }
 
-  if (result && typeof result.then === 'function') {
+  if (isFunction(readProperty(result, 'then'))) {
+    // SAFETY: the probe above established the result is a thenable.
     return Promise.resolve(result as Promise<any>).then(
       (value) => {
         finalize();
@@ -255,14 +302,20 @@ function settleSpan(result: any, finalize: (error?: unknown) => void): any {
  * wrapHookHandler. The two are intentionally not merged: a single "find the
  * callback" rule across both would hide two genuinely different calling shapes.
  */
+/** Whether the call's completion was handed to a callback, and the args to use. */
+interface DeferredCall {
+  callArgs: any[];
+  deferred: boolean;
+}
+
 function deferFinalizeToCallback(
   args: any[],
   span: Span,
-  finalize: (error?: unknown) => void,
-): { callArgs: any[]; deferred: boolean } {
+  finalize: (cause?: unknown) => void,
+): DeferredCall {
   const lastIndex = args.length - 1;
   const maybeCallback = lastIndex >= 0 ? args[lastIndex] : undefined;
-  if (typeof maybeCallback !== 'function') {
+  if (!isFunction(maybeCallback)) {
     return { callArgs: args, deferred: false };
   }
 
@@ -272,7 +325,9 @@ function deferFinalizeToCallback(
     ...callbackArgs: any[]
   ): any {
     try {
-      return runWithSpan(span, () => maybeCallback.apply(this, callbackArgs));
+      return runWithSpan(span, () =>
+        callFunction(maybeCallback, this, callbackArgs),
+      );
     } finally {
       finalize(callbackArgs[0]);
     }
@@ -298,10 +353,8 @@ function wrapQueryReturningMethod(
   config: ResolvedConfig,
   captureStatement: StatementCaptureFn,
 ): void {
-  const original = target[methodName];
-  if (typeof original !== 'function') {
-    return;
-  }
+  const original = asFunction(target[methodName]);
+  if (!original) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
     const collectionName = getCollectionName(this);
@@ -320,21 +373,18 @@ function wrapQueryReturningMethod(
         const result = original.apply(this, args);
 
         // Extract the query payload from the returned Query before it executes.
-        if (result && typeof result.exec === 'function') {
+        const query = asRecord(result);
+        if (query && isFunction(query.exec)) {
           try {
             const payload: SerializerPayload = {};
-            if (typeof result.getFilter === 'function') {
-              payload.condition = result.getFilter();
-            }
-            if (result._update !== undefined) {
-              payload.updates = result._update;
-            }
-            if (typeof result.getOptions === 'function') {
-              payload.options = result.getOptions();
-            }
-            if (result._fields !== undefined) {
-              payload.fields = result._fields;
-            }
+            const getFilter = asFunction(query.getFilter);
+            if (getFilter)
+              payload.condition = mongoDocument(getFilter.call(query));
+            payload.updates = mongoDocument(query._update);
+            const getOptions = asFunction(query.getOptions);
+            if (getOptions)
+              payload.options = mongoDocument(getOptions.call(query));
+            payload.fields = mongoDocument(query._fields);
             const statementText = captureStatement(operation, payload);
             if (statementText) {
               span.setAttribute(ATTR_DB_QUERY_TEXT, statementText);
@@ -371,10 +421,8 @@ function wrapStaticMethod(
   config: ResolvedConfig,
   captureStatement: StatementCaptureFn,
 ): void {
-  const original = target[methodName];
-  if (typeof original !== 'function') {
-    return;
-  }
+  const original = asFunction(target[methodName]);
+  if (!original) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
     const collectionName = getCollectionName(this);
@@ -455,10 +503,8 @@ function wrapInstanceMethod(
   config: ResolvedConfig,
   captureStatement: StatementCaptureFn,
 ): void {
-  const original = target[methodName];
-  if (typeof original !== 'function') {
-    return;
-  }
+  const original = asFunction(target[methodName]);
+  if (!original) return;
 
   target[methodName] = function instrumented(this: any, ...args: any[]): any {
     const collectionName = getCollectionName(this);
@@ -467,7 +513,7 @@ function wrapInstanceMethod(
     // Extract document before calling original
     const payload: SerializerPayload = {};
     try {
-      if (typeof this.toObject === 'function') {
+      if (isFunction(this.toObject)) {
         payload.document = this.toObject();
       }
     } catch {
@@ -512,18 +558,17 @@ function wrapInstanceMethod(
  * Wraps chainable Query methods (populate, select, lean, etc.) to capture span context.
  */
 function wrapChainableMethod(target: any, methodName: string): void {
-  const original = target[methodName];
-  if (typeof original !== 'function') {
-    return;
-  }
+  const original = asFunction(target[methodName]);
+  if (!original) return;
 
   target[methodName] = function captureContext(this: any, ...args: any[]): any {
     const currentSpan = getActiveSpan();
     const result = original.apply(this, args);
 
     // Store parent span on returned Query for exec() calls
-    if (result && typeof result.exec === 'function') {
-      (result as any)[_STORED_PARENT_SPAN] = currentSpan;
+    const query = asRecord(result);
+    if (query && isFunction(query.exec)) {
+      setMarker(query, _STORED_PARENT_SPAN, currentSpan);
     }
 
     return result;
@@ -548,19 +593,14 @@ function patchSchemaHooks(
   }
 
   const HOOK_FLAG = '__autotelHookInstrumented' as const;
-  if ((Schema.prototype as any)[HOOK_FLAG]) {
+  if (hasMarker(Schema.prototype, HOOK_FLAG)) {
     return;
   }
 
-  const originalPre = Schema.prototype.pre;
-  if (typeof originalPre === 'function') {
+  const originalPre = asFunction(Schema.prototype.pre);
+  if (originalPre) {
     Schema.prototype.pre = function (hookName: string, ...args: any[]): any {
-      const handler =
-        typeof args[0] === 'function'
-          ? args[0]
-          : typeof args[1] === 'function'
-            ? args[1]
-            : null;
+      const handler = asFunction(args[0]) ?? asFunction(args[1]) ?? null;
 
       // Only wrap user-defined hooks, skip Mongoose internals
       if (handler && !isMongooseInternalHook(handler)) {
@@ -578,19 +618,14 @@ function patchSchemaHooks(
         }
       }
 
-      return Reflect.apply(originalPre, this, [hookName, ...args]);
+      return callFunction(originalPre, this, [hookName, ...args]);
     };
   }
 
-  const originalPost = Schema.prototype.post;
-  if (typeof originalPost === 'function') {
+  const originalPost = asFunction(Schema.prototype.post);
+  if (originalPost) {
     Schema.prototype.post = function (hookName: string, ...args: any[]): any {
-      const handler =
-        typeof args[0] === 'function'
-          ? args[0]
-          : typeof args[1] === 'function'
-            ? args[1]
-            : null;
+      const handler = asFunction(args[0]) ?? asFunction(args[1]) ?? null;
 
       // Only wrap user-defined hooks, skip Mongoose internals
       if (handler && !isMongooseInternalHook(handler)) {
@@ -608,11 +643,11 @@ function patchSchemaHooks(
         }
       }
 
-      return Reflect.apply(originalPost, this, [hookName, ...args]);
+      return callFunction(originalPost, this, [hookName, ...args]);
     };
   }
 
-  (Schema.prototype as any)[HOOK_FLAG] = true;
+  setMarker(Schema.prototype, HOOK_FLAG);
 }
 
 /**
@@ -623,12 +658,10 @@ function patchSchemaHooks(
  * Note: We intentionally allow anonymous functions because user-defined
  * hooks are often anonymous (e.g., `schema.pre('save', async function() {...})`).
  */
-function isMongooseInternalHook(handler: any): boolean {
-  if (typeof handler !== 'function') {
-    return false;
-  }
+function isMongooseInternalHook(handler: unknown): boolean {
+  if (!isFunction(handler)) return false;
 
-  const funcName = handler.name || '';
+  const funcName = asString(readProperty(handler, 'name')) ?? '';
 
   // Skip private/internal methods (starting with _ or $)
   if (funcName.startsWith('_') || funcName.startsWith('$')) {
@@ -692,12 +725,12 @@ export function wrapHookHandler(
   tracer: Tracer,
   config: ResolvedConfig,
 ): any {
-  if (typeof handler !== 'function') {
+  if (!isFunction(handler)) {
     return handler;
   }
 
   // Skip if already wrapped to prevent duplicate spans
-  if ((handler as any)[WRAPPED_HOOK_FLAG]) {
+  if (hasMarker(handler, WRAPPED_HOOK_FLAG)) {
     return handler;
   }
 
@@ -747,19 +780,17 @@ export function wrapHookHandler(
   ) =>
     runWithSpan(span, () => {
       try {
-        const result = handler.apply(self, args);
+        const result = callFunction(handler, self, args);
 
-        if (result && typeof result.then === 'function') {
+        if (isFunction(readProperty(result, 'then'))) {
+          // SAFETY: as above - the probe established the result is a thenable.
           return Promise.resolve(result as Promise<any>)
             .then((value) => {
               finalizeSpan(span);
               return value;
             })
             .catch((error: unknown) => {
-              finalizeSpan(
-                span,
-                error instanceof Error ? error : new Error(String(error)),
-              );
+              finalizeSpan(span, toError(error));
               throw error;
             });
         }
@@ -819,6 +850,8 @@ export function wrapHookHandler(
     // Restoring the original arity on this wrapper (see `defineProperty` below)
     // is what lets Kareem's own exact-arity checks line up in the `post` case.
     const expectedIndex = handler.length - 1;
+    // SAFETY: the condition establishes the argument at that index is callable
+    // before it is treated as mongoose's node-style hook callback.
     const realCallback =
       expectedIndex >= 0 && typeof runtimeArgs[expectedIndex] === 'function'
         ? (runtimeArgs[expectedIndex] as (...args: any[]) => void)
@@ -880,7 +913,7 @@ export function wrapHookHandler(
   });
 
   // Mark as wrapped to prevent double-wrapping
-  (wrappedHook as any)[WRAPPED_HOOK_FLAG] = true;
+  setMarker(wrappedHook, WRAPPED_HOOK_FLAG);
   return wrappedHook;
 }
 
@@ -957,10 +990,16 @@ function selectorAllows(selector: MethodSelector, name: string): boolean {
  * Derives model + collection names from the runtime `this` of a custom
  * function, which differs by category (Model / Document / Query).
  */
+/** Where a traced custom method's model and collection names came from. */
+interface ModelContext {
+  modelName?: string;
+  collectionName?: string;
+}
+
 function resolveModelContext(
   self: any,
   methodType: CustomMethodType,
-): { modelName?: string; collectionName?: string } {
+): ModelContext {
   try {
     switch (methodType) {
       case 'static': {
@@ -1005,7 +1044,7 @@ function wrapCustomFunction(
   methodName: string,
   methodType: CustomMethodType,
 ): (...args: any[]) => any {
-  if ((original as any)[WRAPPED_METHOD_FLAG]) {
+  if (hasMarker(original, WRAPPED_METHOD_FLAG)) {
     return original;
   }
 
@@ -1131,7 +1170,7 @@ function wrapCustomFunction(
   } catch {
     // Ignore — non-fatal.
   }
-  (wrapped as any)[WRAPPED_METHOD_FLAG] = true;
+  setMarker(wrapped, WRAPPED_METHOD_FLAG);
   return wrapped;
 }
 
@@ -1184,11 +1223,11 @@ function isMongooseModelLike(fn: any): boolean {
 }
 
 /** Whether a value assigned to a schema collection should be wrapped. */
-function shouldWrapCustomFunction(name: string, value: any): boolean {
+function shouldWrapCustomFunction(name: string, value: unknown): boolean {
   return (
-    typeof value === 'function' &&
+    isFunction(value) &&
     !isMongooseInternalFunctionName(name) &&
-    !(value as any)[WRAPPED_METHOD_FLAG] &&
+    !hasMarker(value, WRAPPED_METHOD_FLAG) &&
     !isMongooseModelLike(value)
   );
 }
@@ -1241,6 +1280,8 @@ function instrumentSchemaCustomFunctions(schema: any): void {
 
     return new Proxy(collection, {
       set(target, prop, value): boolean {
+        // SAFETY: a proxy set trap writes whatever key it was given; the
+        // collection this wraps is mongoose's, whose members are untyped here.
         (target as any)[prop] =
           typeof prop === 'string' && shouldWrapCustomFunction(prop, value)
             ? wrapCustomFunction(value, prop, methodType)
@@ -1277,18 +1318,14 @@ function patchModelFactory(m: any, config: ResolvedConfig): void {
       schema?: any,
       ...rest: any[]
     ): any {
-      if (schema && typeof schema === 'object') {
+      if (asRecord(schema)) {
         try {
           instrumentSchemaCustomFunctions(schema);
         } catch {
           // Never let instrumentation break model compilation.
         }
       }
-      return Reflect.apply(originalModel, this, [
-        nameOrSchema,
-        schema,
-        ...rest,
-      ]);
+      return callFunction(originalModel, this, [nameOrSchema, schema, ...rest]);
     };
     host[MODEL_PATCHED_FLAG] = true;
   };
@@ -1338,6 +1375,8 @@ export function instrumentMongoose(
     return mongoose;
   }
 
+  // SAFETY: the instrumented marker is autotel's own key on the mongoose
+  // instance; hasMarker/setMarker below are the only things that read it.
   const m = mongoose as any;
   if (m[INSTRUMENTED_FLAG]) {
     return mongoose;

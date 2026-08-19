@@ -19,6 +19,8 @@ export function resolveConfig(
 ): AIConfig | null {
   const provider: AIProviderType | undefined =
     options.provider ??
+    // SAFETY: AI_PROVIDER arrives from the environment as a string; an
+    // unrecognised value falls through to the default on the next line.
     (process.env.AI_PROVIDER as AIProviderType | undefined) ??
     undefined;
 

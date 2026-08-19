@@ -35,6 +35,14 @@
 import { trace, context, SpanStatusCode } from '@opentelemetry/api';
 import type { Span, Tracer, Context } from '@opentelemetry/api';
 import { requireModule } from './node-require';
+import {
+  asBoolean,
+  asNumber,
+  asPlainRecord,
+  asString,
+  toError,
+  type UnknownRecord,
+} from './values';
 
 /**
  * WeakMap to store span names for active spans
@@ -165,10 +173,10 @@ export function getTraceContext(): TraceContext | null {
  * // { userId: '123' } - no trace fields added
  * ```
  */
-export function enrichWithTraceContext<T extends Record<string, unknown>>(
-  obj: T,
-): T {
+export function enrichWithTraceContext<T extends UnknownRecord>(obj: T): T {
   const context = getTraceContext();
+  // SAFETY: the spread only adds the trace fields on top of T's own, so every
+  // member T declares is still there, carrying the value it had.
   return context ? ({ ...obj, ...context } as T) : obj;
 }
 
@@ -422,13 +430,9 @@ export function runWithSpan<T>(span: Span, fn: () => T): T {
  * }
  * ```
  */
-export function finalizeSpan(span: Span, error?: unknown): void {
-  if (error) {
-    if (error instanceof Error) {
-      span.recordException(error);
-    } else {
-      span.recordException(new Error(String(error)));
-    }
+export function finalizeSpan(span: Span, cause?: unknown): void {
+  if (cause) {
+    span.recordException(toError(cause));
     span.setStatus({ code: SpanStatusCode.ERROR });
   } else {
     span.setStatus({ code: SpanStatusCode.OK });
@@ -653,14 +657,19 @@ export function resolveTraceUrl(
   return t.replaceAll('{traceId}', traceId);
 }
 
+/** Flattened metadata: every leaf rendered as the string an attribute holds. */
+export interface FlatMetadata {
+  [key: string]: string;
+}
+
 export function flattenMetadata(
-  metadata: Record<string, unknown>,
+  metadata: UnknownRecord,
   prefix = 'metadata',
-): Record<string, string> {
-  const flattened: Record<string, string> = {};
+): FlatMetadata {
+  const flattened: FlatMetadata = {};
   const seen = new WeakSet<object>(); // Track visited objects to detect cycles
 
-  function flatten(obj: Record<string, unknown>, currentPrefix: string): void {
+  function flatten(obj: UnknownRecord, currentPrefix: string): void {
     for (const [key, value] of Object.entries(obj)) {
       // Skip null/undefined values
       if (value == null) continue;
@@ -668,30 +677,29 @@ export function flattenMetadata(
       const attributeKey = `${currentPrefix}.${key}`;
 
       // Handle primitives directly (string, number, boolean)
-      if (typeof value === 'string') {
-        flattened[attributeKey] = value;
+      const text = asString(value);
+      if (text !== undefined) {
+        flattened[attributeKey] = text;
         continue;
       }
-      if (typeof value === 'number' || typeof value === 'boolean') {
-        flattened[attributeKey] = String(value);
+      const scalar = asNumber(value) ?? asBoolean(value);
+      if (scalar !== undefined) {
+        flattened[attributeKey] = String(scalar);
         continue;
       }
 
       // Recursively flatten plain objects (with cycle detection)
-      if (
-        typeof value === 'object' &&
-        value !== null &&
-        value.constructor === Object
-      ) {
+      const nested = asPlainRecord(value);
+      if (nested !== undefined) {
         // Detect circular references
-        if (seen.has(value)) {
+        if (seen.has(nested)) {
           flattened[attributeKey] = '<circular-reference>';
           continue;
         }
 
         // Mark as visited and recursively flatten
-        seen.add(value);
-        flatten(value as Record<string, unknown>, attributeKey);
+        seen.add(nested);
+        flatten(nested, attributeKey);
         continue;
       }
 

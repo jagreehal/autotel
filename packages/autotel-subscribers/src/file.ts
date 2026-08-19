@@ -17,6 +17,7 @@
  * ```
  */
 
+import type { EventAttributes } from 'autotel/event-subscriber';
 import { appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { EventSubscriber, type EventPayload } from './event-subscriber-base';
@@ -34,7 +35,7 @@ export interface FileSubscriberConfig {
    * Transform a payload before writing. Return `null` to skip the event.
    * Defaults to writing the normalized payload unchanged.
    */
-  transform?: (payload: EventPayload) => Record<string, unknown> | null;
+  transform?: (payload: EventPayload) => EventAttributes | null;
 }
 
 export class FileSubscriber extends EventSubscriber {
@@ -46,7 +47,7 @@ export class FileSubscriber extends EventSubscriber {
   private readonly ensureDir: boolean;
   private readonly transform?: (
     payload: EventPayload,
-  ) => Record<string, unknown> | null;
+  ) => EventAttributes | null;
 
   /** Serializes writes so concurrent events never interleave on disk. */
   private writeChain: Promise<void> = Promise.resolve();

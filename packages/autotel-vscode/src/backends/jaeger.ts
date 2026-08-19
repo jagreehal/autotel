@@ -2,6 +2,8 @@ import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { registerAdapter } from './types';
 import { backendFetch } from './http';
+import type { AttributeValue, SpanAttributes } from 'autotel-devtools';
+import { asString } from '../values';
 
 // Minimal Jaeger query API adapter. Backend reference:
 //   GET /api/services
@@ -19,10 +21,10 @@ interface JaegerSpan {
   operationName: string;
   startTime: number; // microseconds since epoch
   duration: number; // microseconds
-  tags?: Array<{ key: string; type: string; value: unknown }>;
+  tags?: Array<{ key: string; type: string; value: AttributeValue }>;
   logs?: Array<{
     timestamp: number;
-    fields: Array<{ key: string; value: unknown }>;
+    fields: Array<{ key: string; value: AttributeValue }>;
   }>;
   processID: string;
 }
@@ -36,8 +38,8 @@ interface JaegerTrace {
   >;
 }
 
-function tagsToAttrs(tags: JaegerSpan['tags']): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+function tagsToAttrs(tags: JaegerSpan['tags']): SpanAttributes {
+  const out: SpanAttributes = {};
   for (const t of tags ?? []) out[t.key] = t.value;
   return out;
 }
@@ -54,7 +56,7 @@ function statusFromTags(
     const msg = tags?.find((t) => t.key === 'otel.status_description')?.value;
     return {
       code: 'ERROR',
-      message: typeof msg === 'string' ? msg : undefined,
+      message: asString(msg),
     };
   }
   return { code: 'OK' };
@@ -105,12 +107,18 @@ async function fetchJSON<T>(
   const url = new URL(path, ctx.baseUrl).toString();
   const timeoutId = ctx.timeoutMs
     ? setTimeout(() => {
+        // SAFETY: the adapter is handed an AbortSignal whose controller it
+        // does not hold; VS Code's own signal carries `abort`, and a signal
+        // without it simply never times out here.
         (ctx.abortSignal as unknown as { abort?: () => void }).abort?.();
       }, ctx.timeoutMs)
     : undefined;
   try {
     const res = await backendFetch(url, { signal: ctx.abortSignal });
     if (!res.ok) throw new Error(`Jaeger ${res.status}: ${res.statusText}`);
+    // SAFETY: T names the response this endpoint documents; every field is
+    // read defensively below, so an unexpected body renders as an empty result
+    // rather than a crash.
     return (await res.json()) as T;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);

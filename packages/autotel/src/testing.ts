@@ -41,6 +41,8 @@ import {
 import * as nodeAsyncHooks from 'node:async_hooks';
 import { type Logger } from './logger';
 import { configure } from './config';
+import type { UnknownRecord } from './values';
+import { asRecord, asString, isFunction } from './values';
 
 // Re-export events testing utilities
 export {
@@ -115,7 +117,7 @@ export interface SpanMatch {
   spanId?: string;
   parentSpanId?: string;
   kind?: SpanKind;
-  attributes?: Record<string, unknown>;
+  attributes?: Attributes;
 }
 
 /**
@@ -127,7 +129,7 @@ export interface TraceCollector {
   /** Get spans matching a name */
   getSpansByName(name: string): TestSpan[];
   /** Get spans matching attributes */
-  getSpansByAttributes(attributes: Record<string, unknown>): TestSpan[];
+  getSpansByAttributes(attributes: Attributes): TestSpan[];
   /** Get spans belonging to a trace */
   getSpansByTraceId(traceId: string): TestSpan[];
   /** Get spans without a recorded parent */
@@ -227,12 +229,10 @@ export function createTraceCollector(): TraceCollector {
         attributesOrStartTime?: Attributes | TimeInput,
         startTime?: TimeInput,
       ) {
-        const attributes =
-          attributesOrStartTime &&
-          !Array.isArray(attributesOrStartTime) &&
-          typeof attributesOrStartTime === 'object'
-            ? (attributesOrStartTime as Attributes)
-            : undefined;
+        // SAFETY: addEvent's overloads put either attributes or a start time
+        // in this position; a record here is the attributes.
+        const attributes = asRecord(attributesOrStartTime) as
+          Attributes | undefined;
         spanData.events!.push({ name, attributes });
         void startTime;
         return this;
@@ -303,26 +303,25 @@ export function createTraceCollector(): TraceCollector {
       contextOrFn?: OtelContext | F,
       fn?: F,
     ): ReturnType<F> {
-      const callback = (() => {
-        if (typeof optionsOrFn === 'function') {
-          return optionsOrFn;
-        }
-        if (typeof contextOrFn === 'function') {
-          return contextOrFn;
-        }
-        if (fn) {
-          return fn;
-        }
-        throw new Error('startActiveSpan requires a callback');
-      })();
+      // The callback is whichever argument is callable; OTel allows it in any
+      // of the three positions. typeof, not isFunction: this narrows a union
+      // of a callback and a context, and only the operator TypeScript
+      // understands can tell the rest of the body which one it has.
+      const callback =
+        typeof optionsOrFn === 'function'
+          ? optionsOrFn
+          : typeof contextOrFn === 'function'
+            ? contextOrFn
+            : fn;
+      if (!callback) throw new Error('startActiveSpan requires a callback');
 
       const startTime = performance.now();
       const suppliedContext =
-        typeof optionsOrFn === 'function'
+        typeof optionsOrFn === 'function' ||
+        typeof contextOrFn === 'function' ||
+        contextOrFn === undefined
           ? context.active()
-          : typeof contextOrFn === 'function' || contextOrFn === undefined
-            ? context.active()
-            : contextOrFn;
+          : contextOrFn;
       const parent =
         otelTrace.getSpan(suppliedContext)?.spanContext() ??
         activeMockSpanStorage.getStore()?.spanContext();
@@ -333,6 +332,8 @@ export function createTraceCollector(): TraceCollector {
       // Set span as active in context (makes otelTrace.getActiveSpan() work)
       const ctx = otelTrace.setSpan(suppliedContext, mockSpan);
       return activeMockSpanStorage.run(mockSpan, () => {
+        // SAFETY: the callback is the caller's own F, so what it returns is
+        // ReturnType<F>; context.with only passes the value through.
         return context.with(ctx, () => callback(mockSpan)) as ReturnType<F>;
       });
     },
@@ -350,7 +351,7 @@ export function createTraceCollector(): TraceCollector {
       return spans.filter((span) => span.name === name);
     },
 
-    getSpansByAttributes(attributes: Record<string, unknown>): TestSpan[] {
+    getSpansByAttributes(attributes: Attributes): TestSpan[] {
       return spans.filter((span) => {
         return Object.entries(attributes).every(
           ([key, value]) => span.attributes[key] === value,
@@ -387,6 +388,8 @@ export function createTraceCollector(): TraceCollector {
     },
 
     expectSpan(criteria: string | SpanMatch): TestSpan {
+      // typeof, not asString: the else branch needs criteria narrowed to
+      // SpanMatch, which only the operator TypeScript understands does.
       const matches =
         typeof criteria === 'string'
           ? spans.filter((span) => span.name === criteria)
@@ -463,7 +466,7 @@ export function assertTraceCreated(
     minCount?: number;
     maxCount?: number;
     status?: SpanStatusCode;
-    attributes?: Record<string, unknown>;
+    attributes?: Attributes;
   },
 ): void {
   const spans = collector.getSpansByName(operationName);
@@ -620,7 +623,7 @@ export interface LogCollector {
 export interface LogEntry {
   level: 'info' | 'warn' | 'error' | 'debug';
   message: string;
-  extra?: Record<string, unknown>;
+  extra?: UnknownRecord;
   error?: Error;
 }
 
@@ -648,22 +651,15 @@ export function createMockLogger(): Logger & LogCollector {
   // - logger.info('message') - string only
   // - logger.info({ extra }, 'message') - object first with optional message
   const createLogMethod = (level: 'info' | 'warn' | 'debug') => {
-    return (objOrMsg: Record<string, unknown> | string, msg?: string): void => {
-      if (typeof objOrMsg === 'string') {
-        // String-only call: logger.info('message')
-        logs.push({
-          level,
-          message: objOrMsg,
-          extra: undefined,
-        });
-      } else {
-        // Pino style: logger.info({ extra }, 'message')
-        logs.push({
-          level,
-          message: msg || '',
-          extra: objOrMsg,
-        });
-      }
+    return (objOrMsg: UnknownRecord | string, msg?: string): void => {
+      const message = asString(objOrMsg);
+      logs.push(
+        message === undefined
+          ? // Pino style: logger.info({ extra }, 'message')
+            { level, message: msg || '', extra: asRecord(objOrMsg) }
+          : // String-only call: logger.info('message')
+            { level, message, extra: undefined },
+      );
     };
   };
 
@@ -672,12 +668,13 @@ export function createMockLogger(): Logger & LogCollector {
     warn: createLogMethod('warn'),
     debug: createLogMethod('debug'),
 
-    error(objOrMsg: Record<string, unknown> | string, msg?: string): void {
-      if (typeof objOrMsg === 'string') {
+    error(objOrMsg: UnknownRecord | string, msg?: string): void {
+      const message = asString(objOrMsg);
+      if (message !== undefined) {
         // String-only call: logger.error('message')
         logs.push({
           level: 'error',
-          message: objOrMsg,
+          message,
           extra: undefined,
           error: undefined,
         });
@@ -686,9 +683,7 @@ export function createMockLogger(): Logger & LogCollector {
 
       // Pino style: logger.error({ err, ...extra }, 'message')
       // Extract err from extra if present (Pino convention)
-      const { err, ...rest } = objOrMsg as Record<string, unknown> & {
-        err?: unknown;
-      };
+      const { err, ...rest } = asRecord(objOrMsg) ?? {};
       logs.push({
         level: 'error',
         message: msg || '',

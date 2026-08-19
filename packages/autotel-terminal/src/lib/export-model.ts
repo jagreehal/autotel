@@ -1,4 +1,5 @@
 import type { TraceSummary } from './trace-model';
+import type { SpanAttributes } from '../attrs.js';
 import type { TerminalLogEvent } from './log-model';
 
 export interface ExportedTrace {
@@ -15,7 +16,7 @@ export interface ExportedTrace {
     durationMs: number;
     status: string;
     kind?: string;
-    attributes?: Record<string, unknown>;
+    attributes?: SpanAttributes;
   }>;
   logs: Array<{
     time: number;
@@ -23,7 +24,7 @@ export interface ExportedTrace {
     message: string;
     traceId?: string;
     spanId?: string;
-    attributes?: Record<string, unknown>;
+    attributes?: SpanAttributes;
   }>;
 }
 

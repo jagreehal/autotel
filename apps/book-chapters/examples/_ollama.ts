@@ -22,6 +22,8 @@ export async function reachOllama() {
       signal: AbortSignal.timeout(2_000),
     });
     if (!response.ok) return undefined;
+    // SAFETY: /api/tags is Ollama's documented endpoint and this is the shape it
+    // answers with; only `name` is read, and the request is bounded by a timeout.
     const { models } = (await response.json()) as {
       models: Array<{ name: string }>;
     };

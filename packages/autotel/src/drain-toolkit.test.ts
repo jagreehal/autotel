@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineDrain, defineHttpDrain } from './drain-toolkit';
+import { fetchDouble } from './testing/doubles';
 
 describe('defineDrain', () => {
   it('calls send with transformed payloads', async () => {
@@ -63,7 +64,7 @@ describe('defineHttpDrain', () => {
       async (_url: string, _init?: RequestInit) =>
         new Response(null, { status: 200 }),
     );
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchDouble(fetchMock);
 
     const drain = defineHttpDrain<
       { event: { id: string } },
@@ -96,7 +97,7 @@ describe('defineHttpDrain', () => {
       .fn()
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValueOnce(new Response(null, { status: 200 }));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchDouble(fetchMock);
 
     const drain = defineHttpDrain({
       name: 'http-drain',

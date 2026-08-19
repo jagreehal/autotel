@@ -6,6 +6,18 @@ import { traceConsumer } from 'autotel/messaging';
 import type { OrderPlacedMessage } from '../shared/types';
 import { recommendationGeneratedEvent } from '../shared/events';
 
+/** The fields this service tracks on a recommendation event. */
+type RecommendationGeneratedFields = {
+  orderId: string;
+  recommendations: unknown;
+  model: string;
+  usage: { promptTokens: number; completionTokens: number };
+  personalization_seed: string;
+  _autotel: { channel: string; producer: string };
+  /** Added only while the live runner is demonstrating schema drift. */
+  _drift_demo_field?: string;
+};
+
 const openai = {
   chat: {
     completions: {
@@ -59,11 +71,9 @@ export const generateRecommendation = traceConsumer({
 
   const recommendations = JSON.parse(result.choices[0].message.content);
 
-  const extra =
-    (globalThis as { __autotel_demo_extra_recommendation_field__?: boolean })
-      .__autotel_demo_extra_recommendation_field__ === true;
+  const extra = globalThis.__autotel_demo_extra_recommendation_field__ === true;
 
-  recommendationGeneratedEvent.track({
+  const event: RecommendationGeneratedFields = {
     orderId: msg.id,
     recommendations,
     model: 'gpt-4o-mini',
@@ -75,9 +85,14 @@ export const generateRecommendation = traceConsumer({
     // RecommendationGenerated schema does not declare this field. Running
     // `pnpm catalog:drift` will surface it.
     personalization_seed: `seed-${msg.id.slice(-6)}`,
-    // Only present when the live runner has decided to introduce mid-run
-    // drift — lets the dashboard show drift appearing in real time.
-    ...(extra ? { _drift_demo_field: 'introduced-mid-run' } : {}),
     _autotel: { channel: 'orders.events', producer: 'RecommendationsService' },
-  });
+  };
+
+  // Only present when the live runner has decided to introduce mid-run drift —
+  // lets the dashboard show drift appearing in real time.
+  if (extra) {
+    event._drift_demo_field = 'introduced-mid-run';
+  }
+
+  recommendationGeneratedEvent.track(event);
 });

@@ -17,6 +17,7 @@ import {
   isConfigured,
   resetForTesting as resetExporter,
 } from './span-exporter';
+import { configureSession } from './session';
 import {
   setBaggage as setBaggageInternal,
   clearBaggage,
@@ -125,6 +126,30 @@ export interface AutotelWebConfig {
      */
     allowedOrigins?: string[];
   };
+
+  /**
+   * Session identity stamped on every browser span as `session.id`, so spans
+   * from one visit can be reassembled into a journey.
+   *
+   * The id is a random UUID held in `sessionStorage` — tab-scoped, nothing
+   * derived from the person, and it identifies a visit rather than a visitor.
+   * A gap longer than `timeoutMs` starts a new session and links it to the old
+   * one via `session.previous_id` on the first span.
+   *
+   * Pass `false` to emit no session attributes at all.
+   *
+   * Where another SDK on the page already owns a session, hand its id in via
+   * `id` and autotel carries that instead of minting one, so spans and that
+   * SDK's own records key on the same value:
+   *
+   * ```ts
+   * import { posthogSessionId } from 'autotel-posthog';
+   * init({ service: 'web', session: { id: posthogSessionId } });
+   * ```
+   *
+   * @default { timeoutMs: 1_800_000 }
+   */
+  session?: false | { timeoutMs?: number; id?: () => string | undefined };
 }
 
 let isInitialized = false;
@@ -169,7 +194,7 @@ let originalXHRSetRequestHeader:
  */
 export function init(userConfig: AutotelWebConfig): void {
   // SSR-safe: do nothing on the server
-  if (typeof window === 'undefined') {
+  if (globalThis.window === undefined) {
     return;
   }
 
@@ -184,6 +209,8 @@ export function init(userConfig: AutotelWebConfig): void {
   validateConfig(userConfig);
 
   config = userConfig;
+
+  configureSession(config.session ?? {});
 
   // Initialize privacy manager if privacy config provided
   if (config.privacy) {
@@ -647,7 +674,7 @@ export function resetForTesting(): void {
 
   // Restore original fetch/XHR if they were patched
   // Then clear the stored originals so next test can set up fresh mocks
-  if (typeof window !== 'undefined') {
+  if (globalThis.window !== undefined) {
     if (originalFetch) {
       window.fetch = originalFetch;
       originalFetch = undefined;

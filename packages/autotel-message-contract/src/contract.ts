@@ -76,8 +76,9 @@ function isApprovedSnapshotSource(
   value: unknown,
 ): value is ApprovedSnapshotSource {
   return (
-    typeof value === 'object' &&
-    value !== null &&
+    // SAFETY: the `in` check on the line above establishes the property exists;
+    // this reads it to confirm the marker was set by approveSnapshot().
+    value instanceof Object &&
     SNAPSHOT_SOURCE in value &&
     (value as ApprovedSnapshotSource)[SNAPSHOT_SOURCE] === true
   );
@@ -252,8 +253,11 @@ class CompatibilityStep<Output> {
       serialized,
     );
 
-    if (assert) await assert(outcome.value as Output);
-    return outcome.value as Output;
+    // SAFETY: `outcome.ok` was checked above, and a successful read yields the
+    // value the reader parsed - which is Output by the reader's own type.
+    const value = outcome.value as Output;
+    if (assert) await assert(value);
+    return value;
   }
 
   private resolveSourceSerialized(): string {
@@ -375,7 +379,7 @@ function compareSharedStructure(
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
+  if (value === null || !(value instanceof Object) || Array.isArray(value))
     return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;

@@ -8,6 +8,7 @@ import { runStatic, type InvestigateFlags } from './runtime';
 import { addStaticFlags, staticFlagsFromOpts } from './cli-helpers';
 import { AutotelError } from '../../lib/errors';
 import * as fs from 'node:fs';
+import { stringOpt } from '../../lib/opts.js';
 
 interface SpanInput {
   operationName: string;
@@ -74,7 +75,7 @@ export function registerScoreCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runScoreSpan({
         ...staticFlagsFromOpts(o),
-        spanFile: o.spanFile as string | undefined,
+        spanFile: stringOpt(o, 'spanFile'),
       });
     });
   const explainCmd = addStaticFlags(new Command('explain'))

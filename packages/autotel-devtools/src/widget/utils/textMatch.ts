@@ -10,10 +10,18 @@
  */
 export function matchesNeedle(
   needle: string,
-  fields: Array<string | number | null | undefined>,
+  fields: Array<MatchableField>,
 ): boolean {
   if (!needle) return true;
   return fields.some(
     (field) => field != null && String(field).toLowerCase().includes(needle),
   );
 }
+
+/**
+ * Anything the search box compares against. A span attribute can hold a nested
+ * map or a list, and those are matched by their serialized form - which is what
+ * the user sees in the panel next to the search box.
+ */
+export type MatchableField =
+  string | number | boolean | object | null | undefined;

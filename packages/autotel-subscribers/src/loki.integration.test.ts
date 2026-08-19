@@ -30,6 +30,7 @@ async function queryBack(service: string): Promise<QueryResult['data']> {
     `${ENDPOINT}/loki/api/v1/query_range?query=${query}&start=${start}&end=${end}`,
   );
   expect(response.ok).toBe(true);
+  // SAFETY: Loki's query_range endpoint answers with this documented shape.
   return ((await response.json()) as QueryResult).data;
 }
 
@@ -78,6 +79,7 @@ describe.skipIf(!ENDPOINT)('LokiSubscriber against a live Loki', () => {
     expect(info?.stream.requestId).toBeUndefined();
     expect(info?.stream.path).toBeUndefined();
 
+    // SAFETY: the subscriber wrote this line as a JSON object.
     const line = JSON.parse(info!.values[0]![1]) as Record<string, unknown>;
     expect(line.name).toBe('checkout.completed');
     expect(line.requestId).toBe('req_4a8ff3a8');

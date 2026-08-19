@@ -25,8 +25,7 @@ const routes = [
 const methods = ['GET', 'POST', 'GET', 'GET'] as const;
 
 async function apiRequest() {
-  return trace('api.request', async () => {
-    const ctx = getActiveTraceContext()!;
+  return trace.run('api.request', async (ctx) => {
     const idx = Math.floor(Math.random() * routes.length);
     const route = routes[idx]!;
     const method = methods[idx]!;
@@ -81,7 +80,7 @@ async function apiRequest() {
     );
 
     ctx.setStatus({ code: 1 });
-  })();
+  });
 }
 
 // --- Main loop ---

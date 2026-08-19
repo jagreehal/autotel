@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LokiBackend, buildLogQl } from '../src/backends/loki/index';
+import { installFetchHandler } from './helpers/fetch';
 
 describe('LokiBackend — LogQL generation', () => {
   it('defaults to a wide service_name matcher when nothing is given', () => {
@@ -48,8 +49,8 @@ describe('LokiBackend — wiring', () => {
   it('searchLogs sends LogQL, nanosecond times, and parses stream entries', async () => {
     const requests: string[] = [];
     originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      requests.push(typeof input === 'string' ? input : input.toString());
+    installFetchHandler(async (url) => {
+      requests.push(url);
       return new Response(
         JSON.stringify({
           status: 'success',
@@ -72,7 +73,7 @@ describe('LokiBackend — wiring', () => {
         }),
         { status: 200 },
       );
-    }) as typeof fetch;
+    });
 
     const backend = new LokiBackend('http://localhost:3100');
     const result = await backend.searchLogs({

@@ -126,6 +126,7 @@ function validate(
 
   if (schema.required && typeof data === 'object' && data !== null) {
     for (const key of schema.required) {
+      // SAFETY: the enclosing condition established data is a non-null object.
       if (!(key in (data as Record<string, unknown>))) {
         errors.push(`${path}: missing required property "${key}"`);
       }
@@ -133,6 +134,8 @@ function validate(
   }
 
   if (schema.properties && typeof data === 'object' && data !== null) {
+    // SAFETY: the condition above established data is a non-null object; each
+    // property is validated recursively against the schema below.
     const obj = data as Record<string, unknown>;
     for (const [key, sub] of Object.entries(schema.properties)) {
       if (key in obj) {
@@ -254,6 +257,9 @@ describe('drift report JSON envelope (autotel-eventcatalog-report/v0.2.0)', () =
   it('spec marker is the only place the version lives; bumping it is a breaking change', () => {
     // Sanity: if someone renames REPORT_SPEC by accident, the published
     // contract changes silently. Pin it to the schema's const here.
+    // SAFETY: the report schema's first oneOf branch pins `spec` with a const;
+    // the optional chain yields undefined if the schema ever stops doing that,
+    // which fails the expectation below rather than passing silently.
     const schemaConst = (
       (schema.oneOf ?? [])[0]?.properties?.spec as
         { const?: string } | undefined
@@ -268,10 +274,19 @@ describe('drift summary JSON (autotel-eventcatalog-drift-summary/v0.2.0)', () =>
   // The CLI builds the summary inline; we replicate the shape here so the
   // contract test is independent of CLI implementation details. The
   // important thing is that the shape we ship matches the published schema.
+  /** The summary envelope the CLI writes, replicated here - see the note above. */
+  interface DriftSummary {
+    spec: 'autotel-eventcatalog-drift-summary/v0.2.0';
+    mode: 'all' | 'new-only';
+    shouldFail: boolean;
+    reason: string;
+    counts: ReturnType<typeof countDriftReport>;
+  }
+
   function buildSummary(
     mode: 'all' | 'new-only',
     report: DriftReport,
-  ): unknown {
+  ): DriftSummary {
     const policy = evaluatePolicy({ mode: 'all', report });
     return {
       spec: 'autotel-eventcatalog-drift-summary/v0.2.0',
@@ -476,7 +491,7 @@ describe('tiny JSON Schema validator (used by the contract tests above)', () => 
 
   // Silence the unused-envelope-type import without polluting runtime.
   it('exports the envelope type', () => {
-    const _envelope = null as unknown as JsonReportEnvelope;
+    const _envelope: JsonReportEnvelope | null = null;
     expect(_envelope).toBe(null);
   });
 });

@@ -28,7 +28,7 @@ export const CLAUDE_CODE_EVENT_CONTRACT = {
     'assistant_response', // plaintext response — privacy-gated, not a rollup fact
     'hook_registered', // startup registration noise
     'hook_execution_start', // paired with hook_execution_complete (which we model)
-  ] as readonly string[],
+  ],
 } as const;
 
 /** Every event.name Claude Code is known to emit (handled ∪ ignored). */

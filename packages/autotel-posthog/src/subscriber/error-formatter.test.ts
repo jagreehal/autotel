@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   formatExceptionForPostHog,
   errorToExceptionList,
-} from './posthog-error-formatter';
+} from './error-formatter';
 
 describe('formatExceptionForPostHog', () => {
   it('formats an ExceptionList for PostHog $exception event', () => {
@@ -27,11 +27,11 @@ describe('formatExceptionForPostHog', () => {
 
     const result = formatExceptionForPostHog(exceptionList);
     expect(result.$exception_list).toHaveLength(1);
-    expect(result.$exception_list[0].type).toBe('TypeError');
-    expect(result.$exception_list[0].value).toBe(
+    expect(result.$exception_list[0]!.type).toBe('TypeError');
+    expect(result.$exception_list[0]!.value).toBe(
       'Cannot read properties of undefined',
     );
-    expect(result.$exception_list[0].stacktrace.frames[0].platform).toBe(
+    expect(result.$exception_list[0]!.stacktrace!.frames[0]!.platform).toBe(
       'web:javascript',
     );
   });
@@ -52,10 +52,10 @@ describe('formatExceptionForPostHog', () => {
     ];
 
     const result = formatExceptionForPostHog(exceptionList, 'node:javascript');
-    expect(result.$exception_list[0].stacktrace.frames[0].platform).toBe(
+    expect(result.$exception_list[0]!.stacktrace!.frames[0]!.platform).toBe(
       'node:javascript',
     );
-    expect(result.$exception_list[0].stacktrace.frames[1].platform).toBe(
+    expect(result.$exception_list[0]!.stacktrace!.frames[1]!.platform).toBe(
       'node:javascript',
     );
   });
@@ -82,7 +82,7 @@ describe('formatExceptionForPostHog with redactor', () => {
       'web:javascript',
       mockRedactor,
     );
-    expect(result.$exception_list[0].value).toBe('User not found: [REDACTED]');
+    expect(result.$exception_list[0]!.value).toBe('User not found: [REDACTED]');
   });
 
   it('redacts PII from abs_path in stack frames', () => {
@@ -109,7 +109,7 @@ describe('formatExceptionForPostHog with redactor', () => {
       'web:javascript',
       mockRedactor,
     );
-    expect(result.$exception_list[0].stacktrace.frames[0].abs_path).toBe(
+    expect(result.$exception_list[0]!.stacktrace!.frames[0]!.abs_path).toBe(
       '/home/[REDACTED]/app.js',
     );
   });
@@ -128,8 +128,8 @@ describe('formatExceptionForPostHog with redactor', () => {
       'web:javascript',
       mockRedactor,
     );
-    expect(result.$exception_list[0].type).toBe('TypeError');
-    expect(result.$exception_list[0].value).toBe('Error for [REDACTED]');
+    expect(result.$exception_list[0]!.type).toBe('TypeError');
+    expect(result.$exception_list[0]!.value).toBe('Error for [REDACTED]');
   });
 
   it('works without redactor (backwards compatible)', () => {
@@ -142,7 +142,7 @@ describe('formatExceptionForPostHog with redactor', () => {
     ];
 
     const result = formatExceptionForPostHog(exceptionList);
-    expect(result.$exception_list[0].value).toBe(
+    expect(result.$exception_list[0]!.value).toBe(
       'User alice@example.com not found',
     );
   });
@@ -156,14 +156,14 @@ describe('errorToExceptionList with redactor', () => {
     const error = new Error('Failed with secret-token-abc123');
     const result = errorToExceptionList(error, mockRedactor);
     expect(result).toHaveLength(1);
-    expect(result[0].value).toBe('Failed with [REDACTED]');
+    expect(result[0]!.value).toBe('Failed with [REDACTED]');
   });
 
   it('works without redactor', () => {
     const error = new Error('Failed with secret-token-abc123');
     const result = errorToExceptionList(error);
     expect(result).toHaveLength(1);
-    expect(result[0].value).toBe('Failed with secret-token-abc123');
+    expect(result[0]!.value).toBe('Failed with secret-token-abc123');
   });
 });
 
@@ -172,14 +172,14 @@ describe('errorToExceptionList', () => {
     const error = new TypeError('test');
     const result = errorToExceptionList(error);
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('TypeError');
-    expect(result[0].value).toBe('test');
+    expect(result[0]!.type).toBe('TypeError');
+    expect(result[0]!.value).toBe('test');
   });
 
   it('handles non-Error input', () => {
     const result = errorToExceptionList('string error');
     expect(result).toHaveLength(1);
-    expect(result[0].value).toBe('string error');
+    expect(result[0]!.value).toBe('string error');
   });
 
   it('walks cause chain', () => {
@@ -187,7 +187,7 @@ describe('errorToExceptionList', () => {
     const outer = new Error('outer', { cause });
     const result = errorToExceptionList(outer);
     expect(result).toHaveLength(2);
-    expect(result[0].value).toBe('root');
-    expect(result[1].value).toBe('outer');
+    expect(result[0]!.value).toBe('root');
+    expect(result[1]!.value).toBe('outer');
   });
 });

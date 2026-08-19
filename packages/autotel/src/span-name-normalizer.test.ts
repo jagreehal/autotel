@@ -15,6 +15,7 @@ import type {
 } from '@opentelemetry/sdk-trace-base';
 import type { Context } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/sdk-trace-base';
+import { emptyContext, sdkSpanDouble } from './testing/doubles.js';
 
 /**
  * Mock span processor to capture forwarded spans
@@ -66,7 +67,7 @@ function createMockSpan(initialName: string): Span {
     enumerable: true,
   });
 
-  return span as unknown as Span;
+  return sdkSpanDouble(span);
 }
 
 describe('SpanNameNormalizingProcessor', () => {
@@ -85,7 +86,7 @@ describe('SpanNameNormalizingProcessor', () => {
       });
 
       const span = createMockSpan('GET /users/123/posts/456');
-      processor.onStart(span, {} as Context);
+      processor.onStart(span, emptyContext());
 
       expect(span.updateName).toHaveBeenCalledWith('GET /users/:id/posts/:id');
     });
@@ -97,7 +98,7 @@ describe('SpanNameNormalizingProcessor', () => {
       });
 
       const span = createMockSpan('createUser');
-      processor.onStart(span, {} as Context);
+      processor.onStart(span, emptyContext());
 
       expect(span.updateName).not.toHaveBeenCalled();
     });
@@ -124,7 +125,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('GET /users/123');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('GET /users/:id');
       });
@@ -137,7 +138,7 @@ describe('SpanNameNormalizingProcessor', () => {
         const span = createMockSpan(
           'GET /items/550e8400-e29b-41d4-a716-446655440000',
         );
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('GET /items/:uuid');
       });
@@ -148,7 +149,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('GET /docs/507f1f77bcf86cd799439011');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('GET /docs/:objectId');
       });
@@ -159,7 +160,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('GET /logs/2024-01-15');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('GET /logs/:date');
       });
@@ -170,7 +171,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('GET /events/1705334400');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('GET /events/:timestamp');
       });
@@ -181,7 +182,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('GET /users/john@example.com');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('GET /users/:email');
       });
@@ -192,7 +193,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('GET /users/123/posts/456/comments/789');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith(
           'GET /users/:id/posts/:id/comments/:id',
@@ -207,7 +208,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('GET /users/123');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('GET /users/:id');
       });
@@ -219,7 +220,7 @@ describe('SpanNameNormalizingProcessor', () => {
 
         // ObjectId is 24 hex chars - minimal doesn't handle this
         const span = createMockSpan('GET /docs/507f1f77bcf86cd799439011');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         // Minimal only does numeric IDs and UUIDs, not ObjectIds
         expect(span.updateName).not.toHaveBeenCalled();
@@ -235,7 +236,7 @@ describe('SpanNameNormalizingProcessor', () => {
         const span = createMockSpan(
           'POST /graphql/550e8400-e29b-41d4-a716-446655440000',
         );
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('POST /graphql/:uuid');
       });
@@ -246,7 +247,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('POST /graphql/users/123');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         expect(span.updateName).toHaveBeenCalledWith('POST /graphql/users/:id');
       });
@@ -257,7 +258,7 @@ describe('SpanNameNormalizingProcessor', () => {
         });
 
         const span = createMockSpan('query GetUserById');
-        processor.onStart(span, {} as Context);
+        processor.onStart(span, emptyContext());
 
         // No change expected since there are no path segments to normalize
         expect(span.updateName).not.toHaveBeenCalled();
@@ -275,7 +276,7 @@ describe('SpanNameNormalizingProcessor', () => {
       });
 
       const span = createMockSpan('GET /users/123');
-      processor.onStart(span, {} as Context);
+      processor.onStart(span, emptyContext());
 
       // Should not throw and should not call updateName
       expect(span.updateName).not.toHaveBeenCalled();
@@ -366,8 +367,8 @@ describe('NORMALIZER_PATTERNS', () => {
 describe('NORMALIZER_PRESETS', () => {
   it('should export preset functions for advanced users', () => {
     expect(typeof NORMALIZER_PRESETS['rest-api']).toBe('function');
-    expect(typeof NORMALIZER_PRESETS['graphql']).toBe('function');
-    expect(typeof NORMALIZER_PRESETS['minimal']).toBe('function');
+    expect(NORMALIZER_PRESETS['graphql']).toBeTypeOf('function');
+    expect(NORMALIZER_PRESETS['minimal']).toBeTypeOf('function');
   });
 
   it('presets should be usable directly', () => {

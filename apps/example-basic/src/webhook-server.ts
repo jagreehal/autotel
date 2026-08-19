@@ -66,19 +66,25 @@ const events = new Event('example-basic', {
   logger,
 });
 
+/** What OpenTelemetry lets an event attribute hold. */
+type AttributeValue = string | number | boolean;
+
+/** The JSON body the demo trigger endpoint accepts. */
 type TriggerPayload = {
   name?: unknown;
   attributes?: unknown;
 };
 
+/** The webhook body: whatever the sender posted, echoed back in the response. */
+type WebhookBody = Record<
+  string,
+  AttributeValue | Array<AttributeValue> | null
+>;
+
 async function readRequestBody(req: IncomingMessage): Promise<string> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of req) {
-    if (typeof chunk === 'string') {
-      chunks.push(Buffer.from(chunk));
-    } else {
-      chunks.push(chunk);
-    }
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
 
   return Buffer.concat(chunks).toString('utf8');
@@ -89,6 +95,9 @@ async function parseJson<T>(req: IncomingMessage): Promise<T | undefined> {
   if (!raw) return undefined;
 
   try {
+    // SAFETY: the caller names the shape it expects and checks each field it reads
+    // below; JSON.parse cannot describe that shape itself. A payload that does not
+    // match still lands here, which is why nothing downstream trusts it blindly.
     return JSON.parse(raw) as T;
   } catch (error) {
     logger.warn({ error, raw }, 'Failed to parse JSON payload');
@@ -108,7 +117,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (method === 'POST' && url === webhookPath) {
-    const payload = await parseJson<Record<string, unknown>>(req);
+    const payload = await parseJson<WebhookBody>(req);
     if (!payload) {
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
@@ -131,16 +140,20 @@ const server = createServer(async (req, res) => {
   }
 
   if (method === 'POST' && url === triggerPath) {
-    // Wrap in traced function to automatically capture traceId/spanId in events events
-    const handleTrigger = trace('webhook.trigger', async () => {
+    // Run inside a named trace to capture traceId/spanId in emitted events.
+    await trace.run('webhook.trigger', async (ctx) => {
+      ctx.setAttribute('http.route', triggerPath);
       const payload = (await parseJson<TriggerPayload>(req)) ?? {};
       const name =
         typeof payload.name === 'string'
           ? payload.name
           : 'webhook.demo.triggered';
+      // SAFETY: the condition below establishes that attributes is a non-null
+      // object before the assertion is reached, and its values are only spread
+      // into a trackEvent call, which coerces whatever they turn out to be.
       const attributes =
         typeof payload.attributes === 'object' && payload.attributes !== null
-          ? (payload.attributes as Record<string, unknown>)
+          ? (payload.attributes as Record<string, AttributeValue>)
           : {
               orderId: `ord_${Math.random().toString(36).slice(2, 8)}`,
               amount: 99.5,
@@ -165,7 +178,6 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true, event: name }));
     });
 
-    await handleTrigger;
     return;
   }
 
@@ -175,6 +187,8 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, () => {
+  // SAFETY: address() returns the string form only for a pipe or UDS listener.
+  // This server was listened on a TCP port, so the AddressInfo form applies.
   const address = server.address() as AddressInfo | null;
   const host = address?.address ?? 'localhost';
   const actualPort = address?.port ?? port;
@@ -194,15 +208,18 @@ server.listen(port, () => {
 
   // Kick off an initial demo event after the server starts up.
   setTimeout(() => {
-    // Wrap in traced function to automatically capture traceId/spanId
-    const sendDemoEvent = trace('webhook.demo.init', async () => {
-      logger.info('Sending initial demo events event');
-      events.trackEvent('webhook.demo.started', {
-        startedAt: new Date().toISOString(),
+    // Run immediately inside a named trace to capture traceId/spanId.
+    void trace
+      .run('webhook.demo.init', async (ctx) => {
+        ctx.setAttribute('event.name', 'webhook.demo.started');
+        logger.info('Sending initial demo events event');
+        events.trackEvent('webhook.demo.started', {
+          startedAt: new Date().toISOString(),
+        });
+      })
+      .catch((error: unknown) => {
+        logger.warn({ error }, 'Failed to send the initial demo event');
       });
-    });
-
-    void sendDemoEvent;
   }, 1_000).unref();
 
   logger.info(

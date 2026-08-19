@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentWorkflow } from './workflows';
 import { getWorkflowLogger } from '../execution-logger';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { tracerDouble, spanDouble } from '../testing/doubles.js';
 
 describe('Workflow Instrumentation', () => {
   let mockTracer: any;
@@ -38,7 +39,7 @@ describe('Workflow Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
   });
 
   afterEach(() => {
@@ -60,7 +61,7 @@ describe('Workflow Instrumentation', () => {
       });
 
       expect(Instrumented).toBeDefined();
-      expect(typeof Instrumented).toBe('function');
+      expect(Instrumented).toBeTypeOf('function');
     });
 
     it('should create workflow instance with instrumented run()', () => {
@@ -81,7 +82,7 @@ describe('Workflow Instrumentation', () => {
       const instance = new Instrumented({}, {});
 
       expect(instance).toBeDefined();
-      expect(typeof instance.run).toBe('function');
+      expect(instance.run).toBeTypeOf('function');
     });
 
     it('should accept static config', () => {
@@ -256,7 +257,7 @@ describe('Workflow Instrumentation', () => {
     it('should make getWorkflowLogger() available inside run()', async () => {
       const getActiveSpanSpy = vi
         .spyOn(trace, 'getActiveSpan')
-        .mockReturnValue(mockSpan as any);
+        .mockReturnValue(spanDouble(mockSpan));
 
       class TestWorkflow {
         constructor(

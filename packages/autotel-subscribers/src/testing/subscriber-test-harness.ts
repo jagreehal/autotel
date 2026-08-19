@@ -24,11 +24,7 @@
  * ```
  */
 
-import type {
-  EventSubscriber,
-  FunnelStatus,
-  OutcomeStatus,
-} from '../event-subscriber-base';
+import type { EventSubscriber } from '../event-subscriber-base';
 
 export interface TestResult {
   name: string;
@@ -118,7 +114,7 @@ export class SubscriberTestHarness {
         name: 'Basic Event Tracking',
         passed: false,
         duration: performance.now() - startTime,
-        error: error as Error,
+        error: error instanceof Error ? error : new Error(String(error)),
       };
     }
   }
@@ -130,21 +126,13 @@ export class SubscriberTestHarness {
     const startTime = performance.now();
 
     try {
-      await this.subscriber.trackFunnelStep(
-        'test_funnel',
-        'started' as FunnelStatus,
-        {
-          cartValue: 99.99,
-        },
-      );
+      await this.subscriber.trackFunnelStep('test_funnel', 'started', {
+        cartValue: 99.99,
+      });
 
-      await this.subscriber.trackFunnelStep(
-        'test_funnel',
-        'completed' as FunnelStatus,
-        {
-          cartValue: 99.99,
-        },
-      );
+      await this.subscriber.trackFunnelStep('test_funnel', 'completed', {
+        cartValue: 99.99,
+      });
 
       return {
         name: 'Funnel Tracking',
@@ -157,7 +145,7 @@ export class SubscriberTestHarness {
         name: 'Funnel Tracking',
         passed: false,
         duration: performance.now() - startTime,
-        error: error as Error,
+        error: error instanceof Error ? error : new Error(String(error)),
       };
     }
   }
@@ -169,21 +157,13 @@ export class SubscriberTestHarness {
     const startTime = performance.now();
 
     try {
-      await this.subscriber.trackOutcome(
-        'test_operation',
-        'success' as OutcomeStatus,
-        {
-          duration: 100,
-        },
-      );
+      await this.subscriber.trackOutcome('test_operation', 'success', {
+        duration: 100,
+      });
 
-      await this.subscriber.trackOutcome(
-        'test_operation',
-        'failure' as OutcomeStatus,
-        {
-          error: 'Test error',
-        },
-      );
+      await this.subscriber.trackOutcome('test_operation', 'failure', {
+        error: 'Test error',
+      });
 
       return {
         name: 'Outcome Tracking',
@@ -196,7 +176,7 @@ export class SubscriberTestHarness {
         name: 'Outcome Tracking',
         passed: false,
         duration: performance.now() - startTime,
-        error: error as Error,
+        error: error instanceof Error ? error : new Error(String(error)),
       };
     }
   }
@@ -227,7 +207,7 @@ export class SubscriberTestHarness {
         name: 'Value Tracking',
         passed: false,
         duration: performance.now() - startTime,
-        error: error as Error,
+        error: error instanceof Error ? error : new Error(String(error)),
       };
     }
   }
@@ -259,7 +239,7 @@ export class SubscriberTestHarness {
         name: 'Concurrency',
         passed: false,
         duration: performance.now() - startTime,
-        error: error as Error,
+        error: error instanceof Error ? error : new Error(String(error)),
       };
     }
   }
@@ -336,7 +316,7 @@ export class SubscriberTestHarness {
         name: 'Graceful Shutdown',
         passed: false,
         duration: performance.now() - startTime,
-        error: error as Error,
+        error: error instanceof Error ? error : new Error(String(error)),
       };
     }
   }

@@ -9,8 +9,7 @@ import Icon from '../../node_modules/@astrojs/starlight/user-components/Icon.ast
 {/* This is intentionally inlined to avoid FOUC. */}
 <script is:inline>
 	window.StarlightThemeProvider = (() => {
-		const getRaw = () =>
-			typeof localStorage !== 'undefined' ? localStorage.getItem('starlight-theme') : null;
+		const getRaw = () => globalThis.localStorage?.getItem('starlight-theme') ?? null;
 		const resolveTheme = () => {
 			const raw = getRaw();
 			if (raw === 'light' || raw === 'dark') return raw;

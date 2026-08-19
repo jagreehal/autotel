@@ -33,7 +33,11 @@ export interface StackFrame {
 function classify(file: string): StackFrameKind {
   // `node:` builtins, plus V8's synthetic `[eval]` / `<anonymous>` specifiers,
   // have no file on disk.
-  if (file.startsWith('node:') || file.startsWith('[') || file.startsWith('<')) {
+  if (
+    file.startsWith('node:') ||
+    file.startsWith('[') ||
+    file.startsWith('<')
+  ) {
     return 'native';
   }
   // Path-segment match, not a substring match: a project legitimately called

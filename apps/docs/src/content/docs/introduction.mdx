@@ -16,7 +16,7 @@ Autotel is a zero-boilerplate OpenTelemetry wrapper for TypeScript. It replaces 
 
 | Need                         | API / entry point                                                                                           |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Wrap a function with a span  | `trace(fn)`, `span(name, fn)`, `instrument({ key, fn })`                                                    |
+| Wrap a function with a span  | `trace(fn)`, `trace(name, fn)`, `span(name, fn)`, `instrument({ key, fn })`                                 |
 | Request-scoped attributes    | `getRequestLogger(ctx?)`                                                                                    |
 | Structured throw             | `createStructuredError({ message, why?, fix?, link?, status?, code?, cause? })`                             |
 | Reusable error definitions   | `defineErrorCatalog(namespace, entries)`. See [Error Catalogs](/autotel/advanced/#error-catalogs).          |

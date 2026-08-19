@@ -7,6 +7,7 @@ import type {
   TraceRecord,
   TraceSearchQuery,
 } from '../types';
+import { asBoolean, asNumber, asString } from '../lib/values';
 
 function matchesTagValue(
   actual: TagValue | undefined,
@@ -172,22 +173,16 @@ function compareValue(actual: TagValue, filter: QueryFilter): boolean {
   switch (filter.valueType) {
     case 'number': {
       const actualNum = toNumber(actual);
-      const expectedNum =
-        expected !== undefined && expected !== null
-          ? toNumber(expected as TagValue)
-          : undefined;
+      const expectedNum = asNumber(expected);
       const valuesNum = expectedValues
-        .map((v) => toNumber(v as TagValue))
+        .map((v) => asNumber(v))
         .filter((v): v is number => v !== undefined);
       if (actualNum === undefined) return false;
       return compareNumeric(actualNum, filter.operator, expectedNum, valuesNum);
     }
     case 'boolean': {
       const actualBool = toBoolean(actual);
-      const expectedBool =
-        expected !== undefined && expected !== null
-          ? toBoolean(expected as TagValue)
-          : undefined;
+      const expectedBool = toBoolean(asTagValue(expected));
       if (actualBool === undefined || expectedBool === undefined) return false;
       return compareBoolean(actualBool, filter.operator, expectedBool);
     }
@@ -340,6 +335,8 @@ function getSpanFieldValues(span: SpanRecord, field: string): TagValue[] {
   for (const [key, value] of Object.entries(span.tags)) {
     if (normalizeField(key) === normalized) values.push(value);
   }
+  // SAFETY: `values` holds tag values the span carries plus the derived
+  // token count; the filter only drops the empty and missing ones.
   return values.filter(
     (value) => value !== '' && value !== undefined,
   ) as TagValue[];
@@ -354,20 +351,19 @@ function isLLMSpan(span: SpanRecord): boolean {
 }
 
 function getSpanSystem(span: SpanRecord): string | undefined {
-  const system = span.tags['gen_ai.system'] ?? span.tags['llm.vendor'];
-  return typeof system === 'string' ? system : undefined;
+  return asString(span.tags['gen_ai.system'] ?? span.tags['llm.vendor']);
 }
 
 function getSpanRequestModel(span: SpanRecord): string | undefined {
-  const model =
-    span.tags['gen_ai.request.model'] ?? span.tags['llm.request.model'];
-  return typeof model === 'string' ? model : undefined;
+  return asString(
+    span.tags['gen_ai.request.model'] ?? span.tags['llm.request.model'],
+  );
 }
 
 function getSpanResponseModel(span: SpanRecord): string | undefined {
-  const model =
-    span.tags['gen_ai.response.model'] ?? span.tags['llm.response.model'];
-  return typeof model === 'string' ? model : undefined;
+  return asString(
+    span.tags['gen_ai.response.model'] ?? span.tags['llm.response.model'],
+  );
 }
 
 function getSpanTotalTokens(span: SpanRecord): number {
@@ -386,34 +382,28 @@ function sumTraceTokens(trace: TraceRecord): number {
   return trace.spans.reduce((sum, span) => sum + getSpanTotalTokens(span), 0);
 }
 
-function asNumber(value: TagValue | undefined): number | undefined {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
+/** A filter's expected value, as the tag values a span can carry. */
+function asTagValue(value: unknown): string | number | boolean | undefined {
+  return asString(value) ?? asNumber(value) ?? asBoolean(value);
 }
 
 function toNumber(
   value: string | number | boolean | null | undefined,
 ): number | undefined {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
+  return asNumber(value);
 }
 
+/**
+ * A tag value read as a boolean: the literal booleans, the strings 'true' and
+ * 'false' a query string carries, and a number, where 0 is false.
+ */
 function toBoolean(
   value: string | number | boolean | null | undefined,
 ): boolean | undefined {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'string') {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-  }
-  if (typeof value === 'number') return value !== 0;
-  return undefined;
+  const flag = asBoolean(value);
+  if (flag !== undefined) return flag;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  const numeric = asNumber(value);
+  return numeric === undefined ? undefined : numeric !== 0;
 }

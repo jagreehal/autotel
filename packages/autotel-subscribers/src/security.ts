@@ -163,6 +163,7 @@ export class SecuritySubscriber extends EventSubscriber {
 
     await postJsonWithRetry(
       this.httpClient,
+      // SAFETY: the constructor rejects a config without a webhook URL.
       this.config.webhookUrl as string,
       alert,
       {

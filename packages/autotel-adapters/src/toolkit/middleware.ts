@@ -151,7 +151,7 @@ async function performFinish(
 
   const mergedOverrides = {
     ...(overrides ?? {}),
-    ...(tailCtx.shouldKeep ? { 'autotel.sampling.tail.keep': true } : {}),
+    'autotel.sampling.tail.keep': true,
   };
 
   return logger.emitNow(

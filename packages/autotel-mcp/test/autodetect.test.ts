@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { probeAll } from '../src/backends/autodetect';
+import { installFetchHandler } from './helpers/fetch';
 
 describe('autodetect', () => {
   let originalFetch: typeof fetch;
@@ -10,11 +11,10 @@ describe('autodetect', () => {
   it('probes the expected path per backend kind', async () => {
     const calls: string[] = [];
     originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      const url = typeof input === 'string' ? input : input.toString();
+    installFetchHandler(async (url) => {
       calls.push(url);
       return new Response('ok', { status: 200 });
-    }) as typeof fetch;
+    });
 
     await probeAll({
       tempo: 'http://tempo.local',
@@ -31,11 +31,10 @@ describe('autodetect', () => {
 
   it('marks unreachable backends as reachable=false without throwing', async () => {
     originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      const url = typeof input === 'string' ? input : input.toString();
+    installFetchHandler(async (url) => {
       if (url.includes('prom')) return new Response('ok', { status: 200 });
       throw new Error('connection refused');
-    }) as typeof fetch;
+    });
 
     const results = await probeAll({
       tempo: 'http://tempo.local',

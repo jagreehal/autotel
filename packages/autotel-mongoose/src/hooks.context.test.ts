@@ -36,7 +36,7 @@ afterAll(async () => {
 
 const tracer: Tracer = provider.getTracer('autotel-mongoose-context-test');
 
-const config = {
+const hookConfig = {
   dbName: '',
   peerName: '',
   peerPort: 27_017,
@@ -46,7 +46,11 @@ const config = {
   dbStatementSerializer: false,
   statementRedactor: false,
   customMethods: { enabled: false },
-} as unknown as ResolvedConfig;
+};
+
+// SAFETY: ResolvedConfig carries more than wrapHookHandler reads; the
+// fields above are the ones it consults, and the rest are unreachable here.
+const config = hookConfig as unknown as ResolvedConfig;
 
 const wrap = (handler: any, name: string, type: 'pre' | 'post') =>
   wrapHookHandler(handler, name, type, tracer, config);

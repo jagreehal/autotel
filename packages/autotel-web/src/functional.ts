@@ -60,11 +60,15 @@ export function trace<T extends (...args: any[]) => any>(
 
   if (expectsContext) {
     // Factory pattern: trace(ctx => async (data) => ...)
+    // SAFETY: the factory form is detected above by arity; this wrapper stands
+    // in for the function the factory will return, whose signature only the
+    // caller knows. The assertion at the end of this branch restores T.
     return ((...args: any[]) => {
       // Generate a new trace context for this call
       const ctx = createContext();
 
       // Call factory to get the actual function
+      // SAFETY: `expectsContext` established fn is the factory form.
       const actualFn = (fn as (ctx: TraceContext) => T)(ctx);
 
       // Execute the function
@@ -74,6 +78,8 @@ export function trace<T extends (...args: any[]) => any>(
 
   // Direct pattern: trace(async (data) => ...)
   // Just return the function as-is since headers are auto-injected
+  // SAFETY: the non-factory form is returned unchanged - headers are injected
+  // by the fetch patch, not by wrapping - so this is the same function.
   return fn as T;
 }
 

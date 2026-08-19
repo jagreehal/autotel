@@ -8,8 +8,8 @@ describe('keyboard utilities', () => {
   describe('module exports', () => {
     it('exports isInputFocused and isMac', async () => {
       const mod = await import('../utils/keyboard');
-      expect(typeof mod.isInputFocused).toBe('function');
-      expect(typeof mod.isMac).toBe('boolean');
+      expect(mod.isInputFocused).toBeTypeOf('function');
+      expect(mod.isMac).toBeTypeOf('boolean');
     });
   });
 
@@ -48,7 +48,7 @@ describe('keyboard utilities', () => {
   describe('isMac', () => {
     it('is a boolean constant', async () => {
       const mod = await import('../utils/keyboard');
-      expect(typeof mod.isMac).toBe('boolean');
+      expect(mod.isMac).toBeTypeOf('boolean');
     });
   });
 });

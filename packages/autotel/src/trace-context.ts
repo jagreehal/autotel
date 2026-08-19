@@ -17,6 +17,15 @@ import type { AsyncLocalStorage } from 'node:async_hooks';
 import * as nodeAsyncHooks from 'node:async_hooks';
 import { recordStructuredError } from './structured-error';
 import { track } from './track';
+import type { UnknownRecord } from './values';
+import { isFunction } from './values';
+
+const spansWithExplicitStatus = new WeakSet<Span>();
+
+/** Whether a TraceContext consumer explicitly chose this span's status. */
+export function hasExplicitSpanStatus(span: Span): boolean {
+  return spansWithExplicitStatus.has(span);
+}
 
 type AsyncLocalBox<T> = {
   value: T;
@@ -97,6 +106,9 @@ function updateActiveContext(newContext: Context): void {
   // Update our storage first so any helper reads see the new context
   enterOrRun(contextStorage, newContext);
 
+  // SAFETY: the ContextAPI does not expose its manager, and there is no
+  // callback-free way to enter a context without it. Every member below is
+  // optional and probed before use, so an API without them takes the fallback.
   const contextWithManager = context as unknown as {
     _getContextManager?: () => ContextManagerLike;
   };
@@ -105,6 +117,7 @@ function updateActiveContext(newContext: Context): void {
   if (!manager) return;
 
   const asyncLocal =
+    // SAFETY: as above - the storage and its enterWith are both probed.
     (manager as { _asyncLocalStorage?: { enterWith?: (ctx: Context) => void } })
       ._asyncLocalStorage ?? undefined;
   if (asyncLocal?.enterWith) {
@@ -112,7 +125,7 @@ function updateActiveContext(newContext: Context): void {
     return;
   }
 
-  if (typeof manager.with === 'function') {
+  if (isFunction(manager.with)) {
     manager.with(newContext, () => {});
   }
 }
@@ -159,14 +172,14 @@ export interface SpanMethods {
    * Replaces the deprecated `recordException` (OTEP 4430). Accepts `unknown`
    * so it can be called directly with the value caught from a `catch` block.
    */
-  recordError(error: unknown): void;
+  recordError(cause: unknown): void;
   /**
    * Emit a tracked event correlated to this span. Equivalent to the standalone
    * `track(event, data)` but reads naturally on `ctx`. Replaces the deprecated
    * `ctx.addEvent` (OTEP 4430) — events become correlated logs rather than
    * span events.
    */
-  track<Events extends Record<string, unknown> = Record<string, unknown>>(
+  track<Events extends UnknownRecord = UnknownRecord>(
     event: keyof Events & string,
     data?: Events[keyof Events & string],
   ): void;
@@ -178,7 +191,7 @@ export interface SpanMethods {
  * @template TBaggage - Optional type for typed baggage (defaults to undefined for untyped)
  */
 export interface BaggageMethods<
-  TBaggage extends Record<string, unknown> | undefined = undefined,
+  TBaggage extends UnknownRecord | undefined = undefined,
 > {
   /**
    * Get a baggage entry by key
@@ -229,7 +242,7 @@ export interface BaggageMethods<
    *
    * @internal
    */
-  getTypedBaggage?: TBaggage extends Record<string, unknown>
+  getTypedBaggage?: TBaggage extends UnknownRecord
     ? <T extends TBaggage>(namespace?: string) => Partial<T> | undefined
     : never;
 
@@ -239,7 +252,7 @@ export interface BaggageMethods<
    *
    * @internal
    */
-  setTypedBaggage?: TBaggage extends Record<string, unknown>
+  setTypedBaggage?: TBaggage extends UnknownRecord
     ? <T extends TBaggage>(
         namespace: string | undefined,
         value: Partial<T>,
@@ -275,7 +288,7 @@ export interface BaggageMethods<
  * ```
  */
 export type TraceContext<
-  TBaggage extends Record<string, unknown> | undefined = undefined,
+  TBaggage extends UnknownRecord | undefined = undefined,
 > = TraceContextBase & SpanMethods & BaggageMethods<TBaggage>;
 
 /**
@@ -288,7 +301,7 @@ export type TraceContext<
  * which may differ from the context when createTraceContext was called.
  */
 export function createTraceContext<
-  TBaggage extends Record<string, unknown> | undefined = undefined,
+  TBaggage extends UnknownRecord | undefined = undefined,
 >(span: Span): TraceContext<TBaggage> {
   const spanContext = span.spanContext();
 
@@ -368,9 +381,10 @@ export function createTraceContext<
     },
 
     // Typed baggage helpers (used by defineBaggageSchema)
-    getTypedBaggage: (<T extends Record<string, unknown>>(
-      namespace?: string,
-    ) => {
+    // SAFETY: the conditional type at the end of this member makes it present
+    // only when the context declares a baggage schema; the cast bridges the
+    // implementation's own signature to that conditional.
+    getTypedBaggage: (<T extends UnknownRecord>(namespace?: string) => {
       // Check active context first, then stored context
       const activeCtx = context.active();
       let baggage = propagation.getBaggage(activeCtx);
@@ -383,25 +397,27 @@ export function createTraceContext<
       if (!baggage) return;
 
       const prefix = namespace ? `${namespace}.` : '';
-      const result: Record<string, unknown> = {};
+      const entries: Array<[string, string]> = [];
 
       for (const [key, entry] of baggage.getAllEntries()) {
         if (namespace && key.startsWith(prefix)) {
-          const fieldName = key.slice(prefix.length);
-          result[fieldName] = entry.value;
+          entries.push([key.slice(prefix.length), entry.value]);
         } else if (!namespace) {
-          result[key] = entry.value;
+          entries.push([key, entry.value]);
         }
       }
 
-      return Object.keys(result).length > 0
-        ? (result as Partial<T>)
-        : undefined;
-    }) as TBaggage extends Record<string, unknown>
+      // SAFETY: baggage travels as string entries; the caller's schema names
+      // which of those keys it expects, and Partial says any of them may be
+      // absent from the header this request arrived with.
+      const result = Object.fromEntries(entries) as Partial<T>;
+      return entries.length > 0 ? result : undefined;
+    }) as TBaggage extends UnknownRecord
       ? <T extends TBaggage>(namespace?: string) => Partial<T> | undefined
       : never,
 
-    setTypedBaggage: (<T extends Record<string, unknown>>(
+    // SAFETY: as above, for the setter.
+    setTypedBaggage: (<T extends UnknownRecord>(
       namespace: string | undefined,
       value: Partial<T>,
     ) => {
@@ -419,7 +435,7 @@ export function createTraceContext<
 
       const newContext = propagation.setBaggage(currentContext, baggage);
       updateActiveContext(newContext);
-    }) as TBaggage extends Record<string, unknown>
+    }) as TBaggage extends UnknownRecord
       ? <T extends TBaggage>(
           namespace: string | undefined,
           value: Partial<T>,
@@ -433,24 +449,30 @@ export function createTraceContext<
   // (see MIGRATION.md). New code MUST go through `recordStructuredError`,
   // `emitCorrelatedEvent`, or the request logger. The cast below is what hides
   // these compatibility-only fields from the public type.
+  // SAFETY: the object below implements TraceContext member by member; the
+  // assertion at the end of it supplies the baggage members, which are present
+  // only when a schema was declared.
   const traceCtx = {
     traceId: spanContext.traceId,
     spanId: spanContext.spanId,
     correlationId: spanContext.traceId.slice(0, 16),
     setAttribute: span.setAttribute.bind(span),
     setAttributes: span.setAttributes.bind(span),
-    setStatus: span.setStatus.bind(span),
+    setStatus: (status: { code: SpanStatusCode; message?: string }) => {
+      spansWithExplicitStatus.add(span);
+      span.setStatus(status);
+    },
     recordException: span.recordException.bind(span),
     addEvent: span.addEvent.bind(span),
     addLink: span.addLink.bind(span),
     addLinks: span.addLinks.bind(span),
     updateName: span.updateName.bind(span),
     isRecording: span.isRecording.bind(span),
-    recordError: (error: unknown) => {
-      const err = error instanceof Error ? error : new Error(String(error));
+    recordError: (cause: unknown) => {
+      const err = cause instanceof Error ? cause : new Error(String(cause));
       recordStructuredError(traceCtx, err);
     },
-    track: (event: string, data?: Record<string, unknown>) => {
+    track: (event: string, data?: UnknownRecord) => {
       track(event, data);
     },
     ...baggageHelpers,
@@ -497,7 +519,7 @@ export function createTraceContext<
  * });
  * ```
  */
-export function defineBaggageSchema<T extends Record<string, unknown>>(
+export function defineBaggageSchema<T extends UnknownRecord>(
   namespace?: string,
 ) {
   return {
@@ -540,9 +562,11 @@ export function defineBaggageSchema<T extends Record<string, unknown>>(
       maybeFn?: () => R | Promise<R>,
     ): R | Promise<R> => {
       // Support both with(ctx, value, fn) and with(value, fn)
-      const value = maybeFn
-        ? (valueOrFn as Partial<T>)
-        : (ctxOrValue as Partial<T>);
+      // SAFETY: a third argument means the second one is the value; without
+      // it the first argument was the value. That is what the two declared
+      // overloads say, and they are the only ways in.
+      const value = (maybeFn ? valueOrFn : ctxOrValue) as Partial<T>;
+      // SAFETY: whichever overload was used, the callback is the last argument.
       const fn = maybeFn || (valueOrFn as () => R | Promise<R>);
 
       // Serialize typed baggage to flat key-value pairs

@@ -252,6 +252,7 @@ vi.mock('vscode', () => {
 });
 
 import { activate, deactivate } from './extension';
+import { extensionContext } from './testing/doubles.js';
 
 describe('activate', () => {
   beforeEach(() => {
@@ -306,9 +307,9 @@ describe('activate', () => {
   });
 
   it('registers required v0.1 commands', () => {
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
 
     const registered = registerCommand.mock.calls.map((call) => call[0]);
 
@@ -328,18 +329,18 @@ describe('activate', () => {
   });
 
   it('adds command disposables to extension subscriptions', () => {
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
 
     expect(context.subscriptions.length).toBeGreaterThanOrEqual(7);
   });
 
   it('starts receiver on activate when autoStart is "always"', async () => {
     receiverConfig.autoStart = 'always';
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(createServer).toHaveBeenCalledTimes(1);
@@ -348,9 +349,9 @@ describe('activate', () => {
 
   it('does not start receiver on activate when autoStart is "off"', async () => {
     receiverConfig.autoStart = 'off';
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(createServer).not.toHaveBeenCalled();
@@ -360,9 +361,9 @@ describe('activate', () => {
   it('auto-starts on "onAutotelProject" when the workspace depends on autotel', async () => {
     receiverConfig.autoStart = 'onAutotelProject';
     detection.hasAutotelDep = true;
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(createServer).toHaveBeenCalledTimes(1);
@@ -379,9 +380,9 @@ describe('activate', () => {
     );
     detection.files = files;
     detection.autotelPath = files[200]; // well past any small cap
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(createServer).toHaveBeenCalledTimes(1);
@@ -391,9 +392,9 @@ describe('activate', () => {
   it('stays stopped on "onAutotelProject" when no autotel dependency is present', async () => {
     receiverConfig.autoStart = 'onAutotelProject';
     detection.hasAutotelDep = false;
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(createServer).not.toHaveBeenCalled();
@@ -401,9 +402,9 @@ describe('activate', () => {
   });
 
   it('deactivate disposes registered command disposables', () => {
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
     deactivate();
 
     for (const disposable of createdDisposables) {
@@ -412,8 +413,8 @@ describe('activate', () => {
   });
 
   it('copies span id from command arg', async () => {
-    const context = { subscriptions: [] as { dispose(): void }[] };
-    activate(context as never);
+    const context = extensionContext();
+    activate(context);
 
     const command = commandHandlers.get('autotel.copySpanId');
     expect(command).toBeDefined();
@@ -423,8 +424,8 @@ describe('activate', () => {
   });
 
   it('reveals source for in-workspace path from command arg', async () => {
-    const context = { subscriptions: [] as { dispose(): void }[] };
-    activate(context as never);
+    const context = extensionContext();
+    activate(context);
 
     const command = commandHandlers.get('autotel.revealSource');
     expect(command).toBeDefined();
@@ -437,8 +438,8 @@ describe('activate', () => {
   });
 
   it('rejects reveal source for sibling path outside workspace boundary', async () => {
-    const context = { subscriptions: [] as { dispose(): void }[] };
-    activate(context as never);
+    const context = extensionContext();
+    activate(context);
 
     const command = commandHandlers.get('autotel.revealSource');
     expect(command).toBeDefined();
@@ -460,9 +461,9 @@ describe('activate', () => {
     // Auto-start must never nag: opening a window where host is set to 0.0.0.0
     // should not pop a modal on every activation — it blocks and logs instead.
     receiverConfig.host = '0.0.0.0';
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(showWarningMessage).not.toHaveBeenCalled();
@@ -473,8 +474,8 @@ describe('activate', () => {
     receiverConfig.autoStart = 'off';
     receiverConfig.host = '0.0.0.0';
     showWarningMessage.mockResolvedValue(undefined);
-    const context = { subscriptions: [] as { dispose(): void }[] };
-    activate(context as never);
+    const context = extensionContext();
+    activate(context);
 
     await commandHandlers.get('autotel.start')?.();
     await new Promise((resolve) => setImmediate(resolve));
@@ -491,8 +492,8 @@ describe('activate', () => {
     receiverConfig.autoStart = 'off';
     receiverConfig.host = '0.0.0.0';
     showWarningMessage.mockResolvedValue('Start anyway');
-    const context = { subscriptions: [] as { dispose(): void }[] };
-    activate(context as never);
+    const context = extensionContext();
+    activate(context);
 
     await commandHandlers.get('autotel.start')?.();
     await new Promise((resolve) => setImmediate(resolve));
@@ -511,9 +512,9 @@ describe('activate', () => {
         return fakeServer;
       },
     );
-    const context = { subscriptions: [] as { dispose(): void }[] };
+    const context = extensionContext();
 
-    activate(context as never);
+    activate(context);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(showWarningMessage).not.toHaveBeenCalled();

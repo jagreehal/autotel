@@ -23,6 +23,16 @@ const FIXTURE_PATH = resolve(
   '../../../packages/autotel-devtools/src/widget/genai/__fixtures__/openllmetry-openai-real.json',
 );
 
+/** What OpenTelemetry lets a span attribute hold. */
+type SpanAttributes = Record<
+  string,
+  | string
+  | number
+  | boolean
+  | Array<string | number | boolean | null>
+  | undefined
+>;
+
 interface ReadableSpan {
   spanContext(): { traceId: string; spanId: string };
   parentSpanContext?: { spanId: string };
@@ -31,12 +41,12 @@ interface ReadableSpan {
   kind: number;
   startTime: [number, number];
   endTime: [number, number];
-  attributes: Record<string, unknown>;
+  attributes: SpanAttributes;
   status: { code: number; message?: string };
   events?: Array<{
     name: string;
     time: [number, number];
-    attributes?: Record<string, unknown>;
+    attributes?: SpanAttributes;
   }>;
 }
 
@@ -45,11 +55,13 @@ function hrTimeToNs(t: [number, number]): number {
 }
 
 const KIND_NAMES = ['INTERNAL', 'SERVER', 'CLIENT', 'PRODUCER', 'CONSUMER'];
-const STATUS_NAMES: Record<number, 'OK' | 'ERROR' | 'UNSET'> = {
-  0: 'UNSET',
-  1: 'OK',
-  2: 'ERROR',
-};
+
+/** OpenTelemetry status codes, keyed by the numeric code a span carries. */
+const STATUS_NAMES = new Map<number, 'OK' | 'ERROR' | 'UNSET'>([
+  [0, 'UNSET'],
+  [1, 'OK'],
+  [2, 'ERROR'],
+]);
 
 function toSpanData(span: ReadableSpan) {
   const ctx = span.spanContext();
@@ -66,7 +78,7 @@ function toSpanData(span: ReadableSpan) {
     duration: endNs - startNs,
     attributes: span.attributes,
     status: {
-      code: STATUS_NAMES[span.status.code] ?? 'UNSET',
+      code: STATUS_NAMES.get(span.status.code) ?? 'UNSET',
       message: span.status.message,
     },
     events: (span.events ?? []).map((ev) => ({
@@ -113,7 +125,10 @@ async function main(): Promise<void> {
 
   await shutdown();
 
-  const spans = exporter.getFinishedSpans() as unknown as ReadableSpan[];
+  // SAFETY: the in-memory exporter and this file resolve @opentelemetry/sdk-trace-base
+  // through different dependency paths, so the ReadableSpan they each name is the same
+  // shape under two identities. Only the fields toSpanData reads are touched.
+  const spans = exporter.getFinishedSpans() as ReadableSpan[];
   const genAiSpans = spans
     .map(toSpanData)
     .filter((s) =>

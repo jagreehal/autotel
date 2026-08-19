@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { runInvestigate, type InvestigateFlags } from './runtime';
 import { addBackendFlags, backendFlagsFromOpts, intArg } from './cli-helpers';
+import { numberOpt } from '../../lib/opts.js';
 
 export async function runListServices(flags: InvestigateFlags): Promise<void> {
   await runInvestigate('topology services', flags, async (backend) =>
@@ -50,8 +51,8 @@ export function registerTopologyCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runServiceMap({
         ...backendFlagsFromOpts(o),
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
-        limit: o.limit as number | undefined,
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
+        limit: numberOpt(o, 'limit'),
       });
     });
   addBackendFlags(topologyCmd);

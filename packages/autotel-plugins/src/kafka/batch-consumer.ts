@@ -339,7 +339,7 @@ function setBatchAttributes(
  */
 interface WrappedPayloadResult {
   wrappedPayload: EachBatchPayload;
-  endOpenMessageSpans?: (error: unknown) => void;
+  endOpenMessageSpans?: (cause: unknown) => void;
   endRemainingMessageSpansOnSuccess?: () => void;
 }
 
@@ -431,13 +431,13 @@ function createWrappedPayload(
 
   const endOpenMessageSpans =
     perMessageSpans === 'all'
-      ? (error: unknown) => {
+      ? (cause: unknown) => {
           for (const [, span] of messageSpans) {
             span.setStatus({ code: SpanStatusCode.ERROR });
-            if (error instanceof Error) {
-              span.recordException(error);
+            if (cause instanceof Error) {
+              span.recordException(cause);
             } else {
-              span.recordException(new Error(String(error)));
+              span.recordException(new Error(String(cause)));
             }
             span.end();
           }

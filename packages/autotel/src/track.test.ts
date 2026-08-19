@@ -4,22 +4,20 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { trace } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import { track, getEventQueue } from './track';
 import { init, getLogger } from './init';
 
 type TrackedEvent = {
   name: string;
-  attributes?: Record<string, unknown>;
+  attributes?: Attributes;
 };
 
 // Mock adapter for testing
 class MockAdapter {
   public events: TrackedEvent[] = [];
 
-  async trackEvent(
-    name: string,
-    attributes?: Record<string, unknown>,
-  ): Promise<void> {
+  async trackEvent(name: string, attributes?: Attributes): Promise<void> {
     this.events.push({ name, attributes });
   }
 

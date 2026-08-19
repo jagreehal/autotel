@@ -4,6 +4,7 @@ import {
   toAttributeValue,
   type AgentContext,
 } from './context.js';
+import type { Attributes } from '@opentelemetry/api';
 
 /** Canonical plan-risk attribute keys (Google SAIF plan-risk predictor aligned). */
 export const AGENT_PLAN_RISK_ATTR = {
@@ -50,7 +51,7 @@ export interface RecordPlanRiskAssessmentOptions {
 
 function setPlanRiskAttrs(
   ctx: AgentContext | undefined,
-  attrs: Record<string, unknown>,
+  attrs: Attributes,
 ): void {
   const traceCtx = resolveContext(ctx);
   const mapped: Record<

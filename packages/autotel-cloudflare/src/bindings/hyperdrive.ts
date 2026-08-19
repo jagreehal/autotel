@@ -2,9 +2,11 @@
  * Hyperdrive binding instrumentation
  */
 
-import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import type { WorkerTracer } from 'autotel-edge';
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { wrap, setAttr } from './common';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { asFunction, member } from '../values.js';
 
 /**
  * Instrument Hyperdrive binding
@@ -17,12 +19,13 @@ export function instrumentHyperdrive<T extends Hyperdrive>(
 
   const handler: ProxyHandler<T> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
-      if (prop === 'connect' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'connect' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const tracer = workerTracer('autotel-edge');
 
             const attributes: Record<string, string | number> = {
               'db.system': 'cloudflare-hyperdrive',
@@ -70,11 +73,11 @@ export function instrumentHyperdrive<T extends Hyperdrive>(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, target, args);
+                  const result = await fnTarget.apply(target, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:

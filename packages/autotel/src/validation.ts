@@ -9,6 +9,14 @@
  */
 
 import type { EventAttributes } from './event-subscriber';
+import type { UnknownRecord } from './values';
+import {
+  asBoolean,
+  asNumber,
+  asRecord,
+  asString,
+  describeValue,
+} from './values';
 
 export interface ValidationConfig {
   /** Max event name length (default: 100) */
@@ -61,9 +69,9 @@ export function validateEventName(
   config: ValidationConfig = DEFAULT_CONFIG,
 ): string {
   // Check type
-  if (typeof eventName !== 'string') {
+  if (asString(eventName) === undefined) {
     throw new ValidationError(
-      `Event name must be a string, got ${typeof eventName}`,
+      `Event name must be a string, got ${describeValue(eventName)}`,
     );
   }
 
@@ -105,7 +113,7 @@ export function validateAttributes(
   }
 
   // Check type
-  if (typeof attributes !== 'object' || Array.isArray(attributes)) {
+  if (!asRecord(attributes)) {
     throw new ValidationError('Attributes must be an object');
   }
 
@@ -137,20 +145,50 @@ export function validateAttributes(
     // both leaks no useful signal and breaks downstream type expectations
     // (e.g. an LLM `promptTokens` counter becoming a string poisons every
     // consumer that treats it as a number).
-    const isSensitive =
-      typeof value === 'string' &&
-      config.sensitivePatterns.some((pattern) => pattern.test(key));
-
-    if (isSensitive) {
+    if (isSensitiveString(key, value, config)) {
       sanitized[key] = '[REDACTED]';
       continue;
     }
 
+    // SAFETY: sanitizeValue answers with the same kind of value it was given -
+    // a truncated string for a string, the number or boolean as it stands, a
+    // sanitized copy for a container - so it stays a valid attribute value.
     sanitized[key] = sanitizeValue(value, config, 1) as
       string | number | boolean;
   }
 
   return sanitized;
+}
+
+/**
+ * A value that has been through sanitization: a primitive, or a container of
+ * sanitized values. Strings may be truncated, credentials replaced, and a
+ * value the exporters cannot carry is described rather than dropped.
+ */
+export type SanitizedValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | SanitizedValue[]
+  | { [key: string]: SanitizedValue };
+
+/**
+ * Whether this key/value pair is a credential to redact. Strings only:
+ * numeric and boolean values are not credentials, and replacing them with the
+ * literal '[REDACTED]' leaks no signal while breaking every consumer that
+ * treats them as a number.
+ */
+function isSensitiveString(
+  key: string,
+  value: unknown,
+  config: ValidationConfig,
+): boolean {
+  return (
+    asString(value) !== undefined &&
+    config.sensitivePatterns.some((pattern) => pattern.test(key))
+  );
 }
 
 /**
@@ -160,7 +198,7 @@ function sanitizeValue(
   value: unknown,
   config: ValidationConfig,
   depth: number,
-): unknown {
+): SanitizedValue {
   // Check nesting depth
   if (depth > config.maxNestingDepth) {
     return '[MAX_DEPTH_EXCEEDED]';
@@ -172,16 +210,15 @@ function sanitizeValue(
   }
 
   // Handle primitives
-  if (typeof value === 'string') {
-    if (value.length > config.maxAttributeValueLength) {
-      return value.slice(0, config.maxAttributeValueLength) + '...';
-    }
-    return value;
+  const text = asString(value);
+  if (text !== undefined) {
+    return text.length > config.maxAttributeValueLength
+      ? text.slice(0, config.maxAttributeValueLength) + '...'
+      : text;
   }
 
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return value;
-  }
+  const scalar = asNumber(value) ?? asBoolean(value);
+  if (scalar !== undefined) return scalar;
 
   // Handle arrays
   if (Array.isArray(value)) {
@@ -189,24 +226,18 @@ function sanitizeValue(
   }
 
   // Handle objects
-  if (typeof value === 'object') {
+  const record = asRecord(value);
+  if (record) {
     try {
       // Check for circular references
-      JSON.stringify(value);
+      JSON.stringify(record);
 
-      const sanitized: Record<string, unknown> = {};
-      for (const key in value) {
-        if (Object.prototype.hasOwnProperty.call(value, key)) {
-          const nested = (value as Record<string, unknown>)[key];
-          // See top-level branch above: only string values are redacted.
-          const isSensitive =
-            typeof nested === 'string' &&
-            config.sensitivePatterns.some((pattern) => pattern.test(key));
-
-          sanitized[key] = isSensitive
-            ? '[REDACTED]'
-            : sanitizeValue(nested, config, depth + 1);
-        }
+      const sanitized: Record<string, SanitizedValue> = {};
+      for (const [key, nested] of Object.entries(record)) {
+        // See top-level branch above: only string values are redacted.
+        sanitized[key] = isSensitiveString(key, nested, config)
+          ? '[REDACTED]'
+          : sanitizeValue(nested, config, depth + 1);
       }
       return sanitized;
     } catch {
@@ -216,7 +247,13 @@ function sanitizeValue(
   }
 
   // Unsupported type (function, symbol, etc.)
-  return `[${typeof value}]`;
+  return `[${describeValue(value)}]`;
+}
+
+/** An event that has been through validation, ready to emit. */
+export interface ValidatedEvent {
+  eventName: string;
+  attributes?: EventAttributes;
 }
 
 /**
@@ -227,7 +264,7 @@ export function validateEvent(
   eventName: string,
   attributes?: EventAttributes,
   config?: Partial<ValidationConfig>,
-): { eventName: string; attributes?: EventAttributes } {
+): ValidatedEvent {
   const fullConfig = { ...DEFAULT_CONFIG, ...config };
 
   return {

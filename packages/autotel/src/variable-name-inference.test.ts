@@ -4,12 +4,29 @@ import {
   clearInferenceCache,
 } from './variable-name-inference';
 
+/** A function this test wrapped, carrying the name that was inferred for it. */
+interface NamedFunction {
+  __inferredName?: string;
+}
+
 // Helper function that simulates trace() for testing
-function trace<T>(fn: T): T {
+function trace<TFn>(fn: TFn): TFn {
   const varName = inferVariableNameFromCallStack();
   // Attach the inferred name to the function for verification
-  (fn as { __inferredName?: string }).__inferredName = varName;
+  named(fn).__inferredName = varName;
   return fn;
+}
+
+/**
+ * The wrapped function, as the carrier of its inferred name.
+ *
+ * SAFETY: `trace()` above is the only writer of `__inferredName`, and these
+ * tests are its only readers; the field exists because the real trace() puts
+ * the inferred name on the span rather than on the function.
+ */
+function named(fn: unknown): NamedFunction {
+  // SAFETY: see the note above.
+  return fn as NamedFunction;
 }
 
 describe('variable-name-inference', () => {
@@ -22,16 +39,14 @@ describe('variable-name-inference', () => {
     it('should infer variable name from const assignment', () => {
       const testFunction = trace(() => 'test');
 
-      expect((testFunction as { __inferredName?: string }).__inferredName).toBe(
-        'testFunction',
-      );
+      expect(named(testFunction).__inferredName).toBe('testFunction');
     });
 
     it('should cache inference results', () => {
       // Helper to test caching from same location
       function callFromSameLocation() {
         const cachedResult = trace(() => 'test');
-        return (cachedResult as { __inferredName?: string }).__inferredName;
+        return named(cachedResult).__inferredName;
       }
 
       const result1 = callFromSameLocation();
@@ -55,67 +70,53 @@ describe('variable-name-inference', () => {
 
     it('should match const pattern', () => {
       const myConstVariable = trace(() => 'test');
-      expect(
-        (myConstVariable as { __inferredName?: string }).__inferredName,
-      ).toBe('myConstVariable');
+      expect(named(myConstVariable).__inferredName).toBe('myConstVariable');
     });
 
     it('should handle camelCase names', () => {
       const myCamelCaseVariableName = trace(() => 'test');
-      expect(
-        (myCamelCaseVariableName as { __inferredName?: string }).__inferredName,
-      ).toBe('myCamelCaseVariableName');
+      expect(named(myCamelCaseVariableName).__inferredName).toBe(
+        'myCamelCaseVariableName',
+      );
     });
 
     it('should handle PascalCase names', () => {
       const MyPascalCaseName = trace(() => 'test');
-      expect(
-        (MyPascalCaseName as { __inferredName?: string }).__inferredName,
-      ).toBe('MyPascalCaseName');
+      expect(named(MyPascalCaseName).__inferredName).toBe('MyPascalCaseName');
     });
 
     it('should handle snake_case names', () => {
       const my_snake_case_name = trace(() => 'test');
-      expect(
-        (my_snake_case_name as { __inferredName?: string }).__inferredName,
-      ).toBe('my_snake_case_name');
+      expect(named(my_snake_case_name).__inferredName).toBe(
+        'my_snake_case_name',
+      );
     });
 
     it('should handle names with numbers', () => {
       const myVariable123 = trace(() => 'test');
-      expect(
-        (myVariable123 as { __inferredName?: string }).__inferredName,
-      ).toBe('myVariable123');
+      expect(named(myVariable123).__inferredName).toBe('myVariable123');
     });
 
     it('should handle names with dollar signs', () => {
       const $myVariable = trace(() => 'test');
-      expect(($myVariable as { __inferredName?: string }).__inferredName).toBe(
-        '$myVariable',
-      );
+      expect(named($myVariable).__inferredName).toBe('$myVariable');
     });
 
     it('should handle names with underscores', () => {
       const _privateVariable = trace(() => 'test');
-      expect(
-        (_privateVariable as { __inferredName?: string }).__inferredName,
-      ).toBe('_privateVariable');
+      expect(named(_privateVariable).__inferredName).toBe('_privateVariable');
     });
   });
 
   describe('edge cases', () => {
     it('should handle multiple spaces in assignment', () => {
       const spacedVariable = trace(() => 'test');
-      expect(
-        (spacedVariable as { __inferredName?: string }).__inferredName,
-      ).toBe('spacedVariable');
+      expect(named(spacedVariable).__inferredName).toBe('spacedVariable');
     });
 
     it('should handle assignment with no spaces', () => {
       const noSpaces = trace(() => 'test');
-      expect((noSpaces as { __inferredName?: string }).__inferredName).toBe(
-        'noSpaces',
-      );
+      expect(named(noSpaces).__inferredName).toBe('noSpaces');
     });
   });
 
@@ -124,7 +125,7 @@ describe('variable-name-inference', () => {
       // Helper function to call from same location multiple times
       function callFromSameLocation() {
         const cachedResult = trace(() => 'test');
-        return (cachedResult as { __inferredName?: string }).__inferredName;
+        return named(cachedResult).__inferredName;
       }
 
       const result1 = callFromSameLocation();
@@ -137,14 +138,12 @@ describe('variable-name-inference', () => {
 
     it('should clear cache when requested', () => {
       const beforeClear = trace(() => 'test');
-      const result1 = (beforeClear as { __inferredName?: string })
-        .__inferredName;
+      const result1 = named(beforeClear).__inferredName;
 
       clearInferenceCache();
 
       const afterClear = trace(() => 'test');
-      const result2 = (afterClear as { __inferredName?: string })
-        .__inferredName;
+      const result2 = named(afterClear).__inferredName;
 
       // Both should infer correctly regardless of cache
       expect(result1).toBe('beforeClear');
@@ -159,9 +158,7 @@ describe('variable-name-inference', () => {
         return 'test';
       });
 
-      expect(
-        (myFactoryFunction as { __inferredName?: string }).__inferredName,
-      ).toBe('myFactoryFunction');
+      expect(named(myFactoryFunction).__inferredName).toBe('myFactoryFunction');
     });
 
     it('should work with direct pattern simulation', () => {
@@ -170,9 +167,7 @@ describe('variable-name-inference', () => {
         return 'test';
       });
 
-      expect(
-        (myDirectFunction as { __inferredName?: string }).__inferredName,
-      ).toBe('myDirectFunction');
+      expect(named(myDirectFunction).__inferredName).toBe('myDirectFunction');
     });
   });
 });

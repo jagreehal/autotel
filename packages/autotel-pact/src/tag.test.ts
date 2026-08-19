@@ -47,7 +47,12 @@ describe('tagPactInteraction', () => {
     });
 
     expect(setAttributes).toHaveBeenCalledTimes(1);
-    const attrs = setAttributes.mock.calls[0]![0] as Record<string, unknown>;
+    // SAFETY: the expectation above established there was exactly one call, and
+    // its first argument is the attribute bag being asserted on.
+    const attrs = setAttributes.mock.calls[0]![0] as Record<
+      string,
+      string | string[]
+    >;
     expect(attrs[PACT_ATTRS.CONSUMER]).toBe('OrderShipper');
     expect(attrs[PACT_ATTRS.PROVIDER]).toBe('OrderService');
     expect(attrs[PACT_ATTRS.KIND]).toBe('message');

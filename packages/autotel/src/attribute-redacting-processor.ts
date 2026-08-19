@@ -32,6 +32,13 @@ import type {
 } from '@opentelemetry/sdk-trace-base';
 import type { Context, AttributeValue, Attributes } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/sdk-trace-base';
+import {
+  asBoolean,
+  asRecord,
+  asString,
+  isFunction,
+  readProperty,
+} from './values';
 
 /**
  * Custom redactor function type
@@ -199,18 +206,15 @@ function cloneRegex(re: RegExp): RegExp {
   return new RegExp(re.source, re.flags);
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 function toRegExp(value: unknown): RegExp | undefined {
   if (value instanceof RegExp) return value;
-  if (typeof value === 'string') return new RegExp(value, 'g');
-  if (isPlainObject(value) && typeof value.source === 'string') {
-    const flags = typeof value.flags === 'string' ? value.flags : 'g';
-    return new RegExp(value.source, flags);
-  }
-  return undefined;
+  const literal = asString(value);
+  if (literal !== undefined) return new RegExp(literal, 'g');
+  // A regex that has been through JSON keeps its source and flags as fields.
+  const source = asString(readProperty(value, 'source'));
+  return source === undefined
+    ? undefined
+    : new RegExp(source, asString(readProperty(value, 'flags')) ?? 'g');
 }
 
 function toRegExpArray(value: unknown): RegExp[] | undefined {
@@ -241,10 +245,7 @@ const DEFAULT_VALUE_PATTERNS: ValuePatternConfig[] = [
 /**
  * Built-in redactor presets
  */
-export const REDACTOR_PRESETS: Record<
-  AttributeRedactorPreset,
-  AttributeRedactorConfig
-> = {
+export const REDACTOR_PRESETS = {
   /**
    * Default preset - covers common PII patterns with smart masking
    * Detects: emails (a***@***.com), phone numbers, SSNs, credit cards (****1111)
@@ -284,7 +285,7 @@ export const REDACTOR_PRESETS: Record<
     builtins: ['creditCard'],
     replacement: '[REDACTED]',
   },
-};
+} satisfies Record<AttributeRedactorPreset, AttributeRedactorConfig>;
 
 /**
  * Normalize redactor config that may have been deserialized from JSON/YAML.
@@ -294,52 +295,59 @@ export function normalizeAttributeRedactorConfig(
   raw: AttributeRedactorConfig | AttributeRedactorPreset | unknown,
 ): AttributeRedactorConfig | AttributeRedactorPreset | undefined {
   if (raw === undefined || raw === null) return undefined;
-  if (typeof raw === 'string') return raw as AttributeRedactorPreset;
-  if (!isPlainObject(raw)) return undefined;
+  const presetName = asString(raw);
+  if (presetName !== undefined) {
+    // SAFETY: a string config names one of the built-in presets; resolving it
+    // below returns undefined when the name is not one of them.
+    return presetName as AttributeRedactorPreset;
+  }
+  const record = asRecord(raw);
+  if (!record) return undefined;
 
   const config: AttributeRedactorConfig = {};
 
-  if (Array.isArray(raw.paths)) {
-    config.paths = raw.paths.filter(
-      (value): value is string => typeof value === 'string',
+  if (Array.isArray(record.paths)) {
+    config.paths = record.paths.filter(
+      (value): value is string => asString(value) !== undefined,
     );
   }
 
-  if (typeof raw.replacement === 'string') {
-    config.replacement = raw.replacement;
-  }
+  const replacement = asString(record.replacement);
+  if (replacement !== undefined) config.replacement = replacement;
 
-  if (typeof raw.builtins === 'boolean') {
-    config.builtins = raw.builtins;
-  } else if (Array.isArray(raw.builtins)) {
-    config.builtins = raw.builtins.filter(
-      (name): name is BuiltinPatternName => typeof name === 'string',
+  const builtins = asBoolean(record.builtins);
+  if (builtins !== undefined) {
+    config.builtins = builtins;
+  } else if (Array.isArray(record.builtins)) {
+    config.builtins = record.builtins.filter(
+      (name): name is BuiltinPatternName => asString(name) !== undefined,
     );
   }
 
-  if (typeof raw.redactor === 'function') {
-    config.redactor = raw.redactor as AttributeRedactorFn;
+  if (isFunction(record.redactor)) {
+    // SAFETY: the guard above established `redactor` is callable.
+    config.redactor = record.redactor as AttributeRedactorFn;
   }
 
-  const keyPatterns = toRegExpArray(raw.keyPatterns);
+  const keyPatterns = toRegExpArray(record.keyPatterns);
   if (keyPatterns) config.keyPatterns = keyPatterns;
 
-  const patterns = toRegExpArray(raw.patterns);
+  const patterns = toRegExpArray(record.patterns);
   if (patterns) config.patterns = patterns;
 
-  if (Array.isArray(raw.valuePatterns)) {
+  if (Array.isArray(record.valuePatterns)) {
     const valuePatterns: ValuePatternConfig[] = [];
-    for (const item of raw.valuePatterns) {
-      if (!isPlainObject(item) || typeof item.name !== 'string') continue;
-      const pattern = toRegExp(item.pattern);
-      if (!pattern) continue;
+    for (const entry of record.valuePatterns) {
+      const item = asRecord(entry);
+      const name = asString(item?.name);
+      const pattern = toRegExp(item?.pattern);
+      if (!item || name === undefined || !pattern) continue;
       valuePatterns.push({
-        name: item.name,
+        name,
         pattern,
-        replacement:
-          typeof item.replacement === 'string' ? item.replacement : undefined,
-        mask:
-          typeof item.mask === 'function' ? (item.mask as MaskFn) : undefined,
+        replacement: asString(item.replacement),
+        // SAFETY: the probe on this line is what establishes the mask is callable.
+        mask: isFunction(item.mask) ? (item.mask as MaskFn) : undefined,
       });
     }
     config.valuePatterns = valuePatterns;
@@ -359,6 +367,8 @@ function resolveConfig(
     throw new Error('Invalid attribute redactor config');
   }
 
+  // typeof, not asString: this narrows a union of a preset name and a config
+  // object, and only the operator TypeScript understands does that.
   if (typeof normalized === 'string') {
     const preset = REDACTOR_PRESETS[normalized];
     if (!preset) {
@@ -384,6 +394,7 @@ function resolveConfig(
 
   // Merge built-in patterns if enabled
   if (resolvedConfig.builtins !== false) {
+    // SAFETY: the keys of the builtin table are its own pattern names.
     const builtinNames = Array.isArray(resolvedConfig.builtins)
       ? resolvedConfig.builtins
       : (Object.keys(builtinPatterns) as BuiltinPatternName[]);
@@ -428,7 +439,8 @@ function createRedactorFromConfig(
     // Numbers, booleans and other non-string attributes are not credentials;
     // replacing them with the string '[REDACTED]' silently changes their
     // type and corrupts downstream consumers (LLM token counters etc.).
-    if (typeof value === 'string') {
+    const text = asString(value);
+    if (text !== undefined) {
       for (const pattern of keyPatterns) {
         pattern.lastIndex = 0;
         if (pattern.test(key)) {
@@ -441,19 +453,21 @@ function createRedactorFromConfig(
     }
 
     // For non-string values, return as-is
-    if (typeof value !== 'string') {
+    if (text === undefined) {
       if (Array.isArray(value)) {
+        // SAFETY: redacting each element of an attribute array yields an array
+        // of the same kind; redactStringValue returns a string for a string.
         return value.map((item) => {
-          if (typeof item === 'string') {
-            return redactStringValue(
-              item,
-              valuePatterns,
-              maskers,
-              customPatterns,
-              defaultReplacement,
-            ) as string;
-          }
-          return item;
+          const itemText = asString(item);
+          return itemText === undefined
+            ? item
+            : redactStringValue(
+                itemText,
+                valuePatterns,
+                maskers,
+                customPatterns,
+                defaultReplacement,
+              );
         }) as AttributeValue;
       }
       return value;
@@ -461,7 +475,7 @@ function createRedactorFromConfig(
 
     // Three-tier strategy: path-based → masker-based → pattern-based
     return redactStringValue(
-      value,
+      text,
       valuePatterns,
       maskers,
       customPatterns,
@@ -531,12 +545,12 @@ function createRedactedSpan(
         return redactedAttributes;
       }
       // For all other properties, delegate to the original span
+      // SAFETY: a proxy get trap forwards whatever key it was asked for, which
+      // is what Reflect.get exists for; the value is redacted before it is
+      // returned, never read as a particular type here.
       const value = Reflect.get(target, prop);
       // Bind methods to the original target
-      if (typeof value === 'function') {
-        return value.bind(target);
-      }
-      return value;
+      return isFunction(value) ? value.bind(target) : value;
     },
   });
 }

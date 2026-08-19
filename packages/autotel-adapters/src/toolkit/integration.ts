@@ -5,11 +5,7 @@ import type {
   RequestLoggerOptions,
   TraceContext,
 } from 'autotel';
-import {
-  createNoopRequestLogger,
-  getRequestLogger,
-  withTracing,
-} from 'autotel';
+import { createNoopRequestLogger, getRequestLogger, trace } from 'autotel';
 import { attachForkToLogger } from './fork';
 import { createStorageForkLifecycle } from './storage';
 import {
@@ -34,7 +30,7 @@ export interface ExtractedRequest {
 export interface IntegratedCompletionOptions {
   autoEmit?: boolean;
   /** Return false for framework control-flow throws that are not failures. */
-  isError?: (error: unknown) => boolean;
+  isError?: (cause: unknown) => boolean;
 }
 
 export type TracedOptionInput = RouteAdapterOptions & {
@@ -196,7 +192,7 @@ function buildHandle<TCtx>(
   log.set({
     'http.request.method': extracted.method,
     'http.route': extracted.path,
-    ...(extracted.requestId ? { 'http.request.id': extracted.requestId } : {}),
+    'http.request.id': extracted.requestId,
   });
 
   if (spec.storage) {
@@ -277,13 +273,13 @@ export function defineFrameworkIntegration<TCtx>(
       const spanName =
         options?.spanName ?? resolveSpanName(spec, ctx, extracted);
 
-      // The wrapped factory is async, so the call always yields a Promise.
-      return withTracing({ name: spanName, isError: completion?.isError })(
-        (traceCtx) => async () => {
+      return trace.run(
+        { name: spanName, isError: completion?.isError },
+        (traceCtx) => {
           const handle = buildHandle(spec, ctx, traceCtx, options ?? {});
           return handler(handle);
         },
-      )() as ReturnType<typeof handler>;
+      ) as ReturnType<typeof handler>;
     },
   };
 }

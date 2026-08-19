@@ -13,7 +13,7 @@ import {
 import { extractResponseMetadata } from './response-builder';
 import { classifyAWSError, extractErrorAttributes } from './error-handlers';
 import { buildSDKAttributes } from '../attributes';
-import { trace, getActiveTraceContext } from 'autotel';
+import { trace } from 'autotel';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 /**
@@ -36,10 +36,9 @@ export function wrapSDKClient<T extends Client<any, any, any, any>>(
           const metadata = extractRequestMetadata(command, { clientName });
           const operationName = extractOperationName(metadata.commandName);
 
-          return trace(
+          return trace.run(
             `aws.${resolvedServiceName}.${operationName}`,
-            async () => {
-              const ctx = getActiveTraceContext()!;
+            async (ctx) => {
               // Set request attributes
               ctx.setAttributes(
                 buildSDKAttributes({
@@ -105,7 +104,7 @@ export function wrapSDKClient<T extends Client<any, any, any, any>>(
                 throw error;
               }
             },
-          )();
+          );
         };
       }
 

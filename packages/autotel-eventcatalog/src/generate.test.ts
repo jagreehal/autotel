@@ -41,11 +41,10 @@ function snap(events: ArchitectureSnapshot['events']): ArchitectureSnapshot {
 
 describe('inferJsonSchemaFromObservation', () => {
   it('builds nested object/array schema from field paths + field stats', () => {
-    const schema = inferJsonSchemaFromObservation(obs()) as {
-      properties: Record<string, unknown>;
-    };
-    expect(schema.properties.orderId).toEqual({ type: 'string' });
-    expect(schema.properties.items).toEqual({
+    const schema = inferJsonSchemaFromObservation(obs());
+    expect(schema.properties).toBeDefined();
+    expect(schema.properties?.orderId).toEqual({ type: 'string' });
+    expect(schema.properties?.items).toEqual({
       type: 'array',
       items: {
         type: 'object',
@@ -127,6 +126,8 @@ describe('generateCatalogFromSnapshot', () => {
     const event = await sdk.getEvent('OrderPlaced', undefined, {
       attachSchema: true,
     });
+    // SAFETY: the SDK types getEvent by the catalog's own model; `schema` is
+    // present because the call above asked for it with attachSchema.
     expect((event as { schema?: unknown })?.schema).toEqual(declared);
   });
 

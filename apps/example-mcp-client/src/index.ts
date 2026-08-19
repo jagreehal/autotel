@@ -114,6 +114,8 @@ const runExamples = withTracing({})((ctx) => async () => {
 
   console.log('\nError result:', JSON.stringify(errorResult, null, 2));
   if (errorResult.isError) {
+    // SAFETY: the MCP SDK types tool result content as a union of block kinds;
+    // this server answers errors with text blocks, and `text` is read optionally.
     const content = errorResult.content as Array<{ text?: string }>;
     console.log(
       'Server returned error (server still running):',
@@ -136,7 +138,9 @@ const runExamples = withTracing({})((ctx) => async () => {
       );
     }
   } catch (error) {
-    console.log(`Guard halted the run: ${(error as Error).message}`);
+    console.log(
+      `Guard halted the run: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   console.log('\n=== Distributed Tracing Demo Complete ===');

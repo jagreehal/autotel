@@ -50,9 +50,34 @@ import type { ReifiedMessage } from './wrapper.js';
 
 const INSTALLED = Symbol.for('autotel-pact:auto-wrap-installed');
 
+/**
+ * A Pact-JS prototype as this file patches it. Pact-JS is an optional peer, so
+ * its classes are reached through the module object rather than imported, and
+ * each method is captured and replaced by name.
+ */
+export type PactPrototype = Record<string | symbol, PactPrototypeMember>;
+
+/** A member of a patched prototype: the method being wrapped, or our marker. */
+export type PactPrototypeMember =
+  ((...args: never[]) => PactCallResult) | boolean | undefined;
+
+/** What a patched Pact-JS method returns: a builder, a promise, or nothing. */
+export type PactCallResult = object | Promise<unknown> | void;
+
+/** What a Pact-JS verify or executeTest call resolves with. */
+type VerifyResult = void;
+
+/** The builder `addInteraction` returns so calls can be chained. */
+type PactBuilder = PactV3Instance;
+
+/** A PactV3 instance, keyed on by the interaction tracker. */
+interface PactV3Instance {
+  opts?: { consumer?: string; provider?: string };
+}
+
 interface PactJsModule {
-  MessageConsumerPact?: { prototype: Record<string | symbol, unknown> };
-  PactV3?: { prototype: Record<string | symbol, unknown> };
+  MessageConsumerPact?: { prototype: PactPrototype };
+  PactV3?: { prototype: PactPrototype };
 }
 
 /**
@@ -78,6 +103,8 @@ function loadPactJs(): PactJsModule | undefined {
     // Use createRequire so we work from both ESM and CJS without
     // pulling Pact-JS into the dynamic import graph.
     const require = createRequire(import.meta.url);
+    // SAFETY: createRequire returns `any`; PactJsModule names only the two
+    // constructors this file patches, and each is probed for before use.
     return require('@pact-foundation/pact') as PactJsModule;
   } catch {
     process.stderr.write(
@@ -93,14 +120,17 @@ function patchMessagePact(mod: PactJsModule): void {
   const proto = ctor.prototype;
   if (proto[INSTALLED]) return;
 
+  // SAFETY: MessageConsumerPact.prototype.verify is the method being wrapped;
+  // Pact-JS is an optional peer, so its prototype is typed as an open record
+  // rather than imported.
   const originalVerify = proto.verify as (
-    handler: (m: ReifiedMessage) => Promise<unknown>,
-  ) => Promise<unknown>;
+    handler: (m: ReifiedMessage) => Promise<VerifyResult>,
+  ) => Promise<VerifyResult>;
 
   proto.verify = async function patchedVerify(
     this: { config: { consumer: string; provider: string } },
-    handler: (m: ReifiedMessage) => Promise<unknown>,
-  ): Promise<unknown> {
+    handler: (m: ReifiedMessage) => Promise<VerifyResult>,
+  ): Promise<VerifyResult> {
     const start = process.hrtime.bigint();
     let captured: ReifiedMessage | undefined;
     const consumer = this.config?.consumer ?? '<unknown>';
@@ -168,9 +198,12 @@ function patchHttpPact(mod: PactJsModule): void {
   // be reused across multiple test cases.
   const tracked = new WeakMap<object, HttpInteraction[]>();
 
-  const originalAdd = proto.addInteraction as (i: HttpInteraction) => unknown;
+  // SAFETY: as above - PactV3.prototype.addInteraction is what is being wrapped.
+  const originalAdd = proto.addInteraction as (
+    i: HttpInteraction,
+  ) => PactBuilder;
   proto.addInteraction = function patchedAddInteraction(
-    this: object,
+    this: PactV3Instance,
     interaction: HttpInteraction,
   ) {
     const list = tracked.get(this) ?? [];
@@ -179,6 +212,7 @@ function patchHttpPact(mod: PactJsModule): void {
     return originalAdd.call(this, interaction);
   };
 
+  // SAFETY: as above - PactV3.prototype.executeTest is what is being wrapped.
   const originalExecute = proto.executeTest as <T>(
     fn: (server: { url: string; port: number }) => Promise<T>,
   ) => Promise<T | undefined>;
@@ -216,6 +250,8 @@ function patchHttpPact(mod: PactJsModule): void {
       }
 
       try {
+        // SAFETY: executeTest resolves with whatever the test function returned,
+        // or undefined when it returned nothing; the generic states that.
         const result = (await originalExecute.call(this, fn)) as T | undefined;
         span.setAttributes(outcomeAttribute('passed'));
         for (const i of interactions) {

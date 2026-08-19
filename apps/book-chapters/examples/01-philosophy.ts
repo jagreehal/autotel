@@ -1,6 +1,6 @@
 import {
   init,
-  trace,
+  instrument,
   getRequestLogger,
   createStructuredError,
   parseError,
@@ -22,8 +22,11 @@ async function main() {
   });
 
   // Functional API
-  const greet = trace('greeting.create', (name: string) => `Hello, ${name}!`);
-  console.log('  trace(fn) →', greet('Autotel'));
+  const greet = instrument({
+    key: 'greeting.create',
+    fn: (name: string) => `Hello, ${name}!`,
+  });
+  console.log('  instrument({ key, fn }) →', greet('Autotel'));
 
   // Factory pattern with context
   const greetWithCtx = withTracing({ name: 'greeting.contextual' })(

@@ -34,7 +34,9 @@ describe('StackTracePanel', () => {
     const loadSource = vi.fn().mockResolvedValue(WINDOW);
     render(StackTracePanel, { stackTrace: STACK, loadSource });
 
-    await fireEvent.click(screen.getByRole('button', { name: /quoteShipment/ }));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /quoteShipment/ }),
+    );
 
     expect(
       await screen.findByText('  throw new TypeError("no quote");', {
@@ -48,7 +50,9 @@ describe('StackTracePanel', () => {
     const loadSource = vi.fn().mockResolvedValue(null);
     render(StackTracePanel, { stackTrace: STACK, loadSource });
 
-    await fireEvent.click(screen.getByRole('button', { name: /quoteShipment/ }));
+    await fireEvent.click(
+      screen.getByRole('button', { name: /quoteShipment/ }),
+    );
 
     expect(await screen.findByText(/could not be read/i)).toBeTruthy();
   });

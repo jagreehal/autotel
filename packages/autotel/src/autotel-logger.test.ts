@@ -318,7 +318,7 @@ describe('Built-in Logger', () => {
       const logOutput = consoleLogSpy.mock.calls[0][0];
 
       // In pretty mode, output is a formatted string, not JSON
-      expect(typeof logOutput).toBe('string');
+      expect(logOutput).toBeTypeOf('string');
       expect(logOutput).toContain('INFO');
       expect(logOutput).toContain('test-service');
       expect(logOutput).toContain('pretty message');
@@ -332,7 +332,7 @@ describe('Built-in Logger', () => {
       expect(consoleLogSpy).toHaveBeenCalledOnce();
       const logOutput = consoleLogSpy.mock.calls[0][0];
 
-      expect(typeof logOutput).toBe('string');
+      expect(logOutput).toBeTypeOf('string');
       expect(logOutput).toContain('ERROR');
       expect(logOutput).toContain('test-service');
       expect(logOutput).toContain('error occurred');

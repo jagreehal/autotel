@@ -10,7 +10,7 @@
  * @example Recommended: Configure subscribers in init(), use track() function
  * ```typescript
  * import { init, track } from 'autotel';
- * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+ * import { PostHogSubscriber } from 'autotel-posthog/subscriber';
  *
  * init({
  *   service: 'my-app',
@@ -33,7 +33,7 @@
  * @example Override subscribers for specific Event instance
  * ```typescript
  * import { Event } from 'autotel/event';
- * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+ * import { PostHogSubscriber } from 'autotel-posthog/subscriber';
  *
  * // Override: use different subscribers for this instance
  * const event = new Event('job-application', {
@@ -64,6 +64,7 @@ import { type EventCollector } from './event-testing';
 import { CircuitBreaker, CircuitOpenError } from './circuit-breaker';
 import { validateEvent } from './validation';
 import { getOperationContext } from './operation-context';
+import { isFunction } from './values';
 import { type EnrichFromBaggageConfig, hashValue } from './events-config';
 import { getOrCreateCorrelationId } from './correlation-id';
 
@@ -133,7 +134,7 @@ export class Event {
    * @example Recommended: Use track() with init()
    * ```typescript
    * import { init, track } from 'autotel';
-   * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+   * import { PostHogSubscriber } from 'autotel-posthog/subscriber';
    *
    * init({
    *   service: 'checkout',
@@ -153,7 +154,7 @@ export class Event {
    * @example Override subscribers for this instance
    * ```typescript
    * import { Event } from 'autotel/event';
-   * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+   * import { PostHogSubscriber } from 'autotel-posthog/subscriber';
    *
    * // Override: use different subscribers for this instance only
    * const event = new Event('checkout', {
@@ -288,7 +289,7 @@ export class Event {
         // Convert TraceState to string representation safely
         let traceStateStr = '';
         try {
-          if (typeof traceState.serialize === 'function') {
+          if (isFunction(traceState.serialize)) {
             traceStateStr = traceState.serialize();
           }
         } catch {
@@ -382,12 +383,10 @@ export class Event {
 
       if (transform === 'hash') {
         transformedValue = hashValue(value);
-      } else if (transform === 'plain' || !transform) {
+      } else if (transform === undefined || transform === 'plain') {
         transformedValue = value;
-      } else if (typeof transform === 'function') {
-        transformedValue = transform(value);
       } else {
-        transformedValue = value;
+        transformedValue = transform(value);
       }
 
       const valueBytes = new TextEncoder().encode(transformedValue).length;
@@ -872,14 +871,21 @@ export class Event {
     );
 
     // Record for testing (as funnel step with custom name)
+    const stepAttributes: EventAttributes = {
+      ...enrichedAttributes,
+      step_name: stepName,
+    };
+    if (stepNumber !== undefined) stepAttributes.step_number = stepNumber;
+
+    // SAFETY: a progression's step name is not one of the four funnel
+    // statuses. The collector records it in that slot because a progression
+    // *is* a step, named by the caller rather than by the enum.
+    const stepAsStatus = stepName as FunnelStatus;
+
     this.collector?.recordFunnelStep({
       funnel: funnelName,
-      status: stepName as FunnelStatus, // Cast for testing collector
-      attributes: {
-        ...enrichedAttributes,
-        step_name: stepName,
-        ...(stepNumber === undefined ? {} : { step_number: stepNumber }),
-      },
+      status: stepAsStatus,
+      attributes: stepAttributes,
       service: this.serviceName,
       timestamp: Date.now(),
     });
@@ -898,17 +904,11 @@ export class Event {
               finalAttributes,
               { autotel: autotelContext },
             )
-          : // Fall back to trackFunnelStep with step as custom name (cast)
+          : // Fall back to trackFunnelStep with the step as a custom name
             subscriber.trackFunnelStep(
               funnelName,
-              stepName as FunnelStatus,
-              {
-                ...finalAttributes,
-                step_name: stepName,
-                ...(stepNumber === undefined
-                  ? {}
-                  : { step_number: stepNumber }),
-              },
+              stepAsStatus,
+              { ...finalAttributes, ...stepAttributes },
               { autotel: autotelContext },
             ));
       });
@@ -939,16 +939,21 @@ export class Event {
     for (const event of events) {
       // Filter undefined/null values from attributes
       const filteredAttributes = event.attributes
-        ? (Object.fromEntries(
-            Object.entries(event.attributes).filter(
-              ([, v]) => v !== undefined && v !== null,
-            ),
-          ) as EventAttributes)
+        ? definedAttributes(event.attributes)
         : undefined;
 
       this.trackEvent(event.name, filteredAttributes);
     }
   }
+}
+
+/** The attributes with the entries that carry nothing left out. */
+function definedAttributes(input: EventAttributesInput): EventAttributes {
+  const defined: EventAttributes = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined && value !== null) defined[key] = value;
+  }
+  return defined;
 }
 
 /**

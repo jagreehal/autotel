@@ -54,8 +54,9 @@ describe('loadConfig', () => {
     // A region hostname is not a credential. The flag has to reach the config,
     // not just parse.
     expect(
-      loadConfig(['--datadog-site', 'datadoghq.eu'], { DD_SITE: 'datadoghq.com' })
-        .datadogSite,
+      loadConfig(['--datadog-site', 'datadoghq.eu'], {
+        DD_SITE: 'datadoghq.com',
+      }).datadogSite,
     ).toBe('datadoghq.eu');
     expect(loadConfig([], { DD_SITE: 'datadoghq.com' }).datadogSite).toBe(
       'datadoghq.com',
@@ -75,11 +76,14 @@ describe('loadConfig', () => {
 
   it('picks the retention default from whether storage is persistent', () => {
     expect(loadConfig([], {}).retentionMs).toBe(3_600_000);
-    expect(loadConfig(['--persist', './a.db'], {}).retentionMs).toBe(86_400_000);
-    // An explicit value survives both paths.
-    expect(loadConfig(['--persist', './a.db', '--retention-ms', '60000'], {}).retentionMs).toBe(
-      60_000,
+    expect(loadConfig(['--persist', './a.db'], {}).retentionMs).toBe(
+      86_400_000,
     );
+    // An explicit value survives both paths.
+    expect(
+      loadConfig(['--persist', './a.db', '--retention-ms', '60000'], {})
+        .retentionMs,
+    ).toBe(60_000);
   });
 
   it('rejects a transport the server cannot serve', () => {

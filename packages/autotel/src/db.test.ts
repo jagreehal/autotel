@@ -6,6 +6,7 @@ import {
   DB_OPERATIONS,
 } from './db';
 import { configure, resetConfig } from './config';
+import { tracerDouble } from './testing/doubles.js';
 
 describe('instrumentDatabase', () => {
   beforeEach(() => {
@@ -25,7 +26,7 @@ describe('instrumentDatabase', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     const repo = {
@@ -70,7 +71,7 @@ describe('instrumentDatabase', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     const repo = {
@@ -119,7 +120,7 @@ describe('instrumentDatabase', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     const repo = {
@@ -155,7 +156,7 @@ describe('instrumentDatabase', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     const repo = {
@@ -184,7 +185,7 @@ describe('instrumentDatabase', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     const repo = {
@@ -223,7 +224,7 @@ describe('tracebQuery', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     const result = await tracebQuery(

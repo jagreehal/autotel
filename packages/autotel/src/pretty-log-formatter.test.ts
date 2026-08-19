@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { formatDuration, formatPrettyLogLine } from './pretty-log-formatter';
 import type { CanonicalLogLineEvent } from './processors/canonical-log-line-processor';
+import { readableSpanDouble } from './testing/doubles';
 
 describe('formatDuration', () => {
   it('formats sub-second durations as ms', () => {
@@ -41,7 +42,7 @@ describe('formatPrettyLogLine', () => {
 
   it('formats a basic request line', () => {
     const ctx: CanonicalLogLineEvent = {
-      span: {} as any,
+      span: readableSpanDouble({}),
       level: 'info',
       message: '[checkout] Request completed',
       event: {
@@ -70,7 +71,7 @@ describe('formatPrettyLogLine', () => {
 
   it('names the operation instead of an HTTP status for non-HTTP spans', () => {
     const ctx: CanonicalLogLineEvent = {
-      span: {} as any,
+      span: readableSpanDouble({}),
       level: 'info',
       message: '[support_agent.run] Request completed',
       event: {
@@ -93,7 +94,7 @@ describe('formatPrettyLogLine', () => {
 
   it('marks a failed span whose level was overridden below error', () => {
     const ctx: CanonicalLogLineEvent = {
-      span: {} as any,
+      span: readableSpanDouble({}),
       level: 'info', // set via autotel.log.level, despite the span failing
       message: '[support_agent.run] Request completed',
       event: {
@@ -111,7 +112,7 @@ describe('formatPrettyLogLine', () => {
 
   it('does not double-mark a span already logged at error level', () => {
     const ctx: CanonicalLogLineEvent = {
-      span: {} as any,
+      span: readableSpanDouble({}),
       level: 'error',
       message: '[support_agent.run] Request failed',
       event: {
@@ -129,7 +130,7 @@ describe('formatPrettyLogLine', () => {
 
   it('includes context attributes as tree', () => {
     const ctx: CanonicalLogLineEvent = {
-      span: {} as any,
+      span: readableSpanDouble({}),
       level: 'info',
       message: 'Request completed',
       event: {
@@ -156,7 +157,7 @@ describe('formatPrettyLogLine', () => {
 
   it('skips internal telemetry attributes', () => {
     const ctx: CanonicalLogLineEvent = {
-      span: {} as any,
+      span: readableSpanDouble({}),
       level: 'info',
       message: 'Request completed',
       event: {

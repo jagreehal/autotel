@@ -7,7 +7,9 @@ import {
   type StoredTraceContext,
   type CallbackContext,
 } from './webhook';
-import * as functionalModule from './functional';
+import type { TraceContext } from './trace-context';
+import { traceContextDouble } from './testing/doubles';
+import { asString, readPath, readProperty } from './values';
 
 // Mock the functional trace
 vi.mock('./functional', () => ({
@@ -19,12 +21,12 @@ vi.mock('./functional', () => ({
     };
   }),
   withTracing: vi.fn(
-    (_options: unknown) =>
-      (factory: (ctx: unknown) => (...a: unknown[]) => unknown) =>
-      (...args: unknown[]) => {
-        const mockCtx = createMockTraceContext();
-        return factory(mockCtx)(...args);
-      },
+    () =>
+      <TArgs extends unknown[], TReturn>(
+        factory: (ctx: TraceContext) => (...args: TArgs) => TReturn,
+      ) =>
+      (...args: TArgs): TReturn =>
+        factory(createMockTraceContext())(...args),
   ),
 }));
 
@@ -47,8 +49,8 @@ vi.mock('@opentelemetry/api', () => ({
   },
 }));
 
-function createMockTraceContext() {
-  return {
+function createMockTraceContext(): TraceContext {
+  return traceContextDouble({
     setAttribute: vi.fn(),
     setAttributes: vi.fn(),
     addEvent: vi.fn(),
@@ -61,7 +63,7 @@ function createMockTraceContext() {
       spanId: '0000000000000002',
       traceFlags: 1,
     })),
-  };
+  });
 }
 
 describe('Webhook Parking Lot', () => {
@@ -392,7 +394,7 @@ describe('Webhook Parking Lot', () => {
       const handler = parkingLot.traceCallback({
         name: 'webhook.payment.completed',
         correlationKeyFrom: (args) =>
-          `payment:${(args[0] as { orderId: string }).orderId}`,
+          `payment:${asString(readProperty(args[0], 'orderId'))}`,
       })((_ctx) => async (event: { orderId: string }) => {
         return { processed: true, orderId: event.orderId };
       });
@@ -405,22 +407,20 @@ describe('Webhook Parking Lot', () => {
     it('should provide parked context to handler', async () => {
       await parkingLot.park('payment:order-123', { customerId: 'cust-456' });
 
-      let capturedCtx: CallbackContext | null = null;
+      const captured: CallbackContext[] = [];
 
       const handler = parkingLot.traceCallback({
         name: 'webhook.test',
         correlationKeyFrom: () => 'payment:order-123',
       })((ctx) => async () => {
-        capturedCtx = ctx;
+        captured.push(ctx);
         return {};
       });
 
       await handler();
 
-      // Read through a snapshot: TS narrows the closure-assigned `let` to its
-      // initial `null` in the outer flow, so widen back to the declared union.
-      const ctx = capturedCtx as CallbackContext | null;
-      expect(ctx).not.toBeNull();
+      const [ctx] = captured;
+      expect(ctx).toBeDefined();
       expect(ctx?.parkedContext).not.toBeNull();
       expect(ctx?.parkedContext?.metadata?.customerId).toBe('cust-456');
       expect(ctx?.correlationKey).toBe('payment:order-123');
@@ -455,19 +455,19 @@ describe('Webhook Parking Lot', () => {
     });
 
     it('should handle missing parked context gracefully', async () => {
-      let capturedCtx: CallbackContext | null = null;
+      const captured: CallbackContext[] = [];
 
       const handler = parkingLot.traceCallback({
         name: 'webhook.test',
         correlationKeyFrom: () => 'non-existent',
       })((ctx) => async () => {
-        capturedCtx = ctx;
+        captured.push(ctx);
         return {};
       });
 
       await handler();
 
-      const ctx = capturedCtx as CallbackContext | null;
+      const [ctx] = captured;
       expect(ctx?.parkedContext).toBeNull();
       expect(ctx?.elapsedMs).toBeNull();
     });
@@ -488,22 +488,6 @@ describe('Webhook Parking Lot', () => {
 
     it('should apply custom attributes', async () => {
       await parkingLot.park('payment:order-123');
-
-      const mockCtx = createMockTraceContext();
-      vi.mocked(functionalModule.trace).mockImplementationOnce(
-        (_options, factory) => {
-          // trace is heavily overloaded; vi.mocked resolves `factory` to the
-          // plain-function overload, but traceCallback passes the curried factory
-          // form (ctx) => (...args) => result, which this mock executes.
-          const curried = factory as unknown as (
-            ctx: unknown,
-          ) => (...args: unknown[]) => Promise<unknown>;
-          return (...args: unknown[]) => {
-            const fn = curried(mockCtx as any);
-            return fn(...args);
-          };
-        },
-      );
 
       const handler = parkingLot.traceCallback({
         name: 'webhook.test',
@@ -574,17 +558,15 @@ describe('Webhook Parking Lot', () => {
       expect(parkedContext).not.toBeNull();
 
       // 3. Handle webhook callback
-      let webhookCtx: CallbackContext | null = null;
+      const captured: CallbackContext[] = [];
       const handleWebhook = parkingLot.traceCallback({
         name: 'stripe.webhook.payment_intent.succeeded',
         correlationKeyFrom: (args) => {
-          const event = args[0] as {
-            data: { object: { metadata: { orderId: string } } };
-          };
-          return `payment:${event.data.object.metadata.orderId}`;
+          const id = readPath(args[0], 'data', 'object', 'metadata', 'orderId');
+          return `payment:${asString(id)}`;
         },
       })((ctx) => async (_event) => {
-        webhookCtx = ctx;
+        captured.push(ctx);
         // Process payment...
         return { success: true };
       });
@@ -599,7 +581,7 @@ describe('Webhook Parking Lot', () => {
       });
 
       expect(result).toEqual({ success: true });
-      const ctx = webhookCtx as CallbackContext | null;
+      const [ctx] = captured;
       expect(ctx?.parkedContext?.metadata?.amount).toBe('99.99');
       expect(ctx?.correlationKey).toBe(`payment:${orderId}`);
     });
@@ -619,7 +601,7 @@ describe('Webhook Parking Lot', () => {
       const handleApproval = parkingLot.traceCallback({
         name: 'approval.callback',
         correlationKeyFrom: (args) =>
-          `approval:${(args[0] as { requestId: string }).requestId}`,
+          `approval:${asString(readProperty(args[0], 'requestId'))}`,
       })(
         (ctx) => async (approval: { requestId: string; approved: boolean }) => {
           const metadata = ctx.parkedContext?.metadata;

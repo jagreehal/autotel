@@ -91,7 +91,8 @@ init({
   // always shows the spans. `destinations` fans the same spans out to Langfuse
   // and/or devtools over OTLP — every consumer is just another entry here.
   debug: 'pretty',
-  ...(destinations.length > 0 ? { destinations } : {}),
+  // An empty list would switch off the default destination, so omit the key.
+  destinations: destinations.length > 0 ? destinations : undefined,
 });
 
 // Instrument the AI SDK once. The tracer comes from autotel's global provider,

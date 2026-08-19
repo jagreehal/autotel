@@ -5,6 +5,7 @@ import {
   toAttributeValue,
   type AgentContext,
 } from './context.js';
+import type { Attributes } from '@opentelemetry/api';
 
 /** Canonical agent security attribute keys (Google SAIF / human-control aligned). */
 export const AGENT_SECURITY_ATTR = {
@@ -117,7 +118,7 @@ function setSecurityAttr(
 
 function setSecurityAttrs(
   ctx: AgentContext | undefined,
-  attrs: Record<string, unknown>,
+  attrs: Attributes,
 ): void {
   const traceCtx = resolveContext(ctx);
   const mapped: Record<
@@ -170,7 +171,7 @@ export function recordInputProvenance(input: RecordInputProvenanceInput): void {
 }
 
 export function recordHumanApproval(input: RecordHumanApprovalInput): void {
-  const attrs: Record<string, unknown> = {
+  const attrs: Attributes = {
     [AGENT_SECURITY_ATTR.consentRequired]: input.required ?? true,
     [AGENT_SECURITY_ATTR.consentOutcome]: input.approved
       ? 'approved'

@@ -1,4 +1,4 @@
-import { init, trace, span, flush, shutdown } from 'autotel';
+import { init, instrument, span, flush, shutdown } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 
@@ -14,14 +14,19 @@ async function main() {
   });
   console.log('✓ init() sets up the OTel SDK');
 
-  // trace(fn) wraps your function with a span automatically
-  const hello = trace('hello', () => {
-    return 'Hello, observability!';
+  // instrument({ key, fn }) wraps a reusable function with a stable span name
+  const hello = instrument({
+    key: 'hello',
+    fn: () => {
+      return 'Hello, observability!';
+    },
   });
   console.log('  ', hello());
 
-  // trace(name, fn) for explicit naming
-  const named = trace('my-named-span', () => 'named result');
+  const named = instrument({
+    key: 'my-named-span',
+    fn: () => 'named result',
+  });
   console.log('  ', named());
   const result = span('inline-work', () => 42);
   console.log('  span() result:', result);

@@ -72,6 +72,9 @@ describe('flush on clean exit', () => {
     const { installExitFlush } = await import('./process-handlers');
     const exit = vi
       .spyOn(process, 'exit')
+      // SAFETY: process.exit is declared to return `never`; a test that
+      // replaces it needs an implementation that returns, which is the point -
+      // the code under test must keep running so the assertion can see it.
       .mockImplementation((() => undefined) as never);
 
     installExitFlush(() => new Promise<void>(() => {}), 2000);
@@ -89,11 +92,13 @@ describe('flush on clean exit', () => {
     // A container stopping a job that has just finished its work: the event
     // loop drains, SIGTERM arrives, shutdown starts. A flush racing that
     // teardown reads queues it is dismantling.
-    const { installExitFlush, installProcessHandlers } = await import(
-      './process-handlers'
-    );
+    const { installExitFlush, installProcessHandlers } =
+      await import('./process-handlers');
     const exit = vi
       .spyOn(process, 'exit')
+      // SAFETY: process.exit is declared to return `never`; a test that
+      // replaces it needs an implementation that returns, which is the point -
+      // the code under test must keep running so the assertion can see it.
       .mockImplementation((() => undefined) as never);
     const shutdown = vi.fn().mockResolvedValue(undefined);
     const flush = vi.fn().mockResolvedValue(undefined);
@@ -117,9 +122,8 @@ describe('flush on clean exit', () => {
   it('stops listening once telemetry has been shut down explicitly', async () => {
     // shutdown() uninstalls the handlers. A listener left behind would fire on
     // the way out and flush a tracer provider that no longer exists.
-    const { installExitFlush, uninstallProcessHandlers } = await import(
-      './process-handlers'
-    );
+    const { installExitFlush, uninstallProcessHandlers } =
+      await import('./process-handlers');
     const flush = vi.fn().mockResolvedValue(undefined);
     const before = process.listenerCount('beforeExit');
 

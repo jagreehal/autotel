@@ -23,6 +23,7 @@
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 import type { ExportResult, ExportResultCode } from '@opentelemetry/core';
 import type { TraceData, SpanData } from './types';
+import type { SpanAttributes } from '../widget/types.js';
 
 export interface DevtoolsRemoteExporterOptions {
   /**
@@ -246,7 +247,7 @@ export class DevtoolsRemoteExporter implements SpanExporter {
     const startTime = span.startTime[0] * 1000 + span.startTime[1] / 1_000_000;
     const endTime = span.endTime[0] * 1000 + span.endTime[1] / 1_000_000;
 
-    const attributes: Record<string, unknown> = {};
+    const attributes: SpanAttributes = {};
     for (const [key, value] of Object.entries(span.attributes)) {
       attributes[key] = value;
     }

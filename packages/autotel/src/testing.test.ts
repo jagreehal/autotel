@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SpanKind } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import { withTracing } from './functional';
 import { createTraceCollector } from './testing';
 import type { TraceContext } from './trace-context';
@@ -7,7 +8,7 @@ import type { TraceContext } from './trace-context';
 // addEvent is a deprecated OTel span method kept as a runtime back-compat shim
 // but hidden from the public TraceContext type (OTEP 4430).
 type LegacyCtx = TraceContext & {
-  addEvent: (name: string, attributes?: Record<string, unknown>) => void;
+  addEvent: (name: string, attributes?: Attributes) => void;
 };
 
 describe('createTraceCollector trace-level helpers', () => {

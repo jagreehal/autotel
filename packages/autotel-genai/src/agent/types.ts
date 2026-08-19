@@ -4,6 +4,20 @@ import type { ModelPricing, TokenUsage } from '../cost.js';
 import type { GenAiProviderName } from '../semconv.js';
 import type { AgentContext } from './context.js';
 
+/**
+ * Free-form metadata a caller attaches to a GenAI operation. Serialized onto a
+ * span or an event, so it holds what JSON can carry.
+ */
+export type GenAiMetadata = {
+  [key: string]:
+    | string
+    | number
+    | boolean
+    | null
+    | GenAiMetadata
+    | Array<GenAiMetadata | string | number | boolean | null>;
+};
+
 export type { OnMissingContext } from 'autotel-audit';
 export type { ModelPricing, TokenUsage } from '../cost.js';
 
@@ -217,7 +231,7 @@ export interface AgentIdentityRecord {
   revokedAt?: string;
   revocationReason?: string;
   expiresAt?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: GenAiMetadata;
 }
 
 export interface AgentIdentityRegistry {
@@ -228,7 +242,7 @@ export interface AgentIdentityRegistry {
     delegatedBy?: string;
     provisionedAt?: string | Date;
     expiresAt?: string | Date;
-    metadata?: Record<string, unknown>;
+    metadata?: GenAiMetadata;
   }): AgentIdentityRecord;
   rotateIdentity(
     agentId: string,
@@ -238,7 +252,7 @@ export interface AgentIdentityRegistry {
       delegatedBy?: string;
       rotatedAt?: string | Date;
       expiresAt?: string | Date;
-      metadata?: Record<string, unknown>;
+      metadata?: GenAiMetadata;
     },
   ): AgentIdentityRecord;
   revokeIdentity(

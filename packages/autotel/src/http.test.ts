@@ -8,11 +8,14 @@ import {
 import { withTracing } from './functional';
 import { configure, resetConfig } from './config';
 import { propagation, context as otelContext } from '@opentelemetry/api';
+import type { Context as OtelContext } from '@opentelemetry/api';
+import { asFunction, writeProperty } from './values';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { init } from './init';
 import { shutdown } from './shutdown';
 import { InMemorySpanExporter } from './exporters';
 import { SimpleSpanProcessor } from './processors';
+import { tracerDouble } from './testing/doubles.js';
 
 describe('HttpInstrumented', () => {
   beforeEach(() => {
@@ -32,7 +35,7 @@ describe('HttpInstrumented', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     @HttpInstrumented({ serviceName: 'api-client' })
@@ -74,7 +77,7 @@ describe('HttpInstrumented', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     @HttpInstrumented()
@@ -133,7 +136,7 @@ describe('HttpInstrumented', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     @HttpInstrumented()
@@ -172,7 +175,7 @@ describe('HttpInstrumented', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     @HttpInstrumented({ slowRequestThresholdMs: 10 })
@@ -209,7 +212,7 @@ describe('HttpInstrumented', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     @HttpInstrumented()
@@ -241,7 +244,7 @@ describe('HttpInstrumented', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     @HttpInstrumented()
@@ -277,13 +280,13 @@ describe('traceHttpRequest', () => {
 
     const mockTracer = {
       startActiveSpan: vi.fn((name, optionsOrFn, maybeFn) => {
-        const fn = typeof optionsOrFn === 'function' ? optionsOrFn : maybeFn;
+        const fn = asFunction(optionsOrFn) ?? maybeFn;
         return fn(mockSpan);
       }),
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     const result = await traceHttpRequest(
@@ -327,8 +330,11 @@ describe('injectTraceContext', () => {
       .spyOn(propagation, 'inject')
       .mockImplementation((ctx, carrier) => {
         // Simulate W3C trace context propagation
-        (carrier as Record<string, string>)['traceparent'] =
-          '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+        writeProperty(
+          carrier,
+          'traceparent',
+          '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        );
       });
 
     const headers = injectTraceContext({
@@ -356,9 +362,12 @@ describe('injectTraceContext', () => {
     const injectSpy = vi
       .spyOn(propagation, 'inject')
       .mockImplementation((ctx, carrier) => {
-        (carrier as Record<string, string>)['traceparent'] =
-          '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
-        (carrier as Record<string, string>)['baggage'] = 'tenant.id=tenant-123';
+        writeProperty(
+          carrier,
+          'traceparent',
+          '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        );
+        writeProperty(carrier, 'baggage', 'tenant.id=tenant-123');
       });
 
     const headers = injectTraceContext({ 'Content-Type': 'application/json' });
@@ -388,21 +397,20 @@ describe('injectTraceContext', () => {
 
     try {
       // Track what context was passed to propagation.inject
-      let injectedContext: unknown = null;
+      const injectedContexts: OtelContext[] = [];
       const injectSpy = vi
         .spyOn(propagation, 'inject')
         .mockImplementation((ctx, carrier) => {
-          injectedContext = ctx;
+          injectedContexts.push(ctx);
           // Extract baggage from context to verify it's included
-          const baggage = propagation.getBaggage(ctx as any);
+          const baggage = propagation.getBaggage(ctx);
           if (baggage) {
             const baggageEntries: string[] = [];
             for (const [key, entry] of baggage.getAllEntries()) {
               baggageEntries.push(`${key}=${entry.value}`);
             }
             if (baggageEntries.length > 0) {
-              (carrier as Record<string, string>)['baggage'] =
-                baggageEntries.join(',');
+              writeProperty(carrier, 'baggage', baggageEntries.join(','));
             }
           }
         });
@@ -420,9 +428,9 @@ describe('injectTraceContext', () => {
       const headers = await testFn();
 
       expect(injectSpy).toHaveBeenCalled();
-      expect(injectedContext).toBeTruthy();
-      // Verify baggage was included in the injected context
-      const baggage = propagation.getBaggage(injectedContext as any);
+      const [injectedContext] = injectedContexts;
+      expect(injectedContext).toBeDefined();
+      const baggage = propagation.getBaggage(injectedContext!);
       expect(baggage).toBeTruthy();
       expect(baggage?.getEntry('tenant.id')?.value).toBe('t1');
       expect(baggage?.getEntry('user.id')?.value).toBe('u1');

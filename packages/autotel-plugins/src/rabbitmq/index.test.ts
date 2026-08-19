@@ -186,7 +186,7 @@ describe('injectTraceHeaders', () => {
   it('should return carrier object', () => {
     const headers = injectTraceHeaders({});
     expect(headers).toBeDefined();
-    expect(typeof headers).toBe('object');
+    expect(headers).toBeTypeOf('object');
   });
 
   it('should preserve base headers', () => {
@@ -391,7 +391,7 @@ describe('withPublishSpan', () => {
 
 describe('recordAckResult', () => {
   it('should be a function', () => {
-    expect(typeof recordAckResult).toBe('function');
+    expect(recordAckResult).toBeTypeOf('function');
   });
 });
 
@@ -532,15 +532,15 @@ describe('type exports', () => {
     const exports = await import('./index');
 
     // Functions
-    expect(typeof exports.normalizeHeaders).toBe('function');
-    expect(typeof exports.extractTraceContext).toBe('function');
-    expect(typeof exports.injectTraceHeaders).toBe('function');
-    expect(typeof exports.extractCorrelationId).toBe('function');
-    expect(typeof exports.deriveCorrelationId).toBe('function');
-    expect(typeof exports.withConsumeSpan).toBe('function');
-    expect(typeof exports.withPublishSpan).toBe('function');
-    expect(typeof exports.extractBatchLineage).toBe('function');
-    expect(typeof exports.recordAckResult).toBe('function');
+    expect(exports.normalizeHeaders).toBeTypeOf('function');
+    expect(exports.extractTraceContext).toBeTypeOf('function');
+    expect(exports.injectTraceHeaders).toBeTypeOf('function');
+    expect(exports.extractCorrelationId).toBeTypeOf('function');
+    expect(exports.deriveCorrelationId).toBeTypeOf('function');
+    expect(exports.withConsumeSpan).toBeTypeOf('function');
+    expect(exports.withPublishSpan).toBeTypeOf('function');
+    expect(exports.extractBatchLineage).toBeTypeOf('function');
+    expect(exports.recordAckResult).toBeTypeOf('function');
   });
 
   it('should export all expected constants', async () => {

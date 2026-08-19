@@ -32,9 +32,13 @@ export function diagnosticsChannelAvailable(): boolean {
   return loadDiagnosticsChannel() !== undefined;
 }
 
-/** Handler for a plain named channel. */
-export type ChannelMessageHandler = (
-  message: unknown,
+/**
+ * Handler for a plain named channel. `TMessage` is whatever the publisher on
+ * that channel sends - a subscriber that knows the channel says so; one that
+ * does not gets `unknown` and decodes it itself.
+ */
+export type ChannelMessageHandler<TMessage = unknown> = (
+  message: TMessage,
   name: string | symbol,
 ) => void;
 
@@ -42,28 +46,32 @@ export type ChannelMessageHandler = (
  * Subscribe to a named diagnostics channel. Returns an idempotent unsubscribe
  * function; a no-op (that still returns a disposer) on unsupported runtimes.
  */
-export function subscribeChannel(
+export function subscribeChannel<TMessage = unknown>(
   name: string,
-  handler: ChannelMessageHandler,
+  handler: ChannelMessageHandler<TMessage>,
 ): () => void {
   const dc = loadDiagnosticsChannel();
   if (!dc?.subscribe) return () => {};
-  dc.subscribe(name, handler);
+  // SAFETY: TMessage is the subscriber's own claim about what this channel
+  // publishes. Node hands the listener whatever was published - the claim is
+  // the caller's to make, and theirs to get wrong.
+  const listener = handler as ChannelMessageHandler;
+  dc.subscribe(name, listener);
   let active = true;
   return () => {
     if (!active) return;
     active = false;
-    dc.unsubscribe?.(name, handler);
+    dc.unsubscribe?.(name, listener);
   };
 }
 
 /** Subscriber set for a {@link https://nodejs.org/api/diagnostics_channel.html#class-tracingchannel TracingChannel}. */
-export interface TracingChannelHandlers {
-  start?(message: unknown): void;
-  end?(message: unknown): void;
-  asyncStart?(message: unknown): void;
-  asyncEnd?(message: unknown): void;
-  error?(message: unknown): void;
+export interface TracingChannelHandlers<TMessage = unknown> {
+  start?(message: TMessage): void;
+  end?(message: TMessage): void;
+  asyncStart?(message: TMessage): void;
+  asyncEnd?(message: TMessage): void;
+  error?(message: TMessage): void;
 }
 
 /**
@@ -71,19 +79,22 @@ export interface TracingChannelHandlers {
  * Returns an idempotent unsubscribe; a no-op on runtimes without
  * `tracingChannel` support.
  */
-export function subscribeTracingChannel(
+export function subscribeTracingChannel<TMessage = unknown>(
   name: string,
-  handlers: TracingChannelHandlers,
+  handlers: TracingChannelHandlers<TMessage>,
 ): () => void {
   const dc = loadDiagnosticsChannel();
   const channel = dc?.tracingChannel?.(name);
   if (!channel) return () => {};
-  // Node's typings want all five handlers; we pass the subset provided.
-  channel.subscribe(handlers as Parameters<typeof channel.subscribe>[0]);
+  // SAFETY: Node's typings want all five handlers on the object passed in;
+  // this passes whichever subset the caller supplied, which is what the
+  // channel actually does with it - each is called only if present.
+  const subset = handlers as Parameters<typeof channel.subscribe>[0];
+  channel.subscribe(subset);
   let active = true;
   return () => {
     if (!active) return;
     active = false;
-    channel.unsubscribe(handlers as Parameters<typeof channel.unsubscribe>[0]);
+    channel.unsubscribe(subset);
   };
 }

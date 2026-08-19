@@ -41,6 +41,8 @@ import {
   createContextKey,
 } from '@opentelemetry/api';
 import type { Logger } from './logger';
+import type { UnknownRecord } from './values';
+import { asRecord, asString } from './values';
 
 export type BuiltinLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';
 
@@ -54,6 +56,9 @@ const LOG_LEVEL_KEY = createContextKey('autotel-log-level');
  * Falls back to undefined if no log level is set in context
  */
 export function getActiveLogLevel(): BuiltinLogLevel | undefined {
+  // SAFETY: setActiveLogLevel below is the only writer of this context key,
+  // and it takes a BuiltinLogLevel. OTel's context is untyped storage, so the
+  // level is stated back here on the way out.
   return api_context.active().getValue(LOG_LEVEL_KEY) as
     BuiltinLogLevel | undefined;
 }
@@ -148,6 +153,37 @@ export interface BuiltinLoggerOptions {
  * });
  * ```
  */
+/**
+ * The fields a log line carries for its error, following Pino's `err`
+ * convention: an Error is spread into message/stack/name, anything else is
+ * kept as it was given.
+ */
+function errorFields(extra: UnknownRecord | undefined): UnknownRecord {
+  if (!extra) return {};
+  const { err, ...rest } = extra;
+  if (err instanceof Error) {
+    return { error: err.message, stack: err.stack, name: err.name, ...rest };
+  }
+  return err === undefined ? rest : { err, ...rest };
+}
+
+/**
+ * Warn once per call about a Winston-style invocation, in development only -
+ * the arguments are swapped either way, so this is guidance, not an error.
+ */
+function warnLegacyPattern(
+  level: string,
+  secondArg: string,
+  recommended: string,
+): void {
+  if (process.env.NODE_ENV === 'production') return;
+  console.warn(
+    `[autotel] Legacy logger pattern detected: logger.${level}('message', ${secondArg}). ` +
+      `Autotel recommends Pino signature: logger.${level}(${recommended}, 'message'). ` +
+      `Auto-swapping arguments for compatibility.`,
+  );
+}
+
 export function createBuiltinLogger(
   service: string,
   options?: BuiltinLoggerOptions,
@@ -155,13 +191,13 @@ export function createBuiltinLogger(
   const defaultLevel = options?.level || 'info';
   const pretty = options?.pretty || false;
 
-  const levelPriority: Record<BuiltinLogLevel, number> = {
-    none: -1,
-    debug: 0,
-    info: 1,
-    warn: 2,
-    error: 3,
-  };
+  const levelPriority = new Map<BuiltinLogLevel, number>([
+    ['none', -1],
+    ['debug', 0],
+    ['info', 1],
+    ['warn', 2],
+    ['error', 3],
+  ]);
 
   const shouldLog = (level: BuiltinLogLevel): boolean => {
     // Priority: context level > options level > 'info' default
@@ -170,18 +206,20 @@ export function createBuiltinLogger(
     // 'none' means suppress all logging
     if (activeLevel === 'none') return false;
 
-    return levelPriority[level] >= levelPriority[activeLevel];
+    return (
+      (levelPriority.get(level) ?? 0) >= (levelPriority.get(activeLevel) ?? 0)
+    );
   };
 
   const log = (
     level: 'info' | 'error' | 'warn' | 'debug',
     msg: string,
-    attrs?: Record<string, unknown>,
+    attrs?: UnknownRecord,
   ) => {
     if (!shouldLog(level)) return;
 
     const ctx = getTraceContextInternal();
-    const logEntry: Record<string, unknown> = {
+    const logEntry: UnknownRecord = {
       level,
       service,
       msg,
@@ -211,32 +249,28 @@ export function createBuiltinLogger(
   // Also auto-detects and handles legacy Winston-style: logger.info('message', { extra })
   const createLogMethod = (level: 'info' | 'warn' | 'debug') => {
     return (
-      extraOrMessage: Record<string, unknown> | string,
-      message?: string | Record<string, unknown>,
+      extraOrMessage: UnknownRecord | string,
+      message?: string | UnknownRecord,
     ) => {
-      if (typeof extraOrMessage === 'string') {
-        // First arg is string - could be:
-        // 1. String-only: logger.info('message')
-        // 2. Legacy Winston-style: logger.info('message', { extra })
-        if (message !== undefined && typeof message === 'object') {
-          // Legacy Winston-style detected - auto-swap for backward compatibility
-          if (process.env.NODE_ENV !== 'production') {
-            console.warn(
-              `[autotel] Legacy logger pattern detected: logger.${level}('message', metadata). ` +
-                `Autotel recommends Pino signature: logger.${level}({ ...metadata }, 'message'). ` +
-                `Auto-swapping arguments for compatibility.`,
-            );
-          }
-          // Swap: treat first arg as message, second as metadata
-          log(level, extraOrMessage, message as Record<string, unknown>);
-        } else {
-          // Pure string-only call: logger.info('message')
-          log(level, extraOrMessage);
-        }
-      } else {
+      const firstAsMessage = asString(extraOrMessage);
+      if (firstAsMessage === undefined) {
         // Pino style: logger.info({ extra }, 'message')
-        log(level, (message as string) || '', extraOrMessage);
+        log(level, asString(message) ?? '', asRecord(extraOrMessage));
+        return;
       }
+      // First arg is string - could be:
+      // 1. String-only: logger.info('message')
+      // 2. Legacy Winston-style: logger.info('message', { extra })
+      const legacyExtra = asRecord(message);
+      if (!legacyExtra) {
+        // Pure string-only call: logger.info('message')
+        log(level, firstAsMessage);
+        return;
+      }
+      // Legacy Winston-style detected - auto-swap for backward compatibility
+      warnLegacyPattern(level, 'metadata', '{ ...metadata }');
+      // Swap: treat first arg as message, second as metadata
+      log(level, firstAsMessage, legacyExtra);
     };
   };
 
@@ -246,88 +280,40 @@ export function createBuiltinLogger(
     debug: createLogMethod('debug'),
 
     error: (
-      extraOrMessage: Record<string, unknown> | string,
-      message?: string | Record<string, unknown> | Error,
+      extraOrMessage: UnknownRecord | string,
+      message?: string | UnknownRecord | Error,
     ) => {
-      if (typeof extraOrMessage === 'string') {
-        // First arg is string - could be:
-        // 1. String-only: logger.error('message')
-        // 2. Legacy: logger.error('message', error) - Error as second arg
-        // 3. Legacy: logger.error('message', { extra }) - object as second arg
-
-        // Handle legacy logger.error('message', error) pattern
-        if (message instanceof Error) {
-          if (process.env.NODE_ENV !== 'production') {
-            console.warn(
-              `[autotel] Legacy logger pattern detected: logger.error('message', error). ` +
-                `Autotel recommends Pino signature: logger.error({ err: error }, 'message'). ` +
-                `Auto-swapping arguments for compatibility.`,
-            );
-          }
-          log('error', extraOrMessage, {
-            error: message.message,
-            stack: message.stack,
-            name: message.name,
-          });
-          return;
-        }
-
-        // Handle legacy logger.error('message', { extra }) pattern
-        if (message !== undefined && typeof message === 'object') {
-          if (process.env.NODE_ENV !== 'production') {
-            console.warn(
-              `[autotel] Legacy logger pattern detected: logger.error('message', metadata). ` +
-                `Autotel recommends Pino signature: logger.error({ ...metadata }, 'message'). ` +
-                `Auto-swapping arguments for compatibility.`,
-            );
-          }
-          // Swap: treat first arg as message, second as metadata (handle err extraction)
-          const extra = message as Record<string, unknown>;
-          const { err, ...rest } = extra as Record<string, unknown> & {
-            err?: unknown;
-          };
-          let errorAttrs: Record<string, unknown> = rest;
-          if (err instanceof Error) {
-            errorAttrs = {
-              error: err.message,
-              stack: err.stack,
-              name: err.name,
-              ...rest,
-            };
-          } else if (err !== undefined) {
-            errorAttrs = { err, ...rest };
-          }
-          log('error', extraOrMessage, errorAttrs);
-          return;
-        }
-
-        // Pure string-only call: logger.error('message')
-        log('error', extraOrMessage);
+      const firstAsMessage = asString(extraOrMessage);
+      if (firstAsMessage === undefined) {
+        // Pino style: logger.error({ err, ...extra }, 'message')
+        log(
+          'error',
+          asString(message) ?? '',
+          errorFields(asRecord(extraOrMessage)),
+        );
         return;
       }
 
-      // Pino style: logger.error({ err, ...extra }, 'message')
-      // Extract err from extra if present (Pino convention)
-      const { err, ...rest } = extraOrMessage as Record<string, unknown> & {
-        err?: unknown;
-      };
-      let errorAttrs: Record<string, unknown> = rest;
-      if (err instanceof Error) {
-        // err is an Error - extract message, stack, name for structured logging
-        errorAttrs = {
-          error: err.message,
-          stack: err.stack,
-          name: err.name,
-          ...rest,
-        };
-      } else if (err !== undefined) {
-        // err is not an Error but exists - preserve it as-is
-        errorAttrs = {
-          err,
-          ...rest,
-        };
+      // First arg is string - could be:
+      // 1. String-only: logger.error('message')
+      // 2. Legacy: logger.error('message', error) - Error as second arg
+      // 3. Legacy: logger.error('message', { extra }) - object as second arg
+      if (message instanceof Error) {
+        warnLegacyPattern('error', 'error', '{ err: error }');
+        log('error', firstAsMessage, errorFields({ err: message }));
+        return;
       }
-      log('error', (message as string) || '', errorAttrs);
+
+      const legacyExtra = asRecord(message);
+      if (legacyExtra) {
+        warnLegacyPattern('error', 'metadata', '{ ...metadata }');
+        // Swap: treat first arg as message, second as metadata
+        log('error', firstAsMessage, errorFields(legacyExtra));
+        return;
+      }
+
+      // Pure string-only call: logger.error('message')
+      log('error', firstAsMessage);
     },
   };
 }

@@ -63,6 +63,9 @@ function resolveHttpParticipants(
   pact: HttpPactLike,
   opts: WithHttpPactInteractionOptions,
 ): { consumer: string; provider: string } {
+  // SAFETY: Pact-JS keeps the consumer and provider names on `opts`, which the
+  // structural interface does not require - a caller can pass them in options
+  // instead, which is what the check below falls back to.
   const fromOpts = (pact as HttpPactWithOpts).opts;
   const consumer = opts.consumer ?? fromOpts?.consumer;
   const provider = opts.provider ?? fromOpts?.provider;

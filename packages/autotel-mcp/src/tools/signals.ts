@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
-import { respondSafe, tagValueSchema, toMetricSearchQuery, toLogSearchQuery, type MetricsQueryInput, type LogsQueryInput, READ_ONLY } from './shared';
+import {
+  respondSafe,
+  tagValueSchema,
+  toMetricSearchQuery,
+  toLogSearchQuery,
+  type MetricsQueryInput,
+  type LogsQueryInput,
+  READ_ONLY,
+} from './shared';
 
 export function registerSignalTools(
   server: McpServer,

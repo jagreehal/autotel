@@ -292,3 +292,37 @@ export const DEFAULT_CONFIG = {
   classifyResults: true,
   validateToolBudgets: true,
 } as const;
+
+/** The arguments an MCP tool call carries: the JSON its schema declared. */
+export type McpArguments = {
+  [key: string]:
+    | string
+    | number
+    | boolean
+    | null
+    | undefined
+    | McpArguments
+    | Array<McpArguments | string | number | boolean | null>;
+};
+
+/** What an MCP tool, prompt or resource handler resolves with. */
+export type McpHandlerResult = {
+  content?: Array<{ type: string; text?: string }>;
+  contents?: Array<{ uri: string; text?: string }>;
+  isError?: boolean;
+  [key: string]: unknown;
+};
+
+/**
+ * A wrapped MCP handler. The SDK calls it with whatever the client sent, which
+ * each handler's own schema describes - the wrapper only forwards it.
+ */
+export type McpHandler = (
+  ...args: McpHandlerArgument[]
+) => Promise<McpHandlerResult>;
+
+/** One argument the SDK passes a handler: a payload, a URL, or an extra. */
+export type McpHandlerArgument = McpArguments | URL | string | undefined;
+
+/** The attributes recorded on an MCP metric; keys are added as they are known. */
+export type McpMetricAttributes = Record<string, string>;

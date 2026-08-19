@@ -210,6 +210,8 @@ const slowInventoryReport = withTracing({ name: 'slowInventoryReport' })(
   `);
 
     const catalog = await db.select().from(products).all();
+    // SAFETY: the query above selects count(*) as `total`, and drizzle types a
+    // raw select as an open row shape; the `?? 0` covers an empty result set.
     const seriesTotal = Number(
       (countRows[0] as { total?: number })?.total ?? 0,
     );
@@ -309,6 +311,10 @@ const validateAuth = (authUrl: string) =>
         });
       }
 
+      // SAFETY: this is our own service, whose handler returns exactly these
+      // fields on a 200; the non-ok branch above returned before reaching here.
+      // SAFETY: this is our own service, whose handler returns exactly these
+      // fields on a 200; the non-ok branch above returned before reaching here.
       return response.json() as Promise<{
         userId: number;
         email: string;
@@ -349,6 +355,8 @@ const notifyWorker = (workerUrl: string) =>
         });
       }
 
+      // SAFETY: this is our own service, whose handler returns exactly these
+      // fields on a 200; the non-ok branch above returned before reaching here.
       return response.json() as Promise<{
         status: string;
         jobId: number;

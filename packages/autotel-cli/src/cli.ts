@@ -39,6 +39,9 @@ import {
   runTelemetryEnable,
   runTelemetryStatus,
 } from './commands/telemetry';
+import { runEstimate } from './commands/estimate';
+import { printEstimate } from './ui/estimate';
+import { configureJsonOutput, printJson } from './lib/json-output';
 import { withCommanderTelemetry } from 'autotel-telemetry';
 
 /**
@@ -294,6 +297,65 @@ export function createProgram(): Command {
   codemodCmd.addCommand(traceCmd);
   addGlobalOptions(codemodCmd);
   program.addCommand(codemodCmd);
+
+  const estimateCmd = new Command('estimate')
+    .description('Estimate what a month of telemetry costs, before and after')
+    .requiredOption(
+      '--requests-per-month <n>',
+      'Requests the application serves per month',
+    )
+    .requiredOption(
+      '--per-gb <usd>',
+      'USD per gigabyte ingested by your provider',
+    )
+    .option(
+      '--log-lines-per-request <n>',
+      'Log lines written per request today (default 4)',
+    )
+    .option(
+      '--spans-per-request <n>',
+      'Spans exported per request after instrumenting (default 0)',
+    )
+    .option(
+      '--per-million-events <usd>',
+      'USD per million events indexed, if your provider meters events too',
+    )
+    .option(
+      '--keep-percent <n>',
+      'Traffic kept after sampling, applied to both shapes (default 100)',
+    )
+    .option('--json', 'Output machine-readable JSON')
+    .option('--output-file <path>', 'Persist JSON output to this path')
+    .action((opts) => {
+      configureJsonOutput({
+        outputFile: opts.outputFile,
+        noSecrets: opts.secretsInOutput === false,
+      });
+      const envelope = runEstimate({
+        requestsPerMonth: Number(opts.requestsPerMonth),
+        perGb: Number(opts.perGb),
+        ...(opts.logLinesPerRequest !== undefined && {
+          logLinesPerRequest: Number(opts.logLinesPerRequest),
+        }),
+        ...(opts.spansPerRequest !== undefined && {
+          spansPerRequest: Number(opts.spansPerRequest),
+        }),
+        ...(opts.perMillionEvents !== undefined && {
+          perMillionEvents: Number(opts.perMillionEvents),
+        }),
+        ...(opts.keepPercent !== undefined && {
+          keepPercent: Number(opts.keepPercent),
+        }),
+      });
+
+      if (opts.json) {
+        printJson(envelope);
+        return;
+      }
+      printEstimate(envelope.estimate);
+    });
+  addGlobalOptions(estimateCmd);
+  program.addCommand(estimateCmd);
 
   // Agent-native discovery surface (always JSON).
   const schemaCmd = new Command('schema')

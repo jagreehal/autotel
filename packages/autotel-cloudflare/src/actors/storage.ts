@@ -4,16 +4,25 @@
  * Traces operations on actor.storage including SQL queries
  */
 
-import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap } from '../bindings/common';
 import type { ActorLike } from './types';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import {
+  asBoolean,
+  asFunction,
+  asRecord,
+  asString,
+  member,
+} from '../values.js';
 
 /**
  * Get the tracer instance
  */
 function getTracer(): WorkerTracer {
-  return trace.getTracer('autotel-cloudflare-actors') as WorkerTracer;
+  return workerTracer('autotel-cloudflare-actors');
 }
 
 /**
@@ -28,20 +37,24 @@ export function instrumentActorStorage(
   actorInstance: ActorLike,
   actorClass: object,
 ): unknown {
-  if (!storage || typeof storage !== 'object') {
+  // asRecord() returns the record rather than narrowing in place, so keep
+  // what it handed back - that is the value the proxy wraps below.
+  const storageRecord = asRecord(storage);
+  if (!storageRecord) {
     return storage;
   }
 
-  const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+  const actorClassName = asString(member(actorClass, 'name')) || 'Actor';
   const actorName = actorInstance.name || actorClassName;
 
   const storageHandler: ProxyHandler<object> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
       // Instrument SQL query method if it exists
       // The Actors Storage class has an exec method for SQL
-      if (prop === 'exec' && typeof value === 'function') {
+      if (prop === 'exec' && method) {
         return function instrumentedExec(
           this: unknown,
           query: string,
@@ -65,11 +78,11 @@ export function instrumentActorStorage(
             },
             (span) => {
               try {
-                const result = value.call(target, query, ...params);
+                const result = method.call(target, query, ...params);
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -85,7 +98,7 @@ export function instrumentActorStorage(
       }
 
       // Instrument query method (alternative name for exec)
-      if (prop === 'query' && typeof value === 'function') {
+      if (prop === 'query' && method) {
         return function instrumentedQuery(
           this: unknown,
           query: string,
@@ -109,11 +122,11 @@ export function instrumentActorStorage(
             },
             (span) => {
               try {
-                const result = value.call(target, query, ...params);
+                const result = method.call(target, query, ...params);
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -129,7 +142,7 @@ export function instrumentActorStorage(
       }
 
       // Instrument get method
-      if (prop === 'get' && typeof value === 'function') {
+      if (prop === 'get' && method) {
         return async function instrumentedGet(
           this: unknown,
           key: string,
@@ -151,14 +164,14 @@ export function instrumentActorStorage(
             },
             async (span) => {
               try {
-                const result = await value.call(target, key);
+                const result = await method.call(target, key);
                 span.setAttributes({
                   'db.result.found': result !== null && result !== undefined,
                 });
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -174,7 +187,7 @@ export function instrumentActorStorage(
       }
 
       // Instrument put method
-      if (prop === 'put' && typeof value === 'function') {
+      if (prop === 'put' && method) {
         return async function instrumentedPut(
           this: unknown,
           key: string,
@@ -198,10 +211,10 @@ export function instrumentActorStorage(
             },
             async (span) => {
               try {
-                await value.call(target, key, val);
+                await method.call(target, key, val);
                 span.setStatus({ code: SpanStatusCode.OK });
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -217,11 +230,11 @@ export function instrumentActorStorage(
       }
 
       // Instrument delete method
-      if (prop === 'delete' && typeof value === 'function') {
+      if (prop === 'delete' && method) {
         return async function instrumentedDelete(
           this: unknown,
           key: string,
-        ): Promise<boolean> {
+        ): Promise<unknown> {
           const tracer = getTracer();
           const spanName = `Actor ${actorName}: storage.delete`;
 
@@ -239,14 +252,15 @@ export function instrumentActorStorage(
             },
             async (span) => {
               try {
-                const result = await value.call(target, key);
-                span.setAttributes({
-                  'db.result.deleted': result,
-                });
+                const result = await method.call(target, key);
+                const deleted = asBoolean(result);
+                if (deleted !== undefined) {
+                  span.setAttributes({ 'db.result.deleted': deleted });
+                }
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -262,13 +276,9 @@ export function instrumentActorStorage(
       }
 
       // Bind other methods to the target
-      if (typeof value === 'function') {
-        return value.bind(target);
-      }
-
-      return value;
+      return method ? method.bind(target) : value;
     },
   };
 
-  return wrap(storage, storageHandler);
+  return wrap(storageRecord, storageHandler);
 }

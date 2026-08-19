@@ -22,22 +22,19 @@ export interface NetworkTimingObserverConfig {
 function timingToAttributes(
   entry: PerformanceResourceTiming,
   timeOrigin: number,
-): Record<string, number> {
-  const attrs: Record<string, number> = {};
+) {
+  const optional: Array<[string, number]> = [];
 
   const fetchStart = entry.fetchStart;
   const responseEnd = entry.responseEnd;
   // Required: absolute ms since epoch
   const callStartMs = timeOrigin + fetchStart;
   const callEndMs = timeOrigin + responseEnd;
-  attrs['http.call.start_time'] = Math.round(callStartMs);
-  attrs['http.call.end_time'] = Math.round(callEndMs);
 
   // Only add attribute when phase happened (browser uses 0 for "did not happen"); use epoch ms
+  // A browser reports 0 for a phase that did not happen, which is not a time.
   const addIfPositive = (key: string, rawValue: number) => {
-    if (rawValue > 0) {
-      attrs[key] = Math.round(timeOrigin + rawValue);
-    }
+    if (rawValue > 0) optional.push([key, Math.round(timeOrigin + rawValue)]);
   };
   addIfPositive('http.redirect.start_time', entry.redirectStart);
   addIfPositive('http.redirect.end_time', entry.redirectEnd);
@@ -50,7 +47,11 @@ function timingToAttributes(
   addIfPositive('http.response.headers.start_time', entry.responseStart);
   addIfPositive('http.worker.start_time', entry.workerStart);
 
-  return attrs;
+  return {
+    'http.call.start_time': Math.round(callStartMs),
+    'http.call.end_time': Math.round(callEndMs),
+    ...Object.fromEntries(optional),
+  };
 }
 
 /** Optional: add resource size/status from Resource Timing when useful */
@@ -64,6 +65,8 @@ function addResourceAttributes(
   if (entry.encodedBodySize > 0) {
     attrs['http.response.body.size'] = entry.encodedBodySize;
   }
+  // SAFETY: responseStatus is in the Resource Timing spec but missing from the
+  // DOM lib; the `!= null` guard below covers a browser that does not send it.
   const status = (
     entry as PerformanceResourceTiming & { responseStatus?: number }
   ).responseStatus;
@@ -75,7 +78,7 @@ function addResourceAttributes(
 export function setupNetworkTimingObserver(
   config: NetworkTimingObserverConfig,
 ): void {
-  if (typeof window === 'undefined' || !window.PerformanceObserver) {
+  if (globalThis.window === undefined || !window.PerformanceObserver) {
     return;
   }
   const timeOrigin = performance.timeOrigin;
@@ -85,6 +88,8 @@ export function setupNetworkTimingObserver(
       const entries = list.getEntries();
       for (const entry of entries) {
         if (entry.entryType !== 'resource') continue;
+        // SAFETY: the guard above skipped every entry whose entryType is not
+        // 'resource', which is what makes this a PerformanceResourceTiming.
         const resource = entry as PerformanceResourceTiming;
         const initiator = resource.initiatorType ?? '';
         if (initiator !== 'fetch' && initiator !== 'xmlhttprequest') continue;

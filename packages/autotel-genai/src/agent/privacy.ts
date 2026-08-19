@@ -1,9 +1,10 @@
 import { hashPayload } from './hash.js';
+import { asBoolean, asNumber, asRecord, asString } from '../values.js';
 import type { PrivacyProfile, PrivacyProfileName } from './types.js';
 
 export type PrivacyProfileInput = PrivacyProfileName | PrivacyProfile;
 
-const PRIVACY_PROFILES: Record<PrivacyProfileName, PrivacyProfile> = {
+const PRIVACY_PROFILES = {
   strict: {
     name: 'strict',
     hashKeys: [
@@ -44,13 +45,11 @@ const PRIVACY_PROFILES: Record<PrivacyProfileName, PrivacyProfile> = {
   },
 };
 
-function maskValue(value: unknown): unknown {
-  if (typeof value !== 'string') {
-    return '<masked>';
-  }
-
-  if (value.length <= 6) return '***';
-  return `${value.slice(0, 3)}***${value.slice(-3)}`;
+function maskValue(value: unknown): string {
+  const text = asString(value);
+  if (text === undefined) return '<masked>';
+  if (text.length <= 6) return '***';
+  return `${text.slice(0, 3)}***${text.slice(-3)}`;
 }
 
 function matches(patterns: RegExp[] | undefined, key: string): boolean {
@@ -65,11 +64,21 @@ function truncateString(value: string, maxLength?: number): string {
   return `${value.slice(0, maxLength)}…`;
 }
 
+/** A value after sanitising: primitives, or containers of sanitised values. */
+export type SanitizedValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | SanitizedValue[]
+  | { [key: string]: SanitizedValue };
+
 function sanitizeNode(
   value: unknown,
   profile: PrivacyProfile,
   keyPath: string,
-): unknown {
+): SanitizedValue {
   if (value instanceof Date) {
     return value.toISOString();
   }
@@ -88,8 +97,9 @@ function sanitizeNode(
     return maskValue(value);
   }
 
-  if (typeof value === 'string') {
-    return truncateString(value, profile.maxStringLength);
+  const text = asString(value);
+  if (text !== undefined) {
+    return truncateString(text, profile.maxStringLength);
   }
 
   if (Array.isArray(value)) {
@@ -98,31 +108,37 @@ function sanitizeNode(
     );
   }
 
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-        key,
-        sanitizeNode(entry, profile, keyPath ? `${keyPath}.${key}` : key),
-      ]),
-    );
+  const record = asRecord(value);
+  if (record) {
+    const out: { [key: string]: SanitizedValue } = {};
+    for (const [key, entry] of Object.entries(record)) {
+      out[key] = sanitizeNode(
+        entry,
+        profile,
+        keyPath ? `${keyPath}.${key}` : key,
+      );
+    }
+    return out;
   }
 
-  if (typeof value === 'bigint') {
-    return value.toString(10);
-  }
+  if (typeof value === 'bigint') return value.toString(10);
 
-  return value;
+  return (
+    asNumber(value) ?? asBoolean(value) ?? (value === null ? null : undefined)
+  );
 }
 
 export function resolvePrivacyProfile(
   profile: PrivacyProfileInput = 'strict',
 ): PrivacyProfile {
+  // typeof, not asString: this narrows a union of a profile name and a
+  // profile object, which only TypeScript's own operator does.
   return typeof profile === 'string' ? PRIVACY_PROFILES[profile] : profile;
 }
 
 export function sanitizeAuditPayload(
   value: unknown,
   profile: PrivacyProfileInput = 'strict',
-): unknown {
+): SanitizedValue {
   return sanitizeNode(value, resolvePrivacyProfile(profile), '');
 }

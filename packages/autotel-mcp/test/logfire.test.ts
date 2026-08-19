@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LogfireBackend } from '../src/backends/logfire/index';
+import { installFetch, recordedCall, requestBody } from './helpers/fetch';
+
+/** The Logfire query request these tests assert on. */
+interface LogfireRequest {
+  sql: string;
+  min_timestamp?: string;
+}
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -66,7 +73,7 @@ describe('LogfireBackend', () => {
   });
 
   it('refuses to query without a read token', async () => {
-    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+    installFetch(vi.fn());
     const noToken = new LogfireBackend({
       baseUrl: 'https://logfire-us.pydantic.dev',
       readToken: '',
@@ -76,23 +83,23 @@ describe('LogfireBackend', () => {
 
   it('posts to /v2/query with a bearer token and a min_timestamp', async () => {
     const fetchSpy = respond(queryResponse);
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await backend().searchTraces({ limit: 5 });
 
-    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const { url, init } = recordedCall(fetchSpy);
     expect(url).toBe('https://logfire-us.pydantic.dev/v2/query');
     expect(init.headers).toMatchObject({
       Authorization: 'Bearer lf-read-token',
     });
     // Omitting min_timestamp is a 422 from the live API.
-    const body = JSON.parse(init.body as string);
-    expect(Number.isNaN(Date.parse(body.min_timestamp))).toBe(false);
+    const body = requestBody<LogfireRequest>(fetchSpy);
+    expect(Number.isNaN(Date.parse(body.min_timestamp ?? ''))).toBe(false);
     expect(body.sql).toMatch(/FROM records/i);
   });
 
   it('groups rows into traces and preserves gen_ai attributes', async () => {
-    globalThis.fetch = respond(queryResponse) as unknown as typeof fetch;
+    installFetch(respond(queryResponse));
 
     const result = await backend().searchTraces({ limit: 5 });
 
@@ -122,22 +129,20 @@ describe('LogfireBackend', () => {
         headers: new Headers(),
         json: async () => queryResponse,
       });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     const result = await backend().searchTraces({
       service: 'travel-assistant',
     });
 
     expect(result.items[0]!.spans).toHaveLength(2);
-    const hydration = JSON.parse(
-      (fetchSpy.mock.calls[1]![1] as RequestInit).body as string,
-    );
+    const hydration = requestBody<LogfireRequest>(fetchSpy, 1);
     expect(hydration.sql).toContain('WHERE trace_id IN');
     expect(hydration.sql).not.toContain("service_name = 'travel-assistant'");
   });
 
   it('converts timestamps to epoch ms and durations to ms', async () => {
-    globalThis.fetch = respond(queryResponse) as unknown as typeof fetch;
+    installFetch(respond(queryResponse));
 
     const trace = (await backend().searchTraces({})).items[0]!;
 
@@ -149,7 +154,7 @@ describe('LogfireBackend', () => {
   });
 
   it('maps parent links and the exception flag onto span status', async () => {
-    globalThis.fetch = respond(queryResponse) as unknown as typeof fetch;
+    installFetch(respond(queryResponse));
 
     const trace = (await backend().searchTraces({})).items[0]!;
 
@@ -162,34 +167,32 @@ describe('LogfireBackend', () => {
 
   it('escapes quotes in a service filter rather than breaking the SQL', async () => {
     const fetchSpy = respond({ schema: {}, data: [] });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await backend().searchTraces({ service: "o'brien" });
 
-    const body = JSON.parse(
-      (fetchSpy.mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = requestBody<LogfireRequest>(fetchSpy, 0);
     expect(body.sql).toContain("service_name = 'o''brien'");
   });
 
   it('narrows min_timestamp to the requested window', async () => {
     const fetchSpy = respond({ schema: {}, data: [] });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     const startTimeUnixMs = Date.parse('2026-07-27T00:00:00.000Z');
     await backend().searchTraces({ startTimeUnixMs });
 
-    const body = JSON.parse(
-      (fetchSpy.mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = requestBody<LogfireRequest>(fetchSpy, 0);
     expect(body.min_timestamp).toBe('2026-07-27T00:00:00.000Z');
   });
 
   it('lists distinct service names', async () => {
-    globalThis.fetch = respond({
-      schema: {},
-      data: [{ service_name: 'api' }, { service_name: 'worker' }],
-    }) as unknown as typeof fetch;
+    installFetch(
+      respond({
+        schema: {},
+        data: [{ service_name: 'api' }, { service_name: 'worker' }],
+      }),
+    );
 
     await expect(backend().listServices()).resolves.toEqual({
       services: ['api', 'worker'],
@@ -197,10 +200,12 @@ describe('LogfireBackend', () => {
   });
 
   it('returns null for a trace id with no rows', async () => {
-    globalThis.fetch = respond({
-      schema: {},
-      data: [],
-    }) as unknown as typeof fetch;
+    installFetch(
+      respond({
+        schema: {},
+        data: [],
+      }),
+    );
     await expect(backend().getTrace('missing')).resolves.toBeNull();
   });
 
@@ -215,12 +220,14 @@ describe('LogfireBackend', () => {
   // write token used for reads — come back as a bare 401. Naming both saves the
   // reader from guessing which one they hit.
   it('turns a 401 into advice naming both the region and the token scope', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      statusText: 'Unauthorized',
-      headers: new Headers(),
-    }) as unknown as typeof fetch;
+    installFetch(
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      }),
+    );
 
     const health = await backend().healthCheck();
     expect(health.healthy).toBe(false);
@@ -231,12 +238,14 @@ describe('LogfireBackend', () => {
   });
 
   it('does not add auth advice to unrelated failures', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: 'Server Error',
-      headers: new Headers(),
-    }) as unknown as typeof fetch;
+    installFetch(
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        headers: new Headers(),
+      }),
+    );
 
     const health = await backend().healthCheck();
     expect(health.message).toMatch(/500/);
@@ -244,12 +253,14 @@ describe('LogfireBackend', () => {
   });
 
   it('reports unhealthy instead of throwing when the API is unreachable', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      statusText: 'Unauthorized',
-      headers: new Headers(),
-    }) as unknown as typeof fetch;
+    installFetch(
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      }),
+    );
 
     const health = await backend().healthCheck();
     expect(health.healthy).toBe(false);

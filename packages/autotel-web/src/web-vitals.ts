@@ -58,7 +58,7 @@ function ensureSpanAndSetMetric(metric: Metric, config: WebVitalsConfig): void {
 }
 
 export function setupWebVitals(config: WebVitalsConfig): void {
-  if (typeof window === 'undefined') return;
+  if (globalThis.window === undefined) return;
 
   const opts = { reportAllChanges: config.reportAllChanges ?? false };
 

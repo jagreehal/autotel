@@ -43,13 +43,16 @@ export {
 export {
   trace,
   withTracing,
+  instrument,
   instrument as instrumentFunctions,
   span,
   enterSpan,
   getActiveTraceContext,
   type traceOptions,
+  type TracingOptions,
   type TraceContext,
   type InstrumentOptions,
+  type SingleInstrumentOptions,
 } from './functional';
 
 // Native span bridge (seam for platform-native tracers, e.g. Cloudflare).

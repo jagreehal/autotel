@@ -1,16 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { APIRequestContext } from '@playwright/test';
+import type { SerializedSpan } from './index';
+
+/** What the `_otelTestSpan` fixture hands to the request fixture. */
+type OtelTestSpanData = {
+  apiBaseUrls: Array<string>;
+  carrier: Record<string, string>;
+  testInfo: { title: string };
+};
+
 type Fixtures = {
   _otelTestSpan?: TestSpanFixtureFn | [TestSpanFixtureFn, { scope: 'test' }];
   requestWithTrace?: (
-    args: { request: unknown; _otelTestSpan: unknown },
-    use: (wrapped: any) => Promise<void>,
+    args: { request: APIRequestContext; _otelTestSpan: OtelTestSpanData },
+    use: (wrapped: APIRequestContext) => Promise<void>,
   ) => Promise<void>;
 };
 
 type TestSpanFixtureFn = (
   args: Record<string, never>,
-  use: (spanData: unknown) => Promise<void>,
+  use: (spanData: OtelTestSpanData) => Promise<void>,
   testInfo: {
     annotations: Array<{ type: string; description?: string }>;
     file?: string;
@@ -20,12 +30,11 @@ type TestSpanFixtureFn = (
   },
 ) => Promise<void>;
 
-const state: { fixtures?: Fixtures } = {};
+/** Holds whatever the module under test passed to `test.extend()`. */
+const state: { fixtures?: Fixtures } = Object.create(null);
 let spanIdCounter = 0;
 let mockDrainResult: unknown[] = [];
-const contextWithSpy = vi.fn((_ctx: unknown, fn: () => Promise<unknown>) =>
-  fn(),
-);
+const contextWithSpy = vi.fn((_ctx: never, fn: () => Promise<void>) => fn());
 const createdSpans: Array<{
   end: ReturnType<typeof vi.fn>;
   recordException: ReturnType<typeof vi.fn>;
@@ -65,7 +74,7 @@ vi.mock('autotel', () => ({
     },
   }),
   propagation: {
-    inject: (_ctx: unknown, carrier: Record<string, string>) => {
+    inject: (_ctx: never, carrier: Record<string, string>) => {
       carrier.traceparent = '00-testtrace-testspan-01';
     },
   },
@@ -76,7 +85,7 @@ vi.mock('autotel', () => ({
   getTraceContext: vi.fn(() => null),
   resolveTraceUrl: vi.fn(() => undefined),
   isTracing: vi.fn(() => false),
-  enrichWithTraceContext: vi.fn((obj: unknown) => obj),
+  enrichWithTraceContext: vi.fn((obj: Record<string, string>) => obj),
 }));
 
 vi.mock('autotel/test-span-collector', () => ({
@@ -113,7 +122,8 @@ describe('autotel-playwright requestWithTrace.fetch', () => {
     expect(requestWithTraceFixture).toBeTypeOf('function');
 
     const fetchSpy = vi.fn(async () => ({ ok: true }));
-    const request = { fetch: fetchSpy } as any;
+    // SAFETY: the fixture only forwards to fetch() on the context it is given.
+    const request = { fetch: fetchSpy } as unknown as APIRequestContext;
     let wrapped: any;
 
     await requestWithTraceFixture?.(
@@ -150,7 +160,8 @@ describe('autotel-playwright requestWithTrace.fetch', () => {
     expect(requestWithTraceFixture).toBeTypeOf('function');
 
     const fetchSpy = vi.fn(async () => ({ ok: true }));
-    const request = { fetch: fetchSpy } as any;
+    // SAFETY: the fixture only forwards to fetch() on the context it is given.
+    const request = { fetch: fetchSpy } as unknown as APIRequestContext;
     let wrapped: any;
 
     await requestWithTraceFixture?.(
@@ -354,17 +365,26 @@ describe('trace context helper re-exports', () => {
   });
 });
 
-// Minimal APIRequestContext mock for createTestSpansClient tests
-function makeRequest(responseBody: unknown, status = 200) {
+/** What the test-spans endpoint answers with, across these tests. */
+type SpansEndpointBody =
+  { spans: Array<SerializedSpan> } | { error: string } | { ok: true };
+
+/**
+ * A stand-in for the request context createTestSpansClient is handed. It answers
+ * `get` and `delete` with one canned response and keeps the spies for assertions.
+ */
+function makeRequest(responseBody: SpansEndpointBody, status = 200) {
   const mockResponse = {
     ok: () => status >= 200 && status < 300,
     status: () => status,
     json: async () => responseBody,
   };
-  return {
-    get: vi.fn().mockResolvedValue(mockResponse),
-    delete: vi.fn().mockResolvedValue(mockResponse),
-  };
+  const get = vi.fn().mockResolvedValue(mockResponse);
+  const del = vi.fn().mockResolvedValue(mockResponse);
+  // SAFETY: createTestSpansClient calls get() and delete() and reads ok(),
+  // status() and json() off what they resolve to. Nothing else is reached.
+  const request = { get, delete: del } as unknown as APIRequestContext;
+  return { request, get, delete: del };
 }
 
 describe('createTestSpansClient', () => {
@@ -382,10 +402,10 @@ describe('createTestSpansClient', () => {
       status: { code: 0 },
       durationMs: 100,
     };
-    const req = makeRequest({ spans: [mockSpan] });
+    const { request: req, ...spies } = makeRequest({ spans: [mockSpan] });
     const client = createTestSpansClient('http://localhost:3100');
-    const spans = await client.getSpans(req as any);
-    expect(req.get).toHaveBeenCalledWith(
+    const spans = await client.getSpans(req);
+    expect(spies.get).toHaveBeenCalledWith(
       'http://localhost:3100/api/test-spans',
     );
     expect(spans).toHaveLength(1);
@@ -394,60 +414,62 @@ describe('createTestSpansClient', () => {
 
   it('getSpans uses custom path when provided', async () => {
     const { createTestSpansClient } = await import('./index');
-    const req = makeRequest({ spans: [] });
+    const { request: req, ...spies } = makeRequest({ spans: [] });
     const client = createTestSpansClient('http://localhost:3100', {
       path: '/custom/spans',
     });
-    await client.getSpans(req as any);
-    expect(req.get).toHaveBeenCalledWith('http://localhost:3100/custom/spans');
+    await client.getSpans(req);
+    expect(spies.get).toHaveBeenCalledWith(
+      'http://localhost:3100/custom/spans',
+    );
   });
 
   it('getSpans throws when response not ok', async () => {
     const { createTestSpansClient } = await import('./index');
-    const req = makeRequest({ error: 'not found' }, 404);
+    const { request: req } = makeRequest({ error: 'not found' }, 404);
     const client = createTestSpansClient('http://localhost:3100');
-    await expect(client.getSpans(req as any)).rejects.toThrow(
+    await expect(client.getSpans(req)).rejects.toThrow(
       'GET /api/test-spans failed: 404',
     );
   });
 
   it('clearSpans calls DELETE /api/test-spans', async () => {
     const { createTestSpansClient } = await import('./index');
-    const req = makeRequest({ ok: true });
+    const { request: req, ...spies } = makeRequest({ ok: true });
     const client = createTestSpansClient('http://localhost:3100');
-    await client.clearSpans(req as any);
-    expect(req.delete).toHaveBeenCalledWith(
+    await client.clearSpans(req);
+    expect(spies.delete).toHaveBeenCalledWith(
       'http://localhost:3100/api/test-spans',
     );
   });
 
   it('clearSpans uses custom path when provided', async () => {
     const { createTestSpansClient } = await import('./index');
-    const req = makeRequest({ ok: true });
+    const { request: req, ...spies } = makeRequest({ ok: true });
     const client = createTestSpansClient('http://localhost:3100', {
       path: '/custom/spans',
     });
-    await client.clearSpans(req as any);
-    expect(req.delete).toHaveBeenCalledWith(
+    await client.clearSpans(req);
+    expect(spies.delete).toHaveBeenCalledWith(
       'http://localhost:3100/custom/spans',
     );
   });
 
   it('clearSpans throws when response not ok', async () => {
     const { createTestSpansClient } = await import('./index');
-    const req = makeRequest({ error: 'not found' }, 404);
+    const { request: req } = makeRequest({ error: 'not found' }, 404);
     const client = createTestSpansClient('http://localhost:3100');
-    await expect(client.clearSpans(req as any)).rejects.toThrow(
+    await expect(client.clearSpans(req)).rejects.toThrow(
       'DELETE /api/test-spans failed: 404',
     );
   });
 
   it('strips trailing slash from baseUrl', async () => {
     const { createTestSpansClient } = await import('./index');
-    const req = makeRequest({ spans: [] });
+    const { request: req, ...spies } = makeRequest({ spans: [] });
     const client = createTestSpansClient('http://localhost:3100/');
-    await client.getSpans(req as any);
-    expect(req.get).toHaveBeenCalledWith(
+    await client.getSpans(req);
+    expect(spies.get).toHaveBeenCalledWith(
       'http://localhost:3100/api/test-spans',
     );
   });

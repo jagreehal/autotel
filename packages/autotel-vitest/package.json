@@ -29,6 +29,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:compat": "vitest run --config integration/vitest.config.ts",
+    "test:stories": "vitest run --config vitest.stories.config.ts",
     "test:watch": "vitest",
     "lint": "eslint src",
     "clean": "rimraf dist"
@@ -46,6 +47,8 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "executable-stories-formatters": "1.10.0",
+    "executable-stories-vitest": "8.6.5",
     "tsdown": "^0.22.14",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"

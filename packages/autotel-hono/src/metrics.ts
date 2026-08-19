@@ -51,6 +51,7 @@ export function createRequestDurationTracker(config: HttpMetricsConfig): {
   record: (durationSeconds: number, attrs: Attributes) => void;
 } {
   if (config.captureRequestDuration === false) {
+    // Nothing to record when the histogram is switched off.
     return { record: () => {} };
   }
   const histogram = config.meter.createHistogram(

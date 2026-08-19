@@ -17,21 +17,19 @@ import {
   type PartitionLag,
   type RebalanceType,
 } from './messaging';
+import type { UnknownRecord } from './values';
 
 // Mock the tracing wrapper to capture span options
 vi.mock('./functional', () => ({
   withTracing: vi.fn(
     () =>
-      (
+      <TArgs extends unknown[], TReturn>(
         factory: (
           ctx: ReturnType<typeof createMockContext>,
-        ) => (...args: unknown[]) => unknown,
+        ) => (...args: TArgs) => TReturn,
       ) =>
-      (...args: unknown[]) => {
-        const mockCtx = createMockContext();
-        const fn = factory(mockCtx);
-        return fn(...args);
-      },
+      (...args: TArgs): TReturn =>
+        factory(createMockContext())(...args),
   ),
 }));
 
@@ -66,10 +64,38 @@ vi.mock('./sampling', () => ({
   }),
 }));
 
+/**
+ * Read a field off a message this test constructed.
+ *
+ * SAFETY: the extractors these tests hand to autotel are called with the
+ * message the same test publishes a few lines away, so the shape asked for
+ * here is the shape the test itself supplies. One place says so, instead of
+ * an assertion at each extractor.
+ */
+function readMessage<TMessage, TValue>(
+  message: unknown,
+  read: (msg: TMessage) => TValue,
+): TValue {
+  // SAFETY: see the note above.
+  return read(message as TMessage);
+}
+
+/**
+ * The mock context, as the TraceContext a customAttributes hook is declared
+ * to take.
+ *
+ * SAFETY: the hook under test reads nothing off the context - these tests
+ * only check the attributes it derives from the message - so the double only
+ * has to be accepted, never used.
+ */
+function mockContextForHook() {
+  // SAFETY: see the note above.
+  return createMockContext() as never;
+}
+
 function createMockContext() {
-  const attributes: Record<string, unknown> = {};
-  const events: Array<{ name: string; attributes?: Record<string, unknown> }> =
-    [];
+  const attributes: UnknownRecord = {};
+  const events: Array<{ name: string; attributes?: UnknownRecord }> = [];
   const links: unknown[] = [];
 
   return {
@@ -108,6 +134,30 @@ function createMockContext() {
   };
 }
 
+/**
+ * The message fields this suite's extractors read. Every broker it covers names
+ * them differently - Kafka's `offset`, SQS's `Attributes.SequenceNumber`,
+ * RabbitMQ's `fields.deliveryTag` - so all of them are optional here, which is
+ * the reason ConsumerConfig is generic over the message in the first place.
+ */
+interface TestMessage {
+  id?: string;
+  key?: string;
+  offset?: number;
+  headers?: Record<string, string>;
+  MessageId?: string;
+  Attributes?: { SequenceNumber?: string; MessageGroupId?: string };
+  properties?: {
+    messageId?: string;
+    headers?: Record<string, string | number>;
+  };
+  fields?: { deliveryTag?: number; routingKey?: string };
+  MessageAttributes?: Record<string, { StringValue: string }>;
+  attempts?: number;
+  streamId?: string;
+  pendingCount?: number;
+}
+
 describe('Messaging Helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -134,7 +184,8 @@ describe('Messaging Helpers', () => {
       const config: ProducerConfig = {
         system: 'kafka',
         destination: 'user-events',
-        messageIdFrom: (args) => (args[0] as { id: string }).id,
+        messageIdFrom: (args) =>
+          readMessage(args[0], (m: { id: string }) => m.id),
       };
 
       // We need to directly test the attribute setting
@@ -183,7 +234,7 @@ describe('Messaging Helpers', () => {
       };
 
       const producer = traceProducer(config)(
-        (_ctx) => async (_event: unknown) => {
+        (_ctx) => async (_event: TestMessage) => {
           return { sent: true };
         },
       );
@@ -211,44 +262,43 @@ describe('Messaging Helpers', () => {
     });
 
     it('should extract message ID from function extractor', () => {
+      const messageIdFrom = (args: unknown[]) =>
+        readMessage(args[0], (m: { eventId: string }) => m.eventId);
       const config: ProducerConfig = {
         system: 'kafka',
         destination: 'events',
-        messageIdFrom: (args) => (args[0] as { eventId: string }).eventId,
+        messageIdFrom,
       };
 
-      expect(typeof config.messageIdFrom).toBe('function');
-      const extractor = config.messageIdFrom as (
-        args: unknown[],
-      ) => string | undefined;
-      expect(extractor([{ eventId: 'evt-123' }])).toBe('evt-123');
+      expect(config.messageIdFrom).toBe(messageIdFrom);
+      expect(messageIdFrom([{ eventId: 'evt-123' }])).toBe('evt-123');
     });
 
     it('should extract partition from function extractor', () => {
+      const partitionFrom = (args: unknown[]) =>
+        readMessage(args[0], (m: { partition: number }) => m.partition);
       const config: ProducerConfig = {
         system: 'kafka',
         destination: 'events',
-        partitionFrom: (args) => (args[0] as { partition: number }).partition,
+        partitionFrom,
       };
 
-      expect(typeof config.partitionFrom).toBe('function');
-      const extractor = config.partitionFrom as (
-        args: unknown[],
-      ) => number | undefined;
+      expect(config.partitionFrom).toBe(partitionFrom);
+      const extractor = partitionFrom;
       expect(extractor([{ partition: 3 }])).toBe(3);
     });
   });
 
   describe('traceConsumer', () => {
     it('should create a consumer function with correct span name', async () => {
-      const config: ConsumerConfig = {
+      const config: ConsumerConfig<TestMessage> = {
         system: 'kafka',
         destination: 'user-events',
         consumerGroup: 'my-consumer',
       };
 
-      const consumer = traceConsumer(config)(
-        (_ctx) => async (_message: unknown) => {
+      const consumer = traceConsumer<TestMessage>(config)(
+        (_ctx) => async (_message: { value: string }) => {
           return { processed: true };
         },
       );
@@ -258,15 +308,18 @@ describe('Messaging Helpers', () => {
     });
 
     it('should support batch mode', async () => {
-      const config: ConsumerConfig = {
+      const config: ConsumerConfig<TestMessage> = {
         system: 'kafka',
         destination: 'user-events',
         batchMode: true,
         headersFrom: (msg) =>
-          (msg as { headers: Record<string, string> }).headers,
+          readMessage(
+            msg,
+            (m: { headers: Record<string, string> }) => m.headers,
+          ),
       };
 
-      const consumer = traceConsumer(config)(
+      const consumer = traceConsumer<TestMessage>(config)(
         (_ctx) => async (messages: unknown[]) => {
           return { count: messages.length };
         },
@@ -285,14 +338,14 @@ describe('Messaging Helpers', () => {
       const onError = vi.fn();
       const testError = new Error('Process failed');
 
-      const config: ConsumerConfig = {
+      const config: ConsumerConfig<TestMessage> = {
         system: 'sqs',
         destination: 'orders',
         onError,
       };
 
-      const consumer = traceConsumer(config)(
-        (_ctx) => async (_message: unknown) => {
+      const consumer = traceConsumer<TestMessage>(config)(
+        (_ctx) => async (_message: TestMessage) => {
           throw testError;
         },
       );
@@ -302,13 +355,14 @@ describe('Messaging Helpers', () => {
     });
 
     it('should support lag metrics configuration', () => {
-      const config: ConsumerConfig = {
+      const config: ConsumerConfig<TestMessage> = {
         system: 'kafka',
         destination: 'events',
         lagMetrics: {
-          getCurrentOffset: (msg) => (msg as { offset: number }).offset,
+          getCurrentOffset: (msg) => msg.offset,
           getEndOffset: () => Promise.resolve(1000),
-          getPartition: (msg) => (msg as { partition: number }).partition,
+          getPartition: (msg) =>
+            readMessage(msg, (m: { partition: number }) => m.partition),
         },
       };
 
@@ -318,7 +372,7 @@ describe('Messaging Helpers', () => {
     });
 
     it('should extract headers using string path', () => {
-      const config: ConsumerConfig = {
+      const config: ConsumerConfig<TestMessage> = {
         system: 'kafka',
         destination: 'events',
         headersFrom: 'headers',
@@ -328,25 +382,20 @@ describe('Messaging Helpers', () => {
     });
 
     it('should extract headers using function', () => {
-      const config: ConsumerConfig = {
+      const headersFrom = (msg: TestMessage) => {
+        const result: Record<string, string> = {};
+        for (const [k, v] of Object.entries(msg.MessageAttributes ?? {})) {
+          result[k] = v.StringValue;
+        }
+        return result;
+      };
+      const config: ConsumerConfig<TestMessage> = {
         system: 'sqs',
         destination: 'events',
-        headersFrom: (msg) => {
-          const m = msg as {
-            MessageAttributes: Record<string, { StringValue: string }>;
-          };
-          const result: Record<string, string> = {};
-          for (const [k, v] of Object.entries(m.MessageAttributes || {})) {
-            result[k] = v.StringValue;
-          }
-          return result;
-        },
+        headersFrom,
       };
 
-      const extractor = config.headersFrom as (
-        msg: unknown,
-      ) => Record<string, string> | undefined;
-      const headers = extractor({
+      const headers = headersFrom({
         MessageAttributes: {
           traceparent: { StringValue: '00-abc-def-01' },
         },
@@ -612,7 +661,7 @@ describe('Messaging Helpers', () => {
     });
 
     it('consumer (single) should use system.process destination format', () => {
-      const config: ConsumerConfig = {
+      const config: ConsumerConfig<TestMessage> = {
         system: 'kafka',
         destination: 'user-events',
       };
@@ -621,7 +670,7 @@ describe('Messaging Helpers', () => {
     });
 
     it('consumer (batch) should use system.receive destination format', () => {
-      const config: ConsumerConfig = {
+      const config: ConsumerConfig<TestMessage> = {
         system: 'kafka',
         destination: 'user-events',
         batchMode: true,
@@ -668,14 +717,18 @@ describe('Messaging Helpers', () => {
           destination: 'orders.created',
           customAttributes: (_ctx, args) => ({
             'nats.subject':
-              (args[0] as { subject?: string })?.subject || 'default',
-            'nats.reply_to': (args[0] as { replyTo?: string })?.replyTo,
+              readMessage(args[0], (m: { subject?: string }) => m?.subject) ||
+              'default',
+            'nats.reply_to': readMessage(
+              args[0],
+              (m: { replyTo?: string }) => m?.replyTo,
+            ),
             'nats.stream': 'ORDERS',
           }),
         };
 
         expect(config.customAttributes).toBeDefined();
-        const attrs = config.customAttributes!(createMockContext() as never, [
+        const attrs = config.customAttributes!(mockContextForHook(), [
           { subject: 'orders.created', replyTo: '_INBOX.reply' },
         ]);
         expect(attrs['nats.subject']).toBe('orders.created');
@@ -687,15 +740,20 @@ describe('Messaging Helpers', () => {
           system: 'temporal' as const,
           destination: 'orders-queue',
           customAttributes: (_ctx, args) => ({
-            'temporal.workflow_id': (args[0] as { workflowId: string })
-              .workflowId,
-            'temporal.run_id': (args[0] as { runId: string }).runId,
+            'temporal.workflow_id': readMessage(
+              args[0],
+              (m: { workflowId: string }) => m.workflowId,
+            ),
+            'temporal.run_id': readMessage(
+              args[0],
+              (m: { runId: string }) => m.runId,
+            ),
             'temporal.task_queue': 'orders-queue',
           }),
         };
 
         expect(config.customAttributes).toBeDefined();
-        const attrs = config.customAttributes!(createMockContext() as never, [
+        const attrs = config.customAttributes!(mockContextForHook(), [
           { workflowId: 'wf-123', runId: 'run-456' },
         ]);
         expect(attrs['temporal.workflow_id']).toBe('wf-123');
@@ -742,13 +800,13 @@ describe('Messaging Helpers', () => {
           'cloudflare.attempts': 1,
         });
 
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'cloudflare_queues' as const,
           destination: 'orders-queue',
           customAttributes,
         };
 
-        const consumer = traceConsumer(config)(
+        const consumer = traceConsumer<TestMessage>(config)(
           (_ctx) => async (msg: { id: string; attempts: number }) => {
             return { processed: true, id: msg.id };
           },
@@ -759,18 +817,24 @@ describe('Messaging Helpers', () => {
       });
 
       it('should support Cloudflare Queue attributes', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'cloudflare_queues' as const,
           destination: 'orders',
           customAttributes: (_ctx, msg) => ({
-            'cloudflare.queue_id': (msg as { id: string }).id,
+            'cloudflare.queue_id': readMessage(
+              msg,
+              (m: { id: string }) => m.id,
+            ),
             'cloudflare.timestamp_ms': Date.now(),
-            'cloudflare.attempts': (msg as { attempts: number }).attempts,
+            'cloudflare.attempts': readMessage(
+              msg,
+              (m: { attempts: number }) => m.attempts,
+            ),
           }),
         };
 
         expect(config.customAttributes).toBeDefined();
-        const attrs = config.customAttributes!(createMockContext() as never, {
+        const attrs = config.customAttributes!(mockContextForHook(), {
           id: 'msg-123',
           attempts: 2,
         });
@@ -779,19 +843,24 @@ describe('Messaging Helpers', () => {
       });
 
       it('should support Redis Streams attributes', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'redis_streams' as const,
           destination: 'orders:stream',
           customAttributes: (_ctx, msg) => ({
-            'redis.stream_id': (msg as { streamId: string }).streamId,
+            'redis.stream_id': readMessage(
+              msg,
+              (m: { streamId: string }) => m.streamId,
+            ),
             'redis.consumer_group': 'processors',
-            'redis.pending_count': (msg as { pendingCount: number })
-              .pendingCount,
+            'redis.pending_count': readMessage(
+              msg,
+              (m: { pendingCount: number }) => m.pendingCount,
+            ),
           }),
         };
 
         expect(config.customAttributes).toBeDefined();
-        const attrs = config.customAttributes!(createMockContext() as never, {
+        const attrs = config.customAttributes!(mockContextForHook(), {
           streamId: '1234567890-0',
           pendingCount: 5,
         });
@@ -801,7 +870,7 @@ describe('Messaging Helpers', () => {
 
     describe('Consumer customContextExtractor hook', () => {
       it('should support B3 format extraction', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'events',
           headersFrom: 'headers',
@@ -832,7 +901,7 @@ describe('Messaging Helpers', () => {
       });
 
       it('should support Datadog format extraction', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'events',
           headersFrom: 'headers',
@@ -863,7 +932,7 @@ describe('Messaging Helpers', () => {
       });
 
       it('should return null for missing headers', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'events',
           headersFrom: 'headers',
@@ -888,21 +957,28 @@ describe('Messaging Helpers', () => {
           customAttributes: (_ctx, args) => ({
             'nats.subject': 'orders.created',
             'nats.stream': 'ORDERS',
-            'nats.sequence': (args[0] as { seq?: number })?.seq || 0,
+            'nats.sequence':
+              readMessage(args[0], (m: { seq?: number }) => m?.seq) || 0,
           }),
           customHeaders: (_ctx) => ({
             'Nats-Msg-Id': `msg-${Date.now()}`,
           }),
         };
 
-        const consumerConfig: ConsumerConfig = {
+        const consumerConfig: ConsumerConfig<TestMessage> = {
           system: 'nats' as const,
           destination: 'orders.created',
           headersFrom: 'headers',
           customAttributes: (_ctx, msg) => ({
-            'nats.subject': (msg as { subject: string }).subject,
+            'nats.subject': readMessage(
+              msg,
+              (m: { subject: string }) => m.subject,
+            ),
             'nats.redelivered':
-              (msg as { redelivered?: boolean })?.redelivered || false,
+              readMessage(
+                msg,
+                (m: { redelivered?: boolean }) => m?.redelivered,
+              ) || false,
           }),
           customContextExtractor: (headers) => {
             // NATS uses its own tracing headers
@@ -929,10 +1005,10 @@ describe('Messaging Helpers', () => {
 
     describe('OrderingConfig types', () => {
       it('should define OrderingConfig interface correctly', () => {
-        const config: OrderingConfig = {
-          sequenceFrom: (msg) => (msg as { offset: number }).offset,
-          partitionKeyFrom: (msg) => (msg as { key: string }).key,
-          messageIdFrom: (msg) => (msg as { id: string }).id,
+        const config: OrderingConfig<TestMessage> = {
+          sequenceFrom: (msg) => msg.offset,
+          partitionKeyFrom: (msg) => msg.key,
+          messageIdFrom: (msg) => msg.id,
           detectOutOfOrder: true,
           detectDuplicates: true,
           deduplicationWindowSize: 500,
@@ -965,11 +1041,11 @@ describe('Messaging Helpers', () => {
 
     describe('Sequence tracking', () => {
       it('should extract sequence number from message', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            sequenceFrom: (msg) => (msg as { offset: number }).offset,
+            sequenceFrom: (msg) => msg.offset,
           },
         };
 
@@ -977,11 +1053,11 @@ describe('Messaging Helpers', () => {
       });
 
       it('should extract partition key from message', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            partitionKeyFrom: (msg) => (msg as { key: string }).key,
+            partitionKeyFrom: (msg) => msg.key,
           },
         };
 
@@ -991,11 +1067,11 @@ describe('Messaging Helpers', () => {
       });
 
       it('should extract message ID for deduplication', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            messageIdFrom: (msg) => (msg as { id: string }).id,
+            messageIdFrom: (msg) => msg.id,
           },
         };
 
@@ -1009,11 +1085,11 @@ describe('Messaging Helpers', () => {
       it('should detect out-of-order messages and call callback', async () => {
         const outOfOrderCallback = vi.fn();
 
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            sequenceFrom: (msg) => (msg as { offset: number }).offset,
+            sequenceFrom: (msg) => msg.offset,
             detectOutOfOrder: true,
             onOutOfOrder: outOfOrderCallback,
           },
@@ -1048,12 +1124,13 @@ describe('Messaging Helpers', () => {
 
       it('should track sequence per partition key', () => {
         // Verify config supports partition-specific tracking
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            sequenceFrom: (msg) => (msg as { offset: number }).offset,
-            partitionKeyFrom: (msg) => (msg as { partition: string }).partition,
+            sequenceFrom: (msg) => msg.offset,
+            partitionKeyFrom: (msg) =>
+              readMessage(msg, (m: { partition: string }) => m.partition),
             detectOutOfOrder: true,
           },
         };
@@ -1067,11 +1144,11 @@ describe('Messaging Helpers', () => {
       it('should detect duplicate messages and call callback', async () => {
         const duplicateCallback = vi.fn();
 
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            messageIdFrom: (msg) => (msg as { id: string }).id,
+            messageIdFrom: (msg) => msg.id,
             detectDuplicates: true,
             onDuplicate: duplicateCallback,
           },
@@ -1083,11 +1160,11 @@ describe('Messaging Helpers', () => {
       });
 
       it('should use custom deduplication window size', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            messageIdFrom: (msg) => (msg as { id: string }).id,
+            messageIdFrom: (msg) => msg.id,
             detectDuplicates: true,
             deduplicationWindowSize: 500,
           },
@@ -1097,11 +1174,11 @@ describe('Messaging Helpers', () => {
       });
 
       it('should default deduplication window to 1000', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            messageIdFrom: (msg) => (msg as { id: string }).id,
+            messageIdFrom: (msg) => msg.id,
             detectDuplicates: true,
             // No deduplicationWindowSize - defaults to 1000
           },
@@ -1115,7 +1192,7 @@ describe('Messaging Helpers', () => {
     describe('ConsumerContext ordering methods', () => {
       it('should have isDuplicate() method in ConsumerContext interface', () => {
         // Type check - these methods are defined in ConsumerContext interface
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
@@ -1128,7 +1205,7 @@ describe('Messaging Helpers', () => {
       });
 
       it('should have getOutOfOrderInfo() method in ConsumerContext interface', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
@@ -1140,11 +1217,11 @@ describe('Messaging Helpers', () => {
       });
 
       it('should have getSequenceNumber() method in ConsumerContext interface', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            sequenceFrom: (msg) => (msg as { offset: number }).offset,
+            sequenceFrom: (msg) => msg.offset,
           },
         };
 
@@ -1152,11 +1229,11 @@ describe('Messaging Helpers', () => {
       });
 
       it('should have getPartitionKey() method in ConsumerContext interface', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           ordering: {
-            partitionKeyFrom: (msg) => (msg as { key: string }).key,
+            partitionKeyFrom: (msg) => msg.key,
           },
         };
 
@@ -1169,16 +1246,19 @@ describe('Messaging Helpers', () => {
         const outOfOrderCallback = vi.fn();
         const duplicateCallback = vi.fn();
 
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'user-events',
           consumerGroup: 'event-processor',
           ordering: {
-            sequenceFrom: (msg) => (msg as { offset: number }).offset,
-            partitionKeyFrom: (msg) => (msg as { key: string }).key,
+            sequenceFrom: (msg) => msg.offset,
+            partitionKeyFrom: (msg) => msg.key,
             messageIdFrom: (msg) =>
-              (msg as { headers: { idempotencyKey: string } }).headers
-                .idempotencyKey,
+              readMessage(
+                msg,
+                (m: { headers: { idempotencyKey: string } }) =>
+                  m.headers.idempotencyKey,
+              ),
             detectOutOfOrder: true,
             detectDuplicates: true,
             deduplicationWindowSize: 2000,
@@ -1194,20 +1274,27 @@ describe('Messaging Helpers', () => {
       });
 
       it('should support SQS ordering configuration with message group', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'sqs',
           destination: 'orders.fifo',
           ordering: {
             sequenceFrom: (msg) =>
               Number.parseInt(
-                (msg as { Attributes: { SequenceNumber: string } }).Attributes
-                  .SequenceNumber,
+                readMessage(
+                  msg,
+                  (m: { Attributes: { SequenceNumber: string } }) =>
+                    m.Attributes.SequenceNumber,
+                ),
                 10,
               ),
             partitionKeyFrom: (msg) =>
-              (msg as { Attributes: { MessageGroupId: string } }).Attributes
-                .MessageGroupId,
-            messageIdFrom: (msg) => (msg as { MessageId: string }).MessageId,
+              readMessage(
+                msg,
+                (m: { Attributes: { MessageGroupId: string } }) =>
+                  m.Attributes.MessageGroupId,
+              ),
+            messageIdFrom: (msg) =>
+              readMessage(msg, (m: { MessageId: string }) => m.MessageId),
             detectOutOfOrder: true,
             detectDuplicates: true,
           },
@@ -1230,17 +1317,23 @@ describe('Messaging Helpers', () => {
       });
 
       it('should support RabbitMQ ordering configuration', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'rabbitmq',
           destination: 'orders',
           consumerGroup: 'order-processor',
           ordering: {
             sequenceFrom: (msg) =>
-              (msg as { properties: { headers: { 'x-sequence': number } } })
-                .properties.headers['x-sequence'],
+              readMessage(
+                msg,
+                (m: { properties: { headers: { 'x-sequence': number } } }) =>
+                  m.properties.headers['x-sequence'],
+              ),
             messageIdFrom: (msg) =>
-              (msg as { properties: { messageId: string } }).properties
-                .messageId,
+              readMessage(
+                msg,
+                (m: { properties: { messageId: string } }) =>
+                  m.properties.messageId,
+              ),
             detectDuplicates: true,
           },
         };
@@ -1263,7 +1356,7 @@ describe('Messaging Helpers', () => {
 
     describe('clearOrderingState()', () => {
       it('should be exported for test isolation', () => {
-        expect(typeof clearOrderingState).toBe('function');
+        expect(clearOrderingState).toBeTypeOf('function');
       });
 
       it('should not throw when called', () => {
@@ -1333,16 +1426,17 @@ describe('Messaging Helpers', () => {
       it('should support function-based memberId and groupInstanceId', () => {
         let dynamicMemberId = 'consumer-initial';
 
+        const memberId = () => dynamicMemberId;
         const config: ConsumerGroupTrackingConfig = {
-          memberId: () => dynamicMemberId,
+          memberId,
           groupInstanceId: () => 'static-instance',
         };
 
-        expect(typeof config.memberId).toBe('function');
-        expect((config.memberId as () => string)()).toBe('consumer-initial');
+        expect(config.memberId).toBe(memberId);
+        expect(memberId()).toBe('consumer-initial');
 
         dynamicMemberId = 'consumer-updated';
-        expect((config.memberId as () => string)()).toBe('consumer-updated');
+        expect(memberId()).toBe('consumer-updated');
       });
     });
 
@@ -1491,7 +1585,7 @@ describe('Messaging Helpers', () => {
         const assignedCallback = vi.fn();
         const revokedCallback = vi.fn();
 
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'user-events',
           consumerGroup: 'event-processor',
@@ -1513,7 +1607,7 @@ describe('Messaging Helpers', () => {
       });
 
       it('should support minimal group tracking configuration', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'events',
           consumerGroup: 'processors',
@@ -1567,12 +1661,12 @@ describe('Messaging Helpers', () => {
 
     describe('Integration with other features', () => {
       it('should work alongside ordering configuration', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'orders',
           consumerGroup: 'order-processor',
           ordering: {
-            sequenceFrom: (msg) => (msg as { offset: number }).offset,
+            sequenceFrom: (msg) => msg.offset,
             detectOutOfOrder: true,
           },
           consumerGroupTracking: {
@@ -1586,12 +1680,12 @@ describe('Messaging Helpers', () => {
       });
 
       it('should work alongside lag metrics configuration', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'events',
           consumerGroup: 'processor',
           lagMetrics: {
-            getCurrentOffset: (msg) => (msg as { offset: number }).offset,
+            getCurrentOffset: (msg) => msg.offset,
             getEndOffset: () => Promise.resolve(10_000),
           },
           consumerGroupTracking: {
@@ -1605,7 +1699,7 @@ describe('Messaging Helpers', () => {
       });
 
       it('should work with custom attributes hook', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'kafka',
           destination: 'events',
           consumerGroup: 'processor',
@@ -1613,7 +1707,7 @@ describe('Messaging Helpers', () => {
             memberId: 'consumer-1',
           },
           customAttributes: (_ctx, msg) => ({
-            'custom.key': (msg as { key: string }).key,
+            'custom.key': readMessage(msg, (m: { key: string }) => m.key),
           }),
         };
 
@@ -1624,7 +1718,7 @@ describe('Messaging Helpers', () => {
 
     describe('SQS and RabbitMQ support', () => {
       it('should support SQS with group tracking', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'sqs',
           destination: 'orders.fifo',
           consumerGroup: 'order-processor',
@@ -1638,7 +1732,7 @@ describe('Messaging Helpers', () => {
       });
 
       it('should support RabbitMQ with group tracking', () => {
-        const config: ConsumerConfig = {
+        const config: ConsumerConfig<TestMessage> = {
           system: 'rabbitmq',
           destination: 'orders',
           consumerGroup: 'order-consumer',

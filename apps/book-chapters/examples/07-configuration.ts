@@ -1,4 +1,4 @@
-import { init, trace, flush, shutdown } from 'autotel';
+import { init, instrument, flush, shutdown } from 'autotel';
 import { getConfig } from 'autotel/config';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
@@ -27,7 +27,7 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  const ping = trace('config.ping', () => 'pong');
+  const ping = instrument({ key: 'config.ping', fn: () => 'pong' });
   console.log('  config.ping →', ping());
 
   await flush();
@@ -54,8 +54,8 @@ async function main() {
 
   // getConfig() exposes the runtime tracer/meter configuration
   const runtime = getConfig();
-  if (typeof runtime.tracerName !== 'string') {
-    throw new Error('getConfig().tracerName should be a string');
+  if (!runtime.tracerName) {
+    throw new Error('getConfig().tracerName should be set');
   }
   if (runtime.featureFlags.ENABLE_TRACING !== true) {
     throw new Error('Tracing should be enabled by default');

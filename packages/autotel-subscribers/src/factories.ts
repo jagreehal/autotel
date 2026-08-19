@@ -6,18 +6,16 @@
  *
  * @example
  * ```typescript
- * import { createPostHogSubscriber, createWebhookSubscriber } from 'autotel-subscribers/factories'
+ * import { createMixpanelSubscriber, createWebhookSubscriber } from 'autotel-subscribers/factories'
  *
  * const events = new Event('my-service', {
  *   subscribers: [
- *     createPostHogSubscriber({ apiKey: 'phc_...' }),
  *     createWebhookSubscriber({ url: 'https://...' })
  *   ]
  * })
  * ```
  */
 
-import { PostHogSubscriber } from './posthog';
 import { MixpanelSubscriber } from './mixpanel';
 import { AmplitudeSubscriber } from './amplitude';
 import { SegmentSubscriber } from './segment';
@@ -25,29 +23,13 @@ import { WebhookSubscriber } from './webhook';
 import { SlackSubscriber } from './slack';
 import { MockEventSubscriber } from './mock-event-subscriber';
 
-import type {
-  EventSubscriber,
-  EventAttributes,
-  OutcomeStatus,
-  FunnelStatus,
-  EventTrackingOptions,
-} from 'autotel/event-subscriber';
+import type { EventSubscriber } from 'autotel/event-subscriber';
 
-export type { PostHogConfig } from './posthog';
 export type { MixpanelConfig } from './mixpanel';
 export type { AmplitudeConfig } from './amplitude';
 export type { SegmentConfig } from './segment';
 export type { WebhookConfig } from './webhook';
 export type { SlackSubscriberConfig } from './slack';
-
-/** Create a PostHog events subscriber */
-export function createPostHogSubscriber(config: {
-  apiKey: string;
-  host?: string;
-  enabled?: boolean;
-}): EventSubscriber {
-  return new PostHogSubscriber(config);
-}
 
 /** Create a Mixpanel events subscriber */
 export function createMixpanelSubscriber(config: {
@@ -120,17 +102,32 @@ export type ComposeSubscribersOptions = {
   maxAttemptsPerSubscriber?: number;
   initialRetryDelayMs?: number;
   maxRetryDelayMs?: number;
-  isRetriable?: (error: unknown) => boolean;
+  isRetriable?: (cause: unknown) => boolean;
   logger?: Pick<Console, 'debug' | 'warn' | 'error'>;
 };
 
-type SubscriberMethod =
-  'trackEvent' | 'trackFunnelStep' | 'trackOutcome' | 'trackValue';
-
-type MethodCall = {
-  method: SubscriberMethod;
-  args: unknown[];
-};
+/**
+ * One queued call, holding the arguments of the method it names. Discriminated
+ * on `method` so replaying a call needs no assertions: the tuple that comes
+ * with each kind is the signature of the method it will be spread into.
+ */
+type MethodCall =
+  | {
+      method: 'trackEvent';
+      args: Parameters<EventSubscriber['trackEvent']>;
+    }
+  | {
+      method: 'trackFunnelStep';
+      args: Parameters<EventSubscriber['trackFunnelStep']>;
+    }
+  | {
+      method: 'trackOutcome';
+      args: Parameters<EventSubscriber['trackOutcome']>;
+    }
+  | {
+      method: 'trackValue';
+      args: Parameters<EventSubscriber['trackValue']>;
+    };
 
 function backoffDelay(
   attempt: number,
@@ -146,38 +143,19 @@ async function callSubscriber(
 ): Promise<void> {
   switch (call.method) {
     case 'trackEvent': {
-      await subscriber.trackEvent(
-        call.args[0] as string,
-        call.args[1] as EventAttributes | undefined,
-        call.args[2] as EventTrackingOptions | undefined,
-      );
+      await subscriber.trackEvent(...call.args);
       return;
     }
     case 'trackFunnelStep': {
-      await subscriber.trackFunnelStep(
-        call.args[0] as string,
-        call.args[1] as FunnelStatus,
-        call.args[2] as EventAttributes | undefined,
-        call.args[3] as EventTrackingOptions | undefined,
-      );
+      await subscriber.trackFunnelStep(...call.args);
       return;
     }
     case 'trackOutcome': {
-      await subscriber.trackOutcome(
-        call.args[0] as string,
-        call.args[1] as OutcomeStatus,
-        call.args[2] as EventAttributes | undefined,
-        call.args[3] as EventTrackingOptions | undefined,
-      );
+      await subscriber.trackOutcome(...call.args);
       return;
     }
     case 'trackValue': {
-      await subscriber.trackValue(
-        call.args[0] as string,
-        call.args[1] as number,
-        call.args[2] as EventAttributes | undefined,
-        call.args[3] as EventTrackingOptions | undefined,
-      );
+      await subscriber.trackValue(...call.args);
     }
   }
 }
@@ -189,7 +167,6 @@ async function callSubscriber(
  * ```typescript
  * const multiSubscriber = composeSubscribers(
  *   [
- *     createPostHogSubscriber({ apiKey: '...' }),
  *     createWebhookSubscriber({ url: '...' })
  *   ],
  *   { strategy: 'parallel' }

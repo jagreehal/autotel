@@ -1,6 +1,12 @@
 // src/server/trace-root.ts
 import type { SpanData } from './types';
 
+/** What pickRoot() answers with. */
+interface PickRootResult {
+  rootSpan: SpanData;
+  partial: boolean;
+}
+
 /**
  * Pick the span to present as the top of a trace, and report whether the real
  * root is missing from `spans`.
@@ -18,10 +24,7 @@ import type { SpanData } from './types';
  * Pass spans sorted by start time; the fallbacks then pick the earliest
  * candidate rather than whichever one the caller happened to receive first.
  */
-export function pickRoot(spans: SpanData[]): {
-  rootSpan: SpanData;
-  partial: boolean;
-} {
+export function pickRoot(spans: SpanData[]): PickRootResult {
   const present = new Set(spans.map((s) => s.spanId));
   const trueRoot = spans.find((s) => !s.parentSpanId);
   const orphan = spans.find(

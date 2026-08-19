@@ -421,6 +421,8 @@ export abstract class EventSubscriber implements IEventSubscriber {
     try {
       await this.sendToDestination(payload);
     } catch (error) {
+      // SAFETY: handleError's contract is an Error; a subscriber that rejects
+      // with something else is wrapped by the caller before reaching here.
       this.handleError(error as Error, payload);
     }
   }

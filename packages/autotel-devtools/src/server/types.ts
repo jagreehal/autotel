@@ -1,5 +1,6 @@
 // src/server/types.ts
 import type { AgentSession } from 'autotel-agents';
+import type { SpanAttributes } from '../widget/types.js';
 
 export interface SpanData {
   traceId: string;
@@ -10,17 +11,17 @@ export interface SpanData {
   startTime: number;
   endTime: number;
   duration: number;
-  attributes: Record<string, any>;
+  attributes: SpanAttributes;
   status: { code: 'OK' | 'ERROR' | 'UNSET'; message?: string };
   events?: Array<{
     name: string;
     timestamp: number;
-    attributes?: Record<string, any>;
+    attributes?: SpanAttributes;
   }>;
   links?: Array<{
     traceId: string;
     spanId: string;
-    attributes?: Record<string, any>;
+    attributes?: SpanAttributes;
   }>;
   scope?: { name?: string; version?: string };
 }
@@ -55,7 +56,7 @@ export interface LogData {
   severityNumber?: number;
   body: string | Record<string, unknown>;
   timestamp: number;
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
   resource?: Record<string, unknown>;
 }
 
@@ -63,7 +64,7 @@ export interface MetricData {
   type: 'event' | 'funnel' | 'outcome' | 'value';
   name: string;
   value?: number;
-  attributes: Record<string, any>;
+  attributes: SpanAttributes;
   timestamp: number;
   traceId?: string;
 }
@@ -79,7 +80,7 @@ export interface ErrorGroup {
   affectedTraces: string[];
   affectedSpans: string[];
   service?: string;
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
 }
 
 export interface ErrorOccurrence {
@@ -88,8 +89,19 @@ export interface ErrorOccurrence {
   spanName: string;
   service: string;
   timestamp: number;
-  error: { type: string; message: string; stackTrace?: string };
-  attributes?: Record<string, unknown>;
+  error: {
+    type: string;
+    message: string;
+    stackTrace?: string;
+    /**
+     * Grouping key the emitting SDK already decided on (`exception.fingerprint`,
+     * written by autotel's `exceptionFingerprint()` enricher). When present the
+     * aggregator groups by it instead of re-deriving one from the stack string,
+     * so this tab agrees with every other backend receiving the same spans.
+     */
+    fingerprint?: string;
+  };
+  attributes?: SpanAttributes;
 }
 
 export interface DevtoolsData {

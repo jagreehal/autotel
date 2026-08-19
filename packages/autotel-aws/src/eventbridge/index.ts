@@ -61,12 +61,7 @@
  * ```
  */
 
-import {
-  trace,
-  type TraceContext,
-  withTracing,
-  getActiveTraceContext,
-} from 'autotel';
+import { trace, type TraceContext, withTracing } from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import type { SpanContext } from '@opentelemetry/api';
 import { buildEventBridgeAttributes } from '../attributes';
@@ -459,8 +454,7 @@ export class EventBridgePublisher<
     eventId?: string;
     failedEntryCount?: number;
   }> {
-    return trace(`eventbridge.PutEvents`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`eventbridge.PutEvents`, async (ctx) => {
       ctx.setAttributes(
         buildEventBridgeAttributes({
           eventBus: this.config.eventBusName || 'default',
@@ -516,7 +510,7 @@ export class EventBridgePublisher<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -536,8 +530,7 @@ export class EventBridgePublisher<
     }>;
     failedEntryCount: number;
   }> {
-    return trace(`eventbridge.PutEvents.batch`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`eventbridge.PutEvents.batch`, async (ctx) => {
       ctx.setAttributes(
         buildEventBridgeAttributes({
           eventBus: this.config.eventBusName || 'default',
@@ -624,7 +617,7 @@ export class EventBridgePublisher<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -641,8 +634,7 @@ export class EventBridgePublisher<
     eventId?: string;
     failedEntryCount?: number;
   }> {
-    return trace(`eventbridge.PutEvents`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`eventbridge.PutEvents`, async (ctx) => {
       ctx.setAttributes(
         buildEventBridgeAttributes({
           eventBus: this.config.eventBusName || 'default',
@@ -698,6 +690,6 @@ export class EventBridgePublisher<
         });
         throw error;
       }
-    })();
+    });
   }
 }

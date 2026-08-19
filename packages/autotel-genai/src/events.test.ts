@@ -21,7 +21,7 @@ describe('setGenAiContent', () => {
       },
     );
     const attrs = setAttributes.mock.calls[0][0];
-    expect(typeof attrs['gen_ai.input.messages']).toBe('string');
+    expect(attrs['gen_ai.input.messages']).toBeTypeOf('string');
     expect(JSON.parse(attrs['gen_ai.input.messages'])[0].role).toBe('user');
     expect(attrs['gen_ai.system_instructions']).toBe('be concise');
   });

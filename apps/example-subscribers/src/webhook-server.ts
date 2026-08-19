@@ -77,6 +77,15 @@ const events = new Event('example-adapters-webhook', {
   logger,
 });
 
+/** What OpenTelemetry lets an event attribute hold. */
+type AttributeValue = string | number | boolean;
+
+/** The webhook body: whatever the sender posted, echoed back in the response. */
+type WebhookBody = Record<
+  string,
+  AttributeValue | Array<AttributeValue> | null
+>;
+
 type TriggerPayload = {
   name?: unknown;
   attributes?: unknown;
@@ -85,11 +94,7 @@ type TriggerPayload = {
 async function readRequestBody(req: IncomingMessage): Promise<string> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of req) {
-    if (typeof chunk === 'string') {
-      chunks.push(Buffer.from(chunk));
-    } else {
-      chunks.push(chunk);
-    }
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
 
   return Buffer.concat(chunks).toString('utf8');
@@ -100,6 +105,9 @@ async function parseJson<T>(req: IncomingMessage): Promise<T | undefined> {
   if (!raw) return undefined;
 
   try {
+    // SAFETY: the caller names the shape it expects and checks each field it reads;
+    // JSON.parse cannot describe that shape itself, and nothing downstream trusts
+    // an unchecked field.
     return JSON.parse(raw) as T;
   } catch (error) {
     logger.warn({ error, raw }, 'Failed to parse JSON payload');
@@ -120,7 +128,7 @@ const receiverServer = createServer(async (req, res) => {
   }
 
   if (method === 'POST' && url === webhookPath) {
-    const payload = await parseJson<Record<string, unknown>>(req);
+    const payload = await parseJson<WebhookBody>(req);
     if (!payload) {
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
@@ -167,9 +175,12 @@ const triggerServer = createServer(async (req, res) => {
         typeof payload.name === 'string'
           ? payload.name
           : 'webhook.demo.triggered';
+      // SAFETY: the condition below establishes that attributes is a non-null
+      // object before the assertion is reached, and its values are only spread
+      // into a trackEvent call, which coerces whatever they turn out to be.
       const attributes =
         typeof payload.attributes === 'object' && payload.attributes !== null
-          ? (payload.attributes as Record<string, unknown>)
+          ? (payload.attributes as Record<string, AttributeValue>)
           : {
               orderId: `ord_${Math.random().toString(36).slice(2, 8)}`,
               amount: 99.5,
@@ -207,6 +218,8 @@ const triggerServer = createServer(async (req, res) => {
 
 // Start Webhook Receiver Server
 receiverServer.listen(receiverPort, () => {
+  // SAFETY: address() returns the string form only for a pipe or UDS listener;
+  // this server was listened on a TCP port.
   const address = receiverServer.address() as AddressInfo | null;
   const actualPort = address?.port ?? receiverPort;
 
@@ -222,6 +235,8 @@ receiverServer.listen(receiverPort, () => {
 
 // Start Trigger Server
 triggerServer.listen(triggerPort, () => {
+  // SAFETY: address() returns the string form only for a pipe or UDS listener;
+  // this server was listened on a TCP port.
   const address = triggerServer.address() as AddressInfo | null;
   const actualPort = address?.port ?? triggerPort;
 

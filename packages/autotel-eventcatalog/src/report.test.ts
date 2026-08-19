@@ -71,6 +71,7 @@ describe('renderMarkdown', () => {
 describe('renderJson', () => {
   it('renders a machine-readable all-mode payload', () => {
     const json = renderJson({ mode: 'all', report: emptyReport });
+    // SAFETY: renderJson built this string a line ago, from the shape below.
     const parsed = JSON.parse(json) as {
       spec: string;
       mode: string;
@@ -227,6 +228,7 @@ describe('renderDeltaTerminal', () => {
 describe('eventcatalog snapshot diff renderer', () => {
   it('renders a SnapshotDiff-compatible envelope', () => {
     const json = renderEventCatalogSnapshotDiffFromReport(driftyReport);
+    // SAFETY: renderJson built this string a line ago, from the shape below.
     const parsed = JSON.parse(json) as {
       spec: string;
       mode: string;

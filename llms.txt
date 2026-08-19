@@ -202,7 +202,7 @@ app.get(
 
 ```ts
 import { init, track } from 'autotel';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 init({
   service: 'checkout-api',

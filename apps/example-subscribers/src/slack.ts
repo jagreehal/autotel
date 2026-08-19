@@ -164,8 +164,8 @@ async function closeGracefully(signal?: NodeJS.Signals): Promise<void> {
     logger.info({ signal }, 'Received shutdown signal');
   }
 
-  await slackSubscriber.shutdown().catch((error: unknown) => {
-    logger.warn({ error }, 'Failed to flush Slack subscriber');
+  await slackSubscriber.shutdown().catch((cause: unknown) => {
+    logger.warn({ error: cause }, 'Failed to flush Slack subscriber');
   });
 
   await shutdown().catch((error) => {

@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readLedger } from './ledger.js';
+import type {
+  VerificationOutput,
+  VerifierOptionsLike,
+} from './wrapper-provider.js';
 import {
   isInteractionLedgerEntry,
   isProviderVerificationRun,
@@ -28,11 +32,11 @@ afterEach(() => {
 
 function mockVerifier(outcome: 'pass' | 'fail'): VerifierConstructor {
   return class {
-    constructor(_opts: unknown) {}
-    verifyProvider() {
+    constructor(_opts: VerifierOptionsLike) {}
+    verifyProvider(): Promise<VerificationOutput> {
       if (outcome === 'fail')
         return Promise.reject(new Error('verifier failed'));
-      return Promise.resolve();
+      return Promise.resolve('verified');
     }
   };
 }
@@ -84,12 +88,12 @@ describe('withProviderVerification', () => {
     // No Verifier supplied. Without skipVerifier this would dynamically import
     // @pact-foundation/pact. With skipVerifier: true, no import happens.
     const VerifierThatWouldThrow = class {
-      constructor(_opts: unknown) {
+      constructor(_opts: VerifierOptionsLike) {
         throw new Error(
           'Verifier should not be instantiated when skipVerifier is true',
         );
       }
-      verifyProvider(): Promise<unknown> {
+      verifyProvider(): Promise<VerificationOutput> {
         throw new Error('unreachable');
       }
     };

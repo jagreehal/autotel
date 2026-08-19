@@ -57,13 +57,20 @@ export function getInstalledPackages(
   return installed;
 }
 
+/** What isPackageInstalled() answers with. */
+interface IsPackageInstalledResult {
+  installed: boolean;
+  version: string | null;
+  isDev: boolean;
+}
+
 /**
  * Check if a package is installed
  */
 export function isPackageInstalled(
   packageJson: PackageJson,
   packageName: string,
-): { installed: boolean; version: string | null; isDev: boolean } {
+): IsPackageInstalledResult {
   const deps = packageJson.dependencies ?? {};
   const devDeps = packageJson.devDependencies ?? {};
 
@@ -109,13 +116,18 @@ export function findMissingPackages(
   return missing;
 }
 
+/** Whether the installed autotel packages agree on a major version. */
+interface AutotelVersionCheck {
+  compatible: boolean;
+  packages: Array<{ name: string; version: string }>;
+}
+
 /**
  * Check version compatibility between autotel packages
  */
-export function checkAutotelVersions(packageJson: PackageJson): {
-  compatible: boolean;
-  packages: Array<{ name: string; version: string }>;
-} {
+export function checkAutotelVersions(
+  packageJson: PackageJson,
+): AutotelVersionCheck {
   const autotelPackages = [
     'autotel',
     'autotel-backends',
@@ -183,13 +195,16 @@ export function auditPresetDependencies(
   };
 }
 
+/** What getAutotelInfo() answers with. */
+interface GetAutotelInfoResult {
+  installed: boolean;
+  version: string | null;
+}
+
 /**
  * Get autotel core package info if installed
  */
-export function getAutotelInfo(packageJson: PackageJson): {
-  installed: boolean;
-  version: string | null;
-} {
+export function getAutotelInfo(packageJson: PackageJson): GetAutotelInfoResult {
   const { installed, version } = isPackageInstalled(packageJson, 'autotel');
   return { installed, version };
 }

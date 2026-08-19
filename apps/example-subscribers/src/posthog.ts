@@ -20,7 +20,7 @@ import pino from 'pino';
 
 import { init, shutdown, span, getActiveTraceContext } from 'autotel';
 import { Event } from 'autotel/event';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 const logger = pino({
   name: 'example-posthog',

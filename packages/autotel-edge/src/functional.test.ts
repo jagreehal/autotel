@@ -1,7 +1,13 @@
-// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { trace, withTracing, instrument, span } from './functional';
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
+
+function tracedFunction<TArgs extends any[], TReturn>(
+  options: Parameters<typeof withTracing<TArgs, TReturn>>[0],
+  fn: (...args: TArgs) => TReturn | Promise<TReturn>,
+) {
+  return withTracing<TArgs, TReturn>(options)(() => fn);
+}
 
 describe('Functional API', () => {
   let mockTracer: any;
@@ -28,7 +34,7 @@ describe('Functional API', () => {
     };
 
     mockTracer = {
-      startActiveSpan: vi.fn((name, optionsOrFn, maybeFn) => {
+      startActiveSpan: vi.fn((_name, optionsOrFn, maybeFn) => {
         const fn = typeof optionsOrFn === 'function' ? optionsOrFn : maybeFn;
         try {
           const result = fn(mockSpan);
@@ -146,7 +152,10 @@ describe('Functional API', () => {
       const pending = new Promise<string>((_resolve, rejectPromise) => {
         reject = rejectPromise;
       });
-      const testFunction = trace('promise-returning', () => pending);
+      const testFunction = tracedFunction(
+        { name: 'promise-returning' },
+        () => pending,
+      );
       const result = testFunction();
 
       expect(mockSpan.end).not.toHaveBeenCalled();
@@ -166,7 +175,7 @@ describe('Functional API', () => {
       const attributesFromResult = vi.fn((value: string) => ({
         'result.value': value,
       }));
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         { name: 'promise-result', attributesFromResult },
         () => Promise.resolve('resolved'),
       );
@@ -180,10 +189,47 @@ describe('Functional API', () => {
   });
 
   describe('trace() - Named Spans', () => {
-    it('should use custom span name', async () => {
-      const testFunction = trace('user.create', async function (email: string) {
-        return { id: '123', email };
+    it('runs a named operation immediately with an explicit TraceContext', async () => {
+      const result = await trace.run('checkout.complete', async (ctx) => {
+        ctx.setAttribute('order.id', 'order_123');
+        ctx.setStatus({ code: SpanStatusCode.OK });
+        return 'done';
       });
+
+      expect(result).toBe('done');
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'order.id',
+        'order_123',
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.OK,
+      });
+    });
+
+    it('preserves an explicit status set by the operation', () => {
+      const result = trace.run('cache.fallback', (ctx) => {
+        ctx.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: 'primary cache unavailable',
+        });
+        return 'fallback';
+      });
+
+      expect(result).toBe('fallback');
+      expect(mockSpan.setStatus).toHaveBeenCalledTimes(1);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'primary cache unavailable',
+      });
+    });
+
+    it('should use custom span name', async () => {
+      const testFunction = tracedFunction(
+        { name: 'user.create' },
+        async function (email: string) {
+          return { id: '123', email };
+        },
+      );
 
       await testFunction('test@example.com');
 
@@ -195,9 +241,12 @@ describe('Functional API', () => {
     });
 
     it('should work with arrow functions', async () => {
-      const testFunction = trace('custom.name', async (email: string) => {
-        return { id: '123', email };
-      });
+      const testFunction = tracedFunction(
+        { name: 'custom.name' },
+        async (email: string) => {
+          return { id: '123', email };
+        },
+      );
 
       await testFunction('test@example.com');
 
@@ -209,9 +258,9 @@ describe('Functional API', () => {
     });
   });
 
-  describe('trace() - Full Options', () => {
+  describe('withTracing() - Full Options', () => {
     it('should extract attributes from arguments', async () => {
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         {
           name: 'user.create',
           attributesFromArgs: ([email]: [string]) => ({ 'user.email': email }),
@@ -229,7 +278,7 @@ describe('Functional API', () => {
     });
 
     it('should extract attributes from result', async () => {
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         {
           name: 'user.create',
           attributesFromResult: (user: any) => ({ 'user.id': user.id }),
@@ -245,7 +294,7 @@ describe('Functional API', () => {
     });
 
     it('should extract attributes from both args and result', async () => {
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         {
           name: 'user.create',
           attributesFromArgs: ([email]: [string]) => ({ 'user.email': email }),
@@ -265,7 +314,7 @@ describe('Functional API', () => {
     });
 
     it('should add static attributes', async () => {
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         {
           name: 'user.create',
           attributes: { 'service.type': 'user-management' },
@@ -283,7 +332,7 @@ describe('Functional API', () => {
     });
 
     it('should use serviceName to prefix function name', async () => {
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         {
           serviceName: 'user',
         },
@@ -302,6 +351,82 @@ describe('Functional API', () => {
     });
   });
 
+  describe('trace(name)(fn) - Wrapper Factory', () => {
+    it('wraps a plain function under the explicit name', async () => {
+      const createUser = trace('user.create')(async (name: string) => ({
+        id: '1',
+        name,
+      }));
+
+      await expect(createUser('Alice')).resolves.toEqual({
+        id: '1',
+        name: 'Alice',
+      });
+      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+        'user.create',
+        expect.anything(),
+        expect.any(Function),
+      );
+    });
+
+    it('returns the wrapper without running the function', () => {
+      const ran = vi.fn();
+
+      const wrapped = trace('never.run')(ran);
+
+      expect(typeof wrapped).toBe('function');
+      expect(ran).not.toHaveBeenCalled();
+      expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
+    });
+
+    // Matches core: every trace(...) form wraps, trace.run(...) runs. Nothing
+    // reads a parameter name, so a minifier cannot flip the dispatch (#166).
+    it('never runs the function, whatever the parameter is called', async () => {
+      const curried = trace('wrapper.curried')(async (c: string) => c);
+      const twoArg = trace('wrapper.two-arg', async (c: string) => c);
+
+      expect(typeof curried).toBe('function');
+      expect(typeof twoArg).toBe('function');
+      expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
+
+      await expect(curried('x')).resolves.toBe('x');
+      await expect(twoArg('y')).resolves.toBe('y');
+
+      const immediate = await trace.run('immediate.form', async (c) => {
+        c.setAttribute('checked', true);
+        return 'ran';
+      });
+      expect(immediate).toBe('ran');
+
+      expect(
+        mockTracer.startActiveSpan.mock.calls.map((call: unknown[]) => call[0]),
+      ).toEqual(['wrapper.curried', 'wrapper.two-arg', 'immediate.form']);
+    });
+
+    it('trace(name, fn) wraps rather than running - the v6.5.0 form', async () => {
+      const ran = vi.fn(async (name: string) => `hi ${name}`);
+
+      const greet = trace('greet', ran);
+
+      expect(typeof greet).toBe('function');
+      expect(ran).not.toHaveBeenCalled();
+      expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
+
+      await expect(greet('Alice')).resolves.toBe('hi Alice');
+      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+        'greet',
+        expect.anything(),
+        expect.any(Function),
+      );
+    });
+
+    it('trace.run rejects a non-function operation', () => {
+      expect(() =>
+        (trace.run as (n: string, o?: unknown) => unknown)('oops'),
+      ).toThrow('operation must be a function');
+    });
+  });
+
   describe('trace() - Sampler Option', () => {
     it('should pass sampler to startActiveSpan when provided', async () => {
       const mockSampler = {
@@ -312,7 +437,7 @@ describe('Functional API', () => {
         toString: () => 'MockSampler',
       };
 
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         {
           name: 'test.function',
           sampler: mockSampler as any,
@@ -333,7 +458,7 @@ describe('Functional API', () => {
     });
 
     it('should NOT pass options when sampler is not provided', async () => {
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         {
           name: 'test.function',
         },
@@ -361,7 +486,7 @@ describe('Functional API', () => {
         toString: () => 'RejectSampler',
       };
 
-      const testFunction = trace(
+      const testFunction = tracedFunction(
         {
           name: 'test.function',
           sampler: rejectSampler as any,
@@ -390,17 +515,17 @@ describe('Functional API', () => {
         toString: () => 'MockSampler',
       };
 
-      const testFunction = (trace as any)(
+      const testFunction = tracedFunction(
         {
           name: 'test.function',
           sampler: mockSampler as any,
           attributes: { 'custom.tag': 'value' },
           attributesFromArgs: ([arg]: [string]) => ({ 'arg.value': arg }),
         },
-        async function (arg: string) {
+        async function (_arg: string) {
           return 'success';
         },
-      ) as any;
+      );
 
       await testFunction('test-arg');
 
@@ -499,7 +624,33 @@ describe('Functional API', () => {
     });
   });
 
-  describe('instrument() - Batch Instrumentation', () => {
+  describe('instrument()', () => {
+    it('wraps one reusable function with a stable key', async () => {
+      const createUser = instrument({
+        key: 'user.create',
+        fn: async (email: string) => ({ id: '123', email }),
+      });
+
+      await expect(createUser('test@example.com')).resolves.toEqual({
+        id: '123',
+        email: 'test@example.com',
+      });
+      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+        'user.create',
+        {},
+        expect.any(Function),
+      );
+    });
+
+    it('rejects invalid single-function options', () => {
+      expect(() => instrument({ key: '', fn: () => undefined })).toThrow(
+        '"key" must be a non-empty string',
+      );
+      expect(() =>
+        instrument({ key: 'invalid', fn: 'not-a-function' } as never),
+      ).toThrow('"fn" must be a function');
+    });
+
     it('should instrument multiple functions', async () => {
       const instrumented = (instrument as any)({
         functions: {
@@ -604,7 +755,7 @@ describe('Functional API', () => {
 
       const result = await noArgsFunction();
 
-      expect(typeof result).toBe('number');
+      expect(result).toBeTypeOf('number');
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
         code: SpanStatusCode.OK,
       });

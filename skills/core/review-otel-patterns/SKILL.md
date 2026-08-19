@@ -57,7 +57,7 @@ The heart of the review. Each row is a grep-able smell with the replacement:
 | Anti-pattern                                        | Fix                                                                |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
 | `console.log` in handlers                           | Use `useLogger()`: fields land on the active span                  |
-| Manual `tracer.startSpan` boilerplate               | `trace(fn)`: auto-named, auto-ended, auto-status                   |
+| Manual `tracer.startSpan` boilerplate               | `trace(fn)` / `trace(name, fn)`: auto-ended, auto-status           |
 | `try { … } catch (e) { console.error(e); throw e }` | Replace with `createStructuredError({ … })`                        |
 | `throw new Error('something went wrong')`           | `createStructuredError({ message, status, why, fix })`             |
 | Ad-hoc `span.setAttribute('user_id', id)`           | Use `useLogger().set({ user: { id } })`: flattens with stable keys |

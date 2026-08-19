@@ -48,7 +48,8 @@ export type {
   ViolationSeverity,
   ViolationCode,
   SchemaViolation,
-  SpanShape,
+  EmittedSpan,
+  EmittedAttributeValue,
   ValidateOptions,
 } from './validate.js';
 

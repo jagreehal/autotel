@@ -28,6 +28,7 @@ import {
   type Span,
   type SpanContext,
 } from '@opentelemetry/api';
+import type { Attributes, Exception, TimeInput } from '@opentelemetry/api';
 import type { TraceContext } from './trace-context';
 
 /**
@@ -65,6 +66,13 @@ export interface NativeTracer {
 
 const INVALID_TRACE_ID = INVALID_SPAN_CONTEXT.traceId;
 
+/** What resolveSpanIds() answers with. */
+interface ResolveSpanIdsResult {
+  traceId: string;
+  spanId: string;
+  correlationId: string;
+}
+
 /**
  * Resolve trace ids for a native span. Prefers real ids from a (future)
  * `spanContext()`; otherwise falls back to the supplied correlation id.
@@ -72,7 +80,7 @@ const INVALID_TRACE_ID = INVALID_SPAN_CONTEXT.traceId;
 function resolveSpanIds(
   span: NativeSpanHandle,
   fallbackCorrelationId?: string,
-): { traceId: string; spanId: string; correlationId: string } {
+): ResolveSpanIdsResult {
   const sc = span.spanContext?.();
   if (sc && sc.traceId && sc.traceId !== INVALID_TRACE_ID) {
     return {
@@ -111,6 +119,8 @@ export function withNativeTracer(
  * native tracing disabled, local dev) — callers then fall back to the OTel path.
  */
 export function getActiveNativeTracer(): NativeTracer | null {
+  // SAFETY: this key is written by createNativeTraceContext below and read
+  // only here; a context that never carried one reads undefined.
   const value = api_context.active().getValue(NATIVE_TRACER_KEY) as
     NativeTracer | undefined;
   return value ?? null;
@@ -123,6 +133,7 @@ export function getActiveNativeTracer(): NativeTracer | null {
  * functional API stores this value separately while a native callback runs.
  */
 export function getActiveNativeTraceContext(): TraceContext | undefined {
+  // SAFETY: as above - autotel's own context key.
   return api_context.active().getValue(NATIVE_TRACE_CONTEXT_KEY) as
     TraceContext | undefined;
 }
@@ -146,7 +157,7 @@ export function runWithNativeTraceContext<T>(
  * accept. Arrays/objects are JSON-stringified; `undefined`/`null` are dropped.
  */
 function coerceAttribute(
-  value: unknown,
+  value: AttributeValue | undefined,
 ): string | number | boolean | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -165,10 +176,7 @@ function coerceAttribute(
   }
 }
 
-function applyAttributes(
-  span: NativeSpanHandle,
-  attributes: Record<string, unknown>,
-): void {
+function applyAttributes(span: NativeSpanHandle, attributes: Attributes): void {
   for (const [key, value] of Object.entries(attributes)) {
     span.setAttribute(key, coerceAttribute(value));
   }
@@ -187,7 +195,7 @@ function nativeSetErrorStatus(span: NativeSpanHandle, message?: string): void {
 
 function nativeRecordException(
   span: NativeSpanHandle,
-  exception: unknown,
+  exception: Exception,
 ): void {
   const error =
     exception instanceof Error ? exception : new Error(String(exception));
@@ -199,7 +207,7 @@ function nativeRecordException(
 
 function nativeAddEvent(
   eventName: string,
-  attributesOrStartTime?: unknown,
+  attributesOrStartTime?: Attributes | TimeInput,
 ): void {
   if (
     attributesOrStartTime &&
@@ -242,8 +250,7 @@ export function createNativeTraceContext(
     'code.function': name,
     setAttribute: (key, value) =>
       span.setAttribute(key, coerceAttribute(value)),
-    setAttributes: (attrs) =>
-      applyAttributes(span, attrs as Record<string, unknown>),
+    setAttributes: (attrs) => applyAttributes(span, attrs),
     setStatus: (status) => {
       if (status.code === SpanStatusCode.ERROR) {
         nativeSetErrorStatus(span, status.message);
@@ -277,32 +284,36 @@ export function createNativeSpanShim(
   // Prefer the platform's real span context when it becomes available;
   // otherwise expose an invalid context (Cloudflare has no spanContext yet).
   const spanContext: SpanContext = span.spanContext?.() ?? INVALID_SPAN_CONTEXT;
-  const shim: Partial<Span> = {
+  // SAFETY: the one assertion for this shim. Every method OpenTelemetry's Span
+  // declares is implemented below, forwarding to the platform's native span;
+  // the assertion is needed because each of them returns the shim itself, which
+  // TypeScript cannot infer while the object is still being built.
+  const shim: Span = {
     spanContext: () => spanContext,
     setAttribute(key: string, value: AttributeValue) {
       span.setAttribute(key, coerceAttribute(value));
-      return shim as Span;
+      return shim;
     },
     setAttributes(attributes) {
-      applyAttributes(span, attributes as Record<string, unknown>);
-      return shim as Span;
+      applyAttributes(span, attributes);
+      return shim;
     },
     addEvent(eventName, attributesOrStartTime) {
       nativeAddEvent(eventName, attributesOrStartTime);
-      return shim as Span;
+      return shim;
     },
-    addLink: () => shim as Span,
-    addLinks: () => shim as Span,
+    addLink: () => shim,
+    addLinks: () => shim,
     setStatus(status) {
       if (status.code === SpanStatusCode.ERROR) {
         nativeSetErrorStatus(span, status.message);
       }
-      return shim as Span;
+      return shim;
     },
-    updateName: () => shim as Span,
+    updateName: () => shim,
     end: () => {},
     isRecording: () => span.isTraced,
     recordException: (exception) => nativeRecordException(span, exception),
-  };
-  return shim as Span;
+  } as Span;
+  return shim;
 }

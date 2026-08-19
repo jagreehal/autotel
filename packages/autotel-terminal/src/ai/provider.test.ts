@@ -41,6 +41,8 @@ describe('AI provider config', () => {
 
   it('throws for unsupported provider values', async () => {
     await expect(
+      // SAFETY: forcing past the compiler is the point - the runtime must
+      // reject a provider name a JavaScript caller could pass.
       createAIModel({ provider: 'invalid' as never, model: 'test-model' }),
     ).rejects.toThrow(/unsupported provider/i);
   });

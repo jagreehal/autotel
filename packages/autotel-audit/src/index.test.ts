@@ -4,11 +4,15 @@ import {
   forceKeepAuditEvent,
   setAuditAttributes,
   withAudit,
+  type AuditContext,
   type AuditMetadata,
 } from './index';
 
 const setAttribute = vi.fn();
 const setAttributes = vi.fn();
+// SAFETY: an AuditContext is a trace context; this fake implements every method
+// the audit helpers call on one, and the assertion covers the members of the
+// full interface that they never reach.
 const mockCtx = {
   traceId: 'trace-1',
   spanId: 'span-1',
@@ -29,7 +33,7 @@ const mockCtx = {
   getTypedBaggage: vi.fn(),
   setTypedBaggage: vi.fn(),
   withBaggage: vi.fn(),
-};
+} as AuditContext;
 
 const logger = {
   set: vi.fn(),
@@ -74,7 +78,7 @@ describe('autotel-audit', () => {
   });
 
   it('forceKeepAuditEvent sets tail keep attributes', () => {
-    forceKeepAuditEvent(mockCtx as never);
+    forceKeepAuditEvent(mockCtx);
 
     expect(setAttribute).toHaveBeenCalledWith(
       'autotel.sampling.tail.evaluated',
@@ -94,7 +98,7 @@ describe('autotel-audit', () => {
       actorId: 'admin-1',
     };
 
-    setAuditAttributes(metadata, mockCtx as never);
+    setAuditAttributes(metadata, mockCtx);
 
     expect(setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -145,7 +149,7 @@ describe('autotel-audit best-effort (onMissingContext)', () => {
   });
 
   it('runs the handler un-audited and warns once by default when no context', async () => {
-    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined as never);
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const result = await withAudit(
@@ -160,7 +164,7 @@ describe('autotel-audit best-effort (onMissingContext)', () => {
   });
 
   it('throws when onMissingContext is "throw"', async () => {
-    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined as never);
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined);
 
     await expect(
       withAudit({ action: 'missing.throw' }, async () => 'x', {
@@ -170,7 +174,7 @@ describe('autotel-audit best-effort (onMissingContext)', () => {
   });
 
   it('runs silently when onMissingContext is "skip"', async () => {
-    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined as never);
+    vi.mocked(otelTrace.getActiveSpan).mockReturnValueOnce(undefined);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const result = await withAudit(

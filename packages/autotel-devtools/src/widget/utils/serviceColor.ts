@@ -14,7 +14,13 @@ const NODE_PALETTE = [
   { fill: '#e0e7ff', stroke: '#6366f1' }, // indigo
 ] as const;
 
-export function serviceColor(name: string): { fill: string; stroke: string } {
+/** What serviceColor() answers with. */
+interface ServiceColorResult {
+  fill: string;
+  stroke: string;
+}
+
+export function serviceColor(name: string): ServiceColorResult {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return NODE_PALETTE[h % NODE_PALETTE.length];

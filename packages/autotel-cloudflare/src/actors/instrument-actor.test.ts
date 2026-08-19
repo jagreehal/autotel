@@ -5,6 +5,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { instrumentActor } from './instrument-actor';
 import type { ActorLike } from './types';
+import { actorClass, durableObjectState } from '../testing/doubles.js';
+import { asFunction } from '../values.js';
 
 // Mock dependencies
 vi.mock('@opentelemetry/api', () => ({
@@ -12,10 +14,7 @@ vi.mock('@opentelemetry/api', () => ({
     getTracer: () => ({
       startActiveSpan: vi.fn(
         (_name, _options, contextOrCallback, maybeCallback) => {
-          const callback =
-            typeof contextOrCallback === 'function'
-              ? contextOrCallback
-              : maybeCallback;
+          const callback = asFunction(contextOrCallback) ?? maybeCallback;
           const mockSpan = {
             setAttributes: vi.fn(),
             setAttribute: vi.fn(),
@@ -54,6 +53,8 @@ vi.mock('autotel-edge', () => ({
 }));
 
 vi.mock('../bindings/common', () => ({
+  // SAFETY: a Proxy over T presents T's own interface; `wrap` in the real
+  // module says the same thing.
   wrap: <T extends object>(target: T, handler: ProxyHandler<T>): T =>
     new Proxy(target, handler) as T,
 }));
@@ -92,13 +93,13 @@ class MockActor implements ActorLike {
 }
 
 // Mock DurableObjectState
-const mockState = {
+const mockState = durableObjectState({
   id: {
     toString: () => 'do-id-123',
     name: 'test-do',
   },
   storage: {},
-} as unknown as DurableObjectState;
+});
 
 describe('instrumentActor', () => {
   beforeEach(() => {
@@ -107,22 +108,16 @@ describe('instrumentActor', () => {
 
   it('should return an instrumented class constructor', () => {
     const InstrumentedActor = instrumentActor(
-      MockActor as unknown as new (
-        state: DurableObjectState,
-        env: unknown,
-      ) => ActorLike,
+      actorClass<ActorLike>(MockActor),
       { service: { name: 'test-service' } },
     );
 
-    expect(typeof InstrumentedActor).toBe('function');
+    expect(InstrumentedActor).toBeTypeOf('function');
   });
 
   it('should create an instrumented instance', () => {
     const InstrumentedActor = instrumentActor(
-      MockActor as unknown as new (
-        state: DurableObjectState,
-        env: unknown,
-      ) => ActorLike,
+      actorClass<ActorLike>(MockActor),
       { service: { name: 'test-service' } },
     );
 
@@ -134,10 +129,7 @@ describe('instrumentActor', () => {
     const configFn = vi.fn(() => ({ service: { name: 'dynamic-service' } }));
 
     const InstrumentedActor = instrumentActor(
-      MockActor as unknown as new (
-        state: DurableObjectState,
-        env: unknown,
-      ) => ActorLike,
+      actorClass<ActorLike>(MockActor),
       configFn,
     );
 
@@ -148,10 +140,7 @@ describe('instrumentActor', () => {
 
   it('should support actors-specific options', () => {
     const InstrumentedActor = instrumentActor(
-      MockActor as unknown as new (
-        state: DurableObjectState,
-        env: unknown,
-      ) => ActorLike,
+      actorClass<ActorLike>(MockActor),
       {
         service: { name: 'test-service' },
         actors: {
@@ -169,10 +158,7 @@ describe('instrumentActor', () => {
 describe('ActorInstrumentationOptions', () => {
   it('should default instrumentStorage to true', () => {
     const InstrumentedActor = instrumentActor(
-      MockActor as unknown as new (
-        state: DurableObjectState,
-        env: unknown,
-      ) => ActorLike,
+      actorClass<ActorLike>(MockActor),
       { service: { name: 'test' } },
     );
 
@@ -188,10 +174,7 @@ describe('ActorInstrumentationOptions', () => {
     );
 
     const InstrumentedActor = instrumentActor(
-      MockActor as unknown as new (
-        state: DurableObjectState,
-        env: unknown,
-      ) => ActorLike,
+      actorClass<ActorLike>(MockActor),
       {
         service: { name: 'test' },
         actors: {

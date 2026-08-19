@@ -50,6 +50,7 @@ import {
 import { runInOperationContext } from './operation-context';
 import {
   FUNCTIONAL_ERROR_MESSAGE_LIMIT,
+  runWithTraceContext,
   wrapFactoryWithTracing,
   wrapPlainWithTracing,
   type AnyInstrumentable,
@@ -84,6 +85,9 @@ import {
  * })
  * ```
  */
+/** Baggage entries: values that survive the W3C baggage header. */
+type BaggageValues = Record<string, string | number | boolean>;
+
 export type { TraceContext } from './trace-context';
 export type {
   InstrumentOptions,
@@ -126,7 +130,7 @@ function shouldSkip(
  * Returns base context (trace IDs) + span methods from the active span.
  */
 function getCtxValue<
-  TBaggage extends Record<string, unknown> | undefined = undefined,
+  TBaggage extends BaggageValues | undefined = undefined,
 >(): TraceContext<TBaggage> | null {
   const activeSpan = otelTrace.getActiveSpan();
   if (!activeSpan) return null;
@@ -145,7 +149,7 @@ function getCtxValue<
  *
  * @example
  * ```typescript
- * const getUser = trace('getUser', async (id: string) => {
+ * const getUser = trace(async function getUser(id: string) {
  *   getActiveTraceContext()?.setAttribute('user.id', id);
  *   return db.users.find(id);
  * });
@@ -155,7 +159,7 @@ function getCtxValue<
  * @see getRequestLogger which reads the active context when called with no args
  */
 export function getActiveTraceContext<
-  TBaggage extends Record<string, unknown> | undefined = undefined,
+  TBaggage extends BaggageValues | undefined = undefined,
 >(): TraceContext<TBaggage> | undefined {
   return getCtxValue<TBaggage>() ?? undefined;
 }
@@ -178,12 +182,18 @@ export function getActiveTraceContext<
  * })
  * ```
  */
-export const ctx = new Proxy({} as TraceContext, {
+// SAFETY: the proxy answers every TraceContext member from the active context,
+// so this target is never read from - it exists only to be proxied.
+const ctxProxyTarget = {} as TraceContext;
+
+export const ctx = new Proxy(ctxProxyTarget, {
   get(_target, prop) {
     const ctxValue = getCtxValue();
     if (!ctxValue) {
       return;
     }
+    // SAFETY: the trap forwards whatever member was asked for; a name that is
+    // not on a TraceContext reads undefined, as it would on the real object.
     return ctxValue[prop as keyof typeof ctxValue];
   },
 
@@ -213,25 +223,18 @@ export const ctx = new Proxy({} as TraceContext, {
 });
 
 /**
- * Wrap a plain function with automatic tracing. The function receives its real
- * arguments; no context parameter is injected. Use
- * {@link getActiveTraceContext} inside the function, or use {@link withTracing}
- * for the explicit `(ctx) => (...args) => result` factory form.
+ * Wrap a plain function with a traced wrapper, or run one named operation
+ * immediately with {@link trace.run}.
  *
- * `trace()` never executes or inspects the function during wrapper
- * construction.
+ * Every `trace(...)` call returns a **wrapper**. Nothing runs until you call
+ * what you get back, so a `trace()` call can never execute your function at
+ * module load. Reach the span from inside the body through the ambient
+ * {@link ctx} - it resolves at any depth, so a helper three frames down sees
+ * the same span without being handed anything.
  *
  * @example Auto-inferred name
  * ```typescript
  * export const createUser = trace(async (data) => {
- *   return await db.users.create(data)
- * })
- * ```
- *
- * @example Ambient context access
- * ```typescript
- * export const createUser = trace(async (data) => {
- *   getActiveTraceContext()?.setAttribute('user.id', data.id)
  *   return await db.users.create(data)
  * })
  * ```
@@ -242,23 +245,55 @@ export const ctx = new Proxy({} as TraceContext, {
  *   return await db.users.create(data)
  * })
  * ```
+ *
+ * @example Ambient context, at any depth
+ * ```typescript
+ * import { trace, ctx } from 'autotel'
+ *
+ * export const createUser = trace('user.create', async (data) => {
+ *   ctx.setAttribute('user.id', data.id)
+ *   return await db.users.create(data)
+ * })
+ * ```
+ *
+ * @example Curried, for a shared configuration
+ * ```typescript
+ * const traced = trace({ serviceName: 'users' })
+ * export const createUser = traced(async (data) => db.users.create(data))
+ * ```
+ *
+ * @example One operation, run now - see {@link trace.run}
+ * ```typescript
+ * const user = await trace.run('user.create', async (ctx) => {
+ *   ctx.setAttribute('user.id', input.id)
+ *   return db.users.create(input)
+ * })
+ * ```
  */
 // trace(fn)
-export function trace<TArgs extends unknown[], TReturn>(
+function traceImpl<TArgs extends unknown[], TReturn>(
   fn: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => TReturn;
-// trace(name, fn)
-export function trace<TArgs extends unknown[], TReturn>(
+// trace(name, fn) / trace(options, fn)
+function traceImpl<TArgs extends unknown[], TReturn>(
   name: string,
   fn: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => TReturn;
-// trace(options, fn)
-export function trace<TArgs extends unknown[], TReturn>(
+function traceImpl<TArgs extends unknown[], TReturn>(
   options: TracingOptions<TArgs, TReturn>,
   fn: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => TReturn;
+// trace(name) / trace(options) - returns a wrapper factory
+function traceImpl(
+  name: string,
+): <TArgs extends unknown[], TReturn>(
+  fn: (...args: TArgs) => TReturn,
+) => (...args: TArgs) => TReturn;
+function traceImpl<TArgs extends unknown[], TReturn>(
+  options: TracingOptions<TArgs, TReturn>,
+): (fn: (...args: TArgs) => TReturn) => (...args: TArgs) => TReturn;
 // Implementation
-export function trace<TArgs extends unknown[] = unknown[], TReturn = unknown>(
+function traceImpl<TArgs extends unknown[] = unknown[], TReturn = unknown>(
   fnOrNameOrOptions:
     | ((...args: TArgs) => TReturn)
     | ((...args: TArgs) => Promise<TReturn>)
@@ -267,27 +302,92 @@ export function trace<TArgs extends unknown[] = unknown[], TReturn = unknown>(
   maybeFn?:
     ((...args: TArgs) => TReturn) | ((...args: TArgs) => Promise<TReturn>),
 ): WrappedFunction<TArgs, TReturn> {
-  // trace(fn) - the function is plain; it receives its real arguments and no
-  // context is injected. Reach the active span via getActiveTraceContext().
+  // trace(fn) - no name given, so the wrapper infers one.
   if (typeof fnOrNameOrOptions === 'function') {
     return wrapPlainWithTracing(
+      // SAFETY: the branch above established the first argument is the function
+      // form of this overload.
       fnOrNameOrOptions as (...args: TArgs) => TReturn,
+      // SAFETY: the no-options overload; every field is optional.
       {} as TracingOptions<TArgs, TReturn>,
     );
   }
 
-  // trace(name, fn) or trace(options, fn)
-  if (!maybeFn) {
-    throw new Error('trace(name|options, fn): fn is required');
-  }
-
+  // SAFETY: the string overload names the span and nothing else; every other
+  // field on TracingOptions is optional.
   const options: TracingOptions<TArgs, TReturn> =
     typeof fnOrNameOrOptions === 'string'
       ? ({ name: fnOrNameOrOptions } as TracingOptions<TArgs, TReturn>)
       : fnOrNameOrOptions;
 
-  return wrapPlainWithTracing(maybeFn as (...args: TArgs) => TReturn, options);
+  // trace(name) / trace(options) - the function is still to come, so hand back
+  // the factory that will wrap it.
+  if (maybeFn === undefined) {
+    return ((fn: (...args: TArgs) => TReturn) =>
+      wrapPlainWithTracing(fn, options)) as unknown as WrappedFunction<
+      TArgs,
+      TReturn
+    >;
+  }
+
+  // trace(name, fn) / trace(options, fn)
+  return wrapPlainWithTracing(maybeFn, options);
 }
+
+/**
+ * Run one named operation immediately and return its result, with the
+ * {@link TraceContext} passed in.
+ *
+ * This is the counterpart to {@link trace}: `trace(...)` always hands back a
+ * wrapper to call later, `trace.run(...)` runs the operation now. Keeping them
+ * under separate names is deliberate - a single call shape that sometimes
+ * wrapped and sometimes ran is what made dispatch depend on a callback's
+ * parameter name, which a minifier is free to rewrite (#166).
+ *
+ * The body can equally read the ambient {@link ctx}; the parameter is here for
+ * when an explicit binding reads better.
+ *
+ * @example
+ * ```typescript
+ * const user = await trace.run('user.create', async (ctx) => {
+ *   ctx.setAttribute('user.id', input.id)
+ *   return db.users.create(input)
+ * })
+ * ```
+ */
+function run<TReturn>(
+  name: string,
+  operation: (ctx: TraceContext) => Promise<TReturn>,
+): Promise<TReturn>;
+function run<TReturn>(
+  name: string,
+  operation: (ctx: TraceContext) => TReturn,
+): TReturn;
+function run<TReturn>(
+  options: TracingOptions<[], TReturn>,
+  operation: (ctx: TraceContext) => Promise<TReturn>,
+): Promise<TReturn>;
+function run<TReturn>(
+  options: TracingOptions<[], TReturn>,
+  operation: (ctx: TraceContext) => TReturn,
+): TReturn;
+function run<TReturn = unknown>(
+  nameOrOptions: string | TracingOptions<[], TReturn>,
+  operation: (ctx: TraceContext) => TReturn | Promise<TReturn>,
+): TReturn | Promise<TReturn> {
+  if (typeof operation !== 'function') {
+    throw new TypeError(
+      'trace.run(name, operation): operation must be a function',
+    );
+  }
+
+  const options: TracingOptions<[], TReturn> =
+    typeof nameOrOptions === 'string' ? { name: nameOrOptions } : nameOrOptions;
+
+  return runWithTraceContext(operation, options);
+}
+
+export const trace = Object.assign(traceImpl, { run });
 
 /**
  * Approach 2: withTracing() - Middleware-style composable wrapper
@@ -404,6 +504,7 @@ export function instrument<
 
   if ('key' in options || 'fn' in options) {
     const { key, fn, ...tracingOptions } =
+      // SAFETY: the `fn` key present on the options selects this overload.
       options as SingleInstrumentOptions<TFunction>;
     if (typeof key !== 'string' || key.trim() === '') {
       throw new TypeError(
@@ -415,9 +516,11 @@ export function instrument<
         'instrument: "fn" must be a function in the { key, fn } form',
       );
     }
+    // SAFETY: the wrapper preserves the wrapped function's signature.
     return wrapPlainWithTracing(fn, tracingOptions, key) as TFunction;
   }
 
+  // SAFETY: the `functions` key present on the options selects this overload.
   const { functions, ...tracingOptions } = options as InstrumentOptions<T>;
   if (!functions || typeof functions !== 'object') {
     throw new TypeError(
@@ -427,11 +530,14 @@ export function instrument<
   const instrumented: Partial<T> = {};
 
   for (const key of Object.keys(functions)) {
+    // SAFETY: the keys come from Object.keys of the same object.
     const typedKey = key as keyof T;
     const fn = functions[typedKey];
 
     // Skip if not a function or undefined - just pass through the value
     if (!fn || typeof fn !== 'function') {
+      // SAFETY: the wrapper preserves the function's own signature, so the
+      // instrumented member has the same type as the one it replaces.
       instrumented[typedKey] = fn as T[typeof typedKey];
       continue;
     }
@@ -439,6 +545,8 @@ export function instrument<
     // Only instrument own enumerable async functions
     // Check if should skip
     if (shouldSkip(key, fn, tracingOptions.skip)) {
+      // SAFETY: the wrapper preserves the function's own signature, so the
+      // instrumented member has the same type as the one it replaces.
       instrumented[typedKey] = fn as T[typeof typedKey];
       continue;
     }
@@ -463,6 +571,8 @@ export function instrument<
     };
 
     // Wrap with tracing (sync or async based on implementation)
+    // SAFETY: the wrapper preserves the factory's own call signature; the hop
+    // through unknown is the compiler's requirement for a generic member type.
     instrumented[typedKey] = wrapFactoryWithTracing(
       fnFactory,
       fnOptions,
@@ -470,6 +580,7 @@ export function instrument<
     ) as unknown as T[typeof typedKey];
   }
 
+  // SAFETY: every member was replaced by a wrapper with the same signature.
   return instrumented as T;
 }
 
@@ -623,6 +734,7 @@ export function span<T = unknown>(
     return result;
   }
 
+  // SAFETY: as above - the instrumented object mirrors its source.
   return result as T;
 }
 

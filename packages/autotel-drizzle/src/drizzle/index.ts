@@ -28,6 +28,12 @@ type QueryFunction = (...args: any[]) => any;
 type AttributeValue = string | number | boolean;
 type AttributeMap = Record<string, AttributeValue>;
 
+/**
+ * Drizzle's driver objects, as this instrumentation reaches into them. The
+ * `any` is deliberate and confined to this one declaration: the methods being
+ * wrapped belong to a dozen dialect-specific classes that drizzle does not
+ * export types for, and every read below is guarded before it is used.
+ */
 interface InstrumentableObject {
   [key: string]: any;
   [INSTRUMENTED_FLAG]?: true;
@@ -116,6 +122,8 @@ function isObject(value: unknown): value is InstrumentableObject {
 
 function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
   return (
+    // SAFETY: this is the thenable test itself - the object is probed for a
+    // callable `then` before anything treats it as a promise.
     typeof value === 'object' &&
     value !== null &&
     typeof (value as PromiseLike<T>).then === 'function'
@@ -143,10 +151,13 @@ function extractQueryText(queryArg: unknown): string | undefined {
     return queryArg.queryString;
   }
 
+  // SAFETY: drizzle's SQL builder carries the assembled text on `sql` next to
+  // its `queryChunks`; both are checked on the lines below before either is read.
   if (
     isObject(queryArg.queryChunks) &&
     typeof (queryArg as Record<string, unknown>).sql === 'string'
   ) {
+    // SAFETY: the condition above checked this property is a string.
     return queryArg.sql as string;
   }
 
@@ -234,6 +245,8 @@ function executeWithSpan<T>(span: any, fn: () => T): T {
       const result = fn();
 
       if (isPromiseLike(result)) {
+        // SAFETY: isPromiseLike narrowed the result to a thenable, so the
+        // assertion inside this call only restates what the guard established.
         return result.then(
           (value) => {
             finalizeSpan(span);
@@ -270,6 +283,9 @@ function instrumentMethod(
     return false;
   }
 
+  // SAFETY: the caller checked this property is callable before asking for it
+  // to be wrapped; InstrumentableObject types every member as `any` because
+  // drizzle exports no types for these driver classes.
   const originalMethod = target[methodName] as QueryFunction;
 
   target[methodName] = function instrumentedMethod(
@@ -277,6 +293,8 @@ function instrumentMethod(
     ...incomingArgs: any[]
   ) {
     const args = [...incomingArgs];
+    // SAFETY: the condition establishes the last argument is a function before
+    // it is popped and treated as the driver's node-style callback.
     const callback =
       options.callbackStyle === 'last-arg' && typeof args.at(-1) === 'function'
         ? (args.pop() as QueryCallback)
@@ -396,6 +414,8 @@ function instrumentTransactionTarget(
       extraAttributes: transactionAttributes,
     }) || instrumented;
 
+  // SAFETY: a transaction target exposes the same session surface as the
+  // connection it was opened on; only prepareQuery is read from it.
   instrumented =
     instrumentPrepareQuery(
       target as DrizzleSessionLike,
@@ -526,6 +546,9 @@ export function instrumentDrizzleClient<TDb extends DrizzleDbLike>(
   const state = getState(config);
   let instrumented = false;
 
+  // SAFETY: some drivers expose the session's methods on the db object itself
+  // rather than under `.session`; instrumentSession probes for each method
+  // before wrapping it, so a db without them is left untouched.
   instrumented =
     instrumentSession(db as unknown as DrizzleSessionLike, state) ||
     instrumented;

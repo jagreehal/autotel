@@ -4,7 +4,7 @@ import { catalog } from './catalog';
 describe('AI catalog', () => {
   it('exports a catalog with component definitions', () => {
     expect(catalog).toBeDefined();
-    expect(typeof catalog.prompt).toBe('function');
+    expect(catalog.prompt).toBeTypeOf('function');
   });
 
   it('generates a system prompt describing available components', () => {

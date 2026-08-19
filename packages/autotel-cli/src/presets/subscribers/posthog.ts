@@ -1,7 +1,11 @@
 import type { SubscriberPreset } from '../../types/index';
 
 /**
- * PostHog subscriber preset
+ * PostHog subscriber preset — product events posted from the server.
+ *
+ * The browser counterpart is the `posthog-web` plugin preset, which joins
+ * traces to the session PostHog is recording. Both live in `autotel-posthog`;
+ * this one needs `autotel-subscribers` too, for the base class it extends.
  */
 export const posthog: SubscriberPreset = {
   name: 'PostHog',
@@ -9,7 +13,7 @@ export const posthog: SubscriberPreset = {
   type: 'subscriber',
   description: 'Send events to PostHog for product analytics',
   packages: {
-    required: ['autotel-subscribers', 'posthog-node'],
+    required: ['autotel-posthog', 'autotel-subscribers', 'posthog-node'],
     optional: [],
     devOnly: [],
   },
@@ -33,7 +37,7 @@ export const posthog: SubscriberPreset = {
   },
   imports: [
     {
-      source: 'autotel-subscribers/posthog',
+      source: 'autotel-posthog/subscriber',
       specifiers: ['PostHogSubscriber'],
     },
   ],

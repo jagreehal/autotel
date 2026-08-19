@@ -30,6 +30,8 @@ export function readPreferenceSync(toolName: string): TelemetryPreference {
       path.join(getTelemetryDir(toolName), 'preference.json'),
       'utf8',
     );
+    // SAFETY: this file is written by setConsent() below and by nothing else;
+    // only `preference` is read, and an unrecognised value falls back to unset.
     const parsed = JSON.parse(raw) as PreferenceFile;
     return parsed.preference ?? 'unset';
   } catch {

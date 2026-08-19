@@ -12,7 +12,7 @@
  *
  * Run: `node scripts/capture-evidence.mjs`
  */
-import { wrapModule, trace, withTracing, span } from 'autotel-cloudflare';
+import { wrapModule, withTracing, span } from 'autotel-cloudflare';
 
 // ── Mock bindings (shape-detected by autotel in OTLP mode) ──────────────────
 const kv = {
@@ -38,7 +38,7 @@ const d1 = {
 };
 const env = { MY_KV: kv, MY_D1: d1 };
 
-// ── Kitchen-sink business logic (same trace()/span() API in both modes) ─────
+// ── Kitchen-sink business logic (same functional API in both modes) ─────────
 const priceOrder = withTracing({
   name: 'order.price',
   attributesFromArgs: ([id]) => ({ 'order.id': id }),
@@ -77,7 +77,7 @@ const createUser = withTracing({ name: 'user.create' })(
     },
 );
 
-const failing = trace('payment.charge', async () => {
+const failing = withTracing({ name: 'payment.charge' })(() => async () => {
   throw new Error('card declined');
 });
 

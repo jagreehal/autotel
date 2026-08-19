@@ -31,39 +31,18 @@ export { TaskAgent };
 
 // Type alias for the environment
 interface Env extends WorkerEnv {
-  TaskAgent: DurableObjectNamespace;
-}
-
-// Type for the TaskAgent stub (with callable methods exposed by PartyServer)
-interface TaskAgentStub {
-  processTask(
-    taskName: string,
-    priority: number,
-  ): Promise<{ result: string; taskId: string }>;
-  processTaskWithError(taskName: string): Promise<{ result: string }>;
-  scheduledCleanup(): Promise<void>;
-  callMcpServer(
-    serverId: string,
-    method: string,
-    params?: Record<string, unknown>,
-  ): Promise<unknown>;
-  sendMessage(
-    recipient: string,
-    message: string,
-  ): Promise<{ messageId: string }>;
-  getStats(): Promise<{ taskCount: number; agentId: string }>;
+  TaskAgent: DurableObjectNamespace<TaskAgent>;
 }
 
 /**
  * Helper to get an agent stub by name using the DO namespace
  */
 function getAgentStub(
-  namespace: DurableObjectNamespace,
+  namespace: DurableObjectNamespace<TaskAgent>,
   roomName: string,
-): TaskAgentStub {
+): DurableObjectStub<TaskAgent> {
   const id = namespace.idFromName(roomName);
-  const stub = namespace.get(id);
-  return stub as unknown as TaskAgentStub;
+  return namespace.get(id);
 }
 
 // Default export is the fetch handler wrapped with instrument()
@@ -113,6 +92,8 @@ export default instrument(
         // Process task endpoint
         if (url.pathname === '/process-task' && request.method === 'POST') {
           try {
+            // SAFETY: request.json() is typed `unknown` because a body can be
+            // anything; every field read below is optional and defaulted.
             const body = (await request.json()) as {
               taskName?: string;
               priority?: number;

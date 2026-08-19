@@ -76,6 +76,8 @@ function requireValue(rest: string[], index: number, flag: string): string {
 
 function isRenderer(value: unknown): value is Renderer {
   if (!value || typeof value !== 'object') return false;
+  // SAFETY: the guard above established this is a non-null object; every member
+  // named below is probed before the value is accepted as a Renderer.
   const r = value as Renderer;
   return (
     typeof r.name === 'string' &&
@@ -85,17 +87,22 @@ function isRenderer(value: unknown): value is Renderer {
   );
 }
 
+/** A user-supplied renderer module: a default export, a named one, or neither. */
+interface RendererModule {
+  default?: unknown;
+  renderer?: unknown;
+}
+
 async function loadRendererModule(modulePath: string): Promise<void> {
   const resolved = resolve(process.cwd(), modulePath);
-  let mod: Record<string, unknown>;
+  let mod: RendererModule;
   try {
-    mod = (await import(pathToFileURL(resolved).href)) as Record<
-      string,
-      unknown
-    >;
+    // SAFETY: a renderer module is user-supplied; isRenderer below checks each
+    // export before any of them is registered.
+    mod = (await import(pathToFileURL(resolved).href)) as RendererModule;
   } catch (error) {
     process.stderr.write(
-      `Failed to load renderer module ${modulePath}: ${(error as Error).message}\n`,
+      `Failed to load renderer module ${modulePath}: ${error instanceof Error ? error.message : String(error)}\n`,
     );
     process.exit(2);
   }
@@ -113,7 +120,9 @@ async function loadRendererModule(modulePath: string): Promise<void> {
   try {
     registerRenderer(candidate);
   } catch (error) {
-    process.stderr.write(`${(error as Error).message}\n`);
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    );
     process.exit(2);
   }
 }
@@ -663,6 +672,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  process.stderr.write(`autotel-eventcatalog: ${(error as Error).message}\n`);
+  process.stderr.write(
+    `autotel-eventcatalog: ${error instanceof Error ? error.message : String(error)}\n`,
+  );
   process.exit(1);
 });

@@ -5,6 +5,7 @@ import {
   getExecutionLogger,
   type TraceContext,
 } from 'autotel-edge/logger';
+import { member } from './values.js';
 
 export type { ExecutionLogger, ExecutionLoggerOptions, ExecutionLogSnapshot };
 
@@ -37,7 +38,7 @@ function collectHeaders(
 }
 
 function pickCfContext(request: Request): Record<string, unknown> {
-  const cf = Reflect.get(request, 'cf');
+  const cf = member(request, 'cf');
   if (!isRecord(cf)) return {};
 
   const out: Record<string, unknown> = {};

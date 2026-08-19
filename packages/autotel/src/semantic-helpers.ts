@@ -11,6 +11,7 @@ import { withTracing } from './functional';
 import { assertTraceFactory } from './trace-factory-validation';
 import type { TraceContext } from './trace-context';
 import { SpanKind, type Attributes } from '@opentelemetry/api';
+import { asRecord, nonEmptyString, toAttributeValue } from './values';
 
 type SemanticHandler<TArgs extends unknown[], TReturn> = (
   ...args: TArgs
@@ -26,14 +27,8 @@ function setConfiguredAttributes(
 ): void {
   if (!attributes) return;
   for (const [key, value] of Object.entries(attributes)) {
-    if (value === undefined || value === null) continue;
-    const attributeValue =
-      typeof value === 'string' ||
-      typeof value === 'number' ||
-      typeof value === 'boolean'
-        ? value
-        : JSON.stringify(value);
-    ctx.setAttribute(key, attributeValue);
+    const attributeValue = toAttributeValue(value);
+    if (attributeValue !== undefined) ctx.setAttribute(key, attributeValue);
   }
 }
 
@@ -248,10 +243,10 @@ export function traceDB<TArgs extends unknown[], TReturn>(
   | (<TFactoryArgs extends unknown[], TFactoryReturn>(
       factory: SemanticFactory<TFactoryArgs, TFactoryReturn>,
     ) => SemanticHandler<TFactoryArgs, TFactoryReturn>) {
-  if (!config || typeof config !== 'object') {
+  if (asRecord(config) === undefined) {
     throw new TypeError('traceDB: config must be an object');
   }
-  if (typeof config.system !== 'string' || config.system.trim() === '') {
+  if (nonEmptyString(config.system) === undefined) {
     throw new TypeError('traceDB: config.system must be a non-empty string');
   }
   const target = config.collection ?? config.database;
@@ -366,7 +361,7 @@ export function traceHTTP<TArgs extends unknown[], TReturn>(
   | (<TFactoryArgs extends unknown[], TFactoryReturn>(
       factory: SemanticFactory<TFactoryArgs, TFactoryReturn>,
     ) => SemanticHandler<TFactoryArgs, TFactoryReturn>) {
-  if (!config || typeof config !== 'object') {
+  if (asRecord(config) === undefined) {
     throw new TypeError('traceHTTP: config must be an object');
   }
   const method = config.method?.toUpperCase() || 'HTTP';
@@ -498,10 +493,10 @@ export function traceMessaging<TArgs extends unknown[], TReturn>(
   | (<TFactoryArgs extends unknown[], TFactoryReturn>(
       factory: SemanticFactory<TFactoryArgs, TFactoryReturn>,
     ) => SemanticHandler<TFactoryArgs, TFactoryReturn>) {
-  if (!config || typeof config !== 'object') {
+  if (asRecord(config) === undefined) {
     throw new TypeError('traceMessaging: config must be an object');
   }
-  if (typeof config.system !== 'string' || config.system.trim() === '') {
+  if (nonEmptyString(config.system) === undefined) {
     throw new TypeError(
       'traceMessaging: config.system must be a non-empty string',
     );

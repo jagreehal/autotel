@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { tempoAdapter } from './tempo';
 import type { QueryAdapterContext } from './types';
+import { installFetch } from '../testing/doubles.js';
 
 const ctx = (over: Partial<QueryAdapterContext> = {}): QueryAdapterContext => ({
   baseUrl: 'http://tempo:3200',
@@ -21,11 +22,12 @@ describe('tempoAdapter', () => {
       status: 200,
       json: async () => ({ tagValues: ['svc-1', 'svc-2'] }),
     });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
     const c = ctx({ secrets: { get: async () => 'top-secret' } });
     const services = await tempoAdapter.listServices(c);
     expect(services).toEqual(['svc-1', 'svc-2']);
     const [, init] = fetchSpy.mock.calls[0];
+    // SAFETY: the adapter calls fetch(url, init); the recorded call is its own.
     expect((init as RequestInit).headers).toMatchObject({
       Authorization: 'Bearer top-secret',
     });
@@ -74,7 +76,7 @@ describe('tempoAdapter', () => {
         ],
       }),
     });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    installFetch(fetchMock);
     const result = await tempoAdapter.searchTraces(ctx(), { service: 'demo' });
     expect(result).toHaveLength(1);
     expect(result[0].service).toBe('demo');

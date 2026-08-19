@@ -6,21 +6,22 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 
 ## When to Use What
 
-| Scenario                                                      | Use                                                                                 | Example                                                |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Wrap an async function with a span                            | `trace(fn)` or `span('Name', fn)`                                                   | Handlers, use-case functions, workers                  |
-| Wrap with explicit name/key                                   | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })`                    | When name inference is unreliable                      |
-| Need span context (set attributes)                            | Factory: `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })` | When you need to attach attributes inside the function |
-| One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()`         | HTTP request handlers, background jobs                 |
-| Throw an error with why/fix/link                              | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`            | API routes, services, validation                       |
-| Show API error in UI (client)                                 | `parseError(caught)` → use `message`, `why`, `fix`, `link`                          | Toasts, error banners, forms                           |
-| Product/analytics events                                      | `track('event.name', attributes)` or `Event` from `autotel/event`                   | Clicks, signups, conversions                           |
-| Record error on current span                                  | `recordStructuredError(ctx, error)` or request logger `.error()`                    | Inside catch blocks when you have a span               |
-| Security decision point                                       | `securityEvent()` from `autotel-audit`                                              | Login failure, `access.tenant.violation`               |
-| Wrap a sensitive operation                                    | `withSecurity()` from `autotel-audit`                                               | API key creation                                       |
-| Correlate actor without raw PII                               | `hashIdentifier()` from `autotel-audit`                                             | Email or IP in `actorId`                               |
-| Validation mismatch observability                             | `defineValidator()` from `autotel/validate`                                         | POST body shape at boundary                            |
-| Zero-code probe/401/LLM signals                               | `createSecuritySignalProcessor()` in `init({ spanProcessors })`                     | Scanner traffic, credential stuffing                   |
+| Scenario                                                      | Use                                                                         | Example                                  |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------- |
+| Wrap an async function with a span                            | `trace(fn)` or `span('Name', fn)`                                           | Handlers, use-case functions, workers    |
+| Wrap with explicit name/key                                   | `trace('checkout', fn)` or `instrument({ key: 'checkout', fn })`            | When name inference is unreliable        |
+| Run named work now with span context                          | `trace.run('checkout', async (ctx) => { ctx.setAttribute(...); ... })`      | One-off operations, run right here       |
+| Reusable handler with explicit context                        | `withTracing({})((ctx) => async (args) => { ctx.setAttribute(...); ... })`  | When a wrapped function needs context    |
+| One snapshot per request (attributes + correlated log events) | `getRequestLogger(ctx?)` + `.set()` / `.info()` / `.error()` + `.emitNow()` | HTTP request handlers, background jobs   |
+| Throw an error with why/fix/link                              | `createStructuredError({ message, why?, fix?, link?, status?, cause? })`    | API routes, services, validation         |
+| Show API error in UI (client)                                 | `parseError(caught)` → use `message`, `why`, `fix`, `link`                  | Toasts, error banners, forms             |
+| Product/analytics events                                      | `track('event.name', attributes)` or `Event` from `autotel/event`           | Clicks, signups, conversions             |
+| Record error on current span                                  | `recordStructuredError(ctx, error)` or request logger `.error()`            | Inside catch blocks when you have a span |
+| Security decision point                                       | `securityEvent()` from `autotel-audit`                                      | Login failure, `access.tenant.violation` |
+| Wrap a sensitive operation                                    | `withSecurity()` from `autotel-audit`                                       | API key creation                         |
+| Correlate actor without raw PII                               | `hashIdentifier()` from `autotel-audit`                                     | Email or IP in `actorId`                 |
+| Validation mismatch observability                             | `defineValidator()` from `autotel/validate`                                 | POST body shape at boundary              |
+| Zero-code probe/401/LLM signals                               | `createSecuritySignalProcessor()` in `init({ spanProcessors })`             | Scanner traffic, credential stuffing     |
 
 **Rule of thumb**: If there is an HTTP request or a "job", create a span via `trace()` or framework middleware, and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
 

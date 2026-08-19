@@ -29,10 +29,34 @@ import {
   MCP_CHAR_BUDGETS,
 } from './semantic-conventions';
 import { recordSecurityEvent } from './metrics';
+import type { UnknownRecord } from './values.js';
+import {
+  asBoolean,
+  asNumber,
+  asRecord,
+  asString,
+  nonEmptyString,
+  readProperty,
+} from './values.js';
 
 // Re-export so the WebMCP character budgets are reachable from the `security`
 // subpath alongside the helpers that use them.
 export { MCP_CHAR_BUDGETS } from './semantic-conventions';
+
+/**
+ * What a bridged security event can carry beyond the named fields. Matches the
+ * value type autotel-audit renders onto a span: scalars pass through, a Date
+ * becomes an ISO string, anything nested is JSON-serialized.
+ */
+export type SecurityEventValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Date
+  | Array<SecurityEventValue>
+  | { [key: string]: SecurityEventValue };
 
 /** Minimal bridge sink — maps MCP boundary signals to unified `security.*` events. */
 export interface SecurityEventBridgeLike {
@@ -45,7 +69,7 @@ export interface SecurityEventBridgeLike {
     toolName?: string;
     verdict?: string;
     source?: string;
-    [key: string]: unknown;
+    [key: string]: SecurityEventValue;
   }): void;
 }
 
@@ -140,26 +164,16 @@ export function applyToolAnnotations(
   annotations: McpToolAnnotations | undefined,
 ): void {
   if (!annotations) return;
-  if (typeof annotations.readOnlyHint === 'boolean') {
-    sink.setAttribute(MCP_SEMCONV.TOOL_READ_ONLY, annotations.readOnlyHint);
-  }
-  if (typeof annotations.destructiveHint === 'boolean') {
-    sink.setAttribute(
-      MCP_SEMCONV.TOOL_DESTRUCTIVE,
-      annotations.destructiveHint,
-    );
-  }
-  if (typeof annotations.idempotentHint === 'boolean') {
-    sink.setAttribute(MCP_SEMCONV.TOOL_IDEMPOTENT, annotations.idempotentHint);
-  }
-  if (typeof annotations.openWorldHint === 'boolean') {
-    sink.setAttribute(MCP_SEMCONV.TOOL_OPEN_WORLD, annotations.openWorldHint);
-  }
-  if (typeof annotations.untrustedContentHint === 'boolean') {
-    sink.setAttribute(
-      MCP_SEMCONV.TOOL_UNTRUSTED_CONTENT,
-      annotations.untrustedContentHint,
-    );
+  const hints: Array<[string, unknown]> = [
+    [MCP_SEMCONV.TOOL_READ_ONLY, annotations.readOnlyHint],
+    [MCP_SEMCONV.TOOL_DESTRUCTIVE, annotations.destructiveHint],
+    [MCP_SEMCONV.TOOL_IDEMPOTENT, annotations.idempotentHint],
+    [MCP_SEMCONV.TOOL_OPEN_WORLD, annotations.openWorldHint],
+    [MCP_SEMCONV.TOOL_UNTRUSTED_CONTENT, annotations.untrustedContentHint],
+  ];
+  for (const [attribute, hint] of hints) {
+    const stated = asBoolean(hint);
+    if (stated !== undefined) sink.setAttribute(attribute, stated);
   }
 }
 
@@ -167,7 +181,8 @@ export function applyToolAnnotations(
 
 /** Serialize a value to a string, tolerating circular / non-serializable input. */
 export function safeStringify(value: unknown): string {
-  if (typeof value === 'string') return value;
+  const text = asString(value);
+  if (text !== undefined) return text;
   try {
     return JSON.stringify(value) ?? String(value);
   } catch {
@@ -301,7 +316,9 @@ export function enforceOutputBudget(
     outcome: 'blocked',
     severity: 'warning',
     reason: 'output_char_budget_exceeded',
-    ...(typeof toolName === 'string' && { toolName }),
+    ...(asString(toolName) === undefined
+      ? {}
+      : { toolName: asString(toolName) }),
     observed: size,
     limit,
   });
@@ -317,14 +334,8 @@ export function extractManifestTextSurface(
   name: string,
   config: unknown,
 ): ManifestTextSurface {
-  const obj =
-    config && typeof config === 'object'
-      ? (config as Record<string, unknown>)
-      : {};
-  const description =
-    typeof obj.description === 'string' && obj.description.length > 0
-      ? obj.description
-      : undefined;
+  const obj = asRecord(config) ?? {};
+  const description = nonEmptyString(obj.description);
 
   const parameters = extractParameterDescriptions(obj);
   return { type, name, description, parameters };
@@ -400,11 +411,9 @@ export function applyManifestAssessment(
       MCP_SEMCONV.SECURITY_MANIFEST_VERDICT,
       assessment.verdict.verdict,
     );
-    if (typeof assessment.verdict.score === 'number') {
-      sink.setAttribute(
-        MCP_SEMCONV.SECURITY_MANIFEST_SCORE,
-        assessment.verdict.score,
-      );
+    const manifestScore = asNumber(assessment.verdict.score);
+    if (manifestScore !== undefined) {
+      sink.setAttribute(MCP_SEMCONV.SECURITY_MANIFEST_SCORE, manifestScore);
     }
     if (assessment.verdict.categories?.length) {
       sink.setAttribute(
@@ -435,11 +444,15 @@ export function applyManifestAssessment(
           assessment.verdict.verdict === 'malicious' ? 'error' : 'warning',
         reason:
           assessment.verdict.categories?.join(',') ?? 'manifest_suspected',
-        ...(typeof toolName === 'string' && { toolName }),
+        ...(asString(toolName) === undefined
+          ? {}
+          : { toolName: asString(toolName) }),
         verdict: assessment.verdict.verdict,
-        ...(typeof assessment.verdict.score === 'number' && {
-          score: assessment.verdict.score,
-        }),
+        ...(asNumber(assessment.verdict.score) === undefined
+          ? {}
+          : {
+              score: asNumber(assessment.verdict.score),
+            }),
       });
     }
   }
@@ -524,8 +537,9 @@ export async function runClassifier(
   sink.setAttribute(MCP_SEMCONV.SECURITY_INJECTION_SUSPECTED, suspected);
   sink.setAttribute(MCP_SEMCONV.SECURITY_INJECTION_VERDICT, verdict.verdict);
   sink.setAttribute(MCP_SEMCONV.SECURITY_INJECTION_SOURCE, input.source);
-  if (typeof verdict.score === 'number') {
-    sink.setAttribute(MCP_SEMCONV.SECURITY_INJECTION_SCORE, verdict.score);
+  const injectionScore = asNumber(verdict.score);
+  if (injectionScore !== undefined) {
+    sink.setAttribute(MCP_SEMCONV.SECURITY_INJECTION_SCORE, injectionScore);
   }
   if (verdict.categories?.length) {
     sink.setAttribute(
@@ -560,7 +574,9 @@ export async function runClassifier(
       toolName: input.name,
       verdict: verdict.verdict,
       source: input.source,
-      ...(typeof verdict.score === 'number' && { score: verdict.score }),
+      ...(asNumber(verdict.score) === undefined
+        ? {}
+        : { score: asNumber(verdict.score) }),
     });
   }
   return verdict;
@@ -693,39 +709,34 @@ function buildManifestText(surface: ManifestTextSurface): string {
   return parts.join('\n');
 }
 
+/** One parameter, as the manifest surface describes it. */
+interface ParameterDescription {
+  description?: string;
+}
+
+/** Parameter descriptions by name, however the config spelled them. */
+type ParameterDescriptions = Record<string, ParameterDescription>;
+
 function extractParameterDescriptions(
-  config: Record<string, unknown>,
-): Record<string, { description?: string }> | undefined {
+  config: UnknownRecord,
+): ParameterDescriptions | undefined {
+  // A tool states its parameters as a JSON schema's `properties`, an object
+  // of `parameters`, or a list of `arguments` - all three are in the wild.
   const fromSchema = normalizeParameterObject(
-    (config.inputSchema &&
-    typeof config.inputSchema === 'object' &&
-    (config.inputSchema as Record<string, unknown>).properties &&
-    typeof (config.inputSchema as Record<string, unknown>).properties ===
-      'object'
-      ? (config.inputSchema as Record<string, unknown>).properties
-      : undefined) as Record<string, unknown> | undefined,
+    asRecord(readProperty(config.inputSchema, 'properties')),
   );
   if (fromSchema) return fromSchema;
 
-  const fromParameters = normalizeParameterObject(
-    (config.parameters &&
-    typeof config.parameters === 'object' &&
-    !Array.isArray(config.parameters)
-      ? (config.parameters as Record<string, unknown>)
-      : undefined) as Record<string, unknown> | undefined,
-  );
+  const fromParameters = normalizeParameterObject(asRecord(config.parameters));
   if (fromParameters) return fromParameters;
 
   if (Array.isArray(config.arguments)) {
-    const out: Record<string, { description?: string }> = {};
+    const out: ParameterDescriptions = {};
     for (const item of config.arguments) {
-      if (!item || typeof item !== 'object') continue;
-      const arg = item as Record<string, unknown>;
-      if (typeof arg.name !== 'string') continue;
-      out[arg.name] = {
-        description:
-          typeof arg.description === 'string' ? arg.description : undefined,
-      };
+      const arg = asRecord(item);
+      const name = asString(arg?.name);
+      if (!arg || name === undefined) continue;
+      out[name] = { description: asString(arg.description) };
     }
     return Object.keys(out).length > 0 ? out : undefined;
   }
@@ -734,20 +745,15 @@ function extractParameterDescriptions(
 }
 
 function normalizeParameterObject(
-  parameters: Record<string, unknown> | undefined,
-): Record<string, { description?: string }> | undefined {
+  parameters: UnknownRecord | undefined,
+): ParameterDescriptions | undefined {
   if (!parameters) return undefined;
-  const out: Record<string, { description?: string }> = {};
+  const out: ParameterDescriptions = {};
   for (const [name, value] of Object.entries(parameters)) {
-    if (!value || typeof value !== 'object') {
-      out[name] = {};
-      continue;
-    }
-    const obj = value as Record<string, unknown>;
-    out[name] = {
-      description:
-        typeof obj.description === 'string' ? obj.description : undefined,
-    };
+    const parameter = asRecord(value);
+    out[name] = parameter
+      ? { description: asString(parameter.description) }
+      : {};
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }

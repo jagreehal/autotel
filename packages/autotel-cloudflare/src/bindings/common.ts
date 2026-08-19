@@ -1,3 +1,4 @@
+import { member } from '../values.js';
 /**
  * Common instrumentation utilities
  */
@@ -17,13 +18,18 @@ export class PromiseTracker {
   }
 }
 
+/** What proxyExecutionContext() answers with. */
+interface ProxyExecutionContextResult {
+  ctx: ExecutionContext;
+  tracker: PromiseTracker;
+}
+
 /**
  * Proxy ExecutionContext to track waitUntil promises
  */
-export function proxyExecutionContext(ctx: ExecutionContext): {
-  ctx: ExecutionContext;
-  tracker: PromiseTracker;
-} {
+export function proxyExecutionContext(
+  ctx: ExecutionContext,
+): ProxyExecutionContextResult {
   const tracker = new PromiseTracker();
 
   const proxied = new Proxy(ctx, {
@@ -34,7 +40,7 @@ export function proxyExecutionContext(ctx: ExecutionContext): {
           return target.waitUntil(promise);
         };
       }
-      return Reflect.get(target, prop);
+      return member(target, prop);
     },
   });
 

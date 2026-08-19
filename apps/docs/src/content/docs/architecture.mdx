@@ -5,20 +5,52 @@ description: Code structure patterns, conventions, and important architectural d
 
 ## Functional API Pattern
 
-The core `trace()` function deterministically wraps a plain function. Use `getActiveTraceContext()` for ambient context, or `withTracing()` when an explicit context factory is clearer:
+**`trace` wraps, `trace.run` runs.** Every `trace(...)` form returns a
+wrapper and executes nothing, so importing a module full of them has no
+side effects. `trace.run(...)` is the only form that runs the operation.
+
+| Call                        | Returns                    | Use for                          |
+| --------------------------- | -------------------------- | -------------------------------- |
+| `trace(fn)`                 | wrapper, name inferred     | a reusable function              |
+| `trace(name, fn)`           | wrapper, name explicit     | a reusable function, stable name |
+| `trace(name)(fn)`           | wrapper, curried           | applying one config to many fns  |
+| `trace.run(name, ctx => r)` | the operation's result     | one operation, run right here    |
+| `instrument({ key, fn })`   | wrapper, name explicit     | the options form of the wrapper  |
+| `withTracing(opts)(f)`      | wrapper from a ctx factory | reusable config, ctx in scope    |
 
 ```typescript
-// Factory pattern (receives ctx)
-export const createUser = withTracing({})((ctx) => async (data) => {
+import { trace, ctx } from 'autotel';
+
+// Reusable, name inferred from the binding
+export const getUser = trace(async (id) => {
+  return await db.users.findById(id);
+});
+
+// Reusable, explicit name — reach the span through the ambient ctx
+export const createUser = trace('user.create', async (data) => {
   ctx.setAttribute('user.id', data.id);
   return await db.users.create(data);
 });
 
-// Direct pattern (no ctx needed)
-export const getUser = trace(async (id) => {
-  return await db.users.findById(id);
+// One operation, run right here
+const user = await trace.run('user.create', async (ctx) => {
+  ctx.setAttribute('user.id', input.id);
+  return await db.users.create(input);
+});
+
+// Factory pattern (ctx bound for the whole wrapper)
+export const updateUser = withTracing({})((ctx) => async (data) => {
+  ctx.setAttribute('user.id', data.id);
+  return await db.users.update(data);
 });
 ```
+
+Because `trace` and `trace.run` are separate names, no call shape is
+ambiguous and nothing inspects a callback's parameter name.
+
+Inside any traced body, the ambient `ctx` import resolves to the active span —
+including in helpers several frames down, which a context parameter cannot
+reach without being threaded through every call.
 
 `trace()` never inspects or executes the function during wrapper construction. The explicit factory shape belongs to `withTracing()` and the semantic, messaging, and workflow helpers.
 
@@ -26,7 +58,7 @@ export const getUser = trace(async (id) => {
 
 Trace names are inferred automatically with the following priority:
 
-1. **Explicit name** (from `trace('customName', ...)` or `instrument()` key)
+1. **Explicit name** (from an immediate `trace('customName', operation)`, a `withTracing({ name })` factory, or an `instrument()` key)
 2. **Named function expressions** (e.g., `withTracing({})((ctx) => async function createUser() {})`)
 3. **Variable name from assignment** (e.g., `const processDocuments = trace(...)` → "processDocuments")
 4. **Factory function name** (if the outer function is named)
@@ -51,6 +83,7 @@ export const processDocuments = withTracing({})((ctx) => async function processD
 - Minified/obfuscated code may prevent name inference
 - Edge runtimes without file system access will fall back to unnamed spans
 - Results are cached per source location for performance
+- Production/minified reusable functions should use `trace(name, fn)`, `instrument({ key, fn })`, or `withTracing({ name })` for stable names
 
 ## Events Queue Pattern
 

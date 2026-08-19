@@ -125,7 +125,7 @@ export async function pollUntil<T>(
   throw new Error(
     `[${label}] pollUntil timed out after ${timeoutMs}ms (${attempts} attempts)${
       lastError
-        ? `; last error: ${(lastError as Error).message ?? lastError}`
+        ? `; last error: ${lastError instanceof Error ? lastError.message : (String(lastError) ?? lastError)}`
         : ''
     }`,
   );

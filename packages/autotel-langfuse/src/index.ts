@@ -40,6 +40,7 @@
  * ```
  */
 
+import type { AttributeValue, Attributes } from '@opentelemetry/api';
 import type { Context } from '@opentelemetry/api';
 import type {
   ReadableSpan,
@@ -120,14 +121,17 @@ export function langfuseCompatibility(
     },
 
     onEnd(span: ReadableSpan): void {
-      const attributes = span.attributes as Record<string, unknown>;
+      // SAFETY: ReadableSpan types attributes as readonly; this processor's job
+      // is to add the Langfuse-specific ones, which is what a span processor is
+      // allowed to do before export.
+      const attributes = span.attributes as Attributes;
 
       /**
        * Fill a field only when the span has not already answered it. These
        * options are process-wide defaults, and a span that set the attribute
        * itself knows something this configuration does not.
        */
-      const fill = (key: string, value: unknown): void => {
+      const fill = (key: string, value: AttributeValue | undefined): void => {
         if (value !== undefined && attributes[key] === undefined) {
           attributes[key] = value;
         }

@@ -132,19 +132,28 @@ function banner(): void {
   );
 }
 
-function oneLine(content: unknown): string {
+/** What a model message carries: text, or the structured parts the SDK returns. */
+type MessageContent =
+  | string
+  | number
+  | boolean
+  | null
+  | Array<MessageContent>
+  | { [key: string]: MessageContent };
+
+function oneLine(content: MessageContent): string {
   const text = typeof content === 'string' ? content : JSON.stringify(content);
   const collapsed = text.replace(/\s+/g, ' ').trim();
   return collapsed.length > 160 ? `${collapsed.slice(0, 157)}…` : collapsed;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
-function isConnectionError(error: unknown): boolean {
+function isConnectionError(cause: unknown): boolean {
   return /ECONNREFUSED|fetch failed|ENOTFOUND|connect/i.test(
-    errorMessage(error),
+    errorMessage(cause),
   );
 }
 

@@ -7,7 +7,7 @@
  * Expected: Logs inside trace() should have trace_id, span_id, trace_flags fields
  */
 
-import { trace, shutdown, flush } from 'autotel';
+import { instrument, shutdown, flush } from 'autotel';
 import pino from 'pino';
 
 // Create a synchronous destination for immediate output
@@ -22,11 +22,17 @@ console.log('');
 console.log('📝 Log INSIDE trace (SHOULD have trace_id):');
 
 // Create traced function
-const tracedOperation = trace('esm-test-operation', async () => {
-  logger.info('Inside trace - SHOULD have trace_id!');
-  logger.info({ userId: '123', action: 'test' }, 'Structured log inside trace');
-  dest.flushSync();
-  return 'success';
+const tracedOperation = instrument({
+  key: 'esm-test-operation',
+  fn: async () => {
+    logger.info('Inside trace - SHOULD have trace_id!');
+    logger.info(
+      { userId: '123', action: 'test' },
+      'Structured log inside trace',
+    );
+    dest.flushSync();
+    return 'success';
+  },
 });
 
 async function main() {

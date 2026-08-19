@@ -27,6 +27,7 @@ import type { TracingOptions, TraceContext } from './functional';
 import { getConfig } from './config';
 import { SpanStatusCode } from '@opentelemetry/api';
 import { createTraceContext } from './trace-context';
+import { splitNameOrOptions } from './values';
 
 /**
  * Options for @Trace method decorator
@@ -37,6 +38,20 @@ export interface TraceDecoratorOptions extends Omit<TracingOptions, 'name'> {
    */
   name?: string;
 }
+
+/**
+ * The receiver of a decorated method. `@Trace` lends the method its span's
+ * context for the duration of the call, and puts back whatever was there.
+ */
+export interface WithTraceContext {
+  ctx?: TraceContext;
+}
+
+/** The decorator a `@Trace(...)` call produces. */
+export type TraceDecorator = <TArgs extends unknown[], TResult>(
+  originalMethod: (...args: TArgs) => Promise<TResult>,
+  context: ClassMethodDecoratorContext,
+) => (...args: TArgs) => Promise<TResult>;
 
 /**
  * @Trace - Method decorator for fine-grained tracing
@@ -67,15 +82,11 @@ export interface TraceDecoratorOptions extends Omit<TracingOptions, 'name'> {
  *
  * @example Accessing ctx
  * ```typescript
- * interface WithTraceContext {
- *   ctx?: TraceContext
- * }
- *
  * class UserService {
  *   @Trace()
- *   async createUser(data: UserData) {
+ *   async createUser(this: WithTraceContext, data: UserData) {
  *     // Access ctx via this.ctx (available during execution)
- *     const ctx = (this as unknown as WithTraceContext).ctx
+ *     const ctx = this.ctx
  *     if (ctx) {
  *       ctx.setAttribute('user.id', data.id)
  *     }
@@ -84,40 +95,28 @@ export interface TraceDecoratorOptions extends Omit<TracingOptions, 'name'> {
  * }
  * ```
  */
-export function Trace(
-  options?: TraceDecoratorOptions,
-): <T extends (...args: unknown[]) => Promise<unknown>>(
-  originalMethod: T,
-  context: ClassMethodDecoratorContext,
-) => T;
+export function Trace(options?: TraceDecoratorOptions): TraceDecorator;
 export function Trace(
   name?: string,
   options?: TraceDecoratorOptions,
-): <T extends (...args: unknown[]) => Promise<unknown>>(
-  originalMethod: T,
-  context: ClassMethodDecoratorContext,
-) => T;
+): TraceDecorator;
 export function Trace(
   nameOrOptions?: string | TraceDecoratorOptions,
   maybeOptions?: TraceDecoratorOptions,
-): <T extends (...args: unknown[]) => Promise<unknown>>(
-  originalMethod: T,
-  context: ClassMethodDecoratorContext,
-) => T {
+): TraceDecorator {
   // Parse arguments
-  const name =
-    typeof nameOrOptions === 'string' ? nameOrOptions : nameOrOptions?.name;
+  const { name: nameArgument, options } =
+    splitNameOrOptions<TraceDecoratorOptions>(nameOrOptions);
+  const name = nameArgument ?? options?.name;
   // Options are used in the returned decorator function, not here
   const _options: TraceDecoratorOptions =
-    typeof nameOrOptions === 'string'
-      ? maybeOptions || {}
-      : nameOrOptions || {};
+    (nameArgument === undefined ? options : maybeOptions) ?? {};
 
   // TypeScript 5+ decorator signature
-  return function <T extends (...args: unknown[]) => Promise<unknown>>(
-    originalMethod: T,
+  return function <TArgs extends unknown[], TResult>(
+    originalMethod: (...args: TArgs) => Promise<TResult>,
     context: ClassMethodDecoratorContext,
-  ): T {
+  ): (...args: TArgs) => Promise<TResult> {
     const methodName = String(context.name);
 
     // Skip if not an async function
@@ -139,10 +138,10 @@ export function Trace(
 
     const spanName = name || methodName;
 
-    return async function <This>(
-      this: This,
-      ...args: unknown[]
-    ): Promise<unknown> {
+    return async function (
+      this: WithTraceContext,
+      ...args: TArgs
+    ): Promise<TResult> {
       const config = getConfig();
       const tracer = config.tracer;
 
@@ -151,18 +150,18 @@ export function Trace(
           // Make ctx available via this.ctx for methods that need it
           const ctx: TraceContext = createTraceContext(span);
 
-          const originalCtx = (this as { ctx?: TraceContext }).ctx;
+          const originalCtx = this.ctx;
           try {
-            (this as { ctx?: TraceContext }).ctx = ctx;
-            const result = await originalMethod.apply(this, args as []);
+            this.ctx = ctx;
+            const result = await originalMethod.apply(this, args);
             span.setStatus({ code: SpanStatusCode.OK });
             return result;
           } finally {
             // Restore original ctx
             if (originalCtx === undefined) {
-              delete (this as { ctx?: TraceContext }).ctx;
+              delete this.ctx;
             } else {
-              (this as { ctx?: TraceContext }).ctx = originalCtx;
+              this.ctx = originalCtx;
             }
           }
         } catch (error) {
@@ -178,7 +177,7 @@ export function Trace(
           span.end();
         }
       });
-    } as T;
+    };
   };
 }
 

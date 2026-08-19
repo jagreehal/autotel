@@ -1,12 +1,12 @@
 /**
- * Shared structural converters from Vercel AI SDK shapes to autotel inputs.
+ * Shared converters from the Vercel AI SDK's own fields to autotel inputs.
  *
  * The AI SDK reports the same data three ways — the lifecycle `Telemetry`
  * events ({@link autotelTelemetry}), the `ai:telemetry` channel messages
  * ({@link subscribeAiTelemetry}), and a finished call result
  * ({@link observeAiSdkResult}) — and across v4/v5 with differing field names
  * (`promptTokens` vs `inputTokens`, flat vs nested token details). These helpers
- * are the single place that normalizes those shapes, so the three entry points
+ * are the single place that normalizes those spellings, so the three entry points
  * stay consistent and none of them re-derive the mapping.
  */
 
@@ -16,7 +16,7 @@ import type { TokenUsage } from '../cost.js';
 import { GEN_AI_OPERATION } from '../semconv.js';
 
 /** Every AI SDK token-usage field name we understand (v4 + v5, flat + nested). */
-export interface AiSdkUsageShape {
+export interface AiSdkUsageFields {
   inputTokens?: number;
   outputTokens?: number;
   /** v4 aliases. */
@@ -32,9 +32,9 @@ export interface AiSdkUsageShape {
   outputTokenDetails?: { reasoningTokens?: number };
 }
 
-/** Map any AI SDK usage shape to {@link TokenUsage}; `undefined` if all empty. */
+/** Map any AI SDK usage fields to {@link TokenUsage}; `undefined` if all empty. */
 export function toTokenUsage(
-  usage: AiSdkUsageShape | undefined,
+  usage: AiSdkUsageFields | undefined,
 ): TokenUsage | undefined {
   if (!usage) return undefined;
   const tokenUsage: TokenUsage = {
@@ -57,7 +57,7 @@ export function normalizeProvider(provider: string | undefined) {
 }
 
 /** Request-side fields shared by the lifecycle and channel model-call events. */
-export interface AiSdkRequestShape {
+export interface AiSdkRequestFields {
   provider?: string;
   modelId?: string;
   temperature?: number;
@@ -71,7 +71,7 @@ export interface AiSdkRequestShape {
 }
 
 /** Build the `chat` request attributes from a model-call start event. */
-export function toChatRequest(event: AiSdkRequestShape): GenAiRequestInput {
+export function toChatRequest(event: AiSdkRequestFields): GenAiRequestInput {
   return {
     operation: GEN_AI_OPERATION.CHAT,
     provider: normalizeProvider(event.provider),

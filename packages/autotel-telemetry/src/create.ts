@@ -8,7 +8,7 @@ import {
   createNoopDrain,
   resolveEndpoint,
 } from './drain';
-import { TelemetryOutbox } from './outbox';
+import { TelemetryOutbox, type OutboxLike } from './outbox';
 import { sanitizeCustom, sanitizeFlags } from './sanitize';
 import type {
   RunEvent,
@@ -30,14 +30,15 @@ let activeHandle: InternalTelemetry | null = null;
 
 class InternalTelemetry implements TelemetryHandle {
   readonly enabled: boolean;
-  private readonly outbox: TelemetryOutbox;
+  private readonly outbox: OutboxLike;
   private readonly drain: ReturnType<typeof composeDrains>;
   private readonly options: TelemetryOptions;
 
   constructor(options: TelemetryOptions, enabled: boolean) {
     this.options = options;
     this.enabled = enabled;
-    this.outbox = new TelemetryOutbox({ toolName: options.name });
+    this.outbox =
+      options.outbox ?? new TelemetryOutbox({ toolName: options.name });
     const endpoint = resolveEndpoint(options.endpoint);
     const drains = [
       createDebugDrain(),
@@ -142,14 +143,18 @@ export const telemetry = {
   },
 };
 
-export function withCommanderTelemetry(
-  program: {
-    name: () => string;
-    version: () => string;
-    parseAsync: (argv: string[]) => Promise<unknown>;
-  },
+/** The slice of a Commander program this wrapper needs. parseAsync resolves to
+ * the program itself, which is what makes the call chainable. */
+export interface CommanderLike {
+  name: () => string;
+  version: () => string;
+  parseAsync: (argv: string[]) => Promise<CommanderLike>;
+}
+
+export function withCommanderTelemetry<TProgram extends CommanderLike>(
+  program: TProgram,
   options?: Partial<TelemetryOptions>,
-): typeof program {
+): TProgram {
   const originalParse = program.parseAsync.bind(program);
   program.parseAsync = async (argv: string[]) => {
     const command = argv[2] ?? 'help';
@@ -161,8 +166,8 @@ export function withCommanderTelemetry(
       },
       command,
       argv.slice(3),
-      () => originalParse(argv) as Promise<unknown>,
-    ) as Promise<unknown>;
+      () => originalParse(argv),
+    );
   };
   return program;
 }

@@ -52,6 +52,8 @@ import { createSafeBaggageSchema } from './business-baggage';
 import { emitCorrelatedEvent } from './correlated-events';
 import { withTracing } from './functional';
 import type { TraceContext } from './trace-context';
+import type { UnknownRecord } from './values';
+import { isFunction, toError } from './values';
 
 // ============================================================================
 // Workflow Baggage Schema
@@ -149,7 +151,7 @@ export type WorkflowBaggageValues = {
 /**
  * Configuration for distributed workflow tracing
  */
-export interface DistributedWorkflowConfig {
+export interface DistributedWorkflowConfig<TResult = unknown> {
   /** Workflow name/type (e.g., "OrderFulfillment", "UserOnboarding") */
   name: string;
 
@@ -196,7 +198,7 @@ export interface DistributedWorkflowConfig {
   onStart?: (ctx: DistributedWorkflowContext) => void;
 
   /** Callback on workflow completion */
-  onComplete?: (ctx: DistributedWorkflowContext, result: unknown) => void;
+  onComplete?: (ctx: DistributedWorkflowContext, result: TResult) => void;
 
   /** Callback on workflow error */
   onError?: (ctx: DistributedWorkflowContext, error: Error) => void;
@@ -205,7 +207,7 @@ export interface DistributedWorkflowConfig {
 /**
  * Configuration for distributed workflow step
  */
-export interface DistributedStepConfig {
+export interface DistributedStepConfig<TResult = unknown> {
   /** Step name (e.g., "ReserveInventory", "ChargePayment") */
   name: string;
 
@@ -236,7 +238,7 @@ export interface DistributedStepConfig {
   onStart?: (ctx: DistributedStepContext) => void;
 
   /** Callback on step completion */
-  onComplete?: (ctx: DistributedStepContext, result: unknown) => void;
+  onComplete?: (ctx: DistributedStepContext, result: TResult) => void;
 
   /** Callback on step error */
   onError?: (ctx: DistributedStepContext, error: Error) => void;
@@ -297,7 +299,7 @@ export interface DistributedStepContext extends TraceContext {
   getWorkflowHeaders(): Record<string, string>;
 
   /** Mark step as requiring compensation on failure */
-  requiresCompensation(compensationData?: Record<string, unknown>): void;
+  requiresCompensation(compensationData?: UnknownRecord): void;
 }
 
 // ============================================================================
@@ -332,14 +334,20 @@ export interface DistributedStepContext extends TraceContext {
  * });
  * ```
  */
-export function traceDistributedWorkflow(config: DistributedWorkflowConfig) {
+export function traceDistributedWorkflow<TResult = unknown>(
+  config: DistributedWorkflowConfig<TResult>,
+) {
   const spanName = `workflow.${config.name}`;
 
-  return <TArgs extends unknown[], TReturn>(
+  return <TArgs extends unknown[], TReturn extends TResult>(
     fnFactory: (
       ctx: DistributedWorkflowContext,
     ) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
+    // SAFETY: withTracing infers its wrapper from the factory it is given.
+    // This factory takes the distributed workflow context rather than a bare
+    // TraceContext, so the wrapper is stated back as the caller's own
+    // signature - the same TArgs and TReturn.
     return withTracing<TArgs, TReturn>({
       name: spanName,
       spanKind: SpanKind.INTERNAL,
@@ -409,7 +417,7 @@ export function traceDistributedWorkflow(config: DistributedWorkflowConfig) {
             WorkflowBaggage.set(baseCtx, baggageValues);
           },
 
-          getWorkflowHeaders(): Record<string, string> {
+          getWorkflowHeaders() {
             const headers: Record<string, string> = {};
             const ctx = context.active();
             propagation.inject(ctx, headers);
@@ -452,12 +460,13 @@ export function traceDistributedWorkflow(config: DistributedWorkflowConfig) {
           return result;
         } catch (error) {
           // Call onError callback
-          config.onError?.(workflowCtx, error as Error);
+          config.onError?.(workflowCtx, toError(error));
 
           // Add error event
           emitCorrelatedEvent(baseCtx, 'workflow.failed', {
             'workflow.id': workflowId,
-            'workflow.error': (error as Error).message,
+            'workflow.error':
+              error instanceof Error ? error.message : String(error),
           });
 
           throw error;
@@ -510,14 +519,20 @@ export function traceDistributedWorkflow(config: DistributedWorkflowConfig) {
  * });
  * ```
  */
-export function traceDistributedStep(config: DistributedStepConfig) {
+export function traceDistributedStep<TResult = unknown>(
+  config: DistributedStepConfig<TResult>,
+) {
   const spanName = `workflow.step.${config.name}`;
 
-  return <TArgs extends unknown[], TReturn>(
+  return <TArgs extends unknown[], TReturn extends TResult>(
     fnFactory: (
       ctx: DistributedStepContext,
     ) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
+    // SAFETY: withTracing infers its wrapper from the factory it is given.
+    // This factory takes the distributed workflow context rather than a bare
+    // TraceContext, so the wrapper is stated back as the caller's own
+    // signature - the same TArgs and TReturn.
     return withTracing<TArgs, TReturn>({
       name: spanName,
       spanKind: SpanKind.INTERNAL,
@@ -527,12 +542,17 @@ export function traceDistributedStep(config: DistributedStepConfig) {
         let baggageValues: WorkflowBaggageValues | null = null;
 
         const extractBaggage = config.extractBaggage ?? true;
-        if (typeof extractBaggage === 'function') {
-          baggageValues = extractBaggage(args);
+        const readBaggage = isFunction(extractBaggage)
+          ? extractBaggage
+          : undefined;
+        if (readBaggage) {
+          baggageValues = readBaggage(args);
         } else if (extractBaggage) {
           // Read from current context
           const extracted = WorkflowBaggage.get(baseCtx);
           if (extracted.workflowId && extracted.workflowName) {
+            // SAFETY: both required fields are present, which is what
+            // WorkflowBaggageValues declares; the rest are optional.
             baggageValues = extracted as WorkflowBaggageValues;
           }
         }
@@ -597,7 +617,7 @@ export function traceDistributedStep(config: DistributedStepConfig) {
         }
 
         // Compensation data storage
-        let compensationData: Record<string, unknown> | undefined;
+        let compensationData: UnknownRecord | undefined;
 
         // Create extended context
         const stepCtx: DistributedStepContext = {
@@ -619,14 +639,14 @@ export function traceDistributedStep(config: DistributedStepConfig) {
             }
           },
 
-          getWorkflowHeaders(): Record<string, string> {
+          getWorkflowHeaders() {
             const headers: Record<string, string> = {};
             const ctx = context.active();
             propagation.inject(ctx, headers);
             return headers;
           },
 
-          requiresCompensation(data?: Record<string, unknown>): void {
+          requiresCompensation(data?: UnknownRecord): void {
             compensationData = data;
             baseCtx.setAttribute('workflow.step.requires_compensation', true);
             emitCorrelatedEvent(
@@ -666,12 +686,13 @@ export function traceDistributedStep(config: DistributedStepConfig) {
           return result;
         } catch (error) {
           // Call onError callback
-          config.onError?.(stepCtx, error as Error);
+          config.onError?.(stepCtx, toError(error));
 
           // Add error event with compensation info if registered
           emitCorrelatedEvent(baseCtx, 'workflow.step.failed', {
             'workflow.step.name': config.name,
-            'workflow.step.error': (error as Error).message,
+            'workflow.step.error':
+              error instanceof Error ? error.message : String(error),
             ...(compensationData && {
               'workflow.step.requires_compensation': true,
             }),
@@ -770,9 +791,7 @@ export function getWorkflowProgress(ctx: TraceContext): {
  * await fetch('/api/inventory', { headers });
  * ```
  */
-export function createWorkflowHeaders(
-  values: Partial<WorkflowBaggageValues>,
-): Record<string, string> {
+export function createWorkflowHeaders(values: Partial<WorkflowBaggageValues>) {
   const headers: Record<string, string> = {};
 
   // Build baggage string
@@ -883,6 +902,9 @@ export function parseWorkflowFromBaggage(
         break;
       }
       case 'workflow.priority': {
+        // SAFETY: the priority is written to baggage from this same union a
+        // few functions above; a header carrying something else reads back as
+        // that value, which the consumer treats as an unknown priority.
         values.priority = decodedValue as WorkflowBaggageValues['priority'];
         break;
       }

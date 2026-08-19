@@ -1,4 +1,5 @@
 import type { AuditContext } from './context.js';
+import type { AuditMetadataValue } from './index.js';
 import {
   securityEvent,
   type SecurityEventMetadata,
@@ -19,7 +20,8 @@ export interface McpBridgedSecurityEvent {
   toolName?: string;
   verdict?: string;
   source?: string;
-  [key: string]: unknown;
+  /** Extra fields ride along as span attributes; see AuditMetadataValue. */
+  [key: string]: AuditMetadataValue;
 }
 
 export interface McpSecurityEventBridgeOptions extends SecurityEventOptions {

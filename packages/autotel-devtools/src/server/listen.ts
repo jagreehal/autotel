@@ -143,7 +143,7 @@ export function listenLoopbackDualStack(args: {
         // throws a RangeError synchronously instead of emitting 'error'.
         primary.removeListener('error', onError);
         primary.removeListener('listening', onListening);
-        bindFailed(candidate, (e as Error).message);
+        bindFailed(candidate, e instanceof Error ? e.message : String(e));
       }
     };
 

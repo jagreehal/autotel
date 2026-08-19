@@ -25,27 +25,31 @@ export type PactAttributeKey = (typeof PACT_ATTRS)[keyof typeof PACT_ATTRS];
 export function buildPactAttributes(
   meta: PactInteractionMeta,
   opts: { contractFile?: string } = {},
-): Record<string, string | string[]> {
-  const attrs: Record<string, string | string[]> = {
-    [PACT_ATTRS.CONSUMER]: meta.consumer,
-    [PACT_ATTRS.PROVIDER]: meta.provider,
-    [PACT_ATTRS.KIND]: meta.kind,
-    [PACT_ATTRS.INTERACTION_DESCRIPTION]: meta.description,
-    [PACT_ATTRS.INTERACTION_STATES]: meta.states,
-  };
+) {
+  // Present only when known: a contract file is not always on disk, and an
+  // interaction id only exists once the broker has seen the interaction.
+  const optional: Array<[string, string]> = [];
   if (opts.contractFile) {
-    attrs[PACT_ATTRS.CONTRACT_FILE] = opts.contractFile;
+    optional.push([PACT_ATTRS.CONTRACT_FILE, opts.contractFile]);
   }
   if (meta.interactionId) {
-    attrs[PACT_ATTRS.INTERACTION_ID] = meta.interactionId;
+    optional.push([PACT_ATTRS.INTERACTION_ID, meta.interactionId]);
   }
-  return attrs;
+
+  return Object.fromEntries<string | string[]>([
+    [PACT_ATTRS.CONSUMER, meta.consumer],
+    [PACT_ATTRS.PROVIDER, meta.provider],
+    [PACT_ATTRS.KIND, meta.kind],
+    [PACT_ATTRS.INTERACTION_DESCRIPTION, meta.description],
+    [PACT_ATTRS.INTERACTION_STATES, meta.states],
+    ...optional,
+  ]);
 }
 
 /**
  * Helper that returns just the outcome attribute — stamped after the
  * handler resolves or rejects.
  */
-export function outcomeAttribute(outcome: PactOutcome): Record<string, string> {
+export function outcomeAttribute(outcome: PactOutcome) {
   return { [PACT_ATTRS.OUTCOME]: outcome };
 }

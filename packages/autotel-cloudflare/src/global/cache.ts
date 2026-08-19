@@ -7,9 +7,11 @@
  * - cache.delete() - Delete from cache
  */
 
-import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import { wrap } from '../bindings/common';
-import { WorkerTracer } from 'autotel-edge';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { applyTrap, asFunction, member } from '../values.js';
 
 type CacheOperation = 'match' | 'put' | 'delete';
 
@@ -31,7 +33,7 @@ function instrumentCacheMethod<T extends Function>(
 ): T {
   const handler: ProxyHandler<T> = {
     async apply(target, thisArg, argArray) {
-      const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+      const tracer = workerTracer('autotel-edge');
 
       // Extract URL from first argument (Request or string)
       const firstArg = argArray[0];
@@ -56,7 +58,7 @@ function instrumentCacheMethod<T extends Function>(
         },
         async (span) => {
           try {
-            const result = await Reflect.apply(target, thisArg, argArray);
+            const result = await target.apply(thisArg, argArray);
 
             // For match operations, record whether it was a hit or miss
             if (operation === 'match') {
@@ -66,7 +68,7 @@ function instrumentCacheMethod<T extends Function>(
             span.setStatus({ code: SpanStatusCode.OK });
             return result;
           } catch (error) {
-            span.recordException(error as Error);
+            span.recordException(toException(error));
             span.setStatus({
               code: SpanStatusCode.ERROR,
               message: error instanceof Error ? error.message : String(error),
@@ -89,23 +91,24 @@ function instrumentCacheMethod<T extends Function>(
 function instrumentCache(cache: Cache, cacheName: string): Cache {
   const handler: ProxyHandler<Cache> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
       // Instrument the cache operation methods
       if (
         (prop === 'match' || prop === 'put' || prop === 'delete') &&
-        typeof value === 'function'
+        method !== undefined
       ) {
         return instrumentCacheMethod(
-          value.bind(target),
+          method.bind(target),
           cacheName,
           prop as CacheOperation,
         );
       }
 
       // Bind other methods to preserve `this` context
-      if (typeof value === 'function') {
-        return value.bind(target);
+      if (method !== undefined) {
+        return method.bind(target);
       }
 
       return value;
@@ -124,7 +127,7 @@ function instrumentCachesOpen(
   const handler: ProxyHandler<CacheStorage['open']> = {
     async apply(target, thisArg, argArray) {
       const cacheName = argArray[0];
-      const cache = await Reflect.apply(target, thisArg, argArray);
+      const cache = await applyTrap(target, thisArg, argArray);
       return instrumentCache(cache, cacheName);
     },
   };
@@ -148,13 +151,13 @@ export function instrumentGlobalCache(): void {
         return instrumentCache(target.default, 'default');
       } else if (prop === 'open') {
         // Wrap the open method
-        const openFn = Reflect.get(target, prop);
+        const openFn = member(target, prop);
         if (typeof openFn === 'function') {
           return instrumentCachesOpen(openFn.bind(target));
         }
       }
 
-      return Reflect.get(target, prop);
+      return member(target, prop);
     },
   };
 

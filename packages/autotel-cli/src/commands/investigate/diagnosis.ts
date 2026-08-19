@@ -7,6 +7,7 @@ import {
   floatArg,
   intArg,
 } from './cli-helpers';
+import { numberOpt, stringOpt } from '../../lib/opts.js';
 
 export interface AnomaliesFlags extends InvestigateFlags {
   service?: string;
@@ -199,9 +200,9 @@ export function registerDiagnoseCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runDiagnoseAnomalies({
         ...backendFlagsFromOpts(o),
-        service: o.service as string | undefined,
-        operation: o.operation as string | undefined,
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
+        service: stringOpt(o, 'service'),
+        operation: stringOpt(o, 'operation'),
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
       });
     });
   const rootCauseCmd = new Command('root-cause')
@@ -222,9 +223,9 @@ export function registerDiagnoseCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runDiagnoseErrors({
         ...backendFlagsFromOpts(o),
-        service: o.service as string | undefined,
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
-        limit: o.limit as number | undefined,
+        service: stringOpt(o, 'service'),
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
+        limit: numberOpt(o, 'limit'),
       });
     });
   const slosCmd = new Command('slos')
@@ -237,10 +238,10 @@ export function registerDiagnoseCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runDiagnoseSlos({
         ...backendFlagsFromOpts(o),
-        service: o.service as string,
-        p99LatencyMs: o.p99LatencyMs as number | undefined,
-        maxErrorRate: o.maxErrorRate as number | undefined,
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
+        service: stringOpt(o, 'service') ?? '',
+        p99LatencyMs: numberOpt(o, 'p99LatencyMs'),
+        maxErrorRate: numberOpt(o, 'maxErrorRate'),
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
       });
     });
   addBackendFlags(diagnoseCmd);

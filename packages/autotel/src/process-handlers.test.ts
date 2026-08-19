@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { returnsInstead, sdkDouble } from './testing/doubles.js';
+import { toError } from './values';
+import type { AutotelConfig } from './autotel-config';
 
 // @types/node narrows signal listeners to per-signal overloads, so iterating a
 // `NodeJS.Signals` union needs a plain function type here.
 type AnyListener = (...args: unknown[]) => void;
 
+// SAFETY: a listener registered for one signal is called with that signal's
+// arguments; nothing here calls one, it only counts and compares them.
 const signalListeners = (signal: NodeJS.Signals): AnyListener[] =>
   process.listeners(signal) as AnyListener[];
 
@@ -75,7 +80,7 @@ describe('process handler lifecycle', () => {
 
     init({
       service: 'process-handler-shorthand-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: true,
     });
 
@@ -102,7 +107,7 @@ describe('process handler lifecycle', () => {
 
     init({
       service: 'process-handler-opt-out-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
         signals: [],
         fatalErrors: false,
@@ -123,13 +128,14 @@ describe('process handler lifecycle', () => {
     };
     const exit = vi
       .spyOn(process, 'exit')
-      .mockImplementation((() => undefined) as never);
+      // SAFETY: process.exit is declared to return `never`; a test that
+      .mockImplementation(returnsInstead);
     const sigtermListeners = process.listenerCount('SIGTERM');
     const { init } = await import('./index');
 
     init({
       service: 'process-handler-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
         signals: ['SIGTERM'],
       },
@@ -156,12 +162,13 @@ describe('process handler lifecycle', () => {
     };
     const exit = vi
       .spyOn(process, 'exit')
-      .mockImplementation((() => undefined) as never);
+      // SAFETY: process.exit is declared to return `never`; a test that
+      .mockImplementation(returnsInstead);
     const { init } = await import('./index');
 
     init({
       service: 'process-handler-timeout-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
         signals: ['SIGTERM'],
         shutdownTimeoutMs: 25,
@@ -185,7 +192,8 @@ describe('process handler lifecycle', () => {
     };
     const exit = vi
       .spyOn(process, 'exit')
-      .mockImplementation((() => undefined) as never);
+      // SAFETY: process.exit is declared to return `never`; a test that
+      .mockImplementation(returnsInstead);
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const uncaughtExceptionListeners =
       process.listenerCount('uncaughtException');
@@ -193,7 +201,7 @@ describe('process handler lifecycle', () => {
 
     init({
       service: 'fatal-process-handler-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
         fatalErrors: true,
       },
@@ -219,7 +227,7 @@ describe('process handler lifecycle', () => {
     const args = errorLog.mock.calls.at(-1)!;
     expect(String(args[0])).toContain('uncaughtException');
     expect(args[1]).toBeInstanceOf(Error);
-    expect((args[1] as Error).message).toBe('fatal test error');
+    expect(toError(args[1]).message).toBe('fatal test error');
 
     exit.mockRestore();
   });
@@ -232,7 +240,8 @@ describe('process handler lifecycle', () => {
     };
     const exit = vi
       .spyOn(process, 'exit')
-      .mockImplementation((() => undefined) as never);
+      // SAFETY: process.exit is declared to return `never`; a test that
+      .mockImplementation(returnsInstead);
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const unhandledRejectionListeners =
       process.listenerCount('unhandledRejection');
@@ -240,7 +249,7 @@ describe('process handler lifecycle', () => {
 
     init({
       service: 'rejection-process-handler-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
         fatalErrors: true,
       },
@@ -264,7 +273,7 @@ describe('process handler lifecycle', () => {
     const args = errorLog.mock.calls.at(-1)!;
     expect(String(args[0])).toContain('unhandledRejection');
     expect(args[1]).toBeInstanceOf(Error);
-    expect((args[1] as Error).message).toBe('rejected test promise');
+    expect(toError(args[1]).message).toBe('rejected test promise');
 
     exit.mockRestore();
   });
@@ -281,11 +290,11 @@ describe('process handler lifecycle', () => {
     const unhandledRejectionListeners =
       process.listenerCount('unhandledRejection');
     const { init } = await import('./index');
-    const config = {
+    const config: AutotelConfig = {
       service: 'reinitialized-process-handler-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
-        signals: ['SIGTERM'] as NodeJS.Signals[],
+        signals: ['SIGTERM'],
         fatalErrors: true,
       },
     };
@@ -317,7 +326,7 @@ describe('process handler lifecycle', () => {
 
     init({
       service: 'process-handler-cleanup-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
         signals: ['SIGTERM'],
         fatalErrors: true,
@@ -348,7 +357,7 @@ describe('process handler lifecycle', () => {
 
     init({
       service: 'process-handlers-enabled-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
         signals: ['SIGTERM'],
         fatalErrors: true,
@@ -356,7 +365,7 @@ describe('process handler lifecycle', () => {
     });
     init({
       service: 'process-handlers-disabled-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
     });
 
     expect(process.listenerCount('SIGTERM')).toBe(sigtermListeners);
@@ -373,13 +382,14 @@ describe('process handler lifecycle', () => {
     };
     const exit = vi
       .spyOn(process, 'exit')
-      .mockImplementation((() => undefined) as never);
+      // SAFETY: process.exit is declared to return `never`; a test that
+      .mockImplementation(returnsInstead);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { init } = await import('./index');
 
     init({
       service: 'concurrent-process-handler-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
       processHandlers: {
         signals: ['SIGTERM'],
         fatalErrors: true,
@@ -418,7 +428,7 @@ describe('process handler lifecycle', () => {
 
     init({
       service: 'shutdown-unreachable-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
     });
 
     // No configured OTLP endpoint: a wrapped connection-refused is expected and
@@ -439,7 +449,7 @@ describe('process handler lifecycle', () => {
 
     init({
       service: 'shutdown-real-error-test',
-      sdkFactory: () => sdk as never,
+      sdkFactory: () => sdkDouble(sdk),
     });
 
     await expect(shutdown()).rejects.toThrow('exporter is misconfigured');

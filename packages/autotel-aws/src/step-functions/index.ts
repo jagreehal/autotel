@@ -55,12 +55,7 @@
  * ```
  */
 
-import {
-  trace,
-  type TraceContext,
-  withTracing,
-  getActiveTraceContext,
-} from 'autotel';
+import { trace, type TraceContext, withTracing } from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import type { SpanContext } from '@opentelemetry/api';
 import { buildStepFunctionsAttributes } from '../attributes';
@@ -443,8 +438,7 @@ export class StepFunctionsExecutor<
     executionArn?: string;
     startDate?: Date;
   }> {
-    return trace(`stepfunctions.StartExecution`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`stepfunctions.StartExecution`, async (ctx) => {
       ctx.setAttributes(
         buildStepFunctionsAttributes({
           stateMachineArn: this.config.stateMachineArn,
@@ -496,7 +490,7 @@ export class StepFunctionsExecutor<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -518,8 +512,7 @@ export class StepFunctionsExecutor<
       billedDurationInMilliseconds?: number;
     };
   }> {
-    return trace(`stepfunctions.StartSyncExecution`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`stepfunctions.StartSyncExecution`, async (ctx) => {
       ctx.setAttributes(
         buildStepFunctionsAttributes({
           stateMachineArn: this.config.stateMachineArn,
@@ -599,7 +592,7 @@ export class StepFunctionsExecutor<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -620,8 +613,7 @@ export class StepFunctionsExecutor<
     error?: string;
     cause?: string;
   }> {
-    return trace(`stepfunctions.DescribeExecution`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`stepfunctions.DescribeExecution`, async (ctx) => {
       ctx.setAttributes(
         buildStepFunctionsAttributes({
           stateMachineArn: this.config.stateMachineArn,
@@ -662,7 +654,7 @@ export class StepFunctionsExecutor<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -676,8 +668,7 @@ export class StepFunctionsExecutor<
     executionArn: string,
     options?: { error?: string; cause?: string },
   ): Promise<{ stopDate?: Date }> {
-    return trace(`stepfunctions.StopExecution`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`stepfunctions.StopExecution`, async (ctx) => {
       ctx.setAttributes(
         buildStepFunctionsAttributes({
           stateMachineArn: this.config.stateMachineArn,
@@ -706,7 +697,7 @@ export class StepFunctionsExecutor<
         });
         throw error;
       }
-    })();
+    });
   }
 }
 
@@ -793,8 +784,7 @@ export class StepFunctionsActivityWorker<
       ctx: TraceContext,
     ) => Promise<TOutput>,
   ): Promise<void> {
-    return trace(`stepfunctions.activity.poll`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`stepfunctions.activity.poll`, async (ctx) => {
       ctx.setAttribute(
         'aws.stepfunctions.activity_arn',
         this.config.activityArn,
@@ -869,7 +859,7 @@ export class StepFunctionsActivityWorker<
 
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -880,8 +870,7 @@ export class StepFunctionsActivityWorker<
    * @param taskToken - The task token from GetActivityTask
    */
   async sendHeartbeat(taskToken: string): Promise<void> {
-    return trace(`stepfunctions.SendTaskHeartbeat`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`stepfunctions.SendTaskHeartbeat`, async (ctx) => {
       ctx.setAttribute(
         'aws.stepfunctions.activity_arn',
         this.config.activityArn,
@@ -901,7 +890,7 @@ export class StepFunctionsActivityWorker<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -916,8 +905,7 @@ export class StepFunctionsActivityWorker<
     error: string,
     cause?: string,
   ): Promise<void> {
-    return trace(`stepfunctions.SendTaskFailure`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`stepfunctions.SendTaskFailure`, async (ctx) => {
       ctx.setAttribute(
         'aws.stepfunctions.activity_arn',
         this.config.activityArn,
@@ -943,6 +931,6 @@ export class StepFunctionsActivityWorker<
         });
         throw error_;
       }
-    })();
+    });
   }
 }

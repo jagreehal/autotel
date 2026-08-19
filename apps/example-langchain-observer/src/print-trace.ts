@@ -1,13 +1,13 @@
 import { SpanKind, SpanStatusCode, type HrTime } from '@opentelemetry/api';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
-const KIND_LABEL: Record<number, string> = {
+const KIND_LABEL = {
   [SpanKind.INTERNAL]: 'internal',
   [SpanKind.CLIENT]: 'client',
   [SpanKind.SERVER]: 'server',
   [SpanKind.PRODUCER]: 'producer',
   [SpanKind.CONSUMER]: 'consumer',
-};
+} satisfies Record<number, string>;
 
 /** Render captured spans as a tree, surfacing the canonical gen_ai.* fields. */
 export function printTrace(spans: ReadableSpan[]): void {

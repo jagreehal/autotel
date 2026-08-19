@@ -2,6 +2,14 @@ import { withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
 import { compareCohorts } from 'autotel/analysis';
 
+/** The attributes the checkout spans in this example carry. */
+type CheckoutAttributes = {
+  'checkout.duration_ms': number;
+  provider: string;
+  region: string;
+  tier: string;
+};
+
 // Checkout latency rose at 14:05. You do not know which requests are affected,
 // and opening traces one at a time will take the rest of the afternoon. Record
 // the dimensions worth splitting on, then let the loop rank them for you.
@@ -45,10 +53,13 @@ for (let i = 0; i < 20; i++) {
 }
 
 // Step 1: split the population on the user-visible symptom.
+// SAFETY: these spans were recorded by the loop above, which set exactly the
+// attributes named below; the collector types them loosely because any span can
+// carry anything.
 const events = collector
   .getSpans()
-  .map((span) => span.attributes as Record<string, unknown>);
-const isSlow = (event: Record<string, unknown>) =>
+  .map((span) => span.attributes as CheckoutAttributes);
+const isSlow = (event: CheckoutAttributes) =>
   Number(event['checkout.duration_ms']) >= 800;
 
 const slow = events.filter(isSlow);

@@ -12,42 +12,30 @@ import type {
   GenAiWarning,
 } from './types';
 import { priceCall } from './prices';
-
-type Attrs = Record<string, unknown>;
-
-function str(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined;
-}
-
-function num(v: unknown): number | undefined {
-  if (typeof v === 'number') return v;
-  if (typeof v === 'string' && v !== '') {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  }
-  return undefined;
-}
-
-function strArray(v: unknown): string[] | undefined {
-  if (Array.isArray(v) && v.every((x) => typeof x === 'string'))
-    return v as string[];
-  if (typeof v === 'string') return [v];
-  return undefined;
-}
-
-function bool(v: unknown): boolean | undefined {
-  if (typeof v === 'boolean') return v;
-  if (v === 'true') return true;
-  if (v === 'false') return false;
-  return undefined;
-}
+import {
+  asBoolean as bool,
+  asNumber as num,
+  asString as str,
+  asStringArray as strArray,
+} from '../attrs.js';
+import type { SpanAttributes } from '../types.js';
+import { asObject } from '../utils/json-fields.js';
+// A span's attributes, before this file has decided what any of them mean.
+import type { JsonObject as Attrs } from '../utils/json-fields.js';
 
 // Safe JSON parse — many instrumentations stringify their structured attrs.
 function parseJson<T = unknown>(v: unknown): T | undefined {
   if (v == null) return undefined;
-  if (typeof v === 'object') return v as T;
+  if (typeof v === 'object') {
+    // SAFETY: T names the shape the caller expects of this attribute. An
+    // attribute that already arrived structured is handed back as it is, and
+    // a stringified one is parsed - neither can be checked here, which is why
+    // every caller reads the result field by field rather than trusting it.
+    return v as T;
+  }
   if (typeof v !== 'string') return undefined;
   try {
+    // SAFETY: see above.
     return JSON.parse(v) as T;
   } catch {
     return undefined;
@@ -100,6 +88,9 @@ function normalizeMessageParts(raw: RawMessage): GenAiMessagePart[] {
   }
   // Vercel AI SDK shape: content is an array of `{type, text|image|...}`.
   if (Array.isArray(raw.content)) {
+    // SAFETY: the branch above already took the canonical shape, so an array
+    // here is the Vercel one. Each part is still read field by field below,
+    // and a part that matches nothing falls through to the raw-JSON bubble.
     return (raw.content as VercelContentPart[]).map((p): GenAiMessagePart => {
       if (p.type === 'text' || p.text !== undefined) {
         return { kind: 'text', text: String(p.text ?? '') };
@@ -122,8 +113,8 @@ function normalizeMessageParts(raw: RawMessage): GenAiMessagePart[] {
     });
   }
   // Legacy: content as plain string.
-  if (typeof raw.content === 'string')
-    return [{ kind: 'text', text: raw.content }];
+  const legacyText = str(raw.content);
+  if (legacyText !== undefined) return [{ kind: 'text', text: legacyText }];
   if (raw.content != null) return [{ kind: 'json', value: raw.content }];
   return [];
 }
@@ -160,11 +151,8 @@ type ToolPart =
 // Unwrap a tool-result payload: both encodings may wrap the value as
 // `{ type, value }`, so pull `.value` out when present, else use it as-is.
 function unwrapToolResult(payload: unknown): unknown {
-  return payload &&
-    typeof payload === 'object' &&
-    'value' in (payload as object)
-    ? (payload as { value: unknown }).value
-    : payload;
+  const wrapper = asObject(payload);
+  return wrapper && 'value' in wrapper ? wrapper.value : payload;
 }
 
 function classifyAiSdkPart(part: AiSdkContentPart): ToolPart | null {
@@ -227,6 +215,9 @@ function buildToolMessage(
   }
   if (toolResults.length > 1) {
     const msg: GenAiMessage = { role, parts: [] };
+    // SAFETY: `_toolResults` is this file's own carrier, read back at the end
+    // of toGenAiSpan to expand one bundled message into one message per
+    // result. It is not part of GenAiMessage because nothing outside sees it.
     (msg as GenAiMessage & { _toolResults?: typeof toolResults })._toolResults =
       toolResults;
     return msg;
@@ -242,6 +233,9 @@ function buildToolMessage(
 }
 
 function normalizeMessage(raw: RawMessage): GenAiMessage {
+  // SAFETY: an unrecognised role renders as its own label rather than being
+  // dropped - the alternative is losing the message, which is worse than
+  // showing a role the union has not heard of.
   const role = (raw.role as GenAiMessage['role']) ?? 'user';
 
   // Vercel AI SDK encodes tool calls and results as `content[]` parts with
@@ -251,6 +245,8 @@ function normalizeMessage(raw: RawMessage): GenAiMessage {
   // union and built by `buildToolMessage`, so tool turns render as chips/results
   // rather than raw-JSON or empty bubbles.
   if (Array.isArray(raw.content)) {
+    // SAFETY: read as the Vercel part shape only to ask whether any part is a
+    // tool call; classifyAiSdkPart re-checks every field it uses.
     const content = raw.content as AiSdkContentPart[];
     if (
       content.some((p) => p.type === 'tool-call' || p.type === 'tool-result')
@@ -263,6 +259,7 @@ function normalizeMessage(raw: RawMessage): GenAiMessage {
   }
 
   if (Array.isArray(raw.parts)) {
+    // SAFETY: as above, but for the canonical gen_ai `parts[]` shape.
     const parts = raw.parts as CanonicalPart[];
     if (
       parts.some(
@@ -303,7 +300,7 @@ function readMessagesAttribute(
 interface SpanEvent {
   name: string;
   timestamp: number;
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
 }
 
 function messagesFromEvents(events: SpanEvent[] | undefined): GenAiMessage[] {
@@ -313,9 +310,10 @@ function messagesFromEvents(events: SpanEvent[] | undefined): GenAiMessage[] {
     const attrs = ev.attributes ?? {};
     // `gen_ai.choice` carries the assistant output; older legacy shape.
     if (ev.name === 'gen_ai.choice') {
-      const message =
-        parseJson<RawMessage>(attrs.message) ??
-        (attrs.message as RawMessage | undefined);
+      // SAFETY: normalizeMessage reads `role` and `content` defensively, so
+      // an event whose message is some other shape renders as raw JSON.
+      const unparsedMessage = attrs.message as RawMessage | undefined;
+      const message = parseJson<RawMessage>(attrs.message) ?? unparsedMessage;
       const finishReason = str(attrs.finish_reason);
       if (message) {
         const normalized = normalizeMessage(message);
@@ -327,10 +325,14 @@ function messagesFromEvents(events: SpanEvent[] | undefined): GenAiMessage[] {
     // gen_ai.{system,user,assistant,tool}.message
     const m = ev.name.match(/^gen_ai\.(system|user|assistant|tool)\.message$/);
     if (!m) continue;
+    // SAFETY: the regex above captured one of the four roles by construction.
     const role = m[1] as GenAiMessage['role'];
     const content = attrs.content;
+    const contentText = str(content);
     const parsed =
-      typeof content === 'string' ? (parseJson(content) ?? content) : content;
+      contentText === undefined
+        ? content
+        : (parseJson(contentText) ?? contentText);
     out.push(
       normalizeMessage({
         role,
@@ -358,8 +360,9 @@ function readToolDefinitions(attrs: Attrs): GenAiToolDef[] | undefined {
   );
   if (!Array.isArray(raw)) return undefined;
   return raw
-    .filter((d) => typeof d.name === 'string')
+    .filter((d) => str(d.name) !== undefined)
     .map((d) => ({
+      // SAFETY: the filter above kept only definitions whose name is a string.
       name: d.name as string,
       description: d.description,
       type: d.type,
@@ -459,6 +462,8 @@ function readGuardDetails(
   return {
     rule,
     action:
+      // SAFETY: a guard action this build does not know renders as its own
+      // label; dropping it would hide that a guard fired at all.
       (str(a['gen_ai.guard.action']) as GenAiGuard['action']) ?? defaultAction,
     message: str(a['gen_ai.guard.message']),
     observed: num(a['gen_ai.guard.observed']),
@@ -466,10 +471,16 @@ function readGuardDetails(
   };
 }
 
+/** What a span's guard attributes and events say, read together. */
+interface GuardAndWarnings {
+  guard?: GenAiGuard;
+  warnings?: GenAiWarning[];
+}
+
 function readGuardAndWarnings(
   attrs: Attrs,
   events: SpanEvent[] | undefined,
-): { guard?: GenAiGuard; warnings?: GenAiWarning[] } {
+): GuardAndWarnings {
   const stopped = bool(attrs['gen_ai.guard.stopped']);
   const warnings: GenAiWarning[] = [];
   let guard = readGuardDetails(attrs);
@@ -589,6 +600,8 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
 ]);
 
 export function toGenAiSpan(span: SpanData): GenAiSpan {
+  // SAFETY: SpanAttributes is what the wire delivered; Attrs is the same bag
+  // named for what this file does with it - read one key at a time.
   const attrs = (span.attributes ?? {}) as Attrs;
 
   const rawProvider =
@@ -625,13 +638,17 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
   let systemInstructions: GenAiMessage[] = [];
   const rawSystem = parseJson<unknown>(attrs['gen_ai.system_instructions']);
   if (Array.isArray(rawSystem) && rawSystem.length > 0) {
-    const first = rawSystem[0] as { role?: string; type?: string };
-    if (first && typeof first === 'object' && 'role' in first) {
+    const first = asObject(rawSystem[0]);
+    if (first && 'role' in first) {
+      // SAFETY: the first entry carries a role, so this is the messages shape
+      // rather than the parts one. normalizeMessage still reads each field.
       systemInstructions = rawSystem.map((m) =>
         normalizeMessage(m as RawMessage),
       );
     } else {
       // Parts-shaped: wrap as one system message.
+      // SAFETY: the else branch of the same test - parts, not messages. A
+      // part matching neither test below becomes a raw-JSON bubble.
       const parts: GenAiMessagePart[] = (
         rawSystem as Array<{ type?: string; content?: unknown }>
       ).map((p) =>
@@ -717,9 +734,10 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
       aiResponseToolCalls,
     )
       ? aiResponseToolCalls
-          .filter((c) => typeof c.toolName === 'string')
+          .filter((c) => str(c.toolName) !== undefined)
           .map((c) => ({
             id: c.toolCallId,
+            // SAFETY: the filter above kept only calls with a string name.
             name: c.toolName as string,
             arguments: parseJson(c.input ?? c.args) ?? c.input ?? c.args ?? {},
           }))
@@ -788,6 +806,7 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
   // Expand any tool-role messages that bundled multiple tool-results into
   // one message per result, so each gets its own tool_call_id chip.
   messages = messages.flatMap((m) => {
+    // SAFETY: reading back the carrier buildToolMessage attached above.
     const bundled = (
       m as GenAiMessage & {
         _toolResults?: Array<{ id?: string; value: unknown }>;
@@ -908,7 +927,7 @@ export function toGenAiSpan(span: SpanData): GenAiSpan {
         }
       : undefined;
 
-  const raw: Record<string, unknown> = {};
+  const raw: Attrs = {};
   for (const [k, v] of Object.entries(attrs)) {
     if (KNOWN_TOP_LEVEL_KEYS.has(k)) continue;
     if (k.startsWith('gen_ai.prompt.') || k.startsWith('gen_ai.completion.'))

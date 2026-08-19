@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrument } from './instrument';
 import { trace } from '@opentelemetry/api';
 import type { IncomingRequestCfProperties } from '@cloudflare/workers-types';
+import { tracerDouble } from '../testing/doubles.js';
 
 const incomingRequest = (...args: ConstructorParameters<typeof Request>) =>
   new Request(...args) as Request<unknown, IncomingRequestCfProperties>;
@@ -47,7 +48,7 @@ describe('CF Attributes extraction via instrument()', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
   });
 
   afterEach(() => {

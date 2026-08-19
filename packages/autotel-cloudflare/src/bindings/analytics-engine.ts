@@ -2,9 +2,11 @@
  * Analytics Engine binding instrumentation
  */
 
-import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import type { WorkerTracer } from 'autotel-edge';
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { wrap } from './common';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { asFunction, member, trapArgs } from '../values.js';
 
 /**
  * Instrument Analytics Engine binding
@@ -17,13 +19,15 @@ export function instrumentAnalyticsEngine<T extends AnalyticsEngineDataset>(
 
   const handler: ProxyHandler<T> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
-      if (prop === 'writeDataPoint' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'writeDataPoint' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
-            const [dataPoint] = args as [AnalyticsEngineDataPoint | undefined];
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const [dataPoint] =
+              trapArgs<[AnalyticsEngineDataPoint | undefined]>(args);
+            const tracer = workerTracer('autotel-edge');
 
             const attributes: Record<string, string | number> = {
               'analytics.system': 'cloudflare-analytics-engine',
@@ -56,10 +60,10 @@ export function instrumentAnalyticsEngine<T extends AnalyticsEngineDataset>(
               (span) => {
                 try {
                   // writeDataPoint is synchronous/void
-                  Reflect.apply(fnTarget, target, args);
+                  fnTarget.apply(target, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:

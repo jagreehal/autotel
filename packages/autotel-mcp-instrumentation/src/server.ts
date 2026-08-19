@@ -31,6 +31,16 @@ import {
   type ManifestAssessment,
   type McpToolAnnotations,
 } from './security';
+import { errorName } from './error-name.js';
+import type { McpMetricAttributes } from './types.js';
+import {
+  asRecord,
+  asString,
+  isFunction,
+  callMethod,
+  member,
+  readProperty,
+} from './values.js';
 
 type ResolvedConfig = ReturnType<typeof resolveConfig>;
 
@@ -204,7 +214,7 @@ interface RequestFacts {
 function readRequestFacts(args: unknown[]): RequestFacts {
   for (let index = args.length - 1; index >= 0; index--) {
     const arg = args[index] as any;
-    if (typeof arg !== 'object' || arg === null) continue;
+    if (!asRecord(arg)) continue;
 
     // 2026-07-28: ServerContext
     if (arg.mcpReq) {
@@ -249,13 +259,8 @@ function readCallPayload(
  * members are NOT reliable tells — results are passthrough-typed, so a handler
  * may legitimately return a field by either name.
  */
-function isInputRequired(result: any): boolean {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    !Array.isArray(result) &&
-    result.resultType === 'input_required'
-  );
+function isInputRequired(result: unknown): boolean {
+  return readProperty(result, 'resultType') === 'input_required';
 }
 
 /** Map operation type to MCP method name */
@@ -349,11 +354,9 @@ function wrapHandler<T extends (...args: any[]) => any>(
             config.networkTransport,
           );
         }
-        if (typeof request.protocolVersion === 'string') {
-          ctx.setAttribute(
-            MCP_SEMCONV.PROTOCOL_VERSION,
-            request.protocolVersion,
-          );
+        const protocolVersion = asString(request.protocolVersion);
+        if (protocolVersion !== undefined) {
+          ctx.setAttribute(MCP_SEMCONV.PROTOCOL_VERSION, protocolVersion);
         }
         // Request first, config only as a legacy fallback. A modern request is
         // sessionless even over stdio, so never attach a transport or configured
@@ -362,8 +365,9 @@ function wrapHandler<T extends (...args: any[]) => any>(
           request.protocolVersion === undefined
             ? (request.sessionId ?? config.sessionId)
             : undefined;
-        if (typeof sessionId === 'string') {
-          ctx.setAttribute(MCP_SEMCONV.SESSION_ID, sessionId);
+        const sessionIdText = asString(sessionId);
+        if (sessionIdText !== undefined) {
+          ctx.setAttribute(MCP_SEMCONV.SESSION_ID, sessionIdText);
         }
 
         if (manifestAssessmentPromise) {
@@ -419,6 +423,8 @@ function wrapHandler<T extends (...args: any[]) => any>(
             args: callPayload,
           });
           ctx.setAttributes(
+            // SAFETY: custom attributes are the caller's own, already declared as
+            // span-attribute values by the options type they came from.
             customAttrs as Record<string, string | number | boolean>,
           );
         }
@@ -498,6 +504,8 @@ function wrapHandler<T extends (...args: any[]) => any>(
               result,
             });
             ctx.setAttributes(
+              // SAFETY: custom attributes are the caller's own, already declared as
+              // span-attribute values by the options type they came from.
               customAttrs as Record<string, string | number | boolean>,
             );
           }
@@ -552,19 +560,16 @@ function wrapHandler<T extends (...args: any[]) => any>(
             ) {
               ctx.recordException(error);
             }
-            ctx.setAttribute(
-              MCP_SEMCONV.ERROR_TYPE,
-              (error as Error).name || 'Error',
-            );
+            ctx.setAttribute(MCP_SEMCONV.ERROR_TYPE, errorName(error));
             applyFailureGrouping(ctx, thrownText);
           }
 
           // Record metric on error
           if (config.enableMetrics) {
             const durationS = (performance.now() - startTime) / 1000;
-            const metricAttrs: Record<string, string> = {
+            const metricAttrs: McpMetricAttributes = {
               [MCP_SEMCONV.METHOD_NAME]: methodName,
-              [MCP_SEMCONV.ERROR_TYPE]: (error as Error).name || 'Error',
+              [MCP_SEMCONV.ERROR_TYPE]: errorName(error),
             };
             switch (type) {
               case 'tool': {
@@ -637,11 +642,11 @@ export function instrumentMcpServer<T extends Record<string, any>>(
   const mergedConfig = resolveConfig(config);
 
   return new Proxy(server, {
-    get(target, prop, receiver) {
-      const value = Reflect.get(target, prop, receiver);
+    get(target, prop) {
+      const value = member(target, prop);
 
       // Wrap registerTool (McpServer API: name, config, handler)
-      if (prop === 'registerTool' && typeof value === 'function') {
+      if (prop === 'registerTool' && isFunction(value)) {
         return function wrappedRegisterTool(
           this: any,
           name: string,
@@ -664,16 +669,12 @@ export function instrumentMcpServer<T extends Record<string, any>>(
             manifestAssessmentPromise,
           );
 
-          return Reflect.apply(value, target, [
-            name,
-            toolConfig,
-            wrappedHandler,
-          ]);
+          return callMethod(value, target, [name, toolConfig, wrappedHandler]);
         };
       }
 
       // Wrap registerResource (McpServer API: name, uriOrTemplate, config, readCallback)
-      if (prop === 'registerResource' && typeof value === 'function') {
+      if (prop === 'registerResource' && isFunction(value)) {
         return function wrappedRegisterResource(
           this: any,
           name: string,
@@ -698,7 +699,7 @@ export function instrumentMcpServer<T extends Record<string, any>>(
             manifestAssessmentPromise,
           );
 
-          return Reflect.apply(value, target, [
+          return callMethod(value, target, [
             name,
             uriOrTemplate,
             resourceConfig,
@@ -708,7 +709,7 @@ export function instrumentMcpServer<T extends Record<string, any>>(
       }
 
       // Wrap registerPrompt (McpServer API: name, config, cb)
-      if (prop === 'registerPrompt' && typeof value === 'function') {
+      if (prop === 'registerPrompt' && isFunction(value)) {
         return function wrappedRegisterPrompt(
           this: any,
           name: string,
@@ -731,7 +732,7 @@ export function instrumentMcpServer<T extends Record<string, any>>(
             manifestAssessmentPromise,
           );
 
-          return Reflect.apply(value, target, [
+          return callMethod(value, target, [
             name,
             promptConfig,
             wrappedCallback,

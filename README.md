@@ -12,7 +12,8 @@ Instrument your Node.js code once and stream traces, metrics, logs, and product 
 
 ```typescript
 import { init, trace, track } from 'autotel';
-import { PostHogSubscriber, SlackSubscriber } from 'autotel-subscribers';
+import { SlackSubscriber } from 'autotel-subscribers';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 // Initialize once at startup
 init({

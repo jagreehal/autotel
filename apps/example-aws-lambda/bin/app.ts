@@ -15,6 +15,8 @@ const region =
   'us-east-1';
 const account = process.env.CDK_DEFAULT_ACCOUNT || '000000000000';
 
+// SAFETY: OTEL_MODE arrives from the environment as a string; the list below is
+// checked against it on the next line and the process exits on a mismatch.
 const otelMode =
   (process.env.OTEL_MODE as OtelMode | undefined) ?? 'custom-endpoint';
 const validModes: OtelMode[] = [

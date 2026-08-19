@@ -1,4 +1,5 @@
 import { trace } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import { getActiveConfig } from '../core/config';
 import type {
   OrPromise,
@@ -57,25 +58,25 @@ export interface CreateEdgeSubscribersOptions {
 export interface EdgeSubscribers {
   trackEvent(
     event: string,
-    attributes?: Record<string, unknown>,
+    attributes?: Attributes,
     options?: EdgeDispatchOptions,
   ): OrPromise<void>;
   trackFunnelStep(
     funnel: string,
     status: FunnelStepStatus,
-    attributes?: Record<string, unknown>,
+    attributes?: Attributes,
     options?: EdgeDispatchOptions,
   ): OrPromise<void>;
   trackOutcome(
     operation: string,
     outcome: OutcomeStatus,
-    attributes?: Record<string, unknown>,
+    attributes?: Attributes,
     options?: EdgeDispatchOptions,
   ): OrPromise<void>;
   trackValue(
     metric: string,
     value: number,
-    attributes?: Record<string, unknown>,
+    attributes?: Attributes,
     options?: EdgeDispatchOptions,
   ): OrPromise<void>;
   dispatch(event: EdgeEvent, options?: EdgeDispatchOptions): OrPromise<void>;
@@ -106,7 +107,7 @@ function isPromiseLike(value: unknown): value is Promise<unknown> {
 }
 
 function createBaseEvent(
-  attributes: Record<string, unknown> | undefined,
+  attributes: Attributes | undefined,
   options: CreateEdgeSubscribersOptions,
 ): Omit<EdgeEventBase, 'name'> {
   const config = getActiveConfig();

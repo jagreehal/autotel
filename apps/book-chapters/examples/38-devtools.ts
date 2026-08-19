@@ -1,4 +1,4 @@
-import { init, trace, flush, shutdown } from 'autotel';
+import { init, instrument, flush, shutdown } from 'autotel';
 import { SimpleSpanProcessor } from 'autotel/processors';
 import { createDevtools } from 'autotel-devtools';
 
@@ -18,7 +18,10 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(devtools.exporter)],
   });
 
-  const greet = trace('greet', (name: string) => `Hello, ${name}!`);
+  const greet = instrument({
+    key: 'greet',
+    fn: (name: string) => `Hello, ${name}!`,
+  });
   console.log(`  ✓ Traced call → ${greet('devtools')}`);
 
   await flush();

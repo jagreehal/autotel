@@ -36,8 +36,8 @@ function enrichFromEvent(
   if (!event) return undefined;
 
   return {
-    ...(event.method ? { 'http.request.method': event.method } : {}),
-    ...(event.path ? { 'http.route': event.path } : {}),
+    'http.request.method': event.method,
+    'http.route': event.path,
     ...(typeof event.context?.requestId === 'string'
       ? { 'http.request.id': event.context.requestId }
       : {}),

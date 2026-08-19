@@ -6,10 +6,25 @@ const state = vi.hoisted(() => {
     port: 0,
     treeProviders: new Map<
       string,
-      { getChildren(element?: unknown): unknown[] }
+      { getChildren(element?: TreeNode): TreeNode[] }
     >(),
   };
 });
+
+/** A node in one of the extension's tree views, as these tests observe it. */
+type TreeNode = { label?: string; children?: TreeNode[] };
+
+/** A value read out of the editor's settings. */
+type SettingValue = string | number | boolean | undefined;
+
+/** The editor's Uri, as the extension uses one. */
+type UriLike = { fsPath: string; toString(): string };
+
+/** A range in a document. */
+type RangeLike = { start: { line: number }; end: { line: number } };
+
+/** A command a CodeLens invokes. */
+type CommandLike = { title: string; command: string; arguments?: unknown[] };
 
 vi.mock('vscode', () => {
   return {
@@ -34,7 +49,7 @@ vi.mock('vscode', () => {
       registerTreeDataProvider: vi.fn(
         (
           id: string,
-          provider: { getChildren(element?: unknown): unknown[] },
+          provider: { getChildren(element?: TreeNode): TreeNode[] },
         ) => {
           state.treeProviders.set(id, provider);
           return { dispose: vi.fn() };
@@ -69,7 +84,7 @@ vi.mock('vscode', () => {
     ViewColumn: { Beside: -2 },
     workspace: {
       getConfiguration: vi.fn(() => ({
-        get: vi.fn((key: string, fallback: unknown) => {
+        get: vi.fn((key: string, fallback: SettingValue) => {
           if (key === 'receiver.autoStart') return 'always';
           if (key === 'receiver.host') return '127.0.0.1';
           if (key === 'receiver.port') return state.port;
@@ -87,7 +102,7 @@ vi.mock('vscode', () => {
         dispose: vi.fn(),
       })),
       workspaceFolders: [{ uri: { fsPath: '/workspace' } }],
-      openTextDocument: vi.fn(async (uri: unknown) => ({ uri })),
+      openTextDocument: vi.fn(async (uri: UriLike) => ({ uri })),
     },
     env: {
       clipboard: {
@@ -126,18 +141,19 @@ vi.mock('vscode', () => {
       }
     },
     Hover: class {
-      constructor(public contents: unknown) {}
+      constructor(public contents: string) {}
     },
     CodeLens: class {
       constructor(
-        public range: unknown,
-        public command?: unknown,
+        public range: RangeLike,
+        public command?: CommandLike,
       ) {}
     },
   };
 });
 
 import { activate, deactivate } from './extension';
+import { extensionContext } from './testing/doubles.js';
 
 async function getFreePort(): Promise<number> {
   return await new Promise<number>((resolve, reject) => {
@@ -170,11 +186,10 @@ describe('extension OTLP integration', () => {
   });
 
   it('ingests OTLP traces over HTTP and updates trace tree provider', async () => {
-    const context = {
-      subscriptions: [] as { dispose(): void }[],
+    const context = extensionContext({
       extensionUri: { fsPath: '/tmp/autotel-vscode' },
-    };
-    activate(context as never);
+    });
+    activate(context);
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     const payload = {

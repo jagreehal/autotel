@@ -108,3 +108,5 @@ export type {
   ErrorGroup,
   DevtoolsData,
 } from './server/types';
+
+export type { AttributeValue, SpanAttributes } from './widget/types';

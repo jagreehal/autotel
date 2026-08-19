@@ -7,6 +7,7 @@ import type {
   AgentIdentityStatus,
   DelegationContext,
 } from './types.js';
+import type { GenAiMetadata } from './types.js';
 
 function toIsoString(value?: string | Date): string | undefined {
   if (!value) return undefined;
@@ -29,7 +30,7 @@ export interface ProvisionAgentIdentityInput {
   delegatedBy?: string;
   provisionedAt?: string | Date;
   expiresAt?: string | Date;
-  metadata?: Record<string, unknown>;
+  metadata?: GenAiMetadata;
 }
 
 export interface RotateAgentIdentityInput {
@@ -38,7 +39,7 @@ export interface RotateAgentIdentityInput {
   delegatedBy?: string;
   rotatedAt?: string | Date;
   expiresAt?: string | Date;
-  metadata?: Record<string, unknown>;
+  metadata?: GenAiMetadata;
 }
 
 export interface RevokeAgentIdentityInput {

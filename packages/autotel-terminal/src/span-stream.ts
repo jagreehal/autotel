@@ -5,6 +5,7 @@
  * for consumption by the terminal dashboard.
  */
 
+import type { SpanAttributes } from './attrs.js';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import { SpanStatusCode, SpanKind } from 'autotel';
 import type { StreamingSpanProcessor } from './streaming-processor';
@@ -16,7 +17,7 @@ export interface SpanEvent {
   /** Time in milliseconds since epoch */
   timeMs: number;
   /** Event attributes */
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
 }
 
 /** Span link (cross-trace reference) */
@@ -26,7 +27,7 @@ export interface SpanLink {
   /** Linked span ID */
   spanId: string;
   /** Link attributes */
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
 }
 
 /**
@@ -52,7 +53,7 @@ export interface TerminalSpanEvent {
   /** Span kind (INTERNAL, SERVER, CLIENT, etc.) */
   kind?: string;
   /** Span attributes */
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
   /** Span events (exceptions, annotations) */
   events?: SpanEvent[];
   /** Span links (cross-trace references) */
@@ -96,14 +97,14 @@ function mapStatus(code: SpanStatusCode): 'OK' | 'ERROR' | 'UNSET' {
  * Map SpanKind number to string
  */
 function mapKind(kind: SpanKind): string {
-  const kindMap: Record<number, string> = {
-    [SpanKind.INTERNAL]: 'INTERNAL',
-    [SpanKind.SERVER]: 'SERVER',
-    [SpanKind.CLIENT]: 'CLIENT',
-    [SpanKind.PRODUCER]: 'PRODUCER',
-    [SpanKind.CONSUMER]: 'CONSUMER',
-  };
-  return kindMap[kind] ?? 'UNKNOWN';
+  const kindMap = new Map<number, string>([
+    [SpanKind.INTERNAL, 'INTERNAL'],
+    [SpanKind.SERVER, 'SERVER'],
+    [SpanKind.CLIENT, 'CLIENT'],
+    [SpanKind.PRODUCER, 'PRODUCER'],
+    [SpanKind.CONSUMER, 'CONSUMER'],
+  ]);
+  return kindMap.get(kind) ?? 'UNKNOWN';
 }
 
 /**
@@ -144,25 +145,22 @@ export function createTerminalSpanStream(
         const endTime = timeToMs(span.endTime);
         const durationMs = endTime - startTime;
 
-        // Merge resource attributes (e.g. service.name) with span attributes
-        const resourceAttrs = (span.resource?.attributes ?? {}) as Record<
-          string,
-          unknown
-        >;
-        const spanAttrs = span.attributes as Record<string, unknown>;
-        const mergedAttrs: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(resourceAttrs)) {
-          mergedAttrs[k] = v;
-        }
-        for (const [k, v] of Object.entries(spanAttrs)) {
-          mergedAttrs[k] = v;
-        }
+        // Merge resource attributes (e.g. service.name) with span attributes.
+        // SAFETY: the SDK types attributes by OTel's AttributeValue, which is
+        // SpanAttributes plus the nullable array members; nothing here reads a
+        // value without checking what it is first.
+        const mergedAttrs = {
+          ...span.resource?.attributes,
+          ...span.attributes,
+        } as SpanAttributes;
 
         const spanEvents: SpanEvent[] | undefined = span.events?.length
           ? span.events.map((e) => ({
               name: e.name,
               timeMs: timeToMs(e.time),
-              attributes: e.attributes as Record<string, unknown> | undefined,
+              // SAFETY: the SDK's AttributeValue is SpanAttributes plus the
+              // nullable array members, which nothing here reads unchecked.
+              attributes: e.attributes as SpanAttributes | undefined,
             }))
           : undefined;
 
@@ -170,7 +168,8 @@ export function createTerminalSpanStream(
           ? span.links.map((l) => ({
               traceId: l.context.traceId,
               spanId: l.context.spanId,
-              attributes: l.attributes as Record<string, unknown> | undefined,
+              // SAFETY: as above.
+              attributes: l.attributes as SpanAttributes | undefined,
             }))
           : undefined;
 
@@ -186,8 +185,8 @@ export function createTerminalSpanStream(
           status: mapStatus(span.status.code),
           kind: mapKind(span.kind),
           attributes: mergedAttrs,
-          ...(spanEvents ? { events: spanEvents } : {}),
-          ...(spanLinks ? { links: spanLinks } : {}),
+          events: spanEvents,
+          links: spanLinks,
         };
 
         callback(event);

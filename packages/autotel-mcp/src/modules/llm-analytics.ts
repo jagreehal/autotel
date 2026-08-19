@@ -476,13 +476,16 @@ export function calculatePercentiles(values: number[]): PercentileStats {
   };
 }
 
-function summarizeTraceTokens(trace: TraceRecord): {
+/** What summarizeTraceTokens() answers with. */
+interface SummarizeTraceTokensResult {
   prompt: number;
   completion: number;
   total: number;
   costUsd: number;
   hasUnpricedSpans: boolean;
-} {
+}
+
+function summarizeTraceTokens(trace: TraceRecord): SummarizeTraceTokensResult {
   let prompt = 0;
   let completion = 0;
   let total = 0;

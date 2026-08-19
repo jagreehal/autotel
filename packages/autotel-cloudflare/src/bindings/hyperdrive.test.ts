@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentHyperdrive } from './hyperdrive';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import {
+  hyperdriveDouble,
+  socketDouble,
+  tracerDouble,
+} from '../testing/doubles.js';
+import type { UnknownRecord } from '../values.js';
 
 describe('Hyperdrive Binding Instrumentation', () => {
   let mockTracer: any;
@@ -32,18 +38,16 @@ describe('Hyperdrive Binding Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
   });
 
   afterEach(() => {
     getTracerSpy.mockRestore();
   });
 
-  function createMockHyperdrive(
-    overrides: Partial<Hyperdrive> = {},
-  ): Hyperdrive {
-    return {
-      connect: vi.fn(async () => ({}) as Socket),
+  function createMockHyperdrive(overrides: UnknownRecord = {}): Hyperdrive {
+    return hyperdriveDouble({
+      connect: vi.fn(async () => socketDouble({})),
       connectionString:
         'postgresql://user:secret-password@db.example.com:5432/mydb',
       host: 'db.example.com',
@@ -52,7 +56,7 @@ describe('Hyperdrive Binding Instrumentation', () => {
       password: 'secret-password',
       database: 'mydb',
       ...overrides,
-    } as unknown as Hyperdrive;
+    });
   }
 
   describe('connect()', () => {
@@ -79,7 +83,7 @@ describe('Hyperdrive Binding Instrumentation', () => {
       const mockHyperdrive = createMockHyperdrive({
         connect: vi.fn(async () => {
           throw connectError;
-        }) as any,
+        }),
       });
       const instrumented = instrumentHyperdrive(mockHyperdrive, 'my-db');
 
@@ -96,9 +100,9 @@ describe('Hyperdrive Binding Instrumentation', () => {
     });
 
     it('should set OK status and end span on success', async () => {
-      const mockSocket = { readable: true } as unknown as Socket;
+      const mockSocket = socketDouble({ readable: true });
       const mockHyperdrive = createMockHyperdrive({
-        connect: vi.fn(async () => mockSocket) as any,
+        connect: vi.fn(async () => mockSocket),
       });
       const instrumented = instrumentHyperdrive(mockHyperdrive, 'my-db');
 
@@ -124,12 +128,11 @@ describe('Hyperdrive Binding Instrumentation', () => {
 
   describe('this-binding', () => {
     it('should invoke connect() with original object as this, not the proxy', async () => {
-      let receivedThis: any;
-      const mockHyperdrive = {
-        connect: vi.fn(async function (this: any) {
-          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
-          receivedThis = this;
-          return {} as Socket;
+      const receivedThis: unknown[] = [];
+      const mockHyperdrive = hyperdriveDouble({
+        connect: vi.fn(async function (this: unknown) {
+          receivedThis.push(this);
+          return socketDouble({});
         }),
         connectionString: 'postgresql://user:pass@host:5432/db',
         host: 'host',
@@ -137,10 +140,10 @@ describe('Hyperdrive Binding Instrumentation', () => {
         user: 'user',
         password: 'pass',
         database: 'db',
-      } as unknown as Hyperdrive;
+      });
       const instrumented = instrumentHyperdrive(mockHyperdrive, 'test');
       await instrumented.connect();
-      expect(receivedThis).toBe(mockHyperdrive);
+      expect(receivedThis[0]).toBe(mockHyperdrive);
     });
   });
 

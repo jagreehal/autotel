@@ -9,9 +9,10 @@ import type { Attributes, AttrValue } from './types';
 export function str(attrs: Attributes, ...keys: string[]): string | undefined {
   for (const key of keys) {
     const value = attrs[key];
-    if (typeof value === 'string' && value.length > 0) return value;
-    if (typeof value === 'number' || typeof value === 'boolean')
-      return String(value);
+    if (value === undefined || value === null || value instanceof Object)
+      continue;
+    const text = String(value);
+    if (text.length > 0) return text;
   }
   return undefined;
 }
@@ -19,11 +20,12 @@ export function str(attrs: Attributes, ...keys: string[]): string | undefined {
 export function num(attrs: Attributes, ...keys: string[]): number | undefined {
   for (const key of keys) {
     const value = attrs[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string') {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && value.trim() !== '') return parsed;
-    }
+    if (value === undefined || value === null || value instanceof Object)
+      continue;
+    // A boolean is not a measurement: `success: true` must not read as 1.
+    if (value === true || value === false) continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && String(value).trim() !== '') return parsed;
   }
   return undefined;
 }
@@ -34,11 +36,8 @@ export function bool(
 ): boolean | undefined {
   for (const key of keys) {
     const value = attrs[key];
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'string') {
-      if (value === 'true') return true;
-      if (value === 'false') return false;
-    }
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
   }
   return undefined;
 }

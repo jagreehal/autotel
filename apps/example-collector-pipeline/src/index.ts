@@ -31,18 +31,16 @@ init({
 });
 
 async function healthCheck() {
-  return trace('GET /healthz', async () => {
-    const ctx = getActiveTraceContext()!;
+  return trace.run('GET /healthz', async (ctx) => {
     ctx.setAttribute('http.request.method', 'GET');
     ctx.setAttribute('http.route', '/healthz');
     ctx.setAttribute('http.response.status_code', 200);
     await delay(2);
-  })();
+  });
 }
 
 async function placeOrder(n: number) {
-  return trace('POST /orders', async () => {
-    const ctx = getActiveTraceContext()!;
+  return trace.run('POST /orders', async (ctx) => {
     const orderId = `ord-${String(n).padStart(4, '0')}`;
 
     ctx.setAttribute('http.request.method', 'POST');
@@ -70,7 +68,7 @@ async function placeOrder(n: number) {
 
     ctx.setAttribute('http.response.status_code', 201);
     return orderId;
-  })();
+  });
 }
 
 async function main() {

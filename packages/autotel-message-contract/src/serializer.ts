@@ -35,17 +35,18 @@ function sortKeysDeep(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((element) => sortKeysDeep(element));
   }
-  if (value !== null && typeof value === 'object' && isPlainObject(value)) {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(value).toSorted()) {
-      sorted[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
-    }
-    return sorted;
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .toSorted()
+        .map((key) => [key, sortKeysDeep(value[key])]),
+    );
   }
   return value;
 }
 
-function isPlainObject(value: object): boolean {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || !(value instanceof Object)) return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
@@ -80,6 +81,8 @@ export function jsonSerializer(
       return JSON.stringify(prepared, undefined, indent);
     },
     deserialize(serialized) {
+      // SAFETY: JSON.parse is typed `any`; this asserts it back to `unknown` so
+      // callers must narrow it rather than being handed an unchecked `any`.
       return JSON.parse(serialized) as unknown;
     },
   };

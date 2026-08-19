@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { logfireAdapter } from './logfire';
 import type { QueryAdapterContext } from './types';
+import { installFetch } from '../testing/doubles.js';
 
 const ctx = (over: Partial<QueryAdapterContext> = {}): QueryAdapterContext => ({
   baseUrl: 'https://logfire-us.pydantic.dev',
@@ -69,7 +70,7 @@ afterEach(() => {
 
 describe('logfireAdapter', () => {
   it('refuses to call without a read token', async () => {
-    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+    installFetch(vi.fn());
     await expect(
       logfireAdapter.searchTraces(
         ctx({ secrets: { get: async () => undefined } }),
@@ -94,7 +95,7 @@ describe('logfireAdapter', () => {
 
   it('posts to the v2 query endpoint', async () => {
     const fetchSpy = okJson(liveQueryResponse);
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
     await logfireAdapter.searchTraces(ctx(), {});
     expect(fetchSpy.mock.calls[0][0]).toBe(
       'https://logfire-us.pydantic.dev/v2/query',
@@ -105,9 +106,10 @@ describe('logfireAdapter', () => {
   // one — including queries the caller gave no time range for.
   it('always sends min_timestamp, defaulting when the query has no start', async () => {
     const fetchSpy = okJson(liveQueryResponse);
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
     await logfireAdapter.searchTraces(ctx(), {});
     const body = JSON.parse(
+      // SAFETY: the adapter posts a JSON string body; the recorded call is its own.
       (fetchSpy.mock.calls[0][1] as RequestInit).body as string,
     );
     expect(body.min_timestamp).toEqual(expect.any(String));
@@ -116,10 +118,11 @@ describe('logfireAdapter', () => {
 
   it('uses the query start time as min_timestamp when given', async () => {
     const fetchSpy = okJson(liveQueryResponse);
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
     const startMs = Date.parse('2026-07-27T00:00:00.000Z');
     await logfireAdapter.searchTraces(ctx(), { startMs });
     const body = JSON.parse(
+      // SAFETY: the adapter posts a JSON string body; the recorded call is its own.
       (fetchSpy.mock.calls[0][1] as RequestInit).body as string,
     );
     expect(body.min_timestamp).toBe('2026-07-27T00:00:00.000Z');
@@ -142,7 +145,7 @@ describe('logfireAdapter', () => {
         headers: new Headers(),
         json: async () => liveQueryResponse,
       });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
     const traces = await logfireAdapter.searchTraces(ctx(), {});
     expect(traces).toHaveLength(1);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
@@ -155,7 +158,7 @@ describe('logfireAdapter', () => {
       statusText: 'Too Many Requests',
       headers: new Headers({ 'Retry-After': '0' }),
     });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
     await expect(logfireAdapter.searchTraces(ctx(), {})).rejects.toThrow(/429/);
   });
 });

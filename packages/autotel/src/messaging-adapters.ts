@@ -40,6 +40,7 @@
 import type { AttributeValue, SpanContext } from '@opentelemetry/api';
 import { TraceFlags } from '@opentelemetry/api';
 import type { ProducerContext, ConsumerContext } from './messaging';
+import { asFunction, asRecord, asString, readProperty } from './values';
 
 // ============================================================================
 // Adapter Types
@@ -156,38 +157,48 @@ interface NatsJetStreamMsg {
  * });
  * ```
  */
+/** Set an attribute when the value is a string worth recording. */
+function setIfString(
+  attrs: Record<string, AttributeValue>,
+  key: string,
+  value: unknown,
+): void {
+  const text = asString(value);
+  if (text) attrs[key] = text;
+}
+
 export const natsAdapter: MessagingAdapter = {
   producer: {
     customAttributes: (_ctx, args) => {
-      const msg = args[0] as
-        { subject?: string; replyTo?: string; stream?: string } | undefined;
+      const msg = asRecord(args[0]);
       const attrs: Record<string, AttributeValue> = {};
 
-      if (msg?.subject) attrs['nats.subject'] = msg.subject;
-      if (msg?.replyTo) attrs['nats.reply_to'] = msg.replyTo;
-      if (msg?.stream) attrs['nats.stream'] = msg.stream;
+      setIfString(attrs, 'nats.subject', msg?.subject);
+      setIfString(attrs, 'nats.reply_to', msg?.replyTo);
+      setIfString(attrs, 'nats.stream', msg?.stream);
 
       return attrs;
     },
   },
   consumer: {
     headersFrom: (msg) => {
-      const natsMsg = msg as NatsJetStreamMsg;
-      const headers = natsMsg.headers;
+      const headers = asRecord(readProperty(msg, 'headers'));
 
       if (!headers) return;
 
       // Try toJSON() first (some NATS implementations)
-      if (typeof headers.toJSON === 'function') {
-        const json = headers.toJSON();
-        if (json && typeof json === 'object') {
-          return json as Record<string, string>;
-        }
+      const toJSON = asFunction(headers.toJSON);
+      if (toJSON) {
+        // SAFETY: a NATS header bag serialises to its own name/value pairs.
+        const json = asRecord(toJSON.call(headers)) as
+          Record<string, string> | undefined;
+        if (json) return json;
       }
 
       // Fallback: use .get() for common trace headers
       // This handles Headers-like objects that only expose .get()
-      if (typeof headers.get === 'function') {
+      const get = asFunction(headers.get);
+      if (get) {
         const result: Record<string, string> = {};
         const traceHeaders = [
           'traceparent',
@@ -199,7 +210,7 @@ export const natsAdapter: MessagingAdapter = {
           'b3',
         ];
         for (const key of traceHeaders) {
-          const value = headers.get(key);
+          const value = asString(get.call(headers, key));
           if (value) {
             result[key] = value;
           }
@@ -210,11 +221,17 @@ export const natsAdapter: MessagingAdapter = {
       }
 
       // Fallback: try to iterate if it's iterable (e.g., entries())
-      if (typeof headers.entries === 'function') {
+      const entries = asFunction(headers.entries);
+      if (entries) {
         const result: Record<string, string> = {};
-        for (const [key, value] of headers.entries()) {
-          if (typeof key === 'string' && typeof value === 'string') {
-            result[key] = value;
+        // SAFETY: a Headers-like `entries()` yields [name, value] pairs; each
+        // pair is checked for strings below before it is kept.
+        const pairs = entries.call(headers) as Iterable<[unknown, unknown]>;
+        for (const [key, value] of pairs) {
+          const name = asString(key);
+          const text = asString(value);
+          if (name !== undefined && text !== undefined) {
+            result[name] = text;
           }
         }
         if (Object.keys(result).length > 0) {
@@ -225,6 +242,8 @@ export const natsAdapter: MessagingAdapter = {
       return;
     },
     customAttributes: (_ctx, msg) => {
+      // SAFETY: this adapter is registered for NATS, so the message it is
+      // handed is a NATS one; every field read below is optional.
       const natsMsg = msg as NatsJetStreamMsg;
       const attrs: Record<string, AttributeValue> = {};
 
@@ -298,6 +317,9 @@ interface TemporalActivityInfo {
 export const temporalAdapter: MessagingAdapter = {
   producer: {
     customAttributes: (_ctx, args) => {
+      // SAFETY: this adapter is registered for Temporal, so the first
+      // argument is the activity info Temporal passes; every field is
+      // optional and checked below.
       const info = args[0] as TemporalActivityInfo | undefined;
       const attrs: Record<string, AttributeValue> = {};
 
@@ -312,6 +334,7 @@ export const temporalAdapter: MessagingAdapter = {
   },
   consumer: {
     customAttributes: (_ctx, msg) => {
+      // SAFETY: as in the producer above - a Temporal activity's info.
       const info = msg as TemporalActivityInfo;
       const attrs: Record<string, AttributeValue> = {};
 
@@ -372,6 +395,8 @@ interface CloudflareQueueMessage {
 export const cloudflareQueuesAdapter: MessagingAdapter = {
   consumer: {
     customAttributes: (_ctx, msg) => {
+      // SAFETY: this adapter is registered for Cloudflare Queues, so the
+      // message is one of theirs; every field is checked before use.
       const cfMsg = msg as CloudflareQueueMessage;
       const attrs: Record<string, AttributeValue> = {};
 

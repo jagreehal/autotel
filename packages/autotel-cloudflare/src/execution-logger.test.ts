@@ -32,7 +32,7 @@ describe('cloudflare execution logger aliases', () => {
     expect(ctx.setAttributes).toHaveBeenCalledWith({
       'request.id': 'req-123',
     });
-    expect(typeof log.fork).toBe('function');
+    expect(log.fork).toBeTypeOf('function');
   });
 
   it('getQueueLogger delegates to the shared execution logger', () => {

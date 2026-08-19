@@ -1,5 +1,5 @@
 import { context, SpanStatusCode, type Attributes } from '@opentelemetry/api';
-import { trace, getActiveTraceContext } from 'autotel';
+import { trace } from 'autotel';
 import { extractContextFromRequest } from './context';
 import { isServerSide } from './env';
 import { isControlFlowSignal, isRealError } from './control-flow';
@@ -153,10 +153,9 @@ export function createTracingMiddleware<TContext = unknown>(
       const fnName = functionId || 'unknown';
       const method = (opts as { method?: string }).method || 'POST';
 
-      return trace(
+      return trace.run(
         { name: `tanstack.serverFn.${fnName}`, isError: isRealError },
-        async () => {
-          const ctx = getActiveTraceContext()!;
+        async (ctx) => {
           const attrs = buildServerFnAttributes(
             fnName,
             method,
@@ -230,7 +229,7 @@ export function createTracingMiddleware<TContext = unknown>(
             throw error;
           }
         },
-      )() as Promise<TContext>;
+      ) as Promise<TContext>;
     }
 
     // For request middleware
@@ -253,89 +252,94 @@ export function createTracingMiddleware<TContext = unknown>(
     return context.with(parentContext, async () => {
       const spanName = `${request.method} ${pathname || url.pathname}`;
 
-      return trace({ name: spanName, isError: isRealError }, async () => {
-        const ctx = getActiveTraceContext()!;
-        const attrs = buildRequestAttributes(request, mergedConfig);
-        ctx.setAttributes(attrs as Record<string, string | number | boolean>);
+      return trace.run(
+        { name: spanName, isError: isRealError },
+        async (ctx) => {
+          const attrs = buildRequestAttributes(request, mergedConfig);
+          ctx.setAttributes(attrs as Record<string, string | number | boolean>);
 
-        // Add custom attributes if provided
-        if (config?.customAttributes) {
-          const customAttrs = config.customAttributes({
-            type: 'request',
-            name: spanName,
-            request,
-          });
-          ctx.setAttributes(
-            customAttrs as Record<string, string | number | boolean>,
-          );
-        }
-
-        const startTime = Date.now();
-
-        try {
-          const result = await next();
-
-          const duration = Date.now() - startTime;
-          ctx.setAttribute(
-            SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
-            duration,
-          );
-
-          // Record timing in metrics collector
-          try {
-            const { metricsCollector } = await import('./metrics');
-            metricsCollector.recordTiming(spanName, duration);
-          } catch {
-            // Metrics not available, skip
-          }
-
-          // Try to get response status from result if it's a Response
-          if (result && typeof result === 'object' && 'status' in result) {
-            ctx.setAttribute(
-              SPAN_ATTRIBUTES.HTTP_RESPONSE_STATUS_CODE,
-              (result as { status: number }).status,
+          // Add custom attributes if provided
+          if (config?.customAttributes) {
+            const customAttrs = config.customAttributes({
+              type: 'request',
+              name: spanName,
+              request,
+            });
+            ctx.setAttributes(
+              customAttrs as Record<string, string | number | boolean>,
             );
           }
 
-          ctx.setStatus({ code: SpanStatusCode.OK });
-          return result;
-        } catch (error) {
-          const duration = Date.now() - startTime;
-          ctx.setAttribute(
-            SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
-            duration,
-          );
+          const startTime = Date.now();
 
-          if (isControlFlowSignal(error)) {
+          try {
+            const result = await next();
+
+            const duration = Date.now() - startTime;
+            ctx.setAttribute(
+              SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
+              duration,
+            );
+
+            // Record timing in metrics collector
+            try {
+              const { metricsCollector } = await import('./metrics');
+              metricsCollector.recordTiming(spanName, duration);
+            } catch {
+              // Metrics not available, skip
+            }
+
+            // Try to get response status from result if it's a Response
+            if (result && typeof result === 'object' && 'status' in result) {
+              ctx.setAttribute(
+                SPAN_ATTRIBUTES.HTTP_RESPONSE_STATUS_CODE,
+                (result as { status: number }).status,
+              );
+            }
+
             ctx.setStatus({ code: SpanStatusCode.OK });
+            return result;
+          } catch (error) {
+            const duration = Date.now() - startTime;
+            ctx.setAttribute(
+              SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
+              duration,
+            );
+
+            if (isControlFlowSignal(error)) {
+              ctx.setStatus({ code: SpanStatusCode.OK });
+              throw error;
+            }
+
+            if (mergedConfig.captureErrors) {
+              if (
+                'recordError' in ctx &&
+                typeof ctx.recordError === 'function'
+              ) {
+                ctx.recordError(error);
+              } else if (
+                'recordException' in ctx &&
+                typeof ctx.recordException === 'function'
+              ) {
+                ctx.recordException(error);
+              }
+
+              // Report error to error store
+              try {
+                const { reportError } = await import('./error-reporting');
+                reportError(error as Error, {
+                  type: 'request',
+                  method: request.method,
+                  pathname: url.pathname,
+                });
+              } catch {
+                // Error reporting not available, skip
+              }
+            }
             throw error;
           }
-
-          if (mergedConfig.captureErrors) {
-            if ('recordError' in ctx && typeof ctx.recordError === 'function') {
-              ctx.recordError(error);
-            } else if (
-              'recordException' in ctx &&
-              typeof ctx.recordException === 'function'
-            ) {
-              ctx.recordException(error);
-            }
-
-            // Report error to error store
-            try {
-              const { reportError } = await import('./error-reporting');
-              reportError(error as Error, {
-                type: 'request',
-                method: request.method,
-                pathname: url.pathname,
-              });
-            } catch {
-              // Error reporting not available, skip
-            }
-          }
-          throw error;
-        }
-      })() as Promise<TContext>;
+        },
+      ) as Promise<TContext>;
     });
   };
 }

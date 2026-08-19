@@ -7,7 +7,9 @@ import {
   type PrettyConsoleExporterOptions,
 } from './pretty-console-exporter';
 import { SpanStatusCode } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import { readableSpanDouble } from './testing/doubles';
 
 /**
  * Create a mock span for testing
@@ -21,7 +23,7 @@ function createMockSpan(
     startTime: [number, number];
     duration: [number, number];
     status: { code: number; message?: string };
-    attributes: Record<string, unknown>;
+    attributes: Attributes;
     instrumentationScope: { name: string; version?: string };
   }> = {},
 ): ReadableSpan {
@@ -44,7 +46,7 @@ function createMockSpan(
     ? { traceId: config.traceId, spanId: config.parentSpanId, traceFlags: 1 }
     : undefined;
 
-  return {
+  return readableSpanDouble({
     name: config.name,
     spanContext: () => ({
       traceId: config.traceId,
@@ -67,7 +69,7 @@ function createMockSpan(
     droppedAttributesCount: 0,
     droppedEventsCount: 0,
     droppedLinksCount: 0,
-  } as unknown as ReadableSpan;
+  });
 }
 
 describe('PrettyConsoleExporter', () => {

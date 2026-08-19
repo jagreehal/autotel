@@ -1,7 +1,7 @@
 // GitHub-flavoured Markdown; the default. Used directly as the body of
 // the sticky PR comment posted by the bundled action.
 
-import type { DriftReport, FieldDrift } from '../diff';
+import type { DriftReport } from '../diff';
 import { hasDrift } from '../diff';
 import type { DriftDelta, DriftEntries } from '../diff-vs-base';
 import type { Renderer } from './types';
@@ -209,9 +209,6 @@ function renderEntries(
     }
     out.push('');
   }
-  // FieldDrift import kept for typing of the for..of above; reference here so
-  // the import isn't flagged as unused by some linter configurations.
-  void (null as unknown as FieldDrift);
 }
 
 export const markdownRenderer: Renderer = {

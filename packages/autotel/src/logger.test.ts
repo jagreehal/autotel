@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LoggedOperation, type Logger } from './logger';
+import { loggerDouble } from './testing/doubles';
 
 describe('Logger interface', () => {
   it('should work with custom logger implementations (Pino signature)', () => {
@@ -47,12 +48,12 @@ describe('@LoggedOperation decorator', () => {
       }
     }
 
-    const mockLog = {
+    const mockLog = loggerDouble({
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
-    } as unknown as Logger;
+    });
 
     const service = new TestService({ log: mockLog });
     const result = await service.testMethod();
@@ -79,12 +80,12 @@ describe('@LoggedOperation decorator', () => {
       }
     }
 
-    const mockLog = {
+    const mockLog = loggerDouble({
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
-    } as unknown as Logger;
+    });
 
     const service = new TestService({ log: mockLog });
     const result = await service.testMethod();
@@ -103,12 +104,12 @@ describe('@LoggedOperation decorator', () => {
       }
     }
 
-    const mockLog = {
+    const mockLog = loggerDouble({
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
-    } as unknown as Logger;
+    });
 
     const service = new TestService({ log: mockLog });
 

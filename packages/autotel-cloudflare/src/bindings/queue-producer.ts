@@ -2,9 +2,11 @@
  * Queue producer binding instrumentation
  */
 
-import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import type { WorkerTracer } from 'autotel-edge';
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { wrap, setAttr } from './common';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { asFunction, member, trapArgs } from '../values.js';
 
 /**
  * Instrument Queue producer binding
@@ -17,12 +19,13 @@ export function instrumentQueueProducer<T extends Queue>(
 
   const handler: ProxyHandler<T> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
-      if (prop === 'send' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'send' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const tracer = workerTracer('autotel-edge');
 
             return tracer.startActiveSpan(
               `Queue ${name}: send`,
@@ -37,7 +40,7 @@ export function instrumentQueueProducer<T extends Queue>(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, target, args);
+                  const result = await fnTarget.apply(target, args);
                   setAttr(
                     span,
                     'messaging.message.id',
@@ -46,7 +49,7 @@ export function instrumentQueueProducer<T extends Queue>(
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:
@@ -62,11 +65,11 @@ export function instrumentQueueProducer<T extends Queue>(
         });
       }
 
-      if (prop === 'sendBatch' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'sendBatch' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
-            const [messages] = args as [{ body: unknown }[]];
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const [messages] = trapArgs<[{ body: unknown }[]]>(args);
+            const tracer = workerTracer('autotel-edge');
 
             return tracer.startActiveSpan(
               `Queue ${name}: sendBatch`,
@@ -84,11 +87,11 @@ export function instrumentQueueProducer<T extends Queue>(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, target, args);
+                  const result = await fnTarget.apply(target, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:

@@ -21,6 +21,13 @@
 
 import { SpanStatusCode } from '@opentelemetry/api';
 import { getConfig } from './config';
+import {
+  asFunction,
+  asRecord,
+  asString,
+  isFunction,
+  readProperty,
+} from './values';
 
 /**
  * Helper: Trace a single database query
@@ -236,8 +243,8 @@ export function instrumentDatabase<T extends object>(
   options: InstrumentDatabaseOptions,
 ): T {
   // Idempotency check - if already instrumented, return as-is
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((client as any)[INSTRUMENTED_SYMBOL]) {
+  const target = clientMembers(client);
+  if (target[INSTRUMENTED_SYMBOL]) {
     return client;
   }
 
@@ -261,16 +268,14 @@ export function instrumentDatabase<T extends object>(
     if (skipSet.has(methodName)) continue;
     if (methodName.startsWith('_')) continue; // Skip private methods
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const method = (client as any)[methodName];
-    if (typeof method !== 'function') continue;
+    const method = asFunction(target[methodName]);
+    if (!method) continue;
 
     // Preserve the original method
     const originalMethod = method;
 
     // Wrap the method
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (client as any)[methodName] = async function (this: T, ...args: any[]) {
+    target[methodName] = async function (this: T, ...args: unknown[]) {
       const operation = inferDbOperation(methodName);
       const table = inferTableName(methodName);
 
@@ -357,45 +362,63 @@ export function instrumentDatabase<T extends object>(
     };
 
     // Preserve function name
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Object.defineProperty((client as any)[methodName], 'name', {
+    Object.defineProperty(target[methodName], 'name', {
       value: methodName,
       configurable: true,
     });
   }
 
   // Mark as instrumented
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (client as any)[INSTRUMENTED_SYMBOL] = true;
+  target[INSTRUMENTED_SYMBOL] = true;
 
   return client;
 }
 
 /**
+ * A client's members, so the wrapper can read a method off it and write the
+ * wrapped one back.
+ *
+ * SAFETY: instrumentDatabase's whole job is to replace named methods on a
+ * client it was handed. TypeScript describes that client by the methods the
+ * caller declared, which is precisely the set being rewritten - so this says
+ * once that the client is being addressed by name.
+ */
+function clientMembers<TClient extends object>(client: TClient): ClientMembers {
+  // SAFETY: see the note above.
+  return client as ClientMembers;
+}
+
+/** A database client, addressed by member name. */
+interface ClientMembers {
+  [key: string]: unknown;
+  [INSTRUMENTED_SYMBOL]?: boolean;
+}
+
+/**
  * Extract method names from a database client that should be instrumented
  */
-function extractDatabaseMethods(client: object): string[] {
+function extractDatabaseMethods<TClient extends object>(
+  client: TClient,
+): string[] {
   const methods: string[] = [];
-  const proto = Object.getPrototypeOf(client);
+  const own = clientMembers(client);
+  const proto = clientMembers(Object.getPrototypeOf(client) ?? {});
 
   // Get own methods
   for (const key of Object.getOwnPropertyNames(client)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof (client as any)[key] === 'function' && !key.startsWith('_')) {
+    if (isFunction(own[key]) && !key.startsWith('_')) {
       methods.push(key);
     }
   }
 
   // Get prototype methods
-  if (proto) {
-    for (const key of Object.getOwnPropertyNames(proto)) {
-      if (
-        typeof proto[key] === 'function' &&
-        !key.startsWith('_') &&
-        key !== 'constructor'
-      ) {
-        methods.push(key);
-      }
+  for (const key of Object.getOwnPropertyNames(proto)) {
+    if (
+      isFunction(proto[key]) &&
+      !key.startsWith('_') &&
+      key !== 'constructor'
+    ) {
+      methods.push(key);
     }
   }
 
@@ -405,38 +428,28 @@ function extractDatabaseMethods(client: object): string[] {
 /**
  * Try to extract SQL query from common argument patterns
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractQueryFromArgs(args: any[]): string | undefined {
+function extractQueryFromArgs(args: unknown[]): string | undefined {
   if (args.length === 0) return undefined;
 
   const firstArg = args[0];
 
   // String query (raw SQL)
-  if (typeof firstArg === 'string') {
-    return firstArg;
-  }
+  const rawSql = asString(firstArg);
+  if (rawSql !== undefined) return rawSql;
 
-  // Object with sql property
-  if (firstArg && typeof firstArg === 'object') {
-    if ('sql' in firstArg && typeof firstArg.sql === 'string') {
-      return firstArg.sql;
-    }
-    // PostgreSQL-style query object
-    if ('text' in firstArg && typeof firstArg.text === 'string') {
-      return firstArg.text;
-    }
+  // Object with sql property, or a PostgreSQL-style query object
+  const query = asRecord(firstArg);
+  if (query) {
+    const stated = asString(query.sql) ?? asString(query.text);
+    if (stated !== undefined) return stated;
+
     // Query builder pattern
-    if ('toQuery' in firstArg && typeof firstArg.toQuery === 'function') {
+    if (isFunction(query.toQuery)) {
       try {
-        const queryResult = firstArg.toQuery();
-        if (typeof queryResult === 'string') return queryResult;
-        if (
-          queryResult &&
-          typeof queryResult === 'object' &&
-          'sql' in queryResult
-        ) {
-          return queryResult.sql as string;
-        }
+        const queryResult: unknown = query.toQuery();
+        const built =
+          asString(queryResult) ?? asString(readProperty(queryResult, 'sql'));
+        if (built !== undefined) return built;
       } catch {
         // Ignore errors from toQuery()
       }

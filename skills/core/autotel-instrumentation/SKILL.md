@@ -13,7 +13,13 @@ For new event emission, prefer correlated logs (OTel Logs API path) over adding 
 ## Setup
 
 ```typescript
-import { init, trace, withTracing } from 'autotel';
+import {
+  getRequestLogger,
+  init,
+  instrument,
+  trace,
+  withTracing,
+} from 'autotel';
 
 init({ service: 'my-app' });
 
@@ -37,15 +43,25 @@ const handler = withTracing({ name: 'http.request' })(
 
 ## Core Patterns
 
-**Explicit span name:**
+**One named operation with explicit context:**
 
 ```typescript
-const checkout = trace('checkout', async (body) => {
+const checkout = await trace.run('checkout', async (ctx) => {
+  ctx.setAttribute('cart.items', body.items.length);
   return processCheckout(body);
 });
 ```
 
-**instrument() with key:**
+`trace.run(name, operation)` runs immediately and returns the result.
+**`trace` wraps, `trace.run` runs** — so a reusable named function is:
+
+```typescript
+export const processOrder = trace('processOrder', async (id: string) =>
+  db.orders.get(id),
+);
+```
+
+`instrument()` is the options form of the same wrapper:
 
 ```typescript
 import { instrument } from 'autotel';
@@ -140,9 +156,10 @@ Use the exact export paths from package.json (autotel/event, autotel/testing, au
 
 Source: packages/autotel/package.json exports
 
-## Version
+## Compatibility
 
-Targets autotel v2.23.x.
+Targets the current workspace public API. Verify package exports when working
+against an older installed version.
 
 See also:
 

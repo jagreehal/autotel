@@ -15,7 +15,7 @@ interface StackFrame {
   platform?: string;
 }
 
-interface ExceptionRecord {
+export interface ExceptionRecord {
   type: string;
   value: string;
   mechanism: { type: string; handled: boolean };
@@ -108,12 +108,14 @@ function parseStackBasic(stack: string): StackFrame[] {
     const match = line.trim().match(re);
     if (match) {
       const [, fn, absPath, lineStr, colStr] = match;
+      // A frame with no path is a frame with nothing to show or group on.
+      if (!absPath) continue;
       frames.push({
         function: fn || undefined,
         abs_path: absPath,
         filename: absPath.split('/').pop() || absPath,
-        lineno: Number.parseInt(lineStr, 10),
-        colno: Number.parseInt(colStr, 10),
+        lineno: Number.parseInt(lineStr ?? '0', 10),
+        colno: Number.parseInt(colStr ?? '0', 10),
         in_app: !absPath.includes('node_modules'),
       });
     }

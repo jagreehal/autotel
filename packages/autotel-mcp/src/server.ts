@@ -87,7 +87,11 @@ async function main() {
       console.error('[autotel-mcp] request error:', err);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: (err as Error).message }));
+        res.end(
+          JSON.stringify({
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
       }
     }
   });

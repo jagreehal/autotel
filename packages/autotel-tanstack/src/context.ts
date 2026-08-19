@@ -27,8 +27,9 @@ export type HeadersInitType =
  * const parentContext = extractContextFromRequest(request);
  * context.with(parentContext, async () => {
  *   // Spans created here will be children of the extracted context
- *   await trace('my-operation', async ()=> {
-      const ctx = getActiveTraceContext()!; ... })();
+ *   await trace.run('my-operation', async (ctx) => {
+ *     ctx.setAttribute('operation.kind', 'example');
+ *   });
  * });
  * ```
  */

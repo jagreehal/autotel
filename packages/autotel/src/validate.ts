@@ -24,6 +24,7 @@
  */
 
 import { trace } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import { createCounter } from './metric-helpers';
 import {
   createStructuredError,
@@ -36,6 +37,8 @@ import {
   VALIDATION_ISSUE_CAP,
   VALIDATION_METRICS,
 } from './validation-attributes';
+import type { UnknownRecord } from './values';
+import { asRecord, asString } from './values';
 
 export type { SchemaLike } from './define-event';
 
@@ -109,18 +112,18 @@ export function recordValidationMismatch(mismatch: ValidationMismatch): void {
 
     const span = trace.getActiveSpan();
     if (span) {
-      span.setAttributes({
-        [VALIDATION_ATTR.name]: mismatch.name,
-        [VALIDATION_ATTR.boundary]: mismatch.boundary,
-        [VALIDATION_ATTR.mode]: mismatch.mode,
-        [VALIDATION_ATTR.issueCount]: mismatch.issues.length,
-        [VALIDATION_ATTR.issuePaths]: truncate(paths),
-        [VALIDATION_ATTR.issueCodes]: truncate(codes),
-        ...(mismatch.hash ? { [VALIDATION_ATTR.hash]: mismatch.hash } : {}),
-        ...(mismatch.severity
-          ? { [VALIDATION_ATTR.severity]: mismatch.severity }
-          : {}),
-      });
+      const attributes: Attributes = {};
+      attributes[VALIDATION_ATTR.name] = mismatch.name;
+      attributes[VALIDATION_ATTR.boundary] = mismatch.boundary;
+      attributes[VALIDATION_ATTR.mode] = mismatch.mode;
+      attributes[VALIDATION_ATTR.issueCount] = mismatch.issues.length;
+      attributes[VALIDATION_ATTR.issuePaths] = truncate(paths);
+      attributes[VALIDATION_ATTR.issueCodes] = truncate(codes);
+      if (mismatch.hash) attributes[VALIDATION_ATTR.hash] = mismatch.hash;
+      if (mismatch.severity) {
+        attributes[VALIDATION_ATTR.severity] = mismatch.severity;
+      }
+      span.setAttributes(attributes);
     }
 
     try {
@@ -160,33 +163,24 @@ export function formatValidationIssues(error: unknown): ValidationIssue[] {
   return raw.map((issue) => toSafeIssue(issue));
 }
 
-function extractRawIssues(error: unknown): Array<Record<string, unknown>> {
-  if (error && typeof error === 'object') {
-    const candidate =
-      (error as { issues?: unknown }).issues ??
-      (error as { errors?: unknown }).errors;
-    if (Array.isArray(candidate)) {
-      return candidate.filter(
-        (i): i is Record<string, unknown> =>
-          i !== null && typeof i === 'object',
-      );
-    }
-  }
-  return [];
+function extractRawIssues(error: unknown): UnknownRecord[] {
+  const raised = asRecord(error);
+  const candidate = raised?.issues ?? raised?.errors;
+  if (!Array.isArray(candidate)) return [];
+  return candidate
+    .map((issue) => asRecord(issue))
+    .filter((issue) => issue !== undefined);
 }
 
-function toSafeIssue(issue: Record<string, unknown>): ValidationIssue {
+function toSafeIssue(issue: UnknownRecord): ValidationIssue {
   const rawPath = issue.path;
   const path = Array.isArray(rawPath)
     ? rawPath.map(String).join('.')
-    : typeof rawPath === 'string'
-      ? rawPath
-      : '';
-  const code = typeof issue.code === 'string' ? issue.code : 'invalid';
+    : (asString(rawPath) ?? '');
+  const code = asString(issue.code) ?? 'invalid';
   // `expected` is a declared type name in Zod (e.g. 'string'); safe. We never
   // read `received`/`message`/`value`, which can carry the offending payload.
-  const expected =
-    typeof issue.expected === 'string' ? issue.expected : undefined;
+  const expected = asString(issue.expected);
   return expected ? { path, code, expected } : { path, code };
 }
 
@@ -196,7 +190,7 @@ export interface DefineValidatorOptions<S> {
   /** `reject` (default): record then throw. `observe`: record then continue. */
   onMismatch?: ValidationMode;
   /** Project the schema to JSON Schema for a stable `validation.hash`. */
-  toJsonSchema?: (schema: S) => unknown;
+  toJsonSchema?: (schema: S) => UnknownRecord;
   severity?: ValidationSeverity;
   /** Build the error thrown in `reject` mode (defaults to a 400 structured error). */
   onReject?: (issues: ValidationIssue[], name: string) => Error;
@@ -299,7 +293,10 @@ export function defineValidator<T, S extends SchemaLike<T>>(
           options.onReject?.(issues, name) ?? defaultRejectError(issues, name)
         );
       }
-      // observe: continue with the raw input (documented type caveat)
+      // SAFETY: observe mode's whole purpose is to let the handler run on
+      // input the schema rejected, so the caller gets the declared type on
+      // paper and the raw value in fact. This is the documented caveat of
+      // choosing `observe`, and the mismatch has just been recorded.
       return input as T;
     },
   };

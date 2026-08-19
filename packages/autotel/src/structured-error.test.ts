@@ -6,6 +6,7 @@ import {
   recordStructuredError,
 } from './structured-error';
 import { createTraceContext, type TraceContext } from './trace-context';
+import { spanDouble, traceContextDouble } from './testing/doubles';
 
 function createFakeSpan(): {
   span: Span;
@@ -21,7 +22,7 @@ function createFakeSpan(): {
     spanId: '0123456789abcdef',
     traceFlags: 1,
   };
-  const span = {
+  const span = spanDouble({
     spanContext: () => spanContext,
     setAttribute: vi.fn(),
     setAttributes,
@@ -33,7 +34,7 @@ function createFakeSpan(): {
     updateName: vi.fn(),
     isRecording: () => true,
     end: vi.fn(),
-  } as unknown as Span;
+  });
   return { span, recordException, setStatus, setAttributes };
 }
 
@@ -107,13 +108,14 @@ describe('structured-error helpers', () => {
   });
 
   it('records structured error onto trace context', () => {
-    const ctx = {
-      recordException: vi.fn(),
-      setStatus: vi.fn(),
-      setAttributes: vi.fn(),
-    } as unknown as TraceContext & {
-      recordException: (error: unknown) => void;
-    };
+    const recordException = vi.fn();
+    const setStatus = vi.fn();
+    const setAttributes = vi.fn();
+    const ctx = traceContextDouble({
+      recordException,
+      setStatus,
+      setAttributes,
+    });
 
     const err = createStructuredError({
       message: 'Checkout failed',
@@ -123,12 +125,12 @@ describe('structured-error helpers', () => {
 
     recordStructuredError(ctx, err);
 
-    expect(ctx.recordException).toHaveBeenCalledWith(err);
-    expect(ctx.setStatus).toHaveBeenCalledWith({
+    expect(recordException).toHaveBeenCalledWith(err);
+    expect(setStatus).toHaveBeenCalledWith({
       code: 2,
       message: 'Checkout failed',
     });
-    expect(ctx.setAttributes).toHaveBeenCalledWith(
+    expect(setAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
         'error.message': 'Checkout failed',
         'error.why': 'Inventory mismatch',
@@ -186,7 +188,7 @@ describe('ctx.track', () => {
     const { span } = createFakeSpan();
     const ctx = createTraceContext(span);
 
-    expect(typeof ctx.track).toBe('function');
+    expect(ctx.track).toBeTypeOf('function');
     // Smoke test — should not throw without init() (track is a no-op when no queue is configured)
     expect(() => ctx.track('test.event', { foo: 'bar' })).not.toThrow();
   });

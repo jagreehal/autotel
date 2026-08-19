@@ -47,7 +47,7 @@ const fetchUserData = traceDynamoDB({
 // Simple health check handler using wrapHandler
 export const healthHandler = wrapHandler(
   async (
-    _event: unknown,
+    _event: APIGatewayProxyEvent,
     _context: LambdaContext,
   ): Promise<APIGatewayProxyResult> => {
     return {

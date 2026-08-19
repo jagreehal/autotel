@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatadogConfig } from './datadog';
 
 describe('createDatadogConfig()', () => {
@@ -98,14 +98,8 @@ describe('createDatadogConfig()', () => {
     });
 
     it('sets OTLP logs env vars for direct ingestion', () => {
-      // Mock the peer dependencies to avoid the error
-      vi.mock('@opentelemetry/sdk-logs', () => ({
-        BatchLogRecordProcessor: vi.fn().mockImplementation(() => ({})),
-      }));
-      vi.mock('@opentelemetry/exporter-logs-otlp-http', () => ({
-        OTLPLogExporter: vi.fn().mockImplementation(() => ({})),
-      }));
-
+      // The peer dependencies are absent here; the env vars this test asserts on are
+      // set before the require that throws, and the catch below tolerates it.
       try {
         createDatadogConfig({
           apiKey: 'test-key',

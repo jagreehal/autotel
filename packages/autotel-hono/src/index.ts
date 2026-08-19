@@ -29,9 +29,8 @@ type Meter = HttpMetricsConfig['meter'];
 type MeterProvider = { getMeter(name: string, version?: string): Meter };
 
 function now(): number {
-  const p = (globalThis as unknown as { performance?: { now(): number } })
-    .performance;
-  return p?.now() ?? Date.now();
+  // Workers and browsers have performance.now(); older Node targets may not.
+  return globalThis.performance?.now() ?? Date.now();
 }
 
 export type OtelConfig = {
@@ -117,7 +116,7 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
   return createMiddleware(async (c, next) => {
     const method = c.req.method;
 
-    const stableAttrs: Record<string, string | number | undefined> = {
+    const stableAttrs = {
       [HTTPAttributes.requestMethod]: method,
       [ServiceAttributes.name]: config.serviceName,
       [ServiceAttributes.version]: config.serviceVersion,
@@ -136,7 +135,7 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
       }
     }
 
-    const finalize = (span?: Span, error?: unknown) => {
+    const finalize = (span?: Span, cause?: unknown) => {
       try {
         const status = c.res.status;
 
@@ -151,9 +150,12 @@ export function otel(userConfig: OtelConfig = {}): MiddlewareHandler {
           if (status >= 500) {
             span.setStatus({ code: SpanStatusCode.ERROR });
           }
-          if (error) {
+          if (cause) {
             try {
-              span.recordException(error as Error);
+              // SAFETY: recordException accepts an Error or a description; a
+              // route can throw anything, and the catch around this call covers
+              // an implementation that rejects what it is given.
+              span.recordException(cause as Error);
             } catch {
               // Ignore errors when recording exception
             }

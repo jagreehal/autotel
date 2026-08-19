@@ -61,11 +61,17 @@ function parseMinScore(value: string | undefined): number | undefined {
   return threshold;
 }
 
+/** What resolveFramework() answers with. */
+interface ResolveFrameworkResult {
+  framework: Framework;
+  warnings: string[];
+}
+
 function resolveFramework(
   requested: string | undefined,
   projectRoot: string,
   deps: ReadonlySet<string>,
-): { framework: Framework; warnings: string[] } {
+): ResolveFrameworkResult {
   if (requested !== undefined && requested !== '') {
     if (!isFramework(requested)) {
       throw new AutotelError({

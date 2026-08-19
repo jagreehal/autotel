@@ -120,7 +120,19 @@ let otelTraceId: string;
  * trace is three times the requests for no more information, and Cloud's rate
  * limiter charges for every one of them.
  */
-let ingested: Record<string, unknown>[] = [];
+/** A JSON value, as Langfuse's HTTP API answers with. */
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Array<JsonValue>
+  | { [key: string]: JsonValue };
+
+/** One observation or trace row read back from Langfuse; a field may be absent. */
+type LangfuseRow = Record<string, JsonValue | undefined>;
+
+let ingested: LangfuseRow[] = [];
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -143,6 +155,8 @@ async function api(path: string, init: RequestInit = {}): Promise<Response> {
     });
     if (response.status !== 429 || attempt >= 2) return response;
 
+    // SAFETY: a 429 from Langfuse carries a retry hint in this shape; the catch
+    // above supplies {} for a body that is not JSON, and every field is optional.
     const body = (await response
       .clone()
       .json()
@@ -195,9 +209,7 @@ function metricsUrl(fields: readonly string[]): string {
  * for every failure is what turned a Cloud rate-limit into a 90-second timeout
  * reported as "timed out", with the 429 that caused it never printed.
  */
-async function rows(
-  fields: readonly string[],
-): Promise<Record<string, unknown>[]> {
+async function rows(fields: readonly string[]): Promise<LangfuseRow[]> {
   if (hasEntityApi) {
     const response = await api(
       `/api/public/observations?limit=100&traceId=${otelTraceId}`,
@@ -207,16 +219,17 @@ async function rows(
         `observations read failed: ${response.status} ${await response.text()}`,
       );
     }
+    // SAFETY: the observations endpoint answers with { data }, and the caller
+    // defaults it to an empty list below.
     const body = (await response.json()) as {
-      data?: Record<string, unknown>[];
+      data?: LangfuseRow[];
     };
     // The entity API names the model differently from the metrics dimension,
     // and keeps trace-level facts on the trace. Fill both in so one set of
     // assertions covers both deployments.
     const trace = await api(`/api/public/traces/${otelTraceId}`);
-    const traceBody = trace.ok
-      ? ((await trace.json()) as Record<string, unknown>)
-      : {};
+    // SAFETY: a trace is a JSON object; the non-ok branch supplies an empty one.
+    const traceBody = trace.ok ? ((await trace.json()) as LangfuseRow) : {};
     return (body.data ?? []).map((observation) => ({
       ...observation,
       providedModelName: observation.model,
@@ -237,7 +250,8 @@ async function rows(
       `metrics read failed: ${response.status} ${await response.text()}`,
     );
   }
-  const body = (await response.json()) as { data?: Record<string, unknown>[] };
+  // SAFETY: the metrics endpoint answers with { data }, defaulted below.
+  const body = (await response.json()) as { data?: LangfuseRow[] };
   return body.data ?? [];
 }
 
@@ -455,8 +469,10 @@ describe.skipIf(!enabled)('Langfuse contract', () => {
     const score = await eventually(async () => {
       const response = await api('/api/public/v3/scores?limit=100');
       if (!response.ok) return undefined;
+      // SAFETY: the scores endpoint answers with { data }; a non-ok response
+      // returned above, and the find below tolerates an absent list.
       const body = (await response.json()) as {
-        data?: Record<string, unknown>[];
+        data?: LangfuseRow[];
       };
       return body.data?.find((s) => s.name === scoreName);
     });
@@ -490,9 +506,8 @@ describe.skipIf(!enabled)('Langfuse contract', () => {
     // complete, neither of which the POST response can tell us.
     const stored = await eventually(async () => {
       const response = await api(`/api/public/media/${mediaId}`);
-      return response.ok
-        ? ((await response.json()) as Record<string, unknown>)
-        : undefined;
+      // SAFETY: the media endpoint answers with a JSON object on 200.
+      return response.ok ? ((await response.json()) as LangfuseRow) : undefined;
     });
 
     expect(stored.contentType).toBe('image/png');

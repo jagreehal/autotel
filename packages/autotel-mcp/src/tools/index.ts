@@ -12,6 +12,7 @@ import { registerInstrumentationTools } from './instrumentation';
 import { registerDiagnosisTools } from './diagnosis';
 import { registerCorrelationTools } from './correlation';
 import { registerSemanticConventionTools } from './semantic-conventions';
+import { registerEstimateTools } from './estimate';
 import { registerResources } from '../resources/index';
 import type { RuntimeSignalAvailability } from '../modules/signal-availability';
 
@@ -29,6 +30,8 @@ export function registerTools(
   registerCollectorSchemaTools(server);
   registerInstrumentationTools(server);
   registerSemanticConventionTools(server);
+  // Pure arithmetic over caller-supplied figures — no backend, no signals.
+  registerEstimateTools(server);
 
   const tracesEnabled =
     runtimeAvailability?.traces.enabled ?? caps.traces === 'available';

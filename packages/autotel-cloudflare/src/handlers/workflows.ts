@@ -9,15 +9,17 @@
  */
 
 import {
-  trace,
   context as api_context,
   SpanStatusCode,
   SpanKind,
 } from '@opentelemetry/api';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 import type { ConfigurationOption, WorkflowTrigger } from 'autotel-edge';
-import { createInitialiser, setConfig, WorkerTracer } from 'autotel-edge';
+import { createInitialiser, setConfig } from 'autotel-edge';
 import { wrap } from '../bindings/common';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { asFunction, member, trapArgs } from '../values.js';
 
 type WorkflowRunFn = (
   event: Readonly<WorkflowEvent<unknown>>,
@@ -46,15 +48,16 @@ function instrumentWorkflowStep(
 ): WorkflowStep {
   const stepHandler: ProxyHandler<WorkflowStep> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
       // Instrument step.do() to create spans for each workflow step
-      if (prop === 'do' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'do' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, thisArg, args) => {
-            const [stepName] = args as [string, ...unknown[]];
+            const [stepName] = trapArgs<[string, ...unknown[]]>(args);
 
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const tracer = workerTracer('autotel-edge');
 
             return tracer.startActiveSpan(
               `Workflow ${workflowName}: ${stepName}`,
@@ -67,11 +70,11 @@ function instrumentWorkflowStep(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await fnTarget.apply(thisArg, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:
@@ -88,12 +91,13 @@ function instrumentWorkflowStep(
       }
 
       // Instrument step.sleep() to track workflow delays
-      if (prop === 'sleep' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'sleep' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, thisArg, args) => {
-            const [sleepName, duration] = args as [string, string | number];
+            const [sleepName, duration] =
+              trapArgs<[string, string | number]>(args);
 
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const tracer = workerTracer('autotel-edge');
 
             return tracer.startActiveSpan(
               `Workflow ${workflowName}: sleep ${sleepName}`,
@@ -107,11 +111,11 @@ function instrumentWorkflowStep(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await fnTarget.apply(thisArg, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:
@@ -127,12 +131,13 @@ function instrumentWorkflowStep(
         });
       }
 
-      if (prop === 'sleepUntil' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'sleepUntil' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, thisArg, args) => {
-            const [sleepName, timestamp] = args as [string, Date | number];
+            const [sleepName, timestamp] =
+              trapArgs<[string, Date | number]>(args);
 
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const tracer = workerTracer('autotel-edge');
             const wakeAt =
               timestamp instanceof Date
                 ? timestamp.toISOString()
@@ -150,11 +155,11 @@ function instrumentWorkflowStep(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, thisArg, args);
+                  const result = await fnTarget.apply(thisArg, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:
@@ -171,8 +176,8 @@ function instrumentWorkflowStep(
       }
 
       // Pass through other step methods
-      if (typeof value === 'function') {
-        return value.bind(target);
+      if (method !== undefined) {
+        return method.bind(target);
       }
 
       return value;
@@ -195,7 +200,7 @@ function instrumentWorkflowRun(
     event: Readonly<WorkflowEvent<unknown>>,
     step: WorkflowStep,
   ): Promise<unknown> {
-    const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+    const tracer = workerTracer('autotel-edge');
 
     // Instrument the step object to track individual operations
     const instrumentedStep = instrumentWorkflowStep(step, workflowName);
@@ -219,7 +224,7 @@ function instrumentWorkflowRun(
           span.setStatus({ code: SpanStatusCode.OK });
           return result;
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -243,22 +248,19 @@ function instrumentWorkflowInstance(
 ): Record<string, unknown> {
   const instanceHandler: ProxyHandler<Record<string, unknown>> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
-      if (prop === 'run' && typeof value === 'function') {
+      if (prop === 'run' && method) {
         return instrumentWorkflowRun(
-          value.bind(target) as WorkflowRunFn,
+          method.bind(target) as WorkflowRunFn,
           workflowName,
           workflowClass,
         );
       }
 
       // Bind other methods to the target
-      if (typeof value === 'function') {
-        return value.bind(target);
-      }
-
-      return value;
+      return method ? method.bind(target) : value;
     },
   };
 

@@ -2,9 +2,11 @@
  * Vectorize binding instrumentation
  */
 
-import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import type { WorkerTracer } from 'autotel-edge';
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { wrap, setAttr } from './common';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { asFunction, member, readProperty } from '../values.js';
 
 const TRACED_METHODS = [
   'query',
@@ -26,17 +28,18 @@ export function instrumentVectorize<T extends VectorizeIndex>(
 
   const handler: ProxyHandler<T> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
       if (
         typeof prop === 'string' &&
         TRACED_METHODS.includes(prop as any) &&
-        typeof value === 'function'
+        method !== undefined
       ) {
-        return new Proxy(value, {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
             const operation = prop as string;
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const tracer = workerTracer('autotel-edge');
 
             const attributes: Record<string, string | number> = {
               'db.system': 'cloudflare-vectorize',
@@ -67,20 +70,17 @@ export function instrumentVectorize<T extends VectorizeIndex>(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, target, args);
+                  const result = await fnTarget.apply(target, args);
 
-                  if (operation === 'query' && result?.matches) {
-                    setAttr(
-                      span,
-                      'db.vectorize.matches_count',
-                      result.matches.length,
-                    );
+                  const matches = readProperty(result, 'matches');
+                  if (operation === 'query' && Array.isArray(matches)) {
+                    setAttr(span, 'db.vectorize.matches_count', matches.length);
                   }
 
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:

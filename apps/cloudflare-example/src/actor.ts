@@ -68,6 +68,9 @@ class CounterActor extends Actor<ActorEnv> {
 
     // POST /increment - Increment count
     if (method === 'POST' && url.pathname === '/increment') {
+      // SAFETY: the body is only read for `amount`, which is defaulted below, so
+      // a body of another shape - including the {} the catch supplies - yields
+      // undefined there rather than anything unsound.
       const body = (await request.json().catch(() => ({}))) as {
         amount?: number;
       };
@@ -112,6 +115,8 @@ class CounterActor extends Actor<ActorEnv> {
             new Date().toISOString(),
           ]);
 
+          // SAFETY: beta.6 types Storage without prepare(); the guard above
+          // established that this runtime's storage implements the SQL surface.
           const visits = await (this.storage as any)
             .prepare('SELECT * FROM visits ORDER BY timestamp DESC LIMIT 10')
             .all();
@@ -166,7 +171,7 @@ class CounterActor extends Actor<ActorEnv> {
    * onAlarm is automatically traced with 'actor.lifecycle': 'alarm'
    * This is called when an alarm is triggered
    */
-  protected async onAlarm(alarmInfo?: unknown): Promise<void> {
+  protected async onAlarm(alarmInfo?: { retryCount?: number }): Promise<void> {
     console.log('Alarm triggered', { alarmInfo, count: this.countValue });
 
     // Example: Increment count on alarm

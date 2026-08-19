@@ -16,27 +16,78 @@ import { setUser, httpServer, type TraceContext, withTracing } from 'autotel';
 const app = express();
 app.use(express.json());
 
+/** A user as the auth step records it onto the event. */
+interface SessionUser {
+  id: string;
+  subscription: string;
+  account_age_days: number;
+  lifetime_value_cents: number;
+}
+
+/** A cart as the cart step records it onto the event. */
+interface SessionCart {
+  id: string;
+  item_count: number;
+  total_cents: number;
+  coupon_applied?: string;
+}
+
+/** What the payment step records onto the event. */
+interface SessionPayment {
+  method: string;
+  provider: string;
+  latency_ms: number;
+  attempt: number;
+}
+
+/** The simulated failure the last step can record. */
+interface SessionError {
+  type: string;
+  code: string;
+  message: string;
+  stripe_decline_code: string;
+}
+
+/**
+ * Everything the six steps accumulate onto one checkout event. Each step adds
+ * its own group, which is the point of the demo: one wide event, not six lines.
+ */
+interface CheckoutAttributes {
+  request_id: string;
+  timestamp: string;
+  method: string;
+  path: string;
+  service: string;
+  user?: SessionUser;
+  cart?: SessionCart;
+  payment?: SessionPayment;
+  duration_ms?: number;
+  status_code?: number;
+  outcome?: 'error' | 'success';
+  error?: SessionError;
+}
+
+/** The wide event, or one of the groups nested inside it. */
+type EventGroup =
+  | CheckoutAttributes
+  | SessionUser
+  | SessionCart
+  | SessionPayment
+  | SessionError;
+
 // In-memory session store for checkout sessions
 interface CheckoutSession {
   request_id: string;
   timestamp: string;
   startTime: number;
   step: number;
-  attributes: Record<string, unknown>;
+  attributes: CheckoutAttributes;
 }
 
 const sessions = new Map<string, CheckoutSession>();
 
 // Simulated user database (matching Boris's example)
-const users: Record<
-  string,
-  {
-    id: string;
-    subscription: string;
-    account_age_days: number;
-    lifetime_value_cents: number;
-  }
-> = {
+const users = {
   user_456: {
     id: 'user_456',
     subscription: 'premium',
@@ -49,25 +100,17 @@ const users: Record<
     account_age_days: 30,
     lifetime_value_cents: 0,
   },
-};
+} satisfies Record<string, SessionUser>;
 
 // Simulated cart database
-const carts: Record<
-  string,
-  {
-    id: string;
-    item_count: number;
-    total_cents: number;
-    coupon_applied?: string;
-  }
-> = {
+const carts = {
   cart_xyz: {
     id: 'cart_xyz',
     item_count: 3,
     total_cents: 15999,
     coupon_applied: 'SAVE20',
   },
-};
+} satisfies Record<string, SessionCart>;
 
 /**
  * Step 1: Request Received
@@ -122,7 +165,8 @@ app.post('/checkout/auth', (req, res) => {
       .json({ error: 'Session not found. Call /checkout/start first.' });
   }
 
-  const user = users[user_id] || users['user_456'];
+  const user =
+    Object.entries(users).find(([id]) => id === user_id)?.[1] ?? users.user_456;
 
   session.step = 2;
   session.attributes = {
@@ -163,7 +207,8 @@ app.post('/checkout/cart', (req, res) => {
       .json({ error: 'Session not found. Call /checkout/start first.' });
   }
 
-  const cart = carts[cart_id] || carts['cart_xyz'];
+  const cart =
+    Object.entries(carts).find(([id]) => id === cart_id)?.[1] ?? carts.cart_xyz;
 
   session.step = 3;
   session.attributes = {
@@ -253,11 +298,10 @@ const processCheckout = withTracing({})(
       });
 
       // User context
-      const user = session.attributes.user as
-        Record<string, unknown> | undefined;
+      const { user } = session.attributes;
       if (user) {
         setUser(ctx, {
-          id: user.id as string,
+          id: user.id,
         });
         ctx.setAttributes({
           'user.subscription': user.subscription,
@@ -272,8 +316,7 @@ const processCheckout = withTracing({})(
       });
 
       // Cart context
-      const cart = session.attributes.cart as
-        Record<string, unknown> | undefined;
+      const { cart } = session.attributes;
       if (cart) {
         ctx.setAttributes({
           'cart.id': cart.id,
@@ -284,8 +327,7 @@ const processCheckout = withTracing({})(
       }
 
       // Payment context
-      const payment = session.attributes.payment as
-        Record<string, unknown> | undefined;
+      const { payment } = session.attributes;
       if (payment) {
         ctx.setAttributes({
           'payment.method': payment.method,
@@ -385,17 +427,14 @@ app.post('/reset', (req, res) => {
 });
 
 // Helper: count nested fields
-function countFields(obj: Record<string, unknown>, prefix = ''): number {
+function countFields(event: EventGroup, prefix = ''): number {
   let count = 0;
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      count += countFields(
-        value as Record<string, unknown>,
-        `${prefix}${key}.`,
-      );
-    } else {
-      count++;
-    }
+  for (const [key, value] of Object.entries(event)) {
+    // A group is a plain object the steps nested under one key (user, cart,
+    // payment, error). Anything else - including a Date or an array - is a leaf.
+    const isGroup =
+      value !== null && Object.getPrototypeOf(value) === Object.prototype;
+    count += isGroup ? countFields(value, `${prefix}${key}.`) : 1;
   }
   return count;
 }

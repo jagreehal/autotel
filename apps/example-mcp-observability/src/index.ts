@@ -23,6 +23,12 @@ import 'dotenv/config';
 import express from 'express';
 import { init, span, type TraceContext, withTracing } from 'autotel';
 
+/** The filters this example's user query accepts. */
+type UserFilters = {
+  status?: string;
+  limit?: number;
+};
+
 // Initialize autotel to export to local Jaeger
 init({
   service: 'mcp-observability-demo',
@@ -38,7 +44,7 @@ app.use(express.json());
 // ============================================================================
 
 const queryUsers = withTracing({})(
-  (ctx: TraceContext) => async (filters: Record<string, unknown>) => {
+  (ctx: TraceContext) => async (filters: UserFilters) => {
     ctx.setAttribute('db.system', 'postgresql');
     ctx.setAttribute('db.operation', 'SELECT');
     ctx.setAttribute('db.table', 'users');

@@ -34,6 +34,23 @@ interface AgentEnv extends WorkerEnv {
   TaskAgent: DurableObjectNamespace;
 }
 
+/** What an MCP request carries: JSON, nothing else. */
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Array<JsonValue>
+  | { [key: string]: JsonValue };
+
+/** What this example returns in place of a real MCP round trip. */
+type McpCallResult = {
+  serverId: string;
+  method: string;
+  params?: Record<string, JsonValue>;
+  result: string;
+};
+
 class TaskAgent extends Agent<AgentEnv> {
   declare observability: Observability;
 
@@ -42,6 +59,10 @@ class TaskAgent extends Agent<AgentEnv> {
   constructor(state: DurableObjectState, env: AgentEnv) {
     super(state, env);
 
+    // SAFETY: createOtelObservability returns the agents SDK's own observability
+    // shape; the assertion at the end of this call bridges the two copies of the
+    // Observability type that the agents and autotel-cloudflare packages each
+    // resolve, which are structurally the same.
     this.observability = createOtelObservability({
       exporter: {
         url: env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
@@ -134,8 +155,8 @@ class TaskAgent extends Agent<AgentEnv> {
   async callMcpServer(
     serverId: string,
     method: string,
-    params?: Record<string, unknown>,
-  ): Promise<unknown> {
+    params?: Record<string, JsonValue>,
+  ): Promise<McpCallResult> {
     // MCP client operations are automatically traced
     // This is a simplified example - actual MCP usage would involve
     // connecting to MCP servers and making requests

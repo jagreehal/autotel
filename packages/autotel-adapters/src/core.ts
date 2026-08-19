@@ -9,7 +9,7 @@ import {
   type PipelineDrainFn,
   type StructuredError,
   type StructuredErrorInput,
-  withTracing,
+  trace,
 } from 'autotel';
 import {
   mergeRequestLoggerOptions,
@@ -95,24 +95,20 @@ export function createRequestRunner(storage: AsyncLocalStorage<RequestLogger>) {
       options?.waitUntil,
     );
 
-    const wrapped = withTracing({ name: spanName })(
-      (ctx) => async (): Promise<T> => {
-        const log = getRequestLogger(ctx, loggerOptions);
-        enrich(log);
-        try {
-          return await storage.run(log, () => handler());
-        } catch (error) {
-          log.error(error instanceof Error ? error : new Error(String(error)));
-          throw error;
-        } finally {
-          if (options?.autoEmit !== false) {
-            log.emitNow(options?.finalize?.());
-          }
+    return trace.run(spanName, async (ctx): Promise<T> => {
+      const log = getRequestLogger(ctx, loggerOptions);
+      enrich(log);
+      try {
+        return await storage.run(log, () => handler());
+      } catch (error) {
+        log.error(error instanceof Error ? error : new Error(String(error)));
+        throw error;
+      } finally {
+        if (options?.autoEmit !== false) {
+          log.emitNow(options?.finalize?.());
         }
-      },
-    );
-    // The wrapped factory is async, so the call always yields a Promise.
-    return wrapped() as Promise<T>;
+      }
+    });
   };
 }
 

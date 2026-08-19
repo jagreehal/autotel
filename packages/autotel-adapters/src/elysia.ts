@@ -39,7 +39,7 @@ function enrichFromContext(
     'http.request.method': ctx.request.method,
     'url.full': ctx.request.url,
     'http.route': ctx.path,
-    ...(requestId ? { 'http.request.id': requestId } : {}),
+    'http.request.id': requestId,
   };
 }
 

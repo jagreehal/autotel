@@ -30,6 +30,8 @@ import type { Attributes, AttributeValue } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import type { Logger } from '../logger';
 import { formatPrettyLogLine, formatDuration } from '../pretty-log-formatter';
+import type { UnknownRecord } from '../values';
+import { asBoolean, asNumber, asString, hasProcess, toError } from '../values';
 
 /**
  * Function to redact sensitive attribute values
@@ -39,11 +41,18 @@ export type AttributeRedactorFn = (
   value: AttributeValue,
 ) => AttributeValue;
 
+const SEVERITY_NUMBERS = new Map<string, SeverityNumber>([
+  ['debug', SeverityNumber.DEBUG],
+  ['info', SeverityNumber.INFO],
+  ['warn', SeverityNumber.WARN],
+  ['error', SeverityNumber.ERROR],
+]);
+
 export interface CanonicalLogLineEvent {
   span: ReadableSpan;
   level: 'debug' | 'info' | 'warn' | 'error';
   message: string;
-  event: Record<string, unknown>;
+  event: UnknownRecord;
 }
 
 export interface KeepCondition {
@@ -85,7 +94,7 @@ export interface CanonicalLogLineOptions {
   /** Callback invoked after emit for custom fan-out. */
   drain?: (ctx: CanonicalLogLineEvent) => void | Promise<void>;
   /** Handler for drain failures. */
-  onDrainError?: (error: unknown, ctx: CanonicalLogLineEvent) => void;
+  onDrainError?: (cause: unknown, ctx: CanonicalLogLineEvent) => void;
   /**
    * Pretty-print canonical log lines to console in a tree format.
    * Defaults to true when NODE_ENV is 'development'.
@@ -159,7 +168,7 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
   private attributeRedactor?: AttributeRedactorFn;
   private shouldEmit?: (ctx: CanonicalLogLineEvent) => boolean;
   private drain?: (ctx: CanonicalLogLineEvent) => void | Promise<void>;
-  private onDrainError?: (error: unknown, ctx: CanonicalLogLineEvent) => void;
+  private onDrainError?: (cause: unknown, ctx: CanonicalLogLineEvent) => void;
   private pretty: boolean;
   private getOTelLogger: (() => ReturnType<typeof logs.getLogger>) | null =
     null;
@@ -178,8 +187,7 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     this.onDrainError = options.onDrainError;
     this.pretty =
       options.pretty ??
-      (typeof process !== 'undefined' &&
-        process.env.NODE_ENV === 'development');
+      (hasProcess() && process.env.NODE_ENV === 'development');
 
     if (!this.logger) {
       this.getOTelLogger = () => logs.getLogger('autotel.canonical-log-line');
@@ -267,18 +275,20 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     }
   }
 
-  private buildCanonicalLogLine(span: ReadableSpan): Record<string, unknown> {
+  private buildCanonicalLogLine(span: ReadableSpan): UnknownRecord {
     const durationMs = span.duration[0] * 1000 + span.duration[1] / 1_000_000;
     const timestamp = new Date(
       span.startTime[0] * 1000 + span.startTime[1] / 1_000_000,
     ).toISOString();
 
     // Span attributes first so core metadata fields below take precedence
-    const canonicalLogLine: Record<string, unknown> = {};
+    const canonicalLogLine: UnknownRecord = {};
     const attributes = this.redactAttributes(span.attributes);
     Object.assign(canonicalLogLine, attributes);
 
     if (this.includeResourceAttributes) {
+      // SAFETY: a resource's attributes are span attributes by another name -
+      // the SDK types them separately, the wire does not.
       const resourceAttrs = this.redactAttributes(
         span.resource.attributes as Attributes,
       );
@@ -298,12 +308,12 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
     return canonicalLogLine;
   }
 
-  private redactAttributes(attributes: Attributes): Record<string, unknown> {
+  private redactAttributes(attributes: Attributes): UnknownRecord {
     if (!this.attributeRedactor) {
       return { ...attributes };
     }
 
-    const redacted: Record<string, unknown> = {};
+    const redacted: UnknownRecord = {};
     for (const [key, value] of Object.entries(attributes)) {
       if (value !== undefined) {
         redacted[key] = this.attributeRedactor(key, value);
@@ -315,7 +325,7 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
   private emitViaLogger(
     level: 'debug' | 'info' | 'warn' | 'error',
     message: string,
-    canonicalLogLine: Record<string, unknown>,
+    canonicalLogLine: UnknownRecord,
   ): void {
     this.logger![level](canonicalLogLine, message);
   }
@@ -323,17 +333,14 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
   private emitViaOTel(
     level: 'debug' | 'info' | 'warn' | 'error',
     message: string,
-    canonicalLogLine: Record<string, unknown>,
+    canonicalLogLine: UnknownRecord,
     otelLogger: ReturnType<typeof logs.getLogger>,
   ): void {
     const otelAttributes: Record<string, string | number | boolean> = {};
     for (const [key, value] of Object.entries(canonicalLogLine)) {
-      if (
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean'
-      ) {
-        otelAttributes[key] = value;
+      const scalar = asString(value) ?? asNumber(value) ?? asBoolean(value);
+      if (scalar !== undefined) {
+        otelAttributes[key] = scalar;
       } else if (value !== null && value !== undefined) {
         otelAttributes[key] = String(value);
       }
@@ -367,18 +374,11 @@ export class CanonicalLogLineProcessor implements SpanProcessor {
   }
 
   private getSeverityNumber(level: string): SeverityNumber {
-    const mapping: Record<string, SeverityNumber> = {
-      debug: SeverityNumber.DEBUG,
-      info: SeverityNumber.INFO,
-      warn: SeverityNumber.WARN,
-      error: SeverityNumber.ERROR,
-    };
-    return mapping[level] ?? SeverityNumber.INFO;
+    return SEVERITY_NUMBERS.get(level) ?? SeverityNumber.INFO;
   }
 
-  private reportInternalWarning(message: string, error: unknown): void {
-    const err =
-      error instanceof Error ? error.message : String(error ?? 'unknown error');
+  private reportInternalWarning(message: string, cause: unknown): void {
+    const err = cause === undefined ? 'unknown error' : toError(cause).message;
     if (this.logger) {
       this.logger.warn({ error: err }, `[autotel] ${message}`);
       return;

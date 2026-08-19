@@ -1,16 +1,17 @@
 import * as path from 'node:path';
 import type { PackageManager } from '../types/index';
 import { fileExists, findAllUpward, readFileSafe } from './fs';
+import { readProperty } from './values';
 
 /**
  * Lockfile to package manager mapping
  */
-const LOCKFILE_MAP: Record<string, PackageManager> = {
-  'pnpm-lock.yaml': 'pnpm',
-  'bun.lockb': 'bun',
-  'yarn.lock': 'yarn',
-  'package-lock.json': 'npm',
-};
+const LOCKFILE_MAP = new Map<string, PackageManager>([
+  ['pnpm-lock.yaml', 'pnpm'],
+  ['bun.lockb', 'bun'],
+  ['yarn.lock', 'yarn'],
+  ['package-lock.json', 'npm'],
+]);
 
 /**
  * All lockfile names in priority order
@@ -31,10 +32,13 @@ const PM_PRIORITY: PackageManager[] = ['pnpm', 'bun', 'yarn', 'npm'];
  * Detect package manager from nearest lockfile
  * Algorithm: Find closest lockfile to cwd, working upward
  */
-export function detectPackageManager(startDir: string): {
+/** Which package manager a directory belongs to, and the lockfile that says so. */
+export interface DetectedPackageManager {
   packageManager: PackageManager;
   lockfilePath: string | null;
-} {
+}
+
+export function detectPackageManager(startDir: string): DetectedPackageManager {
   const foundLockfiles = findAllUpward(startDir, LOCKFILES);
 
   if (foundLockfiles.size === 0) {
@@ -48,7 +52,7 @@ export function detectPackageManager(startDir: string): {
 
   for (const [lockfileName, lockfilePath] of foundLockfiles) {
     const depth = lockfilePath.split(path.sep).length;
-    const pm = LOCKFILE_MAP[lockfileName];
+    const pm = LOCKFILE_MAP.get(lockfileName);
 
     if (pm === undefined) continue;
 
@@ -141,10 +145,13 @@ export function getExecCommand(pm: PackageManager): string {
 /**
  * Detect workspace root markers
  */
-export function detectWorkspaceRoot(startDir: string): {
+/** The monorepo root a directory sits in, and what kind of workspace it is. */
+export interface DetectedWorkspace {
   workspaceRoot: string | null;
   workspaceType: 'pnpm' | 'yarn' | 'npm' | 'lerna' | null;
-} {
+}
+
+export function detectWorkspaceRoot(startDir: string): DetectedWorkspace {
   let currentDir = path.resolve(startDir);
   const root = path.parse(currentDir).root;
 
@@ -164,8 +171,8 @@ export function detectWorkspaceRoot(startDir: string): {
     const pkgJsonContent = readFileSafe(pkgJsonPath);
     if (pkgJsonContent) {
       try {
-        const pkgJson = JSON.parse(pkgJsonContent) as { workspaces?: unknown };
-        if (pkgJson.workspaces) {
+        const pkgJson: unknown = JSON.parse(pkgJsonContent);
+        if (readProperty(pkgJson, 'workspaces')) {
           // Determine if yarn or npm based on lockfile
           const hasYarnLock = fileExists(path.join(currentDir, 'yarn.lock'));
           return {

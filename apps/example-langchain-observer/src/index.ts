@@ -24,6 +24,7 @@ import {
 } from 'autotel-genai/observer';
 import { z } from 'zod';
 import { printTrace } from './print-trace.js';
+import type { BaseMessage } from '@langchain/core/messages';
 
 const MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2';
 const BASE_URL = process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434';
@@ -95,14 +96,17 @@ async function main(): Promise<void> {
   await provider.shutdown();
 }
 
-function oneLine(content: unknown): string {
+/** What a LangChain message carries: text, or the content blocks it returns. */
+type MessageContent = BaseMessage['content'] | undefined;
+
+function oneLine(content: MessageContent): string {
   const text = typeof content === 'string' ? content : JSON.stringify(content);
   const collapsed = text.replace(/\s+/g, ' ').trim();
   return collapsed.length > 160 ? `${collapsed.slice(0, 157)}…` : collapsed;
 }
 
-function isConnectionError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+function isConnectionError(cause: unknown): boolean {
+  const message = cause instanceof Error ? cause.message : String(cause);
   return /ECONNREFUSED|fetch failed|ENOTFOUND|connect/i.test(message);
 }
 

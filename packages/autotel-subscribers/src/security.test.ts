@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SecuritySubscriber, type SecurityAlert } from './security';
 
 const fetchMock = vi.fn();
+// SAFETY: the tests replace fetch with a mock and assert on what it received.
 globalThis.fetch = fetchMock as never;
 
 describe('SecuritySubscriber', () => {
@@ -30,9 +31,11 @@ describe('SecuritySubscriber', () => {
     await subscriber.shutdown();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    // SAFETY: the subscriber calls fetch(url, init); that is what was recorded.
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://siem.example.com/alerts');
 
+    // SAFETY: the subscriber posts the alert as a JSON string body.
     const body = JSON.parse(init.body as string) as SecurityAlert;
     expect(body).toMatchObject({
       event: 'security.auth.login.failed',
@@ -138,6 +141,7 @@ describe('SecuritySubscriber', () => {
     });
     await subscriber.shutdown();
 
+    // SAFETY: as above - fetch(url, init) is what the subscriber called.
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.headers).toMatchObject({
       'Content-Type': 'application/json',

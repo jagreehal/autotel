@@ -87,7 +87,9 @@ const users = {
 // Simulate checkout processing
 const processCheckout = withTracing({})(
   (ctx) => async (req: CheckoutRequest) => {
-    const user = users[req.userId as keyof typeof users];
+    // The id comes from the request, so look it up rather than asserting it is
+    // one of the two keys this table happens to have.
+    const user = Object.entries(users).find(([id]) => id === req.userId)?.[1];
     if (!user) {
       throw new Error(`User ${req.userId} not found`);
     }

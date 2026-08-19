@@ -63,6 +63,12 @@ import { resolveConfigFromEnv } from './env-config';
 import { loadYamlConfig } from './yaml-config';
 import { safeRequire } from './node-require';
 import {
+  asFunction,
+  isFunction,
+  readProperty,
+  type UnknownRecord,
+} from './values';
+import {
   CanonicalLogLineProcessor,
   type CanonicalLogLineOptions,
 } from './processors/canonical-log-line-processor';
@@ -94,6 +100,7 @@ import {
   _resetAutoInstrumentationsLoader,
   _setAutoInstrumentationsLoader,
   type AutoInstrumentationsLoader,
+  type InstrumentationSwitches,
 } from './auto-instrumentations';
 import {
   createLogExporter,
@@ -120,6 +127,7 @@ export {
   _resetAutoInstrumentationsLoader,
   _setAutoInstrumentationsLoader,
   type AutoInstrumentationsLoader,
+  type InstrumentationSwitches,
 };
 export {
   createTraceExporter,
@@ -150,15 +158,16 @@ function toOtelSampler(sampler: Sampler): OtelSampler {
       };
       const shouldTrace = sampler.shouldSample(samplingContext);
       const rate = sampler.sampleRate?.(samplingContext);
-      return {
+      const result: SamplingResult = {
         decision: shouldTrace
           ? SamplingDecision.RECORD_AND_SAMPLED
           : SamplingDecision.NOT_RECORD,
-        // Let a query reweight counts back to the true population.
-        ...(shouldTrace && rate !== undefined && rate > 1
-          ? { attributes: { [AUTOTEL_SAMPLING_RATE]: rate } }
-          : {}),
       };
+      // Let a query reweight counts back to the true population.
+      if (shouldTrace && rate !== undefined && rate > 1) {
+        result.attributes = { [AUTOTEL_SAMPLING_RATE]: rate };
+      }
+      return result;
     },
     toString(): string {
       return `AutotelSamplerAdapter`;
@@ -183,14 +192,13 @@ interface StringRedactorAware {
 }
 
 function acceptsStringRedactor(
-  subscriber: unknown,
-): subscriber is StringRedactorAware {
-  return (
-    typeof subscriber === 'object' &&
-    subscriber !== null &&
-    'setStringRedactor' in subscriber &&
-    typeof (subscriber as StringRedactorAware).setStringRedactor === 'function'
-  );
+  subscriber: object,
+): StringRedactorAware | undefined {
+  // SAFETY: the only member this promises is the setter just found on the
+  // subscriber; everything else about it stays an EventSubscriber.
+  return isFunction(readProperty(subscriber, 'setStringRedactor'))
+    ? (subscriber as StringRedactorAware)
+    : undefined;
 }
 let _optionalRequire: typeof safeRequire = safeRequire;
 let _devtoolsClose: (() => Promise<void> | void) | null = null;
@@ -224,7 +232,7 @@ export function isLoggerLocked(): boolean {
  *
  * @example With events (observe in PostHog, Mixpanel, etc.)
  * ```typescript
- * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+ * import { PostHogSubscriber } from 'autotel-posthog/subscriber';
  *
  * init({
  *   service: 'my-app',
@@ -296,7 +304,7 @@ export function init(cfg: AutotelConfig): void {
     },
     // Handle headers merge (can be string or object)
     headers: cfg.headers ?? yamlConfig.headers ?? envConfig.headers,
-  } as AutotelConfig;
+  };
 
   const resolvedRedactor = resolveAttributeRedactor(
     mergedConfig.attributeRedactor,
@@ -533,9 +541,7 @@ export function init(cfg: AutotelConfig): void {
   // Wire string redactor to subscribers that support it (e.g., PostHogSubscriber)
   if (_stringRedactor && mergedConfig.subscribers) {
     for (const subscriber of mergedConfig.subscribers) {
-      if (acceptsStringRedactor(subscriber)) {
-        subscriber.setStringRedactor(_stringRedactor);
-      }
+      acceptsStringRedactor(subscriber)?.setStringRedactor(_stringRedactor);
     }
   }
 
@@ -620,15 +626,17 @@ export function init(cfg: AutotelConfig): void {
       const exportIntervalMillis = readMillisEnv('OTEL_METRIC_EXPORT_INTERVAL');
       const exportTimeoutMillis = readMillisEnv('OTEL_METRIC_EXPORT_TIMEOUT');
 
-      metricReaders.push(
-        new PeriodicExportingMetricReader({
-          exporter: metricExporter,
-          ...(exportIntervalMillis === undefined
-            ? {}
-            : { exportIntervalMillis }),
-          ...(exportTimeoutMillis === undefined ? {} : { exportTimeoutMillis }),
-        }),
-      );
+      const readerOptions: ConstructorParameters<
+        typeof PeriodicExportingMetricReader
+      >[0] = { exporter: metricExporter };
+      if (exportIntervalMillis !== undefined) {
+        readerOptions.exportIntervalMillis = exportIntervalMillis;
+      }
+      if (exportTimeoutMillis !== undefined) {
+        readerOptions.exportTimeoutMillis = exportTimeoutMillis;
+      }
+
+      metricReaders.push(new PeriodicExportingMetricReader(readerOptions));
     }
   }
 
@@ -740,10 +748,9 @@ export function init(cfg: AutotelConfig): void {
         manualInstrumentationNames,
       );
       if (autoInstrumentations && autoInstrumentations.length > 0) {
-        // Cast to proper type - getNodeAutoInstrumentations returns the correct type
         finalInstrumentations = [
           ...finalInstrumentations,
-          ...(autoInstrumentations as NodeSDKConfiguration['instrumentations']),
+          ...autoInstrumentations,
         ];
       }
     } catch (error) {
@@ -801,22 +808,22 @@ export function init(cfg: AutotelConfig): void {
   // Initialize OpenLLMetry if enabled (after SDK starts to reuse tracer provider)
   if (mergedConfig.openllmetry?.enabled) {
     const traceloop = _optionalRequire<{
-      initialize?: (options?: Record<string, unknown>) => void;
+      initialize?: (options?: UnknownRecord) => void;
     }>('@traceloop/node-server-sdk');
 
     if (traceloop) {
-      const initOptions: Record<string, unknown> = {
+      const initOptions: UnknownRecord = {
         ...mergedConfig.openllmetry.options,
       };
 
-      // Reuse autotel's tracer provider
-      try {
-        // Type assertion needed as getTracerProvider is not in the public NodeSDK interface
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const tracerProvider = (sdk as any).getTracerProvider();
-        initOptions.tracerProvider = tracerProvider;
-      } catch {
-        // Ignore if tracer provider not available
+      // Reuse autotel's tracer provider. getTracerProvider is not on the
+      // public NodeSDK interface, so it is read off the handle rather than
+      // called through it.
+      const getTracerProvider = asFunction(
+        readProperty(sdk, 'getTracerProvider'),
+      );
+      if (getTracerProvider) {
+        initOptions.tracerProvider = getTracerProvider.call(sdk);
       }
 
       // Pass span exporter to OpenLLMetry if provided
@@ -824,7 +831,7 @@ export function init(cfg: AutotelConfig): void {
         initOptions.exporter = configuredSpanExporters[0];
       }
 
-      if (typeof traceloop.initialize === 'function') {
+      if (isFunction(traceloop.initialize)) {
         traceloop.initialize(initOptions);
         logger.info({}, '[autotel] OpenLLMetry initialized successfully');
       } else {

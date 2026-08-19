@@ -34,10 +34,10 @@ function delay(ms: number): Promise<void> {
  * exhausted — callers rely on the `EventSubscriber` base class to route
  * that through `handleError`.
  */
-export async function postJsonWithRetry(
+export async function postJsonWithRetry<TPayload>(
   client: HttpClient,
   url: string,
-  payload: unknown,
+  payload: TPayload,
   options: JsonDeliveryOptions = {},
 ): Promise<void> {
   const maxRetries = options.maxRetries ?? 3;

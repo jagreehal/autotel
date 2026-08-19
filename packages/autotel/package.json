@@ -125,6 +125,11 @@
       "import": "./dist/attribute-redacting-processor.js",
       "require": "./dist/attribute-redacting-processor.cjs"
     },
+    "./exception-fingerprint": {
+      "types": "./dist/exception-fingerprint.d.ts",
+      "import": "./dist/exception-fingerprint.js",
+      "require": "./dist/exception-fingerprint.cjs"
+    },
     "./functional": {
       "types": "./dist/functional.d.ts",
       "import": "./dist/functional.js",

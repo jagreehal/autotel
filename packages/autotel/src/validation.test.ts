@@ -10,6 +10,8 @@ import {
   ValidationError,
   getDefaultValidationConfig,
 } from './validation';
+import { readPath, type UnknownRecord } from './values';
+import { invalidValue } from './testing/doubles';
 
 describe('validateEventName()', () => {
   it('should accept valid event names', () => {
@@ -29,11 +31,15 @@ describe('validateEventName()', () => {
   });
 
   it('should reject non-string event names', () => {
-    expect(() => validateEventName(123 as any)).toThrow(ValidationError);
+    expect(() => validateEventName(invalidValue(123))).toThrow(ValidationError);
 
-    expect(() => validateEventName(null as any)).toThrow(ValidationError);
+    expect(() => validateEventName(invalidValue(null))).toThrow(
+      ValidationError,
+    );
 
-    expect(() => validateEventName(undefined as any)).toThrow(ValidationError);
+    expect(() => validateEventName(invalidValue(undefined))).toThrow(
+      ValidationError,
+    );
   });
 
   it('should reject event names that are too long', () => {
@@ -68,23 +74,27 @@ describe('validateAttributes()', () => {
   });
 
   it('should reject non-object attributes', () => {
-    expect(() => validateAttributes('string' as any)).toThrow(ValidationError);
+    expect(() => validateAttributes(invalidValue('string'))).toThrow(
+      ValidationError,
+    );
 
-    expect(() => validateAttributes(123 as any)).toThrow(ValidationError);
+    expect(() => validateAttributes(invalidValue(123))).toThrow(
+      ValidationError,
+    );
 
-    expect(() => validateAttributes([] as any)).toThrow(ValidationError);
+    expect(() => validateAttributes(invalidValue([]))).toThrow(ValidationError);
   });
 
   it('should reject too many attributes', () => {
     const config = getDefaultValidationConfig();
-    const attrs: Record<string, unknown> = {};
+    const attrs: UnknownRecord = {};
     for (let i = 0; i < config.maxAttributeCount + 1; i++) {
       attrs[`key${i}`] = 'value';
     }
 
-    expect(() =>
-      validateAttributes(attrs as Record<string, string | number | boolean>),
-    ).toThrow(ValidationError);
+    expect(() => validateAttributes(invalidValue(attrs))).toThrow(
+      ValidationError,
+    );
   });
 
   it('should reject attribute keys that are too long', () => {
@@ -99,7 +109,7 @@ describe('validateAttributes()', () => {
     const attrs = { field: longValue };
 
     const result = validateAttributes(attrs);
-    expect(result?.field).toBe('a'.repeat(1000) + '...');
+    expect(readPath(result, 'field')).toBe('a'.repeat(1000) + '...');
   });
 
   it('should redact sensitive fields', () => {
@@ -111,10 +121,10 @@ describe('validateAttributes()', () => {
     };
 
     const result = validateAttributes(attrs);
-    expect(result?.email).toBe('user@example.com');
-    expect(result?.password).toBe('[REDACTED]');
-    expect(result?.apiKey).toBe('[REDACTED]');
-    expect(result?.normalField).toBe('value');
+    expect(readPath(result, 'email')).toBe('user@example.com');
+    expect(readPath(result, 'password')).toBe('[REDACTED]');
+    expect(readPath(result, 'apiKey')).toBe('[REDACTED]');
+    expect(readPath(result, 'normalField')).toBe('value');
   });
 
   it('should redact sensitive fields in nested objects', () => {
@@ -128,12 +138,11 @@ describe('validateAttributes()', () => {
       },
     };
 
-    const result = validateAttributes(attrs) as
-      Record<string, Record<string, unknown>> | undefined;
+    const result = validateAttributes(attrs);
 
-    expect(result?.user?.password).toBe('[REDACTED]');
-    expect(result?.user?.apiKey).toBe('[REDACTED]');
-    expect(result?.session?.authToken).toBe('[REDACTED]');
+    expect(readPath(result, 'user', 'password')).toBe('[REDACTED]');
+    expect(readPath(result, 'user', 'apiKey')).toBe('[REDACTED]');
+    expect(readPath(result, 'session', 'authToken')).toBe('[REDACTED]');
   });
 
   it('should handle nested objects within depth limit', () => {
@@ -145,9 +154,7 @@ describe('validateAttributes()', () => {
       },
     };
 
-    const result = validateAttributes(
-      attrs as unknown as Record<string, string | number | boolean>,
-    );
+    const result = validateAttributes(invalidValue(attrs));
     expect(result).toEqual(attrs);
   });
 
@@ -164,8 +171,10 @@ describe('validateAttributes()', () => {
       },
     };
 
-    const result = validateAttributes(attrs as any) as any;
-    expect(result.level1.level2.level3.level4).toBe('[MAX_DEPTH_EXCEEDED]');
+    const result = validateAttributes(invalidValue(attrs));
+    expect(readPath(result, 'level1', 'level2', 'level3', 'level4')).toBe(
+      '[MAX_DEPTH_EXCEEDED]',
+    );
   });
 
   it('should handle arrays', () => {
@@ -174,7 +183,7 @@ describe('validateAttributes()', () => {
       scores: [1, 2, 3],
     };
 
-    const result = validateAttributes(attrs as any);
+    const result = validateAttributes(invalidValue(attrs));
     expect(result).toEqual(attrs);
   });
 
@@ -184,8 +193,8 @@ describe('validateAttributes()', () => {
 
     const attrs = { data: circular };
 
-    const result = validateAttributes(attrs) as any;
-    expect(result.data).toBe('[CIRCULAR]');
+    const result = validateAttributes(attrs);
+    expect(readPath(result, 'data')).toBe('[CIRCULAR]');
   });
 
   it('should handle null and undefined values', () => {
@@ -195,10 +204,10 @@ describe('validateAttributes()', () => {
       normalField: 'value',
     };
 
-    const result = validateAttributes(attrs as any);
-    expect(result?.nullable).toBeNull();
-    expect(result?.undefinedField).toBeUndefined();
-    expect(result?.normalField).toBe('value');
+    const result = validateAttributes(invalidValue(attrs));
+    expect(readPath(result, 'nullable')).toBeNull();
+    expect(readPath(result, 'undefinedField')).toBeUndefined();
+    expect(readPath(result, 'normalField')).toBe('value');
   });
 
   it('should handle unsupported types', () => {
@@ -208,10 +217,10 @@ describe('validateAttributes()', () => {
       normalField: 'value',
     };
 
-    const result = validateAttributes(attrs as any);
-    expect(result?.func).toBe('[function]');
-    expect(result?.symbol).toBe('[symbol]');
-    expect(result?.normalField).toBe('value');
+    const result = validateAttributes(invalidValue(attrs));
+    expect(readPath(result, 'func')).toBe('[function]');
+    expect(readPath(result, 'symbol')).toBe('[symbol]');
+    expect(readPath(result, 'normalField')).toBe('value');
   });
 });
 
@@ -222,7 +231,7 @@ describe('validateEvent()', () => {
       password: 'secret',
     });
 
-    expect(result.eventName).toBe('user.signup');
+    expect(readPath(result, 'eventName')).toBe('user.signup');
     expect(result.attributes?.userId).toBe('123');
     expect(result.attributes?.password).toBe('[REDACTED]');
   });
@@ -230,8 +239,8 @@ describe('validateEvent()', () => {
   it('should handle events without attributes', () => {
     const result = validateEvent('page.viewed');
 
-    expect(result.eventName).toBe('page.viewed');
-    expect(result.attributes).toBeUndefined();
+    expect(readPath(result, 'eventName')).toBe('page.viewed');
+    expect(readPath(result, 'attributes')).toBeUndefined();
   });
 
   it('should allow custom validation config', () => {
@@ -241,7 +250,7 @@ describe('validateEvent()', () => {
       { maxEventNameLength: 50 },
     );
 
-    expect(result.eventName).toBe('test.event');
+    expect(readPath(result, 'eventName')).toBe('test.event');
     expect(result.attributes?.field).toBe('value');
   });
 
@@ -250,7 +259,7 @@ describe('validateEvent()', () => {
   });
 
   it('should throw on invalid attributes', () => {
-    expect(() => validateEvent('user.signup', 'invalid' as any)).toThrow(
+    expect(() => validateEvent('user.signup', invalidValue('invalid'))).toThrow(
       ValidationError,
     );
   });
@@ -265,9 +274,9 @@ describe('Sensitive data patterns', () => {
     };
 
     const result = validateAttributes(attrs);
-    expect(result?.password).toBe('[REDACTED]');
-    expect(result?.userPassword).toBe('[REDACTED]');
-    expect(result?.PASSWORD).toBe('[REDACTED]');
+    expect(readPath(result, 'password')).toBe('[REDACTED]');
+    expect(readPath(result, 'userPassword')).toBe('[REDACTED]');
+    expect(readPath(result, 'PASSWORD')).toBe('[REDACTED]');
   });
 
   it('should redact token fields', () => {
@@ -278,9 +287,9 @@ describe('Sensitive data patterns', () => {
     };
 
     const result = validateAttributes(attrs);
-    expect(result?.token).toBe('[REDACTED]');
-    expect(result?.accessToken).toBe('[REDACTED]');
-    expect(result?.auth_token).toBe('[REDACTED]');
+    expect(readPath(result, 'token')).toBe('[REDACTED]');
+    expect(readPath(result, 'accessToken')).toBe('[REDACTED]');
+    expect(readPath(result, 'auth_token')).toBe('[REDACTED]');
   });
 
   it('should redact API key fields', () => {
@@ -291,9 +300,9 @@ describe('Sensitive data patterns', () => {
     };
 
     const result = validateAttributes(attrs);
-    expect(result?.apiKey).toBe('[REDACTED]');
-    expect(result?.api_key).toBe('[REDACTED]');
-    expect(result?.API_KEY).toBe('[REDACTED]');
+    expect(readPath(result, 'apiKey')).toBe('[REDACTED]');
+    expect(readPath(result, 'api_key')).toBe('[REDACTED]');
+    expect(readPath(result, 'API_KEY')).toBe('[REDACTED]');
   });
 
   it('should redact auth fields (strings only)', () => {
@@ -308,9 +317,9 @@ describe('Sensitive data patterns', () => {
     };
 
     const result = validateAttributes(attrs);
-    expect(result?.auth).toBe('[REDACTED]');
-    expect(result?.authorization).toBe('[REDACTED]');
-    expect(result?.authenticated).toBe(true);
+    expect(readPath(result, 'auth')).toBe('[REDACTED]');
+    expect(readPath(result, 'authorization')).toBe('[REDACTED]');
+    expect(readPath(result, 'authenticated')).toBe(true);
   });
 
   it('should not redact non-sensitive fields with similar names', () => {
@@ -321,8 +330,8 @@ describe('Sensitive data patterns', () => {
     };
 
     const result = validateAttributes(attrs);
-    expect(result?.email).toBe('user@example.com');
-    expect(result?.username).toBe('john');
-    expect(result?.userId).toBe('123');
+    expect(readPath(result, 'email')).toBe('user@example.com');
+    expect(readPath(result, 'username')).toBe('john');
+    expect(readPath(result, 'userId')).toBe('123');
   });
 });

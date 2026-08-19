@@ -4,16 +4,19 @@
  * Traces operations on actor.alarms
  */
 
-import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap } from '../bindings/common';
 import type { ActorLike } from './types';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { asFunction, asRecord, asString, member } from '../values.js';
 
 /**
  * Get the tracer instance
  */
 function getTracer(): WorkerTracer {
-  return trace.getTracer('autotel-cloudflare-actors') as WorkerTracer;
+  return workerTracer('autotel-cloudflare-actors');
 }
 
 /**
@@ -30,19 +33,23 @@ export function instrumentActorAlarms(
   actorInstance: ActorLike,
   actorClass: object,
 ): unknown {
-  if (!alarms || typeof alarms !== 'object') {
+  // asRecord() returns the record rather than narrowing in place, so keep
+  // what it handed back - that is the value the proxy wraps below.
+  const alarmsRecord = asRecord(alarms);
+  if (!alarmsRecord) {
     return alarms;
   }
 
-  const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+  const actorClassName = asString(member(actorClass, 'name')) || 'Actor';
   const actorName = actorInstance.name || actorClassName;
 
   const alarmsHandler: ProxyHandler<object> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
       // Instrument set method
-      if (prop === 'set' && typeof value === 'function') {
+      if (prop === 'set' && method) {
         return async function instrumentedSet(
           this: unknown,
           ...args: unknown[]
@@ -78,11 +85,11 @@ export function instrumentActorAlarms(
             },
             async (span) => {
               try {
-                const result = await value.apply(target, args);
+                const result = await method.apply(target, args);
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -98,7 +105,7 @@ export function instrumentActorAlarms(
       }
 
       // Instrument setMultiple method
-      if (prop === 'setMultiple' && typeof value === 'function') {
+      if (prop === 'setMultiple' && method) {
         return async function instrumentedSetMultiple(
           this: unknown,
           alarmDefs: unknown[],
@@ -119,11 +126,11 @@ export function instrumentActorAlarms(
             },
             async (span) => {
               try {
-                const result = await value.call(target, alarmDefs);
+                const result = await method.call(target, alarmDefs);
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -139,7 +146,7 @@ export function instrumentActorAlarms(
       }
 
       // Instrument cancel method
-      if (prop === 'cancel' && typeof value === 'function') {
+      if (prop === 'cancel' && method) {
         return async function instrumentedCancel(
           this: unknown,
           alarmId: string,
@@ -160,11 +167,11 @@ export function instrumentActorAlarms(
             },
             async (span) => {
               try {
-                const result = await value.call(target, alarmId);
+                const result = await method.call(target, alarmId);
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -180,7 +187,7 @@ export function instrumentActorAlarms(
       }
 
       // Instrument cancelAll method
-      if (prop === 'cancelAll' && typeof value === 'function') {
+      if (prop === 'cancelAll' && method) {
         return async function instrumentedCancelAll(
           this: unknown,
         ): Promise<unknown> {
@@ -199,11 +206,11 @@ export function instrumentActorAlarms(
             },
             async (span) => {
               try {
-                const result = await value.call(target);
+                const result = await method.call(target);
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -219,13 +226,9 @@ export function instrumentActorAlarms(
       }
 
       // Bind other methods to the target
-      if (typeof value === 'function') {
-        return value.bind(target);
-      }
-
-      return value;
+      return method ? method.bind(target) : value;
     },
   };
 
-  return wrap(alarms, alarmsHandler);
+  return wrap(alarmsRecord, alarmsHandler);
 }

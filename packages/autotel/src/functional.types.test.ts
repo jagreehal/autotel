@@ -8,15 +8,56 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { withTracing, trace } from './functional';
+import { instrument, withTracing, trace } from './functional';
 import type { TraceContext } from './trace-context';
 
 describe('trace() type inference', () => {
+  it('trace(name)(fn) preserves the wrapped signature', async () => {
+    const createUser = trace('user.create')(
+      async (name: string, age: number) => ({ name, age }),
+    );
+
+    const result = await createUser('Alice', 30);
+    // Compiles only when the argument and return types survive the factory.
+    expect(result.name).toBe('Alice');
+    expect(result.age).toBe(30);
+  });
+
+  it('trace(name)(fn) keeps a sync function sync', () => {
+    const add = trace('math.add')((a: number, b: number) => a + b);
+    const sum: number = add(1, 2);
+    expect(sum).toBe(3);
+  });
+
+  it('trace(name, fn) returns a wrapper preserving the signature', async () => {
+    const createUser = trace(
+      'user.create',
+      async (name: string, age: number) => ({
+        name,
+        age,
+      }),
+    );
+
+    const result = await createUser('Alice', 30);
+    expect(result.name).toBe('Alice');
+    expect(result.age).toBe(30);
+  });
+
+  it('trace.run(name, operation) returns the operation result, not a wrapper', async () => {
+    const user = await trace.run('user.create', async (ctx) => {
+      ctx.setAttribute('user.id', '123');
+      return { id: '123' };
+    });
+
+    // Compiles only when this is the result type rather than a function.
+    expect(user.id).toBe('123');
+  });
+
   // Helper to ensure we're getting the expected type
   // If the type is `unknown`, accessing .foo will cause a type error
   // This is a compile-time check
 
-  it('trace(fn) - single argument factory should infer return type', async () => {
+  it('withTracing() factory should infer return type', async () => {
     // This SHOULD work - returns Promise<{ foo: string }>
     const fn1 = withTracing({})((_ctx: TraceContext) => async () => {
       return { foo: 'bar' };
@@ -27,7 +68,7 @@ describe('trace() type inference', () => {
     expect(result1.foo).toBe('bar');
   });
 
-  it('trace(fn) - without explicit ctx type should infer return type', async () => {
+  it('withTracing() should infer ctx and return types', async () => {
     // Test from bug report: ctx without explicit type annotation
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const fn1 = withTracing({})((ctx) => async () => {
@@ -39,7 +80,7 @@ describe('trace() type inference', () => {
     expect(result1.foo).toBe('bar');
   });
 
-  it('trace(name, fn) - two argument factory should infer return type', async () => {
+  it('withTracing({ name }) should infer return type', async () => {
     // BUG: This SHOULD return Promise<{ foo: string }> but might return unknown
     const fn2 = withTracing({ name: 'my-span-name' })(
       (_ctx: TraceContext) => async () => {
@@ -53,7 +94,7 @@ describe('trace() type inference', () => {
     expect(result2.foo).toBe('bar');
   });
 
-  it('trace(name, fn) - without explicit ctx type should infer return type', async () => {
+  it('withTracing({ name }) should infer ctx type', async () => {
     // Exact reproduction from bug report
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const fn2 = withTracing({ name: 'my-span-name' })((ctx) => async () => {
@@ -67,7 +108,7 @@ describe('trace() type inference', () => {
     expect(result2.foo).toBe('bar');
   });
 
-  it('BUG VERIFICATION: trace(name, fn) returns unknown type', async () => {
+  it('keeps the named withTracing() result concrete', async () => {
     // This test uses @ts-expect-error to VERIFY the bug exists
     // If @ts-expect-error is "unused", that means the bug is FIXED
     // If @ts-expect-error is needed, the bug EXISTS
@@ -85,7 +126,7 @@ describe('trace() type inference', () => {
     expect(_fooValue).toBe('bar');
   });
 
-  it('trace(fn) with args should infer return type', async () => {
+  it('withTracing() with args should infer return type', async () => {
     const fn3 = withTracing({})(
       (_ctx: TraceContext) => async (name: string, age: number) => {
         return { name, age };
@@ -97,7 +138,7 @@ describe('trace() type inference', () => {
     expect(result3.age).toBe(30);
   });
 
-  it('trace(name, fn) with args should infer return type', async () => {
+  it('named withTracing() with args should infer return type', async () => {
     // BUG: This should also infer correctly
     const fn4 = withTracing({ name: 'user.create' })(
       (_ctx: TraceContext) => async (name: string, age: number) => {
@@ -111,7 +152,7 @@ describe('trace() type inference', () => {
     expect(result4.age).toBe(25);
   });
 
-  it('trace(name, fn) sync factory should infer return type', () => {
+  it('named withTracing() sync factory should infer return type', () => {
     const fn5 = withTracing({ name: 'sync.operation' })(
       (_ctx: TraceContext) => () => {
         return 42;
@@ -124,15 +165,27 @@ describe('trace() type inference', () => {
     expect(result5).toBe(42);
   });
 
-  it('trace(name, fn) plain function should infer return type', async () => {
-    // Plain function (no ctx) with name
-    const fn6 = trace('plain.function', async (a: number, b: number) => {
-      return a + b;
+  it('instrument({ key, fn }) should preserve a plain function type', async () => {
+    const fn6 = instrument({
+      key: 'plain.function',
+      fn: async (a: number, b: number) => {
+        return a + b;
+      },
     });
 
     const result6 = await fn6(2, 3);
     // Type should be number, not unknown
     const numResult: number = result6;
     expect(numResult).toBe(5);
+  });
+
+  it('trace.run(name, operation) infers TraceContext and the resolved result', async () => {
+    const operation = trace.run('typed.operation', async (ctx) => {
+      ctx.setAttribute('typed', true);
+      return 42;
+    });
+
+    const result: number = await operation;
+    expect(result).toBe(42);
   });
 });

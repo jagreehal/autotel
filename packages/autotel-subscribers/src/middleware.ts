@@ -12,7 +12,6 @@
  * import { applyMiddleware, retryMiddleware, rateLimitMiddleware } from 'autotel-subscribers/middleware'
  *
  * const subscriber = applyMiddleware(
- *   createPostHogSubscriber({ apiKey: '...' }),
  *   [
  *     retryMiddleware({ maxRetries: 3 }),
  *     rateLimitMiddleware({ requestsPerSecond: 100 })
@@ -21,6 +20,7 @@
  * ```
  */
 
+import type { EventAttributeValue } from 'autotel/event-subscriber';
 import type {
   EventSubscriber,
   EventAttributes,
@@ -90,8 +90,11 @@ export type IdempotencyStore<TResult = unknown> = {
   set(key: string, result: TResult, ttlMs: number): Promise<void>;
 };
 
+/** The context a middleware chain threads through, when the caller names none. */
+export type MiddlewareContext = Record<string, EventAttributeValue>;
+
 export type SubscriberMiddleware<
-  TCtxIn = Record<string, unknown>,
+  TCtxIn = MiddlewareContext,
   TCtxOut = TCtxIn,
 > = (params: {
   event: EventsEvent;
@@ -104,10 +107,7 @@ export type SubscriberMiddleware<
 }) => Promise<void>;
 
 /** Type-safe middleware factory helper */
-export const createMiddleware = <
-  TCtxIn = Record<string, unknown>,
-  TCtxOut = TCtxIn,
->(
+export const createMiddleware = <TCtxIn = MiddlewareContext, TCtxOut = TCtxIn>(
   fn: SubscriberMiddleware<TCtxIn, TCtxOut>,
 ): SubscriberMiddleware<TCtxIn, TCtxOut> => fn;
 
@@ -126,8 +126,9 @@ function eventNameOf(event: EventsEvent): string {
   }
 }
 
-function defaultContextFactory() {
-  return {} as Record<string, unknown>;
+/** A middleware chain with no context of its own starts from an empty one. */
+function defaultContextFactory(): MiddlewareContext {
+  return {};
 }
 
 async function dispatchEvent(
@@ -181,12 +182,14 @@ async function dispatchEvent(
  * )
  * ```
  */
-export function applyMiddleware<TCtx = Record<string, unknown>>(
+export function applyMiddleware<TCtx = MiddlewareContext>(
   subscriber: EventSubscriber,
   middlewares: Array<SubscriberMiddleware<TCtx, TCtx>>,
   options?: { initialContext?: () => TCtx },
 ): EventSubscriber {
   const runChain = async (initialEvent: EventsEvent): Promise<void> => {
+    // SAFETY: the caller either supplied a factory for its own TCtx or took the
+    // default, in which case TCtx is MiddlewareContext.
     const baseCtx = (
       options?.initialContext ?? defaultContextFactory
     )() as TCtx;
@@ -209,7 +212,8 @@ export function applyMiddleware<TCtx = Record<string, unknown>>(
         next: async (update) => {
           const nextEvent = update?.event ?? event;
           const nextCtx = update?.ctxPatch
-            ? ({ ...ctx, ...update.ctxPatch } as TCtx)
+            ? // SAFETY: a patch only adds keys the caller declared on TCtx.
+              ({ ...ctx, ...update.ctxPatch } as TCtx)
             : ctx;
           await execute(index + 1, nextEvent, nextCtx);
         },
@@ -676,6 +680,8 @@ export function withEventLogger(options: {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       const endedAt = new Date();
+      // SAFETY: a node error carries `code`; the check below is what decides
+      // whether this one did.
       const maybeCode = (err as { code?: unknown }).code;
 
       await options.sink.write({

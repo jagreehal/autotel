@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonGet, jsonPost } from '../src/lib/http';
+import { installFetch, recordedCall, requestBody } from './helpers/fetch';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -23,21 +24,21 @@ const rateLimited = (retryAfter = '0') => ({
 
 describe('jsonGet', () => {
   it('returns the parsed body', async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValue(ok({ data: ['a'] })) as unknown as typeof fetch;
+    installFetch(vi.fn().mockResolvedValue(ok({ data: ['a'] })));
     await expect(jsonGet<{ data: string[] }>('http://x/y')).resolves.toEqual({
       data: ['a'],
     });
   });
 
   it('throws with the status and url on failure', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-      statusText: 'Service Unavailable',
-      headers: new Headers(),
-    }) as unknown as typeof fetch;
+    installFetch(
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: new Headers(),
+      }),
+    );
     await expect(jsonGet('http://x/y')).rejects.toThrow(/503.*http:\/\/x\/y/);
   });
 
@@ -48,7 +49,7 @@ describe('jsonGet', () => {
       .fn()
       .mockResolvedValueOnce(rateLimited())
       .mockResolvedValueOnce(ok({ data: ['recovered'] }));
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await expect(jsonGet<{ data: string[] }>('http://x/y')).resolves.toEqual({
       data: ['recovered'],
@@ -57,9 +58,7 @@ describe('jsonGet', () => {
   });
 
   it('gives up on a persistently rate-limited endpoint', async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValue(rateLimited()) as unknown as typeof fetch;
+    installFetch(vi.fn().mockResolvedValue(rateLimited()));
     await expect(jsonGet('http://x/y')).rejects.toThrow(/429/);
   });
 
@@ -70,7 +69,7 @@ describe('jsonGet', () => {
       statusText: 'Server Error',
       headers: new Headers(),
     });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
     await expect(jsonGet('http://x/y')).rejects.toThrow(/500/);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
@@ -79,7 +78,7 @@ describe('jsonGet', () => {
 describe('jsonPost', () => {
   it('sends a JSON body with the caller headers and returns the parsed reply', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(ok({ rows: [] }));
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await jsonPost(
       'http://x/query',
@@ -89,10 +88,10 @@ describe('jsonPost', () => {
       },
     );
 
-    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const { url, init } = recordedCall(fetchSpy);
     expect(url).toBe('http://x/query');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body as string)).toEqual({ sql: 'SELECT 1' });
+    expect(requestBody(fetchSpy)).toEqual({ sql: 'SELECT 1' });
     expect(init.headers).toMatchObject({
       Authorization: 'Bearer t',
       'content-type': 'application/json',

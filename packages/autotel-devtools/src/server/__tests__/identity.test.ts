@@ -38,8 +38,8 @@ describe('identity + health', () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.service).toBe(DEVTOOLS_IDENTITY);
-    expect(typeof body.version).toBe('string');
-    expect(typeof body.clients).toBe('number');
+    expect(body.version).toBeTypeOf('string');
+    expect(body.clients).toBeTypeOf('number');
   });
 
   it('stamps every response with the x-autotel-devtools header', async () => {

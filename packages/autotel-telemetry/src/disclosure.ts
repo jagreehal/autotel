@@ -27,10 +27,7 @@ export async function disableTelemetry(toolName: string): Promise<void> {
   await purgeOutbox(toolName);
 }
 
-export function generateDisclosure(options: TelemetryOptions): {
-  markdown: string;
-  json: Record<string, unknown>;
-} {
+export function generateDisclosure(options: TelemetryOptions) {
   const json = {
     tool: options.name,
     version: options.version,

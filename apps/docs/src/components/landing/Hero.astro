@@ -1,7 +1,13 @@
 ---
 import HeroTraceIsland from './HeroTraceIsland';
 
-const installCmd = 'npm install autotel';
+/* Two audiences arrive at this page and neither wants the other's command. A
+   person wants the package; an agent wants the one call that detects the
+   project, wires it, and reports back as JSON it can parse. */
+const installCmds = {
+  humans: 'npm install autotel',
+  agents: 'npx autotel init --yes --json',
+};
 ---
 
 <section class="hero" aria-labelledby="hero-title">
@@ -24,10 +30,36 @@ const installCmd = 'npm install autotel';
         spans, product events, and structured errors without the SDK wiring.
       </p>
 
-      <div class="install" role="group" aria-label="Install command">
-        <span class="prompt" aria-hidden="true">$</span>
-        <code>{installCmd}</code>
-      </div>
+      {/* Radios rather than buttons: the choice is one-of-two, so the browser
+          already has the semantics, the keyboard behaviour and the focus ring.
+          No island, no hydration, no JS at all — the panels are swapped by
+          :checked sibling selectors. */}
+      <fieldset class="install-switch">
+        <legend class="sr-only">Install command</legend>
+
+        <input
+          type="radio"
+          name="audience"
+          id="audience-humans"
+          value="humans"
+          checked
+        />
+        <label for="audience-humans">Humans</label>
+
+        <input type="radio" name="audience" id="audience-agents" value="agents" />
+        <label for="audience-agents">Agents</label>
+
+        <div class="install-panels">
+          <div class="install install--humans">
+            <span class="prompt" aria-hidden="true">$</span>
+            <code>{installCmds.humans}</code>
+          </div>
+          <div class="install install--agents">
+            <span class="prompt" aria-hidden="true">$</span>
+            <code>{installCmds.agents}</code>
+          </div>
+        </div>
+      </fieldset>
 
       <div class="actions">
         <a class="btn btn--primary" href="/autotel/quick-start/">
@@ -146,6 +178,95 @@ const installCmd = 'npm install autotel';
     color: var(--sl-color-gray-2);
   }
 
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .install-switch {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    border: 0;
+    padding: 0;
+    margin: 0 0 1.75rem;
+    min-inline-size: 0;
+  }
+
+  /* The radio is the accessible control; the label is what's painted. Clipped
+     rather than sized to zero, so it keeps a box the browser will scroll to
+     when it takes focus. Pointer input arrives through the label, keyboard and
+     assistive tech through the radio itself. */
+  .install-switch input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .install-switch label {
+    padding: 0.3rem 0.75rem;
+    border: 1px solid var(--color-charcoal-grey);
+    border-radius: 999px;
+    font-family: var(--sl-font-mono);
+    font-size: 0.75rem;
+    letter-spacing: -0.005em;
+    color: var(--color-storm-cloud);
+    cursor: pointer;
+    transition:
+      background var(--sl-transition),
+      border-color var(--sl-transition),
+      color var(--sl-transition);
+  }
+
+  :root[data-theme='light'] .install-switch label {
+    border-color: var(--sl-color-gray-5);
+  }
+
+  .install-switch label:hover {
+    color: var(--color-porcelain);
+    border-color: var(--color-gunmetal);
+  }
+
+  :root[data-theme='light'] .install-switch label:hover {
+    color: var(--color-pitch-black);
+    border-color: var(--sl-color-gray-4);
+  }
+
+  .install-switch input:checked + label {
+    background: var(--color-porcelain);
+    border-color: var(--color-porcelain);
+    color: var(--color-pitch-black);
+  }
+
+  :root[data-theme='light'] .install-switch input:checked + label {
+    background: var(--color-pitch-black);
+    border-color: var(--color-pitch-black);
+    color: var(--color-porcelain);
+  }
+
+  /* Focus lives on the label, since the input it belongs to is visually gone. */
+  .install-switch input:focus-visible + label {
+    outline: 2px solid var(--color-light-steel);
+    outline-offset: 2px;
+  }
+
+  /* Forces the command onto its own line under the two pills. */
+  .install-panels {
+    flex-basis: 100%;
+    margin-top: 0.6rem;
+  }
+
   .install {
     display: inline-flex;
     align-items: center;
@@ -156,7 +277,22 @@ const installCmd = 'npm install autotel';
     background: var(--color-graphite);
     font-family: var(--sl-font-mono);
     font-size: 0.8125rem;
-    margin-bottom: 1.75rem;
+  }
+
+  :root[data-theme='light'] .install {
+    border-color: var(--sl-color-gray-5);
+    background: var(--sl-color-gray-6);
+  }
+
+  /* Only the selected audience's command is rendered at all, so the hidden one
+     is never read out by a screen reader or copied by mistake. */
+  .install--agents,
+  #audience-agents:checked ~ .install-panels .install--humans {
+    display: none;
+  }
+
+  #audience-agents:checked ~ .install-panels .install--agents {
+    display: inline-flex;
   }
 
   .install .prompt {

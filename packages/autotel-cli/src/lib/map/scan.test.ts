@@ -66,11 +66,11 @@ function scanFixture(source: string): ReturnType<typeof scan> {
 
 const INSTRUMENTED = `
 import { Hono } from 'hono';
-import { trace, getRequestLogger } from 'autotel';
+import { instrument, getRequestLogger } from 'autotel';
 
 const app = new Hono();
 
-app.get('/users/:id', trace('get user', async (c) => {
+app.get('/users/:id', instrument({ key: 'get user', fn: async (c) => {
   const log = getRequestLogger();
   log.set({ 'user.id': c.req.param('id') });
   return c.json({ ok: true });
@@ -110,10 +110,10 @@ describe('scan', () => {
   it('scopes facts to the handler, so routes in one file score separately', () => {
     const result = scanFixture(`
       import { Hono } from 'hono';
-      import { trace, getRequestLogger } from 'autotel';
+      import { instrument, getRequestLogger } from 'autotel';
       const app = new Hono();
 
-      app.get('/a', trace('a', async (c) => {
+      app.get('/a', instrument({ key: 'a', fn: async (c) => {
         getRequestLogger().set({ a: 1 });
         return c.json({ ok: true });
       }));
@@ -147,9 +147,9 @@ describe('scan', () => {
   it('resolves aliased autotel imports and rejects unrelated Map.set calls', () => {
     const aliased = scanFixture(`
       import { Hono } from 'hono';
-      import { trace as observe, getRequestLogger as requestLog } from 'autotel';
+      import { instrument as observe, getRequestLogger as requestLog } from 'autotel';
       const app = new Hono();
-      app.get('/x', observe('x', async (c) => {
+      app.get('/x', observe({ key: 'x', fn: async (c) => {
         const log = requestLog();
         log.set({ account: 'a1' });
         return c.json({ ok: true });
@@ -160,9 +160,9 @@ describe('scan', () => {
 
     const unrelated = scanFixture(`
       import { Hono } from 'hono';
-      import { trace, getRequestLogger } from 'autotel';
+      import { instrument, getRequestLogger } from 'autotel';
       const app = new Hono();
-      app.get('/x', trace('x', async (c) => {
+      app.get('/x', instrument({ key: 'x', fn: async (c) => {
         getRequestLogger();
         new Map().set('account', 'a1');
         return c.json({ ok: true });
@@ -207,9 +207,9 @@ describe('scan', () => {
   it('follows a named router handler without leaking sibling facts', () => {
     const result = scanFixture(`
       import { Hono } from 'hono';
-      import { trace, getRequestLogger } from 'autotel';
+      import { instrument, getRequestLogger } from 'autotel';
       const app = new Hono();
-      const named = trace('named', async (c) => {
+      const named = instrument({ key: 'named', fn: async (c) => {
         getRequestLogger().set({ account: 'a1' });
         return c.json({ ok: true });
       });
@@ -226,9 +226,9 @@ describe('scan', () => {
   it('requires why and fix on structured errors', () => {
     const result = scanFixture(`
       import { Hono } from 'hono';
-      import { trace, getRequestLogger, createStructuredError } from 'autotel';
+      import { instrument, getRequestLogger, createStructuredError } from 'autotel';
       const app = new Hono();
-      app.get('/x', trace('x', async () => {
+      app.get('/x', instrument({ key: 'x', fn: async () => {
         getRequestLogger().set({ operation: 'x' });
         throw createStructuredError({ message: 'Nope', status: 400, why: 'bad input' });
       }));
@@ -387,9 +387,9 @@ describe('scan', () => {
   it('requires an audit trail on money and auth paths only', () => {
     const money = scanFixture(`
       import { Hono } from 'hono';
-      import { trace, getRequestLogger } from 'autotel';
+      import { instrument, getRequestLogger } from 'autotel';
       const app = new Hono();
-      app.post('/checkout', trace('checkout', async (c) => {
+      app.post('/checkout', instrument({ key: 'checkout', fn: async (c) => {
         getRequestLogger().set({ cart: 1 });
         return c.json({ ok: true });
       }));
@@ -405,9 +405,9 @@ describe('scan', () => {
   it('reports a swallowed catch and not a handled one', () => {
     const swallowed = scanFixture(`
       import { Hono } from 'hono';
-      import { trace, getRequestLogger } from 'autotel';
+      import { instrument, getRequestLogger } from 'autotel';
       const app = new Hono();
-      app.get('/x', trace('x', async (c) => {
+      app.get('/x', instrument({ key: 'x', fn: async (c) => {
         getRequestLogger().set({ a: 1 });
         try { return c.json({ ok: true }); } catch { return c.json({ ok: false }); }
       }));
@@ -418,9 +418,9 @@ describe('scan', () => {
 
     const handled = scanFixture(`
       import { Hono } from 'hono';
-      import { trace, getRequestLogger } from 'autotel';
+      import { instrument, getRequestLogger } from 'autotel';
       const app = new Hono();
-      app.get('/x', trace('x', async (c) => {
+      app.get('/x', instrument({ key: 'x', fn: async (c) => {
         const log = getRequestLogger();
         log.set({ a: 1 });
         try { return c.json({ ok: true }); } catch (error) { log.error(error); throw error; }
@@ -434,11 +434,11 @@ describe('scan', () => {
   it('waives a finding named by a disable comment, and warns on an unknown id', () => {
     const result = scanFixture(`
       import { Hono } from 'hono';
-      import { trace, getRequestLogger } from 'autotel';
+      import { instrument, getRequestLogger } from 'autotel';
       // autotel-map-disable error-handling -- safe fallback on purpose
       // autotel-map-disable nonsense -- typo
       const app = new Hono();
-      app.get('/x', trace('x', async (c) => {
+      app.get('/x', instrument({ key: 'x', fn: async (c) => {
         getRequestLogger().set({ a: 1 });
         try { return c.json({ ok: true }); } catch { return c.json({ ok: false }); }
       }));

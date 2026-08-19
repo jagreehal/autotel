@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { TerminalSpanEvent, SpanEvent, SpanLink } from './span-stream';
 import type { TerminalLogEvent, LogLevel } from './lib/log-model';
+import { asRecord, asString } from './values.js';
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -41,7 +42,13 @@ type OtlpSpan = {
   }[];
 };
 
-function anyValueToPrimitive(value: OtlpAnyValue | undefined): unknown {
+/** What an OTLP AnyValue decodes to once its wrapper is unwrapped. */
+export type OtlpPrimitive = string | number | boolean | undefined;
+
+/** A decoded OTLP attribute bag. */
+export type OtlpAttributes = Record<string, OtlpPrimitive>;
+
+function anyValueToPrimitive(value: OtlpAnyValue | undefined): OtlpPrimitive {
   if (!value) return undefined;
   if (value.stringValue !== undefined) return value.stringValue;
   if (value.boolValue !== undefined) return value.boolValue;
@@ -54,15 +61,14 @@ function anyValueToPrimitive(value: OtlpAnyValue | undefined): unknown {
   return undefined;
 }
 
-function attrsToRecord(
-  attributes: OtlpKeyValue[] | undefined,
-): Record<string, unknown> {
+function attrsToRecord(attributes: OtlpKeyValue[] | undefined): OtlpAttributes {
   if (!attributes || attributes.length === 0) return {};
-  const out: Record<string, unknown> = {};
-  for (const attribute of attributes) {
-    out[attribute.key] = anyValueToPrimitive(attribute.value);
-  }
-  return out;
+  return Object.fromEntries(
+    attributes.map((attribute) => [
+      attribute.key,
+      anyValueToPrimitive(attribute.value),
+    ]),
+  );
 }
 
 function normalizeHexId(
@@ -101,7 +107,7 @@ function toMs(unixNano: string | undefined): number {
 function mapStatus(
   code: number | string | undefined,
 ): 'OK' | 'ERROR' | 'UNSET' {
-  const normalized = typeof code === 'string' ? code.toUpperCase() : code;
+  const normalized = asString(code)?.toUpperCase() ?? code;
   if (
     normalized === 1 ||
     normalized === 'STATUS_CODE_OK' ||
@@ -119,7 +125,8 @@ function mapStatus(
 }
 
 function mapKind(kind: number | string | undefined): string {
-  if (typeof kind === 'string') return kind.toUpperCase();
+  const named = asString(kind);
+  if (named !== undefined) return named.toUpperCase();
   switch (kind) {
     case 1: {
       return 'INTERNAL';
@@ -142,29 +149,37 @@ function mapKind(kind: number | string | undefined): string {
   }
 }
 
+/**
+ * The OTLP/JSON export envelopes, as the collector protocol defines them. A
+ * body that does not match yields nothing: every level is checked for the array
+ * it should carry before it is walked.
+ */
+interface OtlpTraceExport {
+  resourceSpans?: Array<{
+    resource?: { attributes?: OtlpKeyValue[] };
+    scopeSpans?: Array<{ spans?: OtlpSpan[] }>;
+  }>;
+}
+
 function* extractSpans(
   payload: unknown,
-): Generator<{ span: OtlpSpan; resourceAttrs: Record<string, unknown> }> {
-  if (!payload || typeof payload !== 'object') return;
-  const resourceSpans = (payload as { resourceSpans?: unknown[] })
-    .resourceSpans;
+): Generator<{ span: OtlpSpan; resourceAttrs: OtlpAttributes }> {
+  if (!asRecord(payload)) return;
+  // SAFETY: the one assertion for this walker. The envelope is a published
+  // protocol shape, and each level below is checked for its array before use.
+  const { resourceSpans } = payload as OtlpTraceExport;
   if (!Array.isArray(resourceSpans)) return;
   for (const resourceSpan of resourceSpans) {
-    if (!resourceSpan || typeof resourceSpan !== 'object') continue;
-    const resource = (
-      resourceSpan as { resource?: { attributes?: OtlpKeyValue[] } }
-    ).resource;
-    const resourceAttrs = attrsToRecord(resource?.attributes);
-    const scopeSpans = (resourceSpan as { scopeSpans?: unknown[] }).scopeSpans;
+    if (!asRecord(resourceSpan)) continue;
+    const resourceAttrs = attrsToRecord(resourceSpan.resource?.attributes);
+    const scopeSpans = resourceSpan.scopeSpans;
     if (!Array.isArray(scopeSpans)) continue;
     for (const scopeSpan of scopeSpans) {
-      if (!scopeSpan || typeof scopeSpan !== 'object') continue;
-      const spans = (scopeSpan as { spans?: unknown[] }).spans;
+      if (!asRecord(scopeSpan)) continue;
+      const spans = scopeSpan.spans;
       if (!Array.isArray(spans)) continue;
       for (const span of spans) {
-        if (span && typeof span === 'object') {
-          yield { span: span as OtlpSpan, resourceAttrs };
-        }
+        if (asRecord(span)) yield { span, resourceAttrs };
       }
     }
   }
@@ -172,14 +187,14 @@ function* extractSpans(
 
 export function otlpSpanToTerminalEvent(
   span: OtlpSpan,
-  resourceAttrs: Record<string, unknown> = {},
+  resourceAttrs: OtlpAttributes = {},
 ): TerminalSpanEvent {
   const startTime = toMs(span.startTimeUnixNano);
   const endTime = toMs(span.endTimeUnixNano);
   const spanAttrs = attrsToRecord(span.attributes);
   // Merge resource attributes (e.g. service.name) under span attributes,
   // with span-level attributes taking precedence
-  const mergedAttrs: Record<string, unknown> = {};
+  const mergedAttrs: OtlpAttributes = {};
   for (const [k, v] of Object.entries(resourceAttrs)) {
     mergedAttrs[k] = v;
   }
@@ -202,7 +217,7 @@ export function otlpSpanToTerminalEvent(
       }))
     : undefined;
 
-  return {
+  const collected: TerminalSpanEvent = {
     name: span.name || 'unnamed',
     spanId: normalizeHexId(span.spanId, 16),
     traceId: normalizeHexId(span.traceId, 32),
@@ -215,9 +230,10 @@ export function otlpSpanToTerminalEvent(
     status: mapStatus(span.status?.code),
     kind: mapKind(span.kind),
     attributes: mergedAttrs,
-    ...(parsedEvents ? { events: parsedEvents } : {}),
-    ...(parsedLinks ? { links: parsedLinks } : {}),
   };
+  if (parsedEvents) collected.events = parsedEvents;
+  if (parsedLinks) collected.links = parsedLinks;
+  return collected;
 }
 
 export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -239,7 +255,7 @@ export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 export function sendJson(
   res: ServerResponse,
   status: number,
-  data: Record<string, unknown>,
+  data: OtlpAttributes,
 ): void {
   res.statusCode = status;
   res.setHeader('content-type', 'application/json');
@@ -294,22 +310,25 @@ function bodyToMessage(body: OtlpAnyValue | undefined): string {
   return value === undefined ? '' : String(value);
 }
 
+interface OtlpLogsExport {
+  resourceLogs?: Array<{ scopeLogs?: Array<{ logRecords?: OtlpLogRecord[] }> }>;
+}
+
 function* extractLogRecords(payload: unknown): Generator<OtlpLogRecord> {
-  if (!payload || typeof payload !== 'object') return;
-  const resourceLogs = (payload as { resourceLogs?: unknown[] }).resourceLogs;
+  if (!asRecord(payload)) return;
+  // SAFETY: the one assertion for this walker; see OtlpTraceExport above.
+  const { resourceLogs } = payload as OtlpLogsExport;
   if (!Array.isArray(resourceLogs)) return;
   for (const resourceLog of resourceLogs) {
-    if (!resourceLog || typeof resourceLog !== 'object') continue;
-    const scopeLogs = (resourceLog as { scopeLogs?: unknown[] }).scopeLogs;
+    if (!asRecord(resourceLog)) continue;
+    const scopeLogs = resourceLog.scopeLogs;
     if (!Array.isArray(scopeLogs)) continue;
     for (const scopeLog of scopeLogs) {
-      if (!scopeLog || typeof scopeLog !== 'object') continue;
-      const logRecords = (scopeLog as { logRecords?: unknown[] }).logRecords;
+      if (!asRecord(scopeLog)) continue;
+      const logRecords = scopeLog.logRecords;
       if (!Array.isArray(logRecords)) continue;
       for (const record of logRecords) {
-        if (record && typeof record === 'object') {
-          yield record as OtlpLogRecord;
-        }
+        if (asRecord(record)) yield record;
       }
     }
   }
@@ -333,20 +352,23 @@ export function parseOtlpLogEvents(payload: unknown): TerminalLogEvent[] {
 
 // --- OTLP Metrics parsing (accept and count) ---
 
+interface OtlpMetricsExport {
+  resourceMetrics?: Array<{ scopeMetrics?: Array<{ metrics?: unknown[] }> }>;
+}
+
 export function countOtlpMetrics(payload: unknown): number {
   if (!payload || typeof payload !== 'object') return 0;
   let count = 0;
-  const resourceMetrics = (payload as { resourceMetrics?: unknown[] })
-    .resourceMetrics;
+  // SAFETY: the one assertion for this walker; see OtlpTraceExport above.
+  const { resourceMetrics } = payload as OtlpMetricsExport;
   if (!Array.isArray(resourceMetrics)) return 0;
   for (const resourceMetric of resourceMetrics) {
-    if (!resourceMetric || typeof resourceMetric !== 'object') continue;
-    const scopeMetrics = (resourceMetric as { scopeMetrics?: unknown[] })
-      .scopeMetrics;
+    if (!asRecord(resourceMetric)) continue;
+    const scopeMetrics = resourceMetric.scopeMetrics;
     if (!Array.isArray(scopeMetrics)) continue;
     for (const scopeMetric of scopeMetrics) {
-      if (!scopeMetric || typeof scopeMetric !== 'object') continue;
-      const metrics = (scopeMetric as { metrics?: unknown[] }).metrics;
+      if (!asRecord(scopeMetric)) continue;
+      const metrics = scopeMetric.metrics;
       if (Array.isArray(metrics)) {
         count += metrics.length;
       }

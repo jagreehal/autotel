@@ -26,7 +26,7 @@
 import type { TimeInput } from '@opentelemetry/api';
 import { normalizeAiSdkProvider } from '../ai-sdk-bridge.js';
 import type { GenAiProviderName } from '../semconv.js';
-import { toTokenUsage } from './ai-sdk-shapes.js';
+import { toTokenUsage } from './ai-sdk-fields.js';
 import type { GenAiObserver } from './types.js';
 
 /** AI SDK usage object — canonical (v5) or legacy (v4) field names. */

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { defineWorkerFetch } from './define-worker-fetch';
+import { emptyEnv, executionContext } from '../testing/doubles.js';
 
 describe('defineWorkerFetch', () => {
   interface Env {
@@ -13,7 +14,7 @@ describe('defineWorkerFetch', () => {
     );
 
     expect(worker).toBeDefined();
-    expect(typeof worker.fetch).toBe('function');
+    expect(worker.fetch).toBeTypeOf('function');
   });
 
   it('invokes the user handler and returns its response', async () => {
@@ -28,11 +29,8 @@ describe('defineWorkerFetch', () => {
     );
 
     const request = new Request('http://example.com/route');
-    const env = {} as Env;
-    const ctx = {
-      waitUntil: vi.fn(),
-      passThroughOnException: vi.fn(),
-    } as any;
+    const env = emptyEnv<Env>();
+    const ctx = executionContext();
 
     const response = await worker.fetch(request, env, ctx);
 
@@ -53,10 +51,7 @@ describe('defineWorkerFetch', () => {
     );
 
     const request = new Request('http://example.com/');
-    const ctx = {
-      waitUntil: vi.fn(),
-      passThroughOnException: vi.fn(),
-    } as any;
+    const ctx = executionContext();
 
     await worker.fetch(request, {} as Env, ctx);
 
@@ -74,10 +69,7 @@ describe('defineWorkerFetch', () => {
     );
 
     const waitUntilSpy = vi.fn();
-    const ctx = {
-      waitUntil: waitUntilSpy,
-      passThroughOnException: vi.fn(),
-    } as any;
+    const ctx = executionContext(waitUntilSpy);
 
     await worker.fetch(new Request('http://example.com/'), {} as Env, ctx);
 
@@ -92,10 +84,7 @@ describe('defineWorkerFetch', () => {
       },
     );
 
-    const ctx = {
-      waitUntil: vi.fn(),
-      passThroughOnException: vi.fn(),
-    } as any;
+    const ctx = executionContext();
 
     await expect(
       worker.fetch(new Request('http://example.com/'), {} as Env, ctx),

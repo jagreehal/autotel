@@ -61,6 +61,14 @@ import { withTracing } from './functional';
 import { assertTraceFactory } from './trace-factory-validation';
 import type { TraceContext } from './trace-context';
 import { getActiveSpan } from './trace-helpers';
+import {
+  asRecord,
+  asString,
+  isFunction,
+  nonEmptyString,
+  toAttributeValue,
+  toError,
+} from './values';
 
 // ============================================================================
 // Types
@@ -237,17 +245,17 @@ export interface StepContext extends TraceContext {
 // ============================================================================
 
 // Store workflow state in a WeakMap keyed by span
-const workflowStates = new WeakMap<
-  object,
-  {
-    workflowId: string;
-    workflowName: string;
-    status: WorkflowStatus;
-    steps: Map<string, StepMetadata>;
-    stepCounter: number;
-    compensations: Map<string, (error: Error) => Promise<void> | void>;
-  }
->();
+/** What a workflow span is holding while its steps run. */
+interface WorkflowState {
+  workflowId: string;
+  workflowName: string;
+  status: WorkflowStatus;
+  steps: Map<string, StepMetadata>;
+  stepCounter: number;
+  compensations: Map<string, (error: Error) => Promise<void> | void>;
+}
+
+const workflowStates = new WeakMap<object, WorkflowState>();
 
 /**
  * AsyncLocalStorage for workflow context (async-safe)
@@ -290,20 +298,24 @@ const workflowContextStorage =
  * });
  * ```
  */
+/**
+ * Check a config a JavaScript caller may have built by hand: TypeScript has
+ * already checked it for everyone else.
+ */
+function assertNamedConfig(fn: string, config: { name?: unknown }): void {
+  if (!asRecord(config)) throw new TypeError(`${fn}: config must be an object`);
+  if (nonEmptyString(config.name) === undefined) {
+    throw new TypeError(`${fn}: config.name must be a non-empty string`);
+  }
+}
+
 export function traceWorkflow<TConfigArgs extends unknown[] = unknown[]>(
   config: WorkflowConfig<TConfigArgs>,
 ) {
-  if (!config || typeof config !== 'object') {
-    throw new TypeError('traceWorkflow: config must be an object');
-  }
-  if (typeof config.name !== 'string' || config.name.trim() === '') {
-    throw new TypeError(
-      'traceWorkflow: config.name must be a non-empty string',
-    );
-  }
+  assertNamedConfig('traceWorkflow', config);
   if (
-    typeof config.workflowId !== 'string' &&
-    typeof config.workflowId !== 'function'
+    asString(config.workflowId) === undefined &&
+    !isFunction(config.workflowId)
   ) {
     throw new TypeError(
       'traceWorkflow: config.workflowId must be a string or function',
@@ -315,13 +327,16 @@ export function traceWorkflow<TConfigArgs extends unknown[] = unknown[]>(
     fnFactory: (ctx: WorkflowContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
     assertTraceFactory('traceWorkflow', fnFactory);
+    // SAFETY: withTracing infers its wrapper from the factory it is given.
+    // This factory takes a WorkflowContext rather than a bare TraceContext,
+    // so the wrapper is stated back as the caller's own signature - the same
+    // TArgs and TReturn, unchanged.
     return withTracing<TArgs, TReturn>({ name: spanName })((baseCtx) => {
       return async (...args: TArgs) => {
         // Generate or extract workflow ID
-        const workflowId =
-          typeof config.workflowId === 'function'
-            ? config.workflowId(...args)
-            : config.workflowId;
+        const workflowId = isFunction(config.workflowId)
+          ? config.workflowId(...args)
+          : config.workflowId;
 
         // Create workflow context
         const ctx = createWorkflowContext(baseCtx, config.name, workflowId);
@@ -337,9 +352,8 @@ export function traceWorkflow<TConfigArgs extends unknown[] = unknown[]>(
         // Set custom attributes
         if (config.attributes) {
           for (const [key, value] of Object.entries(config.attributes)) {
-            if (value !== undefined) {
-              ctx.setAttribute(key, value as string | number | boolean);
-            }
+            const attribute = toAttributeValue(value);
+            if (attribute !== undefined) ctx.setAttribute(key, attribute);
           }
         }
 
@@ -360,7 +374,7 @@ export function traceWorkflow<TConfigArgs extends unknown[] = unknown[]>(
           } catch (error) {
             // Mark as failed
             ctx.setWorkflowStatus('failed');
-            config.onFailed?.(ctx, error as Error);
+            config.onFailed?.(ctx, toError(error));
 
             // Check if we have compensations to run
             const state = getWorkflowState();
@@ -369,7 +383,7 @@ export function traceWorkflow<TConfigArgs extends unknown[] = unknown[]>(
               config.onCompensating?.(ctx);
 
               try {
-                await ctx.compensate(error as Error);
+                await ctx.compensate(toError(error));
                 ctx.setWorkflowStatus('compensated');
               } catch (compensationError) {
                 ctx.setWorkflowStatus('compensation_failed');
@@ -419,17 +433,15 @@ export function traceStep(
 ): <TArgs extends unknown[], TReturn>(
   handler: StepHandler<TArgs, TReturn>,
 ) => StepHandler<TArgs, TReturn> {
-  if (!config || typeof config !== 'object') {
-    throw new TypeError('traceStep: config must be an object');
-  }
-  if (typeof config.name !== 'string' || config.name.trim() === '') {
-    throw new TypeError('traceStep: config.name must be a non-empty string');
-  }
+  assertNamedConfig('traceStep', config);
 
+  // SAFETY: the returned wrapper is generic in the handler it is given, which
+  // is what the declared return type says; the assertion below is how a
+  // generic function expression is stated as a generic type.
   return (<TArgs extends unknown[], TReturn>(
     handler: StepHandler<TArgs, TReturn>,
   ): StepHandler<TArgs, TReturn> => {
-    if (typeof handler !== 'function') {
+    if (!isFunction(handler)) {
       throw new TypeError(
         'traceStep(config)(handler): handler must be a function',
       );
@@ -460,9 +472,8 @@ export function traceStep(
         // Set custom attributes
         if (config.attributes) {
           for (const [key, value] of Object.entries(config.attributes)) {
-            if (value !== undefined) {
-              ctx.setAttribute(key, value as string | number | boolean);
-            }
+            const attribute = toAttributeValue(value);
+            if (attribute !== undefined) ctx.setAttribute(key, attribute);
           }
         }
 
@@ -473,17 +484,23 @@ export function traceStep(
         if (config.compensate && workflowCtx) {
           const compensate = config.compensate;
           workflowCtx.registerCompensation(config.name, (error) => {
+            // A compensation may be written either way round: `(cause)` for
+            // the common case, `(stepCtx, cause)` when it needs the step's
+            // own context. Its arity says which it declared.
+            // SAFETY: the arity check on the line above is what establishes
+            // which of the two shapes this function is.
             if (compensate.length >= 2) {
-              return (
-                compensate as (
-                  stepCtx: StepContext,
-                  cause: Error,
-                ) => Promise<void> | void
-              )(ctx, error);
+              const withContext = compensate as (
+                stepCtx: StepContext,
+                cause: Error,
+              ) => Promise<void> | void;
+              return withContext(ctx, error);
             }
-            return (compensate as (cause: Error) => Promise<void> | void)(
-              error,
-            );
+            // SAFETY: the same arity check, on its other side.
+            const causeOnly = compensate as (
+              cause: Error,
+            ) => Promise<void> | void;
+            return causeOnly(error);
           });
         }
 
@@ -517,7 +534,7 @@ export function traceStep(
 
             return result;
           } catch (error) {
-            lastError = error as Error;
+            lastError = toError(error);
 
             if (attempt < maxAttempts) {
               emitCorrelatedEvent(ctx, 'step_retry_scheduled', {
@@ -555,10 +572,10 @@ function createWorkflowContext(
 ): WorkflowContext {
   // Initialize state
   const span = getActiveSpan();
-  const state = {
+  const state: WorkflowState = {
     workflowId,
     workflowName,
-    status: 'running' as WorkflowStatus,
+    status: 'running',
     steps: new Map<string, StepMetadata>(),
     stepCounter: 0,
     compensations: new Map<string, (error: Error) => Promise<void> | void>(),
@@ -666,7 +683,7 @@ function createWorkflowContext(
             this.recordCompensation(
               stepName,
               false,
-              compensationError as Error,
+              toError(compensationError),
             );
             throw compensationError;
           }

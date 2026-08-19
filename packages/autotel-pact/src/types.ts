@@ -91,12 +91,12 @@ export interface PactFile {
   messages?: Array<{
     description: string;
     providerStates?: Array<{ name: string }>;
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, string | number | boolean>;
   }>;
   interactions?: Array<{
     description: string;
     providerStates?: Array<{ name: string }>;
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, string | number | boolean>;
   }>;
 }
 

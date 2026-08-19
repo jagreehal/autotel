@@ -10,7 +10,6 @@
  */
 
 import {
-  trace,
   context as api_context,
   propagation,
   SpanStatusCode,
@@ -29,13 +28,52 @@ import type {
 import { instrumentActorStorage } from './storage';
 import { instrumentActorAlarms } from './alarms';
 import { instrumentActorSockets } from './sockets';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import {
+  asFunction,
+  asString,
+  describeValue,
+  member,
+  readProperty,
+  type UnknownRecord,
+} from '../values.js';
 
 /**
  * Track cold starts per Actor class
  */
 const coldStarts = new WeakMap<object, boolean>();
 
-function isColdStart(actorClass: object): boolean {
+/**
+ * The Actor class being instrumented. Its own type belongs to the application,
+ * so this names only what the wrappers read off it: the class name that goes on
+ * the span, and the marker used to detect a cold start.
+ */
+/** What an Actor persists, and what a WebSocket carries: the app's own values. */
+type ActorPayload =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | UnknownRecord
+  | unknown[]
+  | ArrayBuffer;
+
+/** What the runtime passes an alarm handler. */
+interface AlarmInvocation {
+  retryCount?: number;
+  isRetry?: boolean;
+}
+
+/** The env a Durable Object is constructed with: whatever wrangler bound. */
+type ActorEnv = UnknownRecord;
+
+interface ActorClass {
+  readonly name?: string;
+}
+
+function isColdStart(actorClass: ActorClass): boolean {
   if (!coldStarts.has(actorClass)) {
     coldStarts.set(actorClass, true);
     return true;
@@ -47,7 +85,7 @@ function isColdStart(actorClass: object): boolean {
  * Get the tracer instance
  */
 function getTracer(): WorkerTracer {
-  return trace.getTracer('autotel-cloudflare-actors') as WorkerTracer;
+  return workerTracer('autotel-cloudflare-actors');
 }
 
 /**
@@ -65,14 +103,19 @@ function defaultSpanNameFormatter(
 /**
  * Create base Actor span attributes
  */
+/** The attributes every actor span carries, whatever its lifecycle stage. */
+interface ActorAttributes {
+  [key: string]: string | boolean | number;
+}
+
 function createActorAttributes(
   actorInstance: ActorLike,
-  actorClass: object,
+  actorClass: ActorClass,
   lifecycle: ActorLifecycle,
-): Record<string, string | boolean | number> {
+): ActorAttributes {
   return {
     'actor.name': actorInstance.name || 'unknown',
-    'actor.class': (actorClass as { name?: string }).name || 'Actor',
+    'actor.class': actorClass.name || 'Actor',
     'actor.lifecycle': lifecycle,
     'actor.coldstart': isColdStart(actorClass),
     ...(actorInstance.identifier && {
@@ -87,12 +130,12 @@ function createActorAttributes(
 function instrumentOnInit(
   originalMethod: () => Promise<void>,
   actorInstance: ActorLike,
-  actorClass: object,
+  actorClass: ActorClass,
   options: ActorInstrumentationOptions,
 ): () => Promise<void> {
   return async function instrumentedOnInit(): Promise<void> {
     const tracer = getTracer();
-    const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+    const actorClassName = actorClass.name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'init')
       : defaultSpanNameFormatter(
@@ -112,7 +155,7 @@ function instrumentOnInit(
           await originalMethod.call(actorInstance);
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -132,7 +175,7 @@ function instrumentOnInit(
 function instrumentOnRequest(
   originalMethod: (request: Request) => Promise<Response>,
   actorInstance: ActorLike,
-  actorClass: object,
+  actorClass: ActorClass,
   options: ActorInstrumentationOptions,
 ): (request: Request) => Promise<Response> {
   return async function instrumentedOnRequest(
@@ -147,7 +190,7 @@ function instrumentOnRequest(
     );
 
     const url = new URL(request.url);
-    const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+    const actorClassName = actorClass.name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'request')
       : `Actor ${actorInstance.name || actorClassName}: ${request.method} ${url.pathname}`;
@@ -181,7 +224,7 @@ function instrumentOnRequest(
 
           return response;
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -199,16 +242,16 @@ function instrumentOnRequest(
  * Instrument the onAlarm lifecycle method
  */
 function instrumentOnAlarm(
-  originalMethod: (alarmInfo?: unknown) => Promise<void>,
+  originalMethod: (alarmInfo?: AlarmInvocation) => Promise<void>,
   actorInstance: ActorLike,
-  actorClass: object,
+  actorClass: ActorClass,
   options: ActorInstrumentationOptions,
-): (alarmInfo?: unknown) => Promise<void> {
+): (alarmInfo?: AlarmInvocation) => Promise<void> {
   return async function instrumentedOnAlarm(
-    alarmInfo?: unknown,
+    alarmInfo?: AlarmInvocation,
   ): Promise<void> {
     const tracer = getTracer();
-    const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+    const actorClassName = actorClass.name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'alarm')
       : defaultSpanNameFormatter(
@@ -231,7 +274,7 @@ function instrumentOnAlarm(
           await originalMethod.call(actorInstance, alarmInfo);
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -249,18 +292,21 @@ function instrumentOnAlarm(
  * Instrument the onPersist lifecycle method
  */
 function instrumentOnPersist(
-  originalMethod: (key: string, value: unknown) => void,
+  originalMethod: (key: string, value: ActorPayload) => void,
   actorInstance: ActorLike,
-  actorClass: object,
+  actorClass: ActorClass,
   options: ActorInstrumentationOptions,
-): (key: string, value: unknown) => void {
+): (key: string, value: ActorPayload) => void {
   if (!options.capturePersistEvents) {
     return originalMethod;
   }
 
-  return function instrumentedOnPersist(key: string, value: unknown): void {
+  return function instrumentedOnPersist(
+    key: string,
+    value: ActorPayload,
+  ): void {
     const tracer = getTracer();
-    const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+    const actorClassName = actorClass.name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'persist')
       : `Actor ${actorInstance.name || actorClassName}: persist ${key}`;
@@ -272,7 +318,7 @@ function instrumentOnPersist(
         attributes: {
           ...createActorAttributes(actorInstance, actorClass, 'persist'),
           'actor.persist.key': key,
-          'actor.persist.value_type': typeof value,
+          'actor.persist.value_type': describeValue(value),
         },
       },
       (span) => {
@@ -280,7 +326,7 @@ function instrumentOnPersist(
           originalMethod.call(actorInstance, key, value);
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -300,7 +346,7 @@ function instrumentOnPersist(
 function instrumentWebSocketConnect(
   originalMethod: (ws: WebSocket, request: Request) => void,
   actorInstance: ActorLike,
-  actorClass: object,
+  actorClass: ActorClass,
   options: ActorInstrumentationOptions,
 ): (ws: WebSocket, request: Request) => void {
   return function instrumentedWebSocketConnect(
@@ -308,7 +354,7 @@ function instrumentWebSocketConnect(
     request: Request,
   ): void {
     const tracer = getTracer();
-    const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+    const actorClassName = actorClass.name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'websocket.connect')
       : defaultSpanNameFormatter(
@@ -335,7 +381,7 @@ function instrumentWebSocketConnect(
           originalMethod.call(actorInstance, ws, request);
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -350,17 +396,17 @@ function instrumentWebSocketConnect(
 }
 
 function instrumentWebSocketMessage(
-  originalMethod: (ws: WebSocket, message: unknown) => void,
+  originalMethod: (ws: WebSocket, message: ActorPayload) => void,
   actorInstance: ActorLike,
-  actorClass: object,
+  actorClass: ActorClass,
   options: ActorInstrumentationOptions,
-): (ws: WebSocket, message: unknown) => void {
+): (ws: WebSocket, message: ActorPayload) => void {
   return function instrumentedWebSocketMessage(
     ws: WebSocket,
-    message: unknown,
+    message: ActorPayload,
   ): void {
     const tracer = getTracer();
-    const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+    const actorClassName = actorClass.name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(actorInstance.name || '', 'websocket.message')
       : defaultSpanNameFormatter(
@@ -379,13 +425,10 @@ function instrumentWebSocketMessage(
             actorClass,
             'websocket.message',
           ),
-          'websocket.message.type': typeof message,
+          'websocket.message.type': describeValue(message),
           'websocket.message.size':
-            typeof message === 'string'
-              ? message.length
-              : message instanceof ArrayBuffer
-                ? message.byteLength
-                : 0,
+            asString(message)?.length ??
+            (message instanceof ArrayBuffer ? message.byteLength : 0),
         },
       },
       (span) => {
@@ -393,7 +436,7 @@ function instrumentWebSocketMessage(
           originalMethod.call(actorInstance, ws, message);
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -410,12 +453,12 @@ function instrumentWebSocketMessage(
 function instrumentWebSocketDisconnect(
   originalMethod: (ws: WebSocket) => void,
   actorInstance: ActorLike,
-  actorClass: object,
+  actorClass: ActorClass,
   options: ActorInstrumentationOptions,
 ): (ws: WebSocket) => void {
   return function instrumentedWebSocketDisconnect(ws: WebSocket): void {
     const tracer = getTracer();
-    const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+    const actorClassName = actorClass.name || 'Actor';
     const spanName = options.spanNameFormatter
       ? options.spanNameFormatter(
           actorInstance.name || '',
@@ -442,7 +485,7 @@ function instrumentWebSocketDisconnect(
           originalMethod.call(actorInstance, ws);
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -462,72 +505,77 @@ function instrumentWebSocketDisconnect(
 function instrumentActorInstance(
   actorInstance: ActorLike,
   _state: DurableObjectState,
-  _env: unknown,
-  actorClass: object,
+  _env: ActorEnv,
+  actorClass: ActorClass,
   options: ActorInstrumentationOptions,
 ): ActorLike {
   const instanceHandler: ProxyHandler<ActorLike> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
-      // Lifecycle methods that need instrumentation
-      if (prop === 'onInit' && typeof value === 'function') {
+      // Lifecycle methods that need instrumentation.
+      if (prop === 'onInit' && method) {
+        // SAFETY: `prop` names the actor lifecycle method being wrapped, so
+        // the bound function is that method with that method's own signature.
         return instrumentOnInit(
-          value.bind(target),
+          method.bind(target) as () => Promise<void>,
           target,
           actorClass,
           options,
         );
       }
 
-      if (prop === 'onRequest' && typeof value === 'function') {
+      if (prop === 'onRequest' && method) {
+        // SAFETY: see the note on onInit above.
         return instrumentOnRequest(
-          value.bind(target),
+          method.bind(target) as (request: Request) => Promise<Response>,
           target,
           actorClass,
           options,
         );
       }
 
-      if (prop === 'onAlarm' && typeof value === 'function') {
+      if (prop === 'onAlarm' && method) {
+        // SAFETY: see the note on onInit above.
         return instrumentOnAlarm(
-          value.bind(target),
+          method.bind(target) as (alarmInfo?: AlarmInvocation) => Promise<void>,
           target,
           actorClass,
           options,
         );
       }
 
-      if (prop === 'onPersist' && typeof value === 'function') {
+      if (prop === 'onPersist' && method) {
         return instrumentOnPersist(
-          value.bind(target),
+          method.bind(target),
           target,
           actorClass,
           options,
         );
       }
 
-      if (prop === 'onWebSocketConnect' && typeof value === 'function') {
+      if (prop === 'onWebSocketConnect' && method) {
         return instrumentWebSocketConnect(
-          value.bind(target),
+          method.bind(target),
           target,
           actorClass,
           options,
         );
       }
 
-      if (prop === 'onWebSocketMessage' && typeof value === 'function') {
+      if (prop === 'onWebSocketMessage' && method) {
         return instrumentWebSocketMessage(
-          value.bind(target),
+          method.bind(target),
           target,
           actorClass,
           options,
         );
       }
 
-      if (prop === 'onWebSocketDisconnect' && typeof value === 'function') {
+      if (prop === 'onWebSocketDisconnect' && method) {
         return instrumentWebSocketDisconnect(
-          value.bind(target),
+          method.bind(target),
           target,
           actorClass,
           options,
@@ -548,11 +596,7 @@ function instrumentActorInstance(
       }
 
       // Bind other methods to the target
-      if (typeof value === 'function') {
-        return value.bind(target);
-      }
-
-      return value;
+      return method ? method.bind(target) : value;
     },
   };
 
@@ -606,8 +650,11 @@ function instrumentActorInstance(
  */
 export function instrumentActor<C extends ActorConstructor>(
   actorClass: C,
-  config: ActorConfig | ((env: unknown, trigger?: unknown) => ActorConfig),
+  config:
+    ActorConfig | ((env: ActorEnv, trigger?: ActorPayload) => ActorConfig),
 ): C {
+  // SAFETY: a ConfigurationOption is exactly "a config, or a function
+  // producing one from the environment", which is what this parameter says.
   const initialiser = createInitialiser(config as ConfigurationOption);
 
   // Default options
@@ -619,21 +666,18 @@ export function instrumentActor<C extends ActorConstructor>(
   };
 
   const classHandler: ProxyHandler<C> = {
-    construct(target, [state, env]: [DurableObjectState, unknown]) {
+    construct(target, [state, env]: [DurableObjectState, ActorEnv]) {
       // Get config (either static or from function)
       const resolvedConfig =
         typeof config === 'function'
           ? config(env, { id: state.id.toString(), name: state.id.name })
           : config;
 
-      // Merge options with defaults
-      // Handle the case where config might not have actors property
-      const actorOptions =
-        resolvedConfig &&
-        typeof resolvedConfig === 'object' &&
-        'actors' in resolvedConfig
-          ? (resolvedConfig as { actors?: ActorInstrumentationOptions }).actors
-          : undefined;
+      // Merge options with defaults. The actors block is optional on a
+      // resolved worker config, so a config without one keeps the defaults.
+      // SAFETY: the block is this package's own option type wherever present.
+      const actorOptions = readProperty(resolvedConfig, 'actors') as
+        ActorInstrumentationOptions | undefined;
       const options: ActorInstrumentationOptions = {
         ...defaultOptions,
         ...actorOptions,
@@ -648,6 +692,8 @@ export function instrumentActor<C extends ActorConstructor>(
       const context = setConfig(telemetryConfig);
 
       // Create the Actor instance within the config context
+      // SAFETY: constructing the application's own Actor class; the assertion
+      // at the end of this call names the lifecycle surface we then wrap.
       const actorInstance = api_context.with(context, () => {
         return new target(state, env);
       }) as ActorLike;

@@ -8,6 +8,7 @@ import {
   type WorkflowContext,
   type StepContext,
 } from './workflow';
+import type { UnknownRecord } from './values';
 
 const mockActiveSpan = vi.hoisted(() => ({
   spanContext: () => ({
@@ -21,16 +22,13 @@ const mockActiveSpan = vi.hoisted(() => ({
 vi.mock('./functional', () => ({
   withTracing: vi.fn(
     () =>
-      (
+      <TArgs extends unknown[], TReturn>(
         factory: (
           ctx: ReturnType<typeof createMockTraceContext>,
-        ) => (...args: unknown[]) => unknown,
+        ) => (...args: TArgs) => TReturn,
       ) =>
-      (...args: unknown[]) => {
-        const mockCtx = createMockTraceContext();
-        const fn = factory(mockCtx);
-        return fn(...args);
-      },
+      (...args: TArgs): TReturn =>
+        factory(createMockTraceContext())(...args),
   ),
 }));
 
@@ -41,9 +39,8 @@ vi.mock('./trace-helpers', () => ({
 }));
 
 function createMockTraceContext() {
-  const attributes: Record<string, unknown> = {};
-  const events: Array<{ name: string; attributes?: Record<string, unknown> }> =
-    [];
+  const attributes: UnknownRecord = {};
+  const events: Array<{ name: string; attributes?: UnknownRecord }> = [];
   const links: unknown[] = [];
 
   return {

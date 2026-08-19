@@ -11,8 +11,9 @@ import type {
   SpanProcessor,
   ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
-import type { Context } from '@opentelemetry/api';
+import type { Context, Attributes } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/sdk-trace-base';
+import { readableSpanDouble } from './testing/doubles';
 
 /**
  * Mock span processor to capture forwarded spans
@@ -53,9 +54,9 @@ class MockSpanProcessor implements SpanProcessor {
 function createMockSpan(
   name: string,
   instrumentationScopeName = 'test-scope',
-  attributes: Record<string, unknown> = {},
+  attributes: Attributes = {},
 ): ReadableSpan {
-  return {
+  return readableSpanDouble({
     name,
     attributes,
     instrumentationScope: {
@@ -83,7 +84,7 @@ function createMockSpan(
     events: [],
     links: [],
     parentSpanId: undefined,
-  } as unknown as ReadableSpan;
+  });
 }
 
 describe('FilteringSpanProcessor', () => {

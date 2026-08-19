@@ -11,6 +11,8 @@
 // Everything here is pure and unit-tested; `FlowView.svelte` only renders it.
 
 import type { SpanData } from '../types';
+import { asString } from '../attrs.js';
+import type { JsonObject } from '../utils/json-fields.js';
 
 export type FlowRole =
   'entry' | 'llm' | 'tool' | 'function' | 'db' | 'http' | 'end';
@@ -64,11 +66,7 @@ export interface FlowGraph {
 // Role + label detection
 // ---------------------------------------------------------------------------
 
-function asString(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined;
-}
-
-function isToolSpan(attrs: Record<string, unknown>): boolean {
+function isToolSpan(attrs: JsonObject): boolean {
   return (
     attrs['ai.toolCall.name'] != null ||
     attrs['operation.name'] === 'ai.toolCall' ||
@@ -78,7 +76,7 @@ function isToolSpan(attrs: Record<string, unknown>): boolean {
   );
 }
 
-function isLlmSpan(attrs: Record<string, unknown>): boolean {
+function isLlmSpan(attrs: JsonObject): boolean {
   return (
     attrs['gen_ai.system'] != null ||
     attrs['gen_ai.provider.name'] != null ||
@@ -88,7 +86,7 @@ function isLlmSpan(attrs: Record<string, unknown>): boolean {
   );
 }
 
-function isDbSpan(attrs: Record<string, unknown>): boolean {
+function isDbSpan(attrs: JsonObject): boolean {
   return (
     attrs['db.system'] != null ||
     attrs['db.statement'] != null ||
@@ -96,7 +94,7 @@ function isDbSpan(attrs: Record<string, unknown>): boolean {
   );
 }
 
-function isHttpSpan(span: SpanData, attrs: Record<string, unknown>): boolean {
+function isHttpSpan(span: SpanData, attrs: JsonObject): boolean {
   return (
     span.kind === 'CLIENT' &&
     (attrs['http.method'] != null ||
@@ -160,8 +158,9 @@ export function classifySpan(span: SpanData): RoleResult {
 // ---------------------------------------------------------------------------
 
 function tryParse(v: unknown): unknown {
-  if (typeof v !== 'string') return v;
-  const t = v.trim();
+  const text = asString(v);
+  if (text === undefined) return v;
+  const t = text.trim();
   if (!t || (t[0] !== '{' && t[0] !== '[')) return v;
   try {
     return JSON.parse(t);

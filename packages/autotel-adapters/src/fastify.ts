@@ -56,10 +56,10 @@ function enrichFromRequest(
   const requestId = request.id ?? headerValue(request.headers, 'x-request-id');
 
   return {
-    ...(request.method ? { 'http.request.method': request.method } : {}),
-    ...(request.url ? { 'url.full': request.url } : {}),
-    ...(route ? { 'http.route': route } : {}),
-    ...(requestId ? { 'http.request.id': requestId } : {}),
+    'http.request.method': request.method,
+    'url.full': request.url,
+    'http.route': route,
+    'http.request.id': requestId,
   };
 }
 

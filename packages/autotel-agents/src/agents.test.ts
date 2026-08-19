@@ -10,15 +10,13 @@ import {
 import type {
   AgentRawEvent,
   AgentSessionStore,
+  Attributes,
   OtelMetricRecord,
 } from './index';
 
 const SESSION = 'sess-1';
 
-function event(
-  eventName: string,
-  attributes: Record<string, unknown>,
-): AgentRawEvent {
+function event(eventName: string, attributes: Attributes): AgentRawEvent {
   return {
     eventName,
     timestamp: 1000,
@@ -30,7 +28,7 @@ function event(
 
 function metric(
   name: string,
-  points: Array<{ value: number; attrs?: Record<string, unknown> }>,
+  points: Array<{ value: number; attrs?: Attributes }>,
   temporality?: 'delta' | 'cumulative',
 ): OtelMetricRecord {
   return {

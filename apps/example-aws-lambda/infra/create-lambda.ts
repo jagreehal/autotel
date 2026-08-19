@@ -95,10 +95,7 @@ export function createLambdaFunction({
   return lambdaFunction;
 }
 
-function otelEnvironment(
-  mode: OtelMode,
-  config: StackConfig,
-): Record<string, string> {
+function otelEnvironment(mode: OtelMode, config: StackConfig) {
   const region =
     config.AWS_REGION ?? process.env.CDK_DEFAULT_REGION ?? 'us-east-1';
   switch (mode) {

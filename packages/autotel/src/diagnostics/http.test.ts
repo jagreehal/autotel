@@ -5,8 +5,7 @@ import {
   SpanStatusCode,
   trace,
   type Context,
-  type TextMapGetter,
-  type TextMapSetter,
+  type TextMapPropagator,
 } from '@opentelemetry/api';
 import {
   BasicTracerProvider,
@@ -19,9 +18,9 @@ import { instrumentHttp } from './http.js';
 
 // Minimal W3C traceparent propagator so extract/inject have something to do
 // (the real one lives in @opentelemetry/core, which isn't a direct dep here).
-const w3c = {
+const w3c: TextMapPropagator = {
   fields: () => ['traceparent'],
-  inject(ctx: Context, carrier: unknown, setter: TextMapSetter) {
+  inject(ctx, carrier, setter) {
     const sc = trace.getSpanContext(ctx);
     if (!sc) return;
     setter.set(
@@ -30,7 +29,7 @@ const w3c = {
       `00-${sc.traceId}-${sc.spanId}-0${sc.traceFlags}`,
     );
   },
-  extract(ctx: Context, carrier: unknown, getter: TextMapGetter): Context {
+  extract(ctx, carrier, getter): Context {
     const raw = getter.get(carrier, 'traceparent');
     const value = Array.isArray(raw) ? raw[0] : raw;
     if (!value) return ctx;

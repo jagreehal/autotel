@@ -6,6 +6,7 @@
  */
 import type { TraceData, SpanData } from '../types';
 import { inferResourceName } from '../utils/resources';
+import { stringAttr } from '../attrs.js';
 
 /**
  * Service node in the map
@@ -77,13 +78,16 @@ function percentile(sorted: number[], p: number): number {
   return sorted[Math.max(0, idx)];
 }
 
+/** What buildServiceMap() answers with. */
+interface BuildServiceMapResult {
+  nodes: ServiceNode[];
+  connections: ServiceConnection[];
+}
+
 /**
  * Build service map from traces
  */
-export function buildServiceMap(traces: TraceData[]): {
-  nodes: ServiceNode[];
-  connections: ServiceConnection[];
-} {
+export function buildServiceMap(traces: TraceData[]): BuildServiceMapResult {
   const nodeMap = new Map<string, ServiceNode>();
   const connectionMap = new Map<string, ServiceConnection>();
 
@@ -149,12 +153,15 @@ export function buildServiceMap(traces: TraceData[]): {
           (childServerSpan
             ? getServiceFromSpan(childServerSpan, trace.service)
             : undefined) ||
-          span.attributes?.['peer.service'] ||
-          span.attributes?.['http.host'] ||
-          span.attributes?.['db.system'] ||
-          span.attributes?.['net.peer.name'] ||
-          span.attributes?.['rpc.service'] ||
-          span.attributes?.['messaging.system'] ||
+          stringAttr(
+            span.attributes,
+            'peer.service',
+            'http.host',
+            'db.system',
+            'net.peer.name',
+            'rpc.service',
+            'messaging.system',
+          ) ||
           'external';
 
         // Ensure the caller node exists (it may have no spans of its own).

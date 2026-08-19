@@ -58,6 +58,14 @@ afterAll(async () => {
 
 beforeEach(() => exporter.reset());
 
+/** The serialized statement a span recorded, which is always a string when set. */
+function queryTextOf(span: { attributes: Record<string, unknown> }): string {
+  // SAFETY: the instrumentation writes db.query.text with a serialized
+  // statement; a span that never recorded one fails the expectation that
+  // precedes each of these reads.
+  return span.attributes[ATTR_DB_QUERY_TEXT] as string;
+}
+
 describe('custom dbStatementSerializer', () => {
   if (!supportsLocalServer) {
     it.skip('skips custom mongoose integration tests when the environment cannot open local TCP ports', () => {});
@@ -72,7 +80,7 @@ describe('custom dbStatementSerializer', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'find',
     );
     expect(findSpan).toBeDefined();
-    const queryText = findSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(findSpan!);
     expect(queryText).toBe('find(name,email)');
   });
 
@@ -83,7 +91,7 @@ describe('custom dbStatementSerializer', () => {
     const findSpan = spans.find(
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'find',
     );
-    const queryText = findSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(findSpan!);
     // Custom serializer doesn't include values, so email won't appear,
     // but importantly the redactor is not running
     expect(queryText).toBe('find(email)');

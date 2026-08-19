@@ -15,6 +15,12 @@ import type {
  * Enables retrieving span names for correlation helpers.
  */
 const spanNameMap = new WeakMap<Span, string>();
+const spansWithExplicitStatus = new WeakSet<Span>();
+
+/** Whether a TraceContext consumer explicitly chose this span's status. */
+export function hasExplicitSpanStatus(span: Span): boolean {
+  return spansWithExplicitStatus.has(span);
+}
 
 /**
  * Base trace context containing trace identifiers
@@ -77,7 +83,10 @@ export function createTraceContext(span: Span): TraceContext {
     'code.function': spanNameMap.get(span),
     setAttribute: span.setAttribute.bind(span),
     setAttributes: span.setAttributes.bind(span),
-    setStatus: span.setStatus.bind(span),
+    setStatus: (status) => {
+      spansWithExplicitStatus.add(span);
+      span.setStatus(status);
+    },
     recordException: span.recordException.bind(span),
     addEvent: span.addEvent.bind(span),
     addLink: span.addLink.bind(span),

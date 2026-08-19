@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CanonicalLogLineProcessor } from './canonical-log-line-processor';
+import {
+  CanonicalLogLineProcessor,
+  type CanonicalLogLineEvent,
+} from './canonical-log-line-processor';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import { asString, type UnknownRecord } from '../values';
 import {
   SpanKind,
   SpanStatusCode,
@@ -10,19 +14,26 @@ import {
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { logs } from '@opentelemetry/api-logs';
 import type { Logger } from '../logger';
+import {
+  loggerDouble,
+  otelLoggerDouble,
+  readableSpanDouble,
+  recordedEmit,
+} from '../testing/doubles';
 
 describe('CanonicalLogLineProcessor', () => {
   let mockLogger: Logger;
   let mockOTelLogger: ReturnType<typeof logs.getLogger>;
+  let emitSpy: ReturnType<typeof vi.fn>;
   let logEntries: Array<{
     level: string;
     message: string;
-    attrs: Record<string, unknown>;
+    attrs: UnknownRecord;
   }>;
 
   beforeEach(() => {
     logEntries = [];
-    mockLogger = {
+    mockLogger = loggerDouble({
       info: vi.fn((extra, msg) => {
         logEntries.push({
           level: 'info',
@@ -51,11 +62,10 @@ describe('CanonicalLogLineProcessor', () => {
           attrs: extra || {},
         });
       }),
-    } as unknown as Logger;
+    });
 
-    mockOTelLogger = {
-      emit: vi.fn(),
-    } as unknown as ReturnType<typeof logs.getLogger>;
+    emitSpy = vi.fn();
+    mockOTelLogger = otelLoggerDouble({ emit: emitSpy });
   });
 
   function createMockSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
@@ -85,7 +95,7 @@ describe('CanonicalLogLineProcessor', () => {
       links: [],
       ...overrides,
     };
-    return defaultSpan as ReadableSpan;
+    return readableSpanDouble(defaultSpan);
   }
 
   describe('basic functionality', () => {
@@ -343,7 +353,7 @@ describe('CanonicalLogLineProcessor', () => {
     });
 
     it('should call drain after emit with canonical event context', async () => {
-      const drain = vi.fn(async (_event: unknown) => {});
+      const drain = vi.fn(async (_event: CanonicalLogLineEvent) => {});
       const processor = new CanonicalLogLineProcessor({
         logger: mockLogger,
         drain,
@@ -398,9 +408,8 @@ describe('CanonicalLogLineProcessor', () => {
       processor.onEnd(span);
 
       expect(mockGetLogger).toHaveBeenCalledWith('autotel.canonical-log-line');
-      expect(mockOTelLogger.emit).toHaveBeenCalledTimes(1);
-      const emitCall = (mockOTelLogger.emit as ReturnType<typeof vi.fn>).mock
-        .calls[0]![0];
+      expect(emitSpy).toHaveBeenCalledTimes(1);
+      const emitCall = recordedEmit(emitSpy);
       expect(emitCall.body).toContain('test.operation');
       expect(emitCall.attributes).toMatchObject({
         operation: 'test.operation',
@@ -457,8 +466,9 @@ describe('CanonicalLogLineProcessor', () => {
     it('should apply attribute redactor to span attributes', () => {
       const redactor = vi.fn((key: string, value: AttributeValue) => {
         if (key === 'user.password') return '[REDACTED]';
-        if (key === 'user.email' && typeof value === 'string') {
-          return value.replace(/@.*/, '@[REDACTED]');
+        const email = key === 'user.email' ? asString(value) : undefined;
+        if (email !== undefined) {
+          return email.replace(/@.*/, '@[REDACTED]');
         }
         return value;
       });

@@ -32,8 +32,20 @@ export const TAB_VALUES: readonly TabType[] = [
 /** The tab shown by default — omitted from the hash to keep clean URLs. */
 export const DEFAULT_TAB: TabType = 'traces';
 
+/**
+ * The member of a small union a raw URL value names, or undefined when it
+ * names none of them. Reading it this way keeps the union's type on the way
+ * out, so nothing downstream has to assert the string back into it.
+ */
+function oneOf<TValue extends string>(
+  values: readonly TValue[],
+  raw: string | null | undefined,
+): TValue | undefined {
+  return values.find((value) => value === raw);
+}
+
 export function isTabType(v: string | null | undefined): v is TabType {
-  return v != null && (TAB_VALUES as readonly string[]).includes(v);
+  return oneOf(TAB_VALUES, v) !== undefined;
 }
 
 const SORT_KEYS: readonly TraceSortKey[] = [
@@ -46,8 +58,14 @@ const SORT_KEYS: readonly TraceSortKey[] = [
 ];
 const STATUS_VALUES: readonly TraceStatusFilter[] = ['error', 'ok'];
 const TIME_RANGE_VALUES: readonly TraceTimeRangeFilter[] = ['5m', '15m', '1h'];
+/** How the traces list is ordered. */
+export interface TraceSort {
+  key: TraceSortKey;
+  dir: SortDir;
+}
+
 /** Default trace sort — omitted from the hash to keep clean URLs. */
-export const DEFAULT_SORT: { key: TraceSortKey; dir: SortDir } = {
+export const DEFAULT_SORT: TraceSort = {
   key: 'time',
   dir: 'desc',
 };
@@ -61,19 +79,16 @@ export interface NavState {
   status?: TraceStatusFilter;
   minDuration?: number;
   timeRange?: TraceTimeRangeFilter;
-  sort?: { key: TraceSortKey; dir: SortDir };
+  sort?: TraceSort;
   // GenAI-list filter.
   genaiQuery?: string;
 }
 
-function parseSort(
-  raw: string | null,
-): { key: TraceSortKey; dir: SortDir } | undefined {
+function parseSort(raw: string | null): TraceSort | undefined {
   if (!raw) return undefined;
-  const [key, dir] = raw.split(':');
-  if (!(SORT_KEYS as readonly string[]).includes(key)) return undefined;
-  const d: SortDir = dir === 'asc' ? 'asc' : 'desc';
-  return { key: key as TraceSortKey, dir: d };
+  const [rawKey, rawDir] = raw.split(':');
+  const key = oneOf(SORT_KEYS, rawKey);
+  return key && { key, dir: rawDir === 'asc' ? 'asc' : 'desc' };
 }
 
 /** Parse a location hash (`#tab=genai&trace=abc&span=def`) into nav state. */
@@ -81,32 +96,37 @@ export function parseNavHash(hash: string): NavState {
   const raw = hash.startsWith('#') ? hash.slice(1) : hash;
   if (!raw) return {};
   const params = new URLSearchParams(raw);
+  const state: NavState = {};
+
   const tab = params.get('tab');
+  if (isTabType(tab)) state.tab = tab;
+
   const traceId = params.get('trace') || undefined;
+  if (traceId) state.traceId = traceId;
+  // A span is only meaningful alongside its trace.
   const spanId = params.get('span') || undefined;
+  if (traceId && spanId) state.spanId = spanId;
+
   const q = params.get('q') || undefined;
-  const status = params.get('status');
+  if (q) state.q = q;
+
+  const status = oneOf(STATUS_VALUES, params.get('status'));
+  if (status) state.status = status;
+
   const minRaw = params.get('min');
-  const min = minRaw != null ? Number(minRaw) : NaN;
-  const range = params.get('range');
+  const min = minRaw == null ? Number.NaN : Number(minRaw);
+  if (Number.isFinite(min) && min > 0) state.minDuration = min;
+
+  const timeRange = oneOf(TIME_RANGE_VALUES, params.get('range'));
+  if (timeRange) state.timeRange = timeRange;
+
   const sort = parseSort(params.get('sort'));
+  if (sort) state.sort = sort;
+
   const genaiQuery = params.get('gq') || undefined;
-  return {
-    ...(isTabType(tab) ? { tab } : {}),
-    ...(traceId ? { traceId } : {}),
-    // A span is only meaningful alongside its trace.
-    ...(traceId && spanId ? { spanId } : {}),
-    ...(q ? { q } : {}),
-    ...((STATUS_VALUES as readonly string[]).includes(status ?? '')
-      ? { status: status as TraceStatusFilter }
-      : {}),
-    ...(Number.isFinite(min) && min > 0 ? { minDuration: min } : {}),
-    ...((TIME_RANGE_VALUES as readonly string[]).includes(range ?? '')
-      ? { timeRange: range as TraceTimeRangeFilter }
-      : {}),
-    ...(sort ? { sort } : {}),
-    ...(genaiQuery ? { genaiQuery } : {}),
-  };
+  if (genaiQuery) state.genaiQuery = genaiQuery;
+
+  return state;
 }
 
 /**

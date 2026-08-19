@@ -192,7 +192,7 @@ export function diffCatalogAgainstSnapshot(
           !declaredConstraint.types.includes('number');
         const nonIntegerSamples = integerDeclared
           ? observed.sampleValues.filter(
-              (v: unknown) => typeof v === 'number' && !Number.isInteger(v),
+              (v) => typeof v === 'number' && !Number.isInteger(v),
             )
           : [];
         if (badTypes.length > 0 || nonIntegerSamples.length > 0) {
@@ -210,15 +210,14 @@ export function diffCatalogAgainstSnapshot(
         observed.sampleValues.length > 0
       ) {
         const observedOutsideEnum = observed.sampleValues.filter(
-          (v: unknown) =>
-            !declaredConstraint.enumValues?.some((d) => Object.is(d, v)),
+          (v) => !declaredConstraint.enumValues?.some((d) => Object.is(d, v)),
         );
         if (observedOutsideEnum.length > 0) {
           valueDrift.push({
             event: snapName,
             path,
             declared: declaredConstraint.enumValues,
-            observed: [...new Set(observedOutsideEnum)] as unknown[],
+            observed: [...new Set(observedOutsideEnum)],
           });
         }
       }

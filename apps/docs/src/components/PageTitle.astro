@@ -104,6 +104,8 @@ import Default from '@astrojs/starlight/components/PageTitle.astro';
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return '';
 
+      // SAFETY: the guard above returned for every node whose nodeType is not
+      // ELEMENT_NODE, which is exactly what makes this an Element.
       const element = node as HTMLElement;
       const tag = element.tagName.toLowerCase();
 
@@ -251,15 +253,17 @@ import Default from '@astrojs/starlight/components/PageTitle.astro';
   }
 
   function bindCopyMarkdownButtons(): void {
-    document.querySelectorAll('.copy-markdown-btn').forEach((btn) => {
-      if ((btn as HTMLElement).dataset.bound === '1') return;
-      (btn as HTMLElement).dataset.bound = '1';
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        void copyMarkdownToClipboard(btn as HTMLElement);
+    document
+      .querySelectorAll<HTMLElement>('.copy-markdown-btn')
+      .forEach((btn) => {
+        if (btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void copyMarkdownToClipboard(btn);
+        });
       });
-    });
   }
 
   document.addEventListener('astro:page-load', bindCopyMarkdownButtons);

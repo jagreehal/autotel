@@ -25,9 +25,13 @@ Canonical reference for all public autotel APIs, their signatures, import paths,
 
 All from `import { ... } from 'autotel'` unless noted.
 
-### trace(fn) / trace(name, fn)
+### trace(fn) / trace(name, fn) / trace.run(name, operation)
 
-Wraps a function with an automatic span. The span starts when the function is called and ends when it returns (or throws).
+**`trace` wraps, `trace.run` runs.** Every `trace(...)` form returns a wrapper
+and executes nothing, so a `trace()` call can never run user code at module
+load. `trace.run(...)` runs the operation now and injects its `TraceContext`.
+Two names, so no call shape is ambiguous and nothing inspects a callback's
+parameter name.
 
 **Direct pattern** (no span context needed):
 
@@ -39,30 +43,53 @@ export const getUser = trace(async (id: string) => {
 });
 ```
 
-**Factory pattern** (access span context to set attributes):
+**Immediate named operation** (access span context to set attributes):
 
 ```typescript
-export const postCheckout = trace((ctx) => async (req: Request) => {
+const result = await trace.run('checkout', async (ctx) => {
   ctx.setAttribute('user.id', req.userId);
   return await processCheckout(req.body);
 });
 ```
 
-**Explicit name** (override name inference):
+**Reusable explicit name:**
 
 ```typescript
+export const handler = trace('checkout', async (req: Request) =>
+  processCheckout(req.body),
+);
+```
+
+Reach the span from inside any traced body with the ambient `ctx` import,
+which resolves at any depth:
+
+```typescript
+import { trace, ctx } from 'autotel';
+
 export const handler = trace('checkout', async (req: Request) => {
-  return await processCheckout(req.body);
+  ctx.setAttribute('user.id', req.userId);
+  return processCheckout(req.body);
 });
 ```
 
+The options form of the same wrapper, for when you need its extra fields:
+
+```typescript
+export const handler = instrument({
+  key: 'checkout',
+  fn: async (req: Request) => processCheckout(req.body),
+});
+```
+
+For a reusable function that needs injected context, use
+`withTracing({ name: 'checkout' })((ctx) => async (req) => ...)`.
+
 **Name inference rules** (highest to lowest priority):
 
-1. Explicit name passed to `trace('name', fn)` or `instrument({ key: 'name' })`
+1. Explicit name passed to `trace('name', fn)`, `instrument({ key: 'name', fn })`, or `withTracing({ name })`
 2. Named function: `trace(async function getUser() { ... })` → `getUser`
 3. Const/let/var assignment: `const getUser = trace(async () => { ... })` → `getUser`
-4. Factory function name: `trace((ctx) => async function getUser() { ... })` → `getUser`
-5. Fallback: `anonymous`
+4. Fallback: `unknown`
 
 ### span(name, fn)
 
@@ -100,21 +127,23 @@ Returns a request-scoped logger that accumulates attributes and events on the ac
 ```typescript
 import { trace, getRequestLogger } from 'autotel';
 
-export const handler = trace((ctx) => async (req) => {
-  const log = getRequestLogger(ctx);
+export const handler = withTracing({ name: 'checkout' })(
+  (ctx) => async (req) => {
+    const log = getRequestLogger(ctx);
 
-  // Set attributes (accumulated, not emitted yet)
-  log.set({ user: { id: user.id } });
-  log.set({ cart: { items: cart.items.length } });
+    // Set attributes (accumulated, not emitted yet)
+    log.set({ user: { id: user.id } });
+    log.set({ cart: { items: cart.items.length } });
 
-  // Log events (timestamped)
-  log.info('Checkout started');
-  log.warn('Inventory low', { sku: item.sku });
-  log.error(caughtError);
+    // Log events (timestamped)
+    log.info('Checkout started');
+    log.warn('Inventory low', { sku: item.sku });
+    log.error(caughtError);
 
-  // Emit the snapshot (all attributes + events in one go)
-  log.emitNow();
-});
+    // Emit the snapshot (all attributes + events in one go)
+    log.emitNow();
+  },
+);
 ```
 
 When framework middleware creates the span (Hono `otel()`, TanStack `tracingMiddleware()`), call with no args:

@@ -1,3 +1,4 @@
+import type { SpanAttributes } from '../attrs.js';
 /**
  * Log model utilities - pure logic for log grouping, filtering, and timelines.
  */
@@ -20,7 +21,7 @@ export interface TerminalLogEvent {
   /** Optional span correlation */
   spanId?: string;
   /** Structured attributes / fields */
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
 }
 
 /** Aggregate stats over logs */

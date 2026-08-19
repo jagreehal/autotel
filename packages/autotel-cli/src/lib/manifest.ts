@@ -282,6 +282,77 @@ export const COMMANDS: CommandSpec[] = [
     ],
   },
   {
+    name: 'estimate',
+    description:
+      'Estimate what a month of telemetry costs, before and after canonical log lines',
+    args: [],
+    flags: [
+      ...GLOBAL_FLAGS,
+      ...AGENT_FLAGS,
+      {
+        name: '--requests-per-month',
+        takesValue: true,
+        description: 'Requests the application serves per month (required)',
+      },
+      {
+        name: '--per-gb',
+        takesValue: true,
+        description:
+          'USD per gigabyte ingested by your provider (required — no rate is assumed)',
+      },
+      {
+        name: '--log-lines-per-request',
+        takesValue: true,
+        description: 'Log lines written per request today (default 4)',
+      },
+      {
+        name: '--spans-per-request',
+        takesValue: true,
+        description:
+          'Spans exported per request after instrumenting (default 0)',
+      },
+      {
+        name: '--per-million-events',
+        takesValue: true,
+        description: 'USD per million events indexed, if metered separately',
+      },
+      {
+        name: '--keep-percent',
+        takesValue: true,
+        description:
+          'Traffic kept after sampling, applied to both shapes (default 100)',
+      },
+    ],
+    mutating: false,
+    network: false,
+    writesFiles: false,
+    supportsDryRun: false,
+    requiresPackageJson: false,
+    mayReadEnv: false,
+    supportsJson: true,
+    examples: [
+      {
+        description: 'Ten million requests a month at four log lines each',
+        command: 'autotel estimate --requests-per-month 10000000 --per-gb 0.10',
+      },
+      {
+        description: 'Include the spans instrumenting will add',
+        command:
+          'autotel estimate --requests-per-month 10000000 --per-gb 0.10 --spans-per-request 6 --json',
+      },
+      {
+        description: 'A provider that meters indexed events as well as bytes',
+        command:
+          'autotel estimate --requests-per-month 300000000 --per-gb 0.50 --per-million-events 2.50',
+      },
+      {
+        description: 'What head sampling at 10% does to the bill',
+        command:
+          'autotel estimate --requests-per-month 10000000 --per-gb 0.10 --keep-percent 10',
+      },
+    ],
+  },
+  {
     name: 'codemod trace',
     description:
       'Wrap functions in trace() with span name from function/variable/method name',

@@ -1,6 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { NodeSDKConfiguration } from '@opentelemetry/sdk-node';
+import { sdkDouble } from './testing/doubles';
+import type { UnknownRecord } from './values';
 
 type InitModule = typeof import('./init');
+
+/** What init() hands its sdkFactory - the NodeSDK options it assembled. */
+type SdkOptions = Partial<NodeSDKConfiguration>;
+
+/** The parts of the Traceloop SDK that init() reaches for. */
+interface TraceloopModule {
+  initialize?: (options?: UnknownRecord) => void;
+  instrumentations?: readonly { name: string }[];
+}
 
 async function loadInitModule(): Promise<InitModule> {
   vi.resetModules();
@@ -15,12 +27,30 @@ async function loadInitModule(): Promise<InitModule> {
 type OptionalRequire = Parameters<
   InitModule['_setOptionalRequireForTesting']
 >[0];
-function stubRequire(module: unknown): OptionalRequire {
+function stubRequire(module: TraceloopModule): OptionalRequire {
+  // SAFETY: safeRequire is generic in what the module id resolves to; a fixed
+  // stub cannot be. The loader hands back this one module for any id, which is
+  // all any test here asks of it.
   return (() => module) as OptionalRequire;
 }
 
+/**
+ * Traceloop installed as the module init() will find, with the options each
+ * initialize() call received.
+ */
+function installTraceloop(mod: InitModule): UnknownRecord[] {
+  const initializeCalls: UnknownRecord[] = [];
+  mod._setOptionalRequireForTesting(
+    stubRequire({
+      initialize: (options?: UnknownRecord) =>
+        initializeCalls.push(options ?? {}),
+    }),
+  );
+  return initializeCalls;
+}
+
 function createSdkFactory() {
-  const calls: Array<Record<string, unknown>> = [];
+  const calls: SdkOptions[] = [];
   const getTracerProvider = vi.fn(() => ({ id: 'mock-tracer-provider' }));
   const start = vi.fn();
   const shutdown = vi.fn(async () => {});
@@ -30,13 +60,9 @@ function createSdkFactory() {
     getTracerProvider,
     start,
     shutdown,
-    sdkFactory: (options: Record<string, unknown>) => {
+    sdkFactory: (options: SdkOptions) => {
       calls.push(options);
-      return {
-        start,
-        shutdown,
-        getTracerProvider,
-      } as never;
+      return sdkDouble({ start, shutdown, getTracerProvider });
     },
   };
 }
@@ -52,14 +78,7 @@ describe('init() OpenLLMetry integration', () => {
   it('should not initialize OpenLLMetry when disabled', async () => {
     const mod = await loadInitModule();
     const sdk = createSdkFactory();
-    const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
-
-    mod._setOptionalRequireForTesting(
-      stubRequire({
-        initialize: (options?: Record<string, unknown>) =>
-          traceloopInitializeCalls.push(options ?? {}),
-      }),
-    );
+    const traceloopInitializeCalls = installTraceloop(mod);
 
     mod.init({ service: 'test-app', sdkFactory: sdk.sdkFactory });
 
@@ -70,14 +89,7 @@ describe('init() OpenLLMetry integration', () => {
   it('should initialize OpenLLMetry when enabled', async () => {
     const mod = await loadInitModule();
     const sdk = createSdkFactory();
-    const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
-
-    mod._setOptionalRequireForTesting(
-      stubRequire({
-        initialize: (options?: Record<string, unknown>) =>
-          traceloopInitializeCalls.push(options ?? {}),
-      }),
-    );
+    const traceloopInitializeCalls = installTraceloop(mod);
 
     mod.init({
       service: 'test-app',
@@ -93,14 +105,7 @@ describe('init() OpenLLMetry integration', () => {
   it('should pass OpenLLMetry options to initialize', async () => {
     const mod = await loadInitModule();
     const sdk = createSdkFactory();
-    const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
-
-    mod._setOptionalRequireForTesting(
-      stubRequire({
-        initialize: (options?: Record<string, unknown>) =>
-          traceloopInitializeCalls.push(options ?? {}),
-      }),
-    );
+    const traceloopInitializeCalls = installTraceloop(mod);
 
     mod.init({
       service: 'test-app',
@@ -125,14 +130,7 @@ describe('init() OpenLLMetry integration', () => {
   it('should reuse autotel tracer provider when OpenLLMetry is enabled', async () => {
     const mod = await loadInitModule();
     const sdk = createSdkFactory();
-    const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
-
-    mod._setOptionalRequireForTesting(
-      stubRequire({
-        initialize: (options?: Record<string, unknown>) =>
-          traceloopInitializeCalls.push(options ?? {}),
-      }),
-    );
+    const traceloopInitializeCalls = installTraceloop(mod);
 
     mod.init({
       service: 'test-app',
@@ -164,10 +162,7 @@ describe('init() OpenLLMetry integration', () => {
       sdkFactory: sdk.sdkFactory,
     });
 
-    const options = sdk.calls.at(-1) as Record<string, unknown>;
-    const instrumentations = options.instrumentations as unknown[];
-
-    expect(instrumentations).toBeDefined();
+    expect(sdk.calls.at(-1)?.instrumentations).toBeDefined();
     expect(mockTraceloop.instrumentations).toBeDefined();
     mod._resetOptionalRequireForTesting();
   });
@@ -190,14 +185,7 @@ describe('init() OpenLLMetry integration', () => {
   it('should initialize OpenLLMetry after SDK start', async () => {
     const mod = await loadInitModule();
     const sdk = createSdkFactory();
-    const traceloopInitializeCalls: Array<Record<string, unknown>> = [];
-
-    mod._setOptionalRequireForTesting(
-      stubRequire({
-        initialize: (options?: Record<string, unknown>) =>
-          traceloopInitializeCalls.push(options ?? {}),
-      }),
-    );
+    const traceloopInitializeCalls = installTraceloop(mod);
 
     mod.init({
       service: 'test-app',

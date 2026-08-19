@@ -9,10 +9,20 @@ import type {
 } from 'autotel-devtools/server';
 import { AutotelCodeLensProvider, AutotelHoverProvider } from './codelens';
 import { getAdapter, listAdapters, credentialKey } from './backends';
+import {
+  asNumber,
+  asRecord,
+  asString,
+  nonEmptyString,
+  readProperty,
+} from './values';
 
 // Value imports via require (CJS interop). The receiver is now a full
 // DevtoolsServer + attachDevtoolsRoutes, so it serves the devtools widget UI
 // (/, /widget.js, /ws) from this same port — `openDevtools` embeds it directly.
+// SAFETY: `require` answers with the module this same specifier types, which
+// is what `typeof import(...)` names. The CJS interop is why it cannot be a
+// static import here.
 const { ErrorAggregator, DevtoolsServer, attachDevtoolsRoutes } =
   require('autotel-devtools/server') as typeof import('autotel-devtools/server');
 
@@ -154,18 +164,15 @@ function getAutoStartMode(): AutoStartMode {
 async function packageDependsOnAutotel(uri: vscode.Uri): Promise<boolean> {
   try {
     const bytes = await vscode.workspace.fs.readFile(uri);
-    const pkg = JSON.parse(new TextDecoder().decode(bytes)) as Record<
-      string,
-      unknown
-    >;
+    const pkg: unknown = JSON.parse(new TextDecoder().decode(bytes));
     for (const field of [
       'dependencies',
       'devDependencies',
       'peerDependencies',
     ] as const) {
-      const deps = pkg[field];
-      if (deps && typeof deps === 'object') {
-        const names = Object.keys(deps as Record<string, string>);
+      const deps = asRecord(readProperty(pkg, field));
+      if (deps) {
+        const names = Object.keys(deps);
         if (
           names.some(
             (name) => name === 'autotel' || name.startsWith('autotel-'),
@@ -907,10 +914,7 @@ async function setReceiverPort(): Promise<void> {
 }
 
 function resolveSpanIdFromArg(arg: unknown): string | undefined {
-  if (typeof arg === 'string') return arg;
-  if (!arg || typeof arg !== 'object') return undefined;
-  const candidate = arg as { spanId?: unknown };
-  return typeof candidate.spanId === 'string' ? candidate.spanId : undefined;
+  return asString(arg) ?? asString(readProperty(arg, 'spanId'));
 }
 
 function resolveSpanFromArg(arg: unknown): Span | undefined {
@@ -932,24 +936,19 @@ function isPathInsideWorkspace(targetPath: string): boolean {
 
 async function revealSource(arg?: unknown): Promise<void> {
   const span = resolveSpanFromArg(arg);
-  const direct =
-    arg && typeof arg === 'object'
-      ? (arg as {
-          filepath?: unknown;
-          lineno?: unknown;
-          ['code.filepath']?: unknown;
-          ['code.lineno']?: unknown;
-        })
-      : undefined;
-  const filepath =
+  // A command can be invoked from a span in a tree view or from a code lens,
+  // which passes the location directly.
+  const direct = asRecord(arg);
+  const filepath = nonEmptyString(
     span?.attributes?.['code.filepath'] ??
-    direct?.filepath ??
-    direct?.['code.filepath'];
+      direct?.filepath ??
+      direct?.['code.filepath'],
+  );
   const lineno =
     span?.attributes?.['code.lineno'] ??
     direct?.lineno ??
     direct?.['code.lineno'];
-  if (typeof filepath !== 'string' || filepath.length === 0) {
+  if (filepath === undefined) {
     void vscode.window.showInformationMessage(
       'Span has no source path metadata.',
     );
@@ -1019,8 +1018,10 @@ let devtoolsPanel: vscode.WebviewPanel | undefined;
 
 function getDevtoolsUrl(): string {
   const config = vscode.workspace.getConfiguration('autotel');
-  const explicit = config.get<string | null>('devtools.url', null);
-  if (typeof explicit === 'string' && explicit.length > 0) return explicit;
+  const explicit = nonEmptyString(
+    config.get<string | null>('devtools.url', null),
+  );
+  if (explicit !== undefined) return explicit;
   const { host, port } = getReceiverConfig();
   const safeHost = host === '0.0.0.0' ? '127.0.0.1' : host;
   return `http://${safeHost}:${port}`;
@@ -1245,8 +1246,7 @@ class LogsProvider implements vscode.TreeDataProvider<LogData> {
   }
 
   getTreeItem(log: LogData): vscode.TreeItem {
-    const summary =
-      typeof log.body === 'string' ? log.body : JSON.stringify(log.body);
+    const summary = asString(log.body) ?? JSON.stringify(log.body);
     const truncated =
       summary.length > 120 ? `${summary.slice(0, 117)}…` : summary;
     const item = new vscode.TreeItem(
@@ -1292,8 +1292,7 @@ class ErrorsProvider implements vscode.TreeDataProvider<ErrorGroup> {
 }
 
 function isErrorSeverity(level: number | undefined): boolean {
-  if (typeof level !== 'number') return false;
-  return level >= 17;
+  return (asNumber(level) ?? 0) >= 17;
 }
 
 function formatDuration(ms: number): string {

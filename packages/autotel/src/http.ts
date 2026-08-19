@@ -23,6 +23,7 @@
 import { SpanStatusCode, context, propagation } from '@opentelemetry/api';
 import { getConfig } from './config';
 import { getActiveContextWithBaggage } from './trace-context';
+import { asNumber, asString, isFunction, readProperty } from './values';
 
 export interface HttpInstrumentedOptions {
   /** Service name for HTTP calls (default: 'http-client') */
@@ -97,7 +98,7 @@ export function HttpInstrumented(options: HttpInstrumentedOptions = {}) {
         const methodNames = Object.getOwnPropertyNames(proto).filter(
           (name) =>
             name !== 'constructor' &&
-            typeof proto[name] === 'function' &&
+            isFunction(readProperty(proto, name)) &&
             !name.startsWith('_'),
         );
 
@@ -115,7 +116,7 @@ export function HttpInstrumented(options: HttpInstrumentedOptions = {}) {
 
               const url = options.urlExtractor
                 ? options.urlExtractor(args)
-                : (args[0] as string | undefined);
+                : asString(args[0]);
 
               const method = options.methodExtractor
                 ? options.methodExtractor(methodName, args)
@@ -210,8 +211,14 @@ export function HttpInstrumented(options: HttpInstrumentedOptions = {}) {
               });
             };
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (this as any)[methodName] = wrappedMethod;
+            // The instance gets back the methods its own prototype declares,
+            // wrapped. The name came off that prototype.
+            Object.defineProperty(this, methodName, {
+              value: wrappedMethod,
+              writable: true,
+              enumerable: true,
+              configurable: true,
+            });
           }
         }
       }
@@ -288,11 +295,14 @@ function extractPath(url: string): string {
   }
 }
 
-function parseUrl(url: string): {
+/** The parts of a URL that become span attributes. */
+interface UrlParts {
   protocol: string;
   host: string;
   path: string;
-} {
+}
+
+function parseUrl(url: string): UrlParts {
   try {
     const urlObj = new URL(url);
     return {
@@ -310,17 +320,11 @@ function parseUrl(url: string): {
 }
 
 function extractStatusCode(result: unknown): number | undefined {
-  if (result && typeof result === 'object') {
-    // Check for Response.status (fetch API)
-    if ('status' in result && typeof result.status === 'number') {
-      return result.status;
-    }
-    // Check for statusCode (axios, node http)
-    if ('statusCode' in result && typeof result.statusCode === 'number') {
-      return result.statusCode;
-    }
-  }
-  return undefined;
+  // `status` is fetch's Response; `statusCode` is axios' and node http's.
+  return (
+    asNumber(readProperty(result, 'status')) ??
+    asNumber(readProperty(result, 'statusCode'))
+  );
 }
 
 /**

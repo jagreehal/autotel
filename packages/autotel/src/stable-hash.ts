@@ -1,5 +1,6 @@
 // namespace import for browser-bundler compat — see node-require.ts
 import * as nodeCrypto from 'node:crypto';
+import { asRecord } from './values';
 
 /**
  * Deterministic JSON stringify with sorted object keys, so two structurally
@@ -8,16 +9,14 @@ import * as nodeCrypto from 'node:crypto';
  * hashes.
  */
 export function stableStringify(value: unknown): string {
-  if (value === null || value === undefined || typeof value !== 'object') {
-    return JSON.stringify(value);
-  }
   if (Array.isArray(value)) {
     return '[' + value.map((v) => stableStringify(v)).join(',') + ']';
   }
-  const obj = value as Record<string, unknown>;
-  const body = Object.keys(obj)
+  const record = asRecord(value);
+  if (record === undefined) return JSON.stringify(value);
+  const body = Object.keys(record)
     .toSorted()
-    .map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k]))
+    .map((k) => JSON.stringify(k) + ':' + stableStringify(record[k]))
     .join(',');
   return '{' + body + '}';
 }

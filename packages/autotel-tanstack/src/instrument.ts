@@ -22,7 +22,7 @@
  * @example
  * ```ts
  * import { instrument } from 'autotel-tanstack';
- * import { PostHogSubscriber } from 'autotel-subscribers';
+ * import { PostHogSubscriber } from 'autotel-posthog/subscriber';
  *
  * instrument({
  *   subscribers: process.env.POSTHOG_KEY

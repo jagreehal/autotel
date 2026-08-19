@@ -1,5 +1,5 @@
 import { SpanStatusCode } from '@opentelemetry/api';
-import { trace, getActiveTraceContext } from 'autotel';
+import { trace } from 'autotel';
 import { isServerSide } from './env';
 import { isControlFlowSignal, isRealError } from './control-flow';
 import { type TraceServerFnConfig, SPAN_ATTRIBUTES } from './types';
@@ -61,10 +61,9 @@ export function traceServerFn<T extends (...args: any[]) => any>(
         return target.apply(thisArg, argArray);
       }
 
-      return trace(
+      return trace.run(
         { name: `tanstack.serverFn.${fnName}`, isError: isRealError },
-        async () => {
-          const ctx = getActiveTraceContext()!;
+        async (ctx) => {
           ctx.setAttributes({
             [SPAN_ATTRIBUTES.RPC_SYSTEM]: 'tanstack-start',
             [SPAN_ATTRIBUTES.RPC_METHOD]: fnName,
@@ -126,7 +125,7 @@ export function traceServerFn<T extends (...args: any[]) => any>(
             throw error;
           }
         },
-      )();
+      );
     },
 
     get(target, prop, receiver) {

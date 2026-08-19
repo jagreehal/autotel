@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import type { EventAttributes } from 'autotel/event-subscriber';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +14,7 @@ const FIXED_NOW = () => new Date('2026-05-21T18:04:00.000Z');
 
 function event(
   name: string,
-  attributes: Record<string, unknown> = {},
+  attributes: EventAttributes = {},
   options: { traceId?: string; at?: string } = {},
 ): EventPayload {
   return {
@@ -152,7 +153,9 @@ describe('ArchitectureSnapshotSubscriber', () => {
       maxSampleTraceIds: 2,
     });
     for (const id of ['t-1', 't-2', 't-3', 't-1']) {
-      await (
+      await // SAFETY: the snapshot is read back for the fields the assertions below
+      // name; the subscriber's own type describes far more of it.
+      (
         limited as unknown as {
           sendToDestination(p: EventPayload): Promise<void>;
         }

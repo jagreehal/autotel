@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PostHogSubscriber } from './posthog';
+import { PostHogSubscriber } from './index';
 import type { PostHog } from 'posthog-node';
 
 // Mock the posthog-node module

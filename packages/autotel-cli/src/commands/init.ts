@@ -183,7 +183,7 @@ function readPlanFromFile(filePath: string): InitPlan {
     throw new AutotelError({
       type: 'validation',
       code: AutotelErrorCodes.E_INVALID_PLAN,
-      message: `Plan file is not valid JSON: ${(error as Error).message}`,
+      message: `Plan file is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     });
   }
 }
@@ -202,7 +202,7 @@ async function readPlanFromInput(input: string): Promise<InitPlan> {
       throw new AutotelError({
         type: 'validation',
         code: AutotelErrorCodes.E_INVALID_INPUT,
-        message: `stdin did not contain valid JSON: ${(error as Error).message}`,
+        message: `stdin did not contain valid JSON: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
   }

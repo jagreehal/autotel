@@ -1,6 +1,9 @@
 import { createServer, type Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
 import {
   localhostHostValidation,
   localhostOriginValidation,

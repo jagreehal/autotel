@@ -23,6 +23,9 @@ const receivedTraceparents: Array<string | undefined> = []
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
+    // SAFETY: node types every header as `string | string[]` because a header can
+    // repeat. traceparent is single-valued by the W3C spec and this test's client
+    // sends it at most once, so the array form cannot occur here.
     const traceparent = req.headers.traceparent as string | undefined
     receivedTraceparents.push(traceparent)
 
@@ -42,6 +45,8 @@ beforeAll(async () => {
     )
   })
   await new Promise<void>((resolve) => server.listen(0, resolve))
+  // SAFETY: address() returns the string form only for a pipe or UDS listener.
+  // This server was listened on a TCP port above, so the AddressInfo form applies.
   url = `http://localhost:${(server.address() as { port: number }).port}/`
 })
 

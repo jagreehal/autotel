@@ -91,12 +91,17 @@ export interface Suppression {
 const DIRECTIVE =
   /(?:\/\/|\/\*|\*)\s*autotel-map-disable(?<scope>-next-line|-line)?(?:\s+(?<ids>[a-z*-]+(?:\s*,\s*[a-z*-]+)*))?(?:\s*--\s*(?<reason>.*?))?\s*(?:\*\/)?\s*$/;
 
-/** Every `autotel-map-disable` comment in a file, indexed for lookup. */
-export function collectSuppressions(sourceText: string): {
+/** What collectSuppressions() answers with. */
+interface CollectSuppressionsResult {
   file: (id: string) => Suppression | undefined;
   at: (id: string, line: number) => Suppression | undefined;
   unknown: (known: readonly string[]) => Suppression[];
-} {
+}
+
+/** Every `autotel-map-disable` comment in a file, indexed for lookup. */
+export function collectSuppressions(
+  sourceText: string,
+): CollectSuppressionsResult {
   const all: Suppression[] = [];
   const lines = sourceText.split('\n');
 

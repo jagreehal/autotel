@@ -40,18 +40,30 @@ yarn add autotel autotel-vitest
 
 ## Quick Start
 
-### 1. Initialize autotel in `globalSetup`
+### 1. Initialize autotel in a setup file
 
 ```ts
-// globalSetup.ts
+// vitest.setup.ts
 import { init } from 'autotel';
+import { SimpleSpanProcessor } from 'autotel/processors';
+import { otelTestCollector } from 'autotel-vitest';
 
-export default function globalSetup() {
-  init({ service: 'unit-tests' });
-}
+init({
+  service: 'unit-tests',
+  spanProcessors: [new SimpleSpanProcessor(otelTestCollector)],
+});
 ```
 
-### 2. Register `globalSetup` in Vitest config
+Two details matter here:
+
+- **`setupFiles`, not `globalSetup`.** Spans are created in the worker that runs
+  the test, and worker module state is not shared with the main process where
+  `globalSetup` runs.
+- **Pass `otelTestCollector` to `init`.** OpenTelemetry SDK 2.x removed
+  `addSpanProcessor`, so a processor can only be registered when the provider is
+  built. This is the collector the fixture drains after each test.
+
+### 2. Register the setup file in Vitest config
 
 ```ts
 // vitest.config.ts
@@ -59,7 +71,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    globalSetup: './globalSetup.ts',
+    setupFiles: ['./vitest.setup.ts'],
   },
 });
 ```
@@ -83,6 +95,9 @@ The fixture is `auto: true`, so every test gets a parent span automatically.
 - Span attributes: `test.name`, `test.file`, `test.suite`
 - If a test throws, the span is marked as error and records the exception
 - Any `trace()` / `span()` calls in the test flow become children of the active test span
+- The test's spans on `task.meta.otelSpans`, which
+  [executable-stories](https://github.com/jagreehal/executable-stories) renders
+  as a trace waterfall in its report with no extra wiring
 
 ## Optional: Reporter (runner-side spans)
 
@@ -94,7 +109,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    globalSetup: './globalSetup.ts',
+    setupFiles: ['./vitest.setup.ts'],
     reporters: ['default', 'autotel-vitest/reporter'],
   },
 });
@@ -133,12 +148,14 @@ test('traces user creation', async () => {
 
 ## Troubleshooting
 
-- No spans exported: verify `init()` runs in `globalSetup` before tests start.
+- No spans exported: verify `init()` runs in a `setupFiles` entry, not `globalSetup`, and that it is passed a processor wrapping `otelTestCollector`.
 - No child spans under test span: ensure your test imports `test` from `autotel-vitest`, not `vitest`.
 - Reporter not running: ensure `reporters` includes `'autotel-vitest/reporter'`.
+- `task.meta.otelSpans` empty: a span is only in the collector after it is exported, which is asynchronous. The fixture flushes before it drains; if you read spans inside the test body, `await flush()` first.
 
 ## API
 
 - `test`: extended Vitest `test` with auto per-test span fixture
+- `otelTestCollector`: the collector the fixture drains onto `task.meta.otelSpans`; pass it to `init()` (see Quick Start)
 - `expect`, `describe`, `beforeEach`, `afterEach`, `beforeAll`, `afterAll`: re-exported from `vitest`
 - `autotel/testing` helpers listed above: re-exported from this package

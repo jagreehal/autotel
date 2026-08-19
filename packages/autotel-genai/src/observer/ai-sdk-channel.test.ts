@@ -47,11 +47,18 @@ function trace(message: Record<string, unknown>, result?: unknown): void {
   channel.asyncEnd.publish(message);
 }
 
+/** A message the AI SDK publishes on its diagnostics channel. */
+type ChannelMessage = {
+  type: string;
+  event?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 describe('subscribeAiTelemetry', () => {
   it('builds invoke_agent → chat with usage and cost from channel messages', () => {
     unsubscribe = subscribeAiTelemetry({ tracer });
 
-    const gen: Record<string, unknown> = {
+    const gen: ChannelMessage = {
       type: 'generateText',
       event: { callId: 'c1', modelId: 'gpt-4o', provider: 'openai' },
     };
@@ -83,7 +90,7 @@ describe('subscribeAiTelemetry', () => {
 
   it('builds a tool span nested under the agent root', () => {
     unsubscribe = subscribeAiTelemetry({ tracer });
-    const gen: Record<string, unknown> = {
+    const gen: ChannelMessage = {
       type: 'streamText',
       event: { callId: 'c2', modelId: 'gpt-4o' },
     };
@@ -148,7 +155,7 @@ describe('subscribeAiTelemetry', () => {
 
   it('does not capture tool output when recordOutputs is false', () => {
     unsubscribe = subscribeAiTelemetry({ tracer, captureContent: true });
-    const gen: Record<string, unknown> = {
+    const gen: ChannelMessage = {
       type: 'streamText',
       event: { callId: 'c4', modelId: 'gpt-4o' },
     };
@@ -172,7 +179,7 @@ describe('subscribeAiTelemetry', () => {
 
   it('returns a callable unsubscribe', () => {
     const off = subscribeAiTelemetry({ tracer });
-    expect(typeof off).toBe('function');
+    expect(off).toBeTypeOf('function');
     off();
   });
 });

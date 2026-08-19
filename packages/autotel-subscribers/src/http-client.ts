@@ -1,3 +1,11 @@
+/** A parsed response body: whatever JSON the endpoint answered with. */
+export type JsonBody =
+  | string
+  | number
+  | boolean
+  | null
+  | Array<JsonBody>
+  | { [key: string]: JsonBody };
 /**
  * HTTP client for sending webhook events
  *
@@ -45,20 +53,22 @@ export type HttpRequestOptions = {
   timeoutMs?: number;
 };
 
-async function parseBody(response: Response): Promise<unknown> {
+async function parseBody(response: Response): Promise<JsonBody> {
   const text = await response.text();
   if (text.trim().length === 0) return null;
 
   try {
-    return JSON.parse(text) as unknown;
+    // SAFETY: JSON.parse is typed `any`; asserting it to JsonBody says what a
+    // successfully parsed body can be, and the caller narrows from there.
+    return JSON.parse(text) as JsonBody;
   } catch {
     return text;
   }
 }
 
-function isTimeoutError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.name === 'AbortError' || error.name === 'TimeoutError';
+function isTimeoutError(cause: unknown): boolean {
+  if (!(cause instanceof Error)) return false;
+  return cause.name === 'AbortError' || cause.name === 'TimeoutError';
 }
 
 /**
@@ -97,6 +107,9 @@ export function createHttpClient(options: HttpClientOptions = {}) {
         });
 
         if (!response.ok) {
+          // SAFETY: the caller names the error shape its endpoint answers with; a
+          // body that does not match still lands here, and only what the caller reads
+          // from it is ever touched.
           const body = (await parseBody(response)) as E;
           return {
             ok: false,
@@ -107,6 +120,7 @@ export function createHttpClient(options: HttpClientOptions = {}) {
           };
         }
 
+        // SAFETY: as above - the caller names the success shape.
         const data = (await parseBody(response)) as T;
         return { ok: true, status: response.status, data };
       } catch (error) {

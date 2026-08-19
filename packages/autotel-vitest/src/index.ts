@@ -19,8 +19,13 @@ import { test as base } from 'vitest';
 import { otelTestSpanFixture } from './fixture';
 
 export const test = base.extend({
+  // SAFETY: vitest types a fixture tuple by the fixture's own value type, which
+  // it cannot infer for an auto fixture that yields a span. The fixture's shape
+  // is checked where it is declared, against OtelFixtureFn.
   _otelTestSpan: otelTestSpanFixture as never,
 });
+
+export { otelTestCollector } from './fixture';
 
 export {
   expect,

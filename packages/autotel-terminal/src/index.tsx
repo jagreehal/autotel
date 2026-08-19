@@ -35,6 +35,11 @@
  * @module autotel-terminal
  */
 
+import {
+  stringAttr,
+  type AttributeValue,
+  type SpanAttributes,
+} from './attrs.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { render, Box, Text, useInput, useStdin } from 'ink';
 import type { TerminalSpanEvent, TerminalSpanStream } from './span-stream';
@@ -92,6 +97,11 @@ import { createTelemetryTools, type ToolContext } from './ai/tools';
 import { providerStreamText } from './ai/stream';
 import { Renderer as InkRenderer } from '@json-render/ink';
 import type { InkSpec } from './ai/types';
+
+/** The processor shape the SDK's provider accepts, without importing it. */
+interface SpanProcessorLike {
+  onEnd(span: unknown): void;
+}
 
 /** Key attribute keys to show first (autotel / OTel conventions) */
 const KEY_ATTR_KEYS = new Set([
@@ -338,9 +348,7 @@ function Dashboard({
   const spansForSelectedService = useMemo(() => {
     if (!selectedServiceName) return spans;
     return spans.filter(
-      (s) =>
-        (s.attributes?.['service.name'] as string | undefined) ===
-        selectedServiceName,
+      (s) => stringAttr(s.attributes, 'service.name') === selectedServiceName,
     );
   }, [spans, selectedServiceName]);
   const selectedServiceRouteStats = useMemo(
@@ -1110,11 +1118,11 @@ function Dashboard({
     );
   }
 
-  function keyAttrsAndRest(attrs: Record<string, unknown> | undefined) {
+  function keyAttrsAndRest(attrs: SpanAttributes | undefined) {
     if (!attrs || Object.keys(attrs).length === 0)
       return {
-        key: [] as [string, unknown][],
-        rest: [] as [string, unknown][],
+        key: [] as Array<[string, AttributeValue]>,
+        rest: [] as Array<[string, AttributeValue]>,
       };
     const entries = Object.entries(attrs);
     const key = entries.filter(([k]) => KEY_ATTR_KEYS.has(k));
@@ -2372,12 +2380,14 @@ let globalStreamingProcessor: StreamingSpanProcessor | null = null;
 function canAddSpanProcessor(
   provider: TracerProvider,
 ): provider is TracerProvider & {
-  addSpanProcessor: (processor: unknown) => void;
+  addSpanProcessor: (processor: SpanProcessorLike) => void;
 } {
   return (
     typeof provider === 'object' &&
     provider !== null &&
     'addSpanProcessor' in provider &&
+    // SAFETY: addSpanProcessor is on the SDK's provider implementation, not
+    // on the TracerProvider interface; this probe is what finds it.
     typeof (provider as { addSpanProcessor?: unknown }).addSpanProcessor ===
       'function'
   );

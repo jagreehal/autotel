@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventQueue } from './event-queue';
 import { configure, resetConfig } from './config';
+import { meterDouble } from './testing/doubles.js';
 
 // Mock adapter for testing
 type MockEvent = {
@@ -189,7 +190,7 @@ describe('EventQueue', () => {
 
     it('should not increment failed counter when a retry succeeds', async () => {
       const { mockMeter, counters } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -222,7 +223,7 @@ describe('EventQueue', () => {
 
     it('should increment failed counter after all retries exhausted', async () => {
       const { mockMeter, counters } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -252,7 +253,7 @@ describe('EventQueue', () => {
 
     it('should count failed events per event, not per batch', async () => {
       const { mockMeter, counters } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -291,7 +292,7 @@ describe('EventQueue', () => {
 
     it('should increment delivered counter on successful delivery', async () => {
       const { mockMeter, counters } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -319,7 +320,7 @@ describe('EventQueue', () => {
 
     it('should increment delivered counter when retry eventually succeeds', async () => {
       const { mockMeter, counters } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -359,7 +360,7 @@ describe('EventQueue', () => {
 
     it('should not double-count delivered events when retrying a mixed-success batch', async () => {
       const { mockMeter, counters } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -402,7 +403,7 @@ describe('EventQueue', () => {
 
     it('should not re-send to healthy subscribers when retrying failed ones', async () => {
       const { mockMeter } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const failingAdapter = new MockAdapter();
@@ -440,7 +441,7 @@ describe('EventQueue', () => {
 
     it('should retry only failed events and deliver each event once (three-event batch)', async () => {
       const { mockMeter, counters } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -495,7 +496,7 @@ describe('EventQueue', () => {
 
     it('should record latency histogram on successful delivery', async () => {
       const { mockMeter, histograms } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -525,7 +526,7 @@ describe('EventQueue', () => {
 
     it('should not record latency when delivery fails', async () => {
       const { mockMeter, histograms } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -552,7 +553,7 @@ describe('EventQueue', () => {
 
     it('should mark subscriber unhealthy on transient failure', async () => {
       const { mockMeter } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter = new MockAdapter();
@@ -587,7 +588,7 @@ describe('EventQueue', () => {
 
     it('should handle multiple subscribers with mixed success/failure', async () => {
       const { mockMeter, counters } = createMockMeter();
-      configure({ meter: mockMeter as any });
+      configure({ meter: meterDouble(mockMeter) });
 
       try {
         const adapter1 = new MockAdapter();

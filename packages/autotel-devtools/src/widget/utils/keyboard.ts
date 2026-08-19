@@ -34,5 +34,5 @@ export function activateOnKey(handler: () => void) {
  * (e.g. "Option+Delete" on Mac vs "Alt+Delete" on Windows/Linux).
  */
 export const isMac: boolean =
-  typeof navigator !== 'undefined' &&
+  globalThis.navigator !== undefined &&
   /Mac|iPhone|iPad|iPod/.test(navigator.platform);
