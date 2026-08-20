@@ -144,20 +144,14 @@ export function countDriftEntries(entries: DriftEntries): DriftCounts {
   };
 }
 
-export function countDriftDelta(delta: DriftDelta): {
-  introduced: DriftCounts;
-  resolved: DriftCounts;
-} {
+export function countDriftDelta(delta: DriftDelta) {
   return {
     introduced: countDriftEntries(delta.introduced),
     resolved: countDriftEntries(delta.resolved),
   };
 }
 
-function diffStringList(
-  base: string[],
-  head: string[],
-): { added: string[]; removed: string[] } {
+function diffStringList(base: string[], head: string[]) {
   const baseSet = new Set(base);
   const headSet = new Set(head);
   return {
@@ -166,10 +160,7 @@ function diffStringList(
   };
 }
 
-function diffFieldDrift(
-  base: FieldDrift[],
-  head: FieldDrift[],
-): { added: FieldDrift[]; removed: FieldDrift[] } {
+function diffFieldDrift(base: FieldDrift[], head: FieldDrift[]) {
   const baseByEvent = new Map(base.map((d) => [d.event, d]));
   const headByEvent = new Map(head.map((d) => [d.event, d]));
 
@@ -206,25 +197,15 @@ function diffFieldDrift(
   return { added, removed };
 }
 
-function diffTypeDrift(
-  base: TypeDrift[],
-  head: TypeDrift[],
-): { added: TypeDrift[]; removed: TypeDrift[] } {
+function diffTypeDrift(base: TypeDrift[], head: TypeDrift[]) {
   return diffStructuredByKey(base, head, (x) => `${x.event}::${x.path}`);
 }
 
-function diffValueDrift(
-  base: ValueDrift[],
-  head: ValueDrift[],
-): { added: ValueDrift[]; removed: ValueDrift[] } {
+function diffValueDrift(base: ValueDrift[], head: ValueDrift[]) {
   return diffStructuredByKey(base, head, (x) => `${x.event}::${x.path}`);
 }
 
-function diffStructuredByKey<T>(
-  base: T[],
-  head: T[],
-  keyOf: (v: T) => string,
-): { added: T[]; removed: T[] } {
+function diffStructuredByKey<T>(base: T[], head: T[], keyOf: (v: T) => string) {
   const baseMap = new Map(base.map((v) => [keyOf(v), v]));
   const headMap = new Map(head.map((v) => [keyOf(v), v]));
   const added: T[] = [];

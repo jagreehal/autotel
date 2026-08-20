@@ -13,18 +13,16 @@ export interface ConsumerProviderPair {
 }
 
 function authHeaders(config: BrokerConfig): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  };
+  const auth: Array<[string, string]> = [];
   if (config.token) {
-    headers.Authorization = `Bearer ${config.token}`;
+    auth.push(['Authorization', `Bearer ${config.token}`]);
   } else if (config.username && config.password) {
     const encoded = Buffer.from(
       `${config.username}:${config.password}`,
     ).toString('base64');
-    headers.Authorization = `Basic ${encoded}`;
+    auth.push(['Authorization', `Basic ${encoded}`]);
   }
-  return headers;
+  return { Accept: 'application/json', ...Object.fromEntries(auth) };
 }
 
 function trimBaseUrl(url: string): string {
@@ -40,6 +38,8 @@ export function parseBrokerVerificationResult(
   json: unknown,
 ): BrokerVerification | null {
   if (!json || typeof json !== 'object') return null;
+  // SAFETY: the guard above established this is a non-null object; each field
+  // read below is compared to a literal rather than trusted.
   const body = json as Record<string, unknown>;
   const success =
     body.success === true ||

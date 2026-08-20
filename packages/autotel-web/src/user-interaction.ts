@@ -30,13 +30,15 @@ function closestMatch(
 export function setupUserInteractionInstrumentation(
   config: UserInteractionConfig,
 ): void {
-  if (typeof document === 'undefined') return;
+  if (globalThis.document === undefined) return;
 
   const tracer = trace.getTracer('autotel-web', '1.0.0');
 
   document.addEventListener(
     'click',
     (event: MouseEvent) => {
+      // SAFETY: this listener is registered on document for click events, whose
+      // target is the element clicked; closestMatch tolerates a detached node.
       const target = event.target as Element;
       const matched = closestMatch(target, config.selectors);
       if (!matched) return;

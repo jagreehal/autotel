@@ -38,10 +38,22 @@ import {
  * Only loads when a YAML config file is actually found
  */
 import { requireModule } from './node-require';
+import { asRecord, asString } from './values';
 
-function loadYamlParser(): (content: string) => unknown {
+/** A value as a YAML document carries it: scalars, sequences, mappings. */
+export type YamlValue =
+  string | number | boolean | null | YamlValue[] | YamlMapping;
+
+/** A YAML mapping - keys the reader has not looked at yet. */
+export interface YamlMapping {
+  [key: string]: YamlValue;
+}
+
+function loadYamlParser(): (content: string) => YamlValue {
   try {
-    const mod = requireModule<{ parse: (content: string) => unknown }>('yaml');
+    const mod = requireModule<{ parse: (content: string) => YamlValue }>(
+      'yaml',
+    );
     return mod.parse;
   } catch {
     throw new Error('YAML parser not found. Install with: pnpm add yaml');
@@ -122,21 +134,42 @@ function substituteEnvVars(value: string): string {
  * @param obj - Object to process
  * @returns Object with all string values having env vars substituted
  */
-function substituteEnvVarsDeep(obj: unknown): unknown {
-  if (typeof obj === 'string') {
-    return substituteEnvVars(obj);
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => substituteEnvVarsDeep(item));
-  }
-  if (obj && typeof obj === 'object') {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      result[key] = substituteEnvVarsDeep(value);
+function substituteEnvVarsDeep(value: YamlValue): YamlValue {
+  if (Array.isArray(value)) return value.map(substituteEnvVarsDeep);
+
+  const mapping = asYamlMapping(value);
+  if (mapping) {
+    const result: YamlMapping = {};
+    for (const [key, entry] of Object.entries(mapping)) {
+      result[key] = substituteEnvVarsDeep(entry);
     }
     return result;
   }
-  return obj;
+
+  const text = asString(value);
+  return text === undefined ? value : substituteEnvVars(text);
+}
+
+/** The mapping a YAML value is, when it is one. */
+function asYamlMapping(value: YamlValue): YamlMapping | undefined {
+  // SAFETY: a YamlValue that is a non-array object has only one arm it can be,
+  // and that is a mapping.
+  return asRecord(value) === undefined ? undefined : (value as YamlMapping);
+}
+
+/**
+ * A YAML document read into the config shape, with `${env:...}` placeholders
+ * resolved.
+ *
+ * This is the boundary: the file is text until here. Every field of
+ * YamlConfig is optional, so any document satisfies it, and
+ * `yamlToAutotelConfig` picks out only the fields it understands.
+ */
+function parseYamlConfig(content: string): YamlConfig {
+  const substituted = substituteEnvVarsDeep(loadYamlParser()(content));
+  // SAFETY: see above - YamlConfig describes the fields this reader looks for,
+  // not a shape the document is required to have.
+  return (asYamlMapping(substituted) ?? {}) as YamlConfig;
 }
 
 /**
@@ -268,14 +301,17 @@ function createSamplerFromYaml(
 function warnOnIgnoredPresetOverrides(
   sampling: NonNullable<YamlConfig['sampling']>,
 ): void {
-  const ignoredFields = [
+  const presetOverriddenFields = [
     'type',
     'ratio',
     'baseline_rate',
     'always_sample_errors',
     'always_sample_slow',
     'slow_threshold_ms',
-  ].filter((field) => sampling[field as keyof typeof sampling] !== undefined);
+  ] as const satisfies readonly (keyof typeof sampling)[];
+  const ignoredFields = presetOverriddenFields.filter(
+    (field) => sampling[field] !== undefined,
+  );
 
   if (ignoredFields.length === 0) {
     return;
@@ -307,10 +343,7 @@ export function loadYamlConfig(): Partial<AutotelConfig> | null {
 
   try {
     const content = nodeFs.readFileSync(filePath, 'utf8');
-    const parseYaml = loadYamlParser();
-    const rawYaml = parseYaml(content) as YamlConfig;
-    const substituted = substituteEnvVarsDeep(rawYaml) as YamlConfig;
-    return yamlToAutotelConfig(substituted);
+    return yamlToAutotelConfig(parseYamlConfig(content));
   } catch (error) {
     console.error(
       `[autotel] Failed to load YAML config from ${filePath}:`,
@@ -341,10 +374,7 @@ export function loadYamlConfigFromFile(
 ): Partial<AutotelConfig> {
   const resolved = path.resolve(filePath);
   const content = nodeFs.readFileSync(resolved, 'utf8');
-  const parseYaml = loadYamlParser();
-  const rawYaml = parseYaml(content) as YamlConfig;
-  const substituted = substituteEnvVarsDeep(rawYaml) as YamlConfig;
-  return yamlToAutotelConfig(substituted);
+  return yamlToAutotelConfig(parseYamlConfig(content));
 }
 
 /**

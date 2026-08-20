@@ -61,18 +61,49 @@ export type GenerateSummary = {
   };
 };
 
+/** A JSON Schema node, as this generator builds one. */
+export interface JsonSchemaNode {
+  $schema?: string;
+  type?: string | string[];
+  enum?: Array<string | number | boolean | null>;
+  properties?: Record<string, JsonSchemaNode>;
+  items?: JsonSchemaNode;
+  format?: string;
+  description?: string;
+}
+
+/** A value in an EventCatalog frontmatter document. */
+export type CatalogValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonSchemaNode
+  | Array<CatalogValue>
+  | { [key: string]: CatalogValue };
+
+/** An EventCatalog frontmatter document: a service, event or channel. */
+export type CatalogDocument = Record<string, CatalogValue>;
+
+/** The write options the EventCatalog SDK accepts. */
+export interface CatalogWriteOptions {
+  versionExistingContent?: boolean;
+  override?: boolean;
+  path?: string;
+}
+
 type Sdk = ReturnType<typeof utils> & {
   writeService: (
-    service: Record<string, unknown>,
-    options?: Record<string, unknown>,
+    service: CatalogDocument,
+    options?: CatalogWriteOptions,
   ) => Promise<void>;
   writeEvent: (
-    event: Record<string, unknown>,
-    options?: Record<string, unknown>,
+    event: CatalogDocument,
+    options?: CatalogWriteOptions,
   ) => Promise<void>;
   writeChannel: (
-    channel: Record<string, unknown>,
-    options?: Record<string, unknown>,
+    channel: CatalogDocument,
+    options?: CatalogWriteOptions,
   ) => Promise<void>;
   addSchemaToEvent: (
     id: string,
@@ -104,6 +135,8 @@ export async function generateCatalogFromSnapshot(
     edgesOnly = false,
     version: resourceVersion = DEFAULT_VERSION,
   } = opts;
+  // SAFETY: @eventcatalog/sdk types utils() by its full surface; Sdk above names
+  // just the writers this generator calls, each of which it then uses directly.
   const sdk = utils(catalogPath) as Sdk;
   const state = await readCatalogState(catalogPath);
 
@@ -183,9 +216,11 @@ export async function generateCatalogFromSnapshot(
 
       const eventId = toCatalogEventId(snapshotName);
       const declared = obs.schema?.jsonSchema;
+      // SAFETY: a declared schema comes from the contract file, where it is a
+      // JSON Schema object; anything else falls back to the inferred one.
       const schema =
         (declared && typeof declared === 'object'
-          ? (declared as Record<string, unknown>)
+          ? (declared as JsonSchemaNode)
           : undefined) ?? inferJsonSchemaFromObservation(obs);
       const schemaSource = declared ? 'declared' : 'inferred';
       operations.push({
@@ -209,9 +244,9 @@ export async function generateCatalogFromSnapshot(
           // ends up nesting a duplicate event file under index.mdx/. Setting
           // channels at write-time produces the same frontmatter and avoids
           // the corrupted layout.
-          ...(obs.channel
-            ? { channels: [{ id: obs.channel, version: DEFAULT_VERSION }] }
-            : {}),
+          channels: obs.channel
+            ? [{ id: obs.channel, version: DEFAULT_VERSION }]
+            : undefined,
         });
         await sdk.addSchemaToEvent(eventId, {
           schema: JSON.stringify(schema, null, 2),
@@ -354,8 +389,8 @@ export function buildGenerateSummary(
 
 export function inferJsonSchemaFromObservation(
   observation: EventObservation,
-): Record<string, unknown> {
-  const root: Record<string, unknown> = {
+): JsonSchemaNode {
+  const root: JsonSchemaNode = {
     $schema: 'http://json-schema.org/draft-07/schema#',
     type: 'object',
     properties: {},
@@ -375,7 +410,7 @@ export function inferJsonSchemaFromObservation(
 }
 
 function insertSchemaPath(
-  root: Record<string, unknown>,
+  root: JsonSchemaNode,
   path: string,
   observedTypes: string[],
 ): void {
@@ -387,19 +422,14 @@ function insertSchemaPath(
     const step = steps[i];
     const last = i === steps.length - 1;
 
-    if (!current.properties || typeof current.properties !== 'object') {
-      current.properties = {};
-    }
-    const properties = current.properties as Record<string, unknown>;
-    const next =
-      (properties[step.key] as Record<string, unknown> | undefined) ?? {};
+    current.properties ??= {};
+    const properties = current.properties;
+    const next = properties[step.key] ?? {};
     properties[step.key] = next;
 
     if (step.array) {
       next.type = 'array';
-      const items =
-        (next.items as Record<string, unknown> | undefined) ??
-        ({} as Record<string, unknown>);
+      const items = next.items ?? {};
       next.items = items;
       if (!last && (!items.type || items.type === 'array')) {
         items.type = 'object';
@@ -416,7 +446,7 @@ function insertSchemaPath(
   }
 }
 
-function setType(schemaNode: Record<string, unknown>, types: string[]): void {
+function setType(schemaNode: JsonSchemaNode, types: string[]): void {
   const mapped = mapRuntimeTypes(types);
   if (mapped.length === 1) {
     schemaNode.type = mapped[0];

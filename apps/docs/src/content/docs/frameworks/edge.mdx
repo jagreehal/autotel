@@ -35,7 +35,7 @@ npm install autotel-edge
 ## Quick start
 
 ```typescript
-import { trace, span, withTracing, init } from 'autotel-edge';
+import { trace, span, instrument, withTracing, init } from 'autotel-edge';
 
 init({
   service: { name: 'my-edge-function' },
@@ -51,22 +51,34 @@ export const handler = trace(async (request: Request) => {
 
 ## Core API
 
-### `trace(fn)` / `trace(options, fn)`
+### `trace(fn)` / `trace(name, fn)` / `trace.run(name, operation)`
 
-Wrap a function so its execution becomes a span. Three call shapes:
+**`trace` wraps, `trace.run` runs.** Every `trace(...)` form returns a wrapper;
+`trace.run(...)` runs the operation immediately with an injected context. Edge
+matches core exactly:
 
 ```typescript
 // Bare function
 const handler = trace(async (request: Request) => new Response('OK'));
 
-// With options
+// Reusable function with a stable name
 const handler = trace(
-  {
-    name: 'fetch-handler',
-    attributesFromArgs: ([request]) => ({ 'http.method': request.method }),
-  },
+  'fetch-handler',
   async (request: Request) => new Response('OK'),
 );
+
+// Same wrapper, options form — needed when you want attributesFromArgs
+const handler = instrument({
+  key: 'fetch-handler',
+  fn: async (request: Request) => new Response('OK'),
+  attributesFromArgs: ([request]) => ({ 'http.method': request.method }),
+});
+
+// One immediate named operation with context
+const result = await trace.run('cache.refresh', async (ctx) => {
+  ctx.setAttribute('cache.region', 'eu');
+  return refreshCache();
+});
 
 // Factory pattern — receives ctx, returns the handler
 const handler = withTracing({})((ctx) => async (request: Request) => {

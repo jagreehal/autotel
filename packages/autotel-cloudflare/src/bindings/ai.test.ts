@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import { instrumentAI } from './ai';
+import { tracerDouble } from '../testing/doubles.js';
 
 describe('AI Binding Instrumentation', () => {
   let mockTracer: any;
@@ -33,7 +34,7 @@ describe('AI Binding Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
 
     mockAI = {
       run: vi.fn(async () => ({ response: 'Hello world' })),
@@ -51,7 +52,7 @@ describe('AI Binding Instrumentation', () => {
       const instrumented = instrumentAI(mockAI);
 
       expect(instrumented).not.toBe(mockAI);
-      expect(typeof instrumented.run).toBe('function');
+      expect(instrumented.run).toBeTypeOf('function');
     });
 
     it('should create span with correct name and attributes for run()', async () => {

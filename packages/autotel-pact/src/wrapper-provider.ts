@@ -21,12 +21,26 @@ export interface VerifierOptionsLike {
   providerBaseUrl: string;
   pactUrls?: string[];
   logLevel?: string;
-  [key: string]: unknown;
+  /** Pact-JS accepts more options than this package names; they pass through. */
+  [key: string]: VerifierOptionValue;
 }
 
+/** What a Pact-JS verifier option can hold. */
+export type VerifierOptionValue =
+  | string
+  | number
+  | boolean
+  | Array<string>
+  | Record<string, string>
+  | undefined;
+
 export interface VerifierLike {
-  verifyProvider: () => Promise<unknown>;
+  /** Resolves with Pact-JS's own verification output, which we do not read. */
+  verifyProvider: () => Promise<VerificationOutput>;
 }
+
+/** Whatever Pact-JS reports from a verification run. */
+export type VerificationOutput = string | object;
 
 export interface VerifierConstructor {
   new (options: VerifierOptionsLike): VerifierLike;
@@ -80,6 +94,8 @@ async function loadVerifier(
 ): Promise<VerifierConstructor> {
   if (VerifierClass) return VerifierClass;
   const mod = await import('@pact-foundation/pact');
+  // SAFETY: Pact-JS is an optional peer, so the module is typed only by what we
+  // read from it; the check below handles a version that does not export it.
   const Verifier = (mod as { Verifier?: VerifierConstructor }).Verifier;
   if (!Verifier) {
     throw new Error(

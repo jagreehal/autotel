@@ -4,6 +4,8 @@
  * exists as a real span in the collector.
  */
 
+import { getSessionAttributes } from './session';
+
 let debug = false;
 let serviceName = 'browser';
 let exportEndpoint: string | undefined;
@@ -46,15 +48,23 @@ export function recordSpan(
   if (!exportEndpoint) return;
   if (debug)
     console.log(`[autotel-web] recordSpan: ${name} (${traceId.slice(0, 8)}…)`);
-  const attributes = attrs
-    ? Object.entries(attrs).map(([key, value]) => ({
-        key,
-        value:
-          typeof value === 'number'
-            ? { intValue: String(value) }
-            : { stringValue: value },
-      }))
-    : undefined;
+  // Session attributes ride on the span rather than the resource: the resource
+  // identifies the service, and a value that changes every 30 minutes there
+  // would fragment it in every backend that keys on resource identity.
+  const entries = Object.entries({
+    ...attrs,
+    ...getSessionAttributes(),
+  });
+  const attributes =
+    entries.length > 0
+      ? entries.map(([key, value]) => ({
+          key,
+          value:
+            typeof value === 'number'
+              ? { intValue: String(value) }
+              : { stringValue: value },
+        }))
+      : undefined;
   pendingSpans.push({
     traceId,
     spanId,

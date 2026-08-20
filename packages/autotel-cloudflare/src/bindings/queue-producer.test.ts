@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentQueueProducer } from './queue-producer';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { queueDouble, tracerDouble } from '../testing/doubles.js';
+import { readProperty, type UnknownRecord } from '../values.js';
 
 describe('Queue Producer Binding Instrumentation', () => {
   let mockTracer: any;
@@ -32,19 +34,19 @@ describe('Queue Producer Binding Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
   });
 
   afterEach(() => {
     getTracerSpy.mockRestore();
   });
 
-  function createMockQueue(overrides: Partial<Queue> = {}): Queue {
-    return {
+  function createMockQueue(overrides: UnknownRecord = {}): Queue {
+    return queueDouble({
       send: vi.fn(async () => ({ messageId: 'msg-123', outcome: 'ok' })),
       sendBatch: vi.fn(async () => ({})),
       ...overrides,
-    } as unknown as Queue;
+    });
   }
 
   describe('send()', () => {
@@ -70,7 +72,7 @@ describe('Queue Producer Binding Instrumentation', () => {
         send: vi.fn(async () => ({
           messageId: 'msg-456',
           outcome: 'ok',
-        })) as any,
+        })),
       });
       const instrumented = instrumentQueueProducer(mockQueue, 'my-queue');
 
@@ -88,7 +90,7 @@ describe('Queue Producer Binding Instrumentation', () => {
 
     it('should not set messageId attribute when result has no messageId', async () => {
       const mockQueue = createMockQueue({
-        send: vi.fn(async () => ({})) as any,
+        send: vi.fn(async () => ({})),
       });
       const instrumented = instrumentQueueProducer(mockQueue, 'my-queue');
 
@@ -106,7 +108,7 @@ describe('Queue Producer Binding Instrumentation', () => {
       const mockQueue = createMockQueue({
         send: vi.fn(async () => {
           throw sendError;
-        }) as any,
+        }),
       });
       const instrumented = instrumentQueueProducer(mockQueue, 'my-queue');
 
@@ -176,7 +178,7 @@ describe('Queue Producer Binding Instrumentation', () => {
       const mockQueue = createMockQueue({
         sendBatch: vi.fn(async () => {
           throw batchError;
-        }) as any,
+        }),
       });
       const instrumented = instrumentQueueProducer(mockQueue, 'my-queue');
 
@@ -200,44 +202,41 @@ describe('Queue Producer Binding Instrumentation', () => {
 
   describe('this-binding', () => {
     it('should invoke send() with original object as this, not the proxy', async () => {
-      let receivedThis: any;
-      const mockQueue = {
-        send: vi.fn(async function (this: any) {
-          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
-          receivedThis = this;
+      const receivedThis: unknown[] = [];
+      const mockQueue = queueDouble({
+        send: vi.fn(async function (this: unknown) {
+          receivedThis.push(this);
           return { messageId: 'msg-123' };
         }),
         sendBatch: vi.fn(async () => ({})),
-      } as unknown as Queue;
+      });
       const instrumented = instrumentQueueProducer(mockQueue, 'test');
       await instrumented.send({ data: 'test' });
-      expect(receivedThis).toBe(mockQueue);
+      expect(receivedThis[0]).toBe(mockQueue);
     });
 
     it('should invoke sendBatch() with original object as this, not the proxy', async () => {
-      let receivedThis: any;
-      const mockQueue = {
+      const receivedThis: unknown[] = [];
+      const mockQueue = queueDouble({
         send: vi.fn(async () => ({ messageId: 'msg-123' })),
-        sendBatch: vi.fn(async function (this: any) {
-          // eslint-disable-next-line unicorn/no-this-assignment, @typescript-eslint/no-this-alias
-          receivedThis = this;
+        sendBatch: vi.fn(async function (this: unknown) {
+          receivedThis.push(this);
           return {};
         }),
-      } as unknown as Queue;
+      });
       const instrumented = instrumentQueueProducer(mockQueue, 'test');
       await instrumented.sendBatch([{ body: { data: 'test' } }]);
-      expect(receivedThis).toBe(mockQueue);
+      expect(receivedThis[0]).toBe(mockQueue);
     });
   });
 
   describe('non-instrumented methods', () => {
     it('should pass through non-instrumented properties', () => {
-      const mockQueue = createMockQueue();
-      (mockQueue as any).customProp = 'test-value';
+      const mockQueue = createMockQueue({ customProp: 'test-value' });
 
       const instrumented = instrumentQueueProducer(mockQueue, 'my-queue');
 
-      expect((instrumented as any).customProp).toBe('test-value');
+      expect(readProperty(instrumented, 'customProp')).toBe('test-value');
     });
   });
 });

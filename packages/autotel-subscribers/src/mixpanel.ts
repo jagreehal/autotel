@@ -84,12 +84,10 @@ export class MixpanelSubscriber implements EventSubscriber {
    * - autotel.span_id → span_id
    * - autotel.correlation_id → correlation_id
    */
-  private mapAutotelContext(
-    autotel?: AutotelEventContext,
-  ): Record<string, unknown> {
+  private mapAutotelContext(autotel?: AutotelEventContext): EventAttributes {
     if (!autotel) return {};
 
-    const mapped: Record<string, unknown> = {};
+    const mapped: EventAttributes = {};
 
     if (autotel.trace_id) {
       mapped.trace_id = autotel.trace_id;

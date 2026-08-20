@@ -4,11 +4,26 @@ import type { AttributeRedactorPreset, AttributeRedactorConfig } from 'autotel';
  * Payload passed to the dbStatementSerializer.
  * Shape matches @opentelemetry/instrumentation-mongodb for migration compatibility.
  */
+/** A value inside a Mongo filter, update, projection or options document. */
+export type MongoValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Date
+  | RegExp
+  | Array<MongoValue>
+  | { [key: string]: MongoValue };
+
+/** A Mongo document as mongoose passes one to a driver call. */
+export type MongoDocument = { [key: string]: MongoValue };
+
 export interface SerializerPayload {
-  condition?: Record<string, unknown>;
-  updates?: Record<string, unknown>;
-  options?: Record<string, unknown>;
-  fields?: Record<string, unknown>;
+  condition?: MongoDocument;
+  updates?: MongoDocument;
+  options?: MongoDocument;
+  fields?: MongoDocument;
   aggregatePipeline?: unknown[];
   document?: unknown;
   documents?: unknown[];

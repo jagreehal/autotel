@@ -8,6 +8,7 @@ import { resetEvents } from './event';
 import { resetMetrics } from './metric';
 import { getForceFlushableProvider } from './tracer-provider';
 import { uninstallProcessHandlers } from './process-handlers';
+import { asRecord, asString, isFunction, readProperty } from './values';
 
 /**
  * Error codes that mean "the OTLP endpoint wasn't reachable" — expected and
@@ -22,12 +23,8 @@ const UNREACHABLE_ENDPOINT_CODES = new Set([
   'EAI_AGAIN',
 ]);
 
-function errorCode(error: unknown): string | undefined {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === 'string') return code;
-  }
-  return undefined;
+function errorCode(cause: unknown): string | undefined {
+  return asString(readProperty(cause, 'code'));
 }
 
 /**
@@ -35,22 +32,22 @@ function errorCode(error: unknown): string | undefined {
  * failure. Traverses `AggregateError.errors` and the `cause` chain, since the
  * SDK often wraps the underlying network error.
  */
-function isUnreachableEndpointError(error: unknown, depth = 0): boolean {
-  if (depth > 5 || error === null || typeof error !== 'object') return false;
+function isUnreachableEndpointError(cause: unknown, depth = 0): boolean {
+  if (depth > 5 || asRecord(cause) === undefined) return false;
 
-  if (error instanceof AggregateError) {
+  if (cause instanceof AggregateError) {
     return (
-      error.errors.length > 0 &&
-      error.errors.every((e) => isUnreachableEndpointError(e, depth + 1))
+      cause.errors.length > 0 &&
+      cause.errors.every((e) => isUnreachableEndpointError(e, depth + 1))
     );
   }
 
-  const code = errorCode(error);
+  const code = errorCode(cause);
   if (code && UNREACHABLE_ENDPOINT_CODES.has(code)) return true;
 
-  const cause = (error as { cause?: unknown }).cause;
-  return cause !== undefined && cause !== error
-    ? isUnreachableEndpointError(cause, depth + 1)
+  const wrapped = readProperty(cause, 'cause');
+  return wrapped !== undefined && wrapped !== cause
+    ? isUnreachableEndpointError(wrapped, depth + 1)
     : false;
 }
 
@@ -215,7 +212,7 @@ export async function shutdown(): Promise<void> {
     // Clean up singleton Maps and queues to prevent memory leaks
     // This runs even if SDK shutdown fails
     const eventsQueue = getEventQueue();
-    if (eventsQueue && typeof eventsQueue.cleanup === 'function') {
+    if (isFunction(eventsQueue?.cleanup)) {
       eventsQueue.cleanup();
     }
     resetEvents();

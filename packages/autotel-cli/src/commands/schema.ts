@@ -109,6 +109,19 @@ export function runSchemaOutputs(opts: SchemaCommonOptions): void {
         },
         nextSteps: 'string[]',
       },
+      'autotel estimate --json': {
+        ok: 'boolean',
+        command: 'string',
+        estimate: {
+          currency: '"USD"',
+          before: '{ events: number, gb: number, cost: number }',
+          after: '{ events: number, gb: number, cost: number }',
+          saved: 'number (USD/month, negative when instrumenting costs more)',
+          savedPercent: 'number',
+          basis:
+            '{ logLineBytes, canonicalLineBytes, spanBytes, bytesFrom: "measured" | "caller", perGb, perMillionEvents, keepPercent, bytesPerGb }',
+        },
+      },
     },
   });
 }

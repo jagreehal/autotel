@@ -263,7 +263,9 @@ export function attachDevtoolsRoutes(
         );
 
         if (!file || !Number.isInteger(line) || line < 1) {
-          sendJson(res, 400, { error: 'file and a positive integer line are required' });
+          sendJson(res, 400, {
+            error: 'file and a positive integer line are required',
+          });
           return;
         }
 

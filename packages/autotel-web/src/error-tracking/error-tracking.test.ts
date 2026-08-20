@@ -29,6 +29,8 @@ const mockTracer = {
   startActiveSpan: mockStartActiveSpan,
 };
 
+// SAFETY: the error tracking under test calls startSpan on the tracer and
+// nothing else; mockTracer implements exactly that.
 vi.spyOn(trace, 'getTracer').mockReturnValue(mockTracer as any);
 vi.spyOn(trace, 'getActiveSpan').mockReturnValue(undefined);
 
@@ -131,6 +133,8 @@ describe('setupErrorTracking', () => {
   });
 
   it('skips autocapture when window.posthog detected and deferToPostHog=true', () => {
+    // SAFETY: posthog is installed on the page by a script tag in production;
+    // these tests put one there to exercise the deferral branch.
     (globalThis as any).posthog = { captureException: vi.fn() };
 
     setupErrorTracking({ debug: false, deferToPostHog: true });
@@ -147,10 +151,13 @@ describe('setupErrorTracking', () => {
     expect(mockStartActiveSpan).not.toHaveBeenCalled();
 
     window.removeEventListener('error', swallow);
+    // SAFETY: removing what the test installed above.
     delete (globalThis as any).posthog;
   });
 
   it('still captures when deferToPostHog=false even if posthog exists', () => {
+    // SAFETY: posthog is installed on the page by a script tag in production;
+    // these tests put one there to exercise the deferral branch.
     (globalThis as any).posthog = { captureException: vi.fn() };
 
     setupErrorTracking({ debug: false, deferToPostHog: false });
@@ -160,6 +167,7 @@ describe('setupErrorTracking', () => {
 
     expect(mockStartActiveSpan).toHaveBeenCalled();
 
+    // SAFETY: removing what the test installed above.
     delete (globalThis as any).posthog;
   });
 });
@@ -191,5 +199,48 @@ describe('captureException', () => {
     const parsed = JSON.parse(call![1]);
     expect(parsed[0].mechanism.type).toBe('manual');
     expect(parsed[0].mechanism.handled).toBe(true);
+  });
+});
+
+describe('skipLocalhost', () => {
+  // A dev server reloads on every keystroke, and each reload can throw. Those
+  // exceptions group with the production ones — same code, same stack — and
+  // then a real regression is buried under a day of local typos. Opt-in, since
+  // plenty of teams do want their dev errors captured.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetErrorTrackingForTesting();
+  });
+
+  it('captures on localhost by default', () => {
+    setupErrorTracking({ debug: false });
+
+    captureException(new Error('dev'));
+
+    expect(mockStartActiveSpan).toHaveBeenCalled();
+  });
+
+  it('drops exceptions on a localhost origin when enabled', () => {
+    setupErrorTracking({ debug: false, skipLocalhost: true });
+
+    captureException(new Error('dev'));
+
+    expect(mockStartActiveSpan).not.toHaveBeenCalled();
+  });
+
+  it('still captures on a non-local origin when enabled', () => {
+    // jsdom serves the suite from localhost, so the production case has to be
+    // stated explicitly rather than assumed from the ambient location.
+    // SAFETY: only `hostname` is read from location on this path, and stating
+    // it explicitly is the point of the test - see the comment above.
+    vi.spyOn(globalThis, 'location', 'get').mockReturnValue({
+      hostname: 'app.example.com',
+    } as Location);
+
+    setupErrorTracking({ debug: false, skipLocalhost: true });
+
+    captureException(new Error('prod'));
+
+    expect(mockStartActiveSpan).toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import type {
   AgentEvent,
   AgentKind,
   AgentRawEvent,
+  Attributes,
   MetricTemporality,
   OtelMetricRecord,
 } from '../types';
@@ -18,7 +19,7 @@ export interface AgentMetricSignal {
   temporality?: MetricTemporality;
   timestamp: number;
   /** Original data-point attributes (e.g. `type: "input"` on token usage). */
-  attributes: Record<string, unknown>;
+  attributes: Attributes;
 }
 
 // Only the metric-only signals we actually fold into rollups have a kind.

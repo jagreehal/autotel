@@ -21,6 +21,14 @@ export {
   discoverLogFields,
 } from './modules/discovery';
 export { detectAnomalies } from './modules/anomaly';
+export {
+  EstimateInputError,
+  estimateCost,
+  type EstimateBytes,
+  type EstimateInput,
+  type EstimateResult,
+  type EstimateShape,
+} from './modules/estimate';
 export { findRootCause } from './modules/correlator';
 export {
   collectUsage,

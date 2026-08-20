@@ -56,7 +56,10 @@ function ErrorTrackingPage() {
       JSON.parse('{ invalid json }')
     } catch (err) {
       captureException(err)
-      addLog('info', `Manual captureException: ${(err as Error).message}`)
+      addLog(
+        'info',
+        `Manual captureException: ${err instanceof Error ? err.message : String(err)}`,
+      )
     }
   }
 
@@ -71,7 +74,7 @@ function ErrorTrackingPage() {
       captureException(err)
       addLog(
         'info',
-        `Captured error with .cause chain: ${(err as Error).message}`,
+        `Captured error with .cause chain: ${err instanceof Error ? err.message : String(err)}`,
       )
     }
   }

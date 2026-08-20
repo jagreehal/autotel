@@ -20,7 +20,7 @@ export function listPactFiles(dir: string): string[] {
 }
 
 export function extractInteractionId(
-  metadata: Record<string, unknown> | undefined,
+  metadata: Record<string, string | number | boolean> | undefined,
 ): string | undefined {
   if (!metadata) return undefined;
   const id = metadata.interactionId ?? metadata.interaction_id;
@@ -58,6 +58,8 @@ export function interactionsFromPactFile(pact: PactFile): PactInteractionKey[] {
 
 export function parsePactFile(filePath: string): PactFile | null {
   try {
+    // SAFETY: a pact file is written by Pact-JS in this shape; a file that is
+    // not JSON at all takes the catch, and every field read from it is optional.
     return JSON.parse(readFileSync(filePath, 'utf8')) as PactFile;
   } catch {
     return null;

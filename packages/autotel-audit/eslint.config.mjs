@@ -89,6 +89,9 @@ export default defineConfig(
       'unicorn/no-null': 'off',
       'unicorn/prefer-top-level-await': 'off',
       'unicorn/no-nested-ternary': 'off',
+      // A vitest mock's `mockReturnValueOnce(undefined)` argument is required
+      // by its arity; the rule reads it as useless and strips it.
+      'unicorn/no-useless-undefined': ['error', { checkArguments: false }],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/consistent-type-exports': 'off',
       '@typescript-eslint/no-unused-vars': 'off',

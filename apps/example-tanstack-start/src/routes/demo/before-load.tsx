@@ -12,6 +12,11 @@ type BeforeLoadSearch = {
   userId?: string
 }
 
+/** What the URL can hand us: a value repeats when the key appears more than once. */
+type RawSearch = {
+  userId?: string | Array<string>
+}
+
 // Simulate auth check
 async function checkAuth(userId?: string) {
   // Simulate async auth check
@@ -21,8 +26,8 @@ async function checkAuth(userId?: string) {
 
 export const Route = createFileRoute('/demo/before-load')({
   // Validate search params - TanStack Router will type `search` in beforeLoad/loader
-  validateSearch: (search: Record<string, unknown>): BeforeLoadSearch => ({
-    userId: typeof search.userId === 'string' ? search.userId : undefined,
+  validateSearch: (search: RawSearch): BeforeLoadSearch => ({
+    userId: Array.isArray(search.userId) ? search.userId[0] : search.userId,
   }),
 
   // Example: Using traceBeforeLoad for auth/redirect logic
@@ -51,7 +56,9 @@ export const Route = createFileRoute('/demo/before-load')({
   // Example: Loader that depends on beforeLoad context
   // The context includes what beforeLoad returned (userId, isAuthenticated)
   loader: traceLoader(({ context }) => {
-    // TanStack merges beforeLoad return into context
+    // SAFETY: beforeLoad above returns exactly { userId, isAuthenticated } and
+    // TanStack merges that return value into the loader's context. The assertion
+    // stands in for the generated route types, which this example does not build.
     const { userId, isAuthenticated } = context as {
       userId?: string
       isAuthenticated: boolean

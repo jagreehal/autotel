@@ -48,6 +48,8 @@ export function httpServer(
   const attributes = attrs.http.server(data);
 
   if ('updateName' in spanOrContext && data.method && data.route) {
+    // SAFETY: updateName is the member that tells a Span apart from a
+    // TraceContext, and the `in` check just found it.
     const span = spanOrContext as Span;
     span.updateName(`HTTP ${data.method} ${data.route}`);
   }
@@ -97,7 +99,7 @@ export function mergeServiceResource(
   data: import('./types').ServiceAttrs,
 ): Resource {
   const attributes = attrs.service.data(data);
-  return resource.merge(resourceFromAttributes(attributes as Attributes));
+  return resource.merge(resourceFromAttributes(attributes));
 }
 
 export function identify(
@@ -121,7 +123,7 @@ export function identify(
     allAttrs.push(attrs.device.data(data.device));
   }
 
-  const merged: Record<string, unknown> = {};
+  const merged: Attributes = {};
   for (const attrSet of allAttrs) {
     Object.assign(merged, attrSet);
   }

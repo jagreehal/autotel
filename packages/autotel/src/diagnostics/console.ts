@@ -25,6 +25,7 @@ import { trace, type Attributes } from '@opentelemetry/api';
 import { logs, SeverityNumber, type Logger } from '@opentelemetry/api-logs';
 import { safeRequire } from '../node-require.js';
 import { subscribeChannel } from './channel.js';
+import { asString } from '../values.js';
 
 /** Console methods that publish a diagnostics channel. */
 export type ConsoleLevel = 'log' | 'info' | 'debug' | 'warn' | 'error';
@@ -37,13 +38,13 @@ const ALL_LEVELS: readonly ConsoleLevel[] = [
   'error',
 ];
 
-const SEVERITY: Record<ConsoleLevel, SeverityNumber> = {
-  debug: SeverityNumber.DEBUG,
-  log: SeverityNumber.INFO,
-  info: SeverityNumber.INFO,
-  warn: SeverityNumber.WARN,
-  error: SeverityNumber.ERROR,
-};
+const SEVERITY = new Map<ConsoleLevel, SeverityNumber>([
+  ['debug', SeverityNumber.DEBUG],
+  ['log', SeverityNumber.INFO],
+  ['info', SeverityNumber.INFO],
+  ['warn', SeverityNumber.WARN],
+  ['error', SeverityNumber.ERROR],
+]);
 
 export interface CaptureConsoleOptions {
   /** Which console methods to capture. Defaults to all five. */
@@ -68,9 +69,8 @@ type ConsoleMessage = { args?: unknown[] };
  * (e.g. `console.warn('a', 1)` → `['a', 1]`); some publishers use the
  * `{ args: [...] }` object shape instead. Accept both.
  */
-function messageArgs(message: unknown): unknown[] {
-  if (Array.isArray(message)) return message;
-  return (message as ConsoleMessage)?.args ?? [];
+function messageArgs(message: unknown[] | ConsoleMessage): unknown[] {
+  return Array.isArray(message) ? message : (message?.args ?? []);
 }
 
 const nodeUtil = safeRequire<typeof import('node:util')>('node:util');
@@ -78,9 +78,7 @@ const nodeUtil = safeRequire<typeof import('node:util')>('node:util');
 /** Format console arguments the way `console` itself would (printf + inspect). */
 function formatArgs(args: unknown[]): string {
   if (nodeUtil?.format) return nodeUtil.format(...args);
-  return args
-    .map((a) => (typeof a === 'string' ? a : safeStringify(a)))
-    .join(' ');
+  return args.map((a) => asString(a) ?? safeStringify(a)).join(' ');
 }
 
 function safeStringify(value: unknown): string {
@@ -111,34 +109,37 @@ export function captureConsole(
   let recording = false;
 
   const disposers = levels.map((level) =>
-    subscribeChannel(`console.${level}`, (message) => {
-      if (recording) return;
-      const args = messageArgs(message);
-      const body = formatArgs(args);
-      recording = true;
-      try {
-        const attributes: Attributes = {
-          'log.source': 'console',
-          'log.method': level,
-          ...options.attributes,
-        };
-        if (toLog) {
-          logger.emit({
-            severityNumber: SEVERITY[level],
-            severityText: level.toUpperCase(),
-            body,
-            attributes,
-          });
+    subscribeChannel<unknown[] | ConsoleMessage>(
+      `console.${level}`,
+      (message) => {
+        if (recording) return;
+        const args = messageArgs(message);
+        const body = formatArgs(args);
+        recording = true;
+        try {
+          const attributes: Attributes = {
+            'log.source': 'console',
+            'log.method': level,
+            ...options.attributes,
+          };
+          if (toLog) {
+            logger.emit({
+              severityNumber: SEVERITY.get(level),
+              severityText: level.toUpperCase(),
+              body,
+              attributes,
+            });
+          }
+          if (toSpan) {
+            trace
+              .getActiveSpan()
+              ?.addEvent('log', { 'log.message': body, ...attributes });
+          }
+        } finally {
+          recording = false;
         }
-        if (toSpan) {
-          trace
-            .getActiveSpan()
-            ?.addEvent('log', { 'log.message': body, ...attributes });
-        }
-      } finally {
-        recording = false;
-      }
-    }),
+      },
+    ),
   );
 
   let active = true;

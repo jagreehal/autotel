@@ -16,8 +16,13 @@ import type {
   SpanProcessor,
   ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
-import type { Context } from '@opentelemetry/api';
+import type { Context, Attributes } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/sdk-trace-base';
+import {
+  emptyContext,
+  readableSpanDouble,
+  sdkSpanDouble,
+} from './testing/doubles.js';
 
 /**
  * Mock span processor to capture forwarded spans
@@ -48,10 +53,8 @@ class MockSpanProcessor implements SpanProcessor {
 /**
  * Create a mock ReadableSpan with given attributes
  */
-function createMockReadableSpan(
-  attributes: Record<string, unknown>,
-): ReadableSpan {
-  return {
+function createMockReadableSpan(attributes: Attributes): ReadableSpan {
+  return readableSpanDouble({
     name: 'test-span',
     kind: 0,
     spanContext: () => ({
@@ -72,21 +75,21 @@ function createMockReadableSpan(
     droppedAttributesCount: 0,
     droppedEventsCount: 0,
     droppedLinksCount: 0,
-  } as unknown as ReadableSpan;
+  });
 }
 
 /**
  * Create a mock mutable Span
  */
 function createMockSpan(): Span {
-  return {
+  return sdkSpanDouble({
     name: 'test-span',
     spanContext: () => ({
       traceId: 'trace123',
       spanId: 'span123',
       traceFlags: 1,
     }),
-  } as unknown as Span;
+  });
 }
 
 describe('AttributeRedactingProcessor', () => {
@@ -136,7 +139,7 @@ describe('AttributeRedactingProcessor', () => {
       });
 
       const span = createMockSpan();
-      processor.onStart(span, {} as Context);
+      processor.onStart(span, emptyContext());
 
       expect(mockProcessor.startedSpans).toHaveLength(1);
     });
@@ -743,7 +746,7 @@ describe('normalizeAttributeRedactorConfig', () => {
       replacement: '[MASKED]',
     });
 
-    expect(typeof normalized).toBe('object');
+    expect(normalized).toBeTypeOf('object');
     if (!normalized || typeof normalized === 'string') {
       throw new Error('Expected object config');
     }

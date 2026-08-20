@@ -1,5 +1,5 @@
 import { context, SpanStatusCode } from '@opentelemetry/api';
-import { trace, init, getActiveTraceContext } from 'autotel';
+import { trace, init } from 'autotel';
 import { extractContextFromRequest } from './context';
 import { isControlFlowSignal, isRealError } from './control-flow';
 import { isExcludedPath } from './route-filter';
@@ -96,90 +96,92 @@ export function wrapStartHandler(
       return context.with(parentContext, async () => {
         const spanName = `${request.method} ${url.pathname}`;
 
-        return trace({ name: spanName, isError: isRealError }, async () => {
-          const ctx = getActiveTraceContext()!;
-          // Set HTTP semantic attributes
-          ctx.setAttributes({
-            [SPAN_ATTRIBUTES.HTTP_REQUEST_METHOD]: request.method,
-            [SPAN_ATTRIBUTES.URL_PATH]: url.pathname,
-            [SPAN_ATTRIBUTES.URL_FULL]: request.url,
-            [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'request',
-          });
+        return trace.run(
+          { name: spanName, isError: isRealError },
+          async (ctx) => {
+            // Set HTTP semantic attributes
+            ctx.setAttributes({
+              [SPAN_ATTRIBUTES.HTTP_REQUEST_METHOD]: request.method,
+              [SPAN_ATTRIBUTES.URL_PATH]: url.pathname,
+              [SPAN_ATTRIBUTES.URL_FULL]: request.url,
+              [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'request',
+            });
 
-          if (url.search) {
-            ctx.setAttribute(SPAN_ATTRIBUTES.URL_QUERY, url.search);
-          }
+            if (url.search) {
+              ctx.setAttribute(SPAN_ATTRIBUTES.URL_QUERY, url.search);
+            }
 
-          // Capture configured headers
-          if (mergedConfig.captureHeaders) {
-            for (const header of mergedConfig.captureHeaders) {
-              const value = request.headers.get(header);
-              if (value) {
-                ctx.setAttribute(
-                  `http.request.header.${header.toLowerCase()}`,
-                  value,
-                );
+            // Capture configured headers
+            if (mergedConfig.captureHeaders) {
+              for (const header of mergedConfig.captureHeaders) {
+                const value = request.headers.get(header);
+                if (value) {
+                  ctx.setAttribute(
+                    `http.request.header.${header.toLowerCase()}`,
+                    value,
+                  );
+                }
               }
             }
-          }
 
-          // Add custom attributes
-          if (config.customAttributes) {
-            const customAttrs = config.customAttributes({
-              type: 'request',
-              name: spanName,
-              request,
-            });
-            ctx.setAttributes(
-              customAttrs as Record<string, string | number | boolean>,
-            );
-          }
-
-          const startTime = Date.now();
-
-          try {
-            const response = await handler(request, opts);
-            const duration = Date.now() - startTime;
-
-            ctx.setAttribute(
-              SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
-              duration,
-            );
-            ctx.setAttribute(
-              SPAN_ATTRIBUTES.HTTP_RESPONSE_STATUS_CODE,
-              response.status,
-            );
-
-            // Set status based on HTTP status code
-            if (response.status >= 400) {
-              ctx.setStatus({
-                code: SpanStatusCode.ERROR,
-                message: `HTTP ${response.status}`,
+            // Add custom attributes
+            if (config.customAttributes) {
+              const customAttrs = config.customAttributes({
+                type: 'request',
+                name: spanName,
+                request,
               });
-            } else {
-              ctx.setStatus({ code: SpanStatusCode.OK });
+              ctx.setAttributes(
+                customAttrs as Record<string, string | number | boolean>,
+              );
             }
 
-            return response;
-          } catch (error) {
-            const duration = Date.now() - startTime;
-            ctx.setAttribute(
-              SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
-              duration,
-            );
+            const startTime = Date.now();
 
-            if (isControlFlowSignal(error)) {
-              ctx.setStatus({ code: SpanStatusCode.OK });
+            try {
+              const response = await handler(request, opts);
+              const duration = Date.now() - startTime;
+
+              ctx.setAttribute(
+                SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
+                duration,
+              );
+              ctx.setAttribute(
+                SPAN_ATTRIBUTES.HTTP_RESPONSE_STATUS_CODE,
+                response.status,
+              );
+
+              // Set status based on HTTP status code
+              if (response.status >= 400) {
+                ctx.setStatus({
+                  code: SpanStatusCode.ERROR,
+                  message: `HTTP ${response.status}`,
+                });
+              } else {
+                ctx.setStatus({ code: SpanStatusCode.OK });
+              }
+
+              return response;
+            } catch (error) {
+              const duration = Date.now() - startTime;
+              ctx.setAttribute(
+                SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
+                duration,
+              );
+
+              if (isControlFlowSignal(error)) {
+                ctx.setStatus({ code: SpanStatusCode.OK });
+                throw error;
+              }
+
+              if (mergedConfig.captureErrors) {
+                ctx.recordError(error);
+              }
+
               throw error;
             }
-
-            if (mergedConfig.captureErrors) {
-              ctx.recordError(error);
-            }
-
-            throw error;
-          }
-        })();
+          },
+        );
       });
     };
   };
@@ -234,85 +236,87 @@ export function createTracedHandler(
       return context.with(parentContext, async () => {
         const spanName = `${request.method} ${url.pathname}`;
 
-        return trace({ name: spanName, isError: isRealError }, async () => {
-          const ctx = getActiveTraceContext()!;
-          ctx.setAttributes({
-            [SPAN_ATTRIBUTES.HTTP_REQUEST_METHOD]: request.method,
-            [SPAN_ATTRIBUTES.URL_PATH]: url.pathname,
-            [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'request',
-          });
+        return trace.run(
+          { name: spanName, isError: isRealError },
+          async (ctx) => {
+            ctx.setAttributes({
+              [SPAN_ATTRIBUTES.HTTP_REQUEST_METHOD]: request.method,
+              [SPAN_ATTRIBUTES.URL_PATH]: url.pathname,
+              [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'request',
+            });
 
-          if (url.search) {
-            ctx.setAttribute(SPAN_ATTRIBUTES.URL_QUERY, url.search);
-          }
+            if (url.search) {
+              ctx.setAttribute(SPAN_ATTRIBUTES.URL_QUERY, url.search);
+            }
 
-          if (mergedConfig.captureHeaders) {
-            for (const header of mergedConfig.captureHeaders) {
-              const value = request.headers.get(header);
-              if (value) {
-                ctx.setAttribute(
-                  `http.request.header.${header.toLowerCase()}`,
-                  value,
-                );
+            if (mergedConfig.captureHeaders) {
+              for (const header of mergedConfig.captureHeaders) {
+                const value = request.headers.get(header);
+                if (value) {
+                  ctx.setAttribute(
+                    `http.request.header.${header.toLowerCase()}`,
+                    value,
+                  );
+                }
               }
             }
-          }
 
-          if (config.customAttributes) {
-            const customAttrs = config.customAttributes({
-              type: 'request',
-              name: spanName,
-              request,
-            });
-            ctx.setAttributes(
-              customAttrs as Record<string, string | number | boolean>,
-            );
-          }
-
-          const startTime = Date.now();
-
-          try {
-            const response = await handler(request, opts);
-            const duration = Date.now() - startTime;
-
-            ctx.setAttribute(
-              SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
-              duration,
-            );
-            ctx.setAttribute(
-              SPAN_ATTRIBUTES.HTTP_RESPONSE_STATUS_CODE,
-              response.status,
-            );
-
-            if (response.status >= 400) {
-              ctx.setStatus({
-                code: SpanStatusCode.ERROR,
-                message: `HTTP ${response.status}`,
+            if (config.customAttributes) {
+              const customAttrs = config.customAttributes({
+                type: 'request',
+                name: spanName,
+                request,
               });
-            } else {
-              ctx.setStatus({ code: SpanStatusCode.OK });
+              ctx.setAttributes(
+                customAttrs as Record<string, string | number | boolean>,
+              );
             }
 
-            return response;
-          } catch (error) {
-            const duration = Date.now() - startTime;
-            ctx.setAttribute(
-              SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
-              duration,
-            );
+            const startTime = Date.now();
 
-            if (isControlFlowSignal(error)) {
-              ctx.setStatus({ code: SpanStatusCode.OK });
+            try {
+              const response = await handler(request, opts);
+              const duration = Date.now() - startTime;
+
+              ctx.setAttribute(
+                SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
+                duration,
+              );
+              ctx.setAttribute(
+                SPAN_ATTRIBUTES.HTTP_RESPONSE_STATUS_CODE,
+                response.status,
+              );
+
+              if (response.status >= 400) {
+                ctx.setStatus({
+                  code: SpanStatusCode.ERROR,
+                  message: `HTTP ${response.status}`,
+                });
+              } else {
+                ctx.setStatus({ code: SpanStatusCode.OK });
+              }
+
+              return response;
+            } catch (error) {
+              const duration = Date.now() - startTime;
+              ctx.setAttribute(
+                SPAN_ATTRIBUTES.TANSTACK_REQUEST_DURATION_MS,
+                duration,
+              );
+
+              if (isControlFlowSignal(error)) {
+                ctx.setStatus({ code: SpanStatusCode.OK });
+                throw error;
+              }
+
+              if (mergedConfig.captureErrors) {
+                ctx.recordError(error);
+              }
+
               throw error;
             }
-
-            if (mergedConfig.captureErrors) {
-              ctx.recordError(error);
-            }
-
-            throw error;
-          }
-        })();
+          },
+        );
       });
     };
   };

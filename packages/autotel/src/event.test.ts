@@ -3,8 +3,20 @@ import { Event, getEvents, resetEvents } from './event';
 import { type Logger } from './logger';
 import { init } from './init';
 import { shutdown } from './shutdown';
-import { withTracing, trace, span } from './functional';
+import {
+  instrument,
+  withTracing,
+  trace as wrapTrace,
+  span,
+} from './functional';
 import { context, propagation } from '@opentelemetry/api';
+
+function namedWrapper<TArgs extends unknown[], TReturn>(
+  name: string,
+  fn: (...args: TArgs) => TReturn,
+): (...args: TArgs) => TReturn {
+  return instrument({ key: name, fn });
+}
 
 describe('Events', () => {
   let mockLogger: Logger;
@@ -325,7 +337,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const tracedOperation = trace('test.operation', async () => {
+      const tracedOperation = namedWrapper('test.operation', async () => {
         event.trackEvent('operation.started', { step: 1 });
       });
 
@@ -339,9 +351,9 @@ describe('Events', () => {
       expect(attributes).toHaveProperty('traceId');
       expect(attributes).toHaveProperty('spanId');
       expect(attributes).toHaveProperty('correlationId');
-      expect(typeof attributes.traceId).toBe('string');
-      expect(typeof attributes.spanId).toBe('string');
-      expect(typeof attributes.correlationId).toBe('string');
+      expect(attributes.traceId).toBeTypeOf('string');
+      expect(attributes.spanId).toBeTypeOf('string');
+      expect(attributes.correlationId).toBeTypeOf('string');
       // Correlation ID should be first 16 chars of traceId
       expect(attributes.correlationId).toBe(attributes.traceId.slice(0, 16));
     });
@@ -355,7 +367,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const tracedOperation = trace('checkout.flow', async () => {
+      const tracedOperation = namedWrapper('checkout.flow', async () => {
         event.trackFunnelStep('checkout', 'started', { cartValue: 99.99 });
       });
 
@@ -387,7 +399,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const tracedOperation = trace('email.send', async () => {
+      const tracedOperation = namedWrapper('email.send', async () => {
         event.trackOutcome('email.delivery', 'success', {
           recipientType: 'user',
         });
@@ -421,7 +433,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const tracedOperation = trace('order.process', async () => {
+      const tracedOperation = namedWrapper('order.process', async () => {
         event.trackValue('order.revenue', 149.99, { currency: 'USD' });
       });
 
@@ -487,7 +499,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const operation = trace('user.create', async () => {
+      const operation = namedWrapper('user.create', async () => {
         event.trackEvent('user.created', { userId: '123' });
       });
 
@@ -510,7 +522,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const createUser = trace(async function createUser() {
+      const createUser = wrapTrace(async function createUser() {
         event.trackEvent('user.created', { userId: '456' });
       });
 
@@ -537,7 +549,7 @@ describe('Events', () => {
 
       // Test 1: Named function declaration (non-factory pattern)
       // Should infer name from function declaration
-      const updateUser = trace(async function updateUser(userId: string) {
+      const updateUser = wrapTrace(async function updateUser(userId: string) {
         event.trackEvent('user.updated', { userId });
       });
       await updateUser('user-123');
@@ -582,7 +594,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const operation = trace('order.process', async () => {
+      const operation = namedWrapper('order.process', async () => {
         span({ name: 'order.validate' }, () => {
           // Should capture the innermost operation name
           event.trackEvent('order.validated', { orderId: 'ord_123' });
@@ -608,7 +620,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const checkout = trace('checkout.flow', async () => {
+      const checkout = namedWrapper('checkout.flow', async () => {
         event.trackFunnelStep('checkout', 'started', {
           cartValue: 99.99,
         });
@@ -633,7 +645,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const sendEmail = trace('email.send', async () => {
+      const sendEmail = namedWrapper('email.send', async () => {
         event.trackOutcome('email.delivery', 'success', {
           recipientType: 'user',
         });
@@ -658,7 +670,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const processOrder = trace('order.process', async () => {
+      const processOrder = namedWrapper('order.process', async () => {
         event.trackValue('order.revenue', 149.99, { currency: 'USD' });
       });
 
@@ -704,7 +716,7 @@ describe('Events', () => {
 
       const event = new Event('test-service', { logger: mockLogger });
 
-      const parentOperation = trace('parent.operation', async () => {
+      const parentOperation = namedWrapper('parent.operation', async () => {
         // Track event in parent context (not in a nested span)
         event.trackEvent('parent.event', { step: 1 });
 
@@ -840,7 +852,7 @@ describe('Events', () => {
       });
 
       // Track event inside a trace
-      const tracedOperation = trace('test.operation', async () => {
+      const tracedOperation = namedWrapper('test.operation', async () => {
         event.trackEvent('traced.event', { data: 'test' });
       });
 
@@ -902,7 +914,7 @@ describe('Events', () => {
       });
 
       // Track event inside a trace
-      const tracedOperation = trace('test.operation', async () => {
+      const tracedOperation = namedWrapper('test.operation', async () => {
         event.trackEvent('traced.event', {});
       });
 
@@ -949,7 +961,7 @@ describe('Events', () => {
         subscribers: [mockSubscriber],
       });
 
-      const tracedOperation = trace('checkout.flow', async () => {
+      const tracedOperation = namedWrapper('checkout.flow', async () => {
         event.trackFunnelStep('checkout', 'started', { cartValue: 99.99 });
       });
 
@@ -989,7 +1001,7 @@ describe('Events', () => {
         subscribers: [mockSubscriber],
       });
 
-      const tracedOperation = trace('payment.process', async () => {
+      const tracedOperation = namedWrapper('payment.process', async () => {
         event.trackOutcome('payment', 'success', { amount: 99.99 });
       });
 
@@ -1029,7 +1041,7 @@ describe('Events', () => {
         subscribers: [mockSubscriber],
       });
 
-      const tracedOperation = trace('order.process', async () => {
+      const tracedOperation = namedWrapper('order.process', async () => {
         event.trackValue('revenue', 149.99, { currency: 'USD' });
       });
 

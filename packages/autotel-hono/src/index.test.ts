@@ -1,9 +1,25 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Hono } from 'hono';
 import { otel } from './index';
-import type { Span, Tracer } from 'autotel';
+import type { Attributes, Context, Span, SpanOptions, Tracer } from 'autotel';
 import { SpanKind, propagation, context, otelTrace } from 'autotel';
 import type { HttpMetricsConfig } from './metrics';
+
+/** The span methods the middleware calls. */
+type MockSpan = ReturnType<typeof createMockSpan>;
+
+/** What the fake tracer recorded about the span it was asked to start. */
+interface SpanCollector {
+  span: MockSpan;
+  options: SpanOptions | undefined;
+  parentContext?: Context;
+}
+
+/** What the fake meter recorded. */
+interface RecordCollector {
+  durationRecords: Array<{ duration: number; attrs: Attributes }>;
+  activeAdds: Array<{ delta: number; attrs: Attributes }>;
+}
 
 function createMockSpan() {
   return {
@@ -15,18 +31,29 @@ function createMockSpan() {
   };
 }
 
-function createMockTracer(spanCollector: {
-  span: ReturnType<typeof createMockSpan>;
-  options: unknown;
-  parentContext?: unknown;
-}) {
-  const tracer: Tracer = {
+/** A fresh pair of collectors, one per test. */
+function createCollectors() {
+  const spanCollector: SpanCollector = {
+    span: createMockSpan(),
+    options: undefined,
+  };
+  const recordCollector: RecordCollector = {
+    durationRecords: [],
+    activeAdds: [],
+  };
+  return { spanCollector, recordCollector };
+}
+
+function createMockTracer(spanCollector: SpanCollector): Tracer {
+  // SAFETY: the middleware calls startActiveSpan and nothing else on a tracer,
+  // and on the span it is handed only the five methods createMockSpan provides.
+  return {
     startActiveSpan: vi.fn(
       (
         _name: string,
-        options: unknown,
-        parentContext: unknown,
-        callback: (span: Span) => Promise<unknown>,
+        options: SpanOptions,
+        parentContext: Context,
+        callback: (span: Span) => Promise<Response>,
       ) => {
         const span = createMockSpan();
         spanCollector.span = span;
@@ -36,44 +63,30 @@ function createMockTracer(spanCollector: {
       },
     ),
   } as unknown as Tracer;
-  return tracer;
 }
 
-function createMockMeter(recordCollector: {
-  durationRecords: Array<{ duration: number; attrs: Record<string, unknown> }>;
-  activeAdds: Array<{ delta: number; attrs: Record<string, unknown> }>;
-}) {
-  const meter = {
+function createMockMeter(
+  recordCollector: RecordCollector,
+): HttpMetricsConfig['meter'] {
+  // SAFETY: the middleware creates one histogram and one up-down counter, and
+  // calls record/add on them; nothing else of a Meter is reached.
+  return {
     createHistogram: vi.fn(() => ({
-      record: vi.fn((duration: number, attrs: Record<string, unknown>) => {
+      record: vi.fn((duration: number, attrs: Attributes) => {
         recordCollector.durationRecords.push({ duration, attrs });
       }),
     })),
     createUpDownCounter: vi.fn(() => ({
-      add: vi.fn((delta: number, attrs: Record<string, unknown>) => {
+      add: vi.fn((delta: number, attrs: Attributes) => {
         recordCollector.activeAdds.push({ delta, attrs });
       }),
     })),
   } as unknown as HttpMetricsConfig['meter'];
-  return meter;
 }
 
 describe('otel middleware', () => {
   it('creates a span and sets method, url, route, status', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = { span: null!, options: null };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector, recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -118,23 +131,8 @@ describe('otel middleware', () => {
   });
 
   it('sets serviceName and serviceVersion on span and metrics', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -162,23 +160,8 @@ describe('otel middleware', () => {
   });
 
   it('captures request and response headers when configured', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -219,23 +202,8 @@ describe('otel middleware', () => {
   });
 
   it('sets ERROR status and records exception when handler throws', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -259,37 +227,24 @@ describe('otel middleware', () => {
   });
 
   it('does not throw when recordException receives non-Error (robustness)', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const baseSpan = createMockSpan();
     baseSpan.recordException = vi.fn((_e: unknown) => {
       throw new Error('recordException fails on non-Error');
     });
-    const tracerWithFragileSpan: Tracer = {
+    // SAFETY: as in createMockTracer - only startActiveSpan is reached on the
+    // tracer, and only the five methods createMockSpan provides on the span.
+    const tracerWithFragileSpan = {
       startActiveSpan: vi.fn(
         (
           _name: string,
-          _options: unknown,
-          _context: unknown,
-          callback: (span: Span) => Promise<unknown>,
+          options: SpanOptions,
+          _context: Context,
+          callback: (span: Span) => Promise<Response>,
         ) => {
-          spanCollector.span = baseSpan as ReturnType<typeof createMockSpan>;
-          spanCollector.options = _options;
+          spanCollector.span = baseSpan;
+          spanCollector.options = options;
           return callback(baseSpan as unknown as Span);
         },
       ),
@@ -299,7 +254,9 @@ describe('otel middleware', () => {
     const app = new Hono()
       .use(otel({ tracer: tracerWithFragileSpan, meter }))
       .get('/bad', () => {
-        throw 'string throw' as unknown as Error;
+        // A route can throw anything; the middleware must survive a non-Error.
+
+        throw 'string throw';
       });
 
     // Hono surfaces the string throw via console.error; silence for the test.
@@ -312,16 +269,7 @@ describe('otel middleware', () => {
   });
 
   it('when disableTracing is true, does not create span but still records metrics', async () => {
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { recordCollector } = createCollectors();
     const meter = createMockMeter(recordCollector);
 
     const app = new Hono()
@@ -349,16 +297,7 @@ describe('otel middleware', () => {
       });
 
     try {
-      const recordCollector = {
-        durationRecords: [] as Array<{
-          duration: number;
-          attrs: Record<string, unknown>;
-        }>,
-        activeAdds: [] as Array<{
-          delta: number;
-          attrs: Record<string, unknown>;
-        }>,
-      };
+      const { recordCollector } = createCollectors();
       const meter = createMockMeter(recordCollector);
 
       const app = new Hono()
@@ -376,23 +315,8 @@ describe('otel middleware', () => {
   });
 
   it('uses spanNameFactory when provided', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -417,23 +341,8 @@ describe('otel middleware', () => {
   });
 
   it('sets correct span name and route for subapp route', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -454,23 +363,8 @@ describe('otel middleware', () => {
   });
 
   it('handles header names case-insensitively (request and response)', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -516,23 +410,8 @@ describe('otel middleware', () => {
   });
 
   it('does not capture headers not in the allow list', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -554,29 +433,14 @@ describe('otel middleware', () => {
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'text/plain' },
     });
 
-    const setAttributeCalls = (
-      spanCollector.span.setAttribute as ReturnType<typeof vi.fn>
-    ).mock.calls as Array<[string, unknown]>;
+    const setAttributeCalls = spanCollector.span.setAttribute.mock.calls;
     const attrKeys = setAttributeCalls.map(([k]) => k);
     expect(attrKeys).not.toContain('http.request.header.authorization');
     expect(attrKeys).not.toContain('http.response.header.x-secret');
   });
 
   it('uses getTime for span startTime and end when provided', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = { span: null!, options: null };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector, recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
     const customTime = 12_345;
@@ -592,23 +456,8 @@ describe('otel middleware', () => {
   });
 
   it('marks span error for 5xx response without thrown exception', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-    } = {
-      span: null!,
-      options: null,
-    };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector } = createCollectors();
+    const { recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -634,16 +483,7 @@ describe('otel middleware', () => {
   });
 
   it('records duration metrics for subapp routes', async () => {
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { recordCollector } = createCollectors();
     const meter = createMockMeter(recordCollector);
 
     const subapp = new Hono().get('/nested', (c) => c.text('nested'));
@@ -659,16 +499,7 @@ describe('otel middleware', () => {
   });
 
   it('records metrics for different HTTP methods and status codes', async () => {
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { recordCollector } = createCollectors();
     const meter = createMockMeter(recordCollector);
 
     const app = new Hono()
@@ -696,16 +527,7 @@ describe('otel middleware', () => {
   });
 
   it('active requests increment and decrement use identical attributes', async () => {
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { recordCollector } = createCollectors();
     const meter = createMockMeter(recordCollector);
 
     const app = new Hono()
@@ -725,16 +547,7 @@ describe('otel middleware', () => {
   });
 
   it('does not track active requests when captureActiveRequests is false', async () => {
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { recordCollector } = createCollectors();
     const meter = createMockMeter(recordCollector);
 
     const app = new Hono()
@@ -748,16 +561,7 @@ describe('otel middleware', () => {
   });
 
   it('records duration metric when handler throws', async () => {
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { recordCollector } = createCollectors();
     const meter = createMockMeter(recordCollector);
 
     const app = new Hono().use(otel({ meter })).get('/err-metric', () => {
@@ -776,21 +580,7 @@ describe('otel middleware', () => {
   });
 
   it('honors parent context when request runs inside active span', async () => {
-    const spanCollector: {
-      span: ReturnType<typeof createMockSpan>;
-      options: unknown;
-      parentContext?: unknown;
-    } = { span: null!, options: null };
-    const recordCollector = {
-      durationRecords: [] as Array<{
-        duration: number;
-        attrs: Record<string, unknown>;
-      }>,
-      activeAdds: [] as Array<{
-        delta: number;
-        attrs: Record<string, unknown>;
-      }>,
-    };
+    const { spanCollector, recordCollector } = createCollectors();
     const tracer = createMockTracer(spanCollector);
     const meter = createMockMeter(recordCollector);
 
@@ -798,6 +588,8 @@ describe('otel middleware', () => {
       .use(otel({ tracer, meter }))
       .get('/child', (c) => c.text('ok'));
 
+    // SAFETY: only the span context is read from a parent span, and setSpan
+    // stores it without touching anything else.
     const parentSpan = createMockSpan() as unknown as Span;
     const ctxWithParent = otelTrace.setSpan(context.active(), parentSpan);
     await context.with(ctxWithParent, async () => {

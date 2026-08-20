@@ -1,6 +1,7 @@
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import type { ErrorTrackingConfig, ExceptionMechanism } from './types';
 import { buildExceptionList } from './exception-builder';
+import { fingerprintFrames } from './fingerprint';
 import { RateLimiter } from './rate-limiter';
 import { isSuppressed } from './suppression';
 
@@ -18,20 +19,46 @@ let rateLimiter = new RateLimiter();
 let config: ErrorTrackingConfig = {};
 let cleanupFns: (() => void)[] = [];
 
+/** The PostHog browser SDK, as this module uses it. */
+interface PostHogLike {
+  captureException?: (cause: unknown) => void;
+}
+
 function hasPostHog(): boolean {
-  const g =
-    typeof globalThis !== 'undefined'
-      ? (globalThis as Record<string, unknown>)
-      : undefined;
-  return !!(
-    g?.posthog && typeof (g.posthog as any).captureException === 'function'
-  );
+  // SAFETY: posthog is installed on the page by a script tag, so it is not in
+  // any type we control; only captureException is read, and only after this
+  // probe finds it.
+  const g = globalThis as { posthog?: PostHogLike };
+  return !!(g.posthog && typeof g.posthog.captureException === 'function');
+}
+
+const LOCAL_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '[::1]',
+  '::1',
+]);
+
+function isLocalOrigin(): boolean {
+  const hostname = globalThis.location?.hostname;
+  if (!hostname) return false;
+  // `.local` covers mDNS names phones use to reach a dev machine on the LAN,
+  // which is still the same dev server.
+  return LOCAL_HOSTS.has(hostname) || hostname.endsWith('.local');
 }
 
 function recordException(
   error: unknown,
   mechanismType: ExceptionMechanism['type'],
 ): void {
+  if (config.skipLocalhost && isLocalOrigin()) {
+    if (config.debug) {
+      console.debug('[autotel-web] Skipped exception on a local origin');
+    }
+    return;
+  }
+
   const exceptionList = buildExceptionList(
     error,
     mechanismType,
@@ -64,6 +91,14 @@ function recordException(
     return;
   }
 
+  // Computed from the frames already parsed above, so the grouping decision
+  // travels with the error instead of each backend re-deriving its own.
+  const fingerprint = fingerprintFrames(
+    topException.type,
+    topException.value,
+    topException.stacktrace?.frames,
+  );
+
   const tracer = trace.getTracer('autotel-web', '1.0.0');
 
   // Record on active span or create new one
@@ -79,6 +114,7 @@ function recordException(
     activeSpan.setAttribute('exception.type', topException.type);
     activeSpan.setAttribute('exception.message', topException.value);
     activeSpan.setAttribute('exception.list', JSON.stringify(exceptionList));
+    activeSpan.setAttribute('exception.fingerprint', fingerprint);
     activeSpan.setAttribute('error.source', mechanismType);
   } else {
     tracer.startActiveSpan('unhandled_error', (span) => {
@@ -92,6 +128,7 @@ function recordException(
       span.setAttribute('exception.type', topException.type);
       span.setAttribute('exception.message', topException.value);
       span.setAttribute('exception.list', JSON.stringify(exceptionList));
+      span.setAttribute('exception.fingerprint', fingerprint);
       span.setAttribute('error.source', mechanismType);
       span.end();
     });
@@ -111,7 +148,7 @@ function recordException(
  * Replaces the old setupErrorCapture().
  */
 export function setupErrorTracking(cfg: ErrorTrackingConfig): void {
-  if (typeof window === 'undefined') return;
+  if (globalThis.window === undefined) return;
   if (isInitialized) return;
 
   config = cfg;

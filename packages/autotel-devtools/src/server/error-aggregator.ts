@@ -28,6 +28,16 @@
  */
 
 import type { ErrorGroup, ErrorOccurrence, SpanData, TraceData } from './types';
+import type { SpanAttributes } from '../widget/types.js';
+import { stringAttr } from '../widget/attrs.js';
+
+/** How many errors the aggregator is holding, and what they are. */
+export interface ErrorStats {
+  totalGroups: number;
+  totalErrors: number;
+  recentErrors: number;
+  topErrorTypes: Array<{ type: string; count: number }>;
+}
 
 export interface ErrorAggregatorOptions {
   /**
@@ -149,25 +159,25 @@ export class ErrorAggregator {
     // Try to get error info from span attributes or events
     const exceptionEvent = span.events?.find((e) => e.name === 'exception');
     const errorType =
-      (span.attributes['exception.type'] as string) ||
-      (span.attributes['error.type'] as string) ||
-      (exceptionEvent?.attributes?.['exception.type'] as string) ||
+      stringAttr(span.attributes, 'exception.type', 'error.type') ??
+      stringAttr(exceptionEvent?.attributes, 'exception.type') ??
       'Error';
 
     const errorMessage =
       span.status.message ||
-      (span.attributes['exception.message'] as string) ||
-      (span.attributes['error.message'] as string) ||
+      stringAttr(span.attributes, 'exception.message', 'error.message') ||
       'Unknown error';
 
     const stackTrace =
-      (span.attributes['exception.stacktrace'] as string) ||
-      (span.attributes['exception.stack'] as string) ||
-      // `autotel`'s structured errors write the stack here rather than emitting
-      // an `exception` event, so without this the Errors tab showed no frames
-      // for them at all.
-      (span.attributes['error.stack'] as string) ||
-      this.extractStackFromEvents(span);
+      stringAttr(
+        span.attributes,
+        'exception.stacktrace',
+        'exception.stack',
+        // `autotel`'s structured errors write the stack here rather than
+        // emitting an `exception` event, so without this the Errors tab showed
+        // no frames for them at all.
+        'error.stack',
+      ) ?? this.extractStackFromEvents(span);
 
     return {
       traceId: trace.traceId,
@@ -179,6 +189,9 @@ export class ErrorAggregator {
         type: errorType,
         message: errorMessage,
         stackTrace,
+        fingerprint:
+          stringAttr(span.attributes, 'exception.fingerprint') ??
+          stringAttr(exceptionEvent?.attributes, 'exception.fingerprint'),
       },
       attributes: this.extractRelevantAttributes(span.attributes),
     };
@@ -192,9 +205,10 @@ export class ErrorAggregator {
 
     const exceptionEvent = span.events.find((e) => e.name === 'exception');
     if (exceptionEvent?.attributes) {
-      return (
-        (exceptionEvent.attributes['exception.stacktrace'] as string) ||
-        (exceptionEvent.attributes['exception.stack'] as string)
+      return stringAttr(
+        exceptionEvent.attributes,
+        'exception.stacktrace',
+        'exception.stack',
       );
     }
 
@@ -205,9 +219,9 @@ export class ErrorAggregator {
    * Extract relevant attributes for error context
    */
   private extractRelevantAttributes(
-    attributes: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const relevant: Record<string, unknown> = {};
+    attributes: SpanAttributes,
+  ): SpanAttributes {
+    const relevant: SpanAttributes = {};
     const keepKeys = [
       'http.method',
       'http.url',
@@ -238,6 +252,12 @@ export class ErrorAggregator {
    * Uses error type + first N stack frames (normalized)
    */
   private generateFingerprint(occurrence: ErrorOccurrence): string {
+    // The emitter had the real Error object; this only ever had the stack
+    // string it chose to serialize. Where it made the call, defer to it — that
+    // is what makes this tab group identically to whatever else is receiving
+    // the same spans.
+    if (occurrence.error.fingerprint) return occurrence.error.fingerprint;
+
     const parts: string[] = [occurrence.error.type];
 
     if (occurrence.error.stackTrace) {
@@ -427,12 +447,7 @@ export class ErrorAggregator {
   /**
    * Get error statistics
    */
-  getStats(): {
-    totalGroups: number;
-    totalErrors: number;
-    recentErrors: number;
-    topErrorTypes: Array<{ type: string; count: number }>;
-  } {
+  getStats(): ErrorStats {
     const now = Date.now();
     const oneHourAgo = now - 60 * 60 * 1000;
 

@@ -56,7 +56,7 @@
     const root = rootEl?.getRootNode();
     if (root instanceof ShadowRoot) {
       target = root.host;
-    } else if (typeof document !== 'undefined') {
+    } else if (globalThis.document !== undefined) {
       target = document.documentElement;
     }
     if (target) {

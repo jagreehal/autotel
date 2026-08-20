@@ -16,7 +16,7 @@
  */
 
 import { Event } from 'autotel/event';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 import { PostHog } from 'posthog-node';
 
 // ============================================================================

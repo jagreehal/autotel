@@ -6,6 +6,7 @@ import {
   SchemaValidationSpanProcessor,
 } from './processor.js';
 import type { SchemaViolation } from './validate.js';
+import type { EmittedAttributeValue } from './validate.js';
 
 const contract: TelemetryContract = defineContract({
   service: 'checkout',
@@ -22,7 +23,7 @@ const contract: TelemetryContract = defineContract({
 function endSpan(
   p: SchemaValidationSpanProcessor,
   name: string,
-  attributes: Record<string, unknown>,
+  attributes: Record<string, EmittedAttributeValue>,
 ) {
   p.onEnd({ name, attributes });
 }

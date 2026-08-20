@@ -16,18 +16,18 @@ Event guidance: for new instrumentation, emit events as correlated logs (via req
 
 ## When to Use What
 
-| Need                                  | API                                                              | Import                                 |
-| ------------------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
-| Wrap a function with a span           | `trace(fn)`, `span('Name', fn)`                                  | `autotel`                              |
-| Request-scoped attributes + emit once | `getRequestLogger(ctx?)` → `.set()`, `.emitNow()`                | `autotel`                              |
-| Throw with why/fix/link               | `createStructuredError({ message, why?, fix?, link?, status? })` | `autotel`                              |
-| Parse API errors (client)             | `parseError(err)` → `message`, `why`, `fix`, `link`              | `autotel`                              |
-| Product/analytics events              | `track(name, attrs)` or `Event` from `autotel/event`             | `autotel`, `autotel/event`             |
-| Init (once at startup)                | `init({ service, ... })`                                         | `autotel` or `autotel/instrumentation` |
-| Same error thrown from many places    | `defineErrorCatalog(ns, entries)` → typed builders + `.match()`  | `autotel`                              |
-| Error budgets and burn-rate alerts    | `createSloTracker()`, `evaluateBurnRateAlert()`                  | `autotel/slo`                          |
-| Flush telemetry on SIGTERM / crash    | `init({ processHandlers: true })`                                | `autotel`                              |
-| Testing                               | `createTraceCollector()`, `InMemorySpanExporter`                 | `autotel/testing`, `autotel/exporters` |
+| Need                                  | API                                                                                                           | Import                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Trace reusable or immediate work      | `trace(fn)`, `trace(name, fn)`, `instrument({ key, fn })`, `trace.run(name, ctx => result)`, `span(name, fn)` | `autotel`                              |
+| Request-scoped attributes + emit once | `getRequestLogger(ctx?)` → `.set()`, `.emitNow()`                                                             | `autotel`                              |
+| Throw with why/fix/link               | `createStructuredError({ message, why?, fix?, link?, status? })`                                              | `autotel`                              |
+| Parse API errors (client)             | `parseError(err)` → `message`, `why`, `fix`, `link`                                                           | `autotel`                              |
+| Product/analytics events              | `track(name, attrs)` or `Event` from `autotel/event`                                                          | `autotel`, `autotel/event`             |
+| Init (once at startup)                | `init({ service, ... })`                                                                                      | `autotel` or `autotel/instrumentation` |
+| Same error thrown from many places    | `defineErrorCatalog(ns, entries)` → typed builders + `.match()`                                               | `autotel`                              |
+| Error budgets and burn-rate alerts    | `createSloTracker()`, `evaluateBurnRateAlert()`                                                               | `autotel/slo`                          |
+| Flush telemetry on SIGTERM / crash    | `init({ processHandlers: true })`                                                                             | `autotel`                              |
+| Testing                               | `createTraceCollector()`, `InMemorySpanExporter`                                                              | `autotel/testing`, `autotel/exporters` |
 
 Request logger requires an active span. Wrap HTTP handlers with `trace()` or framework middleware that creates a span, then call `getRequestLogger()` inside.
 
@@ -75,6 +75,38 @@ const getUser = trace(async (id: string) => {
   return db.users.findById(id);
 });
 ```
+
+**One immediate named operation when you do need context:**
+
+```typescript
+const result = await trace.run('user.lookup', async (ctx) => {
+  ctx.setAttribute('user.id', id);
+  return db.users.findById(id);
+});
+```
+
+**`trace` wraps, `trace.run` runs.** Every `trace(...)` form returns a wrapper
+and executes nothing, so a reusable function with an explicit name is just:
+
+```typescript
+export const createUser = trace('user.create', async (data: NewUser) => {
+  return db.users.create(data);
+});
+```
+
+Inside any traced body, import `ctx` to reach the span — it resolves at any
+depth, so a helper further down sees the same span without being passed one:
+
+```typescript
+import { trace, ctx } from 'autotel';
+
+export const createUser = trace('user.create', async (data: NewUser) => {
+  ctx.setAttribute('user.id', data.id);
+  return db.users.create(data);
+});
+```
+
+`instrument({ key: name, fn })` is the options form of the same wrapper.
 
 **Structured errors in API routes:**
 
@@ -142,17 +174,18 @@ init() must stay synchronous. Use node-require helpers for optional dependencies
 
 Source: packages/autotel/CLAUDE.md
 
-### MEDIUM Use trace() without ctx when you need attributes or request logger
+### MEDIUM Assume trace(fn) has no ambient context
 
-Wrong:
+This is valid and often simplest:
 
 ```typescript
 const handler = trace(async (req) => {
-  const log = getRequestLogger(); // may throw if span not set up for request logger
+  const log = getRequestLogger(); // valid: trace() made this span active
+  log.set({ route: req.url });
 });
 ```
 
-Correct:
+Also correct when explicit context improves clarity:
 
 ```typescript
 const handler = withTracing({ name: 'http.request' })((ctx) => async (req) => {
@@ -161,13 +194,16 @@ const handler = withTracing({ name: 'http.request' })((ctx) => async (req) => {
 });
 ```
 
-Use the factory pattern `(ctx) => async (...)` when you need to set attributes or use the request logger.
+Inside `trace(fn)`, `getRequestLogger()` and `getActiveTraceContext()` resolve
+the active function span. Use `withTracing()` when explicit context threading
+is clearer, not because the ambient form is unavailable.
 
 Source: docs/AGENT-GUIDE.md
 
-## Version
+## Compatibility
 
-Targets autotel v2.23.x.
+Targets the current workspace public API. Verify package exports when working
+against an older installed version.
 
 See also:
 

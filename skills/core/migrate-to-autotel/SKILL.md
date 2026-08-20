@@ -112,11 +112,11 @@ init({
 
 | Sentry                                                     | autotel                                               |
 | ---------------------------------------------------------- | ----------------------------------------------------- |
-| `Sentry.startSpan({ op: 'fn', name: 'process' }, () => …)` | `trace({ name: 'process' }, () => …)`                 |
+| `Sentry.startSpan({ op: 'fn', name: 'process' }, () => …)` | `trace.run('process', (ctx) => …)`                    |
 | `Sentry.captureException(err)`                             | `createStructuredError({ … })` (auto-records on span) |
-| `Sentry.setUser({ id })`                                   | `useLogger().set({ user: { id } })`                   |
-| `Sentry.setContext('cart', { … })`                         | `useLogger().set({ cart: { … } })`                    |
-| `Sentry.startTransaction({ name })`                        | `trace({ name }, fn)`                                 |
+| `Sentry.setUser({ id })`                                   | `getRequestLogger().set({ user: { id } })`            |
+| `Sentry.setContext('cart', { … })`                         | `getRequestLogger().set({ cart: { … } })`             |
+| reusable named transaction function                        | `trace(name, fn)` or `instrument({ key: name, fn })`  |
 
 ### Step 3: Decide on errors-only vs full tracing
 
@@ -176,11 +176,11 @@ Datadog uses `service`, `resource`, `operation`. OTel uses `service.name`, `http
 
 ### Step 4: Replace `dd-trace`-specific APIs
 
-| `dd-trace`                             | autotel                                                                                             |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `tracer.trace('op', { resource }, fn)` | `trace({ name: 'op' }, fn)` (set `http.route` via `useLogger().set({ http: { route } })` if needed) |
-| `tracer.scope().active()`              | `trace.getActiveSpan()` (from `@opentelemetry/api`)                                                 |
-| `tracer.wrap('op', fn)`                | `trace(fn)`                                                                                         |
+| `dd-trace`                             | autotel                                                                     |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| `tracer.trace('op', { resource }, fn)` | `trace.run('op', (ctx) => fn())` (set `http.route` with `ctx.setAttribute`) |
+| `tracer.scope().active()`              | `getActiveSpan()` from `@opentelemetry/api`                                 |
+| `tracer.wrap('op', fn)`                | `trace('op', fn)` or `instrument({ key: 'op', fn })`                        |
 
 ## From New Relic Node agent
 
@@ -206,7 +206,7 @@ For EU: `https://otlp.eu01.nr-data.net/v1/traces`.
 
 | `newrelic`                                | autotel                             |
 | ----------------------------------------- | ----------------------------------- |
-| `newrelic.startSegment('name', true, fn)` | `trace({ name }, fn)`               |
+| `newrelic.startSegment('name', true, fn)` | `trace.run(name, (ctx) => fn())`    |
 | `newrelic.addCustomAttribute(key, value)` | `useLogger().set({ [key]: value })` |
 | `newrelic.noticeError(err)`               | `createStructuredError({ … })`      |
 | `newrelic.recordMetric(name, value)`      | OTel meter API                      |
@@ -225,7 +225,7 @@ init({
 
 | Beeline                                 | autotel                                                                     |
 | --------------------------------------- | --------------------------------------------------------------------------- |
-| `beeline.withTrace(meta, fn)`           | `trace({ name: meta.task }, fn)`                                            |
+| `beeline.withTrace(meta, fn)`           | `trace(meta.task, (ctx) => fn())`                                           |
 | `beeline.customContext.add(key, value)` | `useLogger().set({ [key]: value })`                                         |
 | `beeline.flush()`                       | `await provider.forceFlush()` (autotel does this on shutdown automatically) |
 

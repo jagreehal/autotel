@@ -27,6 +27,17 @@ import type {
   ObservabilityExecutionContext,
   OtelObservabilityConfig,
 } from './types';
+import { workerTracer } from '../tracer.js';
+import {
+  asFunction,
+  asScalar,
+  asScalarArray,
+  asString,
+  nonEmptyString,
+  readPath,
+  readProperty,
+  type UnknownRecord,
+} from '../values.js';
 
 let providerInitialized = false;
 
@@ -63,7 +74,7 @@ function initProvider(config: ResolvedEdgeConfig): void {
   const provider = new WorkerTracerProvider(config.spanProcessors, resource);
   provider.register();
 
-  const tracer = trace.getTracer('autotel-cloudflare/agents') as WorkerTracer;
+  const tracer = workerTracer('autotel-cloudflare/agents');
   tracer.setHeadSampler(config.sampling.headSampler);
 
   providerInitialized = true;
@@ -186,14 +197,12 @@ function formatTypeSegment(value: string): string {
 }
 
 function getPayloadName(
-  payload: Record<string, unknown>,
+  payload: UnknownRecord,
   ...keys: string[]
 ): string | undefined {
   for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === 'string' && value.length > 0) {
-      return value;
-    }
+    const value = nonEmptyString(payload[key]);
+    if (value !== undefined) return value;
   }
   return undefined;
 }
@@ -204,7 +213,7 @@ function getDefaultSpanName(event: ObservabilityEvent): string {
   switch (event.type) {
     case 'rpc':
     case 'rpc:error': {
-      return `agent.rpc ${(payload as { method: string }).method}`;
+      return `agent.rpc ${asString(readProperty(payload, 'method'))}`;
     }
     case 'schedule:create':
     case 'schedule:execute':
@@ -268,34 +277,9 @@ function getDefaultSpanName(event: ObservabilityEvent): string {
   }
 }
 
-function isPrimitiveAttributeValue(
-  value: unknown,
-): value is string | number | boolean | string[] | number[] | boolean[] {
-  if (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return true;
-  }
-
-  if (!Array.isArray(value)) {
-    return false;
-  }
-
-  return value.every(
-    (entry) =>
-      typeof entry === 'string' ||
-      typeof entry === 'number' ||
-      typeof entry === 'boolean',
-  );
-}
-
 function setIfPresent(attrs: Attributes, key: string, value: unknown): void {
-  if (value === undefined || value === null) return;
-  if (isPrimitiveAttributeValue(value)) {
-    attrs[key] = value;
-  }
+  const attribute = asScalar(value) ?? asScalarArray(value);
+  if (attribute !== undefined) attrs[key] = attribute;
 }
 
 function getDefaultAttributes(event: ObservabilityEvent): Attributes {
@@ -393,18 +377,14 @@ function getSpanKind(event: ObservabilityEvent): SpanKind {
 }
 
 function inferErrorMessage(event: ObservabilityEvent): string | undefined {
-  const payload = event.payload as Record<string, unknown>;
-  const direct = payload.error;
-  if (typeof direct === 'string' && direct.length > 0) {
-    return direct;
-  }
+  const direct = nonEmptyString(readProperty(event.payload, 'error'));
+  if (direct !== undefined) return direct;
 
   if (event.type === 'workflow:rejected') {
-    const reason = payload.reason;
-    if (typeof reason === 'string' && reason.length > 0) {
-      return reason;
-    }
-    return 'workflow rejected';
+    return (
+      nonEmptyString(readProperty(event.payload, 'reason')) ??
+      'workflow rejected'
+    );
   }
 
   if (event.type.endsWith(':failed') || event.type.endsWith(':error')) {
@@ -419,11 +399,7 @@ function isErrorEvent(event: ObservabilityEvent): boolean {
   if (event.type.endsWith(':error') || event.type.endsWith(':failed'))
     return true;
 
-  if ('error' in event.payload) {
-    return typeof (event.payload as Record<string, unknown>).error === 'string';
-  }
-
-  return false;
+  return asString(readProperty(event.payload, 'error')) !== undefined;
 }
 
 function applyEventStatus(span: Span, event: ObservabilityEvent): void {
@@ -451,14 +427,8 @@ async function exportSpans(
   const tracer = trace.getTracer('autotel-cloudflare/agents');
   if (tracer instanceof WorkerTracer) {
     try {
-      const scheduler =
-        ctx && 'scheduler' in ctx
-          ? (ctx.scheduler as
-              { wait?: (ms: number) => Promise<void> } | undefined)
-          : undefined;
-      if (scheduler?.wait) {
-        await scheduler.wait(1);
-      }
+      const wait = asFunction(readPath(ctx, 'scheduler', 'wait'));
+      if (wait) await wait(1);
       await tracer.forceFlush(traceId);
     } catch (error) {
       console.error(
@@ -526,8 +496,9 @@ export class OtelObservability implements Observability {
     span.end(event.timestamp + 1);
 
     const traceId = span.spanContext().traceId;
-    if (ctx && 'waitUntil' in ctx && typeof ctx.waitUntil === 'function') {
-      ctx.waitUntil(exportSpans(traceId, ctx));
+    const waitUntil = asFunction(readProperty(ctx, 'waitUntil'));
+    if (waitUntil) {
+      waitUntil(exportSpans(traceId, ctx));
       return;
     }
 
@@ -542,14 +513,15 @@ export function createOtelObservability(
 }
 
 export function createOtelObservabilityFromEnv(
-  env: Record<string, unknown>,
+  env: UnknownRecord,
   options?: AgentInstrumentationOptions,
 ): OtelObservability {
-  const endpoint = (env.OTEL_EXPORTER_OTLP_ENDPOINT as string) || undefined;
-  const serviceName = (env.OTEL_SERVICE_NAME as string) || 'cloudflare-agent';
+  const endpoint = nonEmptyString(env.OTEL_EXPORTER_OTLP_ENDPOINT);
+  const serviceName =
+    nonEmptyString(env.OTEL_SERVICE_NAME) ?? 'cloudflare-agent';
 
   let headers: Record<string, string> | undefined;
-  const headersStr = env.OTEL_EXPORTER_OTLP_HEADERS as string;
+  const headersStr = nonEmptyString(env.OTEL_EXPORTER_OTLP_HEADERS);
   if (headersStr) {
     headers = {};
     for (const pair of headersStr.split(',')) {

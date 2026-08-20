@@ -56,6 +56,8 @@ const handler: ExportedHandler<Env> = {
     // Create workflow instance
     if (url.pathname === '/workflows' && request.method === 'POST') {
       try {
+        // SAFETY: request.json() is typed `unknown` because a body can be
+        // anything; every field read from it below is optional and defaulted.
         const body = (await request.json()) as {
           orderId?: string;
           customerId?: string;

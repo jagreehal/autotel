@@ -1,3 +1,4 @@
+import type { OutboxLike } from './outbox';
 export type TelemetryPreference = 'enabled' | 'disabled' | 'unset';
 
 export type RunOutcome = 'success' | 'failure' | 'cancelled';
@@ -23,6 +24,12 @@ export interface TelemetryOptions {
   maxBufferBytes?: number;
   maxEventAgeMs?: number;
   allowlistedStringFlags?: string[];
+  /**
+   * Where finished runs are queued before they drain. Defaults to a file under
+   * the tool's telemetry directory; supply one to keep them elsewhere, or to
+   * observe them in a test.
+   */
+  outbox?: OutboxLike;
 }
 
 export interface TelemetryHandle {

@@ -66,6 +66,8 @@ import {
   genAiSpanName,
   type GenAiOperationName,
 } from './semconv.js';
+import type { UnknownRecord } from './values.js';
+import { asNumber, asString, isFunction } from './values.js';
 
 /** Configuration for {@link traceGenAI}. */
 export interface TraceGenAIConfig extends GenAiRequestInput {
@@ -100,7 +102,10 @@ export interface TraceGenAIConfig extends GenAiRequestInput {
  * The span in turn holds nothing when sampling declined to record, and metrics
  * are not sampled.
  */
-function observed(seen: Record<string, unknown>): Record<string, unknown> {
+function observed(seen: UnknownRecord): UnknownRecord {
+  // SAFETY: a recording SDK span keeps the attributes set on it; the API type
+  // does not declare them, and a non-recording span simply has none - see the
+  // note on RecordedSpan below.
   const span = otelTrace.getActiveSpan() as RecordedSpan | undefined;
   return { ...span?.attributes, ...seen };
 }
@@ -112,7 +117,7 @@ function observed(seen: Record<string, unknown>): Record<string, unknown> {
  * named here rather than pulling in an SDK dependency.
  */
 interface RecordedSpan extends Span {
-  attributes?: Record<string, unknown>;
+  attributes?: Attributes;
 }
 
 /**
@@ -122,10 +127,7 @@ interface RecordedSpan extends Span {
  * (`logger.info({ ...ctx }, 'llm call')`), and a `Object.create(ctx)` wrapper
  * spreads to nothing but the two overridden setters — no traceId, no spanId.
  */
-function watchAttributes(
-  ctx: TraceContext,
-  seen: Record<string, unknown>,
-): () => void {
+function watchAttributes(ctx: TraceContext, seen: UnknownRecord): () => void {
   const { setAttribute, setAttributes } = ctx;
   ctx.setAttribute = (key: string, value: AttributeValue) => {
     seen[key] = value;
@@ -139,13 +141,6 @@ function watchAttributes(
     ctx.setAttribute = setAttribute;
     ctx.setAttributes = setAttributes;
   };
-}
-
-/** Narrow an observed attribute to a number, ignoring anything else. */
-function asNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
 }
 
 function defaultSpanIdentifier(config: TraceGenAIConfig): string | undefined {
@@ -205,22 +200,19 @@ export function traceGenAI(config: TraceGenAIConfig) {
     ? genAiWorkflowAttributes(config.workflow)
     : {};
 
-  const emitMetrics = (
-    watched: Record<string, unknown>,
-    startedAt: number,
-  ): void => {
+  const emitMetrics = (watched: UnknownRecord, startedAt: number): void => {
     if (config.metrics === false) return;
 
     const seen = observed(watched);
     const attributes: Attributes = { [GEN_AI.OPERATION_NAME]: operation };
     if (config.provider) attributes[GEN_AI.PROVIDER_NAME] = config.provider;
     if (config.model) attributes[GEN_AI.REQUEST_MODEL] = config.model;
-    const responseModel = seen[GEN_AI.RESPONSE_MODEL];
-    if (typeof responseModel === 'string') {
+    const responseModel = asString(seen[GEN_AI.RESPONSE_MODEL]);
+    if (responseModel !== undefined) {
       attributes[GEN_AI.RESPONSE_MODEL] = responseModel;
     }
-    const errorType = seen['error.type'];
-    if (typeof errorType === 'string') attributes['error.type'] = errorType;
+    const errorType = asString(seen['error.type']);
+    if (errorType !== undefined) attributes['error.type'] = errorType;
 
     recordGenAiMetrics({
       durationSeconds: (Date.now() - startedAt) / 1000,
@@ -235,7 +227,7 @@ export function traceGenAI(config: TraceGenAIConfig) {
   return <TArgs extends unknown[], TReturn>(
     factory: (ctx: TraceContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
-    if (typeof factory !== 'function') {
+    if (!isFunction(factory)) {
       throw new TypeError(
         'traceGenAI: expected a factory (ctx) => (...args) => result',
       );
@@ -250,7 +242,7 @@ export function traceGenAI(config: TraceGenAIConfig) {
         // builds a fresh one per call, and callers spread it
         // (`logger.info({ ...ctx })`), which a derived object would reduce to
         // the two overridden setters — no traceId, no spanId.
-        const seen: Record<string, unknown> = {};
+        const seen: UnknownRecord = {};
         const unwatch =
           config.metrics === false ? () => {} : watchAttributes(ctx, seen);
 
@@ -262,7 +254,7 @@ export function traceGenAI(config: TraceGenAIConfig) {
           ...(config.attributes ?? {}),
         });
         const handler = factory(ctx);
-        if (typeof handler !== 'function') {
+        if (!isFunction(handler)) {
           throw new TypeError(
             'traceGenAI: factory must return a function; expected (ctx) => (...args) => result',
           );

@@ -175,8 +175,14 @@ export function createParser(): Parser {
   };
 }
 
+/** What calleeParts() answers with. */
+interface CalleePartsResult {
+  member: string;
+  root: string | null;
+}
+
 /** Rightmost name and leftmost identifier of a callee expression. */
-function calleeParts(expr: Node): { member: string; root: string | null } {
+function calleeParts(expr: Node): CalleePartsResult {
   const access = expr.asKind(SyntaxKind.PropertyAccessExpression);
   if (access) {
     let root: Node = access.getExpression();

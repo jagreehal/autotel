@@ -6,7 +6,6 @@ export default defineConfig({
   tsconfig: 'tsconfig.build.json',
   entry: {
     index: 'src/index.ts',
-    posthog: 'src/posthog.ts',
     mixpanel: 'src/mixpanel.ts',
     segment: 'src/segment.ts',
     amplitude: 'src/amplitude.ts',

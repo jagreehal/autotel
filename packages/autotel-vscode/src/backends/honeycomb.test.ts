@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { honeycombAdapter } from './honeycomb';
 import type { QueryAdapterContext } from './types';
+import { installFetch } from '../testing/doubles.js';
 
 const ctx = (over: Partial<QueryAdapterContext> = {}): QueryAdapterContext => ({
   baseUrl: 'https://api.honeycomb.io',
@@ -17,7 +18,7 @@ afterEach(() => {
 
 describe('honeycombAdapter', () => {
   it('refuses to call without an API key', async () => {
-    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+    installFetch(vi.fn());
     await expect(
       honeycombAdapter.listServices(
         ctx({ secrets: { get: async () => undefined } }),
@@ -31,10 +32,11 @@ describe('honeycombAdapter', () => {
       status: 200,
       json: async () => [{ name: 'web' }, { name: 'api' }],
     });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
     const services = await honeycombAdapter.listServices(ctx());
     expect(services).toEqual(['web', 'api']);
     const [, init] = fetchSpy.mock.calls[0];
+    // SAFETY: the adapter calls fetch(url, init); the recorded call is its own.
     expect((init as RequestInit).headers).toMatchObject({
       'X-Honeycomb-Team': 'hc-api-key',
     });
@@ -71,7 +73,7 @@ describe('honeycombAdapter', () => {
         complete: true,
       }),
     });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    installFetch(fetchMock);
     const result = await honeycombAdapter.searchTraces(ctx(), { limit: 10 });
     expect(result).toHaveLength(1);
     expect(result[0].traceId).toBe('tr1');

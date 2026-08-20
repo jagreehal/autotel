@@ -1,3 +1,4 @@
+import { stringAttr } from '../attrs.js';
 import type { TerminalSpanEvent } from '../span-stream';
 
 export interface ServiceStats {
@@ -33,8 +34,7 @@ export function computeServiceStats(
 
   for (const span of spans) {
     const attrs = span.attributes ?? {};
-    const serviceName =
-      (attrs['service.name'] as string | undefined) ?? 'unknown';
+    const serviceName = stringAttr(attrs, 'service.name') ?? 'unknown';
     const entry = byService.get(serviceName) ?? {
       durations: [],
       total: 0,
@@ -68,7 +68,7 @@ export function computeRouteStats(spans: TerminalSpanEvent[]): RouteStats[] {
 
   for (const span of spans) {
     const attrs = span.attributes ?? {};
-    const route = (attrs['http.route'] as string | undefined) ?? null;
+    const route = stringAttr(attrs, 'http.route') ?? null;
     if (!route) continue;
 
     const entry = byRoute.get(route) ?? {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PrometheusBackend } from '../src/backends/prometheus/index';
+import { installFetchHandler } from './helpers/fetch';
 
 type FetchCall = { url: string };
 
@@ -8,12 +9,11 @@ function installFetchStub(
 ): { calls: FetchCall[]; restore: () => void } {
   const calls: FetchCall[] = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-    const url = typeof input === 'string' ? input : input.toString();
+  installFetchHandler(async (url) => {
     calls.push({ url });
     const { status = 200, body } = respond(url);
     return new Response(JSON.stringify(body), { status });
-  }) as typeof fetch;
+  });
   return {
     calls,
     restore: () => {
@@ -139,9 +139,9 @@ describe('PrometheusBackend', () => {
     // probeSignalAvailability will leave list_metrics registered against a
     // dead backend.
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
+    globalThis.fetch = async () => {
       throw new Error('ECONNREFUSED');
-    }) as typeof fetch;
+    };
     try {
       const backend = new PrometheusBackend('http://127.0.0.1:1');
       await expect(backend.listMetrics()).rejects.toThrow(/ECONNREFUSED/);

@@ -189,6 +189,28 @@ describe('detectInProject', () => {
     expect(result.backend.source).toBe('default');
   });
 
+  it('detects the PostHog browser SDK separately from the node one', () => {
+    // A front end running posthog-js is the case the server-side subscriber
+    // does not cover: what that project wants is the trace joined to the
+    // session PostHog is already recording, not events posted from a server.
+    fs.writeFileSync(
+      path.join(tmp, 'package.json'),
+      JSON.stringify({
+        name: 'demo',
+        dependencies: { 'posthog-js': '^1.200.0', next: '^15.0.0' },
+      }),
+    );
+    const project = makeProject(
+      tmp,
+      JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'), 'utf8')),
+    );
+
+    const result = detectInProject({ project, envConsent: false });
+
+    expect(result.presets).toContain('posthog-web');
+    expect(result.presets).not.toContain('posthog');
+  });
+
   it('detects cloudflare platform from wrangler.toml', () => {
     fs.writeFileSync(
       path.join(tmp, 'package.json'),

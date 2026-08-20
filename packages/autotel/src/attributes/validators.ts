@@ -3,7 +3,9 @@
  * Provides safe-by-default attribute handling with configurable policies
  */
 
+import type { AttributeValue, Attributes } from '@opentelemetry/api';
 import { REDACTOR_PATTERNS } from '../attribute-redacting-processor';
+import { asString } from '../values';
 
 export interface AttributeGuardrails {
   /** How to handle PII in attributes */
@@ -28,31 +30,35 @@ export interface AttributePolicy {
   deprecatedWarnings?: Record<string, string>;
 }
 
-const DEPRECATED_ATTRIBUTES = {
-  'enduser.id': 'user.id',
-  'enduser.role': 'user.roles',
-  'enduser.scope': undefined,
-  'http.method': 'http.request.method',
-  'http.host': 'server.address',
-  'http.status_code': 'http.response.status_code',
-  'http.target': 'url.path',
-  'http.url': 'url.full',
-  'http.user_agent': 'user_agent.original',
-  'http.flavor': 'network.protocol.name',
-  'http.scheme': 'url.scheme',
-  'http.server_name': 'server.address',
-  'db.name': 'db.namespace',
-  'db.operation': 'db.operation.name',
-  'db.statement': 'db.query.text',
-  'db.system': 'db.system.name',
-  'db.collection': 'db.collection.name',
-  'db.instance.id': undefined,
-  'db.jdbc.driver_classname': undefined,
-  'db.mssql.instance_name': 'mssql.instance.name',
-  'db.sql.table': 'db.collection.name',
-  'http.client_ip': 'client.address',
-  'user_agent.original': 'user_agent.original',
-} as const;
+/**
+ * Attributes OpenTelemetry has renamed, mapped to their replacement - or to
+ * `null` where the convention dropped them outright.
+ */
+const DEPRECATED_ATTRIBUTES = new Map<string, string | null>([
+  ['enduser.id', 'user.id'],
+  ['enduser.role', 'user.roles'],
+  ['enduser.scope', null],
+  ['http.method', 'http.request.method'],
+  ['http.host', 'server.address'],
+  ['http.status_code', 'http.response.status_code'],
+  ['http.target', 'url.path'],
+  ['http.url', 'url.full'],
+  ['http.user_agent', 'user_agent.original'],
+  ['http.flavor', 'network.protocol.name'],
+  ['http.scheme', 'url.scheme'],
+  ['http.server_name', 'server.address'],
+  ['db.name', 'db.namespace'],
+  ['db.operation', 'db.operation.name'],
+  ['db.statement', 'db.query.text'],
+  ['db.system', 'db.system.name'],
+  ['db.collection', 'db.collection.name'],
+  ['db.instance.id', null],
+  ['db.jdbc.driver_classname', null],
+  ['db.mssql.instance_name', 'mssql.instance.name'],
+  ['db.sql.table', 'db.collection.name'],
+  ['http.client_ip', 'client.address'],
+  ['user_agent.original', 'user_agent.original'],
+]);
 
 const HTTP_METHODS = new Set([
   'GET',
@@ -69,24 +75,21 @@ const HTTP_METHODS = new Set([
 
 export function validateAttribute(
   key: string,
-  value: unknown,
+  value: AttributeValue | undefined,
   policy: AttributePolicy = {},
-): unknown {
+): AttributeValue | undefined {
   const { guardrails = {} } = policy;
 
   if (value === undefined || value === null) {
     return undefined;
   }
 
-  // For non-string values that don't need transformation, preserve the original type
-  if (typeof value !== 'string') {
-    // PII checks only apply to strings
-    // maxLength only applies to strings
-    // validateEnum only applies to strings
+  // PII, maxLength and validateEnum all only apply to strings; anything else
+  // is preserved as it arrived.
+  const stringValue = asString(value);
+  if (stringValue === undefined) {
     return value;
   }
-
-  const stringValue = value;
 
   if (guardrails.pii) {
     const piiResult = applyPIIPolicy(key, stringValue, guardrails.pii);
@@ -215,12 +218,9 @@ export function checkDeprecatedAttribute(
     return null;
   }
 
-  // Check if the key exists in the deprecated attributes map
-  const isDeprecated = key in DEPRECATED_ATTRIBUTES;
-  if (isDeprecated) {
-    const replacement =
-      DEPRECATED_ATTRIBUTES[key as keyof typeof DEPRECATED_ATTRIBUTES];
-    if (replacement === undefined) {
+  const replacement = DEPRECATED_ATTRIBUTES.get(key) ?? null;
+  if (DEPRECATED_ATTRIBUTES.has(key)) {
+    if (replacement === null) {
       // Deprecated with no replacement (e.g., enduser.scope)
       console.warn(
         `[autotel/attributes] Attribute "${key}" is deprecated and has no replacement. ` +
@@ -238,18 +238,16 @@ export function checkDeprecatedAttribute(
     console.warn(`[autotel/attributes] ${deprecatedWarnings[key]}`);
   }
 
-  const replacement =
-    DEPRECATED_ATTRIBUTES[key as keyof typeof DEPRECATED_ATTRIBUTES];
-  return replacement ?? null;
+  return replacement;
 }
 
 export function autoRedactPII(
-  attributes: Record<string, unknown>,
+  attributes: Attributes,
   policy: AttributePolicy = {},
-): Record<string, unknown> {
+): Attributes {
   const { guardrails = { pii: 'redact' } } = policy;
 
-  const redacted: Record<string, unknown> = {};
+  const redacted: Attributes = {};
   for (const [key, value] of Object.entries(attributes)) {
     redacted[key] = validateAttribute(key, value, { guardrails });
   }

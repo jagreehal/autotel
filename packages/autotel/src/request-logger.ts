@@ -6,6 +6,8 @@ import { createTraceContext } from './trace-context';
 import { recordStructuredError } from './structured-error';
 import { flattenToAttributes } from './flatten-attributes';
 import { emitCorrelatedEvent } from './correlated-events';
+import type { UnknownRecord } from './values';
+import { asRecord, nonEmptyString, toError } from './values';
 
 const POST_EMIT_FORK_HINT =
   "For intentional background work tied to this request, use log.fork('label', fn) when available.";
@@ -16,26 +18,15 @@ function warnPostEmit(method: string, detail: string): void {
   );
 }
 
-function mergeInto(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
-): void {
+function mergeInto(target: UnknownRecord, source: UnknownRecord): void {
   for (const key in source) {
     const sourceVal = source[key];
     if (sourceVal === undefined) continue;
     const targetVal = target[key];
-    if (
-      sourceVal !== null &&
-      typeof sourceVal === 'object' &&
-      !Array.isArray(sourceVal) &&
-      targetVal !== null &&
-      typeof targetVal === 'object' &&
-      !Array.isArray(targetVal)
-    ) {
-      mergeInto(
-        targetVal as Record<string, unknown>,
-        sourceVal as Record<string, unknown>,
-      );
+    const sourceRecord = asRecord(sourceVal);
+    const targetRecord = asRecord(targetVal);
+    if (sourceRecord && targetRecord) {
+      mergeInto(targetRecord, sourceRecord);
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
       target[key] = [...targetVal, ...sourceVal];
     } else {
@@ -52,14 +43,14 @@ export function runWithRequestContext<T>(ctx: TraceContext, fn: () => T): T {
 }
 
 export interface RequestLogger {
-  set(fields: Record<string, unknown>): void;
+  set(fields: UnknownRecord): void;
   /** Set snapshot severity without adding a log event or exception. */
   setLevel(level: RequestLogLevel): void;
-  info(message: string, fields?: Record<string, unknown>): void;
-  warn(message: string, fields?: Record<string, unknown>): void;
-  error(error: Error | string, fields?: Record<string, unknown>): void;
-  getContext(): Record<string, unknown>;
-  emitNow(overrides?: Record<string, unknown>): RequestLogSnapshot;
+  info(message: string, fields?: UnknownRecord): void;
+  warn(message: string, fields?: UnknownRecord): void;
+  error(error: Error | string, fields?: UnknownRecord): void;
+  getContext(): UnknownRecord;
+  emitNow(overrides?: UnknownRecord): RequestLogSnapshot;
   fork(
     label: string,
     fn: () => void | Promise<void>,
@@ -74,7 +65,7 @@ export interface RequestLogSnapshot {
   traceId: string;
   spanId: string;
   correlationId: string;
-  context: Record<string, unknown>;
+  context: UnknownRecord;
 }
 
 export interface RequestLoggerOptions {
@@ -117,7 +108,7 @@ export function getRequestLogger(
   options?: RequestLoggerOptions,
 ): RequestLogger {
   const activeContext = resolveContext(ctx);
-  const contextState: Record<string, unknown> = {};
+  const contextState: UnknownRecord = {};
   let emitted = false;
   let lastSnapshot: RequestLogSnapshot | null = null;
   let hasExplicitLevel = false;
@@ -125,7 +116,7 @@ export function getRequestLogger(
   const addLogEvent = (
     level: 'info' | 'warn' | 'error',
     message: string,
-    fields?: Record<string, unknown>,
+    fields?: UnknownRecord,
   ) => {
     const attrs = fields ? flattenToAttributes(fields) : undefined;
     emitCorrelatedEvent(activeContext, `log.${level}`, {
@@ -144,7 +135,7 @@ export function getRequestLogger(
   };
 
   return {
-    set(fields: Record<string, unknown>) {
+    set(fields: UnknownRecord) {
       sealCheck('log.set()', Object.keys(fields));
       if (emitted) return;
       mergeInto(contextState, fields);
@@ -158,7 +149,7 @@ export function getRequestLogger(
       activeContext.setAttribute('autotel.log.level', level);
     },
 
-    info(message: string, fields?: Record<string, unknown>) {
+    info(message: string, fields?: UnknownRecord) {
       const keys = fields
         ? ['message', ...Object.keys(fields).filter((k) => k !== 'requestLogs')]
         : ['message'];
@@ -171,7 +162,7 @@ export function getRequestLogger(
       }
     },
 
-    warn(message: string, fields?: Record<string, unknown>) {
+    warn(message: string, fields?: UnknownRecord) {
       const keys = fields
         ? ['message', ...Object.keys(fields).filter((k) => k !== 'requestLogs')]
         : ['message'];
@@ -187,11 +178,11 @@ export function getRequestLogger(
       }
     },
 
-    error(error: Error | string, fields?: Record<string, unknown>) {
+    error(error: Error | string, fields?: UnknownRecord) {
       const keys = fields ? [...Object.keys(fields), 'error'] : ['error'];
       sealCheck('log.error()', keys);
       if (emitted) return;
-      const err = typeof error === 'string' ? new Error(error) : error;
+      const err = toError(error);
       recordStructuredError(activeContext, err);
       addLogEvent('error', err.message, fields);
 
@@ -208,9 +199,11 @@ export function getRequestLogger(
       return { ...contextState };
     },
 
-    emitNow(overrides?: Record<string, unknown>): RequestLogSnapshot {
+    emitNow(overrides?: UnknownRecord): RequestLogSnapshot {
       if (emitted) {
         warnPostEmit('log.emitNow()', 'Ignoring duplicate emit.');
+        // SAFETY: `emitted` is only ever set together with `lastSnapshot`, in
+        // the one place below that assigns both.
         return lastSnapshot as RequestLogSnapshot;
       }
 
@@ -249,8 +242,8 @@ export function getRequestLogger(
       fn: () => void | Promise<void>,
       forkOptions?: ForkOptions,
     ): void {
-      const parentRequestId = activeContext.correlationId;
-      if (typeof parentRequestId !== 'string' || parentRequestId.length === 0) {
+      const parentRequestId = nonEmptyString(activeContext.correlationId);
+      if (parentRequestId === undefined) {
         throw new Error(
           '[autotel] log.fork() requires the parent logger to have a correlationId. ' +
             'Ensure the request was created by autotel middleware.',
@@ -279,10 +272,8 @@ export function getRequestLogger(
             .then(() => {
               childLog.emitNow();
             })
-            .catch((error_: unknown) => {
-              const error =
-                error_ instanceof Error ? error_ : new Error(String(error_));
-              childLog.error(error);
+            .catch((error_) => {
+              childLog.error(toError(error_));
               childLog.emitNow();
             })
             .finally(() => {

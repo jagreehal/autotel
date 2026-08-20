@@ -310,6 +310,12 @@ async function executeDeferredMode<T>(
   }
 }
 
+/** What resolveContextAndLinks() answers with. */
+interface ResolveContextAndLinksResult {
+  parentContext: ReturnType<typeof context.active>;
+  spanLinks: SpanLink[];
+}
+
 /**
  * Resolve parent context and links based on context mode.
  *
@@ -321,10 +327,7 @@ function resolveContextAndLinks(
   contextMode: ContextMode,
   extractedSpanContext: SpanContext | undefined,
   additionalLinks: SpanLink[],
-): {
-  parentContext: ReturnType<typeof context.active>;
-  spanLinks: SpanLink[];
-} {
+): ResolveContextAndLinksResult {
   const activeContext = context.active();
   const hasValidExtracted = isValidSpanContext(extractedSpanContext);
 

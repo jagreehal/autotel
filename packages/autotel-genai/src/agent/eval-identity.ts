@@ -4,6 +4,7 @@ import {
   toAttributeValue,
   type AgentContext,
 } from './context.js';
+import type { Attributes } from '@opentelemetry/api';
 
 /** Canonical eval-run attribute keys for sandbox / IR correlation. */
 export const EVAL_IDENTITY_ATTR = {
@@ -19,10 +20,7 @@ export interface RecordEvalRunIdentityInput {
   sandboxId?: string;
 }
 
-function setEvalAttrs(
-  ctx: AgentContext | undefined,
-  attrs: Record<string, unknown>,
-): void {
+function setEvalAttrs(ctx: AgentContext | undefined, attrs: Attributes): void {
   const traceCtx = resolveContext(ctx);
   const mapped: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(attrs)) {

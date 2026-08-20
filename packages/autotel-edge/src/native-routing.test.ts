@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { context as api_context } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import {
-  trace,
   withTracing,
   span,
   enterSpan,
@@ -15,7 +15,7 @@ import {
 
 interface RecordedSpan {
   name: string;
-  attributes: Record<string, unknown>;
+  attributes: Attributes;
 }
 
 function recordingTracer(): NativeTracer & { spans: RecordedSpan[] } {
@@ -81,7 +81,7 @@ describe('span()/trace()/enterSpan() route to the native tracer when active', ()
 
   it('exposes the native span through getActiveTraceContext()', () => {
     const tracer = recordingTracer();
-    const handler = trace('native.ambient', () => {
+    const handler = withTracing({ name: 'native.ambient' })(() => () => {
       const ctx = getActiveTraceContext();
       ctx?.setAttribute('ambient.available', true);
       return ctx?.correlationId;
@@ -98,7 +98,7 @@ describe('span()/trace()/enterSpan() route to the native tracer when active', ()
 
   it('trace() error path marks error attributes and rethrows', async () => {
     const tracer = recordingTracer();
-    const boom = trace('boom', async () => {
+    const boom = withTracing({ name: 'boom' })(() => async () => {
       throw new Error('kaboom');
     });
     await expect(withNative(tracer, () => boom())).rejects.toThrow('kaboom');

@@ -87,6 +87,8 @@ async function setup(config?: InstrumentMongooseConfig) {
 
   // Query helper: chainable. `schema.query` defaults to `{}` (no query-helper
   // generic supplied), so assign through its real runtime shape: a map of helpers.
+  // SAFETY: see the note above - the runtime shape of `query` is a map of
+  // helper functions, which is what this test is installing one into.
   (
     schema.query as Record<string, (this: any, ...args: any[]) => unknown>
   ).byDomain = function byDomain(this: any, domain: string): any {
@@ -94,7 +96,7 @@ async function setup(config?: InstrumentMongooseConfig) {
   };
 
   // Unique model name per call to avoid OverwriteModelError across tests
-  const Model = m.model(`CM_${(modelCounter += 1)}`, schema) as any;
+  const Model = compileModel(m, `CM_${(modelCounter += 1)}`, schema);
 
   return { m, Model };
 }
@@ -106,6 +108,21 @@ const methodSpans = () =>
 
 const spanByMethod = (name: string) =>
   methodSpans().find((s) => s.attributes[ATTR_MONGOOSE_METHOD_NAME] === name);
+
+/**
+ * Compile a model whose custom statics and methods are only known to the test.
+ * Mongoose types a model by its schema's declared generics, which these tests
+ * deliberately do not supply - the point is to exercise untyped user code.
+ */
+function compileModel(
+  connection: typeof mongoose,
+  name: string,
+  schema: mongoose.Schema,
+): any {
+  // SAFETY: see above - the returned model is called with the methods the test
+  // just put on the schema, which no static type describes.
+  return connection.model(name, schema) as any;
+}
 
 describe('custom method instrumentation', () => {
   if (!supportsLocalServer) {
@@ -166,6 +183,8 @@ describe('custom method instrumentation', () => {
       expect(span).toBeDefined();
       expect(span!.attributes[ATTR_MONGOOSE_METHOD_PARAMETER_COUNT]).toBe(1);
 
+      // SAFETY: the instrumentation writes the serialized parameters as a
+      // string; the expectation below fails if the attribute is absent.
       const params = span!.attributes[
         ATTR_MONGOOSE_METHOD_PARAMETERS
       ] as string;
@@ -188,7 +207,7 @@ describe('custom method instrumentation', () => {
 
       // Query helper returns a chainable Query
       const q = Model.find().byDomain('x.io');
-      expect(typeof q.exec).toBe('function');
+      expect(q.exec).toBeTypeOf('function');
       const results = await q;
       expect(results).toHaveLength(1);
     } finally {
@@ -287,7 +306,7 @@ describe('custom method instrumentation', () => {
       { email: { type: String } },
       { timestamps: true },
     );
-    const Model = m.model(`TS_${(modelCounter += 1)}`, schema) as any;
+    const Model = compileModel(m, `TS_${(modelCounter += 1)}`, schema);
 
     try {
       const doc = await Model.create({ email: 'ts@example.com' });
@@ -325,8 +344,8 @@ describe('custom method instrumentation', () => {
     };
 
     const name = `Shared_${(modelCounter += 1)}`;
-    const ModelA = a.model(name, shared) as any;
-    const ModelB = b.model(name, shared) as any;
+    const ModelA = compileModel(a, name, shared);
+    const ModelB = compileModel(b, name, shared);
 
     try {
       await ModelA.create({ email: 'shared@example.com' });
@@ -363,7 +382,7 @@ describe('custom method instrumentation', () => {
     ): void {
       setImmediate(() => cb(null));
     };
-    const Model = m.model(`CB_${(modelCounter += 1)}`, schema) as any;
+    const Model = compileModel(m, `CB_${(modelCounter += 1)}`, schema);
 
     try {
       const doc = await Model.create({ email: 'cb@example.com' });
@@ -377,6 +396,8 @@ describe('custom method instrumentation', () => {
           }
           try {
             // A DB op issued from inside the callback must nest under refresh.
+            // SAFETY: a document's constructor is its Model, which is where
+            // countDocuments lives; mongoose types it as Function.
             await (doc.constructor as any).countDocuments({});
             resolve();
           } catch (error) {
@@ -395,14 +416,14 @@ describe('custom method instrumentation', () => {
       // parent linkage (not the first countDocuments span) so concurrent tests
       // sharing the global exporter can't fool the assertion.
       const parentId = refreshSpan!.spanContext().spanId;
-      const nested = exporter
-        .getFinishedSpans()
-        .some(
-          (s) =>
-            s.attributes[ATTR_DB_OPERATION_NAME] === 'countDocuments' &&
-            ((s as any).parentSpanContext?.spanId ??
-              (s as any).parentSpanId) === parentId,
-        );
+      const nested = exporter.getFinishedSpans().some(
+        (s) =>
+          s.attributes[ATTR_DB_OPERATION_NAME] === 'countDocuments' &&
+          // SAFETY: the SDK renamed parentSpanId to parentSpanContext in 2.x;
+          // reading both keeps this test working across either.
+          ((s as any).parentSpanContext?.spanId ?? (s as any).parentSpanId) ===
+            parentId,
+      );
       expect(nested).toBe(true);
     } finally {
       await m.disconnect();
@@ -422,7 +443,7 @@ describe('custom method instrumentation', () => {
     ): void {
       setImmediate(() => cb(new Error('boom')));
     };
-    const Model = m.model(`CBErr_${(modelCounter += 1)}`, schema) as any;
+    const Model = compileModel(m, `CBErr_${(modelCounter += 1)}`, schema);
 
     try {
       const doc = await Model.create({ email: 'err@example.com' });
@@ -455,14 +476,16 @@ describe('custom method instrumentation', () => {
     const schema = new m.Schema({ email: { type: String } });
     // Plugin-style attachment: statics is typed as a map of functions, but the
     // runtime (and this test) deliberately parks a compiled Model there.
+    // SAFETY: mongoose types `statics` as the schema's declared statics; the
+    // runtime (and this test) deliberately parks a compiled Model there.
     (schema.statics as Record<string, unknown>).Patches = PatchModel;
-    const Model = m.model(`Hist_${(modelCounter += 1)}`, schema) as any;
+    const Model = compileModel(m, `Hist_${(modelCounter += 1)}`, schema);
 
     try {
       // The Model survives intact — not replaced by a wrapper.
       expect(Model.Patches).toBe(PatchModel);
-      expect(typeof Model.Patches.find).toBe('function');
-      expect(typeof Model.Patches.create).toBe('function');
+      expect(Model.Patches.find).toBeTypeOf('function');
+      expect(Model.Patches.create).toBeTypeOf('function');
 
       // And still behaves as a Model.
       const created = await Model.Patches.create({ note: 'hi' });
@@ -493,7 +516,7 @@ describe('custom method instrumentation', () => {
     };
 
     // A model compiled afterwards traces the dynamically added static.
-    const Second = m.model(`Dyn_${(modelCounter += 1)}`, schema) as any;
+    const Second = compileModel(m, `Dyn_${(modelCounter += 1)}`, schema);
 
     try {
       await Second.create({ email: 'dyn@example.com' });

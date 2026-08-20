@@ -25,12 +25,12 @@ describe('backend adapter registry', () => {
 
   it('each adapter implements the QueryAdapter interface', () => {
     for (const a of listAdapters()) {
-      expect(typeof a.id).toBe('string');
-      expect(typeof a.label).toBe('string');
-      expect(typeof a.ping).toBe('function');
-      expect(typeof a.listServices).toBe('function');
-      expect(typeof a.searchTraces).toBe('function');
-      expect(typeof a.getTrace).toBe('function');
+      expect(a.id).toBeTypeOf('string');
+      expect(a.label).toBeTypeOf('string');
+      expect(a.ping).toBeTypeOf('function');
+      expect(a.listServices).toBeTypeOf('function');
+      expect(a.searchTraces).toBeTypeOf('function');
+      expect(a.getTrace).toBeTypeOf('function');
     }
   });
 

@@ -1,8 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite';
 import GenAiTour from './GenAiTour.svelte';
-import {
-  tourSteps,
-} from '../__fixtures__/genai';
+import { tourSteps } from '../__fixtures__/genai';
 
 // Catalogue only — no assertions. Fixtures come from the real normalisers over
 // recorded spans, so no story shows a shape the app cannot produce.

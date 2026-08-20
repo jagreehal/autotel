@@ -110,6 +110,8 @@ function parseArgs(argv: string[]): CliOptions | null {
       continue;
     }
     if (arg === '--ai-provider' && next) {
+      // SAFETY: the value came off argv; createAIModel rejects an unknown
+      // provider when the model is built.
       options.ai.provider = next as AIProviderType;
       i++;
       continue;

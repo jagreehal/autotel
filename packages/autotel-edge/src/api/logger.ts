@@ -18,6 +18,14 @@ import {
   createContextKey,
 } from '@opentelemetry/api';
 import { createRedactor, type RedactorConfig } from './redact';
+import type { UnknownRecord } from '../values';
+import {
+  asFunction,
+  asRecord,
+  asString,
+  isFunction,
+  readProperty,
+} from '../values';
 
 export type LogLevel =
   'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
@@ -216,6 +224,9 @@ const LOGGER_VERSION = 'autotel-edge';
  * Falls back to undefined if no log level is set in context
  */
 export function getActiveLogLevel(): LogLevel | undefined {
+  // SAFETY: withLogLevel below is the only writer of this context key, and it
+  // takes a LogLevel. OTel's context is untyped storage, so the level is
+  // stated back here on the way out.
   return api_context.active().getValue(LOG_LEVEL_KEY) as LogLevel | undefined;
 }
 
@@ -264,7 +275,7 @@ function getTraceContext(): {
 }
 
 function isRecord(value: unknown): value is LogAttrs {
-  return typeof value === 'object' && value !== null;
+  return asRecord(value) !== undefined || Array.isArray(value);
 }
 
 function toErrorAttrs(error: unknown): LogAttrs {
@@ -328,22 +339,22 @@ function formatMessage(template: string, args: unknown[]): string {
 const ANSI_RESET = '\u001B[0m';
 const ANSI_DIM = '\u001B[2m';
 const ANSI_BOLD = '\u001B[1m';
-const ANSI_COLORS: Record<string, string> = {
-  fatal: '\u001B[41m\u001B[37m', // white on red bg
-  error: '\u001B[31m', // red
-  warn: '\u001B[33m', // yellow
-  info: '\u001B[36m', // cyan
-  debug: '\u001B[34m', // blue
-  trace: '\u001B[90m', // gray
-};
-const LEVEL_SYMBOLS: Record<string, string> = {
-  fatal: '✗',
-  error: '✗',
-  warn: '⚠',
-  info: '●',
-  debug: '◦',
-  trace: '…',
-};
+const ANSI_COLORS = new Map<string, string>([
+  ['fatal', '\u001B[41m\u001B[37m'], // white on red bg
+  ['error', '\u001B[31m'], // red
+  ['warn', '\u001B[33m'], // yellow
+  ['info', '\u001B[36m'], // cyan
+  ['debug', '\u001B[34m'], // blue
+  ['trace', '\u001B[90m'], // gray
+]);
+const LEVEL_SYMBOLS = new Map<string, string>([
+  ['fatal', '✗'],
+  ['error', '✗'],
+  ['warn', '⚠'],
+  ['info', '●'],
+  ['debug', '◦'],
+  ['trace', '…'],
+]);
 
 function formatPrettyTimestamp(): string {
   const d = new Date();
@@ -354,7 +365,7 @@ function formatPrettyTimestamp(): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
-function formatPrettyAttrs(attrs: Record<string, any>): string {
+function formatPrettyAttrs(attrs: LogAttrs): string {
   const keys = Object.keys(attrs);
   if (keys.length === 0) return '';
   return (
@@ -379,8 +390,10 @@ function safeStringify(
 
   return JSON.stringify(
     obj,
-    function replacer(this: any, _key: string, value: unknown) {
-      if (typeof value === 'object' && value !== null) {
+    function replacer(this: unknown, _key: string, value: unknown) {
+      const container =
+        asRecord(value) ?? (Array.isArray(value) ? value : undefined);
+      if (container) {
         // Unwind: `this` is the object that owns the current key.
         // Pop ancestors until we find `this` (our direct parent).
         while (
@@ -391,18 +404,19 @@ function safeStringify(
         }
 
         // True circular reference: value is already an ancestor
-        if (ancestors.includes(value as object)) return '[Circular]';
+        if (ancestors.includes(container)) return '[Circular]';
 
         if (ancestors.length >= depthLimit) return '[Object]';
 
-        ancestors.push(value as object);
+        ancestors.push(container);
 
-        if (!Array.isArray(value)) {
-          const keys = Object.keys(value as Record<string, unknown>);
+        const record = asRecord(container);
+        if (record) {
+          const keys = Object.keys(record);
           if (keys.length > edgeLimit) {
-            const truncated: Record<string, unknown> = {};
+            const truncated: UnknownRecord = {};
             for (let i = 0; i < edgeLimit; i++) {
-              truncated[keys[i]] = (value as Record<string, unknown>)[keys[i]];
+              truncated[keys[i]] = record[keys[i]];
             }
             truncated['...'] = `[${keys.length - edgeLimit} more properties]`;
             return truncated;
@@ -414,34 +428,32 @@ function safeStringify(
   );
 }
 
-function parseLogArgs(args: unknown[]): { msg: string; attrs?: LogAttrs } {
-  const [first, ...rest] = args;
+/** What one log call turned out to be saying. */
+interface ParsedLogArgs {
+  msg: string;
+  attrs?: LogAttrs;
+}
 
-  if (typeof first === 'string') {
-    return {
-      msg: formatMessage(first, rest),
-      attrs: undefined,
-    };
+function parseLogArgs(args: unknown[]): ParsedLogArgs {
+  const [first, ...rest] = args;
+  const template = asString(rest[0]);
+  const trailingMessage =
+    template === undefined ? undefined : formatMessage(template, rest.slice(1));
+
+  const firstAsMessage = asString(first);
+  if (firstAsMessage !== undefined) {
+    return { msg: formatMessage(firstAsMessage, rest), attrs: undefined };
   }
 
   if (first instanceof Error) {
     return {
-      msg:
-        typeof rest[0] === 'string'
-          ? formatMessage(rest[0], rest.slice(1))
-          : first.message,
+      msg: trailingMessage ?? first.message,
       attrs: toErrorAttrs(first),
     };
   }
 
   if (isRecord(first)) {
-    return {
-      msg:
-        typeof rest[0] === 'string'
-          ? formatMessage(rest[0], rest.slice(1))
-          : '',
-      attrs: first,
-    };
+    return { msg: trailingMessage ?? '', attrs: first };
   }
 
   return {
@@ -527,6 +539,8 @@ export function createEdgeLogger(
     options?.level ??
     (options?.useOnlyCustomLevels ? Object.keys(customLevels)[0] : 'info') ??
     'info';
+  // SAFETY: a level is either one of Pino's or one the caller declared in
+  // customLevels, which is what LevelWithSilentOrString allows.
   let currentLevel = defaultLevel as LevelWithSilentOrString;
   const pretty = options?.pretty || false;
   const currentBindings = { ...options?.bindings };
@@ -586,7 +600,7 @@ export function createEdgeLogger(
       | ((current: number, expected: number) => boolean)
       | undefined,
   ) => {
-    if (typeof comparison === 'function') return comparison(current, expected);
+    if (isFunction(comparison)) return comparison(current, expected);
     if (comparison === 'DESC') return current <= expected;
     return current >= expected;
   };
@@ -605,6 +619,9 @@ export function createEdgeLogger(
     listeners.set(event, activeListeners);
     if (event === 'level-change') {
       levelListeners.length = 0;
+      // SAFETY: the 'level-change' event is only ever registered with a
+      // LevelChangeEventListener - that is what the on()/off() overloads
+      // above declare, and this is the same list read back.
       levelListeners.push(
         ...((listeners.get(event) as LevelChangeEventListener[] | undefined) ??
           []),
@@ -644,6 +661,9 @@ export function createEdgeLogger(
     }
     if (event === 'level-change') {
       levelListeners.length = 0;
+      // SAFETY: the 'level-change' event is only ever registered with a
+      // LevelChangeEventListener - that is what the on()/off() overloads
+      // above declare, and this is the same list read back.
       levelListeners.push(
         ...((listeners.get(event) as LevelChangeEventListener[] | undefined) ??
           []),
@@ -675,19 +695,17 @@ export function createEdgeLogger(
 
   const getTimestamp = (): string | undefined => {
     if (timestamp === false) return undefined;
-    if (typeof timestamp === 'function') return timestamp();
-    return new Date().toISOString();
+    return isFunction(timestamp) ? timestamp() : new Date().toISOString();
   };
 
-  const writeOutput = (
-    level: LevelWithSilentOrString,
-    logObject: Record<string, any>,
-  ) => {
+  const writeOutput = (level: LevelWithSilentOrString, logObject: LogAttrs) => {
     if (writeFn) {
-      if (typeof writeFn === 'function') {
-        writeFn(logObject);
-      } else if (typeof writeFn === 'object' && writeFn[level]) {
-        writeFn[level](logObject);
+      const writeAll = asFunction(writeFn);
+      const writeForLevel = asFunction(readProperty(writeFn, level));
+      if (writeAll) {
+        writeAll(logObject);
+      } else if (writeForLevel) {
+        writeForLevel(logObject);
       } else {
         console.log(stringify(logObject));
       }
@@ -699,7 +717,7 @@ export function createEdgeLogger(
     }
   };
 
-  const applySerializers = (obj: Record<string, any>): Record<string, any> => {
+  const applySerializers = (obj: LogAttrs): LogAttrs => {
     if (Object.keys(serializers).length === 0) return obj;
     return Object.fromEntries(
       Object.entries(obj).map(([key, value]) => [
@@ -724,13 +742,15 @@ export function createEdgeLogger(
     }
     // Apply serializers then redaction to messages
     const processedMessages = rawArgs.map((m) => {
-      if (typeof m !== 'object' || m === null) return m;
-      const serialized = applySerializers(m as Record<string, any>);
+      const record = asRecord(m);
+      if (!record) return m;
+      const serialized = applySerializers(record);
       return redactor ? redactor(serialized) : serialized;
     });
     // Apply serializers then redaction to bindings
     const processedBindings = bindingsChain.map((b) => {
       const serialized = applySerializers({ ...b });
+      // SAFETY: a redactor answers with the same bag of fields, masked.
       return redactor ? (redactor(serialized) as LogAttrs) : serialized;
     });
     const logEvent: LogEvent = {
@@ -752,6 +772,8 @@ export function createEdgeLogger(
 
     const ctx = getTraceContext();
     const message = msgPrefix ? `${msgPrefix}${msg}` : msg;
+    // SAFETY: a bindings formatter is the caller's own hook; Pino types it as
+    // returning `object`, and whatever it returns is spread onto the line.
     const baseBindings = bindingsFormatter
       ? (bindingsFormatter({ ...currentBindings }) as LogAttrs)
       : { ...currentBindings };
@@ -763,14 +785,18 @@ export function createEdgeLogger(
           ]),
         )
       : undefined;
+    // SAFETY: a computed key is what nestedKey is for - the line's fields go
+    // under the name the caller chose.
     const mergeObject = nestedKey
-      ? ({ [nestedKey]: serializedAttrs ?? {} } as Record<string, unknown>)
+      ? ({ [nestedKey]: serializedAttrs ?? {} } as UnknownRecord)
       : (serializedAttrs ?? {});
     const mixinObject = mixin?.(mergeObject, levelValues[level], logger) ?? {};
+    // SAFETY: the merge strategy is the caller's hook, typed by Pino as
+    // returning `object`; its result is the line's own fields.
     const mergedLogObject = mixinMergeStrategy(
       mergeObject,
       mixinObject,
-    ) as Record<string, unknown>;
+    ) as UnknownRecord;
     const formattedLogObject = logFormatter
       ? logFormatter(mergedLogObject)
       : mergedLogObject;
@@ -780,17 +806,18 @@ export function createEdgeLogger(
           level: logger.useLevelLabels ? level : levelValues[level],
         };
     const ts = getTimestamp();
-    const logEntry: Record<string, any> = {
-      ...formattedLevel,
-      ...(loggerName === undefined ? {} : { name: loggerName }),
-      service,
-      ...(message === '' ? {} : { [messageKey]: message }),
-      ...(base === null || base === undefined ? {} : base),
-      ...baseBindings,
-      ...formattedLogObject,
-      ...ctx, // Auto-inject traceId, spanId, correlationId
-      ...(ts === undefined ? {} : { timestamp: ts }),
-    };
+    const logEntry: LogAttrs = { ...formattedLevel };
+    if (loggerName !== undefined) logEntry.name = loggerName;
+    logEntry.service = service;
+    if (message !== '') logEntry[messageKey] = message;
+    Object.assign(
+      logEntry,
+      base ?? {},
+      baseBindings,
+      formattedLogObject,
+      ctx, // Auto-inject traceId, spanId, correlationId
+    );
+    if (ts !== undefined) logEntry.timestamp = ts;
 
     if (
       serializedAttrs &&
@@ -804,8 +831,8 @@ export function createEdgeLogger(
 
     if (pretty && !writeFn) {
       // Pretty print for development
-      const color = ANSI_COLORS[level] ?? ANSI_COLORS.info;
-      const symbol = LEVEL_SYMBOLS[level] ?? '●';
+      const color = ANSI_COLORS.get(level) ?? ANSI_COLORS.get('info') ?? '';
+      const symbol = LEVEL_SYMBOLS.get(level) ?? '●';
       const time = formatPrettyTimestamp();
       const traceInfo = ctx
         ? ` ${ANSI_DIM}[${ctx.traceId.slice(0, 8)}/${ctx.spanId.slice(0, 8)}]${ANSI_RESET}`
@@ -814,6 +841,8 @@ export function createEdgeLogger(
         ...baseBindings,
         ...formattedLogObject,
       };
+      // SAFETY: a redactor answers with the same bag of fields it was given,
+      // minus the values it masked - that is what redacting means here.
       const safeAttrs = redactor
         ? (redactor(prettyAttrs) as LogAttrs)
         : prettyAttrs;
@@ -823,6 +852,7 @@ export function createEdgeLogger(
       );
     } else {
       // Structured JSON for production (or custom write)
+      // SAFETY: see the note on safeAttrs above.
       const safeEntry = redactor ? (redactor(logEntry) as LogAttrs) : logEntry;
       writeOutput(level, safeEntry);
     }
@@ -831,14 +861,21 @@ export function createEdgeLogger(
   };
 
   const makeLogMethod = (levelName: string): LogFn => {
+    // SAFETY: LogFn is the set of spellings a caller may use; this function
+    // accepts all of them and hands the arguments to parseLogArgs, which is
+    // the one place that decides which spelling arrived.
     return ((...args: unknown[]) => {
       if (hooks?.logMethod) {
+        // SAFETY: LogFn's overloads describe how a caller may spell a log
+        // call; this forwards whatever spelling arrived, unread, to
+        // parseLogArgs - which is the one place that decides what it was.
         const method = ((...methodArgs: unknown[]) => {
           const { msg, attrs } = parseLogArgs(methodArgs);
           log(levelName, msg, attrs, methodArgs);
         }) as LogFn;
         hooks.logMethod.call(
           logger,
+          // SAFETY: as above - these are the arguments this log call received.
           args as Parameters<LogFn>,
           method,
           levelValues[levelName],
@@ -906,6 +943,8 @@ export function createEdgeLogger(
 
     fatal: makeLogMethod('fatal'),
 
+    // SAFETY: a silent level accepts every spelling of a log call and does
+    // nothing with any of them.
     silent: (() => {}) as LogFn,
 
     child: (bindings: LogAttrs, childOptions?: ChildLoggerOptions) => {

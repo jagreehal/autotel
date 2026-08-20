@@ -89,7 +89,9 @@ interface CreateMediaResponse {
 
 function isCreateMediaResponse(value: unknown): value is CreateMediaResponse {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Record<string, unknown>;
+  // SAFETY: the guard above established this is a non-null object; every field
+  // read below is then checked for its own type before it is trusted.
+  const candidate = value as Partial<CreateMediaResponse>;
   return (
     typeof candidate.mediaId === 'string' &&
     candidate.mediaId.length > 0 &&
@@ -137,7 +139,8 @@ export function langfuseMedia(options: LangfuseMediaOptions) {
       method: 'POST',
       body: JSON.stringify({
         traceId: args.traceId,
-        ...(args.observationId ? { observationId: args.observationId } : {}),
+        // Omitted rather than sent as undefined when the media is trace-level.
+        observationId: args.observationId,
         field: args.field,
         contentType: args.contentType,
         contentLength: args.bytes.byteLength,
@@ -174,9 +177,11 @@ export function langfuseMedia(options: LangfuseMediaOptions) {
         body: JSON.stringify({
           uploadedAt: new Date().toISOString(),
           uploadHttpStatus: put.status,
-          ...(put.ok
-            ? {}
-            : { uploadHttpError: (await put.text()).slice(0, 1000) }),
+          // Langfuse reads this only on a failed upload; JSON.stringify drops
+          // the key when the upload succeeded and it is undefined.
+          uploadHttpError: put.ok
+            ? undefined
+            : (await put.text()).slice(0, 1000),
           uploadTimeMs: Date.now() - startedAt,
         }),
       });

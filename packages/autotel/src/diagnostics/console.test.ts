@@ -35,6 +35,8 @@ class AlsContextManager implements ContextManager {
     thisArg?: ThisParameterType<F>,
     ...args: A
   ): ReturnType<F> {
+    // SAFETY: `with()` calls the function on the receiver its own caller
+    // supplied; this double just passes it straight through.
     return this.als.run(ctx, () =>
       fn.apply(thisArg as ThisParameterType<F>, args),
     );

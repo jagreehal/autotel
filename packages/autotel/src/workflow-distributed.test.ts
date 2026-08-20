@@ -14,6 +14,7 @@ import {
   type DistributedStepContext,
 } from './workflow-distributed';
 import type { TraceContext } from './trace-context';
+import { asString, readProperty } from './values';
 
 // Mock the functional trace
 vi.mock('./functional', () => ({
@@ -25,17 +26,17 @@ vi.mock('./functional', () => ({
     };
   }),
   withTracing: vi.fn(
-    (_options: unknown) =>
-      (factory: (ctx: unknown) => (...a: unknown[]) => unknown) =>
-      (...args: unknown[]) => {
-        const mockCtx = createMockTraceContext();
-        return factory(mockCtx)(...args);
-      },
+    () =>
+      <TArgs extends unknown[], TReturn>(
+        factory: (ctx: TraceContext) => (...args: TArgs) => TReturn,
+      ) =>
+      (...args: TArgs): TReturn =>
+        factory(createMockTraceContext())(...args),
   ),
 }));
 
 // Mock the business-baggage
-const mockBaggageStore = new Map<string, unknown>();
+const mockBaggageStore = new Map<string, Partial<WorkflowBaggageValues>>();
 vi.mock('./business-baggage', () => ({
   createSafeBaggageSchema: vi.fn((_fields, _options) => ({
     set: vi.fn((_ctx, values) => {
@@ -123,7 +124,7 @@ describe('Workflow Distributed', () => {
     it('should create a traced workflow function', async () => {
       const config: DistributedWorkflowConfig = {
         name: 'OrderFulfillment',
-        workflowIdFrom: (order) => (order as { id: string }).id,
+        workflowIdFrom: (order) => asString(readProperty(order, 'id')) ?? '',
       };
 
       const workflow = traceDistributedWorkflow(config)(
@@ -139,31 +140,28 @@ describe('Workflow Distributed', () => {
     });
 
     it('should provide workflow context with correct properties', async () => {
-      let capturedCtx: DistributedWorkflowContext | null = null;
+      const captured: DistributedWorkflowContext[] = [];
 
       const workflow = traceDistributedWorkflow({
         name: 'TestWorkflow',
         workflowIdFrom: () => 'wf-123',
         version: '1.0.0',
       })((ctx) => async () => {
-        capturedCtx = ctx;
+        captured.push(ctx);
         return {};
       });
 
       await workflow();
 
-      // Widen back to the declared union: TS narrows a closure-assigned `let`
-      // to its initial `null` in the outer flow (it can't see the deferred
-      // assignment), so read through a snapshot to restore the real type.
-      const ctx = capturedCtx as DistributedWorkflowContext | null;
-      expect(ctx).not.toBeNull();
+      const [ctx] = captured;
+      expect(ctx).toBeDefined();
       expect(ctx?.workflowId).toBe('wf-123');
       expect(ctx?.workflowName).toBe('TestWorkflow');
       expect(ctx?.workflowVersion).toBe('1.0.0');
     });
 
     it('should provide getWorkflowBaggage method', async () => {
-      let baggage: WorkflowBaggageValues | null = null;
+      const captured: WorkflowBaggageValues[] = [];
 
       const workflow = traceDistributedWorkflow({
         name: 'TestWorkflow',
@@ -171,14 +169,14 @@ describe('Workflow Distributed', () => {
         version: '2.0.0',
         priority: 'high',
       })((ctx) => async () => {
-        baggage = ctx.getWorkflowBaggage();
+        captured.push(ctx.getWorkflowBaggage());
         return {};
       });
 
       await workflow();
 
-      const b = baggage as WorkflowBaggageValues | null;
-      expect(b).not.toBeNull();
+      const [b] = captured;
+      expect(b).toBeDefined();
       expect(b?.workflowId).toBe('wf-123');
       expect(b?.workflowName).toBe('TestWorkflow');
       expect(b?.workflowVersion).toBe('2.0.0');
@@ -186,20 +184,20 @@ describe('Workflow Distributed', () => {
     });
 
     it('should provide getWorkflowHeaders method', async () => {
-      let headers: Record<string, string> | null = null;
+      const captured: Record<string, string>[] = [];
 
       const workflow = traceDistributedWorkflow({
         name: 'TestWorkflow',
         workflowIdFrom: () => 'wf-123',
       })((ctx) => async () => {
-        headers = ctx.getWorkflowHeaders();
+        captured.push(ctx.getWorkflowHeaders());
         return {};
       });
 
       await workflow();
 
-      const h = headers as Record<string, string> | null;
-      expect(h).not.toBeNull();
+      const [h] = captured;
+      expect(h).toBeDefined();
       expect(h?.traceparent).toBeDefined();
     });
 
@@ -310,19 +308,19 @@ describe('Workflow Distributed', () => {
         stepIndex: 2,
       });
 
-      let capturedCtx: DistributedStepContext | null = null;
+      const captured: DistributedStepContext[] = [];
 
       const step = traceDistributedStep({
         name: 'ChargePayment',
       })((ctx) => async () => {
-        capturedCtx = ctx;
+        captured.push(ctx);
         return {};
       });
 
       await step();
 
-      const ctx = capturedCtx as DistributedStepContext | null;
-      expect(ctx).not.toBeNull();
+      const [ctx] = captured;
+      expect(ctx).toBeDefined();
       expect(ctx?.workflowId).toBe('wf-123');
       expect(ctx?.workflowName).toBe('OrderFulfillment');
       expect(ctx?.stepName).toBe('ChargePayment');
@@ -331,19 +329,19 @@ describe('Workflow Distributed', () => {
     it('should handle missing workflow context gracefully', async () => {
       mockBaggageStore.clear();
 
-      let capturedCtx: DistributedStepContext | null = null;
+      const captured: DistributedStepContext[] = [];
 
       const step = traceDistributedStep({
         name: 'StandaloneStep',
       })((ctx) => async () => {
-        capturedCtx = ctx;
+        captured.push(ctx);
         return {};
       });
 
       await step();
 
-      const ctx = capturedCtx as DistributedStepContext | null;
-      expect(ctx).not.toBeNull();
+      const [ctx] = captured;
+      expect(ctx).toBeDefined();
       expect(ctx?.workflowId).toBeNull();
       expect(ctx?.workflowName).toBeNull();
       expect(ctx?.stepName).toBe('StandaloneStep');
@@ -373,19 +371,19 @@ describe('Workflow Distributed', () => {
         workflowName: 'TestWorkflow',
       });
 
-      let capturedCtx: DistributedStepContext | null = null;
+      const captured: DistributedStepContext[] = [];
 
       const step = traceDistributedStep({
         name: 'IsolatedStep',
         extractBaggage: false,
       })((ctx) => async () => {
-        capturedCtx = ctx;
+        captured.push(ctx);
         return {};
       });
 
       await step();
 
-      const ctx = capturedCtx as DistributedStepContext | null;
+      const [ctx] = captured;
       expect(ctx?.workflowId).toBeNull();
     });
 
@@ -660,7 +658,7 @@ describe('Workflow Distributed', () => {
         const values = parseWorkflowFromBaggage(baggage);
 
         expect(values?.workflowId).toBe('wf-123');
-        expect((values as Record<string, unknown>)['other']).toBeUndefined();
+        expect(readProperty(values, 'other')).toBeUndefined();
       });
 
       it('should parse all workflow fields', () => {
@@ -700,7 +698,8 @@ describe('Workflow Distributed', () => {
       // Service A: Create order workflow
       const createOrder = traceDistributedWorkflow({
         name: 'OrderFulfillment',
-        workflowIdFrom: (order) => (order as { orderId: string }).orderId,
+        workflowIdFrom: (order) =>
+          asString(readProperty(order, 'orderId')) ?? '',
         version: '1.0.0',
         totalSteps: 4,
       })((ctx) => async (_order: { orderId: string; items: string[] }) => {
@@ -800,9 +799,7 @@ describe('Workflow Distributed', () => {
         results.push(result);
 
         // Update baggage for next step
-        const currentBaggage = mockBaggageStore.get(
-          'workflow',
-        ) as WorkflowBaggageValues;
+        const currentBaggage = mockBaggageStore.get('workflow');
         mockBaggageStore.set('workflow', {
           ...currentBaggage,
           stepIndex: i + 1,

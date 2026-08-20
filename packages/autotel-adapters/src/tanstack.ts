@@ -6,7 +6,7 @@ export const useLogger = createUseLogger<{
 }>({
   adapterName: 'tanstack',
   enrich: (ctx) => ({
-    ...(ctx.method ? { 'http.request.method': ctx.method } : {}),
-    ...(ctx.pathname ? { 'http.route': ctx.pathname } : {}),
+    'http.request.method': ctx.method,
+    'http.route': ctx.pathname,
   }),
 });

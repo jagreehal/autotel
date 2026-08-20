@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { defineEnricher } from './enricher-toolkit';
+import { defineEnricher, type EnrichContext } from './enricher-toolkit';
+import type { UnknownRecord } from './values';
 
 describe('defineEnricher', () => {
   it('merges computed values into existing field by default', () => {
@@ -42,7 +43,7 @@ describe('defineEnricher', () => {
       compute: () => {},
     });
 
-    const ctx = { event: { a: 1 } as Record<string, unknown> };
+    const ctx: EnrichContext<UnknownRecord> = { event: { a: 1 } };
     enricher(ctx);
     expect(ctx.event).toEqual({ a: 1 });
   });
@@ -57,7 +58,7 @@ describe('defineEnricher', () => {
       },
     });
 
-    const ctx = { event: {} as Record<string, unknown> };
+    const ctx: EnrichContext<UnknownRecord> = { event: {} };
     enricher(ctx);
 
     expect(ctx.event).toEqual({});

@@ -1,8 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite';
 import RunTraceView from './RunTraceView.svelte';
-import {
-  runTraceNodes,
-} from '../__fixtures__/genai';
+import { runTraceNodes } from '../__fixtures__/genai';
 
 // Catalogue only — no assertions. Fixtures come from the real normalisers over
 // recorded spans, so no story shows a shape the app cannot produce.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JaegerBackend } from '../src/backends/jaeger/index';
+import { installFetchHandler } from './helpers/fetch';
 
 describe('JaegerBackend', () => {
   it('normalizes trace records from Jaeger payloads', () => {
@@ -305,11 +306,10 @@ describe('JaegerBackend', () => {
   it('searchTraces with hasError over-fetches without sending tags (Jaeger cannot index bool error tag)', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      const url = typeof input === 'string' ? input : input.toString();
+    installFetchHandler(async (url) => {
       requests.push(url);
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
-    }) as typeof fetch;
+    });
 
     try {
       const backend = new JaegerBackend('http://localhost:16686');
@@ -328,10 +328,10 @@ describe('JaegerBackend', () => {
   it('searchTraces forwards explicit time window as Jaeger start/end (μs)', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      requests.push(typeof input === 'string' ? input : input.toString());
+    installFetchHandler(async (url) => {
+      requests.push(url);
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
-    }) as typeof fetch;
+    });
 
     try {
       const backend = new JaegerBackend('http://localhost:16686');
@@ -352,10 +352,10 @@ describe('JaegerBackend', () => {
   it('searchTraces defaults to 60m lookback when no time window is given', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      requests.push(typeof input === 'string' ? input : input.toString());
+    installFetchHandler(async (url) => {
+      requests.push(url);
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
-    }) as typeof fetch;
+    });
 
     try {
       const backend = new JaegerBackend('http://localhost:16686');
@@ -372,10 +372,10 @@ describe('JaegerBackend', () => {
   it('searchTraces forwards min/max duration as Jaeger ms strings', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-      requests.push(typeof input === 'string' ? input : input.toString());
+    installFetchHandler(async (url) => {
+      requests.push(url);
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
-    }) as typeof fetch;
+    });
 
     try {
       const backend = new JaegerBackend('http://localhost:16686');

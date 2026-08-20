@@ -1,6 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import { readableSpanDouble } from './testing/doubles';
 import {
   createTraceExporter,
   formatEndpointUrl,
@@ -60,6 +62,9 @@ async function captureOtlpRequest(): Promise<{
   await new Promise<void>((resolve) =>
     listener.listen(0, '127.0.0.1', resolve),
   );
+  // SAFETY: address() answers with an AddressInfo for a listening TCP server,
+  // and this one was just awaited into listening. The string form is for Unix
+  // sockets, which this test never opens.
   const { port } = listener.address() as AddressInfo;
 
   return {
@@ -74,8 +79,8 @@ async function captureOtlpRequest(): Promise<{
 }
 
 /** Minimal finished span the OTLP serializers accept. */
-function probeSpan(): unknown {
-  return {
+function probeSpan(): ReadableSpan {
+  return readableSpanDouble({
     name: 'protocol-probe',
     kind: 0,
     spanContext: () => ({
@@ -97,7 +102,7 @@ function probeSpan(): unknown {
     droppedAttributesCount: 0,
     droppedEventsCount: 0,
     droppedLinksCount: 0,
-  };
+  });
 }
 
 async function exportOneSpan(
@@ -106,11 +111,7 @@ async function exportOneSpan(
 ): Promise<void> {
   const exporter = createTraceExporter(protocol, { url });
   await new Promise<void>((resolve) => {
-    (
-      exporter as unknown as {
-        export: (spans: unknown[], done: () => void) => void;
-      }
-    ).export([probeSpan()], () => resolve());
+    exporter.export([probeSpan()], () => resolve());
   });
 }
 

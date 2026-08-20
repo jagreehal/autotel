@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { atomicWrite } from './fs';
+import type { UnknownRecord } from './values';
+import { asRecord, asString } from './values';
 
 /**
  * Module-level state for output configuration.
@@ -58,23 +60,21 @@ export function redact(value: unknown): unknown {
     return value.map((v) => redact(v));
   }
 
-  if (typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (typeof v === 'string' && SECRET_KEY_PATTERN.test(k)) {
-        out[k] = REDACTED;
-      } else {
-        out[k] = redact(v);
-      }
+  const record = asRecord(value);
+  if (record) {
+    const out: UnknownRecord = {};
+    for (const [key, field] of Object.entries(record)) {
+      const secretByName =
+        asString(field) !== undefined && SECRET_KEY_PATTERN.test(key);
+      out[key] = secretByName ? REDACTED : redact(field);
     }
     return out;
   }
 
-  if (typeof value === 'string' && SECRET_VALUE_PATTERN.test(value)) {
-    return REDACTED;
-  }
-
-  return value;
+  const text = asString(value);
+  return text !== undefined && SECRET_VALUE_PATTERN.test(text)
+    ? REDACTED
+    : value;
 }
 
 /**

@@ -1,7 +1,7 @@
 {
   "name": "autotel-subscribers",
   "version": "49.0.0",
-  "description": "Write Once, Observe Anywhere - Event subscribers for autotel (PostHog, Mixpanel, Amplitude, Segment)",
+  "description": "Write Once, Observe Anywhere - Event subscribers for autotel (Mixpanel, Amplitude, Segment, Slack, webhooks, Loki, file)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
@@ -11,11 +11,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./posthog": {
-      "types": "./dist/posthog.d.ts",
-      "import": "./dist/posthog.js",
-      "require": "./dist/posthog.cjs"
     },
     "./mixpanel": {
       "types": "./dist/mixpanel.d.ts",

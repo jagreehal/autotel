@@ -40,7 +40,7 @@ const preview: Preview = {
       // driven by `:root[data-theme=...]` on the document element. The widget's
       // surface/foreground tokens are applied to the body so every story sits
       // on the themed background (replaces the old Preact wrapper <div>).
-      if (typeof document !== 'undefined') {
+      if (globalThis.document !== undefined) {
         document.documentElement.setAttribute('data-theme', theme);
         document.body.classList.add('bg-surface', 'text-fg');
       }

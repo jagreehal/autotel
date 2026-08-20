@@ -123,6 +123,8 @@ export class MockWebhookServer {
       });
     });
 
+    // SAFETY: address() answers with the string form only for a pipe or UDS
+    // listener; this server was listened on a TCP port.
     const address = this.server.address() as AddressInfo;
     return `http://localhost:${address.port}`;
   }
@@ -161,6 +163,8 @@ export class MockWebhookServer {
   getRequestsWhere(filter: Partial<RecordedRequest>): RecordedRequest[] {
     return this.requests.filter((req) => {
       return Object.entries(filter).every(([key, value]) => {
+        // SAFETY: a recorded request is matched on an arbitrary caller-supplied
+        // key, which is the point of the matcher.
         return (req as any)[key] === value;
       });
     });

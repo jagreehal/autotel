@@ -4,25 +4,25 @@ import { trace } from './trace-hybrid';
 
 describe('hybrid trace', () => {
   it('is callable like autotel trace', () => {
-    expect(typeof trace).toBe('function');
+    expect(trace).toBeTypeOf('function');
 
     const wrapped = trace(async (x: number) => x * 2);
-    expect(typeof wrapped).toBe('function');
+    expect(wrapped).toBeTypeOf('function');
   });
 
   it('exposes the OTel TraceAPI surface', () => {
-    expect(typeof trace.getActiveSpan).toBe('function');
-    expect(typeof trace.getTracer).toBe('function');
-    expect(typeof trace.getTracerProvider).toBe('function');
-    expect(typeof trace.setSpan).toBe('function');
-    expect(typeof trace.getSpan).toBe('function');
-    expect(typeof trace.setSpanContext).toBe('function');
-    expect(typeof trace.getSpanContext).toBe('function');
-    expect(typeof trace.deleteSpan).toBe('function');
-    expect(typeof trace.wrapSpanContext).toBe('function');
-    expect(typeof trace.isSpanContextValid).toBe('function');
-    expect(typeof trace.disable).toBe('function');
-    expect(typeof trace.setGlobalTracerProvider).toBe('function');
+    expect(trace.getActiveSpan).toBeTypeOf('function');
+    expect(trace.getTracer).toBeTypeOf('function');
+    expect(trace.getTracerProvider).toBeTypeOf('function');
+    expect(trace.setSpan).toBeTypeOf('function');
+    expect(trace.getSpan).toBeTypeOf('function');
+    expect(trace.setSpanContext).toBeTypeOf('function');
+    expect(trace.getSpanContext).toBeTypeOf('function');
+    expect(trace.deleteSpan).toBeTypeOf('function');
+    expect(trace.wrapSpanContext).toBeTypeOf('function');
+    expect(trace.isSpanContextValid).toBeTypeOf('function');
+    expect(trace.disable).toBeTypeOf('function');
+    expect(trace.setGlobalTracerProvider).toBeTypeOf('function');
   });
 
   it('forwards getActiveSpan / getTracerProvider to the OTel singleton', () => {

@@ -24,11 +24,14 @@ import {
   createTraceContext,
   getActiveContextWithBaggage,
   getContextStorage,
+  hasExplicitSpanStatus,
   type TraceContext,
 } from './trace-context';
 import { setSpanName } from './trace-helpers';
 import { getForceFlushableProvider } from './tracer-provider';
 import { inferVariableNameFromCallStack } from './variable-name-inference';
+import type { UnknownRecord } from './values';
+import { asString, isDevelopment } from './values';
 
 export type WrappedFunction<TArgs extends unknown[], TReturn> = (
   ...args: TArgs
@@ -70,9 +73,10 @@ export interface TracingOptions<
    */
   withMetrics?: boolean;
   /** Extract attributes from function arguments. */
-  attributesFromArgs?: (args: TArgs) => Record<string, unknown>;
+  attributesFromArgs?: (args: TArgs) => Attributes;
   /** Extract attributes from the function result. */
-  attributesFromResult?: (result: TReturn) => Record<string, unknown>;
+  /** Receives the resolved value when the function returns a Promise. */
+  attributesFromResult?: (result: Awaited<TReturn>) => Attributes;
   /**
    * Capture arguments on the span as the truncated JSON `autotel.input`
    * attribute. One argument is captured directly; multiple arguments are an
@@ -107,7 +111,7 @@ export interface TracingOptions<
    * as `redirect()` and `notFound()`.
    * @default every throw is treated as an error
    */
-  isError?: (error: unknown) => boolean;
+  isError?: (cause: unknown) => boolean;
 }
 
 /** Options for `instrument()` batch instrumentation. */
@@ -205,23 +209,26 @@ function getSpanName<TArgs extends unknown[], TReturn>(
 
   const initConfig = getInitConfig();
   if (
-    typeof process !== 'undefined' &&
-    process.env.NODE_ENV !== 'production' &&
+    isDevelopment() &&
     !unknownSpanNameWarningEmitted &&
     initConfig?.logger?.warn
   ) {
     unknownSpanNameWarningEmitted = true;
     initConfig.logger.warn(
       {},
-      '[autotel] Span name resolved to "unknown". Pass an explicit name, for example trace("operation.name", fn).',
+      '[autotel] Span name resolved to "unknown". Use instrument({ key: "operation.name", fn }) for a reusable named wrapper.',
     );
   }
   return 'unknown';
 }
 
 function createDummyCtx<
-  TBaggage extends Record<string, unknown> | undefined = undefined,
+  TBaggage extends UnknownRecord | undefined = undefined,
 >(): TraceContext<TBaggage> {
+  // SAFETY: a context for a span that is not recording. Every method is a
+  // no-op and every id is empty, which is what each caller sees when
+  // sampling has decided against the span - the shape is TraceContext's, the
+  // hop is only because a bag of no-ops cannot be inferred as one.
   return {
     traceId: '',
     spanId: '',
@@ -245,7 +252,7 @@ function createDummyCtx<
 function serializeCapture(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   try {
-    const json = typeof value === 'string' ? value : JSON.stringify(value);
+    const json = asString(value) ?? JSON.stringify(value);
     if (json === undefined) return undefined;
     return json.length > CAPTURE_MAX_CHARS
       ? `${json.slice(0, CAPTURE_MAX_CHARS)}…[truncated]`
@@ -255,19 +262,13 @@ function serializeCapture(value: unknown): string | undefined {
   }
 }
 
-function captureInputAttrs(
-  args: unknown[],
-  enabled?: boolean,
-): Record<string, unknown> {
+function captureInputAttrs(args: unknown[], enabled?: boolean): Attributes {
   if (!enabled) return {};
   const serialized = serializeCapture(args.length === 1 ? args[0] : args);
   return serialized === undefined ? {} : { [AUTOTEL_INPUT_ATTR]: serialized };
 }
 
-function captureOutputAttrs(
-  result: unknown,
-  enabled?: boolean,
-): Record<string, unknown> {
+function captureOutputAttrs(result: unknown, enabled?: boolean): Attributes {
   if (!enabled) return {};
   const serialized = serializeCapture(result);
   return serialized === undefined ? {} : { [AUTOTEL_OUTPUT_ATTR]: serialized };
@@ -281,7 +282,7 @@ function truncateErrorMessage(message: string): string {
 
 function finalizeThrownSpan(
   error: unknown,
-  isError: ((error: unknown) => boolean) | undefined,
+  isError: ((cause: unknown) => boolean) | undefined,
   finalizeContext: SpanFinalizeContext,
 ): void {
   const {
@@ -381,6 +382,9 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
 ): WrappedFunction<TArgs, TReturn> {
   const { tracer, meter } = getConfig();
   const sampler: Sampler = options.sampler || new AlwaysSampler();
+  // SAFETY: getSpanName reads only `name` and `displayName` off the function
+  // it is given, to infer a span name. A factory has those too - it is the
+  // caller's own function - and nothing else about it is read.
   const spanName = getSpanName(
     options,
     fnFactory as unknown as InstrumentableFunction<TArgs, TReturn>,
@@ -440,10 +444,8 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
             const fn = fnFactory(createTraceContext(span));
             const argsAttributes: Attributes = {
               ...captureInputAttrs(args, options.captureInput),
-              ...(options.attributesFromArgs
-                ? options.attributesFromArgs(args)
-                : {}),
-            } as Attributes;
+              ...options.attributesFromArgs?.(args),
+            };
             const handleTailSampling = (
               success: boolean,
               duration: number,
@@ -459,7 +461,7 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                 span.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
               }
             };
-            const onSuccess = (result: TReturn) => {
+            const onSuccess = (result: Awaited<TReturn>) => {
               const duration = performance.now() - startTime;
               callCounter?.add(1, {
                 operation: spanName,
@@ -469,13 +471,13 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                 operation: spanName,
                 status: 'success',
               });
-              const resultAttributes = {
+              const resultAttributes: Attributes = {
                 ...captureOutputAttrs(result, options.captureOutput),
-                ...(options.attributesFromResult
-                  ? options.attributesFromResult(result)
-                  : {}),
+                ...options.attributesFromResult?.(result),
               };
-              span.setStatus({ code: SpanStatusCode.OK });
+              if (!hasExplicitSpanStatus(span)) {
+                span.setStatus({ code: SpanStatusCode.OK });
+              }
               span.setAttributes({
                 ...argsAttributes,
                 ...resultAttributes,
@@ -488,8 +490,8 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
               span.end();
               return result;
             };
-            const onError = (error: unknown): never => {
-              finalizeThrownSpan(error, options.isError, {
+            const onError = (cause: unknown): never => {
+              finalizeThrownSpan(cause, options.isError, {
                 span,
                 spanName,
                 duration: performance.now() - startTime,
@@ -498,7 +500,7 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                 handleTailSampling,
                 extraAttributes: argsAttributes,
               });
-              throw error;
+              throw cause;
             };
 
             try {
@@ -513,7 +515,8 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
               if (result instanceof Promise) {
                 return result.then(
                   async (value) => {
-                    const completed = onSuccess(value);
+                    // SAFETY: Promise fulfillment is the awaited function result.
+                    const completed = onSuccess(value as Awaited<TReturn>);
                     await flushRootTelemetry();
                     return completed;
                   },
@@ -526,7 +529,8 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                   },
                 );
               }
-              const completed = onSuccess(result);
+              // SAFETY: this branch established that the result is synchronous.
+              const completed = onSuccess(result as Awaited<TReturn>);
               void flushRootTelemetry();
               return completed;
             } catch (error) {
@@ -559,6 +563,8 @@ export function wrapFactoryWithTracing<TArgs extends unknown[], TReturn>(
   return wrapWithTracingSync(
     factory,
     options,
+    // SAFETY: resolveVariableName reads the function's own name, which every
+    // function has.
     resolveVariableName(factory as InstrumentableFunction, variableName),
   );
 }
@@ -570,6 +576,7 @@ export function wrapPlainWithTracing<TArgs extends unknown[], TReturn>(
   variableName?: string,
 ): WrappedFunction<TArgs, TReturn> {
   const effectiveVariableName = resolveVariableName(
+    // SAFETY: as above - only the function's own name is read.
     fn as InstrumentableFunction,
     variableName,
   );
@@ -578,4 +585,16 @@ export function wrapPlainWithTracing<TArgs extends unknown[], TReturn>(
     options,
     effectiveVariableName,
   );
+}
+
+/** Run one operation immediately with its span-bound context. */
+export function runWithTraceContext<TReturn>(
+  operation: (ctx: TraceContext) => TReturn | Promise<TReturn>,
+  options: TracingOptions<[], TReturn>,
+): TReturn | Promise<TReturn> {
+  const wrapped = wrapFactoryWithTracing<[], TReturn>(
+    (ctx) => () => operation(ctx),
+    options,
+  );
+  return wrapped();
 }

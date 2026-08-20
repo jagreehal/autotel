@@ -7,6 +7,7 @@ import {
   context as api_context,
 } from '@opentelemetry/api';
 import { setConfig, parseConfig } from 'autotel-edge';
+import { tracerDouble } from '../testing/doubles.js';
 
 describe('Global Fetch Instrumentation', () => {
   let mockTracer: any;
@@ -42,7 +43,7 @@ describe('Global Fetch Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
 
     // Mock underlying fetch to return test responses
     globalThis.fetch = vi.fn(async (_input) => {
@@ -65,7 +66,7 @@ describe('Global Fetch Instrumentation', () => {
       instrumentGlobalFetch();
 
       expect(globalThis.fetch).not.toBe(originalFetch);
-      expect(typeof globalThis.fetch).toBe('function');
+      expect(globalThis.fetch).toBeTypeOf('function');
     });
 
     it('should create span for HTTP requests', async () => {

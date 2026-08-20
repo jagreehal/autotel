@@ -10,6 +10,16 @@ import type {
   MetricData,
   ErrorGroup,
 } from './types';
+import type { JsonObject } from './utils/json-fields';
+import {
+  arrayField,
+  asObject,
+  hasArrayField,
+  missingFields,
+  numberField,
+  objectField,
+  stringField,
+} from './utils/json-fields';
 
 /**
  * Export format version for compatibility checking
@@ -125,91 +135,82 @@ export async function copyTraceToClipboard(trace: TraceData): Promise<void> {
   await navigator.clipboard.writeText(json);
 }
 
+/** What a validation pass has to say about one trace. */
+interface ValidationMessages {
+  errors: string[];
+  warnings: string[];
+}
+
 /**
  * Validate span data structure
  */
-function validateSpan(span: unknown, path: string): string[] {
-  const errors: string[] = [];
+function validateSpan(span: JsonObject | undefined, path: string): string[] {
+  if (!span) return [`${path}: Invalid span data`];
+  const s = span;
 
-  if (!span || typeof span !== 'object') {
-    errors.push(`${path}: Invalid span data`);
-    return errors;
-  }
-
-  const s = span as Record<string, unknown>;
-
-  if (typeof s.spanId !== 'string') {
-    errors.push(`${path}: Missing or invalid spanId`);
-  }
-  if (typeof s.traceId !== 'string') {
-    errors.push(`${path}: Missing or invalid traceId`);
-  }
-  if (typeof s.name !== 'string') {
-    errors.push(`${path}: Missing or invalid name`);
-  }
-  if (typeof s.startTime !== 'number') {
-    errors.push(`${path}: Missing or invalid startTime`);
-  }
-  if (typeof s.endTime !== 'number') {
-    errors.push(`${path}: Missing or invalid endTime`);
-  }
-  if (typeof s.duration !== 'number') {
-    errors.push(`${path}: Missing or invalid duration`);
-  }
-  if (!s.status || typeof s.status !== 'object') {
-    errors.push(`${path}: Missing or invalid status`);
-  }
-
-  return errors;
+  return [
+    ...missingFields(s, path, stringField, ['spanId', 'traceId', 'name']),
+    ...missingFields(s, path, numberField, [
+      'startTime',
+      'endTime',
+      'duration',
+    ]),
+    ...missingFields(s, path, objectField, ['status']),
+  ];
 }
 
 /**
  * Validate trace data structure
  */
 function validateTrace(
-  trace: unknown,
+  trace: JsonObject | undefined,
   index: number,
-): { errors: string[]; warnings: string[] } {
-  const errors: string[] = [];
-  const warnings: string[] = [];
+): ValidationMessages {
   const path = `trace[${index}]`;
+  if (!trace) return { errors: [`${path}: Invalid trace data`], warnings: [] };
+  const t = trace;
 
-  if (!trace || typeof trace !== 'object') {
-    errors.push(`${path}: Invalid trace data`);
-    return { errors, warnings };
-  }
+  const warnings = stringField(t, 'correlationId')
+    ? []
+    : [`${path}: Missing correlationId, will use traceId`];
 
-  const t = trace as Record<string, unknown>;
+  const rootSpan = objectField(t, 'rootSpan');
+  const spans = hasArrayField(t, 'spans')
+    ? arrayField(t, 'spans').flatMap((span, i) =>
+        validateSpan(asObject(span), `${path}.spans[${i}]`),
+      )
+    : [`${path}: Missing or invalid spans array`];
 
-  if (typeof t.traceId !== 'string') {
-    errors.push(`${path}: Missing or invalid traceId`);
-  }
-  if (typeof t.correlationId !== 'string') {
-    warnings.push(`${path}: Missing correlationId, will use traceId`);
-  }
-  if (!t.rootSpan || typeof t.rootSpan !== 'object') {
-    errors.push(`${path}: Missing or invalid rootSpan`);
-  } else {
-    errors.push(...validateSpan(t.rootSpan, `${path}.rootSpan`));
-  }
-  if (Array.isArray(t.spans)) {
-    for (const [i, span] of t.spans.entries()) {
-      errors.push(...validateSpan(span, `${path}.spans[${i}]`));
-    }
-  } else {
-    errors.push(`${path}: Missing or invalid spans array`);
-  }
-  if (typeof t.startTime !== 'number') {
-    errors.push(`${path}: Missing or invalid startTime`);
-  }
-  if (typeof t.endTime !== 'number') {
-    errors.push(`${path}: Missing or invalid endTime`);
-  }
-  if (typeof t.duration !== 'number') {
-    errors.push(`${path}: Missing or invalid duration`);
-  }
+  return {
+    errors: [
+      ...missingFields(t, path, stringField, ['traceId']),
+      ...(rootSpan
+        ? validateSpan(rootSpan, `${path}.rootSpan`)
+        : [`${path}: Missing or invalid rootSpan`]),
+      ...spans,
+      ...missingFields(t, path, numberField, [
+        'startTime',
+        'endTime',
+        'duration',
+      ]),
+    ],
+    warnings,
+  };
+}
 
-  return { errors, warnings };
+/**
+ * A trace that validateTrace() has just accepted, read as a TraceData.
+ *
+ * SAFETY: validateTrace checks every required field of the trace and of every
+ * span it carries, which is what TraceData declares. TypeScript cannot carry
+ * that verdict across the call, so it is restated once here rather than at
+ * each of the three call sites.
+ */
+function validatedTrace(trace: JsonObject): TraceData {
+  // SAFETY: see the note above. The `unknown` hop is TypeScript's, not a
+  // widening: an interface has no implicit index signature, so it never
+  // overlaps a bag of unread fields in one step.
+  return trace as unknown as TraceData;
 }
 
 /**
@@ -228,12 +229,15 @@ export function parseImportedJson(jsonString: string): ImportResult {
     return {
       success: false,
       traces: [],
-      errors: [`Invalid JSON: ${(error as Error).message}`],
+      errors: [
+        `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      ],
       warnings: [],
     };
   }
 
-  if (!parsed || typeof parsed !== 'object') {
+  const data = asObject(parsed);
+  if (!data) {
     return {
       success: false,
       traces: [],
@@ -242,38 +246,35 @@ export function parseImportedJson(jsonString: string): ImportResult {
     };
   }
 
-  const data = parsed as Record<string, unknown>;
-
   // Check for version (optional but helpful)
-  if (
-    data.version &&
-    typeof data.version === 'string' &&
-    data.version !== EXPORT_VERSION
-  ) {
+  const version = stringField(data, 'version');
+  if (version && version !== EXPORT_VERSION) {
     warnings.push(
-      `Version mismatch: expected ${EXPORT_VERSION}, got ${data.version}`,
+      `Version mismatch: expected ${EXPORT_VERSION}, got ${version}`,
     );
   }
 
   // Determine format: single trace or bundle
-  if (data.trace && typeof data.trace === 'object') {
+  const single = objectField(data, 'trace');
+  if (single) {
     // Single trace format
-    const validation = validateTrace(data.trace, 0);
+    const validation = validateTrace(single, 0);
     errors.push(...validation.errors);
     warnings.push(...validation.warnings);
 
     if (validation.errors.length === 0) {
-      traces.push(normalizeTrace(data.trace as TraceData));
+      traces.push(normalizeTrace(validatedTrace(single)));
     }
-  } else if (Array.isArray(data.traces)) {
+  } else if (hasArrayField(data, 'traces')) {
     // Bundle format
-    for (const [index, trace] of data.traces.entries()) {
+    for (const [index, entry] of arrayField(data, 'traces').entries()) {
+      const trace = asObject(entry);
       const validation = validateTrace(trace, index);
       errors.push(...validation.errors);
       warnings.push(...validation.warnings);
 
-      if (validation.errors.length === 0) {
-        traces.push(normalizeTrace(trace as TraceData));
+      if (trace && validation.errors.length === 0) {
+        traces.push(normalizeTrace(validatedTrace(trace)));
       }
     }
   } else if (data.traceId) {
@@ -283,7 +284,7 @@ export function parseImportedJson(jsonString: string): ImportResult {
     warnings.push(...validation.warnings);
 
     if (validation.errors.length === 0) {
-      traces.push(normalizeTrace(data as unknown as TraceData));
+      traces.push(normalizeTrace(validatedTrace(data)));
     }
   } else {
     errors.push(
@@ -337,6 +338,8 @@ function normalizeSpan(span: SpanData): SpanData {
 export function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    // SAFETY: readAsText below is what fills `result`, and it always fills it
+    // with text. The union is there for readAsArrayBuffer, which is not used.
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsText(file);
@@ -354,7 +357,9 @@ export async function importTracesFromFile(file: File): Promise<ImportResult> {
     return {
       success: false,
       traces: [],
-      errors: [`Failed to read file: ${(error as Error).message}`],
+      errors: [
+        `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
+      ],
       warnings: [],
     };
   }
@@ -412,6 +417,19 @@ export function downloadSnapshotAsJson(
   URL.revokeObjectURL(url);
 }
 
+/**
+ * One array out of a snapshot, read as the records that section holds.
+ *
+ * SAFETY: a snapshot is a file this devtools wrote, so its sections hold the
+ * records they are named for. Unlike an imported trace, a snapshot section is
+ * not validated field by field - a hand-edited one renders as whatever it
+ * contains, which is the point of being able to share a repro.
+ */
+function snapshotSection<TRecord>(data: JsonObject, key: string): TRecord[] {
+  // SAFETY: see the note above.
+  return arrayField(data, key) as TRecord[];
+}
+
 export function parseImportedSnapshot(
   jsonString: string,
 ): SnapshotImportResult {
@@ -421,12 +439,15 @@ export function parseImportedSnapshot(
   } catch (error) {
     return {
       success: false,
-      errors: [`Invalid JSON: ${(error as Error).message}`],
+      errors: [
+        `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      ],
       warnings: [],
     };
   }
 
-  if (!parsed || typeof parsed !== 'object') {
+  const root = asObject(parsed);
+  if (!root) {
     return {
       success: false,
       errors: ['Snapshot is not an object'],
@@ -434,33 +455,24 @@ export function parseImportedSnapshot(
     };
   }
 
-  const root = parsed as Record<string, unknown>;
   const warnings: string[] = [];
 
   if (root.kind && root.kind !== 'autotel-devtools-snapshot') {
     warnings.push(`Unexpected snapshot kind: ${String(root.kind)}`);
   }
-  if (typeof root.version === 'string' && root.version !== EXPORT_VERSION) {
+  const version = stringField(root, 'version');
+  if (version && version !== EXPORT_VERSION) {
     warnings.push(
-      `Version mismatch: expected ${EXPORT_VERSION}, got ${root.version}`,
+      `Version mismatch: expected ${EXPORT_VERSION}, got ${version}`,
     );
   }
 
-  const data =
-    root.data && typeof root.data === 'object'
-      ? (root.data as Record<string, unknown>)
-      : root;
+  const data = objectField(root, 'data') ?? root;
 
-  const traces = Array.isArray(data.traces)
-    ? (data.traces as TraceData[]).map(normalizeTrace)
-    : [];
-  const logs = Array.isArray(data.logs) ? (data.logs as LogData[]) : [];
-  const errors = Array.isArray(data.errors)
-    ? (data.errors as ErrorGroup[])
-    : [];
-  const metrics = Array.isArray(data.metrics)
-    ? (data.metrics as MetricData[])
-    : [];
+  const traces = snapshotSection<TraceData>(data, 'traces').map(normalizeTrace);
+  const logs = snapshotSection<LogData>(data, 'logs');
+  const errors = snapshotSection<ErrorGroup>(data, 'errors');
+  const metrics = snapshotSection<MetricData>(data, 'metrics');
 
   if (
     traces.length === 0 &&
@@ -492,7 +504,9 @@ export async function importSnapshotFromFile(
   } catch (error) {
     return {
       success: false,
-      errors: [`Failed to read file: ${(error as Error).message}`],
+      errors: [
+        `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
+      ],
       warnings: [],
     };
   }

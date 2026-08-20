@@ -8,14 +8,30 @@ import type {
   ToolCallMetadata,
 } from './types.js';
 
+/**
+ * The audit metadata this package builds. Mirrors `AuditMetadata` from
+ * autotel-audit without importing it, since that package is an optional peer;
+ * the value type is the one it renders onto a span.
+ */
 interface AuditMetadataLike {
   action: string;
   resource?: string;
   actorId?: string;
   category?: string;
   outcome?: string;
-  [key: string]: unknown;
+  [key: string]: AuditMetadataLikeValue;
 }
+
+/** What a metadata field can hold; anything nested is JSON-serialized. */
+type AuditMetadataLikeValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Date
+  | Array<AuditMetadataLikeValue>
+  | { [key: string]: AuditMetadataLikeValue };
 
 export function defaultEventKind(
   metadata: AgentActionMetadata,

@@ -104,7 +104,7 @@ Use `createWorkersLogger(request, options?)` to pre-populate method/path, `cf-ra
 ## Boundaries
 
 - ✅ **Always do**: Use Proxy pattern for bindings, maintain API compatibility, check bundle size
-- ✅ **Prefer**: plain `trace(name?, fn)` for Cloudflare business logic; use `getActiveTraceContext()` or `withTracing({ name })((ctx) => fn)` when context access is needed
+- ✅ **Prefer**: `trace(fn)` for inferred-name wrappers and `trace(name, ctx => result)` for immediate named work; use `withTracing({ name })((ctx) => fn)` for reusable named business logic (`instrument(handler, config)` is the Worker handler adapter)
 - ✅ **Prefer**: span attributes plus one execution-scoped snapshot over repeated raw info logs
 - ✅ **Prefer**: implementing shared execution logger primitives in `autotel-edge` before adding Cloudflare-only logger variants
 - ⚠️ **Ask first**: Adding new bindings, changing API styles, increasing bundle size

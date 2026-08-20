@@ -17,7 +17,7 @@ Autotel ships adapters for TanStack Start, Hono, Cloudflare, Nuxt, and the Next.
 
 ```ts
 import { context, propagation } from '@opentelemetry/api';
-import { trace, getActiveTraceContext, getRequestLogger } from 'autotel';
+import { trace, getRequestLogger } from 'autotel';
 
 export async function withAutotel(
   req: MyRequest,
@@ -30,8 +30,7 @@ export async function withAutotel(
   );
 
   return context.with(parent, () =>
-    trace({ name: `${req.method} ${req.route}` }, async () => {
-      const ctx = getActiveTraceContext()!;
+    trace({ name: `${req.method} ${req.route}` }, async (ctx) => {
       ctx.setAttributes({
         'http.request.method': req.method,
         'url.path': req.path,
@@ -45,7 +44,7 @@ export async function withAutotel(
       const res = await handler();
       ctx.setAttribute('http.response.status_code', res.status);
       return res;
-    })(),
+    }),
   );
 }
 ```

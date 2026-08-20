@@ -63,6 +63,7 @@ import type {
   ContainerAttrs,
   ExceptionAttrs,
 } from './types';
+import type { Attributes } from '@opentelemetry/api';
 
 export const attrs = {
   user: {
@@ -74,7 +75,7 @@ export const attrs = {
     roles: (value: string[]) => ({ [UserAttributes.roles]: value }),
 
     data: (data: UserAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.id !== undefined) result[UserAttributes.id] = data.id;
       if (data.email !== undefined) result[UserAttributes.email] = data.email;
       if (data.name !== undefined) result[UserAttributes.name] = data.name;
@@ -91,7 +92,7 @@ export const attrs = {
     previousId: (value: string) => ({ [SessionAttributes.previousId]: value }),
 
     data: (data: SessionAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.id !== undefined) result[SessionAttributes.id] = data.id;
       if (data.previousId !== undefined)
         result[SessionAttributes.previousId] = data.previousId;
@@ -110,7 +111,7 @@ export const attrs = {
     modelName: (value: string) => ({ [DeviceAttributes.modelName]: value }),
 
     data: (data: DeviceAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.id !== undefined) result[DeviceAttributes.id] = data.id;
       if (data.manufacturer !== undefined)
         result[DeviceAttributes.manufacturer] = data.manufacturer;
@@ -153,7 +154,7 @@ export const attrs = {
     }),
 
     server: (data: HTTPServerAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.method !== undefined)
         result[HTTPAttributes.requestMethod] = data.method;
       if (data.route !== undefined) result[HTTPAttributes.route] = data.route;
@@ -171,7 +172,7 @@ export const attrs = {
     },
 
     client: (data: HTTPClientAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.method !== undefined)
         result[HTTPAttributes.requestMethod] = data.method;
       if (data.url !== undefined) result[HTTPAttributes.route] = data.url;
@@ -200,7 +201,7 @@ export const attrs = {
       }),
 
       data: (data: DBAttrs) => {
-        const result: Record<string, unknown> = {};
+        const result: Attributes = {};
         if (data.system !== undefined)
           result[DBAttributes.systemName] = data.system;
         if (data.operation !== undefined)
@@ -233,7 +234,7 @@ export const attrs = {
     version: (value: string) => ({ [ServiceAttributes.version]: value }),
 
     data: (data: ServiceAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.name !== undefined) result[ServiceAttributes.name] = data.name;
       if (data.instance !== undefined)
         result[ServiceAttributes.instance] = data.instance;
@@ -257,7 +258,7 @@ export const attrs = {
     }),
 
     data: (data: NetworkAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.peerAddress !== undefined)
         result[NetworkAttributes.peerAddress] = data.peerAddress;
       if (data.peerPort !== undefined)
@@ -280,7 +281,7 @@ export const attrs = {
     }),
 
     data: (data: ServerAddressAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.address !== undefined)
         result[ServerAddressAttributes.address] = data.address;
       if (data.port !== undefined)
@@ -299,7 +300,7 @@ export const attrs = {
     fragment: (value: string) => ({ [URLAttributes.fragment]: value }),
 
     data: (data: URLAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.scheme !== undefined) result[URLAttributes.scheme] = data.scheme;
       if (data.full !== undefined) result[URLAttributes.full] = data.full;
       if (data.path !== undefined) result[URLAttributes.path] = data.path;
@@ -317,7 +318,7 @@ export const attrs = {
     code: (value: string | number) => ({ [ErrorAttributes.code]: value }),
 
     data: (data: ErrorAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.type !== undefined) result[ErrorAttributes.type] = data.type;
       if (data.message !== undefined)
         result[ErrorAttributes.message] = data.message;
@@ -340,7 +341,7 @@ export const attrs = {
     }),
 
     data: (data: ExceptionAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.escaped !== undefined)
         result[ExceptionAttributes.escaped] = data.escaped;
       if (data.message !== undefined)
@@ -363,7 +364,7 @@ export const attrs = {
     owner: (value: string) => ({ [ProcessAttributes.owner]: value }),
 
     data: (data: ProcessAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.pid !== undefined) result[ProcessAttributes.pid] = data.pid;
       if (data.executablePath !== undefined)
         result[ProcessAttributes.executablePath] = data.executablePath;
@@ -387,7 +388,7 @@ export const attrs = {
     tag: (value: string) => ({ [ContainerAttributes.tag]: value }),
 
     data: (data: ContainerAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.id !== undefined) result[ContainerAttributes.id] = data.id;
       if (data.name !== undefined) result[ContainerAttributes.name] = data.name;
       if (data.image !== undefined)
@@ -418,7 +419,7 @@ export const attrs = {
     platform: (value: string) => ({ [CloudAttributes.platform]: value }),
 
     data: (data: CloudAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.provider !== undefined)
         result[CloudAttributes.provider] = data.provider;
       if (data.accountId !== undefined)
@@ -461,7 +462,7 @@ export const attrs = {
     }),
 
     data: (data: MessagingAttrs) => {
-      const result: Record<string, unknown> = {};
+      const result: Attributes = {};
       if (data.system !== undefined)
         result[MessagingAttributes.system] = data.system;
       if (data.destination !== undefined)

@@ -24,7 +24,7 @@ const provider = new NodeTracerProvider({
 const tracer: Tracer = provider.getTracer('autotel-mongoose-hooks-test');
 
 // Minimal resolved config — only the fields `wrapHookHandler` reads matter.
-const config = {
+const hookConfig = {
   dbName: '',
   peerName: '',
   peerPort: 27_017,
@@ -34,7 +34,11 @@ const config = {
   dbStatementSerializer: false,
   statementRedactor: false,
   customMethods: { enabled: false },
-} as unknown as ResolvedConfig;
+};
+
+// SAFETY: ResolvedConfig carries more than wrapHookHandler reads; the
+// fields above are the ones it consults, and the rest are unreachable here.
+const config = hookConfig as unknown as ResolvedConfig;
 
 const wrap = (handler: any, name: string, type: 'pre' | 'post') =>
   wrapHookHandler(handler, name, type, tracer, config);
@@ -156,7 +160,7 @@ describe('wrapHookHandler — span lifecycle', () => {
     k.post('findOneAndUpdate', wrap(handler, 'findOneAndUpdate', 'post'));
     await k.execPost('findOneAndUpdate', null, [{ value: 2 }], {});
 
-    expect(typeof receivedDoc).not.toBe('function');
+    expect(receivedDoc).not.toBeTypeOf('function');
     expect(receivedDoc?.value).toBe(2);
     expect(receivedNextType).toBe('function');
   });

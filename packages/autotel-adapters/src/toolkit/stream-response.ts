@@ -38,7 +38,7 @@ function toError(value: unknown): Error {
 function createObservedBody(
   body: ReadableStream<Uint8Array>,
   onDone: () => void | Promise<void>,
-  onError: (error: unknown) => void | Promise<void>,
+  onError: (cause: unknown) => void | Promise<void>,
 ): ReadableStream<Uint8Array> | null {
   if (body.locked) {
     void Promise.resolve(

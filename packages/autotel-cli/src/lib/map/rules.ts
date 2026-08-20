@@ -211,7 +211,7 @@ const traceRule: RequirementRule = {
   weight: 40,
   appliesTo: { kinds: HANDLER_KINDS },
   fix: ({ target }) =>
-    `export const handler = trace('${target.method?.toLowerCase() ?? 'handle'} ${target.path}', async () => { /* … */ });`,
+    `export const handler = instrument({ key: '${target.method?.toLowerCase() ?? 'handle'} ${target.path}', fn: async () => { /* … */ } });`,
   check(context) {
     if (usesAutotelApi(context, SPAN_WRAPPERS)) return null;
     if (context.project.ambientTracing) return null;
@@ -445,7 +445,7 @@ const genaiRule: OpportunityRule = {
     when: ({ project }) => project.hasLlmDependency,
   },
   fix: () =>
-    "traceGenAI({ operation: 'chat', model }, async () => client.chat.completions.create(…));",
+    "traceGenAI({ operation: 'chat', model })((ctx) => async () => client.chat.completions.create(…));",
   check(context) {
     const llmCall = LLM_CALLS.flatMap((name) =>
       context.facts.memberCalls(name),

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { packEventLanes, classifyEvent } from '../utils/spanEvents';
+import type { SpanAttributes } from '../types.js';
 
 type Ev = {
   name: string;
   timestamp: number;
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
 };
 
 describe('packEventLanes', () => {

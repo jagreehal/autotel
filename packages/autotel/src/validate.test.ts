@@ -281,7 +281,7 @@ describe('defineValidator', () => {
     });
     v.safeParse({});
     const attrs = setAttributes.mock.calls[0]![0];
-    expect(typeof attrs[VALIDATION_ATTR.hash]).toBe('string');
+    expect(attrs[VALIDATION_ATTR.hash]).toBeTypeOf('string');
     expect(attrs[VALIDATION_ATTR.hash]).toHaveLength(64); // sha256 hex
   });
 });

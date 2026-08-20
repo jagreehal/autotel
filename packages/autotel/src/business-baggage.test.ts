@@ -4,6 +4,8 @@ import {
   BusinessBaggage,
   type BaggageError,
 } from './business-baggage';
+import { invalidValue } from './testing/doubles';
+import { asString } from './values';
 
 // Mock OpenTelemetry propagation API
 vi.mock('@opentelemetry/api', () => {
@@ -144,8 +146,7 @@ describe('Business Baggage', () => {
         {
           code: {
             type: 'string',
-            validate: (value) =>
-              typeof value === 'string' && value.length === 6,
+            validate: (value) => asString(value)?.length === 6,
           },
         },
         { onError },
@@ -251,7 +252,7 @@ describe('Business Baggage', () => {
       );
 
       // Number passed for string field should trigger validation error
-      schema.set(undefined, { name: 123 as unknown as string });
+      schema.set(undefined, { name: invalidValue<string>(123) });
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'validation' }),
       );
@@ -266,7 +267,7 @@ describe('Business Baggage', () => {
         { onError },
       );
 
-      schema.set(undefined, { count: 'not-a-number' as unknown as number });
+      schema.set(undefined, { count: invalidValue<number>('not-a-number') });
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'validation' }),
       );
@@ -281,7 +282,7 @@ describe('Business Baggage', () => {
         { onError },
       );
 
-      schema.set(undefined, { enabled: 'true' as unknown as boolean });
+      schema.set(undefined, { enabled: invalidValue<boolean>('true') });
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'validation' }),
       );
@@ -296,7 +297,9 @@ describe('Business Baggage', () => {
         { onError },
       );
 
-      schema.set(undefined, { priority: 'invalid' as 'low' | 'high' });
+      schema.set(undefined, {
+        priority: invalidValue<'low' | 'high'>('invalid'),
+      });
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'validation' }),
       );
@@ -311,7 +314,7 @@ describe('Business Baggage', () => {
         { onError },
       );
 
-      schema.set(undefined, { requiredField: undefined as unknown as string });
+      schema.set(undefined, { requiredField: invalidValue<string>(undefined) });
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'validation',
@@ -407,7 +410,7 @@ describe('Business Baggage', () => {
 
       const headers = schema.toHeaders();
       expect(headers).toBeDefined();
-      expect(typeof headers).toBe('object');
+      expect(headers).toBeTypeOf('object');
     });
 
     it('fromHeaders should restore baggage from headers', () => {
@@ -430,7 +433,7 @@ describe('Business Baggage', () => {
         { onError: (e) => errors.push(e) },
       );
 
-      schema.set(undefined, { count: 'invalid' as unknown as number });
+      schema.set(undefined, { count: invalidValue<number>('invalid') });
       expect(errors.some((e) => e.type === 'validation')).toBe(true);
     });
 

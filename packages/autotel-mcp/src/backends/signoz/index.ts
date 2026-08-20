@@ -31,6 +31,8 @@ import {
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
 import { normalizeTagValue } from '../span-mapping';
+import type { UnknownRecord } from '../../lib/values';
+import { asNumber, asRecord, nonEmptyString } from '../../lib/values';
 
 /** SigNoz trace reads over the supported Query Builder v5 API. */
 
@@ -41,7 +43,7 @@ const MAX_RAW_ROWS = 1000;
 
 interface SignozRawRow {
   timestamp?: string;
-  data?: Record<string, unknown>;
+  data?: UnknownRecord;
 }
 
 interface SignozRawResult {
@@ -68,7 +70,7 @@ interface SignozSpan {
   durationNano?: number;
   statusCode?: number;
   hasError?: boolean;
-  attributes?: Record<string, unknown>;
+  attributes?: UnknownRecord;
 }
 
 interface SelectField {
@@ -279,11 +281,14 @@ export class SignozBackend implements TelemetryBackend {
 
   async serviceMap(_lookbackMinutes = 60, limit = 20): Promise<ServiceMap> {
     const traces = await this.searchTraces({ limit: Math.max(limit, 20) });
+    // SAFETY: buildServiceMap is the shared builder every backend uses; it
+    // returns the same map, described by each backend's own span type.
     return buildServiceMap(traces.items, limit) as unknown as ServiceMap;
   }
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
     const trace = await this.getTrace(traceId);
+    // SAFETY: as serviceMap above - a shared summariser, one shape.
     return trace ? (summarizeTrace(trace) as unknown as TraceSummary) : null;
   }
 
@@ -321,6 +326,9 @@ export class SignozBackend implements TelemetryBackend {
 function rawRows(
   body: SignozApiEnvelope | SignozQueryRangeResponse,
 ): SignozRawRow[] {
+  // SAFETY: SigNoz answers either with the envelope (`data.type` present) or
+  // with the query-range body directly; the check on the line above is what
+  // tells the two apart, and every field read below is optional either way.
   const response =
     body.data && 'type' in body.data
       ? body.data
@@ -329,34 +337,28 @@ function rawRows(
 }
 
 function readString(
-  data: Record<string, unknown> | undefined,
+  data: UnknownRecord | undefined,
   ...keys: string[]
 ): string | undefined {
   for (const key of keys) {
-    const value = data?.[key];
-    if (typeof value === 'string' && value !== '') return value;
+    const value = nonEmptyString(data?.[key]);
+    if (value !== undefined) return value;
   }
   return undefined;
 }
 
 function readNumber(
-  data: Record<string, unknown> | undefined,
+  data: UnknownRecord | undefined,
   ...keys: string[]
 ): number | undefined {
   for (const key of keys) {
-    const value = data?.[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string' && value !== '') {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
+    const value = asNumber(data?.[key]);
+    if (value !== undefined) return value;
   }
   return undefined;
 }
 
-function groupedAttributes(
-  data: Record<string, unknown>,
-): Record<string, unknown> {
+function groupedAttributes(data: UnknownRecord): UnknownRecord {
   const groups = [
     'attributes',
     'attributes_bool',
@@ -370,15 +372,9 @@ function groupedAttributes(
     'resources_number',
     'resources_string',
   ];
-  return Object.assign(
-    {},
-    ...groups.map((key) => {
-      const value = data[key];
-      return value && typeof value === 'object' && !Array.isArray(value)
-        ? value
-        : {};
-    }),
-  ) as Record<string, unknown>;
+  const merged: UnknownRecord = {};
+  for (const key of groups) Object.assign(merged, asRecord(data[key]) ?? {});
+  return merged;
 }
 
 function rowToSignozSpan(row: SignozRawRow): SignozSpan {
@@ -412,6 +408,9 @@ function toSpanRecord(span: SignozSpan, fallbackTraceId: string): SpanRecord {
     serviceName: span.serviceName ?? 'unknown',
     startTimeUnixMs: Math.floor((span.startTime ?? 0) / NS_PER_MS),
     durationMs: (span.durationNano ?? 0) / NS_PER_MS,
+    // SAFETY: normalizeTagValue answers with a TagValue for every entry, so
+    // the assembled bag is keyed strings to TagValue; Object.fromEntries
+    // cannot carry that.
     tags: Object.fromEntries(
       Object.entries(span.attributes ?? {}).map(([key, value]) => [
         key,

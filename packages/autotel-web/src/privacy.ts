@@ -114,7 +114,7 @@ export class PrivacyManager {
    * Check if Do Not Track is enabled in the browser
    */
   private isDoNotTrackEnabled(): boolean {
-    if (typeof navigator === 'undefined') return false;
+    if (globalThis.navigator === undefined) return false;
 
     // DNT header can be "1" (enabled), "0" (disabled), or null (not set)
     return navigator.doNotTrack === '1';
@@ -124,10 +124,12 @@ export class PrivacyManager {
    * Check if Global Privacy Control is enabled in the browser
    */
   private isGPCEnabled(): boolean {
-    if (typeof navigator === 'undefined') return false;
+    if (globalThis.navigator === undefined) return false;
 
     // GPC is a newer spec, not all browsers support it yet
     // TypeScript doesn't have types for this yet, so we cast
+    // SAFETY: Global Privacy Control is not in the DOM lib yet; the strict
+    // comparison below treats an absent flag as "not set".
     const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
     return nav.globalPrivacyControl === true;
   }
@@ -146,7 +148,7 @@ export class PrivacyManager {
       }
 
       // Handle relative URLs - use current window location
-      if (typeof window !== 'undefined') {
+      if (globalThis.window !== undefined) {
         return new URL(url, window.location.href).origin;
       }
 
@@ -208,17 +210,21 @@ export function getDenialReason(
 ): string | null {
   // This is a helper for debugging - it re-checks the conditions
   // to provide a user-friendly reason string
+  // SAFETY: the reason string is built from the same config the manager was
+  // constructed with; it is private only because nothing else should write it.
   const config = (privacyManager as any).config as PrivacyConfig;
 
   // Check DNT
-  if (config.respectDoNotTrack && typeof navigator !== 'undefined') {
+  if (config.respectDoNotTrack && globalThis.navigator !== undefined) {
     if (navigator.doNotTrack === '1') {
       return 'Do Not Track is enabled';
     }
   }
 
   // Check GPC
-  if (config.respectGPC && typeof navigator !== 'undefined') {
+  if (config.respectGPC && globalThis.navigator !== undefined) {
+    // SAFETY: Global Privacy Control is not in the DOM lib yet; an absent flag
+    // reads as "not set" through the strict comparison below.
     const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
     if (nav.globalPrivacyControl === true) {
       return 'Global Privacy Control is enabled';
@@ -230,7 +236,7 @@ export function getDenialReason(
   try {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       targetOrigin = new URL(url).origin;
-    } else if (typeof window !== 'undefined') {
+    } else if (globalThis.window !== undefined) {
       targetOrigin = new URL(url, window.location.href).origin;
     }
   } catch {

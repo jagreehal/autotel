@@ -21,8 +21,8 @@ describe('Trace Helpers', () => {
     it('should return a tracer instance', () => {
       const tracer = getTracer('my-service');
       expect(tracer).toBeDefined();
-      expect(typeof tracer.startSpan).toBe('function');
-      expect(typeof tracer.startActiveSpan).toBe('function');
+      expect(tracer.startSpan).toBeTypeOf('function');
+      expect(tracer.startActiveSpan).toBeTypeOf('function');
     });
 
     it('should accept optional version parameter', () => {
@@ -85,9 +85,9 @@ describe('Trace Helpers', () => {
         const activeSpan = getActiveSpan();
         if (activeSpan) {
           // Test that we can call span methods
-          expect(typeof activeSpan.addEvent).toBe('function');
-          expect(typeof activeSpan.setAttribute).toBe('function');
-          expect(typeof activeSpan.setStatus).toBe('function');
+          expect(activeSpan.addEvent).toBeTypeOf('function');
+          expect(activeSpan.setAttribute).toBeTypeOf('function');
+          expect(activeSpan.setStatus).toBeTypeOf('function');
           expect(activeSpan.isRecording()).toBe(true);
 
           // Call addEvent to verify it doesn't throw

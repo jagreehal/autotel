@@ -10,23 +10,46 @@ const PNG =
  * of string building, while the three-call upload dance is the part that has to
  * match a wire API this package does not own.
  */
+/** A JSON value, as this package sends and Langfuse answers with. */
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Array<JsonValue>
+  | { [key: string]: JsonValue };
+
+/** One request the fake recorded, with its JSON body already parsed. */
+interface RecordedCall {
+  method: string;
+  url: string;
+  body?: JsonValue;
+}
+
 function fakeLangfuse(
   overrides: {
     uploadUrl?: string | null;
     putStatus?: number;
     createStatus?: number;
-    createBody?: unknown;
+    createBody?: JsonValue;
   } = {},
 ) {
-  const calls: { method: string; url: string; body?: unknown }[] = [];
+  const calls: RecordedCall[] = [];
   let nextId = 0;
 
-  const fetch = (async (url: string | URL, init?: RequestInit) => {
+  const fetch: typeof globalThis.fetch = async (url, init) => {
     const href = String(url);
     const method = init?.method ?? 'GET';
-    // Only the JSON calls have a parseable body; the PUT carries raw bytes.
+    // Only the JSON calls have a parseable body; the PUT carries raw bytes,
+    // which have no JSON reading.
+    const raw = init?.body;
+    // SAFETY: every JSON call in this package sends a string body it built with
+    // JSON.stringify, so parsing one back yields a JsonValue. Byte bodies took
+    // the branch above.
     const body =
-      typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+      raw === undefined || raw === null || ArrayBuffer.isView(raw)
+        ? undefined
+        : (JSON.parse(String(raw)) as JsonValue);
     calls.push({ method, url: href, body });
 
     if (href.endsWith('/api/public/media') && method === 'POST') {
@@ -48,7 +71,7 @@ function fakeLangfuse(
       return new Response('', { status: overrides.putStatus ?? 200 });
     }
     return new Response('{}', { status: 200 });
-  }) as unknown as typeof globalThis.fetch;
+  };
 
   const media = langfuseMedia({
     baseUrl: 'https://langfuse.example/',
@@ -77,7 +100,9 @@ describe('upload', () => {
       'PATCH /api/public/media/media-0',
     ]);
 
-    const declare = calls[0]!.body as Record<string, unknown>;
+    // SAFETY: the first recorded call is the JSON declaration POST, whose body
+    // the fake parsed above; the assertions below are what it must contain.
+    const declare = calls[0]!.body as Record<string, JsonValue>;
     expect(declare.contentLength).toBe(5);
     expect(declare.field).toBe('input');
     // base64 of sha256("bytes"), which is what Langfuse dedupes on.

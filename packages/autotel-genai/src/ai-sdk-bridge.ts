@@ -26,6 +26,7 @@ import {
   type TokenUsage,
 } from './cost.js';
 import { GEN_AI, GEN_AI_PROVIDER, type GenAiProviderName } from './semconv.js';
+import type { Attributes } from '@opentelemetry/api';
 
 /** Legacy AI SDK (`LegacyOpenTelemetry`) attribute keys we understand. */
 export const AI_SDK_ATTR = {
@@ -87,7 +88,7 @@ function str(value: unknown): string | undefined {
  * `undefined` when no token counts are present.
  */
 export function extractAiSdkUsage(
-  attributes: Record<string, unknown>,
+  attributes: Attributes,
 ): TokenUsage | undefined {
   const inputTokens =
     num(attributes[GEN_AI.USAGE_INPUT_TOKENS]) ??
@@ -126,9 +127,7 @@ export function extractAiSdkUsage(
 }
 
 /** Read the request model from canonical or legacy attributes. */
-export function extractAiSdkModel(
-  attributes: Record<string, unknown>,
-): string | undefined {
+export function extractAiSdkModel(attributes: Attributes): string | undefined {
   return (
     str(attributes[GEN_AI.REQUEST_MODEL]) ??
     str(attributes[AI_SDK_ATTR.MODEL_ID])
@@ -141,9 +140,7 @@ export function extractAiSdkModel(
  * SDK version); returns a fresh map with the canonical keys. Unknown keys are
  * dropped — this is a focused mapper, not a passthrough.
  */
-export function mapAiSdkAttributes(
-  attributes: Record<string, unknown>,
-): GenAiAttributeMap {
+export function mapAiSdkAttributes(attributes: Attributes): GenAiAttributeMap {
   const out: GenAiAttributeMap = {};
 
   const model = str(attributes[AI_SDK_ATTR.MODEL_ID]);
@@ -179,7 +176,7 @@ export function mapAiSdkAttributes(
  * missing, or the model has no known pricing.
  */
 export function estimateAiSdkCost(
-  attributes: Record<string, unknown>,
+  attributes: Attributes,
   options?: EstimateCostOptions,
 ): number | undefined {
   const model = extractAiSdkModel(attributes);
@@ -196,7 +193,7 @@ export function estimateAiSdkCost(
  */
 export function recordAiSdkCost(
   ctx: Pick<TraceContext, 'setAttribute'>,
-  attributes: Record<string, unknown>,
+  attributes: Attributes,
   options?: EstimateCostOptions,
 ): number | undefined {
   const cost = estimateAiSdkCost(attributes, options);

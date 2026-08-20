@@ -25,6 +25,7 @@ import type { LogRecordExporter } from '@opentelemetry/sdk-logs';
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import type { LogData } from './types';
 import { getResourceName } from './resource-utils';
+import type { SpanAttributes } from '../widget/types.js';
 
 export interface DevtoolsLogExporterOptions {
   /**
@@ -52,11 +53,10 @@ function hrTimeToMs(hrTime: [number, number]): number {
 
 function bodyToPayload(
   body: ReadableLogRecord['body'],
-): string | Record<string, unknown> {
+): string | SpanAttributes {
   if (body === undefined) return '';
   if (typeof body === 'string') return body;
-  if (typeof body === 'object' && body !== null)
-    return body as Record<string, unknown>;
+  if (typeof body === 'object' && body !== null) return body as SpanAttributes;
   return String(body);
 }
 
@@ -66,12 +66,12 @@ function recordToLogData(record: ReadableLogRecord, index: number): LogData {
   const body = bodyToPayload(record.body);
   const attributes =
     record.attributes && Object.keys(record.attributes).length > 0
-      ? (record.attributes as Record<string, unknown>)
+      ? (record.attributes as SpanAttributes)
       : undefined;
   const resource =
     record.resource?.attributes &&
     Object.keys(record.resource.attributes).length > 0
-      ? (record.resource.attributes as Record<string, unknown>)
+      ? (record.resource.attributes as SpanAttributes)
       : undefined;
 
   const log: LogData = {

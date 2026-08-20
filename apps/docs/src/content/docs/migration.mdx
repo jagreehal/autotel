@@ -173,7 +173,7 @@ See sections below for pattern-by-pattern migrations, custom sampling, and edge 
 | ----------------------------------------------------------------------------- | ---------------------------------------- | ----------------------------------- |
 | `NODE_OPTIONS="--require @opentelemetry/auto-instrumentations-node/register"` | `init({ integrations: true })`           | Programmatic configuration          |
 | `new NodeSDK({ ... })`                                                        | `init({ ... })`                          | Reduced boilerplate (30+ → 5 lines) |
-| `tracer.startSpan()` + `span.end()`                                           | `trace(fn)`                              | Automatic span lifecycle            |
+| `tracer.startSpan()` + `span.end()`                                           | `trace(fn)` or `trace(name, fn)`         | Automatic span lifecycle            |
 | Manual log correlation                                                        | `autotel/logger`                         | Automatic trace context injection   |
 | Head sampling                                                                 | Tail sampling (default)                  | Sample 100% of errors/slow requests |
 | Custom span processor                                                         | Built-in rate limiters, circuit breakers | Rate limiting, circuit breakers     |
@@ -600,7 +600,7 @@ function handleRequest(req) {
 | OpenTelemetry API/SDK               | Autotel Equivalent               | Notes                       |
 | ----------------------------------- | -------------------------------- | --------------------------- |
 | `new NodeSDK({...})`                | `init({...})`                    | Simplified configuration    |
-| `tracer.startSpan()` + `span.end()` | `trace(fn)`                      | Automatic lifecycle         |
+| `tracer.startSpan()` + `span.end()` | `trace(fn)`, `trace(name, fn)`   | Automatic lifecycle         |
 | `span.setAttribute()`               | `ctx.setAttribute()`             | Same API, different context |
 | `span.setStatus()`                  | Automatic                        | Based on exception/return   |
 | `span.recordException()`            | Automatic                        | All errors auto-recorded    |
@@ -799,7 +799,7 @@ Use this checklist for a smooth migration:
 ### Phase 4: Migrate Manual Spans
 
 - [ ] Find all `tracer.startSpan()` + `span.end()` patterns
-- [ ] Replace with `trace(fn)` functional wrapper
+- [ ] Replace with the `trace(fn)` / `trace(name, fn)` functional wrapper
 - [ ] Convert `span.setAttribute()` to `ctx.setAttribute()`
 - [ ] Remove manual error handling for telemetry (keep business error handling)
 - [ ] Test that span hierarchy is preserved

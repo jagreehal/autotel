@@ -77,7 +77,7 @@ export function defaultParameterSerializer(
   }
 
   const seen = new WeakSet<object>();
-  const replacer = (_key: string, value: unknown): unknown => {
+  const replacer = (_key: string, value: unknown) => {
     if (typeof value === 'bigint') {
       return value.toString();
     }
@@ -97,6 +97,9 @@ export function defaultParameterSerializer(
   // so we serialize plain data rather than internal document state.
   const normalized = args.map((arg) => {
     if (
+      // SAFETY: a mongoose document exposes toObject(); the probe below is what
+      // distinguishes one from a plain filter object, and the call is guarded by
+      // the try that follows.
       arg !== null &&
       typeof arg === 'object' &&
       typeof (arg as { toObject?: unknown }).toObject === 'function'

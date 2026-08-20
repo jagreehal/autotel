@@ -1,3 +1,4 @@
+import { stringAttr } from '../attrs.js';
 import type { TerminalSpanEvent } from '../span-stream';
 
 export interface AvailableFilters {
@@ -17,12 +18,12 @@ export interface SpanFilterState {
 
 function getServiceName(span: TerminalSpanEvent): string | undefined {
   const attrs = span.attributes ?? {};
-  return (attrs['service.name'] as string | undefined) ?? undefined;
+  return stringAttr(attrs, 'service.name') ?? undefined;
 }
 
 function getRoute(span: TerminalSpanEvent): string | undefined {
   const attrs = span.attributes ?? {};
-  return (attrs['http.route'] as string | undefined) ?? undefined;
+  return stringAttr(attrs, 'http.route') ?? undefined;
 }
 
 function getStatusCode(span: TerminalSpanEvent): number | undefined {

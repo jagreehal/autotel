@@ -1,3 +1,4 @@
+import { stringAttr } from '../attrs.js';
 import type { TerminalSpanEvent } from '../span-stream';
 
 export interface ServiceNode {
@@ -23,18 +24,18 @@ export interface ServiceGraph {
 function getServiceName(span: TerminalSpanEvent): string {
   const attrs = span.attributes ?? {};
   const serviceName =
-    (attrs['service.name'] as string | undefined) ??
-    (attrs['resource.service.name'] as string | undefined);
+    stringAttr(attrs, 'service.name') ??
+    stringAttr(attrs, 'resource.service.name');
   return serviceName || 'unknown';
 }
 
 function getPeerService(span: TerminalSpanEvent): string | null {
   const attrs = span.attributes ?? {};
   const peerService =
-    (attrs['peer.service'] as string | undefined) ??
-    (attrs['db.system'] as string | undefined) ??
-    (attrs['messaging.system'] as string | undefined) ??
-    (attrs['http.host'] as string | undefined);
+    stringAttr(attrs, 'peer.service') ??
+    stringAttr(attrs, 'db.system') ??
+    stringAttr(attrs, 'messaging.system') ??
+    stringAttr(attrs, 'http.host');
   return peerService ?? null;
 }
 

@@ -45,11 +45,31 @@ export const createUser = withTracing({})((ctx) => async (data: UserData) => {
   return user;
 });
 
-// Direct pattern (no ctx needed)
+// Direct pattern (no ctx needed) — name inferred from the binding
 export const getUser = trace(async (id: string) => {
   return await db.users.findById(id);
 });
+
+// Explicit name — use when the binding is minified or inference is unclear
+export const deleteUser = trace('user.delete', async (id: string) => {
+  return await db.users.delete(id);
+});
+
+// Reach the span from inside, at any depth, via the ambient ctx
+export const createUser = trace('user.create', async (input: UserData) => {
+  ctx.setAttribute('user.id', input.id);
+  return await db.users.create(input);
+});
+
+// Run one named operation right here
+const user = await trace.run('user.create', async (ctx) => {
+  ctx.setAttribute('user.id', input.id);
+  return await db.users.create(input);
+});
 ```
+
+**`trace` wraps, `trace.run` runs.** Every `trace(...)` form returns a wrapper
+and executes nothing, so importing a module of them has no side effects.
 
 ## 4. Request-Scoped Logging
 

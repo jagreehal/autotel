@@ -57,8 +57,22 @@ import {
 } from '../bindings/common';
 import { instrumentGlobalFetch } from '../global/fetch';
 import { instrumentGlobalCache } from '../global/cache';
+import type { WorkerEnv } from '../bindings/bindings';
 import { instrumentBindings } from '../bindings/bindings';
 import type { Attributes, Span, TextMapGetter } from '@opentelemetry/api';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import {
+  applyTrap,
+  asBoolean,
+  asFunction,
+  asNumber,
+  asRecord,
+  asString,
+  member,
+  readProperty,
+  trapArgs,
+} from '../values.js';
 
 // Web API Headers objects require .get() — property access via defaultTextMapGetter won't work
 const headersGetter: TextMapGetter<Headers> = {
@@ -99,14 +113,13 @@ type EmailHandler = (
 function extractCfAttributes(
   request: Request,
 ): Record<string, string | number | boolean> {
-  const cf = (request as any).cf;
+  const cf = asRecord(member(request, 'cf'));
   if (!cf) return {};
 
   const attrs: Record<string, string | number | boolean> = {};
   const set = (key: string, value: unknown) => {
-    if (value !== undefined && value !== null) {
-      attrs[key] = value as string | number | boolean;
-    }
+    const scalar = asString(value) ?? asNumber(value) ?? asBoolean(value);
+    if (scalar !== undefined) attrs[key] = scalar;
   };
 
   set('cloudflare.colo', cf.colo);
@@ -141,7 +154,7 @@ function createFetchInstrumentation(
       );
 
       const cfAttrs =
-        (config as any).extractCfAttributes === false
+        readProperty(config, 'extractCfAttributes') === false
           ? {}
           : extractCfAttributes(request);
 
@@ -179,6 +192,9 @@ function createFetchInstrumentation(
 
       // Call postProcess callback if configured
       if (config.handlers.fetch.postProcess) {
+        // SAFETY: a recording SDK span is a ReadableSpan - the SDK's own
+        // implementation is both - and postProcess is documented as receiving
+        // the readable view of the span it was handed.
         const readableSpan = span as unknown as ReadableSpan;
         config.handlers.fetch.postProcess(span, {
           request: trigger,
@@ -284,22 +300,23 @@ function proxyQueueMessage<Q>(
 ): Message<Q> {
   const msgHandler: ProxyHandler<Message<Q>> = {
     get: (target, prop) => {
-      if (prop === 'ack') {
-        const ackFn = Reflect.get(target, prop);
-        return new Proxy(ackFn, {
+      const messageFn = asFunction(member(target, prop));
+      if (prop === 'ack' && messageFn) {
+        return new Proxy(messageFn, {
           apply: (fnTarget) => {
             addQueueEvent('messageAck', msg);
             count.ack();
-            Reflect.apply(fnTarget, msg, []);
+            fnTarget.apply(msg, []);
           },
         });
-      } else if (prop === 'retry') {
-        const retryFn = Reflect.get(target, prop);
-        return new Proxy(retryFn, {
+      } else if (prop === 'retry' && messageFn) {
+        return new Proxy(messageFn, {
           apply: (fnTarget, _thisArg, args) => {
             // Extract delay and content type from retry options if provided
-            const retryOptions = args[0] as
-              { delaySeconds?: number; contentType?: string } | undefined;
+            const retryOptions =
+              trapArgs<[{ delaySeconds?: number; contentType?: string }?]>(
+                args,
+              )[0];
             const delaySeconds = retryOptions?.delaySeconds;
 
             addQueueEvent('messageRetry', msg, delaySeconds);
@@ -316,12 +333,12 @@ function proxyQueueMessage<Q>(
             }
 
             count.retry();
-            const result = Reflect.apply(fnTarget, msg, args);
+            const result = applyTrap(fnTarget, msg, args);
             return result;
           },
         });
       } else {
-        return Reflect.get(target, prop, msg);
+        return member(target, prop);
       }
     },
   };
@@ -338,43 +355,44 @@ function proxyMessageBatch(
   const batchHandler: ProxyHandler<MessageBatch> = {
     get: (target, prop) => {
       if (prop === 'messages') {
-        const messages = Reflect.get(target, prop);
         const messagesHandler: ProxyHandler<MessageBatch['messages']> = {
           get: (target, prop) => {
-            if (typeof prop === 'string' && !isNaN(parseInt(prop))) {
-              const message = Reflect.get(target, prop);
+            const index = asString(prop);
+            if (index !== undefined && !Number.isNaN(Number.parseInt(index))) {
+              // SAFETY: an element of a MessageBatch's own messages array.
+              const message = member(target, prop) as Message;
               return proxyQueueMessage(message, count);
-            } else {
-              return Reflect.get(target, prop);
             }
+            return member(target, prop);
           },
         };
-        return wrap(messages, messagesHandler);
-      } else if (prop === 'ackAll') {
-        const ackFn = Reflect.get(target, prop);
-        return new Proxy(ackFn, {
+        return wrap(target.messages, messagesHandler);
+      }
+
+      const batchFn = asFunction(member(target, prop));
+      if (prop === 'ackAll' && batchFn) {
+        return new Proxy(batchFn, {
           apply: (fnTarget) => {
             addQueueEvent('ackAll');
             count.ackRemaining();
-            Reflect.apply(fnTarget, batch, []);
+            fnTarget.apply(batch, []);
           },
         });
-      } else if (prop === 'retryAll') {
-        const retryFn = Reflect.get(target, prop);
-        return new Proxy(retryFn, {
+      } else if (prop === 'retryAll' && batchFn) {
+        return new Proxy(batchFn, {
           apply: (fnTarget, _thisArg, args) => {
             // Extract delay from retryAll options if provided
-            const retryOptions = args[0] as
-              { delaySeconds?: number } | undefined;
+            const retryOptions =
+              trapArgs<[{ delaySeconds?: number }?]>(args)[0];
             const delaySeconds = retryOptions?.delaySeconds;
 
             addQueueEvent('retryAll', undefined, delaySeconds);
             count.retryRemaining();
-            Reflect.apply(fnTarget, batch, args);
+            applyTrap(fnTarget, batch, args);
           },
         });
       }
-      return Reflect.get(target, prop);
+      return member(target, prop);
     },
   };
   return wrap(batch, batchHandler);
@@ -488,7 +506,9 @@ async function exportSpans(
   const tracer = trace.getTracer('autotel-edge');
   if (tracer instanceof WorkerTracer) {
     try {
-      // scheduler is available on ExecutionContext at runtime
+      // SAFETY: `scheduler` is on ExecutionContext at runtime but not in the
+      // published types; it is probed before use, so a runtime without it
+      // simply takes the fallback below.
       const ctxWithScheduler = ctx as ExecutionContext & {
         scheduler?: { wait(ms: number): Promise<void> };
       };
@@ -518,7 +538,7 @@ function createHandlerFlow<T extends Trigger, E, R>(
   ) => {
     const { ctx: proxiedCtx, tracker } = proxyExecutionContext(context);
 
-    const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+    const tracer = workerTracer('autotel-edge');
 
     const {
       name,
@@ -562,7 +582,7 @@ function createHandlerFlow<T extends Trigger, E, R>(
           }
           return result;
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -677,7 +697,9 @@ function createHandlerProxy<T extends Trigger, E, R>(
     }
 
     // Auto-instrument Cloudflare bindings in the environment
-    const instrumentedEnv = instrumentBindings(env as Record<string, any>) as E;
+    // SAFETY: instrumentBindings answers with the same bindings, each wrapped
+    // in a proxy of its own type - so the env it returns is the caller's E.
+    const instrumentedEnv = instrumentBindings(env as WorkerEnv) as E;
 
     const configContext = setConfig(config);
 
@@ -688,6 +710,8 @@ function createHandlerProxy<T extends Trigger, E, R>(
 
     // Execute the handler flow within the config context
     return api_context.with(configContext, () => {
+      // SAFETY: the flow calls the caller's own handler and passes its result
+      // straight back, so the result is that handler's return.
       return flowFn(handlerFn, [trigger, instrumentedEnv, ctx]) as ReturnType<
         typeof handlerFn
       >;
@@ -724,6 +748,8 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
           exclude: fetchCfg.exclude,
         })
       ) {
+        // SAFETY: the untraced path calls the caller's own handler, so its
+        // result is that handler's return.
         return handlerFn(trigger, env, ctx) as ReturnType<typeof handlerFn>;
       }
     }
@@ -742,7 +768,9 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
     }
 
     // Auto-instrument Cloudflare bindings in the environment
-    const instrumentedEnv = instrumentBindings(env as Record<string, any>) as E;
+    // SAFETY: instrumentBindings answers with the same bindings, each wrapped
+    // in a proxy of its own type - so the env it returns is the caller's E.
+    const instrumentedEnv = instrumentBindings(env as WorkerEnv) as E;
 
     const configContext = setConfig(config);
 
@@ -755,6 +783,8 @@ function createHandlerProxyWithConfig<T extends Trigger, E, R>(
 
     // Execute the handler flow within the config context
     return api_context.with(configContext, () => {
+      // SAFETY: the flow calls the caller's own handler and passes its result
+      // straight back, so the result is that handler's return.
       return flowFn(handlerFn, [trigger, instrumentedEnv, ctx]) as ReturnType<
         typeof handlerFn
       >;
@@ -798,7 +828,7 @@ function initProvider(config: ResolvedEdgeConfig): void {
   provider.register();
 
   // Set head sampler on tracer
-  const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+  const tracer = workerTracer('autotel-edge');
   tracer.setHeadSampler(config.sampling.headSampler);
 
   providerInitialized = true;
@@ -833,6 +863,8 @@ export function instrument<E, Q = any, C = any>(
   const initialiser = createInitialiser(config);
 
   if (handler.fetch) {
+    // SAFETY: unwrap() answers with the handler that was wrapped, which is
+    // the one handler.fetch declares.
     const fetcher = unwrap(handler.fetch) as FetchHandler;
     // Create fetch instrumentation with config support
     handler.fetch = createHandlerProxyWithConfig(
@@ -844,6 +876,8 @@ export function instrument<E, Q = any, C = any>(
   }
 
   if (handler.scheduled) {
+    // SAFETY: unwrap() answers with the handler that was wrapped, which is
+    // the one handler.scheduled declares.
     const scheduled = unwrap(handler.scheduled) as ScheduledHandler;
     handler.scheduled = createHandlerProxy(
       handler,
@@ -854,6 +888,8 @@ export function instrument<E, Q = any, C = any>(
   }
 
   if (handler.queue) {
+    // SAFETY: unwrap() answers with the handler that was wrapped, which is
+    // the one handler.queue declares.
     const queue = unwrap(handler.queue) as QueueHandler;
     handler.queue = createHandlerProxy(
       handler,
@@ -864,6 +900,8 @@ export function instrument<E, Q = any, C = any>(
   }
 
   if (handler.email) {
+    // SAFETY: unwrap() answers with the handler that was wrapped, which is
+    // the one handler.email declares.
     const email = unwrap(handler.email) as EmailHandler;
     handler.email = createHandlerProxy(
       handler,

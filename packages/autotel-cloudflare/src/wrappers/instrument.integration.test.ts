@@ -5,6 +5,7 @@ import type {
   ExportedHandler,
   IncomingRequestCfProperties,
 } from '@cloudflare/workers-types';
+import { emptyEnv, executionContext } from '../testing/doubles.js';
 
 // Build a Request typed as an incoming CF request (the shape handlers receive),
 // which `new Request()` does not produce because its cf defaults to CfProperties.
@@ -37,7 +38,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
       }));
 
       expect(instrumented).toBeDefined();
-      expect(typeof instrumented.fetch).toBe('function');
+      expect(instrumented.fetch).toBeTypeOf('function');
     });
 
     it('should create a new handler that wraps the original', async () => {
@@ -55,11 +56,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const request = incomingRequest('http://example.com/test');
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       await instrumented.fetch!(request, env, ctx);
 
@@ -78,12 +76,9 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const request = incomingRequest('http://example.com/test');
-      const env = {} as Env;
+      const env = emptyEnv<Env>();
       const waitUntilSpy = vi.fn();
-      const ctx = {
-        waitUntil: waitUntilSpy,
-        passThroughOnException: vi.fn(),
-      } as any;
+      const ctx = executionContext(waitUntilSpy);
 
       await instrumented.fetch!(request, env, ctx);
 
@@ -103,11 +98,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const request = incomingRequest('http://example.com/test');
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       await expect(instrumented.fetch!(request, env, ctx)).rejects.toThrow(
         'Handler error',
@@ -131,11 +123,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const request = incomingRequest('http://example.com/users');
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       const response = await instrumented.fetch!(request, env, ctx);
       const data = await response.json();
@@ -162,7 +151,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       expect(instrumented).toBeDefined();
-      expect(typeof instrumented.fetch).toBe('function');
+      expect(instrumented.fetch).toBeTypeOf('function');
     });
 
     it('should accept config function', async () => {
@@ -177,7 +166,7 @@ describe('Handler Instrumentation - Integration Tests', () => {
       }));
 
       expect(instrumented).toBeDefined();
-      expect(typeof instrumented.fetch).toBe('function');
+      expect(instrumented.fetch).toBeTypeOf('function');
     });
   });
 
@@ -205,11 +194,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
           scheduledTime: Date.now(),
           cron: '0 0 * * *',
         } as ScheduledController;
-        const env = {} as Env;
-        const ctx = {
-          waitUntil: vi.fn(),
-          passThroughOnException: vi.fn(),
-        } as any;
+        const env = emptyEnv<Env>();
+        const ctx = executionContext();
 
         await instrumented.scheduled(event, env, ctx);
 
@@ -262,11 +248,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
           retryAll: vi.fn(),
           metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
         } as MessageBatch;
-        const env = {} as Env;
-        const ctx = {
-          waitUntil: vi.fn(),
-          passThroughOnException: vi.fn(),
-        } as any;
+        const env = emptyEnv<Env>();
+        const ctx = executionContext();
 
         await instrumented.queue(batch, env, ctx);
 
@@ -315,11 +298,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
           retryAll: vi.fn(),
           metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
         } as MessageBatch;
-        const env = {} as Env;
-        const ctx = {
-          waitUntil: vi.fn(),
-          passThroughOnException: vi.fn(),
-        } as any;
+        const env = emptyEnv<Env>();
+        const ctx = executionContext();
 
         await instrumented.queue(batch, env, ctx);
 
@@ -359,11 +339,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
           retryAll: vi.fn(),
           metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
         } as MessageBatch;
-        const env = {} as Env;
-        const ctx = {
-          waitUntil: vi.fn(),
-          passThroughOnException: vi.fn(),
-        } as any;
+        const env = emptyEnv<Env>();
+        const ctx = executionContext();
 
         await instrumented.queue(batch, env, ctx);
 
@@ -409,11 +386,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
           retryAll: vi.fn(),
           metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
         } as MessageBatch;
-        const env = {} as Env;
-        const ctx = {
-          waitUntil: vi.fn(),
-          passThroughOnException: vi.fn(),
-        } as any;
+        const env = emptyEnv<Env>();
+        const ctx = executionContext();
 
         await instrumented.queue(batch, env, ctx);
 
@@ -444,11 +418,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
           to: 'recipient@example.com',
           headers: new Headers({ subject: 'Test Email' }),
         } as ForwardableEmailMessage;
-        const env = {} as Env;
-        const ctx = {
-          waitUntil: vi.fn(),
-          passThroughOnException: vi.fn(),
-        } as any;
+        const env = emptyEnv<Env>();
+        const ctx = executionContext();
 
         await instrumented.email(message, env, ctx);
 
@@ -485,11 +456,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
           traceparent: `00-${incomingTraceId}-${incomingSpanId}-01`,
         },
       });
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       await instrumented.fetch!(request, env, ctx);
 
@@ -513,11 +481,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const request = incomingRequest('http://example.com/test');
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       const response = await instrumented.fetch!(request, env, ctx);
       expect(response.status).toBe(200);
@@ -535,11 +500,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const request = incomingRequest('http://example.com/missing');
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       const response = await instrumented.fetch!(request, env, ctx);
       expect(response.status).toBe(404);
@@ -557,11 +519,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const request = incomingRequest('http://example.com/fail');
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       const response = await instrumented.fetch!(request, env, ctx);
       expect(response.status).toBe(500);
@@ -590,11 +549,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
       }));
 
       const request = incomingRequest('http://example.com/fail');
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       const response = await instrumented.fetch!(request, env, ctx);
       expect(response.status).toBe(503);
@@ -626,11 +582,8 @@ describe('Handler Instrumentation - Integration Tests', () => {
       });
 
       const request = incomingRequest('http://example.com/test');
-      const env = {} as Env;
-      const ctx = {
-        waitUntil: vi.fn(),
-        passThroughOnException: vi.fn(),
-      } as any;
+      const env = emptyEnv<Env>();
+      const ctx = executionContext();
 
       const response1 = await instrumented1.fetch!(request, env, ctx);
       const response2 = await instrumented2.fetch!(request, env, ctx);

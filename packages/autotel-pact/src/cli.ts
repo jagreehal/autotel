@@ -240,7 +240,9 @@ export async function main(argv: string[]): Promise<number> {
   try {
     args = parseArgs(argv);
   } catch (error) {
-    process.stderr.write(`${(error as Error).message}\n\n${HELP_TEXT}`);
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n\n${HELP_TEXT}`,
+    );
     return 2;
   }
 

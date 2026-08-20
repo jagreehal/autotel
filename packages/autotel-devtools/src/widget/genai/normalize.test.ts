@@ -659,7 +659,7 @@ describe('stitch — back-fill tool results from sibling ai.toolCall spans', () 
     expect(index.size).toBe(toolSpans.length);
     expect(index.size).toBeGreaterThan(0);
     for (const [id, result] of index) {
-      expect(typeof id).toBe('string');
+      expect(id).toBeTypeOf('string');
       expect(result).toBeDefined();
     }
   });

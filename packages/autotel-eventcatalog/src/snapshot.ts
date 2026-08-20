@@ -34,7 +34,7 @@ export async function loadSnapshot(
       throw new Error(`Snapshot path is a directory, not a file: ${path}`);
     }
     throw new Error(
-      `Could not read snapshot at ${path}: ${(err as Error).message}`,
+      `Could not read snapshot at ${path}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
@@ -47,7 +47,7 @@ export async function loadSnapshot(
     parsed = JSON.parse(raw);
   } catch (err) {
     throw new Error(
-      `Snapshot is not valid JSON: ${path} (${(err as Error).message})`,
+      `Snapshot is not valid JSON: ${path} (${err instanceof Error ? err.message : String(err)})`,
     );
   }
 
@@ -106,17 +106,21 @@ function validateSnapshot(parsed: unknown, path: string): ArchitectureSnapshot {
     }
   }
 
-  return parsed as unknown as ArchitectureSnapshot;
+  // SAFETY: every field ArchitectureSnapshot declares was checked above; this
+  // function's whole job is to reject a file that does not match.
+  return parsed as ArchitectureSnapshot;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isNodeFsError(err: unknown): err is NodeJS.ErrnoException {
+function isNodeFsError(cause: unknown): cause is NodeJS.ErrnoException {
+  // SAFETY: node's fs errors are Errors carrying a `code`; the probe below is
+  // what distinguishes one from any other Error.
   return (
-    err instanceof Error &&
-    typeof (err as NodeJS.ErrnoException).code === 'string'
+    cause instanceof Error &&
+    typeof (cause as NodeJS.ErrnoException).code === 'string'
   );
 }
 

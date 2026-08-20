@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import { instrumentImages } from './images';
+import { imagesDouble, tracerDouble } from '../testing/doubles.js';
+import { asFunction, readProperty } from '../values.js';
 
 describe('Images Binding Instrumentation', () => {
   let mockTracer: any;
@@ -32,7 +34,7 @@ describe('Images Binding Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
   });
 
   afterEach(() => {
@@ -68,7 +70,7 @@ describe('Images Binding Instrumentation', () => {
   describe('info()', () => {
     it('should create its own span with correct attributes', async () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
       await instrumented.info(new ArrayBuffer(8));
 
@@ -83,7 +85,7 @@ describe('Images Binding Instrumentation', () => {
 
     it('should record width, height, format from result', async () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
       await instrumented.info(new ArrayBuffer(8));
 
@@ -105,7 +107,7 @@ describe('Images Binding Instrumentation', () => {
       images.info = vi.fn(async () => {
         throw testError;
       });
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
       await expect(instrumented.info(new ArrayBuffer(8))).rejects.toThrow(
         'Image info failed',
@@ -123,7 +125,7 @@ describe('Images Binding Instrumentation', () => {
   describe('pipeline: input() -> output()', () => {
     it('should create a single span at output() with operation_count = 0', async () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
       const transformer = instrumented.input(new ArrayBuffer(8));
       await transformer.output();
@@ -141,7 +143,7 @@ describe('Images Binding Instrumentation', () => {
   describe('pipeline: input() -> transform() -> output()', () => {
     it('should create span with operation_count = 1', async () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
       const transformer = instrumented.input(new ArrayBuffer(8));
       const transformed = transformer.transform({ width: 400 });
@@ -157,7 +159,7 @@ describe('Images Binding Instrumentation', () => {
   describe('pipeline: input() -> transform() -> draw() -> output()', () => {
     it('should create span with operation_count = 2', async () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
       const transformer = instrumented.input(new ArrayBuffer(8));
       const transformed = transformer.transform({ width: 400 });
@@ -174,7 +176,7 @@ describe('Images Binding Instrumentation', () => {
   describe('output() format capture', () => {
     it('should capture format from string arg', async () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
       const transformer = instrumented.input(new ArrayBuffer(8));
       await transformer.output('webp');
@@ -185,7 +187,7 @@ describe('Images Binding Instrumentation', () => {
 
     it('should capture format from options object', async () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
       const transformer = instrumented.input(new ArrayBuffer(8));
       await transformer.output({ format: 'avif' });
@@ -201,7 +203,7 @@ describe('Images Binding Instrumentation', () => {
         throw testError;
       });
 
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
       const transformer = instrumented.input(new ArrayBuffer(8));
 
       await expect(transformer.output()).rejects.toThrow('Output failed');
@@ -230,7 +232,10 @@ describe('Images Binding Instrumentation', () => {
           output: vi.fn(),
         })),
       };
-      const instrumented = instrumentImages(mockImagesObj as any, 'test');
+      const instrumented = instrumentImages(
+        imagesDouble(mockImagesObj),
+        'test',
+      );
       await instrumented.info(new ArrayBuffer(8));
       expect(receivedThis).toBe(mockImagesObj);
     });
@@ -250,7 +255,10 @@ describe('Images Binding Instrumentation', () => {
           return mockTransformer;
         }),
       };
-      const instrumented = instrumentImages(mockImagesObj as any, 'test');
+      const instrumented = instrumentImages(
+        imagesDouble(mockImagesObj),
+        'test',
+      );
       instrumented.input(new ArrayBuffer(8));
       expect(receivedThis).toBe(mockImagesObj);
     });
@@ -259,9 +267,11 @@ describe('Images Binding Instrumentation', () => {
   describe('non-instrumented methods', () => {
     it('should pass through non-instrumented methods unchanged', () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
-      const result = (instrumented as any).someOtherMethod();
+      const result = asFunction(
+        readProperty(instrumented, 'someOtherMethod'),
+      )?.();
 
       expect(result).toBe('passthrough');
       expect(images.someOtherMethod).toHaveBeenCalled();
@@ -270,9 +280,9 @@ describe('Images Binding Instrumentation', () => {
 
     it('should pass through non-instrumented properties unchanged', () => {
       const { images } = createMockImages();
-      const instrumented = instrumentImages(images as any, 'my-images');
+      const instrumented = instrumentImages(imagesDouble(images), 'my-images');
 
-      expect((instrumented as any).someProperty).toBe('test-value');
+      expect(readProperty(instrumented, 'someProperty')).toBe('test-value');
       expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
     });
   });

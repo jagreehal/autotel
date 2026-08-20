@@ -1,11 +1,37 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Attributes } from '@opentelemetry/api';
 import {
   GEN_AI_EVALUATION_RESULT,
   langfuseScores,
   toScorePayload,
 } from './scores.js';
 
-const evaluation = (extra: Record<string, unknown> = {}) => ({
+/**
+ * A fetch stand-in that answers with a real Response and records the calls, so
+ * `ok` follows from the status the way it does in production.
+ */
+function fakeFetch(response: { status: number; statusText?: string }) {
+  return vi.fn<typeof fetch>().mockResolvedValue(new Response(null, response));
+}
+
+/** A fetch stand-in that rejects, for the transport-failure paths. */
+function failingFetch(cause: Error) {
+  return vi.fn<typeof fetch>().mockRejectedValue(cause);
+}
+
+/** The url and init of a recorded fetch call, with the body already parsed. */
+function callOf(fetchStub: typeof fetch, index = 0) {
+  const calls = vi.mocked(fetchStub).mock.calls;
+  const [url, init] = calls[index]!;
+  const request = init ?? {};
+  return {
+    url: String(url),
+    headers: request.headers,
+    body: JSON.parse(String(request.body ?? '{}')),
+  };
+}
+
+const evaluation = (extra: Attributes = {}) => ({
   traceId: 'trace-1',
   spanId: 'span-1',
   'gen_ai.evaluation.name': 'faithfulness',
@@ -100,10 +126,10 @@ describe('langfuseScores', () => {
   };
 
   it('posts the score with basic auth to the scores endpoint', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const fetchMock = fakeFetch({ status: 200 });
     const subscriber = langfuseScores({
       ...options,
-      fetch: fetchMock as never,
+      fetch: fetchMock,
     });
 
     await subscriber.trackEvent(
@@ -112,13 +138,13 @@ describe('langfuseScores', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, init] = fetchMock.mock.calls[0]!;
+    const call = callOf(fetchMock);
     // The trailing slash on baseUrl must not become a double slash.
-    expect(url).toBe('http://langfuse.test/api/public/scores');
-    expect((init as RequestInit).headers).toMatchObject({
+    expect(call.url).toBe('http://langfuse.test/api/public/scores');
+    expect(call.headers).toMatchObject({
       Authorization: `Basic ${Buffer.from('pk:sk').toString('base64')}`,
     });
-    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+    expect(call.body).toMatchObject({
       traceId: 'trace-1',
       name: 'faithfulness',
       value: 0.92,
@@ -126,11 +152,11 @@ describe('langfuseScores', () => {
   });
 
   it('uses the subscriber trace context when ids are not copied into attributes', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const fetchMock = fakeFetch({ status: 200 });
     const subscriber = langfuseScores({
       ...options,
       scoreObservation: true,
-      fetch: fetchMock as never,
+      fetch: fetchMock,
     });
 
     await subscriber.trackEvent(
@@ -148,8 +174,8 @@ describe('langfuseScores', () => {
       },
     );
 
-    const [, init] = fetchMock.mock.calls[0]!;
-    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+    const call = callOf(fetchMock);
+    expect(call.body).toMatchObject({
       traceId: 'trace-from-context',
       observationId: 'span-from-context',
     });
@@ -159,7 +185,7 @@ describe('langfuseScores', () => {
     const fetchMock = vi.fn();
     const subscriber = langfuseScores({
       ...options,
-      fetch: fetchMock as never,
+      fetch: fetchMock,
     });
     await subscriber.trackEvent('order.created', { traceId: 'trace-1' });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -168,15 +194,11 @@ describe('langfuseScores', () => {
   it('reports a rejected score without throwing into the run', async () => {
     // A score that fails to post must never take down the operation that
     // produced it.
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      statusText: 'Unauthorized',
-    });
+    const fetchMock = fakeFetch({ status: 401, statusText: 'Unauthorized' });
     const onError = vi.fn();
     const subscriber = langfuseScores({
       ...options,
-      fetch: fetchMock as never,
+      fetch: fetchMock,
       onError,
     });
 
@@ -195,7 +217,7 @@ describe('langfuseScores', () => {
     const onError = vi.fn();
     const subscriber = langfuseScores({
       ...options,
-      fetch: fetchMock as never,
+      fetch: fetchMock,
       onError,
     });
 
@@ -222,17 +244,13 @@ describe('error isolation', () => {
   it('reports a rejected response exactly once', async () => {
     // The reporting call used to sit inside the try that caught it, so an
     // onError that threw was invoked a second time from the catch.
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: 'Server Error',
-    });
+    const fetchMock = fakeFetch({ status: 500, statusText: 'Server Error' });
     const onError = vi.fn(() => {
       throw new Error('reporter exploded');
     });
     const subscriber = langfuseScores({
       ...options,
-      fetch: fetchMock as never,
+      fetch: fetchMock,
       onError,
     });
 
@@ -250,16 +268,12 @@ describe('error isolation', () => {
 
     const failedResponse = langfuseScores({
       ...options,
-      fetch: vi.fn().mockResolvedValue({
-        ok: false,
-        status: 401,
-        statusText: 'no',
-      }) as never,
+      fetch: fakeFetch({ status: 401, statusText: 'no' }),
       onError,
     });
     const failedTransport = langfuseScores({
       ...options,
-      fetch: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')) as never,
+      fetch: failingFetch(new Error('ECONNREFUSED')),
       onError,
     });
 

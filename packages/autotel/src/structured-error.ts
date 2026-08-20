@@ -1,6 +1,8 @@
 import { SpanStatusCode } from '@opentelemetry/api';
 import type { AttributeValue, TraceContext } from './trace-context';
 import { flattenToAttributes } from './flatten-attributes';
+import type { UnknownRecord } from './values';
+import { isFunction } from './values';
 
 const internalKey = Symbol.for('autotel.error.internal');
 
@@ -12,10 +14,10 @@ export interface StructuredErrorInput {
   code?: string | number;
   status?: number;
   cause?: unknown;
-  details?: Record<string, unknown>;
+  details?: UnknownRecord;
   name?: string;
   /** Backend-only context. Omitted from toJSON() and never serialized to clients. */
-  internal?: Record<string, unknown>;
+  internal?: UnknownRecord;
 }
 
 export interface StructuredError extends Error {
@@ -24,14 +26,16 @@ export interface StructuredError extends Error {
   link?: string;
   code?: string | number;
   status?: number;
-  details?: Record<string, unknown>;
+  details?: UnknownRecord;
   /** Backend-only context. Omitted from toJSON() and never serialized to clients. */
-  readonly internal?: Record<string, unknown>;
+  readonly internal?: UnknownRecord;
 }
 
 export function createStructuredError(
   input: StructuredErrorInput,
 ): StructuredError {
+  // SAFETY: the fields StructuredError adds to Error are all optional and are
+  // set below; until then the new Error simply has none of them.
   const error = new Error(input.message, {
     cause: input.cause,
   }) as StructuredError;
@@ -55,9 +59,11 @@ export function createStructuredError(
 
   Object.defineProperty(error, 'internal', {
     get() {
-      return (
-        this as StructuredError & { [internalKey]?: Record<string, unknown> }
-      )[internalKey];
+      // SAFETY: `internalKey` is written a few lines above, on this same
+      // object and nowhere else, with the input's `internal` bag.
+      return (this as StructuredError & { [internalKey]?: UnknownRecord })[
+        internalKey
+      ];
     },
     enumerable: false,
     configurable: true,
@@ -70,9 +76,10 @@ export function createStructuredError(
     if (error.link) lines.push(`  Link: ${error.link}`);
     if (error.code !== undefined) lines.push(`  Code: ${error.code}`);
     if (error.status !== undefined) lines.push(`  Status: ${error.status}`);
-    if (error.cause) {
-      const cause = error.cause as Error;
-      lines.push(`  Caused by: ${cause.name}: ${cause.message}`);
+    if (error.cause instanceof Error) {
+      lines.push(`  Caused by: ${error.cause.name}: ${error.cause.message}`);
+    } else if (error.cause !== undefined) {
+      lines.push(`  Caused by: ${String(error.cause)}`);
     }
     return lines.join('\n');
   };
@@ -80,10 +87,8 @@ export function createStructuredError(
   return error;
 }
 
-export function structuredErrorToJSON(
-  error: StructuredError,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {
+export function structuredErrorToJSON(error: StructuredError): UnknownRecord {
+  const result: UnknownRecord = {
     name: error.name,
     message: error.message,
   };
@@ -105,24 +110,24 @@ export function structuredErrorToJSON(
   return result;
 }
 
-export function getStructuredErrorAttributes(
-  error: Error,
-): Record<string, AttributeValue> {
+/** The `error.*` attributes a failure contributes to a span. */
+export type ErrorAttributes = Record<string, AttributeValue>;
+
+export function getStructuredErrorAttributes(error: Error) {
+  // SAFETY: StructuredError only adds optional fields to Error, so a plain
+  // Error read through it simply has none of them - which is what each check
+  // below is for.
   const structured = error as StructuredError;
-  const attributes: Record<string, AttributeValue> = {
-    'error.type': error.name || 'Error',
-    'error.message': error.message,
-  };
+  const attributes: ErrorAttributes = {};
+  attributes['error.type'] = error.name || 'Error';
+  attributes['error.message'] = error.message;
 
   if (error.stack) attributes['error.stack'] = error.stack;
   if (structured.why) attributes['error.why'] = structured.why;
   if (structured.fix) attributes['error.fix'] = structured.fix;
   if (structured.link) attributes['error.link'] = structured.link;
   if (structured.code !== undefined) {
-    attributes['error.code'] =
-      typeof structured.code === 'string'
-        ? structured.code
-        : String(structured.code);
+    attributes['error.code'] = String(structured.code);
   }
   if (structured.status !== undefined) {
     attributes['error.status'] = structured.status;
@@ -141,14 +146,15 @@ export function recordStructuredError(
   ctx: Pick<TraceContext, 'setAttributes' | 'setStatus'>,
   error: Error,
 ): void {
+  // SAFETY: the parameter is the narrow slice of TraceContext this function
+  // needs; a full context also records exceptions, and one that does not
+  // simply leaves this undefined.
   const maybeRecordException = (
-    ctx as unknown as {
+    ctx as Partial<TraceContext> & {
       recordException?: (e: Error) => void;
     }
   ).recordException;
-  if (typeof maybeRecordException === 'function') {
-    maybeRecordException(error);
-  }
+  if (isFunction(maybeRecordException)) maybeRecordException(error);
   ctx.setStatus({
     code: SpanStatusCode.ERROR,
     message: error.message,

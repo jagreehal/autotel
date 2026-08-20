@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentGlobalCache } from './cache';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { tracerDouble } from '../testing/doubles.js';
 
 // `caches` is a Cloudflare global; `typeof globalThis` (Node lib) doesn't declare
 // it. Read it via a typed view of globalThis so property access stays safe at
@@ -43,7 +44,7 @@ describe('Global Cache Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
 
     // Mock caches API
     const mockCache = {
@@ -264,7 +265,7 @@ describe('Global Cache Instrumentation', () => {
       // After instrumentation, caches.open is wrapped
       // The key is that we can still call it and get a cache back
       expect(namedCache).toBeDefined();
-      expect(typeof namedCache.match).toBe('function');
+      expect(namedCache.match).toBeTypeOf('function');
     });
 
     it('should instrument operations on named caches', async () => {

@@ -11,7 +11,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // Types
 // ============================================================================
 
-export interface TraceSpan {
+export /** What OpenTelemetry lets a span attribute hold. */
+type AttributeValue =
+  string | number | boolean | Array<string | number | boolean>
+
+/** A span's attribute bag, keyed by attribute name. */
+type SpanAttributes = Record<string, AttributeValue>
+
+interface TraceSpan {
   id: string
   traceId: string
   parentId?: string
@@ -20,7 +27,7 @@ export interface TraceSpan {
   endTime?: number
   duration?: number
   status: 'ok' | 'error' | 'pending'
-  attributes: Record<string, unknown>
+  attributes: SpanAttributes
   children?: Array<TraceSpan>
 }
 
@@ -76,7 +83,7 @@ export function useSpans(): Array<TraceSpan> {
 // Helper to record a span (call from playground actions)
 export function recordSpan(
   name: string,
-  attributes: Record<string, unknown> = {},
+  attributes: SpanAttributes = {},
   status: 'ok' | 'error' = 'ok',
   duration?: number,
 ) {
@@ -407,10 +414,11 @@ function SpanRow({
 
   return (
     <div
-      style={{
-        ...styles.spanRow,
-        ...(isHovered || isSelected ? styles.spanRowHover : {}),
-      }}
+      style={
+        isHovered || isSelected
+          ? { ...styles.spanRow, ...styles.spanRowHover }
+          : styles.spanRow
+      }
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={onClick}
@@ -438,9 +446,7 @@ function SpanDetail({ span }: { span: TraceSpan }) {
           <div key={key} style={styles.attributeRow}>
             <span style={styles.attributeKey}>{key}:</span>
             <span style={styles.attributeValue}>
-              {typeof value === 'object'
-                ? JSON.stringify(value)
-                : String(value)}
+              {Array.isArray(value) ? value.join(', ') : String(value)}
             </span>
           </div>
         ))
@@ -513,9 +519,10 @@ export function TracesDevtools({
       {/* Floating Button */}
       <button
         style={{
-          ...styles.floatingButton,
+          ...(isButtonHovered
+            ? { ...styles.floatingButton, ...styles.floatingButtonHover }
+            : styles.floatingButton),
           ...positionStyles,
-          ...(isButtonHovered ? styles.floatingButtonHover : {}),
           opacity: isOpen ? 0 : 1,
           visibility: isOpen ? 'hidden' : 'visible',
         }}
@@ -541,10 +548,11 @@ export function TracesDevtools({
       >
         {/* Drag Handle */}
         <div
-          style={{
-            ...styles.dragHandle,
-            ...(isDragHandleHovered ? styles.dragHandleHover : {}),
-          }}
+          style={
+            isDragHandleHovered
+              ? { ...styles.dragHandle, ...styles.dragHandleHover }
+              : styles.dragHandle
+          }
           onMouseEnter={() => setIsDragHandleHovered(true)}
           onMouseLeave={() => setIsDragHandleHovered(false)}
           onMouseDown={handleDragStart}

@@ -41,17 +41,17 @@ export interface NextWithAutotelOptions extends Omit<
  * into responses. Delegate classification to Next itself so new signal types
  * and signals wrapped in `cause` stay covered without duplicating its internals.
  */
-function findNextControlFlowSignal(error: unknown): unknown | null {
+function findNextControlFlowSignal(cause: unknown): unknown | null {
   try {
-    unstableRethrow(error);
+    unstableRethrow(cause);
     return null;
   } catch (signal) {
     return signal;
   }
 }
 
-function isRealNextError(error: unknown): boolean {
-  return findNextControlFlowSignal(error) === null;
+function isRealNextError(cause: unknown): boolean {
+  return findNextControlFlowSignal(cause) === null;
 }
 
 const { storage: nextLoggerStorage, useLogger: storageUseLogger } =
@@ -75,9 +75,9 @@ function enrichFromRequest(
   const requestId = getHeader(request.headers, 'x-request-id');
 
   return {
-    ...(request.method ? { 'http.request.method': request.method } : {}),
-    ...(request.url ? { 'url.full': request.url } : {}),
-    ...(route ? { 'http.route': route } : {}),
+    'http.request.method': request.method,
+    'url.full': request.url,
+    'http.route': route,
     ...(requestId ? { 'http.request.header.x-request-id': requestId } : {}),
   };
 }

@@ -23,26 +23,29 @@
 import { normalizeAiSdkProvider } from '../ai-sdk-bridge.js';
 import type { TokenUsage } from '../cost.js';
 import type { GenAiObserver } from './types.js';
+import type { GenAiMetadata } from '../agent/types.js';
+import type { UnknownRecord } from '../values.js';
+import { asNumber, asRecord, nonEmptyString } from '../values.js';
 
 /** LangChain `Serialized` — the identity of a chain/LLM/tool. */
 interface Serialized {
   id?: string[];
   name?: string;
-  kwargs?: Record<string, unknown>;
+  kwargs?: UnknownRecord;
 }
 
 interface LLMGeneration {
-  generationInfo?: Record<string, unknown>;
+  generationInfo?: UnknownRecord;
   message?: {
-    usage_metadata?: Record<string, unknown>;
-    response_metadata?: Record<string, unknown>;
+    usage_metadata?: GenAiMetadata;
+    response_metadata?: GenAiMetadata;
   };
 }
 
 /** LangChain `LLMResult` — what an LLM/chat-model run returns. */
 interface LLMResult {
   generations?: LLMGeneration[][];
-  llmOutput?: Record<string, unknown>;
+  llmOutput?: UnknownRecord;
 }
 
 /** The subset of LangChain's `CallbackHandlerMethods` this adapter implements. */
@@ -53,7 +56,7 @@ export interface LangChainObserverHandler {
     runId: string,
     parentRunId?: string,
     tags?: string[],
-    metadata?: Record<string, unknown>,
+    metadata?: GenAiMetadata,
     runType?: string,
     runName?: string,
   ): void;
@@ -64,14 +67,14 @@ export interface LangChainObserverHandler {
     prompts: string[],
     runId: string,
     parentRunId?: string,
-    extraParams?: Record<string, unknown>,
+    extraParams?: GenAiMetadata,
   ): void;
   handleChatModelStart(
     llm: Serialized,
     messages: unknown,
     runId: string,
     parentRunId?: string,
-    extraParams?: Record<string, unknown>,
+    extraParams?: GenAiMetadata,
   ): void;
   handleLLMEnd(output: LLMResult, runId: string): void;
   handleLLMError(error: unknown, runId: string): void;
@@ -81,7 +84,7 @@ export interface LangChainObserverHandler {
     runId: string,
     parentRunId?: string,
     tags?: string[],
-    metadata?: Record<string, unknown>,
+    metadata?: GenAiMetadata,
     runName?: string,
   ): void;
   handleToolEnd(output: unknown, runId: string): void;
@@ -122,7 +125,7 @@ export function createLangChainObserver(
     llm: Serialized,
     runId: string,
     parentRunId: string | undefined,
-    extraParams: Record<string, unknown> | undefined,
+    extraParams: GenAiMetadata | undefined,
   ): void {
     const model = langChainModel(llm, extraParams);
     if (model) models.set(runId, model);
@@ -224,7 +227,7 @@ function langChainProvider(serialized: Serialized): string | undefined {
 
 function langChainModel(
   serialized: Serialized,
-  extraParams: Record<string, unknown> | undefined,
+  extraParams: GenAiMetadata | undefined,
 ): string | undefined {
   const invocation = asRecord(extraParams?.invocation_params);
   return (
@@ -272,18 +275,7 @@ function lastIdSegment(serialized: Serialized): string | undefined {
   return serialized.name ?? serialized.id?.at(-1);
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function str(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function num(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
-}
+// The value readers live in ../values.js; these are this file's short names
+// for the two it uses most.
+const str = nonEmptyString;
+const num = asNumber;

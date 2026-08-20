@@ -1,12 +1,18 @@
 /**
- * PostHog Subscriber for autotel
+ * PostHog event subscriber — product events posted from the server.
  *
- * Send events to PostHog for product events, feature flags, and A/B testing.
+ * The other half of this package joins browser traces to the PostHog session.
+ * This half sends `track()` events to PostHog from Node, stamping the same
+ * `$trace_id` / `$span_id` property names the browser hook writes, so an event
+ * points back at its trace whichever side captured it.
+ *
+ * Extends `EventSubscriber` from `autotel-subscribers`, which stays the home of
+ * the subscriber machinery and the smaller vendor sinks.
  *
  * @example Basic usage
  * ```typescript
  * import { Event } from 'autotel/event';
- * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+ * import { PostHogSubscriber } from 'autotel-posthog/subscriber';
  *
  * const events = new Event('checkout', {
  *   subscribers: [
@@ -90,15 +96,19 @@ import type {
   EventAttributes,
   EventAttributesInput,
 } from 'autotel/event-subscriber';
-import { EventSubscriber, type EventPayload } from './event-subscriber-base';
+import { EventSubscriber, type EventPayload } from 'autotel-subscribers';
+import type { ExceptionRecord } from './error-formatter.js';
 import {
-  formatExceptionForPostHog,
   errorToExceptionList,
-} from './posthog-error-formatter';
+  formatExceptionForPostHog,
+} from './error-formatter.js';
 import slowRedact from 'slow-redact';
 
 // Type-only import to avoid runtime dependency
 import type { PostHog } from 'posthog-node';
+import type { PostHog as PostHogBrowser } from 'posthog-js';
+import type { UnknownRecord } from '../values.js';
+import { asRecord, asString, readProperty, toError } from '../values.js';
 
 /**
  * Error context for enhanced error handling
@@ -278,15 +288,33 @@ export interface PersonProperties {
 
 export class PostHogSubscriber extends EventSubscriber {
   readonly name = 'PostHogSubscriber';
-  readonly version = '2.0.0';
+  override readonly version = '2.0.0';
 
   private posthog: PostHog | null = null;
   private config: PostHogConfig;
   private initPromise: Promise<void> | null = null;
   /** True when using browser's window.posthog (different API signature) */
   private isBrowserClient = false;
-  private pathRedactor:
-    ((obj: Record<string, unknown>) => Record<string, unknown>) | null = null;
+
+  /**
+   * The same client seen through the browser SDK's shape.
+   *
+   * The two SDKs disagree about `capture`: Node takes one object, the browser
+   * takes a name and properties. Rather than cast at each call site, the cast
+   * happens once here and the calls are typed against `posthog-js` itself — so
+   * a change to the browser signature is a compile error rather than a runtime
+   * one in a page.
+   */
+  private get browserClient(): PostHogBrowser | undefined {
+    // SAFETY: see the note above - `isBrowserClient` is set only where the
+    // instance came from the page, so this is posthog-js, whose signatures
+    // differ from posthog-node's. The hop is TypeScript's: the two client
+    // types share a name and nothing else.
+    return this.isBrowserClient && this.posthog
+      ? (this.posthog as unknown as PostHogBrowser)
+      : undefined;
+  }
+  private pathRedactor: ((obj: UnknownRecord) => UnknownRecord) | null = null;
   private stringRedactor: StringRedactor | null = null;
 
   constructor(config: PostHogConfig) {
@@ -317,10 +345,12 @@ export class PostHogSubscriber extends EventSubscriber {
     };
 
     if (this.config.redactPaths && this.config.redactPaths.length > 0) {
+      // SAFETY: slow-redact returns a redactor over the paths it was given;
+      // with `serialize: false` it answers with the same object, masked.
       this.pathRedactor = slowRedact({
         paths: this.config.redactPaths,
         serialize: false,
-      }) as any;
+      }) as (obj: UnknownRecord) => UnknownRecord;
     }
     if (this.config.stringRedactor) {
       this.stringRedactor = this.config.stringRedactor;
@@ -336,12 +366,12 @@ export class PostHogSubscriber extends EventSubscriber {
     try {
       // Option 1: Use global browser client (window.posthog)
       if (this.config.useGlobalClient) {
-        const globalWindow =
-          typeof globalThis === 'undefined'
-            ? undefined
-            : (globalThis as Record<string, unknown>);
-        if (globalWindow?.posthog) {
-          this.posthog = globalWindow.posthog as PostHog;
+        const globalPostHog = readProperty(globalThis, 'posthog');
+        if (globalPostHog) {
+          // SAFETY: `window.posthog` is the browser SDK the page loaded; the
+          // browserClient getter below is what states its browser signature,
+          // and every call through it is guarded.
+          this.posthog = globalPostHog as PostHog;
           this.isBrowserClient = true;
           this.setupErrorHandling();
           return;
@@ -378,7 +408,7 @@ export class PostHogSubscriber extends EventSubscriber {
         error,
       );
       this.enabled = false;
-      this.config.onError?.(error as Error);
+      this.config.onError?.(toError(error));
     }
   }
 
@@ -399,16 +429,30 @@ export class PostHogSubscriber extends EventSubscriber {
     }
   }
 
-  private extractDistinctId(attributes?: EventAttributes): string {
-    return (attributes?.userId || attributes?.user_id || 'anonymous') as string;
+  /**
+   * Feature-flag options as posthog-node's own parameter type.
+   *
+   * SAFETY: FeatureFlagOptions above mirrors the fields posthog-node accepts -
+   * groups, person and group properties, and the two evaluation switches. The
+   * SDK declares them inline on each method rather than as a named type, so
+   * the correspondence is stated here once instead of at each call.
+   */
+  private flagOptions(options?: FeatureFlagOptions) {
+    return options as Parameters<PostHog['isFeatureEnabled']>[2];
   }
 
-  private redactProperties(
-    properties: Record<string, unknown>,
-  ): Record<string, unknown> {
+  private extractDistinctId(attributes?: EventAttributes): string {
+    return (
+      asString(attributes?.userId) ??
+      asString(attributes?.user_id) ??
+      'anonymous'
+    );
+  }
+
+  private redactProperties(properties: UnknownRecord): UnknownRecord {
     let result = properties;
     if (this.pathRedactor) {
-      result = this.pathRedactor(properties) as Record<string, unknown>;
+      result = this.pathRedactor(properties);
     }
     if (this.stringRedactor) {
       result = this.redactStringValues(result);
@@ -416,35 +460,25 @@ export class PostHogSubscriber extends EventSubscriber {
     return result;
   }
 
-  private redactStringValues(
-    obj: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
+  private redactStringValues(obj: UnknownRecord): UnknownRecord {
+    const result: UnknownRecord = {};
     for (const [key, value] of Object.entries(obj)) {
-      if (typeof value === 'string') {
-        result[key] = this.stringRedactor!(value);
-      } else if (Array.isArray(value)) {
-        result[key] = this.redactArray(value);
-      } else if (value !== null && typeof value === 'object') {
-        result[key] = this.redactStringValues(value as Record<string, unknown>);
-      } else {
-        result[key] = value;
-      }
+      result[key] = this.redactValue(value);
     }
     return result;
   }
 
   private redactArray(arr: unknown[]): unknown[] {
-    return arr.map((item) => {
-      if (typeof item === 'string') {
-        return this.stringRedactor!(item);
-      } else if (Array.isArray(item)) {
-        return this.redactArray(item);
-      } else if (item !== null && typeof item === 'object') {
-        return this.redactStringValues(item as Record<string, unknown>);
-      }
-      return item;
-    });
+    return arr.map((item) => this.redactValue(item));
+  }
+
+  /** One value, redacted: a string masked, a container walked. */
+  private redactValue(value: unknown): unknown {
+    const text = asString(value);
+    if (text !== undefined) return this.stringRedactor!(text);
+    if (Array.isArray(value)) return this.redactArray(value);
+    const nested = asRecord(value);
+    return nested ? this.redactStringValues(nested) : value;
   }
 
   /**
@@ -474,7 +508,7 @@ export class PostHogSubscriber extends EventSubscriber {
         : this.filterAttributes(payload.attributes as EventAttributesInput);
 
     // Build properties object, including value and funnel metadata if present
-    const properties: Record<string, unknown> = { ...filteredAttributes };
+    const properties: UnknownRecord = { ...filteredAttributes };
     if (payload.value !== undefined) {
       properties.value = payload.value;
     }
@@ -523,9 +557,12 @@ export class PostHogSubscriber extends EventSubscriber {
 
     if (payload.attributes?.['exception.list']) {
       try {
+        // SAFETY: `exception.list` is the JSON the autotel exporter wrote
+        // from ExceptionRecord[]; formatExceptionForPostHog reads each entry
+        // field by field, so a list of something else formats to nothing.
         const exceptionList = JSON.parse(
-          payload.attributes['exception.list'] as string,
-        );
+          asString(payload.attributes['exception.list']) ?? '[]',
+        ) as ExceptionRecord[];
         const formatted = formatExceptionForPostHog(
           exceptionList,
           undefined,
@@ -537,7 +574,7 @@ export class PostHogSubscriber extends EventSubscriber {
         };
 
         if (this.isBrowserClient) {
-          (this.posthog as any)?.capture('$exception', exceptionProperties);
+          this.browserClient?.capture('$exception', exceptionProperties);
         } else {
           this.posthog?.capture({
             distinctId: this.extractDistinctId(filteredAttributes),
@@ -555,7 +592,7 @@ export class PostHogSubscriber extends EventSubscriber {
     // Browser client has different API signature
     if (this.isBrowserClient) {
       // Browser API: capture(eventName, properties)
-      (this.posthog as any)?.capture(payload.name, redactedProperties);
+      this.browserClient?.capture(payload.name, redactedProperties);
     } else {
       // Server API: capture({ distinctId, event, properties, groups })
       const capturePayload: any = {
@@ -606,11 +643,11 @@ export class PostHogSubscriber extends EventSubscriber {
         (await this.posthog?.isFeatureEnabled(
           flagKey,
           distinctId,
-          options as any,
+          this.flagOptions(options),
         )) ?? false
       );
     } catch (error) {
-      this.config.onError?.(error as Error);
+      this.config.onError?.(toError(error));
       return false;
     }
   }
@@ -646,10 +683,10 @@ export class PostHogSubscriber extends EventSubscriber {
       return await this.posthog?.getFeatureFlag(
         flagKey,
         distinctId,
-        options as any,
+        this.flagOptions(options),
       );
     } catch (error) {
-      this.config.onError?.(error as Error);
+      this.config.onError?.(toError(error));
       return undefined;
     }
   }
@@ -675,10 +712,13 @@ export class PostHogSubscriber extends EventSubscriber {
     await this.ensureInitialized();
 
     try {
-      const flags = await this.posthog?.getAllFlags(distinctId, options as any);
+      const flags = await this.posthog?.getAllFlags(
+        distinctId,
+        this.flagOptions(options),
+      );
       return flags ?? {};
     } catch (error) {
-      this.config.onError?.(error as Error);
+      this.config.onError?.(toError(error));
       return {};
     }
   }
@@ -700,7 +740,7 @@ export class PostHogSubscriber extends EventSubscriber {
     try {
       await this.posthog?.reloadFeatureFlags();
     } catch (error) {
-      this.config.onError?.(error as Error);
+      this.config.onError?.(toError(error));
     }
   }
 
@@ -743,7 +783,7 @@ export class PostHogSubscriber extends EventSubscriber {
         properties,
       });
     } catch (error) {
-      this.config.onError?.(error as Error);
+      this.config.onError?.(toError(error));
     }
   }
 
@@ -783,7 +823,7 @@ export class PostHogSubscriber extends EventSubscriber {
         properties,
       });
     } catch (error) {
-      this.config.onError?.(error as Error);
+      this.config.onError?.(toError(error));
     }
   }
 
@@ -814,11 +854,11 @@ export class PostHogSubscriber extends EventSubscriber {
     if (!this.enabled) return;
     await this.ensureInitialized();
 
-    const eventAttributes: EventAttributes = {
-      ...attributes,
-    } as EventAttributes;
+    const eventAttributes: EventAttributes = { ...attributes };
     if (groups) {
-      (eventAttributes as any).groups = groups;
+      // SAFETY: `groups` is a PostHog group-analytics field carried alongside
+      // the event's own attributes; EventAttributes is autotel's bag of them.
+      (eventAttributes as UnknownRecord).groups = groups;
     }
 
     await this.trackEvent(name, eventAttributes);
@@ -834,7 +874,7 @@ export class PostHogSubscriber extends EventSubscriber {
     error: unknown,
     options?: {
       distinctId?: string;
-      additionalProperties?: Record<string, unknown>;
+      additionalProperties?: UnknownRecord;
     },
   ): Promise<void> {
     if (!this.enabled) return;
@@ -845,7 +885,7 @@ export class PostHogSubscriber extends EventSubscriber {
         const browserProps = options?.additionalProperties
           ? this.redactProperties(options.additionalProperties)
           : undefined;
-        (this.posthog as any)?.captureException?.(error, browserProps);
+        this.browserClient?.captureException?.(error, browserProps);
         return;
       }
 
@@ -870,14 +910,14 @@ export class PostHogSubscriber extends EventSubscriber {
         properties: this.redactProperties(properties),
       });
     } catch (error_) {
-      this.config.onError?.(error_ as Error);
+      this.config.onError?.(toError(error_));
     }
   }
 
   /**
    * Flush pending events and clean up resources
    */
-  async shutdown(): Promise<void> {
+  override async shutdown(): Promise<void> {
     await super.shutdown(); // Drain pending requests first
     await this.ensureInitialized();
 
@@ -885,7 +925,7 @@ export class PostHogSubscriber extends EventSubscriber {
       try {
         await this.posthog.shutdown();
       } catch (error) {
-        this.config.onError?.(error as Error);
+        this.config.onError?.(toError(error));
       }
     }
   }
@@ -893,7 +933,7 @@ export class PostHogSubscriber extends EventSubscriber {
   /**
    * Handle errors with custom error handler
    */
-  protected handleError(error: Error, payload: EventPayload): void {
+  protected override handleError(error: Error, payload: EventPayload): void {
     // Call basic onError if provided
     this.config.onError?.(error);
 

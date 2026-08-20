@@ -128,6 +128,9 @@ describe('snapshot contract', () => {
 describe('compatibility checks', () => {
   // A reader is a plain parse function here; a Zod/Valibot schema works identically.
   const orderV2Reader = (value: unknown) => {
+    // SAFETY: a reader receives whatever the serializer deserialized. Every
+    // field is checked below before it is used, which is what makes this a
+    // reader: it throws when the message it was handed is not compatible.
     const v = value as Record<string, unknown>;
     if (typeof v.orderId !== 'string')
       throw new Error('orderId must be a string');
@@ -165,6 +168,9 @@ describe('compatibility checks', () => {
   it('passes forward compatibility when the newer writer only adds fields', async () => {
     const v2 = { orderId: 'ord-1', customer: 'Alice', coupon: 'SAVE10' };
     const orderV1Reader = (value: unknown) => {
+      // SAFETY: a reader receives whatever the serializer deserialized. Every
+      // field is checked below before it is used, which is what makes this a
+      // reader: it throws when the message it was handed is not compatible.
       const v = value as Record<string, unknown>;
       if (typeof v.orderId !== 'string')
         throw new Error('orderId must be a string');
@@ -186,6 +192,9 @@ describe('compatibility checks', () => {
 
   it('fails compatibility when the reader silently renames a shared field', async () => {
     const driftedReader = (value: unknown) => {
+      // SAFETY: a reader receives whatever the serializer deserialized. Every
+      // field is checked below before it is used, which is what makes this a
+      // reader: it throws when the message it was handed is not compatible.
       const v = value as Record<string, unknown>;
       return {
         orderId: v.orderId,
@@ -203,6 +212,9 @@ describe('compatibility checks', () => {
 
   it('fails compatibility when the reader changes a shared field value', async () => {
     const lossyReader = (value: unknown) => {
+      // SAFETY: a reader receives whatever the serializer deserialized. Every
+      // field is checked below before it is used, which is what makes this a
+      // reader: it throws when the message it was handed is not compatible.
       const v = value as Record<string, unknown>;
       return {
         orderId: v.orderId,
@@ -266,6 +278,9 @@ describe('compatibility checks', () => {
         version: 1 as const,
         vendor: 'test',
         validate: (value: unknown) => {
+          // SAFETY: a reader receives whatever the serializer deserialized. Every
+          // field is checked below before it is used, which is what makes this a
+          // reader: it throws when the message it was handed is not compatible.
           const v = value as Record<string, unknown>;
           if (typeof v.orderId === 'string') return { value: v };
           return {

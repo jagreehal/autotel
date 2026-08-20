@@ -21,6 +21,7 @@ import { toGenAiSpan } from './genai/normalize';
 import { buildToolResultIndex, hydrateToolResults } from './genai/stitch';
 import type { GenAiSpan } from './genai/types';
 import type { SpanData } from './types';
+import { stringAttr } from './attrs';
 import type { Shortcut } from './shortcuts';
 import {
   summarizeSessions,
@@ -135,8 +136,14 @@ export function toggleHelp(shortcuts: Shortcut[]) {
  * user controls. It is persisted and never changes on its own — selecting a
  * trace no longer resizes the panel (that was the old "size jumps around" bug).
  */
+/** How big the detail panel is, per axis it can be docked on. */
+export interface PanelSize {
+  vertical: number;
+  horizontal: number;
+}
+
 /** Default panel size per axis, used as the initial value and on reset. */
-export const DEFAULT_PANEL_SIZE: { vertical: number; horizontal: number } = {
+export const DEFAULT_PANEL_SIZE: PanelSize = {
   vertical: 440,
   horizontal: 560,
 };
@@ -145,7 +152,7 @@ export const panelSizeSignal = signal({ ...DEFAULT_PANEL_SIZE });
 
 /** Clamp limits for the docked panel, derived from the viewport at call time. */
 export function panelSizeBounds(axis: 'vertical' | 'horizontal') {
-  if (typeof window === 'undefined') {
+  if (globalThis.window === undefined) {
     return axis === 'vertical'
       ? { min: 200, max: 900 }
       : { min: 360, max: 1200 };
@@ -205,6 +212,14 @@ export function recordIngest(traces: number, logs: number, metrics: number) {
   activityTickSignal.value = activityTickSignal.value + 1;
 }
 
+/** Items per second arriving, per signal type. */
+export interface IngestRates {
+  traces: number;
+  logs: number;
+  metrics: number;
+  total: number;
+}
+
 /**
  * Per-type ingest rate (items/sec) over the trailing `windowMs`. Pure over the
  * buffer + `now`, so callers on an interval decay the rate to zero when data
@@ -213,7 +228,7 @@ export function recordIngest(traces: number, logs: number, metrics: number) {
 export function ingestRatePerSecond(
   windowMs = 5000,
   now: number = Date.now(),
-): { traces: number; logs: number; metrics: number; total: number } {
+): IngestRates {
   const cutoff = now - windowMs;
   let traces = 0;
   let logs = 0;
@@ -321,14 +336,11 @@ export function clearTraceServiceFilter() {
 export type TraceTimeRangeFilter = 'all' | '5m' | '15m' | '1h';
 export const traceTimeRangeFilterSignal = signal<TraceTimeRangeFilter>('all');
 
-const TRACE_TIME_RANGE_MS: Record<
-  Exclude<TraceTimeRangeFilter, 'all'>,
-  number
-> = {
-  '5m': 5 * 60 * 1000,
-  '15m': 15 * 60 * 1000,
-  '1h': 60 * 60 * 1000,
-};
+const TRACE_TIME_RANGE_MS = new Map<TraceTimeRangeFilter, number>([
+  ['5m', 5 * 60 * 1000],
+  ['15m', 15 * 60 * 1000],
+  ['1h', 60 * 60 * 1000],
+]);
 
 /**
  * Lower-bound start time (ms epoch) for a time-range filter: traces that started
@@ -339,7 +351,7 @@ export function traceTimeRangeCutoff(
   range: TraceTimeRangeFilter,
   now: number,
 ): number {
-  return range === 'all' ? 0 : now - TRACE_TIME_RANGE_MS[range];
+  return range === 'all' ? 0 : now - (TRACE_TIME_RANGE_MS.get(range) ?? 0);
 }
 
 // GenAI-list filter — also global for the same shareable-URL reason.
@@ -347,33 +359,36 @@ export const genaiQuerySignal = signal('');
 
 // Default direction when first switching to a key: numeric/time keys descend
 // (biggest/newest first), text/status keys ascend.
-const DEFAULT_SORT_DIR: Record<TraceSortKey, SortDir> = {
-  time: 'desc',
-  duration: 'desc',
-  spans: 'desc',
-  service: 'asc',
-  name: 'asc',
-  status: 'desc',
-};
+const DEFAULT_SORT_DIR = new Map<TraceSortKey, SortDir>([
+  ['time', 'desc'],
+  ['duration', 'desc'],
+  ['spans', 'desc'],
+  ['service', 'asc'],
+  ['name', 'asc'],
+  ['status', 'desc'],
+]);
 
 export function setTraceSort(key: TraceSortKey) {
   const cur = traceSortSignal.value;
   traceSortSignal.value =
     cur.key === key
       ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' }
-      : { key, dir: DEFAULT_SORT_DIR[key] };
+      : { key, dir: DEFAULT_SORT_DIR.get(key) ?? 'desc' };
 }
 
-function traceSortValue(t: TraceData, key: TraceSortKey): number | string {
+/** The two keys that order traces by text; the rest order by a number. */
+const TEXT_SORT_KEYS = new Set<TraceSortKey>(['service', 'name']);
+
+function traceSortText(t: TraceData, key: TraceSortKey): string {
+  return (key === 'service' ? t.service : t.rootSpan?.name) ?? '';
+}
+
+function traceSortNumber(t: TraceData, key: TraceSortKey): number {
   switch (key) {
     case 'duration':
       return t.duration;
     case 'spans':
       return t.spans.length;
-    case 'service':
-      return t.service ?? '';
-    case 'name':
-      return t.rootSpan?.name ?? '';
     case 'status':
       return t.status === 'ERROR' ? 1 : 0;
     default:
@@ -381,16 +396,18 @@ function traceSortValue(t: TraceData, key: TraceSortKey): number | string {
   }
 }
 
+/** Order two traces by the key in force, text keys by locale. */
+function compareTraces(a: TraceData, b: TraceData, key: TraceSortKey): number {
+  return TEXT_SORT_KEYS.has(key)
+    ? traceSortText(a, key).localeCompare(traceSortText(b, key))
+    : traceSortNumber(a, key) - traceSortNumber(b, key);
+}
+
 export const sortedTracesSignal = computed(() => {
   const { key, dir } = traceSortSignal.value;
   const factor = dir === 'asc' ? 1 : -1;
   return [...tracesSignal.value].sort((a, b) => {
-    const av = traceSortValue(a, key);
-    const bv = traceSortValue(b, key);
-    const cmp =
-      typeof av === 'string'
-        ? av.localeCompare(bv as string)
-        : (av as number) - (bv as number);
+    const cmp = compareTraces(a, b, key);
     // Stable tiebreak on start time so equal keys keep a deterministic order.
     return cmp !== 0 ? cmp * factor : b.startTime - a.startTime;
   });
@@ -587,7 +604,7 @@ function recomputeTrace(base: TraceData, spans: SpanData[]): TraceData {
   )
     ? 'ERROR'
     : 'OK';
-  const rootService = rootSpan?.attributes?.['service.name'];
+  const rootService = stringAttr(rootSpan?.attributes, 'service.name');
   return {
     ...base,
     rootSpan,
@@ -596,10 +613,7 @@ function recomputeTrace(base: TraceData, spans: SpanData[]): TraceData {
     endTime,
     duration: endTime - startTime,
     status,
-    service:
-      typeof rootService === 'string' && rootService.length > 0
-        ? rootService
-        : base.service,
+    service: rootService ?? base.service,
   };
 }
 
@@ -843,8 +857,9 @@ export function setWidgetDocked(docked: DockPosition) {
 /** Cycle the dock edge: bottom → right → left → bottom. */
 export function cycleDock() {
   const order: Exclude<DockPosition, null>[] = ['bottom', 'right', 'left'];
-  const current = widgetDockedSignal.value ?? 'bottom';
-  const idx = order.indexOf(current as Exclude<DockPosition, null>);
+  const current: Exclude<DockPosition, null> =
+    widgetDockedSignal.value ?? 'bottom';
+  const idx = order.indexOf(current);
   widgetDockedSignal.value = order[(idx + 1) % order.length];
 }
 

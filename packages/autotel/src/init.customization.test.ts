@@ -1,26 +1,48 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MetricReader } from '@opentelemetry/sdk-metrics';
-import type { NodeSDK } from '@opentelemetry/sdk-node';
+import type { NodeSDK, NodeSDKConfiguration } from '@opentelemetry/sdk-node';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { mock, mockDeep, type DeepMockProxy } from 'vitest-mock-extended';
 import { NeverSampler } from './sampling';
 
+/** The options a constructor was called with, as this harness records them. */
+type SdkOptions = Partial<NodeSDKConfiguration>;
+
+/**
+ * What an exporter, reader or processor was constructed with. Each is an
+ * options bag the SDK passes straight through, so the harness records it as
+ * the config values it can hold rather than re-deriving each vendor's shape.
+ */
+type RecordedOptions = Record<string, ConfigValue>;
+
+/** A value inside a recorded options bag. */
+type ConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Date
+  | ((...args: never[]) => ConfigValue)
+  | Array<ConfigValue>
+  | { [key: string]: ConfigValue };
+
 type SdkRecord = {
-  options: Record<string, unknown>;
+  options: SdkOptions;
   instance: DeepMockProxy<NodeSDK>;
 };
 
 async function loadInitWithMocks() {
   const sdkInstances: SdkRecord[] = [];
-  const traceExporterOptions: Record<string, unknown>[] = [];
-  const metricExporterOptions: Record<string, unknown>[] = [];
-  const metricReaderOptions: Record<string, unknown>[] = [];
-  const logExporterOptions: Record<string, unknown>[] = [];
-  const logProcessorOptions: Record<string, unknown>[] = [];
+  const traceExporterOptions: RecordedOptions[] = [];
+  const metricExporterOptions: RecordedOptions[] = [];
+  const metricReaderOptions: RecordedOptions[] = [];
+  const logExporterOptions: RecordedOptions[] = [];
+  const logProcessorOptions: RecordedOptions[] = [];
 
   class MockNodeSDK {
-    constructor(options: Record<string, unknown>) {
+    constructor(options: SdkOptions) {
       const instance = mockDeep<NodeSDK>();
       instance.start.mockImplementation(() => {});
       instance.shutdown.mockResolvedValue();
@@ -30,27 +52,27 @@ async function loadInitWithMocks() {
   }
 
   class MockOTLPTraceExporter {
-    options: Record<string, unknown>;
+    options: RecordedOptions;
 
-    constructor(options: Record<string, unknown>) {
+    constructor(options: RecordedOptions) {
       this.options = options;
       traceExporterOptions.push(options);
     }
   }
 
   class MockOTLPMetricExporter {
-    options: Record<string, unknown>;
+    options: RecordedOptions;
 
-    constructor(options: Record<string, unknown>) {
+    constructor(options: RecordedOptions) {
       this.options = options;
       metricExporterOptions.push(options);
     }
   }
 
   class MockPeriodicExportingMetricReader {
-    options: Record<string, unknown>;
+    options: RecordedOptions;
 
-    constructor(options: Record<string, unknown>) {
+    constructor(options: RecordedOptions) {
       this.options = options;
       metricReaderOptions.push(options);
     }
@@ -76,18 +98,18 @@ async function loadInitWithMocks() {
   }));
 
   class MockOTLPLogExporter {
-    options: Record<string, unknown>;
+    options: RecordedOptions;
 
-    constructor(options: Record<string, unknown>) {
+    constructor(options: RecordedOptions) {
       this.options = options;
       logExporterOptions.push(options);
     }
   }
 
   class MockBatchLogRecordProcessor {
-    exporter: unknown;
+    exporter: ConfigValue;
 
-    constructor(exporter: unknown) {
+    constructor(exporter: ConfigValue) {
       this.exporter = exporter;
       logProcessorOptions.push({ exporter });
     }
@@ -163,7 +185,8 @@ describe('init() customization', () => {
       url: 'http://127.0.0.1:4318/v1/logs',
     });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.logRecordProcessors).toBeDefined();
   });
 
@@ -180,6 +203,8 @@ describe('init() customization', () => {
 
     setOptionalRequireForTesting((id: string) => {
       if (id === 'autotel-devtools') {
+        // SAFETY: init() reaches for the devtools entry point by id and calls
+        // createDevtools on what it gets; nothing else of the module is used.
         return {
           createDevtools: () => ({
             port: 9876,
@@ -226,6 +251,8 @@ describe('init() customization', () => {
     async () => {
       const { init, sdkInstances } = await loadInitWithMocks();
 
+      // SAFETY: init() only forwards instrumentations to the SDK; a name is all
+      // this test needs to identify the one it passed in.
       const instrumentation = { name: 'http' } as any;
 
       init({
@@ -233,7 +260,8 @@ describe('init() customization', () => {
         instrumentations: [instrumentation],
       });
 
-      const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+      // init() constructs exactly one SDK, so the last record is this run's.
+      const options = sdkInstances.at(-1)!.options;
       expect(options.instrumentations).toBeDefined();
       expect(options.instrumentations).toContain(instrumentation);
     },
@@ -247,9 +275,11 @@ describe('init() customization', () => {
       resourceAttributes: { 'cloud.region': 'eu-central-1' },
     });
 
+    // SAFETY: init() always passes a resource; the fields read below are the
+    // ones it fills in from the service config.
     const resource = sdkInstances.at(-1)?.options.resource as
       | {
-          attributes?: Record<string, unknown>;
+          attributes?: Record<string, ConfigValue>;
         }
       | undefined;
 
@@ -346,7 +376,8 @@ describe('init() customization', () => {
     init({ service: 'custom-metrics', metricReaders: [customMetricReader] });
 
     expect(sdkInstances).toHaveLength(1);
-    const options = sdkInstances.at(-1)!.options as Record<string, unknown>;
+    // SAFETY: as above - the last record is this run's SDK options.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.metricReaders).toEqual([customMetricReader]);
     expect(metricReaderOptions).toHaveLength(0);
   });
@@ -358,7 +389,8 @@ describe('init() customization', () => {
 
     init({ service: 'custom-metric-alias', metricReader: customMetricReader });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.metricReaders).toEqual([customMetricReader]);
     expect(metricReaderOptions).toHaveLength(0);
   });
@@ -489,7 +521,10 @@ describe('init() customization', () => {
       service: 'env-sampler-app',
     });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: a Sampler names itself through toString(), which is what init()
+    // is being checked to have configured.
     expect((options.sampler as { toString(): string }).toString()).toContain(
       'AlwaysOffSampler',
     );
@@ -504,7 +539,10 @@ describe('init() customization', () => {
       sampling: 'development',
     });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: a Sampler names itself through toString(), which is what init()
+    // is being checked to have configured.
     expect((options.sampler as { toString(): string }).toString()).toBe(
       'AutotelSamplerAdapter',
     );
@@ -538,7 +576,8 @@ describe('init() customization', () => {
 
     init({ service: 'custom-span', spanProcessors: [customProcessor] });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.spanProcessors).toEqual([customProcessor]);
   });
 
@@ -558,7 +597,10 @@ describe('init() customization', () => {
       spanEnrichers: [enricher],
     });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: init() passes the processors it built; the assertions below are
+    // about which ones ended up in that list.
     const processors = options.spanProcessors as SpanProcessor[];
     expect(processors[0]).toBe(enricher);
     expect(processors.length).toBeGreaterThan(1);
@@ -582,7 +624,10 @@ describe('init() customization', () => {
       spanEnrichers: [enricher],
     });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: init() passes the processors it built; the assertions below are
+    // about which ones ended up in that list.
     const processors = options.spanProcessors as SpanProcessor[];
     // Identity, not just position: the enricher reaches the SDK unwrapped, so
     // it mutates the real span. Compared by constructor name because
@@ -604,7 +649,8 @@ describe('init() customization', () => {
 
     init({ service: 'custom-span-alias', spanProcessor: customProcessor });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.spanProcessors).toEqual([customProcessor]);
   });
 
@@ -623,13 +669,16 @@ describe('init() customization', () => {
       spanProcessors: [pluralProcessor],
     });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.spanProcessors).toEqual([pluralProcessor]);
   });
 
   it('supports singular spanExporter alias', async () => {
     const { init, sdkInstances, traceExporterOptions } =
       await loadInitWithMocks();
+    // SAFETY: a SpanExporter is used for export() and shutdown(); the assertion
+    // at the end of this literal covers the rest of the interface.
     const customExporter = {
       export: vi.fn(),
       shutdown: vi.fn().mockResolvedValue(undefined),
@@ -642,7 +691,8 @@ describe('init() customization', () => {
       spanExporter: customExporter,
     });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.spanProcessors).toBeDefined();
     // Custom exporter path should bypass default OTLP trace exporter creation.
     expect(traceExporterOptions).toHaveLength(0);
@@ -660,9 +710,11 @@ describe('init() customization', () => {
 
     expect(logExporterOptions).toHaveLength(1);
     expect(logExporterOptions[0]!.url).toBe('http://localhost:4318/v1/logs');
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.logRecordProcessors).toBeDefined();
     expect(
+      // SAFETY: only the count of configured processors is read here.
       (options.logRecordProcessors as unknown[]).length,
     ).toBeGreaterThanOrEqual(1);
   });
@@ -678,7 +730,8 @@ describe('init() customization', () => {
       logRecordProcessor: customLogProcessor,
     });
 
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.logRecordProcessors).toEqual([customLogProcessor]);
   });
 
@@ -692,7 +745,8 @@ describe('init() customization', () => {
     });
 
     expect(logExporterOptions).toHaveLength(0);
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.logRecordProcessors).toBeUndefined();
   });
 
@@ -708,7 +762,8 @@ describe('init() customization', () => {
     });
 
     expect(logExporterOptions).toHaveLength(0);
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
     expect(options.logRecordProcessors).toBeUndefined();
   });
 

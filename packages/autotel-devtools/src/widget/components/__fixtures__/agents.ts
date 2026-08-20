@@ -12,6 +12,7 @@ import {
   type AgentSessionStore,
   type OtelMetricRecord,
 } from 'autotel-agents';
+import type { SpanAttributes } from '../../types.js';
 
 const SCOPE = { name: 'com.anthropic.claude_code' };
 const RESOURCE = { 'service.name': 'claude-code' };
@@ -20,7 +21,7 @@ function event(
   sessionId: string,
   eventName: string,
   timestamp: number,
-  attributes: Record<string, unknown>,
+  attributes: SpanAttributes,
 ): AgentRawEvent {
   return {
     eventName,

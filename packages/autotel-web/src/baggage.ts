@@ -117,6 +117,8 @@ export function setBaggage(
         console.warn(`[autotel-web] setBaggage: dropped entry — ${reason}`);
       continue;
     }
+    // SAFETY: validateBaggageEntry above returned a reason for anything that is
+    // not a usable string, and this branch only runs when it returned none.
     entries.set(key, value as string);
   }
 }

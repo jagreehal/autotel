@@ -3,26 +3,28 @@ import { helpText, parseCliArgs, VALUE_FLAGS } from './cli-args';
 
 describe('parseCliArgs', () => {
   it('parses the invocations the README documents', () => {
-    expect(parseCliArgs(['--transport', 'http', '--port', '3000']).overrides).toEqual(
-      { AUTOTEL_TRANSPORT: 'http', AUTOTEL_PORT: '3000' },
-    );
+    expect(
+      parseCliArgs(['--transport', 'http', '--port', '3000']).overrides,
+    ).toEqual({ AUTOTEL_TRANSPORT: 'http', AUTOTEL_PORT: '3000' });
     expect(parseCliArgs(['--persist', './autotel.db']).overrides).toEqual({
       AUTOTEL_PERSIST: './autotel.db',
     });
   });
 
   it('accepts short flags and --flag=value', () => {
-    expect(parseCliArgs(['-t', 'http', '-p', '8080', '-H', '0.0.0.0']).overrides).toEqual(
+    expect(
+      parseCliArgs(['-t', 'http', '-p', '8080', '-H', '0.0.0.0']).overrides,
+    ).toEqual({
+      AUTOTEL_TRANSPORT: 'http',
+      AUTOTEL_PORT: '8080',
+      AUTOTEL_HOST: '0.0.0.0',
+    });
+    expect(parseCliArgs(['--backend=jaeger', '--port=1234']).overrides).toEqual(
       {
-        AUTOTEL_TRANSPORT: 'http',
-        AUTOTEL_PORT: '8080',
-        AUTOTEL_HOST: '0.0.0.0',
+        AUTOTEL_BACKEND: 'jaeger',
+        AUTOTEL_PORT: '1234',
       },
     );
-    expect(parseCliArgs(['--backend=jaeger', '--port=1234']).overrides).toEqual({
-      AUTOTEL_BACKEND: 'jaeger',
-      AUTOTEL_PORT: '1234',
-    });
   });
 
   it('keeps a value that starts with a dash when it is attached with =', () => {
@@ -32,7 +34,11 @@ describe('parseCliArgs', () => {
   });
 
   it('reports a missing value rather than swallowing the next flag', () => {
-    const { errors, overrides } = parseCliArgs(['--port', '--transport', 'http']);
+    const { errors, overrides } = parseCliArgs([
+      '--port',
+      '--transport',
+      'http',
+    ]);
     expect(errors).toEqual(['--port requires a value']);
     expect(overrides).toEqual({ AUTOTEL_TRANSPORT: 'http' });
 

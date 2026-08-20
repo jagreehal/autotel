@@ -51,13 +51,13 @@ console.error('Starting MCP Weather Server...');
 
 // Simulated weather data. Application state lives here, in a store this
 // process owns — not in the protocol, which no longer has anywhere to put it.
-const weatherData: Record<string, { temp: number; condition: string }> = {
-  'new york': { temp: 72, condition: 'Sunny' },
-  london: { temp: 61, condition: 'Cloudy' },
-  tokyo: { temp: 68, condition: 'Rainy' },
-  paris: { temp: 65, condition: 'Partly Cloudy' },
-  sydney: { temp: 75, condition: 'Clear' },
-};
+const weatherData = new Map<string, { temp: number; condition: string }>([
+  ['new york', { temp: 72, condition: 'Sunny' }],
+  ['london', { temp: 61, condition: 'Cloudy' }],
+  ['tokyo', { temp: 68, condition: 'Rainy' }],
+  ['paris', { temp: 65, condition: 'Partly Cloudy' }],
+  ['sydney', { temp: 75, condition: 'Clear' }],
+]);
 
 /**
  * MCP 2026-07-28 removed the `initialize` handshake and the session header, so
@@ -128,7 +128,7 @@ function createServer() {
       // Simulate some async work
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const weather = weatherData[location.toLowerCase()];
+      const weather = weatherData.get(location.toLowerCase());
 
       if (!weather) {
         // A tool-level failure is a RESULT with isError, not a thrown protocol
@@ -175,7 +175,7 @@ function createServer() {
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       const forecast = Array.from({ length: days }, (_, i) => {
-        const baseTemp = weatherData[location.toLowerCase()]?.temp ?? 70;
+        const baseTemp = weatherData.get(location.toLowerCase())?.temp ?? 70;
         const temp = baseTemp + Math.floor(Math.random() * 10 - 5);
         return `Day ${i + 1}: ${temp}°F`;
       }).join('\n');

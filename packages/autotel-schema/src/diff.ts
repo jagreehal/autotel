@@ -50,20 +50,23 @@ export interface SnapshotDiff {
  * six transitions are explicit and auditable — no silent fall-through. Same-
  * stability transitions are absent (no change to report).
  */
-const STABILITY_TRANSITIONS: Record<
+const STABILITY_TRANSITIONS = new Map<
   string,
   { kind: ChangeKind; type: ChangeType }
-> = {
-  'stable->experimental': { kind: 'breaking', type: 'stability_downgraded' },
-  'stable->deprecated': { kind: 'additive', type: 'deprecated' },
-  'experimental->stable': { kind: 'neutral', type: 'stability_advanced' },
-  'experimental->deprecated': { kind: 'additive', type: 'deprecated' },
-  'deprecated->stable': { kind: 'neutral', type: 'stability_advanced' },
-  'deprecated->experimental': {
-    kind: 'breaking',
-    type: 'stability_downgraded',
-  },
-};
+>([
+  ['stable->experimental', { kind: 'breaking', type: 'stability_downgraded' }],
+  ['stable->deprecated', { kind: 'additive', type: 'deprecated' }],
+  ['experimental->stable', { kind: 'neutral', type: 'stability_advanced' }],
+  ['experimental->deprecated', { kind: 'additive', type: 'deprecated' }],
+  ['deprecated->stable', { kind: 'neutral', type: 'stability_advanced' }],
+  [
+    'deprecated->experimental',
+    {
+      kind: 'breaking',
+      type: 'stability_downgraded',
+    },
+  ],
+]);
 
 function stabilityMessage(
   type: ChangeType,
@@ -148,8 +151,9 @@ function diffAttribute(
   }
 
   if (prev.stability !== next.stability) {
-    const transition =
-      STABILITY_TRANSITIONS[`${prev.stability}->${next.stability}`];
+    const transition = STABILITY_TRANSITIONS.get(
+      `${prev.stability}->${next.stability}`,
+    );
     if (transition) {
       push(diff, {
         ...transition,

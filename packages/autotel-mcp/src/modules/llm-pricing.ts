@@ -16,6 +16,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { asNumber, asRecord, readProperty } from '../lib/values';
 
 export interface ModelPrice {
   /** USD per million prompt tokens. */
@@ -28,7 +29,7 @@ type ModelPriceCatalog = Record<string, ModelPrice>;
 
 // Ordered longest-first so e.g. `gpt-4o-mini-2024-07-18` matches the
 // `gpt-4o-mini` entry before the broader `gpt-4o` entry.
-const DEFAULT_PRICES: ModelPriceCatalog = {
+const DEFAULT_PRICES = {
   // --- Anthropic Claude (per million tokens) -----------------------------
   'claude-opus-4-7': { inputPerMtok: 15, outputPerMtok: 75 },
   'claude-opus-4-6': { inputPerMtok: 15, outputPerMtok: 75 },
@@ -76,7 +77,7 @@ const DEFAULT_PRICES: ModelPriceCatalog = {
   'llama-3.1-405b': { inputPerMtok: 3.5, outputPerMtok: 3.5 },
   'llama-3.1-70b': { inputPerMtok: 0.6, outputPerMtok: 0.6 },
   'llama-3.1-8b': { inputPerMtok: 0.05, outputPerMtok: 0.08 },
-};
+} satisfies ModelPriceCatalog;
 
 let cachedCatalog: ModelPriceCatalog | null = null;
 let cachedMatchEntries: Array<[string, ModelPrice]> | null = null;
@@ -138,7 +139,7 @@ function loadMatchEntries(): Array<[string, ModelPrice]> {
   if (cachedMatchEntries) return cachedMatchEntries;
   const catalog = loadCatalog();
   cachedMatchEntries = Object.entries(catalog)
-    .map(([key, price]) => [key.toLowerCase(), price] as [string, ModelPrice])
+    .map<[string, ModelPrice]>(([key, price]) => [key.toLowerCase(), price])
     .sort((a, b) => b[0].length - a[0].length);
   return cachedMatchEntries;
 }
@@ -148,10 +149,10 @@ function loadOverride(): ModelPriceCatalog {
   if (!path) return {};
   try {
     const raw = readFileSync(path, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isCatalogShape(parsed)) {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isPriceCatalog(parsed)) {
       console.error(
-        `[autotel-mcp] AUTOTEL_LLM_PRICES_JSON at ${path} has wrong shape; ignoring.`,
+        `[autotel-mcp] AUTOTEL_LLM_PRICES_JSON at ${path} is not a price catalog; ignoring.`,
       );
       return {};
     }
@@ -165,13 +166,16 @@ function loadOverride(): ModelPriceCatalog {
   }
 }
 
-function isCatalogShape(value: unknown): value is ModelPriceCatalog {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  return Object.values(value as Record<string, unknown>).every(
-    (entry): entry is ModelPrice =>
-      !!entry &&
-      typeof entry === 'object' &&
-      typeof (entry as ModelPrice).inputPerMtok === 'number' &&
-      typeof (entry as ModelPrice).outputPerMtok === 'number',
+/**
+ * Whether a parsed file is a price catalog: an object of model names, each
+ * naming an input and an output price per million tokens.
+ */
+function isPriceCatalog(value: unknown): value is ModelPriceCatalog {
+  const catalog = asRecord(value);
+  if (!catalog) return false;
+  return Object.values(catalog).every(
+    (entry) =>
+      asNumber(readProperty(entry, 'inputPerMtok')) !== undefined &&
+      asNumber(readProperty(entry, 'outputPerMtok')) !== undefined,
   );
 }

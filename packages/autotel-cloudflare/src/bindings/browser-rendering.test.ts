@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentBrowserRendering } from './browser-rendering';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { tracerDouble } from '../testing/doubles.js';
 
 describe('Browser Rendering Instrumentation', () => {
   let mockTracer: any;
@@ -33,7 +34,7 @@ describe('Browser Rendering Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
 
     mockBrowser = {
       fetch: vi.fn(async () => new Response('<html></html>', { status: 200 })),

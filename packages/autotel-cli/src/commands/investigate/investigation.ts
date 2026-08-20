@@ -13,6 +13,7 @@ import {
   intArg,
 } from './cli-helpers';
 import { runQueryMetrics, runQueryLogs } from './signals';
+import { boolOpt, numberOpt, stringOpt } from '../../lib/opts.js';
 
 export type QueryTracesFlags = InvestigateFlags & TraceQueryInput;
 export type QuerySpansFlags = InvestigateFlags & SpanQueryInput;
@@ -63,19 +64,19 @@ export function registerQueryCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runQueryTraces({
         ...backendFlagsFromOpts(o),
-        serviceName: o.serviceName as string | undefined,
-        operationName: o.operationName as string | undefined,
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
-        from: o.from as string | undefined,
-        to: o.to as string | undefined,
-        limit: o.limit as number | undefined,
-        errorOnly: o.errorOnly as boolean | undefined,
+        serviceName: stringOpt(o, 'serviceName'),
+        operationName: stringOpt(o, 'operationName'),
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
+        from: stringOpt(o, 'from'),
+        to: stringOpt(o, 'to'),
+        limit: numberOpt(o, 'limit'),
+        errorOnly: boolOpt(o, 'errorOnly'),
         statusCode: o.statusCode as 'OK' | 'ERROR' | 'UNSET' | undefined,
-        minDurationMs: o.minDurationMs as number | undefined,
-        maxDurationMs: o.maxDurationMs as number | undefined,
-        genAiSystem: o.genAiSystem as string | undefined,
-        genAiRequestModel: o.genAiRequestModel as string | undefined,
-        genAiResponseModel: o.genAiResponseModel as string | undefined,
+        minDurationMs: numberOpt(o, 'minDurationMs'),
+        maxDurationMs: numberOpt(o, 'maxDurationMs'),
+        genAiSystem: stringOpt(o, 'genAiSystem'),
+        genAiRequestModel: stringOpt(o, 'genAiRequestModel'),
+        genAiResponseModel: stringOpt(o, 'genAiResponseModel'),
       });
     });
 
@@ -89,16 +90,16 @@ export function registerQueryCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runQuerySpans({
         ...backendFlagsFromOpts(o),
-        serviceName: o.serviceName as string | undefined,
-        operationName: o.operationName as string | undefined,
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
-        from: o.from as string | undefined,
-        to: o.to as string | undefined,
-        limit: o.limit as number | undefined,
-        errorOnly: o.errorOnly as boolean | undefined,
+        serviceName: stringOpt(o, 'serviceName'),
+        operationName: stringOpt(o, 'operationName'),
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
+        from: stringOpt(o, 'from'),
+        to: stringOpt(o, 'to'),
+        limit: numberOpt(o, 'limit'),
+        errorOnly: boolOpt(o, 'errorOnly'),
         statusCode: o.statusCode as 'OK' | 'ERROR' | 'UNSET' | undefined,
-        minDurationMs: o.minDurationMs as number | undefined,
-        maxDurationMs: o.maxDurationMs as number | undefined,
+        minDurationMs: numberOpt(o, 'minDurationMs'),
+        maxDurationMs: numberOpt(o, 'maxDurationMs'),
       });
     });
 
@@ -109,12 +110,12 @@ export function registerQueryCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runQueryMetrics({
         ...backendFlagsFromOpts(o),
-        metricName: o.metricName as string | undefined,
-        serviceName: o.serviceName as string | undefined,
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
-        from: o.from as string | undefined,
-        to: o.to as string | undefined,
-        limit: o.limit as number | undefined,
+        metricName: stringOpt(o, 'metricName'),
+        serviceName: stringOpt(o, 'serviceName'),
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
+        from: stringOpt(o, 'from'),
+        to: stringOpt(o, 'to'),
+        limit: numberOpt(o, 'limit'),
       });
     });
 
@@ -128,15 +129,15 @@ export function registerQueryCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runQueryLogs({
         ...backendFlagsFromOpts(o),
-        serviceName: o.serviceName as string | undefined,
-        traceId: o.traceId as string | undefined,
-        spanId: o.spanId as string | undefined,
-        severityText: o.severityText as string | undefined,
-        text: o.text as string | undefined,
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
-        from: o.from as string | undefined,
-        to: o.to as string | undefined,
-        limit: o.limit as number | undefined,
+        serviceName: stringOpt(o, 'serviceName'),
+        traceId: stringOpt(o, 'traceId'),
+        spanId: stringOpt(o, 'spanId'),
+        severityText: stringOpt(o, 'severityText'),
+        text: stringOpt(o, 'text'),
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
+        from: stringOpt(o, 'from'),
+        to: stringOpt(o, 'to'),
+        limit: numberOpt(o, 'limit'),
       });
     });
 

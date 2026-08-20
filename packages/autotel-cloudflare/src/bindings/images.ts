@@ -6,9 +6,17 @@
  * info() is a standalone operation and gets its own span.
  */
 
-import { trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import type { WorkerTracer } from 'autotel-edge';
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { wrap, setAttr } from './common';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import {
+  asFunction,
+  asString,
+  member,
+  numberAt,
+  readProperty,
+} from '../values.js';
 
 const pipelineMetaSymbol = Symbol('images-pipeline-meta');
 
@@ -16,7 +24,7 @@ interface PipelineMeta {
   operationCount: number;
 }
 
-interface ImagesLike {
+export interface ImagesLike {
   info(
     blob: ReadableStream | ArrayBuffer | Blob,
   ): Promise<{ width: number; height: number; format: string }>;
@@ -42,16 +50,14 @@ function proxyTransformer(
 ): ImageTransformerLike {
   const handler: ProxyHandler<ImageTransformerLike> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
-      if (
-        (prop === 'transform' || prop === 'draw') &&
-        typeof value === 'function'
-      ) {
-        return new Proxy(value, {
+      if ((prop === 'transform' || prop === 'draw') && method !== undefined) {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
             meta.operationCount++;
-            const result = Reflect.apply(fnTarget, target, args);
+            const result = fnTarget.apply(target, args);
             // If the result is the transformer itself (fluent chain), return our proxy
             if (
               result === target ||
@@ -68,10 +74,10 @@ function proxyTransformer(
         });
       }
 
-      if (prop === 'output' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'output' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const tracer = workerTracer('autotel-edge');
             const [formatOrOptions] = args;
 
             const attributes: Record<string, string | number> = {
@@ -95,11 +101,11 @@ function proxyTransformer(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, target, args);
+                  const result = await fnTarget.apply(target, args);
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:
@@ -140,12 +146,13 @@ export function instrumentImages<T extends ImagesLike>(
 
   const handler: ProxyHandler<T> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
-      if (prop === 'info' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'info' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
-            const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+            const tracer = workerTracer('autotel-edge');
 
             return tracer.startActiveSpan(
               `Images ${name}: info`,
@@ -158,14 +165,18 @@ export function instrumentImages<T extends ImagesLike>(
               },
               async (span) => {
                 try {
-                  const result = await Reflect.apply(fnTarget, target, args);
-                  setAttr(span, 'images.width', result?.width);
-                  setAttr(span, 'images.height', result?.height);
-                  setAttr(span, 'images.format', result?.format);
+                  const result = await fnTarget.apply(target, args);
+                  setAttr(span, 'images.width', numberAt(result, 'width'));
+                  setAttr(span, 'images.height', numberAt(result, 'height'));
+                  setAttr(
+                    span,
+                    'images.format',
+                    asString(readProperty(result, 'format')),
+                  );
                   span.setStatus({ code: SpanStatusCode.OK });
                   return result;
                 } catch (error) {
-                  span.recordException(error as Error);
+                  span.recordException(toException(error));
                   span.setStatus({
                     code: SpanStatusCode.ERROR,
                     message:
@@ -181,11 +192,10 @@ export function instrumentImages<T extends ImagesLike>(
         });
       }
 
-      if (prop === 'input' && typeof value === 'function') {
-        return new Proxy(value, {
+      if (prop === 'input' && method) {
+        return new Proxy(method, {
           apply: (fnTarget, _thisArg, args) => {
-            const transformer = Reflect.apply(
-              fnTarget,
+            const transformer = fnTarget.apply(
               target,
               args,
             ) as ImageTransformerLike;

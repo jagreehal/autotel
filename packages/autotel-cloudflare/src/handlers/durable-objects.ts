@@ -8,15 +8,17 @@
  */
 
 import {
-  trace,
   context as api_context,
   propagation,
   SpanStatusCode,
   SpanKind,
 } from '@opentelemetry/api';
 import type { ConfigurationOption } from 'autotel-edge';
-import { createInitialiser, setConfig, WorkerTracer } from 'autotel-edge';
+import { createInitialiser, setConfig } from 'autotel-edge';
 import { wrap } from '../bindings/common';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { asFunction, member } from '../values.js';
 
 // Durable Object types
 type DOFetchFn = (request: Request) => Response | Promise<Response>;
@@ -47,7 +49,7 @@ function instrumentDOFetch(
     this: any,
     request: Request,
   ): Promise<Response> {
-    const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+    const tracer = workerTracer('autotel-edge');
 
     // Extract parent context from request headers
     const parentContext = propagation.extract(
@@ -88,7 +90,7 @@ function instrumentDOFetch(
 
           return response;
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -111,7 +113,7 @@ function instrumentDOAlarm(
   doClass: any,
 ): DOAlarmFn {
   return async function instrumentedAlarm(this: any): Promise<void> {
-    const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+    const tracer = workerTracer('autotel-edge');
 
     const spanName = `DO ${id.name || id.toString()}: alarm`;
 
@@ -131,7 +133,7 @@ function instrumentDOAlarm(
           await alarmFn.call(this);
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),
@@ -156,22 +158,30 @@ function instrumentDOInstance(
 ): any {
   const instanceHandler: ProxyHandler<any> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
-      if (prop === 'fetch' && typeof value === 'function') {
-        return instrumentDOFetch(value.bind(target), state.id, doClass);
+      // SAFETY: `prop` names the Durable Object method being wrapped, so the
+      // bound function is that method - fetch takes a Request, alarm takes
+      // nothing. The wrapper passes through whatever it is handed.
+      if (prop === 'fetch' && method) {
+        return instrumentDOFetch(
+          method.bind(target) as DOFetchFn,
+          state.id,
+          doClass,
+        );
       }
 
-      if (prop === 'alarm' && typeof value === 'function') {
-        return instrumentDOAlarm(value.bind(target), state.id, doClass);
+      if (prop === 'alarm' && method) {
+        return instrumentDOAlarm(
+          method.bind(target) as DOAlarmFn,
+          state.id,
+          doClass,
+        );
       }
 
       // Bind other methods to the target
-      if (typeof value === 'function') {
-        return value.bind(target);
-      }
-
-      return value;
+      return method ? method.bind(target) : value;
     },
   };
 

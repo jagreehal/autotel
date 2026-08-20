@@ -83,7 +83,7 @@ pnpm pact:audit:broker     # exit 1 if a Pact Broker is configured and any contr
 2. **`injectStalePactFile`**: appends a message to the pact file by hand to simulate a contract that some other test no longer runs.
 3. **`recordShadowObservation`**: `appendLedgerEntry` with a consumer the pact files do not mention.
 4. **`runProviderVerification`**: `withProviderVerification` with `skipVerifier: true`. The wrapper parses the pact file and fans out one ledger row per interaction with `role: 'provider'` without loading or calling the real Verifier. In production drop the option and `@pact-foundation/pact` runs against a real provider service.
-5. **`simulateProductionObservation`**: `trace('handleOrderCreated', () => { tagPactInteraction({...}); handler(); })`. The `PactLedgerSpanProcessor` registered at `init()` time catches the span and writes a `source: production` row.
+5. **`simulateProductionObservation`**: `trace('handleOrderCreated', (ctx) => { tagPactInteraction({...}); handler(); })`. The `PactLedgerSpanProcessor` registered at `init()` time catches the span and writes a `source: production` row.
 
 In a real codebase the consumer-side pattern is the one you write per test. The other four are demo plumbing that simulates failure modes the audit catches.
 

@@ -61,6 +61,8 @@ https://example.com/static/js/app.js:100:5`;
 
   it('returns empty array for empty/undefined input', () => {
     expect(parseStack('')).toEqual([]);
+    // SAFETY: an absent stack is what a thrown non-Error gives us, and the
+    // types cannot express that a JavaScript caller can reach this.
     expect(parseStack(undefined as any)).toEqual([]);
   });
 });

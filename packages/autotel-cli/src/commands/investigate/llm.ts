@@ -12,6 +12,7 @@ import {
 import { Command } from 'commander';
 import { runInvestigate, type InvestigateFlags } from './runtime';
 import { addBackendFlags, backendFlagsFromOpts, intArg } from './cli-helpers';
+import { numberOpt, stringOpt } from '../../lib/opts.js';
 
 export interface LlmAnalyticsFlags extends InvestigateFlags {
   startTime?: string;
@@ -171,13 +172,13 @@ export function registerLlmCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runLlmUsage({
         ...backendFlagsFromOpts(o),
-        startTime: o.startTime as string | undefined,
-        endTime: o.endTime as string | undefined,
-        serviceName: o.serviceName as string | undefined,
-        genAiSystem: o.genAiSystem as string | undefined,
-        genAiRequestModel: o.genAiRequestModel as string | undefined,
-        genAiResponseModel: o.genAiResponseModel as string | undefined,
-        limit: o.limit as number | undefined,
+        startTime: stringOpt(o, 'startTime'),
+        endTime: stringOpt(o, 'endTime'),
+        serviceName: stringOpt(o, 'serviceName'),
+        genAiSystem: stringOpt(o, 'genAiSystem'),
+        genAiRequestModel: stringOpt(o, 'genAiRequestModel'),
+        genAiResponseModel: stringOpt(o, 'genAiResponseModel'),
+        limit: numberOpt(o, 'limit'),
       });
     });
 
@@ -187,11 +188,11 @@ export function registerLlmCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runLlmModels({
         ...backendFlagsFromOpts(o),
-        startTime: o.startTime as string | undefined,
-        endTime: o.endTime as string | undefined,
-        serviceName: o.serviceName as string | undefined,
-        genAiSystem: o.genAiSystem as string | undefined,
-        limit: o.limit as number | undefined,
+        startTime: stringOpt(o, 'startTime'),
+        endTime: stringOpt(o, 'endTime'),
+        serviceName: stringOpt(o, 'serviceName'),
+        genAiSystem: stringOpt(o, 'genAiSystem'),
+        limit: numberOpt(o, 'limit'),
       });
     });
 
@@ -202,10 +203,10 @@ export function registerLlmCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runLlmModelStats({
         ...backendFlagsFromOpts(o),
-        modelName: o.modelName as string,
-        startTime: o.startTime as string | undefined,
-        endTime: o.endTime as string | undefined,
-        serviceName: o.serviceName as string | undefined,
+        modelName: stringOpt(o, 'modelName') ?? '',
+        startTime: stringOpt(o, 'startTime'),
+        endTime: stringOpt(o, 'endTime'),
+        serviceName: stringOpt(o, 'serviceName'),
       });
     });
 
@@ -216,13 +217,13 @@ export function registerLlmCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runLlmExpensive({
         ...backendFlagsFromOpts(o),
-        startTime: o.startTime as string | undefined,
-        endTime: o.endTime as string | undefined,
-        serviceName: o.serviceName as string | undefined,
-        genAiRequestModel: o.genAiRequestModel as string | undefined,
-        genAiResponseModel: o.genAiResponseModel as string | undefined,
-        minTokens: o.minTokens as number | undefined,
-        limit: o.limit as number | undefined,
+        startTime: stringOpt(o, 'startTime'),
+        endTime: stringOpt(o, 'endTime'),
+        serviceName: stringOpt(o, 'serviceName'),
+        genAiRequestModel: stringOpt(o, 'genAiRequestModel'),
+        genAiResponseModel: stringOpt(o, 'genAiResponseModel'),
+        minTokens: numberOpt(o, 'minTokens'),
+        limit: numberOpt(o, 'limit'),
       });
     });
 
@@ -233,13 +234,13 @@ export function registerLlmCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runLlmSlow({
         ...backendFlagsFromOpts(o),
-        startTime: o.startTime as string | undefined,
-        endTime: o.endTime as string | undefined,
-        serviceName: o.serviceName as string | undefined,
-        genAiRequestModel: o.genAiRequestModel as string | undefined,
-        genAiResponseModel: o.genAiResponseModel as string | undefined,
-        minDurationMs: o.minDurationMs as number | undefined,
-        limit: o.limit as number | undefined,
+        startTime: stringOpt(o, 'startTime'),
+        endTime: stringOpt(o, 'endTime'),
+        serviceName: stringOpt(o, 'serviceName'),
+        genAiRequestModel: stringOpt(o, 'genAiRequestModel'),
+        genAiResponseModel: stringOpt(o, 'genAiResponseModel'),
+        minDurationMs: numberOpt(o, 'minDurationMs'),
+        limit: numberOpt(o, 'limit'),
       });
     });
 
@@ -249,11 +250,11 @@ export function registerLlmCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runLlmTools({
         ...backendFlagsFromOpts(o),
-        startTime: o.startTime as string | undefined,
-        endTime: o.endTime as string | undefined,
-        serviceName: o.serviceName as string | undefined,
-        genAiSystem: o.genAiSystem as string | undefined,
-        limit: o.limit as number | undefined,
+        startTime: stringOpt(o, 'startTime'),
+        endTime: stringOpt(o, 'endTime'),
+        serviceName: stringOpt(o, 'serviceName'),
+        genAiSystem: stringOpt(o, 'genAiSystem'),
+        limit: numberOpt(o, 'limit'),
       });
     });
 

@@ -69,6 +69,14 @@ beforeEach(() => {
   exporter.reset();
 });
 
+/** The serialized statement a span recorded, which is always a string when set. */
+function queryTextOf(span: { attributes: Record<string, unknown> }): string {
+  // SAFETY: the instrumentation writes db.query.text with a serialized
+  // statement; a span that never recorded one fails the expectation that
+  // precedes each of these reads.
+  return span.attributes[ATTR_DB_QUERY_TEXT] as string;
+}
+
 describe('instrumentMongoose integration', () => {
   if (!supportsLocalServer) {
     it.skip('skips mongoose integration tests when the environment cannot open local TCP ports', () => {});
@@ -88,7 +96,7 @@ describe('instrumentMongoose integration', () => {
     );
     expect(findSpan!.attributes[ATTR_DB_COLLECTION_NAME]).toBe('users');
 
-    const queryText = findSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(findSpan!);
     expect(queryText).toBeDefined();
     expect(queryText).toContain('Alice');
   });
@@ -100,7 +108,7 @@ describe('instrumentMongoose integration', () => {
     const findSpan = spans.find(
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'find',
     );
-    const queryText = findSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(findSpan!);
     expect(queryText).not.toContain('alice@example.com');
     // Default preset smart-masks emails as a***@***.com.
     expect(queryText).toContain('a***@***.com');
@@ -115,7 +123,7 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'save',
     );
     expect(saveSpan).toBeDefined();
-    const queryText = saveSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(saveSpan!);
     expect(queryText).toBeDefined();
     expect(queryText).toContain('Bob');
     // Email should be redacted
@@ -133,7 +141,7 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'aggregate',
     );
     expect(aggSpan).toBeDefined();
-    const queryText = aggSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(aggSpan!);
     expect(queryText).toContain('$match');
     expect(queryText).toContain('$group');
   });
@@ -149,7 +157,7 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'insertMany',
     );
     expect(insertSpan).toBeDefined();
-    const queryText = insertSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(insertSpan!);
     expect(queryText).toContain('Charlie');
     expect(queryText).toContain('Diana');
   });
@@ -169,7 +177,7 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'bulkWrite',
     );
     expect(bulkSpan).toBeDefined();
-    const queryText = bulkSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(bulkSpan!);
     expect(queryText).toContain('insertOne');
     expect(queryText).toContain('updateOne');
     expect(queryText).toContain('Eve');
@@ -183,7 +191,7 @@ describe('instrumentMongoose integration', () => {
       (s) => s.attributes[ATTR_DB_OPERATION_NAME] === 'updateOne',
     );
     expect(updateSpan).toBeDefined();
-    const queryText = updateSpan!.attributes[ATTR_DB_QUERY_TEXT] as string;
+    const queryText = queryTextOf(updateSpan!);
     expect(queryText).toBeDefined();
     // Should contain both condition and update fields
     expect(queryText).toContain('Bob');

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SecurityAttributeValue } from './security.js';
+import type { AuditContext } from './index.js';
 import {
   hashIdentifier,
   securityEvent,
@@ -8,13 +10,16 @@ import {
 
 const setAttribute = vi.fn();
 const setAttributes = vi.fn();
+// SAFETY: a security event needs a trace context; this fake implements every
+// method the helpers call on one, and the assertion covers the rest of the
+// interface, which these paths never reach.
 const mockCtx = {
   traceId: 'trace-1',
   spanId: 'span-1',
   correlationId: 'corr-1',
   setAttribute,
   setAttributes,
-};
+} as AuditContext;
 
 const logger = {
   set: vi.fn(),
@@ -65,7 +70,7 @@ describe('securityEvent', () => {
         tenantId: 'tenant-1',
         reason: 'invalid_password',
       },
-      { ctx: mockCtx as never },
+      { ctx: mockCtx },
     );
 
     expect(setAttributes).toHaveBeenCalledWith(
@@ -85,7 +90,7 @@ describe('securityEvent', () => {
   it('force-keeps through tail sampling by default', () => {
     securityEvent(
       { name: 'access.denied', category: 'authorization', outcome: 'denied' },
-      { ctx: mockCtx as never },
+      { ctx: mockCtx },
     );
 
     expect(setAttribute).toHaveBeenCalledWith(
@@ -109,7 +114,7 @@ describe('securityEvent', () => {
         category: 'authentication',
         outcome: 'success',
       },
-      { ctx: mockCtx as never, forceKeep: false },
+      { ctx: mockCtx, forceKeep: false },
     );
 
     expect(setAttribute).not.toHaveBeenCalledWith(
@@ -121,7 +126,7 @@ describe('securityEvent', () => {
   it('defaults severity to info', () => {
     securityEvent(
       { name: 'config.changed', category: 'configuration', outcome: 'success' },
-      { ctx: mockCtx as never },
+      { ctx: mockCtx },
     );
 
     expect(setAttributes).toHaveBeenCalledWith(
@@ -139,10 +144,15 @@ describe('securityEvent', () => {
         apiKey: 'sk-live-123',
         keyId: 'key-1',
       },
-      { ctx: mockCtx as never },
+      { ctx: mockCtx },
     );
 
-    const attrs = setAttributes.mock.calls[0]?.[0] as Record<string, unknown>;
+    // SAFETY: securityEvent calls setAttributes once, with the flattened bag;
+    // the assertions below are what that bag must and must not contain.
+    const attrs = setAttributes.mock.calls[0]?.[0] as Record<
+      string,
+      SecurityAttributeValue | undefined
+    >;
     expect(attrs['security.token']).toBeUndefined();
     expect(attrs['security.apiKey']).toBeUndefined();
     expect(attrs['security.keyId']).toBe('key-1');
@@ -160,7 +170,7 @@ describe('securityEvent', () => {
         limit: 100,
         windowSeconds: 60,
       },
-      { ctx: mockCtx as never },
+      { ctx: mockCtx },
     );
 
     expect(setAttributes).toHaveBeenCalledWith(
@@ -180,7 +190,7 @@ describe('securityEvent', () => {
         severity: 'error',
         reason: 'bad_signature',
       },
-      { ctx: mockCtx as never, emitNow: true },
+      { ctx: mockCtx, emitNow: true },
     );
 
     expect(logger.set).toHaveBeenCalledWith({
@@ -204,7 +214,7 @@ describe('securityEvent', () => {
         outcome: 'denied',
         severity: 'warning',
       },
-      { ctx: mockCtx as never },
+      { ctx: mockCtx },
     );
 
     expect(counterAdd).toHaveBeenCalledWith(1, {
@@ -222,7 +232,7 @@ describe('securityEvent', () => {
         category: 'authentication',
         outcome: 'success',
       },
-      { ctx: mockCtx as never, metrics: false },
+      { ctx: mockCtx, metrics: false },
     );
 
     expect(counterAdd).not.toHaveBeenCalled();
@@ -243,7 +253,7 @@ describe('withSecurity', () => {
     };
 
     const result = await withSecurity(metadata, async () => 'created', {
-      ctx: mockCtx as never,
+      ctx: mockCtx,
     });
 
     expect(result).toBe('created');
@@ -266,7 +276,7 @@ describe('withSecurity', () => {
         async () => {
           throw new Error('vault unreachable');
         },
-        { ctx: mockCtx as never },
+        { ctx: mockCtx },
       ),
     ).rejects.toThrow('vault unreachable');
 
@@ -291,7 +301,7 @@ describe('withSecurity', () => {
         async () => {
           throw new Error('boom');
         },
-        { ctx: mockCtx as never },
+        { ctx: mockCtx },
       ),
     ).rejects.toThrow('boom');
 
@@ -315,7 +325,7 @@ describe('withSecurity', () => {
         async () => {
           throw new Error('boom');
         },
-        { ctx: mockCtx as never },
+        { ctx: mockCtx },
       ),
     ).rejects.toThrow('boom');
 

@@ -70,16 +70,16 @@ lets them survive the v2 SDK's envelope lift.
 
 `2026-07-28` dropped the `initialize` handshake (SEP-2575) and the
 `Mcp-Session-Id` header (SEP-2567), so every request is self-describing and any
-request can land on any instance. Propagation got *easier*: `_meta` is now the
+request can land on any instance. Propagation got _easier_: `_meta` is now the
 mandatory per-request envelope, so there is always somewhere for a traceparent
 to ride and no session for a trace to be orphaned from.
 
-| Signal                 | 2026-07-28                                            | 2025-era                          |
-| ---------------------- | ----------------------------------------------------- | --------------------------------- |
-| `mcp.protocol.version` | per request, from the `_meta` envelope                | not set (fixed at `initialize`)   |
-| `mcp.session.id`       | not set — no sessions                                 | from the request or the transport |
-| `server/discover`      | traced as a discovery op                              | n/a — `initialize` instead        |
-| `mcp.input_required`   | set when a handler returns `inputRequired(...)`       | n/a — elicitation is push-style   |
+| Signal                 | 2026-07-28                                      | 2025-era                          |
+| ---------------------- | ----------------------------------------------- | --------------------------------- |
+| `mcp.protocol.version` | per request, from the `_meta` envelope          | not set (fixed at `initialize`)   |
+| `mcp.session.id`       | not set — no sessions                           | from the request or the transport |
+| `server/discover`      | traced as a discovery op                        | n/a — `initialize` instead        |
+| `mcp.input_required`   | set when a handler returns `inputRequired(...)` | n/a — elicitation is push-style   |
 
 A handler that returns `inputRequired(...)` paused rather than completed: the
 span gets `mcp.input_required=true` and its status is left UNSET, so a pause is

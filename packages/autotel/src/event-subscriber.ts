@@ -22,7 +22,7 @@
  * @example Use pre-built subscribers
  * ```typescript
  * import { Event } from 'autotel/event';
- * import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+ * import { PostHogSubscriber } from 'autotel-posthog/subscriber';
  * import { MixpanelSubscriber } from 'autotel-subscribers/mixpanel';
  *
  * const event =new Event('checkout', {
@@ -35,13 +35,30 @@
  */
 
 /**
- * Event attributes (supports any JSON-serializable values)
+ * A JSON-serializable value: what an event attribute can hold.
  *
- * Allows primitive types for flat attributes and unknown for flexibility
- * with nested objects when using subscribers that support JSON payloads
- * (e.g., WebhookSubscriber).
+ * Attributes are serialized by every subscriber - to a webhook body, a Loki
+ * line, a Mixpanel property - so a value that cannot survive JSON has no
+ * meaning here. Naming that is what lets a subscriber read an attribute
+ * without asserting its shape first.
  */
-export type EventAttributes = Record<string, unknown>;
+export type EventAttributeValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Date
+  | Array<EventAttributeValue>
+  | { [key: string]: EventAttributeValue };
+
+/**
+ * Event attributes (any JSON-serializable values)
+ *
+ * Flat primitives for most events; nested objects and arrays for subscribers
+ * that send JSON payloads (e.g., WebhookSubscriber).
+ */
+export type EventAttributes = Record<string, EventAttributeValue>;
 
 /**
  * Permissive input type for event attributes
@@ -80,7 +97,10 @@ export type OutcomeStatus = 'success' | 'failure' | 'partial';
  * This structured object contains trace context and correlation IDs.
  * Subscribers decide how to map/flatten these for their platform.
  */
-export interface AutotelEventContext {
+// A type alias rather than an interface: this shape is embedded in event
+// attributes, which are JSON values, and only an alias carries the implicit
+// index signature that assignment needs.
+export type AutotelEventContext = {
   /** Trace ID (32 hex chars) - present when inside a trace */
   trace_id?: string;
   /** Span ID (16 hex chars) - present when inside a span */
@@ -99,7 +119,7 @@ export interface AutotelEventContext {
   linked_trace_id_hash?: string;
   /** Full array of linked trace IDs (only if includeLinkedTraceIds: true) */
   linked_trace_ids?: string[];
-}
+};
 
 /**
  * Optional machine-readable schema metadata attached to an event payload.

@@ -18,6 +18,7 @@
 // resolve, so it bundles cleanly; `.createRequire` is read lazily below and is
 // only ever touched in a real Node runtime.
 import * as nodeModule from 'node:module';
+import { asString, readProperty } from './values';
 
 // `__filename` is provided by CJS and by esbuild's CJS output wrapper, but
 // is undefined under pure ESM. `import.meta.url` is provided by ESM. Pick
@@ -43,7 +44,7 @@ let cachedRequire: NodeRequire | undefined;
 
 function getNodeRequire(): NodeRequire {
   if (cachedRequire) return cachedRequire;
-  const base = typeof __filename === 'string' ? __filename : import.meta.url;
+  const base = asString(globalThis.__filename) ?? import.meta.url;
   if (!base) {
     // No module path in this runtime. Surface as a missing-module error so
     // optional lookups via `safeRequire()` degrade gracefully to `undefined`.
@@ -75,9 +76,12 @@ function getNodeRequire(): NodeRequire {
  */
 export function safeRequire<T = unknown>(id: string): T | undefined {
   try {
+    // SAFETY: this is the module boundary. `T` is the caller's claim about
+    // what the id resolves to; nothing here can check it, and a wrong claim
+    // shows up as a missing member at the first use.
     return getNodeRequire()(id) as T;
   } catch (error) {
-    if (error && (error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') {
+    if (asString(readProperty(error, 'code')) === 'MODULE_NOT_FOUND') {
       // Optional dependency missing – return undefined
       return undefined;
     }
@@ -104,6 +108,8 @@ export function safeRequire<T = unknown>(id: string): T | undefined {
  * ```
  */
 export function requireModule<T = unknown>(id: string): T {
+  // SAFETY: as in safeRequire above - `T` is the caller's claim about the
+  // module behind this id.
   return getNodeRequire()(id) as T;
 }
 
@@ -121,7 +127,10 @@ export function requireModule<T = unknown>(id: string): T {
  * reintroduce the workerd crash. Use `nodeModule.createRequire` directly if
  * you need them.
  */
+// SAFETY: NodeRequire also declares `cache`, `extensions` and `main`, which
+// this lazy stand-in deliberately does not carry - see the note above.
 const nodeRequire = ((id: string) => getNodeRequire()(id)) as NodeRequire;
+// SAFETY: resolve() carries a `paths` member, attached on the next line.
 const lazyResolve = ((id: string, options?: { paths?: string[] }) =>
   getNodeRequire().resolve(id, options)) as NodeRequire['resolve'];
 lazyResolve.paths = (request: string) =>

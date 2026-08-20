@@ -8,6 +8,7 @@ import {
   windowFlagsFromOpts,
   type TimeWindowFlags,
 } from './cli-helpers';
+import { stringOpt } from '../../lib/opts.js';
 
 /**
  * `autotel security` — security telemetry for incident triage.
@@ -359,8 +360,8 @@ export function registerSecurityCommands(program: Command): void {
       await runSecurityEvents({
         ...backendFlagsFromOpts(o),
         ...windowFlagsFromOpts(o),
-        category: o.category as string | undefined,
-        severity: o.severity as string | undefined,
+        category: stringOpt(o, 'category'),
+        severity: stringOpt(o, 'severity'),
       });
     });
 

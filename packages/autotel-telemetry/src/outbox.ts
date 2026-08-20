@@ -7,7 +7,17 @@ export interface TelemetryOutboxOptions {
   toolName: string;
 }
 
-export class TelemetryOutbox {
+/**
+ * The outbox as its callers use it. Named so a test - or a tool that keeps its
+ * pending runs somewhere other than a file - can supply its own.
+ */
+export interface OutboxLike {
+  append(event: RunEvent): Promise<void>;
+  readAll(): Promise<RunEvent[]>;
+  purge(): Promise<void>;
+}
+
+export class TelemetryOutbox implements OutboxLike {
   private readonly dir: string;
   private readonly filePath: string;
 
@@ -24,6 +34,8 @@ export class TelemetryOutbox {
   async readAll(): Promise<RunEvent[]> {
     try {
       const raw = await readFile(this.filePath, 'utf8');
+      // SAFETY: every line in this file was written by append() below, which
+      // serializes a RunEvent; a line that fails to parse takes the catch.
       return raw
         .split('\n')
         .filter(Boolean)

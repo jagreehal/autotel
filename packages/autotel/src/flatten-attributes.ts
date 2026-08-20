@@ -1,38 +1,45 @@
 import type { AttributeValue } from './trace-context';
+import {
+  asBoolean,
+  asNumber,
+  asPlainRecord,
+  asString,
+  type UnknownRecord,
+} from './values';
 
 /**
- * Convert an unknown value to an OTel-compatible AttributeValue.
- * Returns undefined when the value cannot be represented.
+ * Convert a value that arrived from outside to an OTel-compatible
+ * AttributeValue. Returns undefined when the value cannot be represented -
+ * which is how flattenToAttributes below learns it has an object to descend
+ * into rather than a leaf to record.
  */
 export function toAttributeValue(value: unknown): AttributeValue | undefined {
-  if (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    if (
-      value.every((v) => typeof v === 'string') ||
-      value.every((v) => typeof v === 'number') ||
-      value.every((v) => typeof v === 'boolean')
-    ) {
-      return value as AttributeValue;
-    }
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return '<serialization-failed>';
-    }
-  }
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-  if (value instanceof Error) {
-    return value.message;
-  }
+  const scalar = asString(value) ?? asNumber(value) ?? asBoolean(value);
+  if (scalar !== undefined) return scalar;
+  if (Array.isArray(value)) return toAttributeArray(value);
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Error) return value.message;
   return undefined;
+}
+
+/** A homogeneous array as itself; anything else as the JSON it serialises to. */
+function toAttributeArray(values: unknown[]): AttributeValue {
+  const strings = values.filter((v) => asString(v) !== undefined);
+  if (strings.length === values.length) return strings.map(String);
+  const numbers = values.filter((v) => asNumber(v) !== undefined);
+  if (numbers.length === values.length) return numbers.map(Number);
+  const booleans = values.filter((v) => asBoolean(v) !== undefined);
+  if (booleans.length === values.length) return booleans.map(Boolean);
+  try {
+    return JSON.stringify(values);
+  } catch {
+    return '<serialization-failed>';
+  }
+}
+
+/** A flat, dot-notation attribute bag: what a nested object flattens to. */
+export interface FlatAttributes {
+  [key: string]: AttributeValue;
 }
 
 /**
@@ -40,13 +47,13 @@ export function toAttributeValue(value: unknown): AttributeValue | undefined {
  * Includes circular reference protection via WeakSet.
  */
 export function flattenToAttributes(
-  fields: Record<string, unknown>,
+  fields: UnknownRecord,
   prefix = '',
-): Record<string, AttributeValue> {
-  const out: Record<string, AttributeValue> = {};
+): FlatAttributes {
+  const out: FlatAttributes = {};
   const seen = new WeakSet<object>();
 
-  function flatten(obj: Record<string, unknown>, currentPrefix: string): void {
+  function flatten(obj: UnknownRecord, currentPrefix: string): void {
     for (const [key, value] of Object.entries(obj)) {
       if (value == null) continue;
       const nextKey = currentPrefix ? `${currentPrefix}.${key}` : key;
@@ -57,13 +64,14 @@ export function flattenToAttributes(
         continue;
       }
 
-      if (typeof value === 'object' && value.constructor === Object) {
-        if (seen.has(value)) {
+      const nested = asPlainRecord(value);
+      if (nested !== undefined) {
+        if (seen.has(nested)) {
           out[nextKey] = '<circular-reference>';
           continue;
         }
-        seen.add(value);
-        flatten(value as Record<string, unknown>, nextKey);
+        seen.add(nested);
+        flatten(nested, nextKey);
         continue;
       }
 

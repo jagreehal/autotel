@@ -42,11 +42,16 @@ describe('middleware', () => {
 
     const subscriber = applyMiddleware(base, [
       createMiddleware(async ({ ctx, next }) => {
+        // SAFETY: this test patches a key the chain's context type does not
+        // declare, which is what the runtime merge is being checked for.
         await next({ ctxPatch: { trace: 'x' } as any });
+        // SAFETY: reading the same undeclared key back off the context.
         expect((ctx as any).trace).toBeUndefined();
       }),
       createMiddleware(async ({ event, ctx, next }) => {
+        // SAFETY: as above.
         expect((ctx as any).trace).toBe('x');
+        // SAFETY: replacing the event mid-chain with one the type does not fix.
         await next({ event: { ...event, name: 'changed' } as any });
       }),
     ]);

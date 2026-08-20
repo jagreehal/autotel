@@ -39,6 +39,12 @@
 
 import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import { SpanStatusCode } from '@opentelemetry/api';
+import {
+  asBooleanArray,
+  asNumberArray,
+  asScalar,
+  asStringArray,
+} from './values';
 
 /** @see ExportResultCode from @opentelemetry/core */
 const ExportResultCode = { SUCCESS: 0, FAILED: 1 } as const;
@@ -141,30 +147,30 @@ function hrTimeToMs(hr: [number, number]): number {
   return hr[0] * 1000 + hr[1] / 1_000_000;
 }
 
-function isSerializable(v: unknown): v is SerializableValue {
-  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
-    return true;
-  if (Array.isArray(v) && v.length > 0) {
-    const t = typeof v[0];
-    return (
-      (t === 'string' || t === 'number' || t === 'boolean') &&
-      v.every((e) => typeof e === t)
-    );
-  }
-  return false;
+/**
+ * An attribute value in the form that survives a round trip through JSON: a
+ * scalar, or a list whose entries are all the same kind of scalar. Anything
+ * else - a mixed list, an empty one - is left out of the serialized span.
+ */
+function asSerializable(value: unknown): SerializableValue | undefined {
+  const scalar = asScalar(value);
+  if (scalar !== undefined) return scalar;
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  return asStringArray(value) ?? asNumberArray(value) ?? asBooleanArray(value);
 }
 
 export function serializeSpan(span: ReadableSpan): SerializedSpan {
   const attrs: Record<string, SerializableValue> = {};
   for (const [k, v] of Object.entries(span.attributes)) {
-    if (isSerializable(v)) attrs[k] = v;
+    const serializable = asSerializable(v);
+    if (serializable !== undefined) attrs[k] = serializable;
   }
   return {
     spanId: span.spanContext().spanId,
     parentSpanId: span.parentSpanContext?.spanId || undefined,
     name: span.name,
-    startTimeMs: hrTimeToMs(span.startTime as [number, number]),
-    durationMs: hrTimeToMs(span.duration as [number, number]),
+    startTimeMs: hrTimeToMs(span.startTime),
+    durationMs: hrTimeToMs(span.duration),
     status:
       span.status.code === SpanStatusCode.ERROR
         ? 'error'

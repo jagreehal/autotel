@@ -72,9 +72,8 @@ pnpm lint               # Lint package
 
 ### Functional API Pattern
 
-`trace()` deterministically wraps a plain function and never injects context or
-executes the function during wrapper construction. Use the ambient accessor for
-context:
+`trace(fn)` deterministically wraps a plain function with an inferred name. Use
+the ambient accessor when that reusable function needs context:
 
 ```typescript
 export const createUser = trace(async (data) => {
@@ -82,6 +81,32 @@ export const createUser = trace(async (data) => {
   return await db.users.create(data);
 });
 ```
+
+`trace.run(name, operation)` immediately runs a named operation with an
+explicit context and returns its result:
+
+```typescript
+const user = await trace.run('user.create', async (ctx) => {
+  ctx.setAttribute('user.id', input.id);
+  return db.users.create(input);
+});
+```
+
+`trace(name, fn)` wraps a reusable function under an explicit stable name, and
+`trace(name)` curries the same thing when one configuration is applied to many
+functions:
+
+```typescript
+export const createUser = trace('user.create', async (data) => {
+  return db.users.create(data);
+});
+```
+
+`instrument({ key, fn })` is the options form of that same wrapper.
+
+**`trace` wraps, `trace.run` runs.** Keep them separate names. Dispatch must
+never depend on callback parameter names or minification-sensitive source
+inspection, and no `trace(...)` overload may execute user code.
 
 Use `withTracing()` for an explicit factory:
 

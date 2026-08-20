@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { trace } from '@opentelemetry/api';
 import { instrumentBindings } from './bindings';
 import { isWrapped } from './common';
+import { tracerDouble } from '../testing/doubles.js';
 
 describe('instrumentBindings() caching', () => {
   let mockTracer: any;
@@ -33,7 +34,7 @@ describe('instrumentBindings() caching', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
   });
 
   afterEach(() => {

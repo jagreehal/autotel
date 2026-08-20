@@ -3,10 +3,17 @@ import { WebhookSubscriber } from './webhook';
 
 globalThis.fetch = vi.fn();
 
+/** The stubbed global fetch, as a vitest mock. */
+function fetchStub() {
+  // SAFETY: each test replaces globalThis.fetch with vi.fn() before calling
+  // this; the cast is what lets the mock's own API be reached.
+  return globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+}
+
 describe('WebhookSubscriber', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (globalThis.fetch as any).mockResolvedValue({
+    fetchStub().mockResolvedValue({
       ok: true,
       status: 200,
       statusText: 'OK',
@@ -66,7 +73,7 @@ describe('WebhookSubscriber', () => {
   });
 
   it('retries network failures', async () => {
-    (globalThis.fetch as any)
+    fetchStub()
       .mockRejectedValueOnce(new Error('Network error'))
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce({
@@ -87,7 +94,7 @@ describe('WebhookSubscriber', () => {
   });
 
   it('does not retry non-retriable http status', async () => {
-    (globalThis.fetch as any).mockResolvedValue({
+    fetchStub().mockResolvedValue({
       ok: false,
       status: 401,
       statusText: 'Unauthorized',
@@ -108,7 +115,7 @@ describe('WebhookSubscriber', () => {
   });
 
   it('retries retriable http status', async () => {
-    (globalThis.fetch as any)
+    fetchStub()
       .mockResolvedValueOnce({
         ok: false,
         status: 503,

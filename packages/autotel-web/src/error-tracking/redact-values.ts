@@ -34,7 +34,7 @@ const DEFAULT_VALUE_PATTERNS: ValuePatternConfig[] = [
   { name: 'creditCard', pattern: REDACTOR_PATTERNS.creditCard },
 ];
 
-const REDACTOR_PRESETS: Record<RedactorPreset, RedactorConfig> = {
+const REDACTOR_PRESETS = {
   default: {
     valuePatterns: DEFAULT_VALUE_PATTERNS,
     replacement: '[REDACTED]',
@@ -54,7 +54,7 @@ const REDACTOR_PRESETS: Record<RedactorPreset, RedactorConfig> = {
     ],
     replacement: '[REDACTED]',
   },
-};
+} satisfies Record<RedactorPreset, RedactorConfig>;
 
 export function createStringRedactor(
   config: RedactorConfig | RedactorPreset,

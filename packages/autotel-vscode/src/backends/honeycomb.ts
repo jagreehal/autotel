@@ -2,6 +2,8 @@ import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
 import { backendFetch } from './http';
+import type { SpanAttributes } from 'autotel-devtools';
+import { asNumber, asString, readProperty } from '../values';
 
 // Honeycomb query API (HTTPS):
 //   POST /1/queries/{dataset}     (create a query)
@@ -20,7 +22,7 @@ import { backendFetch } from './http';
 
 interface HoneycombEvent {
   Timestamp?: string;
-  data?: Record<string, unknown>;
+  data?: SpanAttributes;
 }
 
 interface HoneycombQueryResult {
@@ -59,15 +61,17 @@ async function honeycombFetch<T>(
   if (!res.ok) {
     let detail = res.statusText;
     try {
-      const errBody = await res.json();
-      if (errBody && typeof errBody === 'object' && 'error' in errBody) {
-        detail = String((errBody as { error: unknown }).error);
-      }
+      const errBody: unknown = await res.json();
+      const stated = readProperty(errBody, 'error');
+      if (stated !== undefined) detail = String(stated);
     } catch {
       // ignore
     }
     throw new Error(`Honeycomb ${res.status}: ${detail}`);
   }
+  // SAFETY: T names the response this endpoint documents; every field is
+  // read defensively below, so an unexpected body renders as an empty result
+  // rather than a crash.
   return (await res.json()) as T;
 }
 
@@ -78,8 +82,7 @@ function eventToTrace(event: HoneycombEvent, dataset: string): TraceData {
   );
   const spanId = String(d['trace.span_id'] ?? d['span_id'] ?? traceId);
   const startMs = event.Timestamp ? new Date(event.Timestamp).getTime() : 0;
-  const durMs =
-    typeof d['duration_ms'] === 'number' ? (d['duration_ms'] as number) : 0;
+  const durMs = asNumber(d['duration_ms']) ?? 0;
   // Compute duration in ns directly from ms to avoid float drift across the
   // subtract of two large values.
   const duration = durMs * 1_000_000;
@@ -92,16 +95,14 @@ function eventToTrace(event: HoneycombEvent, dataset: string): TraceData {
   const span: TraceData['spans'][number] = {
     traceId,
     spanId,
-    parentSpanId:
-      typeof d['trace.parent_id'] === 'string'
-        ? (d['trace.parent_id'] as string)
-        : undefined,
+    parentSpanId: asString(d['trace.parent_id']),
     name: String(d['name'] ?? 'event'),
     kind: 'INTERNAL',
     startTime: start,
     endTime: end,
     duration,
-    attributes: d as Record<string, unknown>,
+    // SAFETY: a Honeycomb event's fields are the span's attributes, flattened.
+    attributes: d as SpanAttributes,
     status: { code: status },
   };
   return {

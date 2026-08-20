@@ -64,7 +64,8 @@ const CATALOG_CACHE_HINT = { ttlMs: 300_000, cacheScope: 'public' } as const;
 
 export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   const config =
-    options.config ?? loadConfig(options.argv ?? [], options.env ?? process.env);
+    options.config ??
+    loadConfig(options.argv ?? [], options.env ?? process.env);
   const {
     backend,
     start: startBackend,

@@ -13,23 +13,33 @@
 
 import {
   validateSpan,
+  type EmittedAttributeValue,
   type SchemaViolation,
   type ValidateOptions,
 } from './validate.js';
 import type { TelemetryContract } from './contract.js';
 
-/** Minimal ReadableSpan shape — matches OTel without a hard SDK dependency. */
+/** A ReadableSpan as this processor reads one, without a hard SDK dependency. */
 export interface ReadableSpanLike {
   name: string;
-  attributes: Record<string, unknown>;
+  attributes: Record<string, EmittedAttributeValue>;
 }
 
 export interface SpanLike {
   spanContext(): { traceId: string; spanId: string };
 }
 
-/** Opaque parent context — matches OTel SpanProcessor without importing it. */
-export type OtelContext = unknown;
+/**
+ * The parent context OTel hands a span processor. This package never reads it,
+ * and naming it here keeps the SpanProcessor signature matchable without taking
+ * a dependency on the SDK.
+ */
+export interface OtelContext {
+  getValue?: (key: symbol) => ContextValue;
+}
+
+/** Whatever OTel stored under a context key. This package never reads one. */
+export type ContextValue = object | string | number | boolean | undefined;
 
 export interface SpanProcessorLike {
   onStart(span: SpanLike, parentContext: OtelContext): void;

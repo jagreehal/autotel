@@ -281,9 +281,10 @@ init({
 
 ### Core Functions
 
-#### `trace(fn)` / `trace(options, fn)`
+#### `trace(fn)` / `trace(name, operation)`
 
-Zero-boilerplate function tracing with automatic span management.
+`trace(fn)` wraps a reusable inferred-name function. `trace(name, operation)`
+runs one operation immediately with an injected context.
 
 ```typescript
 // Simple function
@@ -291,18 +292,20 @@ const handler = trace(async (request: Request) => {
   return new Response('OK');
 });
 
-// With options
-const handler = trace(
-  {
-    name: 'custom-name',
-    attributesFromArgs: ([request]) => ({
-      'http.method': request.method,
-    }),
-  },
-  async (request: Request) => {
-    return new Response('OK');
-  },
-);
+// Reusable function with a stable name and options
+const handler = instrument({
+  key: 'custom-name',
+  fn: async (request: Request) => new Response('OK'),
+  attributesFromArgs: ([request]) => ({
+    'http.method': request.method,
+  }),
+});
+
+// One immediate named operation with context
+const result = await trace('cache.refresh', async (ctx) => {
+  ctx.setAttribute('cache.region', 'eu');
+  return refreshCache();
+});
 
 // Factory pattern (for context access)
 const handler = withTracing({ name: 'http.request' })(

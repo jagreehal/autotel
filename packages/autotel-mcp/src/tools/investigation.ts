@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
-import { respondSafe, traceQuerySchema, toTraceSearchQuery, toSpanSearchQuery, type TraceQueryInput, type SpanQueryInput, READ_ONLY } from './shared';
+import {
+  respondSafe,
+  traceQuerySchema,
+  toTraceSearchQuery,
+  toSpanSearchQuery,
+  type TraceQueryInput,
+  type SpanQueryInput,
+  READ_ONLY,
+} from './shared';
 
 export function registerInvestigationTools(
   server: McpServer,

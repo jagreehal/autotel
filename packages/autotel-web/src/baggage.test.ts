@@ -12,6 +12,17 @@ import {
   MAX_BAGGAGE_BYTES,
 } from './baggage';
 
+/**
+ * A value the compiler would reject, handed over anyway. These tests exist to
+ * check what the runtime validation does when a JavaScript caller - or a
+ * `JSON.parse` result - passes something the types forbid, which needs exactly
+ * one deliberate hole rather than a cast at every call site.
+ */
+function wrongType<T>(value: unknown): T {
+  // SAFETY: the hole is the point; see the comment above.
+  return value as T;
+}
+
 describe('baggage module', () => {
   beforeEach(() => {
     resetBaggageForTesting();
@@ -24,7 +35,7 @@ describe('baggage module', () => {
 
     it('rejects empty or non-string keys', () => {
       expect(validateBaggageEntry('', 'x')).toMatch(/non-empty string/);
-      expect(validateBaggageEntry(123 as unknown, 'x')).toMatch(
+      expect(validateBaggageEntry(wrongType(123), 'x')).toMatch(
         /non-empty string/,
       );
     });
@@ -36,10 +47,10 @@ describe('baggage module', () => {
     });
 
     it('rejects non-string values', () => {
-      expect(validateBaggageEntry('tenant.id', 42 as unknown)).toMatch(
+      expect(validateBaggageEntry('tenant.id', wrongType(42))).toMatch(
         /must be a string/,
       );
-      expect(validateBaggageEntry('tenant.id', null as unknown)).toMatch(
+      expect(validateBaggageEntry('tenant.id', wrongType(null))).toMatch(
         /must be a string/,
       );
     });
@@ -65,7 +76,7 @@ describe('baggage module', () => {
       setBaggage({
         'tenant.id': 'acme',
         'bad key': 'x',
-        other: 5 as unknown as string,
+        other: wrongType(5),
       });
       expect(getBaggageEntries()).toEqual({ 'tenant.id': 'acme' });
     });
@@ -89,9 +100,7 @@ describe('baggage module', () => {
     });
 
     it('never throws on a non-object argument', () => {
-      expect(() =>
-        setBaggage(undefined as unknown as Record<string, string>),
-      ).not.toThrow();
+      expect(() => setBaggage(wrongType(undefined))).not.toThrow();
       expect(getBaggageEntries()).toEqual({});
     });
   });

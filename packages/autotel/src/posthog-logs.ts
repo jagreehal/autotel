@@ -1,7 +1,12 @@
-import type { LogRecordProcessor, SdkLogRecord } from '@opentelemetry/sdk-logs';
+import type {
+  LogRecordExporter,
+  LogRecordProcessor,
+  SdkLogRecord,
+} from '@opentelemetry/sdk-logs';
 import type { Context } from '@opentelemetry/api';
 import type { AnyValue } from '@opentelemetry/api-logs';
 import { safeRequire } from './node-require';
+import { asString } from './values';
 import type { StringRedactor } from './redact-values';
 
 export class RedactingLogRecordProcessor implements LogRecordProcessor {
@@ -11,17 +16,20 @@ export class RedactingLogRecordProcessor implements LogRecordProcessor {
   ) {}
 
   onEmit(logRecord: SdkLogRecord, context?: Context): void {
-    if (logRecord.body && typeof logRecord.body === 'string') {
-      logRecord.body = this.redact(logRecord.body);
+    const body = asString(logRecord.body);
+    if (body) {
+      logRecord.body = this.redact(body);
     }
     if (logRecord.attributes) {
       for (const [key, value] of Object.entries(logRecord.attributes)) {
-        if (typeof value === 'string') {
-          logRecord.attributes[key] = this.redact(value);
+        const text = asString(value);
+        if (text !== undefined) {
+          logRecord.attributes[key] = this.redact(text);
         } else if (Array.isArray(value)) {
-          logRecord.attributes[key] = value.map((item: AnyValue) =>
-            typeof item === 'string' ? this.redact(item) : item,
-          );
+          logRecord.attributes[key] = value.map((item: AnyValue) => {
+            const entry = asString(item);
+            return entry === undefined ? item : this.redact(entry);
+          });
         }
       }
     }
@@ -64,7 +72,7 @@ export function buildPostHogLogProcessors(
   }>('@opentelemetry/sdk-logs');
 
   const exporterModule = safeRequire<{
-    OTLPLogExporter: new (config: { url: string }) => unknown;
+    OTLPLogExporter: new (config: { url: string }) => LogRecordExporter;
   }>('@opentelemetry/exporter-logs-otlp-http');
 
   if (!sdkLogs || !exporterModule) return [];

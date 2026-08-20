@@ -2,7 +2,6 @@
  * autotel-subscribers
  *
  * Send events to multiple platforms:
- * - PostHog (product events)
  * - Mixpanel (product events)
  * - Amplitude (product events)
  * - Segment (customer data platform)
@@ -12,16 +11,15 @@
  * @example Multi-platform tracking
  * ```typescript
  * import { Event } from 'autotel/event';
- * import { PostHogSubscriber, MixpanelSubscriber } from 'autotel-subscribers';
+ * import { MixpanelSubscriber } from 'autotel-subscribers';
  *
  * const events = new Event('checkout', {
  *   subscribers: [
- *     new PostHogSubscriber({ apiKey: 'phc_...' }),
  *     new MixpanelSubscriber({ token: '...' })
  *   ]
  * });
  *
- * // Sent to: OpenTelemetry + PostHog + Mixpanel
+ * // Sent to: OpenTelemetry + Mixpanel
  * events.trackEvent('order.completed', { userId: '123', amount: 99.99 });
  * ```
  *
@@ -31,7 +29,6 @@
 // Destination Subscribers (where events go)
 // ============================================================================
 
-export { PostHogSubscriber, type PostHogConfig } from './posthog';
 export { MixpanelSubscriber, type MixpanelConfig } from './mixpanel';
 export { SegmentSubscriber, type SegmentConfig } from './segment';
 export { AmplitudeSubscriber, type AmplitudeConfig } from './amplitude';

@@ -162,7 +162,7 @@ init(
 
 ### 🦔 PostHog
 
-[PostHog](https://posthog.com) ingests OTLP traces, logs and metrics, so product analytics and distributed traces can share a destination. (For product _events_, see `autotel-subscribers/posthog` — a separate path.)
+[PostHog](https://posthog.com) ingests OTLP traces, logs and metrics, so product analytics and distributed traces can share a destination. (For product _events_, see `autotel-posthog/subscriber` — a separate path.)
 
 ```typescript
 import { createPostHogConfig } from 'autotel-backends/posthog';

@@ -169,7 +169,10 @@ export function createGoogleCloudConfig(
 
     return {
       ...baseConfig,
-      // Structurally compatible with SpanExporter from @opentelemetry/sdk-trace-base
+      // SAFETY: createGcpAuthTraceExporter returns the OTLPTraceExporter passed in
+      // on the line above, wrapped only to inject auth headers, so it satisfies
+      // SpanExporter structurally; the assertion exists because sdk-trace-base is a
+      // peer dependency and its nominal type is not in scope here.
       spanExporters: [
         gcpTraceExporter as NonNullable<AutotelConfig['spanExporters']>[number],
       ],

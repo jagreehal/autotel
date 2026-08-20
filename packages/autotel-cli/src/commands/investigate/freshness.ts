@@ -97,11 +97,17 @@ export function buildProbeSpan(service: string, startMs: number): ProbeSpan {
   };
 }
 
+/** What encodeProbe() answers with. */
+interface EncodeProbeResult {
+  body: Uint8Array;
+  contentType: string;
+}
+
 /** Serialize a probe span into an OTLP request body plus its content type. */
 export function encodeProbe(
   span: ProbeSpan,
   encoding: OtlpEncoding,
-): { body: Uint8Array; contentType: string } {
+): EncodeProbeResult {
   // The serializers type their input as ReadableSpan; the probe carries every
   // field they read, but not the SDK's internal ones.
   const spans = [span] as unknown as Parameters<

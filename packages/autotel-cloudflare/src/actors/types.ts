@@ -92,7 +92,10 @@ export interface ActorLike {
 /**
  * Constructor type for Actor classes
  */
-export type ActorConstructor<T extends ActorLike = ActorLike> = new (
+export type ActorConstructor<T extends ActorLike = ActorLike> = (new (
   state: DurableObjectState,
-  env: unknown,
-) => T;
+  env: Record<string, unknown>,
+) => T) & {
+  /** A class's own name, which the instrumentation puts on the span. */
+  readonly name?: string;
+};

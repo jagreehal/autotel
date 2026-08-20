@@ -1,4 +1,7 @@
-export interface EnrichContext<TEvent extends Record<string, unknown>> {
+import type { UnknownRecord } from './values';
+import { asRecord } from './values';
+
+export interface EnrichContext<TEvent extends UnknownRecord> {
   event: TEvent;
   request?: {
     method?: string;
@@ -12,7 +15,7 @@ export interface EnrichContext<TEvent extends Record<string, unknown>> {
 }
 
 export interface EnricherDefinition<
-  TEvent extends Record<string, unknown>,
+  TEvent extends UnknownRecord,
   TValue extends object,
 > {
   /** Stable identifier used in error logs. */
@@ -28,20 +31,14 @@ export interface EnricherOptions {
   overwrite?: boolean;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function mergeInto(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
-): void {
+function mergeInto(target: UnknownRecord, source: UnknownRecord): void {
   for (const key in source) {
     const sourceVal = source[key];
     if (sourceVal === undefined) continue;
-    const targetVal = target[key];
-    if (isPlainObject(sourceVal) && isPlainObject(targetVal)) {
-      mergeInto(targetVal, sourceVal);
+    const sourceRecord = asRecord(sourceVal);
+    const targetRecord = asRecord(target[key]);
+    if (sourceRecord && targetRecord) {
+      mergeInto(targetRecord, sourceRecord);
     } else {
       target[key] = sourceVal;
     }
@@ -49,7 +46,7 @@ function mergeInto(
 }
 
 export function defineEnricher<
-  TEvent extends Record<string, unknown>,
+  TEvent extends UnknownRecord,
   TValue extends object,
 >(
   def: EnricherDefinition<TEvent, TValue>,
@@ -66,14 +63,17 @@ export function defineEnricher<
 
     if (!computed) return;
 
-    if (options.overwrite || !isPlainObject(ctx.event[def.field])) {
-      (ctx.event as Record<string, unknown>)[def.field] = computed;
+    // SAFETY: TEvent is constrained to a bag of fields, and `field` is one of
+    // its keys - the enricher writes to the field it declared.
+    const event = ctx.event as UnknownRecord;
+    const existing = asRecord(event[def.field]);
+    if (options.overwrite || !existing) {
+      event[def.field] = computed;
       return;
     }
 
-    mergeInto(
-      ctx.event[def.field] as unknown as Record<string, unknown>,
-      computed as unknown as Record<string, unknown>,
-    );
+    // SAFETY: computed is an object by TValue's constraint, and merging it
+    // into the existing bag is what this enricher was asked to do.
+    mergeInto(existing, computed as UnknownRecord);
   };
 }

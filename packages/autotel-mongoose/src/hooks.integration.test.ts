@@ -123,6 +123,9 @@ describe('instrumentHooks: true with timestamps', () => {
       hookCalled = true;
       next();
     };
+    // SAFETY: mongoose overloads pre('save') by whether the handler declares a
+    // `next` parameter; this one does, and the callback form is what the test
+    // exercises. The overloads are not distinguishable without the assertion.
     schema.pre('save', callbackPreSave as unknown as PreSaveMiddlewareFunction);
 
     const CallbackModel = mongooseInstance.model('CallbackHookTest', schema);
@@ -168,7 +171,7 @@ describe('instrumentHooks: true with timestamps', () => {
 
     // If args were scrambled, `receivedDoc` would be a function (the
     // synthetic callback) and `receivedNextType` would be 'object'.
-    expect(typeof receivedDoc).not.toBe('function');
+    expect(receivedDoc).not.toBeTypeOf('function');
     expect(receivedDoc?.value).toBe(2);
     expect(receivedNextType).toBe('function');
   });
@@ -194,7 +197,7 @@ describe('instrumentHooks: true with timestamps', () => {
 
     // If treated as callback-style, `receivedDoc` would be the synthetic
     // wrappedNext function instead of the real document.
-    expect(typeof receivedDoc).not.toBe('function');
+    expect(receivedDoc).not.toBeTypeOf('function');
     expect(receivedDoc?.value).toBe(7);
   });
 });

@@ -7,6 +7,7 @@ import type { ExportResult, ExportResultCode } from '@opentelemetry/core';
 import type { DevtoolsServer } from './server';
 import type { TraceData, SpanData } from './types';
 import { pickRoot } from './trace-root';
+import type { SpanAttributes } from '../widget/types.js';
 
 export class DevtoolsSpanExporter implements SpanExporter {
   private server: DevtoolsServer;
@@ -117,7 +118,7 @@ export class DevtoolsSpanExporter implements SpanExporter {
     const endTime = span.endTime[0] * 1000 + span.endTime[1] / 1_000_000;
 
     // Convert attributes
-    const attributes: Record<string, any> = {};
+    const attributes: SpanAttributes = {};
     for (const [key, value] of Object.entries(span.attributes)) {
       attributes[key] = value;
     }

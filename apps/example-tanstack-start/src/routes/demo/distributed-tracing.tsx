@@ -17,7 +17,7 @@ const callApi = createServerFn({ method: 'GET' }).handler(async () => {
   try {
     url = resolveDownstreamUrl()
   } catch (error) {
-    return { error: (error as Error).message }
+    return { error: error instanceof Error ? error.message : String(error) }
   }
 
   try {
@@ -28,7 +28,7 @@ const callApi = createServerFn({ method: 'GET' }).handler(async () => {
     }
   } catch (error) {
     return {
-      error: `Could not reach ${url} (${(error as Error).message}). Set DOWNSTREAM_API_URL if the downstream service is somewhere else.`,
+      error: `Could not reach ${url} (${error instanceof Error ? error.message : String(error)}). Set DOWNSTREAM_API_URL if the downstream service is somewhere else.`,
     }
   }
 })

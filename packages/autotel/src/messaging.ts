@@ -45,6 +45,16 @@ import { SpanKind, context, propagation } from '@opentelemetry/api';
 import type { Attributes, Link, SpanContext } from '@opentelemetry/api';
 import { withTracing } from './functional';
 import { assertTraceFactory } from './trace-factory-validation';
+import {
+  asRecord,
+  asScalar,
+  isFunction,
+  nonEmptyString,
+  readProperty,
+  resolveValue,
+  splitNameOrOptions,
+  toAttributeValue,
+} from './values';
 import type { TraceContext } from './trace-context';
 import { emitCorrelatedEvent } from './correlated-events';
 import { createLinkFromHeaders, extractLinksFromBatch } from './sampling';
@@ -159,7 +169,7 @@ export interface ProducerConfig {
 /**
  * Configuration for consumer tracing
  */
-export interface ConsumerConfig {
+export interface ConsumerConfig<TMessage = unknown> {
   /** Messaging system (kafka, rabbitmq, sqs, etc.) */
   system: MessagingSystem;
 
@@ -170,7 +180,8 @@ export interface ConsumerConfig {
   consumerGroup?: string;
 
   /** Extract headers from message for link creation */
-  headersFrom?: string | ((msg: unknown) => Record<string, string> | undefined);
+  headersFrom?:
+    string | ((msg: TMessage) => Record<string, string> | undefined);
 
   /** Enable batch mode - extract links from all messages */
   batchMode?: boolean;
@@ -182,7 +193,7 @@ export interface ConsumerConfig {
   attributes?: Attributes;
 
   /** Consumer lag metrics extraction */
-  lagMetrics?: LagMetricsConfig;
+  lagMetrics?: LagMetricsConfig<TMessage>;
 
   /** Callback when message goes to DLQ */
   onDLQ?: (ctx: ConsumerContext, reason: string) => void;
@@ -209,7 +220,7 @@ export interface ConsumerConfig {
    * }
    * ```
    */
-  ordering?: OrderingConfig;
+  ordering?: OrderingConfig<TMessage>;
 
   // ---- Consumer Group Tracking ----
 
@@ -262,7 +273,7 @@ export interface ConsumerConfig {
    * })
    * ```
    */
-  customAttributes?: (ctx: ConsumerContext, msg: unknown) => Attributes;
+  customAttributes?: (ctx: ConsumerContext, msg: TMessage) => Attributes;
 
   /**
    * Hook for custom context extraction (beyond W3C traceparent)
@@ -307,9 +318,9 @@ export interface ConsumerConfig {
 /**
  * Configuration for consumer lag metrics
  */
-export interface LagMetricsConfig {
+export interface LagMetricsConfig<TMessage = unknown> {
   /** Get current message offset */
-  getCurrentOffset?: (msg: unknown) => number | undefined;
+  getCurrentOffset?: (msg: TMessage) => number | undefined;
 
   /** Get end offset (high watermark) - can be async */
   getEndOffset?: () => number | Promise<number>;
@@ -318,13 +329,13 @@ export interface LagMetricsConfig {
   getCommittedOffset?: () => number | Promise<number>;
 
   /** Get partition from message */
-  getPartition?: (msg: unknown) => number | undefined;
+  getPartition?: (msg: TMessage) => number | undefined;
 }
 
 /**
  * Configuration for message ordering tracking
  */
-export interface OrderingConfig {
+export interface OrderingConfig<TMessage = unknown> {
   /**
    * Extract sequence number from message
    *
@@ -335,7 +346,7 @@ export interface OrderingConfig {
    * sequenceFrom: (msg) => msg.offset
    * ```
    */
-  sequenceFrom?: (msg: unknown) => number | undefined;
+  sequenceFrom?: (msg: TMessage) => number | undefined;
 
   /**
    * Extract partition key from message
@@ -347,7 +358,7 @@ export interface OrderingConfig {
    * partitionKeyFrom: (msg) => msg.key
    * ```
    */
-  partitionKeyFrom?: (msg: unknown) => string | undefined;
+  partitionKeyFrom?: (msg: TMessage) => string | undefined;
 
   /**
    * Extract message ID for deduplication
@@ -359,7 +370,7 @@ export interface OrderingConfig {
    * messageIdFrom: (msg) => msg.headers['idempotency-key']
    * ```
    */
-  messageIdFrom?: (msg: unknown) => string | undefined;
+  messageIdFrom?: (msg: TMessage) => string | undefined;
 
   /**
    * Enable out-of-order detection
@@ -671,6 +682,12 @@ export interface DLQReplayOptions {
 /**
  * Extended trace context for producers with header injection
  */
+/** The W3C trace context headers a producer attaches to a message. */
+export interface TraceHeaders {
+  traceparent: string;
+  tracestate?: string;
+}
+
 export interface ProducerContext extends TraceContext {
   /**
    * Get W3C trace context headers to inject into message
@@ -686,7 +703,7 @@ export interface ProducerContext extends TraceContext {
    * });
    * ```
    */
-  getTraceHeaders(): { traceparent: string; tracestate?: string };
+  getTraceHeaders(): TraceHeaders;
 
   /**
    * Get all propagation headers including baggage if enabled
@@ -937,29 +954,46 @@ export interface ConsumerContext extends TraceContext {
  * });
  * ```
  */
+/** The Error an onError callback expects, wrapping a non-Error rejection. */
+function toError(cause: unknown): Error {
+  return cause instanceof Error ? cause : new Error(String(cause));
+}
+
+/** The attributes a messaging span event carries. */
+interface MessagingEventAttributes {
+  [key: string]: string | number | boolean;
+}
+
+/**
+ * Check a config a JavaScript caller may have built by hand. TypeScript has
+ * already checked it for everyone else, so this only has to catch the shapes
+ * that reach here untyped.
+ */
+function assertMessagingConfig(
+  fn: string,
+  config: ProducerConfig | ConsumerConfig<unknown>,
+): void {
+  const record = asRecord(config);
+  if (!record) throw new TypeError(`${fn}: config must be an object`);
+  for (const field of ['system', 'destination']) {
+    if (nonEmptyString(record[field]) === undefined) {
+      throw new TypeError(`${fn}: config.${field} must be a non-empty string`);
+    }
+  }
+}
+
 export function traceProducer(config: ProducerConfig) {
-  if (!config || typeof config !== 'object') {
-    throw new TypeError('traceProducer: config must be an object');
-  }
-  if (typeof config.system !== 'string' || config.system.trim() === '') {
-    throw new TypeError(
-      'traceProducer: config.system must be a non-empty string',
-    );
-  }
-  if (
-    typeof config.destination !== 'string' ||
-    config.destination.trim() === ''
-  ) {
-    throw new TypeError(
-      'traceProducer: config.destination must be a non-empty string',
-    );
-  }
+  assertMessagingConfig('traceProducer', config);
   const spanName = `publish ${config.destination}`;
 
   return <TArgs extends unknown[], TReturn>(
     fnFactory: (ctx: ProducerContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
     assertTraceFactory('traceProducer', fnFactory);
+    // SAFETY: withTracing infers its wrapper from the factory it is given.
+    // The factory here takes a ProducerContext rather than a bare
+    // TraceContext, so the inferred wrapper is stated back as the signature
+    // the caller passed in - the same TArgs and TReturn, unchanged.
     return withTracing<TArgs, TReturn>({
       name: spanName,
       spanKind: SpanKind.PRODUCER,
@@ -994,7 +1028,7 @@ export function traceProducer(config: ProducerConfig) {
         assertTraceFactory('traceProducer', userFn, 'result');
         return Promise.resolve(userFn(...args)).catch((error) => {
           if (config.onError) {
-            config.onError(error as Error, ctx);
+            config.onError(toError(error), ctx);
           }
           throw error;
         });
@@ -1075,23 +1109,15 @@ export function traceProducer(config: ProducerConfig) {
  * });
  * ```
  */
-export function traceConsumer(config: ConsumerConfig) {
-  if (!config || typeof config !== 'object') {
-    throw new TypeError('traceConsumer: config must be an object');
-  }
-  if (typeof config.system !== 'string' || config.system.trim() === '') {
-    throw new TypeError(
-      'traceConsumer: config.system must be a non-empty string',
-    );
-  }
-  if (
-    typeof config.destination !== 'string' ||
-    config.destination.trim() === ''
-  ) {
-    throw new TypeError(
-      'traceConsumer: config.destination must be a non-empty string',
-    );
-  }
+export function traceConsumer<TMessage = unknown>(
+  typedConfig: ConsumerConfig<TMessage>,
+) {
+  // SAFETY: TMessage exists so a caller's extractors receive their own message
+  // type. Inside, a message is whatever the wrapped function was called with -
+  // an element of `args: unknown[]` - so everything below works on `unknown`,
+  // and this is the one place the two views meet.
+  const config = typedConfig as ConsumerConfig<unknown>;
+  assertMessagingConfig('traceConsumer', config);
   const operation = config.batchMode ? 'receive' : 'process';
   const spanName = `${operation} ${config.destination}`;
 
@@ -1099,6 +1125,7 @@ export function traceConsumer(config: ConsumerConfig) {
     fnFactory: (ctx: ConsumerContext) => (...args: TArgs) => Promise<TReturn>,
   ): ((...args: TArgs) => Promise<TReturn>) => {
     assertTraceFactory('traceConsumer', fnFactory);
+    // SAFETY: as in traceProducer - the wrapper keeps the caller's signature.
     return withTracing<TArgs, TReturn>({
       name: spanName,
       spanKind: SpanKind.CONSUMER,
@@ -1118,14 +1145,8 @@ export function traceConsumer(config: ConsumerConfig) {
       // Create consumer group state
       const groupTracking = config.consumerGroupTracking;
       const groupState: ConsumerGroupStateInternal = {
-        memberId:
-          typeof groupTracking?.memberId === 'function'
-            ? (groupTracking.memberId() ?? null)
-            : (groupTracking?.memberId ?? null),
-        groupInstanceId:
-          typeof groupTracking?.groupInstanceId === 'function'
-            ? (groupTracking.groupInstanceId() ?? null)
-            : (groupTracking?.groupInstanceId ?? null),
+        memberId: resolveValue(groupTracking?.memberId) ?? null,
+        groupInstanceId: resolveValue(groupTracking?.groupInstanceId) ?? null,
         assignedPartitions: [],
         generation: null,
         isActive: true,
@@ -1184,7 +1205,7 @@ export function traceConsumer(config: ConsumerConfig) {
         assertTraceFactory('traceConsumer', userFn, 'result');
         return Promise.resolve(userFn(...args)).catch((error) => {
           if (config.onError) {
-            config.onError(error as Error, ctx);
+            config.onError(toError(error), ctx);
           }
           throw error;
         });
@@ -1208,11 +1229,11 @@ function extendContextForProducer(
   const producerCtx: ProducerContext = {
     ...baseCtx,
 
-    getTraceHeaders(): { traceparent: string; tracestate?: string } {
+    getTraceHeaders() {
       const headers: Record<string, string> = {};
       propagation.inject(context.active(), headers);
 
-      const result: { traceparent: string; tracestate?: string } = {
+      const result: TraceHeaders = {
         traceparent: headers['traceparent'] || '',
       };
 
@@ -1223,7 +1244,7 @@ function extendContextForProducer(
       return result;
     },
 
-    getAllPropagationHeaders(): Record<string, string> {
+    getAllPropagationHeaders() {
       const headers: Record<string, string> = {};
       propagation.inject(context.active(), headers);
 
@@ -1246,7 +1267,7 @@ function extendContextForProducer(
       return headers;
     },
 
-    getFullHeaders(): Record<string, string> {
+    getFullHeaders() {
       // Start with all propagation headers (W3C + baggage)
       const headers = producerCtx.getAllPropagationHeaders();
 
@@ -1338,15 +1359,9 @@ function extendContextForConsumer(
       optionsParam?: DLQOptions,
     ): void {
       // Parse overloaded arguments
-      let dlqName: string | undefined;
-      let options: DLQOptions | undefined;
-
-      if (typeof dlqNameOrOptions === 'string') {
-        dlqName = dlqNameOrOptions;
-        options = optionsParam;
-      } else if (typeof dlqNameOrOptions === 'object') {
-        options = dlqNameOrOptions;
-      }
+      const { name: dlqName, options: inlineOptions } =
+        splitNameOrOptions<DLQOptions>(dlqNameOrOptions);
+      const options = dlqName === undefined ? inlineOptions : optionsParam;
 
       // Default linkToProducer to true
       const linkToProducer = options?.linkToProducer ?? true;
@@ -1402,7 +1417,7 @@ function extendContextForConsumer(
       }
 
       // Record event with all attributes
-      const eventAttrs: Record<string, string | number | boolean> = {
+      const eventAttrs: MessagingEventAttributes = {
         'messaging.dlq.reason': reason,
         ...(dlqName && { 'messaging.dlq.name': dlqName }),
         ...(options?.reasonCategory && {
@@ -1456,7 +1471,7 @@ function extendContextForConsumer(
         ]);
       }
 
-      const eventAttrs: Record<string, string | number | boolean> = {
+      const eventAttrs = {
         'messaging.replay': true,
         ...(options?.replayAttempt !== undefined && {
           'messaging.replay.attempt': options.replayAttempt,
@@ -1464,7 +1479,7 @@ function extendContextForConsumer(
         ...(options?.dlqDwellTimeMs !== undefined && {
           'messaging.replay.dwell_time_ms': options.dlqDwellTimeMs,
         }),
-      };
+      } satisfies MessagingEventAttributes;
 
       emitCorrelatedEvent(baseCtx, 'dlq_replay', eventAttrs);
     },
@@ -1579,7 +1594,7 @@ function extendContextForConsumer(
       }
 
       // Record event
-      const eventAttrs: Record<string, string | number | boolean> = {
+      const eventAttrs: MessagingEventAttributes = {
         'messaging.consumer_group.rebalance.type': event.type,
         'messaging.consumer_group.rebalance.partition_count':
           event.partitions.length,
@@ -1826,6 +1841,8 @@ async function extractAndAddLinks(
 
   if (config.batchMode && Array.isArray(args[0])) {
     // Batch mode - extract links from all messages
+    // SAFETY: Array.isArray above. The elements stay unknown: a batch holds
+    // whatever the broker client handed over.
     const messages = args[0] as unknown[];
 
     if (config.headersFrom) {
@@ -1956,6 +1973,7 @@ async function extractLagMetrics(
 
   // Batch-specific metrics
   if (Array.isArray(args[0]) && args[0].length > 0) {
+    // SAFETY: Array.isArray above, as in extractAndAddLinks.
     const messages = args[0] as unknown[];
     if (lagConfig.getCurrentOffset) {
       const firstOffset = lagConfig.getCurrentOffset(messages[0]);
@@ -1978,43 +1996,32 @@ async function extractLagMetrics(
 /**
  * Extract headers from message using config
  */
-function extractHeaders(
-  headersFrom: string | ((msg: unknown) => Record<string, string> | undefined),
-  msg: unknown,
+function extractHeaders<TMessage>(
+  headersFrom: string | ((msg: TMessage) => Record<string, string> | undefined),
+  msg: TMessage,
 ): Record<string, string> | undefined {
-  if (typeof headersFrom === 'function') {
-    return headersFrom(msg);
-  }
+  if (isFunction(headersFrom)) return headersFrom(msg);
 
   // String path - extract from message property
-  if (typeof msg === 'object' && msg !== null) {
-    const value = (msg as Record<string, unknown>)[headersFrom];
-    if (typeof value === 'object' && value !== null) {
-      return value as Record<string, string>;
-    }
-  }
-
-  return undefined;
+  const headers = asRecord(readProperty(msg, headersFrom));
+  // SAFETY: a broker client's header bag holds strings; a client that puts
+  // something else there has it injected back into the message unchanged,
+  // which is what the propagator does with any carrier value.
+  return headers as Record<string, string> | undefined;
 }
 
 /**
  * Extract value from arguments using config
  */
 function extractValue(
-  extractor: string | ((args: unknown[]) => unknown),
+  extractor:
+    string | ((args: unknown[]) => string | number | boolean | undefined),
   args: unknown[],
-): unknown {
-  if (typeof extractor === 'function') {
-    return extractor(args);
-  }
-
-  // String path - extract from first argument
-  const firstArg = args[0];
-  if (typeof firstArg === 'object' && firstArg !== null) {
-    return (firstArg as Record<string, unknown>)[extractor];
-  }
-
-  return undefined;
+): string | number | boolean | undefined {
+  // String path - the named field of the first argument.
+  return isFunction(extractor)
+    ? extractor(args)
+    : asScalar(readProperty(args[0], extractor));
 }
 
 /**
@@ -2022,31 +2029,8 @@ function extractValue(
  */
 function setCustomAttributes(ctx: TraceContext, attributes: Attributes): void {
   for (const [key, value] of Object.entries(attributes)) {
-    if (value !== undefined && value !== null) {
-      // setAttribute accepts primitives and arrays of primitives
-      if (
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean'
-      ) {
-        ctx.setAttribute(key, value);
-      } else if (Array.isArray(value)) {
-        // Filter out null/undefined from arrays and ensure proper typing
-        const cleanArray = value.filter(
-          (v): v is string | number | boolean =>
-            v !== null &&
-            v !== undefined &&
-            (typeof v === 'string' ||
-              typeof v === 'number' ||
-              typeof v === 'boolean'),
-        );
-        if (cleanArray.length > 0) {
-          ctx.setAttribute(key, cleanArray as string[] | number[] | boolean[]);
-        }
-      } else {
-        ctx.setAttribute(key, JSON.stringify(value));
-      }
-    }
+    const attribute = toAttributeValue(value);
+    if (attribute !== undefined) ctx.setAttribute(key, attribute);
   }
 }
 

@@ -29,6 +29,8 @@ import {
   type GenAiOperationName,
   type GenAiProviderName,
 } from './semconv.js';
+import type { UnknownRecord } from './values.js';
+import { asRecord, asString } from './values.js';
 
 /** Minimal sink: just what these helpers touch on a trace context. */
 export type GenAiContentSink = Pick<TraceContext, 'setAttributes' | 'track'>;
@@ -58,10 +60,11 @@ function replaceBinary(value: unknown): unknown {
     return { __type: 'base64', data: toBase64(new Uint8Array(value)) };
   }
   if (Array.isArray(value)) return value.map(replaceBinary);
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = replaceBinary(v);
+  const record = asRecord(value);
+  if (record) {
+    const out: UnknownRecord = {};
+    for (const [key, entry] of Object.entries(record)) {
+      out[key] = replaceBinary(entry);
     }
     return out;
   }
@@ -82,8 +85,7 @@ export interface GenAiMessage {
 }
 
 function serialize(value: unknown): string {
-  if (typeof value === 'string') return value;
-  return JSON.stringify(replaceBinary(value));
+  return asString(value) ?? JSON.stringify(replaceBinary(value));
 }
 
 /**
@@ -100,7 +102,7 @@ export interface ContentCaptureSettings {
 }
 
 /** Assign `value` under `key` unless it's absent (undefined or empty array). */
-function put(data: Record<string, unknown>, key: string, value: unknown): void {
+function put(data: UnknownRecord, key: string, value: unknown): void {
   if (value === undefined) return;
   if (Array.isArray(value) && value.length === 0) return;
   data[key] = value;
@@ -203,7 +205,7 @@ export function recordInferenceDetails(
   ctx: Pick<TraceContext, 'track'>,
   event: InferenceDetailsEvent,
 ): void {
-  const data: Record<string, unknown> = {};
+  const data: UnknownRecord = {};
   put(data, GEN_AI.OPERATION_NAME, event.operation);
   put(data, GEN_AI.PROVIDER_NAME, event.provider);
   put(data, GEN_AI.REQUEST_MODEL, event.requestModel);
@@ -258,7 +260,7 @@ export function recordEvaluationResult(
   ctx: Pick<TraceContext, 'track'>,
   event: EvaluationResultEvent,
 ): void {
-  const data: Record<string, unknown> = {
+  const data: UnknownRecord = {
     [GEN_AI.EVALUATION_NAME]: event.name,
   };
   put(data, GEN_AI.EVALUATION_SCORE_VALUE, event.scoreValue);
@@ -282,7 +284,7 @@ export function recordOperationException(
   ctx: Pick<TraceContext, 'track'>,
   event: GenAiOperationExceptionEvent,
 ): void {
-  const data: Record<string, unknown> = {};
+  const data: UnknownRecord = {};
   put(data, 'exception.type', event.type);
   put(data, 'exception.message', event.message);
   put(data, 'exception.stacktrace', event.stacktrace);

@@ -190,7 +190,7 @@ describe('injectTraceHeaders', () => {
   it('should return carrier object', () => {
     const headers = injectTraceHeaders({});
     expect(headers).toBeDefined();
-    expect(typeof headers).toBe('object');
+    expect(headers).toBeTypeOf('object');
   });
 
   it('should preserve base headers', () => {
@@ -433,15 +433,15 @@ describe('type exports', () => {
     const exports = await import('./index');
 
     // Functions
-    expect(typeof exports.normalizeHeaders).toBe('function');
-    expect(typeof exports.extractTraceContext).toBe('function');
-    expect(typeof exports.injectTraceHeaders).toBe('function');
-    expect(typeof exports.extractCorrelationId).toBe('function');
-    expect(typeof exports.deriveCorrelationId).toBe('function');
-    expect(typeof exports.withProcessingSpan).toBe('function');
-    expect(typeof exports.withProducerSpan).toBe('function');
-    expect(typeof exports.extractBatchLineage).toBe('function');
-    expect(typeof exports.extractBatchLineageAsync).toBe('function');
+    expect(exports.normalizeHeaders).toBeTypeOf('function');
+    expect(exports.extractTraceContext).toBeTypeOf('function');
+    expect(exports.injectTraceHeaders).toBeTypeOf('function');
+    expect(exports.extractCorrelationId).toBeTypeOf('function');
+    expect(exports.deriveCorrelationId).toBeTypeOf('function');
+    expect(exports.withProcessingSpan).toBeTypeOf('function');
+    expect(exports.withProducerSpan).toBeTypeOf('function');
+    expect(exports.extractBatchLineage).toBeTypeOf('function');
+    expect(exports.extractBatchLineageAsync).toBeTypeOf('function');
   });
 
   it('should export all expected constants', async () => {
@@ -1178,7 +1178,7 @@ describe('withBatchConsumer', () => {
 
 describe('createMessageErrorSpan', () => {
   it('should be a function', () => {
-    expect(typeof createMessageErrorSpan).toBe('function');
+    expect(createMessageErrorSpan).toBeTypeOf('function');
   });
 
   it('should create error span for message', () => {
@@ -1202,7 +1202,7 @@ describe('createStreamProcessor', () => {
     });
 
     expect(processor).toBeDefined();
-    expect(typeof processor.run).toBe('function');
+    expect(processor.run).toBeTypeOf('function');
   });
 
   it('should execute stages in order', async () => {
@@ -1277,7 +1277,7 @@ describe('createStreamProcessor', () => {
     );
 
     expect(producedHeaders).toBeDefined();
-    expect(typeof producedHeaders).toBe('object');
+    expect(producedHeaders).toBeTypeOf('object');
   });
 
   it('should expose inputContext from message headers', async () => {
@@ -1422,7 +1422,7 @@ describe('ConsumerMetrics', () => {
       consumer: mockConsumer,
     });
 
-    expect(typeof metrics.recordMessageProcessed).toBe('function');
+    expect(metrics.recordMessageProcessed).toBeTypeOf('function');
   });
 
   it('should have recordBatch method', () => {
@@ -1434,7 +1434,7 @@ describe('ConsumerMetrics', () => {
       consumer: mockConsumer,
     });
 
-    expect(typeof metrics.recordBatch).toBe('function');
+    expect(metrics.recordBatch).toBeTypeOf('function');
   });
 
   it('should have start and stop methods', async () => {
@@ -1467,7 +1467,7 @@ describe('instrumentConsumerEvents', () => {
       traceErrors: true,
     });
 
-    expect(typeof cleanup).toBe('function');
+    expect(cleanup).toBeTypeOf('function');
   });
 
   it('should attach event listeners', () => {

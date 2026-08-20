@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { detectAnomalies, findRootCause } from 'autotel-mcp';
 import { runInvestigate, type InvestigateFlags } from './runtime';
 import { addBackendFlags, backendFlagsFromOpts, intArg } from './cli-helpers';
+import { numberOpt, stringOpt } from '../../lib/opts.js';
 
 export async function runCorrelate(
   flags: InvestigateFlags & { traceId: string },
@@ -70,8 +71,8 @@ export function registerCorrelateCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runExplainSlowdown({
         ...backendFlagsFromOpts(o),
-        service: o.service as string,
-        lookbackMinutes: o.lookbackMinutes as number | undefined,
+        service: stringOpt(o, 'service') ?? '',
+        lookbackMinutes: numberOpt(o, 'lookbackMinutes'),
       });
     });
   addBackendFlags(correlateCmd);

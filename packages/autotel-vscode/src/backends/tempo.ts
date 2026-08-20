@@ -1,7 +1,9 @@
 import type { TraceData } from 'autotel-devtools/server';
+import type { AttributeValue, SpanAttributes } from 'autotel-devtools';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
 import { backendFetch } from './http';
+import { asString } from '../values';
 
 // Grafana Tempo query API (HTTP):
 //   GET /api/search?tags=service.name=X&limit=N
@@ -31,19 +33,19 @@ interface TempoBatchSpan {
   kind?: number;
   startTimeUnixNano?: string;
   endTimeUnixNano?: string;
-  attributes?: Array<{ key: string; value: Record<string, unknown> }>;
+  attributes?: Array<{ key: string; value: SpanAttributes }>;
   status?: { code?: number; message?: string };
   events?: Array<{
     name?: string;
     timeUnixNano?: string;
-    attributes?: Array<{ key: string; value: Record<string, unknown> }>;
+    attributes?: Array<{ key: string; value: SpanAttributes }>;
   }>;
 }
 
 interface TempoOtlpTrace {
   batches?: Array<{
     resource?: {
-      attributes?: Array<{ key: string; value: Record<string, unknown> }>;
+      attributes?: Array<{ key: string; value: SpanAttributes }>;
     };
     scopeSpans?: Array<{ spans?: TempoBatchSpan[] }>;
     // legacy "instrumentationLibrarySpans"
@@ -60,24 +62,25 @@ const KIND_NAMES = [
   'CONSUMER',
 ] as const;
 
-function unwrapOtelValue(v: Record<string, unknown> | undefined): unknown {
+function unwrapOtelValue(v: SpanAttributes | undefined): AttributeValue {
   if (!v) return undefined;
   if ('stringValue' in v) return v.stringValue;
   if ('intValue' in v) return Number(v.intValue);
   if ('doubleValue' in v) return v.doubleValue;
   if ('boolValue' in v) return v.boolValue;
   if ('arrayValue' in v) {
-    const arr = (v.arrayValue as { values?: Array<Record<string, unknown>> })
-      .values;
+    // SAFETY: an OTLP arrayValue holds its entries under `values`.
+    const arr = (v.arrayValue as { values?: Array<SpanAttributes> }).values;
     return arr?.map((x) => unwrapOtelValue(x));
   }
   if ('kvlistValue' in v) {
+    // SAFETY: an OTLP kvlistValue holds its entries under `values`.
     const kv = (
       v.kvlistValue as {
-        values?: Array<{ key: string; value: Record<string, unknown> }>;
+        values?: Array<{ key: string; value: SpanAttributes }>;
       }
     ).values;
-    const out: Record<string, unknown> = {};
+    const out: SpanAttributes = {};
     for (const item of kv ?? []) out[item.key] = unwrapOtelValue(item.value);
     return out;
   }
@@ -85,11 +88,24 @@ function unwrapOtelValue(v: Record<string, unknown> | undefined): unknown {
 }
 
 function flattenAttrs(
-  attrs: Array<{ key: string; value: Record<string, unknown> }> | undefined,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+  attrs: Array<{ key: string; value: SpanAttributes }> | undefined,
+): SpanAttributes {
+  const out: SpanAttributes = {};
   for (const a of attrs ?? []) out[a.key] = unwrapOtelValue(a.value);
   return out;
+}
+
+/**
+ * A span kind, as Tempo's numeric code names it.
+ *
+ * SAFETY: KIND_NAMES holds exactly the kinds TraceData allows, in OTLP's own
+ * order; a code outside it falls back to INTERNAL.
+ */
+function spanKind(
+  code: number | undefined,
+): TraceData['spans'][number]['kind'] {
+  return (KIND_NAMES[code ?? 0] ??
+    'INTERNAL') as TraceData['spans'][number]['kind'];
 }
 
 function nanoToNumber(ns: string | undefined): number {
@@ -104,8 +120,7 @@ function tempoTraceToTraceData(
   let service = 'unknown';
   for (const batch of otlp.batches ?? []) {
     const resAttrs = flattenAttrs(batch.resource?.attributes);
-    if (typeof resAttrs['service.name'] === 'string')
-      service = resAttrs['service.name'] as string;
+    service = asString(resAttrs['service.name']) ?? service;
     const scopes = batch.scopeSpans ?? batch.instrumentationLibrarySpans ?? [];
     for (const scope of scopes) {
       for (const s of scope.spans ?? []) {
@@ -116,8 +131,7 @@ function tempoTraceToTraceData(
           spanId: s.spanId,
           parentSpanId: s.parentSpanId,
           name: s.name ?? '',
-          kind: (KIND_NAMES[s.kind ?? 0] ??
-            'INTERNAL') as TraceData['spans'][number]['kind'],
+          kind: spanKind(s.kind),
           startTime: startNs,
           endTime: endNs,
           duration: endNs - startNs,
@@ -168,6 +182,9 @@ async function authedFetch<T>(
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await backendFetch(url, { signal: ctx.abortSignal, headers });
   if (!res.ok) throw new Error(`Tempo ${res.status}: ${res.statusText}`);
+  // SAFETY: T names the response this endpoint documents; every field is
+  // read defensively below, so an unexpected body renders as an empty result
+  // rather than a crash.
   return (await res.json()) as T;
 }
 

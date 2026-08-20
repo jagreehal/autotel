@@ -1,7 +1,7 @@
 ---
 name: autotel-subscribers
 description: >
-  Event subscribers for autotel. PostHog, Mixpanel, Amplitude, Segment, Webhook, Slack. Configure in init() subscribers; use track() or Event from autotel. Import from autotel-subscribers/posthog etc.
+  Event subscribers for autotel. Mixpanel, Amplitude, Segment, Webhook, Slack. Configure in init() subscribers; use track() or Event from autotel. Import from autotel-subscribers/mixpanel etc. PostHog lives in autotel-posthog/subscriber.
 ---
 
 # autotel-subscribers
@@ -12,7 +12,7 @@ Event subscribers send product/analytics events from autotel to external platfor
 
 ```typescript
 import { init, track } from 'autotel';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 init({
   service: 'my-app',
@@ -26,7 +26,7 @@ track('order.completed', { userId: 'user-123', amount: 99.99 });
 
 | Platform  | Import path                     | Peer dependency           |
 | --------- | ------------------------------- | ------------------------- |
-| PostHog   | `autotel-subscribers/posthog`   | posthog-node (optional)   |
+| PostHog   | `autotel-posthog/subscriber`    | posthog-node (optional)   |
 | Mixpanel  | `autotel-subscribers/mixpanel`  | mixpanel (optional)       |
 | Amplitude | `autotel-subscribers/amplitude` | @amplitude/analytics-node |
 | Segment   | `autotel-subscribers/segment`   | @segment/analytics-node   |
@@ -37,11 +37,11 @@ Install the peer dependency for the subscriber you use (e.g. `pnpm add posthog-n
 
 ## Core patterns
 
-**Multiple subscribers:** Pass an array to `init({ subscribers: [new PostHogSubscriber(...), new MixpanelSubscriber(...)] })`. Events are sent to all.
+**Multiple subscribers:** Pass an array to `init({ subscribers: [new MixpanelSubscriber(...), new SlackSubscriber(...)] })`. Events are sent to all.
 
 **Event instance with overrides:** Use `Event` from `autotel/event` with a custom `subscribers` option to send only to specific backends for that instance.
 
-**Factories:** `autotel-subscribers/factories` provides `createPostHogSubscriber()` etc. for env-based config.
+**Factories:** `autotel-subscribers/factories` provides `createMixpanelSubscriber()` etc. for env-based config. There is no PostHog factory — construct `PostHogSubscriber` from `autotel-posthog/subscriber` directly.
 
 ## Common mistakes
 
@@ -50,13 +50,13 @@ Install the peer dependency for the subscriber you use (e.g. `pnpm add posthog-n
 Wrong:
 
 ```typescript
-import { PostHogSubscriber } from 'autotel-subscribers';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 ```
 
 Correct:
 
 ```typescript
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 ```
 
 Each adapter is a separate export; use the subpath so only the adapter you use is bundled.

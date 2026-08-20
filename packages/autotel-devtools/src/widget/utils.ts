@@ -136,6 +136,13 @@ export function getCircuitBreakerColor(
   }
 }
 
+/** What snapToCorner() answers with. */
+interface SnapToCornerResult {
+  corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  x: number;
+  y: number;
+}
+
 /**
  * Calculate snap position to nearest corner
  */
@@ -144,11 +151,7 @@ export function snapToCorner(
   y: number,
   viewportWidth: number,
   viewportHeight: number,
-): {
-  corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-  x: number;
-  y: number;
-} {
+): SnapToCornerResult {
   const centerX = viewportWidth / 2;
   const centerY = viewportHeight / 2;
 

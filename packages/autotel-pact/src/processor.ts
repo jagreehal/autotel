@@ -10,9 +10,17 @@ import {
   type PactKind,
 } from './types.js';
 
-/** Minimal ReadableSpan shape — avoids hard dependency on sdk-trace-base. */
+/** What a span attribute can hold once it has been recorded. */
+export type SpanAttributeValue =
+  | string
+  | number
+  | boolean
+  | Array<string | number | boolean | null>
+  | undefined;
+
+/** A ReadableSpan as this processor reads one, without a hard SDK dependency. */
 export interface ReadableSpanLike {
-  attributes: Record<string, unknown>;
+  attributes: Record<string, SpanAttributeValue>;
   spanContext(): { traceId: string; spanId: string };
   /** OTel SpanStatus. code 2 = ERROR (see @opentelemetry/api SpanStatusCode). */
   status?: { code: number; message?: string };
@@ -22,8 +30,13 @@ export interface SpanLike {
   spanContext(): { traceId: string; spanId: string };
 }
 
-/** Opaque parent context — matches OTel SpanProcessor without a hard dependency. */
-export type OtelContext = unknown;
+/**
+ * The parent context OTel hands a span processor. This package never reads it;
+ * naming it keeps the SpanProcessor signature matchable without the SDK.
+ */
+export interface OtelContext {
+  getValue?: (key: symbol) => object | string | number | boolean | undefined;
+}
 
 export interface SpanProcessorLike {
   onStart(span: SpanLike, parentContext: OtelContext): void;
@@ -36,7 +49,7 @@ export interface PactLedgerProcessorOptions extends LedgerOptions {
   /** Max queued ledger writes before dropping (default 1024). */
   maxQueueSize?: number;
   onDrop?: (reason: 'queue_full') => void;
-  onWriteError?: (error: unknown) => void;
+  onWriteError?: (cause: unknown) => void;
   onWarn?: (message: string) => void;
 }
 
@@ -46,7 +59,7 @@ const WARN_INTERVAL_MS = 60_000;
 type QueueItem = { entry: InteractionLedgerEntry; opts: LedgerOptions };
 
 function attrString(
-  attrs: Record<string, unknown>,
+  attrs: Record<string, SpanAttributeValue>,
   key: string,
 ): string | undefined {
   const v = attrs[key];
@@ -54,7 +67,7 @@ function attrString(
   return undefined;
 }
 
-function attrStates(attrs: Record<string, unknown>): string[] {
+function attrStates(attrs: Record<string, SpanAttributeValue>): string[] {
   const v = attrs[PACT_ATTRS.INTERACTION_STATES];
   if (Array.isArray(v)) {
     return v.filter((s): s is string => typeof s === 'string');

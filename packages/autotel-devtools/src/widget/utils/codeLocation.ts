@@ -1,3 +1,4 @@
+import type { SpanAttributes } from '../types.js';
 /**
  * Builds clickable editor deep-links from OpenTelemetry `code.*` span
  * attributes, closing the loop from a span back to its source.
@@ -27,7 +28,7 @@ const COLUMN_KEYS = ['code.column', 'code.column.number'] as const;
 const FUNCTION_KEYS = ['code.function', 'code.function.name'] as const;
 
 function firstString(
-  attributes: Record<string, unknown>,
+  attributes: SpanAttributes,
   keys: readonly string[],
 ): string | undefined {
   for (const key of keys) {
@@ -38,7 +39,7 @@ function firstString(
 }
 
 function firstNumber(
-  attributes: Record<string, unknown>,
+  attributes: SpanAttributes,
   keys: readonly string[],
 ): number | undefined {
   for (const key of keys) {
@@ -77,7 +78,7 @@ function buildHref(
 }
 
 export function buildCodeLocation(
-  attributes: Record<string, unknown>,
+  attributes: SpanAttributes,
   scheme: EditorScheme,
 ): CodeLocation | null {
   const filepath = firstString(attributes, FILE_KEYS);

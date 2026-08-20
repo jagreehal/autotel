@@ -4,16 +4,19 @@
  * Traces operations on actor.sockets
  */
 
-import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import type { WorkerTracer } from 'autotel-edge';
 import { wrap } from '../bindings/common';
 import type { ActorLike } from './types';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
+import { asFunction, asRecord, asString, member } from '../values.js';
 
 /**
  * Get the tracer instance
  */
 function getTracer(): WorkerTracer {
-  return trace.getTracer('autotel-cloudflare-actors') as WorkerTracer;
+  return workerTracer('autotel-cloudflare-actors');
 }
 
 /**
@@ -29,19 +32,23 @@ export function instrumentActorSockets(
   actorInstance: ActorLike,
   actorClass: object,
 ): unknown {
-  if (!sockets || typeof sockets !== 'object') {
+  // asRecord() returns the record rather than narrowing in place, so keep
+  // what it handed back - that is the value the proxy wraps below.
+  const socketsRecord = asRecord(sockets);
+  if (!socketsRecord) {
     return sockets;
   }
 
-  const actorClassName = (actorClass as { name?: string }).name || 'Actor';
+  const actorClassName = asString(member(actorClass, 'name')) || 'Actor';
   const actorName = actorInstance.name || actorClassName;
 
   const socketsHandler: ProxyHandler<object> = {
     get(target, prop) {
-      const value = Reflect.get(target, prop);
+      const value = member(target, prop);
+      const method = asFunction(value);
 
       // Instrument acceptWebSocket method
-      if (prop === 'acceptWebSocket' && typeof value === 'function') {
+      if (prop === 'acceptWebSocket' && method) {
         return function instrumentedAcceptWebSocket(
           this: unknown,
           request: Request,
@@ -62,11 +69,11 @@ export function instrumentActorSockets(
             },
             (span) => {
               try {
-                const result = value.call(target, request);
+                const result = method.call(target, request);
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -82,7 +89,7 @@ export function instrumentActorSockets(
       }
 
       // Instrument broadcast method
-      if (prop === 'broadcast' && typeof value === 'function') {
+      if (prop === 'broadcast' && method) {
         return function instrumentedBroadcast(
           this: unknown,
           message: unknown,
@@ -109,10 +116,10 @@ export function instrumentActorSockets(
             },
             (span) => {
               try {
-                value.call(target, message);
+                method.call(target, message);
                 span.setStatus({ code: SpanStatusCode.OK });
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -128,7 +135,7 @@ export function instrumentActorSockets(
       }
 
       // Instrument send method
-      if (prop === 'send' && typeof value === 'function') {
+      if (prop === 'send' && method) {
         return function instrumentedSend(
           this: unknown,
           ws: WebSocket,
@@ -156,10 +163,10 @@ export function instrumentActorSockets(
             },
             (span) => {
               try {
-                value.call(target, ws, message);
+                method.call(target, ws, message);
                 span.setStatus({ code: SpanStatusCode.OK });
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -175,7 +182,7 @@ export function instrumentActorSockets(
       }
 
       // Instrument getConnections method (if exists)
-      if (prop === 'getConnections' && typeof value === 'function') {
+      if (prop === 'getConnections' && method) {
         return function instrumentedGetConnections(this: unknown): unknown {
           const tracer = getTracer();
           const spanName = `Actor ${actorName}: sockets.getConnections`;
@@ -192,7 +199,7 @@ export function instrumentActorSockets(
             },
             (span) => {
               try {
-                const result = value.call(target);
+                const result = method.call(target);
                 // Try to capture connection count if result is array-like
                 if (Array.isArray(result)) {
                   span.setAttribute(
@@ -203,7 +210,7 @@ export function instrumentActorSockets(
                 span.setStatus({ code: SpanStatusCode.OK });
                 return result;
               } catch (error) {
-                span.recordException(error as Error);
+                span.recordException(toException(error));
                 span.setStatus({
                   code: SpanStatusCode.ERROR,
                   message:
@@ -219,13 +226,9 @@ export function instrumentActorSockets(
       }
 
       // Bind other methods to the target
-      if (typeof value === 'function') {
-        return value.bind(target);
-      }
-
-      return value;
+      return method ? method.bind(target) : value;
     },
   };
 
-  return wrap(sockets, socketsHandler);
+  return wrap(socketsRecord, socketsHandler);
 }

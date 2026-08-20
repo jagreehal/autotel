@@ -32,6 +32,8 @@
 
 import { context, propagation } from '@opentelemetry/api';
 import type { TraceContext } from './trace-context';
+import type { UnknownRecord } from './values';
+import { asBoolean, asNumber, asString, describeValue } from './values';
 
 // ============================================================================
 // Types
@@ -41,6 +43,12 @@ import type { TraceContext } from './trace-context';
  * Supported field types in baggage schema
  */
 export type BaggageFieldType = 'string' | 'number' | 'boolean' | 'enum';
+
+/**
+ * What a caller may put in a baggage field: one of the scalars baggage can
+ * carry, or nothing - a field left out, or one waiting for its default.
+ */
+export type BaggageFieldValue = string | number | boolean | null | undefined;
 
 /**
  * Field definition in a baggage schema
@@ -65,7 +73,7 @@ export interface BaggageFieldDefinition {
   required?: boolean;
 
   /** Custom validation function */
-  validate?: (value: unknown) => boolean;
+  validate?: (value: BaggageFieldValue) => boolean;
 }
 
 /**
@@ -275,7 +283,7 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
   // Validate and transform a single value
   const validateAndTransform = (
     key: string,
-    value: unknown,
+    value: BaggageFieldValue,
     fieldDef: BaggageFieldDefinition,
   ): string | null => {
     const fullKey = prefixKey(key);
@@ -312,44 +320,47 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
 
     switch (fieldDef.type) {
       case 'string': {
-        if (typeof value !== 'string') {
+        const text = asString(value);
+        if (text === undefined) {
           onError?.({
             type: 'validation',
             key,
-            message: `Field "${key}" expected string, got ${typeof value}`,
+            message: `Field "${key}" expected string, got ${describeValue(value)}`,
             value,
           });
           return null;
         }
-        stringValue = value;
+        stringValue = text;
         break;
       }
 
       case 'number': {
-        if (typeof value !== 'number' || Number.isNaN(value)) {
+        const numeric = asNumber(value);
+        if (numeric === undefined) {
           onError?.({
             type: 'validation',
             key,
-            message: `Field "${key}" expected number, got ${typeof value}`,
+            message: `Field "${key}" expected number, got ${describeValue(value)}`,
             value,
           });
           return null;
         }
-        stringValue = String(value);
+        stringValue = String(numeric);
         break;
       }
 
       case 'boolean': {
-        if (typeof value !== 'boolean') {
+        const flag = asBoolean(value);
+        if (flag === undefined) {
           onError?.({
             type: 'validation',
             key,
-            message: `Field "${key}" expected boolean, got ${typeof value}`,
+            message: `Field "${key}" expected boolean, got ${describeValue(value)}`,
             value,
           });
           return null;
         }
-        stringValue = String(value);
+        stringValue = String(flag);
         break;
       }
 
@@ -422,7 +433,7 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
     key: string,
     stringValue: string,
     fieldDef: BaggageFieldDefinition,
-  ): unknown => {
+  ): string | number | boolean => {
     switch (fieldDef.type) {
       case 'number': {
         return Number.parseFloat(stringValue);
@@ -443,7 +454,7 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
         return {};
       }
 
-      const result: Record<string, unknown> = {};
+      const result: UnknownRecord = {};
 
       for (const [key, fieldDef] of Object.entries(schema)) {
         const fullKey = prefixKey(key);
@@ -456,6 +467,9 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
         }
       }
 
+      // SAFETY: every key came from `schema`, and parseValue produced its
+      // value from that field's declared type - which is exactly what
+      // InferBaggageType derives. The mapping is the schema's, not a guess.
       return result as Partial<InferBaggageType<T>>;
     },
 
@@ -514,6 +528,8 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
       const fieldDef = schema[String(key)];
 
       if (!entry) {
+        // SAFETY: a field's default is declared alongside its type, so it is
+        // already the type InferBaggageType derives for that key.
         return fieldDef?.defaultValue as InferBaggageType<T>[K] | undefined;
       }
 
@@ -521,6 +537,8 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
         return undefined;
       }
 
+      // SAFETY: see the note in get() - parseValue answers in the field's
+      // declared type.
       return parseValue(
         String(key),
         entry.value,
@@ -533,6 +551,8 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
       value: InferBaggageType<T>[K],
       ctx?: TraceContext,
     ): void {
+      // SAFETY: `value` is already typed as this key's value; the computed
+      // key is what TypeScript cannot follow into a mapped type.
       this.set(ctx, { [key]: value } as Partial<InferBaggageType<T>>);
     },
 
@@ -548,7 +568,7 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
       propagation.setBaggage(context.active(), baggage);
     },
 
-    toHeaders(): Record<string, string> {
+    toHeaders() {
       const headers: Record<string, string> = {};
       propagation.inject(context.active(), headers);
       return headers;
@@ -559,7 +579,7 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
       const baggage = propagation.getBaggage(extractedContext);
 
       if (baggage) {
-        const values: Record<string, unknown> = {};
+        const values: UnknownRecord = {};
 
         for (const [key, fieldDef] of Object.entries(schema)) {
           const fullKey = prefixKey(key);
@@ -570,6 +590,7 @@ export function createSafeBaggageSchema<T extends BaggageSchemaDefinition>(
           }
         }
 
+        // SAFETY: see the note in get().
         this.set(ctx, values as Partial<InferBaggageType<T>>);
       }
     },

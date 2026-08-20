@@ -118,12 +118,9 @@ describe('createHoneycombConfig()', () => {
         sampleRate: 50,
       });
 
-      const { headers } = config;
-      if (typeof headers !== 'object') {
-        throw new TypeError('expected headers to be a Record');
-      }
-      expect(typeof headers['x-honeycomb-samplerate']).toBe('string');
-      expect(headers['x-honeycomb-samplerate']).toBe('50');
+      expect(config.headers).toMatchObject({
+        'x-honeycomb-samplerate': '50',
+      });
     });
   });
 

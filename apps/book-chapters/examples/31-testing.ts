@@ -1,4 +1,4 @@
-import { trace, withTracing } from 'autotel';
+import { instrument, withTracing } from 'autotel';
 import { createTraceCollector } from 'autotel/testing';
 
 async function main() {
@@ -31,7 +31,10 @@ async function main() {
 
   // getSpansByName / getRootSpans / getDescendants for structure assertions.
   // Calling double() inside makes test-operation a child of parent-operation.
-  const parent = trace('parent-operation', () => double(2));
+  const parent = instrument({
+    key: 'parent-operation',
+    fn: () => double(2),
+  });
   parent();
 
   if (collector.getSpansByName('test-operation').length !== 2) {

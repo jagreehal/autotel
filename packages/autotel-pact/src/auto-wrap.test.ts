@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import type { PactPrototype } from './auto-wrap.js';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -59,14 +60,21 @@ afterEach(() => {
   delete process.env.AUTOTEL_PACT_RUN_ID;
 });
 
+/**
+ * Hand a fake Pact-JS class to the auto-wrapper. The wrapper only ever reads
+ * `.prototype` and replaces methods on it, which is all these fakes provide.
+ */
+function asPactClass(fake: unknown): { prototype: PactPrototype } {
+  // SAFETY: see above - only the prototype is touched.
+  return fake as { prototype: PactPrototype };
+}
+
 describe('auto-wrap', () => {
   it('patches MessageConsumerPact.prototype.verify to emit a ledger entry', async () => {
     process.env.AUTOTEL_PACT_RUN_ID = 'r-auto-msg';
     const Pact = makeFakeMessagePact();
     installAutoWrap({
-      MessageConsumerPact: Pact as unknown as {
-        prototype: Record<string | symbol, unknown>;
-      },
+      MessageConsumerPact: asPactClass(Pact),
     });
 
     const pact = new Pact();
@@ -88,9 +96,7 @@ describe('auto-wrap', () => {
     process.env.AUTOTEL_PACT_RUN_ID = 'r-auto-http';
     const Pact = makeFakePactV3();
     installAutoWrap({
-      PactV3: Pact as unknown as {
-        prototype: Record<string | symbol, unknown>;
-      },
+      PactV3: asPactClass(Pact),
     });
 
     const pact = new Pact();
@@ -116,9 +122,7 @@ describe('auto-wrap', () => {
     process.env.AUTOTEL_PACT_RUN_ID = 'r-auto-fail';
     const Pact = makeFakePactV3();
     installAutoWrap({
-      PactV3: Pact as unknown as {
-        prototype: Record<string | symbol, unknown>;
-      },
+      PactV3: asPactClass(Pact),
     });
 
     const pact = new Pact();
@@ -141,14 +145,10 @@ describe('auto-wrap', () => {
     process.env.AUTOTEL_PACT_RUN_ID = 'r-auto-idem';
     const Pact = makeFakeMessagePact();
     installAutoWrap({
-      MessageConsumerPact: Pact as unknown as {
-        prototype: Record<string | symbol, unknown>;
-      },
+      MessageConsumerPact: asPactClass(Pact),
     });
     installAutoWrap({
-      MessageConsumerPact: Pact as unknown as {
-        prototype: Record<string | symbol, unknown>;
-      },
+      MessageConsumerPact: asPactClass(Pact),
     });
 
     const pact = new Pact();

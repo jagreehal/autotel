@@ -186,7 +186,7 @@ service:
       const config = loadYamlConfigFromFile(filePath);
       expect(config.service).toBe('default-service');
       // NODE_ENV might be set in test environment, so just check it's a string
-      expect(typeof config.environment).toBe('string');
+      expect(config.environment).toBeTypeOf('string');
     });
 
     it('should handle nested env var substitution', () => {

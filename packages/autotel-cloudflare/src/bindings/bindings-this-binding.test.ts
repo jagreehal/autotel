@@ -6,6 +6,13 @@ import {
   instrumentD1,
   instrumentServiceBinding,
 } from './bindings';
+import {
+  d1Double,
+  fetcherDouble,
+  kvDouble,
+  r2Double,
+  tracerDouble,
+} from '../testing/doubles.js';
 
 describe('Bindings this-binding tests', () => {
   let mockTracer: any;
@@ -37,7 +44,7 @@ describe('Bindings this-binding tests', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
   });
 
   afterEach(() => {
@@ -60,8 +67,8 @@ describe('Bindings this-binding tests', () => {
           list_complete: true,
           cacheStatus: null,
         })),
-      } as unknown as KVNamespace;
-      const instrumented = instrumentKV(mockKV, 'test');
+      };
+      const instrumented = instrumentKV(kvDouble(mockKV), 'test');
       await instrumented.get('key');
       expect(receivedThis).toBe(mockKV);
     });
@@ -80,8 +87,8 @@ describe('Bindings this-binding tests', () => {
           list_complete: true,
           cacheStatus: null,
         })),
-      } as unknown as KVNamespace;
-      const instrumented = instrumentKV(mockKV, 'test');
+      };
+      const instrumented = instrumentKV(kvDouble(mockKV), 'test');
       await instrumented.put('key', 'value');
       expect(receivedThis).toBe(mockKV);
     });
@@ -100,8 +107,8 @@ describe('Bindings this-binding tests', () => {
           list_complete: true,
           cacheStatus: null,
         })),
-      } as unknown as KVNamespace;
-      const instrumented = instrumentKV(mockKV, 'test');
+      };
+      const instrumented = instrumentKV(kvDouble(mockKV), 'test');
       await instrumented.delete('key');
       expect(receivedThis).toBe(mockKV);
     });
@@ -117,8 +124,8 @@ describe('Bindings this-binding tests', () => {
           receivedThis = this;
           return { keys: [], list_complete: true, cacheStatus: null };
         }),
-      } as unknown as KVNamespace;
-      const instrumented = instrumentKV(mockKV, 'test');
+      };
+      const instrumented = instrumentKV(kvDouble(mockKV), 'test');
       await instrumented.list();
       expect(receivedThis).toBe(mockKV);
     });
@@ -137,8 +144,8 @@ describe('Bindings this-binding tests', () => {
         delete: vi.fn(async () => undefined),
         list: vi.fn(async () => ({ objects: [], truncated: false })),
         head: vi.fn(async () => null),
-      } as unknown as R2Bucket;
-      const instrumented = instrumentR2(mockR2, 'test');
+      };
+      const instrumented = instrumentR2(r2Double(mockR2), 'test');
       await instrumented.get('key');
       expect(receivedThis).toBe(mockR2);
     });
@@ -155,8 +162,8 @@ describe('Bindings this-binding tests', () => {
         delete: vi.fn(async () => undefined),
         list: vi.fn(async () => ({ objects: [], truncated: false })),
         head: vi.fn(async () => null),
-      } as unknown as R2Bucket;
-      const instrumented = instrumentR2(mockR2, 'test');
+      };
+      const instrumented = instrumentR2(r2Double(mockR2), 'test');
       await instrumented.put('key', 'value');
       expect(receivedThis).toBe(mockR2);
     });
@@ -172,8 +179,8 @@ describe('Bindings this-binding tests', () => {
         }),
         list: vi.fn(async () => ({ objects: [], truncated: false })),
         head: vi.fn(async () => null),
-      } as unknown as R2Bucket;
-      const instrumented = instrumentR2(mockR2, 'test');
+      };
+      const instrumented = instrumentR2(r2Double(mockR2), 'test');
       await instrumented.delete('key');
       expect(receivedThis).toBe(mockR2);
     });
@@ -190,8 +197,8 @@ describe('Bindings this-binding tests', () => {
           return { objects: [], truncated: false };
         }),
         head: vi.fn(async () => null),
-      } as unknown as R2Bucket;
-      const instrumented = instrumentR2(mockR2, 'test');
+      };
+      const instrumented = instrumentR2(r2Double(mockR2), 'test');
       await instrumented.list();
       expect(receivedThis).toBe(mockR2);
     });
@@ -216,8 +223,8 @@ describe('Bindings this-binding tests', () => {
           return mockPrepared;
         }),
         exec: vi.fn(async () => ({ count: 0 })),
-      } as unknown as D1Database;
-      const instrumented = instrumentD1(mockD1, 'test');
+      };
+      const instrumented = instrumentD1(d1Double(mockD1), 'test');
       instrumented.prepare('SELECT 1');
       expect(receivedThis).toBe(mockD1);
     });
@@ -240,8 +247,8 @@ describe('Bindings this-binding tests', () => {
       const mockD1 = {
         prepare: vi.fn(() => mockPrepared),
         exec: vi.fn(async () => ({ count: 0 })),
-      } as unknown as D1Database;
-      const instrumented = instrumentD1(mockD1, 'test');
+      };
+      const instrumented = instrumentD1(d1Double(mockD1), 'test');
       const stmt = instrumented.prepare('SELECT * FROM users WHERE id = ?');
       await stmt.first();
       expect(receivedThis).toBe(mockPrepared);
@@ -261,8 +268,8 @@ describe('Bindings this-binding tests', () => {
           receivedThis = this;
           return { count: 1 };
         }),
-      } as unknown as D1Database;
-      const instrumented = instrumentD1(mockD1, 'test');
+      };
+      const instrumented = instrumentD1(d1Double(mockD1), 'test');
       await instrumented.exec('CREATE TABLE test (id INTEGER PRIMARY KEY)');
       expect(receivedThis).toBe(mockD1);
     });
@@ -277,8 +284,11 @@ describe('Bindings this-binding tests', () => {
           receivedThis = this;
           return new Response('ok', { status: 200 });
         }),
-      } as unknown as Fetcher;
-      const instrumented = instrumentServiceBinding(mockFetcher, 'test');
+      };
+      const instrumented = instrumentServiceBinding(
+        fetcherDouble(mockFetcher),
+        'test',
+      );
       await instrumented.fetch('https://example.com');
       expect(receivedThis).toBe(mockFetcher);
     });
@@ -301,7 +311,7 @@ describe('Bindings this-binding tests', () => {
         }
       }
 
-      const nativeFetcher = new NativeFetcher() as unknown as Fetcher;
+      const nativeFetcher = fetcherDouble(new NativeFetcher());
       const instrumented = instrumentServiceBinding(
         nativeFetcher,
         'native-service',
@@ -323,9 +333,15 @@ describe('Bindings this-binding tests', () => {
           receivedThis = this;
           return {};
         }),
-      } as unknown as Fetcher;
-      const instrumented = instrumentServiceBinding(mockFetcher, 'test');
-      (instrumented as any).connect('https://example.com');
+      };
+      const instrumented = instrumentServiceBinding(
+        fetcherDouble(mockFetcher),
+        'test',
+      );
+      // SAFETY: `connect` is a Fetcher method the wrapper forwards untouched;
+      // this test is about which `this` it receives, not its signature.
+      const fetcher = instrumented as { connect: (url: string) => void };
+      fetcher.connect('https://example.com');
       expect(receivedThis).toBe(mockFetcher);
     });
   });

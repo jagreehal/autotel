@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { trace } from '@opentelemetry/api';
 import { instrumentBindings } from './bindings';
 import { isWrapped, wrap } from './common';
+import { tracerDouble } from '../testing/doubles.js';
+import { member } from '../values.js';
 
 describe('instrumentBindings() detection logic', () => {
   let mockTracer: any;
@@ -33,7 +35,7 @@ describe('instrumentBindings() detection logic', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
   });
 
   afterEach(() => {
@@ -208,7 +210,7 @@ describe('instrumentBindings() detection logic', () => {
     // Pre-wrap the binding using the wrap helper
     const preWrapped = wrap(mockKV, {
       get(target, prop) {
-        return Reflect.get(target, prop);
+        return member(target, prop);
       },
     });
 

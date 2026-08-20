@@ -24,6 +24,8 @@ describe('defaultSerializer', () => {
 describe('createStatementCapture', () => {
   it('uses default serializer and default redactor when no config provided', () => {
     const capture = createStatementCapture({
+      // SAFETY: a JavaScript caller can leave this unset, which is the default
+      // path being tested; the type requires a value.
       dbStatementSerializer: undefined as any,
       statementRedactor: 'default',
     });
@@ -58,6 +60,8 @@ describe('createStatementCapture', () => {
 
   it('skips redaction when statementRedactor is false', () => {
     const capture = createStatementCapture({
+      // SAFETY: a JavaScript caller can leave this unset, which is the default
+      // path being tested; the type requires a value.
       dbStatementSerializer: undefined as any,
       statementRedactor: false,
     });

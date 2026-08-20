@@ -204,10 +204,13 @@ export function withNextSpan(attrs: Attributes) {
   withNextSpanAttributes = Object.assign({}, withNextSpanAttributes, attrs);
 }
 
-function getTraceInfo(parentSpanContext?: SpanContext): {
+/** What getTraceInfo() answers with. */
+interface GetTraceInfoResult {
   traceId: string;
   randomTraceFlag: NewTraceFlagValues;
-} {
+}
+
+function getTraceInfo(parentSpanContext?: SpanContext): GetTraceInfoResult {
   if (parentSpanContext && trace.isSpanContextValid(parentSpanContext)) {
     const { traceId, traceFlags } = parentSpanContext;
     return {

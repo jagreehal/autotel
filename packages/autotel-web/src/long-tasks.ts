@@ -12,7 +12,7 @@ export interface LongTasksConfig {
 }
 
 export function setupLongTaskObserver(config: LongTasksConfig): void {
-  if (typeof window === 'undefined' || !window.PerformanceObserver) return;
+  if (globalThis.window === undefined || !window.PerformanceObserver) return;
 
   try {
     const tracer = trace.getTracer('autotel-web', '1.0.0');

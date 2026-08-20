@@ -89,7 +89,8 @@ export function resolveConfig(
     console.error(`autotel-mcp: ${warning}`);
   }
 
-  const read = (name: string): string | undefined => overrides[name] ?? env[name];
+  const read = (name: string): string | undefined =>
+    overrides[name] ?? env[name];
 
   const raw = {
     backend: read('AUTOTEL_BACKEND'),

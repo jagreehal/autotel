@@ -28,8 +28,24 @@ export interface AuditMetadata {
   actorId?: string;
   category?: string;
   outcome?: 'success' | 'failure' | (string & {});
-  [key: string]: unknown;
+  /** Extra fields ride along as span attributes, so they must be attribute-shaped. */
+  [key: string]: AuditMetadataValue;
 }
+
+/**
+ * What a metadata field can hold: anything `toAttributeValue` can render onto a
+ * span. Scalars and scalar arrays pass through; a Date becomes an ISO string;
+ * anything else nested is JSON-serialized.
+ */
+export type AuditMetadataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Date
+  | Array<AuditMetadataValue>
+  | { [key: string]: AuditMetadataValue };
 
 export interface WithAuditOptions {
   ctx?: AuditContext;
@@ -43,24 +59,20 @@ export interface WithAuditOptions {
   onMissingContext?: OnMissingContext;
 }
 
+/** An attribute value, as OpenTelemetry allows one on a span. */
+type AuditAttributeValue =
+  string | number | boolean | string[] | number[] | boolean[];
+
 function flattenAuditAttributes(
   metadata: AuditMetadata,
-): Record<string, string | number | boolean | string[] | number[] | boolean[]> {
-  const attributes: Record<
-    string,
-    string | number | boolean | string[] | number[] | boolean[]
-  > = {
-    'autotel.audit': true,
-  };
-
+): Record<string, AuditAttributeValue> {
+  const custom: Array<[string, AuditAttributeValue]> = [];
   for (const [key, value] of Object.entries(metadata)) {
     const attr = toAttributeValue(value);
-    if (attr !== undefined) {
-      attributes[`audit.${key}`] = attr;
-    }
+    if (attr !== undefined) custom.push([`audit.${key}`, attr]);
   }
 
-  return attributes;
+  return Object.fromEntries([['autotel.audit', true], ...custom]);
 }
 
 export function forceKeepAuditEvent(ctx?: AuditContext): void {

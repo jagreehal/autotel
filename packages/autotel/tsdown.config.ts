@@ -28,6 +28,7 @@ export default defineConfig({
     policy: 'src/policy.ts',
     'span-name-normalizer': 'src/span-name-normalizer.ts',
     'attribute-redacting-processor': 'src/attribute-redacting-processor.ts',
+    'exception-fingerprint': 'src/exception-fingerprint.ts',
     functional: 'src/functional.ts',
     http: 'src/http.ts',
     db: 'src/db.ts',

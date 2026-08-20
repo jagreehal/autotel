@@ -103,14 +103,17 @@ export function createTestSpansRoute(
   throw new Error('createTestSpansRoute is server-only');
 }
 
+/** What createTestSpansHandlers() answers with. */
+interface CreateTestSpansHandlersResult {
+  GET: (input: HandlerInput) => Response;
+  DELETE: (input: HandlerInput) => Response;
+}
+
 /**
  * Browser stub: test-spans handlers are server-only.
  * Returns no-op handlers that always return 404.
  */
-export function createTestSpansHandlers(): {
-  GET: (input: HandlerInput) => Response;
-  DELETE: (input: HandlerInput) => Response;
-} {
+export function createTestSpansHandlers(): CreateTestSpansHandlersResult {
   return {
     GET(input: HandlerInput): Response {
       void input;

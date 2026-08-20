@@ -83,19 +83,22 @@ export function findSourceFiles(packageRoot: string): string[] {
   return sourceFiles;
 }
 
+/** What checkLoggerInstrumentation() answers with. */
+interface CheckLoggerInstrumentationResult {
+  logger: 'winston' | 'bunyan' | 'pino' | null;
+  hasLogger: boolean;
+  hasInstrumentation: boolean;
+  configuredInCode: boolean;
+  instrumentationPackage: string | null;
+}
+
 /**
  * Check logger instrumentation configuration
  */
 export function checkLoggerInstrumentation(
   packageRoot: string,
   deps: Record<string, string>,
-): {
-  logger: 'winston' | 'bunyan' | 'pino' | null;
-  hasLogger: boolean;
-  hasInstrumentation: boolean;
-  configuredInCode: boolean;
-  instrumentationPackage: string | null;
-} {
+): CheckLoggerInstrumentationResult {
   // Check if logger packages are installed
   const hasWinston = !!deps['winston'];
   const hasBunyan = !!deps['bunyan'];

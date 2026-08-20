@@ -42,12 +42,18 @@ export function parseTimestamp(input: string, nowMs = Date.now()): number {
   return parsed;
 }
 
+/** What resolveTimeRange() answers with. */
+interface ResolveTimeRangeResult {
+  startTimeUnixMs?: number;
+  endTimeUnixMs?: number;
+}
+
 export function resolveTimeRange(params: {
   from?: string;
   to?: string;
   lookbackMinutes?: number;
   defaultLookbackMinutes?: number;
-}): { startTimeUnixMs?: number; endTimeUnixMs?: number } {
+}): ResolveTimeRangeResult {
   const nowMs = Date.now();
   const defaultLookbackMinutes = params.defaultLookbackMinutes ?? 60;
 

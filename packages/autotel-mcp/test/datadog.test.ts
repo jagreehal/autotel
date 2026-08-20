@@ -3,6 +3,7 @@ import {
   DatadogBackend,
   resolveDatadogBaseUrl,
 } from '../src/backends/datadog/index';
+import { installFetch } from './helpers/fetch';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -68,7 +69,7 @@ describe('DatadogBackend', () => {
   });
 
   it('requires both the API key and the application key', async () => {
-    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+    installFetch(vi.fn());
     const missingAppKey = new DatadogBackend({
       baseUrl: 'https://api.datadoghq.com',
       apiKey: 'dd-api',
@@ -87,7 +88,7 @@ describe('DatadogBackend', () => {
         type: 'services_list',
       },
     });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await backend().listServices();
 
@@ -106,7 +107,7 @@ describe('DatadogBackend', () => {
         type: 'services_list',
       },
     });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await expect(backend().listServices()).resolves.toEqual({
       services: ['checkout', 'payments'],
@@ -117,7 +118,7 @@ describe('DatadogBackend', () => {
   });
 
   it('groups spans into traces by trace_id and preserves span attributes', async () => {
-    globalThis.fetch = respond(searchResponse) as unknown as typeof fetch;
+    installFetch(respond(searchResponse));
 
     const result = await backend().searchTraces({ limit: 10 });
 
@@ -134,7 +135,7 @@ describe('DatadogBackend', () => {
   });
 
   it('converts nanosecond start and duration into ms', async () => {
-    globalThis.fetch = respond(searchResponse) as unknown as typeof fetch;
+    installFetch(respond(searchResponse));
 
     const trace = (await backend().searchTraces({})).items[0]!;
 
@@ -148,20 +149,22 @@ describe('DatadogBackend', () => {
   // an ISO string as well as epoch nanoseconds so timestamps never silently
   // become garbage.
   it('also accepts an ISO start timestamp', async () => {
-    globalThis.fetch = respond({
-      data: [
-        {
-          attributes: {
-            trace_id: 't',
-            span_id: 's',
-            service: 'api',
-            resource_name: 'GET /',
-            start_timestamp: '2026-07-27T21:53:20.000Z',
-            end_timestamp: '2026-07-27T21:53:20.001Z',
+    installFetch(
+      respond({
+        data: [
+          {
+            attributes: {
+              trace_id: 't',
+              span_id: 's',
+              service: 'api',
+              resource_name: 'GET /',
+              start_timestamp: '2026-07-27T21:53:20.000Z',
+              end_timestamp: '2026-07-27T21:53:20.001Z',
+            },
           },
-        },
-      ],
-    }) as unknown as typeof fetch;
+        ],
+      }),
+    );
 
     const trace = (await backend().searchTraces({})).items[0]!;
     expect(trace.spans[0]!.startTimeUnixMs).toBe(
@@ -170,7 +173,7 @@ describe('DatadogBackend', () => {
   });
 
   it('maps the error status onto the span', async () => {
-    globalThis.fetch = respond(searchResponse) as unknown as typeof fetch;
+    installFetch(respond(searchResponse));
 
     const trace = (await backend().searchTraces({})).items[0]!;
 
@@ -182,7 +185,7 @@ describe('DatadogBackend', () => {
 
   it('builds a service and error filter query', async () => {
     const fetchSpy = respond({ data: [] });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await backend().searchTraces({ service: 'checkout', hasError: true });
 
@@ -209,7 +212,7 @@ describe('DatadogBackend', () => {
         headers: new Headers(),
         json: async () => searchResponse,
       });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     const result = await backend().searchTraces({ service: 'checkout' });
 
@@ -227,7 +230,7 @@ describe('DatadogBackend', () => {
   // so an older trace looked up by id would silently come back empty.
   it('bounds a trace lookup with an explicit time window', async () => {
     const fetchSpy = respond({ data: [] });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await backend().getTrace('trace-1');
 
@@ -253,7 +256,7 @@ describe('DatadogBackend', () => {
   // that named neither the variable nor the fix.
   it('accepts a bare Datadog site and reaches the API host', async () => {
     const fetchSpy = respond({ data: [] });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    installFetch(fetchSpy);
 
     await new DatadogBackend({
       baseUrl: 'datadoghq.eu',
@@ -269,7 +272,7 @@ describe('DatadogBackend', () => {
   // Credentials are checked before the URL is built, so a config with BOTH
   // problems reports the one the user has to fix rather than a URL parse error.
   it('reports the missing application key even when the site is malformed', async () => {
-    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+    installFetch(vi.fn());
 
     await expect(
       new DatadogBackend({

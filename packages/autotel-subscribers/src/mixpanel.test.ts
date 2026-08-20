@@ -10,6 +10,18 @@ vi.mock('mixpanel', () => ({
   },
 }));
 
+/**
+ * The client the mocked Mixpanel.init() handed back on its first call. The
+ * subscriber imports mixpanel itself, so the tests reach the client it was
+ * given through the recorded call rather than by constructing one.
+ */
+async function mockedMixpanelClient() {
+  const Mixpanel = await import('mixpanel');
+  // SAFETY: vitest types mock results as `any`; the value recorded here is the
+  // object the mock factory above returns from init().
+  return (Mixpanel.default.init as any).mock.results[0].value;
+}
+
 describe('MixpanelSubscriber', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -38,7 +50,6 @@ describe('MixpanelSubscriber', () => {
 
   describe('trackEvent', () => {
     it('should track event with attributes', async () => {
-      const Mixpanel = await import('mixpanel');
       const adapter = new MixpanelSubscriber({
         token: 'test_token',
       });
@@ -52,7 +63,7 @@ describe('MixpanelSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const mockInstance = (Mixpanel.default.init as any).mock.results[0].value;
+      const mockInstance = await mockedMixpanelClient();
       expect(mockInstance.track).toHaveBeenCalledWith('order.completed', {
         distinct_id: 'user-123',
         userId: 'user-123',
@@ -61,7 +72,6 @@ describe('MixpanelSubscriber', () => {
     });
 
     it('should use user_id if userId is not present', async () => {
-      const Mixpanel = await import('mixpanel');
       const adapter = new MixpanelSubscriber({
         token: 'test_token',
       });
@@ -74,7 +84,7 @@ describe('MixpanelSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const mockInstance = (Mixpanel.default.init as any).mock.results[0].value;
+      const mockInstance = await mockedMixpanelClient();
       expect(mockInstance.track).toHaveBeenCalledWith('order.completed', {
         distinct_id: 'user-456',
         user_id: 'user-456',
@@ -82,7 +92,6 @@ describe('MixpanelSubscriber', () => {
     });
 
     it('should use anonymous if no userId is present', async () => {
-      const Mixpanel = await import('mixpanel');
       const adapter = new MixpanelSubscriber({
         token: 'test_token',
       });
@@ -93,7 +102,7 @@ describe('MixpanelSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const mockInstance = (Mixpanel.default.init as any).mock.results[0].value;
+      const mockInstance = await mockedMixpanelClient();
       expect(mockInstance.track).toHaveBeenCalledWith('page.viewed', {
         distinct_id: 'anonymous',
       });
@@ -114,7 +123,6 @@ describe('MixpanelSubscriber', () => {
 
   describe('trackFunnelStep', () => {
     it('should track funnel step', async () => {
-      const Mixpanel = await import('mixpanel');
       const adapter = new MixpanelSubscriber({
         token: 'test_token',
       });
@@ -128,7 +136,7 @@ describe('MixpanelSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const mockInstance = (Mixpanel.default.init as any).mock.results[0].value;
+      const mockInstance = await mockedMixpanelClient();
       expect(mockInstance.track).toHaveBeenCalledWith('checkout.started', {
         distinct_id: 'user-123',
         funnel: 'checkout',
@@ -141,7 +149,6 @@ describe('MixpanelSubscriber', () => {
 
   describe('trackOutcome', () => {
     it('should track outcome', async () => {
-      const Mixpanel = await import('mixpanel');
       const adapter = new MixpanelSubscriber({
         token: 'test_token',
       });
@@ -155,7 +162,7 @@ describe('MixpanelSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const mockInstance = (Mixpanel.default.init as any).mock.results[0].value;
+      const mockInstance = await mockedMixpanelClient();
       expect(mockInstance.track).toHaveBeenCalledWith(
         'payment.processing.success',
         {
@@ -171,7 +178,6 @@ describe('MixpanelSubscriber', () => {
 
   describe('trackValue', () => {
     it('should track value', async () => {
-      const Mixpanel = await import('mixpanel');
       const adapter = new MixpanelSubscriber({
         token: 'test_token',
       });
@@ -185,7 +191,7 @@ describe('MixpanelSubscriber', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const mockInstance = (Mixpanel.default.init as any).mock.results[0].value;
+      const mockInstance = await mockedMixpanelClient();
       expect(mockInstance.track).toHaveBeenCalledWith('revenue', {
         distinct_id: 'user-123',
         value: 99.99,

@@ -15,6 +15,7 @@ import { runStatic, type InvestigateFlags } from './runtime';
 import { addStaticFlags, staticFlagsFromOpts } from './cli-helpers';
 import { AutotelError } from '../../lib/errors';
 import * as fs from 'node:fs';
+import { stringOpt } from '../../lib/opts.js';
 
 type ComponentKind =
   'receiver' | 'processor' | 'exporter' | 'connector' | 'extension';
@@ -181,7 +182,7 @@ export function registerCollectorCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runCollectorValidate({
         ...staticFlagsFromOpts(o),
-        configFile: o.configFile as string | undefined,
+        configFile: stringOpt(o, 'configFile'),
       });
     });
   const suggestCmd = addStaticFlags(new Command('suggest'))
@@ -210,7 +211,7 @@ export function registerCollectorCommands(program: Command): void {
       const o = this.optsWithGlobals();
       await runCollectorComponents({
         ...staticFlagsFromOpts(o),
-        version: o.version as string | undefined,
+        version: stringOpt(o, 'version'),
         kind: o.kind as
           | 'receiver'
           | 'processor'
@@ -231,8 +232,8 @@ export function registerCollectorCommands(program: Command): void {
         ...staticFlagsFromOpts(o),
         kind: o.kind as
           'receiver' | 'processor' | 'exporter' | 'connector' | 'extension',
-        name: o.name as string,
-        version: o.version as string | undefined,
+        name: stringOpt(o, 'name') ?? '',
+        version: stringOpt(o, 'version'),
       });
     });
   const readmeCmd = addStaticFlags(new Command('readme'))
@@ -246,8 +247,8 @@ export function registerCollectorCommands(program: Command): void {
         ...staticFlagsFromOpts(o),
         kind: o.kind as
           'receiver' | 'processor' | 'exporter' | 'connector' | 'extension',
-        name: o.name as string,
-        version: o.version as string | undefined,
+        name: stringOpt(o, 'name') ?? '',
+        version: stringOpt(o, 'version'),
       });
     });
   const validateComponentCmd = addStaticFlags(new Command('validate-component'))
@@ -262,9 +263,9 @@ export function registerCollectorCommands(program: Command): void {
         ...staticFlagsFromOpts(o),
         kind: o.kind as
           'receiver' | 'processor' | 'exporter' | 'connector' | 'extension',
-        name: o.name as string,
-        version: o.version as string | undefined,
-        configFile: o.configFile as string | undefined,
+        name: stringOpt(o, 'name') ?? '',
+        version: stringOpt(o, 'version'),
+        configFile: stringOpt(o, 'configFile'),
       });
     });
   const refreshCmd = addStaticFlags(new Command('refresh'))

@@ -41,30 +41,30 @@ export const TOOL_CATEGORIES: readonly ToolCategory[] = [
   'other',
 ];
 
-const BUILTIN: Record<string, ToolCategory> = {
-  read: 'file',
-  edit: 'file',
-  write: 'file',
-  multiedit: 'file',
-  notebookedit: 'file',
-  bash: 'shell',
-  bashoutput: 'shell',
-  killshell: 'shell',
-  killbash: 'shell',
-  grep: 'search',
-  glob: 'search',
-  ls: 'search',
-  webfetch: 'web',
-  websearch: 'web',
-  todowrite: 'todo',
-  task: 'subagent',
-  agent: 'subagent',
-  skill: 'skill',
-};
+const BUILTIN = new Map<string, ToolCategory>([
+  ['read', 'file'],
+  ['edit', 'file'],
+  ['write', 'file'],
+  ['multiedit', 'file'],
+  ['notebookedit', 'file'],
+  ['bash', 'shell'],
+  ['bashoutput', 'shell'],
+  ['killshell', 'shell'],
+  ['killbash', 'shell'],
+  ['grep', 'search'],
+  ['glob', 'search'],
+  ['ls', 'search'],
+  ['webfetch', 'web'],
+  ['websearch', 'web'],
+  ['todowrite', 'todo'],
+  ['task', 'subagent'],
+  ['agent', 'subagent'],
+  ['skill', 'skill'],
+]);
 
 export function classifyTool(name: string): ToolCategory {
   if (isMcpTool(name)) return 'mcp';
-  return BUILTIN[name.toLowerCase()] ?? 'other';
+  return BUILTIN.get(name.toLowerCase()) ?? 'other';
 }
 
 /** Sub-agent type, when the agent happens to emit it (defensive — often absent). */

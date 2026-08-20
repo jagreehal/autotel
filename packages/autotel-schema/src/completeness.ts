@@ -23,6 +23,7 @@
  * ```
  */
 
+import type { EmittedAttributeValue } from './validate.js';
 import type { ScenarioSpan } from './scenario.js';
 
 /** The ten fields a GenAI trace is scored on. */
@@ -61,7 +62,7 @@ export interface CompletenessResult {
 }
 
 /** A value counts as present only if it is non-null and not an empty string/array. */
-function isNonEmpty(value: unknown): boolean {
+function isNonEmpty(value: EmittedAttributeValue): boolean {
   if (value === null || value === undefined) return false;
   if (typeof value === 'string') return value.trim() !== '';
   if (Array.isArray(value)) return value.length > 0;

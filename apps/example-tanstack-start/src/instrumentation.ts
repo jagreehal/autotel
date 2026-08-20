@@ -10,10 +10,11 @@ declare global {
   var __autotelInitPromise: Promise<void> | undefined
 }
 
-const serverDebug =
-  typeof process !== 'undefined' &&
-  typeof process.env !== 'undefined' &&
-  process.env.AUTOTEL_DEBUG === 'true'
+// Reading through globalThis keeps this safe in the browser, where `process`
+// is not defined at all and a bare reference would throw. The Node types say
+// it is always there, so the optional chain reads as unnecessary to eslint.
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+const serverDebug = globalThis.process?.env?.AUTOTEL_DEBUG === 'true'
 
 const debugLogging = import.meta.env.DEV || serverDebug
 

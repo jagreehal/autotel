@@ -1,3 +1,4 @@
+import type { SpanAttributes } from '../types.js';
 /**
  * Extracts structured database information from OpenTelemetry `db.*` span
  * attributes and provides lightweight, display-only SQL keyword highlighting.
@@ -20,7 +21,7 @@ export interface DbInfo {
 }
 
 function firstString(
-  attributes: Record<string, unknown>,
+  attributes: SpanAttributes,
   keys: readonly string[],
 ): string | undefined {
   for (const key of keys) {
@@ -31,7 +32,7 @@ function firstString(
 }
 
 function firstNumber(
-  attributes: Record<string, unknown>,
+  attributes: SpanAttributes,
   keys: readonly string[],
 ): number | undefined {
   for (const key of keys) {
@@ -48,9 +49,7 @@ function firstNumber(
   return undefined;
 }
 
-export function extractDbInfo(
-  attributes: Record<string, unknown>,
-): DbInfo | null {
+export function extractDbInfo(attributes: SpanAttributes): DbInfo | null {
   const system = firstString(attributes, ['db.system', 'db.system.name']);
   const statement = firstString(attributes, ['db.statement', 'db.query.text']);
   if (!system && !statement) return null;

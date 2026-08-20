@@ -1,3 +1,5 @@
+import type { SpanOptions } from 'autotel';
+import type { TaskMeta } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 let spanIdCounter = 0;
@@ -12,10 +14,10 @@ vi.mock('autotel', () => ({
   SpanStatusCode: { UNSET: 0, OK: 1, ERROR: 2 },
   context: {
     active: () => ({}),
-    with: (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
+    with: (_ctx: never, fn: () => Promise<void>) => fn(),
   },
   getTracer: () => ({
-    startSpan: (_name: string, _options?: unknown) => {
+    startSpan: (_name: string, _options?: SpanOptions) => {
       const id = String(++spanIdCounter);
       const span = {
         end: vi.fn(),
@@ -30,11 +32,12 @@ vi.mock('autotel', () => ({
   otelTrace: {
     setSpan: () => ({}),
   },
+  flush: vi.fn(async () => {}),
   getAutotelTracerProvider: vi.fn(() => ({})),
   getTraceContext: vi.fn(() => null),
   resolveTraceUrl: vi.fn(() => undefined),
   isTracing: vi.fn(() => false),
-  enrichWithTraceContext: vi.fn((obj: unknown) => obj),
+  enrichWithTraceContext: vi.fn((obj: Record<string, string>) => obj),
 }));
 
 let mockDrainResult: unknown[] = [];
@@ -153,7 +156,7 @@ describe('autotel-vitest fixture', () => {
 
     const { fixtureFn } = await getFixture();
 
-    const meta: Record<string, unknown> = {};
+    const meta: TaskMeta = {};
     await fixtureFn(
       {
         task: {

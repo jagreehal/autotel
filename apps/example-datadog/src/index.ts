@@ -77,10 +77,15 @@ function loadConfig(): AppConfig {
 
   return {
     apiKey,
+    // SAFETY: both values come from the environment as plain strings. Datadog
+    // rejects an unknown site at export time and the logger falls back to INFO,
+    // so a typo surfaces there rather than being silently accepted here.
     site: (process.env.DATADOG_SITE || 'datadoghq.com') as DatadogSite,
     service: process.env.SERVICE_NAME || 'example-datadog',
     environment: process.env.ENVIRONMENT || 'development',
     version: process.env.VERSION,
+    // SAFETY: see the note on `site` above - the logger falls back to INFO when
+    // this string is not one of its levels.
     logLevel: (process.env.LOG_LEVEL as LogLevel) ?? LOG_LEVEL.INFO,
     enableLogExport: process.env.ENABLE_LOG_EXPORT !== 'false',
   };

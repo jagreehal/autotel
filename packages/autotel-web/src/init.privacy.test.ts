@@ -33,6 +33,8 @@ describe('init() with privacy controls', () => {
             ? Object.fromEntries(init.headers.entries())
             : init?.headers;
         callTracker.push([input, { ...init, headers: headersObj }]);
+        // SAFETY: init() reads `ok` and `status` off what fetch resolves to;
+        // nothing else of Response is reached on this path.
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -41,7 +43,9 @@ describe('init() with privacy controls', () => {
       });
 
     global.fetch = mockFetch;
-    if (typeof window !== 'undefined') {
+    if (globalThis.window !== undefined) {
+      // SAFETY: the test installs its own fetch on the stubbed window, which is
+      // what init() then patches.
       (window as any).fetch = mockFetch;
     }
   });

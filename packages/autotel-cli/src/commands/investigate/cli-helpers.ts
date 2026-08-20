@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import type { InvestigateFlags } from './runtime';
+import { numberOpt, stringOpt } from '../../lib/opts.js';
 
 /**
  * Shared commander wiring for investigate commands. Each command group's
@@ -71,16 +72,16 @@ export function backendFlagsFromOpts(
 ): InvestigateFlags {
   return {
     backend: opts.backend as InvestigateFlags['backend'],
-    jaegerBaseUrl: opts.jaegerBaseUrl as string | undefined,
-    tempoBaseUrl: opts.tempoBaseUrl as string | undefined,
-    prometheusBaseUrl: opts.prometheusBaseUrl as string | undefined,
-    lokiBaseUrl: opts.lokiBaseUrl as string | undefined,
-    collectorPort: opts.collectorPort as number | undefined,
-    fixturePath: opts.fixturePath as string | undefined,
-    logfireBaseUrl: opts.logfireBaseUrl as string | undefined,
-    datadogSite: opts.datadogSite as string | undefined,
-    signozBaseUrl: opts.signozBaseUrl as string | undefined,
-    outputFile: opts.outputFile as string | undefined,
+    jaegerBaseUrl: stringOpt(opts, 'jaegerBaseUrl'),
+    tempoBaseUrl: stringOpt(opts, 'tempoBaseUrl'),
+    prometheusBaseUrl: stringOpt(opts, 'prometheusBaseUrl'),
+    lokiBaseUrl: stringOpt(opts, 'lokiBaseUrl'),
+    collectorPort: numberOpt(opts, 'collectorPort'),
+    fixturePath: stringOpt(opts, 'fixturePath'),
+    logfireBaseUrl: stringOpt(opts, 'logfireBaseUrl'),
+    datadogSite: stringOpt(opts, 'datadogSite'),
+    signozBaseUrl: stringOpt(opts, 'signozBaseUrl'),
+    outputFile: stringOpt(opts, 'outputFile'),
     noSecrets: opts.secretsInOutput === false,
   };
 }
@@ -89,7 +90,7 @@ export function staticFlagsFromOpts(
   opts: Record<string, unknown>,
 ): InvestigateFlags {
   return {
-    outputFile: opts.outputFile as string | undefined,
+    outputFile: stringOpt(opts, 'outputFile'),
     noSecrets: opts.secretsInOutput === false,
   };
 }
@@ -121,11 +122,11 @@ export function windowFlagsFromOpts(
   opts: Record<string, unknown>,
 ): TimeWindowFlags {
   return {
-    serviceName: opts.serviceName as string | undefined,
-    operationName: opts.operationName as string | undefined,
-    lookbackMinutes: opts.lookbackMinutes as number | undefined,
-    from: opts.from as string | undefined,
-    to: opts.to as string | undefined,
-    limit: opts.limit as number | undefined,
+    serviceName: stringOpt(opts, 'serviceName'),
+    operationName: stringOpt(opts, 'operationName'),
+    lookbackMinutes: numberOpt(opts, 'lookbackMinutes'),
+    from: stringOpt(opts, 'from'),
+    to: stringOpt(opts, 'to'),
+    limit: numberOpt(opts, 'limit'),
   };
 }

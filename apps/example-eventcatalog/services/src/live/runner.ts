@@ -18,6 +18,14 @@ import { LiveStreamSubscriber } from './stream';
 import { startLiveServer } from './server';
 import { attachRecorder, replay } from './replay';
 
+declare global {
+  /**
+   * Set by the drift demo so the recommendation service adds a field its schema
+   * does not declare. Declared here because the runner owns the flag's lifetime.
+   */
+  var __autotel_demo_extra_recommendation_field__: boolean | undefined;
+}
+
 const PORT = Number(process.env.PORT ?? 4000);
 const CHECKOUT_INTERVAL_MS = Number(process.env.INTERVAL_MS ?? 1200);
 const FAILURE_RATE = Number(process.env.FAILURE_RATE ?? 0.18);
@@ -120,7 +128,9 @@ async function tick(): Promise<void> {
   try {
     await walkHappyPath(order);
   } catch (err) {
-    process.stderr.write(`[runner] tick failed: ${(err as Error).message}\n`);
+    process.stderr.write(
+      `[runner] tick failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
   }
 }
 
@@ -135,9 +145,7 @@ async function main() {
     },
     clearDrift: async () => {
       driftIntroduced = false;
-      (
-        globalThis as { __autotel_demo_extra_recommendation_field__?: boolean }
-      ).__autotel_demo_extra_recommendation_field__ = false;
+      globalThis.__autotel_demo_extra_recommendation_field__ = false;
       snapshot.reset();
       process.stdout.write(
         '\n[runner] demo control: drift cleared, snapshot reset\n',
@@ -201,7 +209,7 @@ async function main() {
       speed: REPLAY_SPEED,
     }).catch((err) => {
       process.stderr.write(
-        `[runner] replay failed: ${(err as Error).message}\n`,
+        `[runner] replay failed: ${err instanceof Error ? err.message : String(err)}\n`,
       );
     });
   } else {
@@ -224,6 +232,8 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`[runner] fatal: ${(err as Error).message}\n`);
+  process.stderr.write(
+    `[runner] fatal: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
   process.exit(1);
 });

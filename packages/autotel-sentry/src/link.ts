@@ -16,7 +16,7 @@ export function linkSentryErrors(sentry: SentryLinkable): void {
     const otelSpan = trace.getActiveSpan();
     if (!otelSpan) return event;
 
-    const contexts = (event.contexts ?? {}) as Record<string, unknown>;
+    const contexts = event.contexts ?? {};
 
     // Don't overwrite trace context that's already set
     if (contexts.trace) return event;

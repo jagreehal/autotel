@@ -29,20 +29,21 @@ import Select from '@astrojs/starlight/components/Select.astro';
 
 	const storageKey = 'starlight-theme';
 
-	const parseTheme = (theme: unknown): Theme =>
+	const parseTheme = (theme: string | null): Theme =>
 		theme === 'auto' || theme === 'dark' || theme === 'light' ? theme : 'auto';
 
 	/** First visit (key unset) defaults to dark; '' means user chose "auto". */
 	const loadTheme = (): Theme => {
-		const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null;
+		const raw = globalThis.localStorage?.getItem(storageKey) ?? null;
 		if (raw === null) return 'dark';
 		return parseTheme(raw);
 	};
 
 	function storeTheme(theme: Theme): void {
-		if (typeof localStorage !== 'undefined') {
-			localStorage.setItem(storageKey, theme === 'light' || theme === 'dark' ? theme : '');
-		}
+		globalThis.localStorage?.setItem(
+			storageKey,
+			theme === 'light' || theme === 'dark' ? theme : '',
+		);
 	}
 
 	const getPreferredColorScheme = (): Theme =>

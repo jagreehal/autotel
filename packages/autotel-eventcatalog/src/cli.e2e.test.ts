@@ -55,7 +55,7 @@ function buildFixture(opts: {
   >;
   /** Catalog events to write as <root>/events/<id>/index.mdx files. */
   catalogEvents: Array<{ id: string; declaredFields?: string[] }>;
-}): { snapshotPath: string; catalogPath: string; root: string } {
+}) {
   const root = mkdtempSync(join(tmpdir(), 'autotel-cli-e2e-'));
   const catalogPath = join(root, 'catalog');
   mkdirSync(catalogPath, { recursive: true });
@@ -74,8 +74,9 @@ function buildFixture(opts: {
           lastSeen: '2026-05-22T00:00:00.000Z',
           fieldPaths: e.fields,
           sampleTraceIds: [],
-          ...(e.producer ? { producer: e.producer } : {}),
-          ...(e.channel ? { channel: e.channel } : {}),
+          // JSON.stringify drops these when the fixture did not set them.
+          producer: e.producer,
+          channel: e.channel,
         },
       ]),
     ),

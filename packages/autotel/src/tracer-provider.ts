@@ -14,6 +14,7 @@
 
 import { trace } from '@opentelemetry/api';
 import type { TracerProvider } from '@opentelemetry/api';
+import { asFunction, isFunction, readProperty } from './values';
 
 /**
  * Symbol for storing isolated tracer provider in global scope
@@ -52,14 +53,10 @@ function getGlobalState(): AutotelGlobalState {
   const initialState = createState();
 
   try {
+    // SAFETY: the symbol slot is this module's own, defined below on whatever
+    // globalThis a runtime provides. A runtime without one throws on the read,
+    // which the catch below turns into the fallback state.
     const g = globalThis as typeof globalThis & GlobalThis;
-
-    if (typeof g !== 'object' || g === null) {
-      console.warn(
-        '[autotel] globalThis is not available, using fallback state',
-      );
-      return initialState;
-    }
 
     if (!g[AUTOTEL_GLOBAL_SYMBOL]) {
       Object.defineProperty(g, AUTOTEL_GLOBAL_SYMBOL, {
@@ -234,12 +231,14 @@ interface ForceFlushable {
   forceFlush(): Promise<void>;
 }
 
-function isForceFlushable(value: unknown): value is ForceFlushable {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as ForceFlushable).forceFlush === 'function'
-  );
+/** The candidate if it can be force-flushed, or undefined. */
+function asForceFlushable(value: unknown): ForceFlushable | undefined {
+  // SAFETY: the only member this promises is the forceFlush just found on the
+  // value. Everything else a real provider carries is read through OTel's own
+  // types, not through this one.
+  return isFunction(readProperty(value, 'forceFlush'))
+    ? (value as ForceFlushable)
+    : undefined;
 }
 
 /**
@@ -258,23 +257,19 @@ function isForceFlushable(value: unknown): value is ForceFlushable {
 export function getForceFlushableProvider(
   sdk?: unknown,
 ): ForceFlushable | undefined {
-  const candidates: unknown[] = [];
+  // sdk-node dropped getTracerProvider() in 0.220, so an SDK handle either has
+  // one or it does not; both are read the same way.
+  const fromSdk = asFunction(readProperty(sdk, 'getTracerProvider'));
+  const candidates: unknown[] = [fromSdk?.call(sdk)];
 
-  const sdkAny = sdk as { getTracerProvider?: () => unknown } | undefined;
-  if (sdkAny && typeof sdkAny.getTracerProvider === 'function') {
-    candidates.push(sdkAny.getTracerProvider());
-  }
-
-  const globalProvider = trace.getTracerProvider() as unknown;
+  const globalProvider: TracerProvider = trace.getTracerProvider();
   candidates.push(globalProvider);
   // The API hands back a ProxyTracerProvider; the real provider (with
   // forceFlush) sits behind getDelegate().
-  const proxy = globalProvider as { getDelegate?: () => unknown };
-  if (proxy && typeof proxy.getDelegate === 'function') {
-    candidates.push(proxy.getDelegate());
-  }
+  const getDelegate = asFunction(readProperty(globalProvider, 'getDelegate'));
+  if (getDelegate) candidates.push(getDelegate.call(globalProvider));
 
-  return candidates.find(isForceFlushable);
+  return candidates.map(asForceFlushable).find((found) => found !== undefined);
 }
 
 /**

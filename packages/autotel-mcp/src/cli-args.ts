@@ -110,7 +110,10 @@ export function parseCliArgs(argv: readonly string[]): ParsedArgs {
     }
 
     const value = inlineValue ?? argv[index + 1];
-    if (value === undefined || (inlineValue === undefined && value.startsWith('-'))) {
+    if (
+      value === undefined ||
+      (inlineValue === undefined && value.startsWith('-'))
+    ) {
       errors.push(`${name} requires a value`);
       continue;
     }

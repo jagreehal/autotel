@@ -4,6 +4,28 @@
 
 import type { AgentSession } from 'autotel-agents';
 
+/**
+ * What a span attribute holds once it has crossed OTLP. The widget is
+ * browser-safe and does not depend on the OTel API package, so the value type
+ * is named here rather than imported.
+ */
+export type AttributeValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Uint8Array
+  | Array<AttributeValue>
+  | { [key: string]: AttributeValue };
+
+/**
+ * A span's attribute bag as the devtools receives it. Wider than OpenTelemetry's
+ * own `Attributes` on purpose: OTLP's kvlist and array values decode to nested
+ * maps and lists, and the devtools displays whatever actually arrived.
+ */
+export type SpanAttributes = Record<string, AttributeValue>;
+
 export type { AgentSession } from 'autotel-agents';
 
 export interface SpanData {
@@ -15,7 +37,7 @@ export interface SpanData {
   startTime: number;
   endTime: number;
   duration: number;
-  attributes: Record<string, any>;
+  attributes: SpanAttributes;
   status: {
     code: 'OK' | 'ERROR' | 'UNSET';
     message?: string;
@@ -23,12 +45,12 @@ export interface SpanData {
   events?: Array<{
     name: string;
     timestamp: number;
-    attributes?: Record<string, any>;
+    attributes?: SpanAttributes;
   }>;
   links?: Array<{
     traceId: string;
     spanId: string;
-    attributes?: Record<string, any>;
+    attributes?: SpanAttributes;
   }>;
   scope?: { name?: string; version?: string };
 }
@@ -58,7 +80,7 @@ export interface MetricData {
   type: 'event' | 'funnel' | 'outcome' | 'value';
   name: string;
   value?: number;
-  attributes: Record<string, any>;
+  attributes: SpanAttributes;
   timestamp: number;
   traceId?: string;
   /** Stable id assigned at ingestion so live-updating lists can key on it
@@ -81,7 +103,7 @@ export interface LogData {
   severityNumber?: number;
   body: string | Record<string, unknown>;
   timestamp: number;
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
   resource?: Record<string, unknown>;
 }
 
@@ -119,7 +141,7 @@ export interface ErrorGroup {
   /** Service where error originated */
   service?: string;
   /** Additional attributes from the error spans */
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
 }
 
 export type TabType =

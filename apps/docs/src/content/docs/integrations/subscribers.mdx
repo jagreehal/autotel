@@ -1,6 +1,6 @@
 ---
 title: Event Subscribers
-description: Send product events to PostHog, Mixpanel, Amplitude, Segment, webhooks, and Slack.
+description: Send product events to Mixpanel, Amplitude, Segment, webhooks, and Slack — and to PostHog via autotel-posthog.
 ---
 
 `autotel-subscribers` sends events to multiple product analytics platforms simultaneously.
@@ -8,7 +8,7 @@ description: Send product events to PostHog, Mixpanel, Amplitude, Segment, webho
 **Track once, send everywhere:**
 
 - Primary metrics → **OpenTelemetry**
-- Product events → **PostHog / Mixpanel / Amplitude**
+- Product events → **Mixpanel / Amplitude / Segment** (PostHog: `autotel-posthog/subscriber`)
 - Customer data → **Segment**
 - Custom integrations → **Webhooks**
 
@@ -24,7 +24,7 @@ npm install mixpanel        # For Mixpanel
 
 ```typescript
 import { init, track } from 'autotel';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 init({
   service: 'my-app',
@@ -40,7 +40,7 @@ track('user.signup', { userId: '123', plan: 'pro' });
 
 | Subscriber           | Import                                      |
 | -------------------- | ------------------------------------------- |
-| PostHog              | `autotel-subscribers/posthog`               |
+| PostHog              | `autotel-posthog/subscriber`                |
 | Mixpanel             | `autotel-subscribers/mixpanel`              |
 | Segment              | `autotel-subscribers/segment`               |
 | Amplitude            | `autotel-subscribers/amplitude`             |
@@ -102,20 +102,20 @@ mirrored).
 
 ```typescript
 import {
-  createPostHogSubscriber,
+  createMixpanelSubscriber,
   createWebhookSubscriber,
 } from 'autotel-subscribers/factories';
 
 init({
   service: 'my-service',
   subscribers: [
-    createPostHogSubscriber({ apiKey: 'phc_...' }),
+    createMixpanelSubscriber({ token: 'mp_...' }),
     createWebhookSubscriber({ url: 'https://example.com/events' }),
   ],
 });
 ```
 
-Factories: `createPostHogSubscriber`, `createMixpanelSubscriber`,
+Factories: `createMixpanelSubscriber`,
 `createAmplitudeSubscriber`, `createSegmentSubscriber`, `createWebhookSubscriber`,
 `createSlackSubscriber`, `createMockSubscriber`, and `composeSubscribers`.
 
@@ -191,7 +191,7 @@ Available middleware:
 ## Entry Points
 
 - `autotel-subscribers`: Base class + re-exports
-- `autotel-subscribers/posthog`: PostHog
+- `autotel-posthog/subscriber`: PostHog
 - `autotel-subscribers/mixpanel`: Mixpanel
 - `autotel-subscribers/segment`: Segment
 - `autotel-subscribers/amplitude`: Amplitude

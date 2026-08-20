@@ -34,10 +34,22 @@ export interface SchemaViolation {
   suggestion?: string;
 }
 
-/** Minimal emitted-span shape — avoids a hard dependency on the OTel SDK. */
-export interface SpanShape {
+/** What an attribute can hold once a span has been emitted. */
+export type EmittedAttributeValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Array<string | number | boolean | null | undefined>;
+
+/**
+ * A span as this package receives it for validation — just enough of one to
+ * check against a schema, which avoids a hard dependency on the OTel SDK.
+ */
+export interface EmittedSpan {
   name: string;
-  attributes: Record<string, unknown>;
+  attributes: Record<string, EmittedAttributeValue>;
 }
 
 export interface ValidateOptions {
@@ -46,7 +58,9 @@ export interface ValidateOptions {
 }
 
 /** `'empty[]'` is a distinct marker: an empty array satisfies any array type. */
-function actualType(value: unknown): AttributeType | 'empty[]' | 'unknown' {
+function actualType(
+  value: EmittedAttributeValue,
+): AttributeType | 'empty[]' | 'unknown' {
   if (typeof value === 'string') return 'string';
   if (typeof value === 'number') return 'number';
   if (typeof value === 'boolean') return 'boolean';
@@ -60,7 +74,10 @@ function actualType(value: unknown): AttributeType | 'empty[]' | 'unknown' {
   return 'unknown';
 }
 
-function typeMatches(expected: AttributeType, value: unknown): boolean {
+function typeMatches(
+  expected: AttributeType,
+  value: EmittedAttributeValue,
+): boolean {
   const actual = actualType(value);
   if (actual === 'unknown') return false;
   if (actual === 'empty[]') return expected.endsWith('[]');
@@ -117,7 +134,7 @@ function declaredKeysFor(
 function checkValue(
   spanName: string,
   key: string,
-  value: unknown,
+  value: EmittedAttributeValue,
   spec: AttributeSpec,
   out: SchemaViolation[],
 ): void {
@@ -167,7 +184,7 @@ function checkValue(
  * in attribute insertion order.
  */
 export function validateSpan(
-  span: SpanShape,
+  span: EmittedSpan,
   contract: TelemetryContract,
   options: ValidateOptions = {},
 ): SchemaViolation[] {

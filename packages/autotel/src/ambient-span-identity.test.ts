@@ -3,10 +3,17 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
-import { getActiveTraceContext, trace, withTracing } from './functional';
+import { getActiveTraceContext, instrument, withTracing } from './functional';
 import { getActiveSpan } from './trace-helpers';
 import { init } from './init';
 import { defineBaggageSchema } from './trace-context';
+
+function namedWrapper<TArgs extends unknown[], TReturn>(
+  name: string,
+  fn: (...args: TArgs) => TReturn,
+): (...args: TArgs) => TReturn {
+  return instrument({ key: name, fn });
+}
 
 /**
  * A nested traced function must see its own span through the ambient OTel
@@ -51,10 +58,10 @@ describe('ambient span identity inside nested traced functions', () => {
   };
 
   it('getActiveSpan() resolves to the innermost span, not an ancestor', async () => {
-    const inner = trace('inner', async () => {
+    const inner = namedWrapper('inner', async () => {
       getActiveSpan()?.setAttribute('written.by', 'inner');
     });
-    await trace('outer', async () => {
+    await namedWrapper('outer', async () => {
       await inner();
     })();
     await waitForSpans(2);
@@ -77,11 +84,11 @@ describe('ambient span identity inside nested traced functions', () => {
   });
 
   it('getActiveTraceContext() agrees with getActiveSpan()', async () => {
-    const inner = trace('ctx.inner', async () => {
+    const inner = namedWrapper('ctx.inner', async () => {
       getActiveTraceContext()?.setAttribute('ctx.here', true);
       getActiveSpan()?.setAttribute('span.here', true);
     });
-    await trace('ctx.outer', async () => {
+    await namedWrapper('ctx.outer', async () => {
       await inner();
     })();
     await waitForSpans(2);
@@ -92,14 +99,14 @@ describe('ambient span identity inside nested traced functions', () => {
   });
 
   it('nesting three deep keeps each level distinct', async () => {
-    const c = trace('lvl.c', async () => {
+    const c = namedWrapper('lvl.c', async () => {
       getActiveSpan()?.setAttribute('level', 'c');
     });
-    const b = trace('lvl.b', async () => {
+    const b = namedWrapper('lvl.b', async () => {
       getActiveSpan()?.setAttribute('level', 'b');
       await c();
     });
-    await trace('lvl.a', async () => {
+    await namedWrapper('lvl.a', async () => {
       getActiveSpan()?.setAttribute('level', 'a');
       await b();
     })();
@@ -111,8 +118,8 @@ describe('ambient span identity inside nested traced functions', () => {
   });
 
   it('the inner span is still a child of the outer span', async () => {
-    const inner = trace('parent.inner', async () => {});
-    await trace('parent.outer', async () => {
+    const inner = namedWrapper('parent.inner', async () => {});
+    await namedWrapper('parent.outer', async () => {
       await inner();
     })();
     await waitForSpans(2);
@@ -123,7 +130,7 @@ describe('ambient span identity inside nested traced functions', () => {
   });
 
   it('preserves the inner ambient span after a baggage update', async () => {
-    const inner = trace('baggage.inner', async () => {
+    const inner = namedWrapper('baggage.inner', async () => {
       const ctx = getActiveTraceContext();
       ctx?.setBaggage('tenant.id', 'tenant-42');
       getActiveSpan()?.setAttribute('span.after_baggage', true);
@@ -133,7 +140,7 @@ describe('ambient span identity inside nested traced functions', () => {
       );
     });
 
-    await trace('baggage.outer', async () => {
+    await namedWrapper('baggage.outer', async () => {
       await inner();
     })();
     await waitForSpans(2);
@@ -147,7 +154,7 @@ describe('ambient span identity inside nested traced functions', () => {
   });
 
   it('preserves the active span after deleting baggage', async () => {
-    const inner = trace('delete.inner', async () => {
+    const inner = namedWrapper('delete.inner', async () => {
       const ctx = getActiveTraceContext();
       ctx?.setBaggage('temporary', 'value');
       ctx?.deleteBaggage('temporary');
@@ -155,7 +162,7 @@ describe('ambient span identity inside nested traced functions', () => {
       expect(ctx?.getBaggage('temporary')).toBeUndefined();
     });
 
-    await trace('delete.outer', async () => {
+    await namedWrapper('delete.outer', async () => {
       await inner();
     })();
     await waitForSpans(2);
@@ -169,7 +176,7 @@ describe('ambient span identity inside nested traced functions', () => {
   it('preserves the active span after typed baggage updates', async () => {
     type TenantBaggage = { tenantId: string; region: string };
     const tenantBaggage = defineBaggageSchema<TenantBaggage>('tenant');
-    const inner = trace('typed.inner', async () => {
+    const inner = namedWrapper('typed.inner', async () => {
       const ctx = getActiveTraceContext<TenantBaggage>();
       if (!ctx) throw new Error('expected an active trace context');
       tenantBaggage.set(ctx, { tenantId: 'tenant-42', region: 'eu-west-2' });
@@ -180,7 +187,7 @@ describe('ambient span identity inside nested traced functions', () => {
       });
     });
 
-    await trace('typed.outer', async () => {
+    await namedWrapper('typed.outer', async () => {
       await inner();
     })();
     await waitForSpans(2);
@@ -194,15 +201,15 @@ describe('ambient span identity inside nested traced functions', () => {
   });
 
   it('parents a later sibling to the outer span after baggage changes', async () => {
-    const first = trace('siblings.first', async () => {
+    const first = namedWrapper('siblings.first', async () => {
       getActiveTraceContext()?.setBaggage('shared', 'from-first');
     });
-    const second = trace('siblings.second', async () => {
+    const second = namedWrapper('siblings.second', async () => {
       expect(getActiveTraceContext()?.getBaggage('shared')).toBe('from-first');
       getActiveSpan()?.setAttribute('sibling', 'second');
     });
 
-    await trace('siblings.outer', async () => {
+    await namedWrapper('siblings.outer', async () => {
       await first();
       getActiveSpan()?.setAttribute('after.first_child', true);
       await second();
@@ -232,20 +239,20 @@ describe('ambient span identity inside nested traced functions', () => {
       releaseFirst = resolve;
     });
 
-    const first = trace('concurrent.first', async () => {
+    const first = namedWrapper('concurrent.first', async () => {
       getActiveTraceContext()?.setBaggage('branch', 'first');
       markFirstUpdated();
       await firstCanFinish;
       getActiveSpan()?.setAttribute('after.interleave', 'first');
     });
-    const second = trace('concurrent.second', async () => {
+    const second = namedWrapper('concurrent.second', async () => {
       await firstUpdated;
       getActiveTraceContext()?.setBaggage('branch', 'second');
       getActiveSpan()?.setAttribute('after.interleave', 'second');
       releaseFirst();
     });
 
-    await trace('concurrent.outer', async () => {
+    await namedWrapper('concurrent.outer', async () => {
       await Promise.all([first(), second()]);
     })();
     await waitForSpans(3);
@@ -265,12 +272,12 @@ describe('ambient span identity inside nested traced functions', () => {
   });
 
   it('keeps sync nested functions on their own span after baggage updates', async () => {
-    const inner = trace('sync.inner', () => {
+    const inner = namedWrapper('sync.inner', () => {
       getActiveTraceContext()?.setBaggage('sync', 'true');
       getActiveSpan()?.setAttribute('sync.after_baggage', true);
     });
 
-    trace('sync.outer', () => {
+    namedWrapper('sync.outer', () => {
       inner();
     })();
     await waitForSpans(2);

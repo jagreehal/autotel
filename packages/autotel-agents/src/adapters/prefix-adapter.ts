@@ -35,16 +35,16 @@ export interface PrefixAdapterConfig {
   serviceHint: string;
 }
 
-const EVENT_SUFFIXES: Record<string, AgentEventType> = {
-  user_prompt: 'user_prompt',
-  api_request: 'api_request',
-  api_error: 'api_error',
-  tool_result: 'tool_result',
-  tool_decision: 'tool_decision',
-  mcp_server_connection: 'mcp_connection',
-  plugin_loaded: 'plugin_loaded',
-  hook_execution_complete: 'hook_execution',
-};
+const EVENT_SUFFIXES = new Map<string, AgentEventType>([
+  ['user_prompt', 'user_prompt'],
+  ['api_request', 'api_request'],
+  ['api_error', 'api_error'],
+  ['tool_result', 'tool_result'],
+  ['tool_decision', 'tool_decision'],
+  ['mcp_server_connection', 'mcp_connection'],
+  ['plugin_loaded', 'plugin_loaded'],
+  ['hook_execution_complete', 'hook_execution'],
+]);
 
 /**
  * Event-name suffixes this adapter family models (drives the drift guard: an
@@ -52,8 +52,9 @@ const EVENT_SUFFIXES: Record<string, AgentEventType> = {
  * an unhandled signal to triage). Prefix-shaped agents (Claude Code / opencode)
  * share these names.
  */
-export const HANDLED_EVENT_NAMES: readonly string[] =
-  Object.keys(EVENT_SUFFIXES);
+export const HANDLED_EVENT_NAMES: readonly string[] = [
+  ...EVENT_SUFFIXES.keys(),
+];
 
 /** Compose a full ToolRef: MCP split + category + (defensive) sub-agent/skill id. */
 function buildToolRef(name: string, attrs: Attributes): ToolRef {
@@ -71,12 +72,12 @@ function buildToolRef(name: string, attrs: Attributes): ToolRef {
 
 // Only the metric-only signals get a kind; overlapping metrics (token/cost/
 // code_edit decision/session) fall through to 'other' and are not folded.
-const METRIC_SUFFIXES: Record<string, AgentMetricKind> = {
-  'lines_of_code.count': 'lines_of_code',
-  'commit.count': 'commit',
-  'pull_request.count': 'pull_request',
-  'active_time.total': 'active_time',
-};
+const METRIC_SUFFIXES = new Map<string, AgentMetricKind>([
+  ['lines_of_code.count', 'lines_of_code'],
+  ['commit.count', 'commit'],
+  ['pull_request.count', 'pull_request'],
+  ['active_time.total', 'active_time'],
+]);
 
 export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
   const { kind, prefix, scopeHint, serviceHint } = config;
@@ -86,7 +87,7 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
   // match on a bare `event.name` like "api_request", because any application's
   // logs could carry that and would otherwise be misattributed as agent sessions.
   const scopeMatches = (scopeName?: string): boolean =>
-    typeof scopeName === 'string' && scopeName.includes(scopeHint);
+    scopeName !== undefined && scopeName.includes(scopeHint);
   const serviceMatches = (resource: Attributes): boolean => {
     const service = str(resource, 'service.name');
     return service !== undefined && service.includes(serviceHint);
@@ -121,7 +122,7 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
         suffixOf(record.eventName) ||
         str(attrs, 'event.name') ||
         record.eventName;
-      const type = EVENT_SUFFIXES[rawName] ?? 'other';
+      const type = EVENT_SUFFIXES.get(rawName) ?? 'other';
       const sessionId = str(attrs, 'session.id');
       if (!sessionId) return null;
 
@@ -219,7 +220,8 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
     },
 
     normalizeMetric(record: OtelMetricRecord): AgentMetricSignal[] {
-      const kindOfMetric = METRIC_SUFFIXES[suffixOf(record.name)] ?? 'other';
+      const kindOfMetric =
+        METRIC_SUFFIXES.get(suffixOf(record.name)) ?? 'other';
       return record.dataPoints.map((point) => {
         const attrs = mergeAttrs(record.resource, point.attributes);
         return {

@@ -62,14 +62,15 @@ import {
   normalizeProvider,
   toChatRequest,
   toTokenUsage,
-  type AiSdkUsageShape,
-} from './ai-sdk-shapes.js';
+  type AiSdkUsageFields,
+} from './ai-sdk-fields.js';
 import { createGenAiObserver } from './observer.js';
 import type {
   ChatStreamTiming,
   GenAiObserverEvent,
   GenAiObserver,
 } from './types.js';
+import { asString, readProperty } from '../values.js';
 
 // --- Structural views of the AI SDK telemetry event shapes -----------------
 // Only the fields this integration reads. The real events are supersets, so a
@@ -108,7 +109,7 @@ interface LanguageModelCallEndEventView {
   modelId?: string;
   responseId?: string;
   finishReason?: string;
-  usage?: AiSdkUsageShape;
+  usage?: AiSdkUsageFields;
   /** Output content parts (when content capture is on). */
   content?: readonly ContentPartView[];
   /** Whether the SDK call permits recording outputs (default true). */
@@ -501,20 +502,9 @@ function msToSeconds(ms: number | undefined): number | undefined {
 }
 
 function errorCallId(event: unknown): string | undefined {
-  if (
-    typeof event === 'object' &&
-    event !== null &&
-    'callId' in event &&
-    typeof (event as { callId: unknown }).callId === 'string'
-  ) {
-    return (event as { callId: string }).callId;
-  }
-  return undefined;
+  return asString(readProperty(event, 'callId'));
 }
 
 function errorValue(event: unknown): unknown {
-  if (typeof event === 'object' && event !== null && 'error' in event) {
-    return (event as { error: unknown }).error;
-  }
-  return undefined;
+  return readProperty(event, 'error');
 }

@@ -17,4 +17,3 @@ minimumReleaseAgeExclude:
   - ollama
   - '@ai-sdk/*'
   - '@langfuse/*'
-

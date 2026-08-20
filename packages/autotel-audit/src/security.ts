@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { AuditMetadataValue } from './index.js';
 import {
   AUTOTEL_SAMPLING_TAIL_EVALUATED,
   AUTOTEL_SAMPLING_TAIL_KEEP,
@@ -79,6 +80,10 @@ export type SuggestedSecurityEventName =
   | 'llm.manifest.suspicious'
   | 'llm.plan.risk.elevated';
 
+/** An attribute value, as OpenTelemetry allows one on a span. */
+export type SecurityAttributeValue =
+  string | number | boolean | string[] | number[] | boolean[];
+
 export interface SecurityEventMetadata {
   /** Stable, dot-separated event name, e.g. `auth.login.failed`. */
   name: SuggestedSecurityEventName | (string & {});
@@ -93,7 +98,8 @@ export interface SecurityEventMetadata {
   tenantId?: string;
   /** Short machine-readable reason, e.g. `invalid_password`. */
   reason?: string;
-  [key: string]: unknown;
+  /** Extra fields ride along as span attributes; see AuditMetadataValue. */
+  [key: string]: AuditMetadataValue;
 }
 
 export interface SecurityEventOptions {
@@ -126,10 +132,7 @@ export interface SecurityEventOptions {
 export type WithSecurityOptions = SecurityEventOptions;
 
 interface SecurityAttributeSink {
-  setAttribute(
-    key: string,
-    value: string | number | boolean | string[] | number[] | boolean[],
-  ): unknown;
+  setAttribute(key: string, value: SecurityAttributeValue): void;
 }
 
 /**
@@ -137,32 +140,25 @@ interface SecurityAttributeSink {
  * Drives both standard-field emission and the reserved-key check for the
  * custom-attribute loop — adding a field here is the whole change.
  */
-const FIELD_ATTRIBUTES: Record<string, string> = {
-  name: SECURITY_ATTR.event,
-  category: SECURITY_ATTR.category,
-  outcome: SECURITY_ATTR.outcome,
-  severity: SECURITY_ATTR.severity,
-  actorId: SECURITY_ATTR.actorId,
-  targetType: SECURITY_ATTR.targetType,
-  targetId: SECURITY_ATTR.targetId,
-  tenantId: SECURITY_ATTR.tenantId,
-  reason: SECURITY_ATTR.reason,
-};
+const FIELD_ATTRIBUTES = new Map<string, string>([
+  ['name', SECURITY_ATTR.event],
+  ['category', SECURITY_ATTR.category],
+  ['outcome', SECURITY_ATTR.outcome],
+  ['severity', SECURITY_ATTR.severity],
+  ['actorId', SECURITY_ATTR.actorId],
+  ['targetType', SECURITY_ATTR.targetType],
+  ['targetId', SECURITY_ATTR.targetId],
+  ['tenantId', SECURITY_ATTR.tenantId],
+  ['reason', SECURITY_ATTR.reason],
+]);
 
 function flattenSecurityAttributes(
   metadata: SecurityEventMetadata,
 ): Record<string, string | number | boolean | string[] | number[] | boolean[]> {
-  const attributes: Record<
-    string,
-    string | number | boolean | string[] | number[] | boolean[]
-  > = {
-    [SECURITY_ATTR.marker]: true,
-    [SECURITY_ATTR.severity]: metadata.severity ?? 'info',
-  };
-
+  const custom: Array<[string, SecurityAttributeValue]> = [];
   const droppedKeys: string[] = [];
   for (const [key, value] of Object.entries(metadata)) {
-    const standardAttribute = FIELD_ATTRIBUTES[key];
+    const standardAttribute = FIELD_ATTRIBUTES.get(key);
     // Never emit values under credential-shaped custom keys, even by
     // accident. Reuses the core redactor's sensitive-key pattern so the
     // deny-list stays in one place.
@@ -176,15 +172,19 @@ function flattenSecurityAttributes(
 
     const attr = toAttributeValue(value);
     if (attr !== undefined) {
-      attributes[standardAttribute ?? `security.${key}`] = attr;
+      custom.push([standardAttribute ?? `security.${key}`, attr]);
     }
   }
 
   if (droppedKeys.length > 0) {
-    attributes[SECURITY_ATTR.droppedKeys] = droppedKeys;
+    custom.push([SECURITY_ATTR.droppedKeys, droppedKeys]);
   }
 
-  return attributes;
+  return Object.fromEntries([
+    [SECURITY_ATTR.marker, true],
+    [SECURITY_ATTR.severity, metadata.severity ?? 'info'],
+    ...custom,
+  ]);
 }
 
 const eventsCounter = lazyCounter(

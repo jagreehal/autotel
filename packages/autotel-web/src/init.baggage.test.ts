@@ -20,7 +20,7 @@ const ORIGIN = 'https://app.example.com';
 function installWindow() {
   const mockFetch = vi
     .fn()
-    .mockResolvedValue({ ok: true, status: 200 } as Response);
+    .mockResolvedValue(new Response(null, { status: 200 }));
   vi.stubGlobal('window', {
     fetch: mockFetch,
     location: { origin: ORIGIN, href: `${ORIGIN}/` },
@@ -32,8 +32,20 @@ function installWindow() {
 /** Read the baggage header from the most recent patched-fetch call. */
 function lastBaggage(mockFetch: ReturnType<typeof vi.fn>): string | null {
   const call = mockFetch.mock.calls.at(-1);
+  // SAFETY: the instrumented fetch always passes an init object, and the
+  // `instanceof` on the next line is what decides whether it carried Headers.
   const headers = call?.[1]?.headers as Headers | undefined;
   return headers instanceof Headers ? headers.get('baggage') : null;
+}
+
+/**
+ * The fetch init() patched onto the stubbed window. Calling it is what exercises
+ * the instrumentation; the tests then read the headers it sent.
+ */
+function patchedFetch(): typeof fetch {
+  // SAFETY: installWindow() stubs a window carrying a fetch, and init()
+  // replaces it with the instrumented one before any test calls this.
+  return (globalThis.window as { fetch: typeof fetch }).fetch;
 }
 
 describe('init() baggage propagation', () => {
@@ -54,7 +66,7 @@ describe('init() baggage propagation', () => {
     init({ service: 'spa', instrumentXHR: false });
     setBaggage({ 'tenant.id': 'acme' });
 
-    await (window as unknown as { fetch: typeof fetch }).fetch('/api/users');
+    await patchedFetch()('/api/users');
 
     expect(lastBaggage(mockFetch)).toBe('tenant.id=acme');
   });
@@ -62,7 +74,7 @@ describe('init() baggage propagation', () => {
   it('does NOT inject baggage when none is set', async () => {
     init({ service: 'spa', instrumentXHR: false });
 
-    await (window as unknown as { fetch: typeof fetch }).fetch('/api/users');
+    await patchedFetch()('/api/users');
 
     expect(lastBaggage(mockFetch)).toBeNull();
   });
@@ -71,9 +83,7 @@ describe('init() baggage propagation', () => {
     init({ service: 'spa', instrumentXHR: false });
     setBaggage({ 'tenant.id': 'acme' });
 
-    await (window as unknown as { fetch: typeof fetch }).fetch(
-      'https://analytics.google.com/c',
-    );
+    await patchedFetch()('https://analytics.google.com/c');
 
     expect(lastBaggage(mockFetch)).toBeNull();
   });
@@ -86,14 +96,10 @@ describe('init() baggage propagation', () => {
     });
     setBaggage({ 'tenant.id': 'acme' });
 
-    await (window as unknown as { fetch: typeof fetch }).fetch(
-      'https://api.partner.com/x',
-    );
+    await patchedFetch()('https://api.partner.com/x');
     expect(lastBaggage(mockFetch)).toBe('tenant.id=acme');
 
-    await (window as unknown as { fetch: typeof fetch }).fetch(
-      'https://other.com/y',
-    );
+    await patchedFetch()('https://other.com/y');
     expect(lastBaggage(mockFetch)).toBeNull();
   });
 
@@ -104,7 +110,7 @@ describe('init() baggage propagation', () => {
       baggage: { initial: { 'tenant.id': 'globex' } },
     });
 
-    await (window as unknown as { fetch: typeof fetch }).fetch('/api/users');
+    await patchedFetch()('/api/users');
 
     expect(lastBaggage(mockFetch)).toBe('tenant.id=globex');
   });
@@ -114,7 +120,7 @@ describe('init() baggage propagation', () => {
     setBaggage({ 'tenant.id': 'acme' });
     clearBaggage();
 
-    await (window as unknown as { fetch: typeof fetch }).fetch('/api/users');
+    await patchedFetch()('/api/users');
 
     expect(lastBaggage(mockFetch)).toBeNull();
   });
@@ -131,7 +137,7 @@ describe('init() baggage propagation', () => {
     });
     setBaggage({ 'tenant.id': 'acme' });
 
-    await (window as unknown as { fetch: typeof fetch }).fetch('/api/users');
+    await patchedFetch()('/api/users');
 
     expect(lastBaggage(mockFetch)).toBeNull();
     Object.defineProperty(navigator, 'doNotTrack', {
@@ -145,16 +151,16 @@ describe('init() baggage propagation', () => {
     setBaggage({ 'tenant.id': 'acme' });
 
     // Cross-origin: baggage header is NOT sent, but the local span is still tagged.
-    await (window as unknown as { fetch: typeof fetch }).fetch(
-      'https://analytics.google.com/c',
-    );
+    await patchedFetch()('https://analytics.google.com/c');
     await new Promise((r) => setTimeout(r, 0)); // let the fetch .then run
 
     expect(lastBaggage(mockFetch)).toBeNull();
     expect(recordSpan).toHaveBeenCalled();
+    // SAFETY: recordSpan's sixth parameter is the attribute bag; the
+    // expectation above established there was a call to read it from.
     const attrs = vi.mocked(recordSpan).mock.calls.at(-1)?.[5] as Record<
       string,
-      unknown
+      string | number | boolean
     >;
     expect(attrs['tenant.id']).toBe('acme');
     expect(attrs['http.url']).toBe('https://analytics.google.com/c');

@@ -122,8 +122,9 @@ userSchema.pre(
     console.log(`🪝 [user pre-save] normalizing ${this.email}`);
 
     await wait(25);
-    if (this.get('name') && typeof this.get('name') === 'string') {
-      this.set('name', this.get('name').trim());
+    const name = this.get('name');
+    if (name) {
+      this.set('name', String(name).trim());
     }
   },
 );

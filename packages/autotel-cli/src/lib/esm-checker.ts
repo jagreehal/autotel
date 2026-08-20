@@ -12,14 +12,19 @@ export interface EsmCheckResult {
   details?: string[];
 }
 
-/**
- * Check if autotel/register is imported correctly
- */
-export function checkRegisterImportOrder(content: string): {
+/** What checkRegisterImportOrder() answers with. */
+interface CheckRegisterImportOrderResult {
   found: boolean;
   isFirst: boolean;
   lineNumber: number | null;
-} {
+}
+
+/**
+ * Check if autotel/register is imported correctly
+ */
+export function checkRegisterImportOrder(
+  content: string,
+): CheckRegisterImportOrderResult {
   const lines = content.split('\n');
   let registerLine: number | null = null;
   let firstImportLine: number | null = null;
@@ -161,13 +166,19 @@ export function getRecommendedStartupCommand(
   return `node --import ./${relPath} src/index.js`;
 }
 
+/** What checkScriptsUseImport() answers with. */
+interface CheckScriptsUseImportResult {
+  found: boolean;
+  scriptName: string | null;
+}
+
 /**
  * Check if scripts use --import flag
  */
 export function checkScriptsUseImport(
   scripts: Record<string, string> | undefined,
   _instrumentationPath: string,
-): { found: boolean; scriptName: string | null } {
+): CheckScriptsUseImportResult {
   if (!scripts) {
     return { found: false, scriptName: null };
   }

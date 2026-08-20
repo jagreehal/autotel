@@ -101,10 +101,13 @@ function firstHeader(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function splitHostPort(host: string | undefined): {
+/** What splitHostPort() answers with. */
+interface SplitHostPortResult {
   address?: string;
   port?: number;
-} {
+}
+
+function splitHostPort(host: string | undefined): SplitHostPortResult {
   if (!host) return {};
   const idx = host.lastIndexOf(':');
   if (idx === -1) return { address: host };
@@ -127,115 +130,131 @@ export function instrumentHttp(
 
   if (options.server !== false) {
     disposers.push(
-      subscribeChannel('http.server.request.start', (message) => {
-        const request = (message as ServerStartMessage)?.request;
-        if (!request) return;
-        const method = request.method ?? 'HTTP';
-        const host = firstHeader(request.headers.host);
-        const { address, port } = splitHostPort(host);
-        const path = (request.url ?? '/').split('?', 1)[0];
-        const attributes: Attributes = {
-          [ATTR_HTTP_REQUEST_METHOD]: method,
-          [ATTR_URL_PATH]: path,
-          [ATTR_URL_SCHEME]: 'http',
-          [ATTR_NETWORK_PROTOCOL_VERSION]: request.httpVersion,
-          [ATTR_USER_AGENT_ORIGINAL]: firstHeader(
-            request.headers['user-agent'],
-          ),
-          [ATTR_SERVER_ADDRESS]: address,
-          [ATTR_SERVER_PORT]: port,
-        };
-        const parent = propagation.extract(
-          otelContext.active(),
-          request.headers,
-          defaultTextMapGetter,
-        );
-        const span = tracer.startSpan(
-          method,
-          { kind: SpanKind.SERVER, attributes },
-          parent,
-        );
-        SERVER_SPANS.set(request, span);
-      }),
-      subscribeChannel('http.server.response.finish', (message) => {
-        const { request, response } = (message as ServerFinishMessage) ?? {};
-        if (!request) return;
-        const span = SERVER_SPANS.get(request);
-        if (!span) return;
-        SERVER_SPANS.delete(request);
-        finishHttpSpan(span, response?.statusCode, 500);
-      }),
+      subscribeChannel<ServerStartMessage>(
+        'http.server.request.start',
+        (message) => {
+          const request = message?.request;
+          if (!request) return;
+          const method = request.method ?? 'HTTP';
+          const host = firstHeader(request.headers.host);
+          const { address, port } = splitHostPort(host);
+          const path = (request.url ?? '/').split('?', 1)[0];
+          const attributes: Attributes = {
+            [ATTR_HTTP_REQUEST_METHOD]: method,
+            [ATTR_URL_PATH]: path,
+            [ATTR_URL_SCHEME]: 'http',
+            [ATTR_NETWORK_PROTOCOL_VERSION]: request.httpVersion,
+            [ATTR_USER_AGENT_ORIGINAL]: firstHeader(
+              request.headers['user-agent'],
+            ),
+            [ATTR_SERVER_ADDRESS]: address,
+            [ATTR_SERVER_PORT]: port,
+          };
+          const parent = propagation.extract(
+            otelContext.active(),
+            request.headers,
+            defaultTextMapGetter,
+          );
+          const span = tracer.startSpan(
+            method,
+            { kind: SpanKind.SERVER, attributes },
+            parent,
+          );
+          SERVER_SPANS.set(request, span);
+        },
+      ),
+      subscribeChannel<ServerFinishMessage>(
+        'http.server.response.finish',
+        (message) => {
+          const { request, response } = message ?? {};
+          if (!request) return;
+          const span = SERVER_SPANS.get(request);
+          if (!span) return;
+          SERVER_SPANS.delete(request);
+          finishHttpSpan(span, response?.statusCode, 500);
+        },
+      ),
     );
   }
 
   if (options.client !== false) {
     disposers.push(
-      subscribeChannel('http.client.request.start', (message) => {
-        const request = (message as ClientStartMessage)?.request;
-        if (!request) return;
-        const method = request.method ?? 'HTTP';
-        // `ClientRequest` exposes host/protocol/path on the public surface.
-        const req = request as ClientRequest & {
-          host?: string;
-          protocol?: string;
-          path?: string;
-        };
-        const { address, port } = splitHostPort(req.host);
-        const scheme = (req.protocol ?? 'http:').replace(':', '');
-        const attributes: Attributes = {
-          [ATTR_HTTP_REQUEST_METHOD]: method,
-          [ATTR_SERVER_ADDRESS]: address,
-          [ATTR_SERVER_PORT]: port,
-          [ATTR_URL_FULL]:
-            address && req.path
-              ? `${scheme}://${req.host}${req.path}`
-              : undefined,
-        };
-        const span = tracer.startSpan(method, {
-          kind: SpanKind.CLIENT,
-          attributes,
-        });
-        CLIENT_SPANS.set(request, span);
+      subscribeChannel<ClientStartMessage>(
+        'http.client.request.start',
+        (message) => {
+          const request = message?.request;
+          if (!request) return;
+          const method = request.method ?? 'HTTP';
+          // SAFETY: `ClientRequest` exposes host, protocol and path on the
+          // public surface; @types/node just does not declare them.
+          const req = request as ClientRequest & {
+            host?: string;
+            protocol?: string;
+            path?: string;
+          };
+          const { address, port } = splitHostPort(req.host);
+          const scheme = (req.protocol ?? 'http:').replace(':', '');
+          const attributes: Attributes = {
+            [ATTR_HTTP_REQUEST_METHOD]: method,
+            [ATTR_SERVER_ADDRESS]: address,
+            [ATTR_SERVER_PORT]: port,
+            [ATTR_URL_FULL]:
+              address && req.path
+                ? `${scheme}://${req.host}${req.path}`
+                : undefined,
+          };
+          const span = tracer.startSpan(method, {
+            kind: SpanKind.CLIENT,
+            attributes,
+          });
+          CLIENT_SPANS.set(request, span);
 
-        // Inject this span's context into the outbound headers so the
-        // downstream service continues the trace.
-        if (!request.headersSent) {
-          const carrier: Record<string, string> = {};
-          propagation.inject(
-            trace.setSpan(otelContext.active(), span),
-            carrier,
-            defaultTextMapSetter,
-          );
-          for (const [key, value] of Object.entries(carrier)) {
-            try {
-              request.setHeader(key, value);
-            } catch {
-              // Headers already sent / immutable — propagation best-effort.
+          // Inject this span's context into the outbound headers so the
+          // downstream service continues the trace.
+          if (!request.headersSent) {
+            const carrier: Record<string, string> = {};
+            propagation.inject(
+              trace.setSpan(otelContext.active(), span),
+              carrier,
+              defaultTextMapSetter,
+            );
+            for (const [key, value] of Object.entries(carrier)) {
+              try {
+                request.setHeader(key, value);
+              } catch {
+                // Headers already sent / immutable — propagation best-effort.
+              }
             }
           }
-        }
-      }),
-      subscribeChannel('http.client.response.finish', (message) => {
-        const { request, response } = (message as ClientFinishMessage) ?? {};
-        if (!request) return;
-        const span = CLIENT_SPANS.get(request);
-        if (!span) return;
-        CLIENT_SPANS.delete(request);
-        finishHttpSpan(span, response?.statusCode, 400);
-      }),
-      subscribeChannel('http.client.request.error', (message) => {
-        const { request, error } = (message as ClientErrorMessage) ?? {};
-        if (!request) return;
-        const span = CLIENT_SPANS.get(request);
-        if (!span) return;
-        CLIENT_SPANS.delete(request);
-        if (error instanceof Error) span.recordException(error);
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : undefined,
-        });
-        span.end();
-      }),
+        },
+      ),
+      subscribeChannel<ClientFinishMessage>(
+        'http.client.response.finish',
+        (message) => {
+          const { request, response } = message ?? {};
+          if (!request) return;
+          const span = CLIENT_SPANS.get(request);
+          if (!span) return;
+          CLIENT_SPANS.delete(request);
+          finishHttpSpan(span, response?.statusCode, 400);
+        },
+      ),
+      subscribeChannel<ClientErrorMessage>(
+        'http.client.request.error',
+        (message) => {
+          const { request, error } = message ?? {};
+          if (!request) return;
+          const span = CLIENT_SPANS.get(request);
+          if (!span) return;
+          CLIENT_SPANS.delete(request);
+          if (error instanceof Error) span.recordException(error);
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error instanceof Error ? error.message : undefined,
+          });
+          span.end();
+        },
+      ),
     );
   }
 

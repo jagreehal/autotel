@@ -71,7 +71,7 @@ export function mapHttpStatus(status: number): MappedHttpError {
  *
  * Returns the retriable flag from SubscriberProviderError, or true for unknown errors
  */
-export function isProviderRetriable(error: unknown): boolean {
-  if (error instanceof SubscriberProviderError) return error.retriable;
+export function isProviderRetriable(cause: unknown): boolean {
+  if (cause instanceof SubscriberProviderError) return cause.retriable;
   return true;
 }

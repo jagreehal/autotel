@@ -47,6 +47,9 @@ describe('defineContract', () => {
   });
 
   it('rejects an unknown attribute type', () => {
+    // SAFETY: `as never` is the point of this test - it forces past the compiler
+    // to check that an attribute type outside the declared union is rejected at
+    // runtime, which is what a JavaScript caller would hit.
     expect(() =>
       defineContract({
         ...base,

@@ -25,6 +25,7 @@
 import type { Link, Attributes } from '@opentelemetry/api';
 import { TraceFlags } from '@opentelemetry/api';
 import { type Logger } from './logger';
+import { asStringRecord, type UnknownRecord } from './values';
 
 /**
  * Tail sampling attribute keys (autotel-internal, not OTel semconv)
@@ -134,7 +135,7 @@ export interface SamplingContext {
   /** Method arguments (for extracting user IDs, etc.) */
   args: unknown[];
   /** Optional metadata (e.g., feature flags, request headers) */
-  metadata?: Record<string, unknown>;
+  metadata?: UnknownRecord;
   /** Optional span links for links-based sampling */
   links?: Link[];
 }
@@ -643,7 +644,7 @@ export class FeatureFlagSampler implements Sampler {
   private alwaysSampleFlags: Set<string>;
   private extractFlags: (
     args: unknown[],
-    metadata?: Record<string, unknown>,
+    metadata?: UnknownRecord,
   ) => string[] | undefined;
   private logger?: Logger;
 
@@ -652,7 +653,7 @@ export class FeatureFlagSampler implements Sampler {
     alwaysSampleFlags?: string[];
     extractFlags: (
       args: unknown[],
-      metadata?: Record<string, unknown>,
+      metadata?: UnknownRecord,
     ) => string[] | undefined;
     logger?: Logger;
   }) {
@@ -860,15 +861,15 @@ export function createLinkFromHeaders(
  * ```
  */
 export function extractLinksFromBatch(
-  messages: Array<{ [key: string]: unknown }>,
+  messages: UnknownRecord[],
   headersKey: string = 'headers',
 ): Link[] {
   const links: Link[] = [];
 
   for (const msg of messages) {
-    const msgHeaders = msg[headersKey];
-    if (msgHeaders && typeof msgHeaders === 'object' && msgHeaders !== null) {
-      const link = createLinkFromHeaders(msgHeaders as Record<string, string>, {
+    const msgHeaders = asStringRecord(msg[headersKey]);
+    if (msgHeaders) {
+      const link = createLinkFromHeaders(msgHeaders, {
         'messaging.batch.message_index': links.length,
       });
       if (link) {

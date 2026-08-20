@@ -10,6 +10,7 @@
 
 import type { NodeSDKConfiguration } from '@opentelemetry/sdk-node';
 import { requireModule } from './node-require';
+import { asFunction, readProperty } from './values';
 
 /**
  * Extract instrumentation class names from instrumentation instances
@@ -23,9 +24,10 @@ export function getInstrumentationNames(
   if (!instrumentations) return names;
 
   for (const instrumentation of instrumentations) {
-    if (instrumentation && typeof instrumentation === 'object') {
-      names.add(instrumentation.constructor.name);
-    }
+    const className = asFunction(
+      readProperty(instrumentation, 'constructor'),
+    )?.name;
+    if (className) names.add(className);
   }
 
   return names;
@@ -35,34 +37,41 @@ export function getInstrumentationNames(
  * Map common instrumentation class names to their package names
  * Used to disable auto-instrumentations when user provides manual configs
  */
-const INSTRUMENTATION_CLASS_TO_PACKAGE: Record<string, string> = {
-  HttpInstrumentation: '@opentelemetry/instrumentation-http',
-  HttpsInstrumentation: '@opentelemetry/instrumentation-http',
-  ExpressInstrumentation: '@opentelemetry/instrumentation-express',
-  FastifyInstrumentation: '@opentelemetry/instrumentation-fastify',
-  MongoDBInstrumentation: '@opentelemetry/instrumentation-mongodb',
-  MongooseInstrumentation: '@opentelemetry/instrumentation-mongoose',
-  PrismaInstrumentation: '@opentelemetry/instrumentation-prisma',
-  PinoInstrumentation: '@opentelemetry/instrumentation-pino',
-  WinstonInstrumentation: '@opentelemetry/instrumentation-winston',
-  RedisInstrumentation: '@opentelemetry/instrumentation-redis',
-  GraphQLInstrumentation: '@opentelemetry/instrumentation-graphql',
-  GrpcInstrumentation: '@opentelemetry/instrumentation-grpc',
-  IORedisInstrumentation: '@opentelemetry/instrumentation-ioredis',
-  KnexInstrumentation: '@opentelemetry/instrumentation-knex',
-  NestJsInstrumentation: '@opentelemetry/instrumentation-nestjs-core',
-  PgInstrumentation: '@opentelemetry/instrumentation-pg',
-  MySQLInstrumentation: '@opentelemetry/instrumentation-mysql',
-  MySQL2Instrumentation: '@opentelemetry/instrumentation-mysql2',
-};
+const INSTRUMENTATION_CLASS_TO_PACKAGE = new Map<string, string>(
+  Object.entries({
+    HttpInstrumentation: '@opentelemetry/instrumentation-http',
+    HttpsInstrumentation: '@opentelemetry/instrumentation-http',
+    ExpressInstrumentation: '@opentelemetry/instrumentation-express',
+    FastifyInstrumentation: '@opentelemetry/instrumentation-fastify',
+    MongoDBInstrumentation: '@opentelemetry/instrumentation-mongodb',
+    MongooseInstrumentation: '@opentelemetry/instrumentation-mongoose',
+    PrismaInstrumentation: '@opentelemetry/instrumentation-prisma',
+    PinoInstrumentation: '@opentelemetry/instrumentation-pino',
+    WinstonInstrumentation: '@opentelemetry/instrumentation-winston',
+    RedisInstrumentation: '@opentelemetry/instrumentation-redis',
+    GraphQLInstrumentation: '@opentelemetry/instrumentation-graphql',
+    GrpcInstrumentation: '@opentelemetry/instrumentation-grpc',
+    IORedisInstrumentation: '@opentelemetry/instrumentation-ioredis',
+    KnexInstrumentation: '@opentelemetry/instrumentation-knex',
+    NestJsInstrumentation: '@opentelemetry/instrumentation-nestjs-core',
+    PgInstrumentation: '@opentelemetry/instrumentation-pg',
+    MySQLInstrumentation: '@opentelemetry/instrumentation-mysql',
+    MySQL2Instrumentation: '@opentelemetry/instrumentation-mysql2',
+  }),
+);
 
 /**
  * Type for the auto-instrumentations loader function
  * @internal Used for testing injection
  */
+/** Per-package switches, as `getNodeAutoInstrumentations` takes them. */
+export interface InstrumentationSwitches {
+  [packageName: string]: { enabled?: boolean };
+}
+
 export type AutoInstrumentationsLoader = (
-  config?: Record<string, { enabled?: boolean }>,
-) => unknown[];
+  config?: InstrumentationSwitches,
+) => NodeSDKConfiguration['instrumentations'];
 
 /**
  * Detect if we're running in ESM mode
@@ -149,9 +158,9 @@ export function _resetAutoInstrumentationsLoader(): void {
  * Excludes instrumentations that are manually provided to avoid conflicts
  */
 export function getAutoInstrumentations(
-  integrations: string[] | boolean | Record<string, { enabled?: boolean }>,
+  integrations: string[] | boolean | InstrumentationSwitches,
   manualInstrumentationNames: Set<string> = new Set(),
-): unknown[] {
+): NodeSDKConfiguration['instrumentations'] {
   if (integrations === false) {
     return [];
   }
@@ -162,9 +171,9 @@ export function getAutoInstrumentations(
     : loadNodeAutoInstrumentations();
 
   // Build exclusion config for manual instrumentations
-  const exclusionConfig: Record<string, { enabled: boolean }> = {};
+  const exclusionConfig: InstrumentationSwitches = {};
   for (const className of manualInstrumentationNames) {
-    const packageName = INSTRUMENTATION_CLASS_TO_PACKAGE[className];
+    const packageName = INSTRUMENTATION_CLASS_TO_PACKAGE.get(className);
     if (packageName) {
       exclusionConfig[packageName] = { enabled: false };
     }
@@ -179,7 +188,7 @@ export function getAutoInstrumentations(
   }
 
   if (Array.isArray(integrations)) {
-    const config: Record<string, { enabled: boolean }> = { ...exclusionConfig };
+    const config: InstrumentationSwitches = { ...exclusionConfig };
     for (const name of integrations) {
       const packageName = `@opentelemetry/instrumentation-${name}`;
       // Don't override exclusions
@@ -190,7 +199,7 @@ export function getAutoInstrumentations(
     return getNodeAutoInstrumentations(config);
   }
 
-  const config: Record<string, { enabled?: boolean }> = {
+  const config: InstrumentationSwitches = {
     ...exclusionConfig,
     ...integrations,
   };

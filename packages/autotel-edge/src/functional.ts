@@ -11,9 +11,14 @@ import {
   type Span,
   type AttributeValue,
 } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import type { Sampler } from '@opentelemetry/sdk-trace-base';
 import type { TraceContext } from './core/trace-context';
-import { createTraceContext, setSpanName } from './core/trace-context';
+import {
+  createTraceContext,
+  hasExplicitSpanStatus,
+  setSpanName,
+} from './core/trace-context';
 import {
   getActiveNativeTracer,
   getActiveNativeTraceContext,
@@ -28,8 +33,6 @@ export type { TraceContext } from './core/trace-context';
 
 type AnyFn = (...args: any[]) => any;
 
-const INSTRUMENTED_MARK = '__autotelEdgeInstrumented';
-
 type WrappedFunction<TArgs extends any[], TReturn> = (
   ...args: TArgs
 ) => TReturn | Promise<TReturn>;
@@ -37,16 +40,22 @@ type WrappedFunction<TArgs extends any[], TReturn> = (
 /**
  * trace function options
  */
-export interface traceOptions<TArgs extends any[] = any[], TReturn = any> {
+export interface TracingOptions<TArgs extends any[] = any[], TReturn = any> {
   name?: string;
   serviceName?: string;
   sampler?: Sampler;
-  attributesFromArgs?: (args: TArgs) => Record<string, unknown>;
+  attributesFromArgs?: (args: TArgs) => Attributes;
   // Receives the resolved value: async wrappers await before calling this, so
   // `Awaited<TReturn>` matches runtime (and lets async fns annotate the result).
-  attributesFromResult?: (result: Awaited<TReturn>) => Record<string, unknown>;
-  attributes?: Record<string, unknown>;
+  attributesFromResult?: (result: Awaited<TReturn>) => Attributes;
+  attributes?: Attributes;
 }
+
+/** @deprecated Use {@link TracingOptions}. */
+export type traceOptions<
+  TArgs extends any[] = any[],
+  TReturn = any,
+> = TracingOptions<TArgs, TReturn>;
 
 const MAX_ERROR_MESSAGE_LENGTH = 500;
 
@@ -60,7 +69,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 500;
  *
  * @example
  * ```typescript
- * const handler = trace('fetch', async (req: Request) => {
+ * const handler = trace(async function fetch(req: Request) {
  *   getActiveTraceContext()?.setAttribute('http.method', req.method);
  *   return fetch(req);
  * });
@@ -73,7 +82,21 @@ export function getActiveTraceContext(): TraceContext | undefined {
   return span ? createTraceContext(span) : undefined;
 }
 
+/**
+ * Attributes a caller's hook produced.
+ *
+ * SAFETY: the hooks are declared as returning an object of attribute values;
+ * this states that shape for setAttributes, which is the only thing done with
+ * it. A hook that returns something else records those keys as they are.
+ */
+function hookAttributes(attributes: object): Record<string, AttributeValue> {
+  return attributes as Record<string, AttributeValue>;
+}
+
 function createDummyCtx(): TraceContext {
+  // SAFETY: a context for a span that is not recording - every method is a
+  // no-op and every id empty, which is what a caller sees when sampling has
+  // decided against the span.
   return {
     traceId: '',
     spanId: '',
@@ -101,17 +124,17 @@ function truncateErrorMessage(message: string): string {
  * Record an error onto a native trace context (status + exception) and rethrow.
  * Shared by every native-span code path so the error degradation is identical.
  */
-function failNativeContext(ctx: TraceContext, error: unknown): never {
+function failNativeContext(ctx: TraceContext, cause: unknown): never {
   ctx.setStatus({
     code: SpanStatusCode.ERROR,
     message: truncateErrorMessage(
-      error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+      cause instanceof Error ? cause.message : String(cause ?? 'Unknown cause'),
     ),
   });
   ctx.recordException(
-    error instanceof Error ? error : new Error(String(error)),
+    cause instanceof Error ? cause : new Error(String(cause)),
   );
-  throw error;
+  throw cause;
 }
 
 /**
@@ -139,33 +162,31 @@ function runFactoryInNativeSpan<TArgs extends any[], TReturn>(
       const actualFn = fnFactory(ctx);
 
       if (options.attributes) {
-        ctx.setAttributes(options.attributes as Record<string, AttributeValue>);
+        // SAFETY: the options' attributes are the caller's own, already checked
+        // against Attributes where the options type declares them.
+        ctx.setAttributes(hookAttributes(options.attributes));
       }
       if (options.attributesFromArgs) {
-        ctx.setAttributes(
-          options.attributesFromArgs(args) as Record<string, AttributeValue>,
-        );
+        ctx.setAttributes(hookAttributes(options.attributesFromArgs(args)));
       }
 
       const onSuccess = (result: Awaited<TReturn>): Awaited<TReturn> => {
         if (options.attributesFromResult) {
           ctx.setAttributes(
-            options.attributesFromResult(result) as Record<
-              string,
-              AttributeValue
-            >,
+            hookAttributes(options.attributesFromResult(result)),
           );
         }
         ctx.setAttribute('code.function', spanName);
         return result;
       };
-      const onError = (error: unknown): never => {
+      const onError = (cause: unknown): never => {
         ctx.setAttribute('code.function', spanName);
-        return failNativeContext(ctx, error);
+        return failNativeContext(ctx, cause);
       };
 
       try {
         const result = actualFn(...args);
+        // SAFETY: as above - the wrapper keeps the caller's own signature.
         return result instanceof Promise
           ? ((result as Promise<Awaited<TReturn>>).then(
               onSuccess,
@@ -267,43 +288,46 @@ function wrapWithTracingSync<TArgs extends any[], TReturn>(
         const actualFn = fnFactory(createTraceContext(span));
 
         if (options.attributes) {
-          span.setAttributes(
-            options.attributes as Record<string, AttributeValue>,
-          );
+          span.setAttributes(hookAttributes(options.attributes));
         }
 
         if (options.attributesFromArgs) {
           const argsAttrs = options.attributesFromArgs(args);
-          span.setAttributes(argsAttrs as Record<string, AttributeValue>);
+          span.setAttributes(hookAttributes(argsAttrs));
         }
 
         const onSuccess = (result: Awaited<TReturn>): Awaited<TReturn> => {
           if (options.attributesFromResult) {
             const resultAttrs = options.attributesFromResult(result);
-            span.setAttributes(resultAttrs as Record<string, AttributeValue>);
+            span.setAttributes(hookAttributes(resultAttrs));
           }
 
           span.setAttribute('code.function', spanName);
-          span.setStatus({ code: SpanStatusCode.OK });
+          if (!hasExplicitSpanStatus(span)) {
+            span.setStatus({ code: SpanStatusCode.OK });
+          }
           span.end();
           return result;
         };
-        const onError = (error: unknown): never => {
+        const onError = (cause: unknown): never => {
           const message = truncateErrorMessage(
-            error instanceof Error
-              ? error.message
-              : String(error ?? 'Unknown error'),
+            cause instanceof Error
+              ? cause.message
+              : String(cause ?? 'Unknown cause'),
           );
           span.setAttribute('code.function', spanName);
           span.setStatus({ code: SpanStatusCode.ERROR, message });
           span.recordException(
-            error instanceof Error ? error : new Error(String(error)),
+            cause instanceof Error ? cause : new Error(String(cause)),
           );
           span.end();
-          throw error;
+          throw cause;
         };
 
         const result = actualFn(...args);
+        // SAFETY: the wrapped function returns TReturn, which may itself be a
+        // promise; whichever it is, onSuccess sees the awaited value and the
+        // wrapper hands back what the caller's own signature promises.
         return result instanceof Promise
           ? (result as Promise<Awaited<TReturn>>).then(onSuccess, onError)
           : onSuccess(result as Awaited<TReturn>);
@@ -321,6 +345,8 @@ function wrapWithTracingSync<TArgs extends any[], TReturn>(
         span.end();
         throw error;
       }
+      // SAFETY: startActiveSpan returns whatever its callback returned, which
+      // is the wrapped function's own result.
     }) as TReturn | Promise<TReturn>;
   };
 
@@ -328,8 +354,6 @@ function wrapWithTracingSync<TArgs extends any[], TReturn>(
     value: tempFn.name || 'trace',
     configurable: true,
   });
-
-  (wrappedFunction as any)[INSTRUMENTED_MARK] = true;
 
   return wrappedFunction;
 }
@@ -365,29 +389,45 @@ function wrapPlainWithTracing<TArgs extends any[], TReturn>(
   return wrapFactoryWithTracing(factory, options, variableName);
 }
 
-// `trace()` always wraps a PLAIN function that receives its real arguments; it
-// never injects a context parameter and never inspects the function. Reach the
-// active span via getActiveTraceContext() inside the body. For the explicit
-// `(ctx) => (args) => result` factory form, use withTracing(). `TReturn`
-// captures the return type verbatim, so async functions infer
-// `(...args) => Promise<...>` with no separate overload.
+/** Run one operation immediately with its span-bound context. */
+function runWithTraceContext<TReturn>(
+  operation: (ctx: TraceContext) => TReturn | Promise<TReturn>,
+  options: traceOptions<[], TReturn>,
+): TReturn | Promise<TReturn> {
+  return wrapFactoryWithTracing<[], TReturn>(
+    (ctx) => () => operation(ctx),
+    options,
+  )();
+}
+
+// Every trace(...) call returns a wrapper; nothing runs until you call what
+// comes back. trace.run(...) is the immediate form. Two names, so no call shape
+// is ambiguous and a minified parameter name cannot change the dispatch (#166).
 
 // trace(fn)
-export function trace<TArgs extends any[], TReturn = any>(
+function traceImpl<TArgs extends any[], TReturn = any>(
   fn: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => TReturn;
-// trace(name, fn)
-export function trace<TArgs extends any[], TReturn = any>(
+// trace(name, fn) / trace(options, fn)
+function traceImpl<TArgs extends any[], TReturn = any>(
   name: string,
   fn: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => TReturn;
-// trace(options, fn)
-export function trace<TArgs extends any[], TReturn = any>(
+function traceImpl<TArgs extends any[], TReturn = any>(
   options: traceOptions<TArgs, TReturn>,
   fn: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => TReturn;
+// trace(name) / trace(options) - returns a wrapper factory
+function traceImpl(
+  name: string,
+): <TArgs extends any[], TReturn = any>(
+  fn: (...args: TArgs) => TReturn,
+) => (...args: TArgs) => TReturn;
+function traceImpl<TArgs extends any[], TReturn = any>(
+  options: traceOptions<TArgs, TReturn>,
+): (fn: (...args: TArgs) => TReturn) => (...args: TArgs) => TReturn;
 // Implementation
-export function trace<TArgs extends any[] = any[], TReturn = any>(
+function traceImpl<TArgs extends any[] = any[], TReturn = any>(
   fnOrNameOrOptions:
     | ((...args: TArgs) => TReturn)
     | ((...args: TArgs) => Promise<TReturn>)
@@ -396,8 +436,7 @@ export function trace<TArgs extends any[] = any[], TReturn = any>(
   maybeFn?:
     ((...args: TArgs) => TReturn) | ((...args: TArgs) => Promise<TReturn>),
 ): WrappedFunction<TArgs, TReturn> {
-  // trace(fn) - the function is plain; it receives its real arguments and no
-  // context is injected. Reach the active span via getActiveTraceContext().
+  // trace(fn) - no name given, so the wrapper infers one.
   if (typeof fnOrNameOrOptions === 'function') {
     return wrapPlainWithTracing(
       fnOrNameOrOptions as (...args: TArgs) => TReturn,
@@ -405,18 +444,61 @@ export function trace<TArgs extends any[] = any[], TReturn = any>(
     );
   }
 
-  // trace(name, fn) or trace(options, fn)
-  if (!maybeFn) {
-    throw new Error('trace(name|options, fn): fn is required');
-  }
-
   const options: traceOptions<TArgs, TReturn> =
     typeof fnOrNameOrOptions === 'string'
       ? ({ name: fnOrNameOrOptions } as traceOptions<TArgs, TReturn>)
       : fnOrNameOrOptions;
 
-  return wrapPlainWithTracing(maybeFn as (...args: TArgs) => TReturn, options);
+  // trace(name) / trace(options) - the function is still to come.
+  if (maybeFn === undefined) {
+    return ((fn: (...args: TArgs) => TReturn) =>
+      wrapPlainWithTracing(fn, options)) as unknown as WrappedFunction<
+      TArgs,
+      TReturn
+    >;
+  }
+
+  return wrapPlainWithTracing(maybeFn, options);
 }
+
+/**
+ * Run one named operation immediately and return its result, with the
+ * {@link TraceContext} passed in. The counterpart to {@link trace}, which
+ * always hands back a wrapper.
+ */
+function run<TReturn = any>(
+  name: string,
+  operation: (ctx: TraceContext) => Promise<TReturn>,
+): Promise<TReturn>;
+function run<TReturn = any>(
+  name: string,
+  operation: (ctx: TraceContext) => TReturn,
+): TReturn;
+function run<TReturn = any>(
+  options: traceOptions<[], TReturn>,
+  operation: (ctx: TraceContext) => Promise<TReturn>,
+): Promise<TReturn>;
+function run<TReturn = any>(
+  options: traceOptions<[], TReturn>,
+  operation: (ctx: TraceContext) => TReturn,
+): TReturn;
+function run<TReturn = any>(
+  nameOrOptions: string | traceOptions<[], TReturn>,
+  operation: (ctx: TraceContext) => TReturn | Promise<TReturn>,
+): TReturn | Promise<TReturn> {
+  if (typeof operation !== 'function') {
+    throw new TypeError(
+      'trace.run(name, operation): operation must be a function',
+    );
+  }
+
+  const options: traceOptions<[], TReturn> =
+    typeof nameOrOptions === 'string' ? { name: nameOrOptions } : nameOrOptions;
+
+  return runWithTraceContext(operation, options);
+}
+
+export const trace = Object.assign(traceImpl, { run });
 
 /**
  * The explicit `(ctx) => (...args) => result` factory API. Reach the span via
@@ -461,17 +543,67 @@ function shouldSkip(
   return false;
 }
 
-export interface InstrumentOptions extends traceOptions {
-  functions: Record<string, any>;
+type AnyInstrumentable = (...args: any[]) => any;
+
+export interface InstrumentOptions<
+  T extends Record<string, AnyInstrumentable> = Record<
+    string,
+    AnyInstrumentable
+  >,
+> extends traceOptions {
+  functions: T;
   overrides?: Record<string, Partial<traceOptions>>;
   skip?: (string | RegExp | ((key: string, fn: Function) => boolean))[];
 }
 
-export function instrument<T extends Record<string, any>>(
-  options: InstrumentOptions,
-): T {
+export interface SingleInstrumentOptions<
+  TFunction extends AnyInstrumentable = AnyInstrumentable,
+> extends traceOptions {
+  key: string;
+  fn: TFunction;
+}
+
+export function instrument<TFunction extends AnyInstrumentable>(
+  options: SingleInstrumentOptions<TFunction>,
+): TFunction;
+export function instrument<T extends Record<string, AnyInstrumentable>>(
+  options: InstrumentOptions<T>,
+): T;
+export function instrument<
+  T extends Record<string, AnyInstrumentable>,
+  TFunction extends AnyInstrumentable,
+>(
+  options: InstrumentOptions<T> | SingleInstrumentOptions<TFunction>,
+): T | TFunction {
+  if (!options || typeof options !== 'object') {
+    throw new TypeError(
+      'instrument: expected { key, fn } or { functions: { name: fn } }',
+    );
+  }
+
+  if ('key' in options || 'fn' in options) {
+    const { key, fn, ...tracingOptions } =
+      options as SingleInstrumentOptions<TFunction>;
+    if (typeof key !== 'string' || key.trim() === '') {
+      throw new TypeError(
+        'instrument: "key" must be a non-empty string in the { key, fn } form',
+      );
+    }
+    if (typeof fn !== 'function') {
+      throw new TypeError(
+        'instrument: "fn" must be a function in the { key, fn } form',
+      );
+    }
+    return wrapPlainWithTracing(fn, tracingOptions, key) as TFunction;
+  }
+
   const { functions, ...tracingOptions } = options;
-  const instrumented: Record<string, any> = {};
+  if (!functions || typeof functions !== 'object') {
+    throw new TypeError(
+      'instrument: expected { key, fn } or { functions: { name: fn } }',
+    );
+  }
+  const instrumented: Record<string, AnyInstrumentable> = {};
 
   for (const key of Object.keys(functions)) {
     const fn = functions[key];

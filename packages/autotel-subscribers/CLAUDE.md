@@ -1,6 +1,8 @@
 # autotel-subscribers (Event Subscribers)
 
-Event subscribers for product events platforms (PostHog, Mixpanel, Amplitude, Segment, webhooks).
+Event subscribers for product events platforms (Mixpanel, Amplitude, Segment, Slack, Loki, files, webhooks).
+
+**PostHog is not here.** `PostHogSubscriber` lives in `autotel-posthog`, which owns every PostHog surface — the browser join and the server subscriber — so a PostHog user installs one package. It extends the `EventSubscriber` base exported from here, which is the only thing that crosses the boundary. Do not add a PostHog adapter back to this package.
 
 ## Your Role
 
@@ -12,7 +14,7 @@ You are working on the event subscribers package. You understand product analyti
 - **Language**: TypeScript 5.0+ (ESM-first, CJS fallback)
 - **Build**: tsup
 - **Testing**: vitest
-- **Key Dependencies**: Platform-specific SDKs (PostHog, Mixpanel, etc.) as optional peer dependencies
+- **Key Dependencies**: Platform-specific SDKs (Mixpanel, Segment, etc.) as optional peer dependencies
 
 ## Key Concepts
 
@@ -26,7 +28,6 @@ You are working on the event subscribers package. You understand product analyti
 
 Each adapter is a separate entry point for tree-shaking:
 
-- `autotel-subscribers/posthog` - PostHog adapter
 - `autotel-subscribers/mixpanel` - Mixpanel adapter
 - `autotel-subscribers/amplitude` - Amplitude adapter
 - `autotel-subscribers/segment` - Segment adapter
@@ -45,7 +46,6 @@ pnpm lint               # Lint package
 ## File Structure
 
 - `src/base.ts` - EventSubscriber base class
-- `src/posthog.ts` - PostHog adapter
 - `src/mixpanel.ts` - Mixpanel adapter
 - `src/amplitude.ts` - Amplitude adapter
 - `src/segment.ts` - Segment adapter
@@ -61,14 +61,14 @@ All adapters extend `EventSubscriber`:
 ```typescript
 import { EventSubscriber, EventPayload } from './base';
 
-export class PostHogSubscriber extends EventSubscriber {
-  constructor(private config: PostHogConfig) {
+export class MixpanelSubscriber extends EventSubscriber {
+  constructor(private config: MixpanelConfig) {
     super();
   }
 
   async sendToDestination(payload: EventPayload): Promise<void> {
     // Implement platform-specific sending logic
-    await this.posthog.capture(payload);
+    await this.mixpanel.track(payload);
   }
 }
 ```
@@ -78,7 +78,7 @@ export class PostHogSubscriber extends EventSubscriber {
 Base class handles pending requests:
 
 ```typescript
-const subscriber = new PostHogSubscriber(config);
+const subscriber = new MixpanelSubscriber(config);
 await subscriber.shutdown(); // Waits for pending requests
 ```
 

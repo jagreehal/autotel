@@ -237,3 +237,63 @@ describe('stack traces written as error.stack', () => {
     expect(group.stackTrace).toContain('/proj/src/validate.ts:12:9');
   });
 });
+
+describe('exception.fingerprint from the emitting SDK', () => {
+  // `exceptionFingerprint()` in autotel (and autotel-web's error tracking)
+  // stamps the grouping key on the span. Honouring it is what makes this tab
+  // group identically to every other backend receiving the same spans.
+  const base = {
+    spanName: 'GET /api',
+    service: 'svc',
+    timestamp: Date.now(),
+  };
+
+  it('groups by the emitted fingerprint even when the stacks differ', () => {
+    const agg = new ErrorAggregator();
+
+    const first = agg.addError({
+      ...base,
+      traceId: 't1',
+      spanId: 's1',
+      error: {
+        type: 'Error',
+        message: 'fail',
+        stackTrace: 'Error: fail\n  at foo (/a/src/one.ts:1:1)',
+        fingerprint: 'sdk-decided',
+      },
+    });
+    const second = agg.addError({
+      ...base,
+      traceId: 't2',
+      spanId: 's2',
+      error: {
+        type: 'Error',
+        message: 'fail',
+        stackTrace: 'Error: fail\n  at bar (/b/src/two.ts:9:9)',
+        fingerprint: 'sdk-decided',
+      },
+    });
+
+    expect(first.fingerprint).toBe('sdk-decided');
+    expect(second.fingerprint).toBe('sdk-decided');
+    expect(second.count).toBe(2);
+  });
+
+  it('still derives one for spans that arrive without it', () => {
+    const agg = new ErrorAggregator();
+
+    const group = agg.addError({
+      ...base,
+      traceId: 't3',
+      spanId: 's3',
+      error: {
+        type: 'Error',
+        message: 'fail',
+        stackTrace: 'Error: fail\n  at foo (/a/src/one.ts:1:1)',
+      },
+    });
+
+    expect(group.fingerprint).toBeTruthy();
+    expect(group.fingerprint).not.toBe('sdk-decided');
+  });
+});

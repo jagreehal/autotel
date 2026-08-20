@@ -95,6 +95,9 @@ describe('validateScenarioSpec / defineContract integration', () => {
   });
 
   it('rejects a missing or invalid completion boundary', () => {
+    // SAFETY: the `as never` casts below are the point of this test - they force
+    // past the compiler so the runtime validation can be exercised the way a
+    // JavaScript caller, or a spec loaded from YAML, would reach it.
     expect(() =>
       validateScenarioSpec('bad', {
         completion: { mode: 'sometime' as never, observationBudgetMs: 100 },
@@ -107,6 +110,8 @@ describe('validateScenarioSpec / defineContract integration', () => {
         events: { a: {} },
       }),
     ).toThrowError(/positive number/);
+    // SAFETY: as above - forcing past the compiler is what exercises the runtime
+    // check that a terminal-event completion must name its event.
     expect(() =>
       validateScenarioSpec('bad', {
         completion: {
@@ -543,6 +548,8 @@ describe('proposeScenario — record → propose → commit', () => {
 
   it('derives the budget from observed makespan, floored at 1s', () => {
     const { scenario } = proposeScenario([run(false)]);
+    // SAFETY: every completion mode except externally-reconciled carries an
+    // observationBudgetMs, and this run proposes a terminal-event completion.
     const budget = (scenario.completion as { observationBudgetMs: number })
       .observationBudgetMs;
     expect(budget).toBeGreaterThanOrEqual(1000);

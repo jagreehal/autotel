@@ -1,5 +1,5 @@
 import { SpanStatusCode } from '@opentelemetry/api';
-import { trace, getActiveTraceContext } from 'autotel';
+import { trace } from 'autotel';
 import { isServerSide } from './env';
 import { isControlFlowSignal, isRealError } from './control-flow';
 import { type TraceLoaderConfig, SPAN_ATTRIBUTES } from './types';
@@ -77,8 +77,7 @@ export function traceLoader<TLoaderFn extends (ctx: any) => any>(
 
     if (!isPromise) {
       // Sync loader - wrap in trace synchronously
-      return trace({ name: spanName, isError: isRealError }, () => {
-        const ctx = getActiveTraceContext()!;
+      return trace.run({ name: spanName, isError: isRealError }, (ctx) => {
         ctx.setAttributes({
           [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'loader',
           [SPAN_ATTRIBUTES.TANSTACK_LOADER_ROUTE_ID]: routeId,
@@ -109,12 +108,11 @@ export function traceLoader<TLoaderFn extends (ctx: any) => any>(
 
         ctx.setStatus({ code: SpanStatusCode.OK });
         return result;
-      })();
+      });
     }
 
     // Async loader
-    return trace({ name: spanName, isError: isRealError }, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run({ name: spanName, isError: isRealError }, async (ctx) => {
       ctx.setAttributes({
         [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'loader',
         [SPAN_ATTRIBUTES.TANSTACK_LOADER_ROUTE_ID]: routeId,
@@ -166,7 +164,7 @@ export function traceLoader<TLoaderFn extends (ctx: any) => any>(
         }
         throw error;
       }
-    })();
+    });
   };
 
   return wrapped as TLoaderFn;
@@ -227,8 +225,7 @@ export function traceBeforeLoad<TBeforeLoadFn extends (opts: any) => any>(
 
     if (!isPromise) {
       // Sync beforeLoad
-      return trace({ name: spanName, isError: isRealError }, () => {
-        const ctx = getActiveTraceContext()!;
+      return trace.run({ name: spanName, isError: isRealError }, (ctx) => {
         ctx.setAttributes({
           [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'beforeLoad',
           [SPAN_ATTRIBUTES.TANSTACK_LOADER_ROUTE_ID]: routeId,
@@ -251,12 +248,11 @@ export function traceBeforeLoad<TBeforeLoadFn extends (opts: any) => any>(
 
         ctx.setStatus({ code: SpanStatusCode.OK });
         return result;
-      })();
+      });
     }
 
     // Async beforeLoad
-    return trace({ name: spanName, isError: isRealError }, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run({ name: spanName, isError: isRealError }, async (ctx) => {
       ctx.setAttributes({
         [SPAN_ATTRIBUTES.TANSTACK_TYPE]: 'beforeLoad',
         [SPAN_ATTRIBUTES.TANSTACK_LOADER_ROUTE_ID]: routeId,
@@ -298,7 +294,7 @@ export function traceBeforeLoad<TBeforeLoadFn extends (opts: any) => any>(
         }
         throw error;
       }
-    })();
+    });
   };
 
   return wrapped as TBeforeLoadFn;

@@ -64,9 +64,9 @@ const sqs = instrumentSDK(
   }),
 );
 
-// S3 operation helper - use trace() directly to avoid traceS3 argument issues
+// S3 operation helper - use trace.run() directly to avoid traceS3 argument issues
 const processS3File = async (bucket: string, key: string) => {
-  return autotelTrace('s3.GetObject', async (ctx) => {
+  return autotelTrace.run('s3.GetObject', async (ctx) => {
     ctx.setAttribute('aws.s3.bucket', bucket);
     ctx.setAttribute('aws.s3.key', key);
     ctx.setAttribute('db.system', 's3'); // Semantic convention
@@ -89,9 +89,9 @@ const processS3File = async (bucket: string, key: string) => {
   });
 };
 
-// DynamoDB operation helper - use trace() directly for better control
+// DynamoDB operation helper - use trace.run() directly for better control
 const fetchUserData = async (userId: string) => {
-  return autotelTrace('dynamodb.GetItem', async (ctx) => {
+  return autotelTrace.run('dynamodb.GetItem', async (ctx) => {
     ctx.setAttribute('db.system', 'dynamodb');
     ctx.setAttribute('db.operation', 'GetItem');
     ctx.setAttribute('db.name', 'users');
@@ -146,7 +146,7 @@ const sendNotification = async (data: {
     process.env.SQS_QUEUE_URL ||
     'http://localhost:4566/000000000000/notifications';
 
-  return autotelTrace('sqs.send', async (ctx) => {
+  return autotelTrace.run('sqs.send', async (ctx) => {
     // Set SQS semantic attributes
     ctx.setAttribute('messaging.system', 'aws_sqs');
     ctx.setAttribute('messaging.destination.name', 'notifications');

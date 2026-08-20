@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { trace as otelTrace } from '@opentelemetry/api';
+import type { Attributes } from '@opentelemetry/api';
 import {
   createNoopRequestLogger,
   getRequestLogger,
@@ -8,17 +9,22 @@ import {
   runWithRequestContext,
 } from './request-logger';
 import type { TraceContext } from './trace-context';
+import {
+  spanDouble,
+  traceContextDouble,
+  tracerDouble,
+} from './testing/doubles';
 
 // The runtime ctx exposes deprecated OTel span methods (recordException/addEvent)
 // as back-compat shims that the public TraceContext type hides; the mock and the
 // code under test still use them, so expose them on the mock's type.
 type MockTraceContext = TraceContext & {
   recordException: (error: unknown) => void;
-  addEvent: (name: string, attributes?: Record<string, unknown>) => void;
+  addEvent: (name: string, attributes?: Attributes) => void;
 };
 
 function createMockContext(): MockTraceContext {
-  return {
+  return traceContextDouble({
     traceId: 'trace-id',
     spanId: 'span-id',
     correlationId: 'corr-id',
@@ -35,7 +41,7 @@ function createMockContext(): MockTraceContext {
     setBaggage: vi.fn(),
     deleteBaggage: vi.fn(),
     getAllBaggage: vi.fn(() => new Map()),
-  } as unknown as MockTraceContext;
+  });
 }
 
 afterEach(() => {
@@ -225,7 +231,7 @@ describe('log.fork()', () => {
   });
 
   it('fork method exists on the logger interface', () => {
-    expect(typeof log.fork).toBe('function');
+    expect(log.fork).toBeTypeOf('function');
   });
 
   it('uses an isolated child span context for forked work', async () => {
@@ -257,9 +263,7 @@ describe('log.fork()', () => {
 
     const tracerSpy = vi
       .spyOn(otelTrace, 'getTracer')
-      .mockReturnValue(
-        tracer as unknown as ReturnType<typeof otelTrace.getTracer>,
-      );
+      .mockReturnValue(tracerDouble(tracer));
 
     log.fork('background-work', async () => {
       const childLog = getRequestLogger();
@@ -304,12 +308,14 @@ describe('log.fork()', () => {
       end: vi.fn(),
     };
 
-    vi.spyOn(otelTrace, 'getTracer').mockReturnValue({
-      startActiveSpan: (
-        _name: string,
-        cb: (span: typeof childSpan) => Promise<void>,
-      ) => cb(childSpan),
-    } as unknown as ReturnType<typeof otelTrace.getTracer>);
+    vi.spyOn(otelTrace, 'getTracer').mockReturnValue(
+      tracerDouble({
+        startActiveSpan: (
+          _name: string,
+          cb: (span: typeof childSpan) => Promise<void>,
+        ) => cb(childSpan),
+      }),
+    );
 
     const calls: string[] = [];
     const onChildEnter = vi.fn(() => calls.push('enter'));
@@ -352,12 +358,14 @@ describe('log.fork()', () => {
       end: vi.fn(),
     };
 
-    vi.spyOn(otelTrace, 'getTracer').mockReturnValue({
-      startActiveSpan: (
-        _name: string,
-        cb: (span: typeof childSpan) => Promise<void>,
-      ) => cb(childSpan),
-    } as unknown as ReturnType<typeof otelTrace.getTracer>);
+    vi.spyOn(otelTrace, 'getTracer').mockReturnValue(
+      tracerDouble({
+        startActiveSpan: (
+          _name: string,
+          cb: (span: typeof childSpan) => Promise<void>,
+        ) => cb(childSpan),
+      }),
+    );
 
     log.fork('bg', async () => {}, {
       lifecycle: {
@@ -532,9 +540,7 @@ describe('getRequestLogger', () => {
 
     const spanSpy = vi
       .spyOn(otelTrace, 'getActiveSpan')
-      .mockReturnValue(
-        activeSpan as unknown as ReturnType<typeof otelTrace.getActiveSpan>,
-      );
+      .mockReturnValue(spanDouble(activeSpan));
 
     const log = getRequestLogger();
     log.set({ order: { id: 'o-1' } });

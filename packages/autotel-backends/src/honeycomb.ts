@@ -138,6 +138,13 @@ export interface HoneycombPresetConfig {
  * }));
  * ```
  */
+/** The headers Honeycomb reads: team is always sent, the other two only when configured. */
+type HoneycombHeaders = {
+  'x-honeycomb-team': string;
+  'x-honeycomb-dataset'?: string;
+  'x-honeycomb-samplerate'?: string;
+};
+
 export function createHoneycombConfig(
   config: HoneycombPresetConfig,
 ): AutotelConfig {
@@ -159,7 +166,7 @@ export function createHoneycombConfig(
   }
 
   // Build headers
-  const headers: Record<string, string> = {
+  const headers: HoneycombHeaders = {
     'x-honeycomb-team': apiKey,
   };
 

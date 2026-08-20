@@ -138,10 +138,13 @@ export const rollTheDice = trace(function rollTheDice({
 //   ctx.setStatus({ code: 1 }); // OK
 // });
 
-// Option 3: Custom span name
-// const increment = trace('counter.increment', async () => {
-//   logger.info('Incrementing');
-//   await new Promise(resolve => setTimeout(resolve, 100));
+// Option 3: Reusable function with a stable custom span name
+// const increment = instrument({
+//   key: 'counter.increment',
+//   fn: async () => {
+//     logger.info('Incrementing');
+//     await new Promise(resolve => setTimeout(resolve, 100));
+//   },
 // });
 
 // Main function to run examples
@@ -149,7 +152,7 @@ async function main() {
   console.log('🚀 Starting autotel example...\n');
 
   // Call the traced function
-  await increment;
+  await increment();
   logger.info('Increment completed');
 
   // Test rollTheDice (sync function - no await needed!)

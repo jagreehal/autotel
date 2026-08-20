@@ -6,12 +6,7 @@ function canListen() {
     const server = createServer();
 
     server.once('error', (error) => {
-      if (
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        error.code === 'EPERM'
-      ) {
+      if (error instanceof Error && 'code' in error && error.code === 'EPERM') {
         resolve(false);
         return;
       }

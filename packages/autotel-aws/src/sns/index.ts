@@ -46,12 +46,7 @@
  * ```
  */
 
-import {
-  trace,
-  type TraceContext,
-  withTracing,
-  getActiveTraceContext,
-} from 'autotel';
+import { trace, type TraceContext, withTracing } from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import { buildSNSAttributes } from '../attributes';
 import { wrapSDKClient } from '../common/sdk-wrapper';
@@ -305,8 +300,7 @@ export class SNSPublisher<
     messageId?: string;
     sequenceNumber?: string;
   }> {
-    return trace(`sns.publish`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`sns.publish`, async (ctx) => {
       ctx.setAttributes(buildSNSAttributes({ topicArn: this.config.topicArn }));
       ctx.setAttribute('messaging.destination.name', this.topicName);
 
@@ -347,7 +341,7 @@ export class SNSPublisher<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -364,8 +358,7 @@ export class SNSPublisher<
     }>;
     failed: Array<{ id: string; code?: string; message?: string }>;
   }> {
-    return trace(`sns.publishBatch`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`sns.publishBatch`, async (ctx) => {
       ctx.setAttributes(buildSNSAttributes({ topicArn: this.config.topicArn }));
       ctx.setAttribute('messaging.batch.message_count', messages.length);
 
@@ -433,7 +426,7 @@ export class SNSPublisher<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -445,8 +438,7 @@ export class SNSPublisher<
   async publishToEndpoint(
     message: Omit<SNSPublishMessage, 'targetArn'> & { targetArn: string },
   ): Promise<{ messageId?: string }> {
-    return trace(`sns.publishToEndpoint`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`sns.publishToEndpoint`, async (ctx) => {
       ctx.setAttribute('messaging.system', 'aws_sns');
       ctx.setAttribute('aws.sns.target_arn', message.targetArn);
 
@@ -477,6 +469,6 @@ export class SNSPublisher<
         });
         throw error;
       }
-    })();
+    });
   }
 }

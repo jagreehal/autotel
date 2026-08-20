@@ -4,10 +4,25 @@
 
 import { EventSubscriber, type EventPayload } from 'autotel-subscribers';
 
+/** What an event attribute can hold once it has been serialized for the wire. */
+export type LiveAttributeValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Array<string | number | boolean | null>
+  | { [key: string]: LiveAttributeValue };
+
+/** The `_autotel` block the subscribers add to every tracked event. */
+type AutotelMeta = {
+  channel?: string;
+  producer?: string;
+};
+
 export type LiveEvent = {
   type: 'event';
   name: string;
-  attributes: Record<string, unknown>;
+  attributes: Record<string, LiveAttributeValue>;
   timestamp: string;
   channel?: string;
   producer?: string;
@@ -36,10 +51,16 @@ export class LiveStreamSubscriber extends EventSubscriber {
 
   protected async sendToDestination(payload: EventPayload): Promise<void> {
     if (payload.type !== 'event') return;
-    const attrs = (payload.attributes ?? {}) as Record<string, unknown>;
-    const meta =
-      (attrs._autotel as { channel?: string; producer?: string } | undefined) ??
-      {};
+    // SAFETY: EventPayload types attributes loosely because a subscriber sees
+    // whatever track() was given. Everything below either passes them straight
+    // to JSON or reads `_autotel`, which autotel writes in this shape.
+    const attrs = (payload.attributes ?? {}) as Record<
+      string,
+      LiveAttributeValue
+    >;
+    // SAFETY: `_autotel` is written by autotel's own subscribers in exactly this
+    // shape; both fields are optional and only ever read for display.
+    const meta = (attrs._autotel as AutotelMeta | undefined) ?? {};
     const event: LiveEvent = {
       type: 'event',
       name: payload.name,
@@ -54,7 +75,7 @@ export class LiveStreamSubscriber extends EventSubscriber {
       } catch (err) {
         // Listener errors must never block the producer.
         process.stderr.write(
-          `live-stream listener error: ${(err as Error).message}\n`,
+          `live-stream listener error: ${err instanceof Error ? err.message : String(err)}\n`,
         );
       }
     }

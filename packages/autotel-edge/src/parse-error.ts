@@ -1,3 +1,6 @@
+import type { UnknownRecord } from './values';
+import { asNumber, asRecord, asString, readProperty } from './values';
+
 export interface ParsedError {
   message: string;
   status: number;
@@ -5,50 +8,43 @@ export interface ParsedError {
   fix?: string;
   link?: string;
   code?: string | number;
-  details?: Record<string, unknown>;
+  details?: UnknownRecord;
   raw: unknown;
 }
 
-type ErrorLike = {
-  message?: unknown;
-  status?: unknown;
-  statusCode?: unknown;
-  data?: unknown;
-  code?: unknown;
-  why?: unknown;
-  fix?: unknown;
-  link?: unknown;
-  details?: unknown;
-};
-
+/** An HTTP-ish status, however the library that threw chose to spell it. */
 function toStatus(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
+  const text = asString(value);
+  return text === undefined
+    ? asNumber(value)
+    : (asNumber(Number(text)) ?? undefined);
 }
 
 function pickString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  const text = asString(value);
+  return text !== undefined && text.length > 0 ? text : undefined;
 }
 
 function pickCode(value: unknown): string | number | undefined {
-  if (typeof value === 'string' || typeof value === 'number') return value;
-  return undefined;
+  return asString(value) ?? asNumber(value);
 }
 
-function pickDetails(value: unknown): Record<string, unknown> | undefined {
-  if (value && typeof value === 'object' && value.constructor === Object) {
-    return value as Record<string, unknown>;
-  }
-  return undefined;
+/**
+ * A plain object of extra fields. Only a plain one: an Error, a Response or a
+ * class instance carries behaviour, and copying it onto a log line as details
+ * would serialise something the thrower never meant to publish.
+ */
+function pickDetails(value: unknown): UnknownRecord | undefined {
+  const record = asRecord(value);
+  return record?.constructor === Object ? record : undefined;
 }
 
 export function parseError(error: unknown): ParsedError {
   if (error instanceof Error) {
-    const structured = error as ErrorLike;
+    // A thrown Error may carry the extra fields a structured error adds -
+    // status, why, fix, link, code, details - so it is read as a bag of
+    // unread fields: present when they are there, undefined when not.
+    const structured = asRecord(error) ?? {};
     return {
       message: error.message || 'An error occurred',
       status: toStatus(structured.status) ?? 500,
@@ -61,16 +57,10 @@ export function parseError(error: unknown): ParsedError {
     };
   }
 
-  if (error && typeof error === 'object') {
-    const err = error as ErrorLike;
-    const data =
-      err.data && typeof err.data === 'object'
-        ? (err.data as Record<string, unknown>)
-        : undefined;
-    const nested =
-      data?.data && typeof data.data === 'object'
-        ? (data.data as Record<string, unknown>)
-        : undefined;
+  const err = asRecord(error);
+  if (err) {
+    const data = asRecord(err.data);
+    const nested = asRecord(readProperty(data, 'data'));
     const payload = nested ?? data;
 
     const message =

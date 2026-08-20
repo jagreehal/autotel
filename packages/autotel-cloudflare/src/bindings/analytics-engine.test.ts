@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentAnalyticsEngine } from './analytics-engine';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { tracerDouble } from '../testing/doubles.js';
 
 describe('Analytics Engine Instrumentation', () => {
   let mockTracer: any;
@@ -33,7 +34,7 @@ describe('Analytics Engine Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
 
     mockAE = {
       writeDataPoint: vi.fn(),

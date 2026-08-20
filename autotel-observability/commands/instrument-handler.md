@@ -38,7 +38,7 @@ Check imports and dependencies for framework-specific packages:
 | `import { Hono }` or `hono` in deps               | Hono               | `autotel-hono`: use `otel()` middleware                    |
 | `createServerFn`, `createFileRoute` from TanStack | TanStack Start     | `autotel-tanstack`: use `tracingMiddleware()`              |
 | `env.MY_KV`, `wrangler.toml`, Cloudflare bindings | Cloudflare Workers | `autotel-cloudflare`: use `instrument()` or `wrapModule()` |
-| `McpServer`, `@modelcontextprotocol/{server,sdk}`  | MCP                | `autotel-mcp-instrumentation`: use `instrumentMcpServer()` |
+| `McpServer`, `@modelcontextprotocol/{server,sdk}` | MCP                | `autotel-mcp-instrumentation`: use `instrumentMcpServer()` |
 | Edge runtime (Vercel Edge, Netlify Edge, Deno)    | Edge               | `autotel-edge`: use `trace()` from edge package            |
 | Express, Fastify, Next.js, generic Node.js        | Node.js            | `autotel`: use `trace()` directly                          |
 
@@ -210,4 +210,4 @@ Present the before/after changes clearly so the user can review what was added:
 - **Don't over-instrument**: Not every function needs a span. Focus on handlers, entry points, and meaningful units of work.
 - **Don't log secrets**: Never put auth tokens, passwords, or full PII in `.set()` or `ctx.setAttribute()`.
 - **Prefer request logger over multiple console.log**: One `.emitNow()` snapshot is better than scattered logs.
-- **Name inference**: `trace()` infers span names from the function/variable name. Use `instrument({ key })` or `span(name, fn)` when the name would be unclear (e.g., anonymous arrow functions).
+- **Name inference**: `trace()` infers span names from the function/variable name. Use `trace(name, fn)`, `instrument({ key })`, or `span(name, fn)` when the name would be unclear (e.g., anonymous arrow functions).

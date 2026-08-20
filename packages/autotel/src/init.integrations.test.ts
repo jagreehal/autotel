@@ -1,20 +1,44 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trace, context, propagation } from '@opentelemetry/api';
-import type { NodeSDK } from '@opentelemetry/sdk-node';
+import type { NodeSDK, NodeSDKConfiguration } from '@opentelemetry/sdk-node';
 import type { DeepMockProxy } from 'vitest-mock-extended';
 import { mockDeep } from 'vitest-mock-extended';
 import {
   _setAutoInstrumentationsLoader,
   _resetAutoInstrumentationsLoader,
-  type AutoInstrumentationsLoader,
+  type InstrumentationSwitches,
 } from './init';
 import type {
   Instrumentation,
   InstrumentationConfig,
 } from '@opentelemetry/instrumentation';
+import type { MeterProvider, TracerProvider } from '@opentelemetry/api';
+import type { LoggerProvider } from '@opentelemetry/api-logs';
+import type { UnknownRecord } from './values';
+
+/** Pino's own field bag: what LogFn takes, mirrored by this fake logger. */
+type LogFields = UnknownRecord;
+
+/** The options a constructor was called with, as this harness records them. */
+type SdkOptions = Partial<NodeSDKConfiguration>;
+
+/** What an exporter or instrumentation was constructed with. */
+type RecordedOptions = Record<string, ConfigValue>;
+
+/** A value inside a recorded options bag. */
+type ConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Date
+  | ((...args: never[]) => ConfigValue)
+  | Array<ConfigValue>
+  | { [key: string]: ConfigValue };
 
 type SdkRecord = {
-  options: Record<string, unknown>;
+  options: RecordedOptions;
   instance: DeepMockProxy<NodeSDK>;
 };
 
@@ -32,7 +56,7 @@ class MockInstrumentationBase implements Instrumentation {
   instrumentationVersion = '1.0.0';
   config: InstrumentationConfig;
 
-  constructor(config: InstrumentationConfig & Record<string, unknown> = {}) {
+  constructor(config: InstrumentationConfig & RecordedOptions = {}) {
     this.config = config;
   }
 
@@ -42,9 +66,9 @@ class MockInstrumentationBase implements Instrumentation {
   getConfig(): InstrumentationConfig {
     return this.config;
   }
-  setTracerProvider(_provider: unknown) {}
-  setMeterProvider(_provider: unknown) {}
-  setLoggerProvider(_provider: unknown) {}
+  setTracerProvider(_provider: TracerProvider) {}
+  setMeterProvider(_provider: MeterProvider) {}
+  setLoggerProvider(_provider: LoggerProvider) {}
   enable() {}
   disable() {}
 }
@@ -57,17 +81,16 @@ class HttpInstrumentation extends MockInstrumentationBase {}
 
 async function loadInitWithMocks() {
   const sdkInstances: SdkRecord[] = [];
-  const traceExporterOptions: Record<string, unknown>[] = [];
-  const metricExporterOptions: Record<string, unknown>[] = [];
-  const autoInstrumentationsConfig: Record<string, { enabled?: boolean }>[] =
-    [];
+  const traceExporterOptions: RecordedOptions[] = [];
+  const metricExporterOptions: RecordedOptions[] = [];
+  const autoInstrumentationsConfig: InstrumentationSwitches[] = [];
   const logMessages: {
     level: string;
     message: string;
   }[] = [];
 
   class MockNodeSDK {
-    constructor(options: Record<string, unknown>) {
+    constructor(options: RecordedOptions) {
       const instance = mockDeep<NodeSDK>();
       instance.start.mockImplementation(() => {});
       instance.shutdown.mockResolvedValue();
@@ -77,36 +100,36 @@ async function loadInitWithMocks() {
   }
 
   class MockOTLPTraceExporter {
-    options: Record<string, unknown>;
+    options: RecordedOptions;
 
-    constructor(options: Record<string, unknown>) {
+    constructor(options: RecordedOptions) {
       this.options = options;
       traceExporterOptions.push(options);
     }
   }
 
   class MockOTLPMetricExporter {
-    options: Record<string, unknown>;
+    options: RecordedOptions;
 
-    constructor(options: Record<string, unknown>) {
+    constructor(options: RecordedOptions) {
       this.options = options;
       metricExporterOptions.push(options);
     }
   }
 
   class MockPeriodicExportingMetricReader {
-    constructor(public options: Record<string, unknown>) {}
+    constructor(public options: RecordedOptions) {}
   }
 
   // Mock getNodeAutoInstrumentations function
   const mockGetNodeAutoInstrumentations = vi.fn(
-    (config?: Record<string, { enabled?: boolean }>) => {
+    (config?: InstrumentationSwitches) => {
       if (config) {
         autoInstrumentationsConfig.push(config);
       }
 
       // Simulate returning auto-instrumentations based on config
-      const instrumentations: unknown[] = [];
+      const instrumentations: NodeSDKConfiguration['instrumentations'] = [];
 
       // If MongoDB is not explicitly disabled, add it
       if (
@@ -141,16 +164,16 @@ async function loadInitWithMocks() {
 
   // Mock logger to capture log messages (Pino-compatible signature: extra, message)
   const mockLogger = {
-    info: vi.fn((extra: Record<string, unknown> | string, msg?: string) => {
+    info: vi.fn((extra: LogFields | string, msg?: string) => {
       logMessages.push({ level: 'info', message: msg || '' });
     }),
-    warn: vi.fn((extra: Record<string, unknown> | string, msg?: string) => {
+    warn: vi.fn((extra: LogFields | string, msg?: string) => {
       logMessages.push({ level: 'warn', message: msg || '' });
     }),
-    error: vi.fn((extra: Record<string, unknown> | string, msg?: string) => {
+    error: vi.fn((extra: LogFields | string, msg?: string) => {
       logMessages.push({ level: 'error', message: msg || '' });
     }),
-    debug: vi.fn((extra: Record<string, unknown> | string, msg?: string) => {
+    debug: vi.fn((extra: LogFields | string, msg?: string) => {
       logMessages.push({ level: 'debug', message: msg || '' });
     }),
   };
@@ -178,7 +201,7 @@ async function loadInitWithMocks() {
 
   // Inject the mock loader via the exported setter
   initModule._setAutoInstrumentationsLoader(
-    () => mockGetNodeAutoInstrumentations as AutoInstrumentationsLoader,
+    () => mockGetNodeAutoInstrumentations,
   );
 
   return {
@@ -251,7 +274,10 @@ describe('init() integrations vs instrumentations', () => {
     });
 
     // Check that manual instrumentations are in the final list
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: init() passes the instrumentations it resolved; the assertions
+    // below are about which ones ended up in that list.
     const instrumentations = options.instrumentations as unknown[];
     expect(instrumentations).toContain(manualMongoDBInstrumentation);
     expect(instrumentations).toContain(manualMongooseInstrumentation);
@@ -303,7 +329,10 @@ describe('init() integrations vs instrumentations', () => {
     });
 
     // Check that manual MongoDB instrumentation is in the final list
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: init() passes the instrumentations it resolved; the assertions
+    // below are about which ones ended up in that list.
     const instrumentations = options.instrumentations as unknown[];
     expect(instrumentations).toContain(manualMongoDBInstrumentation);
 
@@ -380,7 +409,10 @@ describe('init() integrations vs instrumentations', () => {
     });
 
     // Check that manual MongoDB instrumentation is in the final list
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: init() passes the instrumentations it resolved; the assertions
+    // below are about which ones ended up in that list.
     const instrumentations = options.instrumentations as unknown[];
     expect(instrumentations).toContain(manualMongoDBInstrumentation);
   });
@@ -401,7 +433,10 @@ describe('init() integrations vs instrumentations', () => {
     });
 
     // Check that manual instrumentation is in the final list
-    const options = sdkInstances.at(-1)?.options as Record<string, unknown>;
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: init() passes the instrumentations it resolved; the assertions
+    // below are about which ones ended up in that list.
     const instrumentations = options.instrumentations as unknown[];
     expect(instrumentations).toContain(manualHttpInstrumentation);
 

@@ -73,15 +73,13 @@ function enrichFromRequest(
     getHeader(request.headers, 'cf-ray');
 
   return {
-    ...(request.method ? { 'http.request.method': request.method } : {}),
-    ...(request.url ? { 'url.full': request.url } : {}),
-    ...(route ? { 'http.route': route } : {}),
-    ...(requestId ? { 'http.request.id': requestId } : {}),
-    ...(request.cf?.country
-      ? { 'cloudflare.country': request.cf.country }
-      : {}),
-    ...(request.cf?.colo ? { 'cloudflare.colo': request.cf.colo } : {}),
-    ...(request.cf?.city ? { 'cloudflare.city': request.cf.city } : {}),
+    'http.request.method': request.method,
+    'url.full': request.url,
+    'http.route': route,
+    'http.request.id': requestId,
+    'cloudflare.country': request.cf?.country,
+    'cloudflare.colo': request.cf?.colo,
+    'cloudflare.city': request.cf?.city,
   };
 }
 

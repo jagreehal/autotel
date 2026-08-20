@@ -141,7 +141,7 @@ describe('Config System', () => {
       const parsed = parseConfig(config);
 
       expect(parsed.sampling.tailSampler).toBeDefined();
-      expect(typeof parsed.sampling.tailSampler).toBe('function');
+      expect(parsed.sampling.tailSampler).toBeTypeOf('function');
     });
 
     it('should accept custom tail sampler', () => {
@@ -281,7 +281,7 @@ describe('Config System', () => {
 
       const initialiser = createInitialiser(config);
 
-      expect(typeof initialiser).toBe('function');
+      expect(initialiser).toBeTypeOf('function');
 
       const resolved = initialiser({}, { request: null as any });
 
@@ -295,7 +295,7 @@ describe('Config System', () => {
 
       const initialiser = createInitialiser(configFn);
 
-      expect(typeof initialiser).toBe('function');
+      expect(initialiser).toBeTypeOf('function');
 
       const resolved = initialiser(
         { SERVICE_NAME: 'dynamic-service' },
@@ -400,7 +400,7 @@ describe('Config System', () => {
 
       // setConfig should return a context object
       expect(context).toBeDefined();
-      expect(typeof context).toBe('object');
+      expect(context).toBeTypeOf('object');
     });
 
     it('should not have race conditions with context-based storage', () => {

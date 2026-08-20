@@ -3,9 +3,8 @@ import { traceServerFn, createTracedServerFnFactory } from './server-functions';
 
 // Mock autotel
 vi.mock('autotel', () => {
-  // Ambient model: trace(name|opts, fn) returns the wrapper; the body reaches
-  // the span via getActiveTraceContext(). withTracing(opts)(factory) mirrors
-  // that for the explicit factory form.
+  // Public call shapes: trace(fn) wraps; trace(name|opts, operation) executes
+  // immediately with context.
   const mockCtx = {
     setAttributes: vi.fn(),
     setAttribute: vi.fn(),
@@ -14,8 +13,16 @@ vi.mock('autotel', () => {
     recordError: vi.fn(),
   };
   return {
-    trace: vi.fn(
-      (_nameOrOpts: unknown, fn: (...a: unknown[]) => unknown) => fn,
+    // Mirrors the real shapes: every trace(...) form wraps, trace.run(...) runs.
+    trace: Object.assign(
+      vi.fn((first: unknown, maybeFn?: (...a: unknown[]) => unknown) =>
+        typeof first === 'function' ? first : (maybeFn ?? ((f: unknown) => f)),
+      ),
+      {
+        run: vi.fn((_first: unknown, operation: (ctx: unknown) => unknown) =>
+          operation(mockCtx),
+        ),
+      },
     ),
     withTracing: vi.fn(
       () => (factory: (ctx: unknown) => (...a: unknown[]) => unknown) =>

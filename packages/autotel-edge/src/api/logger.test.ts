@@ -61,7 +61,7 @@ describe('Edge Logger', () => {
 
       const logOutput = JSON.parse(consoleLogSpy.mock.calls[0][0]);
       expect(logOutput.err).toMatchObject({ message: 'boom', type: 'Error' });
-      expect(typeof logOutput.err.stack).toBe('string');
+      expect(logOutput.err.stack).toBeTypeOf('string');
     });
 
     it('should support pino-style object-first info calls', () => {
@@ -122,7 +122,7 @@ describe('Edge Logger', () => {
         message: 'test error',
         type: 'Error',
       });
-      expect(typeof logOutput.err.stack).toBe('string');
+      expect(logOutput.err.stack).toBeTypeOf('string');
     });
 
     it('should support pino-style error-first calls', () => {
@@ -160,7 +160,7 @@ describe('Edge Logger', () => {
         message: 'test error',
         type: 'Error',
       });
-      expect(typeof logOutput.err.stack).toBe('string');
+      expect(logOutput.err.stack).toBeTypeOf('string');
     });
 
     it('should use err as the default error key like pino', () => {
@@ -190,7 +190,7 @@ describe('Edge Logger', () => {
         message: 'test error',
         type: 'Error',
       });
-      expect(typeof logOutput.err.stack).toBe('string');
+      expect(logOutput.err.stack).toBeTypeOf('string');
       expect(logOutput).not.toHaveProperty('stack');
       expect(logOutput).not.toHaveProperty('name');
     });
@@ -385,8 +385,8 @@ describe('Edge Logger', () => {
       expect(logger.levels.labels[50]).toBe('error');
       expect(logger.useLevelLabels).toBe(false);
       expect(logger.msgPrefix).toBe('[api] ');
-      expect(typeof logger.on).toBe('function');
-      expect(typeof logger.flush).toBe('function');
+      expect(logger.on).toBeTypeOf('function');
+      expect(logger.flush).toBeTypeOf('function');
     });
 
     it('should log trace and fatal levels', () => {
@@ -549,7 +549,7 @@ describe('Edge Logger', () => {
       const logOutput = consoleLogSpy.mock.calls[0][0];
 
       // In pretty mode, output is a formatted string, not JSON
-      expect(typeof logOutput).toBe('string');
+      expect(logOutput).toBeTypeOf('string');
       expect(logOutput).toContain('INFO');
       expect(logOutput).toContain('test-service');
       expect(logOutput).toContain('pretty message');
@@ -563,7 +563,7 @@ describe('Edge Logger', () => {
       expect(consoleLogSpy).toHaveBeenCalledOnce();
       const logOutput = consoleLogSpy.mock.calls[0][0];
 
-      expect(typeof logOutput).toBe('string');
+      expect(logOutput).toBeTypeOf('string');
       expect(logOutput).toContain('ERROR');
       expect(logOutput).toContain('test-service');
       expect(logOutput).toContain('error occurred');

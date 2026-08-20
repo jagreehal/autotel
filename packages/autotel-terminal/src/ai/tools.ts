@@ -1,4 +1,5 @@
 import { tool } from 'ai';
+import { stringAttr } from '../attrs.js';
 import { z } from 'zod';
 import type { TerminalSpanEvent } from '../span-stream';
 import type { TerminalLogEvent } from '../lib/log-model';
@@ -10,6 +11,8 @@ import { validateSpec } from '@json-render/core';
 import { standardComponentDefinitions } from '@json-render/ink/catalog';
 
 /** Valid component names from the Ink catalog */
+// SAFETY: the component registry is keyed by name; Object.keys widens that to
+// string, and the assertion restores the union the tool schema needs.
 const COMPONENT_NAMES = Object.keys(standardComponentDefinitions) as [
   string,
   ...string[],
@@ -83,7 +86,7 @@ export function createTelemetryTools(
         let filtered = ctx.spans;
         if (service) {
           filtered = filtered.filter(
-            (s) => (s.attributes?.['service.name'] as string) === service,
+            (s) => stringAttr(s.attributes, 'service.name') === service,
           );
         }
         return filtered
@@ -93,8 +96,8 @@ export function createTelemetryTools(
             name: s.name,
             durationMs: Math.round(s.durationMs),
             status: s.status,
-            service: (s.attributes?.['service.name'] as string) ?? 'unknown',
-            route: s.attributes?.['http.route'] as string | undefined,
+            service: stringAttr(s.attributes, 'service.name') ?? 'unknown',
+            route: stringAttr(s.attributes, 'http.route'),
             traceId: s.traceId.slice(0, 8),
           }));
       },
@@ -198,7 +201,7 @@ export function createTelemetryTools(
             durationMs: Math.round(s.durationMs),
             status: s.status,
             traceId: s.traceId.slice(0, 8),
-            service: (s.attributes?.['service.name'] as string) ?? 'unknown',
+            service: stringAttr(s.attributes, 'service.name') ?? 'unknown',
           }));
       },
     }),

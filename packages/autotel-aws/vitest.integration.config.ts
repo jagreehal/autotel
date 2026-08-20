@@ -9,7 +9,7 @@ export default defineConfig({
       'src/__tests__/*.integration.test.ts',
     ],
     exclude: ['node_modules/**'],
-    testTimeout: 30000,
+    testTimeout: 30_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

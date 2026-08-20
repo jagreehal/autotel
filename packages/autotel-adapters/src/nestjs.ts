@@ -55,9 +55,9 @@ function enrichFromRequest(
   const route = request.path ?? url;
 
   return {
-    ...(request.method ? { 'http.request.method': request.method } : {}),
-    ...(url ? { 'url.full': url } : {}),
-    ...(route ? { 'http.route': route } : {}),
+    'http.request.method': request.method,
+    'url.full': url,
+    'http.route': route,
   };
 }
 
@@ -187,8 +187,8 @@ export class AutotelInterceptor {
         () => {
           if (!cancelled) subscriber.complete();
         },
-        (error: unknown) => {
-          if (!cancelled) subscriber.error(error);
+        (cause: unknown) => {
+          if (!cancelled) subscriber.error(cause);
         },
       );
 

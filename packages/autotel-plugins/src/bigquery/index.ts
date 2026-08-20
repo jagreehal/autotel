@@ -25,6 +25,7 @@ import {
   SEMATTRS_GCP_BIGQUERY_CACHE_HIT,
 } from '../common/constants';
 import { runWithSpan, finalizeSpan } from 'autotel/trace-helpers';
+import { asFunction, asString, clientResult, readProperty } from '../values.js';
 
 const DEFAULT_TRACER_NAME = 'autotel-plugins/bigquery';
 const DEFAULT_DB_SYSTEM_NAME = 'gcp.bigquery';
@@ -251,14 +252,17 @@ function extractLocation(bigquery: any, options?: any): string | undefined {
   }
 }
 
-/**
- * Extracts dataset and table identifiers from various BigQuery objects.
- */
-function extractTableReference(obj: any): {
+/** What extractTableReference() answers with. */
+interface ExtractTableReferenceResult {
   datasetId?: string;
   tableId?: string;
   projectId?: string;
-} {
+}
+
+/**
+ * Extracts dataset and table identifiers from various BigQuery objects.
+ */
+function extractTableReference(obj: any): ExtractTableReferenceResult {
   try {
     // Plain API reference, e.g. a job configuration's destinationTable
     if (obj.tableId) {
@@ -322,10 +326,8 @@ function createSpan(
  * Instruments BigQuery.query() method.
  */
 function instrumentQueryMethod(BigQuery: any): void {
-  const originalQuery = BigQuery.prototype.query;
-  if (typeof originalQuery !== 'function') {
-    return;
-  }
+  const originalQuery = asFunction(BigQuery.prototype.query);
+  if (!originalQuery) return;
 
   BigQuery.prototype.query = function instrumentedQuery(
     this: any,
@@ -341,7 +343,7 @@ function instrumentQueryMethod(BigQuery: any): void {
       return originalQuery.call(this, query, options, callback);
     }
 
-    const queryText = typeof query === 'string' ? query : query.query;
+    const queryText = asString(query) ?? asString(readProperty(query, 'query'));
     const projectId = extractProjectId(this);
     const location = extractLocation(this, options);
 
@@ -431,8 +433,8 @@ function instrumentQueryMethod(BigQuery: any): void {
       try {
         const result = originalQuery.call(this, query, options);
 
-        return Promise.resolve(result)
-          .then(([rows, response]: [any[], any]) => {
+        return clientResult<[any[], any]>(result)
+          .then(([rows, response]) => {
             // Record row count
             if (Array.isArray(rows)) {
               span.setAttribute(
@@ -474,10 +476,8 @@ function instrumentQueryMethod(BigQuery: any): void {
  * Instruments BigQuery.createQueryJob() method.
  */
 function instrumentCreateQueryJob(BigQuery: any): void {
-  const originalCreateQueryJob = BigQuery.prototype.createQueryJob;
-  if (typeof originalCreateQueryJob !== 'function') {
-    return;
-  }
+  const originalCreateQueryJob = asFunction(BigQuery.prototype.createQueryJob);
+  if (!originalCreateQueryJob) return;
 
   BigQuery.prototype.createQueryJob = function instrumentedCreateQueryJob(
     this: any,
@@ -490,7 +490,8 @@ function instrumentCreateQueryJob(BigQuery: any): void {
       return originalCreateQueryJob.call(this, options);
     }
 
-    const queryText = typeof options === 'string' ? options : options.query;
+    const queryText =
+      asString(options) ?? asString(readProperty(options, 'query'));
     const projectId = extractProjectId(this);
     const location = extractLocation(this, options);
 
@@ -546,8 +547,8 @@ function instrumentCreateQueryJob(BigQuery: any): void {
       try {
         const result = originalCreateQueryJob.call(this, options);
 
-        return Promise.resolve(result)
-          .then(([job, response]: [any, any]) => {
+        return clientResult<[any, any]>(result)
+          .then(([job, response]) => {
             // Record job ID
             if (job?.id) {
               span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_ID, job.id);
@@ -591,10 +592,10 @@ function instrumentCreateQueryJob(BigQuery: any): void {
  * process exits. Add a configurable idle timeout if that shows up in practice.
  */
 function instrumentCreateQueryStream(BigQuery: any): void {
-  const originalCreateQueryStream = BigQuery.prototype.createQueryStream;
-  if (typeof originalCreateQueryStream !== 'function') {
-    return;
-  }
+  const originalCreateQueryStream = asFunction(
+    BigQuery.prototype.createQueryStream,
+  );
+  if (!originalCreateQueryStream) return;
 
   BigQuery.prototype.createQueryStream = function instrumentedCreateQueryStream(
     this: any,
@@ -675,8 +676,8 @@ function instrumentCreateQueryStream(BigQuery: any): void {
     stream.on('end', () => {
       settle();
     });
-    stream.on('error', (error: unknown) => {
-      settle(error instanceof Error ? error : new Error(String(error)));
+    stream.on('error', (cause: unknown) => {
+      settle(cause instanceof Error ? cause : new Error(String(cause)));
     });
     stream.on('close', () => {
       settle();
@@ -712,10 +713,8 @@ function extractJobKind(options: any): string {
  * loads built from an explicit configuration object.
  */
 function instrumentCreateJob(BigQuery: any): void {
-  const originalCreateJob = BigQuery.prototype.createJob;
-  if (typeof originalCreateJob !== 'function') {
-    return;
-  }
+  const originalCreateJob = asFunction(BigQuery.prototype.createJob);
+  if (!originalCreateJob) return;
 
   BigQuery.prototype.createJob = function instrumentedCreateJob(
     this: any,
@@ -760,8 +759,8 @@ function instrumentCreateJob(BigQuery: any): void {
 
     return runWithSpan(span, () => {
       try {
-        return Promise.resolve(originalCreateJob.call(this, options))
-          .then(([job, response]: [any, any]) => {
+        return clientResult<[any, any]>(originalCreateJob.call(this, options))
+          .then(([job, response]) => {
             const jobId = job?.id ?? response?.jobReference?.jobId;
             if (jobId) {
               span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_ID, jobId);
@@ -844,10 +843,8 @@ function recordJobStatistics(span: Span, job: any): void {
  * instantaneous — the job creation is traced and the work is not.
  */
 function instrumentJobPromise(Job: any): void {
-  const originalPromise = Job.prototype.promise;
-  if (typeof originalPromise !== 'function') {
-    return;
-  }
+  const originalPromise = asFunction(Job.prototype.promise);
+  if (!originalPromise) return;
 
   Job.prototype.promise = function instrumentedPromise(this: any): any {
     const config = getInstanceConfig(this);
@@ -897,10 +894,8 @@ function instrumentJobPromise(Job: any): void {
  * Instruments Table.insert() method.
  */
 function instrumentTableInsert(Table: any): void {
-  const originalInsert = Table.prototype.insert;
-  if (typeof originalInsert !== 'function') {
-    return;
-  }
+  const originalInsert = asFunction(Table.prototype.insert);
+  if (!originalInsert) return;
 
   Table.prototype.insert = function instrumentedInsert(
     this: any,
@@ -983,10 +978,8 @@ function instrumentTableInsert(Table: any): void {
  * Instruments Table.getRows() method.
  */
 function instrumentTableGetRows(Table: any): void {
-  const originalGetRows = Table.prototype.getRows;
-  if (typeof originalGetRows !== 'function') {
-    return;
-  }
+  const originalGetRows = asFunction(Table.prototype.getRows);
+  if (!originalGetRows) return;
 
   Table.prototype.getRows = function instrumentedGetRows(
     this: any,
@@ -1029,8 +1022,8 @@ function instrumentTableGetRows(Table: any): void {
       try {
         const result = originalGetRows.call(this, options);
 
-        return Promise.resolve(result)
-          .then(([rows, nextQuery, apiResponse]: [any[], any, any]) => {
+        return clientResult<[any[], any, any]>(result)
+          .then(([rows, nextQuery, apiResponse]) => {
             if (Array.isArray(rows)) {
               span.setAttribute(
                 SEMATTRS_GCP_BIGQUERY_ROWS_RETURNED,
@@ -1062,10 +1055,8 @@ function instrumentTableGetRows(Table: any): void {
  * Instruments Table.createLoadJob() method.
  */
 function instrumentTableCreateLoadJob(Table: any): void {
-  const originalCreateLoadJob = Table.prototype.createLoadJob;
-  if (typeof originalCreateLoadJob !== 'function') {
-    return;
-  }
+  const originalCreateLoadJob = asFunction(Table.prototype.createLoadJob);
+  if (!originalCreateLoadJob) return;
 
   Table.prototype.createLoadJob = function instrumentedCreateLoadJob(
     this: any,
@@ -1114,8 +1105,8 @@ function instrumentTableCreateLoadJob(Table: any): void {
       try {
         const result = originalCreateLoadJob.call(this, source, metadata);
 
-        return Promise.resolve(result)
-          .then(([job, response]: [any, any]) => {
+        return clientResult<[any, any]>(result)
+          .then(([job, response]) => {
             if (job?.id) {
               span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_ID, job.id);
             }
@@ -1144,10 +1135,8 @@ function instrumentTableCreateLoadJob(Table: any): void {
  * Instruments Table.createCopyJob() method.
  */
 function instrumentTableCreateCopyJob(Table: any): void {
-  const originalCreateCopyJob = Table.prototype.createCopyJob;
-  if (typeof originalCreateCopyJob !== 'function') {
-    return;
-  }
+  const originalCreateCopyJob = asFunction(Table.prototype.createCopyJob);
+  if (!originalCreateCopyJob) return;
 
   Table.prototype.createCopyJob = function instrumentedCreateCopyJob(
     this: any,
@@ -1197,8 +1186,8 @@ function instrumentTableCreateCopyJob(Table: any): void {
       try {
         const result = originalCreateCopyJob.call(this, destination, metadata);
 
-        return Promise.resolve(result)
-          .then(([job, response]: [any, any]) => {
+        return clientResult<[any, any]>(result)
+          .then(([job, response]) => {
             if (job?.id) {
               span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_ID, job.id);
             }
@@ -1227,10 +1216,8 @@ function instrumentTableCreateCopyJob(Table: any): void {
  * Instruments Table.createExtractJob() method.
  */
 function instrumentTableCreateExtractJob(Table: any): void {
-  const originalCreateExtractJob = Table.prototype.createExtractJob;
-  if (typeof originalCreateExtractJob !== 'function') {
-    return;
-  }
+  const originalCreateExtractJob = asFunction(Table.prototype.createExtractJob);
+  if (!originalCreateExtractJob) return;
 
   Table.prototype.createExtractJob = function instrumentedCreateExtractJob(
     this: any,
@@ -1291,8 +1278,8 @@ function instrumentTableCreateExtractJob(Table: any): void {
           metadata,
         );
 
-        return Promise.resolve(result)
-          .then(([job, response]: [any, any]) => {
+        return clientResult<[any, any]>(result)
+          .then(([job, response]) => {
             if (job?.id) {
               span.setAttribute(SEMATTRS_GCP_BIGQUERY_JOB_ID, job.id);
             }
@@ -1321,10 +1308,8 @@ function instrumentTableCreateExtractJob(Table: any): void {
  * Instruments Job.getQueryResults() method.
  */
 function instrumentJobGetQueryResults(Job: any): void {
-  const originalGetQueryResults = Job.prototype.getQueryResults;
-  if (typeof originalGetQueryResults !== 'function') {
-    return;
-  }
+  const originalGetQueryResults = asFunction(Job.prototype.getQueryResults);
+  if (!originalGetQueryResults) return;
 
   Job.prototype.getQueryResults = function instrumentedGetQueryResults(
     this: any,
@@ -1361,8 +1346,8 @@ function instrumentJobGetQueryResults(Job: any): void {
       try {
         const result = originalGetQueryResults.call(this, options);
 
-        return Promise.resolve(result)
-          .then(([rows, nextQuery, apiResponse]: [any[], any, any]) => {
+        return clientResult<[any[], any, any]>(result)
+          .then(([rows, nextQuery, apiResponse]) => {
             if (Array.isArray(rows)) {
               span.setAttribute(
                 SEMATTRS_GCP_BIGQUERY_ROWS_RETURNED,
@@ -1395,10 +1380,8 @@ function instrumentJobGetQueryResults(Job: any): void {
  * Instruments Dataset.create() method (admin operation).
  */
 function instrumentDatasetCreate(Dataset: any): void {
-  const originalCreate = Dataset.prototype.create;
-  if (typeof originalCreate !== 'function') {
-    return;
-  }
+  const originalCreate = asFunction(Dataset.prototype.create);
+  if (!originalCreate) return;
 
   Dataset.prototype.create = function instrumentedCreate(
     this: any,
@@ -1462,10 +1445,8 @@ function instrumentDatasetCreate(Dataset: any): void {
  * Instruments Dataset.delete() method (admin operation).
  */
 function instrumentDatasetDelete(Dataset: any): void {
-  const originalDelete = Dataset.prototype.delete;
-  if (typeof originalDelete !== 'function') {
-    return;
-  }
+  const originalDelete = asFunction(Dataset.prototype.delete);
+  if (!originalDelete) return;
 
   Dataset.prototype.delete = function instrumentedDelete(
     this: any,
@@ -1525,10 +1506,8 @@ function instrumentDatasetDelete(Dataset: any): void {
  * This is different from Dataset.prototype.create - it's called as bigquery.createDataset(id).
  */
 function instrumentBigQueryCreateDataset(BigQuery: any): void {
-  const originalCreateDataset = BigQuery.prototype.createDataset;
-  if (typeof originalCreateDataset !== 'function') {
-    return;
-  }
+  const originalCreateDataset = asFunction(BigQuery.prototype.createDataset);
+  if (!originalCreateDataset) return;
 
   BigQuery.prototype.createDataset = function instrumentedCreateDataset(
     this: any,
@@ -1612,10 +1591,8 @@ function instrumentBigQueryCreateDataset(BigQuery: any): void {
  * Instruments Table.create() method (admin operation).
  */
 function instrumentTableCreate(Table: any): void {
-  const originalCreate = Table.prototype.create;
-  if (typeof originalCreate !== 'function') {
-    return;
-  }
+  const originalCreate = asFunction(Table.prototype.create);
+  if (!originalCreate) return;
 
   Table.prototype.create = function instrumentedCreate(
     this: any,
@@ -1677,10 +1654,8 @@ function instrumentTableCreate(Table: any): void {
  * Instruments Table.delete() method (admin operation).
  */
 function instrumentTableDelete(Table: any): void {
-  const originalDelete = Table.prototype.delete;
-  if (typeof originalDelete !== 'function') {
-    return;
-  }
+  const originalDelete = asFunction(Table.prototype.delete);
+  if (!originalDelete) return;
 
   Table.prototype.delete = function instrumentedDelete(
     this: any,

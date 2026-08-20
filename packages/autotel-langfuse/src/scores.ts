@@ -35,6 +35,8 @@
  * ```
  */
 
+import type { AttributeValue, Attributes } from '@opentelemetry/api';
+
 /** The event `autotel-genai` emits for an evaluation result. */
 export const GEN_AI_EVALUATION_RESULT = 'gen_ai.evaluation.result';
 
@@ -80,11 +82,14 @@ interface SubscriberTrackingOptions {
   autotel?: {
     trace_id?: string;
     span_id?: string;
-    [key: string]: unknown;
+    /** Autotel adds more here (correlation id, service, session); unread by us. */
+    correlation_id?: string;
+    service?: string;
+    session_id?: string;
   };
 }
 
-const asString = (value: unknown): string | undefined =>
+const asString = (value: AttributeValue | undefined): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
 
 /**
@@ -93,7 +98,7 @@ const asString = (value: unknown): string | undefined =>
  * Langfuse charts numerics and only groups categoricals.
  */
 export function toScorePayload(
-  attributes: Record<string, unknown>,
+  attributes: Attributes,
   options: { scoreObservation?: boolean } = {},
 ): ScorePayload | undefined {
   const traceId = asString(attributes.traceId);
@@ -102,24 +107,30 @@ export function toScorePayload(
 
   const rawValue = attributes[EVALUATION.SCORE_VALUE];
   const label = asString(attributes[EVALUATION.SCORE_LABEL]);
-  const numeric = typeof rawValue === 'number' && Number.isFinite(rawValue);
-  if (!numeric && label === undefined) return undefined;
+  const numericValue =
+    typeof rawValue === 'number' && Number.isFinite(rawValue)
+      ? rawValue
+      : undefined;
+  if (numericValue === undefined && label === undefined) return undefined;
+
+  // Langfuse charts numerics and only groups categoricals, so a numeric score
+  // is preferred whenever the event carried one.
+  const scored: Pick<ScorePayload, 'value' | 'dataType'> =
+    numericValue === undefined
+      ? { value: label!, dataType: 'CATEGORICAL' }
+      : { value: numericValue, dataType: 'NUMERIC' };
+
+  const payload: ScorePayload = { traceId, name, ...scored };
 
   const observationId = options.scoreObservation
     ? asString(attributes.spanId)
     : undefined;
+  if (observationId !== undefined) payload.observationId = observationId;
 
-  return {
-    traceId,
-    ...(observationId ? { observationId } : {}),
-    name,
-    ...(numeric
-      ? { value: rawValue as number, dataType: 'NUMERIC' as const }
-      : { value: label!, dataType: 'CATEGORICAL' as const }),
-    ...(asString(attributes[EVALUATION.EXPLANATION])
-      ? { comment: asString(attributes[EVALUATION.EXPLANATION])! }
-      : {}),
-  };
+  const explanation = asString(attributes[EVALUATION.EXPLANATION]);
+  if (explanation !== undefined) payload.comment = explanation;
+
+  return payload;
 }
 
 /**
@@ -159,7 +170,7 @@ export function langfuseScores(options: LangfuseScoresOptions) {
 
     async trackEvent(
       name: string,
-      attributes: Record<string, unknown> = {},
+      attributes: Attributes = {},
       tracking?: SubscriberTrackingOptions,
     ): Promise<void> {
       if (name !== GEN_AI_EVALUATION_RESULT) return;

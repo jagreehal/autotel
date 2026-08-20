@@ -10,25 +10,26 @@ import type {
 } from 'autotel-agents';
 import { getResourceName } from './resource-utils';
 import { pickRoot } from './trace-root';
+import type { AttributeValue, SpanAttributes } from '../widget/types.js';
+import type {
+  OtlpAnyValue,
+  OtlpKeyValue,
+  OtlpLogsRequest,
+  OtlpMetric,
+  OtlpMetricsRequest,
+  OtlpTraceRequest,
+} from './otlp-types.js';
+import { otlpEnvelope } from './otlp-types.js';
+import { asString } from '../widget/attrs.js';
+import { asObject } from '../widget/utils/json-fields.js';
 
-type OtlpAnyValue = {
-  stringValue?: string;
-  boolValue?: boolean;
-  intValue?: string | number;
-  doubleValue?: number;
-  bytesValue?: string;
-  arrayValue?: { values?: OtlpAnyValue[] };
-  kvlistValue?: { values?: OtlpKeyValue[] };
-};
-
-type OtlpKeyValue = { key: string; value?: OtlpAnyValue };
-
-function resolveOtlpValue(v?: OtlpAnyValue): unknown {
+function resolveOtlpValue(v?: OtlpAnyValue): AttributeValue {
   if (!v) return undefined;
   if (v.stringValue !== undefined) return v.stringValue;
   if (v.boolValue !== undefined) return v.boolValue;
-  if (v.intValue !== undefined)
-    return typeof v.intValue === 'string' ? Number(v.intValue) : v.intValue;
+  // intValue is a string in OTLP/JSON (int64 does not survive JSON) and a
+  // number once protobuf is decoded; Number() takes either.
+  if (v.intValue !== undefined) return Number(v.intValue);
   if (v.doubleValue !== undefined) return v.doubleValue;
   if (v.bytesValue !== undefined) return v.bytesValue;
   if (v.arrayValue?.values) return v.arrayValue.values.map(resolveOtlpValue);
@@ -36,13 +37,41 @@ function resolveOtlpValue(v?: OtlpAnyValue): unknown {
   return undefined;
 }
 
-function flattenAttributes(attrs?: OtlpKeyValue[]): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+function flattenAttributes(attrs?: OtlpKeyValue[]): SpanAttributes {
+  const out: SpanAttributes = {};
   if (!attrs) return out;
   for (const { key, value } of attrs) {
     out[key] = resolveOtlpValue(value);
   }
   return out;
+}
+
+/**
+ * A log record's body: the text it carried, or the structure it carried when
+ * the sender used an OTLP kvlist or array rather than a string.
+ */
+function logBody(body: AttributeValue): string | SpanAttributes {
+  const text = asString(body);
+  if (text !== undefined) return text;
+  if (body === undefined || body === null) return '';
+  const structured = asObject(body);
+  if (!structured) return String(body);
+  // SAFETY: resolveOtlpValue returns a nested map for kvlist and array bodies,
+  // which is what SpanAttributes describes.
+  return structured as SpanAttributes;
+}
+
+/**
+ * Attributes handed to the agent layer, whose `Attributes` is OTel's own -
+ * scalars and arrays of scalars, nothing nested.
+ *
+ * SAFETY: a coding agent's metrics and events carry scalar attributes only,
+ * so the two shapes agree in practice. A sender that nests one anyway is
+ * rendered by the Agents tab as whatever it is rather than being dropped.
+ */
+function agentAttributes(attributes: SpanAttributes): Attributes {
+  // SAFETY: see the note above.
+  return attributes as Attributes;
 }
 
 function nanoToMs(nano?: string): number {
@@ -57,19 +86,21 @@ function nanoToMs(nano?: string): number {
   return Number(ms) + Number(remNs) / 1_000_000;
 }
 
-const SPAN_KIND_MAP: Record<number | string, SpanData['kind']> = {
-  0: 'INTERNAL',
-  1: 'INTERNAL',
-  2: 'SERVER',
-  3: 'CLIENT',
-  4: 'PRODUCER',
-  5: 'CONSUMER',
-  SPAN_KIND_INTERNAL: 'INTERNAL',
-  SPAN_KIND_SERVER: 'SERVER',
-  SPAN_KIND_CLIENT: 'CLIENT',
-  SPAN_KIND_PRODUCER: 'PRODUCER',
-  SPAN_KIND_CONSUMER: 'CONSUMER',
-};
+// A Map rather than an object: the key is whatever the exporter sent, which
+// is a number in protobuf and the enum name in some JSON clients.
+const SPAN_KIND_MAP = new Map<number | string, SpanData['kind']>([
+  [0, 'INTERNAL'],
+  [1, 'INTERNAL'],
+  [2, 'SERVER'],
+  [3, 'CLIENT'],
+  [4, 'PRODUCER'],
+  [5, 'CONSUMER'],
+  ['SPAN_KIND_INTERNAL', 'INTERNAL'],
+  ['SPAN_KIND_SERVER', 'SERVER'],
+  ['SPAN_KIND_CLIENT', 'CLIENT'],
+  ['SPAN_KIND_PRODUCER', 'PRODUCER'],
+  ['SPAN_KIND_CONSUMER', 'CONSUMER'],
+]);
 
 function normalizeHexId(id?: string): string {
   if (!id) return '';
@@ -97,18 +128,15 @@ function normalizeHexId(id?: string): string {
 }
 
 export function parseOtlpTraces(payload: unknown): TraceData[] {
-  if (!payload || typeof payload !== 'object') return [];
-  const { resourceSpans } = payload as any;
-  if (!Array.isArray(resourceSpans) || resourceSpans.length === 0) return [];
+  const resourceSpans = otlpEnvelope<OtlpTraceRequest>(payload)?.resourceSpans;
+  if (!resourceSpans || resourceSpans.length === 0) return [];
 
   const traceMap = new Map<string, { spans: SpanData[]; service: string }>();
 
   for (const rs of resourceSpans) {
     const resourceAttrs = flattenAttributes(rs.resource?.attributes);
     const service = String(resourceAttrs['service.name'] || 'unknown');
-    const scopeSpans = rs.scopeSpans || [];
-
-    for (const ss of scopeSpans) {
+    for (const ss of rs.scopeSpans ?? []) {
       const scope = ss.scope?.name
         ? { name: ss.scope.name, version: ss.scope.version || undefined }
         : undefined;
@@ -129,24 +157,24 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
           spanId: normalizeHexId(span.spanId),
           parentSpanId: normalizeHexId(span.parentSpanId) || undefined,
           name: span.name || 'unknown',
-          kind: SPAN_KIND_MAP[span.kind ?? 0] || 'INTERNAL',
+          kind: SPAN_KIND_MAP.get(span.kind ?? 0) ?? 'INTERNAL',
           startTime: startMs,
           endTime: endMs,
           duration: endMs - startMs,
           attributes: {
             ...resourceAttrs,
             ...flattenAttributes(span.attributes),
-          } as Record<string, any>,
+          },
           status: { code: status, message: span.status?.message },
-          events: (span.events || []).map((e: any) => ({
+          events: (span.events ?? []).map((e) => ({
             name: e.name || '',
             timestamp: nanoToMs(e.timeUnixNano),
-            attributes: flattenAttributes(e.attributes) as Record<string, any>,
+            attributes: flattenAttributes(e.attributes),
           })),
-          links: (span.links || []).map((l: any) => ({
+          links: (span.links ?? []).map((l) => ({
             traceId: normalizeHexId(l.traceId),
             spanId: normalizeHexId(l.spanId),
-            attributes: flattenAttributes(l.attributes) as Record<string, any>,
+            attributes: flattenAttributes(l.attributes),
           })),
           scope,
         };
@@ -170,7 +198,7 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
     const endTime = Math.max(...sorted.map((s) => s.endTime));
     const hasError = sorted.some((s) => s.status.code === 'ERROR');
 
-    traces.push({
+    const trace: TraceData = {
       traceId,
       correlationId: traceId.slice(0, 16),
       rootSpan,
@@ -180,23 +208,23 @@ export function parseOtlpTraces(payload: unknown): TraceData[] {
       duration: endTime - startTime,
       status: hasError ? 'ERROR' : 'OK',
       service,
-      ...(partial ? { partial: true } : {}),
-    });
+    };
+    if (partial) trace.partial = true;
+    traces.push(trace);
   }
 
   return traces;
 }
 
 export function parseOtlpLogs(payload: unknown): LogData[] {
-  if (!payload || typeof payload !== 'object') return [];
-  const { resourceLogs } = payload as any;
-  if (!Array.isArray(resourceLogs)) return [];
+  const resourceLogs = otlpEnvelope<OtlpLogsRequest>(payload)?.resourceLogs;
+  if (!resourceLogs) return [];
 
   const logs: LogData[] = [];
   for (const rl of resourceLogs) {
     const resourceAttrs = flattenAttributes(rl.resource?.attributes);
-    for (const sl of rl.scopeLogs || []) {
-      for (const rec of sl.logRecords || []) {
+    for (const sl of rl.scopeLogs ?? []) {
+      for (const rec of sl.logRecords ?? []) {
         const timestamp = nanoToMs(
           rec.timeUnixNano || rec.observedTimeUnixNano,
         );
@@ -208,19 +236,13 @@ export function parseOtlpLogs(payload: unknown): LogData[] {
           id: `${traceId || 'no-trace'}:${spanId || 'no-span'}:${timestamp}:${rec.severityNumber || 0}`,
           traceId,
           spanId,
-          resourceName: getResourceName(
-            resourceAttrs as Record<string, unknown>,
-          ),
+          resourceName: getResourceName(resourceAttrs),
           severityText: rec.severityText,
           severityNumber: rec.severityNumber,
-          body:
-            typeof body === 'string' ? body : (body as Record<string, unknown>),
+          body: logBody(body),
           timestamp,
-          attributes: flattenAttributes(rec.attributes) as Record<
-            string,
-            unknown
-          >,
-          resource: resourceAttrs as Record<string, unknown>,
+          attributes: flattenAttributes(rec.attributes),
+          resource: resourceAttrs,
         });
       }
     }
@@ -230,13 +252,13 @@ export function parseOtlpLogs(payload: unknown): LogData[] {
 }
 
 export function countOtlpMetrics(payload: unknown): number {
-  if (!payload || typeof payload !== 'object') return 0;
-  const { resourceMetrics } = payload as any;
-  if (!Array.isArray(resourceMetrics)) return 0;
+  const resourceMetrics =
+    otlpEnvelope<OtlpMetricsRequest>(payload)?.resourceMetrics;
+  if (!resourceMetrics) return 0;
   let count = 0;
   for (const rm of resourceMetrics) {
-    for (const sm of rm.scopeMetrics || []) {
-      count += (sm.metrics || []).length;
+    for (const sm of rm.scopeMetrics ?? []) {
+      count += (sm.metrics ?? []).length;
     }
   }
   return count;
@@ -247,7 +269,7 @@ export function countOtlpMetrics(payload: unknown): number {
 // HistogramDataPoints). Coding-agent instruments are all counters (Sum) so the
 // NumberDataPoint path covers token/cost/lines/etc.; histograms (e.g. request
 // duration) fall back to their `count`.
-function extractDataPoints(metric: any): OtelDataPoint[] {
+function extractDataPoints(metric: OtlpMetric): OtelDataPoint[] {
   const points: OtelDataPoint[] = [];
   const numberPoints = metric.sum?.dataPoints ?? metric.gauge?.dataPoints;
   if (Array.isArray(numberPoints)) {
@@ -260,7 +282,7 @@ function extractDataPoints(metric: any): OtelDataPoint[] {
             : 0;
       points.push({
         value,
-        attributes: flattenAttributes(dp.attributes) as Attributes,
+        attributes: agentAttributes(flattenAttributes(dp.attributes)),
         timestamp: nanoToMs(dp.timeUnixNano || dp.startTimeUnixNano),
       });
     }
@@ -270,7 +292,7 @@ function extractDataPoints(metric: any): OtelDataPoint[] {
     for (const dp of histPoints) {
       points.push({
         value: dp.count !== undefined ? Number(dp.count) : 0,
-        attributes: flattenAttributes(dp.attributes) as Attributes,
+        attributes: agentAttributes(flattenAttributes(dp.attributes)),
         timestamp: nanoToMs(dp.timeUnixNano || dp.startTimeUnixNano),
       });
     }
@@ -285,7 +307,7 @@ function extractDataPoints(metric: any): OtelDataPoint[] {
  */
 // OTLP aggregation temporality: 1 = DELTA, 2 = CUMULATIVE (numeric in protobuf
 // and most JSON; the string enum is handled too). Only Sum/Histogram carry it.
-function readTemporality(metric: any): MetricTemporality | undefined {
+function readTemporality(metric: OtlpMetric): MetricTemporality | undefined {
   const raw =
     metric.sum?.aggregationTemporality ??
     metric.histogram?.aggregationTemporality;
@@ -296,20 +318,22 @@ function readTemporality(metric: any): MetricTemporality | undefined {
 }
 
 export function parseOtlpMetrics(payload: unknown): OtelMetricRecord[] {
-  if (!payload || typeof payload !== 'object') return [];
-  const { resourceMetrics } = payload as any;
-  if (!Array.isArray(resourceMetrics)) return [];
+  const resourceMetrics =
+    otlpEnvelope<OtlpMetricsRequest>(payload)?.resourceMetrics;
+  if (!resourceMetrics) return [];
 
   const records: OtelMetricRecord[] = [];
   for (const rm of resourceMetrics) {
-    const resource = flattenAttributes(rm.resource?.attributes) as Attributes;
-    for (const sm of rm.scopeMetrics || []) {
+    const resource = agentAttributes(
+      flattenAttributes(rm.resource?.attributes),
+    );
+    for (const sm of rm.scopeMetrics ?? []) {
       const scope = sm.scope?.name
         ? { name: sm.scope.name, version: sm.scope.version || undefined }
         : undefined;
-      for (const metric of sm.metrics || []) {
+      for (const metric of sm.metrics ?? []) {
         records.push({
-          name: metric.name,
+          name: metric.name ?? '',
           unit: metric.unit || undefined,
           description: metric.description || undefined,
           temporality: readTemporality(metric),
@@ -330,22 +354,22 @@ export function parseOtlpMetrics(payload: unknown): OtelMetricRecord[] {
  * `parseOtlpLogs`, which feeds the generic Logs tab.
  */
 export function parseOtlpAgentEvents(payload: unknown): AgentRawEvent[] {
-  if (!payload || typeof payload !== 'object') return [];
-  const { resourceLogs } = payload as any;
-  if (!Array.isArray(resourceLogs)) return [];
+  const resourceLogs = otlpEnvelope<OtlpLogsRequest>(payload)?.resourceLogs;
+  if (!resourceLogs) return [];
 
   const events: AgentRawEvent[] = [];
   for (const rl of resourceLogs) {
-    const resource = flattenAttributes(rl.resource?.attributes) as Attributes;
-    for (const sl of rl.scopeLogs || []) {
+    const resource = agentAttributes(
+      flattenAttributes(rl.resource?.attributes),
+    );
+    for (const sl of rl.scopeLogs ?? []) {
       const scope = sl.scope?.name
         ? { name: sl.scope.name, version: sl.scope.version || undefined }
         : undefined;
-      for (const rec of sl.logRecords || []) {
-        const attributes = flattenAttributes(rec.attributes) as Attributes;
+      for (const rec of sl.logRecords ?? []) {
+        const attributes = agentAttributes(flattenAttributes(rec.attributes));
         const eventName =
-          (typeof rec.eventName === 'string' && rec.eventName) ||
-          String(attributes['event.name'] ?? '');
+          rec.eventName || String(attributes['event.name'] ?? '');
         events.push({
           eventName,
           timestamp: nanoToMs(rec.timeUnixNano || rec.observedTimeUnixNano),
@@ -398,10 +422,10 @@ export function isProtobufContentType(contentType?: string): boolean {
   );
 }
 
-export function sendJson(
+export function sendJson<TBody>(
   res: ServerResponse,
   status: number,
-  data: Record<string, unknown>,
+  data: TBody,
 ): void {
   const body = JSON.stringify(data);
   res.writeHead(status, {

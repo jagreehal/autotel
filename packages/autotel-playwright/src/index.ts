@@ -43,7 +43,7 @@ const TRACER_VERSION = '0.1.0';
 let collector: TestSpanCollector | null = null;
 
 interface TracerProviderWithProcessor {
-  addSpanProcessor(processor: unknown): void;
+  addSpanProcessor(processor: SimpleSpanProcessor): void;
 }
 
 function ensureCollector(): TestSpanCollector {
@@ -51,6 +51,9 @@ function ensureCollector(): TestSpanCollector {
     collector = new TestSpanCollector();
     const provider = getAutotelTracerProvider();
     if ('addSpanProcessor' in provider) {
+      // SAFETY: the guard above established the method exists. It is not on the
+      // TracerProvider interface - only on the SDK's implementation of it, which
+      // is what autotel installs.
       (provider as TracerProviderWithProcessor).addSpanProcessor(
         new SimpleSpanProcessor(collector),
       );
@@ -127,10 +130,8 @@ function setAttributesFromAnnotations(
   }
 }
 
-/** Internal: options for get/post/put/patch/delete/head/fetch that may include headers. */
-type RequestOptions = Record<string, unknown> & {
-  headers?: Record<string, string>;
-};
+/** Internal: options for get/post/put/patch/delete/head/fetch, as Playwright types them. */
+type RequestOptions = NonNullable<Parameters<APIRequestContext['get']>[1]>;
 
 function mergeTraceHeaders(
   url: string,
@@ -144,7 +145,7 @@ function mergeTraceHeaders(
   return {
     ...opts,
     headers: {
-      ...(opts.headers as Record<string, string>),
+      ...opts.headers,
       ...carrier,
       'x-test-name': testName,
     },
@@ -161,6 +162,9 @@ function createRequestWithTrace(
   const merge = (url: string, options?: RequestOptions) =>
     mergeTraceHeaders(url, options, apiBaseUrls, carrier, testInfo.title);
 
+  // SAFETY: the object below implements every method of APIRequestContext that a
+  // test can reach; Playwright's interface also carries internal members it does
+  // not expose, which is why the assertion at the end of this return is needed.
   return {
     get: (url: string, options?: RequestOptions) =>
       request.get(url, merge(url, options)),
@@ -354,12 +358,18 @@ export function createGlobalSetup(
 /**
  * Serialized span returned by the test-spans endpoint (matches autotel-tanstack/testing SerializedSpan).
  */
+/** Span attributes as they survive JSON: OpenTelemetry's value types. */
+export type SerializedAttributes = Record<
+  string,
+  string | number | boolean | Array<string | number | boolean | null>
+>;
+
 export interface SerializedSpan {
   name: string;
   spanId: string;
   traceId: string;
   parentSpanId?: string;
-  attributes?: Record<string, unknown>;
+  attributes?: SerializedAttributes;
   status: { code: number; message?: string };
   durationMs: number;
 }
@@ -385,13 +395,16 @@ export interface SerializedSpan {
  * });
  * ```
  */
+/** Reads and clears the spans a test server collected. */
+export interface TestSpansClient {
+  getSpans(request: APIRequestContext): Promise<SerializedSpan[]>;
+  clearSpans(request: APIRequestContext): Promise<void>;
+}
+
 export function createTestSpansClient(
   baseUrl: string,
   options?: { path?: string },
-): {
-  getSpans(request: APIRequestContext): Promise<SerializedSpan[]>;
-  clearSpans(request: APIRequestContext): Promise<void>;
-} {
+): TestSpansClient {
   const base = baseUrl.replace(/\/$/, '');
   const path = options?.path ?? '/api/test-spans';
   const url = `${base}${path}`;
@@ -402,6 +415,8 @@ export function createTestSpansClient(
       if (!res.ok()) {
         throw new Error(`GET ${path} failed: ${res.status()}`);
       }
+      // SAFETY: this endpoint is autotel's own test-span collector, which answers
+      // with { spans }; a non-200 was thrown above.
       const body = (await res.json()) as { spans: SerializedSpan[] };
       return body.spans;
     },

@@ -69,7 +69,7 @@ function setResult(id, value) {
   const element = document.getElementById(id);
   if (!element) return;
   element.textContent =
-    typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    value instanceof Object ? JSON.stringify(value, null, 2) : String(value);
 }
 
 function applyPersona(personaId) {

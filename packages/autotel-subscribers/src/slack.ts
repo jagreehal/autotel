@@ -60,6 +60,7 @@
  * 4. Copy webhook URL (https://hooks.slack.com/services/...)
  */
 
+import type { EventAttributes } from 'autotel/event-subscriber';
 import { EventSubscriber, type EventPayload } from './event-subscriber-base';
 
 export interface SlackSubscriberConfig {
@@ -313,7 +314,7 @@ export class SlackSubscriber extends EventSubscriber {
   /**
    * Format attributes as Slack fields
    */
-  private formatAttributes(attributes: Record<string, any>): SlackField[] {
+  private formatAttributes(attributes: EventAttributes): SlackField[] {
     const fields: SlackField[] = [];
     const entries = Object.entries(attributes);
 

@@ -40,7 +40,7 @@ import { applySecurityEventAttributes } from './security.js';
 // autotel-audit adds no new dependencies. Objects returned here satisfy the
 // real SpanProcessor interface structurally (must mirror @opentelemetry/api's
 // AttributeValue, including nullable array entries).
-type AttributeValue =
+export type AttributeValue =
   | string
   | number
   | boolean
@@ -48,10 +48,18 @@ type AttributeValue =
   | Array<null | undefined | number>
   | Array<null | undefined | boolean>;
 
+/** The parent context OTel hands a processor. This package never reads it. */
+export interface SpanParentContext {
+  getValue?: (key: symbol) => ContextValue;
+}
+
+/** Whatever OTel stored under a context key. This package never reads one. */
+export type ContextValue = object | string | number | boolean | undefined;
+
 interface MutableSpanLike {
   attributes: Record<string, AttributeValue | undefined>;
   spanContext?: { traceId: string };
-  setAttribute(key: string, value: AttributeValue): unknown;
+  setAttribute(key: string, value: AttributeValue): void;
 }
 
 interface ReadableSpanLike {
@@ -60,7 +68,7 @@ interface ReadableSpanLike {
 }
 
 export interface SecuritySignalProcessor {
-  onStart(span: MutableSpanLike, parentContext?: unknown): void;
+  onStart(span: MutableSpanLike, parentContext?: SpanParentContext): void;
   onEnd(span: ReadableSpanLike): void;
   shutdown(): Promise<void>;
   forceFlush(): Promise<void>;
@@ -193,11 +201,17 @@ export interface SecuritySignalProcessorOptions {
   now?: () => number;
 }
 
+/** A burst window's weight before and after recording one more event. */
+interface BurstCount {
+  before: number;
+  after: number;
+}
+
 /**
  * Conservative request-target patterns. Tuned for scanner/probe traffic —
  * high signal, low false-positive — not as a WAF. Extend via `extraPatterns`.
  */
-export const SUSPICIOUS_REQUEST_PATTERNS: Record<string, RegExp> = {
+export const SUSPICIOUS_REQUEST_PATTERNS = {
   path_traversal: /(\.\.[/\\]|%2e%2e(%2f|%5c|\/)|\.\.%2f|%252e%252e)/i,
   sensitive_file_probe:
     /(\/\.env\b|\/\.git\b|\/etc\/passwd|\/wp-admin\b|\/\.aws\b|\/id_rsa\b)/i,
@@ -205,7 +219,7 @@ export const SUSPICIOUS_REQUEST_PATTERNS: Record<string, RegExp> = {
     /(\bunion\b[\s+%20]+(all[\s+%20]+)?select\b|'[\s+%20]*or[\s+%20]*'?1'?[\s+%20]*=[\s+%20]*'?1)/i,
   xss_probe: /(<script\b|%3cscript)/i,
   null_byte: /%00/,
-};
+} satisfies Record<string, RegExp>;
 
 const TARGET_ATTRIBUTES = [
   'url.path',
@@ -241,11 +255,7 @@ class SlidingWindow {
    * Record a hit; returns the totals inside the window before and after it,
    * so callers can signal exactly once on a threshold crossing.
    */
-  record(
-    key: string,
-    now: number,
-    weight = 1,
-  ): { before: number; after: number } {
+  record(key: string, now: number, weight = 1): BurstCount {
     let entries = this.hits.get(key);
     if (!entries) {
       // Bound memory: random client addresses must not grow the map forever.
@@ -258,6 +268,8 @@ class SlidingWindow {
     }
 
     const cutoff = now - this.windowMs;
+    // SAFETY: the loop condition established the array is non-empty, and every
+    // entry it holds was pushed as a [timestamp, weight] pair below.
     while (entries.length > 0 && (entries[0] as [number, number])[0] < cutoff) {
       entries.shift();
     }
@@ -374,7 +386,7 @@ export function createSecuritySignalProcessor(
   );
   const now = options.now ?? Date.now;
 
-  const patterns: Record<string, RegExp> = {
+  const patterns = {
     ...SUSPICIOUS_REQUEST_PATTERNS,
     ...options.extraPatterns,
   };

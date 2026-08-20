@@ -104,7 +104,7 @@ export interface LokiConfig {
 }
 
 /** One event as it is written to the Loki line. */
-export type LokiEvent = Record<string, unknown> & { timestamp?: string };
+export type LokiEvent = EventAttributes & { timestamp?: string };
 
 interface LokiStream {
   stream: Record<string, string>;
@@ -150,7 +150,7 @@ export function toLokiLabels(
   config: Pick<LokiConfig, 'labelFields' | 'labels'> = {},
 ): Record<string, string> {
   const fields = config.labelFields ?? [...DEFAULT_LABEL_FIELDS];
-  const labels: Record<string, string> = { ...config.labels };
+  const labels = new Map(Object.entries(config.labels ?? {}));
 
   for (const field of fields) {
     const value = event[field];
@@ -159,11 +159,11 @@ export function toLokiLabels(
       typeof value === 'number' ||
       typeof value === 'boolean'
     ) {
-      labels[field] = String(value);
+      labels.set(field, String(value));
     }
   }
 
-  return labels;
+  return Object.fromEntries(labels);
 }
 
 /**
@@ -211,20 +211,20 @@ export function buildLokiPayload(
 export function toLokiHeaders(
   config: Pick<LokiConfig, 'apiKey' | 'user' | 'tenantId'>,
 ): Record<string, string> {
-  const headers: Record<string, string> = {};
+  const headers = new Map<string, string>();
 
   if (config.user && config.apiKey) {
     const encoded = Buffer.from(`${config.user}:${config.apiKey}`).toString(
       'base64',
     );
-    headers.Authorization = `Basic ${encoded}`;
+    headers.set('Authorization', `Basic ${encoded}`);
   } else if (config.apiKey) {
-    headers.Authorization = `Bearer ${config.apiKey}`;
+    headers.set('Authorization', `Bearer ${config.apiKey}`);
   }
 
-  if (config.tenantId) headers['X-Scope-OrgID'] = config.tenantId;
+  if (config.tenantId) headers.set('X-Scope-OrgID', config.tenantId);
 
-  return headers;
+  return Object.fromEntries(headers);
 }
 
 /** Push a batch of events without going through a subscriber. */
@@ -369,7 +369,7 @@ export class LokiSubscriber implements EventSubscriber {
       name,
       ...attributes,
       timestamp: new Date().toISOString(),
-      ...(options?.autotel ? { autotel: options.autotel } : {}),
+      autotel: options?.autotel,
     });
   }
 
@@ -385,7 +385,7 @@ export class LokiSubscriber implements EventSubscriber {
       step,
       ...attributes,
       timestamp: new Date().toISOString(),
-      ...(options?.autotel ? { autotel: options.autotel } : {}),
+      autotel: options?.autotel,
     });
   }
 
@@ -401,7 +401,7 @@ export class LokiSubscriber implements EventSubscriber {
       outcome,
       ...attributes,
       timestamp: new Date().toISOString(),
-      ...(options?.autotel ? { autotel: options.autotel } : {}),
+      autotel: options?.autotel,
     });
   }
 
@@ -417,7 +417,7 @@ export class LokiSubscriber implements EventSubscriber {
       value,
       ...attributes,
       timestamp: new Date().toISOString(),
-      ...(options?.autotel ? { autotel: options.autotel } : {}),
+      autotel: options?.autotel,
     });
   }
 

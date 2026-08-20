@@ -72,6 +72,11 @@ export function createBackup(filePath: string): string | null {
   return backupPath;
 }
 
+/** What atomicWrite() answers with. */
+interface AtomicWriteResult {
+  backupPath: string | null;
+}
+
 /**
  * Atomic write - write to temp file then rename
  */
@@ -79,7 +84,7 @@ export function atomicWrite(
   filePath: string,
   content: string,
   options: { root: string; backup?: boolean },
-): { backupPath: string | null } {
+): AtomicWriteResult {
   const resolvedPath = path.resolve(filePath);
 
   // Security: ensure we're writing within root

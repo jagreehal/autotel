@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Trace } from './decorators';
+import { Trace, type WithTraceContext } from './decorators';
+import type { TraceContext } from './trace-context';
 import { configure, resetConfig } from './config';
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import {
@@ -27,7 +28,7 @@ describe('Decorators', () => {
 
   afterEach(() => {
     exporter.reset();
-    otelTrace.setGlobalTracerProvider(undefined as any);
+    otelTrace.disable();
   });
 
   describe('@Trace method decorator', () => {
@@ -80,18 +81,12 @@ describe('Decorators', () => {
     });
 
     it('should make ctx available via this.ctx', async () => {
-      interface WithTraceContext {
-        ctx?: import('./functional').TraceContext;
-      }
+      class TestService implements WithTraceContext {
+        ctx?: TraceContext;
 
-      class TestService {
-        // @ts-expect-error - Decorator type resolution issue in test environment, works in production
         @Trace()
         async createUser(data: { id: string }) {
-          const ctx = (this as unknown as WithTraceContext).ctx;
-          if (ctx) {
-            ctx.setAttribute('user.id', data.id);
-          }
+          this.ctx?.setAttribute('user.id', data.id);
           return data;
         }
       }
@@ -120,7 +115,6 @@ describe('Decorators', () => {
 
     it('should preserve method arguments and return values', async () => {
       class TestService {
-        // @ts-expect-error - Decorator type resolution issue in test environment, works in production
         @Trace()
         async calculate(a: number, b: number) {
           return a + b;

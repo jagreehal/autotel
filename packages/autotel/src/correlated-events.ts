@@ -1,9 +1,15 @@
 import type { AttributeValue } from './trace-context';
+import { isFunction } from './values';
+
+/** A flat, dot-namespaced attribute bag, as OTel carries one. */
+export interface CorrelatedAttributes {
+  [key: string]: AttributeValue;
+}
 
 export interface CorrelatedEventTarget {
-  setAttribute(key: string, value: AttributeValue): unknown;
-  setAttributes(attrs: Record<string, AttributeValue>): unknown;
-  addEvent?(name: string, attrs?: Record<string, AttributeValue>): unknown;
+  setAttribute(key: string, value: AttributeValue): void;
+  setAttributes(attrs: CorrelatedAttributes): void;
+  addEvent?(name: string, attrs?: CorrelatedAttributes): void;
 }
 
 // OTel attribute keys are dot-namespaced flat strings; we keep `.`/`-`/`_` and
@@ -18,7 +24,7 @@ function sanitizeEventKey(input: string): string {
 // this keeps the fallback correct if/when the runtime stops binding addEvent.
 const sequenceByTarget = new WeakMap<object, number>();
 
-function nextSequence(target: object): number {
+function nextSequence(target: CorrelatedEventTarget): number {
   const n = (sequenceByTarget.get(target) ?? 0) + 1;
   sequenceByTarget.set(target, n);
   return n;
@@ -27,16 +33,16 @@ function nextSequence(target: object): number {
 export function emitCorrelatedEvent(
   ctx: CorrelatedEventTarget,
   name: string,
-  attrs: Record<string, AttributeValue> = {},
+  attrs: CorrelatedAttributes = {},
 ): void {
   const eventName = sanitizeEventKey(name);
-  if (typeof ctx.addEvent === 'function') {
+  if (isFunction(ctx.addEvent)) {
     ctx.addEvent.call(ctx, eventName, attrs);
     return;
   }
   const seq = nextSequence(ctx);
   const prefix = `autotel.event.${seq}.${eventName}`;
-  const flattened: Record<string, AttributeValue> = {
+  const flattened: CorrelatedAttributes = {
     [`${prefix}.name`]: eventName,
     [`${prefix}.ts`]: new Date().toISOString(),
   };

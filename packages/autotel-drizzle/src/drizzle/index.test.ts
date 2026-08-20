@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// SAFETY: vi.hoisted runs before the declarations below, so the empty array is
+// annotated rather than inferred; every push into it is a MockSpan.
 const spans = vi.hoisted(() => [] as MockSpan[]);
 const tracer = vi.hoisted(() => ({
-  startSpan: vi.fn((name: string, options: unknown) => {
+  startSpan: vi.fn((name: string, options?: SpanStartOptions) => {
     const span: MockSpan = {
       name,
       options,
@@ -10,14 +12,14 @@ const tracer = vi.hoisted(() => ({
       status: undefined,
       ended: false,
       exceptions: [],
-      setAttribute: vi.fn((key: string, value: unknown) => {
+      setAttribute: vi.fn((key: string, value: SpanAttributeValue) => {
         span.attributes[key] = value;
       }),
-      setStatus: vi.fn((status: unknown) => {
+      setStatus: vi.fn((status: SpanStatus) => {
         span.status = status;
       }),
-      recordException: vi.fn((error: unknown) => {
-        span.exceptions.push(error);
+      recordException: vi.fn((cause: unknown) => {
+        span.exceptions.push(cause);
       }),
       end: vi.fn(() => {
         span.ended = true;
@@ -29,14 +31,14 @@ const tracer = vi.hoisted(() => ({
   }),
 }));
 const runWithSpan = vi.hoisted(() =>
-  vi.fn((_span: unknown, fn: () => unknown) => fn()),
+  vi.fn(<T>(_span: MockSpan, fn: () => T): T => fn()),
 );
 const finalizeSpan = vi.hoisted(() =>
-  vi.fn((span: MockSpan, error?: unknown) => {
-    if (error === undefined) {
+  vi.fn((span: MockSpan, cause?: unknown) => {
+    if (cause === undefined) {
       span.setStatus({ code: 'OK' });
     } else {
-      span.recordException(error);
+      span.recordException(cause);
       span.setStatus({ code: 'ERROR' });
     }
     span.end();
@@ -66,22 +68,57 @@ import {
   type InstrumentDrizzleConfig,
 } from './index';
 
+/** An attribute value, as OpenTelemetry allows one on a span. */
+type SpanAttributeValue =
+  | string
+  | number
+  | boolean
+  | Array<string | number | boolean | null | undefined>;
+
+/** The options a span is started with, as the instrumentation passes them. */
+interface SpanStartOptions {
+  kind?: number;
+  attributes?: Record<string, SpanAttributeValue>;
+}
+
+/** The status the instrumentation sets on a span when it finishes. */
+interface SpanStatus {
+  code: string;
+  message?: string;
+}
+
+/**
+ * What these tests pass a drizzle client. Drizzle's drivers each name the SQL
+ * differently - a bare string, `{ sql }`, or `{ text }` - which is why the
+ * instrumentation reads all three.
+ */
+type DrizzleQuery =
+  string | { sql: string } | { text: string } | { queryString: string };
+
+/** The transaction object a fake drizzle session hands its callback. */
+interface FakeTransaction {
+  execute: (query?: DrizzleQuery) => Promise<{ ok: true }>;
+  session?: { prepareQuery?: (query: DrizzleQuery) => unknown };
+}
+
+/** What the instrumentation recorded on a span, as these tests observe it. */
 interface MockSpan {
   name: string;
-  options: unknown;
-  attributes: Record<string, unknown>;
-  status: unknown;
+  options: SpanStartOptions | undefined;
+  attributes: Record<string, SpanAttributeValue>;
+  status: SpanStatus | undefined;
   ended: boolean;
   exceptions: unknown[];
-  setAttribute: (key: string, value: unknown) => void;
-  setStatus: (status: unknown) => void;
-  recordException: (error: unknown) => void;
+  setAttribute: (key: string, value: SpanAttributeValue) => void;
+  setStatus: (status: SpanStatus) => void;
+  recordException: (cause: unknown) => void;
   end: () => void;
 }
 
 function getSpan(index = 0): MockSpan {
   const span = spans[index];
   expect(span).toBeDefined();
+  // SAFETY: the expectation above fails the test when the span is absent.
   return span as MockSpan;
 }
 
@@ -95,7 +132,7 @@ describe('instrumentDrizzle', () => {
 
   it('preserves synchronous query return values', () => {
     const client = {
-      query: vi.fn((_query: unknown) => ({ rows: [{ id: 1 }] })),
+      query: vi.fn((_query: DrizzleQuery) => ({ rows: [{ id: 1 }] })),
     };
 
     instrumentDrizzle(client);
@@ -110,8 +147,8 @@ describe('instrumentDrizzle', () => {
 
   it('wraps both query and execute when both methods exist', async () => {
     const client = {
-      query: vi.fn(async (_query: unknown) => ({ source: 'query' })),
-      execute: vi.fn(async (_query: unknown) => ({ source: 'execute' })),
+      query: vi.fn(async (_query: DrizzleQuery) => ({ source: 'query' })),
+      execute: vi.fn(async (_query: DrizzleQuery) => ({ source: 'execute' })),
     };
 
     instrumentDrizzle(client);
@@ -136,7 +173,7 @@ describe('instrumentDrizzle', () => {
       query: vi.fn(
         (
           _query: string,
-          callback: (error: unknown, result: { ok: true }) => void,
+          callback: (cause: unknown, result: { ok: true }) => void,
         ) => {
           callback(null, { ok: true });
           return;
@@ -162,7 +199,7 @@ describe('instrumentDrizzle', () => {
   it('records async failures', async () => {
     const error = new Error('boom');
     const client = {
-      query: vi.fn(async (_query: unknown) => {
+      query: vi.fn(async (_query: DrizzleQuery) => {
         throw error;
       }),
     };
@@ -177,7 +214,7 @@ describe('instrumentDrizzle', () => {
 
   it('applies config to captured spans', async () => {
     const client = {
-      execute: vi.fn(async (_query: unknown) => ({ rows: [] })),
+      execute: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
     };
     const config: InstrumentDrizzleConfig = {
       dbSystem: 'mysql',
@@ -202,7 +239,7 @@ describe('instrumentDrizzle', () => {
 
   it('skips db.statement when query capture is disabled', async () => {
     const client = {
-      query: vi.fn(async (_query: unknown) => ({ rows: [] })),
+      query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
     };
 
     instrumentDrizzle(client, { captureQueryText: false });
@@ -214,7 +251,7 @@ describe('instrumentDrizzle', () => {
 
   it('emits db.statement.hash even when statement text is suppressed', async () => {
     const client = {
-      query: vi.fn(async (_query: unknown) => ({ rows: [] })),
+      query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
     };
 
     instrumentDrizzle(client, { captureQueryText: false });
@@ -226,7 +263,7 @@ describe('instrumentDrizzle', () => {
 
   it('produces identical db.statement.hash for identical statements', async () => {
     const client = {
-      query: vi.fn(async (_query: unknown) => ({ rows: [] })),
+      query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
     };
 
     instrumentDrizzle(client, {});
@@ -241,7 +278,7 @@ describe('instrumentDrizzle', () => {
 
   it('produces different db.statement.hash for different statements', async () => {
     const client = {
-      query: vi.fn(async (_query: unknown) => ({ rows: [] })),
+      query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
     };
 
     instrumentDrizzle(client, {});
@@ -269,7 +306,7 @@ describe('instrumentDrizzleClient', () => {
     };
     const db = {
       session: {
-        prepareQuery: vi.fn((_query: unknown) => prepared),
+        prepareQuery: vi.fn((_query: DrizzleQuery) => prepared),
       },
     };
 
@@ -290,12 +327,12 @@ describe('instrumentDrizzleClient', () => {
   });
 
   it('instruments the session but leaves $client untouched', async () => {
-    const originalClientQuery = vi.fn(async (_query: unknown) => ({
+    const originalClientQuery = vi.fn(async (_query: DrizzleQuery) => ({
       rows: ['client'],
     }));
     const db = {
       session: {
-        execute: vi.fn(async (_query: unknown) => ({ rows: ['session'] })),
+        execute: vi.fn(async (_query: DrizzleQuery) => ({ rows: ['session'] })),
       },
       $client: {
         query: originalClientQuery,
@@ -321,7 +358,7 @@ describe('instrumentDrizzleClient', () => {
     // Simulates the real drizzle-orm/node-postgres flow where
     // prepared.execute() internally dispatches to db.$client.query().
     const client = {
-      query: vi.fn(async (_query: unknown) => ({ rows: [{ id: 1 }] })),
+      query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [{ id: 1 }] })),
     };
     const db = {
       $client: client,
@@ -349,16 +386,18 @@ describe('instrumentDrizzleClient', () => {
     let txRef: any;
     const db = {
       session: {
-        transaction: vi.fn(async (callback: (tx: unknown) => unknown) => {
-          txRef = {
-            execute: vi.fn(async () => ({ ok: true })),
-            session: {
-              query: vi.fn(async () => ({ ok: true })),
-            },
-          };
+        transaction: vi.fn(
+          async (callback: (tx: FakeTransaction) => unknown) => {
+            txRef = {
+              execute: vi.fn(async () => ({ ok: true })),
+              session: {
+                query: vi.fn(async () => ({ ok: true })),
+              },
+            };
 
-          return callback(txRef);
-        }),
+            return callback(txRef);
+          },
+        ),
       },
     };
 
@@ -379,7 +418,7 @@ describe('instrumentDrizzleClient', () => {
     const db = {
       _: {
         session: {
-          execute: vi.fn((_query: unknown) => ({ rows: [1] })),
+          execute: vi.fn((_query: DrizzleQuery) => ({ rows: [1] })),
         },
       },
     };
@@ -394,12 +433,12 @@ describe('instrumentDrizzleClient', () => {
   });
 
   it('is idempotent when called repeatedly', () => {
-    const originalClientExecute = vi.fn(async (_query: unknown) => ({
+    const originalClientExecute = vi.fn(async (_query: DrizzleQuery) => ({
       rows: [],
     }));
     const db = {
       session: {
-        query: vi.fn(async (_query: unknown) => ({ rows: [] })),
+        query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
       },
       $client: {
         execute: originalClientExecute,

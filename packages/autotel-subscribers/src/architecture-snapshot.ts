@@ -29,6 +29,10 @@
  * ```
  */
 
+import type {
+  EventAttributes,
+  EventAttributeValue,
+} from 'autotel/event-subscriber';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { EventSubscriber, type EventPayload } from './event-subscriber-base';
@@ -239,10 +243,12 @@ type AutotelMeta = {
   consumers?: string[];
 };
 
-function readAutotelMeta(attrs: Record<string, unknown>): AutotelMeta {
+function readAutotelMeta(attrs: EventAttributes): AutotelMeta {
   const meta = attrs._autotel;
   if (!meta || typeof meta !== 'object') return {};
-  const m = meta as Record<string, unknown>;
+  // SAFETY: the guard above established `meta` is a non-null object; every
+  // field read below is checked for its own type before it is used.
+  const m = meta as Record<string, EventAttributeValue>;
   return {
     channel: typeof m.channel === 'string' ? m.channel : undefined,
     producer: typeof m.producer === 'string' ? m.producer : undefined,
@@ -271,10 +277,8 @@ const AUTOTEL_INJECTED_KEYS = new Set([
   'service.name',
 ]);
 
-function stripAutotelMeta(
-  attrs: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+function stripAutotelMeta(attrs: EventAttributes): EventAttributes {
+  const out: EventAttributes = {};
   for (const [key, value] of Object.entries(attrs)) {
     if (AUTOTEL_INJECTED_KEYS.has(key)) continue;
     out[key] = value;
@@ -395,23 +399,23 @@ function mergeFieldStats(
   a: Record<string, FieldStats>,
   b: Record<string, FieldStats>,
 ): Record<string, FieldStats> {
-  const merged: Record<string, FieldStats> = { ...a };
+  const merged = new Map(Object.entries(a));
   for (const [path, bs] of Object.entries(b)) {
-    const prev = merged[path];
+    const prev = merged.get(path);
     if (!prev) {
-      merged[path] = bs;
+      merged.set(path, bs);
       continue;
     }
     const types = new Set([...prev.types, ...bs.types]);
     const sampleValues = new Set([...prev.sampleValues, ...bs.sampleValues]);
-    merged[path] = {
+    merged.set(path, {
       types: [...types].toSorted(),
       sampleValues: [...sampleValues]
         .toSorted(comparePrimitiveValues)
         .slice(0, 20),
-    };
+    });
   }
-  return merged;
+  return Object.fromEntries(merged);
 }
 
 function sortFieldStats(

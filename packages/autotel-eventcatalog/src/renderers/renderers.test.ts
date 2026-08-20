@@ -60,11 +60,11 @@ describe('renderer registry', () => {
 
   it('every renderer has a name, description, and both render functions', () => {
     for (const r of RENDERERS) {
-      expect(typeof r.name).toBe('string');
+      expect(r.name).toBeTypeOf('string');
       expect(r.name.length).toBeGreaterThan(0);
-      expect(typeof r.description).toBe('string');
-      expect(typeof r.renderReport).toBe('function');
-      expect(typeof r.renderDelta).toBe('function');
+      expect(r.description).toBeTypeOf('string');
+      expect(r.renderReport).toBeTypeOf('function');
+      expect(r.renderDelta).toBeTypeOf('function');
     }
   });
 

@@ -136,7 +136,7 @@
 
   // ─── Open/close motion: slide from (and back to) the docked edge ───
   const reduceMotion =
-    typeof window !== 'undefined' &&
+    globalThis.window !== undefined &&
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 

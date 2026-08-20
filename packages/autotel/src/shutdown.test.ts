@@ -11,19 +11,16 @@ import {
   _setOptionalRequireForTesting,
 } from './init';
 import { track, getEventQueue } from './track';
-import type { EventSubscriber } from './event-subscriber';
+import type { EventAttributes, EventSubscriber } from './event-subscriber';
+import { moduleDouble, sdkDouble } from './testing/doubles';
 
 // Mock adapter for testing
 class MockAdapter implements EventSubscriber {
   name = 'mock-adapter';
-  public events: Array<{ name: string; attributes?: Record<string, unknown> }> =
-    [];
+  public events: Array<{ name: string; attributes?: EventAttributes }> = [];
   public shutdownCalled = false;
 
-  async trackEvent(
-    name: string,
-    attributes?: Record<string, unknown>,
-  ): Promise<void> {
+  async trackEvent(name: string, attributes?: EventAttributes): Promise<void> {
     this.events.push({ name, attributes });
   }
 
@@ -113,7 +110,7 @@ describe('shutdown module', () => {
 
       init({
         service: 'test-service',
-        sdkFactory: () => mockSdk as any,
+        sdkFactory: () => sdkDouble(mockSdk),
         subscribers: [mockAdapter],
       });
 
@@ -143,7 +140,7 @@ describe('shutdown module', () => {
 
       init({
         service: 'test-service',
-        sdkFactory: () => mockSdk as any,
+        sdkFactory: () => sdkDouble(mockSdk),
         subscribers: [mockAdapter],
       });
 
@@ -164,7 +161,7 @@ describe('shutdown module', () => {
 
       init({
         service: 'test-service',
-        sdkFactory: () => mockSdk as any,
+        sdkFactory: () => sdkDouble(mockSdk),
       });
 
       // Flush with custom timeout should work
@@ -184,7 +181,7 @@ describe('shutdown module', () => {
 
       init({
         service: 'test-service',
-        sdkFactory: () => mockSdk as any,
+        sdkFactory: () => sdkDouble(mockSdk),
       });
 
       // Should not throw even if forceFlush doesn't exist
@@ -201,7 +198,7 @@ describe('shutdown module', () => {
 
       init({
         service: 'test-service',
-        sdkFactory: () => mockSdk as any,
+        sdkFactory: () => sdkDouble(mockSdk),
       });
 
       // Should not throw
@@ -300,12 +297,12 @@ describe('shutdown module', () => {
       const close = vi.fn().mockResolvedValue(undefined);
       _setOptionalRequireForTesting((id: string) => {
         if (id === 'autotel-devtools') {
-          return {
+          return moduleDouble({
             createDevtools: () => ({
               port: 4318,
               close,
             }),
-          } as any;
+          });
         }
         return;
       });

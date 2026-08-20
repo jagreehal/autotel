@@ -1,4 +1,6 @@
 import type { ErrorGroup, LogData, SpanData, TraceData } from '../types';
+import type { SpanAttributes } from '../types.js';
+import { asString } from '../attrs.js';
 
 export type ResourceType =
   'service' | 'database' | 'cache' | 'messaging' | 'external' | 'unknown';
@@ -32,29 +34,29 @@ export function inferResourceName(
   ];
 
   for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.trim().length > 0) {
-      return candidate;
-    }
+    const named = asString(candidate)?.trim();
+    if (named) return named;
   }
 
   return 'unknown';
 }
 
 export function inferResourceType(
-  attributes: Record<string, unknown>,
+  attributes: SpanAttributes,
   name: string,
 ): ResourceType {
-  if (typeof attributes['db.system'] === 'string') return 'database';
-  if (typeof attributes['cache.system'] === 'string') return 'cache';
-  if (typeof attributes['messaging.system'] === 'string') return 'messaging';
+  if (asString(attributes['db.system']) !== undefined) return 'database';
+  if (asString(attributes['cache.system']) !== undefined) return 'cache';
+  if (asString(attributes['messaging.system']) !== undefined)
+    return 'messaging';
   if (
-    typeof attributes['peer.service'] === 'string' ||
-    typeof attributes['net.peer.name'] === 'string' ||
-    typeof attributes['http.host'] === 'string'
+    asString(attributes['peer.service']) !== undefined ||
+    asString(attributes['net.peer.name']) !== undefined ||
+    asString(attributes['http.host']) !== undefined
   ) {
     return name === attributes['service.name'] ? 'service' : 'external';
   }
-  if (typeof attributes['service.name'] === 'string') return 'service';
+  if (asString(attributes['service.name']) !== undefined) return 'service';
   return 'unknown';
 }
 
@@ -69,9 +71,8 @@ export function getLogResourceName(log: LogData): string {
   ];
 
   for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.trim().length > 0) {
-      return candidate;
-    }
+    const named = asString(candidate)?.trim();
+    if (named) return named;
   }
 
   return 'unknown';

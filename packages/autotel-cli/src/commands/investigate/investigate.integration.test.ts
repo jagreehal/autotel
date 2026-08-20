@@ -168,7 +168,7 @@ describe('investigate commands (fixture backend)', () => {
       totalTraces: number;
       groups: unknown[];
     };
-    expect(typeof data.totalTraces).toBe('number');
+    expect(data.totalTraces).toBeTypeOf('number');
     expect(Array.isArray(data.groups)).toBe(true);
   });
 
@@ -207,7 +207,7 @@ describe('investigate commands (fixture backend)', () => {
       byModel: unknown;
       byService: unknown;
     };
-    expect(typeof data.summary.totalRequests).toBe('number');
+    expect(data.summary.totalRequests).toBeTypeOf('number');
     expect(data.byModel).toBeDefined();
     expect(data.byService).toBeDefined();
   });
@@ -215,7 +215,7 @@ describe('investigate commands (fixture backend)', () => {
   it('score explain: returns guide (no backend)', async () => {
     await runScoreExplain({});
     const data = expectOk('score explain') as { guide: string };
-    expect(typeof data.guide).toBe('string');
+    expect(data.guide).toBeTypeOf('string');
     expect(data.guide.length).toBeGreaterThan(0);
   });
 });

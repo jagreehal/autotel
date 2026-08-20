@@ -106,10 +106,13 @@ function hasAmbientTracing(
   return false;
 }
 
-function projectSource(projectRoot: string): {
+/** What projectSource() answers with. */
+interface ProjectSourceResult {
   text: string;
   repeatedErrors: ProjectFacts['repeatedErrors'];
-} {
+}
+
+function projectSource(projectRoot: string): ProjectSourceResult {
   const files = globSync(
     '{src,app,server,routes,pages}/**/*.{ts,tsx,js,jsx,mts,mjs}',
     {

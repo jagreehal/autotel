@@ -1,12 +1,4 @@
-import {
-  init,
-  trace,
-  span,
-  instrument,
-  flush,
-  shutdown,
-  withTracing,
-} from 'autotel';
+import { init, span, instrument, flush, shutdown, withTracing } from 'autotel';
 import { InMemorySpanExporter } from 'autotel/exporters';
 import { SimpleSpanProcessor } from 'autotel/processors';
 
@@ -20,13 +12,13 @@ async function main() {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
-  // 1. Direct trace wrapping
-  const getUser = trace('user.get', async (id: string) => ({
-    id,
-    name: 'Alice',
-  }));
+  // 1. Reusable named function
+  const getUser = instrument({
+    key: 'user.get',
+    fn: async (id: string) => ({ id, name: 'Alice' }),
+  });
   const user = await getUser('123');
-  console.log('  trace(fn) →', user);
+  console.log('  instrument({ key, fn }) →', user);
 
   // 2. Factory pattern with context access
   const createUser = withTracing({ name: 'user.create' })(
@@ -40,11 +32,11 @@ async function main() {
   console.log('  withTracing({})((ctx)=>fn) →', created);
 
   // 3. Explicit naming
-  const namedOp = trace(
-    'process-payment',
-    (amount: number) => `Paid $${amount}`,
-  );
-  console.log('  trace(name, fn) →', namedOp(100));
+  const namedOp = instrument({
+    key: 'process-payment',
+    fn: (amount: number) => `Paid $${amount}`,
+  });
+  console.log('  instrument({ key, fn }) →', namedOp(100));
 
   // 4. span() — inline span around any expression
   const computed = span('compute-value', () => 1 + 2 + 3);

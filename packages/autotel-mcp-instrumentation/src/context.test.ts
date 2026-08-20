@@ -82,7 +82,7 @@ describe('Context Utilities', () => {
       context.with(trace.setSpan(context.active(), span), () => {
         const meta = injectOtelContextToMeta();
         expect(meta.traceparent).toBeDefined();
-        expect(typeof meta.traceparent).toBe('string');
+        expect(meta.traceparent).toBeTypeOf('string');
       });
 
       span.end();

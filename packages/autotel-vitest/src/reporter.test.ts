@@ -1,3 +1,4 @@
+import type { SpanOptions } from 'autotel';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
 const spans: Array<{
@@ -10,10 +11,10 @@ vi.mock('autotel', () => ({
   SpanStatusCode: { ERROR: 2 },
   context: {
     active: () => ({}),
-    with: (_ctx: unknown, fn: () => void) => fn(),
+    with: (_ctx: never, fn: () => void) => fn(),
   },
   getTracer: () => ({
-    startSpan: (_name: string, _options?: unknown) => {
+    startSpan: (_name: string, _options?: SpanOptions) => {
       const span = {
         end: vi.fn(),
         recordException: vi.fn(),
@@ -37,6 +38,9 @@ function makeTestCase(overrides: {
     errors?: Array<{ message?: string; stack?: string }>;
   };
 }) {
+  // SAFETY: OtelReporter reads id, name, fullName, module.moduleId and result()
+  // off a test case. Vitest's own type describes a great deal more, none of
+  // which these paths reach.
   return {
     id: overrides.id,
     name: overrides.name,
@@ -52,6 +56,7 @@ function makeTestSuite(overrides: {
   moduleId?: string;
   state?: string;
 }) {
+  // SAFETY: as above - a suite is read for id, name, module.moduleId and state().
   return {
     id: overrides.id,
     name: overrides.name,
@@ -169,6 +174,7 @@ describe('OtelReporter', () => {
     const { OtelReporter } = await import('./reporter');
     const reporter = new OtelReporter();
 
+    // SAFETY: the reporter reads moduleId off a module and nothing else.
     const moduleA = { moduleId: 'a.test.ts' } as any;
 
     const testInA = makeTestCase({
@@ -196,6 +202,7 @@ describe('OtelReporter', () => {
     const { OtelReporter } = await import('./reporter');
     const reporter = new OtelReporter();
 
+    // SAFETY: the reporter reads moduleId off a module and nothing else.
     const moduleA = { moduleId: 'a.test.ts' } as any;
 
     const suiteInA = makeTestSuite({

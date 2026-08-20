@@ -5,6 +5,7 @@
 // Inventing our own catalog types would silently drift from the SDK as it
 // evolves.
 
+import type { JsonSchemaNode } from './generate.js';
 import utils from '@eventcatalog/sdk';
 import type { Channel, Event, Service } from '@eventcatalog/sdk';
 
@@ -89,7 +90,7 @@ export async function readCatalogState(
  * use `.`. We walk `properties` (objects) and `items` (arrays).
  */
 export function extractDeclaredFieldPaths(
-  schema: unknown,
+  schema: JsonSchemaNode | undefined,
   prefix = '',
 ): string[] {
   const out = new Set<string>();
@@ -97,70 +98,61 @@ export function extractDeclaredFieldPaths(
   return [...out].toSorted();
 }
 
-function walkSchema(schema: unknown, prefix: string, out: Set<string>): void {
-  if (!schema || typeof schema !== 'object') return;
-  const s = schema as Record<string, unknown>;
+function walkSchema(
+  schema: JsonSchemaNode | undefined,
+  prefix: string,
+  out: Set<string>,
+): void {
+  if (!schema) return;
 
-  if (s.properties && typeof s.properties === 'object') {
-    for (const [key, sub] of Object.entries(
-      s.properties as Record<string, unknown>,
-    )) {
-      const path = prefix === '' ? key : `${prefix}.${key}`;
-      out.add(path);
-      walkSchema(sub, path, out);
-    }
+  for (const [key, sub] of Object.entries(schema.properties ?? {})) {
+    const path = prefix === '' ? key : `${prefix}.${key}`;
+    out.add(path);
+    walkSchema(sub, path, out);
   }
 
-  if (s.items) {
-    const arrayPrefix = prefix + '[]';
-    walkSchema(s.items, arrayPrefix, out);
-  }
+  if (schema.items) walkSchema(schema.items, prefix + '[]', out);
 }
 
 export function extractDeclaredSchemaConstraints(
-  schema: unknown,
+  schema: JsonSchemaNode | undefined,
   prefix = '',
 ): Record<string, SchemaConstraint> {
   const out = new Map<string, SchemaConstraint>();
   walkSchemaConstraints(schema, prefix, out);
-  const obj: Record<string, SchemaConstraint> = {};
-  for (const [path, c] of out) obj[path] = c;
-  return obj;
+  return Object.fromEntries(out);
 }
 
 function walkSchemaConstraints(
-  schema: unknown,
+  schema: JsonSchemaNode | undefined,
   prefix: string,
   out: Map<string, SchemaConstraint>,
 ): void {
-  if (!schema || typeof schema !== 'object') return;
-  const s = schema as Record<string, unknown>;
-  const typeVal = s.type;
-  const enumVal = s.enum;
+  if (!schema) return;
+  const typeVal = schema.type;
+  const enumVal = schema.enum;
   if (prefix !== '' && (typeVal !== undefined || enumVal !== undefined)) {
     const types = toTypeArray(typeVal);
     const enumValues = Array.isArray(enumVal) ? [...enumVal] : undefined;
-    out.set(prefix, {
-      ...(types.length > 0 ? { types } : {}),
-      ...(enumValues ? { enumValues } : {}),
-    });
+    // A field declares types, enum values, both or neither; an absent one is
+    // omitted rather than recorded as empty.
+    const field: SchemaConstraint = {};
+    if (types.length > 0) field.types = types;
+    if (enumValues) field.enumValues = enumValues;
+    out.set(prefix, field);
   }
 
-  if (s.properties && typeof s.properties === 'object') {
-    for (const [key, sub] of Object.entries(
-      s.properties as Record<string, unknown>,
-    )) {
-      const path = prefix === '' ? key : `${prefix}.${key}`;
-      walkSchemaConstraints(sub, path, out);
-    }
+  for (const [key, sub] of Object.entries(schema.properties ?? {})) {
+    const path = prefix === '' ? key : `${prefix}.${key}`;
+    walkSchemaConstraints(sub, path, out);
   }
-  if (s.items) {
+  if (schema.items) {
     const arrayPrefix = prefix + '[]';
-    walkSchemaConstraints(s.items, arrayPrefix, out);
+    walkSchemaConstraints(schema.items, arrayPrefix, out);
   }
 }
 
-function toTypeArray(typeVal: unknown): string[] {
+function toTypeArray(typeVal: JsonSchemaNode['type']): string[] {
   if (typeof typeVal === 'string') return [typeVal];
   if (Array.isArray(typeVal)) {
     return typeVal.filter((t): t is string => typeof t === 'string').toSorted();

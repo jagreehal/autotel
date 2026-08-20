@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { instrumentRateLimiter } from './rate-limiter';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { tracerDouble } from '../testing/doubles.js';
 
 describe('Rate Limiter Instrumentation', () => {
   let mockTracer: any;
@@ -33,7 +34,7 @@ describe('Rate Limiter Instrumentation', () => {
 
     getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(mockTracer as any);
+      .mockReturnValue(tracerDouble(mockTracer));
 
     mockLimiter = {
       limit: vi.fn(async () => ({ success: true })),

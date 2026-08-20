@@ -2,10 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 
 import { createFileRoute } from '@tanstack/react-router'
 
-function getNames() {
-  return fetch('/demo/api/names').then(
-    (res) => res.json() as Promise<Array<string>>,
-  )
+function getNames(): Promise<Array<string>> {
+  return fetch('/demo/api/names')
+    .then((res) => res.json())
+    .then((body) => (Array.isArray(body) ? body.map(String) : []))
 }
 
 export const Route = createFileRoute('/demo/start/api-request')({

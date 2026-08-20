@@ -80,6 +80,9 @@ async function ddFetch<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Datadog ${res.status}: ${res.statusText}`);
+  // SAFETY: T names the response this endpoint documents; every field is
+  // read defensively below, so an unexpected body renders as an empty result
+  // rather than a crash.
   return (await res.json()) as T;
 }
 

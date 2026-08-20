@@ -2,6 +2,8 @@ import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
 import { backendFetch } from './http';
+import type { SpanAttributes } from 'autotel-devtools';
+import { asString, readProperty } from '../values';
 
 // Pydantic Logfire query API. Logfire spans live in a ClickHouse-backed
 // store accessed via a SQL-like read API at `/v2/query`.
@@ -25,11 +27,11 @@ interface LogfireSpanRow {
   is_exception?: boolean;
   status_code?: string;
   status_message?: string | null;
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
   events?: Array<{
     name: string;
     timestamp: string;
-    attributes?: Record<string, unknown>;
+    attributes?: SpanAttributes;
   }>;
 }
 
@@ -76,6 +78,9 @@ async function logfireFetch<T>(
     }),
   });
   if (!res.ok) throw new Error(`Logfire ${res.status}: ${res.statusText}`);
+  // SAFETY: T names the response this endpoint documents; every field is
+  // read defensively below, so an unexpected body renders as an empty result
+  // rather than a crash.
   return (await res.json()) as T;
 }
 
@@ -169,9 +174,7 @@ export const logfireAdapter: QueryAdapter = {
       'SELECT DISTINCT service_name FROM records WHERE service_name IS NOT NULL LIMIT 200',
     );
     return rowsOf(body)
-      .map(
-        (r) => (r as unknown as { service_name?: string }).service_name ?? '',
-      )
+      .map((r) => asString(readProperty(r, 'service_name')) ?? '')
       .filter((n) => n.length > 0);
   },
 

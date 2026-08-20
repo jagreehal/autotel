@@ -16,9 +16,8 @@ import {
  * at runtime, with `opts.consumer` / `opts.provider` as override fallbacks.
  */
 export interface MessageConsumerPactLike {
-  verify: (
-    handler: (message: ReifiedMessage) => Promise<unknown>,
-  ) => Promise<unknown>;
+  /** Runs the handler against the reified message and forwards what it returned. */
+  verify: <R>(handler: (message: ReifiedMessage) => Promise<R>) => Promise<R>;
   /**
    * Optional fluent metadata appender. Pact-JS's `MessageConsumerPact`
    * provides this; we use it (when present) to write `interactionId`
@@ -39,7 +38,7 @@ interface MessageConsumerPactWithConfig extends MessageConsumerPactLike {
 export interface ReifiedMessage {
   contents: unknown;
   description?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, string | number | boolean>;
   providerStates?: Array<{ name: string }>;
 }
 
@@ -78,7 +77,10 @@ export interface WithPactInteractionOptions extends LedgerOptions {
 function resolveParticipants(
   pact: MessageConsumerPactLike,
   opts: WithPactInteractionOptions,
-): { consumer: string; provider: string } {
+) {
+  // SAFETY: Pact-JS keeps the consumer and provider names on `config`, which
+  // MessageConsumerPactLike does not require - a caller can pass them in
+  // options instead, which is what the check below falls back to.
   const cfg = (pact as MessageConsumerPactWithConfig).config;
   const consumer = opts.consumer ?? cfg?.consumer;
   const provider = opts.provider ?? cfg?.provider;
@@ -156,6 +158,8 @@ export async function withPactInteraction<R>(
           buildPactAttributes(meta, { contractFile: opts.contractFile }),
         );
 
+        // SAFETY: the handler is the caller's own, typed to return R; verify()
+        // erases that because Pact-JS types it as returning void.
         handlerResult = (await handler(reified)) as R;
         return handlerResult;
       });
@@ -171,6 +175,7 @@ export async function withPactInteraction<R>(
         opts,
       });
 
+      // SAFETY: assigned by the handler above, which ran before verify resolved.
       return handlerResult as R;
     } catch (error) {
       span.setAttributes(outcomeAttribute('failed'));

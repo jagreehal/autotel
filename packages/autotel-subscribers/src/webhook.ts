@@ -37,7 +37,8 @@ export class WebhookSubscriber implements EventSubscriber {
     this.httpClient = createHttpClient({ timeoutMs: config.timeoutMs });
   }
 
-  private async send(payload: unknown): Promise<void> {
+  /** Posts one event body. Generic because each subscriber builds its own. */
+  private async send<TPayload>(payload: TPayload): Promise<void> {
     if (!this.enabled) return;
 
     await postJsonWithRetry(this.httpClient, this.config.url, payload, {

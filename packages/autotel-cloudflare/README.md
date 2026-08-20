@@ -23,7 +23,7 @@
 The package direction is to make Cloudflare observability feel the same across Workers, Queues, Durable Objects, alarms, and Workflows:
 
 - use Cloudflare-native wrappers to create the root span
-- use plain `trace(name?, fn)` for business logic, with ambient `getActiveTraceContext()` or explicit `withTracing({ name })((ctx) => fn)` when span access is needed
+- use `trace(fn)` for inferred-name wrappers and `trace(name, ctx => result)` for immediate named work; use `withTracing({ name })((ctx) => fn)` for reusable named business logic (`instrument(handler, config)` is the Worker handler adapter)
 - prefer span attributes and one execution snapshot over scattered info logs
 
 See [docs/CLOUDFLARE-DX.md](../../docs/CLOUDFLARE-DX.md) for the design target and review rules.

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PACT_ATTRS } from './attrs.js';
+import type { SpanAttributeValue } from './processor.js';
 import { readLedger, resetLedgerWriteChainForTests } from './ledger.js';
 import { PactLedgerSpanProcessor } from './processor.js';
 
@@ -21,7 +22,7 @@ afterEach(() => {
   rmSync(workDir, { recursive: true, force: true });
 });
 
-function fakeSpan(attrs: Record<string, unknown>) {
+function fakeSpan(attrs: Record<string, SpanAttributeValue>) {
   return {
     attributes: attrs,
     spanContext: () => ({ traceId: 't1', spanId: 's1' }),

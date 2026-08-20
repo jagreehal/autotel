@@ -315,11 +315,14 @@ const nextAdapter: FrameworkAdapter = {
 /* Nitro / Nuxt                                                                */
 /* -------------------------------------------------------------------------- */
 
-/** Nitro encodes the method in the filename: `users.post.ts` is `POST /users`. */
-function nitroMethodSuffix(fileName: string): {
+/** What nitroMethodSuffix() answers with. */
+interface NitroMethodSuffixResult {
   method: string | null;
   base: string;
-} {
+}
+
+/** Nitro encodes the method in the filename: `users.post.ts` is `POST /users`. */
+function nitroMethodSuffix(fileName: string): NitroMethodSuffixResult {
   const match = /^(.*)\.(get|post|put|patch|delete|head|options)$/i.exec(
     fileName,
   );
@@ -767,6 +770,12 @@ export function isFramework(value: string): value is Framework {
   return (SUPPORTED_FRAMEWORKS as readonly string[]).includes(value);
 }
 
+/** What detectFramework() answers with. */
+interface DetectFrameworkResult {
+  framework: Framework | null;
+  warnings: string[];
+}
+
 /**
  * Pick the framework to scan for.
  *
@@ -776,7 +785,7 @@ export function isFramework(value: string): value is Framework {
 export function detectFramework(
   projectRoot: string,
   deps: ReadonlySet<string>,
-): { framework: Framework | null; warnings: string[] } {
+): DetectFrameworkResult {
   const warnings: string[] = [];
 
   const candidates: [Framework, boolean][] = [

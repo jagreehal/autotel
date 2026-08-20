@@ -12,9 +12,10 @@ import {
   unsupportedReason,
   type Policy,
 } from './policy';
+import { logRecordDouble, readableSpanDouble } from './testing/doubles';
 
 function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
-  return {
+  return readableSpanDouble({
     name: 'GET /health',
     kind: SpanKind.SERVER,
     attributes: {},
@@ -27,18 +28,18 @@ function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
       traceFlags: 1,
     }),
     ...overrides,
-  } as unknown as ReadableSpan;
+  });
 }
 
 function makeLog(overrides: Partial<SdkLogRecord> = {}): SdkLogRecord {
-  return {
+  return logRecordDouble({
     body: 'hello',
     severityText: 'INFO',
     attributes: {},
     resource: { attributes: {} },
     instrumentationScope: { name: 'test' },
     ...overrides,
-  } as unknown as SdkLogRecord;
+  });
 }
 
 function collectingProcessor() {

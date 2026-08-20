@@ -7,6 +7,7 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
 import { configure, getConfig, resetConfig } from './config';
+import { tracerDouble } from './testing/doubles.js';
 
 describe('configure()', () => {
   beforeEach(() => {
@@ -38,7 +39,7 @@ describe('configure()', () => {
     };
 
     configure({
-      tracer: mockTracer as any,
+      tracer: tracerDouble(mockTracer),
     });
 
     const config = getConfig();
@@ -119,7 +120,7 @@ describe('configure()', () => {
   it('should expose feature flags', () => {
     const config = getConfig();
     expect(config.featureFlags).toBeDefined();
-    expect(typeof config.featureFlags.ENABLE_TRACING).toBe('boolean');
+    expect(config.featureFlags.ENABLE_TRACING).toBeTypeOf('boolean');
     expect(typeof config.featureFlags.ENABLE_METRICS_BY_DEFAULT).toBe(
       'boolean',
     );

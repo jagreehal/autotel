@@ -34,8 +34,22 @@ import {
   createStructuredError,
   type StructuredError,
 } from './structured-error';
+import type { EventAttributeValue } from './event-subscriber';
+import { asFunction, asNumber, asRecord, asString } from './values';
 
-const catalogCodeKey = Symbol.for('autotel.catalog.code');
+/**
+ * Structured fields attached to a log line or an error. They are serialized by
+ * whatever sink receives them, so a value that cannot survive JSON has no
+ * meaning here - which is what EventAttributeValue names.
+ */
+type LogFields = Record<string, EventAttributeValue>;
+
+const catalogCodeKey: unique symbol = Symbol.for('autotel.catalog.code');
+
+/** A value the builder below stamped with its catalog code. */
+interface CatalogCodeCarrier {
+  [catalogCodeKey]?: string | number;
+}
 
 /** Definition of a single error in a catalog. */
 export interface ErrorCatalogEntry {
@@ -61,9 +75,9 @@ export interface ErrorCatalogEntry {
 /** Per-call options passed alongside (or instead of) typed params. */
 export interface ErrorBuildOptions {
   cause?: unknown;
-  details?: Record<string, unknown>;
+  details?: LogFields;
   /** Backend-only context. Never serialized to clients. */
-  internal?: Record<string, unknown>;
+  internal?: LogFields;
 }
 
 type ParamsOf<E> = E extends { message: (params: infer P) => string }
@@ -91,9 +105,11 @@ export type ErrorCatalog<T extends Record<string, ErrorCatalogEntry>> = {
 };
 
 function readCatalogCode(error: unknown): string | number | undefined {
-  if (error === null || typeof error !== 'object') return undefined;
-  return (error as Record<symbol, unknown>)[catalogCodeKey] as
-    string | number | undefined;
+  if (!asRecord(error)) return undefined;
+  // SAFETY: the code is stored under this module's own symbol by the builder
+  // below; a value from anywhere else simply does not carry it.
+  const stored = (error as CatalogCodeCarrier)[catalogCodeKey];
+  return asString(stored) ?? asNumber(stored);
 }
 
 /** True when `error` was produced by any autotel error catalog. */
@@ -116,44 +132,46 @@ export function defineErrorCatalog<
 >(namespace: string, entries: T): ErrorCatalog<T> {
   const catalog: Record<string, ErrorBuilder<ErrorCatalogEntry>> = {};
 
+  // SAFETY: the entries come from the caller's own catalog literal, so each
+  // key is one of T's and each value that key's entry.
   for (const [key, entry] of Object.entries(entries) as [
     string,
     ErrorCatalogEntry,
   ][]) {
     const code = entry.code ?? `${namespace}.${key}`;
-    const usesParams =
-      typeof entry.message === 'function' || typeof entry.why === 'function';
+    const messageFor = asFunction(entry.message);
+    const whyFor = asFunction(entry.why);
+    const usesParams = Boolean(messageFor || whyFor);
 
+    // SAFETY: the builder's call signature depends on whether the entry's
+    // message takes params, which only the entry itself declares.
     const builder = ((
       paramsOrOptions?: unknown,
       maybeOptions?: ErrorBuildOptions,
     ): StructuredError => {
       const params = usesParams ? paramsOrOptions : undefined;
+      // SAFETY: the two overloads differ by whether params come first.
       const options = (usesParams ? maybeOptions : paramsOrOptions) as
         ErrorBuildOptions | undefined;
 
-      const message =
-        typeof entry.message === 'function'
-          ? (entry.message as (p: unknown) => string)(params)
-          : entry.message;
-      const why =
-        typeof entry.why === 'function'
-          ? (entry.why as (p: unknown) => string)(params)
-          : entry.why;
+      const message = messageFor
+        ? String(messageFor(params))
+        : (asString(entry.message) ?? '');
+      const why = whyFor ? String(whyFor(params)) : asString(entry.why);
 
+      // Every optional field is passed as undefined when absent, which
+      // createStructuredError treats the same way an omitted key would be.
       const error = createStructuredError({
         message,
         name: entry.name ?? key,
         code,
-        ...(entry.status === undefined ? {} : { status: entry.status }),
-        ...(why === undefined ? {} : { why }),
-        ...(entry.fix === undefined ? {} : { fix: entry.fix }),
-        ...(entry.link === undefined ? {} : { link: entry.link }),
-        ...(options?.cause === undefined ? {} : { cause: options.cause }),
-        ...(options?.details === undefined ? {} : { details: options.details }),
-        ...(options?.internal === undefined
-          ? {}
-          : { internal: options.internal }),
+        status: entry.status,
+        why,
+        fix: entry.fix,
+        link: entry.link,
+        cause: options?.cause,
+        details: options?.details,
+        internal: options?.internal,
       });
 
       Object.defineProperty(error, catalogCodeKey, {
@@ -178,6 +196,7 @@ export function defineErrorCatalog<
     catalog[key] = builder;
   }
 
+  // SAFETY: the catalog was built by walking T's own keys.
   return Object.freeze(catalog) as ErrorCatalog<T>;
 }
 
@@ -224,6 +243,8 @@ export function defineAuditCatalog<
 >(namespace: string, entries: T): AuditCatalog<T> {
   const catalog: Record<string, AuditDescriptor<AuditCatalogEntry>> = {};
 
+  // SAFETY: the entries come from the caller's own catalog literal, so each
+  // key is one of T's and each value that key's entry.
   for (const [key, entry] of Object.entries(entries) as [
     string,
     AuditCatalogEntry,
@@ -231,15 +252,18 @@ export function defineAuditCatalog<
     const action = entry.action ?? `${namespace}.${key}`;
     const severity: AuditSeverity = entry.severity ?? 'info';
 
+    const auditMessageFor = asFunction(entry.message);
+
+    // SAFETY: as with the error builder - the signature depends on whether
+    // this entry's message takes params.
     const descriptor = ((params?: unknown): AuditAction => {
-      const message =
-        typeof entry.message === 'function'
-          ? (entry.message as (p: unknown) => string)(params)
-          : entry.message;
+      const message = auditMessageFor
+        ? String(auditMessageFor(params))
+        : asString(entry.message);
       return Object.freeze({
         action,
         severity,
-        ...(message === undefined ? {} : { message }),
+        message,
       });
     }) as AuditDescriptor<AuditCatalogEntry>;
 
@@ -255,5 +279,6 @@ export function defineAuditCatalog<
     catalog[key] = descriptor;
   }
 
+  // SAFETY: as above - built from the caller's own entries.
   return Object.freeze(catalog) as AuditCatalog<T>;
 }

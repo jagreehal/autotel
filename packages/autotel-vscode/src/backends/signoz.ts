@@ -2,6 +2,7 @@ import type { TraceData } from 'autotel-devtools/server';
 import type { QueryAdapter, QueryAdapterContext, TraceQuery } from './types';
 import { credentialKey, registerAdapter } from './types';
 import { backendFetch } from './http';
+import type { SpanAttributes } from 'autotel-devtools';
 
 // SigNoz query API (HTTP, ClickHouse-backed):
 //   POST /api/v3/query_range   — generic trace+metric query
@@ -28,11 +29,11 @@ interface SignozTraceSpan {
   durationNano?: number;
   statusCode?: number;
   statusMessage?: string;
-  attributes?: Record<string, unknown>;
+  attributes?: SpanAttributes;
   events?: Array<{
     name?: string;
     timestamp?: number;
-    attributes?: Record<string, unknown>;
+    attributes?: SpanAttributes;
   }>;
 }
 
@@ -62,6 +63,9 @@ async function signozFetch<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`SigNoz ${res.status}: ${res.statusText}`);
+  // SAFETY: T names the response this endpoint documents; every field is
+  // read defensively below, so an unexpected body renders as an empty result
+  // rather than a crash.
   return (await res.json()) as T;
 }
 

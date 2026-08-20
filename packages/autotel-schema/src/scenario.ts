@@ -38,13 +38,15 @@
  * ```
  */
 
+import type { EmittedAttributeValue } from './validate.js';
+
 /** A finished span/event as the scenario checker sees it. */
 export interface ScenarioSpan {
   spanId: string;
   parentSpanId?: string;
   name: string;
   status: 'ok' | 'error' | 'unset';
-  attributes?: Record<string, unknown>;
+  attributes?: Record<string, EmittedAttributeValue>;
   /** Epoch ms. Optional — used by {@link proposeScenario} to suggest budgets. */
   startTimeMs?: number;
   durationMs?: number;
@@ -171,7 +173,7 @@ export interface ScenarioResult {
   spans: ScenarioSpan[];
 }
 
-function assert(condition: unknown, message: string): asserts condition {
+function assert(condition: boolean, message: string): asserts condition {
   if (!condition) {
     throw new Error(`autotel-schema: ${message}`);
   }
@@ -190,12 +192,12 @@ const COMPLETION_MODES = [
 export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
   const scope = `scenario "${name}"`;
   assert(
-    spec.completion && typeof spec.completion === 'object',
+    spec.completion !== undefined && spec.completion !== null,
     `${scope} must declare a completion boundary`,
   );
   assert(
-    (COMPLETION_MODES as readonly string[]).includes(spec.completion.mode),
-    `${scope} has invalid completion mode "${(spec.completion as { mode: string }).mode}"`,
+    COMPLETION_MODES.some((mode) => mode === spec.completion.mode),
+    `${scope} has invalid completion mode "${spec.completion.mode}"`,
   );
   const budget =
     spec.completion.mode === 'externally-reconciled'
@@ -226,7 +228,7 @@ export function validateScenarioSpec(name: string, spec: ScenarioSpec): void {
         parseCardinality(eventSpec.cardinality);
       } catch (error) {
         throw new Error(
-          `autotel-schema: ${scope} event "${event}": ${(error as Error).message}`,
+          `autotel-schema: ${scope} event "${event}": ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -553,6 +555,8 @@ export function proposeScenario(
   const edges: Array<readonly [string, string]> = [];
   const optionalEdges: Array<readonly [string, string]> = [];
   for (const [pair, seen] of [...edgeRuns.entries()].toSorted()) {
+    // SAFETY: every key in edgeRuns was built as `${parent}\0${child}` above,
+    // and a span name cannot contain a NUL, so this splits into exactly two.
     const [from, to] = pair.split(' ') as [string, string];
     if (seen === total) {
       edges.push([from, to]);
@@ -594,6 +598,7 @@ export function proposeScenario(
     ? Math.max(1000, Math.ceil(maxMakespanMs * 3))
     : 30_000;
   if (hasTiming && lastNames.size === 1) {
+    // SAFETY: the branch condition is lastNames.size === 1.
     const [event] = [...lastNames] as [string];
     completion = { mode: 'terminal-event', event, observationBudgetMs };
     notes.push(
@@ -612,9 +617,10 @@ export function proposeScenario(
     description: `Proposed from ${total} recorded run${total === 1 ? '' : 's'} of ${name} — review before committing`,
     completion,
     events,
-    ...(edges.length > 0 ? { edges } : {}),
-    ...(optionalEdges.length > 0 ? { optionalEdges } : {}),
   };
+  // A scenario with no edges declares none, rather than declaring an empty list.
+  if (edges.length > 0) scenario.edges = edges;
+  if (optionalEdges.length > 0) scenario.optionalEdges = optionalEdges;
   validateScenarioSpec(name, scenario);
   return { scenario, notes };
 }

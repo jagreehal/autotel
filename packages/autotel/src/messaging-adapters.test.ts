@@ -8,12 +8,13 @@ import {
   b3ContextExtractor,
   xrayContextExtractor,
 } from './messaging-adapters';
+import { traceContextDouble } from './testing/doubles.js';
 
 describe('Messaging Adapters', () => {
   describe('natsAdapter', () => {
     describe('producer', () => {
       it('should extract NATS attributes from producer args', () => {
-        const mockCtx = {} as never;
+        const mockCtx = traceContextDouble();
         const args = [
           { subject: 'orders.created', replyTo: 'inbox.123', stream: 'ORDERS' },
         ];
@@ -28,7 +29,7 @@ describe('Messaging Adapters', () => {
       });
 
       it('should handle missing optional fields', () => {
-        const mockCtx = {} as never;
+        const mockCtx = traceContextDouble();
         const args = [{ subject: 'orders.created' }];
 
         const attrs = natsAdapter.producer!.customAttributes!(mockCtx, args);
@@ -39,7 +40,7 @@ describe('Messaging Adapters', () => {
       });
 
       it('should handle undefined first arg', () => {
-        const mockCtx = {} as never;
+        const mockCtx = traceContextDouble();
         const args: unknown[] = [undefined];
 
         const attrs = natsAdapter.producer!.customAttributes!(mockCtx, args);
@@ -121,7 +122,7 @@ describe('Messaging Adapters', () => {
       });
 
       it('should extract NATS attributes from consumer message', () => {
-        const mockCtx = {} as never;
+        const mockCtx = traceContextDouble();
         const msg = {
           subject: 'orders.created',
           reply: 'inbox.456',
@@ -150,7 +151,7 @@ describe('Messaging Adapters', () => {
   describe('temporalAdapter', () => {
     describe('producer', () => {
       it('should extract Temporal attributes from producer args', () => {
-        const mockCtx = {} as never;
+        const mockCtx = traceContextDouble();
         const args = [
           {
             workflowId: 'order-123',
@@ -176,7 +177,7 @@ describe('Messaging Adapters', () => {
 
     describe('consumer', () => {
       it('should extract Temporal activity attributes', () => {
-        const mockCtx = {} as never;
+        const mockCtx = traceContextDouble();
         const msg = {
           workflowId: 'order-123',
           runId: 'run-456',
@@ -203,7 +204,7 @@ describe('Messaging Adapters', () => {
   describe('cloudflareQueuesAdapter', () => {
     describe('consumer', () => {
       it('should extract Cloudflare Queue message attributes', () => {
-        const mockCtx = {} as never;
+        const mockCtx = traceContextDouble();
         const timestamp = new Date('2024-01-15T10:00:00Z');
         const msg = {
           id: 'msg-123',
@@ -225,7 +226,7 @@ describe('Messaging Adapters', () => {
       });
 
       it('should handle missing optional fields', () => {
-        const mockCtx = {} as never;
+        const mockCtx = traceContextDouble();
         const msg = {
           id: 'msg-123',
         };

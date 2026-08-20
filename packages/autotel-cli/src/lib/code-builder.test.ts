@@ -59,7 +59,7 @@ describe('code-builder', () => {
       addImport(
         file,
         {
-          source: 'autotel-subscribers/posthog',
+          source: 'autotel-posthog/subscriber',
           specifiers: ['PostHogSubscriber'],
         },
         'subscriber',
@@ -126,7 +126,7 @@ describe('code-builder', () => {
       addImport(
         file,
         {
-          source: 'autotel-subscribers/posthog',
+          source: 'autotel-posthog/subscriber',
           specifiers: ['PostHogSubscriber'],
         },
         'subscriber',
@@ -297,7 +297,7 @@ instrumentMongoose(mongoose);`;
       addImport(
         file,
         {
-          source: 'autotel-subscribers/posthog',
+          source: 'autotel-posthog/subscriber',
           specifiers: ['PostHogSubscriber'],
         },
         'subscriber',

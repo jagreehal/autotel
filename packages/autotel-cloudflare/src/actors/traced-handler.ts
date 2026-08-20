@@ -8,7 +8,6 @@
  */
 
 import {
-  trace,
   context as api_context,
   propagation,
   SpanStatusCode,
@@ -17,12 +16,14 @@ import {
 import type { ConfigurationOption } from 'autotel-edge';
 import { createInitialiser, setConfig, WorkerTracer } from 'autotel-edge';
 import type { ActorConfig, ActorConstructor, ActorLike } from './types';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
 
 /**
  * Get the tracer instance
  */
 function getTracer(): WorkerTracer {
-  return trace.getTracer('autotel-cloudflare-actors') as WorkerTracer;
+  return workerTracer('autotel-cloudflare-actors');
 }
 
 /**
@@ -201,7 +202,7 @@ export function tracedHandler<E, A extends ActorLike>(
 
             return response;
           } catch (error) {
-            span.recordException(error as Error);
+            span.recordException(toException(error));
             span.setStatus({
               code: SpanStatusCode.ERROR,
               message: error instanceof Error ? error.message : String(error),
@@ -308,7 +309,7 @@ export function wrapHandler<E>(
 
             return response;
           } catch (error) {
-            span.recordException(error as Error);
+            span.recordException(toException(error));
             span.setStatus({
               code: SpanStatusCode.ERROR,
               message: error instanceof Error ? error.message : String(error),

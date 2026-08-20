@@ -98,7 +98,7 @@ export interface EdgeEventBase {
   [key: string]: unknown;
   service: string;
   timestamp: number;
-  attributes: Record<string, unknown>;
+  attributes: Attributes;
   traceId?: string;
   spanId?: string;
   correlationId?: string;

@@ -2,14 +2,16 @@
 
 **Send events to multiple platforms**
 
-Subscribers for [autotel](https://github.com/jagreehal/autotel) to send events to PostHog, Mixpanel, Amplitude, Segment, and custom webhooks.
+Subscribers for [autotel](https://github.com/jagreehal/autotel) to send events to Mixpanel, Amplitude, Segment, Slack, Loki, files, and custom webhooks.
+
+> **PostHog moved.** `PostHogSubscriber` now lives in [`autotel-posthog`](../autotel-posthog), alongside the browser session/replay join, so one package covers PostHog end to end. Import it from `autotel-posthog/subscriber`; it still extends the `EventSubscriber` base defined here.
 
 ## Why Use This?
 
 **Track once, send everywhere:**
 
 - Primary metrics → **OpenTelemetry** (infrastructure monitoring)
-- Product events → **PostHog / Mixpanel / Amplitude**
+- Product events → **Mixpanel / Amplitude / Segment**
 - Customer data → **Segment**
 - Custom integrations → **Webhooks** (Zapier, Make.com, etc.)
 
@@ -98,7 +100,7 @@ Import subscribers directly from their entry points:
 
 ```typescript
 import { Event } from 'autotel/event';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 import { WebhookSubscriber } from 'autotel-subscribers/webhook';
 
 const events = new Event('checkout', {
@@ -181,7 +183,7 @@ const subscriber = applyMiddleware(new MySubscriber('api-key'), [
 
 ```typescript
 import { Event } from 'autotel/event';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 const events = new Event('checkout', {
   subscribers: [
@@ -309,7 +311,7 @@ Send to **multiple platforms simultaneously**:
 
 ```typescript
 import { Event } from 'autotel/event';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 import { MixpanelSubscriber } from 'autotel-subscribers/mixpanel';
 import { SegmentSubscriber } from 'autotel-subscribers/segment';
 
@@ -390,7 +392,7 @@ npm install autotel-outbox
 
 ```typescript
 import { OutboxEventSubscriber } from 'autotel-outbox';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 const outbox = new DrizzleD1OutboxStorage(env.DB);
 const events = new Event('checkout', {
@@ -520,7 +522,7 @@ Adapters are **fully tree-shakeable**:
 
 ```typescript
 // Only PostHog code is bundled (not Mixpanel, Segment, etc.)
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 ```
 
 Bundle sizes (gzipped):
@@ -676,7 +678,7 @@ All exports available:
 
 ```typescript
 // Import subscribers from their specific entry points
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 import { MixpanelSubscriber } from 'autotel-subscribers/mixpanel';
 import { SegmentSubscriber } from 'autotel-subscribers/segment';
 import { AmplitudeSubscriber } from 'autotel-subscribers/amplitude';

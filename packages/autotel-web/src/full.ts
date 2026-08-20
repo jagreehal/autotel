@@ -28,6 +28,25 @@ import { setupErrorTracking, type ErrorTrackingConfig } from './error-tracking';
 import { createStringRedactor } from './error-tracking/redact-values';
 import { setupWebVitals } from './web-vitals';
 import { setupLongTaskObserver } from './long-tasks';
+import { configureSession, getSessionAttributes } from './session';
+
+/**
+ * Stamps session attributes in `onStart`, which is the only hook that can still
+ * write to a span. Sitting first in the processor array means every later
+ * processor — including whatever the host app passed as `spanProcessor` — sees
+ * the attributes already there.
+ */
+function sessionSpanProcessor(): SpanProcessor {
+  return {
+    onStart(span) {
+      const attributes = getSessionAttributes();
+      if (attributes) span.setAttributes(attributes);
+    },
+    onEnd() {},
+    forceFlush: () => Promise.resolve(),
+    shutdown: () => Promise.resolve(),
+  };
+}
 
 export interface AutotelWebFullConfig {
   /** Service name for the browser application */
@@ -44,6 +63,33 @@ export interface AutotelWebFullConfig {
    * When endpoint is set, this is ignored.
    */
   spanProcessor?: SpanProcessor;
+
+  /**
+   * Processors that decorate spans on the way out rather than export them.
+   *
+   * Separate from `spanProcessor` on purpose: that one *replaces* the pipeline,
+   * so passing an enricher there silently switches off the export that was just
+   * configured. These are added to the pipeline, and ordered ahead of the
+   * exporter so an attribute they add is one the exporter actually sends.
+   *
+   * ```ts
+   * import { posthogCompatibility } from 'autotel-posthog';
+   * initFull({ service: 'web', endpoint, spanEnrichers: [posthogCompatibility()] });
+   * ```
+   */
+  spanEnrichers?: SpanProcessor[];
+
+  /**
+   * Session identity stamped on every span as `session.id`, so a visit's
+   * navigation, fetches, vitals, clicks and errors can be reassembled into one
+   * journey. Tab-scoped random UUID, no user-derived data; a gap longer than
+   * `timeoutMs` starts a new session linked by `session.previous_id`.
+   *
+   * Pass `false` to emit no session attributes.
+   *
+   * @default { timeoutMs: 1_800_000 }
+   */
+  session?: false | { timeoutMs?: number };
 
   /**
    * Sample rate 0–1. Default 1.0. Use e.g. 0.1 in production.
@@ -152,7 +198,7 @@ let provider: WebTracerProvider | undefined;
  * ```
  */
 export function initFull(config: AutotelWebFullConfig): void {
-  if (typeof window === 'undefined') {
+  if (globalThis.window === undefined) {
     return;
   }
   if (isFullInitialized) {
@@ -165,7 +211,17 @@ export function initFull(config: AutotelWebFullConfig): void {
   const service = config.service ?? 'browser';
   const resource = resourceFromAttributes({ 'service.name': service });
 
+  configureSession(config.session ?? {});
+
   const spanProcessors: SpanProcessor[] = [];
+  if (config.session !== false) {
+    spanProcessors.push(sessionSpanProcessor());
+  }
+  // Ahead of whatever exports below: onEnd runs in array order, so an enricher
+  // placed after the exporter would decorate a span that has already gone.
+  if (config.spanEnrichers?.length) {
+    spanProcessors.push(...config.spanEnrichers);
+  }
   if (config.spanProcessor) {
     spanProcessors.push(config.spanProcessor);
   } else if (config.endpoint) {
@@ -316,6 +372,21 @@ function createRatioSampler(ratio: number): Sampler {
   };
 }
 
+/** A value that settles later, whatever produced it. */
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  // SAFETY: this is the thenable test itself - `then` is probed for before
+  // anything treats the value as a promise.
+  return (
+    value instanceof Object &&
+    typeof (value as PromiseLike<unknown>).then === 'function'
+  );
+}
+
+/** What `recordException` accepts: an Error, or a description of one. */
+function toException(cause: unknown): Error | string {
+  return cause instanceof Error ? cause : String(cause);
+}
+
 /**
  * Create a span with the current context (full mode).
  */
@@ -327,18 +398,20 @@ export function span<T>(
   }) => T,
 ): T {
   const tracer = otelTrace.getTracer('autotel-web', '1.0.0');
+  // SAFETY: startActiveSpan is typed to return whatever its callback returns,
+  // but only through an overload set that loses T here; the callback below
+  // returns exactly the T that `fn` produced.
   return tracer.startActiveSpan(name, (s) => {
     try {
       const result = fn({
         setAttribute: (k, v) => s.setAttribute(k, v),
         end: () => s.end(),
       });
-      const promise = result as Promise<unknown> | unknown;
-      if (promise && typeof (promise as Promise<unknown>).then === 'function') {
-        (promise as Promise<unknown>).then(
+      if (isThenable(result)) {
+        result.then(
           () => s.end(),
-          (err: unknown) => {
-            s.recordException(err as Error);
+          (cause: unknown) => {
+            s.recordException(toException(cause));
             s.end();
           },
         );
@@ -346,10 +419,10 @@ export function span<T>(
       }
       s.end();
       return result;
-    } catch (err) {
-      s.recordException(err as Error);
+    } catch (cause) {
+      s.recordException(toException(cause));
       s.end();
-      throw err;
+      throw cause;
     }
   }) as T;
 }
@@ -410,4 +483,9 @@ export function resetFullForTesting(): void {
     provider.shutdown();
     provider = undefined;
   }
+  // Shutting the provider down does not unregister it. Without this, a second
+  // initFull() in the same process is refused by the API and keeps the first
+  // provider's processors — so a suite silently tests the previous test's
+  // configuration.
+  otelTrace.disable();
 }

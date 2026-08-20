@@ -282,22 +282,22 @@ describe('Sampling Strategies', () => {
   describe('SamplingPresets', () => {
     it('should have production preset', () => {
       const sampler = SamplingPresets.production();
-      expect(typeof sampler).toBe('function');
+      expect(sampler).toBeTypeOf('function');
     });
 
     it('should have highTraffic preset', () => {
       const sampler = SamplingPresets.highTraffic();
-      expect(typeof sampler).toBe('function');
+      expect(sampler).toBeTypeOf('function');
     });
 
     it('should have debugging preset', () => {
       const sampler = SamplingPresets.debugging();
-      expect(typeof sampler).toBe('function');
+      expect(sampler).toBeTypeOf('function');
     });
 
     it('should have development preset', () => {
       const sampler = SamplingPresets.development();
-      expect(typeof sampler).toBe('function');
+      expect(sampler).toBeTypeOf('function');
     });
 
     it('production preset should capture errors and slow requests', () => {

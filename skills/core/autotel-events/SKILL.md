@@ -14,7 +14,7 @@ For observability events in new code, prefer log-based correlated events (OTel L
 
 ```typescript
 import { init, track } from 'autotel';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 init({
   service: 'my-app',
@@ -45,7 +45,7 @@ track('signup.completed', { plan: 'pro', source: 'web' });
 
 ```typescript
 import { Event } from 'autotel/event';
-import { PostHogSubscriber } from 'autotel-subscribers/posthog';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
 
 const event = new Event('onboarding', {
   subscribers: [new PostHogSubscriber({ apiKey: 'phc_other_project' })],

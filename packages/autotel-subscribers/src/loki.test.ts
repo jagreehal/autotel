@@ -113,6 +113,7 @@ describe('buildLokiPayload', () => {
     const payload = buildLokiPayload([
       { service: 'api', requestId: 'req_9', durationMs: 12 },
     ]);
+    // SAFETY: the subscriber writes each Loki value as a JSON object line.
     const line = JSON.parse(payload.streams[0]!.values[0]![1]) as Record<
       string,
       unknown
@@ -167,6 +168,7 @@ describe('LokiSubscriber', () => {
   });
 
   function pushedBody(): { streams: { stream: Record<string, string> }[] } {
+    // SAFETY: the subscriber posts a JSON string body on every call.
     return JSON.parse(fetchMock.mock.calls[0]![1].body as string);
   }
 
@@ -252,6 +254,7 @@ describe('LokiSubscriber', () => {
     await subscriber.shutdown();
 
     const lines = pushedBody().streams.flatMap((s) =>
+      // SAFETY: a Loki stream carries [timestamp, line] pairs under `values`.
       (s as unknown as { values: [string, string][] }).values.map(([, line]) =>
         JSON.parse(line),
       ),

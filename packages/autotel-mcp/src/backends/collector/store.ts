@@ -21,11 +21,25 @@ import {
   traceMatchesQuery,
   spanMatchesQuery,
 } from '../../modules/query-filters';
+import type { Row } from '@libsql/client';
+import { asBoolean, asNumber, asString, numberAt } from '../../lib/values';
+import { count, flag, json, optionalText, text } from './row';
 
 export interface CollectorStoreOptions {
   maxTraces: number;
   retentionMs: number;
   url?: string; // libsql URL, defaults to file::memory:
+}
+
+/**
+ * A tag value as SQLite can bind it. Strings and numbers go as they are;
+ * SQLite has no boolean type, so a boolean is bound as the 0/1 that
+ * `json_each` reads back for JSON true/false.
+ */
+function bindableTag(value: unknown): string | number {
+  const flag = asBoolean(value);
+  if (flag !== undefined) return Number(flag);
+  return asString(value) ?? asNumber(value) ?? String(value);
 }
 
 export class CollectorStore {
@@ -125,7 +139,7 @@ export class CollectorStore {
     });
 
     for (const row of oldTraces.rows) {
-      const tid = row.trace_id as string;
+      const tid = text(row, 'trace_id');
       await this.db.execute({
         sql: 'DELETE FROM spans WHERE trace_id = ?',
         args: [tid],
@@ -168,7 +182,7 @@ export class CollectorStore {
     const records: TraceRecord[] = [];
 
     for (const row of tracesResult.rows) {
-      const trace = await this.getTrace(row.trace_id as string);
+      const trace = await this.getTrace(text(row, 'trace_id'));
       if (trace) records.push(trace);
     }
 
@@ -179,7 +193,7 @@ export class CollectorStore {
     const result = await this.db.execute(
       'SELECT service_name FROM services ORDER BY last_seen_unix_ms DESC',
     );
-    return { services: result.rows.map((r) => r.service_name as string) };
+    return { services: result.rows.map((r) => text(r, 'service_name')) };
   }
 
   async listOperations(service: string): Promise<OperationListResult> {
@@ -187,16 +201,13 @@ export class CollectorStore {
       sql: `SELECT DISTINCT operation_name FROM spans WHERE service_name = ? ORDER BY operation_name`,
       args: [service],
     });
-    return { operations: result.rows.map((r) => r.operation_name as string) };
+    return { operations: result.rows.map((r) => text(r, 'operation_name')) };
   }
 
   async searchTraces(query: TraceSearchQuery): Promise<TraceSearchResult> {
+    const lookbackMinutes = numberAt(query, 'lookbackMinutes');
     const lookbackMs =
-      'lookbackMinutes' in query &&
-      typeof (query as { lookbackMinutes?: number }).lookbackMinutes ===
-        'number'
-        ? (query as { lookbackMinutes?: number }).lookbackMinutes! * 60 * 1000
-        : undefined;
+      lookbackMinutes === undefined ? undefined : lookbackMinutes * 60 * 1000;
 
     let sql = 'SELECT DISTINCT trace_id FROM traces';
     const conditions: string[] = [];
@@ -224,7 +235,7 @@ export class CollectorStore {
     const allTraces: TraceRecord[] = [];
 
     for (const row of tracesResult.rows) {
-      const trace = await this.getTrace(row.trace_id as string);
+      const trace = await this.getTrace(text(row, 'trace_id'));
       if (trace) allTraces.push(trace);
     }
 
@@ -293,13 +304,13 @@ export class CollectorStore {
 
     const seriesMap = new Map<string, MetricSeries>();
     for (const row of result.rows) {
-      const name = row.metric_name as string;
+      const name = text(row, 'metric_name');
       if (!seriesMap.has(name)) {
         seriesMap.set(name, {
           metricName: name,
-          unit: (row.unit as string | null) ?? undefined,
+          unit: optionalText(row, 'unit'),
           points: [],
-          attributes: JSON.parse((row.attributes as string) || '{}'),
+          attributes: json<Record<string, string>>(row, 'attributes', {}),
         });
       }
     }
@@ -347,14 +358,14 @@ export class CollectorStore {
     // Group by attributes to form series
     const seriesMap = new Map<string, MetricSeries>();
     for (const row of result.rows) {
-      const attrs = (row.attributes as string) || '{}';
+      const attrs = text(row, 'attributes') || '{}';
       const key = `${name}::${attrs}`;
       if (!seriesMap.has(key)) {
         seriesMap.set(key, {
           metricName: name,
-          unit: (row.unit as string | null) ?? undefined,
+          unit: optionalText(row, 'unit'),
           points: [],
-          attributes: JSON.parse(attrs),
+          attributes: json<Record<string, string>>(row, 'attributes', {}),
         });
       }
       seriesMap.get(key)!.points.push({
@@ -437,7 +448,7 @@ export class CollectorStore {
       conditions.push(
         'EXISTS (SELECT 1 FROM json_each(log_records.attributes) WHERE key = ? AND value = ?)',
       );
-      args.push(key, typeof value === 'boolean' ? Number(value) : value);
+      args.push(key, bindableTag(value));
     }
 
     const where =
@@ -457,30 +468,33 @@ export class CollectorStore {
       args: [...args, query.limit ?? 100],
     });
     const items: LogRecord[] = result.rows.map((r) => ({
-      timestampUnixMs: Number(r.timestamp_unix_ms),
-      severityText: r.severity_text as string,
-      body: r.body as string,
-      serviceName: (r.service_name as string | null) ?? undefined,
-      traceId: (r.trace_id as string | null) ?? undefined,
-      spanId: (r.span_id as string | null) ?? undefined,
-      attributes: JSON.parse((r.attributes as string) || '{}'),
+      timestampUnixMs: count(r, 'timestamp_unix_ms'),
+      severityText: text(r, 'severity_text'),
+      body: text(r, 'body'),
+      serviceName: optionalText(r, 'service_name'),
+      traceId: optionalText(r, 'trace_id'),
+      spanId: optionalText(r, 'span_id'),
+      attributes: json<Record<string, string>>(r, 'attributes', {}),
     }));
 
     return { items, totalCount };
   }
 
-  private rowToSpan(row: Record<string, unknown>): SpanRecord {
+  private rowToSpan(row: Row): SpanRecord {
     return {
-      traceId: row.trace_id as string,
-      spanId: row.span_id as string,
-      parentSpanId: (row.parent_span_id as string | null) ?? null,
-      operationName: row.operation_name as string,
-      serviceName: row.service_name as string,
-      startTimeUnixMs: Number(row.start_time_unix_ms),
-      durationMs: Number(row.duration_ms),
-      statusCode: row.status_code as 'OK' | 'ERROR' | 'UNSET',
-      tags: JSON.parse((row.tags as string) || '{}'),
-      hasError: row.has_error === 1,
+      traceId: text(row, 'trace_id'),
+      spanId: text(row, 'span_id'),
+      parentSpanId: optionalText(row, 'parent_span_id') ?? null,
+      operationName: text(row, 'operation_name'),
+      serviceName: text(row, 'service_name'),
+      startTimeUnixMs: count(row, 'start_time_unix_ms'),
+      durationMs: count(row, 'duration_ms'),
+      // SAFETY: insertSpans writes this column from SpanRecord['statusCode'],
+      // which is this union; a row written by anything else renders as
+      // whatever status it holds.
+      statusCode: text(row, 'status_code') as 'OK' | 'ERROR' | 'UNSET',
+      tags: json<Record<string, string>>(row, 'tags', {}),
+      hasError: flag(row, 'has_error'),
     };
   }
 }

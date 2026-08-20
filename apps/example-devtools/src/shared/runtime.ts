@@ -24,7 +24,9 @@ async function allocatePort(preferred: number): Promise<number> {
     server.once('error', reject);
     server.once('listening', () => {
       const address = server.address();
-      if (!address || typeof address === 'string') {
+      // A pipe or UDS listener answers with a string; this one asked for a TCP
+      // port, so anything without a port number means the listen did not work.
+      if (address === null || !('port' in address)) {
         server.close(() =>
           reject(new Error('Unable to allocate an ephemeral port.')),
         );

@@ -18,20 +18,20 @@
  * The `name`-based branch keeps older TanStack versions covered, which threw
  * `RedirectError` / `NotFoundError` instances instead.
  */
-export function isControlFlowSignal(error: unknown): boolean {
+export function isControlFlowSignal(cause: unknown): boolean {
   if (
-    typeof Response !== 'undefined' &&
-    error instanceof Response &&
-    (error as { options?: unknown }).options != null
+    globalThis.Response !== undefined &&
+    cause instanceof Response &&
+    (cause as { options?: unknown }).options != null
   ) {
     return true;
   }
 
-  if (typeof error === 'object' && error !== null) {
-    if ((error as { isNotFound?: unknown }).isNotFound === true) {
+  if (typeof cause === 'object' && cause !== null) {
+    if ((cause as { isNotFound?: unknown }).isNotFound === true) {
       return true;
     }
-    const name = (error as { name?: unknown }).name;
+    const name = (cause as { name?: unknown }).name;
     if (name === 'RedirectError' || name === 'NotFoundError') {
       return true;
     }
@@ -45,6 +45,6 @@ export function isControlFlowSignal(error: unknown): boolean {
  * `isError` option: returns `false` for control-flow signals so the span is
  * marked OK and no exception is recorded, `true` for real errors.
  */
-export function isRealError(error: unknown): boolean {
-  return !isControlFlowSignal(error);
+export function isRealError(cause: unknown): boolean {
+  return !isControlFlowSignal(cause);
 }

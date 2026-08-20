@@ -9,13 +9,14 @@
  */
 
 import {
-  trace,
   context as api_context,
   propagation,
   SpanStatusCode,
   SpanKind,
 } from '@opentelemetry/api';
-import { getActiveConfig, WorkerTracer } from 'autotel-edge';
+import { getActiveConfig } from 'autotel-edge';
+import { toException } from '../exception.js';
+import { workerTracer } from '../tracer.js';
 
 /**
  * Gather HTTP request attributes following OpenTelemetry semantic conventions
@@ -76,7 +77,7 @@ export function instrumentGlobalFetch(): void {
       return originalFetch(input, init);
     }
 
-    const tracer = trace.getTracer('autotel-edge') as WorkerTracer;
+    const tracer = workerTracer('autotel-edge');
     const url = new URL(request.url);
     const spanName = `${request.method} ${url.host}`;
 
@@ -119,7 +120,7 @@ export function instrumentGlobalFetch(): void {
 
           return response;
         } catch (error) {
-          span.recordException(error as Error);
+          span.recordException(toException(error));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: error instanceof Error ? error.message : String(error),

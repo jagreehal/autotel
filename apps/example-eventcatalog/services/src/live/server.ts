@@ -26,6 +26,13 @@ import {
 
 import type { LiveEvent, LiveStreamSubscriber } from './stream';
 
+/** Everything this server answers with on its JSON endpoints. */
+type JsonBody =
+  | Awaited<ReturnType<ArchitectureSnapshotSubscriber['toSnapshot']>>
+  | Awaited<ReturnType<typeof computeDrift>>
+  | Awaited<ReturnType<typeof readCatalogEvents>>
+  | { ok: boolean };
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 // `services/public/live.html` from `services/src/live/server.ts`
 const HTML_PATH = join(HERE, '..', '..', 'public', 'live.html');
@@ -82,7 +89,7 @@ export async function startLiveServer(
           return sendStatus(res, 404, 'Not found');
       }
     } catch (err) {
-      sendStatus(res, 500, (err as Error).message);
+      sendStatus(res, 500, err instanceof Error ? err.message : String(err));
     }
   });
 
@@ -123,7 +130,7 @@ function sendHtml(res: ServerResponse, body: string): void {
   res.end(body);
 }
 
-function sendJson(res: ServerResponse, body: unknown): void {
+function sendJson(res: ServerResponse, body: JsonBody): void {
   res.writeHead(200, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -166,7 +173,7 @@ async function handleControl(
   // surfaced; the dashboard reads state from /snapshot.json afterward.
   Promise.resolve(handler()).catch((err) => {
     process.stderr.write(
-      `live demo control failed: ${(err as Error).message}\n`,
+      `live demo control failed: ${err instanceof Error ? err.message : String(err)}\n`,
     );
   });
   sendJson(res, { ok: true });

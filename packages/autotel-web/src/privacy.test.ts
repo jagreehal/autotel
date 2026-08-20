@@ -251,7 +251,7 @@ describe('PrivacyManager', () => {
     // Note: These tests use window.location which should be set by the test environment
 
     it('should handle relative URLs by using window.location', () => {
-      if (typeof window === 'undefined' || !window.location) {
+      if (globalThis.window === undefined || !window.location) {
         // Skip test if window is not available
         return;
       }
@@ -268,7 +268,7 @@ describe('PrivacyManager', () => {
     });
 
     it('should block relative URLs if origin is blocked', () => {
-      if (typeof window === 'undefined' || !window.location) {
+      if (globalThis.window === undefined || !window.location) {
         // Skip test if window is not available
         return;
       }

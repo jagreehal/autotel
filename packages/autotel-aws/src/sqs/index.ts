@@ -49,12 +49,7 @@
  * ```
  */
 
-import {
-  trace,
-  type TraceContext,
-  withTracing,
-  getActiveTraceContext,
-} from 'autotel';
+import { trace, type TraceContext, withTracing } from 'autotel';
 import { context, propagation, SpanStatusCode } from '@opentelemetry/api';
 import { buildSQSAttributes } from '../attributes';
 import { wrapSDKClient } from '../common/sdk-wrapper';
@@ -294,8 +289,7 @@ export class SQSProducer<
     sequenceNumber?: string;
     md5OfMessageBody?: string;
   }> {
-    return trace(`sqs.send`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`sqs.send`, async (ctx) => {
       ctx.setAttributes(
         buildSQSAttributes({
           queueName: this.queueName,
@@ -343,7 +337,7 @@ export class SQSProducer<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -360,8 +354,7 @@ export class SQSProducer<
     }>;
     failed: Array<{ id: string; code?: string; message?: string }>;
   }> {
-    return trace(`sqs.sendBatch`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`sqs.sendBatch`, async (ctx) => {
       ctx.setAttributes(
         buildSQSAttributes({
           queueName: this.queueName,
@@ -438,7 +431,7 @@ export class SQSProducer<
         });
         throw error;
       }
-    })();
+    });
   }
 }
 
@@ -648,8 +641,7 @@ export class SQSConsumer<
    * @returns Array of received messages
    */
   async receive(): Promise<ReceivedSQSMessage[]> {
-    return trace(`sqs.receive`, async () => {
-      const ctx = getActiveTraceContext()!;
+    return trace.run(`sqs.receive`, async (ctx) => {
       ctx.setAttributes(
         buildSQSAttributes({
           queueName: this.queueName,
@@ -685,7 +677,7 @@ export class SQSConsumer<
         });
         throw error;
       }
-    })();
+    });
   }
 
   /**
@@ -722,8 +714,7 @@ export class SQSConsumer<
 
       // Create processing span, optionally linked to producer
       const processMessage = async () => {
-        return trace(`sqs.process`, async () => {
-          const ctx = getActiveTraceContext()!;
+        return trace.run(`sqs.process`, async (ctx) => {
           ctx.setAttributes(
             buildSQSAttributes({
               queueName: this.queueName,
@@ -746,7 +737,7 @@ export class SQSConsumer<
             });
             throw error;
           }
-        })();
+        });
       };
 
       // Run with extracted context if available
