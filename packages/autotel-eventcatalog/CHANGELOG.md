@@ -1,5 +1,12 @@
 # Changelog
 
+## 20.0.0
+
+### Patch Changes
+
+- Updated dependencies [d303348]
+  - autotel-subscribers@50.0.0
+
 ## 19.0.0
 
 ### Patch Changes

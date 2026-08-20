@@ -1,5 +1,12 @@
 # autotel-message-contract
 
+## 11.0.0
+
+### Patch Changes
+
+- Updated dependencies [d303348]
+  - autotel@7.0.0
+
 ## 10.0.0
 
 ### Patch Changes
