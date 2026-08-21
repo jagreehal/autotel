@@ -109,6 +109,7 @@ await db.select().from(users).where(eq(users.id, 123));
   maxQueryTextLength?: number // Max SQL length (default: 1000)
   peerName?: string          // Database host
   peerPort?: number          // Database port
+  explain?: 'plan' | 'analyze' | false // Capture the postgres query plan (default: false)
 }
 ```
 
@@ -118,8 +119,93 @@ await db.select().from(users).where(eq(users.id, 123));
 - `db.operation` - Operation name (SELECT, INSERT, UPDATE, DELETE)
 - `db.name` - Database name
 - `db.statement` - SQL query text (if `captureQueryText: true`)
+- `db.statement.hash` - Stable hash of the statement, present even when the text is suppressed
 - `net.peer.name` - Database host
 - `net.peer.port` - Database port
+
+## Drivers
+
+Tested against postgres 16, mysql 8, and sqlite, driving each through drizzle's
+own query builder, its relational API, and raw `db.execute`. Every driver below
+emits one span per query, names the operation, and tags `db.collection.name`.
+
+| Driver | Queries | Transaction span | Query plans |
+| --- | --- | --- | --- |
+| `node-postgres` | yes | yes | yes |
+| `postgres.js` | yes | yes | yes |
+| `pglite` | yes | yes | yes |
+| `mysql2` | yes | yes | postgres only |
+| `better-sqlite3` | yes | yes, synchronous | postgres only |
+| `libsql` | yes | yes | postgres only |
+
+Nothing about the instrumentation is dialect-specific except `explain`, which
+sends postgres syntax and so turns itself off unless `dbSystem` is
+`'postgresql'`. Table names are read from double-quoted, backtick-quoted, and
+unquoted identifiers alike, so mysql groups by table the same way postgres does.
+
+better-sqlite3 runs transactions synchronously and rejects a callback that
+returns a promise. That is the driver's own rule and applies with or without
+instrumentation; the wrapper keeps synchronous calls synchronous so those
+transactions still commit.
+
+## Query Plans
+
+A span records what you asked postgres for. It does not record what postgres
+did. Add an index and `db.statement` is unchanged, byte for byte, with the same
+`db.statement.hash`; the duration moves and nothing on the span says why.
+
+`explain` puts the planner's answer on the span:
+
+```typescript
+instrumentDrizzleClient(db, {
+  dbSystem: 'postgresql',
+  explain: 'analyze', // or 'plan' to plan without executing
+});
+```
+
+The same query, before and after `CREATE INDEX`:
+
+| Attribute | Before | After |
+| --- | --- | --- |
+| `db.statement.hash` | `372269a8881e921a` | `372269a8881e921a` |
+| `db.plan.hash` | `0b50591ce9f68f51` | `eb8765b8d1c4af5a` |
+| `db.plan.node` | `Seq Scan` | `Bitmap Heap Scan` |
+| `db.plan.indexes` | | `idx_comments_post_id` |
+| `db.plan.seq_scan` | `true` | `false` |
+| `db.plan.rows_examined` | `200199` | `1001` |
+| `db.plan.rows_returned` | `1001` | `1001` |
+| `db.plan.blocks` | `1861` | `1005` |
+| `db.plan.cost` | | planner's total cost estimate |
+| `db.plan.rows_estimated` | | rows the planner expected |
+| `db.plan.execution_ms` | | measured time (`'analyze'` only) |
+
+An unchanged statement hash beside a changed plan hash is a planner decision.
+Grouping `db.plan.indexes` by `db.statement.hash` answers which queries an index
+is serving.
+
+`rows_examined` counts at the leaves of the plan, and counts the rows a scan
+read and discarded. A parent node reports the rows its children handed up, so
+summing every level counts one row per level; and the rows an index saves you
+from reading never appear in the rows the query returns. `blocks` counts cached
+and disk reads together, because a scan that walks a table already in memory
+still walked the table.
+
+### Cost and safety
+
+Both modes add a round trip per query, and `'analyze'` executes the statement a
+second time to measure it. Both are off by default. Use them in development, in
+CI, or behind a sample of production traffic.
+
+- `'analyze'` runs on read-only statements only, so a traced insert never runs
+  twice. A leading `WITH` qualifies only when no writing keyword appears
+  anywhere in the statement, because `WITH gone AS (DELETE ... RETURNING *)
+  SELECT` opens exactly like a read.
+- The plan is collected before the span opens, so the extra round trip stays out
+  of the duration the span reports.
+- A failed `EXPLAIN` is swallowed. The query still runs and still gets its span.
+- Ignored unless `dbSystem` is `'postgresql'`.
+- Inside a transaction the plan is taken on the transaction's own connection, so
+  it sees the rows the query will see.
 
 ## Security Considerations
 

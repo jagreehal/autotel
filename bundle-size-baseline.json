@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-19T21:19:04.575Z",
+  "generatedAt": "2026-08-20T20:22:58.131Z",
   "sizes": {
     "autotel": 1911602,
     "autotel-adapters": 142517,
@@ -10,7 +10,7 @@
     "autotel-cli": 323526,
     "autotel-cloudflare": 176704,
     "autotel-devtools": 757941,
-    "autotel-drizzle": 39155,
+    "autotel-drizzle": 61828,
     "autotel-edge": 158827,
     "autotel-eventcatalog": 163954,
     "autotel-genai": 737060,
