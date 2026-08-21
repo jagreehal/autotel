@@ -1,5 +1,12 @@
 # @jagreehal/example-devtools
 
+## 1.0.30
+
+### Patch Changes
+
+- Updated dependencies [ebcd606]
+  - autotel-drizzle@0.0.52
+
 ## 1.0.29
 
 ### Patch Changes
