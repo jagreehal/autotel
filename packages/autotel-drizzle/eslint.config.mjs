@@ -28,6 +28,10 @@ export default defineConfig(
       'unicorn/no-null': 'off',
       'unicorn/prefer-top-level-await': 'off',
       'unicorn/no-nested-ternary': 'off',
+      // Contradicts anti-slop/no-reflect-apply, which the repo enforces and
+      // which is the one to keep: Reflect.apply dispatches through an untyped
+      // meta-API, and these call sites go through a named QueryFunction.
+      'unicorn/prefer-reflect-apply': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-exports': 'error',
       'no-restricted-syntax': [
@@ -59,6 +63,10 @@ export default defineConfig(
       'unicorn/no-null': 'off',
       'unicorn/prefer-top-level-await': 'off',
       'unicorn/no-nested-ternary': 'off',
+      // Contradicts anti-slop/no-reflect-apply, which the repo enforces and
+      // which is the one to keep: Reflect.apply dispatches through an untyped
+      // meta-API, and these call sites go through a named QueryFunction.
+      'unicorn/prefer-reflect-apply': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/consistent-type-exports': 'off',
       '@typescript-eslint/no-unused-vars': [

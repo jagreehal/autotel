@@ -60,5 +60,6 @@ export {
 export {
   instrumentDrizzle,
   instrumentDrizzleClient,
+  type ExplainMode,
   type InstrumentDrizzleConfig,
 } from './drizzle';
