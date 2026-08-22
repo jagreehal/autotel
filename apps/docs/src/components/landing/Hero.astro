@@ -231,6 +231,7 @@ const installCmds = {
 
   :root[data-theme='light'] .install-switch label {
     border-color: var(--sl-color-gray-5);
+    color: var(--sl-color-gray-2);
   }
 
   .install-switch label:hover {
@@ -257,7 +258,7 @@ const installCmds = {
 
   /* Focus lives on the label, since the input it belongs to is visually gone. */
   .install-switch input:focus-visible + label {
-    outline: 2px solid var(--color-light-steel);
+    outline: 2px solid var(--sl-color-accent);
     outline-offset: 2px;
   }
 
@@ -297,8 +298,13 @@ const installCmds = {
 
   .install .prompt {
     color: var(--color-storm-cloud);
+    /* stays put in dark; light needs a darker grey to clear 4.5:1 on gray-6 */
     user-select: none;
     font-weight: 590;
+  }
+
+  :root[data-theme='light'] .install .prompt {
+    color: var(--sl-color-gray-3);
   }
 
   .install code {
@@ -307,6 +313,10 @@ const installCmds = {
     padding: 0;
     border: 0;
     border-radius: 0;
+  }
+
+  :root[data-theme='light'] .install code {
+    color: var(--color-pitch-black);
   }
 
   .actions {

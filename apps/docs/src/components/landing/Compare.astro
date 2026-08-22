@@ -223,6 +223,11 @@ export const checkout = trace(async (req, res) => {
     color: var(--color-pitch-black);
   }
 
+  :root[data-theme='light'] .panel--after::before,
+  :root[data-theme='light'] .panel__tag-dot {
+    background: var(--color-pitch-black);
+  }
+
   .panel__tag-dot {
     width: 0.375rem;
     height: 0.375rem;

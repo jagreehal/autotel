@@ -103,7 +103,9 @@ html {
   --sl-color-black: var(--color-porcelain);
 
   --sl-color-text: var(--color-pitch-black);
-  --sl-color-text-accent: #3b82f6;
+  /* Link text uses the dark end of the ramp: #3b82f6 is only 3.46:1 on the
+     light background. --sl-color-accent stays bright for filled surfaces. */
+  --sl-color-text-accent: #1d4ed8;
 
   --sl-color-bg: var(--color-porcelain);
   --sl-color-bg-nav: var(--color-porcelain);
@@ -165,7 +167,7 @@ body {
    Exclusions are wrapped in :where() so they don't bump specificity, which
    lets .foot a / component-scoped overrides win on equal terms. */
 .sl-markdown-content a:where(:not(.btn, .chip, .cta__btn, .copy-markdown-btn)) {
-  color: var(--sl-color-accent);
+  color: var(--sl-color-text-accent);
   text-decoration: none;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
@@ -475,16 +477,18 @@ header.header .site-title * {
   background-size: 140px 140px;
 }
 
-/* Monochrome focus ring on the landing — keep blue out of the chrome. */
+/* Monochrome focus ring on the landing — keep blue out of the chrome.
+   --sl-color-white flips per theme, so the ring stays the highest-contrast
+   ink in both (porcelain on black, pitch-black on porcelain). */
 [data-has-hero] :focus-visible {
-  outline-color: var(--color-porcelain);
+  outline-color: var(--sl-color-white);
 }
 
 /* Keep blue out of the landing chrome — social icons stay quiet grey. */
 [data-has-hero] header .social-icons a {
-  color: var(--color-storm-cloud);
+  color: var(--sl-color-gray-3);
 }
 
 [data-has-hero] header .social-icons a:hover {
-  color: var(--color-porcelain);
+  color: var(--sl-color-white);
 }
