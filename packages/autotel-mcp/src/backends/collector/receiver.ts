@@ -1,4 +1,5 @@
 import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { CollectorStore } from './store';
 import type {
   SpanRecord,
@@ -31,9 +32,7 @@ function decodeAnyValue(v: OtlpAnyValue): TagValue {
   return '';
 }
 
-function attrsToRecord(
-  kvs: OtlpKeyValue[] | undefined,
-): Record<string, TagValue> {
+function attrsToRecord(kvs: OtlpKeyValue[] | undefined) {
   if (!kvs) return {};
   const out: Record<string, TagValue> = {};
   for (const kv of kvs) {
@@ -163,6 +162,7 @@ interface OtlpDataPoint {
   timeUnixNano?: string | number;
   asDouble?: number;
   asInt?: string | number;
+  attributes?: OtlpKeyValue[];
 }
 
 interface OtlpMetric {
@@ -186,7 +186,20 @@ interface OtlpMetricsPayload {
   resourceMetrics?: OtlpResourceMetrics[];
 }
 
-function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
+function dataPointValue(dp: OtlpDataPoint): number {
+  if (dp.asDouble !== undefined) return dp.asDouble;
+  if (dp.asInt !== undefined) return Number(dp.asInt);
+  return 0;
+}
+
+/** Stable identity for an attribute set, independent of OTLP key order. */
+function attributeKey(attributes: Record<string, TagValue>): string {
+  return JSON.stringify(
+    Object.entries(attributes).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
+}
+
+export function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
   const series: MetricSeries[] = [];
   for (const rm of body.resourceMetrics ?? []) {
     const resourceAttrs = attrsToRecord(rm.resource?.attributes);
@@ -200,20 +213,33 @@ function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
 
         if (dataPoints.length === 0) continue;
 
-        series.push({
-          metricName: m.name ?? 'unknown',
-          unit: m.unit,
-          attributes: resourceAttrs,
-          points: dataPoints.map((dp) => ({
+        // OTel puts a metric's dimensions on the data point, not the resource:
+        // one `http.server.requests` metric arrives as a data point per route.
+        // Folding them into one series by resource alone sums unrelated label
+        // sets into a single untyped timeline, so split by attribute set.
+        const byAttributes = new Map<string, MetricSeries>();
+        for (const dp of dataPoints) {
+          const attributes = {
+            ...resourceAttrs,
+            ...attrsToRecord(dp.attributes),
+          };
+          const key = attributeKey(attributes);
+          let entry = byAttributes.get(key);
+          if (!entry) {
+            entry = {
+              metricName: m.name ?? 'unknown',
+              unit: m.unit,
+              attributes,
+              points: [],
+            };
+            byAttributes.set(key, entry);
+          }
+          entry.points.push({
             timestampUnixMs: nanoStringToMs(dp.timeUnixNano),
-            value:
-              dp.asDouble !== undefined
-                ? dp.asDouble
-                : dp.asInt !== undefined
-                  ? Number(dp.asInt)
-                  : 0,
-          })),
-        });
+            value: dataPointValue(dp),
+          });
+        }
+        series.push(...byAttributes.values());
       }
     }
   }
@@ -278,10 +304,15 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
+/** Every response this receiver sends: an empty OTLP ack, or an error. */
+interface OtlpResponseBody {
+  error?: string;
+}
+
 function sendJson(
   res: http.ServerResponse,
   status: number,
-  body: unknown,
+  body: OtlpResponseBody,
 ): void {
   const json = JSON.stringify(body);
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -308,6 +339,9 @@ export class OtlpReceiver {
 
       if (method === 'POST' && url === '/v1/traces') {
         const raw = await readBody(req);
+        // SAFETY: an OTLP exporter is the only caller, and every field the
+        // parser reads is optional, so a payload of another shape yields no
+        // traces rather than a bad read.
         const body = JSON.parse(raw) as OtlpTracesPayload;
         const spans = parseTraces(body);
         await this.store.insertSpans(spans);
@@ -317,6 +351,9 @@ export class OtlpReceiver {
 
       if (method === 'POST' && url === '/v1/metrics') {
         const raw = await readBody(req);
+        // SAFETY: an OTLP exporter is the only caller, and every field the
+        // parser reads is optional, so a payload of another shape yields no
+        // metrics rather than a bad read.
         const body = JSON.parse(raw) as OtlpMetricsPayload;
         const metrics = parseMetrics(body);
         await this.store.insertMetrics(metrics);
@@ -326,6 +363,9 @@ export class OtlpReceiver {
 
       if (method === 'POST' && url === '/v1/logs') {
         const raw = await readBody(req);
+        // SAFETY: an OTLP exporter is the only caller, and every field the
+        // parser reads is optional, so a payload of another shape yields no
+        // logs rather than a bad read.
         const body = JSON.parse(raw) as OtlpLogsPayload;
         const logs = parseLogs(body);
         await this.store.insertLogs(logs);
@@ -343,10 +383,11 @@ export class OtlpReceiver {
     return new Promise((resolve, reject) => {
       this.server.once('error', reject);
       this.server.listen(this.port, '127.0.0.1', () => {
-        const address = this.server.address();
-        if (address && typeof address === 'object') {
-          this.port = address.port;
-        }
+        // SAFETY: address() answers with AddressInfo for a host/port listen.
+        // The string form describes a pipe or unix socket, which this never
+        // binds, and null only before listening — inside this callback it is.
+        const address = this.server.address() as AddressInfo | null;
+        if (address !== null) this.port = address.port;
         resolve();
       });
     });

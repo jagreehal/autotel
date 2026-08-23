@@ -1,18 +1,6 @@
-import type { TraceRecord } from '../types';
+import type { TraceRecord, TraceSummary } from '../types';
 
-export interface TraceSummary {
-  traceId: string;
-  serviceName: string;
-  durationMs: number;
-  statusCode: 'OK' | 'ERROR' | 'UNSET';
-  spanCount: number;
-  llmSpanCount: number;
-  errorSpanCount: number;
-  totalTokens: number;
-  modelsUsed: string[];
-  serviceCount: number;
-  topOperations: Array<{ operation: string; count: number }>;
-}
+export type { TraceSummary };
 
 function deriveServiceName(trace: TraceRecord): string {
   const rootSpan =

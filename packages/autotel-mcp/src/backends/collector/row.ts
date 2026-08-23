@@ -39,6 +39,9 @@ export function flag(row: Row, key: string): boolean {
  */
 export function json<TValue>(row: Row, key: string, fallback: TValue): TValue {
   try {
+    // SAFETY: the store serialised this column from TValue itself. A row
+    // written by anything else parses to whatever it holds, which is what the
+    // fallback covers when the text is not JSON at all.
     return (JSON.parse(text(row, key) || 'null') as TValue) ?? fallback;
   } catch {
     return fallback;

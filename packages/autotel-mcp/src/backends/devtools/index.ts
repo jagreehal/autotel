@@ -195,13 +195,13 @@ export class DevtoolsBackend implements TelemetryBackend {
     const records = (await this.fetchTraces()).map((trace) =>
       this.toTraceRecord(trace),
     );
-    return buildServiceMap(records, limit) as unknown as ServiceMap;
+    return buildServiceMap(records, limit);
   }
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
     const trace = await this.getTrace(traceId);
     if (!trace) return null;
-    return summarizeTrace(trace) as unknown as TraceSummary;
+    return summarizeTrace(trace);
   }
 
   async listMetrics(_query?: MetricSearchQuery): Promise<MetricSearchResult> {

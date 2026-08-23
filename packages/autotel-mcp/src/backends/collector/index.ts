@@ -93,13 +93,13 @@ export class CollectorBackend implements TelemetryBackend {
     limit?: number,
   ): Promise<ServiceMap> {
     const traces = await this.store.getAllTraces(lookbackMinutes);
-    return buildServiceMap(traces, limit) as unknown as ServiceMap;
+    return buildServiceMap(traces, limit);
   }
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
     const trace = await this.store.getTrace(traceId);
     if (!trace) return null;
-    return buildTraceSummary(trace) as unknown as TraceSummary;
+    return buildTraceSummary(trace);
   }
 
   async listMetrics(query?: MetricSearchQuery): Promise<MetricSearchResult> {

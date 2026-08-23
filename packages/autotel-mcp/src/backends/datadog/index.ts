@@ -315,13 +315,13 @@ export class DatadogBackend implements TelemetryBackend {
       endTimeUnixMs: toMs,
       limit: Math.max(limit, 20),
     });
-    return buildServiceMap(traces.items, limit) as unknown as ServiceMap;
+    return buildServiceMap(traces.items, limit);
   }
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
     const trace = await this.getTrace(traceId);
     if (!trace) return null;
-    return summarizeTrace(trace) as unknown as TraceSummary;
+    return summarizeTrace(trace);
   }
 
   async listMetrics(_query?: MetricSearchQuery): Promise<MetricSearchResult> {

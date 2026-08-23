@@ -211,16 +211,13 @@ export class JaegerBackend implements TelemetryBackend {
         deduped.set(trace.traceId, trace);
       }
     }
-    return buildServiceMap(
-      Array.from(deduped.values()),
-      limit,
-    ) as unknown as ServiceMap;
+    return buildServiceMap(Array.from(deduped.values()), limit);
   }
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
     const trace = await this.getTrace(traceId);
     if (!trace) return null;
-    return summarizeTrace(trace) as unknown as TraceSummary;
+    return summarizeTrace(trace);
   }
 
   async listMetrics(_query?: MetricSearchQuery): Promise<MetricSearchResult> {
