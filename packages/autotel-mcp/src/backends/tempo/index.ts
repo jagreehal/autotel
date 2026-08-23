@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening -- These types describe Tempo's OTLP payloads as it arrives on the wire, where an attribute bag genuinely is an open dictionary of unread values. The tag maps built from them are open by the same token: an attribute set is not a fixed field list. */
+
 import { jsonGet } from '../../lib/http';
 import type {
   BackendCapabilities,
@@ -31,6 +33,7 @@ import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
 import { inferErrorStatusFromTags, readNumericTag } from '../span-mapping';
 import type { TelemetryBackend } from '../telemetry';
+import { asNumber, asString, tagKind } from '../../lib/values';
 
 type TempoSearchResponse = {
   traces?: Array<{
@@ -327,10 +330,10 @@ export function buildTraceql(query: TraceSearchQuery): string {
 
 function renderTagCondition(key: string, value: TagValue): string {
   const field = key.startsWith('resource.') ? key : `span.${key}`;
-  if (typeof value === 'string') {
-    return `${field} = "${escapeTraceql(value)}"`;
+  if (tagKind(value) === 'string') {
+    return `${field} = "${escapeTraceql(String(value))}"`;
   }
-  if (typeof value === 'boolean') {
+  if (tagKind(value) === 'boolean') {
     return `${field} = ${value ? 'true' : 'false'}`;
   }
   return `${field} = ${value}`;
@@ -349,10 +352,7 @@ export function parseOtlpTrace(
 
   for (const batch of batches) {
     const resourceAttrs = parseOtlpAttributes(batch.resource?.attributes);
-    const serviceName =
-      typeof resourceAttrs['service.name'] === 'string'
-        ? resourceAttrs['service.name']
-        : 'unknown';
+    const serviceName = asString(resourceAttrs['service.name']) ?? 'unknown';
 
     const scopeSpans =
       batch.scopeSpans ?? batch.instrumentationLibrarySpans ?? [];
@@ -414,10 +414,7 @@ function extractOtlpValue(value: OtlpAttribute['value']): TagValue | undefined {
   if (value.stringValue !== undefined) return value.stringValue;
   if (value.boolValue !== undefined) return value.boolValue;
   if (value.intValue !== undefined) {
-    const parsed =
-      typeof value.intValue === 'number'
-        ? value.intValue
-        : Number(value.intValue);
+    const parsed = asNumber(value.intValue) ?? Number.NaN;
     if (Number.isFinite(parsed)) return parsed;
   }
   if (value.doubleValue !== undefined) return value.doubleValue;
@@ -429,12 +426,13 @@ function resolveOtlpStatus(
   code: string | number | undefined,
   tags: Record<string, TagValue>,
 ): SpanStatusCode {
-  if (typeof code === 'number') {
+  if (tagKind(code) === 'number') {
     if (code === 2) return 'ERROR';
     if (code === 1) return 'OK';
   }
-  if (typeof code === 'string') {
-    const upper = code.toUpperCase();
+  const codeText = asString(code);
+  if (codeText !== undefined) {
+    const upper = codeText.toUpperCase();
     if (upper.includes('ERROR')) return 'ERROR';
     if (upper.includes('OK')) return 'OK';
   }
@@ -451,10 +449,5 @@ function resolveOtlpStatus(
 }
 
 function toNumber(value: string | number | undefined): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
+  return asNumber(value);
 }

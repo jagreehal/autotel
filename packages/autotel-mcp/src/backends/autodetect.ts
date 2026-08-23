@@ -17,12 +17,12 @@ interface Probe {
   path: string;
 }
 
-const PROBES: Record<ProbeKind, Probe> = {
+const PROBES = {
   tempo: { kind: 'tempo', path: '/api/echo' },
   jaeger: { kind: 'jaeger', path: '/api/services' },
   prometheus: { kind: 'prometheus', path: '/api/v1/status/buildinfo' },
   loki: { kind: 'loki', path: '/ready' },
-};
+} satisfies Record<ProbeKind, Probe>;
 
 const PROBE_TIMEOUT_MS = 1500;
 
@@ -48,6 +48,10 @@ export async function probeBackend(
 export async function probeAll(
   candidates: Partial<Record<ProbeKind, string>>,
 ): Promise<ProbeResult[]> {
-  const entries = Object.entries(candidates) as [ProbeKind, string][];
+  // SAFETY: Object.entries widens the key to string. `candidates` is keyed by
+  // ProbeKind, and undefined values are filtered before the assertion is used.
+  const entries = Object.entries(candidates).filter(
+    ([, url]) => url !== undefined,
+  ) as [ProbeKind, string][];
   return Promise.all(entries.map(([kind, url]) => probeBackend(kind, url)));
 }

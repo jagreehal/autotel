@@ -2,15 +2,15 @@ import { z } from 'zod';
 
 const RELATIVE_RE = /^now([+-])(\d+)([smhdwMy])$/;
 
-const UNIT_TO_MS: Record<string, number> = {
-  s: 1000,
-  m: 60 * 1000,
-  h: 60 * 60 * 1000,
-  d: 24 * 60 * 60 * 1000,
-  w: 7 * 24 * 60 * 60 * 1000,
-  M: 30 * 24 * 60 * 60 * 1000,
-  y: 365 * 24 * 60 * 60 * 1000,
-};
+const UNIT_TO_MS = new Map<string, number>([
+  ['s', 1000],
+  ['m', 60 * 1000],
+  ['h', 60 * 60 * 1000],
+  ['d', 24 * 60 * 60 * 1000],
+  ['w', 7 * 24 * 60 * 60 * 1000],
+  ['M', 30 * 24 * 60 * 60 * 1000],
+  ['y', 365 * 24 * 60 * 60 * 1000],
+]);
 
 export const timeWindowSchema = z.object({
   from: z.string().min(1).optional(),
@@ -27,7 +27,7 @@ export function parseTimestamp(input: string, nowMs = Date.now()): number {
     const op = rel[1];
     const amount = Number(rel[2]);
     const unit = rel[3];
-    const ms = UNIT_TO_MS[unit];
+    const ms = UNIT_TO_MS.get(unit);
     if (!Number.isFinite(amount) || !ms) {
       throw new Error(`Invalid relative time expression: ${input}`);
     }

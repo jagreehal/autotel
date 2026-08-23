@@ -1,4 +1,5 @@
 import type { TraceRecord, TraceSummary } from '../types';
+import { asNumber, asString } from '../lib/values';
 
 export type { TraceSummary };
 
@@ -64,10 +65,11 @@ function isLlmSpan(span: TraceRecord['spans'][number]): boolean {
 function getSpanModel(span: TraceRecord['spans'][number]): string | undefined {
   const response =
     span.tags['gen_ai.response.model'] ?? span.tags['llm.response.model'];
-  if (typeof response === 'string') return response;
+  const asResponse = asString(response);
+  if (asResponse !== undefined) return asResponse;
   const request =
     span.tags['gen_ai.request.model'] ?? span.tags['llm.request.model'];
-  return typeof request === 'string' ? request : undefined;
+  return asString(request);
 }
 
 function getSpanTokens(span: TraceRecord['spans'][number]): number {
@@ -78,5 +80,5 @@ function getSpanTokens(span: TraceRecord['spans'][number]): number {
     span.tags['gen_ai.usage.input_tokens'] ??
     span.tags['llm.usage.prompt_tokens'] ??
     span.tags['llm.usage.input_tokens'];
-  return typeof total === 'number' ? total : Number(total ?? 0) || 0;
+  return asNumber(total) ?? 0;
 }

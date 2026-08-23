@@ -78,6 +78,8 @@ describe('estimateCost', () => {
   it('refuses to guess a rate', () => {
     // A cost tool that invents a price is worse than one that asks for it.
     expect(() =>
+      // SAFETY: deliberately invalid - `perGb` is required, and omitting it
+      // is the condition under test. `as never` is what lets the call compile.
       estimateCost({ requestsPerMonth: 1000, bytes: BYTES } as never),
     ).toThrow(EstimateInputError);
   });

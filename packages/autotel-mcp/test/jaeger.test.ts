@@ -204,10 +204,10 @@ describe('JaegerBackend', () => {
     const backend = new JaegerBackend('http://localhost:16686');
     // serviceMap fans out per-service — stub both listServices (to bound
     // the walk) and searchTraces (to return the shared trace each svc sees).
-    (backend as any).listServices = async () => ({
+    backend.listServices = async () => ({
       services: ['checkout', 'payments'],
     });
-    (backend as any).searchTraces = async () => ({
+    backend.searchTraces = async () => ({
       items: [
         {
           traceId: 'trace-1',
@@ -248,7 +248,7 @@ describe('JaegerBackend', () => {
 
   it('searchSpans supports aggregate trace filters', async () => {
     const backend = new JaegerBackend('http://localhost:16686');
-    (backend as any).searchTraces = async () => ({
+    backend.searchTraces = async () => ({
       items: [
         {
           traceId: 'trace-1',
@@ -394,6 +394,8 @@ describe('JaegerBackend', () => {
 
   it('searchTraces filters hasError client-side from inferred error spans', async () => {
     const originalFetch = globalThis.fetch;
+    // SAFETY: the backend calls fetch(url) and reads a Response; a real
+    // Response is returned, so nothing else of the fetch surface is reached.
     globalThis.fetch = (async () =>
       new Response(
         JSON.stringify({
@@ -447,14 +449,10 @@ describe('JaegerBackend', () => {
 
   it('serviceMap fans out per-service so every service contributes traces', async () => {
     const backend = new JaegerBackend('http://localhost:16686');
-    (backend as any).listServices = async () => ({
+    backend.listServices = async () => ({
       services: ['chatty', 'quiet'],
     });
-    (backend as any).searchTraces = async ({
-      service,
-    }: {
-      service: string;
-    }) => {
+    backend.searchTraces = async ({ service }: { service: string }) => {
       if (service === 'chatty') {
         return {
           items: Array.from({ length: 25 }, (_, i) => ({

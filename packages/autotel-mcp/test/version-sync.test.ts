@@ -13,6 +13,8 @@ async function readUtf8(path: string): Promise<string> {
 
 describe('package version sync', () => {
   it('exposes the package.json version via the shared VERSION constant', async () => {
+    // SAFETY: this package's own manifest; the test exists to check that the
+    // `version` it declares matches the exported constant.
     const pkg = JSON.parse(await readUtf8('package.json')) as {
       version: string;
     };

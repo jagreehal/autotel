@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Test helpers that build a Response from any JSON body the test wants to serve. */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DevtoolsBackend } from '../src/backends/devtools/index';
 
@@ -45,10 +47,12 @@ function trace(input: DevtoolsTraceInput) {
 /** Stub `GET /v1/traces` (and `/healthz`) with a fixed devtools payload. */
 function stubFetch(traces: ReturnType<typeof trace>[]): string[] {
   const requests: string[] = [];
+  // SAFETY: the code under test calls fetch(url) and reads a Response; this
+  // returns a real Response, so no other part of the fetch surface is reached.
   vi.spyOn(globalThis, 'fetch').mockImplementation((async (
     input: Parameters<typeof fetch>[0],
   ) => {
-    const url = typeof input === 'string' ? input : input.toString();
+    const url = String(input);
     requests.push(url);
     if (url.endsWith('/healthz')) {
       return new Response(

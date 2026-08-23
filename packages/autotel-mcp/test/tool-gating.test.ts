@@ -50,10 +50,17 @@ function collectRegisteredTools(backend: TelemetryBackend): Set<string> {
   const server = new McpServer({ name: 't', version: '0.0.0' });
   const registered = new Set<string>();
   const original = server.registerTool.bind(server);
+  // SAFETY: this wrapper records the name and forwards every argument to the
+  // bound original, so it behaves as registerTool for the registration below.
   server.registerTool = ((name: string, ...rest: unknown[]) => {
     registered.add(name);
     // Forward to preserve any side effects while capturing the name.
-    return (original as (..._args: unknown[]) => unknown)(name, ...rest);
+    // SAFETY: `original` is server.registerTool bound above; this call
+    // forwards the same arguments it was given.
+    const forward = original as (
+      ..._args: unknown[]
+    ) => ReturnType<typeof server.registerTool>;
+    return forward(name, ...rest);
   }) as typeof server.registerTool;
   registerTools(server, backend);
   return registered;

@@ -17,42 +17,42 @@
  * @internal Exported so the help text can be checked against it rather than
  * against a second hand-written list that drifts.
  */
-export const VALUE_FLAGS: Record<string, string> = {
-  '--backend': 'AUTOTEL_BACKEND',
-  '-b': 'AUTOTEL_BACKEND',
-  '--transport': 'AUTOTEL_TRANSPORT',
-  '-t': 'AUTOTEL_TRANSPORT',
-  '--port': 'AUTOTEL_PORT',
-  '-p': 'AUTOTEL_PORT',
-  '--host': 'AUTOTEL_HOST',
-  '-H': 'AUTOTEL_HOST',
-  '--collector-port': 'AUTOTEL_COLLECTOR_PORT',
-  '--persist': 'AUTOTEL_PERSIST',
-  '--retention-ms': 'AUTOTEL_RETENTION_MS',
-  '--max-traces': 'AUTOTEL_MAX_TRACES',
-  '--fixture': 'AUTOTEL_FIXTURE_PATH',
-  '--jaeger-url': 'JAEGER_BASE_URL',
-  '--devtools-url': 'DEVTOOLS_BASE_URL',
-  '--tempo-url': 'TEMPO_BASE_URL',
-  '--prometheus-url': 'PROMETHEUS_BASE_URL',
-  '--loki-url': 'LOKI_BASE_URL',
-  '--logfire-url': 'LOGFIRE_BASE_URL',
-  '--signoz-url': 'SIGNOZ_BASE_URL',
+export const VALUE_FLAGS = new Map<string, string>([
+  ['--backend', 'AUTOTEL_BACKEND'],
+  ['-b', 'AUTOTEL_BACKEND'],
+  ['--transport', 'AUTOTEL_TRANSPORT'],
+  ['-t', 'AUTOTEL_TRANSPORT'],
+  ['--port', 'AUTOTEL_PORT'],
+  ['-p', 'AUTOTEL_PORT'],
+  ['--host', 'AUTOTEL_HOST'],
+  ['-H', 'AUTOTEL_HOST'],
+  ['--collector-port', 'AUTOTEL_COLLECTOR_PORT'],
+  ['--persist', 'AUTOTEL_PERSIST'],
+  ['--retention-ms', 'AUTOTEL_RETENTION_MS'],
+  ['--max-traces', 'AUTOTEL_MAX_TRACES'],
+  ['--fixture', 'AUTOTEL_FIXTURE_PATH'],
+  ['--jaeger-url', 'JAEGER_BASE_URL'],
+  ['--devtools-url', 'DEVTOOLS_BASE_URL'],
+  ['--tempo-url', 'TEMPO_BASE_URL'],
+  ['--prometheus-url', 'PROMETHEUS_BASE_URL'],
+  ['--loki-url', 'LOKI_BASE_URL'],
+  ['--logfire-url', 'LOGFIRE_BASE_URL'],
+  ['--signoz-url', 'SIGNOZ_BASE_URL'],
   // A region hostname, not a secret. autotel-cli exposes it as a flag too.
-  '--datadog-site': 'DD_SITE',
-};
+  ['--datadog-site', 'DD_SITE'],
+]);
 
 /**
  * Credentials stay out of argv on purpose: the process table is readable by
  * any other process on the box. Naming them here turns a leak into an error
  * message that says where to put them instead.
  */
-const ENV_ONLY: Record<string, string> = {
-  '--logfire-token': 'LOGFIRE_READ_TOKEN',
-  '--datadog-api-key': 'DD_API_KEY',
-  '--datadog-app-key': 'DD_APP_KEY',
-  '--signoz-api-key': 'SIGNOZ_API_KEY',
-};
+const ENV_ONLY = new Map<string, string>([
+  ['--logfire-token', 'LOGFIRE_READ_TOKEN'],
+  ['--datadog-api-key', 'DD_API_KEY'],
+  ['--datadog-app-key', 'DD_APP_KEY'],
+  ['--signoz-api-key', 'SIGNOZ_API_KEY'],
+]);
 
 export interface ParsedArgs {
   /** Environment-shaped overrides, highest precedence. */
@@ -90,7 +90,7 @@ export function parseCliArgs(argv: readonly string[]): ParsedArgs {
     const name = equals === -1 ? arg : arg.slice(0, equals);
     const inlineValue = equals === -1 ? undefined : arg.slice(equals + 1);
 
-    const envOnly = ENV_ONLY[name];
+    const envOnly = ENV_ONLY.get(name);
     if (envOnly) {
       errors.push(
         `${name} is not accepted on the command line because argv is visible ` +
@@ -100,7 +100,7 @@ export function parseCliArgs(argv: readonly string[]): ParsedArgs {
       continue;
     }
 
-    const envName = VALUE_FLAGS[name];
+    const envName = VALUE_FLAGS.get(name);
     if (!envName) {
       // Not fatal. argv was read by nobody until this module existed, so MCP
       // client configs already in the wild carry flags we never defined;

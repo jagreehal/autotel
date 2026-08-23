@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters -- Validates a collector config parsed from user-supplied YAML, whose shape is what this function exists to determine. */
+
 import { z } from 'zod';
 
 export const otlpReceiverConfigSchema = z.object({

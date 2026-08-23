@@ -65,6 +65,9 @@ async function githubGetJson<T>(url: string): Promise<T> {
     throw new Error(`HTTP ${response.status} for ${url}`);
   }
 
+  // SAFETY: the caller names the shape this endpoint documents, and the
+  // status was checked above. A payload that does not match surfaces as a
+  // failed read at the call site rather than a silent wrong value.
   return (await response.json()) as T;
 }
 
@@ -134,18 +137,20 @@ export async function listCollectorComponents(
         `${API_ROOT}/${resolved}`,
       );
 
-      const out: Record<CollectorComponentKind, Set<string>> = {
+      const out = {
         receiver: new Set(),
         processor: new Set(),
         exporter: new Set(),
         connector: new Set(),
         extension: new Set(),
-      };
+      } satisfies Record<CollectorComponentKind, Set<string>>;
 
       for (const entry of entries) {
         if (entry.type !== 'file') continue;
         const match = FILE_RE.exec(entry.name);
         if (!match) continue;
+        // SAFETY: FILE_RE's first group is an alternation of exactly the
+        // CollectorComponentKind members, so a match yields one of them.
         const kind = match[1] as CollectorComponentKind;
         const name = match[2]!;
         out[kind].add(name);
@@ -217,6 +222,8 @@ export async function getCollectorComponentSchema(
   if (!isOfflineMode()) {
     try {
       const text = await fetchRawText(`${resolved}/${kind}_${name}.yaml`);
+      // SAFETY: only stored and re-serialised as JSON from here; a scalar
+      // document would round-trip unchanged rather than be misread.
       parsed = parseYaml(text) as object;
       await writeCachedJson(cachePath, parsed);
     } catch {

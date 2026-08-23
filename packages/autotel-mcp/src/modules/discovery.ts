@@ -5,10 +5,11 @@ import type {
   TagValue,
   TraceRecord,
 } from '../types';
+import { asNumber, tagKind, nonEmptyString } from '../lib/values';
 
 export interface FieldDiscovery {
   totalFields: number;
-  fieldsByType: Record<string, string[]>;
+  fieldsByType: FieldsByType;
   searchableFields: string[];
   fieldDetails: Array<{
     name: string;
@@ -45,6 +46,13 @@ interface FieldAggregate {
 }
 
 const MAX_EXAMPLES_PER_FIELD = 3;
+
+/** Discovered field names, grouped by the tag kind they carry. */
+interface FieldsByType {
+  string: string[];
+  number: string[];
+  boolean: string[];
+}
 
 export function discoverTraceFields(
   traces: TraceRecord[],
@@ -214,13 +222,13 @@ function addField(
   name: string,
   value: TagValue,
 ): void {
-  const type = typeof value;
-  if (type !== 'string' && type !== 'number' && type !== 'boolean') return;
+  const kind = tagKind(value);
+  if (kind === undefined) return;
 
   const current = fields.get(name);
   if (!current) {
     fields.set(name, {
-      type,
+      type: kind,
       occurrences: 1,
       examples: [value],
     });
@@ -246,7 +254,7 @@ function finalizeFieldDiscovery(
     .filter(([name]) => (matcher ? matcher(name) : true))
     .sort((a, b) => a[0].localeCompare(b[0]));
 
-  const fieldsByType: Record<string, string[]> = {
+  const fieldsByType: FieldsByType = {
     string: [],
     number: [],
     boolean: [],
@@ -301,15 +309,6 @@ function isLLMSpan(span: SpanRecord): boolean {
   );
 }
 
-function asNumber(value: TagValue | undefined): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
 function extractLanguage(tags: Record<string, TagValue>): string | undefined {
   const bySemantic = readTagString(tags['telemetry.sdk.language']);
   if (bySemantic) return bySemantic;
@@ -319,14 +318,12 @@ function extractLanguage(tags: Record<string, TagValue>): string | undefined {
 }
 
 function readTagString(value: TagValue | undefined): string | undefined {
-  if (typeof value === 'string' && value.length > 0) return value;
-  return undefined;
+  return nonEmptyString(value);
 }
 
 function readAttrString(
   attrs: Record<string, TagValue> | undefined,
   key: string,
 ): string | undefined {
-  const value = attrs?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return nonEmptyString(attrs?.[key]);
 }

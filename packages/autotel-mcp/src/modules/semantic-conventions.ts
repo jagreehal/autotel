@@ -44,6 +44,9 @@ async function githubGetJson<T>(url: string): Promise<T> {
     throw new Error(`HTTP ${response.status} for ${url}`);
   }
 
+  // SAFETY: the caller names the shape this endpoint documents, and the
+  // status was checked above. A payload that does not match surfaces as a
+  // failed read at the call site rather than a silent wrong value.
   return (await response.json()) as T;
 }
 
@@ -103,6 +106,9 @@ export async function getSemanticConventionNamespace(
       }
 
       const text = await response.text();
+      // SAFETY: the semantic-conventions repo publishes this file with a
+      // `groups` list; every field read below is optional, so a change in the
+      // upstream schema yields no groups rather than a bad read.
       const doc = parseYaml(text) as {
         groups?: Array<{ id?: string; brief?: string; note?: string }>;
       };

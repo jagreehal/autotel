@@ -33,6 +33,7 @@ import {
   readNumericTag,
 } from '../span-mapping';
 import type { ServiceMap, TraceSummary } from '../../types';
+import { asString } from '../../lib/values';
 
 type JaegerServiceResponse = { data: string[] };
 type JaegerSpanReference = {
@@ -303,13 +304,16 @@ function inferStatusCode(
   tags: Record<string, string | number | boolean>,
 ): SpanStatusCode {
   const statusTag = tags['status.code'];
-  if (typeof statusTag === 'string') {
-    const normalized = statusTag.toUpperCase();
+  const statusText = asString(statusTag);
+  if (statusText !== undefined) {
+    const normalized = statusText.toUpperCase();
     if (
       normalized === 'ERROR' ||
       normalized === 'OK' ||
       normalized === 'UNSET'
     ) {
+      // SAFETY: the comparisons above are exactly SpanStatusCode's members,
+      // so this branch is reached only when normalized is one of them.
       return normalized as SpanStatusCode;
     }
   }
