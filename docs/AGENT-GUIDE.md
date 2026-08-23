@@ -22,6 +22,7 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 | Correlate actor without raw PII                               | `hashIdentifier()` from `autotel-audit`                                     | Email or IP in `actorId`                 |
 | Validation mismatch observability                             | `defineValidator()` from `autotel/validate`                                 | POST body shape at boundary              |
 | Zero-code probe/401/LLM signals                               | `createSecuritySignalProcessor()` in `init({ spanProcessors })`             | Scanner traffic, credential stuffing     |
+| Join PostHog session to traces                                | `joinPostHog(posthog)` from `autotel-posthog` in `spanEnrichers`            | Browser + PostHog on the same page       |
 
 **Rule of thumb**: If there is an HTTP request or a "job", create a span via `trace()` or framework middleware, and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
 

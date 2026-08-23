@@ -1,0 +1,245 @@
+---
+title: PostHog
+description: Join Autotel traces to PostHog sessions and replays, and stamp $trace_id on PostHog events.
+---
+
+A failed checkout span carries a timestamped replay URL. The PostHog `$exception`
+from that moment carries `$trace_id`. One call wires both sides:
+
+```typescript
+import posthog from 'posthog-js';
+import { initFull } from 'autotel-web/full';
+import { joinPostHog } from 'autotel-posthog';
+
+posthog.init('<key>');
+
+initFull({
+  service: 'web',
+  endpoint: 'https://collector.example.com/v1/traces',
+  spanEnrichers: [
+    joinPostHog(posthog, {
+      traceUrl: ({ traceId }) => `https://traces.example.com/${traceId}`,
+      featureFlags: ['new-checkout'],
+    }),
+  ],
+});
+```
+
+Keep `posthog-js` installed. `joinPostHog` reads the instance on the
+page.
+
+## Three jobs
+
+| Package                       | Job                                                                        |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `posthog-js` / `posthog-node` | Capture, replay, flags, persons.                                           |
+| `autotel-backends/posthog`    | Ship traces, logs, and metrics into PostHog over OTLP.                     |
+| `autotel-posthog`             | The join. Browser: `joinPostHog()`. Server `track()`: `PostHogSubscriber`. |
+
+Install the half you use:
+
+```bash
+# Browser join
+npm install autotel-posthog posthog-js autotel-web
+
+# Server events
+npm install autotel-posthog posthog-node autotel autotel-subscribers
+```
+
+`posthog-js` is a peer. Two copies on one page means two session managers, so
+two answers to `get_session_id()`.
+
+## What the span carries
+
+| Attribute            | Source                                                    | Which spans                   |
+| -------------------- | --------------------------------------------------------- | ----------------------------- |
+| `session.id`         | `posthog.get_session_id()`                                | every span                    |
+| `user.id`            | `posthog.get_distinct_id()`                               | every span                    |
+| `session.replay.url` | `posthog.get_session_replay_url({ withTimestamp: true })` | spans that recorded an error  |
+| `feature_flag.<key>` | `posthog.getFeatureFlag(key)`                             | every span, for keys you name |
+
+Identity is read when the span starts. PostHog rotates a session after 30
+minutes idle, and `identify()` can land mid-request. The replay URL is decided
+at the end, because only the end knows the span failed. If the session rotated
+in between, the URL is withheld.
+
+A flag that evaluates to `false` is kept. A flag PostHog has no opinion on is
+omitted.
+
+:::caution
+Pass the enricher in `spanEnrichers`, not `spanProcessor`. `spanProcessor`
+replaces the pipeline Autotel builds, which switches off the export you
+configured. See [Configuration](/autotel/configuration/#spanenrichers).
+:::
+
+## Queries after you wire it
+
+In Grafana or Honeycomb:
+
+- `session.id = <id from the PostHog replay>`
+- `session.replay.url exists`
+
+In PostHog:
+
+- `$trace_id is set` on `$exception`
+- click `$trace_url` if you passed `traceUrl`
+
+Autocaptured `$exception` receives `$trace_id` and `$span_id`. Skip a second
+`captureException` for the join.
+
+### Events captured after an `await`
+
+The browser has no `AsyncLocalStorage`. OpenTelemetry's active context is gone
+by the first `await`, which is exactly where the interesting events happen —
+the fetch came back, the card was declined, the upload failed:
+
+```typescript
+await span('checkout.click', async () => {
+  await fetch('/checkout', { method: 'POST' });
+  // The active span is already gone here. joinPostHog still finds it.
+  posthog.capture('checkout_failed', { message: 'Card declined' });
+});
+```
+
+`joinPostHog` falls back to the most recent span it has seen start and not yet
+end, so no Zone.js and no manual `context.with()` are needed.
+
+It adds nothing rather than guessing wrong. Two overlapping user actions each
+start their own trace, and with no active context nothing can say which one the
+event belongs to — a guess there names an unrelated request, which is worse
+than an absent property. In development it says so in the console and names the
+fix.
+
+The fix is one line: read the ids while the span is still active, before the
+first `await`, and spread them onto the capture.
+
+```typescript
+import { traceProperties } from 'autotel-posthog';
+
+await span('checkout.click', async () => {
+  const trace = traceProperties();
+  await fetch('/checkout', { method: 'POST' });
+  posthog.capture('checkout_failed', { ...trace, message: 'Card declined' });
+});
+```
+
+`traceProperties()` returns `{}` when nothing is being traced, so the spread is
+always safe. A property the caller set is never overwritten, so explicit always
+wins — and `$trace_url` is still added for you.
+
+`autotelBeforeSend()` used on its own reads only the active context. Pass
+`fallbackSpanContext` if you want the same behaviour without the enricher.
+
+`joinPostHog` appends its `before_send` hook. An event an earlier hook dropped
+(`null`) stays dropped. A second call (strict mode, HMR) does not stack another
+copy.
+
+## Server hop
+
+`joinPostHog` copies PostHog's session id onto subsequent same-origin fetches as
+W3C `baggage`. The checkout handler span carries the same `session.id`.
+
+On the backend:
+
+```typescript
+import { init } from 'autotel';
+
+init({
+  service: 'api',
+  endpoint: 'https://collector.example.com',
+  baggage: '',
+});
+```
+
+`baggage: ''` copies entries onto server spans with no prefix, so the attribute
+is `session.id`. `baggage: true` would write `baggage.session.id`. Distinct id
+stays off; it can be an email.
+
+:::note
+`baggage: ''` needs `autotel` 7.0.1 or later. Earlier versions read the empty
+string as "off" and the attribute never landed.
+:::
+
+Pass `propagateSession: false` to skip the header.
+
+Baggage is same-origin unless you set `baggage.allowedOrigins` on
+`initFull()`.
+
+## When nothing shows up
+
+Every failure on this path is quiet by design — a missing PostHog, a session
+that rotated, replay switched off — because none of them should break a span.
+While wiring it up that is indistinguishable from success, so each exit says
+why, once per reason:
+
+```
+[autotel-posthog] No session.replay.url on a failed span: session replay is not
+recording. Check it is enabled for the project, that this session was not
+sampled out, and that the recorder has started.
+```
+
+`debug` defaults to on in development and off in production —
+`process.env.NODE_ENV` where a bundler substituted one, a localhost page
+otherwise. A diagnostic nobody switches on is a diagnostic nobody reads. Set
+`debug: false` to silence it anywhere, or `debug: true` to force it on.
+
+## Callouts
+
+- `get_session_replay_url()` always composes a URL. Replay disabled, sampled
+  out, or not started still produces a link that lands on an empty player. The
+  enricher gates on `sessionRecordingStarted()`.
+- Name the flags you want on spans. Harvesting all of them is a cardinality
+  bill.
+- The loader snippet leaves an array on `window.posthog`. Empty session ids
+  during init are treated as absent. Every PostHog read is guarded.
+- `posthog-js` drops events from anything that looks like a bot, headless
+  Chrome included, and it does so **before** `before_send` runs. An end-to-end
+  test driven by Playwright or Puppeteer sees no events at all until you set
+  `opt_out_useragent_filter: true` on the instance under test.
+
+## Minimal browser build
+
+The lean `autotel-web` build has no processor pipeline. Hand it the session id
+directly:
+
+```typescript
+import { init } from 'autotel-web';
+import { posthogSessionId } from 'autotel-posthog';
+
+init({ service: 'web', session: { id: posthogSessionId } });
+```
+
+## Product events from the server
+
+```typescript
+import { init, track } from 'autotel';
+import { PostHogSubscriber } from 'autotel-posthog/subscriber';
+
+init({
+  service: 'api',
+  events: {
+    subscribers: [new PostHogSubscriber({ apiKey: process.env.POSTHOG_KEY! })],
+  },
+});
+
+track('order.completed', { amount: 99.99 });
+```
+
+Server events write the same `$trace_id` / `$span_id` names the browser hook
+writes.
+
+## Worked example
+
+[`apps/example-posthog`](https://github.com/jagreehal/autotel/tree/main/apps/example-posthog)
+runs a checkout that fails. The page prints the replay URL from the span and
+`$trace_id` from the PostHog event. The server log prints `session.id` from
+baggage.
+
+Set `POSTHOG_KEY` in `.env` and it runs against your own project; leave it
+unset and it runs against a stub, so the example works with no account.
+
+## See also
+
+- [Backends](/autotel/integrations/backends/#posthog) for OTLP ingest into PostHog
+- [Event subscribers](/autotel/integrations/subscribers/) for `PostHogSubscriber`
+- [Web SDK](/autotel/tools/web/) for `initFull` and `setBaggage`

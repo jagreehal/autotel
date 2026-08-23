@@ -16,6 +16,7 @@ export { joinPostHog, type JoinPostHogOptions } from './join';
 
 export {
   autotelBeforeSend,
+  traceProperties,
   type AutotelBeforeSendOptions,
   type BeforeSendLike,
   type CaptureResultLike,

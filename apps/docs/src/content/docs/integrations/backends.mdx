@@ -114,9 +114,9 @@ init(
 ```
 
 The preset sends traces, logs, and metrics as OTLP/HTTP protobuf, preserves
-PostHog's `/i` path prefix, and uses Bearer authentication. This is telemetry
-ingestion; `autotel-posthog/subscriber` remains the separate product-event
-integration.
+PostHog's `/i` path prefix, and uses Bearer authentication. This is OTLP ingest.
+The session and replay join lives on the [PostHog](/autotel/integrations/posthog/)
+page.
 
 ## Available Backends
 

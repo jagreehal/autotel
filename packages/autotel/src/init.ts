@@ -475,8 +475,9 @@ export function init(cfg: AutotelConfig): void {
   // If no endpoint and no custom processors/exporters, array remains empty
   // SDK will still work but won't export traces
 
-  // Add baggage span processor if enabled
-  if (mergedConfig.baggage) {
+  // Add baggage span processor if enabled. `''` is a documented prefix ("copy
+  // baggage on, unprefixed"), not an off switch — only `false`/omitted disable.
+  if (mergedConfig.baggage || mergedConfig.baggage === '') {
     const prefix =
       typeof mergedConfig.baggage === 'string'
         ? mergedConfig.baggage

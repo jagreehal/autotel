@@ -18,6 +18,10 @@
     "./privacy": {
       "types": "./dist/privacy.d.ts",
       "import": "./dist/privacy.js"
+    },
+    "./baggage": {
+      "types": "./dist/baggage.d.ts",
+      "import": "./dist/baggage.js"
     }
   },
   "files": [

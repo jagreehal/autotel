@@ -73,6 +73,11 @@ html {
   --sl-color-gray-6: var(--color-charcoal-grey);
   --sl-color-black: var(--color-pitch-black);
 
+  /* The quiet metadata grey has to be readable, and no single value clears
+     4.5:1 against both a near-black and a near-white surface — so it is
+     tuned per theme rather than shared. */
+  --color-fog-grey: #818691;
+
   --sl-color-text: var(--color-porcelain);
   --sl-color-text-accent: var(--color-aether-blue);
 
@@ -101,6 +106,8 @@ html {
   --sl-color-gray-5: #d3d5da;
   --sl-color-gray-6: #ececef;
   --sl-color-black: var(--color-porcelain);
+
+  --color-fog-grey: #5f636c;
 
   --sl-color-text: var(--color-pitch-black);
   /* Link text uses the dark end of the ramp: #3b82f6 is only 3.46:1 on the

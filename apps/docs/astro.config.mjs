@@ -89,6 +89,7 @@ export default defineConfig({
             { label: 'Grafana Loki', slug: 'integrations/loki' },
             { label: 'MCP', slug: 'integrations/mcp' },
             { label: 'Langfuse', slug: 'integrations/langfuse' },
+            { label: 'PostHog', slug: 'integrations/posthog' },
             { label: 'Sentry', slug: 'integrations/sentry' },
             { label: 'Plugins', slug: 'integrations/plugins' },
             { label: 'Backends', slug: 'integrations/backends' },

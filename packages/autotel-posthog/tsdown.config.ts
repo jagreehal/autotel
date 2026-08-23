@@ -13,6 +13,8 @@ export default defineConfig({
     'posthog-node',
     'autotel',
     'autotel-subscribers',
+    'autotel-web',
+    'autotel-web/baggage',
     'slow-redact',
   ],
   format: ['esm', 'cjs'],

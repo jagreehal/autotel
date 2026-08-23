@@ -267,6 +267,10 @@ pnpm start:rag          # RAG pipeline
 
 **`example-langfuse`** - Instrument once with `autotel-genai` and fan the same canonical `gen_ai.*` spans to [Langfuse](https://langfuse.com), [autotel-devtools](../packages/autotel-devtools), and your console. Using autotel's native OTLP `destinations`, with **no `@langfuse/otel` and no `@opentelemetry/*` exporter packages**. Langfuse is a destination, not a span source; the semconv is the integration. See [example-langfuse/README.md](./example-langfuse/README.md).
 
+#### PostHog session join
+
+**`example-posthog`** - `joinPostHog` on a checkout that fails. The browser span carries a replay URL, the PostHog event carries `$trace_id`, and the server span carries `session.id` from W3C baggage. See [example-posthog/README.md](./example-posthog/README.md).
+
 ## Verifying in Grafana
 
 1. **Open Grafana Cloud** (or your Grafana instance)

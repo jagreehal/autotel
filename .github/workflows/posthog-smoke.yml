@@ -1,0 +1,75 @@
+# The PostHog round-trip alarm.
+#
+# `autotel-posthog`'s unit suite proves the join against a real `posthog-js`
+# with no network — including the case the browser actually hits, an event
+# captured after an `await`. What it cannot prove is that those properties
+# survive ingestion and come back out of PostHog under the names the docs
+# promise, or that W3C baggage still reaches the server span as `session.id`.
+#
+# That gap is not theoretical. Both bugs this example was written to reproduce
+# — `$trace_id` missing on every async capture, and `init({ baggage: '' })`
+# silently disabling itself — shipped under a fully green suite, because the
+# example used a PostHog stub and the doubles agreed with each other.
+#
+# Deliberately **not** part of `ci.yml`: it needs a project key, and a fork
+# without that secret must not go red. It skips itself when the key is absent,
+# and on pull requests it runs only when the join or the example moved.
+name: PostHog smoke
+
+on:
+  schedule:
+    # Nightly, off the hour: shared runners are busiest on it.
+    - cron: '41 4 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/autotel-posthog/**'
+      - 'packages/autotel-web/src/full.ts'
+      - 'packages/autotel-web/src/baggage.ts'
+      - 'packages/autotel/src/init.ts'
+      - 'apps/example-posthog/**'
+      - '.github/workflows/posthog-smoke.yml'
+
+jobs:
+  round-trip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install pnpm
+        run: corepack prepare pnpm@latest --activate
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the packages under test
+        run: pnpm --filter autotel --filter autotel-web --filter autotel-posthog build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @jagreehal/example-posthog exec playwright install --with-deps chromium
+
+      # Skips itself, green, when POSTHOG_KEY is absent — which is what a fork
+      # sees. Point it at a throwaway project: it writes real events.
+      - name: Round trip against a real project
+        run: pnpm --filter @jagreehal/example-posthog smoke
+        env:
+          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
