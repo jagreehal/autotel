@@ -43,6 +43,8 @@ export const posthogWeb: PluginPreset = {
   },
   nextSteps: [
     'Browser entry: initFull({ ..., spanEnrichers: [joinPostHog(posthog)] }) — one call wires both directions',
+    'Docs: https://jagreehal.github.io/autotel/integrations/posthog/',
+    'Backend init({ baggage: "" }) so the checkout span carries session.id from W3C baggage',
     'Spans now carry session.id and user.id from PostHog; failed spans carry session.replay.url',
     'For a clickable link back: joinPostHog(posthog, { traceUrl: ({ traceId }) => `...${traceId}` })',
     'Name any feature flags worth slicing by: joinPostHog(posthog, { featureFlags: ["my-flag"] })',

@@ -60,7 +60,8 @@ autotel/
 │   ├── autotel-mcp-instrumentation/          # MCP instrumentation
 │   ├── autotel-genai/         # GenAI/LLM: traceGenAI, cost, metrics, events, ai-sdk, mastra, agent governance (autotel-genai/agent)
 │   ├── autotel-langfuse/      # Langfuse: langfuseCompatibility() enricher, langfuseScores(), langfuseMedia()
-│   ├── autotel-subscribers/   # Event subscribers (PostHog, etc.)
+│   ├── autotel-posthog/       # PostHog join: joinPostHog() browser session/replay, PostHogSubscriber for server track()
+│   ├── autotel-subscribers/   # Event subscribers (Mixpanel, Amplitude, Segment, Slack, Loki, file, webhooks)
 │   ├── autotel-web/           # Browser SDK: traceparent + W3C baggage propagation (setBaggage)
 │   └── ...
 ├── docs/
@@ -97,6 +98,7 @@ When the user wants observability, suggest these entry points. All from `autotel
 | GenAI/LLM calls                            | `traceGenAI()` (alias `traceLLM`) from `autotel-genai/trace`; pair with `recordGenAiResponse()`, `recordGenAiUsage()`, `setGenAiContent()`. Cost via `recordLLMCost`/`estimateLLMCost`/`MODEL_PRICING` from `autotel-genai/cost`; events via `recordInferenceDetails()`/`recordEvaluationResult()` from `autotel-genai/events`; metrics via `genAiMetricViews` from `autotel-genai/metrics`. Canonical `gen_ai.*` attributes only                |
 | Agent identity + auditability              | `withAgentAction()`, `withAgentSession()`, `withScopedTool()`, `recordPolicyDecision()`, `recordDecisionBasis()`, `createAgentIdentityRegistry()`, `createSignedEventEnvelope()` from `autotel-genai/agent`                                                                                                                                                                                                                                      |
 | Agent security observability (Google SAIF) | `recordControllerId()`, `recordHumanApproval()`, `recordInputProvenance()`, `recordPlanStep()`, `recordPlanRiskAssessment()`, `runAgentPlanClassifier()`, `heuristicPlanRiskClassifier()` from `autotel-genai/agent`; MCP bridge via `createMcpSecurityEventBridge()` from `autotel-audit`; passive chain detection via `createSecuritySignalProcessor()`. See [`docs/AGENT-SECURITY-OBSERVABILITY.md`](docs/AGENT-SECURITY-OBSERVABILITY.md).   |
+| PostHog session / replay join              | `joinPostHog(posthog)` from `autotel-posthog` in `initFull({ spanEnrichers })`. Stamps `session.id` / `user.id` on spans, `$trace_id` on PostHog events, and copies session id onto same-origin fetches as baggage. Server `track()`: `PostHogSubscriber` from `autotel-posthog/subscriber`.                                                                                                                                                         |
 
 - **Request logger** requires an active span (or explicit `TraceContext`). So wrap HTTP handlers with `trace()` (or framework middleware that creates a span), then call `getRequestLogger()` inside.
 - **Structured errors**: Prefer `createStructuredError` over `new Error()` in API routes and services. On the client, use `parseError(caught)` to show message/why/fix in UI.

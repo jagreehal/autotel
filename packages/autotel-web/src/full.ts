@@ -21,7 +21,7 @@ import { DocumentLoadInstrumentation } from '@opentelemetry/instrumentation-docu
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
 import { XMLHttpRequestInstrumentation } from '@opentelemetry/instrumentation-xml-http-request';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import type { PrivacyConfig } from './privacy';
+import { PrivacyManager, type PrivacyConfig } from './privacy';
 import { setupNetworkTimingObserver } from './network-timing';
 import { setupUserInteractionInstrumentation } from './user-interaction';
 import { setupErrorTracking, type ErrorTrackingConfig } from './error-tracking';
@@ -29,6 +29,11 @@ import { createStringRedactor } from './error-tracking/redact-values';
 import { setupWebVitals } from './web-vitals';
 import { setupLongTaskObserver } from './long-tasks';
 import { configureSession, getSessionAttributes } from './session';
+import {
+  getBaggageHeader,
+  hasBaggage,
+  isBaggageDestinationAllowed,
+} from './baggage';
 
 /**
  * Stamps session attributes in `onStart`, which is the only hook that can still
@@ -173,12 +178,23 @@ export interface AutotelWebFullConfig {
   /** Privacy controls (origin filtering, DNT, GPC). Applied to which requests get traced. */
   privacy?: PrivacyConfig;
 
+  /**
+   * W3C `baggage` header injection for `setBaggage()` (from `autotel-web/baggage`).
+   *
+   * Same-origin requests receive the header. Cross-origin destinations need
+   * `allowedOrigins`. This is the same fail-closed rule as lean `init()`.
+   */
+  baggage?: {
+    allowedOrigins?: string[];
+  };
+
   /** Enable debug logging. @default false */
   debug?: boolean;
 }
 
 let isFullInitialized = false;
 let provider: WebTracerProvider | undefined;
+let originalFetch: typeof fetch | undefined;
 
 /**
  * Initialize full browser tracing (spans + optional export).
@@ -289,9 +305,19 @@ export function initFull(config: AutotelWebFullConfig): void {
     instrumentations.push(new XMLHttpRequestInstrumentation(xhrOptions));
   }
 
+  if (!originalFetch) {
+    originalFetch = globalThis.fetch.bind(globalThis);
+  }
+
   registerInstrumentations({
     instrumentations,
   });
+
+  wrapFetchForBaggage(
+    config.baggage?.allowedOrigins ?? [],
+    config.privacy ? new PrivacyManager(config.privacy) : undefined,
+    config.debug,
+  );
 
   if (config.captureNetworkTiming !== false) {
     setupNetworkTimingObserver({
@@ -344,6 +370,64 @@ export function initFull(config: AutotelWebFullConfig): void {
       userInteraction: config.userInteraction?.enabled ?? false,
     });
   }
+}
+
+/**
+ * The headers this request will actually be sent with.
+ *
+ * `fetch(request, init)` does not merge: where `init.headers` is given it
+ * replaces the Request's headers wholesale. Anything decided from the Request
+ * alone is therefore thrown away by the caller's `init`, so the effective set
+ * has to be built first and handed back through `init`.
+ */
+function effectiveHeaders(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Headers {
+  if (init?.headers !== undefined) return new Headers(init.headers);
+  if (input instanceof Request) return new Headers(input.headers);
+  return new Headers();
+}
+
+function wrapFetchForBaggage(
+  allowedOrigins: readonly string[],
+  privacy: PrivacyManager | undefined,
+  debug?: boolean,
+): void {
+  const inner = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = fetchUrl(input);
+    const origin = globalThis.location?.origin ?? '';
+    // Both gates, the same way lean mode decides it. The destination allowlist
+    // answers "is this our own backend"; the privacy configuration answers
+    // "may we send context about this visitor at all" — Do Not Track, Global
+    // Privacy Control, blocked origins. Baggage carries business context off
+    // the page, so a `privacy` setting that held for traceparent and not for
+    // this would be a setting that does not mean what it says.
+    if (
+      !hasBaggage() ||
+      (privacy && !privacy.shouldInjectTraceparent(url)) ||
+      !isBaggageDestinationAllowed(url, origin, allowedOrigins)
+    ) {
+      return inner(input, init);
+    }
+    const header = getBaggageHeader();
+    if (!header) return inner(input, init);
+
+    const headers = effectiveHeaders(input, init);
+    if (headers.has('baggage')) return inner(input, init);
+    headers.set('baggage', header);
+    if (debug) {
+      console.log('[autotel-web/full] Injected baggage on fetch:', url, header);
+    }
+    return inner(input, { ...init, headers });
+  };
+}
+
+function fetchUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
 }
 
 function escapeRegex(s: string): string {
@@ -488,4 +572,8 @@ export function resetFullForTesting(): void {
   // provider's processors — so a suite silently tests the previous test's
   // configuration.
   otelTrace.disable();
+  if (originalFetch) {
+    globalThis.fetch = originalFetch;
+    originalFetch = undefined;
+  }
 }

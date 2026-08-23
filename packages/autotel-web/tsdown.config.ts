@@ -4,7 +4,11 @@ import { tsupCompatOutExtensions } from '../../tsdown.shared.mjs';
 export default defineConfig({
   outExtensions: tsupCompatOutExtensions,
   tsconfig: 'tsconfig.build.json',
-  entry: ['src/index.ts', 'src/full.ts'],
+  entry: {
+    index: 'src/index.ts',
+    full: 'src/full.ts',
+    baggage: 'src/baggage-entry.ts',
+  },
   format: ['esm'],
   dts: true,
   sourcemap: false,

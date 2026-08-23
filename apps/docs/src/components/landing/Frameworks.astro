@@ -18,7 +18,7 @@ const integrations = [
   { name: 'MCP', href: '/autotel/integrations/mcp/' },
   { name: 'Sentry', href: '/autotel/integrations/sentry/' },
   { name: 'Datadog', href: '/autotel/integrations/datadog/' },
-  { name: 'PostHog', href: '/autotel/integrations/subscribers/' },
+  { name: 'PostHog', href: '/autotel/integrations/posthog/' },
 ];
 ---
 
@@ -194,6 +194,10 @@ const integrations = [
 
   :root[data-theme='light'] .chip:hover {
     background: var(--sl-color-gray-6);
+  }
+
+  :root[data-theme='light'] .chip:hover .chip__arrow {
+    color: var(--color-pitch-black);
   }
 
   .chip:hover .chip__arrow {

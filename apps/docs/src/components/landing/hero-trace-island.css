@@ -1,5 +1,25 @@
-/* Live hero trace (Preact island). Dark-only, monochrome — blue is the one
-   signal colour; red appears only on a failed span (semantic, not palette). */
+/* Live hero trace (Preact island). Monochrome — blue is the one signal
+   colour; red appears only on a failed span (semantic, not palette). */
+
+/* The island is authored against the dark palette. In light theme it becomes a
+   light card by remapping those tokens once, on .hti — every rule below reads
+   through them, so this replaces an override per rule. */
+:root[data-theme='light'] .hti {
+  --color-graphite: #ffffff;
+  --color-charcoal-grey: #d3d5da;
+  --color-pitch-black: #ececef; /* the span-track rail */
+  --color-gunmetal: #7c818b; /* non-root span bars */
+  --color-porcelain: #08090a;
+  --color-light-steel: #353841;
+  --color-storm-cloud: #545861;
+  --color-aether-blue: #1d4ed8;
+  --color-aether-blue-soft: #1d4ed8;
+  --color-warning-red: #b91c1c;
+  color-scheme: light;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.6) inset,
+    0 24px 60px -34px rgba(8, 9, 10, 0.28);
+}
 
 .hti {
   margin: 0;

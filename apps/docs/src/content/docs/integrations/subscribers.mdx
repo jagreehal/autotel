@@ -8,16 +8,16 @@ description: Send product events to Mixpanel, Amplitude, Segment, webhooks, and 
 **Track once, send everywhere:**
 
 - Primary metrics → **OpenTelemetry**
-- Product events → **Mixpanel / Amplitude / Segment** (PostHog: `autotel-posthog/subscriber`)
-- Customer data → **Segment**
+- Product events → **Mixpanel / Amplitude / Segment**
+- PostHog product events → `PostHogSubscriber` from `autotel-posthog/subscriber` (server `track()` only; the browser session join is [PostHog](/autotel/integrations/posthog/))
 - Custom integrations → **Webhooks**
 
 ## Installation
 
 ```bash
 npm install autotel autotel-subscribers
-npm install posthog-node    # For PostHog
-npm install mixpanel        # For Mixpanel
+npm install autotel-posthog posthog-node    # For PostHog
+npm install mixpanel                        # For Mixpanel
 ```
 
 ## Quick Start
@@ -187,6 +187,7 @@ Available middleware:
 ## Examples
 
 - [`example-subscribers`](https://github.com/jagreehal/autotel/tree/main/apps/example-subscribers): PostHog, Slack, and webhook subscribers with event filtering and funnel tracking.
+- [`example-posthog`](https://github.com/jagreehal/autotel/tree/main/apps/example-posthog): browser join plus a checkout that fails, so you can see the replay URL and `$trace_id`.
 
 ## Entry Points
 

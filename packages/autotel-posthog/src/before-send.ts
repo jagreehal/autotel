@@ -20,7 +20,7 @@
  * ```
  */
 
-import { context, trace } from '@opentelemetry/api';
+import { context, trace, type SpanContext } from '@opentelemetry/api';
 
 /**
  * Structural copy of PostHog's `CaptureResult`. Only `properties` is touched;
@@ -60,6 +60,60 @@ export interface AutotelBeforeSendOptions {
     traceId: string;
     spanId: string;
   }) => string | undefined;
+
+  /**
+   * Where to look when the active context is empty.
+   *
+   * Node keeps the active span across `await` through AsyncLocalStorage; the
+   * browser has no equivalent, so `context.active()` is back to root by the
+   * time the fetch resolves and the interesting event fires. Without this the
+   * hook would silently add nothing to exactly the events worth joining.
+   *
+   * `joinPostHog()` supplies one backed by the spans it has seen start and not
+   * yet end. Left unset, the hook uses only the active context.
+   */
+  fallbackSpanContext?: () => SpanContext | undefined;
+}
+
+/**
+ * The ids of the span in progress, shaped to spread straight onto a capture.
+ *
+ * The hook recovers the span by itself in every case it can be sure of. This
+ * is for the case it cannot: two overlapping user actions, each its own trace,
+ * with no active context left to say which one an event belongs to. Read it
+ * while the span is still active — before the first `await` — and spread it:
+ *
+ * ```ts
+ * await span('checkout.click', async () => {
+ *   const trace = traceProperties();
+ *   await fetch('/checkout', { method: 'POST' });
+ *   posthog.capture('checkout_failed', { ...trace });
+ * });
+ * ```
+ *
+ * Returns `{}` when nothing is being traced, so the spread is always safe.
+ * Properties the caller sets are never overwritten, so this always wins.
+ */
+export function traceProperties(): {
+  $trace_id?: string;
+  $span_id?: string;
+} {
+  const spanContext = trace.getSpanContext(context.active());
+  if (!spanContext) return {};
+  return { $trace_id: spanContext.traceId, $span_id: spanContext.spanId };
+}
+
+/** The active context wins; this only answers when there is nothing active. */
+function readFallback(
+  options: AutotelBeforeSendOptions,
+): SpanContext | undefined {
+  try {
+    return options.fallbackSpanContext?.();
+  } catch {
+    // A fallback that throws is a fallback that adds nothing, not an event
+    // that fails to send.
+    return undefined;
+  }
 }
 
 /**
@@ -74,23 +128,30 @@ export function autotelBeforeSend(
     // would send something the page deliberately suppressed.
     if (event === null) return null;
 
-    const spanContext = trace.getSpanContext(context.active());
-    if (!spanContext) return event;
-
     const properties = event.properties;
-    if (properties['$trace_id'] === undefined) {
-      properties['$trace_id'] = spanContext.traceId;
+    const spanContext =
+      trace.getSpanContext(context.active()) ?? readFallback(options);
+
+    if (spanContext) {
+      if (properties['$trace_id'] === undefined) {
+        properties['$trace_id'] = spanContext.traceId;
+      }
+      if (properties['$span_id'] === undefined) {
+        properties['$span_id'] = spanContext.spanId;
+      }
     }
-    if (properties['$span_id'] === undefined) {
-      properties['$span_id'] = spanContext.spanId;
-    }
+
+    // Read back rather than taken from the span context: an event the caller
+    // stamped by hand — `traceProperties()`, or ids carried from elsewhere —
+    // deserves the same clickable link as one recovered automatically.
+    // Otherwise taking the documented escape hatch quietly costs you the link.
+    const traceId = properties['$trace_id'];
+    const spanId = properties['$span_id'];
+    if (typeof traceId !== 'string' || typeof spanId !== 'string') return event;
 
     if (options.traceUrl && properties['$trace_url'] === undefined) {
       try {
-        const url = options.traceUrl({
-          traceId: spanContext.traceId,
-          spanId: spanContext.spanId,
-        });
+        const url = options.traceUrl({ traceId, spanId });
         if (url !== undefined) properties['$trace_url'] = url;
       } catch {
         // App-supplied callback. It does not get to take down the event it was

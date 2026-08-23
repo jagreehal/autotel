@@ -18,10 +18,15 @@ npm install autotel-posthog posthog-js autotel-web
 npm install autotel-posthog posthog-node autotel autotel-subscribers
 ```
 
-Every peer is declared optional so the half you skip does not warn about
-packages it will never import. `posthog-js` is not bundled: two copies on one
-page means two session managers and two different answers to
-`get_session_id()`, which would break the join this package exists to make.
+Peers are declared optional so the half you skip does not warn about packages it
+will never import — with one exception. `autotel-web` is **required**: the root
+entry's `joinPostHog` imports `autotel-web/baggage` at module scope for the
+session hop, and a peer the entry point always imports is not optional. Server
+events live behind `autotel-posthog/subscriber`, which does not pull it in.
+
+`posthog-js` is not bundled: two copies on one page means two session managers
+and two different answers to `get_session_id()`, which would break the join this
+package exists to make.
 
 ## The short version
 
@@ -110,6 +115,70 @@ posthog.init('<key>', { before_send: [autotelBeforeSend()] });
 ```
 
 A `$exception` or a funnel drop-off in PostHog now names the trace that explains it. Events an earlier hook dropped stay dropped: `before_send` is a chain, and `null` means the page suppressed the event deliberately.
+
+#### Events captured after an `await`
+
+The browser has no `AsyncLocalStorage`, so OpenTelemetry's active context is gone by the first `await` — which is exactly where the events worth joining fire:
+
+```ts
+await span('checkout.click', async () => {
+  await fetch('/checkout', { method: 'POST' });
+  // The active span is already gone here. joinPostHog still finds it.
+  posthog.capture('checkout_failed', { message: 'Card declined' });
+});
+```
+
+`joinPostHog` falls back to the most recent span it has seen start and not yet end, so no Zone.js and no manual `context.with()`. The active context wins when there is one, and a span that already ended is never used.
+
+It refuses to guess when guessing could be wrong. Two overlapping user actions each start their own trace, and with no active context there is nothing to say which one an event belongs to — so nothing is added rather than a trace id pointing at an unrelated request. In development it says so in the console, and names the fix.
+
+The fix is one line. Read the ids while the span is still active, before the first `await`, and spread them onto the capture:
+
+```ts
+import { traceProperties } from 'autotel-posthog';
+
+await span('checkout.click', async () => {
+  const trace = traceProperties();
+  await fetch('/checkout', { method: 'POST' });
+  posthog.capture('checkout_failed', { ...trace, message: 'Card declined' });
+});
+```
+
+`traceProperties()` returns `{}` when nothing is being traced, so the spread is always safe, and a property the caller set is never overwritten — explicit always wins. `$trace_url` is still added for you.
+
+`autotelBeforeSend()` on its own reads only the active context. Pass `fallbackSpanContext` for the same behaviour without the enricher.
+
+## When nothing shows up
+
+Every failure here is quiet on purpose — a missing PostHog, a rotated session, replay switched off all just produce no attribute. That is right in production and useless while wiring it up, so each exit says why, once per reason:
+
+`debug` is on by default in development and silent in production — `process.env.NODE_ENV` where a bundler substituted one, a localhost page otherwise. A diagnostic nobody switches on is a diagnostic nobody reads. `debug: false` silences it anywhere; `debug: true` forces it on.
+
+### Testing it end to end
+
+`posthog-js` drops bots — headless Chrome included — **before** `before_send` runs, so a Playwright or Puppeteer test sees no events and no stamping, with no error to explain it. Turn the filter off on the instance under test only:
+
+```ts
+await page.evaluate(() =>
+  window.posthog.set_config({ opt_out_useragent_filter: true }),
+);
+```
+
+PostHog still classifies that traffic as a bot server-side, so filter it out of your own analysis rather than leaving it in production code.
+
+## Server hop
+
+`joinPostHog` copies PostHog's session id onto subsequent same-origin fetches as W3C `baggage` (`propagateSession`, default on). The backend then stamps that id on the handler span:
+
+```ts
+init({ service: 'api', endpoint, baggage: '' });
+```
+
+`baggage: ''` writes `session.id`. `baggage: true` would write `baggage.session.id`. Distinct id stays off; it can be an email. Pass `propagateSession: false` to skip the header.
+
+Needs `autotel` 7.0.1 or later: earlier versions read the empty string as "off" and the attribute never landed.
+
+Docs: [PostHog join](https://jagreehal.github.io/autotel/integrations/posthog/). Worked example: [`apps/example-posthog`](../../apps/example-posthog).
 
 ## Product events from the server
 

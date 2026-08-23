@@ -254,7 +254,8 @@ const honeyToken = createHoneyTokenTool({
 ### Vercel AI SDK
 
 Register `autotelTelemetry()` once and every `generateText` / `streamText` /
-`embed` call streams a canonical `gen_ai.*` span tree. Live, as it runs:
+`generateObject` / `streamObject` / `embed` call streams a canonical `gen_ai.*`
+span tree. Live, as it runs:
 
 ```ts
 import { registerTelemetry } from 'ai';
@@ -279,7 +280,10 @@ on every `chat` span:
 It is push-based and concurrency-safe (every event carries the SDK `callId`),
 and it pulls in **no** dependency on `ai`. The returned object satisfies the
 `Telemetry` interface structurally, so the snippet above type-checks as-is.
-`rerank` has no canonical `gen_ai` operation and is intentionally not mapped.
+Embeddings open on `onEmbedStart` so span duration is the real model call.
+`runtimeContext.userId` / `sessionId` become `user.id` /
+`gen_ai.conversation.id`; other keys are dropped. `rerank` has no canonical
+`gen_ai` operation and is intentionally not mapped.
 
 **Nested traces.** It implements the SDK's `executeTool` / `executeLanguageModelCall`
 context runners, so a tool whose `execute` calls `generateText`. And the

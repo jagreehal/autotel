@@ -324,6 +324,39 @@ describe('autotelTelemetry — abort & embeddings', () => {
     expect(byName('chat gpt-4o')).toHaveLength(1);
   });
 
+  it('records embeddings duration from onEmbedStart through onEmbedEnd', async () => {
+    const t = autotelTelemetry({ tracer });
+    t.onStart({
+      callId: 'e2',
+      operationId: 'ai.embed',
+      modelId: 'text-embedding-3-small',
+    });
+    t.onEmbedStart({
+      callId: 'e2',
+      embedCallId: 'ec1',
+      provider: 'openai',
+      modelId: 'text-embedding-3-small',
+    });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
+    t.onEmbedEnd({
+      callId: 'e2',
+      embedCallId: 'ec1',
+      provider: 'openai',
+      modelId: 'text-embedding-3-small',
+      usage: { tokens: 42 },
+    });
+    t.onEnd({ callId: 'e2' });
+
+    const embed = one('embeddings text-embedding-3-small');
+    expect(embed.attributes[GEN_AI.OPERATION_NAME]).toBe('embeddings');
+    const [startS, startNs] = embed.startTime;
+    const [endS, endNs] = embed.endTime;
+    const durationMs = (endS - startS) * 1000 + (endNs - startNs) / 1e6;
+    expect(durationMs).toBeGreaterThan(40);
+  });
+
   it('emits a standalone embeddings span with token usage and cost', () => {
     const t = autotelTelemetry({ tracer });
     t.onStart({
@@ -346,6 +379,127 @@ describe('autotelTelemetry — abort & embeddings', () => {
     expect(embed.attributes[GEN_AI.OPERATION_NAME]).toBe('embeddings');
     expect(embed.attributes[GEN_AI.USAGE_INPUT_TOKENS]).toBe(42);
     expect(parentIdOf(embed)).toBeUndefined();
+  });
+
+  it('marks an in-flight embeddings span errored when the call throws', () => {
+    const t = autotelTelemetry({ tracer });
+    t.onStart({
+      callId: 'e3',
+      operationId: 'ai.embed',
+      modelId: 'text-embedding-3-small',
+    });
+    t.onEmbedStart({
+      callId: 'e3',
+      embedCallId: 'ec1',
+      provider: 'openai',
+      modelId: 'text-embedding-3-small',
+    });
+    t.onError({ callId: 'e3', error: new Error('boom') });
+
+    const embed = one('embeddings text-embedding-3-small');
+    expect(embed.status.code).toBe(SpanStatusCode.ERROR);
+    expect(embed.status.message).toBe('boom');
+  });
+});
+
+describe('autotelTelemetry — structured output', () => {
+  it('nests a json chat span under invoke_agent for generateObject', () => {
+    const t = autotelTelemetry({ tracer });
+    t.onStart({
+      callId: 'o1',
+      operationId: 'ai.generateObject',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      functionId: 'extract-incident',
+    });
+    t.onObjectStepStart({
+      callId: 'o1',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+    });
+    t.onObjectStepEnd({
+      callId: 'o1',
+      finishReason: 'stop',
+      response: { id: 'resp_obj', modelId: 'gpt-4o' },
+      usage: { inputTokens: 1000, outputTokens: 500 },
+      objectText: '{"ok":true}',
+      msToFirstChunk: 400,
+    });
+    t.onEnd({ callId: 'o1' });
+
+    const agent = one('invoke_agent extract-incident');
+    expect(agent.attributes[GEN_AI.OPERATION_NAME]).toBe('invoke_agent');
+
+    const chat = one('chat gpt-4o');
+    expect(parentIdOf(chat)).toBe(agent.spanContext().spanId);
+    expect(chat.attributes[GEN_AI.OUTPUT_TYPE]).toBe('json');
+    expect(chat.attributes[GEN_AI.USAGE_INPUT_TOKENS]).toBe(1000);
+    expect(chat.attributes[GEN_AI.USAGE_OUTPUT_TOKENS]).toBe(500);
+    expect(chat.attributes[GEN_AI.USAGE_COST_USD]).toBeGreaterThan(0);
+    expect(chat.attributes[GEN_AI.RESPONSE_TIME_TO_FIRST_CHUNK]).toBeCloseTo(
+      0.4,
+    );
+    expect(chat.attributes[GEN_AI.RESPONSE_ID]).toBe('resp_obj');
+    expect(Object.keys(chat.attributes)).not.toContain(
+      'gen_ai.usage.total_tokens',
+    );
+  });
+
+  it('reaps an in-flight json chat span when generateObject throws', () => {
+    const t = autotelTelemetry({ tracer });
+    t.onStart({
+      callId: 'o2',
+      operationId: 'ai.generateObject',
+      modelId: 'gpt-4o',
+      functionId: 'extract-incident',
+    });
+    t.onObjectStepStart({
+      callId: 'o2',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+    });
+    t.onError({ callId: 'o2', error: new Error('schema mismatch') });
+
+    const agent = one('invoke_agent extract-incident');
+    expect(agent.status.code).toBe(SpanStatusCode.ERROR);
+    const chat = one('chat gpt-4o');
+    expect(parentIdOf(chat)).toBe(agent.spanContext().spanId);
+    expect(chat.status.code).toBe(SpanStatusCode.ERROR);
+  });
+});
+
+describe('autotelTelemetry — runtimeContext', () => {
+  it('stamps user.id and conversation id from runtimeContext and drops leftover keys', () => {
+    const t = autotelTelemetry({ tracer });
+    t.onStart({
+      callId: 'c8',
+      operationId: 'ai.generateText',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      functionId: 'support-agent',
+      runtimeContext: {
+        userId: 'u_123',
+        sessionId: 's_456',
+        tenant: 'acme',
+      },
+    });
+    t.onLanguageModelCallStart({ callId: 'c8', modelId: 'gpt-4o' });
+    t.onLanguageModelCallEnd({
+      callId: 'c8',
+      modelId: 'gpt-4o',
+      usage: { inputTokens: 10, outputTokens: 4 },
+    });
+    t.onEnd({ callId: 'c8' });
+
+    const agent = one('invoke_agent support-agent');
+    expect(agent.attributes['user.id']).toBe('u_123');
+    expect(agent.attributes[GEN_AI.CONVERSATION_ID]).toBe('s_456');
+    expect(agent.attributes.tenant).toBeUndefined();
+
+    const chat = one('chat gpt-4o');
+    expect(chat.attributes['user.id']).toBe('u_123');
+    expect(chat.attributes[GEN_AI.CONVERSATION_ID]).toBe('s_456');
+    expect(chat.attributes.tenant).toBeUndefined();
   });
 });
 
@@ -489,5 +643,64 @@ describe('autotelTelemetry — content capture', () => {
     const chat = one('chat gpt-4o');
     expect(chat.attributes[GEN_AI.INPUT_MESSAGES]).toBe('[redacted]');
     expect(chat.attributes[GEN_AI.OUTPUT_MESSAGES]).toBeUndefined();
+  });
+});
+
+describe('autotelTelemetry — per-call output recording', () => {
+  it('withholds structured output when recordOutputs is false', () => {
+    // `captureContent` is the global permission; `recordOutputs` is the
+    // caller's decision for this one call, and the caller wins. Structured
+    // output is exactly where the sensitive fields are — an extracted address,
+    // a parsed invoice — so honouring it everywhere except here leaks the
+    // shape most worth withholding.
+    const t = autotelTelemetry({ tracer, captureContent: true });
+
+    t.onStart({
+      callId: 'obj1',
+      operationId: 'ai.generateObject',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+    });
+    t.onObjectStepStart({
+      callId: 'obj1',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+    });
+    t.onObjectStepEnd({
+      callId: 'obj1',
+      finishReason: 'stop',
+      objectText: '{"cardNumber":"4111111111111111"}',
+      recordOutputs: false,
+    });
+    t.onEnd({ callId: 'obj1' });
+
+    const chat = one('chat gpt-4o');
+    expect(chat.attributes[GEN_AI.OUTPUT_MESSAGES]).toBeUndefined();
+  });
+
+  it('still records structured output when the caller allows it', () => {
+    const t = autotelTelemetry({ tracer, captureContent: true });
+
+    t.onStart({
+      callId: 'obj2',
+      operationId: 'ai.generateObject',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+    });
+    t.onObjectStepStart({
+      callId: 'obj2',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+    });
+    t.onObjectStepEnd({
+      callId: 'obj2',
+      finishReason: 'stop',
+      objectText: '{"city":"SF"}',
+      recordOutputs: true,
+    });
+    t.onEnd({ callId: 'obj2' });
+
+    const chat = one('chat gpt-4o');
+    expect(String(chat.attributes[GEN_AI.OUTPUT_MESSAGES])).toContain('SF');
   });
 });

@@ -2,9 +2,10 @@
  * `autotelTelemetry` — a Vercel AI SDK telemetry integration.
  *
  * Implements the AI SDK's `Telemetry` lifecycle interface (stable since ai v7)
- * so you register it once and every `generateText` / `streamText` / `embed`
- * call streams a canonical `gen_ai.*` span tree — live, as the operation runs,
- * not reconstructed after the fact:
+ * so you register it once and every `generateText` / `streamText` /
+ * `generateObject` / `streamObject` / `embed` call streams a canonical
+ * `gen_ai.*` span tree — live, as the operation runs, not reconstructed after
+ * the fact:
  *
  * ```ts
  * import { registerTelemetry } from 'ai';
@@ -33,8 +34,11 @@
  * is a superset of the fields read here), so `registerTelemetry(autotelTelemetry())`
  * type-checks without importing the interface.
  *
- * Scope: `generateText` / `streamText` (incl. tool loops and `output`) and
- * `embed` / `embedMany`. A tool's nested `generateText` and the provider's own
+ * Scope: `generateText` / `streamText` (incl. tool loops and `output`),
+ * `generateObject` / `streamObject`, and `embed` / `embedMany`. Embeddings
+ * open on `onEmbedStart` so duration is real. `userId` / `sessionId` on
+ * `runtimeContext` become `user.id` / `gen_ai.conversation.id`; leftover
+ * keys are dropped. A tool's nested `generateText` and the provider's own
  * HTTP spans parent correctly via the `executeTool` / `executeLanguageModelCall`
  * context runners. `rerank` has no canonical `gen_ai` operation in the v1.42.0
  * registry and is intentionally not mapped.
@@ -51,7 +55,12 @@ import {
   type Span,
   type Tracer,
 } from '@opentelemetry/api';
-import { GEN_AI_OPERATION, GEN_AI_TOOL_TYPE } from '../semconv.js';
+import {
+  GEN_AI,
+  GEN_AI_OPERATION,
+  GEN_AI_OUTPUT_TYPE,
+  GEN_AI_TOOL_TYPE,
+} from '../semconv.js';
 import {
   contentToGenAiMessage,
   promptToGenAiMessages,
@@ -84,6 +93,11 @@ interface OperationStartEvent {
   modelId?: string;
   /** From telemetry settings — used as the agent name. */
   functionId?: string;
+  /**
+   * Call-level context already filtered by the SDK. Only `userId` and
+   * `sessionId` are recorded (`user.id`, `gen_ai.conversation.id`).
+   */
+  runtimeContext?: Record<string, unknown>;
 }
 
 interface LanguageModelCallStartEventView {
@@ -146,6 +160,23 @@ interface ToolExecutionEndEventView {
   recordOutputs?: boolean;
 }
 
+interface ObjectStepStartEventView {
+  callId: string;
+  provider?: string;
+  modelId?: string;
+}
+
+interface ObjectStepEndEventView {
+  callId: string;
+  finishReason?: string;
+  response?: { id?: string; modelId?: string };
+  usage?: AiSdkUsageFields;
+  objectText?: string;
+  /** Whether the SDK call permits recording outputs (default true). */
+  recordOutputs?: boolean;
+  msToFirstChunk?: number;
+}
+
 interface OperationEndEventView {
   callId: string;
 }
@@ -153,6 +184,13 @@ interface OperationEndEventView {
 interface AbortEventView {
   callId: string;
   reason?: unknown;
+}
+
+interface EmbeddingModelCallStartEventView {
+  callId: string;
+  embedCallId?: string;
+  provider?: string;
+  modelId?: string;
 }
 
 interface EmbeddingModelCallEndEventView {
@@ -173,6 +211,9 @@ export interface AutotelTelemetryIntegration {
   onLanguageModelCallEnd(event: LanguageModelCallEndEventView): void;
   onToolExecutionStart(event: ToolExecutionStartEventView): void;
   onToolExecutionEnd(event: ToolExecutionEndEventView): void;
+  onObjectStepStart(event: ObjectStepStartEventView): void;
+  onObjectStepEnd(event: ObjectStepEndEventView): void;
+  onEmbedStart(event: EmbeddingModelCallStartEventView): void;
   onEmbedEnd(event: EmbeddingModelCallEndEventView): void;
   onEnd(event: OperationEndEventView): void;
   onAbort(event: AbortEventView): void;
@@ -234,6 +275,20 @@ interface CallState {
   anonymousToolIds: string[];
   /** Monotonic counter for unique anonymous tool span ids within the call. */
   toolSeq: number;
+  /** Open embedding attempt span ids, started and not yet ended. */
+  openEmbed: string[];
+  /**
+   * Whether this operation embeds in parallel (`embedMany`).
+   *
+   * Two open embeds at once means a failed attempt being retried for `embed()`
+   * and ordinary concurrency for `embedMany()`, and the events are identical.
+   * The operation is the only thing that says which.
+   */
+  parallelEmbeds?: boolean;
+  /** `user.id` from `runtimeContext.userId`. */
+  userId?: string;
+  /** `gen_ai.conversation.id` from `runtimeContext.sessionId`. */
+  conversationId?: string;
 }
 
 const AI_SDK_AGENT_NAME = 'ai-sdk';
@@ -306,26 +361,107 @@ export function autotelTelemetry(
     );
   }
 
+  function applyRuntimeContext(
+    state: CallState,
+    runtimeContext: Record<string, unknown> | undefined,
+  ): void {
+    if (!runtimeContext) return;
+    const userId = readContextId(runtimeContext.userId);
+    const conversationId = readContextId(runtimeContext.sessionId);
+    if (userId !== undefined) state.userId = userId;
+    if (conversationId !== undefined) state.conversationId = conversationId;
+  }
+
+  function stampIdentity(id: string, state: CallState | undefined): void {
+    if (!state) return;
+    const span = spans.get(id);
+    if (!span) return;
+    if (state.userId !== undefined) span.setAttribute('user.id', state.userId);
+    if (state.conversationId !== undefined) {
+      span.setAttribute(GEN_AI.CONVERSATION_ID, state.conversationId);
+    }
+  }
+
+  /**
+   * The AI SDK reports an embedding attempt that succeeded and says nothing
+   * about one that threw — the retry just starts a new attempt. A span still
+   * open when the call is over therefore never completed, whatever ended the
+   * call, so closing it clean turns an abandoned attempt into a healthy span
+   * as long as everything that followed it.
+   */
+  const ABANDONED_EMBED = 'embedding attempt did not complete';
+
+  /**
+   * Duration here is an upper bound, not a measurement.
+   *
+   * Nothing says when an abandoned attempt stopped running, and for a parallel
+   * operation nothing says which later attempt replaced it — a second batch
+   * starting looks exactly like a retry starting. Guessing "the next start"
+   * truncates a real concurrent batch to the moment an unrelated one began,
+   * which reads as a fast failure and is worse than an honest overestimate.
+   * The ERROR status is what marks these spans as unusable for latency.
+   */
+  function closeOpenEmbeds(state: CallState, error?: unknown): void {
+    for (const id of state.openEmbed) {
+      observe({ type: 'chat.end', id, error: error ?? ABANDONED_EMBED });
+      spans.delete(id);
+    }
+    state.openEmbed = [];
+  }
+
+  /**
+   * Close the attempt a retry has just replaced.
+   *
+   * Waiting until the call ends would stretch the failed attempt's duration
+   * across the backoff and every later attempt, which is the opposite of the
+   * real model-call duration these spans are for. The next attempt starting is
+   * the tightest upper bound the SDK gives us.
+   */
+  function failPreviousEmbedAttempt(
+    state: CallState,
+    startingId: string,
+  ): void {
+    state.openEmbed = state.openEmbed.filter((id) => {
+      // Two concurrent embeds cannot share a span id, so a repeat is a retry
+      // whatever the operation. Otherwise only a non-parallel one can be sure:
+      // `embed()` is never concurrent with itself, `embedMany()` usually is —
+      // and there a new attempt is as likely to be the next batch as a retry.
+      // The events carry no batch identity to tell them apart, so anything
+      // else is left for the end of the call rather than guessed at.
+      const isRetry = id === startingId || !state.parallelEmbeds;
+      if (!isRetry) return true;
+      observe({ type: 'chat.end', id, error: ABANDONED_EMBED });
+      spans.delete(id);
+      return false;
+    });
+  }
+
   return {
     onStart(event) {
       // Embedding / rerank operations are not `invoke_agent` roots; they are
-      // handled as leaf spans by `onEmbedEnd` (rerank is unsupported).
-      if (isNonAgentOperation(event.operationId)) return;
+      // handled as leaf spans by `onEmbedStart` / `onEmbedEnd` (rerank is
+      // unsupported).
+      const hasAgent = !isNonAgentOperation(event.operationId);
       const state: CallState = {
-        hasAgent: true,
+        hasAgent,
         stream: event.operationId?.includes('stream'),
+        parallelEmbeds: event.operationId?.includes('embedMany'),
         openLm: [],
         lmSeq: 0,
         anonymousToolIds: [],
         toolSeq: 0,
+        openEmbed: [],
       };
       calls.set(event.callId, state);
+      applyRuntimeContext(state, event.runtimeContext);
+      if (!hasAgent) return;
       observe({
         type: 'agent.start',
         id: event.callId,
         provider: normalizeProvider(event.provider),
         agent: { name: event.functionId ?? event.modelId ?? AI_SDK_AGENT_NAME },
       });
+      stampIdentity(event.callId, state);
     },
 
     onLanguageModelCallStart(event) {
@@ -340,10 +476,15 @@ export function autotelTelemetry(
         type: 'chat.start',
         id,
         parentId: state?.hasAgent ? event.callId : undefined,
-        request: { ...toChatRequest(event), stream: state?.stream },
+        request: {
+          ...toChatRequest(event),
+          stream: state?.stream,
+          conversationId: state?.conversationId,
+        },
         inputMessages: content?.messages,
         systemInstructions: content?.systemInstructions,
       });
+      stampIdentity(id, state);
     },
 
     onLanguageModelCallEnd(event) {
@@ -405,8 +546,66 @@ export function autotelTelemetry(
       spans.delete(id);
     },
 
-    onEmbedEnd(event) {
-      const id = `${event.callId}:embed:${event.embedCallId ?? '0'}`;
+    onObjectStepStart(event) {
+      const state = calls.get(event.callId);
+      const id = `${event.callId}:object`;
+      observe({
+        type: 'chat.start',
+        id,
+        parentId: state?.hasAgent ? event.callId : undefined,
+        request: {
+          operation: GEN_AI_OPERATION.CHAT,
+          provider: normalizeProvider(event.provider),
+          model: event.modelId,
+          outputType: GEN_AI_OUTPUT_TYPE.JSON,
+          conversationId: state?.conversationId,
+        },
+      });
+      stampIdentity(id, state);
+    },
+
+    onObjectStepEnd(event) {
+      const id = `${event.callId}:object`;
+      // `captureContent` is the global permission and `recordOutputs` is the
+      // caller's decision for this call — the same order the language-model and
+      // tool handlers apply. Structured output is where the sensitive fields
+      // are, so this is the last place to skip the per-call check.
+      const outputMessage =
+        captureContent &&
+        event.recordOutputs !== false &&
+        event.objectText !== undefined
+          ? contentToGenAiMessage(
+              [{ type: 'text', text: event.objectText }],
+              event.finishReason,
+            )
+          : undefined;
+      observe({
+        type: 'chat.end',
+        id,
+        response: {
+          model: event.response?.modelId,
+          id: event.response?.id,
+          finishReasons: event.finishReason ? [event.finishReason] : undefined,
+          timeToFirstChunk: msToSeconds(event.msToFirstChunk),
+        },
+        usage: toTokenUsage(event.usage),
+        costModel: event.response?.modelId,
+        outputMessages: outputMessage ? [outputMessage] : undefined,
+      });
+      spans.delete(id);
+    },
+
+    onEmbedStart(event) {
+      const id = embedSpanId(event);
+      const state = calls.get(event.callId);
+      if (state) {
+        // A single embed() is never concurrent with itself, so anything still
+        // open here is the attempt this one is retrying. Ids collide when the
+        // SDK omits `embedCallId`, which without this would silently reuse the
+        // failed attempt's span and lose it entirely.
+        failPreviousEmbedAttempt(state, id);
+        state.openEmbed.push(id);
+      }
       observe({
         type: 'chat.start',
         id,
@@ -416,6 +615,26 @@ export function autotelTelemetry(
           model: event.modelId,
         },
       });
+    },
+
+    onEmbedEnd(event) {
+      const id = embedSpanId(event);
+      const state = calls.get(event.callId);
+      if (state) {
+        const index = state.openEmbed.indexOf(id);
+        if (index !== -1) state.openEmbed.splice(index, 1);
+      }
+      if (!spans.has(id)) {
+        observe({
+          type: 'chat.start',
+          id,
+          request: {
+            operation: GEN_AI_OPERATION.EMBEDDINGS,
+            provider: normalizeProvider(event.provider),
+            model: event.modelId,
+          },
+        });
+      }
       observe({
         type: 'chat.end',
         id,
@@ -430,17 +649,26 @@ export function autotelTelemetry(
     },
 
     onEnd(event) {
-      if (!calls.delete(event.callId)) return;
+      const state = calls.get(event.callId);
+      if (!state) return;
+      calls.delete(event.callId);
+      closeOpenEmbeds(state);
+      if (!state.hasAgent) return;
       observe({ type: 'agent.end', id: event.callId });
       spans.delete(event.callId);
     },
 
     onAbort(event) {
-      if (!calls.delete(event.callId)) return;
+      const state = calls.get(event.callId);
+      if (!state) return;
+      calls.delete(event.callId);
+      const error = event.reason ?? 'aborted';
+      closeOpenEmbeds(state, error);
+      if (!state.hasAgent) return;
       observe({
         type: 'agent.end',
         id: event.callId,
-        error: event.reason ?? 'aborted',
+        error,
       });
       spans.delete(event.callId);
     },
@@ -450,11 +678,17 @@ export function autotelTelemetry(
       // matching `invoke_agent` root when we can correlate it; otherwise leave
       // it for `onEnd`/`onAbort` (the observer reaps any open children on close).
       const callId = errorCallId(event);
-      if (callId === undefined || !calls.delete(callId)) return;
+      if (callId === undefined) return;
+      const state = calls.get(callId);
+      if (!state) return;
+      calls.delete(callId);
+      const error = errorValue(event) ?? event;
+      closeOpenEmbeds(state, error);
+      if (!state.hasAgent) return;
       observe({
         type: 'agent.end',
         id: callId,
-        error: errorValue(event) ?? event,
+        error,
       });
       spans.delete(callId);
     },
@@ -475,6 +709,18 @@ export function autotelTelemetry(
       return runInSpan(spans.get(id), options.execute);
     },
   };
+}
+
+function readContextId(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return String(value);
+  }
+  return undefined;
+}
+
+function embedSpanId(event: { callId: string; embedCallId?: string }): string {
+  return `${event.callId}:embed:${event.embedCallId ?? '0'}`;
 }
 
 /** Operations that are not `invoke_agent` roots (embeddings, rerank). */

@@ -92,11 +92,27 @@ function App() {
 }
 ```
 
+## PostHog
+
+`joinPostHog(posthog)` from `autotel-posthog` stamps PostHog's session id onto
+spans and copies it onto same-origin fetches as W3C baggage. Lean mode can take
+the id directly:
+
+```typescript
+import { init } from 'autotel-web';
+import { posthogSessionId } from 'autotel-posthog';
+
+init({ service: 'web', session: { id: posthogSessionId } });
+```
+
+See [PostHog](/autotel/integrations/posthog/).
+
 ## Examples
 
 - [`example-web-vanilla`](https://github.com/jagreehal/autotel/tree/main/apps/example-web-vanilla): Vanilla JS with `autotel-web` lean mode showing automatic `traceparent` injection.
 - [`example-nextjs`](https://github.com/jagreehal/autotel/tree/main/apps/example-nextjs): Next.js with `autotel-web` for browser-to-backend distributed tracing.
 - [`example-tanstack-start`](https://github.com/jagreehal/autotel/tree/main/apps/example-tanstack-start): TanStack Start with `autotel-web` for client-side trace propagation.
+- [`example-posthog`](https://github.com/jagreehal/autotel/tree/main/apps/example-posthog): Browser join plus a checkout server that reads `session.id` from baggage.
 
 ## Why Not Full OTel in the Browser?
 
@@ -109,3 +125,4 @@ function App() {
 - `autotel-web`: Lean mode (default, ~1.6KB)
 - `autotel-web/full`: Full mode (~40-50KB)
 - `autotel-web/privacy`: Privacy manager
+- `autotel-web/baggage`: `setBaggage` / `clearBaggage` without the rest of the SDK

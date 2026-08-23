@@ -606,6 +606,48 @@ describe('init() customization', () => {
     expect(processors.length).toBeGreaterThan(1);
   });
 
+  it.each([
+    ['' as const, 'no prefix'],
+    ['ctx' as const, 'a custom prefix'],
+    [true as const, 'the default prefix'],
+  ])(
+    'installs the baggage processor when baggage is %o (%s)',
+    async (baggage, _description) => {
+      // `baggage: ''` is documented as "copy baggage onto spans, unprefixed" —
+      // the falsy empty string must not read as "baggage off". Getting this
+      // wrong is silent: spans simply never carry the entries.
+      const { init, sdkInstances } = await loadInitWithMocks();
+
+      init({
+        service: 'baggage-app',
+        endpoint: 'http://localhost:4318',
+        baggage,
+      });
+
+      // init() constructs exactly one SDK, so the last record is this run's.
+      const options = sdkInstances.at(-1)!.options;
+      // SAFETY: init() passes the processors it built; this asserts which ones.
+      const processors = options.spanProcessors as SpanProcessor[];
+      expect(
+        processors.map((processor) => processor.constructor.name),
+      ).toContain('BaggageSpanProcessor');
+    },
+  );
+
+  it('leaves the baggage processor out when baggage is off', async () => {
+    const { init, sdkInstances } = await loadInitWithMocks();
+
+    init({ service: 'no-baggage-app', endpoint: 'http://localhost:4318' });
+
+    // init() constructs exactly one SDK, so the last record is this run's.
+    const options = sdkInstances.at(-1)!.options;
+    // SAFETY: init() passes the processors it built; this asserts which ones.
+    const processors = options.spanProcessors as SpanProcessor[];
+    expect(
+      processors.map((processor) => processor.constructor.name),
+    ).not.toContain('BaggageSpanProcessor');
+  });
+
   it('keeps spanEnrichers outside the redaction wrapper', async () => {
     // AttributeRedactingProcessor hands its wrapped processor a proxy whose
     // `attributes` is a private redacted copy. An enricher wrapped by it would

@@ -66,9 +66,13 @@ exactly aligned with them.
   integration for `registerTelemetry()`, push-based / live). All dependency-free
   / structurally typed. `autotelTelemetry()` is the keystone AI SDK path: it
   anchors the `chat` span on `onLanguageModelCallStart/End` (both carry `callId`,
-  so it is concurrency-safe), tools become siblings under the `invoke_agent`
-  root, and it adds cost + streaming timing the built-in `@ai-sdk/otel` omits.
-  It also implements the `executeTool`/`executeLanguageModelCall` context runners
+  so it is concurrency-safe), `generateObject` / `streamObject` on
+  `onObjectStepStart/End` (`gen_ai.output.type = json`), embeddings on
+  `onEmbedStart`/`onEmbedEnd` (duration is the real call, not a zero-width
+  span), tools become siblings under the `invoke_agent` root, and it adds cost
+  + streaming timing the built-in `@ai-sdk/otel` omits. `runtimeContext.userId`
+  / `sessionId` stamp `user.id` / `gen_ai.conversation.id`; leftover keys are
+  dropped. It also implements the `executeTool`/`executeLanguageModelCall` context runners
   (nested traces. Needs an ambient OTel ContextManager, which real Node apps
   have) and opt-in content capture (`captureContent`, off by default; maps AI SDK
   messages → GenAI SemConv format via `ai-sdk-messages.ts`). `subscribeAiTelemetry`
