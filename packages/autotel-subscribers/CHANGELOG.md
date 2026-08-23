@@ -1,5 +1,12 @@
 # autotel-subscribers
 
+## 50.0.1
+
+### Patch Changes
+
+- Updated dependencies [4c859aa]
+  - autotel@7.0.1
+
 ## 50.0.0
 
 ### Major Changes

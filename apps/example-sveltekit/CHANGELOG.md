@@ -1,5 +1,13 @@
 # @jagreehal/example-sveltekit
 
+## 0.1.12
+
+### Patch Changes
+
+- Updated dependencies [4c859aa]
+  - autotel@7.0.1
+  - autotel-adapters@2.0.10
+
 ## 0.1.11
 
 ### Patch Changes

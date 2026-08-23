@@ -1,5 +1,13 @@
 # @jagreehal/example-datadog
 
+## 1.0.85
+
+### Patch Changes
+
+- Updated dependencies [4c859aa]
+  - autotel@7.0.1
+  - autotel-backends@2.13.7
+
 ## 1.0.84
 
 ### Patch Changes
