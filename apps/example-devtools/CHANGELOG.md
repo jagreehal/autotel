@@ -1,5 +1,17 @@
 # @jagreehal/example-devtools
 
+## 1.0.31
+
+### Patch Changes
+
+- Updated dependencies [4c859aa]
+  - autotel-web@1.13.1
+  - autotel@7.0.1
+  - autotel-adapters@2.0.10
+  - autotel-devtools@21.0.1
+  - autotel-drizzle@0.0.53
+  - autotel-hono@0.4.52
+
 ## 1.0.30
 
 ### Patch Changes

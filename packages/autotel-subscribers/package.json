@@ -1,6 +1,6 @@
 {
   "name": "autotel-subscribers",
-  "version": "50.0.0",
+  "version": "50.0.1",
   "description": "Write Once, Observe Anywhere - Event subscribers for autotel (Mixpanel, Amplitude, Segment, Slack, webhooks, Loki, file)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

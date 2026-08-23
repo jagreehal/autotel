@@ -1,5 +1,13 @@
 # autotel-nuxt
 
+## 8.0.1
+
+### Patch Changes
+
+- Updated dependencies [4c859aa]
+  - autotel@7.0.1
+  - autotel-adapters@2.0.10
+
 ## 8.0.0
 
 ### Patch Changes
