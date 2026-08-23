@@ -21,3 +21,11 @@ filters the result.
 to 60 minutes; the collector ignored it and returned every point inside the
 retention period. Point history is capped per call, with `detail` set when the
 cap truncates a series.
+
+**One definition per type.** `ServiceMap`, `ServiceMapNode`, `ServiceMapEdge`
+and `TraceSummary` were declared both in `types.ts` and again in the modules
+that build them. The declarations were structurally identical, so the duplicate
+forced every backend to launder its result through `as unknown as` — fourteen
+double assertions across seven backends, each one discarding the type evidence
+it was written to preserve. The modules now re-export the canonical types and
+the assertions are gone.

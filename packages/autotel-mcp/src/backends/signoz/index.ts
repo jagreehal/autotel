@@ -283,13 +283,13 @@ export class SignozBackend implements TelemetryBackend {
     const traces = await this.searchTraces({ limit: Math.max(limit, 20) });
     // SAFETY: buildServiceMap is the shared builder every backend uses; it
     // returns the same map, described by each backend's own span type.
-    return buildServiceMap(traces.items, limit) as unknown as ServiceMap;
+    return buildServiceMap(traces.items, limit);
   }
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
     const trace = await this.getTrace(traceId);
     // SAFETY: as serviceMap above - a shared summariser, one shape.
-    return trace ? (summarizeTrace(trace) as unknown as TraceSummary) : null;
+    return trace ? summarizeTrace(trace) : null;
   }
 
   async listMetrics(_query?: MetricSearchQuery): Promise<MetricSearchResult> {

@@ -1,4 +1,5 @@
 import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { CollectorStore } from './store';
 import type {
   SpanRecord,
@@ -31,9 +32,7 @@ function decodeAnyValue(v: OtlpAnyValue): TagValue {
   return '';
 }
 
-function attrsToRecord(
-  kvs: OtlpKeyValue[] | undefined,
-): Record<string, TagValue> {
+function attrsToRecord(kvs: OtlpKeyValue[] | undefined) {
   if (!kvs) return {};
   const out: Record<string, TagValue> = {};
   for (const kv of kvs) {
@@ -305,10 +304,15 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
+/** Every response this receiver sends: an empty OTLP ack, or an error. */
+interface OtlpResponseBody {
+  error?: string;
+}
+
 function sendJson(
   res: http.ServerResponse,
   status: number,
-  body: unknown,
+  body: OtlpResponseBody,
 ): void {
   const json = JSON.stringify(body);
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -335,6 +339,9 @@ export class OtlpReceiver {
 
       if (method === 'POST' && url === '/v1/traces') {
         const raw = await readBody(req);
+        // SAFETY: an OTLP exporter is the only caller, and every field the
+        // parser reads is optional, so a payload of another shape yields no
+        // traces rather than a bad read.
         const body = JSON.parse(raw) as OtlpTracesPayload;
         const spans = parseTraces(body);
         await this.store.insertSpans(spans);
@@ -344,6 +351,9 @@ export class OtlpReceiver {
 
       if (method === 'POST' && url === '/v1/metrics') {
         const raw = await readBody(req);
+        // SAFETY: an OTLP exporter is the only caller, and every field the
+        // parser reads is optional, so a payload of another shape yields no
+        // metrics rather than a bad read.
         const body = JSON.parse(raw) as OtlpMetricsPayload;
         const metrics = parseMetrics(body);
         await this.store.insertMetrics(metrics);
@@ -353,6 +363,9 @@ export class OtlpReceiver {
 
       if (method === 'POST' && url === '/v1/logs') {
         const raw = await readBody(req);
+        // SAFETY: an OTLP exporter is the only caller, and every field the
+        // parser reads is optional, so a payload of another shape yields no
+        // logs rather than a bad read.
         const body = JSON.parse(raw) as OtlpLogsPayload;
         const logs = parseLogs(body);
         await this.store.insertLogs(logs);
@@ -370,10 +383,11 @@ export class OtlpReceiver {
     return new Promise((resolve, reject) => {
       this.server.once('error', reject);
       this.server.listen(this.port, '127.0.0.1', () => {
-        const address = this.server.address();
-        if (address && typeof address === 'object') {
-          this.port = address.port;
-        }
+        // SAFETY: address() answers with AddressInfo for a host/port listen.
+        // The string form describes a pipe or unix socket, which this never
+        // binds, and null only before listening — inside this callback it is.
+        const address = this.server.address() as AddressInfo | null;
+        if (address !== null) this.port = address.port;
         resolve();
       });
     });

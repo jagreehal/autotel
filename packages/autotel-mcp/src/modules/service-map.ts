@@ -1,29 +1,11 @@
-import type { TraceRecord } from '../types';
+import type {
+  ServiceMap,
+  ServiceMapEdge,
+  ServiceMapNode,
+  TraceRecord,
+} from '../types';
 
-export interface ServiceMapEdge {
-  source: string;
-  target: string;
-  calls: number;
-  errors: number;
-  avgDurationMs: number;
-  p95DurationMs: number;
-}
-
-export interface ServiceMapNode {
-  service: string;
-  traces: number;
-  spans: number;
-  errors: number;
-  inboundCalls: number;
-  outboundCalls: number;
-  avgDurationMs: number;
-  errorRate: number;
-}
-
-export interface ServiceMap {
-  nodes: ServiceMapNode[];
-  edges: ServiceMapEdge[];
-}
+export type { ServiceMap, ServiceMapEdge, ServiceMapNode };
 
 export function buildServiceMap(
   traces: TraceRecord[],

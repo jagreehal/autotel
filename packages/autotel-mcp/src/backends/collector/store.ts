@@ -40,7 +40,7 @@ export interface CollectorStoreOptions {
  * SQLite has no boolean type, so a boolean is bound as the 0/1 that
  * `json_each` reads back for JSON true/false.
  */
-function bindableTag(value: unknown): string | number {
+function bindableTag(value: TagValue): string | number {
   const flag = asBoolean(value);
   if (flag !== undefined) return Number(flag);
   return asString(value) ?? asNumber(value) ?? String(value);

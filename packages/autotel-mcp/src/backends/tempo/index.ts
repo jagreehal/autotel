@@ -239,16 +239,13 @@ export class TempoBackend implements TelemetryBackend {
     for (const result of results) {
       for (const trace of result.items) deduped.set(trace.traceId, trace);
     }
-    return buildServiceMap(
-      [...deduped.values()],
-      limit,
-    ) as unknown as ServiceMap;
+    return buildServiceMap([...deduped.values()], limit);
   }
 
   async summarizeTrace(traceId: string): Promise<TraceSummary | null> {
     const trace = await this.getTrace(traceId);
     if (!trace) return null;
-    return summarizeTrace(trace) as unknown as TraceSummary;
+    return summarizeTrace(trace);
   }
 
   async listMetrics(_query?: MetricSearchQuery): Promise<MetricSearchResult> {
