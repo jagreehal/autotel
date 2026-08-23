@@ -27,7 +27,7 @@ export {
   type EstimateBytes,
   type EstimateInput,
   type EstimateResult,
-  type EstimateShape,
+  type EstimateTotals,
 } from './modules/estimate';
 export { findRootCause } from './modules/correlator';
 export {

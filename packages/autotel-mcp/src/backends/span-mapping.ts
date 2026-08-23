@@ -1,4 +1,7 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening -- This is where a backend's raw attribute bag becomes canonical tags. The input is unread JSON and the output is an open tag map, because an attribute set is not a fixed field list. */
+
 import type { SpanStatusCode, TagValue } from '../types';
+import { asNumber, asTagValue } from '../lib/values';
 
 /**
  * Shared helpers for mapping raw backend payloads into the canonical
@@ -10,14 +13,7 @@ import type { SpanStatusCode, TagValue } from '../types';
 
 /** Coerce an arbitrary attribute value into a flat tag value. */
 export function normalizeTagValue(value: unknown): TagValue {
-  if (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return value;
-  }
-  return String(value);
+  return asTagValue(value) ?? String(value);
 }
 
 /** Coerce a record of raw attributes into flat tags. */
@@ -35,14 +31,7 @@ export function normalizeTags(
 export function readNumericTag(
   value: TagValue | undefined,
 ): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
+  return asNumber(value);
 }
 
 /**

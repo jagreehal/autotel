@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters -- `body` is a JSON request body on its way to `JSON.stringify`. The caller owns its shape; this only serialises it. */
+
 // Shared HTTP for read backends.
 //
 // Localhost backends (Jaeger, Tempo, Prometheus, Loki) rarely rate-limit, but
@@ -65,6 +67,9 @@ async function parseOrThrow<T>(response: Response, url: string): Promise<T> {
   if (!response.ok) {
     throw new HttpError(response.status, url);
   }
+  // SAFETY: the caller names the shape this endpoint documents, and the
+  // status was checked above. A payload that does not match surfaces as a
+  // failed read at the call site rather than a silent wrong value.
   return (await response.json()) as T;
 }
 

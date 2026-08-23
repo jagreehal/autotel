@@ -188,7 +188,7 @@ export class CompositeBackend implements TelemetryBackend {
       const perService = await Promise.all(
         [...services].map((service) =>
           this.metrics!.listMetrics({ serviceName: service, limit: 20 }).catch(
-            () => ({ items: [] as MetricSeries[], totalCount: 0 }),
+            (): MetricSearchResult => ({ items: [], totalCount: 0 }),
           ),
         ),
       );

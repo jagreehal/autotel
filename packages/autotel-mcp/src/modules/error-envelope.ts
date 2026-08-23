@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- This is the error surface. `toErrorMessage` reads what a `catch` binds, which the language types as `unknown`, and `details` carries whatever context the thrower attached on its way to a JSON envelope. Naming a type for either would be naming a type for "anything a dependency can throw". */
+
 export interface ToolOkEnvelope<T> {
   ok: true;
   data: T;

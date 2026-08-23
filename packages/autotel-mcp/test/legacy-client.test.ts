@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/node';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { createApp, type App } from '../src/app';
+import type { AddressInfo } from 'node:net';
 
 /**
  * The clients people actually have installed.
@@ -26,6 +27,8 @@ describe('2025-era clients', () => {
   let url: string;
 
   beforeAll(async () => {
+    // SAFETY: the literal below names every field createApp reads; the
+    // assertion only supplies the defaults this test does not vary.
     app = await createApp({
       config: {
         backend: 'fixture',
@@ -47,10 +50,13 @@ describe('2025-era clients', () => {
     });
     await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
     const address = http.address();
-    if (address === null || typeof address === 'string') {
+    // SAFETY: listen() was awaited on a host/port above, so address() answers
+    // with AddressInfo. The string form describes a pipe, never bound here.
+    const tcp = address as AddressInfo | null;
+    if (tcp === null) {
       throw new Error('expected a TCP address');
     }
-    url = `http://127.0.0.1:${address.port}/mcp`;
+    url = `http://127.0.0.1:${tcp.port}/mcp`;
   });
 
   afterAll(async () => {
@@ -92,6 +98,8 @@ describe('2025-era clients', () => {
       name: 'backend_capabilities',
       arguments: {},
     });
+    // SAFETY: the tool called above returns a text content block, which the
+    // next line asserts on - a different block type fails the expectation.
     const [content] = result.content as { type: string; text: string }[];
     expect(JSON.parse(content!.text)).toMatchObject({ ok: true });
 

@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-known-value-widening -- Test helpers that build a Response from any JSON body the test wants to serve. */
+
 import { afterEach, describe, expect, it } from 'vitest';
 import { PrometheusBackend } from '../src/backends/prometheus/index';
 import { installFetchHandler } from './helpers/fetch';

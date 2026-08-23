@@ -20,27 +20,29 @@ export interface DashboardEntry {
   tags: string[];
 }
 
-const CATALOG: Record<string, { entry: DashboardEntry; body: unknown }> = {
-  'grafana-llm': {
-    entry: {
-      id: 'grafana-llm',
-      title: 'LLM observability',
-      description:
-        'Grafana dashboard for autotel-instrumented LLM workloads. Panels: request rate, error rate, p50/p95/p99 latency, token throughput split by type, per-model breakdown. Assumes OTel GenAI semantic conventions exported to Prometheus. Pair with the `get_llm_usage` MCP tool for USD cost totals.',
-      format: 'grafana',
-      tags: ['llm', 'genai', 'latency', 'tokens'],
+const CATALOG = new Map<string, { entry: DashboardEntry; body: unknown }>(
+  Object.entries({
+    'grafana-llm': {
+      entry: {
+        id: 'grafana-llm',
+        title: 'LLM observability',
+        description:
+          'Grafana dashboard for autotel-instrumented LLM workloads. Panels: request rate, error rate, p50/p95/p99 latency, token throughput split by type, per-model breakdown. Assumes OTel GenAI semantic conventions exported to Prometheus. Pair with the `get_llm_usage` MCP tool for USD cost totals.',
+        format: 'grafana',
+        tags: ['llm', 'genai', 'latency', 'tokens'],
+      },
+      body: grafanaLlmDashboard,
     },
-    body: grafanaLlmDashboard,
-  },
-};
+  }),
+);
 
 export function listDashboards(): DashboardEntry[] {
-  return Object.values(CATALOG).map((item) => item.entry);
+  return [...CATALOG.values()].map((item) => item.entry);
 }
 
 /** Returns the dashboard JSON as a pretty-printed string. */
 export function readDashboard(id: string): string {
-  const item = CATALOG[id];
+  const item = CATALOG.get(id);
   if (!item) throw new Error(`Unknown dashboard: ${id}`);
   return JSON.stringify(item.body, null, 2);
 }

@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type -- This module is the parse-at-the-boundary layer those rules ask every other module to route through. An `unknown` parameter and a `typeof` check are what a decoder is made of; pushing them behind another decoder only moves the boundary one file further down. Every other module in this package now calls these instead of re-deriving them. */
+
 /**
  * Reading values that arrive from outside: a backend's JSON response, a
  * config file, an error someone threw. Nothing about them is known until one
@@ -8,6 +10,8 @@
  *
  * Internal - not exported from the package entry points.
  */
+
+import type { TagValue } from '../types';
 
 /** An object whose fields have not been read yet. */
 export interface UnknownRecord {
@@ -70,4 +74,28 @@ export function numberAt(
   ...keys: string[]
 ): number | undefined {
   return asNumber(readPath(source, ...keys));
+}
+
+/** The value as a flat tag, or undefined when it is a shape a tag cannot hold. */
+export function asTagValue(value: unknown): TagValue | undefined {
+  if (typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number')
+    return Number.isFinite(value) ? value : undefined;
+  return undefined;
+}
+
+/** Any flat tag rendered as text - a number or boolean prints, a shape does not. */
+export function tagText(value: unknown): string | undefined {
+  const tag = asTagValue(value);
+  return tag === undefined ? undefined : String(tag);
+}
+
+/** Which flat tag this is, or undefined when it is a shape a tag cannot hold. */
+export function tagKind(
+  value: unknown,
+): 'string' | 'number' | 'boolean' | undefined {
+  const tag = asTagValue(value);
+  if (tag === undefined) return undefined;
+  if (typeof tag === 'string') return 'string';
+  return typeof tag === 'number' ? 'number' : 'boolean';
 }

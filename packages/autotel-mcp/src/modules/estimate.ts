@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters -- `requirePositive` validates a tool argument before the rest of the module may assume it is a number. That check is the boundary. */
+
 /**
  * What a month of telemetry costs, before and after.
  *
@@ -18,6 +20,7 @@ import {
   LOG_LINE_BYTES,
   SPAN_BYTES,
 } from './estimate-fixtures';
+import { asNumber, tagKind } from '../lib/values';
 
 /**
  * Bad input, named so callers can map it to their own error surface — the CLI
@@ -65,7 +68,7 @@ export interface EstimateInput {
   bytes?: EstimateBytes;
 }
 
-export interface EstimateShape {
+export interface EstimateTotals {
   events: number;
   gb: number;
   cost: number;
@@ -73,8 +76,8 @@ export interface EstimateShape {
 
 export interface EstimateResult {
   currency: 'USD';
-  before: EstimateShape;
-  after: EstimateShape;
+  before: EstimateTotals;
+  after: EstimateTotals;
   saved: number;
   savedPercent: number;
   basis: {
@@ -96,14 +99,17 @@ function round(value: number): number {
 }
 
 function requirePositive(value: unknown, field: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+  // A numeric string is not a number here: this validates tool input, and
+  // silently coercing '5' would widen what the endpoint accepts.
+  const parsed = tagKind(value) === 'number' ? asNumber(value) : undefined;
+  if (parsed === undefined || parsed <= 0) {
     throw new EstimateInputError(
       field,
       'positive number',
       `${field} must be a positive number`,
     );
   }
-  return value;
+  return parsed;
 }
 
 export function estimateCost(input: EstimateInput): EstimateResult {
@@ -131,7 +137,7 @@ export function estimateCost(input: EstimateInput): EstimateResult {
   // it fall on one side would flatter the comparison rather than describe it.
   const kept = requests * (keepPercent / 100);
 
-  const priceOf = (events: number, bytes: number): EstimateShape => {
+  const priceOf = (events: number, bytes: number): EstimateTotals => {
     const gb = bytes / BYTES_PER_GB;
     return {
       events,

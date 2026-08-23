@@ -17,6 +17,8 @@ function makeBackend(
   caps: BackendCapabilities,
   overrides: Partial<TelemetryBackend> = {},
 ): TelemetryBackend {
+  // SAFETY: the literal below covers every method these tests reach; anything
+  // else the gating code touches is absent and throws rather than misreads.
   return {
     kind: 'stub',
     capabilities: () => caps,
@@ -26,7 +28,7 @@ function makeBackend(
     searchTraces: async () => ({ items: [], totalCount: 0 }),
     searchSpans: async () => ({ items: [], totalCount: 0 }),
     getTrace: async () => null,
-    serviceMap: async () => ({ nodes: [], edges: [] }) as never,
+    serviceMap: async () => ({ nodes: [], edges: [] }),
     summarizeTrace: async () => null,
     listMetrics: async () => ({ items: [], totalCount: 0 }),
     getMetricSeries: async () => [],

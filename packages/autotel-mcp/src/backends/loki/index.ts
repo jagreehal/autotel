@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening -- These types describe Loki's API payloads as it arrives on the wire, where an attribute bag genuinely is an open dictionary of unread values. The tag maps built from them are open by the same token: an attribute set is not a fixed field list. */
+
 import { jsonGet } from '../../lib/http';
 import type {
   BackendCapabilities,
@@ -178,15 +180,11 @@ export class LokiBackend implements TelemetryBackend {
         const tsMs = Math.floor(Number(tsNanoStr) / 1_000_000);
         records.push({
           timestampUnixMs: tsMs,
-          severityText:
-            (labels['severity_text'] as string | undefined) ??
-            (labels['level'] as string | undefined) ??
-            '',
+          severityText: labels['severity_text'] ?? labels['level'] ?? '',
           body,
-          serviceName:
-            (labels[SERVICE_LABEL] as string | undefined) ?? undefined,
-          traceId: (labels['trace_id'] as string | undefined) ?? undefined,
-          spanId: (labels['span_id'] as string | undefined) ?? undefined,
+          serviceName: labels[SERVICE_LABEL],
+          traceId: labels['trace_id'],
+          spanId: labels['span_id'],
           attributes: labelsToTags(labels),
         });
       }

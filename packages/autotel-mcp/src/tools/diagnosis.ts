@@ -4,6 +4,7 @@ import type { TelemetryBackend } from '../backends/telemetry';
 import { detectAnomalies } from '../modules/anomaly';
 import { findRootCause } from '../modules/correlator';
 import { respondJSON, READ_ONLY } from './shared';
+import { nonEmptyString } from '../lib/values';
 
 /**
  * Extract the most informative error message from span tags. OTel
@@ -25,7 +26,8 @@ export function pickErrorMessage(
   ];
   for (const key of ordered) {
     const value = tags[key];
-    if (typeof value === 'string' && value.length > 0) return value;
+    const text = nonEmptyString(value);
+    if (text !== undefined) return text;
   }
   return undefined;
 }

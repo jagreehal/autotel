@@ -7,7 +7,7 @@ import type {
   TraceRecord,
   TraceSearchQuery,
 } from '../types';
-import { asBoolean, asNumber, asString } from '../lib/values';
+import { asBoolean, asNumber, asString, asTagValue } from '../lib/values';
 
 function matchesTagValue(
   actual: TagValue | undefined,
@@ -380,11 +380,6 @@ function getSpanTotalTokens(span: SpanRecord): number {
 
 function sumTraceTokens(trace: TraceRecord): number {
   return trace.spans.reduce((sum, span) => sum + getSpanTotalTokens(span), 0);
-}
-
-/** A filter's expected value, as the tag values a span can carry. */
-function asTagValue(value: unknown): string | number | boolean | undefined {
-  return asString(value) ?? asNumber(value) ?? asBoolean(value);
 }
 
 function toNumber(

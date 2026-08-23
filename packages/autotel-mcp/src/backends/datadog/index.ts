@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening -- These types describe Datadog's API payloads as it arrives on the wire, where an attribute bag genuinely is an open dictionary of unread values. The tag maps built from them are open by the same token: an attribute set is not a fixed field list. */
+
 import { jsonGet, jsonPost } from '../../lib/http';
 import type {
   BackendCapabilities,
@@ -30,6 +32,7 @@ import {
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
 import { normalizeTagValue } from '../span-mapping';
+import { asNumber } from '../../lib/values';
 
 /**
  * Datadog APM — trace-only backend over the v2 spans search API.
@@ -131,11 +134,9 @@ export function resolveDatadogBaseUrl(value: string | undefined): string {
  */
 export function parseStartMs(start: string | number | undefined): number {
   if (start === undefined) return 0;
-  if (typeof start === 'number') return Math.floor(start / NS_PER_MS);
-  if (/^\d+$/.test(start.trim())) {
-    return Math.floor(Number(start) / NS_PER_MS);
-  }
-  const parsed = Date.parse(start);
+  const startNs = asNumber(start);
+  if (startNs !== undefined) return Math.floor(startNs / NS_PER_MS);
+  const parsed = Date.parse(String(start));
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 

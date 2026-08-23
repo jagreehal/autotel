@@ -28,6 +28,7 @@ import {
 } from '../../modules/query-filters';
 import { buildServiceMap } from '../../modules/service-map';
 import { summarizeTrace } from '../../modules/trace-summary';
+import { asString } from '../../lib/values';
 
 type FixtureData = {
   traces?: TraceRecord[];
@@ -115,10 +116,11 @@ export class FixtureBackend implements TelemetryBackend {
   }
 
   async serviceMap(lookbackMinutes = 60, limit = 20): Promise<ServiceMap> {
-    const result = await this.searchTraces({
-      lookbackMinutes,
-      limit,
-    } as TraceSearchQuery);
+    // The fixture serves a fixed set of traces and does not filter on time,
+    // so `lookbackMinutes` has nothing to narrow. It stays in the signature
+    // because TelemetryBackend declares it.
+    void lookbackMinutes;
+    const result = await this.searchTraces({ limit });
     return buildServiceMap(result.items, limit);
   }
 
@@ -207,7 +209,8 @@ export class FixtureBackend implements TelemetryBackend {
       const svcName =
         series.attributes?.['service.name'] ??
         series.attributes?.['serviceName'];
-      return typeof svcName === 'string' && involvedServices.includes(svcName);
+      const service = asString(svcName);
+      return service !== undefined && involvedServices.includes(service);
     });
 
     return {
@@ -220,6 +223,8 @@ export class FixtureBackend implements TelemetryBackend {
   private async loadFixture(): Promise<FixtureData> {
     if (!this.fixturePromise) {
       this.fixturePromise = readFile(this.fixturePath, 'utf8').then(
+        // SAFETY: the fixture file ships with this package and is read only
+        // by these tests; a malformed one throws here rather than half-loading.
         (raw) => JSON.parse(raw) as FixtureData,
       );
     }

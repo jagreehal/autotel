@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening -- These types describe the autotel devtools payload as it arrives on the wire, where an attribute bag genuinely is an open dictionary of unread values. The tag maps built from them are open by the same token: an attribute set is not a fixed field list. */
+
 import { jsonGet } from '../../lib/http';
 import {
   spanMatchesQuery,
@@ -31,6 +33,7 @@ import type {
 } from '../../types';
 import { inferErrorStatusFromTags, normalizeTags } from '../span-mapping';
 import type { TelemetryBackend } from '../telemetry';
+import { nonEmptyString } from '../../lib/values';
 
 /**
  * Shape returned by autotel-devtools' `GET /v1/traces` read-back endpoint.
@@ -260,8 +263,9 @@ export class DevtoolsBackend implements TelemetryBackend {
 
 function serviceOf(span: DevtoolsSpan, trace: DevtoolsTrace): string {
   const fromAttribute = span.attributes?.['service.name'];
-  if (typeof fromAttribute === 'string' && fromAttribute.length > 0) {
-    return fromAttribute;
+  const attributeText = nonEmptyString(fromAttribute);
+  if (attributeText !== undefined) {
+    return attributeText;
   }
   return trace.service || 'unknown';
 }

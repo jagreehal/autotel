@@ -1,5 +1,6 @@
 import type { SpanRecord, TagValue, TraceRecord } from '../types';
 import { estimateCostUsd, priceFor } from './llm-pricing';
+import { asNumber, tagText } from '../lib/values';
 
 export interface UsageReport {
   totalRequests: number;
@@ -345,13 +346,10 @@ export function findErrorTraces(traces: TraceRecord[]): ErrorTraceDetail[] {
               span.tags['exception.message'] ??
               'Unknown error',
           ),
-          errorType: asString(
+          errorType: tagText(
             span.tags['error.type'] ?? span.tags['exception.type'],
           ),
-          stackTrace: truncate(
-            asString(span.tags['exception.stacktrace']),
-            500,
-          ),
+          stackTrace: truncate(tagText(span.tags['exception.stacktrace']), 500),
           isLlmError: isLlmSpan(span),
           llmProvider: getLlmSpan(span)?.provider ?? null,
           llmModel: getLlmSpan(span)?.model ?? null,
@@ -509,13 +507,13 @@ function summarizeTraceTokens(trace: TraceRecord): SummarizeTraceTokensResult {
 }
 
 function getLlmSpan(span: SpanRecord) {
-  const provider = asString(
+  const provider = tagText(
     span.tags['gen_ai.system'] ?? span.tags['llm.vendor'],
   );
-  const requestModel = asString(
+  const requestModel = tagText(
     span.tags['gen_ai.request.model'] ?? span.tags['llm.request.model'],
   );
-  const responseModel = asString(
+  const responseModel = tagText(
     span.tags['gen_ai.response.model'] ?? span.tags['llm.response.model'],
   );
   const model = responseModel ?? requestModel;
@@ -568,8 +566,8 @@ function isLlmSpan(span: SpanRecord): boolean {
 }
 
 function isToolSpan(span: SpanRecord): boolean {
-  const traceloopKind = asString(span.tags['traceloop.span.kind']);
-  const genAiOperation = asString(span.tags['gen_ai.operation.name']);
+  const traceloopKind = tagText(span.tags['traceloop.span.kind']);
+  const genAiOperation = tagText(span.tags['gen_ai.operation.name']);
   return (
     traceloopKind === 'tool' ||
     genAiOperation === 'tool' ||
@@ -579,38 +577,23 @@ function isToolSpan(span: SpanRecord): boolean {
 
 function getToolName(span: SpanRecord): string {
   return (
-    asString(span.tags['gen_ai.tool.name']) ??
-    asString(span.tags['llm.tool.name']) ??
-    asString(span.tags['traceloop.tool.name']) ??
+    tagText(span.tags['gen_ai.tool.name']) ??
+    tagText(span.tags['llm.tool.name']) ??
+    tagText(span.tags['traceloop.tool.name']) ??
     span.operationName
   );
 }
 
 function parseFinishReasons(value: TagValue | undefined): string[] {
   if (Array.isArray(value)) return value.map(String);
-  if (typeof value === 'string') {
-    return value
+  const text = tagText(value);
+  if (text !== undefined) {
+    return text
       .split(',')
       .map((part) => part.trim())
       .filter(Boolean);
   }
   return [];
-}
-
-function asString(value: TagValue | undefined): string | undefined {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean')
-    return String(value);
-  return undefined;
-}
-
-function asNumber(value: TagValue | undefined): number | undefined {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
 }
 
 function round(value: number): number {

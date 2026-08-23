@@ -3,7 +3,6 @@ import { CompositeBackend } from '../src/backends/composite/index';
 import type { TelemetryBackend } from '../src/backends/telemetry';
 import type {
   BackendCapabilities,
-  BackendHealth,
   TraceRecord,
   MetricSeries,
   LogRecord,
@@ -12,9 +11,9 @@ import type {
 function stubBackend(overrides: Partial<TelemetryBackend>): TelemetryBackend {
   const base: Partial<TelemetryBackend> = {
     kind: 'stub',
-    healthCheck: async () =>
-      ({ healthy: true, message: 'ok' }) as BackendHealth,
+    healthCheck: async () => ({ healthy: true, message: 'ok' }),
     capabilities: () =>
+      // SAFETY: the literal names every BackendCapabilities member.
       ({
         traces: 'unsupported',
         metrics: 'unsupported',
@@ -37,6 +36,8 @@ function stubBackend(overrides: Partial<TelemetryBackend>): TelemetryBackend {
     }),
     ...overrides,
   };
+  // SAFETY: `base` plus `overrides` covers every method the composite calls;
+  // anything it reaches that a test did not stub throws rather than misreads.
   return base as TelemetryBackend;
 }
 
@@ -148,9 +149,7 @@ describe('CompositeBackend', () => {
     });
     const logs = stubBackend({
       searchLogs: async () => ({
-        items: [
-          { timestampUnixMs: 1, severityText: 'INFO', body: 'hi' },
-        ] as LogRecord[],
+        items: [{ timestampUnixMs: 1, severityText: 'INFO', body: 'hi' }],
         totalCount: 1,
       }),
     });
