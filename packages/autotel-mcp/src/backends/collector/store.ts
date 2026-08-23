@@ -16,6 +16,7 @@ import type {
   TraceSearchResult,
   SpanSearchQuery,
   SpanSearchResult,
+  TagValue,
 } from '../../types';
 import {
   traceMatchesQuery,
@@ -24,6 +25,9 @@ import {
 import type { Row } from '@libsql/client';
 import { asBoolean, asNumber, asString, numberAt } from '../../lib/values';
 import { count, flag, json, optionalText, text } from './row';
+
+/** Newest metric points one `listMetrics` call will read into memory. */
+const MAX_POINT_ROWS = 50_000;
 
 export interface CollectorStoreOptions {
   maxTraces: number;
@@ -286,48 +290,78 @@ export class CollectorStore {
       conditions.push('metric_name = ?');
       args.push(query.metricName);
     }
+    // The caller always asks for a window (the tool defaults to 60 minutes).
+    // Ignoring it returns every point still inside the retention period.
+    if (query.lookbackMinutes !== undefined) {
+      conditions.push('timestamp_unix_ms >= ?');
+      args.push(Date.now() - query.lookbackMinutes * 60_000);
+    }
     const where =
       conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
 
-    // Series are keyed by metric_name below, so the true total is the distinct
-    // name count under the same predicate — not the post-LIMIT row count.
+    // A series is one metric name at one attribute set, the same identity
+    // `getMetricSeries` uses. Keying by name alone merges `lane=legacy` and
+    // `lane=modern` into one series labelled with whichever row came first.
     const countResult = await this.db.execute({
-      sql: `SELECT COUNT(DISTINCT metric_name) as cnt FROM metric_points${where}`,
+      sql: `SELECT COUNT(*) as cnt FROM (SELECT DISTINCT metric_name, attributes FROM metric_points${where})`,
       args,
     });
     const totalCount = Number(countResult.rows[0]?.cnt ?? 0);
 
+    // ponytail: newest MAX_POINT_ROWS points, grouped in memory. Push the
+    // grouping into SQL if a collector ever holds more than a dev workload.
     const result = await this.db.execute({
-      sql: `SELECT DISTINCT metric_name, unit, attributes FROM metric_points${where} LIMIT ?`,
-      args: [...args, query.limit ?? 100],
+      sql: `SELECT metric_name, unit, attributes, timestamp_unix_ms, value
+            FROM metric_points${where}
+            ORDER BY timestamp_unix_ms DESC
+            LIMIT ?`,
+      args: [...args, MAX_POINT_ROWS + 1],
     });
+    const truncated = result.rows.length > MAX_POINT_ROWS;
+    const rows = truncated ? result.rows.slice(0, MAX_POINT_ROWS) : result.rows;
 
     const seriesMap = new Map<string, MetricSeries>();
-    for (const row of result.rows) {
+    for (const row of rows) {
       const name = text(row, 'metric_name');
-      if (!seriesMap.has(name)) {
-        seriesMap.set(name, {
+      const key = `${name}::${text(row, 'attributes') || '{}'}`;
+      let series = seriesMap.get(key);
+      if (!series) {
+        series = {
           metricName: name,
           unit: optionalText(row, 'unit'),
           points: [],
-          attributes: json<Record<string, string>>(row, 'attributes', {}),
-        });
+          attributes: json<Record<string, TagValue>>(row, 'attributes', {}),
+        };
+        seriesMap.set(key, series);
       }
-    }
-
-    // Fetch points for each series
-    for (const [name, series] of seriesMap) {
-      const points = await this.db.execute({
-        sql: 'SELECT timestamp_unix_ms, value FROM metric_points WHERE metric_name = ? ORDER BY timestamp_unix_ms',
-        args: [name],
+      series.points.push({
+        timestampUnixMs: Number(row.timestamp_unix_ms),
+        value: Number(row.value),
       });
-      series.points = points.rows.map((r) => ({
-        timestampUnixMs: Number(r.timestamp_unix_ms),
-        value: Number(r.value),
-      }));
     }
 
-    return { items: [...seriesMap.values()], totalCount };
+    let items = [...seriesMap.values()];
+    for (const series of items) {
+      series.points.sort((a, b) => a.timestampUnixMs - b.timestampUnixMs);
+    }
+    if (query.serviceName !== undefined) {
+      const service = query.serviceName;
+      items = items.filter(
+        (series) =>
+          series.attributes?.['service.name'] === service ||
+          series.attributes?.['serviceName'] === service,
+      );
+    }
+
+    const limit = query.limit ?? 100;
+    const searchResult: MetricSearchResult = {
+      items: items.slice(0, limit),
+      totalCount,
+    };
+    if (truncated) {
+      searchResult.detail = `Point history truncated to the newest ${MAX_POINT_ROWS} points. Narrow metricName or lookbackMinutes for a complete series.`;
+    }
+    return searchResult;
   }
 
   async getMetricSeries(

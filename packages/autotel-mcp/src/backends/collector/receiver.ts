@@ -163,6 +163,7 @@ interface OtlpDataPoint {
   timeUnixNano?: string | number;
   asDouble?: number;
   asInt?: string | number;
+  attributes?: OtlpKeyValue[];
 }
 
 interface OtlpMetric {
@@ -186,7 +187,20 @@ interface OtlpMetricsPayload {
   resourceMetrics?: OtlpResourceMetrics[];
 }
 
-function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
+function dataPointValue(dp: OtlpDataPoint): number {
+  if (dp.asDouble !== undefined) return dp.asDouble;
+  if (dp.asInt !== undefined) return Number(dp.asInt);
+  return 0;
+}
+
+/** Stable identity for an attribute set, independent of OTLP key order. */
+function attributeKey(attributes: Record<string, TagValue>): string {
+  return JSON.stringify(
+    Object.entries(attributes).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
+}
+
+export function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
   const series: MetricSeries[] = [];
   for (const rm of body.resourceMetrics ?? []) {
     const resourceAttrs = attrsToRecord(rm.resource?.attributes);
@@ -200,20 +214,33 @@ function parseMetrics(body: OtlpMetricsPayload): MetricSeries[] {
 
         if (dataPoints.length === 0) continue;
 
-        series.push({
-          metricName: m.name ?? 'unknown',
-          unit: m.unit,
-          attributes: resourceAttrs,
-          points: dataPoints.map((dp) => ({
+        // OTel puts a metric's dimensions on the data point, not the resource:
+        // one `http.server.requests` metric arrives as a data point per route.
+        // Folding them into one series by resource alone sums unrelated label
+        // sets into a single untyped timeline, so split by attribute set.
+        const byAttributes = new Map<string, MetricSeries>();
+        for (const dp of dataPoints) {
+          const attributes = {
+            ...resourceAttrs,
+            ...attrsToRecord(dp.attributes),
+          };
+          const key = attributeKey(attributes);
+          let entry = byAttributes.get(key);
+          if (!entry) {
+            entry = {
+              metricName: m.name ?? 'unknown',
+              unit: m.unit,
+              attributes,
+              points: [],
+            };
+            byAttributes.set(key, entry);
+          }
+          entry.points.push({
             timestampUnixMs: nanoStringToMs(dp.timeUnixNano),
-            value:
-              dp.asDouble !== undefined
-                ? dp.asDouble
-                : dp.asInt !== undefined
-                  ? Number(dp.asInt)
-                  : 0,
-          })),
-        });
+            value: dataPointValue(dp),
+          });
+        }
+        series.push(...byAttributes.values());
       }
     }
   }
