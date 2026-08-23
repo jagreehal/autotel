@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-known-value-widening -- Test helpers that build a Response from any JSON body the test wants to serve. */
+
 /**
  * Stubbing `fetch` for the backend adapters.
  *
@@ -30,10 +32,10 @@ export function respondWith(body: ResponseBody, status = 200): Mock {
 
 /** Installs a spy as the global fetch and hands it back. */
 export function installFetch(spy: Mock): typeof fetch {
-  // SAFETY: a vitest mock is not the DOM's fetch type, and the adapters call
-  // only fetch(url, init) and read `ok`, `status`, `headers` and `json()` off
-  // what it resolves to - which is what respondWith provides.
-  globalThis.fetch = spy as unknown as typeof fetch;
+  // A vitest mock is not the DOM's fetch type, but the adapters call only
+  // fetch(url, init) and read `ok`, `status`, `headers` and `json()` off what
+  // it resolves to - which is what respondWith provides.
+  Object.assign(globalThis, { fetch: spy });
   return globalThis.fetch;
 }
 
@@ -48,6 +50,8 @@ export function recordedCall(
   body: string | undefined;
 } {
   const [url, init] = spy.mock.calls[index] ?? [];
+  // SAFETY: the second fetch argument is RequestInit; the mock records what
+  // the code under test passed, and an absent init reads as an empty one.
   const request = (init ?? {}) as RequestInit;
   return {
     url: String(url),
@@ -59,7 +63,7 @@ export function recordedCall(
 
 /** The url a fetch call was made with, whatever form the caller used. */
 export function urlOf(input: Parameters<typeof fetch>[0]): string {
-  return typeof input === 'string' ? input : input.toString();
+  return String(input);
 }
 
 /**
@@ -84,6 +88,8 @@ export function installFetchHandler(
  */
 export function requestBody<TBody = UnknownJson>(spy: Mock, index = 0): TBody {
   const { body } = recordedCall(spy, index);
+  // SAFETY: TBody is the shape the caller is about to assert on, parsed from
+  // JSON this same test's backend built. A mismatch fails the expectation.
   return JSON.parse(body ?? 'null') as TBody;
 }
 

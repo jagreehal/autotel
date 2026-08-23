@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters -- Measures the serialised size of a record the caller supplies; any JSON value is a legitimate input because only its byte length is read. */
+
 /**
  * Byte sizes for the cost estimate, measured rather than assumed.
  *

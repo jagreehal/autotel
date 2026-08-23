@@ -1,9 +1,16 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-known-value-widening -- Test helpers that build a Response from any JSON body the test wants to serve. */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DatadogBackend,
   resolveDatadogBaseUrl,
 } from '../src/backends/datadog/index';
-import { installFetch } from './helpers/fetch';
+import { installFetch, recordedCall, requestBody } from './helpers/fetch';
+
+/** The search request body the Datadog backend builds. */
+type DatadogSearchRequest = {
+  data: { attributes: { filter: { query: string; from: string; to: string } } };
+};
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -92,8 +99,8 @@ describe('DatadogBackend', () => {
 
     await backend().listServices();
 
-    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(init.headers).toMatchObject({
+    const { headers } = recordedCall(fetchSpy);
+    expect(headers).toMatchObject({
       'DD-API-KEY': 'dd-api',
       'DD-APPLICATION-KEY': 'dd-app',
     });
@@ -189,9 +196,7 @@ describe('DatadogBackend', () => {
 
     await backend().searchTraces({ service: 'checkout', hasError: true });
 
-    const body = JSON.parse(
-      (fetchSpy.mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = requestBody<DatadogSearchRequest>(fetchSpy);
     expect(body.data.attributes.filter.query).toBe(
       'service:checkout status:error',
     );
@@ -220,9 +225,7 @@ describe('DatadogBackend', () => {
       'checkout',
       'payments',
     ]);
-    const hydrationBody = JSON.parse(
-      (fetchSpy.mock.calls[1]![1] as RequestInit).body as string,
-    );
+    const hydrationBody = requestBody<DatadogSearchRequest>(fetchSpy, 1);
     expect(hydrationBody.data.attributes.filter.query).toBe('trace_id:trace-1');
   });
 
@@ -234,9 +237,7 @@ describe('DatadogBackend', () => {
 
     await backend().getTrace('trace-1');
 
-    const body = JSON.parse(
-      (fetchSpy.mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = requestBody<DatadogSearchRequest>(fetchSpy);
     expect(body.data.attributes.filter.query).toBe('trace_id:trace-1');
     expect(Number.isNaN(Date.parse(body.data.attributes.filter.from))).toBe(
       false,

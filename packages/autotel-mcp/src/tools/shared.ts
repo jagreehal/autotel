@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- The MCP response surface. `respondJSON` serialises whatever a backend method returned, and every backend returns a different type; the value is on its way to `JSON.stringify`, not to a field read. */
+
 import { z } from 'zod';
 import type {
   TraceSearchQuery,
@@ -39,8 +41,8 @@ export function respondError(params: {
   };
 }
 
-export async function respondSafe(
-  fn: () => Promise<unknown> | unknown,
+export async function respondSafe<TResult>(
+  fn: () => Promise<TResult> | TResult,
   context?: string,
 ) {
   try {
@@ -178,15 +180,14 @@ export function toTraceSearchQuery(input: TraceQueryInput): TraceSearchQuery {
 }
 
 export function toSpanSearchQuery(input: SpanQueryInput): SpanSearchQuery {
-  return {
-    ...toTraceSearchQuery(input),
-    ...(input.minDurationMs !== undefined
-      ? { spanMinDurationMs: input.minDurationMs }
-      : {}),
-    ...(input.maxDurationMs !== undefined
-      ? { spanMaxDurationMs: input.maxDurationMs }
-      : {}),
-  };
+  const query: SpanSearchQuery = toTraceSearchQuery(input);
+  if (input.minDurationMs !== undefined) {
+    query.spanMinDurationMs = input.minDurationMs;
+  }
+  if (input.maxDurationMs !== undefined) {
+    query.spanMaxDurationMs = input.maxDurationMs;
+  }
+  return query;
 }
 
 export function toMetricSearchQuery(

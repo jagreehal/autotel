@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters -- A cache writes whatever its caller asks it to hold and reads it back as the same type parameter; the value is opaque to the cache by design. */
+
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +39,8 @@ export async function readCachedJson<T>(
   const text = await readUtf8(filePath);
   if (!text) return undefined;
   try {
+    // SAFETY: this cache only reads back what it wrote as T. A hand-edited
+    // or truncated file throws here and is refetched.
     return JSON.parse(text) as T;
   } catch {
     return undefined;
@@ -77,6 +81,8 @@ export async function readBundledJson<T>(
   const text = await readUtf8(filePath);
   if (!text) return undefined;
   try {
+    // SAFETY: this cache only reads back what it wrote as T. A hand-edited
+    // or truncated file throws here and is refetched.
     return JSON.parse(text) as T;
   } catch {
     return undefined;

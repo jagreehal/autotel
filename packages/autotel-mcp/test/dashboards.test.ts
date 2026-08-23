@@ -13,6 +13,8 @@ describe('dashboards catalog', () => {
 
   it('readDashboard returns a valid Grafana dashboard JSON body', () => {
     const text = readDashboard('grafana-llm');
+    // SAFETY: this is the dashboard file this package ships; the fields named
+    // here are exactly what the assertions below check it still has.
     const parsed = JSON.parse(text) as {
       title: string;
       schemaVersion: number;
@@ -26,6 +28,7 @@ describe('dashboards catalog', () => {
   });
 
   it('panels use OTel GenAI Prometheus metric names', () => {
+    // SAFETY: same shipped dashboard file; a missing `panels` fails below.
     const parsed = JSON.parse(readDashboard('grafana-llm')) as {
       panels: Array<{
         targets?: Array<{ expr?: string }>;

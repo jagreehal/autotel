@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening, anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- `explainAuthFailure` rewrites a caught error, which the language types as `unknown` going in and which passes straight back out to a `throw` when there is nothing to add. These types describe Logfire's API payloads as it arrives on the wire, where an attribute bag genuinely is an open dictionary of unread values. The tag maps built from them are open by the same token: an attribute set is not a fixed field list. */
+
 import { HttpError, jsonPost } from '../../lib/http';
 import type {
   BackendCapabilities,

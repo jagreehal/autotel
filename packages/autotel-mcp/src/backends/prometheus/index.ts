@@ -166,6 +166,8 @@ export class PrometheusBackend implements TelemetryBackend {
     const namesRes = await jsonGet<PromLabelValuesResponse>(
       `${this.baseUrl}/api/v1/label/__name__/values`,
     );
+    // SAFETY: metadata is optional enrichment, and an empty `data` is the
+    // documented shape for "nothing known" - which is what a failure means.
     const metaRes = await jsonGet<PromMetadataResponse>(
       `${this.baseUrl}/api/v1/metadata`,
     ).catch(() => ({ data: {} }) as PromMetadataResponse);
@@ -219,6 +221,8 @@ export class PrometheusBackend implements TelemetryBackend {
     );
     if (data.status !== 'success' || !data.data) return [];
 
+    // SAFETY: `resultType` was checked as 'matrix' above, and Prometheus
+    // documents a matrix result as this array shape.
     const result = data.data.result as PromRangeResult[];
     const limit = query?.limit ?? 100;
 

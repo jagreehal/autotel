@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters -- `isPriceCatalog` is the type guard that parses a downloaded price file at its boundary. Taking `unknown` is what makes it a guard: it is the thing the rule asks other modules to route through. */
+
 /**
  * LLM cost estimation.
  *

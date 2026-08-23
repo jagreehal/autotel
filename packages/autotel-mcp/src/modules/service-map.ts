@@ -7,6 +7,14 @@ import type {
 
 export type { ServiceMap, ServiceMapEdge, ServiceMapNode };
 
+/** Running totals for one caller-to-callee edge, before it is averaged. */
+interface EdgeAccumulator {
+  calls: number;
+  errors: number;
+  totalDurationMs: number;
+  durations: number[];
+}
+
 export function buildServiceMap(
   traces: TraceRecord[],
   limit?: number,
@@ -22,15 +30,7 @@ export function buildServiceMap(
       totalDurationMs: number;
     }
   >();
-  const edgeStats = new Map<
-    string,
-    {
-      calls: number;
-      errors: number;
-      totalDurationMs: number;
-      durations: number[];
-    }
-  >();
+  const edgeStats = new Map<string, EdgeAccumulator>();
 
   for (const trace of traces) {
     const traceServices = new Set<string>();
@@ -83,11 +83,11 @@ export function buildServiceMap(
       nodeStats.set(span.serviceName, targetStats);
 
       const key = `${parent.serviceName}=>${span.serviceName}`;
-      const current = edgeStats.get(key) ?? {
+      const current: EdgeAccumulator = edgeStats.get(key) ?? {
         calls: 0,
         errors: 0,
         totalDurationMs: 0,
-        durations: [] as number[],
+        durations: [],
       };
       current.calls += 1;
       current.errors += span.hasError ? 1 : 0;

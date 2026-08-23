@@ -29,3 +29,18 @@ forced every backend to launder its result through `as unknown as` — fourteen
 double assertions across seven backends, each one discarding the type evidence
 it was written to preserve. The modules now re-export the canonical types and
 the assertions are gone.
+
+**One decoder, not fourteen.** `lib/values.ts` documents itself as the module
+that turns unread JSON into typed values, and a dozen modules re-derived it
+anyway: `discovery`, `tempo` and `span-mapping` each carried a private
+`asNumber` identical to the shared one, `llm-analytics` and `query-filters` had
+their own string and tag decoders, and several backends inlined the same checks
+by hand. They now call the shared decoders. Two latent bugs surfaced on the way:
+the fixture backend's `serviceMap` passed a `lookbackMinutes` that
+`TraceSearchQuery` has never declared — an assertion was discarding it, so the
+argument had never done anything — and `readDashboard`'s catalog was reachable
+only by exact key.
+
+Lookup tables keyed by user input (CLI flags, duration units, dashboard ids) are
+`Map`s, so a miss reads as `undefined` instead of an index signature promising a
+value for every string.

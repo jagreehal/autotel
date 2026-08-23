@@ -1,3 +1,5 @@
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-known-value-widening -- Test helpers that build a Response from any JSON body the test wants to serve. */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonGet, jsonPost } from '../src/lib/http';
 import { installFetch, recordedCall, requestBody } from './helpers/fetch';
