@@ -483,12 +483,26 @@ export class OtelObservability implements Observability {
       startTime: event.timestamp,
     });
 
+    if (event.type === 'tool:result') {
+      // Speak the governance vocabulary the sequence rules match on. The raw
+      // payload lands as `agent.payload.toolName`, which nothing else reads.
+      span.setAttribute('tool.name', event.payload.toolName);
+      span.setAttribute('tool.call.id', event.payload.toolCallId);
+      span.setAttribute(
+        'agent.outcome',
+        isErrorEvent(event) ? 'failure' : 'success',
+      );
+    }
+
     if (event.type === 'tool:approval') {
       recordHumanApproval({
         ctx: agentContextFromSpan(span),
         toolCallId: event.payload.toolCallId,
         approved: event.payload.approved,
         required: true,
+        // The Agents runtime reports the outcome on the event, so this is a
+        // witnessed decision rather than one deduced from the tool running.
+        evidence: 'observed',
       });
     }
 

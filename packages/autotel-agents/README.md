@@ -52,6 +52,23 @@ parseToolName('mcp__github__create_issue');
 // → { name, isMcp: true, mcpServer: 'github', mcpTool: 'create_issue' }
 ```
 
+## Context compaction
+
+When a session outgrows its context window the agent replaces the conversation with a summary and carries on. Nothing announces it — Claude Code emits no compaction event, and the timeline either side of the boundary looks the same. But everything before that point has left the agent's head, so a later answer leaning on it is reconstruction, not recall.
+
+The boundary shows up in token counts the agent already reports. A prompt is `input + cache_read + cache_creation` tokens and grows monotonically while a conversation accumulates; compaction is the discontinuity, where the cached prefix is abandoned and a summary is written in its place.
+
+```ts
+session.rollup.compactions;
+// → [{ atEventId, timestamp, contextBefore: 120_000, contextAfter: 15_002,
+//      droppedTokens: 104_998, confidence: 'likely' }]
+session.rollup.contextHighWaterTokens; // largest prompt since the last reset
+```
+
+A drop alone is not enough. A `Task` sub-agent runs on its own fresh context, so its requests are small and interleaved among the parent's large ones, and pairwise comparison calls every one of them a compaction. What separates them is whether the context comes back, and how: an excursion returns to the parent's full size in one step from a context still the size of the summary, while regrowth after a real compaction climbs gradually. Only the first withdraws a recorded reset.
+
+This is inference, never observation — hence `confidence`, and hence no claim about what the summary contained. Thresholds are tuned against synthetic timelines and stay provisional until validated against a recorded session that actually compacted.
+
 ## Adding an agent
 
 ```ts

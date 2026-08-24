@@ -24,6 +24,7 @@
     Plug,
     Blocks,
     Webhook,
+    Scissors,
   } from '@lucide/svelte';
   import {
     sortedAgentSessionsSignal,
@@ -152,6 +153,17 @@
     selected ? Object.values(selected.rollup.plugins) : [],
   );
   const hooks = $derived(selected?.rollup.hooks);
+
+  // Context resets, keyed by the api_request they were detected at, so the
+  // timeline can mark the boundary in place. Inferred from token-count
+  // discontinuities — see `autotel-agents/compaction`.
+  const compactions = $derived(selected?.rollup.compactions ?? []);
+  const compactionAt = $derived(
+    new Map(compactions.map((c) => [c.atEventId, c])),
+  );
+  const droppedTokens = $derived(
+    compactions.reduce((sum, c) => sum + c.droppedTokens, 0),
+  );
   const hasEnv = $derived(
     mcpConns.length > 0 ||
       plugins.length > 0 ||
@@ -316,6 +328,20 @@
               <span class="px-2 py-0.5 bg-subtle rounded text-fg"
                 >{selected.rollup.apiRequests} req</span
               >
+              {#if compactions.length > 0}
+                <!-- Not an error tone: compaction is the agent working
+                     correctly. It bounds what the record can prove, so it
+                     reads like a caveat, not a failure. -->
+                <span
+                  class="px-2 py-0.5 bg-subtle rounded text-fg-muted flex items-center gap-1 border border-line"
+                  title="Context was replaced by a summary — inferred from token counts, not reported by the agent"
+                >
+                  <Scissors size={11} />{compactions.length} context reset{compactions.length >
+                  1
+                    ? 's'
+                    : ''} · {formatNumber(droppedTokens)} tokens
+                </span>
+              {/if}
               <span
                 class="px-2 py-0.5 bg-subtle rounded text-fg flex items-center gap-1"
               >
@@ -472,6 +498,29 @@
             </div>
             <div class="flex flex-col gap-1">
               {#each timeline as e (e.id)}
+                {@const reset = compactionAt.get(e.id)}
+                {#if reset}
+                  <!-- Newest-first, so everything BELOW this line is what the
+                       agent no longer had in context when it continued. -->
+                  <div
+                    class="flex items-center gap-2 my-1 text-[11px] {reset.confidence ===
+                    'likely'
+                      ? 'text-fg-muted'
+                      : 'text-fg-muted/70'}"
+                  >
+                    <Scissors size={11} class="flex-shrink-0" />
+                    <span class="whitespace-nowrap"
+                      >{formatNumber(reset.droppedTokens)} tokens left the agent's
+                      context · {reset.confidence}</span
+                    >
+                    <span
+                      class="flex-1 border-t border-dashed {reset.confidence ===
+                      'likely'
+                        ? 'border-line'
+                        : 'border-line/60'}"
+                    ></span>
+                  </div>
+                {/if}
                 <div
                   class="flex items-center gap-2 text-xs py-1 border-b border-line/50"
                 >

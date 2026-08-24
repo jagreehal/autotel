@@ -45,6 +45,26 @@ const PRIVACY_PROFILES = {
   },
 };
 
+/**
+ * What a privacy profile took out of a payload. Redaction reduces risk; it
+ * cannot prove a payload is clean, and a sanitised payload with no counts is
+ * indistinguishable from one that never held anything sensitive.
+ */
+export interface SanitizationEvidence {
+  /** Values dropped entirely (`dropKeys`). */
+  redacted: number;
+  /** Values replaced by a hash (`hashKeys`). */
+  hashed: number;
+  /** Values partially obscured (`maskKeys`). */
+  masked: number;
+  /** Strings cut at `maxStringLength`. */
+  truncated: number;
+}
+
+function emptyEvidence(): SanitizationEvidence {
+  return { redacted: 0, hashed: 0, masked: 0, truncated: 0 };
+}
+
 function maskValue(value: unknown): string {
   const text = asString(value);
   if (text === undefined) return '<masked>';
@@ -56,11 +76,16 @@ function matches(patterns: RegExp[] | undefined, key: string): boolean {
   return patterns?.some((pattern) => pattern.test(key)) ?? false;
 }
 
-function truncateString(value: string, maxLength?: number): string {
+function truncateString(
+  value: string,
+  maxLength: number | undefined,
+  tally: SanitizationEvidence,
+): string {
   if (maxLength === undefined || value.length <= maxLength) {
     return value;
   }
 
+  tally.truncated += 1;
   return `${value.slice(0, maxLength)}…`;
 }
 
@@ -78,6 +103,7 @@ function sanitizeNode(
   value: unknown,
   profile: PrivacyProfile,
   keyPath: string,
+  tally: SanitizationEvidence,
 ): SanitizedValue {
   if (value instanceof Date) {
     return value.toISOString();
@@ -86,25 +112,28 @@ function sanitizeNode(
   const lowered = keyPath.toLowerCase();
 
   if (matches(profile.dropKeys, lowered)) {
+    tally.redacted += 1;
     return '<redacted>';
   }
 
   if (matches(profile.hashKeys, lowered)) {
+    tally.hashed += 1;
     return hashPayload(value);
   }
 
   if (matches(profile.maskKeys, lowered)) {
+    tally.masked += 1;
     return maskValue(value);
   }
 
   const text = asString(value);
   if (text !== undefined) {
-    return truncateString(text, profile.maxStringLength);
+    return truncateString(text, profile.maxStringLength, tally);
   }
 
   if (Array.isArray(value)) {
     return value.map((entry, index) =>
-      sanitizeNode(entry, profile, `${keyPath}[${index}]`),
+      sanitizeNode(entry, profile, `${keyPath}[${index}]`, tally),
     );
   }
 
@@ -116,6 +145,7 @@ function sanitizeNode(
         entry,
         profile,
         keyPath ? `${keyPath}.${key}` : key,
+        tally,
       );
     }
     return out;
@@ -140,5 +170,24 @@ export function sanitizeAuditPayload(
   value: unknown,
   profile: PrivacyProfileInput = 'strict',
 ): SanitizedValue {
-  return sanitizeNode(value, resolvePrivacyProfile(profile), '');
+  return sanitizeAuditPayloadWithEvidence(value, profile).value;
+}
+
+/**
+ * Sanitize, and report what was taken out. Use this wherever the sanitised
+ * payload is shown, exported, or shared — the counts are what let a reader
+ * tell a clean payload from a stripped one.
+ */
+export function sanitizeAuditPayloadWithEvidence(
+  value: unknown,
+  profile: PrivacyProfileInput = 'strict',
+): { value: SanitizedValue; evidence: SanitizationEvidence } {
+  const tally = emptyEvidence();
+  const sanitized = sanitizeNode(
+    value,
+    resolvePrivacyProfile(profile),
+    '',
+    tally,
+  );
+  return { value: sanitized, evidence: tally };
 }

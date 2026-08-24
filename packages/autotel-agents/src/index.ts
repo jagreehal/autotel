@@ -79,4 +79,13 @@ export {
 } from './tool-taxonomy';
 export type { ToolCategory } from './tool-taxonomy';
 export { estimateCostUsd } from './cost';
+export {
+  contextTokens,
+  foldContextReset,
+  postCompactionRegression,
+} from './compaction';
+export type {
+  ContextReset,
+  PostCompactionRegression,
+} from './compaction';
 export { readIdentity, mergeAttrs } from './identity';

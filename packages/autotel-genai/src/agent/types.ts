@@ -3,6 +3,7 @@ import type { OnMissingContext } from 'autotel-audit';
 import type { ModelPricing, TokenUsage } from '../cost.js';
 import type { GenAiProviderName } from '../semconv.js';
 import type { AgentContext } from './context.js';
+import type { SanitizationEvidence } from './privacy.js';
 
 /**
  * Free-form metadata a caller attaches to a GenAI operation. Serialized onto a
@@ -306,4 +307,11 @@ export interface AgentAuditEventEnvelope {
   signature?: string;
   metadata: AgentActionMetadata;
   evidence?: unknown;
+  /**
+   * What sanitising {@link AgentAuditEventEnvelope.evidence} removed. Covered
+   * by `eventHash`, so a reader can trust the counts as far as they trust the
+   * chain. Absent when there was no evidence payload, and on envelopes written
+   * before this field existed.
+   */
+  sanitization?: SanitizationEvidence;
 }

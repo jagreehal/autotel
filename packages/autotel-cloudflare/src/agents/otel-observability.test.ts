@@ -262,6 +262,9 @@ describe('OtelObservability', () => {
       expect(processor.spans[0]?.attributes).toMatchObject({
         'agent.consent.required': true,
         'agent.consent.outcome': 'approved',
+        // The runtime reports the decision on the event itself, so this is a
+        // witnessed outcome — not one deduced from the tool having run.
+        'agent.consent.evidence': 'observed',
         'tool.call.id': 'tc-42',
       });
     });

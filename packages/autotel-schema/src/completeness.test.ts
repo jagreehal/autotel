@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   GENAI_COMPLETENESS_FIELDS,
+  formatCompleteness,
   scoreGenAiCompleteness,
 } from './completeness.js';
 import type { ScenarioSpan } from './scenario.js';
@@ -130,5 +131,107 @@ describe('scoreGenAiCompleteness', () => {
     expect(
       result.fields.find((field) => field.field === 'tool_call_results'),
     ).toMatchObject({ points: 1 });
+  });
+});
+
+describe('scoreGenAiCompleteness — capture coverage', () => {
+  // A trace whose deployment cannot capture prompts must not score the same as
+  // one where the instrumentation simply forgot them. Same absence, different
+  // meaning, different action for whoever reads it.
+  const traceWithoutContent: ScenarioSpan[] = [
+    {
+      spanId: 'a',
+      name: 'invoke_agent',
+      status: 'ok',
+      attributes: { 'gen_ai.request.model': 'gpt-4o' },
+      durationMs: 10,
+    },
+    {
+      spanId: 'b',
+      parentSpanId: 'a',
+      name: 'chat',
+      status: 'ok',
+      attributes: {
+        'gen_ai.response.model': 'gpt-4o',
+        'gen_ai.usage.input_tokens': 10,
+        'gen_ai.usage.output_tokens': 5,
+        'gen_ai.usage.cost.usd': 0.01,
+        'gen_ai.tool.name': 't',
+        'gen_ai.tool.call.arguments': '{}',
+        'gen_ai.tool.call.result': 'ok',
+      },
+      durationMs: 5,
+    },
+  ];
+
+  it('drops a not-capturable field from the score and the maximum', () => {
+    const result = scoreGenAiCompleteness(traceWithoutContent, {
+      notCapturable: ['llm_input', 'llm_output'],
+    });
+
+    expect(result.max).toBe(8);
+    expect(result.score).toBe(8);
+    expect(result.notCapturable).toEqual(['llm_input', 'llm_output']);
+    expect(result.missing).toEqual([]);
+  });
+
+  it('scores those same fields as missing when nothing declares a blind spot', () => {
+    const result = scoreGenAiCompleteness(traceWithoutContent);
+
+    expect(result.max).toBe(10);
+    expect(result.missing).toContain('llm_input');
+    expect(result.missing).toContain('llm_output');
+    expect(result.notCapturable).toEqual([]);
+  });
+
+  it('verdicts a full trace with no declared blind spots as healthy', () => {
+    const result = scoreGenAiCompleteness([
+      ...traceWithoutContent,
+      {
+        spanId: 'c',
+        parentSpanId: 'a',
+        name: 'chat',
+        status: 'ok',
+        attributes: {
+          'gen_ai.input.messages': '[]',
+          'gen_ai.output.messages': '[]',
+        },
+        durationMs: 1,
+      },
+    ]);
+
+    expect(result.verdict).toBe('healthy');
+  });
+
+  it('verdicts unknown whenever a blind spot is declared, however good the rest', () => {
+    // Perfect on everything observable is still not a complete story: nothing
+    // in the record can speak for the surface the process cannot see.
+    const result = scoreGenAiCompleteness(traceWithoutContent, {
+      notCapturable: ['llm_input', 'llm_output'],
+    });
+
+    expect(result.score).toBe(result.max);
+    expect(result.verdict).toBe('unknown');
+  });
+
+  it('verdicts partial when observable fields are missing and nothing is blind', () => {
+    expect(scoreGenAiCompleteness(traceWithoutContent).verdict).toBe('partial');
+  });
+
+  it('verdicts an empty trace invalid', () => {
+    const result = scoreGenAiCompleteness([]);
+    expect(result.verdict).toBe('invalid');
+  });
+
+  it('names blind spots in the formatted report', () => {
+    const text = formatCompleteness(
+      scoreGenAiCompleteness(traceWithoutContent, {
+        notCapturable: ['llm_input'],
+      }),
+    );
+
+    expect(text).toContain('unknown');
+    expect(text).toMatch(/\?\s+llm_input/);
+    expect(text).toContain('not capturable');
   });
 });

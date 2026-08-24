@@ -30,7 +30,9 @@ export {
 export {
   resolvePrivacyProfile,
   sanitizeAuditPayload,
+  sanitizeAuditPayloadWithEvidence,
   type PrivacyProfileInput,
+  type SanitizationEvidence,
 } from './privacy.js';
 export {
   createSignedEventEnvelope,
@@ -55,6 +57,41 @@ export {
   querySpansForEvalIncident,
   spansToCrossAgentEvents,
 } from './forensic.js';
+export {
+  SEQUENCE_RULES,
+  detectSequences,
+  sequenceDetectionsToSecurityEvents,
+} from './sequence.js';
+export {
+  AGENT_OUTCOME_LABEL,
+  DETECTION_ATTR,
+  DETECTION_EVENT,
+  POLICY_DECISION_LABEL,
+  TOOL_CALL_ID_LABEL,
+  TOOL_NAME_LABEL,
+  emitSequenceDetections,
+  spansToSequenceEvents,
+} from './sequence.js';
+export type {
+  EmitSequenceDetectionsOptions,
+  SequenceDetection,
+  SequenceEvent,
+  SequenceRule,
+  SequenceSecurityEvent,
+  SequenceSeverity,
+  SequenceSpanLike,
+} from './sequence.js';
+export { sequenceRuleToSigma, sequenceRulesToSigma } from './sigma.js';
+export type { SigmaDocument } from './sigma.js';
+export {
+  DETECTION_DISPOSITION_ATTR,
+  DETECTION_DISPOSITION_EVENT,
+  recordDetectionDisposition,
+} from './disposition.js';
+export type {
+  DetectionDispositionStatus,
+  RecordDetectionDispositionInput,
+} from './disposition.js';
 export type { EvalIncidentQueryResult } from './forensic.js';
 import {
   AGENT_SECURITY_ATTR,
@@ -100,6 +137,7 @@ export {
 export type {
   ActionRiskHints,
   AgentActionRiskClass,
+  AgentConsentEvidence,
   AgentConsentOutcome,
   AgentInputProvenance,
   AgentMemoryOperation,

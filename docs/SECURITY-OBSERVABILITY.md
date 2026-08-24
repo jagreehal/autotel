@@ -194,6 +194,51 @@ names, probe signals by pattern, denied responses by status with top
 clients, and sample trace IDs for pivoting. Output is one JSON document on
 stdout.
 
+## Detections nobody answered
+
+A detection nobody answered is an alert, not a control. `emitSequenceDetections()`
+writes one correlated log record per finding, and `recordDetectionDisposition()`
+writes one per human decision. Both are records, not snapshot mutations —
+several findings can land on one request, and a snapshot keeps only the last.
+
+Both sides carry the **same two flat keys**, and that is the only thing that
+joins them:
+
+| Key                        | On both records           |
+| -------------------------- | ------------------------- |
+| `detection.rule_id`        | which rule fired          |
+| `detection.correlation_id` | which session it fired in |
+
+Trace correlation cannot do this job. A disposition is made hours or days after
+the finding, from a different trace, so the keys have to travel in the records
+themselves.
+
+```logql
+# Findings
+{service="api"} | json | __error__ = "" | detection_rule_id != ""
+
+# Decisions — both closing statuses require a written reason
+{service="api"} | json
+  | detection_disposition_status =~ "risk_accepted|false_positive"
+  | line_format "{{.detection_rule_id}}: {{.detection_disposition_note}}"
+```
+
+Untriaged findings are the `(detection.rule_id, detection.correlation_id)` pairs
+that appear in the first stream and never in the second. That is a set
+difference across two streams, not a filter: run it as a scheduled query and
+lead your triage surface with the count. No single log expression computes it,
+and a dashboard that pretends otherwise is reporting the wrong number.
+
+`detection.disposition.supersedes` records what a decision replaced, so a
+"false positive" that later became "confirmed" keeps both halves.
+
+Sequence rules export to Sigma via `sequenceRulesToSigma()`. The generated rule
+selects the emitted detection — the ordering, session boundary and correlation
+key were all applied in-process before the event existed — and its `fields:`
+list carries the two join keys, so an analyst can pivot straight from the alert
+to the decision. The trade is that the SIEM only sees findings from processes
+that call `emitSequenceDetections()`.
+
 ## Routing alerts without a backend
 
 For teams without SIEM plumbing, `SecuritySubscriber` forwards events

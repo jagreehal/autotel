@@ -9,6 +9,7 @@
  *     the widget renders. Claude Code, opencode and Codex all collapse to these.
  */
 
+import type { ContextReset } from './compaction';
 import type { ToolCategory } from './tool-taxonomy';
 
 export type { ToolCategory } from './tool-taxonomy';
@@ -123,6 +124,18 @@ export interface AgentEvent {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
+  /**
+   * Whether the token counts came from the provider or were worked out. Absent
+   * means the adapter read them off the wire. Compaction detection skips
+   * `estimated` events entirely — see {@link ./compaction}.
+   */
+  tokenSource?: CostSource;
+  /**
+   * Independent conversation this request belongs to, when the agent
+   * distinguishes them (Claude Code's `query_source`). A sub-agent runs its own
+   * context, so prompt sizes are only comparable within one lineage.
+   */
+  contextLineageId?: string;
   durationMs?: number;
 
   // tool_result / tool_decision
@@ -240,6 +253,25 @@ export interface AgentSessionRollup {
   plugins: Record<string, PluginInfo>;
   /** Hook-execution tallies. */
   hooks: HookStats;
+  // ── Context (from api_request token counts) ──
+  /**
+   * Largest prompt seen since the last context reset, in tokens — the biggest
+   * across lineages, so it reads as "how large did this session get".
+   */
+  contextHighWaterTokens: number;
+  /**
+   * Internal reducer state (not for UI): per-lineage context high-water, so a
+   * sub-agent's small prompts are never compared against the parent's large
+   * ones. Same role as {@link AgentSession.metricState}.
+   */
+  contextState: Record<string, number>;
+  /**
+   * Points where the agent's context was replaced — see
+   * {@link ./compaction}. Inferred from token-count discontinuities, so each
+   * one carries a confidence. Everything on the timeline before a reset had
+   * left the agent's context by the time it continued.
+   */
+  compactions: ContextReset[];
 }
 
 export interface AgentSession {

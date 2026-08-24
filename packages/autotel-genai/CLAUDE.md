@@ -19,6 +19,11 @@ exactly aligned with them.
   `genAiSpanName()` (joins the operation with the already-selected canonical
   identifier).
 - `src/cost.ts`: `MODEL_PRICING`, `estimateLLMCost`, `recordLLMCost`.
+  `recordLLMCost` always labels `autotel.evidence.cost`: `estimated` when the
+  price table answered, `unobservable` when it could not. A price-table figure
+  and a provider-billed one are the same attribute; unlabelled, an estimate
+  reads as an invoice. Label a reported cost `observed` yourself via
+  `recordEvidence` from `autotel/evidence`.
 - `src/metrics.ts`: histogram buckets + `genAiMetricViews()`.
 - `src/attributes.ts`: typed builders → canonical attribute maps.
 - `src/events.ts`: opt-in content attrs (with `recordInputs`/`recordOutputs`
@@ -70,27 +75,49 @@ exactly aligned with them.
   `onObjectStepStart/End` (`gen_ai.output.type = json`), embeddings on
   `onEmbedStart`/`onEmbedEnd` (duration is the real call, not a zero-width
   span), tools become siblings under the `invoke_agent` root, and it adds cost
-  + streaming timing the built-in `@ai-sdk/otel` omits. `runtimeContext.userId`
-  / `sessionId` stamp `user.id` / `gen_ai.conversation.id`; leftover keys are
-  dropped. It also implements the `executeTool`/`executeLanguageModelCall` context runners
-  (nested traces. Needs an ambient OTel ContextManager, which real Node apps
-  have) and opt-in content capture (`captureContent`, off by default; maps AI SDK
-  messages → GenAI SemConv format via `ai-sdk-messages.ts`). `subscribeAiTelemetry`
-  (`ai-sdk-channel.ts`) is the zero-config path: it subscribes to the `ai:telemetry`
-  Node tracing channel (loaded edge-safely via `process.getBuiltinModule`, no
-  static `node:` import), pairs `start`↔`asyncEnd` by message-object identity, and
-  emits the same tree with usage+cost but no streaming timing. `autotelEnrich`
-  (in `ai-sdk-bridge.ts`) is an `@ai-sdk/otel` `enrichSpan` helper. Provenance +
-  runtimeContext mapping only; it **cannot** add cost (the SDK gives `enrichSpan`
-  no usage/model and its own attrs win). `rerank` is intentionally unmapped
-  (no canonical `gen_ai` operation in v1.42.0). When changing any of these, keep
-  them assignable to the real `ai` `Telemetry` interface (compile-check against
-  `/Users/jreehal/dev/ai/ai/packages/ai/dist`).
+  - streaming timing the built-in `@ai-sdk/otel` omits. `runtimeContext.userId`
+    / `sessionId` stamp `user.id` / `gen_ai.conversation.id`; leftover keys are
+    dropped. It also implements the `executeTool`/`executeLanguageModelCall` context runners
+    (nested traces. Needs an ambient OTel ContextManager, which real Node apps
+    have) and opt-in content capture (`captureContent`, off by default; maps AI SDK
+    messages → GenAI SemConv format via `ai-sdk-messages.ts`). `subscribeAiTelemetry`
+    (`ai-sdk-channel.ts`) is the zero-config path: it subscribes to the `ai:telemetry`
+    Node tracing channel (loaded edge-safely via `process.getBuiltinModule`, no
+    static `node:` import), pairs `start`↔`asyncEnd` by message-object identity, and
+    emits the same tree with usage+cost but no streaming timing. `autotelEnrich`
+    (in `ai-sdk-bridge.ts`) is an `@ai-sdk/otel` `enrichSpan` helper. Provenance +
+    runtimeContext mapping only; it **cannot** add cost (the SDK gives `enrichSpan`
+    no usage/model and its own attrs win). `rerank` is intentionally unmapped
+    (no canonical `gen_ai` operation in v1.42.0). When changing any of these, keep
+    them assignable to the real `ai` `Telemetry` interface (compile-check against
+    `/Users/jreehal/dev/ai/ai/packages/ai/dist`).
 - `src/agent/`: agent identity / delegation / policy / audit governance
   (absorbed from the former `autotel-agent` package). Includes Google SAIF-aligned
   security attrs (`AGENT_SECURITY_ATTR`, `recordHumanApproval`, `recordInputProvenance`,
   plan/memory/render helpers) and pluggable plan-risk classifiers
   (`AgentPlanClassifier`, `runAgentPlanClassifier`, `heuristicPlanRiskClassifier`).
+  `recordHumanApproval` stamps `agent.consent.evidence`, defaulting to
+  `inferred`: no runtime reports the human's click, so an approval deduced from
+  the tool having run must never be citable as a human decision. Callers that
+  genuinely witnessed one (the Cloudflare Agents `tool:approval` event) pass
+  `evidence: 'observed'`.
+  `sequence.ts` is the ordered-sequence detection engine: rules are ordered
+  steps within one `sessionId`, matched over `"key=value"` label sets, so it
+  needs no OTel SDK and runs over live steps, spans, or a replayed fixture.
+  Order is the claim — `untrusted-input-then-exfiltration` reversed does not
+  fire — and `correlateBy` keeps "denied then executed" from firing whenever an
+  unrelated tool succeeds after a denial. One finding per rule per session,
+  ranked most severe first, convertible to security events via
+  `sequenceDetectionsToSecurityEvents`. The benign half of `sequence.test.ts` is
+  the part that matters: any rule fires on an attack, and a rule that also fires
+  on an ordinary session is a noise generator, not a control. Add a benign case
+  with every new rule.
+  `disposition.ts` closes the loop: a detection nobody answered is an alert, not
+  a control. `recordDetectionDisposition` records the triage decision as
+  telemetry on the same pipeline as the finding, keeps history append-only
+  (`supersedes` rather than edit), and **throws** on `false_positive` /
+  `risk_accepted` without a note — an unexplained dismissal is not a
+  disposition.
   See [`docs/AGENT-SECURITY-OBSERVABILITY.md`](../../docs/AGENT-SECURITY-OBSERVABILITY.md).
 
 ## Invariants

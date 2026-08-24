@@ -10,6 +10,7 @@
  *    representations of the same fact never double-count.
  */
 
+import { foldContextReset } from './compaction';
 import { mergeAttrs, readIdentity } from './identity';
 import { TOOL_CATEGORIES } from './tool-taxonomy';
 import {
@@ -74,6 +75,9 @@ function emptyRollup(): AgentSessionRollup {
     mcpConnections: {},
     plugins: {},
     hooks: { runs: 0, blocked: 0, errored: 0, cancelled: 0 },
+    contextHighWaterTokens: 0,
+    contextState: {},
+    compactions: [],
   };
 }
 
@@ -180,6 +184,7 @@ export function foldEvent(
       }
       if (event.model)
         rollup.models[event.model] = (rollup.models[event.model] ?? 0) + 1;
+      foldContextReset(rollup, event);
       break;
     }
     case 'api_error':

@@ -139,6 +139,10 @@ export function createProgram(): Command {
     .option('--fix', 'Auto-fix resolvable issues')
     .option('--list-checks', 'List all available checks')
     .option('--env-file <path>', 'Specify env file to check')
+    .option(
+      '--capture',
+      'Report which capture surfaces this project can observe at all',
+    )
     .action(async (opts) => {
       const options: DoctorOptions = {
         cwd: opts.cwd ?? process.cwd(),
@@ -152,6 +156,7 @@ export function createProgram(): Command {
         fix: opts.fix ?? false,
         listChecks: opts.listChecks ?? false,
         envFile: opts.envFile,
+        capture: opts.capture ?? false,
       };
 
       await runDoctor(options);

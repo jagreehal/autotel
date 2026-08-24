@@ -236,6 +236,16 @@ export interface ManifestAssessment {
   text?: string;
   verdict?: ClassifierVerdict;
   budgetViolations?: BudgetViolation[];
+  /**
+   * Fingerprint of the tool's text surface — name, description, parameter
+   * descriptions. A classifier answers "does this look malicious now"; the
+   * digest answers "is this the same manifest as last time", which is the only
+   * one of the two that catches a benign tool rewritten after you trusted it.
+   *
+   * Absent where Web Crypto is unavailable, like every other signal here that
+   * degrades quietly rather than throwing.
+   */
+  digest?: string;
 }
 
 /**
@@ -342,8 +352,55 @@ export function extractManifestTextSurface(
 }
 
 /**
+ * SHA-256 of the manifest's text surface, truncated to 64 bits.
+ *
+ * Web Crypto rather than `node:crypto`, so this works unchanged on Workers and
+ * in the browser. Truncated because the job is change detection on an attribute
+ * a backend groups by — 64 bits is far past the point where an accidental
+ * collision between two versions of one tool is a real risk, and a full digest
+ * is just a longer label.
+ */
+async function manifestDigest(
+  surface: ManifestTextSurface,
+): Promise<string | undefined> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return undefined;
+  // Key order is a serialisation detail, not a manifest change. Sorted, or a
+  // reformatted tool file reads as a rug-pull and the alert gets muted.
+  // This package targets ES2022, where `toSorted` does not exist. `Object.keys`
+  // returns a fresh array, so the in-place sort the rule guards against cannot
+  // be observed by any caller.
+  const parameters = Object.keys(surface.parameters ?? {})
+    // eslint-disable-next-line unicorn/no-array-sort -- ES2022 target, see above
+    .sort()
+    .map((key) => [key, surface.parameters?.[key]] as const);
+  const canonical = JSON.stringify([
+    surface.type,
+    surface.name,
+    surface.description ?? '',
+    parameters,
+  ]);
+  try {
+    const digest = await subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(canonical),
+    );
+    return [...new Uint8Array(digest)]
+      .slice(0, 8)
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Analyze a manifest surface once at registration time. Async classifiers are
  * supported; failures degrade quietly to "no assessment".
+ *
+ * Always returns an assessment for a tool, because the digest is worth carrying
+ * even when nothing was flagged — a manifest only reads as *changed* if the
+ * clean version was recorded first.
  */
 export async function assessManifest(
   classifier: McpSecurityClassifier | undefined,
@@ -370,6 +427,11 @@ export async function assessManifest(
     }
   }
 
+  // Computed after the classifier, not before: `registerTool` starts this
+  // without awaiting it, so an extra tick ahead of the classifier delays the
+  // one call callers observe synchronously.
+  const digest = await manifestDigest(surface);
+
   const budgetViolations =
     surface.type === 'tool' && options.validateToolBudgets !== false
       ? validateToolBudget({
@@ -379,7 +441,7 @@ export async function assessManifest(
         })
       : [];
 
-  if (!verdict && budgetViolations.length === 0) {
+  if (!verdict && budgetViolations.length === 0 && digest === undefined) {
     return undefined;
   }
 
@@ -387,6 +449,7 @@ export async function assessManifest(
     text: text || undefined,
     verdict,
     budgetViolations,
+    ...(digest !== undefined && { digest }),
   };
 }
 
@@ -401,6 +464,10 @@ export function applyManifestAssessment(
   bridge?: McpSecurityBridgeOptions,
 ): void {
   if (!assessment) return;
+
+  if (assessment.digest !== undefined) {
+    sink.setAttribute(MCP_SEMCONV.SECURITY_MANIFEST_DIGEST, assessment.digest);
+  }
 
   const suspected = assessment.verdict?.verdict
     ? assessment.verdict.verdict !== 'clean'

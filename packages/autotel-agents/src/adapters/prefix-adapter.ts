@@ -142,6 +142,16 @@ export function createPrefixAdapter(config: PrefixAdapterConfig): AgentAdapter {
           event.inputTokens = num(attrs, 'input_tokens');
           event.outputTokens = num(attrs, 'output_tokens');
           event.cacheReadTokens = num(attrs, 'cache_read_tokens');
+          // `query_source` separates the main conversation from sub-agent and
+          // SDK-issued queries — independent contexts whose prompt sizes are
+          // not comparable.
+          event.contextLineageId = str(attrs, 'query_source');
+          // Only set when an adapter says so. Absent means these counts came
+          // off the wire, which is what every agent reports today.
+          event.tokenSource =
+            str(attrs, 'token_source') === 'estimated'
+              ? 'estimated'
+              : undefined;
           event.cacheCreationTokens = num(attrs, 'cache_creation_tokens');
           event.durationMs = num(attrs, 'duration_ms');
           const reported = num(attrs, 'cost_usd', 'cost');

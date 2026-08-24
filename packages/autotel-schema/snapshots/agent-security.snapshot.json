@@ -16,6 +16,17 @@
         "exfiltration_capable"
       ]
     },
+    "agent.consent.evidence": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "observed",
+        "inferred"
+      ],
+      "description": "Whether the consent outcome was witnessed or reconstructed. Defaults to inferred: no runtime reports the human click, so an approval deduced from the tool having run must never be cited as a human decision."
+    },
     "agent.consent.outcome": {
       "type": "string",
       "stability": "stable",
@@ -121,6 +132,91 @@
       "required": false,
       "highCardinality": false,
       "description": "Agent audit marker"
+    },
+    "detection.correlation_id": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": true,
+      "description": "Session the detection belongs to"
+    },
+    "detection.disposition.note": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "description": "Why the finding was closed. Required for false_positive and risk_accepted."
+    },
+    "detection.disposition.status": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "new",
+        "acknowledged",
+        "in_progress",
+        "resolved",
+        "false_positive",
+        "risk_accepted"
+      ],
+      "description": "Triage decision recorded against a detection"
+    },
+    "detection.disposition.supersedes": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "new",
+        "acknowledged",
+        "in_progress",
+        "resolved",
+        "false_positive",
+        "risk_accepted"
+      ],
+      "description": "Status this decision replaces — dispositions are appended, never edited, so a reversal survives."
+    },
+    "detection.first_at": {
+      "type": "number",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "description": "Epoch ms of the first step matched by the rule"
+    },
+    "detection.last_at": {
+      "type": "number",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "description": "Epoch ms of the last step matched by the rule"
+    },
+    "detection.rule_id": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "description": "Sequence rule that fired"
+    },
+    "detection.severity": {
+      "type": "string",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "description": "Severity of the rule that fired"
+    },
+    "detection.steps": {
+      "type": "number",
+      "stability": "stable",
+      "required": false,
+      "highCardinality": false,
+      "description": "How many ordered steps the rule matched"
     },
     "mcp.security.injection.verdict": {
       "type": "string",

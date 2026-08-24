@@ -76,12 +76,17 @@ describe('recordLLMCost', () => {
     expect(setAttribute).toHaveBeenCalledWith(GEN_AI_COST_ATTRIBUTE, 0.0075);
   });
 
-  it('records nothing for an unknown model', () => {
+  it('records no cost figure for an unknown model', () => {
+    // Superseded on the evidence label by the `recordLLMCost evidence` block
+    // below: an unpriced model now says so on the span.
     const setAttribute = vi.fn();
     expect(
       recordLLMCost({ setAttribute }, 'mystery', { inputTokens: 1 }),
     ).toBeUndefined();
-    expect(setAttribute).not.toHaveBeenCalled();
+    expect(setAttribute).not.toHaveBeenCalledWith(
+      GEN_AI_COST_ATTRIBUTE,
+      expect.anything(),
+    );
   });
 });
 
@@ -92,5 +97,40 @@ describe('constants', () => {
 
   it('ships a non-empty default pricing table', () => {
     expect(Object.keys(MODEL_PRICING).length).toBeGreaterThan(0);
+  });
+});
+
+describe('recordLLMCost evidence', () => {
+  it('labels the cost as estimated, never as a reported figure', () => {
+    // A price-table number and a provider-billed number are the same span
+    // attribute. Without the label an estimate that is 30-50% out reads as
+    // an invoice.
+    const setAttribute = vi.fn();
+    recordLLMCost({ setAttribute }, 'gpt-4o', {
+      inputTokens: 1000,
+      outputTokens: 500,
+    });
+    expect(setAttribute).toHaveBeenCalledWith(GEN_AI_COST_ATTRIBUTE, 0.0075);
+    expect(setAttribute).toHaveBeenCalledWith(
+      'autotel.evidence.cost',
+      'estimated',
+    );
+  });
+
+  it('labels an unpriced model unobservable instead of leaving it silent', () => {
+    // No attribute at all is indistinguishable from a free call. The span has
+    // to say the price table could not answer.
+    const setAttribute = vi.fn();
+    expect(
+      recordLLMCost({ setAttribute }, 'mystery-model', { inputTokens: 100 }),
+    ).toBeUndefined();
+    expect(setAttribute).toHaveBeenCalledWith(
+      'autotel.evidence.cost',
+      'unobservable',
+    );
+    expect(setAttribute).not.toHaveBeenCalledWith(
+      GEN_AI_COST_ATTRIBUTE,
+      expect.anything(),
+    );
   });
 });

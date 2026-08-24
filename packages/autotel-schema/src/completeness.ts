@@ -48,17 +48,52 @@ export interface FieldScore {
   points: 0 | 0.5 | 1;
   /** Why the field scored what it did — shown to whoever has to fix it. */
   detail: string;
+  /**
+   * The deployment declared it cannot capture this field. Excluded from both
+   * `score` and `max`: scoring a blind spot as a failure tells the reader to go
+   * fix instrumentation that was never able to see it.
+   */
+  notCapturable?: true;
+}
+
+/**
+ * How much of a story this trace can support.
+ *
+ * - `invalid` — no spans. Nothing here supports any claim.
+ * - `unknown` — a capture blind spot was declared, so the record cannot account
+ *   for its own gaps whatever else it scored.
+ * - `partial` — everything observable was observable, and some of it is absent.
+ * - `healthy` — every capturable field landed, and no blind spot was declared.
+ *
+ * `unknown` outranks `partial` deliberately: knowing what you missed is a
+ * stronger position than not knowing what you missed.
+ */
+export type CompletenessVerdict = 'healthy' | 'partial' | 'unknown' | 'invalid';
+
+export interface CompletenessOptions {
+  /**
+   * Fields this deployment cannot capture at all — a provider that never
+   * returns token counts, a runtime with no way to see tool results.
+   *
+   * Derive it from the `autotel.coverage.unobserved` resource attribute, or
+   * declare it in the test that asserts on the trace.
+   */
+  notCapturable?: readonly GenAiCompletenessField[];
 }
 
 export interface CompletenessResult {
-  /** Total points, 0–10. */
+  /** Points earned across the capturable fields. */
   score: number;
+  /** Points available: ten, less the fields declared not capturable. */
   max: number;
   fields: FieldScore[];
-  /** Fields that scored 0. */
+  /** Capturable fields that scored 0. */
   missing: GenAiCompletenessField[];
-  /** Fields that scored 0.5. */
+  /** Capturable fields that scored 0.5. */
   partial: GenAiCompletenessField[];
+  /** Fields excluded from scoring because the deployment cannot see them. */
+  notCapturable: GenAiCompletenessField[];
+  verdict: CompletenessVerdict;
 }
 
 /** A value counts as present only if it is non-null and not an empty string/array. */
@@ -93,6 +128,7 @@ function score(
  */
 export function scoreGenAiCompleteness(
   spans: ScenarioSpan[],
+  options: CompletenessOptions = {},
 ): CompletenessResult {
   const fields: FieldScore[] = [];
 
@@ -259,21 +295,59 @@ export function scoreGenAiCompleteness(
     fields.push(score('span_count', 0, 'no spans'));
   }
 
+  const blind = new Set(options.notCapturable);
+  for (const field of fields) {
+    if (blind.has(field.field)) field.notCapturable = true;
+  }
+  const scored = fields.filter((f) => !f.notCapturable);
+
+  const missing = scored.filter((f) => f.points === 0).map((f) => f.field);
+  const partial = scored.filter((f) => f.points === 0.5).map((f) => f.field);
+  const notCapturable = fields
+    .filter((f) => f.notCapturable)
+    .map((f) => f.field);
+
   return {
-    score: fields.reduce((sum, f) => sum + f.points, 0),
-    max: GENAI_COMPLETENESS_FIELDS.length,
+    score: scored.reduce((sum, f) => sum + f.points, 0),
+    max: scored.length,
     fields,
-    missing: fields.filter((f) => f.points === 0).map((f) => f.field),
-    partial: fields.filter((f) => f.points === 0.5).map((f) => f.field),
+    missing,
+    partial,
+    notCapturable,
+    verdict: verdictFor(
+      spans.length,
+      notCapturable.length,
+      missing.length + partial.length,
+    ),
   };
+}
+
+function verdictFor(
+  spanCount: number,
+  blindSpots: number,
+  gaps: number,
+): CompletenessVerdict {
+  if (spanCount === 0) return 'invalid';
+  if (blindSpots > 0) return 'unknown';
+  if (gaps > 0) return 'partial';
+  return 'healthy';
 }
 
 /** One line per field, for a CLI or a failed assertion. */
 export function formatCompleteness(result: CompletenessResult): string {
-  const header = `GenAI trace completeness: ${result.score}/${result.max}`;
+  const header = `GenAI trace completeness: ${result.score}/${result.max} (${result.verdict})`;
   const lines = result.fields.map((f) => {
-    const mark = f.points === 1 ? '✓' : f.points === 0.5 ? '~' : '✗';
-    return `  ${mark} ${f.field} — ${f.detail}`;
+    const mark = f.notCapturable
+      ? '?'
+      : f.points === 1
+        ? '✓'
+        : f.points === 0.5
+          ? '~'
+          : '✗';
+    const reason = f.notCapturable
+      ? `not capturable here — ${f.detail}`
+      : f.detail;
+    return `  ${mark} ${f.field} — ${reason}`;
   });
   return [header, ...lines].join('\n');
 }

@@ -1,7 +1,10 @@
 import { AGENT_AUDIT_SCHEMA_VERSION } from './constants.js';
 import { canonicalizeForHash, hashPayload } from './hash.js';
 import { normalizeMetadata } from './metadata.js';
-import { sanitizeAuditPayload, type PrivacyProfileInput } from './privacy.js';
+import {
+  sanitizeAuditPayloadWithEvidence,
+  type PrivacyProfileInput,
+} from './privacy.js';
 import type { AgentActionMetadata, AgentAuditEventEnvelope } from './types.js';
 
 function toIsoString(value?: string | Date): string {
@@ -22,6 +25,13 @@ export async function createSignedEventEnvelope(
   options: CreateSignedEventEnvelopeOptions = {},
 ): Promise<AgentAuditEventEnvelope> {
   const normalized = normalizeMetadata(metadata);
+  const sanitized =
+    options.evidence === undefined
+      ? undefined
+      : sanitizeAuditPayloadWithEvidence(
+          options.evidence,
+          options.privacyProfile ?? 'strict',
+        );
   const envelopeBase = {
     schemaVersion: normalized.schemaVersion ?? AGENT_AUDIT_SCHEMA_VERSION,
     emittedAt: toIsoString(options.emittedAt),
@@ -29,11 +39,9 @@ export async function createSignedEventEnvelope(
       previousEventHash: options.previousEventHash,
     }),
     metadata: normalized,
-    ...(options.evidence !== undefined && {
-      evidence: sanitizeAuditPayload(
-        options.evidence,
-        options.privacyProfile ?? 'strict',
-      ),
+    ...(sanitized !== undefined && {
+      evidence: sanitized.value,
+      sanitization: sanitized.evidence,
     }),
   };
 
@@ -61,6 +69,10 @@ export function verifyEventEnvelopeHash(
     metadata: envelope.metadata,
     ...(envelope.evidence !== undefined && {
       evidence: envelope.evidence,
+    }),
+    // Conditional, so envelopes written before this field existed still verify.
+    ...(envelope.sanitization !== undefined && {
+      sanitization: envelope.sanitization,
     }),
   });
   return envelope.eventHash === expected;

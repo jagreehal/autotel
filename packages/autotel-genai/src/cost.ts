@@ -23,6 +23,7 @@
  */
 
 import type { TraceContext } from 'autotel';
+import { recordEvidence } from 'autotel/evidence';
 import { GEN_AI } from './semconv.js';
 
 /** Span attribute key autotel sets for an estimated call cost. */
@@ -187,8 +188,16 @@ export function estimateLLMCost(
 
 /**
  * Estimate cost and record it on `ctx` as the `gen_ai.usage.cost.usd` span
- * attribute. Returns the estimated cost, or `undefined` when the model is
- * unknown (in which case no attribute is set).
+ * attribute. Returns the estimated cost, or `undefined` when the model has no
+ * known pricing.
+ *
+ * Either way the span is labelled: `autotel.evidence.cost` is `estimated` when
+ * a figure was computed from the price table, and `unobservable` when it could
+ * not be. A cost attribute carries no hint of which it is, and an absent one is
+ * indistinguishable from a free call — both read as fact to whoever queries it.
+ *
+ * A provider-reported cost should be set directly and labelled `observed` via
+ * `recordEvidence` from `autotel/evidence`.
  */
 export function recordLLMCost(
   ctx: Pick<TraceContext, 'setAttribute'>,
@@ -197,8 +206,11 @@ export function recordLLMCost(
   options?: EstimateCostOptions,
 ): number | undefined {
   const cost = estimateLLMCost(model, usage, options);
-  if (cost !== undefined) {
-    ctx.setAttribute(GEN_AI_COST_ATTRIBUTE, cost);
+  if (cost === undefined) {
+    recordEvidence(ctx, 'cost', 'unobservable');
+    return undefined;
   }
+  ctx.setAttribute(GEN_AI_COST_ATTRIBUTE, cost);
+  recordEvidence(ctx, 'cost', 'estimated');
   return cost;
 }
