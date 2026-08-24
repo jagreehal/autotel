@@ -107,7 +107,9 @@ export {
 export type {
   GenAiCompletenessField,
   FieldScore,
+  CompletenessOptions,
   CompletenessResult,
+  CompletenessVerdict,
 } from './completeness.js';
 
 export { highCardinalityKeys, isHighCardinalityKey } from './redaction.js';

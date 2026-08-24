@@ -45,6 +45,12 @@ Package uses explicit exports (check `package.json` exports field) for tree-shak
   correlated log records, patch-free), `instrumentHttp` (HTTP server/client
   spans + W3C propagation, opt-in, no `import-in-the-middle`). All degrade to a
   no-op where the underlying Node channels are unavailable.
+- `autotel/evidence` - Say what a trace could not see. `recordEvidence()` labels
+  one field (`autotel.evidence.cost = 'estimated'`,
+  `autotel.evidence.input = 'truncated'`); `captureCoverageAttributes()` declares,
+  once per process, which capture surfaces the deployment observes at all
+  (`autotel.coverage.observed` / `.unobserved`). Absence of a label means
+  unknown — nothing here ever asserts completeness.
 - And more (see package.json exports)
 
 ## Commands

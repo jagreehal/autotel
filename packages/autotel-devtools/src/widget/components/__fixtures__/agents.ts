@@ -65,6 +65,33 @@ export function sampleAgentSessions(): AgentSession[] {
     event(b, 'tool_result', tick(), { tool_name: 'Grep', success: 'true', duration_ms: 25 }),
   ]);
 
+  // ── Long session that outgrew its context window and was compacted. The
+  //    drop is in the token counts: a 120k prompt becomes a 15k summary, and
+  //    everything before it left the agent's context. ──
+  const c = 'sess-long-refactor';
+  const request = (
+    input: number,
+    cacheRead: number,
+    cacheCreation: number,
+  ): SpanAttributes => ({
+    model: 'claude-sonnet-4-6',
+    cost_usd: 0.09,
+    input_tokens: input,
+    output_tokens: 900,
+    cache_read_tokens: cacheRead,
+    cache_creation_tokens: cacheCreation,
+    duration_ms: 3100,
+  });
+  ingestAgentEvents(store, [
+    event(c, 'user_prompt', tick(), { prompt_length: 180 }),
+    event(c, 'api_request', tick(), request(2, 0, 60_000)),
+    event(c, 'api_request', tick(), request(2, 60_000, 60_000)),
+    event(c, 'tool_result', tick(), { tool_name: 'Read', success: 'true', duration_ms: 40 }),
+    // The compaction: cached prefix abandoned, a summary written in its place.
+    event(c, 'api_request', tick(), request(2, 0, 15_000)),
+    event(c, 'api_request', tick(), request(2, 15_000, 3_000)),
+  ]);
+
   // ── Rich session: prompts, model calls, sub-agent, skill, MCP, reject, error ──
   const a = 'sess-feature-build';
   ingestAgentEvents(store, [

@@ -118,6 +118,8 @@ export interface DoctorOptions extends GlobalOptions {
   fix: boolean;
   listChecks: boolean;
   envFile?: string;
+  /** Also report which capture surfaces this project can observe. */
+  capture: boolean;
 }
 
 /**

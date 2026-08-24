@@ -49,6 +49,12 @@ export const AGENT_SECURITY_TELEMETRY_CONTRACT = defineContract({
       ...stringAttr,
       enum: ['approved', 'denied', 'timeout', 'revoked'],
     },
+    'agent.consent.evidence': {
+      ...stringAttr,
+      enum: ['observed', 'inferred'],
+      description:
+        'Whether the consent outcome was witnessed or reconstructed. Defaults to inferred: no runtime reports the human click, so an approval deduced from the tool having run must never be cited as a human decision.',
+    },
     'agent.scope.active': { ...stringArrayAttr },
     'agent.memory.operation': {
       ...stringAttr,
@@ -74,6 +80,66 @@ export const AGENT_SECURITY_TELEMETRY_CONTRACT = defineContract({
     'mcp.security.injection.verdict': {
       ...stringAttr,
       enum: ['clean', 'suspicious', 'malicious'],
+    },
+    'detection.correlation_id': {
+      ...stringAttr,
+      highCardinality: true,
+      description: 'Session the detection belongs to',
+    },
+    'detection.rule_id': {
+      ...stringAttr,
+      description: 'Sequence rule that fired',
+    },
+    'detection.severity': {
+      ...stringAttr,
+      enum: ['low', 'medium', 'high', 'critical'],
+      description: 'Severity of the rule that fired',
+    },
+    'detection.first_at': {
+      ...numberAttr,
+      description: 'Epoch ms of the first step matched by the rule',
+    },
+    'detection.last_at': {
+      ...numberAttr,
+      description: 'Epoch ms of the last step matched by the rule',
+    },
+    'detection.steps': {
+      ...numberAttr,
+      description: 'How many ordered steps the rule matched',
+    },
+    'detection.disposition.status': {
+      ...stringAttr,
+      enum: [
+        'new',
+        'acknowledged',
+        'in_progress',
+        'resolved',
+        'false_positive',
+        'risk_accepted',
+      ],
+      description: 'Triage decision recorded against a detection',
+    },
+    'detection.disposition.note': {
+      ...stringAttr,
+      // Deliberately NOT highCardinality: that flag is a redaction protect-list,
+      // and this is free text a human typed. It is the likeliest field in the
+      // contract to carry a pasted secret or a customer name, so it must stay
+      // subject to the redactor rather than exempt from it.
+      description:
+        'Why the finding was closed. Required for false_positive and risk_accepted.',
+    },
+    'detection.disposition.supersedes': {
+      ...stringAttr,
+      enum: [
+        'new',
+        'acknowledged',
+        'in_progress',
+        'resolved',
+        'false_positive',
+        'risk_accepted',
+      ],
+      description:
+        'Status this decision replaces — dispositions are appended, never edited, so a reversal survives.',
     },
     'security.event': { ...stringAttr },
     'security.category': { ...stringAttr },

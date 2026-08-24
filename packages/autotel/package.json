@@ -258,6 +258,11 @@
       "import": "./dist/drain-pipeline.js",
       "require": "./dist/drain-pipeline.cjs"
     },
+    "./evidence": {
+      "types": "./dist/evidence.d.ts",
+      "import": "./dist/evidence.js",
+      "require": "./dist/evidence.cjs"
+    },
     "./enrichers": {
       "types": "./dist/enrichers.d.ts",
       "import": "./dist/enrichers.js",

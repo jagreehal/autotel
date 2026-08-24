@@ -92,6 +92,9 @@ export const MCP_SEMCONV = {
   SECURITY_MANIFEST_CATEGORIES: 'mcp.security.manifest.categories',
   SECURITY_MANIFEST_BUDGET_VIOLATION_COUNT:
     'mcp.security.manifest.budget.violation_count',
+  // Fingerprint of a tool's text surface. A classifier says whether a manifest
+  // looks malicious now; this says whether it is the one you trusted before.
+  SECURITY_MANIFEST_DIGEST: 'mcp.security.manifest.digest',
 
   // Spotlighting (untrusted-content demarcation) applied to a payload.
   SECURITY_SPOTLIGHT_METHOD: 'mcp.security.spotlight.method', // delimit|base64

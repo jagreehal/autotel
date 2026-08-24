@@ -16,6 +16,7 @@ import { checkEnvVarsPresent } from '../lib/env-generator';
 import { getInstallCommand } from '../lib/package-manager';
 import { getPreset } from '../presets/index';
 import { checkLoggerInstrumentation } from '../lib/logger-checker';
+import { captureCoverageChecks } from '../lib/capture-coverage';
 import * as output from '../ui/output';
 import { createSpinner } from '../ui/spinner';
 
@@ -57,6 +58,12 @@ const CHECK_DEFINITIONS = [
     id: 'logger-instrumentation',
     title: 'Logger instrumentation',
     description: 'Check if logger instrumentation packages are installed',
+  },
+  {
+    id: 'capture-coverage',
+    title: 'Capture coverage',
+    description:
+      'Report which capture surfaces this project can observe at all (--capture)',
   },
 ];
 
@@ -117,6 +124,12 @@ async function runChecks(
     ...project.packageJson.dependencies,
     ...project.packageJson.devDependencies,
   };
+
+  if (options.capture) {
+    // Opt-in: these never fail a setup, they describe what a trace from this
+    // project can and cannot be evidence of.
+    checks.push(...captureCoverageChecks(deps));
+  }
 
   // Check 1: Autotel installed
   const autotelInfo = getAutotelInfo(project.packageJson);
@@ -421,11 +434,14 @@ function calculateSummary(checks: Check[]): CheckSummary {
 }
 
 /**
- * Determine exit code from checks
+ * Determine exit code from checks. Informational checks are excluded: they
+ * describe what the setup can observe rather than judging it, and a permanent
+ * fact of the world must not gate CI.
  */
-function getExitCode(checks: Check[]): number {
-  const hasErrors = checks.some((c) => c.status === 'error');
-  const hasWarnings = checks.some((c) => c.status === 'warn');
+export function getExitCode(checks: Check[]): number {
+  const judged = checks.filter((c) => !c.informational);
+  const hasErrors = judged.some((c) => c.status === 'error');
+  const hasWarnings = judged.some((c) => c.status === 'warn');
 
   if (hasErrors) return 2;
   if (hasWarnings) return 1;

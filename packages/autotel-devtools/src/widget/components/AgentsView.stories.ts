@@ -63,3 +63,23 @@ export const SubAgentAndSkillFocus: Story = {
     ).toBeGreaterThan(0);
   },
 };
+
+export const Compacted: Story = {
+  play: async ({ canvas, userEvent }) => {
+    updateWidgetData({ agents: sampleAgentSessions() });
+
+    await userEvent.click(await canvas.findByText(/sess-lon/));
+
+    // The session summary says how much context was lost...
+    await expect(
+      await canvas.findByText(/1 context reset/),
+    ).toBeInTheDocument();
+
+    // ...and the timeline marks where, with its confidence shown rather than
+    // implied — `possible` must never read as `likely`.
+    const marker = await canvas.findByText(/left the agent's context/);
+    await expect(marker).toBeInTheDocument();
+    await expect(marker.textContent).toMatch(/105,000/);
+    await expect(marker.textContent).toMatch(/likely/);
+  },
+};

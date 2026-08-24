@@ -27,6 +27,12 @@ export interface Check {
   message: string;
   details?: string[];
   fix?: CheckFix;
+  /**
+   * Describes the setup rather than judging it, so it never affects the exit
+   * code. A `warn` here reports a fact the user cannot act on — the toolchain
+   * observes no file writes in any project — and failing CI on that is noise.
+   */
+  informational?: true;
 }
 
 /**

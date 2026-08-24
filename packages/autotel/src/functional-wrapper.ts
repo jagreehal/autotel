@@ -9,6 +9,7 @@ import {
   type SpanKind,
 } from '@opentelemetry/api';
 import { getConfig } from './config';
+import { evidenceAttribute } from './evidence';
 import { getConfig as getInitConfig, getSdk } from './init';
 import { runInOperationContext } from './operation-context';
 import {
@@ -249,29 +250,55 @@ function createDummyCtx<
   } as unknown as TraceContext<TBaggage>;
 }
 
-function serializeCapture(value: unknown): string | undefined {
+/**
+ * Serialize a captured value, and say whether the ceiling cut it. The flag is
+ * separate from the text because `…[truncated]` inside the value is only
+ * legible to a human reading one span — a backend cannot filter on it.
+ */
+function serializeCapture(
+  value: unknown,
+): { text: string; truncated: boolean } | undefined {
   if (value === undefined) return undefined;
   try {
     const json = asString(value) ?? JSON.stringify(value);
     if (json === undefined) return undefined;
     return json.length > CAPTURE_MAX_CHARS
-      ? `${json.slice(0, CAPTURE_MAX_CHARS)}…[truncated]`
-      : json;
+      ? {
+          text: `${json.slice(0, CAPTURE_MAX_CHARS)}…[truncated]`,
+          truncated: true,
+        }
+      : { text: json, truncated: false };
   } catch {
     return undefined;
   }
 }
 
-function captureInputAttrs(args: unknown[], enabled?: boolean): Attributes {
+function captureAttrs(
+  value: unknown,
+  valueAttr: string,
+  field: string,
+  enabled?: boolean,
+): Attributes {
   if (!enabled) return {};
-  const serialized = serializeCapture(args.length === 1 ? args[0] : args);
-  return serialized === undefined ? {} : { [AUTOTEL_INPUT_ATTR]: serialized };
+  const serialized = serializeCapture(value);
+  if (serialized === undefined) return {};
+  return {
+    [valueAttr]: serialized.text,
+    ...(serialized.truncated && { [evidenceAttribute(field)]: 'truncated' }),
+  };
+}
+
+function captureInputAttrs(args: unknown[], enabled?: boolean): Attributes {
+  return captureAttrs(
+    args.length === 1 ? args[0] : args,
+    AUTOTEL_INPUT_ATTR,
+    'input',
+    enabled,
+  );
 }
 
 function captureOutputAttrs(result: unknown, enabled?: boolean): Attributes {
-  if (!enabled) return {};
-  const serialized = serializeCapture(result);
-  return serialized === undefined ? {} : { [AUTOTEL_OUTPUT_ATTR]: serialized };
+  return captureAttrs(result, AUTOTEL_OUTPUT_ATTR, 'output', enabled);
 }
 
 function truncateErrorMessage(message: string): string {

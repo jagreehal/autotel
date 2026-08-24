@@ -14,6 +14,7 @@ export const AGENT_SECURITY_ATTR = {
   actionRiskClass: 'agent.action.risk_class',
   consentRequired: 'agent.consent.required',
   consentOutcome: 'agent.consent.outcome',
+  consentEvidence: 'agent.consent.evidence',
   scopeActive: 'agent.scope.active',
   memoryOperation: 'agent.memory.operation',
   memoryIsolationKey: 'agent.memory.isolation_key',
@@ -38,6 +39,16 @@ export type AgentActionRiskClass =
   'read' | 'write' | 'destructive' | 'financial' | 'exfiltration_capable';
 
 export type AgentConsentOutcome = 'approved' | 'denied' | 'timeout' | 'revoked';
+
+/**
+ * Whether a consent outcome was witnessed or reconstructed.
+ *
+ * No IDE or agent runtime reports the human's click, so an approval is usually
+ * deduced from the tool having run after a prompt. That deduction is worth
+ * recording and must never be cited as a human decision, which it cannot be
+ * told apart from unless the record says which it is.
+ */
+export type AgentConsentEvidence = 'observed' | 'inferred';
 
 export type AgentMemoryOperation = 'read' | 'write' | 'delete' | 'search';
 
@@ -67,6 +78,12 @@ export interface RecordHumanApprovalInput extends AgentSecurityRecordOptions {
   required?: boolean;
   controllerId?: string;
   hashSalt?: string;
+  /**
+   * How the outcome was established. Defaults to `'inferred'`: a caller that
+   * did not say it witnessed the decision did not witness it, and the weaker
+   * claim is the safe default for a record an auditor may rely on.
+   */
+  evidence?: AgentConsentEvidence;
 }
 
 export interface RecordActiveScopesInput extends AgentSecurityRecordOptions {
@@ -176,6 +193,7 @@ export function recordHumanApproval(input: RecordHumanApprovalInput): void {
     [AGENT_SECURITY_ATTR.consentOutcome]: input.approved
       ? 'approved'
       : 'denied',
+    [AGENT_SECURITY_ATTR.consentEvidence]: input.evidence ?? 'inferred',
     'tool.call.id': input.toolCallId,
   };
   if (input.toolName) {

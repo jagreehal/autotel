@@ -169,6 +169,11 @@ export const COMMANDS: CommandSpec[] = [
         takesValue: true,
         description: 'Path to env file to check',
       },
+      {
+        name: '--capture',
+        description:
+          'Report which capture surfaces this project can observe at all',
+      },
     ],
     mutating: false,
     network: false,

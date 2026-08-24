@@ -601,6 +601,39 @@ describe('Functional API', () => {
         expect(span.attributes['autotel.output']).toBe('5');
       });
 
+      it('labels a truncated capture so the gap is queryable', async () => {
+        const collector = createTraceCollector();
+
+        // 4096 is the capture ceiling; a 5000-char string is cut and the
+        // reader has to be told, or a shortened value reads as the whole one.
+        const long = 'x'.repeat(5000);
+        const echo = traceOptionsFactory(
+          { name: 'echo', captureInput: true, captureOutput: true },
+          (_ctx: TraceContext) => async (text: string) => text,
+        );
+
+        await echo(long);
+
+        const span = collector.getSpans()[0]!;
+        expect(span.attributes['autotel.evidence.input']).toBe('truncated');
+        expect(span.attributes['autotel.evidence.output']).toBe('truncated');
+      });
+
+      it('leaves an untruncated capture unlabelled', async () => {
+        const collector = createTraceCollector();
+
+        const echo = traceOptionsFactory(
+          { name: 'echo-short', captureInput: true, captureOutput: true },
+          (_ctx: TraceContext) => async (text: string) => text,
+        );
+
+        await echo('short');
+
+        const span = collector.getSpans()[0]!;
+        expect(span.attributes['autotel.evidence.input']).toBeUndefined();
+        expect(span.attributes['autotel.evidence.output']).toBeUndefined();
+      });
+
       it('does not capture input/output by default', async () => {
         const collector = createTraceCollector();
 

@@ -25,7 +25,10 @@ Install `autotel-mongoose`, `autotel`, and `mongoose`:
 npm install autotel autotel-mongoose mongoose
 ```
 
-This package supports Mongoose 8+.
+This package supports Mongoose 8+. Both major versions are exercised by the
+test suite: Mongoose 8 drives hooks through kareem v2's callback convention
+and Mongoose 9 through kareem v3's promise-based one, and the instrumentation
+handles both.
 
 ## Basic Usage
 

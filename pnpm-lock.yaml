@@ -2291,6 +2291,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.65.0
         version: 8.65.0(eslint@10.7.0(jiti@2.7.0))(typescript@6.0.3)
+      autotel-schema:
+        specifier: workspace:*
+        version: link:../autotel-schema
       eslint-config-prettier:
         specifier: ^10.1.8
         version: 10.1.8(eslint@10.7.0(jiti@2.7.0))
