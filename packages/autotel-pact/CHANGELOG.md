@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 17.0.0
+
+### Patch Changes
+
+- Updated dependencies [559ec46]
+  - autotel@7.1.0
+
 ## 16.0.1
 
 ### Patch Changes

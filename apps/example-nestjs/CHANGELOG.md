@@ -1,5 +1,13 @@
 # @jagreehal/example-nestjs
 
+## 1.0.58
+
+### Patch Changes
+
+- Updated dependencies [559ec46]
+  - autotel@7.1.0
+  - autotel-adapters@2.0.11
+
 ## 1.0.57
 
 ### Patch Changes

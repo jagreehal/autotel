@@ -1,5 +1,12 @@
 # autotel-terminal
 
+## 39.0.0
+
+### Patch Changes
+
+- Updated dependencies [559ec46]
+  - autotel@7.1.0
+
 ## 38.0.1
 
 ### Patch Changes
