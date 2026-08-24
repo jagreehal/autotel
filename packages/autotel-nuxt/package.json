@@ -1,6 +1,6 @@
 {
   "name": "autotel-nuxt",
-  "version": "8.0.1",
+  "version": "9.0.0",
   "description": "Nuxt module for Autotel observability via Nitro adapters",
   "license": "Apache-2.0",
   "private": true,
