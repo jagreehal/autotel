@@ -17,9 +17,7 @@
     "gen_ai.request.top_k": 40,
     "gen_ai.response.id": "msg_01ABC7def8GhIjKlMnOpQrSt",
     "gen_ai.response.model": "claude-sonnet-4-20250514",
-    "gen_ai.response.finish_reasons": [
-      "stop"
-    ],
+    "gen_ai.response.finish_reasons": ["stop"],
     "gen_ai.usage.input_tokens": 700,
     "gen_ai.usage.output_tokens": 142,
     "gen_ai.usage.cache_read.input_tokens": 500,

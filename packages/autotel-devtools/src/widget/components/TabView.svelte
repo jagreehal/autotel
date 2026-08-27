@@ -1,44 +1,21 @@
 <script lang="ts">
   /**
    * Single source of truth for tab → view dispatch, shared by both surfaces
-   * (the full-page Layout and the embedded Panel). Covers every TabType; each
-   * surface only ever selects ids from its own tab bar, so the extra cases are
-   * inert — but keeping them here means the two surfaces can never drift in
-   * which view a tab maps to.
+   * (the full-page Layout and the embedded Panel).
+   *
+   * The mapping lives in `views/registry.ts` rather than in a `{#if}` chain
+   * here, so the embedded build can alias in a smaller set without this
+   * component knowing which build it is in. An id with no view falls back to
+   * Traces — which is also what an unknown id gets, so a stale URL cannot
+   * render blank.
    */
   import { selectedTabSignal } from '../store.svelte';
-  import TracesView from './TracesView.svelte';
-  import AgentsView from './AgentsView.svelte';
-  import GenAiView from './GenAiView.svelte';
-  import FlowView from './FlowView.svelte';
-  import ResourcesView from './ResourcesView.svelte';
-  import ServiceMapView from './ServiceMapView.svelte';
-  import MetricsView from './MetricsView.svelte';
-  import LogsView from './LogsView.svelte';
-  import ErrorsView from './ErrorsView.svelte';
-  import SecurityView from './SecurityView.svelte';
+  import { VIEWS } from '../views/registry';
 
   const selected = $derived(selectedTabSignal.value);
+  const View = $derived(VIEWS[selected] ?? VIEWS.traces);
 </script>
 
-{#if selected === 'agents'}
-  <AgentsView />
-{:else if selected === 'genai'}
-  <GenAiView />
-{:else if selected === 'flow'}
-  <FlowView />
-{:else if selected === 'resources'}
-  <ResourcesView />
-{:else if selected === 'service-map'}
-  <ServiceMapView />
-{:else if selected === 'metrics'}
-  <MetricsView />
-{:else if selected === 'logs'}
-  <LogsView />
-{:else if selected === 'errors'}
-  <ErrorsView />
-{:else if selected === 'security'}
-  <SecurityView />
-{:else}
-  <TracesView />
+{#if View}
+  <View />
 {/if}

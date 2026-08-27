@@ -41,6 +41,7 @@ import {
   type Span,
 } from '@opentelemetry/api';
 import { getConfig } from './config';
+import { promiseFromThenable } from './is-thenable';
 import type { TraceContext } from './trace-context';
 import {
   createTraceContext,
@@ -270,11 +271,20 @@ export const ctx = new Proxy(ctxProxyTarget, {
  * })
  * ```
  */
+// The awaitable forms come first, so a function returning a thenable (an ORM
+// query builder) is typed by what it resolves to rather than by the builder.
 // trace(fn)
+function traceImpl<TArgs extends unknown[], TReturn>(
+  fn: (...args: TArgs) => PromiseLike<TReturn>,
+): (...args: TArgs) => Promise<TReturn>;
 function traceImpl<TArgs extends unknown[], TReturn>(
   fn: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => TReturn;
 // trace(name, fn) / trace(options, fn)
+function traceImpl<TArgs extends unknown[], TReturn>(
+  name: string,
+  fn: (...args: TArgs) => PromiseLike<TReturn>,
+): (...args: TArgs) => Promise<TReturn>;
 function traceImpl<TArgs extends unknown[], TReturn>(
   name: string,
   fn: (...args: TArgs) => TReturn,
@@ -429,7 +439,9 @@ export function withTracing<
   return <TArgs extends TCfgArgs, TReturn extends TCfgReturn>(
     fnFactory: (
       ctx: TraceContext,
-    ) => (...args: TArgs) => TReturn | Promise<TReturn>,
+      // PromiseLike, not just Promise: an ORM query builder is awaitable
+      // without being a Promise, and the wrapper waits for it either way.
+    ) => (...args: TArgs) => TReturn | PromiseLike<TReturn>,
   ): WrappedFunction<TArgs, TReturn> =>
     wrapFactoryWithTracing<TArgs, TReturn>(fnFactory, options);
 }
@@ -484,18 +496,34 @@ export function withTracing<
  * })
  * ```
  */
+type InstrumentedFunction<TFunction extends AnyInstrumentable> =
+  TFunction extends (...args: infer TArgs) => infer TReturn
+    ? (
+        ...args: TArgs
+      ) => TReturn extends PromiseLike<infer TValue> ? Promise<TValue> : TReturn
+    : never;
+
+type InstrumentedFunctions<T extends Record<string, AnyInstrumentable>> = {
+  [TKey in keyof T]: InstrumentedFunction<T[TKey]>;
+};
+
+export function instrument<TFunction extends AnyInstrumentable>(
+  options: SingleInstrumentOptions<TFunction> & {
+    fn: TFunction & ((...args: Parameters<TFunction>) => PromiseLike<unknown>);
+  },
+): (...args: Parameters<TFunction>) => Promise<Awaited<ReturnType<TFunction>>>;
 export function instrument<TFunction extends AnyInstrumentable>(
   options: SingleInstrumentOptions<TFunction>,
 ): TFunction;
 export function instrument<T extends Record<string, AnyInstrumentable>>(
   options: InstrumentOptions<T>,
-): T;
+): InstrumentedFunctions<T>;
 export function instrument<
   T extends Record<string, AnyInstrumentable>,
   TFunction extends AnyInstrumentable,
 >(
   options: InstrumentOptions<T> | SingleInstrumentOptions<TFunction>,
-): T | TFunction {
+): InstrumentedFunctions<T> | TFunction {
   if (!options || typeof options !== 'object') {
     throw new TypeError(
       'instrument: expected { key, fn } or { functions: { name: fn } }',
@@ -516,7 +544,8 @@ export function instrument<
         'instrument: "fn" must be a function in the { key, fn } form',
       );
     }
-    // SAFETY: the wrapper preserves the wrapped function's signature.
+    // Awaitable return values are normalised to Promise at runtime; the leading
+    // overload exposes that change while synchronous functions keep their shape.
     return wrapPlainWithTracing(fn, tracingOptions, key) as TFunction;
   }
 
@@ -571,8 +600,8 @@ export function instrument<
     };
 
     // Wrap with tracing (sync or async based on implementation)
-    // SAFETY: the wrapper preserves the factory's own call signature; the hop
-    // through unknown is the compiler's requirement for a generic member type.
+    // The wrapper preserves parameters and synchronous returns; awaitable
+    // returns are normalised to Promise, as InstrumentedFunctions describes.
     instrumented[typedKey] = wrapFactoryWithTracing(
       fnFactory,
       fnOptions,
@@ -580,8 +609,8 @@ export function instrument<
     ) as unknown as T[typeof typedKey];
   }
 
-  // SAFETY: every member was replaced by a wrapper with the same signature.
-  return instrumented as T;
+  // SAFETY: every member follows the InstrumentedFunctions return mapping.
+  return instrumented as unknown as InstrumentedFunctions<T>;
 }
 
 /**
@@ -629,19 +658,22 @@ export interface SpanOptions {
 // Overloads — sync first (more specific match), then async.
 // Each shape is offered with a string name OR a full SpanOptions object so
 // span() aligns with trace()'s argument flexibility.
-export function span<T = unknown>(name: string, fn: (span: Span) => T): T;
+// The awaitable overloads come first. PromiseLike also covers Promise, and an
+// ORM query builder only matches here - behind the bare `T` overload it would
+// type as the builder, which is how a lazy query ends up outside its own span.
 export function span<T = unknown>(
   name: string,
-  fn: (span: Span) => Promise<T>,
+  fn: (span: Span) => PromiseLike<T>,
 ): Promise<T>;
+export function span<T = unknown>(
+  options: SpanOptions,
+  fn: (span: Span) => PromiseLike<T>,
+): Promise<T>;
+export function span<T = unknown>(name: string, fn: (span: Span) => T): T;
 export function span<T = unknown>(
   options: SpanOptions,
   fn: (span: Span) => T,
 ): T;
-export function span<T = unknown>(
-  options: SpanOptions,
-  fn: (span: Span) => Promise<T>,
-): Promise<T>;
 // Implementation
 export function span<T = unknown>(
   nameOrOptions: string | SpanOptions,
@@ -666,9 +698,10 @@ export function span<T = unknown>(
 
         const result = fn(span);
 
-        // Check if result is a Promise
-        if (result instanceof Promise) {
-          return result
+        // Anything thenable, not just native Promises.
+        const resultPromise = promiseFromThenable(result);
+        if (resultPromise) {
+          return resultPromise
             .then((resolved) => {
               span.setStatus({ code: SpanStatusCode.OK });
               span.end();

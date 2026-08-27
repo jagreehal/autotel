@@ -10,12 +10,12 @@
  */
 
 import type { TabType } from './types';
-import type {
-  TraceSortKey,
-  SortDir,
-  TraceStatusFilter,
-  TraceTimeRangeFilter,
-} from './store.svelte';
+import {
+  parseWindowParam,
+  serializeWindow,
+  type WindowSelection,
+} from './timeWindow';
+import type { TraceSortKey, SortDir, TraceStatusFilter } from './store.svelte';
 
 export const TAB_VALUES: readonly TabType[] = [
   'traces',
@@ -57,7 +57,6 @@ const SORT_KEYS: readonly TraceSortKey[] = [
   'status',
 ];
 const STATUS_VALUES: readonly TraceStatusFilter[] = ['error', 'ok'];
-const TIME_RANGE_VALUES: readonly TraceTimeRangeFilter[] = ['5m', '15m', '1h'];
 /** How the traces list is ordered. */
 export interface TraceSort {
   key: TraceSortKey;
@@ -78,7 +77,15 @@ export interface NavState {
   q?: string;
   status?: TraceStatusFilter;
   minDuration?: number;
-  timeRange?: TraceTimeRangeFilter;
+  /**
+   * The global time window, serialized.
+   *
+   * Distinct from `timeRange`, which is the Traces-list-only filter this
+   * replaces. Carried in the URL so a shared link opens on the window the
+   * sender was looking at — without it, "here's the problem" resolves to
+   * whatever range the recipient happens to have set.
+   */
+  window?: WindowSelection;
   sort?: TraceSort;
   // GenAI-list filter.
   genaiQuery?: string;
@@ -117,8 +124,10 @@ export function parseNavHash(hash: string): NavState {
   const min = minRaw == null ? Number.NaN : Number(minRaw);
   if (Number.isFinite(min) && min > 0) state.minDuration = min;
 
-  const timeRange = oneOf(TIME_RANGE_VALUES, params.get('range'));
-  if (timeRange) state.timeRange = timeRange;
+  // Absent means the default, which `parseWindowParam` already returns — but
+  // only set it when present, so an absent key stays absent in the round trip.
+  const rawWindow = params.get('window');
+  if (rawWindow) state.window = parseWindowParam(rawWindow);
 
   const sort = parseSort(params.get('sort'));
   if (sort) state.sort = sort;
@@ -143,8 +152,11 @@ export function formatNavHash(state: NavState): string {
     params.set('status', state.status);
   if (state.minDuration && state.minDuration > 0)
     params.set('min', String(state.minDuration));
-  if (state.timeRange && state.timeRange !== 'all')
-    params.set('range', state.timeRange);
+  if (state.window) {
+    // `serializeWindow` returns null for the default, keeping clean URLs clean.
+    const serialized = serializeWindow(state.window);
+    if (serialized) params.set('window', serialized);
+  }
   if (
     state.sort &&
     !(
@@ -155,4 +167,31 @@ export function formatNavHash(state: NavState): string {
   if (state.genaiQuery) params.set('gq', state.genaiQuery);
   const s = params.toString();
   return s ? `#${s}` : '';
+}
+
+/** Whether a URL write should add a history entry or overwrite the current one. */
+export type HistoryMode = 'push' | 'replace';
+
+/**
+ * Decide how a URL write should touch history.
+ *
+ * The distinction is navigation against adjustment. Moving to another tab,
+ * trace or span is a place you can want to come back from, so it earns a
+ * history entry. Narrowing a window, sorting, or typing into the query bar
+ * refines where you already are — pushing those would bury the page you came
+ * from under one entry per keystroke and make Back useless.
+ *
+ * `previous` is null on the first write, which replaces: there is nothing
+ * behind it to preserve.
+ */
+export function historyModeFor(
+  previous: NavState | null,
+  next: NavState,
+): HistoryMode {
+  if (!previous) return 'replace';
+  const moved =
+    previous.tab !== next.tab ||
+    previous.traceId !== next.traceId ||
+    previous.spanId !== next.spanId;
+  return moved ? 'push' : 'replace';
 }

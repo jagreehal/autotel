@@ -32,6 +32,7 @@ pnpm-debug.log*
 
 # Coverage
 coverage/
+!**/src/**/coverage/
 *.lcov
 
 # Turborepo

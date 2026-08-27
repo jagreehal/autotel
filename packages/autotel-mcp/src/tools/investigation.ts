@@ -10,6 +10,11 @@ import {
   type SpanQueryInput,
   READ_ONLY,
 } from './shared';
+import {
+  compactSpans,
+  compactTrace,
+  compactTraceResult,
+} from '../modules/trace-payload';
 
 export function registerInvestigationTools(
   server: McpServer,
@@ -19,13 +24,21 @@ export function registerInvestigationTools(
     'search_traces',
     {
       description:
-        'Search traces by service, operation, status, tags, time window, and error flag.',
+        'Search traces by service, operation, status, tags, time window, and error flag. Returns root spans and a spanCount per trace; pass includeSpans:true for the full span tree, or call get_trace on the one trace you want. A trace containing an N+1 carries hundreds of spans, so asking for them across a whole result set can exceed the response limit.',
       annotations: READ_ONLY,
-      inputSchema: traceQuerySchema,
+      inputSchema: traceQuerySchema.extend({
+        includeSpans: z.coerce.boolean().default(false),
+      }),
     },
-    async (input: TraceQueryInput) =>
+    async (input: TraceQueryInput & { includeSpans: boolean }) =>
       respondSafe(
-        () => backend.searchTraces(toTraceSearchQuery(input)),
+        async () =>
+          compactTraceResult(
+            await backend.searchTraces(toTraceSearchQuery(input)),
+            {
+              includeSpans: input.includeSpans,
+            },
+          ),
         'search_traces',
       ),
   );
@@ -43,7 +56,8 @@ export function registerInvestigationTools(
     },
     async (input: SpanQueryInput) =>
       respondSafe(
-        () => backend.searchSpans(toSpanSearchQuery(input)),
+        async () =>
+          compactSpans(await backend.searchSpans(toSpanSearchQuery(input))),
         'search_spans',
       ),
   );
@@ -56,7 +70,12 @@ export function registerInvestigationTools(
       inputSchema: z.object({ traceId: z.string().min(1) }),
     },
     async ({ traceId }: { traceId: string }) =>
-      respondSafe(() => backend.getTrace(traceId), 'get_trace'),
+      respondSafe(async () => {
+        const trace = await backend.getTrace(traceId);
+        return trace === null || trace === undefined
+          ? trace
+          : compactTrace(trace);
+      }, 'get_trace'),
   );
 
   server.registerTool(

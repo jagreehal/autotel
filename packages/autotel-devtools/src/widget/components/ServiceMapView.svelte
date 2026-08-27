@@ -16,7 +16,7 @@
   } from '@lucide/svelte';
   import { cn } from '../utils/cn';
   import { formatDuration } from '../utils';
-  import { tracesSignal } from '../store.svelte';
+  import { windowedTracesSignal } from '../store.svelte';
   import { serviceColor } from '../utils/serviceColor';
   import CopyButton from './CopyButton.svelte';
   import Copyable from './Copyable.svelte';
@@ -33,7 +33,8 @@
 
   const SVG_MIN_HEIGHT = 'min-height: 300px;';
 
-  const traces = $derived(tracesSignal.value);
+  // Windowed, so the map shows the topology for the selected range.
+  const traces = $derived(windowedTracesSignal.value);
   let selectedNode = $state<string | null>(null);
   let hoveredNode = $state<string | null>(null);
   let query = $state('');

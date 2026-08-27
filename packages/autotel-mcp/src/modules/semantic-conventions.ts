@@ -142,8 +142,19 @@ export async function getSemanticConventionNamespace(
     );
   }
   if (!parsed) {
+    // "not found" alone sent you hunting: the namespace for db.* attributes is
+    // called "database", and nothing said so. List what is actually there, and
+    // name the tool that refetches when the list itself looks stale.
+    const available = await listSemanticConventionNamespaces().catch(
+      (): string[] => [],
+    );
+    const known =
+      available.length > 0
+        ? ` Available namespaces: ${available.join(', ')}.`
+        : '';
     throw new Error(
-      `Semantic convention namespace not found: ${namespace}. Run online once to warm cache or provide bundled snapshot.`,
+      `Semantic convention namespace not found: ${namespace}.${known} ` +
+        'Run semconv_refresh_cache to refetch from upstream if the list looks incomplete.',
     );
   }
 

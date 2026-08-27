@@ -44,6 +44,13 @@ surfaces spans carrying the `security.*` schema (see
 
 **CLI options:**
 
+- `-d, --db <path>`: Keep telemetry in a sqlite file so it survives restarts
+  (default: in-memory)
+- `--max-traces <n>`: Traces retained before the oldest are pruned (default:
+  `100000`)
+- `--db-max-size <size>`: Logical store cap, e.g. `512mb` or `2gb` (default:
+  `512mb` in memory, `2gb` on disk)
+- `--grpc-port <n>`: OTLP/gRPC port (default: `4317`)
 - `-p, --port <port>`: Port (default: `4318`). If the port is taken, falls
   forward to the next free port and prints a warning. When the original port is
   held by a **foreign** process (not another autotel-devtools), the warning
@@ -233,28 +240,86 @@ For what happens inside the MCP protocol itself, see
 | `AUTOTEL_DEVTOOLS_HOST`        | `127.0.0.1`                      | Bind host                                     |
 | `AUTOTEL_DEVTOOLS_TITLE`       | _unset_                          | Dashboard title                               |
 | `AUTOTEL_DEVTOOLS_SOURCE_ROOT` | cwd on a loopback bind, else off | Root `GET /source` may read; `false` disables |
-| `AUTOTEL_MAX_TRACE_COUNT`      | `100`                            | Max traces kept in memory                     |
-| `AUTOTEL_MAX_LOG_COUNT`        | `100`                            | Max log records kept                          |
-| `AUTOTEL_MAX_METRIC_COUNT`     | `100`                            | Max metric data points kept                   |
+| `AUTOTEL_DEVTOOLS_DB`          | _unset_ (in-memory)              | sqlite file the store writes to               |
+| `AUTOTEL_DEVTOOLS_MAX_TRACES`  | `100000`                         | Traces retained before the oldest are pruned  |
+| `AUTOTEL_DEVTOOLS_DB_MAX_SIZE` | `512mb` memory, `2gb` disk       | Logical store cap                             |
+| `AUTOTEL_DEVTOOLS_GRPC_PORT`   | `4317`                           | OTLP/gRPC port                                |
+| `AUTOTEL_MAX_TRACE_COUNT`      | `100`                            | Traces kept in the live tail                  |
+| `AUTOTEL_MAX_LOG_COUNT`        | `100`                            | Log records kept in the live tail             |
 
-Bump the limits when you need a longer scrollback during a development session.
+The live-tail limits govern what the widget replays on connect. Retention in the
+store is separate and much larger, so a query reaches further back than the tail
+does.
+
+## Querying
+
+Every list view sits on a query language with a tokenizer, a parser and a SQL
+compiler:
+
+```text
+service = api AND duration > 100
+name CONTAINS checkout
+http.status_code = 500
+service IN [api, web]
+name REGEXP "^GET "
+parent = NULL
+```
+
+Any field that is not a declared column is looked up as a span attribute, so
+everything a service emits is queryable without being declared anywhere. Values
+always become bound parameters and identifiers always come from a schema, so no
+text you type reaches the SQL string.
+
+A bare word with no operator is free-text search. A malformed query comes back
+as a `400` with the position of the problem rather than a `500`.
+
+`autotel-devtools/query` exports `parse`, `compileWhere` and the operator table,
+so a tool that generates queries can check them against the real grammar instead
+of a copy of it.
+
+### Persistence
+
+```typescript
+const { exporter, close } = createDevtools({
+  dbPath: './telemetry.db',
+  maxTraces: 100_000,
+});
+```
+
+Both default to in-memory, so an existing embedder keeps its current behaviour
+and gains querying and paging. The store is `node:sqlite`, which is in the
+standard library on Node 24 and costs no new dependency.
+
+### Time window
+
+One window applies across tabs and serialises into the URL. Presets are stored
+as intents, so "Last 15m" keeps tracking now instead of freezing at the moment
+you clicked it. A deep link to a trace carries that trace's own bounds plus a
+minute of air, so a link you hand to someone opens on a window that still
+contains the trace.
 
 ## Endpoints
 
 The standalone server exposes:
 
-| Path          | Method | Purpose                                                 |
-| ------------- | ------ | ------------------------------------------------------- |
-| `/v1/traces`  | POST   | OTLP/HTTP traces ingest (JSON or protobuf)              |
-| `/v1/traces`  | GET    | Read back received traces                               |
-| `/v1/traces`  | DELETE | Clear all captured telemetry                            |
-| `/v1/logs`    | POST   | OTLP/HTTP logs ingest (JSON or protobuf)                |
-| `/v1/metrics` | POST   | OTLP/HTTP metrics ingest (JSON or protobuf)             |
-| `/`           | GET    | Full-page dashboard UI                                  |
-| `/widget.js`  | GET    | Embeddable widget bundle                                |
-| `/healthz`    | GET    | Health + identity (`{ ok, service, version, clients }`) |
-| `/source`     | GET    | Source lines around a stack frame (loopback bind only)  |
-| `/ws`         | WS     | WebSocket stream (live updates + replay)                |
+| Path                    | Method | Purpose                                                 |
+| ----------------------- | ------ | ------------------------------------------------------- |
+| `/v1/traces`            | POST   | OTLP/HTTP traces ingest (JSON or protobuf)              |
+| `/v1/traces`            | GET    | Read back received traces                               |
+| `/v1/traces`            | DELETE | Clear all captured telemetry                            |
+| `/v1/logs`              | POST   | OTLP/HTTP logs ingest (JSON or protobuf)                |
+| `/v1/metrics`           | POST   | OTLP/HTTP metrics ingest (JSON or protobuf)             |
+| `/api/query/traces`     | POST   | Run a query against stored traces                       |
+| `/api/query/logs`       | POST   | Run a query against stored logs                         |
+| `/api/query/errors`     | POST   | Error groups over stored traces                         |
+| `/api/query/metrics`    | POST   | Metric series for the chosen window                     |
+| `/api/analysis/compare` | POST   | Compare two cohorts of traces                           |
+| `/api/coverage`         | GET    | Entry points from `autotel map` against what arrived    |
+| `/`                     | GET    | Full-page dashboard UI                                  |
+| `/widget.js`            | GET    | Embeddable widget bundle                                |
+| `/healthz`              | GET    | Health + identity (`{ ok, service, version, clients }`) |
+| `/source`               | GET    | Source lines around a stack frame (loopback bind only)  |
+| `/ws`                   | WS     | WebSocket stream (live updates + replay)                |
 
 Every response carries an `x-autotel-devtools: <version>` header. Use it to
 confirm you are talking to autotel-devtools rather than another OTLP collector

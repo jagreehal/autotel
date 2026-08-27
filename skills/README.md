@@ -12,6 +12,10 @@ npx skills add jagreehal/autotel --skill autotel-tanstack
 
 Skills no longer ship inside the package tarballs, so `npm install autotel` does not add them. Pick the ones you want with the command above.
 
+## Versions
+
+These skills describe the current API. Where a skill names something newer than the version you have installed, it says so at that point. The one that bites most often: `trace.run()` arrived in autotel 7.0, and on 6.x the immediate form is `span(name, fn)`.
+
 ## Categories
 
 - **core** — the `autotel` package: choosing an API, instrumentation, request logging, structured errors, events, plus task skills for tracing, sampling, audit trails, and debugging.
@@ -65,6 +69,7 @@ Skills no longer ship inside the package tarballs, so `npm install autotel` does
 | [`autotel-eventcatalog`](integrations/autotel-eventcatalog/SKILL.md)               | Keeping an EventCatalog honest against runtime behaviour — the autotel-eventcatalog drift command to diff the catalog against an autotel snapshot in CI, generat… |
 | [`autotel-genai`](integrations/autotel-genai/SKILL.md)                             | Instrumenting AI/LLM/agent code with OpenTelemetry GenAI semantic conventions — traceGenAI() spans, token usage and cost, gen_ai.* attributes, GenAI metric view… |
 | [`autotel-grafana`](integrations/autotel-grafana/SKILL.md)                         | Dashboards and alert rules as files in the repo that owns the service — the `grafana/` folder, alert rule YAML, contact points and routing, proving an alarm fir… |
+| [`autotel-langfuse`](integrations/autotel-langfuse/SKILL.md)                       | Sending autotel traces to Langfuse — langfuseCompatibility() for the fields Langfuse keeps in its own columns, langfuseScores() for evaluations, langfuseMe…      |
 | [`autotel-mcp`](integrations/autotel-mcp/SKILL.md)                                 | MCP server AI agents connect to for investigating OpenTelemetry telemetry. Use when an agent needs to query traces, metrics, or logs from Jaeger, Tempo, Prometh… |
 | [`autotel-mcp-instrumentation`](integrations/autotel-mcp-instrumentation/SKILL.md) | Instrumenting an MCP (Model Context Protocol) server or client with OpenTelemetry — instrumentMcpServer/instrumentMcpClient, W3C trace context via _meta across … |
 | [`autotel-message-contract`](integrations/autotel-message-contract/SKILL.md)       | Pinning the serialized shape of events, commands, or queue payloads as ordinary unit tests — messageContract() snapshot checks with a committed approved file, v… |
@@ -72,12 +77,14 @@ Skills no longer ship inside the package tarballs, so `npm install autotel` does
 | [`autotel-pact`](integrations/autotel-pact/SKILL.md)                               | You run Pact contracts and want evidence each interaction actually fired — withPactInteraction/auto-wrap to record consumer test runs, withProviderVerification … |
 | [`autotel-playwright`](integrations/autotel-playwright/SKILL.md)                   | Linking Playwright e2e tests to server-side traces — the fixture and reporter that create one OTel span per test and inject W3C trace context into API requests.  |
 | [`autotel-plugins`](integrations/autotel-plugins/SKILL.md)                         | Instrumenting BigQuery, Kafka, or RabbitMQ with OpenTelemetry — plugins for libraries with no official OTel support (BigQuery) or where the official package lac… |
+| [`autotel-posthog`](integrations/autotel-posthog/SKILL.md)                         | Joining autotel traces to PostHog sessions, replays and events — joinPostHog() for both directions, replay links on failed spans, and the async-context tra…      |
 | [`autotel-schema`](integrations/autotel-schema/SKILL.md)                           | Treating a service's telemetry surface as a typed, versioned contract — defineContract() to declare span names and attributes, createSchemaValidationProcessor()… |
 | [`autotel-sentry`](integrations/autotel-sentry/SKILL.md)                           | Sending autotel/OpenTelemetry traces to Sentry — the bridge that converts OTel spans to Sentry transactions and propagates sentry-trace/baggage headers, linking… |
 | [`autotel-subscribers`](integrations/autotel-subscribers/SKILL.md)                 | Event subscribers for autotel. PostHog, Mixpanel, Amplitude, Segment, Webhook, Slack. Configure in init() subscribers; use track() or Event from autotel. Import… |
 | [`autotel-telemetry`](integrations/autotel-telemetry/SKILL.md)                     | Adding opt-in CLI usage telemetry to an Autotel-powered command-line tool — withCommanderTelemetry() to instrument a Commander program, and the DO_NOT_TRACK / A… |
 | [`autotel-vitest`](integrations/autotel-vitest/SKILL.md)                           | Adding OpenTelemetry tracing to Vitest tests — gives each test a parent span so all instrumented code becomes filterable child spans in your OTLP backend.        |
 | [`autotel-vscode`](integrations/autotel-vscode/SKILL.md)                           | Working with the Autotel VS Code extension — a local OTLP/HTTP receiver on 127.0.0.1:4318 that buffers traces and logs, shows Services/Traces/Logs/Errors views,… |
+| [`autotel-webmcp`](integrations/autotel-webmcp/SKILL.md)                           | Tracing WebMCP tools in the browser — tools a page registers through `document.modelContext` for a browser agent to call. Registration and execution spans, opt-… |
 
 ## extending
 

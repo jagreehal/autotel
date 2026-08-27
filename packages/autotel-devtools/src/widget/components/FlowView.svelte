@@ -78,7 +78,7 @@
 <script lang="ts">
   import { Workflow, MessageSquare, Coins, ExternalLink } from '@lucide/svelte';
   import {
-    tracesSignal,
+    windowedTracesSignal,
     genAiRowsSignal,
     openSpanInWaterfall,
   } from '../store.svelte';
@@ -101,7 +101,8 @@
   import SearchInput from './SearchInput.svelte';
   import { matchesNeedle } from '../utils/textMatch';
 
-  const traces = $derived(tracesSignal.value);
+  // Windowed, so the flow reflects the range the toolbar says it does.
+  const traces = $derived(windowedTracesSignal.value);
   let selectedTraceId = $state<string | null>(null);
   let selectedNodeId = $state<string | null>(null);
 

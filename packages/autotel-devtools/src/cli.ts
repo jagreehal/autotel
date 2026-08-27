@@ -11,11 +11,17 @@ import { resolveSourceRoot } from './server/source-file';
 import { hostHeaderIsLoopback } from './server/origin-guard';
 import { listenLoopbackDualStack } from './server/listen';
 import { probePortHolder } from './server/identity';
+import { startOtlpGrpcReceiver } from './server/grpc';
 
 interface CliOptions {
   port: number;
   host: string;
   title?: string;
+  /** sqlite file backing the store. Absent means in-memory. */
+  dbPath?: string;
+  maxTraces?: number;
+  maxDbBytes?: number;
+  grpcPort: number;
 }
 
 function printHelp(): void {
@@ -41,8 +47,15 @@ Options:
                        If the port is taken, the next free port is used and a warning is shown.
   -H, --host <host>    Host to bind to (default: 127.0.0.1, env: AUTOTEL_DEVTOOLS_HOST)
   -t, --title <title>  Dashboard title, shown in the banner and browser tab
+  -d, --db <path>      Keep telemetry in a sqlite file so it survives restarts
+                       (default: in-memory, env: AUTOTEL_DEVTOOLS_DB)
+      --max-traces <n> Traces retained before the oldest are pruned
+                       (default: 100000, env: AUTOTEL_DEVTOOLS_MAX_TRACES)
+      --grpc-port <n>  OTLP/gRPC port (default: 4317, env: AUTOTEL_DEVTOOLS_GRPC_PORT)
+      --db-max-size <size> Logical store cap, e.g. 512mb or 2gb
+                       (default: 512mb memory / 2gb disk, env: AUTOTEL_DEVTOOLS_DB_MAX_SIZE)
                        (env: AUTOTEL_DEVTOOLS_TITLE)
-  Env limits:          AUTOTEL_MAX_TRACE_COUNT, AUTOTEL_MAX_LOG_COUNT, AUTOTEL_MAX_METRIC_COUNT
+  Env limits:          AUTOTEL_MAX_TRACE_COUNT, AUTOTEL_MAX_LOG_COUNT
   -h, --help           Show this help message
   -v, --version        Show version number
 
@@ -54,6 +67,7 @@ Endpoints:
   DELETE /v1/traces    Clear captured telemetry (test reset)
   POST   /v1/logs      Receive OTLP JSON log data
   POST   /v1/metrics   Receive OTLP JSON metric data
+  gRPC   :4317         Receive OTLP protobuf traces, logs and metrics
   WS     /ws           WebSocket stream for real-time updates
   GET    /healthz      Health check
 
@@ -92,6 +106,10 @@ function parseArgs(argv: string[]): CliOptions | null {
     port: parsePort(process.env.AUTOTEL_DEVTOOLS_PORT || '4318'),
     host: process.env.AUTOTEL_DEVTOOLS_HOST || '127.0.0.1',
     title: process.env.AUTOTEL_DEVTOOLS_TITLE,
+    dbPath: process.env.AUTOTEL_DEVTOOLS_DB,
+    maxTraces: parseCount(process.env.AUTOTEL_DEVTOOLS_MAX_TRACES),
+    maxDbBytes: parseBytes(process.env.AUTOTEL_DEVTOOLS_DB_MAX_SIZE),
+    grpcPort: parsePort(process.env.AUTOTEL_DEVTOOLS_GRPC_PORT || '4317'),
   };
 
   // An explicit `--port`/`-p` always wins, regardless of where it sits in
@@ -127,6 +145,26 @@ function parseArgs(argv: string[]): CliOptions | null {
       i++;
       continue;
     }
+    if ((arg === '--db' || arg === '-d') && next) {
+      options.dbPath = next;
+      i++;
+      continue;
+    }
+    if (arg === '--max-traces' && next) {
+      options.maxTraces = parseCount(next);
+      i++;
+      continue;
+    }
+    if (arg === '--grpc-port' && next) {
+      options.grpcPort = parsePort(next);
+      i++;
+      continue;
+    }
+    if (arg === '--db-max-size' && next) {
+      options.maxDbBytes = parseBytes(next);
+      i++;
+      continue;
+    }
     if (/^\d+$/.test(arg) && !positionalPortConsumed) {
       if (!portWasExplicit) options.port = parsePort(arg);
       positionalPortConsumed = true;
@@ -135,6 +173,31 @@ function parseArgs(argv: string[]): CliOptions | null {
   }
 
   return options;
+}
+
+/**
+ * A positive integer option, or undefined when unset.
+ *
+ * Unlike `parsePort` this does not exit on a bad value: a nonsense retention
+ * cap should fall back to the default rather than refuse to start a viewer.
+ */
+function parseCount(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+function parseBytes(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const match = value
+    .trim()
+    .toLowerCase()
+    .match(/^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/);
+  if (!match) return undefined;
+  const factors = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 };
+  return Math.floor(
+    Number(match[1]) * factors[(match[2] as keyof typeof factors) || 'b'],
+  );
 }
 
 function parsePort(value: string): number {
@@ -153,6 +216,7 @@ interface RunningReceiver {
   warnings: string[];
   boundPort: number;
   uiBase: string;
+  grpcAddress: string;
 }
 
 async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
@@ -162,6 +226,9 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
     server: httpServer,
     host: options.host,
     verbose: true,
+    dbPath: options.dbPath,
+    maxTraces: options.maxTraces,
+    maxDbBytes: options.maxDbBytes,
   });
   // Lets the Errors tab show the line that threw. See `resolveSourceRoot`.
   const sourceRoot = resolveSourceRoot(
@@ -179,15 +246,29 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
     primary: httpServer,
     port: options.port,
     host: options.host,
-    attachSecondary: (s) =>
+    attachSecondary: (s) => {
       attachDevtoolsRoutes(s, wsServer, {
         loopbackOnly,
         title: options.title,
         sourceRoot,
-      }),
+      });
+      // The live tail has to answer on this family too, or a client using the
+      // other form of `localhost` sees telemetry over HTTP and no stream.
+      wsServer.attachWebSocket(s);
+    },
   });
 
   const { addresses, warnings, port: boundPort } = await listeners.ready;
+  const grpc = await startOtlpGrpcReceiver({
+    devtools: wsServer,
+    host: options.host,
+    port: options.grpcPort,
+  });
+  if (grpc.port !== options.grpcPort) {
+    warnings.push(
+      `OTLP/gRPC port ${options.grpcPort} was busy; using ${grpc.port}.`,
+    );
+  }
 
   // Falling forward to a different port means the one we wanted is held by
   // someone else. Classify them: another autotel-devtools (benign) versus a
@@ -214,19 +295,22 @@ async function startReceiver(options: CliOptions): Promise<RunningReceiver> {
   return {
     wsServer,
     closeAll: () =>
-      Promise.all([wsServer.close(), listeners.closeSibling()]).then(
-        () => undefined,
-      ),
+      Promise.all([
+        wsServer.close(),
+        listeners.closeSibling(),
+        grpc.close(),
+      ]).then(() => undefined),
     addresses,
     warnings,
     boundPort,
     uiBase,
+    grpcAddress: grpc.address,
   };
 }
 
 // Telemetry env that wires Claude Code (and any OTel-via-env CLI) to this
-// receiver for a *live* local view: HTTP/protobuf (NOT gRPC — this receiver
-// speaks HTTP only), 1s export intervals so events show up promptly, and
+// receiver for a live local view. HTTP/protobuf remains the most portable
+// Claude Code configuration; the same receiver also accepts OTLP/gRPC.
 // session.id kept on metrics so metric-only signals join their session.
 function buildAgentEnv(
   uiBase: string,
@@ -311,7 +395,11 @@ async function runClaudeSubcommand(argv: string[]): Promise<void> {
     return;
   }
 
-  const receiver = await startReceiver({ port: opts.port, host: opts.host });
+  const receiver = await startReceiver({
+    port: opts.port,
+    host: opts.host,
+    grpcPort: 4317,
+  });
   const env = buildAgentEnv(receiver.uiBase, opts.logPrompts);
 
   process.stdout.write(`\n  autotel-devtools — Claude Code\n\n`);
@@ -372,6 +460,7 @@ async function main(): Promise<void> {
   process.stdout.write(`  Listening: ${addresses.join('  +  ')}\n`);
   process.stdout.write(`  UI:        ${uiBase}   (open in a browser)\n`);
   process.stdout.write(`  OTLP:      ${uiBase}/v1/traces\n`);
+  process.stdout.write(`  OTLP/gRPC: ${receiver.grpcAddress}\n`);
   process.stdout.write(`  WebSocket: ${uiBase.replace('http', 'ws')}/ws\n\n`);
   // The widget bundle auto-mounts on load, so the bare <script> tag is all the
   // user needs — spell that out, plus the two opt-in variations, so nobody
@@ -389,6 +478,9 @@ async function main(): Promise<void> {
   process.stdout.write(`  Or point any OTLP exporter at this receiver:\n`);
   process.stdout.write(`    OTEL_EXPORTER_OTLP_PROTOCOL=http/json\n`);
   process.stdout.write(`    OTEL_EXPORTER_OTLP_ENDPOINT=${uiBase}\n\n`);
+  process.stdout.write(
+    `  Or use gRPC: OTEL_EXPORTER_OTLP_ENDPOINT=http://${receiver.grpcAddress}\n\n`,
+  );
   // Self-check: confirm the collector is reachable AND that ingestion works,
   // not just that something is listening. Reading /v1/traces back is the same
   // check a test should make instead of trusting "the client tried to send".

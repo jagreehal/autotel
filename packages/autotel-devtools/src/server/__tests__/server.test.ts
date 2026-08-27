@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { DevtoolsServer } from '../server';
-import { makeTrace, makeSpan } from './test-utils/stubs';
+import { makeTrace, makeSpan, makeErrorTrace } from './test-utils/stubs';
 import WebSocket from 'ws';
 
 describe('DevtoolsServer', () => {
@@ -137,6 +137,17 @@ describe('DevtoolsServer', () => {
   });
 
   describe('trace management', () => {
+    it('does not count a replayed error span twice', async () => {
+      server = new DevtoolsServer({ port: 0 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const failed = makeErrorTrace('failed', 'boom');
+
+      server.addTrace(failed);
+      server.addTrace(failed);
+
+      expect(server.getCurrentData().errors[0]?.count).toBe(1);
+    });
+
     it('merges out-of-order spans into existing traces', async () => {
       server = new DevtoolsServer({ port: 0 });
       await new Promise((r) => setTimeout(r, 100));

@@ -76,18 +76,6 @@ export interface TraceData {
   partial?: boolean;
 }
 
-export interface MetricData {
-  type: 'event' | 'funnel' | 'outcome' | 'value';
-  name: string;
-  value?: number;
-  attributes: SpanAttributes;
-  timestamp: number;
-  traceId?: string;
-  /** Stable id assigned at ingestion so live-updating lists can key on it
-   *  instead of the array index (which corrupts rendering as metrics stream). */
-  id?: string;
-}
-
 export interface HealthStatus {
   connectionStatus: 'connected' | 'disconnected' | 'connecting';
   lastHeartbeat?: number;
@@ -109,7 +97,6 @@ export interface LogData {
 
 export interface WidgetData {
   traces: TraceData[];
-  metrics: MetricData[];
   health: HealthStatus;
   errors?: ErrorGroup[];
   logs?: LogData[];
@@ -146,6 +133,8 @@ export interface ErrorGroup {
 
 export type TabType =
   | 'traces'
+  | 'compare'
+  | 'coverage'
   | 'agents'
   | 'resources'
   | 'service-map'

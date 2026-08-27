@@ -91,3 +91,108 @@ describe('SchemaValidationSpanProcessor', () => {
     }
   });
 });
+
+describe('SchemaValidationSpanProcessor — stamping violations onto the span', () => {
+  /**
+   * Opt-in, because it changes what gets exported.
+   *
+   * The point is the handoff: the app owns the contract, so it is the only
+   * thing that can validate. A viewer reading the exported spans has no
+   * contract and cannot. Marking the span is what lets the violation travel
+   * to wherever the span is read.
+   */
+  it('leaves the span untouched unless asked', () => {
+    const p = createSchemaValidationProcessor({
+      contract,
+      mode: 'silent',
+      enabledInProduction: true,
+    });
+    const attributes: Record<string, EmittedAttributeValue> = {};
+
+    p.onEnd({ name: 'checkout.charge', attributes });
+
+    expect(Object.keys(attributes)).toEqual([]);
+  });
+
+  it('marks the span with a count, a severity and the codes', () => {
+    const p = createSchemaValidationProcessor({
+      contract,
+      mode: 'silent',
+      enabledInProduction: true,
+      stampViolations: true,
+    });
+    const attributes: Record<string, EmittedAttributeValue> = {};
+
+    p.onEnd({ name: 'checkout.charge', attributes });
+
+    expect(attributes['autotel.schema.violations']).toBe(1);
+    expect(attributes['autotel.schema.violation.severity']).toBe('error');
+    expect(attributes['autotel.schema.violation.codes']).toEqual([
+      'missing_required:payment.amount_cents',
+    ]);
+  });
+
+  it('leaves a conforming span unmarked, so the attribute means something', () => {
+    const p = createSchemaValidationProcessor({
+      contract,
+      mode: 'silent',
+      enabledInProduction: true,
+      stampViolations: true,
+    });
+    const attributes: Record<string, EmittedAttributeValue> = {
+      'payment.amount_cents': 500,
+    };
+
+    p.onEnd({ name: 'checkout.charge', attributes });
+
+    expect(attributes['autotel.schema.violations']).toBeUndefined();
+  });
+
+  it('reports the worst severity, not the last one seen', () => {
+    const strict = createSchemaValidationProcessor({
+      contract,
+      mode: 'silent',
+      enabledInProduction: true,
+      stampViolations: true,
+      strictSpanNames: true,
+    });
+    const attributes: Record<string, EmittedAttributeValue> = {};
+
+    // An undeclared span name is a warning; nothing here is an error.
+    strict.onEnd({ name: 'checkout.undeclared', attributes });
+
+    expect(attributes['autotel.schema.violation.severity']).toBe('warning');
+  });
+
+  it('caps the codes it writes, so one bad span cannot bloat the payload', () => {
+    const wide = defineContract({
+      service: 'checkout',
+      version: '1.0.0',
+      spans: {
+        'checkout.wide': {
+          attributes: Object.fromEntries(
+            Array.from({ length: 40 }, (_, i) => [
+              `field.${i}`,
+              { type: 'string', required: true } as const,
+            ]),
+          ),
+        },
+      },
+    });
+    const p = createSchemaValidationProcessor({
+      contract: wide,
+      mode: 'silent',
+      enabledInProduction: true,
+      stampViolations: true,
+    });
+    const attributes: Record<string, EmittedAttributeValue> = {};
+
+    p.onEnd({ name: 'checkout.wide', attributes });
+
+    // The count stays honest even though the list is trimmed.
+    expect(attributes['autotel.schema.violations']).toBe(40);
+    expect(
+      (attributes['autotel.schema.violation.codes'] as string[]).length,
+    ).toBe(20);
+  });
+});

@@ -24,6 +24,15 @@ describe('CLI', () => {
     expect(output).toContain('widget.js');
   });
 
+  it('documents the store flags, which persistence is useless without', async () => {
+    const output = await runCli(['--help']);
+    expect(output).toContain('--db');
+    expect(output).toContain('--max-traces');
+    // The default has to be stated: an in-memory default that looks persistent
+    // is how someone loses a session they assumed was on disk.
+    expect(output).toMatch(/in-memory/i);
+  });
+
   it('prints version with --version', async () => {
     const output = await runCli(['--version']);
     // Output may contain npm warnings on stderr; extract the last non-empty line

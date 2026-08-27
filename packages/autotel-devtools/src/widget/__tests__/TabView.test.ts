@@ -20,7 +20,7 @@ const CASES: Array<{ tab: TabType; marker: RegExp }> = [
   { tab: 'flow', marker: /No flow to show yet/ },
   { tab: 'resources', marker: /No resources derived yet/ },
   { tab: 'service-map', marker: /No traces available to build service map/ },
-  { tab: 'metrics', marker: /No metrics yet/ },
+  { tab: 'metrics', marker: /No metrics received yet/ },
   { tab: 'logs', marker: /No logs yet/ },
   { tab: 'errors', marker: /No errors captured/ },
 ];

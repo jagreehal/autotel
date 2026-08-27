@@ -1,187 +1,207 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite';
-import { expect } from 'storybook/test';
 import MetricsView from './MetricsView.svelte';
-import { updateWidgetData, clearAllData } from '../store.svelte';
-import type { MetricData } from '../types';
 
-function makeMetric(overrides: Partial<MetricData> = {}): MetricData {
-  return {
-    type: overrides.type ?? 'event',
-    name: overrides.name ?? 'user.signup',
-    value: overrides.value,
-    attributes: overrides.attributes ?? {},
-    timestamp: overrides.timestamp ?? Date.now(),
-    traceId: overrides.traceId,
+// Catalogue only — no assertions. Behavioural claims belong in the paired
+// `*.test.ts`; this file exists so every state is browsable in Storybook.
+//
+// MetricsView loads from the devtools server rather than from the widget store,
+// so these stories stub `fetch`. That keeps the story exercising the same code
+// path a live server would drive, rather than a second rendering path that
+// could drift from it.
+
+const T0 = Date.now() - 10 * 60_000;
+
+function points(values: number[]) {
+  return values.map((value, i) => ({
+    timestamp: T0 + i * 30_000,
+    attributes: {},
+    value,
+  }));
+}
+
+/**
+ * Answer both metrics endpoints for one story, then put `fetch` back.
+ *
+ * Restoring matters: a decorator that replaces `globalThis.fetch` and walks
+ * away leaks the stub into every story rendered afterwards — including the
+ * harness's own requests. Storybook's `beforeEach` takes a teardown for exactly
+ * this, so the stub lives and dies with the story.
+ */
+function withServer(
+  metrics: unknown[],
+  seriesByName: Record<string, unknown[]>,
+) {
+  return () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (
+      url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const href = String(url);
+      if (href.endsWith('/api/metrics')) {
+        return new Response(JSON.stringify({ metrics }), { status: 200 });
+      }
+      if (href.endsWith('/api/query/metrics')) {
+        const body = JSON.parse((init?.body as string) ?? '{}');
+        return new Response(
+          JSON.stringify({ series: seriesByName[body.name] ?? [] }),
+          { status: 200 },
+        );
+      }
+      // Anything else is the harness's own traffic — leave it alone.
+      return original(url, init);
+    }) as typeof fetch;
+
+    return () => {
+      globalThis.fetch = original;
+    };
   };
 }
 
 const meta = {
   title: 'Views/MetricsView',
   component: MetricsView,
-  parameters: {
-    layout: 'fullscreen',
-  },
-  beforeEach: () => {
-    clearAllData();
-  },
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof MetricsView>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const counterSeries = [
+  {
+    seriesId: 's-get',
+    name: 'http.requests',
+    unit: '1',
+    kind: 'sum',
+    temporality: 'delta',
+    service: 'api',
+    attributes: { 'http.method': 'GET' },
+    points: points([4, 9, 6, 14, 11, 18, 12, 20]),
+  },
+  {
+    seriesId: 's-post',
+    name: 'http.requests',
+    unit: '1',
+    kind: 'sum',
+    temporality: 'delta',
+    service: 'api',
+    attributes: { 'http.method': 'POST' },
+    points: points([1, 2, 2, 5, 3, 6, 4, 7]),
+  },
+];
+
+export const Counter: Story = {
+  beforeEach: withServer(
+    [{ name: 'http.requests', kind: 'sum', unit: '1', seriesCount: 2 }],
+    { 'http.requests': counterSeries },
+  ),
+};
+
+/** A histogram renders as a bucket distribution, not a line. */
+export const Histogram: Story = {
+  beforeEach: withServer(
+    [
+      {
+        name: 'http.server.duration',
+        kind: 'histogram',
+        unit: 'ms',
+        seriesCount: 1,
+        description: 'Inbound request duration',
+      },
+    ],
+    {
+      'http.server.duration': [
+        {
+          seriesId: 's-hist',
+          name: 'http.server.duration',
+          unit: 'ms',
+          kind: 'histogram',
+          service: 'api',
+          attributes: {},
+          points: [
+            {
+              timestamp: T0,
+              attributes: {},
+              count: 120,
+              sum: 8400,
+              bucketCounts: [40, 55, 20, 5],
+              explicitBounds: [10, 100, 1000],
+            },
+          ],
+        },
+      ],
+    },
+  ),
+};
+
+/** Exponential buckets retain their native resolution and negative values. */
+export const ExponentialHistogram: Story = {
+  beforeEach: withServer(
+    [
+      {
+        name: 'rpc.duration',
+        kind: 'exponentialHistogram',
+        unit: 'ms',
+        seriesCount: 1,
+      },
+    ],
+    {
+      'rpc.duration': [
+        {
+          seriesId: 's-exp-hist',
+          name: 'rpc.duration',
+          unit: 'ms',
+          kind: 'exponentialHistogram',
+          service: 'api',
+          resource: { 'service.name': 'api', 'host.name': 'dev-machine' },
+          attributes: {},
+          points: [
+            {
+              timestamp: T0,
+              attributes: {},
+              count: 120,
+              scale: 2,
+              zeroCount: 3,
+              zeroThreshold: 0.001,
+              positive: { offset: 8, bucketCounts: [15, 42, 37, 18] },
+              negative: { offset: -2, bucketCounts: [2, 3] },
+            },
+          ],
+        },
+      ],
+    },
+  ),
+};
+
+/** Exemplars appear as dots that open the trace behind a spike. */
+export const WithExemplars: Story = {
+  beforeEach: withServer(
+    [{ name: 'http.requests', kind: 'sum', seriesCount: 1 }],
+    {
+      'http.requests': [
+        {
+          ...counterSeries[0],
+          points: points([4, 9, 6, 40, 11, 18]).map((p, i) =>
+            i === 3
+              ? {
+                  ...p,
+                  exemplars: [
+                    {
+                      value: 40,
+                      timestamp: p.timestamp,
+                      traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1',
+                    },
+                  ],
+                }
+              : p,
+          ),
+        },
+      ],
+    },
+  ),
+};
+
+/** Nothing ingested yet — distinct from an unreachable server. */
 export const Empty: Story = {
-  play: async ({ canvas }) => {
-    await expect(canvas.getByText(/No metrics yet/)).toBeInTheDocument();
-  },
-};
-
-export const SingleEvent: Story = {
-  play: async ({ canvas }) => {
-    updateWidgetData({
-      metrics: [
-        makeMetric({
-          type: 'event',
-          name: 'user.signup',
-          attributes: { userId: '123' },
-        }),
-      ],
-    });
-    await expect(await canvas.findByText('user.signup')).toBeInTheDocument();
-    await expect(canvas.getByText('Events (1)')).toBeInTheDocument();
-  },
-};
-
-export const MultipleEvents: Story = {
-  play: async ({ canvas }) => {
-    const now = Date.now();
-    updateWidgetData({
-      metrics: [
-        makeMetric({
-          type: 'event',
-          name: 'user.signup',
-          timestamp: now - 3000,
-        }),
-        makeMetric({
-          type: 'event',
-          name: 'user.login',
-          timestamp: now - 2000,
-        }),
-        makeMetric({
-          type: 'event',
-          name: 'user.logout',
-          timestamp: now - 1000,
-        }),
-      ],
-    });
-    await expect(await canvas.findByText('user.signup')).toBeInTheDocument();
-    await expect(canvas.getByText('user.login')).toBeInTheDocument();
-    await expect(canvas.getByText('user.logout')).toBeInTheDocument();
-  },
-};
-
-export const DifferentTypes: Story = {
-  play: async ({ canvas }) => {
-    const now = Date.now();
-    updateWidgetData({
-      metrics: [
-        makeMetric({
-          type: 'event',
-          name: 'page.view',
-          attributes: { path: '/home' },
-          timestamp: now - 5000,
-        }),
-        makeMetric({
-          type: 'funnel',
-          name: 'checkout',
-          value: 42,
-          timestamp: now - 4000,
-        }),
-        makeMetric({
-          type: 'outcome',
-          name: 'payment.success',
-          value: 99.5,
-          timestamp: now - 3000,
-        }),
-        makeMetric({
-          type: 'value',
-          name: 'latency',
-          value: 234,
-          attributes: { unit: 'ms' },
-          timestamp: now - 2000,
-        }),
-      ],
-    });
-    await expect(await canvas.findByText('Events (1)')).toBeInTheDocument();
-    await expect(canvas.getByText('Funnels (1)')).toBeInTheDocument();
-    await expect(canvas.getByText('Outcomes (1)')).toBeInTheDocument();
-    await expect(canvas.getByText('Values (1)')).toBeInTheDocument();
-  },
-};
-
-export const WithAttributes: Story = {
-  play: async ({ canvas }) => {
-    updateWidgetData({
-      metrics: [
-        makeMetric({
-          type: 'event',
-          name: 'api.request',
-          attributes: {
-            method: 'GET',
-            path: '/api/users',
-            statusCode: 200,
-            duration: 45,
-          },
-        }),
-        makeMetric({
-          type: 'event',
-          name: 'api.request',
-          attributes: {
-            method: 'POST',
-            path: '/api/orders',
-            statusCode: 201,
-            duration: 123,
-          },
-        }),
-      ],
-    });
-    await expect(await canvas.findByText('method: GET')).toBeInTheDocument();
-    await expect(canvas.getByText('path: /api/orders')).toBeInTheDocument();
-  },
-};
-
-export const WithTraceLink: Story = {
-  play: async ({ canvas }) => {
-    updateWidgetData({
-      metrics: [
-        makeMetric({
-          type: 'event',
-          name: 'db.query',
-          attributes: { query: 'SELECT * FROM users' },
-          traceId: 'trace-123',
-        }),
-      ],
-    });
-    await expect(await canvas.findByText('db.query')).toBeInTheDocument();
-    await expect(
-      canvas.getByText('query: SELECT * FROM users'),
-    ).toBeInTheDocument();
-  },
-};
-
-export const ManyMetrics: Story = {
-  play: async ({ canvas }) => {
-    const now = Date.now();
-    const metrics = Array.from({ length: 20 }, (_, i) =>
-      makeMetric({
-        type: 'event',
-        name: `metric.${i}`,
-        value: Math.random() * 100,
-        timestamp: now - i * 100,
-      }),
-    );
-    updateWidgetData({ metrics });
-    await expect(await canvas.findByText('metric.0')).toBeInTheDocument();
-    await expect(canvas.getByText('Events (20)')).toBeInTheDocument();
-    await expect(canvas.getByText('+10 more')).toBeInTheDocument();
-  },
+  beforeEach: withServer([], {}),
 };

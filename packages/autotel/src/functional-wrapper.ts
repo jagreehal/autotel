@@ -9,6 +9,7 @@ import {
   type SpanKind,
 } from '@opentelemetry/api';
 import { getConfig } from './config';
+import { promiseFromThenable } from './is-thenable';
 import { evidenceAttribute } from './evidence';
 import { getConfig as getInitConfig, getSdk } from './init';
 import { runInOperationContext } from './operation-context';
@@ -17,6 +18,8 @@ import {
   AUTOTEL_SAMPLING_RATE,
   AUTOTEL_SAMPLING_TAIL_EVALUATED,
   AUTOTEL_SAMPLING_TAIL_KEEP,
+  isForceKept,
+  debugCaptureRequested,
   type Sampler,
   type SamplingContext,
 } from './sampling';
@@ -403,7 +406,8 @@ function runWithTraceContextStorage<TResult>(fn: () => TResult): TResult {
 function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
   fnFactory: (
     ctx: TraceContext,
-  ) => (...args: TArgs) => TReturn | Promise<TReturn>,
+    // PromiseLike, not just Promise: see promiseFromThenable.
+  ) => (...args: TArgs) => TReturn | PromiseLike<TReturn>,
   options: TracingOptions<TArgs, TReturn>,
   variableName?: string,
 ): WrappedFunction<TArgs, TReturn> {
@@ -444,7 +448,13 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
     const needsTailSampling = sampler.needsTailSampling?.() ?? false;
 
     if (!shouldSample && !needsTailSampling) {
-      return fnFactory(createDummyCtx()).call(this, ...args);
+      const unsampled = fnFactory(createDummyCtx()).call(this, ...args);
+      // A thenable becomes a real Promise here so the unsampled path hands back
+      // the same shape as the sampled one. Synchronous results stay synchronous.
+      // promiseFromThenable() returns undefined only for a non-thenable, so the
+      // fallback is a plain TReturn — a narrowing the compiler cannot see.
+      return (promiseFromThenable(unsampled) ?? unsampled) as
+        TReturn | Promise<TReturn>;
     }
 
     const startTime = performance.now();
@@ -478,7 +488,12 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
               duration: number,
               error?: Error,
             ) => {
-              if (needsTailSampling && sampler.shouldKeepTrace) {
+              if (
+                needsTailSampling &&
+                sampler.shouldKeepTrace &&
+                !isForceKept(span) &&
+                !debugCaptureRequested()
+              ) {
                 shouldKeepSpan = sampler.shouldKeepTrace(samplingContext, {
                   success,
                   duration,
@@ -539,8 +554,10 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
                 otelTrace.setSpan(getActiveContextWithBaggage(), span),
                 () => fn.call(this, ...args),
               );
-              if (result instanceof Promise) {
-                return result.then(
+              // Anything thenable, not just native Promises.
+              const resultPromise = promiseFromThenable(result);
+              if (resultPromise) {
+                return resultPromise.then(
                   async (value) => {
                     // SAFETY: Promise fulfillment is the awaited function result.
                     const completed = onSuccess(value as Awaited<TReturn>);
@@ -583,7 +600,8 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
 export function wrapFactoryWithTracing<TArgs extends unknown[], TReturn>(
   factory: (
     ctx: TraceContext,
-  ) => (...args: TArgs) => TReturn | Promise<TReturn>,
+    // PromiseLike, not just Promise: see promiseFromThenable.
+  ) => (...args: TArgs) => TReturn | PromiseLike<TReturn>,
   options: TracingOptions<TArgs, TReturn>,
   variableName?: string,
 ): WrappedFunction<TArgs, TReturn> {

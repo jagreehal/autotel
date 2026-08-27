@@ -88,8 +88,12 @@
   } from '@lucide/svelte';
   import { cn } from '../utils/cn';
   import { formatDuration } from '../utils';
+  import { formatClock } from '../timeFormat';
+  import { timeZoneSignal } from '../store.svelte';
   import type { SpanNode, TraceData } from '../types';
   import { packEventLanes, classifyEvent } from '../utils/spanEvents';
+  import TreeGutter from './TreeGutter.svelte';
+  import type { TreeConnectors } from '../utils/treeConnectors';
 
   interface Props {
     node: SpanNode;
@@ -98,6 +102,11 @@
     isCollapsed: boolean;
     hasChildren: boolean;
     isCritical: boolean;
+    /**
+     * Which connector lines to draw in the gutter. Absent falls back to plain
+     * indentation, so a caller that has not been updated still renders.
+     */
+    connectors?: TreeConnectors;
     onSelect?: () => void;
     onToggleCollapse?: () => void;
   }
@@ -109,6 +118,7 @@
     isCollapsed,
     hasChildren,
     isCritical,
+    connectors,
     onSelect,
     onToggleCollapse,
   }: Props = $props();
@@ -163,11 +173,20 @@
   )}
   onclick={() => onSelect?.()}
 >
-  <!-- Span name column -->
+  <!-- Span name column. The gutter draws the tree structure; without
+       connectors we fall back to flat indentation. -->
   <div
-    class="w-[200px] shrink-0 px-2 py-2 flex items-center gap-1 min-w-0"
-    style={`padding-left: ${8 + node.depth * 16}px;`}
+    class="w-[200px] shrink-0 pr-2 py-2 flex items-center gap-1 min-w-0"
+    style={connectors
+      ? 'padding-left: 8px;'
+      : `padding-left: ${8 + node.depth * 16}px;`}
   >
+    {#if connectors}
+      <TreeGutter
+        ancestorLines={connectors.ancestorLines}
+        isLast={connectors.isLast}
+      />
+    {/if}
     <!-- Collapse/expand button -->
     {#if hasChildren}
       <button
@@ -310,7 +329,7 @@
           </button>
         </div>
         <div class="text-[10px] text-fg-subtle font-mono mb-1.5">
-          {new Date(event.timestamp).toLocaleTimeString()}
+          {formatClock(event.timestamp, timeZoneSignal.value)}
         </div>
         {#if event.attributes && Object.keys(event.attributes).length > 0}
           <div

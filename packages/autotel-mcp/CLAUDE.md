@@ -18,7 +18,10 @@ You are working on the MCP investigation server. This is NOT the instrumentation
 
 ## Architecture
 
-- `src/backends/`: TelemetryBackend interface + implementations. Self-hosted/OSS: collector, jaeger, tempo, prometheus, loki, devtools, fixture, plus `composite` (per-signal fan-out) and `autodetect`. Hosted vendors, traces only: logfire, datadog, signoz — these declare `metrics`/`logs` as `unsupported` rather than returning empty results, so a caller can tell "this backend can't answer that" from "there is nothing there".
+- `src/backends/`: TelemetryBackend interface + implementations. Self-hosted/OSS: collector, jaeger, tempo, prometheus, loki, devtools, fixture, plus `composite` (per-signal fan-out) and `autodetect`.
+- **devtools backend pushes queries down.** autotel-devtools keeps telemetry in a sqlite store with a query language, so `searchTraces` compiles the structured query into query text (`query-pushdown.ts`) and `POST /api/query/traces` runs it as SQL over the whole retained history — not as a JS filter over the hundred-trace live tail. Metrics come from `/api/metrics` + `/api/query/metrics`, so devtools now declares `metrics: 'available'`. The compiler's output is checked against the real grammar, imported from `autotel-devtools/query`, so the two cannot drift into a 400 for a query nobody typed.
+- **The devtools query path verifies the response shape, not just the status.** It returns results as _already filtered_, so a bare 200 from anything on that URL would present unfiltered traces as query matches. The query response always carries `nextCursor`; the older read-back shape carries `count`. A response without `nextCursor` means "fall back", and the probe result is cached so a legacy server costs one failed request per process.
+- Hosted vendors, traces only: logfire, datadog, signoz — these declare `metrics`/`logs` as `unsupported` rather than returning empty results, so a caller can tell "this backend can't answer that" from "there is nothing there".
 - `src/tools/`: MCP tool registrations, split by investigation domain
 - `src/modules/`: Pure logic (no MCP dependency), testable in isolation
 - `src/resources/`: MCP resource registrations

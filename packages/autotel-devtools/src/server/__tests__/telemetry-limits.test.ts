@@ -14,14 +14,12 @@ describe('resolveTelemetryLimits', () => {
       env: {
         AUTOTEL_MAX_TRACE_COUNT: '10',
         AUTOTEL_MAX_LOG_COUNT: '11',
-        AUTOTEL_MAX_METRIC_COUNT: '12',
       } as NodeJS.ProcessEnv,
     });
 
     expect(limits).toEqual({
       maxTraceCount: 10,
       maxLogCount: 11,
-      maxMetricCount: 12,
     });
   });
 
@@ -34,7 +32,6 @@ describe('resolveTelemetryLimits', () => {
     expect(limits).toEqual({
       maxTraceCount: 50,
       maxLogCount: 50,
-      maxMetricCount: 50,
     });
   });
 
@@ -45,7 +42,6 @@ describe('resolveTelemetryLimits', () => {
 
     expect(limits.maxTraceCount).toBe(100);
     expect(limits.maxLogCount).toBe(100);
-    expect(limits.maxMetricCount).toBe(100);
   });
 
   it('ignores invalid env values', () => {
@@ -54,13 +50,11 @@ describe('resolveTelemetryLimits', () => {
       env: {
         AUTOTEL_MAX_TRACE_COUNT: 'invalid',
         AUTOTEL_MAX_LOG_COUNT: '-5',
-        AUTOTEL_MAX_METRIC_COUNT: '0',
       } as NodeJS.ProcessEnv,
     });
 
     expect(limits.maxTraceCount).toBe(25);
     expect(limits.maxLogCount).toBe(25);
-    expect(limits.maxMetricCount).toBe(25);
   });
 });
 

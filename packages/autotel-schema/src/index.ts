@@ -56,6 +56,7 @@ export type {
 export {
   SchemaValidationSpanProcessor,
   createSchemaValidationProcessor,
+  SCHEMA_VIOLATION_ATTRS,
 } from './processor.js';
 export type {
   ReadableSpanLike,

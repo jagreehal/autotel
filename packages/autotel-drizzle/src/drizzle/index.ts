@@ -105,6 +105,15 @@ export type ExplainMode = 'plan' | 'analyze';
  */
 export type SemconvMode = 'legacy' | 'stable' | 'dup';
 
+/**
+ * How a query span is named.
+ *
+ * - `'drizzle'` names it after the library, `drizzle.select`.
+ * - `'semconv'` follows OpenTelemetry's database span convention,
+ *   `{db.operation.name} {target}`, so `SELECT comments`.
+ */
+export type SpanNamingMode = 'drizzle' | 'semconv';
+
 export interface InstrumentDrizzleConfig {
   tracerName?: string;
   dbSystem?: string;
@@ -126,6 +135,12 @@ export interface InstrumentDrizzleConfig {
    */
   semconv?: SemconvMode;
   /**
+   * How query spans are named. Defaults to `'drizzle'`, which keeps the
+   * `drizzle.select` names existing dashboards and saved queries are built on.
+   * `'semconv'` switches to the OpenTelemetry convention, `SELECT comments`.
+   */
+  spanNaming?: SpanNamingMode;
+  /**
    * Where spans are created. Defaults to the globally registered provider,
    * which is what an application wants. Pass one to send this client's spans
    * to a provider of your own, or to hand a test a provider it can read back.
@@ -143,6 +158,7 @@ export interface InstrumentDrizzleConfig {
 interface ResolvedConfig {
   tracerProvider?: TracerProvider;
   semconv: SemconvMode;
+  spanNaming: SpanNamingMode;
   traceTransactions: boolean;
   tracerName: string;
   dbSystem: string;
@@ -251,6 +267,7 @@ function resolveConfig(config?: InstrumentDrizzleConfig): ResolvedConfig {
     peerPort: config?.peerPort,
     tracerProvider: config?.tracerProvider,
     semconv: config?.semconv ?? semconvFromEnvironment(),
+    spanNaming: config?.spanNaming ?? 'drizzle',
     traceTransactions: config?.traceTransactions ?? true,
     // EXPLAIN output is parsed as postgres JSON, so other dialects opt out
     // rather than sending syntax their server would reject.
@@ -558,15 +575,33 @@ async function collectPlan(
   }
 }
 
+/**
+ * Semconv asks for `{db.operation.name} {target}`, which reads better in any
+ * OTel-native UI and groups by table for free. The default stays on the
+ * library-prefixed name so nobody's existing dashboard changes under them.
+ */
+function buildSpanName(
+  mode: SpanNamingMode,
+  operation: string | undefined,
+  table: string | undefined,
+): string {
+  if (mode === 'semconv') {
+    if (operation === undefined) return 'query';
+    return table === undefined ? operation : `${operation} ${table}`;
+  }
+  return operation ? `drizzle.${operation.toLowerCase()}` : 'drizzle.query';
+}
+
 function buildSpan(
   state: InstrumentationState,
   queryText: string | undefined,
   extraAttributes?: AttributeMap,
 ) {
   const operation = queryText ? extractOperation(queryText) : undefined;
-  const spanName = operation
-    ? `drizzle.${operation.toLowerCase()}`
-    : 'drizzle.query';
+  // The table is read from the SQL rather than the query builder, so raw
+  // db.execute() calls are grouped by table alongside builder calls.
+  const table = queryText ? extractTableName(queryText) : undefined;
+  const spanName = buildSpanName(state.config.spanNaming, operation, table);
   const span = state.tracer.startSpan(spanName, { kind: SpanKind.CLIENT });
   const { semconv } = state.config;
   const legacy = semconv !== 'stable';
@@ -605,10 +640,6 @@ function buildSpan(
     // The hash always lives on the span, even when captureQueryText is off for
     // privacy or size, so query grouping still works.
     span.setAttribute(SEMATTRS_DB_STATEMENT_HASH, hashQueryText(queryText));
-
-    // The table is read from the SQL rather than the query builder, so raw
-    // db.execute() calls are grouped by table alongside builder calls.
-    const table = extractTableName(queryText);
 
     if (table !== undefined) {
       span.setAttribute(SEMATTRS_DB_COLLECTION_NAME, table);

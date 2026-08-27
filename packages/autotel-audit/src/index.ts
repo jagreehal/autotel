@@ -2,6 +2,7 @@ import {
   AUTOTEL_SAMPLING_TAIL_EVALUATED,
   AUTOTEL_SAMPLING_TAIL_KEEP,
   createNoopRequestLogger,
+  forceKeep,
   getRequestLoggerSafe,
 } from 'autotel';
 import type { RequestLogger } from 'autotel';
@@ -81,6 +82,10 @@ export function forceKeepAuditEvent(ctx?: AuditContext): void {
   traceCtx.setAttribute(AUTOTEL_SAMPLING_TAIL_EVALUATED, true);
   traceCtx.setAttribute(AUTOTEL_SAMPLING_TAIL_KEEP, true);
   traceCtx.setAttribute('autotel.audit.force_keep', true);
+  // Setting the attributes is not enough on its own: the tracing wrapper
+  // writes the sampler's tail verdict after the body has run, which would
+  // overwrite this one. forceKeep() also marks the span as claimed.
+  forceKeep();
 }
 
 export function setAuditAttributes(

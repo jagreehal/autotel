@@ -39,8 +39,11 @@ export function formatAddress(host: string, port: number): string {
  * is returned in `ready` so callers can print correct URLs and OTLP
  * endpoints. Each fallback produces a warning.
  *
- * The sibling listener serves the same HTTP routes (via `attachSecondary`);
- * the WebSocket/UI stays on the primary address. If the sibling cannot bind
+ * The sibling listener serves the same HTTP routes *and the WebSocket* via
+ * `attachSecondary`: a caller that attaches only routes leaves a client on the
+ * other IP family able to read telemetry over HTTP while its live tail never
+ * connects, which looks like a hung UI rather than a bind problem. If the
+ * sibling cannot bind
  * (e.g. no IPv6, or the port is taken on that family), it is reported as a
  * warning rather than a fatal error.
  */

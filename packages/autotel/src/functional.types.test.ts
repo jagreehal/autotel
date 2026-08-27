@@ -8,8 +8,55 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { instrument, withTracing, trace } from './functional';
+import { instrument, withTracing, trace, span } from './functional';
 import type { TraceContext } from './trace-context';
+
+/**
+ * The lazy builder an ORM returns: a full thenable, but not a Promise, so it
+ * has no catch/finally and fails `instanceof Promise`.
+ */
+function queryBuilder(): PromiseLike<string> {
+  return {
+    then: (onFulfilled, onRejected) =>
+      Promise.resolve('rows').then(onFulfilled, onRejected),
+  };
+}
+
+describe('thenable results type as async', () => {
+  it('span() returns a promise for a thenable callback', async () => {
+    // Compiles only when a thenable routes through the async overload. Typed as
+    // the builder instead, this assignment fails and the span silently ends
+    // before the query runs.
+    const rows: Promise<string> = span('db.query', () => queryBuilder());
+
+    expect(await rows).toBe('rows');
+  });
+
+  it('trace() returns a promise for a thenable callback', async () => {
+    const load = trace('db.load', () => queryBuilder());
+    const rows: Promise<string> = load();
+
+    expect(await rows).toBe('rows');
+  });
+
+  it('withTracing() accepts a factory returning a thenable', async () => {
+    // withTracing takes the `(ctx) => (...args) => result` factory form.
+    // WrappedFunction is `TReturn | Promise<TReturn>` by design and does not
+    // narrow to Promise even for async functions, so await rather than
+    // asserting the narrower type. What matters here is that it compiles: a
+    // thenable factory used to be rejected outright.
+    const load = withTracing({ name: 'db.load' })(() => () => queryBuilder());
+
+    expect(await load()).toBe('rows');
+  });
+
+  it('instrument() exposes the promise it returns for a thenable function', async () => {
+    const load = instrument({ key: 'db.load', fn: () => queryBuilder() });
+    const rows: Promise<string> = load();
+
+    expect(await rows).toBe('rows');
+  });
+});
 
 describe('trace() type inference', () => {
   it('trace(name)(fn) preserves the wrapped signature', async () => {

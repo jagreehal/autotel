@@ -5,6 +5,7 @@
  */
 
 import { getSessionAttributes } from './session';
+import { normaliseOtlpEndpoint } from './otlp-endpoint';
 
 let debug = false;
 let serviceName = 'browser';
@@ -28,10 +29,7 @@ export function configureExporter(
 ): void {
   debug = enableDebug;
   serviceName = service;
-  exportEndpoint = endpoint.replace(/\/$/, '');
-  if (!exportEndpoint.endsWith('/v1/traces')) {
-    exportEndpoint += '/v1/traces';
-  }
+  exportEndpoint = normaliseOtlpEndpoint(endpoint);
   if (!flushTimer) {
     flushTimer = setInterval(flushSpans, 2000);
   }

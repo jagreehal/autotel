@@ -30,6 +30,7 @@ import {
   countOtlpMetrics,
   isProtobufContentType,
 } from '../otlp';
+import { parseOtlpMetricStreams } from '../metric-streams';
 
 /**
  * Protobuf ingestion tests. The decisive guarantee for traces/logs is *interop*:
@@ -135,6 +136,66 @@ function metricsRequestBytes(metricNames: string[]): Buffer {
   return Buffer.from(RequestType.encode(message).finish());
 }
 
+function exponentialHistogramRequestBytes(): Buffer {
+  const { root } = protobuf.parse(
+    `
+    syntax = "proto3";
+    package otlptest.metrics;
+    message Buckets { sint32 offset = 1; repeated uint64 bucket_counts = 2; }
+    message Point {
+      fixed64 time_unix_nano = 3;
+      uint64 count = 4;
+      double sum = 5;
+      sint32 scale = 6;
+      uint64 zero_count = 7;
+      Buckets positive = 8;
+      Buckets negative = 9;
+      double zero_threshold = 14;
+    }
+    message ExponentialHistogram { repeated Point data_points = 1; int32 aggregation_temporality = 2; }
+    message Metric { string name = 1; oneof data { ExponentialHistogram exponential_histogram = 10; } }
+    message ScopeMetrics { repeated Metric metrics = 2; }
+    message ResourceMetrics { repeated ScopeMetrics scope_metrics = 2; }
+    message ExportMetricsServiceRequest { repeated ResourceMetrics resource_metrics = 1; }
+    `,
+    { keepCase: false },
+  );
+  const RequestType = root.lookupType(
+    'otlptest.metrics.ExportMetricsServiceRequest',
+  );
+  const message = RequestType.create({
+    resourceMetrics: [
+      {
+        scopeMetrics: [
+          {
+            metrics: [
+              {
+                name: 'rpc.duration',
+                exponentialHistogram: {
+                  aggregationTemporality: 2,
+                  dataPoints: [
+                    {
+                      timeUnixNano: String(BigInt(START_MS) * 1_000_000n),
+                      count: '7',
+                      sum: 12,
+                      scale: 2,
+                      zeroCount: '1',
+                      zeroThreshold: 0.001,
+                      positive: { offset: -1, bucketCounts: [2, 3] },
+                      negative: { offset: 0, bucketCounts: [1] },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  return Buffer.from(RequestType.encode(message).finish());
+}
+
 describe('isProtobufContentType', () => {
   it('recognises protobuf content types and rejects others', () => {
     expect(isProtobufContentType('application/x-protobuf')).toBe(true);
@@ -180,6 +241,22 @@ describe('decode OTLP/protobuf produced by the real OpenTelemetry SDK', () => {
       metricsRequestBytes(['requests_total', 'errors_total']),
     );
     expect(countOtlpMetrics(payload)).toBe(2);
+  });
+
+  it('preserves protobuf exponential histogram buckets', () => {
+    const decoded = decodeOtlpMetricsRequest(
+      exponentialHistogramRequestBytes(),
+    );
+    expect(JSON.stringify(decoded)).toContain('zeroCount');
+    const [stream] = parseOtlpMetricStreams(decoded);
+    expect(stream.kind).toBe('exponentialHistogram');
+    expect(stream.points[0]).toMatchObject({
+      scale: 2,
+      zeroCount: 1,
+      zeroThreshold: 0.001,
+      positive: { offset: -1, bucketCounts: [2, 3] },
+      negative: { offset: 0, bucketCounts: [1] },
+    });
   });
 });
 

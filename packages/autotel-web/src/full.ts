@@ -7,7 +7,11 @@
  * @see https://github.com/open-telemetry/semantic-conventions/issues/3385 (http.client.network_timing)
  */
 
-import { trace as otelTrace, context } from '@opentelemetry/api';
+import {
+  trace as otelTrace,
+  context,
+  SpanStatusCode,
+} from '@opentelemetry/api';
 import type { Sampler, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { SamplingDecision } from '@opentelemetry/sdk-trace-base';
 import {
@@ -34,6 +38,10 @@ import {
   hasBaggage,
   isBaggageDestinationAllowed,
 } from './baggage';
+import {
+  normaliseOtlpEndpoint,
+  selfInstrumentationIgnoreUrls,
+} from './otlp-endpoint';
 
 /**
  * Stamps session attributes in `onStart`, which is the only hook that can still
@@ -242,7 +250,9 @@ export function initFull(config: AutotelWebFullConfig): void {
     spanProcessors.push(config.spanProcessor);
   } else if (config.endpoint) {
     const exporter = new OTLPTraceExporter({
-      url: config.endpoint,
+      // Accept a bare origin as init() does; without this a bare origin POSTs
+      // to the collector root and 404s.
+      url: normaliseOtlpEndpoint(config.endpoint),
     });
     spanProcessors.push(
       new BatchSpanProcessor(exporter, {
@@ -284,6 +294,12 @@ export function initFull(config: AutotelWebFullConfig): void {
   if (config.captureNavigation !== false) {
     instrumentations.push(new DocumentLoadInstrumentation());
   }
+  // Never trace the exporter's own requests. Without this, each export POST
+  // creates a span, which is exported, which creates another span -- a
+  // feedback loop that floods the collector and starves real spans out of the
+  // batch buffer.
+  const selfUrls = selfInstrumentationIgnoreUrls(config.endpoint);
+
   if (config.captureFetch !== false) {
     const fetchOptions: ConstructorParameters<typeof FetchInstrumentation>[0] =
       {};
@@ -293,6 +309,9 @@ export function initFull(config: AutotelWebFullConfig): void {
           (o) => new RegExp(escapeRegex(o), 'i'),
         );
     }
+    if (selfUrls.length) {
+      fetchOptions.ignoreUrls = selfUrls;
+    }
     instrumentations.push(new FetchInstrumentation(fetchOptions));
   }
   if (config.captureXHR !== false) {
@@ -301,6 +320,9 @@ export function initFull(config: AutotelWebFullConfig): void {
     >[0] = {};
     if (config.privacy?.allowedOrigins?.length) {
       xhrOptions.propagateTraceHeaderCorsUrls = config.privacy.allowedOrigins;
+    }
+    if (selfUrls.length) {
+      xhrOptions.ignoreUrls = selfUrls;
     }
     instrumentations.push(new XMLHttpRequestInstrumentation(xhrOptions));
   }
@@ -496,6 +518,7 @@ export function span<T>(
           () => s.end(),
           (cause: unknown) => {
             s.recordException(toException(cause));
+            s.setStatus({ code: SpanStatusCode.ERROR });
             s.end();
           },
         );
@@ -505,6 +528,7 @@ export function span<T>(
       return result;
     } catch (cause) {
       s.recordException(toException(cause));
+      s.setStatus({ code: SpanStatusCode.ERROR });
       s.end();
       throw cause;
     }

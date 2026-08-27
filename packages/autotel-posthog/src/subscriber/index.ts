@@ -260,10 +260,10 @@ export interface FeatureFlagOptions {
   groups?: Record<string, string | number>;
 
   /** Group properties for feature flag evaluation */
-  groupProperties?: Record<string, Record<string, any>>;
+  groupProperties?: Record<string, Record<string, unknown>>;
 
   /** Person properties for feature flag evaluation */
-  personProperties?: Record<string, any>;
+  personProperties?: Record<string, unknown>;
 
   /** Only evaluate locally, don't send $feature_flag_called event */
   onlyEvaluateLocally?: boolean;
@@ -277,13 +277,13 @@ export interface FeatureFlagOptions {
  */
 export interface PersonProperties {
   /** Set properties (will update existing values) */
-  $set?: Record<string, any>;
+  $set?: Record<string, unknown>;
 
   /** Set properties only if they don't exist */
-  $set_once?: Record<string, any>;
+  $set_once?: Record<string, unknown>;
 
   /** Any custom properties */
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export class PostHogSubscriber extends EventSubscriber {
@@ -595,18 +595,14 @@ export class PostHogSubscriber extends EventSubscriber {
       this.browserClient?.capture(payload.name, redactedProperties);
     } else {
       // Server API: capture({ distinctId, event, properties, groups })
-      const capturePayload: any = {
+      this.posthog?.capture({
         distinctId,
         event: payload.name,
         properties: redactedProperties,
-      };
-
-      // Add groups if present in attributes
-      if (filteredAttributes?.groups) {
-        capturePayload.groups = filteredAttributes.groups;
-      }
-
-      this.posthog?.capture(capturePayload);
+        ...(filteredAttributes?.groups
+          ? { groups: filteredAttributes.groups as Record<string, string> }
+          : {}),
+      });
     }
   }
 
@@ -811,7 +807,7 @@ export class PostHogSubscriber extends EventSubscriber {
   async groupIdentify(
     groupType: string,
     groupKey: string | number,
-    properties?: Record<string, any>,
+    properties?: Record<string, unknown>,
   ): Promise<void> {
     if (!this.enabled) return;
     await this.ensureInitialized();

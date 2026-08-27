@@ -40,14 +40,10 @@
     traceServiceFilterSignal,
     toggleTraceServiceFilter,
     clearTraceServiceFilter,
-    traceTimeRangeFilterSignal,
-    traceTimeRangeCutoff,
+    connectionUrlSignal,
+    windowedTracesSignal,
   } from '../store.svelte';
-  import type {
-    TraceSortKey,
-    TraceStatusFilter,
-    TraceTimeRangeFilter,
-  } from '../store.svelte';
+  import type { TraceSortKey, TraceStatusFilter } from '../store.svelte';
   import { serviceColor } from '../utils/serviceColor';
   import { TRACE_LIST_SHORTCUTS } from '../shortcuts';
   import { formatDuration, formatTimestamp } from '../utils';
@@ -56,8 +52,14 @@
   import TraceImportModal from './TraceImportModal.svelte';
   import TraceDetailView from './TraceDetailView.svelte';
   import CopyButton from './CopyButton.svelte';
-  import SearchInput from './SearchInput.svelte';
   import FacetFilter from './FacetFilter.svelte';
+  import QueryBar from './QueryBar.svelte';
+  import TimeWindowPicker from './TimeWindowPicker.svelte';
+  import TailPill from './TailPill.svelte';
+  import { createTraceQuery } from '../signalQuery.svelte';
+  import { queryFields } from '../query-client';
+  import { infiniteScroll } from '../utils/infiniteScroll';
+  import { httpBaseFromWsUrl } from '../source-client';
   import type { Facet } from './facetFilter.types';
   import { useListKeyboardNav } from './listNav.svelte';
   import { matchesNeedle } from '../utils/textMatch';
@@ -74,12 +76,10 @@
     status: TraceStatusFilter,
     minDurationMs: number,
     services: Set<string>,
-    startCutoff: number,
   ): boolean {
     if (status === 'error' && trace.status !== 'ERROR') return false;
     if (status === 'ok' && trace.status === 'ERROR') return false;
     if (minDurationMs > 0 && trace.duration < minDurationMs) return false;
-    if (startCutoff > 0 && trace.startTime < startCutoff) return false;
     if (services.size > 0 && !services.has(trace.service || 'unknown'))
       return false;
     return matchesNeedle(query.toLowerCase(), [
@@ -92,6 +92,7 @@
   }
 
   const traces = $derived(sortedTracesSignal.value);
+  const windowedTraces = $derived(windowedTracesSignal.value);
   const sort = $derived(traceSortSignal.value);
   const selectedTrace = $derived(selectedTraceSignal.value);
   const paused = $derived(pausedSignal.value);
@@ -105,7 +106,6 @@
   const statusFilter = $derived(traceStatusFilterSignal.value);
   const minDuration = $derived(traceMinDurationSignal.value);
   const serviceFilter = $derived(traceServiceFilterSignal.value);
-  const timeRange = $derived(traceTimeRangeFilterSignal.value);
 
   // Service facet options with live counts over the full trace list, so the
   // dropdown always shows every service even while a subset is selected.
@@ -147,6 +147,7 @@
           clearTraceSelection();
         } else if (document.activeElement === searchRef) {
           traceQuerySignal.value = '';
+          traceQuery.setText('');
         }
       }
       if (e.key === 'a' && (e.metaKey || e.ctrlKey) && !isInputFocused()) {
@@ -158,21 +159,109 @@
     return () => window.removeEventListener('keydown', handleKeydown);
   });
 
+  // Server-side query controller. The store answers from the whole retained
+  // history — far more than the live tail holds, and the only way to see
+  // anything from before the process restarted.
+  const traceQuery = createTraceQuery({
+    client: {
+      fetch: globalThis.fetch.bind(globalThis),
+      baseUrl: queryBaseUrl,
+    },
+  });
+
+  /**
+   * Origin of the devtools server.
+   *
+   * Derived from the page in the full-page app and from the WS URL in the
+   * embedded widget, which may be served from a different origin than the host
+   * page it is embedded in.
+   */
+  function queryBaseUrl(): string {
+    const wsUrl = connectionUrlSignal.value;
+    return (
+      (wsUrl ? httpBaseFromWsUrl(wsUrl) : null) ?? globalThis.location.origin
+    );
+  }
+
+  $effect(() => () => traceQuery.dispose());
+
+  // Load persisted history on mount, and retarget if an embedded widget learns
+  // its server URL after this child component was created.
+  let lastQueryOrigin = $state<string | null>(null);
+  let queryFieldsList = $state<string[]>([]);
+  $effect(() => {
+    const origin = queryBaseUrl();
+    if (origin === lastQueryOrigin) return;
+    lastQueryOrigin = origin;
+    void queryFields('traces', {
+      fetch: globalThis.fetch.bind(globalThis),
+      baseUrl: origin,
+    }).then((fields) => (queryFieldsList = fields));
+    if (!traceQuery.ready.value && traceQuerySignal.value) {
+      traceQuery.setText(traceQuerySignal.value);
+    } else {
+      void traceQuery.refresh();
+    }
+  });
+
+  // New traces arriving over the live stream: while live this refreshes the
+  // list, while frozen it only increments the pill's count.
+  let lastSeenCount = $state(0);
+  $effect(() => {
+    const count = traces.length;
+    if (count > lastSeenCount) {
+      traceQuery.arrived(count - lastSeenCount);
+    }
+    lastSeenCount = count;
+  });
+
+  // Selecting a row freezes the tail, so the list cannot reorder underneath the
+  // trace someone has just opened.
+  $effect(() => {
+    traceQuery.setSelected(selectedTrace != null);
+  });
+
+  const serverResults = $derived(traceQuery.results.value);
+
+  /**
+   * The rows to render.
+   *
+   * The server owns the list whenever it has answered. The client-side filter
+   * below remains the fallback for two cases the server cannot serve: traces
+   * imported from a file (they exist only in the browser), and a devtools
+   * server that is unreachable — where showing the live tail beats showing
+   * nothing.
+   */
   const filtered = $derived.by(() => {
-    // Recomputes as traces stream in, so the relative window stays fresh without
-    // a dedicated timer.
-    const startCutoff = traceTimeRangeCutoff(timeRange, Date.now());
-    return traces.filter((trace) =>
+    const serverReady =
+      traceQuery.ready.value && traceQuery.failure.value === null;
+    let source = windowedTraces;
+    if (serverReady) {
+      source =
+        query.length > 0
+          ? serverResults
+          : mergeTraceRows(serverResults, windowedTraces);
+    }
+    // The window is applied by the shared `windowedTracesSignal`, so the
+    // fallback only has the list-local filters left to apply.
+    return source.filter((trace) =>
       traceMatches(
         trace,
-        query,
+        serverReady ? '' : query,
         statusFilter,
         minDuration,
         serviceFilter,
-        startCutoff,
       ),
     );
   });
+
+  function mergeTraceRows(
+    stored: TraceData[],
+    local: TraceData[],
+  ): TraceData[] {
+    const ids = new Set(stored.map((trace) => trace.traceId));
+    return [...stored, ...local.filter((trace) => !ids.has(trace.traceId))];
+  }
 
   // Keyboard row navigation over the filtered list.
   let listRef: HTMLDivElement | undefined = $state();
@@ -192,16 +281,40 @@
   });
 
   function handleExportSelected() {
-    const selected = traces.filter((t) => selectedIds.has(t.traceId));
+    const selected = filtered.filter((t) => selectedIds.has(t.traceId));
     if (selected.length > 0) downloadTracesAsJson(selected);
+  }
+
+  async function handleDeleteSelected() {
+    const traceIds = [...selectedIds];
+    if (
+      traceIds.length === 0 ||
+      !globalThis.confirm(
+        `Delete ${traceIds.length} stored trace${traceIds.length === 1 ? '' : 's'}?`,
+      )
+    )
+      return;
+    try {
+      await fetch(`${queryBaseUrl()}/api/traces`, {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ traceIds }),
+      });
+    } catch {
+      // Imported traces and older receivers have no durable delete endpoint;
+      // they still retain the established local-delete behaviour.
+    } finally {
+      const deletedIds = new Set(traceIds);
+      traceQuery.removeRows((trace) => deletedIds.has(trace.traceId));
+      deleteSelectedTraces();
+    }
   }
 
   const isFiltered = $derived(
     query.length > 0 ||
       statusFilter !== 'all' ||
       minDuration > 0 ||
-      serviceFilter.size > 0 ||
-      timeRange !== 'all',
+      serviceFilter.size > 0,
   );
   const allFilteredSelected = $derived(
     filtered.length > 0 && filtered.every((t) => selectedIds.has(t.traceId)),
@@ -243,6 +356,9 @@
   <div
     class={cn(
       'group trace-grid px-4 py-2 border-b border-line-subtle cursor-pointer transition-colors',
+      // Offscreen rows are skipped by the browser rather than windowed by us,
+      // so they stay real DOM for find-in-page and screen readers.
+      'row-virtual',
       isSelected
         ? 'bg-accent/10'
         : isError
@@ -384,7 +500,7 @@
               Export ({selectedCount})
             </button>
             <button
-              onclick={deleteSelectedTraces}
+              onclick={handleDeleteSelected}
               class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-danger-bg text-danger hover:bg-danger-bg/80 transition-colors"
               title="Delete selected traces"
             >
@@ -428,9 +544,9 @@
         >
           <Upload size={14} class="text-fg-subtle" />
         </button>
-        {#if traces.length > 0}
+        {#if filtered.length > 0}
           <button
-            onclick={() => downloadTracesAsJson(traces)}
+            onclick={() => downloadTracesAsJson(filtered)}
             class="p-1.5 hover:bg-hover rounded transition-colors"
             title="Export all traces as JSON"
           >
@@ -449,11 +565,31 @@
 
     <!-- Filter bar -->
     <div class="px-4 py-2 border-b border-line flex items-center gap-2">
-      <SearchInput
-        value={query}
-        onValue={(v) => (traceQuerySignal.value = v)}
+      <QueryBar
+        value={traceQuery.text.value}
+        onInput={(v) => {
+          traceQuery.setText(v);
+          // Mirrored into the legacy signal so the shareable URL and the
+          // client-side fallback filter both stay in step with what was typed.
+          traceQuerySignal.value = v;
+        }}
+        onSubmit={() => traceQuery.submit()}
+        serverErrors={traceQuery.errors.value}
+        fields={queryFieldsList}
         bind:ref={searchRef}
-        placeholder="Filter by service, span, trace id…"
+        class="flex-1"
+      />
+      <TimeWindowPicker
+        selection={traceQuery.window.value}
+        onChange={(next) => traceQuery.setWindow(next)}
+      />
+      <TailPill
+        count={traceQuery.pending}
+        live={traceQuery.live}
+        onResume={() => {
+          traceQuerySignal.value = '';
+          traceQuery.resume();
+        }}
       />
       <select
         value={statusFilter}
@@ -466,20 +602,6 @@
         <option value="all">All</option>
         <option value="error">Errors</option>
         <option value="ok">OK</option>
-      </select>
-      <select
-        value={timeRange}
-        onchange={(event) =>
-          (traceTimeRangeFilterSignal.value = (
-            event.currentTarget as HTMLSelectElement
-          ).value as TraceTimeRangeFilter)}
-        class="text-xs border border-line rounded px-1.5 py-1 bg-surface text-fg-muted"
-        title="Only show traces that started within this window"
-      >
-        <option value="all">Any time</option>
-        <option value="5m">Last 5m</option>
-        <option value="15m">Last 15m</option>
-        <option value="1h">Last 1h</option>
       </select>
       {#if showFacets}
         <FacetFilter
@@ -517,9 +639,43 @@
       tabindex="0"
       onkeydown={nav.onKeyDown}
     >
-      {#if traces.length === 0}
+      {#if traceQuery.loading.value && !traceQuery.ready.value && traces.length === 0}
         <div class="text-center text-fg-subtle text-sm py-12">
-          <p class="mb-3">No traces yet. Waiting for data…</p>
+          Loading traces…
+        </div>
+      {:else if filtered.length === 0 && !isFiltered}
+        <div
+          class="mx-auto flex max-w-2xl flex-col items-center gap-3 px-6 py-12 text-center text-sm text-fg-subtle"
+        >
+          <p class="font-medium text-fg">
+            No traces yet — send telemetry to get started
+          </p>
+          <p class="max-w-lg text-xs text-fg-muted">
+            Both standard OTLP transports are ready. Existing SDK defaults
+            usually work unchanged.
+          </p>
+          <div class="grid w-full gap-2 text-left md:grid-cols-2">
+            <div class="rounded-md border border-line bg-subtle p-3">
+              <div
+                class="mb-1 text-[11px] font-semibold uppercase tracking-wide"
+              >
+                OTLP/gRPC
+              </div>
+              <code class="break-all text-xs text-fg"
+                >OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317</code
+              >
+            </div>
+            <div class="rounded-md border border-line bg-subtle p-3">
+              <div
+                class="mb-1 text-[11px] font-semibold uppercase tracking-wide"
+              >
+                OTLP/HTTP
+              </div>
+              <code class="break-all text-xs text-fg"
+                >OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318</code
+              >
+            </div>
+          </div>
         </div>
       {:else if filtered.length === 0}
         <div class="text-center text-fg-subtle text-sm py-12">
@@ -558,6 +714,21 @@
           {#each filtered as trace, index (trace.traceId)}
             {@render traceRow(trace, selectedIds.has(trace.traceId), index)}
           {/each}
+
+          <!-- Paging sentinel: reaching it fetches the next page from the
+               store. Only meaningful when the server is the source; the
+               client-side fallback has nothing further to fetch. -->
+          {#if traceQuery.nextCursor.value}
+            <div
+              use:infiniteScroll={{
+                onReach: () => traceQuery.loadMore(),
+                disabled: traceQuery.loading.value,
+              }}
+              class="px-4 py-3 text-center text-xs text-fg-subtle"
+            >
+              {traceQuery.loading.value ? 'Loading…' : 'Scroll for more'}
+            </div>
+          {/if}
         </div>
       {/if}
     </div>

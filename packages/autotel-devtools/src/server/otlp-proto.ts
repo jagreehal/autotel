@@ -199,8 +199,8 @@ message ExportLogsServiceRequest {
 // Metrics schema. Decodes the structural envelope AND the Sum/Gauge/Histogram
 // data points (number + histogram), so coding-agent counters
 // (token/cost/lines/…) and their attributes survive — not just the metric name.
-// Field numbers match the frozen OTLP v1 spec; unread fields (exemplars, flags,
-// exponential histogram, summary) are skipped as unknown fields.
+// Field numbers match the OTLP v1 spec. Every aggregation and exemplar field
+// the viewer renders is decoded so protobuf and JSON ingestion have parity.
 const METRICS_PROTO = `
 syntax = "proto3";
 package opentelemetry.proto.metrics.v1;
@@ -228,6 +228,8 @@ message Metric {
     Gauge gauge = 5;
     Sum sum = 7;
     Histogram histogram = 9;
+    ExponentialHistogram exponential_histogram = 10;
+    Summary summary = 11;
   }
 }
 message Gauge {
@@ -242,6 +244,13 @@ message Histogram {
   repeated HistogramDataPoint data_points = 1;
   AggregationTemporality aggregation_temporality = 2;
 }
+message ExponentialHistogram {
+  repeated ExponentialHistogramDataPoint data_points = 1;
+  AggregationTemporality aggregation_temporality = 2;
+}
+message Summary {
+  repeated SummaryDataPoint data_points = 1;
+}
 message NumberDataPoint {
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 7;
   fixed64 start_time_unix_nano = 2;
@@ -250,15 +259,66 @@ message NumberDataPoint {
     double as_double = 4;
     sfixed64 as_int = 6;
   }
+  repeated Exemplar exemplars = 5;
+  uint32 flags = 8;
 }
 message HistogramDataPoint {
   repeated opentelemetry.proto.common.v1.KeyValue attributes = 9;
   fixed64 start_time_unix_nano = 2;
   fixed64 time_unix_nano = 3;
-  fixed64 count = 4;
+  uint64 count = 4;
   double sum = 5;
-  repeated fixed64 bucket_counts = 6;
+  repeated uint64 bucket_counts = 6;
   repeated double explicit_bounds = 7;
+  repeated Exemplar exemplars = 8;
+  uint32 flags = 10;
+  double min = 11;
+  double max = 12;
+}
+message ExponentialHistogramDataPoint {
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 1;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  uint64 count = 4;
+  double sum = 5;
+  sint32 scale = 6;
+  uint64 zero_count = 7;
+  Buckets positive = 8;
+  Buckets negative = 9;
+  uint32 flags = 10;
+  repeated Exemplar exemplars = 11;
+  double min = 12;
+  double max = 13;
+  double zero_threshold = 14;
+
+  message Buckets {
+    sint32 offset = 1;
+    repeated uint64 bucket_counts = 2;
+  }
+}
+message SummaryDataPoint {
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 7;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  uint64 count = 4;
+  double sum = 5;
+  repeated ValueAtQuantile quantile_values = 6;
+  uint32 flags = 8;
+
+  message ValueAtQuantile {
+    double quantile = 1;
+    double value = 2;
+  }
+}
+message Exemplar {
+  repeated opentelemetry.proto.common.v1.KeyValue filtered_attributes = 7;
+  fixed64 time_unix_nano = 2;
+  oneof value {
+    double as_double = 3;
+    sfixed64 as_int = 6;
+  }
+  bytes span_id = 4;
+  bytes trace_id = 5;
 }
 message ExportMetricsServiceRequest {
   repeated ResourceMetrics resource_metrics = 1;

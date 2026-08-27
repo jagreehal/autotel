@@ -1,20 +1,66 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   updateWidgetData,
   clearAllData,
   sortedTracesSignal,
   sortedLogsSignal,
-  traceTimeRangeCutoff,
+  windowedTracesSignal,
+  timeWindowSignal,
+  tracesSignal,
+  windowedErrorGroupsSignal,
+  errorGroupsSignal,
+  flowCountSignal,
+  selectedTraceSignal,
+  setSelectedTrace,
+  storeTracesSignal,
+  workingSetStatusSignal,
+  selectAllTraces,
+  selectedTraceIdsSignal,
+  toggleTraceSelection,
+  deleteSelectedTraces,
 } from '../store.svelte';
 import {
   makeTrace,
   makeLog,
   makeSpan,
 } from '../../server/__tests__/test-utils/stubs';
+import type { SpanData, TraceData } from '../types';
 
 describe('Widget Store', () => {
   beforeEach(() => {
     clearAllData();
+    storeTracesSignal.value = [];
+    workingSetStatusSignal.value = 'pending';
+    selectedTraceIdsSignal.value = new Set();
+  });
+
+  it('opens a trace loaded from the durable working set', () => {
+    const stored = makeTrace({ traceId: 'stored-trace' });
+    storeTracesSignal.value = [stored];
+    workingSetStatusSignal.value = 'ready';
+
+    setSelectedTrace('stored-trace');
+
+    expect(selectedTraceSignal.value?.traceId).toBe('stored-trace');
+  });
+
+  it('selects traces loaded from the durable working set', () => {
+    storeTracesSignal.value = [makeTrace({ traceId: 'stored-trace' })];
+    workingSetStatusSignal.value = 'ready';
+
+    selectAllTraces();
+
+    expect([...selectedTraceIdsSignal.value]).toEqual(['stored-trace']);
+  });
+
+  it('removes a deleted trace from the durable working set', () => {
+    storeTracesSignal.value = [makeTrace({ traceId: 'stored-trace' })];
+    workingSetStatusSignal.value = 'ready';
+    toggleTraceSelection('stored-trace');
+
+    deleteSelectedTraces();
+
+    expect(storeTracesSignal.value).toEqual([]);
   });
 
   describe('updateWidgetData - traces', () => {
@@ -157,24 +203,171 @@ describe('Widget Store', () => {
       const log = makeLog({ id: 'l1' });
 
       updateWidgetData({ traces: [trace], logs: [log] });
+      storeTracesSignal.value = [trace];
+      workingSetStatusSignal.value = 'ready';
+      toggleTraceSelection('t1');
 
       clearAllData();
 
       expect(sortedTracesSignal.value).toHaveLength(0);
       expect(sortedLogsSignal.value).toHaveLength(0);
+      expect(storeTracesSignal.value).toHaveLength(0);
+      expect(selectedTraceIdsSignal.value.size).toBe(0);
     });
   });
+});
 
-  describe('traceTimeRangeCutoff', () => {
-    it('returns 0 for the "all" range (no lower bound)', () => {
-      expect(traceTimeRangeCutoff('all', 1_000_000)).toBe(0);
-    });
+describe('windowedTracesSignal', () => {
+  /**
+   * Every view derived from traces reads this rather than the raw list. A view
+   * that ignores the window is worse than one without a window at all: the
+   * control says the range is narrowed and the screen disagrees.
+   */
+  const NOW = Date.now();
 
-    it('subtracts the window from now for bounded ranges', () => {
-      const now = 10_000_000;
-      expect(traceTimeRangeCutoff('5m', now)).toBe(now - 5 * 60 * 1000);
-      expect(traceTimeRangeCutoff('15m', now)).toBe(now - 15 * 60 * 1000);
-      expect(traceTimeRangeCutoff('1h', now)).toBe(now - 60 * 60 * 1000);
-    });
+  function traceAt(id: string, startTime: number, spanCount = 1): TraceData {
+    const spans: SpanData[] = Array.from({ length: spanCount }, (_, index) => ({
+      spanId: `s-${id}-${index}`,
+      traceId: id,
+      parentSpanId: index === 0 ? undefined : `s-${id}-0`,
+      name: 'op',
+      kind: 'INTERNAL',
+      startTime,
+      endTime: startTime + 1,
+      duration: 1,
+      attributes: {},
+      status: { code: 'UNSET' },
+      events: [],
+    }));
+    return {
+      traceId: id,
+      correlationId: id,
+      spans,
+      rootSpan: spans[0],
+      startTime,
+      endTime: startTime + 1,
+      duration: 1,
+      status: 'OK',
+      service: 'api',
+    };
+  }
+
+  beforeEach(() => {
+    timeWindowSignal.value = { type: 'preset', preset: 'all' };
+    tracesSignal.value = [
+      traceAt('recent', NOW - 60_000),
+      traceAt('old', NOW - 60 * 60_000),
+    ];
+  });
+
+  afterEach(() => {
+    timeWindowSignal.value = { type: 'preset', preset: 'all' };
+    tracesSignal.value = [];
+  });
+
+  it('passes everything through for the unbounded default', () => {
+    expect(windowedTracesSignal.value).toHaveLength(2);
+  });
+
+  it('drops traces outside a bounded window', () => {
+    timeWindowSignal.value = { type: 'preset', preset: '15m' };
+    expect(windowedTracesSignal.value.map((t) => t.traceId)).toEqual([
+      'recent',
+    ]);
+  });
+
+  it('honours an explicit custom window', () => {
+    timeWindowSignal.value = {
+      type: 'custom',
+      start: NOW - 2 * 60 * 60_000,
+      end: NOW - 30 * 60_000,
+    };
+    expect(windowedTracesSignal.value.map((t) => t.traceId)).toEqual(['old']);
+  });
+
+  it('returns nothing when the window excludes everything', () => {
+    // Empty is a finding, not a rendering problem — it must not fall back to
+    // showing the full list.
+    timeWindowSignal.value = {
+      type: 'custom',
+      start: NOW + 60_000,
+      end: NOW + 120_000,
+    };
+    expect(windowedTracesSignal.value).toEqual([]);
+  });
+
+  it('counts flow traces only inside the selected window', () => {
+    tracesSignal.value = [
+      traceAt('recent', NOW - 60_000),
+      traceAt('old-flow', NOW - 60 * 60_000, 2),
+    ];
+    timeWindowSignal.value = { type: 'preset', preset: '15m' };
+
+    expect(flowCountSignal.value).toBe(0);
+  });
+});
+
+describe('windowedErrorGroupsSignal', () => {
+  /**
+   * An error group spans a range rather than sitting at an instant, so the
+   * window test is **overlap**. Testing `firstSeen` alone would hide an error
+   * that started before the window and is still happening — which is exactly
+   * the one you opened the tab to find.
+   */
+  const NOW = Date.now();
+
+  function group(fingerprint: string, firstSeen: number, lastSeen: number) {
+    return {
+      fingerprint,
+      type: 'Error',
+      message: 'boom',
+      count: 1,
+      firstSeen,
+      lastSeen,
+      affectedTraces: [],
+      affectedSpans: [],
+    };
+  }
+
+  beforeEach(() => {
+    timeWindowSignal.value = { type: 'preset', preset: 'all' };
+  });
+
+  afterEach(() => {
+    timeWindowSignal.value = { type: 'preset', preset: 'all' };
+    errorGroupsSignal.value = [];
+  });
+
+  it('passes everything through for the unbounded default', () => {
+    errorGroupsSignal.value = [
+      group('a', NOW - 60 * 60_000, NOW - 60 * 60_000),
+    ];
+    expect(windowedErrorGroupsSignal.value).toHaveLength(1);
+  });
+
+  it('keeps a group that started before the window but is still happening', () => {
+    errorGroupsSignal.value = [group('ongoing', NOW - 60 * 60_000, NOW)];
+    timeWindowSignal.value = { type: 'preset', preset: '15m' };
+    expect(windowedErrorGroupsSignal.value.map((g) => g.fingerprint)).toEqual([
+      'ongoing',
+    ]);
+  });
+
+  it('drops a group that finished before the window', () => {
+    errorGroupsSignal.value = [
+      group('old', NOW - 120 * 60_000, NOW - 60 * 60_000),
+    ];
+    timeWindowSignal.value = { type: 'preset', preset: '15m' };
+    expect(windowedErrorGroupsSignal.value).toEqual([]);
+  });
+
+  it('drops a group that starts after the window ends', () => {
+    errorGroupsSignal.value = [group('future', NOW + 60_000, NOW + 120_000)];
+    timeWindowSignal.value = {
+      type: 'custom',
+      start: NOW - 60_000,
+      end: NOW,
+    };
+    expect(windowedErrorGroupsSignal.value).toEqual([]);
   });
 });

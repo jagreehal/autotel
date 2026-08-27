@@ -2,7 +2,7 @@
  * Graceful shutdown with flush and cleanup
  */
 
-import { getSdk, getLogger, _closeEmbeddedDevtools } from './init';
+import { getSdk, getLogger, getConfig, _closeEmbeddedDevtools } from './init';
 import { getEventQueue, resetEventQueue } from './track';
 import { resetEvents } from './event';
 import { resetMetrics } from './metric';
@@ -25,6 +25,20 @@ const UNREACHABLE_ENDPOINT_CODES = new Set([
 
 function errorCode(cause: unknown): string | undefined {
   return asString(readProperty(cause, 'code'));
+}
+
+/**
+ * A bare "Flush timeout" left you with a stack trace into bundled internals and
+ * nothing to act on. Name how long we waited and where we were sending, since
+ * the usual cause is that nothing is listening at that endpoint.
+ */
+function flushTimeoutMessage(timeout: number): string {
+  const endpoint = getConfig()?.endpoint;
+  const target = endpoint === undefined ? '' : ` sending to ${endpoint}`;
+  return (
+    `Flush timeout after ${timeout}ms${target}. ` +
+    'No collector acknowledged the export; check that one is running and reachable.'
+  );
 }
 
 /**
@@ -119,7 +133,7 @@ export async function flush(options?: {
       }),
       new Promise<void>((_, reject) => {
         timeoutHandle = setTimeout(
-          () => reject(new Error('Flush timeout')),
+          () => reject(new Error(flushTimeoutMessage(timeout))),
           timeout,
         );
         // Use unref() to allow Node to exit if flush completes first

@@ -775,6 +775,31 @@ app.use((req, res, next) => {
 - Baggage values are strings (convert numbers/objects before setting)
 - Never put PII in baggage - it propagates in HTTP headers across services!
 
+### Getting the trace id, and a link to it
+
+`getActiveTraceContext()` reads the trace currently in scope, and
+`resolveTraceUrl()` turns its id into a link to wherever you view traces. Printing
+that link beside a slow request is the shortest path from "this was slow" to
+looking at why:
+
+```typescript
+import { getActiveTraceContext, resolveTraceUrl, span } from 'autotel';
+
+await span('GET /feed', async () => {
+  const traceId = getActiveTraceContext()?.traceId;
+  const url = resolveTraceUrl(
+    'http://localhost:4318/#trace={traceId}',
+    traceId,
+  );
+  console.log(`feed request ${url ?? traceId}`);
+});
+```
+
+`resolveTraceUrl(template, traceId)` substitutes `{traceId}`. Pass `undefined`
+as the template and it falls back to `OTEL_TRACE_URL_TEMPLATE`, so the same code
+points at devtools locally and at your vendor in production without a branch.
+It returns `undefined` when neither is set.
+
 ### Reusable Middleware Helpers
 
 - `withTracing(options)` : create a preconfigured wrapper (service name, default attributes, skip rules).

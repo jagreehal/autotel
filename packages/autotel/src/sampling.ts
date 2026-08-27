@@ -26,6 +26,8 @@ import type { Link, Attributes } from '@opentelemetry/api';
 import { TraceFlags } from '@opentelemetry/api';
 import { type Logger } from './logger';
 import { asStringRecord, type UnknownRecord } from './values';
+import { propagation } from '@opentelemetry/api';
+import { getActiveContextWithBaggage } from './trace-context';
 
 /**
  * Tail sampling attribute keys (autotel-internal, not OTel semconv)
@@ -42,6 +44,32 @@ export const AUTOTEL_SAMPLING_TAIL_EVALUATED =
  * attribute only when N exceeds 1, so fully captured spans stay clean.
  */
 export const AUTOTEL_SAMPLING_RATE = 'autotel.sampling.rate';
+
+/**
+ * Spans an explicit `forceKeep()` claimed.
+ *
+ * The tracing wrapper writes the sampler's tail verdict once the body has
+ * run, which is after any `forceKeep()` inside it. Without this the verdict
+ * overwrites the override and the span the caller insisted on is dropped.
+ */
+/**
+ * Baggage key that turns on full-fidelity capture for a request.
+ *
+ * Baggage arrives on the request and propagates, so a gateway, a proxy, a
+ * feature flag or a curl can turn this on for one user and it follows them
+ * across every service. Nobody deploys anything to debug a live problem.
+ */
+export const AUTOTEL_DEBUG_BAGGAGE_KEY = 'autotel.debug';
+
+const forceKeptSpans = new WeakSet<object>();
+
+export function markForceKept(span: object): void {
+  forceKeptSpans.add(span);
+}
+
+export function isForceKept(span: object): boolean {
+  return forceKeptSpans.has(span);
+}
 
 /**
  * Convert a keep probability into the "1 in N" rate reported on spans.
@@ -937,4 +965,12 @@ function isValidSpanContext(
     spanContext.traceId !== '00000000000000000000000000000000' &&
     spanContext.spanId !== '0000000000000000'
   );
+}
+
+/** True when the request in flight asked for full-fidelity capture. */
+export function debugCaptureRequested(): boolean {
+  const entry = propagation
+    .getBaggage(getActiveContextWithBaggage())
+    ?.getEntry(AUTOTEL_DEBUG_BAGGAGE_KEY);
+  return entry !== undefined && entry.value !== '' && entry.value !== '0';
 }

@@ -1,5 +1,6 @@
 // src/server/otlp.ts
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { gzipSync } from 'node:zlib';
 import type { SpanData, TraceData, LogData } from './types';
 import type {
   OtelMetricRecord,
@@ -37,7 +38,7 @@ function resolveOtlpValue(v?: OtlpAnyValue): AttributeValue {
   return undefined;
 }
 
-function flattenAttributes(attrs?: OtlpKeyValue[]): SpanAttributes {
+export function flattenAttributes(attrs?: OtlpKeyValue[]): SpanAttributes {
   const out: SpanAttributes = {};
   if (!attrs) return out;
   for (const { key, value } of attrs) {
@@ -74,7 +75,7 @@ function agentAttributes(attributes: SpanAttributes): Attributes {
   return attributes as Attributes;
 }
 
-function nanoToMs(nano?: string): number {
+export function nanoToMs(nano?: string): number {
   if (!nano) return 0;
   // Split into integer ms (kept in BigInt to stay exact at epoch magnitude,
   // which exceeds Number.MAX_SAFE_INTEGER in nanoseconds) plus the sub-ms
@@ -102,7 +103,7 @@ const SPAN_KIND_MAP = new Map<number | string, SpanData['kind']>([
   ['SPAN_KIND_CONSUMER', 'CONSUMER'],
 ]);
 
-function normalizeHexId(id?: string): string {
+export function normalizeHexId(id?: string): string {
   if (!id) return '';
   // Only attempt base64 decode for strings that look like base64-encoded binary IDs
   // (length 12 for 8-byte span IDs, 24/28 for 16-byte trace IDs, etc; valid base64
@@ -422,15 +423,51 @@ export function isProtobufContentType(contentType?: string): boolean {
   );
 }
 
+/**
+ * Below this, gzip costs more than it saves: the header alone is 18 bytes and
+ * a small body already fits one segment.
+ */
+const GZIP_MIN_BYTES = 1024;
+
+/**
+ * Send JSON, gzipped when the client accepts it and the body is big enough.
+ *
+ * A trace payload is mostly repeated keys and near-identical ids and strings,
+ * which is the shape deflate handles best: a 4,891-span trace measures 2,078
+ * KiB raw against 41 KiB gzipped. Reshaping the payload to dedupe scopes and
+ * drop the repeated trace id was measured against this and is not worth doing,
+ * since deflate already removes what such a dedupe removes.
+ *
+ * `res.req` is Node's own back-reference to the request, so the negotiation
+ * needs nothing threaded through the twenty-odd call sites.
+ */
 export function sendJson<TBody>(
   res: ServerResponse,
   status: number,
   data: TBody,
 ): void {
-  const body = JSON.stringify(data);
+  const body = Buffer.from(JSON.stringify(data), 'utf8');
+  const accepted = String(res.req?.headers['accept-encoding'] ?? '');
+
+  if (accepted.includes('gzip') && body.byteLength >= GZIP_MIN_BYTES) {
+    // ponytail: synchronous, like the rest of the read path. A multi-megabyte
+    // response blocks the loop for tens of ms; move to the async gzip if a
+    // local dev tool ever has more than one impatient client.
+    const packed = gzipSync(body);
+    res.writeHead(status, {
+      'Content-Type': 'application/json',
+      'Content-Encoding': 'gzip',
+      Vary: 'Accept-Encoding',
+      'Content-Length': packed.byteLength,
+    });
+    res.end(packed);
+    return;
+  }
+
   res.writeHead(status, {
     'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(body),
+    Vary: 'Accept-Encoding',
+    'Content-Length': body.byteLength,
   });
   res.end(body);
 }

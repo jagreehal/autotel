@@ -35,6 +35,23 @@ const meta = {
   beforeEach: () => {
     clearAllData();
     setPaused(false);
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (
+      url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const href = String(url);
+      if (href.endsWith('/api/query/logs/fields')) {
+        return new Response(JSON.stringify({ fields: [] }));
+      }
+      if (href.endsWith('/api/query/logs')) {
+        return new Response(JSON.stringify({ logs: [], nextCursor: null }));
+      }
+      return original(url, init);
+    }) as typeof fetch;
+    return () => {
+      globalThis.fetch = original;
+    };
   },
 } satisfies Meta<typeof LogsView>;
 
@@ -44,7 +61,7 @@ type Story = StoryObj<typeof meta>;
 export const Empty: Story = {
   play: async ({ canvas }) => {
     await expect(
-      canvas.getByText(/No logs yet\. Send logs via AutotelLogExporter/),
+      await canvas.findByText(/No logs yet\. Send logs via AutotelLogExporter/),
     ).toBeInTheDocument();
   },
 };

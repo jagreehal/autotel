@@ -1,4 +1,4 @@
-import type { TraceData, SpanData, LogData, MetricData } from '../../types';
+import type { TraceData, SpanData, LogData } from '../../types';
 
 export function makeSpan(overrides: Partial<SpanData> = {}): SpanData {
   const traceId = overrides.traceId ?? 'trace-1';
@@ -47,17 +47,6 @@ export function makeLog(overrides: Partial<LogData> = {}): LogData {
     severityNumber: overrides.severityNumber,
     attributes: overrides.attributes,
     resource: overrides.resource,
-  };
-}
-
-export function makeMetric(overrides: Partial<MetricData> = {}): MetricData {
-  return {
-    type: overrides.type ?? 'event',
-    name: overrides.name ?? 'user.signup',
-    value: overrides.value,
-    attributes: overrides.attributes ?? {},
-    timestamp: overrides.timestamp ?? Date.now(),
-    traceId: overrides.traceId,
   };
 }
 

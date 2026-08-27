@@ -3,6 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import type { TelemetryBackend } from '../backends/telemetry';
 import { detectAnomalies } from '../modules/anomaly';
 import { findRootCause } from '../modules/correlator';
+import { findRepeatedQueries } from '../modules/repeated-queries';
+import { compactTrace } from '../modules/trace-payload';
 import { respondJSON, READ_ONLY } from './shared';
 import { nonEmptyString } from '../lib/values';
 
@@ -90,7 +92,38 @@ export function registerDiagnosisTools(
         return respondJSON({ error: `Trace not found: ${traceId}` });
       }
       const result = findRootCause(trace);
-      return respondJSON(result);
+      // The bottleneck span otherwise carries the whole service, host and
+      // process identity, which is the same on every span in the trace.
+      const { resource } = compactTrace(trace, { includeSpans: false });
+      const tags = Object.fromEntries(
+        Object.entries(result.bottleneck.tags).filter(
+          ([key]) => !(key in resource),
+        ),
+      );
+      return respondJSON({
+        ...result,
+        resource,
+        bottleneck: { ...result.bottleneck, tags },
+      });
+    },
+  );
+
+  server.registerTool(
+    'find_repeated_queries',
+    {
+      description:
+        "Group a trace's database spans by statement and report the ones that ran more than once. Use for N+1 detection: find_root_cause names the single slowest span, which on an N+1 is one cheap query among hundreds, so the repeat count is the finding rather than the duration.",
+      annotations: READ_ONLY,
+      inputSchema: z.object({
+        traceId: z.string().min(1),
+      }),
+    },
+    async ({ traceId }: { traceId: string }) => {
+      const trace = await backend.getTrace(traceId);
+      if (!trace) {
+        return respondJSON({ error: `Trace not found: ${traceId}` });
+      }
+      return respondJSON(findRepeatedQueries(trace));
     },
   );
 

@@ -213,6 +213,40 @@ describe('instrumentDrizzle', () => {
     expect(getSpan().name).toBe('drizzle.select');
   });
 
+  it('names spans after the library by default', async () => {
+    const client = {
+      query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
+    };
+    instrumentDrizzle(client, testConfig());
+
+    await client.query('SELECT id FROM comments WHERE post_id = $1');
+
+    expect(getSpan().name).toBe('drizzle.select');
+  });
+
+  it('names spans the way semconv asks when spanNaming is semconv', async () => {
+    const client = {
+      query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
+    };
+    instrumentDrizzle(client, testConfig({ spanNaming: 'semconv' }));
+
+    await client.query('SELECT id FROM comments WHERE post_id = $1');
+
+    // Semconv: "{db.operation.name} {target}", e.g. the MySQL example "SELECT orders".
+    expect(getSpan().name).toBe('SELECT comments');
+  });
+
+  it('falls back to the operation alone when no table can be read', async () => {
+    const client = {
+      query: vi.fn(async (_query: DrizzleQuery) => ({ rows: [] })),
+    };
+    instrumentDrizzle(client, testConfig({ spanNaming: 'semconv' }));
+
+    await client.query('SELECT 1');
+
+    expect(getSpan().name).toBe('SELECT');
+  });
+
   it('wraps both query and execute when both methods exist', async () => {
     const client = {
       query: vi.fn(async (_query: DrizzleQuery) => ({ source: 'query' })),

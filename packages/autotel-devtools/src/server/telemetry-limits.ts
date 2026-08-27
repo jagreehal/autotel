@@ -3,14 +3,12 @@ import type { DevtoolsData } from './types';
 export interface TelemetryLimits {
   maxTraceCount: number;
   maxLogCount: number;
-  maxMetricCount: number;
 }
 
 export interface ResolveTelemetryLimitsArgs {
   maxHistory?: number;
   maxTraceCount?: number;
   maxLogCount?: number;
-  maxMetricCount?: number;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -33,10 +31,6 @@ export function resolveTelemetryLimits(
       args.maxTraceCount ?? parseLimit(env.AUTOTEL_MAX_TRACE_COUNT) ?? fallback,
     maxLogCount:
       args.maxLogCount ?? parseLimit(env.AUTOTEL_MAX_LOG_COUNT) ?? fallback,
-    maxMetricCount:
-      args.maxMetricCount ??
-      parseLimit(env.AUTOTEL_MAX_METRIC_COUNT) ??
-      fallback,
   };
 }
 
@@ -64,6 +58,5 @@ export function applyTelemetryLimits(
     ...data,
     traces: data.traces.slice(-limits.maxTraceCount),
     logs: data.logs.slice(-limits.maxLogCount),
-    metrics: data.metrics.slice(-limits.maxMetricCount),
   };
 }

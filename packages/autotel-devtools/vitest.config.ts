@@ -20,9 +20,18 @@ export default defineConfig({
     projects: [
       {
         // Server library — pure Node, no Svelte, no browser condition.
+        // `src/query` and `src/wire` live here too: both are plain TypeScript
+        // shared by the server (compiles an AST to SQL, encodes the payload)
+        // and the widget (highlights and lints the same tokens, decodes the
+        // same payload), with no DOM and no Svelte, so they belong in the
+        // project that doesn't apply the browser resolve condition.
         test: {
           name: 'server',
-          include: ['src/server/**/*.test.ts'],
+          include: [
+            'src/server/**/*.test.ts',
+            'src/query/**/*.test.ts',
+            'src/wire/**/*.test.ts',
+          ],
           environment: 'node',
         },
       },

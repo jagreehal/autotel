@@ -28,9 +28,7 @@
       "gen_ai.usage.output_tokens": 3,
       "gen_ai.response.model": "granite4:latest",
       "gen_ai.response.id": "chatcmpl-12",
-      "gen_ai.response.finish_reasons": [
-        "stop"
-      ]
+      "gen_ai.response.finish_reasons": ["stop"]
     },
     "status": {
       "code": "UNSET",

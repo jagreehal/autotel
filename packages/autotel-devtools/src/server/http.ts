@@ -9,11 +9,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  parseOtlpTraces,
-  parseOtlpLogs,
-  parseOtlpMetrics,
-  parseOtlpAgentEvents,
-  countOtlpMetrics,
   readJsonBody,
   readRawBody,
   isProtobufContentType,
@@ -28,6 +23,7 @@ import { DEVTOOLS_IDENTITY } from './identity';
 import { allowSensitiveRequest } from './origin-guard';
 import { readSourceWindow } from './source-file';
 import type { DevtoolsServer } from './server';
+import { joinCoverage, type MapRoute } from './coverage/coverage';
 
 type OtlpSignal = 'traces' | 'logs' | 'metrics';
 
@@ -119,27 +115,47 @@ function getVersion(): string {
   return version;
 }
 
-let cachedWidgetJs: string | null = null;
-function getWidgetJs(): string {
-  if (!cachedWidgetJs) {
-    const pkgRoot = findPackageRoot();
-    const candidates = [
-      resolve(pkgRoot, 'dist', 'widget.global.js'),
-      resolve(pkgRoot, 'widget.global.js'),
-    ];
-    for (const candidate of candidates) {
-      try {
-        cachedWidgetJs = readFileSync(candidate, 'utf8');
-        break;
-      } catch {
-        /* try next */
-      }
-    }
-    if (!cachedWidgetJs) {
-      cachedWidgetJs = '// widget bundle not found - run pnpm build first';
+const widgetJsCache = new Map<string, string>();
+
+/**
+ * The browser bundle for one surface.
+ *
+ * Two are built: `fullpage.global.js` carries every view, while
+ * `widget.global.js` is the reduced set for embedding in someone else's page.
+ * Serving the right one is what makes the split worth anything — handing the
+ * full bundle to an embedder would ship them the views the split exists to
+ * spare them.
+ *
+ * The full-page bundle falls back to the widget one when it is missing, so a
+ * partially-built checkout still serves a working UI rather than a comment.
+ */
+function getWidgetJs(surface: 'widget' | 'fullpage'): string {
+  const cached = widgetJsCache.get(surface);
+  if (cached) return cached;
+
+  const pkgRoot = findPackageRoot();
+  const names =
+    surface === 'fullpage'
+      ? ['fullpage.global.js', 'widget.global.js']
+      : ['widget.global.js'];
+  const candidates = names.flatMap((name) => [
+    resolve(pkgRoot, 'dist', name),
+    resolve(pkgRoot, name),
+  ]);
+
+  let contents: string | null = null;
+  for (const candidate of candidates) {
+    try {
+      contents = readFileSync(candidate, 'utf8');
+      break;
+    } catch {
+      /* try next */
     }
   }
-  return cachedWidgetJs;
+  const resolved =
+    contents ?? '// widget bundle not found - run pnpm build first';
+  widgetJsCache.set(surface, resolved);
+  return resolved;
 }
 
 export interface DevtoolsRoutesOptions {
@@ -210,7 +226,11 @@ export function attachDevtoolsRoutes(
 
       // GET /widget.js — widget bundle
       if (req.method === 'GET' && url.startsWith('/widget.js')) {
-        const js = getWidgetJs();
+        // The full-page HTML asks for `?mode=fullpage`; an embedder's script
+        // tag does not, and gets the reduced bundle.
+        const js = getWidgetJs(
+          url.includes('mode=fullpage') ? 'fullpage' : 'widget',
+        );
         res.writeHead(200, {
           'Content-Type': 'application/javascript; charset=utf-8',
           'Content-Length': Buffer.byteLength(js),
@@ -229,6 +249,25 @@ export function attachDevtoolsRoutes(
           'Content-Length': Buffer.byteLength(DEVTOOLS_FAVICON_SVG),
         });
         res.end(DEVTOOLS_FAVICON_SVG);
+        return;
+      }
+
+      if (
+        req.method === 'GET' &&
+        url.split('?')[0] === '/api/query/attributes'
+      ) {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const params = new URL(url, 'http://localhost').searchParams;
+        const signal = params.get('signal') === 'logs' ? 'logs' : 'traces';
+        sendJson(res, 200, {
+          attributes: devtools.searchAttributes(
+            signal,
+            params.get('value') ?? '',
+          ),
+        });
         return;
       }
 
@@ -315,13 +354,39 @@ export function attachDevtoolsRoutes(
         return;
       }
 
+      if (
+        req.method === 'DELETE' &&
+        (url === '/v1/logs' || url === '/v1/metrics')
+      ) {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const signal = url.endsWith('/logs') ? 'logs' : 'metrics';
+        devtools.clearSignal(signal);
+        sendJson(res, 200, { cleared: true, signal });
+        return;
+      }
+
+      if (req.method === 'DELETE' && url === '/api/traces') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const body = (await readJsonBody(req)) as { traceIds?: string[] };
+        const traceIds = Array.isArray(body.traceIds)
+          ? body.traceIds.filter((id): id is string => typeof id === 'string')
+          : [];
+        sendJson(res, 200, { deleted: devtools.deleteTraces(traceIds) });
+        return;
+      }
+
       // POST /v1/traces — accepts OTLP/JSON or OTLP/protobuf
       if (req.method === 'POST' && url === '/v1/traces') {
         try {
           const payload = await readOtlpPayload(req, 'traces');
-          const traces = parseOtlpTraces(payload);
-          devtools.addTraces(traces);
-          sendJson(res, 200, { acceptedTraces: traces.length });
+          const acceptedTraces = devtools.ingestOtlp('traces', payload);
+          sendJson(res, 200, { acceptedTraces });
         } catch (e) {
           sendOtlpError(res, req, e);
         }
@@ -332,11 +397,8 @@ export function attachDevtoolsRoutes(
       if (req.method === 'POST' && url === '/v1/logs') {
         try {
           const payload = await readOtlpPayload(req, 'logs');
-          const logs = parseOtlpLogs(payload);
-          devtools.addLogs(logs);
-          // Coding-agent events arrive as logs too — fold them into agent sessions.
-          devtools.ingestAgentEvents(parseOtlpAgentEvents(payload));
-          sendJson(res, 200, { acceptedLogs: logs.length });
+          const acceptedLogs = devtools.ingestOtlp('logs', payload);
+          sendJson(res, 200, { acceptedLogs });
         } catch (e) {
           sendOtlpError(res, req, e);
         }
@@ -347,11 +409,352 @@ export function attachDevtoolsRoutes(
       if (req.method === 'POST' && url === '/v1/metrics') {
         try {
           const payload = await readOtlpPayload(req, 'metrics');
-          // Fold coding-agent metric-only signals (lines, commits, active time, …).
-          devtools.ingestAgentMetrics(parseOtlpMetrics(payload));
-          sendJson(res, 200, { acceptedMetrics: countOtlpMetrics(payload) });
+          const acceptedMetrics = devtools.ingestOtlp('metrics', payload);
+          sendJson(res, 200, { acceptedMetrics });
         } catch (e) {
           sendOtlpError(res, req, e);
+        }
+        return;
+      }
+
+      if (
+        req.method === 'GET' &&
+        (url === '/api/query/traces/fields' || url === '/api/query/logs/fields')
+      ) {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const signal = url.includes('/logs/') ? 'logs' : 'traces';
+        sendJson(res, 200, { fields: devtools.listQueryFields(signal) });
+        return;
+      }
+
+      // POST /api/query/traces — run a query against the durable store.
+      //
+      // Sensitive: it reads captured telemetry, so it takes the same
+      // origin guard as the other read-back routes. A parse failure is a 400
+      // with positioned errors (the editor draws squiggles from them), not a
+      // 500 — a half-typed query is expected input, not a server fault.
+      if (req.method === 'POST' && url === '/api/query/traces') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        try {
+          const body = (await readJsonBody(req)) as {
+            query?: string;
+            window?: { start: number; end: number };
+            limit?: number;
+            cursor?: string;
+          };
+          const result = devtools.queryTraces({
+            query: body.query ?? '',
+            window: body.window,
+            limit: body.limit,
+            cursor: body.cursor,
+          });
+          if (result.errors) {
+            sendJson(res, 400, { errors: result.errors });
+            return;
+          }
+          sendJson(res, 200, {
+            traces: result.traces,
+            nextCursor: result.nextCursor,
+          });
+        } catch (e) {
+          sendJson(res, 400, {
+            error: 'Invalid query request',
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+        return;
+      }
+
+      /*
+       * Instrumentation coverage: which mapped entry points never emitted.
+       *
+       * Reads `autotel.map.json`, which `autotel map` writes and projects
+       * commit, from the same root `GET /source` reads under — the map
+       * describes that tree, so anywhere else would describe someone else's
+       * code.
+       */
+      if (req.method === 'GET' && url === '/api/coverage') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        if (!sourceRoot) {
+          sendJson(res, 404, {
+            error: 'Coverage unavailable',
+            message:
+              'No source root configured, so `autotel.map.json` cannot be located.',
+          });
+          return;
+        }
+        const mapPath = resolve(sourceRoot, 'autotel.map.json');
+        if (!existsSync(mapPath)) {
+          // Not an empty report: zero routes and zero *unseen* routes are
+          // indistinguishable in a count, and reporting "0 of 0" would tell
+          // someone their app is covered when nothing has ever scanned it.
+          sendJson(res, 404, {
+            error: 'No instrumentation map',
+            message:
+              "Run `npx autotel map` to record this project's entry points, then reload.",
+          });
+          return;
+        }
+        try {
+          const parsed = JSON.parse(readFileSync(mapPath, 'utf8')) as {
+            routes?: MapRoute[];
+          };
+          sendJson(
+            res,
+            200,
+            joinCoverage(parsed.routes ?? [], devtools.observedSpans()),
+          );
+        } catch (e) {
+          sendJson(res, 400, {
+            error: 'Unreadable instrumentation map',
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+        return;
+      }
+
+      /*
+       * Cohort comparison: what separates these spans from those.
+       *
+       * The ranking comes from `compareCohorts` in `autotel/analysis`, loaded
+       * on demand. `autotel` is a peer dependency, so a viewer pointed at a
+       * plain OpenTelemetry SDK may not have it installed — that is a missing
+       * feature to report, not a server that fails to start, which is what a
+       * top-level import would have made it.
+       */
+      if (req.method === 'POST' && url === '/api/analysis/compare') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        let compareCohorts;
+        try {
+          ({ compareCohorts } = await import('autotel/analysis'));
+        } catch {
+          sendJson(res, 501, {
+            error: 'Comparison unavailable',
+            message:
+              'Install `autotel` alongside autotel-devtools to compare cohorts.',
+          });
+          return;
+        }
+        try {
+          const body = (await readJsonBody(req)) as {
+            outlier?: {
+              query?: string;
+              window?: { start: number; end: number };
+            };
+            baseline?: {
+              query?: string;
+              window?: { start: number; end: number };
+            };
+            ignoreFields?: string[];
+            limit?: number;
+          };
+          const outlier = devtools.cohortRows({
+            query: body.outlier?.query ?? '',
+            window: body.outlier?.window,
+          });
+          const baseline = devtools.cohortRows({
+            query: body.baseline?.query ?? '',
+            window: body.baseline?.window,
+          });
+          sendJson(res, 200, {
+            differences: compareCohorts({
+              outlier,
+              baseline,
+              ignoreFields: body.ignoreFields,
+              limit: body.limit,
+            }),
+            outlierCount: outlier.length,
+            baselineCount: baseline.length,
+          });
+        } catch (e) {
+          sendJson(res, 400, {
+            error: 'Invalid comparison request',
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+        return;
+      }
+
+      // POST /api/query/logs — run a log query against the durable store.
+      if (req.method === 'POST' && url === '/api/query/logs') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        try {
+          const body = (await readJsonBody(req)) as {
+            query?: string;
+            window?: { start: number; end: number };
+            limit?: number;
+            cursor?: string;
+          };
+          const result = devtools.queryLogs({
+            query: body.query ?? '',
+            window: body.window,
+            limit: body.limit,
+            cursor: body.cursor,
+          });
+          if (result.errors) {
+            sendJson(res, 400, { errors: result.errors });
+            return;
+          }
+          sendJson(res, 200, {
+            logs: result.logs,
+            nextCursor: result.nextCursor,
+          });
+        } catch (e) {
+          sendJson(res, 400, {
+            error: 'Invalid query request',
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+        return;
+      }
+
+      // POST /api/query/errors — aggregate errors from the store for a window.
+      if (req.method === 'POST' && url === '/api/query/errors') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        try {
+          const body = (await readJsonBody(req)) as {
+            query?: string;
+            window?: { start: number; end: number };
+            limit?: number;
+          };
+          const result = devtools.queryErrors({
+            query: body.query ?? '',
+            window: body.window,
+            limit: body.limit,
+          });
+          if (result.errors_parse) {
+            sendJson(res, 400, { errors: result.errors_parse });
+            return;
+          }
+          sendJson(res, 200, { errors: result.errors });
+        } catch (e) {
+          sendJson(res, 400, {
+            error: 'Invalid query request',
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+        return;
+      }
+
+      // GET /api/metrics — the metric catalogue.
+      if (req.method === 'GET' && url === '/api/metrics') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        sendJson(res, 200, { metrics: devtools.listMetricNames() });
+        return;
+      }
+
+      if (req.method === 'GET' && url.split('?')[0] === '/api/metrics') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const query =
+          new URL(url, 'http://localhost').searchParams.get('q') ?? '';
+        const result = devtools.queryMetricCatalog(query);
+        if (result.errors) sendJson(res, 400, { errors: result.errors });
+        else sendJson(res, 200, { metrics: result.metrics });
+        return;
+      }
+
+      if (req.method === 'DELETE' && url.split('?')[0] === '/api/metrics') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const name = new URL(url, 'http://localhost').searchParams.get('name');
+        if (!name) {
+          sendJson(res, 400, { error: 'A metric name is required' });
+          return;
+        }
+        sendJson(res, 200, { deletedSeries: devtools.deleteMetric(name) });
+        return;
+      }
+
+      if (req.method === 'GET' && url === '/api/stats') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        sendJson(res, 200, devtools.getStoreStats());
+        return;
+      }
+
+      if (req.method === 'GET' && url.split('?')[0] === '/api/traces/slowest') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const limit = Number(
+          new URL(url, 'http://localhost').searchParams.get('limit') ?? 10,
+        );
+        sendJson(res, 200, { traces: devtools.findSlowestTraces(limit) });
+        return;
+      }
+
+      const summaryMatch =
+        req.method === 'GET' && url.match(/^\/api\/traces\/([^/?]+)\/summary$/);
+      if (summaryMatch) {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        const summary = devtools.describeTrace(
+          decodeURIComponent(summaryMatch[1]),
+        );
+        if (!summary) sendJson(res, 404, { error: 'Trace not found' });
+        else sendJson(res, 200, summary);
+        return;
+      }
+
+      // POST /api/query/metrics — the series for one metric, with their points.
+      if (req.method === 'POST' && url === '/api/query/metrics') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        try {
+          const body = (await readJsonBody(req)) as {
+            name?: string;
+            window?: { start: number; end: number };
+            maxPoints?: number;
+          };
+          if (!body.name) {
+            sendJson(res, 400, { error: 'A metric name is required' });
+            return;
+          }
+          sendJson(res, 200, {
+            series: devtools.queryMetricSeries({
+              name: body.name,
+              window: body.window,
+              maxPoints: body.maxPoints,
+            }),
+          });
+        } catch (e) {
+          sendJson(res, 400, {
+            error: 'Invalid metrics query',
+            message: e instanceof Error ? e.message : String(e),
+          });
         }
         return;
       }

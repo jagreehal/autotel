@@ -27,6 +27,16 @@
       "types": "./dist/genai/index.d.ts",
       "import": "./dist/genai/index.js",
       "require": "./dist/genai/index.cjs"
+    },
+    "./query": {
+      "types": "./dist/query/index.d.ts",
+      "import": "./dist/query/index.js",
+      "require": "./dist/query/index.cjs"
+    },
+    "./wire": {
+      "types": "./dist/wire/index.d.ts",
+      "import": "./dist/wire/index.js",
+      "require": "./dist/wire/index.cjs"
     }
   },
   "main": "./dist/index.js",
@@ -47,22 +57,26 @@
     "widget"
   ],
   "scripts": {
-    "build": "tsdown && vite build --config vite.widget.config.ts",
+    "build": "tsdown && vite build --config vite.widget.config.ts && FULLPAGE=1 vite build --config vite.widget.config.ts",
     "dev": "tsdown --watch",
     "type-check": "svelte-check --tsconfig ./tsconfig.json && tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run --config vitest.config.ts --project server && vitest run --config vitest.config.ts --project widget && vitest run --config vitest.storybook.config.ts",
     "test:storybook": "vitest run --config vitest.storybook.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
-    "test:dist": "node scripts/check-dist-esm.mjs",
+    "test:dist": "node scripts/check-dist-esm.mjs && node scripts/check-widget-size.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "prepublishOnly": "pnpm build && pnpm test:dist"
   },
   "dependencies": {
-    "autotel-agents": "workspace:*",
-    "clsx": "^2.1.1",
+    "@grpc/grpc-js": "^1.14.4",
     "@lucide/svelte": "^1.27.0",
+    "autotel-agents": "workspace:*",
+    "bits-ui": "2.19.0",
+    "clsx": "^2.1.1",
+    "d3-scale": "4.0.2",
+    "d3-shape": "3.2.0",
     "protobufjs": "^8.7.1",
     "svelte": "^5.56.8",
     "tailwind-merge": "^3.6.0",
@@ -83,6 +97,8 @@
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/svelte": "^5.4.2",
+    "@types/d3-scale": "4.0.9",
+    "@types/d3-shape": "3.1.8",
     "@types/node": "^26.1.2",
     "@types/ws": "^8.18.1",
     "@vitest/browser-playwright": "4.1.10",

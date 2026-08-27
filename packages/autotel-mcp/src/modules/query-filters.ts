@@ -37,6 +37,13 @@ export function spanMatchesQuery(
   span: SpanRecord,
   query: SpanSearchQuery | TraceSearchQuery,
 ): boolean {
+  const minDurationMs =
+    ('spanMinDurationMs' in query ? query.spanMinDurationMs : undefined) ??
+    query.minDurationMs;
+  const maxDurationMs =
+    ('spanMaxDurationMs' in query ? query.spanMaxDurationMs : undefined) ??
+    query.maxDurationMs;
+
   if (query.service && span.serviceName !== query.service) {
     return false;
   }
@@ -53,17 +60,11 @@ export function spanMatchesQuery(
     return false;
   }
 
-  if (
-    query.minDurationMs !== undefined &&
-    span.durationMs < query.minDurationMs
-  ) {
+  if (minDurationMs !== undefined && span.durationMs < minDurationMs) {
     return false;
   }
 
-  if (
-    query.maxDurationMs !== undefined &&
-    span.durationMs > query.maxDurationMs
-  ) {
+  if (maxDurationMs !== undefined && span.durationMs > maxDurationMs) {
     return false;
   }
 
@@ -115,8 +116,14 @@ export function traceMatchesQuery(
     return true;
   }
 
-  // Strip filters before per-span check — they were already evaluated at trace level
-  const spanQuery = query.filters ? { ...query, filters: undefined } : query;
+  // Aggregate predicates were already evaluated across the whole trace. Do not
+  // accidentally require the span matching service/operation/tags to also be
+  // the error span or to carry the trace's wall-clock duration.
+  const spanQuery: SpanSearchQuery = {
+    service: query.service,
+    operation: query.operation,
+    tags: query.tags,
+  };
   return trace.spans.some((span) => spanMatchesQuery(span, spanQuery));
 }
 

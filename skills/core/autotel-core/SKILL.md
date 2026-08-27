@@ -85,6 +85,8 @@ const result = await trace.run('user.lookup', async (ctx) => {
 });
 ```
 
+**Version.** `trace.run()` needs autotel 7.0 or later. On 6.x the immediate form is `span(name, fn)`, and `trace(...)` still wraps.
+
 **`trace` wraps, `trace.run` runs.** Every `trace(...)` form returns a wrapper
 and executes nothing, so a reusable function with an explicit name is just:
 
