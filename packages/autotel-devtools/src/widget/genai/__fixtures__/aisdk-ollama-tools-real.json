@@ -34,9 +34,7 @@
       "ai.usage.outputTokens": 65,
       "ai.usage.outputTokenDetails.textTokens": 65,
       "ai.usage.totalTokens": 431,
-      "gen_ai.response.finish_reasons": [
-        "stop"
-      ],
+      "gen_ai.response.finish_reasons": ["stop"],
       "gen_ai.response.id": "aitxt-VioQH0zR8hmIQR0XyYWrlyio",
       "gen_ai.response.model": "qwen2:latest",
       "gen_ai.usage.input_tokens": 366,
@@ -124,9 +122,7 @@
       "ai.usage.outputTokens": 229,
       "ai.usage.outputTokenDetails.textTokens": 229,
       "ai.usage.totalTokens": 727,
-      "gen_ai.response.finish_reasons": [
-        "stop"
-      ],
+      "gen_ai.response.finish_reasons": ["stop"],
       "gen_ai.response.id": "aitxt-HXYooDOwAZ6jFVghq57to6DN",
       "gen_ai.response.model": "qwen2:latest",
       "gen_ai.usage.input_tokens": 498,

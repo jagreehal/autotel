@@ -84,8 +84,5 @@ export {
   foldContextReset,
   postCompactionRegression,
 } from './compaction';
-export type {
-  ContextReset,
-  PostCompactionRegression,
-} from './compaction';
+export type { ContextReset, PostCompactionRegression } from './compaction';
 export { readIdentity, mergeAttrs } from './identity';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compareCohorts, type AnalysisEvent } from './analysis';
+import { bucket, compareCohorts, type AnalysisEvent } from './analysis';
 
 function events(
   count: number,
@@ -105,5 +105,32 @@ describe('compareCohorts', () => {
     ).toBe(false);
 
     expect(compareCohorts({ outlier, baseline, limit: 1 })).toHaveLength(1);
+  });
+});
+
+describe('bucket()', () => {
+  it('labels a value below the first boundary as under that boundary', () => {
+    expect(bucket(42, [100, 500, 1000])).toBe('<100');
+  });
+
+  it('labels a value between two boundaries with the range it falls in', () => {
+    expect(bucket(240, [100, 500, 1000])).toBe('100-500');
+  });
+
+  it('labels a value above every boundary as over the last one', () => {
+    expect(bucket(4200, [100, 500, 1000])).toBe('>=1000');
+  });
+
+  it('does not file a non-finite value under the slowest bucket', () => {
+    expect(bucket(Number.NaN, [100, 500, 1000])).toBe('unknown');
+    expect(bucket(Number.POSITIVE_INFINITY, [100, 500, 1000])).toBe('unknown');
+  });
+
+  it('reads an unordered boundary list in the order the caller meant', () => {
+    expect(bucket(240, [1000, 100, 500])).toBe('100-500');
+  });
+
+  it('has no bucket to name when given no boundaries', () => {
+    expect(bucket(240, [])).toBe('unknown');
   });
 });

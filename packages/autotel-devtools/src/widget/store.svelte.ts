@@ -7,7 +7,6 @@ import { signal, computed, effect } from './signals.svelte';
 import type {
   WidgetData,
   TraceData,
-  MetricData,
   HealthStatus,
   ErrorGroup,
   LogData,
@@ -16,6 +15,13 @@ import type {
   DockPosition,
 } from './types';
 import { buildResourceSummaries } from './utils/resources';
+import type { TimeZonePreference } from './timeFormat';
+import {
+  DEFAULT_SELECTION,
+  isUnbounded,
+  resolveWindow,
+  type WindowSelection,
+} from './timeWindow';
 import { isGenAiSpan } from './genai/detect';
 import { toGenAiSpan } from './genai/normalize';
 import { buildToolResultIndex, hydrateToolResults } from './genai/stitch';
@@ -175,7 +181,6 @@ export function resetPanelSize(axis: 'vertical' | 'horizontal') {
 
 // ===== Data State =====
 export const tracesSignal = signal<TraceData[]>([]);
-export const metricsSignal = signal<MetricData[]>([]);
 export const healthSignal = signal<HealthStatus>({
   connectionStatus: 'disconnected',
 });
@@ -183,6 +188,77 @@ export const errorGroupsSignal = signal<ErrorGroup[]>([]);
 export const logsSignal = signal<LogData[]>([]);
 
 export const connectionStatusSignal = signal<string>('disconnected');
+
+/**
+ * The WebSocket URL this widget was mounted with.
+ *
+ * Needed because the devtools server's HTTP origin is not necessarily the page's
+ * own: an embedded widget runs inside a host app served from somewhere else
+ * entirely, so anything that calls the server (the query API, source peek) has
+ * to derive its base from here rather than from `location`.
+ */
+export const connectionUrlSignal = signal<string | null>(null);
+
+/**
+ * The global time window, shared by every tab.
+ *
+ * One control, one meaning, everywhere. Previously only the Traces tab had a
+ * range filter, so "last 15m" meant something on one screen and nothing on the
+ * next; a per-view window would reintroduce exactly that, one tab at a time.
+ *
+ * Holds the *selection* rather than resolved bounds, so a preset keeps tracking
+ * now instead of freezing at the moment it was picked. See `timeWindow.ts`.
+ */
+export const timeWindowSignal = signal<WindowSelection>(DEFAULT_SELECTION);
+
+/**
+ * Traces fetched from the store for the current window.
+ *
+ * Written by `workingSet.svelte.ts`. Empty until the first fetch lands, and
+ * meaningless unless `workingSetStatusSignal` says `ready` — which is why the
+ * two are read together rather than checking for emptiness, since an empty
+ * window is a legitimate answer.
+ */
+export const storeTracesSignal = signal<TraceData[]>([]);
+
+/** Error groups aggregated from the store for the current window. */
+export const storeErrorGroupsSignal = signal<ErrorGroup[]>([]);
+
+/**
+ * Whether the store-backed working set is usable.
+ *
+ * `unavailable` means the server could not be reached, and the derived views
+ * fall back to the live tail — showing the traces already in the browser beats
+ * showing nothing.
+ */
+export const workingSetStatusSignal = signal<
+  'pending' | 'ready' | 'unavailable'
+>('pending');
+
+/**
+ * The live-tail traces that fall inside the global time window.
+ *
+ * Every view derived from traces — Service Map, Flow, Security, Resources,
+ * GenAI — reads this rather than `tracesSignal`, so setting "last 15m" and
+ * switching tabs does not silently show you everything. A view that ignores
+ * the window is worse than one without a window at all: the control says the
+ * range is narrowed and the screen disagrees.
+ *
+ * Recomputes as traces stream in, so a preset window stays anchored to now
+ * without a dedicated timer.
+ */
+export const windowedTracesSignal = computed(() => {
+  // Preferred: the store already applied the window, over the whole retained
+  // history rather than the hundred traces still in the tail.
+  if (workingSetStatusSignal.value === 'ready') return storeTracesSignal.value;
+
+  const window = resolveWindow(timeWindowSignal.value, Date.now());
+  if (isUnbounded(window)) return tracesSignal.value;
+  const { start, end } = window as { start: number; end: number };
+  return tracesSignal.value.filter(
+    (trace) => trace.startTime >= start && trace.startTime <= end,
+  );
+});
 
 // ===== Live activity / ingest throughput =====
 // A monotonic counter bumped every time new telemetry lands, so indicators can
@@ -255,7 +331,6 @@ export function ingestRatePerSecond(
 export const pausedSignal = signal(false);
 export const pendingTracesSignal = signal<TraceData[]>([]);
 export const pendingLogsSignal = signal<LogData[]>([]);
-export const pendingMetricsSignal = signal<MetricData[]>([]);
 
 export const pendingTraceCountSignal = computed(
   () => pendingTracesSignal.value.length,
@@ -263,18 +338,10 @@ export const pendingTraceCountSignal = computed(
 export const pendingLogCountSignal = computed(
   () => pendingLogsSignal.value.length,
 );
-export const pendingMetricCountSignal = computed(
-  () => pendingMetricsSignal.value.length,
-);
 
 // Metrics arrive without a unique id; assign a monotonic one at ingestion so
 // the (live-updating, capped) metrics list can key on it instead of the array
 // index — index keys corrupt rendering as rows shift in/out.
-let metricSeq = 0;
-function withMetricId(m: MetricData): MetricData {
-  return m.id ? m : { ...m, id: `m${++metricSeq}` };
-}
-
 // Marks the store as displaying a loaded snapshot rather than live data.
 export const snapshotModeSignal = signal(false);
 
@@ -329,29 +396,6 @@ export function toggleTraceServiceFilter(service: string) {
 export function clearTraceServiceFilter() {
   if (traceServiceFilterSignal.value.size > 0)
     traceServiceFilterSignal.value = new Set();
-}
-
-// Relative time-window filter for the traces list — global (like the other
-// trace filters) so the full-page UI can reflect it in the shareable URL.
-export type TraceTimeRangeFilter = 'all' | '5m' | '15m' | '1h';
-export const traceTimeRangeFilterSignal = signal<TraceTimeRangeFilter>('all');
-
-const TRACE_TIME_RANGE_MS = new Map<TraceTimeRangeFilter, number>([
-  ['5m', 5 * 60 * 1000],
-  ['15m', 15 * 60 * 1000],
-  ['1h', 60 * 60 * 1000],
-]);
-
-/**
- * Lower-bound start time (ms epoch) for a time-range filter: traces that started
- * before it are hidden. Returns 0 for `'all'` (no constraint). Pure — `now` is
- * passed in so it is deterministic to test.
- */
-export function traceTimeRangeCutoff(
-  range: TraceTimeRangeFilter,
-  now: number,
-): number {
-  return range === 'all' ? 0 : now - (TRACE_TIME_RANGE_MS.get(range) ?? 0);
 }
 
 // GenAI-list filter — also global for the same shareable-URL reason.
@@ -416,16 +460,6 @@ export const sortedTracesSignal = computed(() => {
 /**
  * Metrics grouped by type
  */
-export const groupedMetricsSignal = computed(() => {
-  const metrics = metricsSignal.value;
-  return {
-    events: metrics.filter((m) => m.type === 'event'),
-    funnels: metrics.filter((m) => m.type === 'funnel'),
-    outcomes: metrics.filter((m) => m.type === 'outcome'),
-    values: metrics.filter((m) => m.type === 'value'),
-  };
-});
-
 /**
  * Logs sorted by most recent first
  */
@@ -463,7 +497,8 @@ export function selectAgentSession(id: string): void {
 
 export const resourceSummariesSignal = computed(() =>
   buildResourceSummaries({
-    traces: tracesSignal.value,
+    // Windowed, so the resource summary describes the range on screen.
+    traces: windowedTracesSignal.value,
     logs: logsSignal.value,
     errors: errorGroupsSignal.value,
   }),
@@ -483,7 +518,8 @@ export interface GenAiRow {
 
 export const genAiRowsSignal = computed<GenAiRow[]>(() => {
   const rows: GenAiRow[] = [];
-  for (const trace of tracesSignal.value) {
+  // Windowed, so the GenAI list reflects the range the toolbar names.
+  for (const trace of windowedTracesSignal.value) {
     const toolResultIndex = buildToolResultIndex(trace.spans);
     for (const span of trace.spans) {
       if (!isGenAiSpan(span)) continue;
@@ -510,28 +546,55 @@ export const genAiCountSignal = computed(() => genAiRowsSignal.value.length);
  * badge counts only multi-span traces.
  */
 export const flowCountSignal = computed(
-  () => tracesSignal.value.filter((t) => t.spans.length > 1).length,
+  () => windowedTracesSignal.value.filter((t) => t.spans.length > 1).length,
 );
+
+/**
+ * Error groups that overlap the global time window.
+ *
+ * A group spans a range (`firstSeen`…`lastSeen`) rather than sitting at an
+ * instant, so the test is **overlap**, not "did it start inside the window":
+ * an error that began before the window and is still happening is exactly the
+ * one you are looking for, and testing `firstSeen` alone would hide it.
+ *
+ * The counts stay as the server aggregated them — they cover the group's whole
+ * lifetime, not the window. Recomputing them per window would need the
+ * occurrences, which the client does not hold.
+ */
+export const windowedErrorGroupsSignal = computed(() => {
+  // The server re-runs the aggregator over the stored window, so its groups
+  // already describe the right period — and cover more than the live tail did.
+  if (workingSetStatusSignal.value === 'ready') {
+    return storeErrorGroupsSignal.value;
+  }
+
+  const window = resolveWindow(timeWindowSignal.value, Date.now());
+  if (isUnbounded(window)) return errorGroupsSignal.value;
+  const { start, end } = window as { start: number; end: number };
+  return errorGroupsSignal.value.filter(
+    (group) => group.lastSeen >= start && group.firstSeen <= end,
+  );
+});
 
 /**
  * Error groups sorted by most recent
  */
 export const sortedErrorGroupsSignal = computed(() =>
-  [...errorGroupsSignal.value].sort((a, b) => b.lastSeen - a.lastSeen),
+  [...windowedErrorGroupsSignal.value].sort((a, b) => b.lastSeen - a.lastSeen),
 );
 
 /**
  * Error groups sorted by frequency
  */
 export const errorGroupsByFrequencySignal = computed(() =>
-  [...errorGroupsSignal.value].sort((a, b) => b.count - a.count),
+  [...windowedErrorGroupsSignal.value].sort((a, b) => b.count - a.count),
 );
 
 /**
  * Total error count across all groups
  */
 export const totalErrorCountSignal = computed(() =>
-  errorGroupsSignal.value.reduce((sum, group) => sum + group.count, 0),
+  windowedErrorGroupsSignal.value.reduce((sum, group) => sum + group.count, 0),
 );
 
 /**
@@ -550,7 +613,7 @@ export const recentErrorCountSignal = computed(() => {
 export const selectedTraceSignal = computed(() => {
   const traceId = selectedTraceIdSignal.value;
   if (!traceId) return null;
-  return tracesSignal.value.find((t) => t.traceId === traceId) || null;
+  return windowedTracesSignal.value.find((t) => t.traceId === traceId) || null;
 });
 
 // ===== Multi-select =====
@@ -564,7 +627,7 @@ export function toggleTraceSelection(traceId: string) {
 }
 
 export function selectAllTraces() {
-  const all = new Set(tracesSignal.value.map((t) => t.traceId));
+  const all = new Set(windowedTracesSignal.value.map((t) => t.traceId));
   selectedTraceIdsSignal.value = all;
 }
 
@@ -575,6 +638,9 @@ export function clearTraceSelection() {
 export function deleteSelectedTraces() {
   const ids = selectedTraceIdsSignal.value;
   tracesSignal.value = tracesSignal.value.filter((t) => !ids.has(t.traceId));
+  storeTracesSignal.value = storeTracesSignal.value.filter(
+    (trace) => !ids.has(trace.traceId),
+  );
   clearTraceSelection();
   // Also deselect trace detail if the selected trace was deleted
   if (selectedTraceIdSignal.value && ids.has(selectedTraceIdSignal.value)) {
@@ -723,15 +789,10 @@ const tracesStream = makeStream(
   (base, incoming) => mergeTracesCapped(base, incoming, maxHistorySize),
 );
 const logsStream = makeStream(logsSignal, pendingLogsSignal, prependLogsCapped);
-const metricsStream = makeStream(
-  metricsSignal,
-  pendingMetricsSignal,
-  (base, incoming) => [...base, ...incoming].slice(-maxHistorySize),
-);
 
 // Iterated for the uniform flush / clear operations. Ingest stays per-stream
-// because the incoming shape differs (metrics get ids assigned at ingestion).
-const PAUSE_BUFFER_STREAMS = [tracesStream, logsStream, metricsStream];
+// because the incoming shape differs per signal.
+const PAUSE_BUFFER_STREAMS = [tracesStream, logsStream];
 
 export function updateWidgetData(data: Partial<WidgetData>) {
   // Snapshot mode is a frozen view of imported data — drop live updates,
@@ -744,23 +805,19 @@ export function updateWidgetData(data: Partial<WidgetData>) {
     return;
   }
 
-  // Buffer while paused, otherwise merge straight into the live lists. Metrics
-  // arrive without ids, so assign them before buffering; the stream caps the
-  // live/pending lists so a long-running session can't grow them unbounded.
+  // Buffer while paused, otherwise merge straight into the live lists. The
+  // stream caps the live/pending lists so a long-running session can't grow
+  // them unbounded.
   const paused = pausedSignal.value;
   tracesStream.ingest(data.traces ?? [], paused);
   logsStream.ingest(data.logs ?? [], paused);
-  if (data.metrics && data.metrics.length > 0) {
-    metricsStream.ingest(data.metrics.map(withMetricId), paused);
-  }
 
   // Arrival drives the live-activity pulse + ingest-rate meter regardless of
   // pause (data still arrived; it's just buffered).
-  recordIngest(
-    data.traces?.length ?? 0,
-    data.logs?.length ?? 0,
-    data.metrics?.length ?? 0,
-  );
+  //
+  // Metrics no longer flow through this path: they are queried from the store
+  // rather than pushed, so they do not contribute to the live-tail counters.
+  recordIngest(data.traces?.length ?? 0, data.logs?.length ?? 0, 0);
 
   if (data.health) {
     healthSignal.value = data.health;
@@ -797,12 +854,10 @@ export function loadSnapshot(snapshot: {
   traces?: TraceData[];
   logs?: LogData[];
   errors?: ErrorGroup[];
-  metrics?: MetricData[];
 }) {
   tracesSignal.value = snapshot.traces ?? [];
   logsSignal.value = (snapshot.logs ?? []).slice(0, maxHistorySize);
   errorGroupsSignal.value = snapshot.errors ?? [];
-  metricsSignal.value = (snapshot.metrics ?? []).map(withMetricId);
   pendingTracesSignal.value = [];
   pendingLogsSignal.value = [];
   pausedSignal.value = false;
@@ -814,7 +869,6 @@ export function exitSnapshotMode() {
   tracesSignal.value = [];
   logsSignal.value = [];
   errorGroupsSignal.value = [];
-  metricsSignal.value = [];
 }
 
 export function toggleWidget() {
@@ -867,14 +921,18 @@ const maxHistorySize = 100;
 
 export function clearAllData() {
   tracesSignal.value = [];
-  metricsSignal.value = [];
+  storeTracesSignal.value = [];
   errorGroupsSignal.value = [];
+  storeErrorGroupsSignal.value = [];
   logsSignal.value = [];
   agentSessionsSignal.value = [];
   selectedAgentSessionIdSignal.value = null;
   pendingTracesSignal.value = [];
   pendingLogsSignal.value = [];
-  pendingMetricsSignal.value = [];
+  selectedTraceIdsSignal.value = new Set();
+  selectedTraceIdSignal.value = null;
+  selectedSpanIdSignal.value = null;
+  workingSetStatusSignal.value = 'pending';
   snapshotModeSignal.value = false;
 }
 
@@ -897,6 +955,16 @@ export function importTraces(traces: TraceData[]) {
 
 // ===== Persistence (localStorage) =====
 
+/**
+ * Which zone every clock in the viewer renders in.
+ *
+ * Per viewer rather than per link: a shared URL should open on the sender's
+ * *window*, since that is what they are pointing at, but not on their zone.
+ * Someone in another region reading the same incident wants their own clock,
+ * or UTC, which is the whole reason the setting exists.
+ */
+export const timeZoneSignal = signal<TimeZonePreference>('local');
+
 const STORAGE_KEY = 'autotel-devtools-widget-state';
 
 export function loadPersistedState() {
@@ -914,6 +982,8 @@ export function loadPersistedState() {
           horizontal: Number(state.panelSize.horizontal) || 560,
         };
       }
+      if (typeof state.timeZone === 'string')
+        timeZoneSignal.value = state.timeZone;
     }
   } catch (error) {
     console.error('[Autotel Devtools] Failed to load persisted state:', error);
@@ -927,6 +997,7 @@ export function persistState() {
       corner: widgetCornerSignal.value,
       docked: widgetDockedSignal.value,
       panelSize: panelSizeSignal.value,
+      timeZone: timeZoneSignal.value,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
@@ -940,6 +1011,7 @@ effect(() => {
   void widgetPositionSignal.value;
   void widgetCornerSignal.value;
   void widgetDockedSignal.value;
+  void timeZoneSignal.value;
   void panelSizeSignal.value;
   persistState();
 });

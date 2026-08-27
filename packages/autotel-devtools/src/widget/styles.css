@@ -37,6 +37,25 @@
 
 @tailwind utilities;
 
+/*
+ * Skip rendering rows that are scrolled out of view.
+ *
+ * A long list pages in at a hundred rows at a time and can reach several
+ * thousand; laying out and painting every one of them costs more than the rows
+ * anybody can see. `content-visibility: auto` lets the browser skip the
+ * offscreen ones entirely, and `contain-intrinsic-size` supplies a placeholder
+ * height so the scrollbar does not jump as they are skipped and restored.
+ *
+ * Chosen over a virtualised list because it is the platform doing the work:
+ * no windowing maths, no scroll listener, and the rows stay real DOM — so
+ * find-in-page, text selection and screen readers keep working, which is
+ * exactly what virtualisation breaks.
+ */
+@utility row-virtual {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
+}
+
 * {
   box-sizing: border-box;
 }

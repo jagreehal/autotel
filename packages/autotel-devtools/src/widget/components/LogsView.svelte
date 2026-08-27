@@ -117,7 +117,14 @@
   import { cn } from '../utils/cn';
   import CopyButton from './CopyButton.svelte';
   import Copyable from './Copyable.svelte';
-  import SearchInput from './SearchInput.svelte';
+  import QueryBar from './QueryBar.svelte';
+  import TimeWindowPicker from './TimeWindowPicker.svelte';
+  import TailPill from './TailPill.svelte';
+  import { createLogQuery } from '../signalQuery.svelte';
+  import { queryFields } from '../query-client';
+  import { infiniteScroll } from '../utils/infiniteScroll';
+  import { httpBaseFromWsUrl } from '../source-client';
+  import { connectionUrlSignal } from '../store.svelte';
   import { matchesNeedle } from '../utils/textMatch';
 
   const logs = $derived(sortedLogsSignal.value);
@@ -135,9 +142,69 @@
     expanded = next;
   }
 
-  const filtered = $derived.by(() =>
-    logs.filter((log) => logMatches(log, query, severityFilter)),
-  );
+  // Server-side log query against the store, which holds far more than the
+  // live tail and survives a restart.
+  const logQuery = createLogQuery({
+    client: {
+      fetch: globalThis.fetch.bind(globalThis),
+      baseUrl: () =>
+        (connectionUrlSignal.value
+          ? httpBaseFromWsUrl(connectionUrlSignal.value)
+          : null) ?? globalThis.location.origin,
+    },
+  });
+
+  $effect(() => () => logQuery.dispose());
+
+  let lastQueryOrigin = $state<string | null>(null);
+  let queryFieldsList = $state<string[]>([]);
+  $effect(() => {
+    const origin =
+      (connectionUrlSignal.value
+        ? httpBaseFromWsUrl(connectionUrlSignal.value)
+        : null) ?? globalThis.location.origin;
+    if (origin === lastQueryOrigin) return;
+    lastQueryOrigin = origin;
+    void queryFields('logs', {
+      fetch: globalThis.fetch.bind(globalThis),
+      baseUrl: origin,
+    }).then((fields) => (queryFieldsList = fields));
+    void logQuery.refresh();
+  });
+
+  // Live arrivals refresh the list while live, and only bump the pill's count
+  // while frozen.
+  let lastSeenCount = $state(0);
+  $effect(() => {
+    const count = logs.length;
+    if (count > lastSeenCount) logQuery.arrived(count - lastSeenCount);
+    lastSeenCount = count;
+  });
+
+  const serverLogs = $derived(logQuery.results.value);
+
+  /**
+   * The rows to render.
+   *
+   * The server owns the list once it has answered; the client-side filter below
+   * remains the fallback for an unreachable devtools server, where showing the
+   * live tail beats showing nothing.
+   */
+  const filtered = $derived.by(() => {
+    const serverReady = logQuery.ready.value && logQuery.failure.value === null;
+    let source = logs;
+    if (serverReady) {
+      source = query.length > 0 ? serverLogs : mergeLogRows(serverLogs, logs);
+    }
+    return source.filter((log) =>
+      logMatches(log, serverReady ? '' : query, severityFilter),
+    );
+  });
+
+  function mergeLogRows(stored: LogData[], local: LogData[]): LogData[] {
+    const ids = new Set(stored.map((log) => log.id));
+    return [...stored, ...local.filter((log) => !ids.has(log.id))];
+  }
 
   const isFiltered = $derived(query.length > 0 || severityFilter !== 'all');
 
@@ -245,7 +312,7 @@
   >
     <h3 class="text-sm font-semibold flex items-center gap-2 text-fg">
       <FileText size={16} />
-      Logs ({isFiltered ? `${filtered.length} of ${logs.length}` : logs.length})
+      Logs ({filtered.length})
     </h3>
     <div class="flex items-center gap-1">
       <button
@@ -280,9 +347,30 @@
   </div>
 
   <div class="px-4 py-2 border-b border-line flex items-center gap-2">
-    <SearchInput
-      bind:value={query}
-      placeholder="Filter by message, resource, trace id…"
+    <QueryBar
+      value={logQuery.text.value}
+      onInput={(v) => {
+        logQuery.setText(v);
+        // Mirrored so the client-side fallback filter stays in step.
+        query = v;
+      }}
+      onSubmit={() => logQuery.submit()}
+      serverErrors={logQuery.errors.value}
+      fields={queryFieldsList}
+      placeholder="Filter — e.g. severity_number >= 17 AND service = api"
+      class="flex-1"
+    />
+    <TimeWindowPicker
+      selection={logQuery.window.value}
+      onChange={(next) => logQuery.setWindow(next)}
+    />
+    <TailPill
+      count={logQuery.pending}
+      live={logQuery.live}
+      onResume={() => {
+        query = '';
+        logQuery.resume();
+      }}
     />
     <select
       value={severityFilter}
@@ -299,7 +387,9 @@
   </div>
 
   <div class="flex-1 overflow-auto space-y-0">
-    {#if logs.length === 0}
+    {#if logQuery.loading.value && !logQuery.ready.value && logs.length === 0}
+      <div class="text-center text-fg-subtle text-sm py-12">Loading logs…</div>
+    {:else if filtered.length === 0 && !isFiltered}
       <div class="text-center text-fg-subtle text-sm py-12">
         No logs yet. Send logs via AutotelLogExporter or POST /ingest/logs.
       </div>
@@ -311,6 +401,19 @@
       {#each filtered as log (log.id)}
         {@render logRow(log)}
       {/each}
+
+      <!-- Paging sentinel: reaching it fetches the next page from the store. -->
+      {#if logQuery.nextCursor.value}
+        <div
+          use:infiniteScroll={{
+            onReach: () => logQuery.loadMore(),
+            disabled: logQuery.loading.value,
+          }}
+          class="px-4 py-3 text-center text-xs text-fg-subtle"
+        >
+          {logQuery.loading.value ? 'Loading…' : 'Scroll for more'}
+        </div>
+      {/if}
     {/if}
   </div>
 </div>

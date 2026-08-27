@@ -3,13 +3,7 @@
  * Allows exporting traces as JSON and importing them back for replay/demo
  */
 
-import type {
-  TraceData,
-  SpanData,
-  LogData,
-  MetricData,
-  ErrorGroup,
-} from './types';
+import type { TraceData, SpanData, LogData, ErrorGroup } from './types';
 import type { JsonObject } from './utils/json-fields';
 import {
   arrayField,
@@ -374,7 +368,6 @@ export interface SnapshotPayload {
   traces: TraceData[];
   logs: LogData[];
   errors: ErrorGroup[];
-  metrics: MetricData[];
 }
 
 export interface ExportedSnapshot {
@@ -472,24 +465,18 @@ export function parseImportedSnapshot(
   const traces = snapshotSection<TraceData>(data, 'traces').map(normalizeTrace);
   const logs = snapshotSection<LogData>(data, 'logs');
   const errors = snapshotSection<ErrorGroup>(data, 'errors');
-  const metrics = snapshotSection<MetricData>(data, 'metrics');
 
-  if (
-    traces.length === 0 &&
-    logs.length === 0 &&
-    errors.length === 0 &&
-    metrics.length === 0
-  ) {
+  if (traces.length === 0 && logs.length === 0 && errors.length === 0) {
     return {
       success: false,
-      errors: ['Snapshot contains no traces, logs, errors, or metrics'],
+      errors: ['Snapshot contains no traces, logs, or errors'],
       warnings,
     };
   }
 
   return {
     success: true,
-    snapshot: { traces, logs, errors, metrics },
+    snapshot: { traces, logs, errors },
     errors: [],
     warnings,
   };

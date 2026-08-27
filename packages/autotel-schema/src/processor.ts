@@ -67,9 +67,42 @@ export interface SchemaValidationProcessorOptions extends ValidateOptions {
   enabledInProduction?: boolean;
   /** Throttle window for repeated identical warnings (ms). Default 60s. */
   warnIntervalMs?: number;
+  /**
+   * Write the violations onto the span before it is exported. Default `false`.
+   *
+   * **This is the handoff to anything that reads the span later.** The app
+   * owns the contract, so the app is the only thing that can validate; a
+   * viewer or a backend reading exported spans has no contract and never
+   * can. Marking the span is what lets a violation travel to where someone
+   * will see it.
+   *
+   * Opt-in because it changes what gets exported, and because the attributes
+   * cost payload on every non-conforming span. Turn it on in development, and
+   * in CI if something downstream reads the result.
+   *
+   * Ordering matters: this processor has to run *before* the one that exports,
+   * or the stamp lands after the span has already gone.
+   */
+  stampViolations?: boolean;
 }
 
 const DEFAULT_WARN_INTERVAL_MS = 60_000;
+
+/**
+ * How many violation codes a single span carries.
+ *
+ * The count attribute stays exact, so trimming the list loses detail but never
+ * misleads about scale. Without a cap, one span against a wide contract could
+ * carry hundreds of strings into every exporter downstream.
+ */
+const MAX_STAMPED_CODES = 20;
+
+/** Attributes written onto a span carrying contract violations. */
+export const SCHEMA_VIOLATION_ATTRS = {
+  count: 'autotel.schema.violations',
+  severity: 'autotel.schema.violation.severity',
+  codes: 'autotel.schema.violation.codes',
+} as const;
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
@@ -114,11 +147,38 @@ export class SchemaValidationSpanProcessor implements SpanProcessorLike {
     } catch {
       return;
     }
+    if (this.opts.stampViolations) this.stamp(span, violations);
+
     // Mode handling runs outside the fail-open guard so `throw` mode propagates.
     for (const violation of violations) {
       this.violationCount++;
       this.opts.onViolation?.(violation, span);
       this.handle(violation);
+    }
+  }
+
+  /**
+   * Record the violations on the span itself.
+   *
+   * A conforming span is left alone rather than marked with a zero: the
+   * presence of the attribute is what a reader filters on, and stamping every
+   * span would make `autotel.schema.violations` mean nothing while costing
+   * payload on the spans that are fine.
+   */
+  private stamp(span: ReadableSpanLike, violations: SchemaViolation[]): void {
+    if (violations.length === 0) return;
+    try {
+      const worst = violations.some((v) => v.severity === 'error')
+        ? 'error'
+        : 'warning';
+      span.attributes[SCHEMA_VIOLATION_ATTRS.count] = violations.length;
+      span.attributes[SCHEMA_VIOLATION_ATTRS.severity] = worst;
+      span.attributes[SCHEMA_VIOLATION_ATTRS.codes] = violations
+        .slice(0, MAX_STAMPED_CODES)
+        .map((v) => (v.attribute ? `${v.code}:${v.attribute}` : v.code));
+    } catch {
+      // Fail-open, like validation itself: a frozen or exotic attribute bag
+      // must not cost the span it was attached to.
     }
   }
 

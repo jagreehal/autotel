@@ -215,6 +215,16 @@ describe('trace and service summaries', () => {
     ).toBe(false);
   });
 
+  it('does not require aggregate trace predicates to match the same span', () => {
+    expect(
+      traceMatchesQuery(trace, {
+        service: 'checkout',
+        statusCode: 'ERROR',
+        minDurationMs: 250,
+      }),
+    ).toBe(true);
+  });
+
   it('filters traces by derived duration when trace-level fields are absent', () => {
     const spanOnlyTrace = {
       traceId: 'trace-4',

@@ -14,6 +14,7 @@ export {
   originIsLoopback,
 } from './origin-guard';
 export { parseOtlpTraces, parseOtlpLogs, isProtobufContentType } from './otlp';
+export { startOtlpGrpcReceiver } from './grpc';
 export { DEVTOOLS_IDENTITY, probePortHolder } from './identity';
 export type { PortHolder } from './identity';
 export {
@@ -28,11 +29,22 @@ export {
   applyTelemetryLimits,
 } from './telemetry-limits';
 export type { TelemetryLimits } from './telemetry-limits';
+export { DevtoolsStore, SPAN_SCHEMA } from './store/store';
+export type {
+  DevtoolsStoreOptions,
+  QueryTracesArgs,
+  QueryTracesResult,
+  QueryLogsArgs,
+  QueryLogsResult,
+  QueryMetricSeriesArgs,
+  MetricCatalogEntry,
+  MetricSeries,
+  TimeWindow,
+} from './store/store';
 export type {
   SpanData,
   TraceData,
   LogData,
-  MetricData,
   ErrorGroup,
   ErrorOccurrence,
   DevtoolsData,

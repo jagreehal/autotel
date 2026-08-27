@@ -92,21 +92,6 @@
 
     return roots;
   }
-
-  /**
-   * Flatten tree to array while preserving depth info, skipping children of collapsed nodes
-   */
-  function flattenTree(nodes: SpanNode[], collapsed: Set<string>): SpanNode[] {
-    const result: SpanNode[] = [];
-    const traverse = (node: SpanNode) => {
-      result.push(node);
-      if (!collapsed.has(node.span.spanId)) {
-        node.children.forEach(traverse);
-      }
-    };
-    nodes.forEach(traverse);
-    return result;
-  }
 </script>
 
 <script lang="ts">
@@ -120,6 +105,7 @@
   import { formatDuration } from '../utils';
   import { isInputFocused } from '../utils/keyboard';
   import { computeCriticalPath } from '../utils/spanAnalysis';
+  import { flattenWithConnectors } from '../utils/treeConnectors';
   import { helpShortcutsSignal } from '../store.svelte';
   import type { TraceData } from '../types';
   import WaterfallRow, { getSpanKindColor } from './WaterfallRow.svelte';
@@ -171,6 +157,11 @@
   let showCritical = $state(true);
   let markersEl: HTMLDivElement | undefined = $state();
   let markersWidth = $state(0);
+  let scrollEl: HTMLDivElement | undefined = $state();
+  let scrollTop = $state(0);
+  let viewportHeight = $state(0);
+  const ROW_HEIGHT = 34;
+  const OVERSCAN = 12;
 
   const criticalPath = $derived.by(() => computeCriticalPath(trace.spans));
 
@@ -188,7 +179,49 @@
 
   // Build span tree and flatten (skipping children of collapsed nodes)
   const spanTree = $derived.by(() => buildSpanTree(trace.spans));
-  const visibleSpans = $derived.by(() => flattenTree(spanTree, collapsed));
+  // Flattened with the tree-connector metadata for the gutter. Computed from
+  // the *visible* shape, so a collapsed branch leaves no line running to
+  // rows that are not rendered.
+  const visibleRows = $derived.by(() =>
+    flattenWithConnectors(spanTree, (node) => collapsed.has(node.span.spanId)),
+  );
+  const visibleSpans = $derived(visibleRows.map((row) => row.node));
+  const virtualWindow = $derived.by(() => {
+    if (visibleRows.length < 300 || viewportHeight === 0) {
+      return { start: 0, end: visibleRows.length };
+    }
+    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+    const end = Math.min(
+      visibleRows.length,
+      Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN,
+    );
+    return { start, end };
+  });
+  const renderedRows = $derived(
+    visibleRows.slice(virtualWindow.start, virtualWindow.end),
+  );
+
+  $effect(() => {
+    const element = scrollEl;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    viewportHeight = element.clientHeight;
+    const observer = new ResizeObserver(() => {
+      viewportHeight = element.clientHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  });
+
+  function revealRow(index: number) {
+    if (!scrollEl || visibleRows.length < 300) return;
+    const top = index * ROW_HEIGHT;
+    const bottom = top + ROW_HEIGHT;
+    if (top < scrollEl.scrollTop) scrollEl.scrollTop = top;
+    else if (bottom > scrollEl.scrollTop + scrollEl.clientHeight) {
+      scrollEl.scrollTop = bottom - scrollEl.clientHeight;
+    }
+    scrollTop = scrollEl.scrollTop;
+  }
 
   // Arrow key navigation
   const handleKeydown = (e: KeyboardEvent) => {
@@ -218,6 +251,7 @@
     const next = visibleSpans[nextIdx];
     if (next) {
       onSpanSelect?.(next.span);
+      revealRow(nextIdx);
       // Scroll the row into view
       const el = document.getElementById(`waterfall-row-${next.span.spanId}`);
       el?.scrollIntoView({ block: 'nearest' });
@@ -249,6 +283,10 @@
         p = byId.get(p)?.parentSpanId;
       }
       if (changed) collapsed = next;
+      const selectedIndex = visibleRows.findIndex(
+        (row) => row.node.span.spanId === id,
+      );
+      if (selectedIndex >= 0) revealRow(selectedIndex);
       requestAnimationFrame(() =>
         document
           .getElementById(`waterfall-row-${id}`)
@@ -331,7 +369,11 @@
   </div>
 
   <!-- Timeline grid lines -->
-  <div class="flex-1 overflow-auto relative">
+  <div
+    bind:this={scrollEl}
+    onscroll={(event) => (scrollTop = event.currentTarget.scrollTop)}
+    class="flex-1 overflow-auto relative"
+  >
     <!-- Grid lines behind content -->
     <div class="absolute inset-0 pointer-events-none" style={GRID_LINES_STYLE}>
       {#each timeMarkers as marker, idx (idx)}
@@ -346,7 +388,10 @@
          highlighted (accent ring), non-matches are dimmed via a wrapper so
          WaterfallRow itself stays untouched. -->
     <div class="relative">
-      {#each visibleSpans as node (node.span.spanId)}
+      {#if virtualWindow.start > 0}
+        <div style={`height: ${virtualWindow.start * ROW_HEIGHT}px`}></div>
+      {/if}
+      {#each renderedRows as { node, connectors } (node.span.spanId)}
         {@const isMatch = matchedSpanIds.has(node.span.spanId)}
         <div
           class={cn(
@@ -362,11 +407,17 @@
             isCollapsed={collapsed.has(node.span.spanId)}
             hasChildren={hasChildren(node.span.spanId)}
             isCritical={showCritical && criticalPath.has(node.span.spanId)}
+            {connectors}
             onSelect={() => onSpanSelect?.(node.span)}
             onToggleCollapse={() => toggleCollapse(node.span.spanId)}
           />
         </div>
       {/each}
+      {#if virtualWindow.end < visibleRows.length}
+        <div
+          style={`height: ${(visibleRows.length - virtualWindow.end) * ROW_HEIGHT}px`}
+        ></div>
+      {/if}
 
       {#if hasQuery && matchedSpanIds.size === 0}
         <div class="px-3 py-6 text-center text-xs text-fg-subtle">

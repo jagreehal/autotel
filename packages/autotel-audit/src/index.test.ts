@@ -63,6 +63,7 @@ vi.mock('autotel', () => ({
   getRequestLogger: vi.fn(() => logger),
   getRequestLoggerSafe: vi.fn(() => logger),
   createNoopRequestLogger: vi.fn(() => logger),
+  forceKeep: vi.fn(),
   otelTrace: {
     getActiveSpan: vi.fn(() => ({
       setAttribute,

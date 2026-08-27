@@ -60,15 +60,6 @@ export interface LogData {
   resource?: Record<string, unknown>;
 }
 
-export interface MetricData {
-  type: 'event' | 'funnel' | 'outcome' | 'value';
-  name: string;
-  value?: number;
-  attributes: SpanAttributes;
-  timestamp: number;
-  traceId?: string;
-}
-
 export interface ErrorGroup {
   fingerprint: string;
   type: string;
@@ -106,7 +97,6 @@ export interface ErrorOccurrence {
 
 export interface DevtoolsData {
   traces: TraceData[];
-  metrics: MetricData[];
   logs: LogData[];
   errors: ErrorGroup[];
   /** Full-state on every broadcast (client replaces, like `errors`). Coding-agent

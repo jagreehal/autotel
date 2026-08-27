@@ -44,9 +44,7 @@
       "ai.usage.outputTokens": 3,
       "ai.usage.outputTokenDetails.textTokens": 3,
       "ai.usage.totalTokens": 17,
-      "gen_ai.response.finish_reasons": [
-        "stop"
-      ],
+      "gen_ai.response.finish_reasons": ["stop"],
       "gen_ai.response.id": "aitxt-jqiCBPw71YdJPDyuQdCYepZN",
       "gen_ai.response.model": "granite4.1:3b",
       "gen_ai.usage.input_tokens": 14,

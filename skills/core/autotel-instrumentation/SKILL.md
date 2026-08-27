@@ -53,6 +53,8 @@ const checkout = await trace.run('checkout', async (ctx) => {
 ```
 
 `trace.run(name, operation)` runs immediately and returns the result.
+**Version.** `trace.run()` needs autotel 7.0 or later. On 6.x the immediate form is `span(name, fn)`, and `trace(...)` still wraps.
+
 **`trace` wraps, `trace.run` runs** — so a reusable named function is:
 
 ```typescript

@@ -28,11 +28,9 @@
       "gen_ai.usage.details.thoughts_tokens": 37,
       "gen_ai.usage.details.text_prompt_tokens": 7,
       "gen_ai.response.model": "gemini-2.5-flash",
-      "operation.cost": 9.96e-05,
+      "operation.cost": 9.96e-5,
       "gen_ai.response.id": "F0INasypLLjYvdIP9avxiQM",
-      "gen_ai.response.finish_reasons": [
-        "stop"
-      ]
+      "gen_ai.response.finish_reasons": ["stop"]
     },
     "status": {
       "code": "UNSET",

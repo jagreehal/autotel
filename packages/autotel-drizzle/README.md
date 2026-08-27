@@ -110,18 +110,58 @@ await db.select().from(users).where(eq(users.id, 123));
   peerName?: string          // Database host
   peerPort?: number          // Database port
   explain?: 'plan' | 'analyze' | false // Capture the postgres query plan (default: false)
+  semconv?: 'legacy' | 'stable' | 'dup' // Which attribute names to emit
+  spanNaming?: 'drizzle' | 'semconv'    // Span name style (default: 'drizzle')
 }
 ```
 
+**Attribute names: `semconv`**
+
+OpenTelemetry renamed the database attributes. `semconv` picks which names a span
+carries, and defaults to whatever `OTEL_SEMCONV_STABILITY_OPT_IN` asks for, or
+`'legacy'` when that is unset.
+
+| Mode       | Emits                                                                  |
+| ---------- | ---------------------------------------------------------------------- |
+| `'legacy'` | `db.system`, `db.operation`, `db.name`, `db.statement`                 |
+| `'stable'` | `db.system.name`, `db.operation.name`, `db.namespace`, `db.query.text` |
+| `'dup'`    | both, so tools on either side of the rename read the same trace        |
+
+`'dup'` is what the migration period is for: set it and nothing downstream has to
+move at the same time as you.
+
+**Span names: `spanNaming`**
+
+`'drizzle'` (the default) names spans `drizzle.select`. `'semconv'` follows the
+OpenTelemetry database convention, `{db.operation.name} {target}`, so
+`SELECT comments`. The default stays put so existing dashboards and saved queries
+keep working.
+
 **Span Attributes:**
 
-- `db.system` - Database type (postgresql, mysql, sqlite)
-- `db.operation` - Operation name (SELECT, INSERT, UPDATE, DELETE)
-- `db.name` - Database name
-- `db.statement` - SQL query text (if `captureQueryText: true`)
+- `db.system` / `db.system.name` - Database type (postgresql, mysql, sqlite)
+- `db.operation` / `db.operation.name` - Operation name (SELECT, INSERT, UPDATE, DELETE)
+- `db.name` / `db.namespace` - Database name
+- `db.statement` / `db.query.text` - SQL query text (if `captureQueryText: true`)
 - `db.statement.hash` - Stable hash of the statement, present even when the text is suppressed
+- `db.collection.name` - The table the statement is aimed at
 - `net.peer.name` - Database host
 - `net.peer.port` - Database port
+
+### Finding an N+1
+
+`db.statement.hash` is the cheapest N+1 detector you have. A route that loops a
+query emits one span per iteration, all carrying the same hash, and none of them
+individually slow. Group a trace's spans by it:
+
+| `db.statement.hash` | `db.collection.name` | Spans |
+| ------------------- | -------------------- | ----: |
+| `6b863b41773053ba`  | `comments`           |   200 |
+| `53ee56739d371a4b`  | `posts`              |     1 |
+
+One statement, run 200 times. Asking which span was slowest gives you a 1.7%
+answer and sends you off to index a table that was never the problem. The
+`find_repeated_queries` tool in `autotel-mcp` does this grouping for you.
 
 ## Drivers
 
@@ -129,14 +169,14 @@ Tested against postgres 16, mysql 8, and sqlite, driving each through drizzle's
 own query builder, its relational API, and raw `db.execute`. Every driver below
 emits one span per query, names the operation, and tags `db.collection.name`.
 
-| Driver | Queries | Transaction span | Query plans |
-| --- | --- | --- | --- |
-| `node-postgres` | yes | yes | yes |
-| `postgres.js` | yes | yes | yes |
-| `pglite` | yes | yes | yes |
-| `mysql2` | yes | yes | postgres only |
-| `better-sqlite3` | yes | yes, synchronous | postgres only |
-| `libsql` | yes | yes | postgres only |
+| Driver           | Queries | Transaction span | Query plans   |
+| ---------------- | ------- | ---------------- | ------------- |
+| `node-postgres`  | yes     | yes              | yes           |
+| `postgres.js`    | yes     | yes              | yes           |
+| `pglite`         | yes     | yes              | yes           |
+| `mysql2`         | yes     | yes              | postgres only |
+| `better-sqlite3` | yes     | yes, synchronous | postgres only |
+| `libsql`         | yes     | yes              | postgres only |
 
 Nothing about the instrumentation is dialect-specific except `explain`, which
 sends postgres syntax and so turns itself off unless `dbSystem` is
@@ -165,19 +205,19 @@ instrumentDrizzleClient(db, {
 
 The same query, before and after `CREATE INDEX`:
 
-| Attribute | Before | After |
-| --- | --- | --- |
-| `db.statement.hash` | `372269a8881e921a` | `372269a8881e921a` |
-| `db.plan.hash` | `0b50591ce9f68f51` | `eb8765b8d1c4af5a` |
-| `db.plan.node` | `Seq Scan` | `Bitmap Heap Scan` |
-| `db.plan.indexes` | | `idx_comments_post_id` |
-| `db.plan.seq_scan` | `true` | `false` |
-| `db.plan.rows_examined` | `200199` | `1001` |
-| `db.plan.rows_returned` | `1001` | `1001` |
-| `db.plan.blocks` | `1861` | `1005` |
-| `db.plan.cost` | | planner's total cost estimate |
-| `db.plan.rows_estimated` | | rows the planner expected |
-| `db.plan.execution_ms` | | measured time (`'analyze'` only) |
+| Attribute                | Before             | After                            |
+| ------------------------ | ------------------ | -------------------------------- |
+| `db.statement.hash`      | `372269a8881e921a` | `372269a8881e921a`               |
+| `db.plan.hash`           | `0b50591ce9f68f51` | `eb8765b8d1c4af5a`               |
+| `db.plan.node`           | `Seq Scan`         | `Bitmap Heap Scan`               |
+| `db.plan.indexes`        |                    | `idx_comments_post_id`           |
+| `db.plan.seq_scan`       | `true`             | `false`                          |
+| `db.plan.rows_examined`  | `200199`           | `1001`                           |
+| `db.plan.rows_returned`  | `1001`             | `1001`                           |
+| `db.plan.blocks`         | `1861`             | `1005`                           |
+| `db.plan.cost`           |                    | planner's total cost estimate    |
+| `db.plan.rows_estimated` |                    | rows the planner expected        |
+| `db.plan.execution_ms`   |                    | measured time (`'analyze'` only) |
 
 An unchanged statement hash beside a changed plan hash is a planner decision.
 Grouping `db.plan.indexes` by `db.statement.hash` answers which queries an index
@@ -199,7 +239,7 @@ CI, or behind a sample of production traffic.
 - `'analyze'` runs on read-only statements only, so a traced insert never runs
   twice. A leading `WITH` qualifies only when no writing keyword appears
   anywhere in the statement, because `WITH gone AS (DELETE ... RETURNING *)
-  SELECT` opens exactly like a read.
+SELECT` opens exactly like a read.
 - The plan is collected before the span opens, so the extra round trip stays out
   of the duration the span reports.
 - A failed `EXPLAIN` is swallowed. The query still runs and still gets its span.

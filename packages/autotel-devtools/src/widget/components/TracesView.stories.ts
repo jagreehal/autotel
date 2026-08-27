@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite';
-import { expect } from 'storybook/test';
+import { expect, screen, waitFor, within } from 'storybook/test';
 import TracesView from './TracesView.svelte';
 import {
   updateWidgetData,
@@ -7,7 +7,6 @@ import {
   setPaused,
   pendingTracesSignal,
   setSelectedTrace,
-  traceTimeRangeFilterSignal,
 } from '../store.svelte';
 import type { TraceData, SpanData } from '../types';
 
@@ -54,7 +53,23 @@ const meta = {
     clearAllData();
     setPaused(false);
     setSelectedTrace(null);
-    traceTimeRangeFilterSignal.value = 'all';
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (
+      url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const href = String(url);
+      if (href.endsWith('/api/query/traces/fields')) {
+        return new Response(JSON.stringify({ fields: [] }));
+      }
+      if (href.endsWith('/api/query/traces')) {
+        return new Response(JSON.stringify({ traces: [], nextCursor: null }));
+      }
+      return original(url, init);
+    }) as typeof fetch;
+    return () => {
+      globalThis.fetch = original;
+    };
   },
 } satisfies Meta<typeof TracesView>;
 
@@ -63,7 +78,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Empty: Story = {
   play: async ({ canvas }) => {
-    await expect(canvas.getByText(/No traces yet/)).toBeInTheDocument();
+    await expect(await canvas.findByText(/No traces yet/)).toBeInTheDocument();
   },
 };
 
@@ -230,10 +245,15 @@ export const MultiSelectAndDelete: Story = {
 
     await expect(canvas.getByText('(1 selected)')).toBeInTheDocument();
     const del = canvas.getByRole('button', { name: /Delete/ });
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
     await userEvent.click(del);
+    window.confirm = originalConfirm;
 
     // Selection cleared and the bulk bar is gone.
-    await expect(canvas.queryByText('(1 selected)')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(canvas.queryByText('(1 selected)')).not.toBeInTheDocument(),
+    );
     await expect(canvas.getByText('Traces (1)')).toBeInTheDocument();
   },
 };
@@ -263,6 +283,13 @@ export const Dark: Story = {
   },
 };
 
+/**
+ * Narrowing the global time window drops traces that fall outside it.
+ *
+ * Previously driven by a Traces-only dropdown; that control is gone, replaced
+ * by the window shared with every other tab. The behaviour is the same, so the
+ * coverage moves rather than disappearing.
+ */
 export const TimeRangeFilter: Story = {
   play: async ({ canvas, userEvent }) => {
     const now = Date.now();
@@ -281,15 +308,19 @@ export const TimeRangeFilter: Story = {
         }),
       ],
     });
-    // Both visible under the default "Any time".
+    // Both visible under the default, unbounded "All time".
     await expect(await canvas.findByText('fresh op')).toBeInTheDocument();
     await expect(canvas.getByText('old op')).toBeInTheDocument();
 
     // Narrow to the last 5 minutes — the 2h-old trace drops out.
-    const timeSelect = canvas.getByTitle(
-      'Only show traces that started within this window',
-    );
-    await userEvent.selectOptions(timeSelect, '5m');
+    //
+    // The popover is *portalled*, so it lands outside the story's canvas and a
+    // canvas-scoped query cannot see it. That is the same behaviour the
+    // shadow-DOM portal test pins; here there is no shadow root, so it goes to
+    // the document — hence `screen` rather than `canvas`.
+    await userEvent.click(canvas.getByLabelText('Time window'));
+    const presets = await screen.findByRole('group', { name: 'Presets' });
+    await userEvent.click(within(presets).getByText('Last 5m'));
 
     await expect(canvas.queryByText('old op')).not.toBeInTheDocument();
     await expect(canvas.getByText('fresh op')).toBeInTheDocument();

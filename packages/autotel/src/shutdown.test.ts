@@ -148,6 +148,36 @@ describe('shutdown module', () => {
       await expect(flush({ timeout: 100 })).rejects.toThrow('Flush timeout');
     });
 
+    it('says how long it waited and where it was sending when flush times out', async () => {
+      const mockForceFlush = vi
+        .fn()
+        .mockImplementation(
+          () => new Promise((resolve) => setTimeout(resolve, 10_000)),
+        );
+      const mockSdk = {
+        getTracerProvider: () => ({ forceFlush: mockForceFlush }),
+        shutdown: vi.fn(),
+        start: vi.fn(),
+      };
+
+      init({
+        service: 'test-service',
+        endpoint: 'http://127.0.0.1:4318',
+        sdkFactory: () => sdkDouble(mockSdk),
+        subscribers: [mockAdapter],
+      });
+
+      const error: unknown = await flush({ timeout: 100 }).catch(
+        (cause: unknown) => cause,
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      // The bare "Flush timeout" gave no clue what to do next.
+      expect(message).toContain('100ms');
+      expect(message).toContain('http://127.0.0.1:4318');
+    });
+
     it('should respect custom timeout', async () => {
       const mockForceFlush = vi.fn();
       const mockTracerProvider = {

@@ -110,6 +110,8 @@ init({
 
 ### Step 2: Replace Sentry-specific helpers
 
+`trace.run()` in these mappings needs autotel 7.0 or later. On 6.x use `span(name, fn)` for the immediate form.
+
 | Sentry                                                     | autotel                                               |
 | ---------------------------------------------------------- | ----------------------------------------------------- |
 | `Sentry.startSpan({ op: 'fn', name: 'process' }, () => …)` | `trace.run('process', (ctx) => …)`                    |

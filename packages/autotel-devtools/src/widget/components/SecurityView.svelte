@@ -2,7 +2,7 @@
   // Security lens — spans carrying the security.* schema from autotel-audit
   import { ShieldAlert, Hash, ExternalLink, Radar } from '@lucide/svelte';
   import {
-    tracesSignal,
+    windowedTracesSignal,
     setSelectedTrace,
     setSelectedTab,
   } from '../store.svelte';
@@ -18,7 +18,8 @@
 
   let minSeverity = $state<SecuritySeverity>('info');
 
-  const allInfos = $derived(collectSecuritySpans(tracesSignal.value));
+  // Windowed, so the range the toolbar shows is the range analysed.
+  const allInfos = $derived(collectSecuritySpans(windowedTracesSignal.value));
   const severityCounts = $derived(countBySeverity(allInfos));
   const infos = $derived(
     allInfos.filter((info) => severityAtLeast(info, minSeverity)),

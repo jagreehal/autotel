@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-24T19:22:13.094Z",
+  "generatedAt": "2026-08-26T23:40:31.076Z",
   "sizes": {
-    "autotel": 1922396,
+    "autotel": 1927510,
     "autotel-adapters": 142517,
     "autotel-agents": 105725,
     "autotel-audit": 80206,
@@ -9,14 +9,14 @@
     "autotel-backends": 72294,
     "autotel-cli": 326684,
     "autotel-cloudflare": 177108,
-    "autotel-devtools": 759964,
-    "autotel-drizzle": 61828,
+    "autotel-devtools": 1708853,
+    "autotel-drizzle": 63604,
     "autotel-edge": 158827,
     "autotel-eventcatalog": 163954,
     "autotel-genai": 827900,
     "autotel-hono": 15168,
     "autotel-langfuse": 42060,
-    "autotel-mcp": 558507,
+    "autotel-mcp": 579869,
     "autotel-mcp-instrumentation": 234274,
     "autotel-message-contract": 58289,
     "autotel-mongoose": 82521,
@@ -24,15 +24,16 @@
     "autotel-pact": 156916,
     "autotel-playwright": 31152,
     "autotel-plugins": 396383,
-    "autotel-posthog": 110625,
-    "autotel-schema": 167205,
+    "autotel-posthog": 110549,
+    "autotel-schema": 173371,
     "autotel-sentry": 7403,
     "autotel-subscribers": 248189,
     "autotel-tanstack": 273858,
     "autotel-telemetry": 29626,
     "autotel-terminal": 281998,
     "autotel-vitest": 22135,
-    "autotel-vscode": 873163,
-    "autotel-web": 84728
+    "autotel-vscode": 1849173,
+    "autotel-web": 86149,
+    "autotel-webmcp": 11786
   }
 }

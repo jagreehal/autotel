@@ -225,3 +225,26 @@ export function compareCohorts(
 
   return results.slice(0, limit);
 }
+
+/**
+ * Label a numeric value with the range it falls in.
+ *
+ * `compareCohorts` skips a field whose values never repeat, which is what a
+ * raw duration or byte count does. Bucketing at instrumentation time turns
+ * such a field into one that can describe a cohort.
+ */
+export function bucket(value: number, boundaries: readonly number[]): string {
+  // A NaN duration filed under the slowest bucket would invent a cohort that
+  // never happened, which is worse than admitting the value is missing.
+  if (!Number.isFinite(value) || boundaries.length === 0) return 'unknown';
+  // Sorted, so a caller who lists boundaries out of order still gets the
+  // ranges they meant rather than a label that overlaps its neighbours.
+  const ordered = [...boundaries].sort((a, b) => a - b);
+  for (const [index, boundary] of ordered.entries()) {
+    if (value < boundary) {
+      const lower = ordered[index - 1];
+      return lower === undefined ? `<${boundary}` : `${lower}-${boundary}`;
+    }
+  }
+  return `>=${ordered.at(-1)}`;
+}

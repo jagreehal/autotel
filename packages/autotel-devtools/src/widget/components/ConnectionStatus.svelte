@@ -10,8 +10,10 @@
     connectionStatusSignal,
     activityTickSignal,
     ingestRatePerSecond,
+    connectionUrlSignal,
   } from '../store.svelte';
   import { cn } from '../utils/cn';
+  import { httpBaseFromWsUrl } from '../source-client';
 
   interface Props {
     /** Dot only (for tight headers); otherwise dot + label + rate. */
@@ -63,6 +65,36 @@
   });
 
   const showRate = $derived(!compact && status === 'connected' && rate > 0);
+  let storage = $state<{ bytesUsed: number; maxBytes: number } | null>(null);
+  $effect(() => {
+    if (compact || status !== 'connected') return;
+    let active = true;
+    const load = async () => {
+      const wsUrl = connectionUrlSignal.value;
+      const base =
+        (wsUrl ? httpBaseFromWsUrl(wsUrl) : null) ??
+        globalThis.location?.origin;
+      if (!base) return;
+      try {
+        const response = await fetch(`${base}/api/stats`);
+        if (response.ok && active) storage = await response.json();
+      } catch {
+        // Store size is secondary status; connectivity remains authoritative.
+      }
+    };
+    void load();
+    const id = setInterval(load, 30_000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  });
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KB`;
+    if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+    return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  }
 </script>
 
 <div
@@ -91,6 +123,14 @@
         title="Telemetry ingest rate"
       >
         · {rate}/s
+      </span>
+    {/if}
+    {#if storage}
+      <span
+        class="text-xs font-mono tabular-nums text-fg-subtle"
+        title="Telemetry store usage and retention cap"
+      >
+        · {formatBytes(storage.bytesUsed)} / {formatBytes(storage.maxBytes)}
       </span>
     {/if}
   {/if}

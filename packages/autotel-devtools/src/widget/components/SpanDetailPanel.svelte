@@ -1,6 +1,8 @@
 <script lang="ts" module>
   import { cn } from '../utils/cn';
   import { tryParseJsonContainer } from '../utils/json';
+  import { formatClock } from '../timeFormat';
+  import { timeZoneSignal } from '../store.svelte';
 
   const SENSITIVE_RE = /(password|secret|token|authorization|api[-_.]?key)/i;
   const RESOURCE_PREFIXES = [
@@ -61,6 +63,7 @@
     Code2,
     Database,
     ExternalLink,
+    AlertTriangle,
   } from '@lucide/svelte';
   import type { Snippet } from 'svelte';
   import { formatDuration } from '../utils';
@@ -69,6 +72,9 @@
   import { matchesNeedle } from '../utils/textMatch';
   import JsonTree from './JsonTree.svelte';
   import IdRow from './IdRow.svelte';
+  import CopyButton from './CopyButton.svelte';
+  import { curlFromSpan } from '../utils/curl';
+  import { schemaViolations } from '../utils/schemaViolations';
   import type { SpanData, TraceData } from '../types';
   import { inferResourceName, inferResourceType } from '../utils/resources';
   import { computeSelfTime } from '../utils/spanAnalysis';
@@ -95,6 +101,9 @@
     onClose: () => void;
   }
   let { span, trace, onClose }: Props = $props();
+
+  const curlCommand = $derived(curlFromSpan(span));
+  const violations = $derived(schemaViolations(span));
 
   let expandedSections = $state<Record<string, boolean>>({
     timing: true,
@@ -373,7 +382,7 @@
         {@render timingItem('End (relative)', formatDuration(relativeEnd))}
         {@render timingItem(
           'Start Time',
-          new Date(span.startTime).toLocaleTimeString(),
+          formatClock(span.startTime, timeZoneSignal.value),
         )}
       </div>
     {/snippet}
@@ -384,6 +393,68 @@
       () => toggleSection('timing'),
       timingBody,
     )}
+
+    {#if violations}
+      <!--
+        The app validated this against its own contract and wrote the result
+        onto the span. The viewer only reads it, which is why this works for
+        any span that reaches here.
+      -->
+      <div
+        class={violations.severity === 'error'
+          ? 'border-b border-line-subtle bg-danger/5 px-4 py-3'
+          : 'border-b border-line-subtle bg-warning/5 px-4 py-3'}
+      >
+        <div class="mb-1 flex items-center gap-1.5">
+          <AlertTriangle
+            size={13}
+            class={violations.severity === 'error'
+              ? 'text-danger'
+              : 'text-warning'}
+          />
+          <span class="text-xs font-medium text-fg">
+            {violations.count}
+            {violations.count === 1
+              ? 'contract violation'
+              : 'contract violations'}
+          </span>
+        </div>
+        <ul class="space-y-0.5">
+          {#each violations.codes as code (code)}
+            <li class="font-mono text-[11px] text-fg-muted">{code}</li>
+          {/each}
+        </ul>
+        {#if violations.count > violations.codes.length}
+          <p class="mt-1 text-[11px] text-fg-subtle">
+            {violations.count - violations.codes.length} more not listed on the span.
+          </p>
+        {/if}
+      </div>
+    {/if}
+
+    {#if curlCommand}
+      <!--
+        Only for spans that recorded a request. The wording is deliberate: a
+        span carries the method and URL, rarely the headers and never the body,
+        so this is something you paste and edit rather than a faithful replay.
+      -->
+      <div class="px-4 py-3 border-b border-line-subtle">
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <span class="text-[11px] uppercase tracking-wide text-fg-muted">
+            Reproduce
+          </span>
+          <CopyButton value={curlCommand} label="Copy as curl" />
+        </div>
+        <code
+          class="block overflow-x-auto whitespace-pre rounded bg-subtle px-2 py-1 text-[11px] text-fg-muted"
+          >{curlCommand}</code
+        >
+        <p class="mt-1 text-[11px] text-fg-subtle">
+          Rebuilt from span attributes. Headers appear only if captured; the
+          body is never recorded.
+        </p>
+      </div>
+    {/if}
 
     <!-- IDs section -->
     <div class="px-4 py-3 border-b border-line-subtle">
@@ -740,7 +811,7 @@
                     </span>
                   {/if}
                   <span class="text-fg-subtle text-[10px] ml-auto">
-                    {new Date(log.timestamp).toLocaleTimeString()}
+                    {formatClock(log.timestamp, timeZoneSignal.value)}
                   </span>
                 </div>
                 <div class="text-fg-muted break-all line-clamp-2">

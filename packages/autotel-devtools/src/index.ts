@@ -24,13 +24,35 @@ export interface CreateDevtoolsOptions {
    * otherwise. `false` disables it. See `resolveSourceRoot`.
    */
   sourceRoot?: string | false;
+  /**
+   * Path to the sqlite file backing the store.
+   *
+   * Omit for in-memory, which is the default: an embedder gets querying and
+   * paging without this call suddenly writing a database file it did not ask
+   * for. Set it to keep telemetry across restarts.
+   */
+  dbPath?: string;
+  /** Maximum traces retained in the store before the oldest are pruned. */
+  maxTraces?: number;
+  /** Maximum logs retained in the store before the oldest are pruned. */
+  maxLogs?: number;
+  /** Maximum logical sqlite size before oldest telemetry is pruned. */
+  maxDbBytes?: number;
+  /** How often to prune the store past its caps, in ms. `0` disables it. */
+  retentionIntervalMs?: number;
 }
 
 export interface DevtoolsInstance {
   server: DevtoolsServer;
   httpServer: Server;
   exporter: DevtoolsSpanExporter;
+  /** The port that was *requested*. See `ready` for the one actually bound. */
   port: number;
+  /**
+   * Resolves once both loopback listeners are up, carrying the bound port,
+   * every address bound, and any warnings raised while binding.
+   */
+  ready: Promise<{ addresses: string[]; port: number; warnings: string[] }>;
   close: () => Promise<void>;
 }
 
@@ -52,6 +74,11 @@ export function createDevtools(
     maxTraceCount: options.maxTraceCount,
     maxLogCount: options.maxLogCount,
     maxMetricCount: options.maxMetricCount,
+    dbPath: options.dbPath,
+    maxTraces: options.maxTraces,
+    maxLogs: options.maxLogs,
+    maxDbBytes: options.maxDbBytes,
+    retentionIntervalMs: options.retentionIntervalMs,
   });
   // `false` and the env var's "off" spellings are the same answer, so both go
   // through one resolver rather than being special-cased here.
@@ -71,8 +98,12 @@ export function createDevtools(
     primary: httpServer,
     port,
     host,
-    attachSecondary: (s) =>
-      attachDevtoolsRoutes(s, wsServer, { loopbackOnly, sourceRoot }),
+    attachSecondary: (s) => {
+      attachDevtoolsRoutes(s, wsServer, { loopbackOnly, sourceRoot });
+      // The live tail has to answer on this family too, or a client using the
+      // other form of `localhost` sees telemetry over HTTP and no stream.
+      wsServer.attachWebSocket(s);
+    },
   });
   if (options.verbose) {
     listeners.ready.then(({ warnings }) => {
@@ -87,6 +118,16 @@ export function createDevtools(
     httpServer,
     exporter,
     port,
+    /**
+     * Resolves once both loopback listeners are up, with the port actually
+     * bound.
+     *
+     * `port` above is what was *asked for*, which is not the same thing: pass
+     * `port: 0` and it stays 0, and a busy port falls forward to the next free
+     * one. An embedder that wants to print a URL or point an exporter at this
+     * receiver needs the resolved value, and until now had no way to get it.
+     */
+    ready: listeners.ready,
     close: async () => {
       await wsServer.close();
       await listeners.closeSibling();
@@ -104,7 +145,6 @@ export type {
   SpanData,
   TraceData,
   LogData,
-  MetricData,
   ErrorGroup,
   DevtoolsData,
 } from './server/types';

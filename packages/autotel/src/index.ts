@@ -101,6 +101,11 @@ export {
   ctx,
   getActiveTraceContext,
 } from './functional';
+export { forceKeep } from './force-keep';
+export { AUTOTEL_DEBUG_BAGGAGE_KEY } from './sampling';
+export { experiment } from './experiment';
+export type { ExperimentOptions } from './experiment';
+
 // `trace` is the hybrid: callable like autotel's `trace(fn)` AND carries the
 // full `@opentelemetry/api` TraceAPI surface (getActiveSpan, getTracer, etc).
 export { trace } from './trace-hybrid';

@@ -44,3 +44,9 @@ Optional adjacent (standalone, test-time, needs no runtime observability):
 - `import path from 'node:path'` (default import). `Array#toSorted()` not `.sort()`.
 - Build: tsdown via `tsupCompatOutExtensions`. Entries: `index`, `processor`, `diff`, `cli` (bin). Exports: `.`, `./processor`, `./diff`.
 - `pnpm test` (vitest), `pnpm lint`, `pnpm type-check`, `pnpm build`.
+
+## Handing violations to a reader
+
+- `stampViolations` writes `autotel.schema.violations`, `.violation.severity` and `.violation.codes` onto a non-conforming span before export, and the names are exported as `SCHEMA_VIOLATION_ATTRS` because another package reads them. A conforming span is left unmarked, so the presence of the attribute is what a reader filters on.
+- **Opt-in, and ordered.** It changes what gets exported and costs payload on every non-conforming span, and the processor has to run _before_ the one that exports or the stamp lands after the span has gone.
+- The code list is capped at 20 while the count stays exact: trimming loses detail but never misleads about scale, and one span against a wide contract would otherwise carry hundreds of strings into every exporter downstream.

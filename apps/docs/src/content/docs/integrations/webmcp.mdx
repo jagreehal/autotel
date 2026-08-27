@@ -1,0 +1,169 @@
+---
+title: WebMCP
+description: OpenTelemetry instrumentation for WebMCP tools in the browser.
+---
+
+[WebMCP](https://github.com/webmachinelearning/webmcp) lets a page register
+tools that a browser agent can call. `autotel-webmcp` turns every registration
+and every invocation into a span.
+
+Spans record what the agent received. The browser serialises your return value,
+substitutes a message for an empty one, and discards annotations it does not
+recognise, so what you returned and what the agent read are often different
+things. Behaviour here is measured against Chrome 151 rather than read from the
+draft, because the two disagree in several places.
+
+## Installation
+
+```bash
+npm install autotel-web autotel-webmcp
+```
+
+`autotel-web` is a peer dependency. The import stays static so `span()` remains
+synchronous.
+
+## Usage
+
+```typescript
+import { initFull } from 'autotel-web/full';
+import { instrumentWebMCP } from 'autotel-webmcp';
+
+initFull({ service: 'shop-web', endpoint: 'http://localhost:4318' });
+
+instrumentWebMCP();
+
+await document.modelContext.registerTool({
+  name: 'search',
+  description: 'Search the product catalogue',
+  inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+  execute: ({ query }) => JSON.stringify(search(query)),
+});
+```
+
+Call `instrumentWebMCP()` before you register tools. It wraps `registerTool` on
+the shared ModelContext, so a tool registered earlier keeps its original
+handler.
+
+The call is safe anywhere. With no `document.modelContext` it returns a no-op
+handle, which covers server rendering and every browser that has not shipped
+WebMCP.
+
+## Two entry points
+
+`autotel-webmcp` fills in autotel-web's `span()`, and reaches the OpenTelemetry
+browser SDK through it. That needs a bundler, like any app dependency.
+
+`autotel-webmcp/core` is the same instrumentation with no telemetry dependency.
+You pass `span`, it imports nothing beyond itself, and it loads straight into a
+browser with no build step:
+
+```javascript
+import { instrumentWebMCP } from 'autotel-webmcp/core';
+
+instrumentWebMCP({ span: mySpanFactory });
+```
+
+Reach for `/core` when your spans already have somewhere to go, or when you want
+the browser SDK out of your bundle.
+
+## Options
+
+```typescript
+instrumentWebMCP({
+  capturePayloads: true,
+  maxPayloadLength: 4096,
+  isErrorResult: (value) =>
+    typeof value === 'string' && value.startsWith('Error: '),
+});
+```
+
+| Option             | Default  | Meaning                                                     |
+| ------------------ | -------- | ----------------------------------------------------------- |
+| `span`             | `span()` | Span factory. Inject one to test without a pipeline.        |
+| `capturePayloads`  | `false`  | Record tool arguments and results as attributes.            |
+| `maxPayloadLength` | `2048`   | Truncation limit for captured payloads.                     |
+| `isErrorResult`    | —        | Classify failures a tool library returned instead of threw. |
+
+`instrumentWebMCP()` returns `{ uninstall() }`. Repeated calls share one
+installation and are reference-counted, so each caller uninstalls its own
+handle.
+
+## Payload capture is opt-in
+
+Tool arguments carry addresses, order contents and whatever else a user typed,
+and a browser agent calls tools without a server ever seeing the arguments.
+Capture stays off until you ask for it.
+
+With capture off you still get result type, byte size, envelope shape and
+whether the browser substituted the result, which is enough to answer most
+questions about a misbehaving tool.
+
+## Attributes
+
+Shared concepts use the canonical names, so WebMCP tool calls land on the same
+dashboards as server-side MCP calls. WebMCP-specific facts sit under `webmcp.*`.
+
+| Attribute                               | Notes                                            |
+| --------------------------------------- | ------------------------------------------------ |
+| `gen_ai.tool.name` / `webmcp.tool.name` | Tool name                                        |
+| `gen_ai.operation.name`                 | `execute_tool`                                   |
+| `mcp.tool.arguments.size`               | Argument bytes, recorded with capture off        |
+| `mcp.tool.result.size`                  | Result bytes the agent pays for                  |
+| `gen_ai.tool.call.arguments`            | Arguments, only with capture on                  |
+| `gen_ai.tool.call.result`               | The exact string the agent received, capture on  |
+| `webmcp.result.type`                    | The handler's return type before serialisation   |
+| `webmcp.result.envelope`                | The value is an MCP `{ content: [...] }` wrapper |
+| `webmcp.result.substituted`             | The browser replaced an empty result             |
+| `webmcp.annotations.sent`               | Annotation keys you passed                       |
+| `webmcp.annotations.dropped`            | Annotation keys the browser discarded            |
+| `error.type` / `webmcp.result.error`    | Set when `isErrorResult` recognises a failure    |
+
+## Three things the browser does quietly
+
+**Annotations disappear.** Chrome keeps `readOnlyHint` and
+`untrustedContentHint` and normalises both to booleans. `destructiveHint`,
+`idempotentHint` and the rest of the server-side MCP vocabulary vanish with no
+error. `webmcp.annotations.dropped` names them, so a tool you believed was
+marked destructive shows up as one that never was.
+
+**Empty results become prose.** Return an empty string and the agent reads
+_Operation succeeded_. `webmcp.result.substituted` marks it.
+
+**Envelopes are not unwrapped.** An MCP `{ content: [...] }` result reaches the
+agent as the JSON wrapper rather than the text inside.
+`webmcp.result.envelope` catches it, including when a tool library serialised
+the envelope to a string before the browser saw it.
+
+## Failures a library normalised
+
+A tool library often catches a handler failure and returns readable prose,
+because that is better for the agent than a rejected promise. Telemetry then
+cannot tell the failure from a success. `isErrorResult` closes the gap:
+
+```typescript
+instrumentWebMCP({
+  isErrorResult: (value) =>
+    typeof value === 'string' && value.startsWith('Error: '),
+});
+```
+
+The span gets `error.type` and `webmcp.result.error`, and the agent still
+receives what your library decided to send. A classifier that throws is
+recorded and ignored rather than allowed to break the tool call.
+
+## Coverage
+
+Instrumentation covers imperative tools registered through the shared
+ModelContext, including retained references and Chrome's
+`navigator.modelContext` alias, because it patches the native object rather than
+replacing `document.modelContext`.
+
+Declarative form tools do not pass through `registerTool()` and are out of scope,
+as are tools registered before `instrumentWebMCP()` runs.
+
+## Example
+
+[`apps/example-webmcp`](https://github.com/jagreehal/autotel/tree/main/apps/example-webmcp)
+registers four tools, calls them the way an agent would, and renders each span
+on the page. It needs no collector: `instrumentWebMCP()` takes a span factory,
+and the demo passes one that draws to the DOM.

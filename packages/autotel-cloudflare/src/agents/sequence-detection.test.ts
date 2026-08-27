@@ -96,9 +96,9 @@ describe('Cloudflare agent spans satisfy the shipped sequence rules', () => {
       }),
     );
 
-    expect(detectFrom(processor.spans as unknown as SequenceSpanLike[])).toEqual(
-      [],
-    );
+    expect(
+      detectFrom(processor.spans as unknown as SequenceSpanLike[]),
+    ).toEqual([]);
   });
 
   it('does not fire when the human approved the call', () => {
@@ -120,9 +120,9 @@ describe('Cloudflare agent spans satisfy the shipped sequence rules', () => {
       }),
     );
 
-    expect(detectFrom(processor.spans as unknown as SequenceSpanLike[])).toEqual(
-      [],
-    );
+    expect(
+      detectFrom(processor.spans as unknown as SequenceSpanLike[]),
+    ).toEqual([]);
   });
 
   it('records a tool result in the canonical governance vocabulary', () => {

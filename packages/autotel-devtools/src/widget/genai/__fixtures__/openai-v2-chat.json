@@ -14,9 +14,7 @@
     "gen_ai.request.model": "gpt-4o-mini",
     "gen_ai.response.id": "chatcmpl-9X8XYZabcdef",
     "gen_ai.response.model": "gpt-4o-mini-2024-07-18",
-    "gen_ai.response.finish_reasons": [
-      "stop"
-    ],
+    "gen_ai.response.finish_reasons": ["stop"],
     "gen_ai.usage.input_tokens": 12,
     "gen_ai.usage.output_tokens": 7,
     "gen_ai.input.messages": "[{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"content\":\"Say this is a test\"}]}]",

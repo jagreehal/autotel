@@ -105,11 +105,49 @@ export interface OtlpLogsRequest {
   resourceLogs?: OtlpResourceLogs[];
 }
 
+export interface OtlpExemplar {
+  asDouble?: number | string;
+  asInt?: number | string;
+  timeUnixNano?: string;
+  /** Hex on the JSON wire, base64 in protobuf; normalised at parse. */
+  traceId?: string;
+  spanId?: string;
+  filteredAttributes?: OtlpKeyValue[];
+}
+
+export interface OtlpQuantileValue {
+  quantile?: number;
+  value?: number;
+}
+
+export interface OtlpExponentialBuckets {
+  offset?: number;
+  bucketCounts?: Array<number | string>;
+}
+
 export interface OtlpDataPoint {
   asDouble?: number | string;
   asInt?: number | string;
-  /** Histogram points carry a count instead of a value. */
+  /** Histogram and summary points carry a count instead of a value. */
   count?: number | string;
+  /** Histogram/summary total. Distinct from `count`. */
+  sum?: number | string;
+  min?: number | string;
+  max?: number | string;
+  /** Histogram: one count per bucket, one longer than `explicitBounds`. */
+  bucketCounts?: Array<number | string>;
+  /** Histogram: upper bounds; the final bucket is the +Inf overflow. */
+  explicitBounds?: Array<number | string>;
+  /** Exponential histogram resolution and the buckets around zero. */
+  scale?: number;
+  zeroCount?: number | string;
+  zeroThreshold?: number | string;
+  positive?: OtlpExponentialBuckets;
+  negative?: OtlpExponentialBuckets;
+  /** Summary: precomputed quantiles. */
+  quantileValues?: OtlpQuantileValue[];
+  /** Exemplars link a data point back to the trace that produced it. */
+  exemplars?: OtlpExemplar[];
   attributes?: OtlpKeyValue[];
   timeUnixNano?: string;
   startTimeUnixNano?: string;
@@ -122,6 +160,8 @@ export interface OtlpDataPoint {
 export interface OtlpAggregation {
   dataPoints?: OtlpDataPoint[];
   aggregationTemporality?: number | string;
+  /** Sums only: a non-monotonic sum is an up/down counter, not a rate. */
+  isMonotonic?: boolean;
 }
 
 export interface OtlpMetric {
@@ -131,6 +171,8 @@ export interface OtlpMetric {
   sum?: OtlpAggregation;
   gauge?: OtlpAggregation;
   histogram?: OtlpAggregation;
+  exponentialHistogram?: OtlpAggregation;
+  summary?: OtlpAggregation;
 }
 
 export interface OtlpScopeMetrics {

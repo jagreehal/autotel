@@ -42,6 +42,7 @@ export default new Map([
 ["src/content/docs/integrations/sentry.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fintegrations%2Fsentry.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/integrations/subscribers.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fintegrations%2Fsubscribers.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/integrations/validation.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fintegrations%2Fvalidation.mdx&astroContentModuleFlag=true")],
+["src/content/docs/integrations/webmcp.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fintegrations%2Fwebmcp.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/introduction.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fintroduction.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/local-stacks.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Flocal-stacks.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/migration.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fmigration.mdx&astroContentModuleFlag=true")],

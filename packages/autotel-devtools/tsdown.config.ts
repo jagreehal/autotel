@@ -12,6 +12,12 @@ export default defineConfig({
     'server/log-exporter': 'src/server/log-exporter.ts',
     'server/remote-exporter': 'src/server/remote-exporter.ts',
     'genai/index': 'src/widget/genai/index.ts',
+    // The query language is shared: the MCP devtools backend compiles searches
+    // into it, and needs the same grammar to verify what it emits parses.
+    'query/index': 'src/query/index.ts',
+    // The wire codec is shared: the widget decodes the live tail with it, and
+    // anyone writing their own /ws client needs the same function.
+    'wire/index': 'src/wire/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

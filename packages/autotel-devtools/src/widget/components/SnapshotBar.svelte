@@ -4,7 +4,6 @@
     tracesSignal,
     logsSignal,
     errorGroupsSignal,
-    metricsSignal,
     snapshotModeSignal,
     loadSnapshot,
     exitSnapshotMode,
@@ -21,6 +20,24 @@
   let warning = $state<string | null>(null);
   const inSnapshot = $derived(snapshotModeSignal.value);
 
+  /**
+   * What a snapshot would contain, spelled out.
+   *
+   * The bar said "Local data" whether the store held two thousand traces or
+   * none, which made `Download snapshot` a button you pressed to find out
+   * whether there was anything to download.
+   */
+  const counts = $derived(
+    [
+      { n: tracesSignal.value.length, one: 'trace', many: 'traces' },
+      { n: logsSignal.value.length, one: 'log', many: 'logs' },
+      { n: errorGroupsSignal.value.length, one: 'error', many: 'errors' },
+    ]
+      .filter((part) => part.n > 0)
+      .map((part) => `${part.n} ${part.n === 1 ? part.one : part.many}`),
+  );
+  const isEmpty = $derived(counts.length === 0);
+
   const onDownload = () => {
     error = null;
     warning = null;
@@ -28,7 +45,6 @@
       traces: tracesSignal.value,
       logs: logsSignal.value,
       errors: errorGroupsSignal.value,
-      metrics: metricsSignal.value,
     });
   };
 
@@ -80,11 +96,16 @@
       Exit
     </button>
   {:else}
-    <span class="text-fg-subtle">Local data</span>
+    <span class="text-fg-subtle">
+      {isEmpty ? 'No data captured' : counts.join(' · ')}
+    </span>
     <button
       onclick={onDownload}
-      class="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded hover:bg-hover transition-colors"
-      title="Download a snapshot of traces, logs, errors and metrics"
+      disabled={isEmpty}
+      class="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded hover:bg-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      title={isEmpty
+        ? 'Nothing captured yet'
+        : 'Download a snapshot of traces, logs, errors and metrics'}
     >
       <Camera size={12} />
       Download snapshot

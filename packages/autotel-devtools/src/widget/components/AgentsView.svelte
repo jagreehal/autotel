@@ -217,9 +217,9 @@
         <CopyButton value={launchCommand} label="Copy launch command" />
       </div>
       <p class="text-[11px] text-fg-muted/80 max-w-md">
-        Uses OTLP <span class="font-mono">http/protobuf</span> to
-        <span class="font-mono">:4318</span> — not the gRPC setup from most guides,
-        which this receiver doesn't speak.
+        Uses OTLP <span class="font-mono">http/protobuf</span> on
+        <span class="font-mono">:4318</span>. Standard OTLP/gRPC exporters can
+        connect on <span class="font-mono">:4317</span>.
       </p>
     </div>
   {:else}

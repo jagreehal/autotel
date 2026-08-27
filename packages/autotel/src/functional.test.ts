@@ -142,6 +142,130 @@ describe('Functional API', () => {
         SpanKind.CLIENT,
       );
     });
+
+    it('waits for a thenable result, so work inside it nests under the span', async () => {
+      const collector = createTraceCollector();
+
+      // The lazy builder drizzle, knex and Prisma return: a thenable that is
+      // not a native Promise, and does no work until something awaits it.
+      const builder = {
+        then(onFulfilled: (value: string) => unknown) {
+          return Promise.resolve().then(() => {
+            span('child.query', () => 'rows');
+            return onFulfilled('rows');
+          });
+        },
+      };
+
+      await span('parent.route', () => builder);
+
+      const parent = collector.getSpansByName('parent.route')[0];
+      const child = collector.getSpansByName('child.query')[0];
+      expect(child?.parentSpanId).toBe(parent?.spanId);
+    });
+
+    it('resolves to the thenable value', async () => {
+      const builder = {
+        then: (onFulfilled: (value: string) => unknown) =>
+          Promise.resolve().then(() => onFulfilled('rows')),
+      };
+
+      await expect(span('thenable.value', () => builder)).resolves.toBe('rows');
+    });
+
+    it('marks the span failed when a thenable rejects', async () => {
+      const collector = createTraceCollector();
+      const failing = {
+        then: (
+          _onFulfilled: (value: never) => unknown,
+          onRejected?: (reason: unknown) => unknown,
+        ) =>
+          Promise.resolve().then(() => onRejected?.(new Error('query failed'))),
+      };
+
+      await expect(span('thenable.rejects', () => failing)).rejects.toThrow(
+        'query failed',
+      );
+
+      expect(collector.getSpansByName('thenable.rejects')[0]?.status.code).toBe(
+        SpanStatusCode.ERROR,
+      );
+    });
+
+    it('reads a thenable getter once, like native promise assimilation', async () => {
+      let reads = 0;
+      const thenable = {
+        get then() {
+          reads++;
+          return (onFulfilled: (value: string) => unknown) =>
+            onFulfilled('rows');
+        },
+      };
+
+      await expect(span('thenable.getter', () => thenable)).resolves.toBe(
+        'rows',
+      );
+      expect(reads).toBe(1);
+    });
+  });
+
+  describe('thenable results across the wrappers', () => {
+    // Same lazy-builder shape as the span() tests: an ORM query builder.
+    const lazyBuilder = (onRun: () => void) => ({
+      then(onFulfilled: (value: string) => unknown) {
+        return Promise.resolve().then(() => {
+          onRun();
+          return onFulfilled('rows');
+        });
+      },
+    });
+
+    it('trace() keeps the span open until a thenable settles', async () => {
+      const collector = createTraceCollector();
+      const handler = trace('traced.route', () =>
+        lazyBuilder(() => {
+          span('traced.child', () => 'inner');
+        }),
+      );
+
+      await handler();
+
+      const parent = collector.getSpansByName('traced.route')[0];
+      const child = collector.getSpansByName('traced.child')[0];
+      expect(child?.parentSpanId).toBe(parent?.spanId);
+    });
+
+    it('instrument() keeps the span open until a thenable settles', async () => {
+      const collector = createTraceCollector();
+      const service = instrument({
+        key: 'instrumented.load',
+        fn: () =>
+          lazyBuilder(() => {
+            span('instrumented.child', () => 'inner');
+          }),
+      });
+
+      await service();
+
+      const parent = collector.getSpansByName('instrumented.load')[0];
+      const child = collector.getSpansByName('instrumented.child')[0];
+      expect(child?.parentSpanId).toBe(parent?.spanId);
+    });
+
+    it('withBaggage() resolves a thenable without leaking baggage past it', async () => {
+      const result = await withBaggage({
+        baggage: { 'tenant.id': 'acme' },
+        // The cast is the point: withBaggage's public type admits Promise<T>
+        // but not PromiseLike<T>, so a query builder only type-checks by
+        // routing through the synchronous overload.
+        fn: () => lazyBuilder(() => {}) as unknown as Promise<string>,
+      });
+
+      expect(result).toBe('rows');
+      expect(
+        propagation.getBaggage(context.active())?.getEntry('tenant.id')?.value,
+      ).toBeUndefined();
+    });
   });
 
   describe('trace()', () => {

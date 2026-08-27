@@ -104,3 +104,33 @@ describe('DevtoolsWebSocketClient reconnect', () => {
     expect(statuses).toEqual(['connected', 'disconnected', 'connected']);
   });
 });
+
+describe('DevtoolsWebSocketClient wire decoding', () => {
+  it('rebuilds the span endTime the server leaves off the live tail', () => {
+    const client = new DevtoolsWebSocketClient('ws://localhost:4318/ws');
+    const seen: unknown[] = [];
+    client.onMessage((data) => seen.push(data));
+    client.connect();
+
+    FakeWebSocket.instances[0].fire('message', {
+      data: JSON.stringify({
+        traces: [
+          {
+            traceId: 'a1',
+            startTime: 1000,
+            duration: 40,
+            rootSpan: { spanId: 'root', startTime: 1000, duration: 40 },
+            spans: [{ spanId: 'root', startTime: 1000, duration: 40 }],
+          },
+        ],
+        logs: [],
+      }),
+    });
+
+    const payload = seen[0] as {
+      traces: Array<{ endTime: number; spans: Array<{ endTime: number }> }>;
+    };
+    expect(payload.traces[0].endTime).toBe(1040);
+    expect(payload.traces[0].spans[0].endTime).toBe(1040);
+  });
+});

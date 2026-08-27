@@ -1,4 +1,5 @@
 import type { DevtoolsData } from '../server/types';
+import { decodeTraces } from '../wire/wire';
 
 export type MessageHandler = (data: DevtoolsData) => void;
 export type ConnectionStatus = 'connected' | 'disconnected';
@@ -32,7 +33,13 @@ export class DevtoolsWebSocketClient {
       this.ws.addEventListener('message', (event) => {
         try {
           const data = JSON.parse(event.data as string);
-          for (const handler of this.messageHandlers) handler(data);
+          // The server leaves off any endTime that startTime + duration
+          // reproduces. Rebuilding it here is what keeps every view unaware
+          // that the transport dropped a field.
+          const decoded = Array.isArray(data?.traces)
+            ? { ...data, traces: decodeTraces(data.traces) }
+            : data;
+          for (const handler of this.messageHandlers) handler(decoded);
         } catch {
           /* ignore parse errors */
         }
