@@ -1,6 +1,6 @@
 {
   "name": "autotel-posthog",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Everything PostHog for autotel: browser session/replay join, server-side event subscriber, and trace links in both directions",
   "type": "module",
   "sideEffects": false,

@@ -1,5 +1,12 @@
 # autotel-backends
 
+## 2.13.9
+
+### Patch Changes
+
+- Updated dependencies [7a2f38c]
+  - autotel@7.2.0
+
 ## 2.13.8
 
 ### Patch Changes

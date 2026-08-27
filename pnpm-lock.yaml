@@ -1478,6 +1478,8 @@ importers:
 
   apps/example-web-vanilla: {}
 
+  apps/example-webmcp: {}
+
   apps/example-winston:
     dependencies:
       '@opentelemetry/auto-instrumentations-node':

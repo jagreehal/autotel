@@ -1,6 +1,6 @@
 {
   "name": "autotel-webmcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenTelemetry instrumentation for WebMCP - traces in-page agent tool calls from the browser",
   "type": "module",
   "main": "./dist/index.js",
@@ -28,7 +28,7 @@
     "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
-    "autotel-web": "^1.13.0"
+    "autotel-web": "^1.13.2"
   },
   "keywords": [
     "webmcp",

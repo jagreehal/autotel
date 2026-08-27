@@ -1,5 +1,12 @@
 # @jagreehal/example-collector-pipeline
 
+## 1.0.8
+
+### Patch Changes
+
+- Updated dependencies [7a2f38c]
+  - autotel@7.2.0
+
 ## 1.0.7
 
 ### Patch Changes
