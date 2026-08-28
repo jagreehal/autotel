@@ -1355,6 +1355,62 @@ export class DevtoolsStore {
     ];
   }
 
+  /**
+   * Values of one attribute paired with another on the same entity.
+   *
+   * `searchAttributes` matches on value text, which cannot answer "what arms
+   * does this experiment have". Pairing two keys across the same span can, and
+   * that is what turns a pair of cohorts into something the viewer offers
+   * rather than something the reader has to type.
+   *
+   * Rows arrive grouped by `key`, each group's values commonest first, so a
+   * caller can build the groups in one pass and take the two commonest as a
+   * default pair.
+   *
+   * The join runs over `attribute_occurrences`, not the `attribute_values`
+   * dictionary: occurrences are deleted with their span, so retention prunes
+   * them, and they carry the entity a value was seen on, so an arm is only
+   * offered for the experiment it actually ran under. The dictionary can do
+   * neither — it counts values for the lifetime of the database and forgets
+   * which span each came from, which would offer arms belonging to a different
+   * experiment and experiments whose spans are long gone.
+   */
+  pairedAttributeValues(
+    signal: 'traces' | 'logs',
+    key: string,
+    pairedKey: string,
+    limit = 200,
+  ): Array<{ value: unknown; paired: unknown; count: number }> {
+    const rows = this.db
+      .prepare(
+        `
+      SELECT a.value_json AS value_json, b.value_json AS paired_json, count(*) AS count
+      FROM attribute_occurrences a
+      JOIN attribute_occurrences b
+        ON b.signal = a.signal AND b.entity_id = a.entity_id AND b.key = ?
+      WHERE a.signal = ? AND a.key = ?
+      GROUP BY a.value_json, b.value_json
+      ORDER BY value_json ASC, count DESC, paired_json ASC
+      LIMIT ?
+    `,
+      )
+      .all(
+        pairedKey,
+        signal,
+        key,
+        Math.max(1, Math.min(limit, 500)),
+      ) as unknown as Array<{
+      value_json: string;
+      paired_json: string;
+      count: number | bigint;
+    }>;
+    return rows.map((row) => ({
+      value: JSON.parse(row.value_json) as unknown,
+      paired: JSON.parse(row.paired_json) as unknown,
+      count: Number(row.count),
+    }));
+  }
+
   searchAttributes(
     signal: 'traces' | 'logs',
     value: string,

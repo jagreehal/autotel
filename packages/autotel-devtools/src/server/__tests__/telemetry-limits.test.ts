@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   appendManyWithLimit,
   appendWithLimit,
@@ -93,11 +93,12 @@ describe('telemetry limits in DevtoolsServer', () => {
   it('applies separate limits for traces and logs', async () => {
     const server = new DevtoolsServer({
       port: 0,
+      host: '127.0.0.1',
       maxTraceCount: 2,
       maxLogCount: 1,
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => expect(server.port).toBeGreaterThan(0));
 
     server.addTrace(makeTrace({ traceId: 't1' }));
     server.addTrace(makeTrace({ traceId: 't2' }));

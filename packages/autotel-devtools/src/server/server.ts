@@ -196,11 +196,18 @@ export class DevtoolsServer {
 
     // Only start listening if no external server was provided
     if (!options.server) {
-      this.httpServer.listen(this._port, () => {
+      // Bind the host the caller asked for. Listening on every interface while
+      // the caller said `127.0.0.1` publishes their captured telemetry to the
+      // network, and it also lets the kernel hand out a port whose loopback
+      // twin belongs to another process, which reads as a server that started
+      // and then would not answer.
+      const listening = () => {
         const addr = this.httpServer.address();
         if (addr && typeof addr === 'object') this._port = addr.port;
         this.log(`WebSocket server listening on port ${this._port}`);
-      });
+      };
+      if (options.host == null) this.httpServer.listen(this._port, listening);
+      else this.httpServer.listen(this._port, options.host, listening);
     }
   }
 
@@ -470,6 +477,15 @@ export class DevtoolsServer {
 
   listQueryFields(signal: 'traces' | 'logs'): string[] {
     return this.store.listQueryFields(signal);
+  }
+
+  pairedAttributeValues(
+    signal: 'traces' | 'logs',
+    key: string,
+    pairedKey: string,
+    limit?: number,
+  ) {
+    return this.store.pairedAttributeValues(signal, key, pairedKey, limit);
   }
 
   searchAttributes(signal: 'traces' | 'logs', value: string, limit?: number) {

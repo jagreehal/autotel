@@ -262,6 +262,19 @@ export function attachDevtoolsRoutes(
         }
         const params = new URL(url, 'http://localhost').searchParams;
         const signal = params.get('signal') === 'logs' ? 'logs' : 'traces';
+        // `key` + `pair` ask a different question from `value`: not "which
+        // field holds this text" but "which values does this field take, and
+        // which value of that other field was on the same span". That is what
+        // lets the viewer offer an experiment's own arms instead of asking the
+        // reader to know them.
+        const key = params.get('key');
+        const pair = params.get('pair');
+        if (key !== null && pair !== null) {
+          sendJson(res, 200, {
+            pairs: devtools.pairedAttributeValues(signal, key, pair),
+          });
+          return;
+        }
         sendJson(res, 200, {
           attributes: devtools.searchAttributes(
             signal,

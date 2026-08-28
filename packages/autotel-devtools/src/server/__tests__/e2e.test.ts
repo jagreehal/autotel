@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { DevtoolsServer } from '../server';
 import { attachDevtoolsRoutes } from '../http';
@@ -20,7 +20,9 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
       httpServer = createServer();
       wsServer = new DevtoolsServer({ server: httpServer });
       attachDevtoolsRoutes(httpServer, wsServer);
-      httpServer.listen(0, () => resolve(httpServer.address().port));
+      httpServer.listen(0, '127.0.0.1', () =>
+        resolve(httpServer.address().port),
+      );
     });
   }
 
@@ -29,14 +31,14 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
   ): Promise<{ ws: WebSocket; messages: any[] }> {
     return new Promise((resolve) => {
       const messages: any[] = [];
-      const ws = new WebSocket(`ws://localhost:${port}/ws`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
       ws.on('message', (data) => messages.push(JSON.parse(data.toString())));
       ws.on('open', () => resolve({ ws, messages }));
     });
   }
 
   function sendTraces(port: number, payload: any): Promise<Response> {
-    return fetch(`http://localhost:${port}/v1/traces`, {
+    return fetch(`http://127.0.0.1:${port}/v1/traces`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -44,7 +46,7 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
   }
 
   function sendLogs(port: number, payload: any): Promise<Response> {
-    return fetch(`http://localhost:${port}/v1/logs`, {
+    return fetch(`http://127.0.0.1:${port}/v1/logs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -108,11 +110,14 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
     const { ws, messages } = await connectWs(port);
 
     await sendTraces(port, makeTracePayload('trace-1', 'GET /api'));
-    await new Promise((r) => setTimeout(r, 50));
 
-    expect(messages.length).toBeGreaterThanOrEqual(1);
-    const msg = messages.find((m) => m.traces?.length > 0);
-    expect(msg).toBeDefined();
+    // Waited for, not slept on: a fixed delay is a guess about a machine
+    // under load, and it fails on the machine that is busiest.
+    const msg = await vi.waitFor(() => {
+      const found = messages.find((m) => m.traces?.length > 0);
+      expect(found).toBeDefined();
+      return found;
+    });
     expect(msg.traces[0].traceId).toBe('trace-1');
     expect(msg.traces[0].spans[0].name).toBe('GET /api');
     expect(msg.traces[0].service).toBe('test-svc');
@@ -150,10 +155,12 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
         },
       ],
     });
-    await new Promise((r) => setTimeout(r, 50));
 
-    const msg = messages.find((m) => m.logs?.length > 0);
-    expect(msg).toBeDefined();
+    const msg = await vi.waitFor(() => {
+      const found = messages.find((m) => m.logs?.length > 0);
+      expect(found).toBeDefined();
+      return found;
+    });
     expect(msg.logs[0].severityText).toBe('ERROR');
     expect(msg.logs[0].body).toBe('request failed');
 
@@ -165,10 +172,12 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
     const { ws, messages } = await connectWs(port);
 
     await sendTraces(port, makeTracePayload('trace-err', 'POST /fail', true));
-    await new Promise((r) => setTimeout(r, 50));
 
-    const msg = messages.find((m) => m.errors?.length > 0);
-    expect(msg).toBeDefined();
+    const msg = await vi.waitFor(() => {
+      const found = messages.find((m) => m.errors?.length > 0);
+      expect(found).toBeDefined();
+      return found;
+    });
     expect(msg.errors.length).toBeGreaterThan(0);
     expect(msg.errors[0].type).toBe('Error');
 
@@ -184,11 +193,10 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
 
     // Now connect — should receive history
     const { ws, messages } = await connectWs(port);
-    await new Promise((r) => setTimeout(r, 100));
 
-    const historyMsg = messages[0];
-    expect(historyMsg).toBeDefined();
-    expect(historyMsg.traces.length).toBeGreaterThanOrEqual(2);
+    await vi.waitFor(() => {
+      expect(messages[0]?.traces?.length ?? 0).toBeGreaterThanOrEqual(2);
+    });
 
     ws.close();
   });
@@ -199,16 +207,15 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
     const client2 = await connectWs(port);
 
     await sendTraces(port, makeTracePayload('trace-multi', 'GET /multi'));
-    await new Promise((r) => setTimeout(r, 50));
 
-    const msg1 = client1.messages.find((m) =>
-      m.traces?.some((t: any) => t.traceId === 'trace-multi'),
-    );
-    const msg2 = client2.messages.find((m) =>
-      m.traces?.some((t: any) => t.traceId === 'trace-multi'),
-    );
-    expect(msg1).toBeDefined();
-    expect(msg2).toBeDefined();
+    const carriesTrace = (messages: any[]) =>
+      messages.find((m) =>
+        m.traces?.some((t: any) => t.traceId === 'trace-multi'),
+      );
+    await vi.waitFor(() => {
+      expect(carriesTrace(client1.messages)).toBeDefined();
+      expect(carriesTrace(client2.messages)).toBeDefined();
+    });
 
     client1.ws.close();
     client2.ws.close();
@@ -218,7 +225,7 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
     const port = await startServer();
 
     // Invalid JSON
-    const res1 = await fetch(`http://localhost:${port}/v1/traces`, {
+    const res1 = await fetch(`http://127.0.0.1:${port}/v1/traces`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: 'not json',
@@ -235,14 +242,14 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
   it('CORS headers are present on responses', async () => {
     const port = await startServer();
 
-    const res = await fetch(`http://localhost:${port}/healthz`);
+    const res = await fetch(`http://127.0.0.1:${port}/healthz`);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
 
   it('widget.js endpoint serves JavaScript', async () => {
     const port = await startServer();
 
-    const res = await fetch(`http://localhost:${port}/widget.js`);
+    const res = await fetch(`http://127.0.0.1:${port}/widget.js`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('javascript');
   });
@@ -256,11 +263,11 @@ describe('end-to-end: OTLP ingest → WebSocket → client', () => {
       sendTraces(port, makeTracePayload(`rapid-${i}`, `GET /api/${i}`)),
     );
     await Promise.all(promises);
-    await new Promise((r) => setTimeout(r, 200));
 
     // All traces should be in server state
-    const data = wsServer!.getCurrentData();
-    expect(data.traces.length).toBe(10);
+    await vi.waitFor(() => {
+      expect(wsServer!.getCurrentData().traces.length).toBe(10);
+    });
 
     ws.close();
   });

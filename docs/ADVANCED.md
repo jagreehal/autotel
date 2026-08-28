@@ -204,6 +204,92 @@ For **KafkaJS `eachBatch`**, use `withBatchConsumer` from `autotel-plugins/kafka
 - Supports lag metrics via `lagMetrics.getCurrentOffset` / `getEndOffset`
 - Automatic semantic attributes: `messaging.system`, `messaging.destination.name`, `messaging.operation`, `messaging.consumer.group`
 
+## Experiments and Cohorts
+
+An experiment needs a guess and a way to check it. Instrumentation is already
+the check. `experiment()` records the guess, so the two groups you want to
+compare come out of the telemetry instead of being reconstructed from deploy
+timestamps:
+
+```typescript
+import { experiment, trace } from 'autotel';
+
+export const checkout = trace('checkout', async () => {
+  experiment({
+    name: 'checkout-cache',
+    variant: useCache ? 'cached' : 'direct',
+    expect: 'cached should cut p95 by 200ms',
+  });
+
+  return processCheckout();
+});
+```
+
+The call stamps `experiment.name`, `experiment.variant` and
+`experiment.expectation` on the active span, and writes the first two to
+baggage, so child spans started afterwards and the services this request goes on
+to reach carry the same answer. Bare keys need `init({ baggage: '' })`;
+`baggage: true` prefixes them.
+
+An experiment covers a request, not one function inside it. Call `experiment()`
+at any depth in a traced body: it reads the ambient span, and does nothing when
+no trace is running. The expectation travels with the result, so a reader a
+month later sees the claim next to what happened.
+
+### Bucket numbers before you compare them
+
+`compareCohorts` skips fields whose values never repeat, and a raw duration is
+such a field. `bucket()` turns one into a label a cohort can be named by:
+
+```typescript
+import { bucket } from 'autotel/analysis';
+
+log.set({
+  'payload.size_bucket': bucket(size, [1024, 65_536]),
+  // '<1024' | '1024-65536' | '>=65536'
+});
+```
+
+Boundaries are sorted, so an unordered list still produces the ranges you meant.
+A non-finite value and an empty boundary list both give `'unknown'`. Filing a
+NaN duration under the slowest bucket would invent a cohort that never ran.
+
+Devtools reads these attributes back: its Compare view lists the experiments in
+the store, offers the arms of the one you pick, and ranks what separates them.
+See [tools/devtools](https://autotel.dev/tools/devtools/#compare-two-cohorts).
+
+## Keeping a Trace the Sampler Would Drop
+
+Two escape hatches, and the difference between them is who decides.
+
+`forceKeep()` decides in code. Reach for it where a trace is worth more than the
+sampling budget: a payment, an audit-relevant action, a request you are
+debugging now.
+
+```typescript
+import { forceKeep, trace } from 'autotel';
+
+export const capture = trace('payment.capture', async () => {
+  forceKeep();
+  return psp.capture(order);
+});
+```
+
+The tail sampler writes its verdict once the body has returned, which is after
+any `forceKeep()` inside it. A forced span is marked as claimed, and the wrapper
+leaves a claimed span alone, so the verdict cannot overwrite the override.
+
+`autotel.debug` baggage decides at the edge, with nothing deployed. Baggage is a
+wire format, so it follows the request into every service behind the first one:
+
+```bash
+curl -H 'baggage: autotel.debug=1' https://api.example.com/orders
+```
+
+Set it at a gateway, from a feature flag, or by hand. Any value other than an
+empty string or `0` turns it on. `AUTOTEL_DEBUG_BAGGAGE_KEY` is exported for
+callers who would rather not spell the key.
+
 ## Safe Baggage Propagation
 
 Type-safe baggage schemas with built-in guardrails for cross-service context:

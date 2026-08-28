@@ -31,7 +31,7 @@ async function start(map?: unknown): Promise<number> {
   server = createServer();
   devtools = new DevtoolsServer({ server });
   attachDevtoolsRoutes(server, devtools, { sourceRoot: dir });
-  await new Promise<void>((resolve) => server!.listen(0, resolve));
+  await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
   return (server.address() as { port: number }).port;
 }
 

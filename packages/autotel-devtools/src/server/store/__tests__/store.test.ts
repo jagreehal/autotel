@@ -452,6 +452,83 @@ describe('DevtoolsStore — retention', () => {
   });
 });
 
+describe('DevtoolsStore — experiment cohorts', () => {
+  function experimentTrace(
+    traceId: string,
+    name: string,
+    variant: string,
+    startTime = Date.now(),
+  ): TraceData {
+    const t = trace({
+      traceId,
+      spans: [span({ traceId, startTime })],
+    });
+    t.spans[0].attributes = {
+      'experiment.name': name,
+      'experiment.variant': variant,
+    };
+    return t;
+  }
+
+  it('pairs each arm with the experiment it ran under, commonest first', () => {
+    store.ingestTraces([
+      experimentTrace('t-1', 'checkout-pricing', 'v1'),
+      experimentTrace('t-2', 'checkout-pricing', 'v2'),
+      experimentTrace('t-3', 'checkout-pricing', 'v2'),
+      // A second experiment. Its arms must stay its own: offering `control`
+      // under `checkout-pricing` would build a cohort that matches nothing.
+      experimentTrace('t-4', 'search-ranking', 'control'),
+      experimentTrace('t-5', 'search-ranking', 'reranked'),
+    ]);
+    // A different key that must not leak into the answer.
+    const other = trace();
+    other.spans[0].attributes = { 'deployment.zone': 'v2' };
+    store.ingestTraces([other]);
+
+    // Grouped by experiment, each experiment's arms commonest first, which is
+    // what lets the picker default to the two commonest arms of the one you
+    // chose.
+    expect(
+      store.pairedAttributeValues(
+        'traces',
+        'experiment.name',
+        'experiment.variant',
+      ),
+    ).toEqual([
+      { value: 'checkout-pricing', paired: 'v2', count: 2 },
+      { value: 'checkout-pricing', paired: 'v1', count: 1 },
+      { value: 'search-ranking', paired: 'control', count: 1 },
+      { value: 'search-ranking', paired: 'reranked', count: 1 },
+    ]);
+  });
+
+  it('forgets an experiment whose traces retention has pruned', () => {
+    const capped = new DevtoolsStore({
+      path: join(dir, 'experiments.db'),
+      maxTraces: 1,
+    });
+    const base = Date.now() - 10_000;
+    capped.ingestTraces([
+      experimentTrace('old', 'retired-experiment', 'v1', base),
+      experimentTrace('new', 'live-experiment', 'v1', base + 5000),
+    ]);
+    capped.enforceRetention();
+
+    // Offering an experiment whose spans are gone hands the reader an empty
+    // cohort and no explanation.
+    expect(
+      capped
+        .pairedAttributeValues(
+          'traces',
+          'experiment.name',
+          'experiment.variant',
+        )
+        .map((row) => row.value),
+    ).toEqual(['live-experiment']);
+    capped.close();
+  });
+});
+
 describe('DevtoolsStore — in-memory mode', () => {
   it('works with no path, for embedders that do not want a file', () => {
     const memory = new DevtoolsStore({});

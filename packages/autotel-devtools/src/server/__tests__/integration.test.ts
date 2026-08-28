@@ -21,11 +21,11 @@ describe('integrated HTTP + WebSocket server', () => {
     wsServer = new DevtoolsServer({ server: httpServer });
     attachDevtoolsRoutes(httpServer, wsServer);
 
-    await new Promise<void>((r) => httpServer.listen(0, r));
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
     const port = httpServer.address().port;
 
     // Connect WebSocket
-    const ws = new WebSocket(`ws://localhost:${port}/ws`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     await new Promise<void>((r) => ws.on('open', r));
 
     // Send OTLP trace via HTTP
@@ -33,7 +33,7 @@ describe('integrated HTTP + WebSocket server', () => {
       ws.on('message', (d) => r(JSON.parse(d.toString()))),
     );
 
-    await fetch(`http://localhost:${port}/v1/traces`, {
+    await fetch(`http://127.0.0.1:${port}/v1/traces`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -69,7 +69,7 @@ describe('integrated HTTP + WebSocket server', () => {
     expect(msg.traces).toHaveLength(1);
 
     // Verify fullpage HTML
-    const htmlRes = await fetch(`http://localhost:${port}/`);
+    const htmlRes = await fetch(`http://127.0.0.1:${port}/`);
     expect(htmlRes.status).toBe(200);
     const html = await htmlRes.text();
     expect(html).toContain('autotel-devtools');

@@ -584,11 +584,52 @@ populations and a ratio for small ones. Numeric fields hit the same guard, so
 bucket durations and payload sizes when you instrument them:
 
 ```typescript
-log.set({ 'payload.size_bucket': size < 1024 ? 'small' : 'large' });
+import { bucket } from 'autotel/analysis';
+
+log.set({ 'payload.size_bucket': bucket(size, [1024, 65_536]) });
+// '<1024' | '1024-65536' | '>=65536'
 ```
+
+`bucket(value, boundaries)` sorts the boundaries you pass, so an unordered list
+still gives you the ranges you meant. A non-finite value and an empty boundary
+list both return `'unknown'`. Filing a NaN duration under the slowest bucket
+would invent a cohort that never ran.
 
 The ranking is a hypothesis, not a cause. Open two traces from the named cohort
 and confirm the mechanism before you act on it.
+
+### Name the cohorts while you instrument
+
+Deploy timestamps make poor cohort boundaries. You end up reconstructing which
+requests took the new path from a clock. `experiment()` records the answer on
+the span instead:
+
+```typescript
+import { experiment, trace } from 'autotel';
+
+await trace.run('checkout', async () => {
+  experiment({
+    name: 'checkout-cache',
+    variant: useCache ? 'cached' : 'direct',
+    expect: 'cached should cut p95 by 200ms',
+  });
+
+  return processCheckout();
+});
+```
+
+The call stamps `experiment.name`, `experiment.variant` and
+`experiment.expectation` on the active span, and writes the first two to
+baggage, so child spans and the services behind this one carry the same answer.
+Bare baggage keys need `init({ baggage: '' })`; `baggage: true` prefixes them.
+
+Call it at any depth inside a traced body. It reads the ambient span, and it
+does nothing when no trace is running.
+
+Your expectation travels with the result, so a reader a month later sees the
+claim next to what happened. The devtools [Compare
+view](/tools/devtools/#compare-two-cohorts) lists the experiments it has seen
+and fills both cohorts from the arms of the one you pick.
 
 ## Service Level Objectives
 
