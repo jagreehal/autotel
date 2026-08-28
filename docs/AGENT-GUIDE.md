@@ -23,6 +23,9 @@ This document gives AI coding agents **before/after examples**, **when-to-use-wh
 | Validation mismatch observability                             | `defineValidator()` from `autotel/validate`                                 | POST body shape at boundary              |
 | Zero-code probe/401/LLM signals                               | `createSecuritySignalProcessor()` in `init({ spanProcessors })`             | Scanner traffic, credential stuffing     |
 | Join PostHog session to traces                                | `joinPostHog(posthog)` from `autotel-posthog` in `spanEnrichers`            | Browser + PostHog on the same page       |
+| Name which arm a request took                                 | `experiment({ name, variant, expect? })` from `autotel`                     | A/B test, migration, cache on or off     |
+| Make a number comparable across requests                      | `bucket(value, boundaries)` from `autotel/analysis`                         | Duration, payload size, item count       |
+| Keep a trace the sampler would drop                           | `forceKeep()` from `autotel`, or `autotel.debug` baggage on the request     | Payments, audits, debugging a live user  |
 
 **Rule of thumb**: If there is an HTTP request or a "job", create a span via `trace()` or framework middleware, and use `getRequestLogger()` when you want one coherent snapshot. Use `createStructuredError` for any error that should be explainable to users or agents. For new event emission, prefer correlated logs over direct span events.
 
@@ -226,6 +229,50 @@ export const postLogin = withTracing({})((ctx) => async (req, res) => {
 ```
 
 The handler still enforces auth. Autotel records the signal. See `docs/SECURITY-OBSERVABILITY.md` for setup and metrics.
+
+### 6. Two deploys compared from memory → `experiment()` and a cohort
+
+**Before:**
+
+```typescript
+export const checkout = trace('checkout', async (order) => {
+  // Which requests used the new pricing? Whoever remembers when it shipped.
+  const total = useNewPricing ? priceV2(order) : priceV1(order);
+  return submit(order, total);
+});
+```
+
+**After:**
+
+```typescript
+import { experiment, getRequestLogger, trace } from 'autotel';
+import { bucket } from 'autotel/analysis';
+
+export const checkout = trace('checkout', async (order) => {
+  experiment({
+    name: 'checkout-pricing',
+    variant: useNewPricing ? 'v2' : 'v1',
+    expect: 'v2 should not raise the failure rate',
+  });
+
+  const total = useNewPricing ? priceV2(order) : priceV1(order);
+  // Bucketed, because compareCohorts skips fields whose values never repeat,
+  // and a raw item count is such a field.
+  getRequestLogger().set({
+    'order.size_bucket': bucket(order.items.length, [5, 20]),
+  });
+  return submit(order, total);
+});
+```
+
+The two cohorts are now selectable from the telemetry. Devtools Compare lists
+the experiments it has seen, offers the arms of the one you pick, and ranks what
+separates them. `compareCohorts` from `autotel/analysis` does the same over any
+array of flat records when you are not in front of devtools.
+
+Both attributes propagate: `experiment()` writes name and variant to baggage, so
+the services behind this one file their spans under the same arm. Bare keys need
+`init({ baggage: '' })`.
 
 ---
 

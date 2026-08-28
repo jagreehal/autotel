@@ -67,7 +67,7 @@ describe('HTTP read-back: verify the collector received spans', () => {
       server = createServer();
       devtools = new DevtoolsServer({ server });
       attachDevtoolsRoutes(server, devtools);
-      server.listen(0, () =>
+      server.listen(0, '127.0.0.1', () =>
         resolve((server!.address() as { port: number }).port),
       );
     });
@@ -96,7 +96,7 @@ describe('HTTP read-back: verify the collector received spans', () => {
       server = createServer();
       devtools = new DevtoolsServer({ server });
       attachDevtoolsRoutes(server, devtools);
-      server.listen(0, () =>
+      server.listen(0, '127.0.0.1', () =>
         resolve((server!.address() as { port: number }).port),
       );
     });

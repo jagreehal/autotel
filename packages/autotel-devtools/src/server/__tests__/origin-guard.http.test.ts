@@ -24,7 +24,7 @@ describe('origin guard on the HTTP read surface', () => {
       attachDevtoolsRoutes(server, devtools, {
         loopbackOnly: host == null || host === '127.0.0.1',
       });
-      server.listen(0, () =>
+      server.listen(0, '127.0.0.1', () =>
         resolve(
           `http://127.0.0.1:${(server!.address() as { port: number }).port}`,
         ),

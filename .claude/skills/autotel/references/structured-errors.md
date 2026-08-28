@@ -50,9 +50,13 @@ When recorded on a span, fields map to:
 Records a structured error onto a trace context (sets status, exception, and attributes):
 
 ```typescript
-import { trace, recordStructuredError, createStructuredError } from 'autotel';
+import {
+  withTracing,
+  recordStructuredError,
+  createStructuredError,
+} from 'autotel';
 
-export const processPayment = trace((ctx) => async (req) => {
+export const processPayment = withTracing({})((ctx) => async (req) => {
   try {
     return await stripe.charges.create(req);
   } catch (err) {

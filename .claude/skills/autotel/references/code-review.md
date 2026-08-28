@@ -40,56 +40,62 @@ export async function createUser(data: CreateUserData) {
 }
 
 // After
-import { trace } from 'autotel';
+import { withTracing } from 'autotel';
 
-export const createUser = trace((ctx) => async (data: CreateUserData) => {
-  ctx.setAttributes({ 'user.email': data.email });
-  const user = await db.users.create(data);
-  ctx.setAttribute('user.id', user.id);
-  return user;
-});
+export const createUser = withTracing({})(
+  (ctx) => async (data: CreateUserData) => {
+    ctx.setAttributes({ 'user.email': data.email });
+    const user = await db.users.create(data);
+    ctx.setAttribute('user.id', user.id);
+    return user;
+  },
+);
 ```
 
 ### Step 2: Add request logger for richer context
 
 ```typescript
-import { trace, getRequestLogger } from 'autotel';
+import { withTracing, getRequestLogger } from 'autotel';
 
-export const createUser = trace((ctx) => async (data: CreateUserData) => {
-  const log = getRequestLogger(ctx);
-  log.set({ feature: 'signup', plan: data.plan });
+export const createUser = withTracing({})(
+  (ctx) => async (data: CreateUserData) => {
+    const log = getRequestLogger(ctx);
+    log.set({ feature: 'signup', plan: data.plan });
 
-  const user = await db.users.create(data);
-  log.set({ user_id: user.id, user_email: user.email });
+    const user = await db.users.create(data);
+    log.set({ user_id: user.id, user_email: user.email });
 
-  return user;
-});
+    return user;
+  },
+);
 ```
 
 ### Step 3: Add structured errors
 
 ```typescript
-import { trace, getRequestLogger, createStructuredError } from 'autotel';
+import { withTracing, getRequestLogger, createStructuredError } from 'autotel';
 
-export const createUser = trace((ctx) => async (data: CreateUserData) => {
-  const log = getRequestLogger(ctx);
-  log.set({ feature: 'signup', plan: data.plan });
+export const createUser = withTracing({})(
+  (ctx) => async (data: CreateUserData) => {
+    const log = getRequestLogger(ctx);
+    log.set({ feature: 'signup', plan: data.plan });
 
-  const existing = await db.users.findByEmail(data.email);
-  if (existing) {
-    throw createStructuredError({
-      message: 'User already exists',
-      why: 'An account with this email address is already registered',
-      fix: 'Use a different email or sign in to the existing account',
-      code: 'USER_EXISTS',
-      status: 409,
-    });
-  }
+    const existing = await db.users.findByEmail(data.email);
+    if (existing) {
+      throw createStructuredError({
+        message: 'User already exists',
+        why: 'An account with this email address is already registered',
+        fix: 'Use a different email or sign in to the existing account',
+        code: 'USER_EXISTS',
+        status: 409,
+      });
+    }
 
-  const user = await db.users.create(data);
-  log.set({ user_id: user.id });
-  return user;
-});
+    const user = await db.users.create(data);
+    log.set({ user_id: user.id });
+    return user;
+  },
+);
 ```
 
 ### Step 4: Add framework adapter (if applicable)

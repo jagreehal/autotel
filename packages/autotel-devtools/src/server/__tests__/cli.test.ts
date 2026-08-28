@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { resolve as pathResolve } from 'node:path';
 
@@ -56,9 +56,7 @@ describe('CLI', () => {
     const output = await waitForOutput(proc, 'OTLP', 5000);
     expect(output).toContain(String(port));
 
-    // Verify server is actually listening
-    const res = await fetch(`http://127.0.0.1:${port}/healthz`);
-    expect(res.status).toBe(200);
+    await expectDevtoolsOn(reportedPort(output));
   });
 
   it('accepts port as the first positional argument', async () => {
@@ -72,8 +70,7 @@ describe('CLI', () => {
     const output = await waitForOutput(proc, 'OTLP', 5000);
     expect(output).toContain(String(port));
 
-    const res = await fetch(`http://127.0.0.1:${port}/healthz`);
-    expect(res.status).toBe(200);
+    await expectDevtoolsOn(reportedPort(output));
   });
 
   it('combines positional port with --host', async () => {
@@ -91,8 +88,7 @@ describe('CLI', () => {
     const output = await waitForOutput(proc, 'OTLP', 5000);
     expect(output).toContain(String(port));
 
-    const res = await fetch(`http://127.0.0.1:${port}/healthz`);
-    expect(res.status).toBe(200);
+    await expectDevtoolsOn(reportedPort(output));
   });
 
   it('rejects invalid port with non-zero exit', async () => {
@@ -116,12 +112,15 @@ describe('CLI', () => {
     // Occupy the requested port before launching the CLI.
     const blocker = spawn(
       process.execPath,
-      ['-e', `require('http').createServer().listen(${port}, '127.0.0.1')`],
-      {
-        stdio: 'ignore',
-      },
+      [
+        '-e',
+        `require('http').createServer().listen(${port}, '127.0.0.1', () => console.log('listening'))`,
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
     );
-    await new Promise<void>((r) => setTimeout(r, 250));
+    // Wait for the bind, not for a guess at how long a bind takes: the CLI
+    // only falls forward if the port is genuinely taken by the time it starts.
+    await waitForOutput(blocker, 'listening', 5000);
 
     try {
       proc = spawn(process.execPath, [CLI_PATH, String(port)], {
@@ -140,13 +139,43 @@ describe('CLI', () => {
       const actual = Number(output.match(/http:\/\/127\.0\.0\.1:(\d+)/)![1]);
       expect(actual).toBeGreaterThan(port);
 
-      // Confirm the new port is actually listening.
-      const res = await fetch(`http://127.0.0.1:${actual}/healthz`);
-      expect(res.status).toBe(200);
+      await expectDevtoolsOn(actual);
     } finally {
       blocker.kill('SIGTERM');
     }
   });
+
+  /**
+   * The port the CLI says it bound, which is not the requested one when that
+   * port was busy and it fell forward.
+   */
+  function reportedPort(output: string): number {
+    const match = output.match(
+      /http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d+)/,
+    );
+    expect(match).not.toBeNull();
+    return Number(match![1]);
+  }
+
+  /**
+   * Devtools answering, not merely something answering.
+   *
+   * A port chosen by number can be held by anything on a developer's machine
+   * or a busy CI box, and a stranger's 404 there should not read as the CLI
+   * failing to start. The identity header is what tells the two apart. The
+   * retry covers the gap between the CLI printing its URL and the listener
+   * accepting connections.
+   */
+  async function expectDevtoolsOn(port: number): Promise<void> {
+    await vi.waitFor(
+      async () => {
+        const res = await fetch(`http://127.0.0.1:${port}/healthz`);
+        expect(res.status).toBe(200);
+        expect(res.headers.get('x-autotel-devtools')).toBeTruthy();
+      },
+      { timeout: 5000, interval: 100 },
+    );
+  }
 
   function runCli(args: string[]): Promise<string> {
     return new Promise((resolve) => {

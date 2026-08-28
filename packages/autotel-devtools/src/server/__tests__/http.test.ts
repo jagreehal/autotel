@@ -19,7 +19,7 @@ describe('HTTP server', () => {
     httpServer = createServer();
     wsServer = new DevtoolsServer({ server: httpServer });
     attachDevtoolsRoutes(httpServer, wsServer);
-    await new Promise<void>((r) => httpServer.listen(0, r));
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
     const port = httpServer.address().port;
 
     const payload = {
@@ -50,7 +50,7 @@ describe('HTTP server', () => {
       ],
     };
 
-    const res = await fetch(`http://localhost:${port}/v1/traces`, {
+    const res = await fetch(`http://127.0.0.1:${port}/v1/traces`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -66,10 +66,10 @@ describe('HTTP server', () => {
     httpServer = createServer();
     wsServer = new DevtoolsServer({ server: httpServer });
     attachDevtoolsRoutes(httpServer, wsServer);
-    await new Promise<void>((r) => httpServer.listen(0, r));
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
     const port = httpServer.address().port;
 
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://127.0.0.1:${port}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
     const html = await res.text();
@@ -82,10 +82,10 @@ describe('HTTP server', () => {
     attachDevtoolsRoutes(httpServer, wsServer, {
       title: 'Checkout <svc> & "co"',
     });
-    await new Promise<void>((r) => httpServer.listen(0, r));
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
     const port = httpServer.address().port;
 
-    const html = await (await fetch(`http://localhost:${port}/`)).text();
+    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
     expect(html).toContain(
       '<title>Checkout &lt;svc&gt; &amp; &quot;co&quot;</title>',
     );
@@ -96,10 +96,10 @@ describe('HTTP server', () => {
     httpServer = createServer();
     wsServer = new DevtoolsServer({ server: httpServer });
     attachDevtoolsRoutes(httpServer, wsServer);
-    await new Promise<void>((r) => httpServer.listen(0, r));
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
     const port = httpServer.address().port;
 
-    const res = await fetch(`http://localhost:${port}/healthz`);
+    const res = await fetch(`http://127.0.0.1:${port}/healthz`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
@@ -109,10 +109,10 @@ describe('HTTP server', () => {
     httpServer = createServer();
     wsServer = new DevtoolsServer({ server: httpServer });
     attachDevtoolsRoutes(httpServer, wsServer);
-    await new Promise<void>((r) => httpServer.listen(0, r));
+    await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', r));
     const port = httpServer.address().port;
 
-    const res = await fetch(`http://localhost:${port}/unknown`);
+    const res = await fetch(`http://127.0.0.1:${port}/unknown`);
     expect(res.status).toBe(404);
   });
 });

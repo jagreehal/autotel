@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { DevtoolsServer } from '../server';
 import { makeTrace, makeSpan, makeErrorTrace } from './test-utils/stubs';
 import WebSocket from 'ws';
@@ -11,26 +11,45 @@ describe('DevtoolsServer', () => {
     server = null;
   });
 
+  describe('binding', () => {
+    it('binds the host it was given rather than every interface', async () => {
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
+
+      // A caller who says `127.0.0.1` and gets a wildcard bind has published
+      // their captured telemetry to the network without being told.
+      const address = (
+        server as unknown as {
+          httpServer: { address(): { address: string } | null };
+        }
+      ).httpServer.address();
+      expect(address?.address).toBe('127.0.0.1');
+    });
+  });
+
   describe('WebSocket connections', () => {
     it('starts and accepts WebSocket connections', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      // The bind is what we are waiting for, so wait for the bind: a fixed
+      // delay is a guess about a machine under load.
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
       const port = server!.port;
 
-      const ws = new WebSocket(`ws://localhost:${port}/ws`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
       await new Promise<void>((resolve) => ws.on('open', resolve));
 
       expect(server!.clientCount).toBe(1);
       ws.close();
-      await new Promise((r) => setTimeout(r, 50));
     });
 
     it('rejects a live-stream subscription from a remote origin', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      // The bind is what we are waiting for, so wait for the bind: a fixed
+      // delay is a guess about a machine under load.
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
       const port = server!.port;
 
-      const ws = new WebSocket(`ws://localhost:${port}/ws`, {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
         origin: 'https://evil.com',
       });
       const rejected = await new Promise<boolean>((resolve) => {
@@ -44,11 +63,13 @@ describe('DevtoolsServer', () => {
     });
 
     it('allows a live-stream subscription from a loopback origin', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      // The bind is what we are waiting for, so wait for the bind: a fixed
+      // delay is a guess about a machine under load.
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
       const port = server!.port;
 
-      const ws = new WebSocket(`ws://localhost:${port}/ws`, {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
         origin: 'http://localhost:3000',
       });
       await new Promise<void>((resolve, reject) => {
@@ -58,15 +79,16 @@ describe('DevtoolsServer', () => {
 
       expect(server!.clientCount).toBe(1);
       ws.close();
-      await new Promise((r) => setTimeout(r, 50));
     });
 
     it('broadcasts trace data to connected clients', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      // The bind is what we are waiting for, so wait for the bind: a fixed
+      // delay is a guess about a machine under load.
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
       const port = server!.port;
 
-      const ws = new WebSocket(`ws://localhost:${port}/ws`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
       await new Promise<void>((resolve) => ws.on('open', resolve));
 
       const messagePromise = new Promise<any>((resolve) => {
@@ -80,16 +102,15 @@ describe('DevtoolsServer', () => {
       expect(msg.traces[0].traceId).toBe('t1');
 
       ws.close();
-      await new Promise((r) => setTimeout(r, 50));
     });
 
     it('sends history to late-connecting clients', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
       server!.addTrace(makeTrace({ traceId: 't1' }));
 
       const port = server!.port;
-      const ws = new WebSocket(`ws://localhost:${port}/ws`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 
       const messagePromise = new Promise<any>((resolve) => {
         ws.on('message', (data) => resolve(JSON.parse(data.toString())));
@@ -101,7 +122,6 @@ describe('DevtoolsServer', () => {
       expect(msg.traces).toHaveLength(1);
 
       ws.close();
-      await new Promise((r) => setTimeout(r, 50));
     });
   });
 
@@ -112,7 +132,6 @@ describe('DevtoolsServer', () => {
         port: 0,
         onData: (d) => seen.push(...d.traces.map((t) => t.traceId)),
       });
-      await new Promise((r) => setTimeout(r, 50));
 
       server!.addTrace(makeTrace({ traceId: 't1' }));
       server!.addTrace(makeTrace({ traceId: 't2' }));
@@ -127,7 +146,6 @@ describe('DevtoolsServer', () => {
           throw new Error('listener boom');
         },
       });
-      await new Promise((r) => setTimeout(r, 50));
 
       expect(() =>
         server!.addTrace(makeTrace({ traceId: 't1' })),
@@ -138,8 +156,8 @@ describe('DevtoolsServer', () => {
 
   describe('trace management', () => {
     it('does not count a replayed error span twice', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
       const failed = makeErrorTrace('failed', 'boom');
 
       server.addTrace(failed);
@@ -149,8 +167,8 @@ describe('DevtoolsServer', () => {
     });
 
     it('merges out-of-order spans into existing traces', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
 
       const traceId = 'trace1';
 
@@ -181,8 +199,8 @@ describe('DevtoolsServer', () => {
     });
 
     it('recovers the root span when a downstream batch arrives first', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
 
       const traceId = 'trace-root-recovery';
 
@@ -242,8 +260,8 @@ describe('DevtoolsServer', () => {
     });
 
     it('keeps a merged trace partial while its root is still missing', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
 
       const traceId = 'trace-still-partial';
       const fragment = (spanId: string, parentSpanId: string) =>
@@ -264,8 +282,8 @@ describe('DevtoolsServer', () => {
     });
 
     it('updates trace status when error spans are added', async () => {
-      server = new DevtoolsServer({ port: 0 });
-      await new Promise((r) => setTimeout(r, 100));
+      server = new DevtoolsServer({ port: 0, host: '127.0.0.1' });
+      await vi.waitFor(() => expect(server!.port).toBeGreaterThan(0));
 
       const traceId = 'trace1';
 

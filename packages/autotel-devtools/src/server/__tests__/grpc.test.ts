@@ -22,7 +22,11 @@ afterEach(async () => {
 
 describe('OTLP/gRPC receiver', () => {
   it('accepts canonical protobuf trace exports on the standard service path', async () => {
-    devtools = new DevtoolsServer({ port: 0, retentionIntervalMs: 0 });
+    devtools = new DevtoolsServer({
+      port: 0,
+      host: '127.0.0.1',
+      retentionIntervalMs: 0,
+    });
     receiver = await startOtlpGrpcReceiver({ devtools, port: 0 });
 
     const exporter = new InMemorySpanExporter();

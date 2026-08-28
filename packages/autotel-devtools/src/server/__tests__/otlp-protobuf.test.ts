@@ -276,7 +276,7 @@ describe('HTTP ingestion of OTLP/protobuf (Content-Type: application/x-protobuf)
       server = createServer();
       devtools = new DevtoolsServer({ server });
       attachDevtoolsRoutes(server, devtools);
-      server.listen(0, () =>
+      server.listen(0, '127.0.0.1', () =>
         resolve((server!.address() as { port: number }).port),
       );
     });

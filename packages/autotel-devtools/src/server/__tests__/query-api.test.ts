@@ -26,7 +26,7 @@ async function start(): Promise<number> {
   server = createServer();
   devtools = new DevtoolsServer({ server });
   attachDevtoolsRoutes(server, devtools);
-  await new Promise<void>((resolve) => server!.listen(0, resolve));
+  await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
   return (server.address() as { port: number }).port;
 }
 
@@ -259,5 +259,93 @@ describe('POST /api/query/traces', () => {
       body: JSON.stringify({ query: '' }),
     });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('GET /api/query/attributes?key=&pair= — experiment cohorts', () => {
+  it('pairs each arm with its own experiment, so the viewer can offer them', async () => {
+    const port = await start();
+    const arm = (name: string, variant: string, spanId: string) =>
+      otlpSpan({
+        traceId: `t-${spanId}`,
+        spanId,
+        name: 'checkout',
+        service: 'shop',
+        startMs: Date.now(),
+        durationMs: 10,
+        attributes: [
+          { key: 'experiment.name', value: { stringValue: name } },
+          { key: 'experiment.variant', value: { stringValue: variant } },
+        ],
+      });
+
+    await postTraces(port, arm('checkout-pricing', 'v1', 'a'));
+    await postTraces(port, arm('checkout-pricing', 'v2', 'b'));
+    await postTraces(port, arm('checkout-pricing', 'v2', 'c'));
+    // A second experiment, whose arm must not be offered under the first.
+    await postTraces(port, arm('search-ranking', 'reranked', 'd'));
+
+    const res = await fetch(
+      `http://127.0.0.1:${port}/api/query/attributes?key=experiment.name&pair=experiment.variant`,
+    );
+    const body = (await res.json()) as {
+      pairs: Array<{ value: unknown; paired: unknown; count: number }>;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.pairs).toEqual([
+      { value: 'checkout-pricing', paired: 'v2', count: 2 },
+      { value: 'checkout-pricing', paired: 'v1', count: 1 },
+      { value: 'search-ranking', paired: 'reranked', count: 1 },
+    ]);
+  });
+
+  it('answers the every-other-arm query the picker generates', async () => {
+    const port = await start();
+    const arm = (name: string, variant: string, spanId: string) =>
+      otlpSpan({
+        traceId: `t-${spanId}`,
+        spanId,
+        name: 'checkout',
+        service: 'shop',
+        startMs: Date.now(),
+        durationMs: 10,
+        attributes: [
+          { key: 'experiment.name', value: { stringValue: name } },
+          { key: 'experiment.variant', value: { stringValue: variant } },
+        ],
+      });
+
+    await postTraces(port, arm('checkout-pricing', 'v1', 'a'));
+    await postTraces(port, arm('checkout-pricing', 'v2', 'b'));
+    await postTraces(port, arm('checkout-pricing', 'v3', 'c'));
+    await postTraces(port, arm('search-ranking', 'v2', 'd'));
+
+    // The baseline the picker writes when you leave the second side alone. It
+    // has to exclude the arm under investigation and stay inside its own
+    // experiment, or the contrast it measures is against itself.
+    const { body } = await query(port, {
+      query:
+        'experiment.name = "checkout-pricing" AND experiment.variant != "v1"',
+    });
+
+    expect(body.traces?.map((t) => t.traceId).sort()).toEqual(['t-b', 't-c']);
+  });
+
+  it('still searches by value when no pair is asked for', async () => {
+    const port = await start();
+    await seed(port);
+
+    const res = await fetch(
+      `http://127.0.0.1:${port}/api/query/attributes?value=u-42`,
+    );
+    const body = (await res.json()) as {
+      attributes: Array<{ key: string; value: unknown }>;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.attributes).toContainEqual(
+      expect.objectContaining({ key: 'user.id', value: 'u-42' }),
+    );
   });
 });

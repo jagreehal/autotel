@@ -28,11 +28,113 @@
   } from '../compare-client';
   import { connectionUrlSignal, timeWindowSignal } from '../store.svelte';
   import { httpBaseFromWsUrl } from '../source-client';
-  import { resolveWindow } from '../timeWindow';
+  import { resolveWindow, toQueryWindow } from '../timeWindow';
   import { cn } from '../utils/cn';
 
   let outlierQuery = $state('duration > 500');
   let baselineQuery = $state('');
+  /**
+   * Each experiment with its own arms, commonest first. Empty hides the picker.
+   *
+   * Arms come paired with the experiment they ran under rather than as every
+   * `experiment.variant` in the store, so picking one experiment can never
+   * offer an arm belonging to another.
+   */
+  let experiments = $state<Array<{ name: string; arms: string[] }>>([]);
+  let selectedExperiment = $state('');
+  let outlierArm = $state('');
+  let baselineArm = $state('');
+
+  const armsFor = (name: string) =>
+    experiments.find((e) => e.name === name)?.arms ?? [];
+
+  function baseUrl(): string | null {
+    const wsUrl = connectionUrlSignal.value;
+    return wsUrl === null ? null : httpBaseFromWsUrl(wsUrl);
+  }
+
+  /**
+   * A query literal for a value the user did not type.
+   *
+   * A variant named `pricing "vip"` closes the string early and the query no
+   * longer parses. Backslash escapes are what the tokenizer decodes, and only
+   * the quote and the backslash need escaping: everything else, newlines
+   * included, survives the round trip as itself.
+   */
+  const literal = (value: string) =>
+    `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+
+  async function loadExperiments(): Promise<void> {
+    const base = baseUrl();
+    if (base === null) return;
+    try {
+      const res = await fetch(
+        `${base}/api/query/attributes?key=experiment.name&pair=experiment.variant`,
+      );
+      if (!res.ok) return;
+      const body = (await res.json()) as {
+        pairs?: Array<{ value: unknown; paired: unknown }>;
+      };
+      const byName = new Map<string, string[]>();
+      for (const pair of body.pairs ?? []) {
+        const name = String(pair.value);
+        const arm = String(pair.paired);
+        if (name === '' || arm === '') continue;
+        const arms = byName.get(name) ?? [];
+        if (!arms.includes(arm)) arms.push(arm);
+        byName.set(name, arms);
+      }
+      experiments = [...byName].map(([name, arms]) => ({ name, arms }));
+    } catch {
+      // A viewer talking to a server without the endpoint keeps the picker
+      // hidden and the query boxes working.
+    }
+  }
+
+  $effect(() => {
+    void loadExperiments();
+  });
+
+  /**
+   * Fill both sides from the arms of the chosen experiment.
+   *
+   * The two commonest arms are a starting point, not the answer: an experiment
+   * with three arms has a comparison the counts cannot pick, so each side stays
+   * selectable. The queries name the experiment as well as the variant, so they
+   * stay correct where two experiments share a variant label.
+   */
+  function useExperiment(name: string): void {
+    selectedExperiment = name;
+    const arms = armsFor(name);
+    outlierArm = arms[0] ?? '';
+    baselineArm = arms[1] ?? '';
+    if (name !== '') mark = null;
+    writeQueries();
+  }
+
+  /** Picking an arm to investigate drops it from the other side's options. */
+  function useOutlierArm(arm: string): void {
+    outlierArm = arm;
+    if (baselineArm === arm) baselineArm = '';
+    writeQueries();
+  }
+
+  /**
+   * Both cohorts, from the arms chosen.
+   *
+   * The baseline is every *other* arm, never the whole experiment: a cohort
+   * that contains the one you are investigating dilutes its own contrast, and
+   * for a one-arm experiment the two sides would be the same spans.
+   */
+  function writeQueries(): void {
+    if (selectedExperiment === '' || outlierArm === '') return;
+    const named = `experiment.name = ${literal(selectedExperiment)}`;
+    outlierQuery = `${named} AND experiment.variant = ${literal(outlierArm)}`;
+    baselineQuery =
+      baselineArm === ''
+        ? `${named} AND experiment.variant != ${literal(outlierArm)}`
+        : `${named} AND experiment.variant = ${literal(baselineArm)}`;
+  }
   /** Epoch ms of the marked moment, or null when comparing by query. */
   let mark = $state<number | null>(null);
   let running = $state(false);
@@ -41,15 +143,20 @@
   const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
 
   function sides(): { outlier: CohortSide; baseline: CohortSide } {
+    const bounds = resolveWindow(timeWindowSignal.value, Date.now());
     if (mark === null) {
+      // Both sides read the window the toolbar shows. A comparison over
+      // everything the store holds, under a toolbar that says the last 15
+      // minutes, answers a question nobody asked. "All" stays unbounded, so
+      // the comparison still spans the whole store when nothing was chosen.
+      const window = toQueryWindow(bounds);
       return {
-        outlier: { query: outlierQuery },
-        baseline: { query: baselineQuery },
+        outlier: { query: outlierQuery, window },
+        baseline: { query: baselineQuery, window },
       };
     }
     // Same query on both sides, split by the marker: whatever differs is the
     // change, not the filter.
-    const bounds = resolveWindow(timeWindowSignal.value, Date.now());
     return {
       outlier: {
         query: baselineQuery,
@@ -75,10 +182,22 @@
 
     running = true;
     try {
-      result = await compareCohorts(sides(), {
-        fetch: globalThis.fetch.bind(globalThis),
-        baseUrl,
-      });
+      result = await compareCohorts(
+        {
+          ...sides(),
+          // The arms are the definition of the two cohorts, so they separate
+          // them perfectly and say nothing. Ranking them first would push the
+          // finding the reader came for off the top of the list.
+          ignoreFields:
+            selectedExperiment === ''
+              ? undefined
+              : ['experiment.name', 'experiment.variant'],
+        },
+        {
+          fetch: globalThis.fetch.bind(globalThis),
+          baseUrl,
+        },
+      );
     } finally {
       running = false;
     }
@@ -115,6 +234,54 @@
         {running ? 'Comparing…' : 'Compare'}
       </button>
     </div>
+
+    {#if experiments.length > 0}
+      <label class="mb-2 block text-[11px] text-fg-muted">
+        Experiment
+        <select
+          value={selectedExperiment}
+          onchange={(e) => useExperiment(e.currentTarget.value)}
+          class="mt-0.5 w-full rounded border border-line bg-subtle px-2 py-1 text-xs text-fg focus:border-accent focus:outline-none"
+        >
+          <option value="">Compare by query instead</option>
+          {#each experiments as experiment (experiment.name)}
+            <option value={experiment.name}>{experiment.name}</option>
+          {/each}
+        </select>
+      </label>
+      {#if selectedExperiment !== ''}
+        <div class="mb-2 grid grid-cols-2 gap-2">
+          <label class="block text-[11px] text-fg-muted">
+            Arm
+            <select
+              value={outlierArm}
+              onchange={(e) => useOutlierArm(e.currentTarget.value)}
+              class="mt-0.5 w-full rounded border border-line bg-subtle px-2 py-1 text-xs text-fg focus:border-accent focus:outline-none"
+            >
+              {#each armsFor(selectedExperiment) as arm (arm)}
+                <option value={arm}>{arm}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="block text-[11px] text-fg-muted">
+            Against
+            <select
+              value={baselineArm}
+              onchange={(e) => {
+                baselineArm = e.currentTarget.value;
+                writeQueries();
+              }}
+              class="mt-0.5 w-full rounded border border-line bg-subtle px-2 py-1 text-xs text-fg focus:border-accent focus:outline-none"
+            >
+              <option value="">Every other arm</option>
+              {#each armsFor(selectedExperiment).filter((a) => a !== outlierArm) as arm (arm)}
+                <option value={arm}>{arm}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+      {/if}
+    {/if}
 
     {#if mark === null}
       <label class="mb-1 block text-[11px] text-fg-muted">

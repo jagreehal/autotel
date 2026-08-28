@@ -33,10 +33,10 @@ Philosophy: "Write once, observe everywhere" - instrument once, stream to any OT
 ## Tracing API
 
 ```typescript
-import { trace, span } from 'autotel';
+import { trace, withTracing, span } from 'autotel';
 
-// Factory pattern (receives ctx for attributes)
-export const createUser = trace((ctx) => async (data) => {
+// Context form (receives ctx for attributes)
+export const createUser = withTracing({})((ctx) => async (data) => {
   ctx.setAttribute('user.id', data.id);
   return await db.users.create(data);
 });
@@ -57,9 +57,9 @@ span('db.insert', async () => {
 **Default: throw, don't catch.** `trace()` records status, exception, and structured attributes when the wrapped function rejects.
 
 ```typescript
-import { trace, createStructuredError } from 'autotel';
+import { withTracing, createStructuredError } from 'autotel';
 
-export const charge = trace((ctx) => async (cart) => {
+export const charge = withTracing({})((ctx) => async (cart) => {
   if (!cart.items.length) {
     throw createStructuredError({
       message: 'Cart is empty',
@@ -75,11 +75,13 @@ export const charge = trace((ctx) => async (cart) => {
 Fallbacks, in order:
 
 1. **Attach call-site context, then rethrow**: `getRequestLogger(ctx).error(err, { step })`. Use when the rethrown error needs context only known at the catch site.
-2. **Writing instrumentation/middleware that wraps user handlers**: `ctx.recordError(err)` from inside a `trace((ctx) => ...)` callback. Sets ERROR status, structured `error.*` attributes, and (during the back-compat window) records the exception. Accepts `unknown` so no `as Error` cast is needed in catch blocks. For code that doesn't have a `ctx` handle, use the standalone form `recordStructuredError(ctx, err)`.
+2. **Writing instrumentation/middleware that wraps user handlers**: `ctx.recordError(err)` from inside a `withTracing({})((ctx) => ...)` callback. Sets ERROR status, structured `error.*` attributes, and (during the back-compat window) records the exception. Accepts `unknown` so no `as Error` cast is needed in catch blocks. For code that doesn't have a `ctx` handle, use the standalone form `recordStructuredError(ctx, err)`.
 
 ```typescript
-// Inside a trace() callback — instrumentation wrapping a user handler:
-return trace({ name }, async (ctx) => {
+// Instrumentation wrapping a user handler. trace.run() is the immediate form:
+// it runs now and hands the callback the span's ctx. trace(name, fn) returns a
+// wrapper instead, and passes fn the caller's arguments, never a ctx.
+return trace.run(name, async (ctx) => {
   try {
     return await userHandler(args);
   } catch (err) {
@@ -94,9 +96,9 @@ return trace({ name }, async (ctx) => {
 ### Request Logger
 
 ```typescript
-import { trace, getRequestLogger } from 'autotel';
+import { withTracing, getRequestLogger } from 'autotel';
 
-export const handleOrder = trace((ctx) => async (req) => {
+export const handleOrder = withTracing({})((ctx) => async (req) => {
   const log = getRequestLogger(ctx);
   log.set({ feature: 'checkout', tier: req.user.tier });
 
@@ -118,10 +120,10 @@ export const handleOrder = trace((ctx) => async (req) => {
 ### Event Tracking
 
 ```typescript
-import { trace, getEventQueue } from 'autotel';
+import { withTracing, getEventQueue } from 'autotel';
 
-// Inside trace() — use ctx.track for ergonomic, ctx-bound emission:
-export const signup = trace((ctx) => async (data) => {
+// Inside a traced body — use ctx.track for ergonomic, ctx-bound emission:
+export const signup = withTracing({})((ctx) => async (data) => {
   ctx.track('user.signup', { userId: data.id, plan: data.plan });
   return await db.users.create(data);
 });
@@ -133,6 +135,37 @@ track('user.signup', { userId: '123', plan: 'pro' });
 // MUST flush before assertions or shutdown
 await getEventQueue()?.flush();
 ```
+
+### Experiments and Cohorts
+
+```typescript
+import { experiment, getRequestLogger, withTracing } from 'autotel';
+import { bucket } from 'autotel/analysis';
+
+export const checkout = withTracing({})((ctx) => async (order) => {
+  // Names the guess: stamps experiment.name / .variant / .expectation on the
+  // active span and puts the first two in baggage, so child spans and the
+  // services behind this one carry the same answer.
+  experiment({
+    name: 'checkout-cache',
+    variant: useCache ? 'cached' : 'direct',
+    expect: 'cached should cut p95 by 200ms',
+  });
+
+  // compareCohorts skips fields whose values never repeat, so bucket numbers
+  // at instrumentation time. Non-finite values give 'unknown'.
+  getRequestLogger(ctx).set({
+    'payload.size_bucket': bucket(order.bytes, [1024, 65_536]),
+  });
+
+  return submitOrder(order);
+});
+```
+
+`experiment()` is ambient: call it at any depth inside a traced body, and it
+no-ops when nothing is being traced. Bare baggage keys need
+`init({ baggage: '' })`; `baggage: true` prefixes them. Devtools Compare then
+offers the experiment's arms instead of asking the reader to know them.
 
 ### Correlation ID
 
@@ -347,7 +380,7 @@ init({
 ### Tracing
 
 - MUST: Use `trace()`, `span()`, `instrument()` to wrap business logic
-- MUST: Use factory pattern `trace((ctx) => ...)` when setting attributes
+- MUST: Use the context form `withTracing({})((ctx) => ...)` when setting attributes. `trace(fn)` wraps `fn` itself, so it never hands you a `ctx`
 - SHOULD: Let trace names infer from const/function names
 - NEVER: Manually start/end spans for app logic (SDK glue only)
 

@@ -298,6 +298,48 @@ you clicked it. A deep link to a trace carries that trace's own bounds plus a
 minute of air, so a link you hand to someone opens on a window that still
 contains the trace.
 
+## Compare two cohorts
+
+Compare answers "what is different about the ones that broke". Give it two
+queries, and it ranks the attributes that separate the traces they match:
+
+1. Query the traces you are investigating, for example `duration > 500`.
+2. Leave the second query empty to compare against every trace in the window,
+   or write one to pick your own baseline.
+3. Read the ranked fields. A field near the top appears in the first cohort far
+   more often than in the second.
+
+Both cohorts obey the time window in the toolbar, so a comparison covers the
+period you are looking at rather than everything the store has kept.
+
+When you cannot describe the difference as a query, mark the moment instead.
+Mark, change something, then compare. Both sides then run the second query and
+split on the marker, so what differs is your change and not the filter.
+
+When a retained span carries `experiment.name`, Compare offers an experiment
+picker above the queries. Pick one and you get its own arms, taken from the
+spans that ran under it, with the two commonest filled in for you. Change either
+side: an experiment with three arms has a comparison the counts cannot guess.
+Leaving the second side on "every other arm" compares the one you are
+investigating against the rest of the experiment, and the arm under
+investigation is never offered as its own baseline. The generated queries name
+the experiment as well as the variant, so they stay correct where two
+experiments share a variant label. `experiment.name` and `experiment.variant`
+are then left out of the ranking: they define the two cohorts, so they separate
+them perfectly and tell you nothing.
+
+Stamp those attributes with
+[`experiment()`](/advanced/#name-the-cohorts-while-you-instrument) from
+`autotel`. A viewer that has never seen an experiment never sees the picker.
+
+Compare borrows `compareCohorts` from `autotel/analysis`, which is a peer
+dependency. Without `autotel` installed the endpoint answers 501 with an
+install hint rather than failing to start. Compare and Coverage are full-page
+only; the embedded widget stays lean.
+
+The ranking is a hypothesis. Open two traces from the named cohort and confirm
+the mechanism before you act on it.
+
 ## Endpoints
 
 The standalone server exposes:
@@ -313,6 +355,7 @@ The standalone server exposes:
 | `/api/query/logs`       | POST   | Run a query against stored logs                         |
 | `/api/query/errors`     | POST   | Error groups over stored traces                         |
 | `/api/query/metrics`    | POST   | Metric series for the chosen window                     |
+| `/api/query/attributes` | GET    | Fields holding a value, or one field's values paired    |
 | `/api/analysis/compare` | POST   | Compare two cohorts of traces                           |
 | `/api/coverage`         | GET    | Entry points from `autotel map` against what arrived    |
 | `/`                     | GET    | Full-page dashboard UI                                  |
