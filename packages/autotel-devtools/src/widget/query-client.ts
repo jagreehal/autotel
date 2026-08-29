@@ -14,7 +14,7 @@
  */
 
 import type { QueryError } from '../query/ast';
-import type { ErrorGroup, LogData, TraceData } from './types';
+import type { ErrorGroup, LogData, TraceData, WebMcpInventory } from './types';
 
 export interface QueryTracesArgs {
   query: string;
@@ -40,6 +40,12 @@ export type QueryTracesResult =
 
 export type QueryErrorsResult =
   | { status: 'ok'; errors: ErrorGroup[] }
+  | { status: 'invalid'; errors: QueryError[] }
+  | { status: 'aborted' }
+  | { status: 'error'; message: string };
+
+export type QueryWebMcpResult =
+  | { status: 'ok'; webmcp: WebMcpInventory }
   | { status: 'invalid'; errors: QueryError[] }
   | { status: 'aborted' }
   | { status: 'error'; message: string };
@@ -224,4 +230,41 @@ export async function queryErrors(
   if (result.status !== 'ok') return result;
   const payload = result.payload as { errors?: ErrorGroup[] };
   return { status: 'ok', errors: payload.errors ?? [] };
+}
+
+/**
+ * The WebMCP tool surface for a window.
+ *
+ * No query argument: the fold answers one question, and the span-name filter
+ * belongs to the server so a caller cannot narrow it into a wrong inventory.
+ */
+export async function queryWebMcp(
+  args: { window?: { start: number; end: number }; limit?: number },
+  deps: QueryClientDeps,
+): Promise<QueryWebMcpResult> {
+  const result = await postQuery(
+    `${deps.baseUrl}/api/query/webmcp`,
+    { query: '', ...args },
+    deps,
+  );
+  if (result.status !== 'ok') return result;
+  const payload = result.payload as { webmcp?: WebMcpInventory };
+  return {
+    status: 'ok',
+    webmcp: payload.webmcp ?? {
+      tools: [],
+      summary: {
+        installations: 0,
+        emptyInstallations: 0,
+        toolsOffered: 0,
+        toolsWithdrawn: 0,
+        calls: 0,
+        errors: 0,
+        resultBytes: 0,
+        envelopeBytes: 0,
+        toolsWithDroppedAnnotations: 0,
+        toolsWithoutInputSchema: 0,
+      },
+    },
+  };
 }

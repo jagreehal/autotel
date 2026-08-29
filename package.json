@@ -20,12 +20,13 @@
     "test:playwright-e2e": "pnpm --filter @jagreehal/example-playwright-e2e test",
     "bundle-size": "node scripts/check-bundle-size.mjs",
     "bundle-size:update": "node scripts/check-bundle-size.mjs --update",
+    "check-exports-map": "node scripts/check-exports-map.mjs",
     "clean": "turbo clean",
     "type-check": "turbo type-check",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install --lockfile-only",
     "release": "pnpm build && changeset publish",
-    "quality": "turbo run build && turbo run build-storybook && turbo run lint && pnpm run format:check && turbo run type-check && turbo run test && turbo run test:integration",
+    "quality": "turbo run build && turbo run build-storybook && turbo run lint && pnpm run format:check && turbo run type-check && turbo run test && turbo run test:integration && pnpm run check-exports-map",
     "format:check": "prettier --check ."
   },
   "devDependencies": {

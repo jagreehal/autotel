@@ -18,6 +18,7 @@ const EVERY_TAB = {
   security: true,
   compare: true,
   coverage: true,
+  webmcp: true,
 } satisfies Record<TabType, true>;
 
 describe('shared tab definitions', () => {

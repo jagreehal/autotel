@@ -224,7 +224,7 @@ describe('trace()', () => {
 
 - Each adapter should be **tree-shakeable**
 - Follow the `EventsAdapter` interface
-- Include tests using `AdapterTestHarness`
+- Include tests using `SubscriberTestHarness`
 - Document adapter-specific configuration
 
 ```typescript

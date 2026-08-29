@@ -1,0 +1,21 @@
+{
+  "name": "@jagreehal/example-agent-trace",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "autotel": "workspace:*",
+    "autotel-genai": "workspace:*",
+    "autotel-subscribers": "workspace:*"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.3"
+  }
+}

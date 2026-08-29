@@ -667,6 +667,35 @@ export function attachDevtoolsRoutes(
         return;
       }
 
+      // POST /api/query/webmcp — the WebMCP tool surface for a window.
+      if (req.method === 'POST' && url === '/api/query/webmcp') {
+        if (!allowSensitiveRequest(req.headers, loopbackOnly)) {
+          sendJson(res, 403, { error: 'Forbidden' });
+          return;
+        }
+        try {
+          const body = (await readJsonBody(req)) as {
+            window?: { start: number; end: number };
+            limit?: number;
+          };
+          const result = devtools.queryWebMcp({
+            window: body.window,
+            limit: body.limit,
+          });
+          if (result.errors_parse) {
+            sendJson(res, 400, { errors: result.errors_parse });
+            return;
+          }
+          sendJson(res, 200, { webmcp: result.webmcp });
+        } catch (e) {
+          sendJson(res, 400, {
+            error: 'Invalid query request',
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+        return;
+      }
+
       // GET /api/metrics — the metric catalogue.
       if (req.method === 'GET' && url === '/api/metrics') {
         if (!allowSensitiveRequest(req.headers, loopbackOnly)) {

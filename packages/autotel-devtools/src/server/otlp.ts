@@ -450,7 +450,7 @@ export function sendJson<TBody>(
   const accepted = String(res.req?.headers['accept-encoding'] ?? '');
 
   if (accepted.includes('gzip') && body.byteLength >= GZIP_MIN_BYTES) {
-    // ponytail: synchronous, like the rest of the read path. A multi-megabyte
+    // Synchronous, like the rest of the read path. A multi-megabyte
     // response blocks the loop for tens of ms; move to the async gzip if a
     // local dev tool ever has more than one impatient client.
     const packed = gzipSync(body);

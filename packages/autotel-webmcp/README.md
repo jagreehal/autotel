@@ -62,6 +62,28 @@ no warning, and no trace in `getTools()`. This attribute is the trace.
 | `webmcp.result.envelope`                      | The result is an MCP `{ content: [...] }` wrapper                        |
 | `webmcp.result.substituted`                   | The browser replaced an empty result                                     |
 
+### `webmcp.tool.withdraw`
+
+| Attribute                               | Meaning                              |
+| --------------------------------------- | ------------------------------------ |
+| `gen_ai.tool.name` / `webmcp.tool.name` | The tool the agent can no longer see |
+
+Withdrawal is an abort: `registerTool(tool, { signal })` is how the platform
+hands a tool back, and a library holds one controller per tool. Under `when:`
+gating that happens continuously rather than at teardown, so an inventory built
+from registrations alone only grows, and lists tools that are gone.
+
+### `webmcp.install`
+
+Emitted by `instrumentWebMCP()` before the patch goes live, carrying
+`webmcp.installation.id` — which is stamped on every register, execute and
+withdraw span from that installation. A reload tears the page down without
+aborting any signal, so without it two page loads are indistinguishable and a
+tool removed in the second still reads as offered.
+
+An install span with no registrations after it is the signature of calling
+`instrumentWebMCP()` _after_ registering your tools.
+
 `result.envelope` catches a common and expensive mistake. Chrome does **not**
 unwrap MCP's `{ content: [{ type: 'text', text }] }` envelope, so the agent
 receives the wrapper as JSON and has to parse it to reach your text. Measured

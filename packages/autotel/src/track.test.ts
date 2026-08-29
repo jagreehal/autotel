@@ -64,6 +64,23 @@ describe('track() function', () => {
       }).not.toThrow();
     });
 
+    it('warns once when an event is dropped for want of a subscriber', () => {
+      // An event with nowhere to go used to leave no trace at all, so an
+      // evaluation result or an audit event could look recorded when it was
+      // discarded. Say so, once, rather than every call.
+      init({ service: 'test-app' }); // No subscribers
+      loggerWarnSpy = vi.spyOn(getLogger(), 'warn');
+
+      track('gen_ai.evaluation.result', { name: 'faithfulness' });
+      track('gen_ai.evaluation.result', { name: 'relevance' });
+
+      expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        {},
+        expect.stringContaining('no subscribers'),
+      );
+    });
+
     it('should be no-op if no adapters configured', () => {
       init({ service: 'test-app' }); // No adapters
 

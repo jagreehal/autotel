@@ -130,7 +130,7 @@ function getEntityAttributes(
  * text and a shared verdict would attribute one classifier's security finding
  * to the other. `NO_CLASSIFIER` stands in when only budgets are being checked.
  *
- * ponytail: unbounded in the number of distinct manifests, which is the tool
+ * Unbounded in the number of distinct manifests, which is the tool
  * count for any normal server. Add an LRU bound if a server ever generates tool
  * names or descriptions per request.
  */

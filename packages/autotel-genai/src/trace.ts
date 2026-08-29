@@ -308,11 +308,15 @@ export function recordGenAiUsage(
   usage: TokenUsage,
   options?: EstimateCostOptions & { recordCost?: boolean },
 ): number | undefined {
-  const cost =
-    options?.recordCost === false
-      ? undefined
-      : estimateLLMCost(model, usage, options);
-  const attrs = genAiUsageAttributes({ ...usage, costUsd: cost });
+  const declined = options?.recordCost === false;
+  const cost = declined ? undefined : estimateLLMCost(model, usage, options);
+  const attrs = genAiUsageAttributes({
+    ...usage,
+    costUsd: cost,
+    // Only when a price was wanted and none was found. A caller who declined
+    // the cost is not missing one.
+    unpricedModel: !declined && cost === undefined ? model : undefined,
+  });
   if (Object.keys(attrs).length > 0) ctx.setAttributes(attrs);
   return cost;
 }

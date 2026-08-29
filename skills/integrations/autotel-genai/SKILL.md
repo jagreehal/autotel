@@ -93,6 +93,13 @@ recordLLMCost(ctx, 'claude-sonnet-4', {
 });
 ```
 
+`estimateLLMCost` returns `undefined` when no pricing entry matches the model.
+Rather than leave the cost attribute unset, where an unpriced call and a free
+one look identical to a dashboard and to a cost ceiling, `recordGenAiUsage` and
+the agent runtime set `gen_ai.usage.cost.unpriced_model` to the model id. Treat
+a non-empty value as "this model needs a price before any cost number is
+trustworthy".
+
 Override/extend pricing per call with `{ pricing: { 'my-model': { inputPer1M, outputPer1M } } }`.
 
 ### Typed attribute builders
@@ -244,6 +251,16 @@ Identity, delegation, policy, and audit for agentic workflows (the former
 `autotel-agent` package). Records `agent.*`/`delegation.*`/`tool.*`/`policy.*`
 governance attributes plus canonical `gen_ai.*` when `ai` metadata is present.
 
+A tool call runs in its own `execute_tool {name}` span: `withAgentToolCall` and
+`defineAgentToolCall` start one rather than recording onto whatever span is
+open, so two calls in the same parent each keep their own duration instead of
+overwriting each other. Pass `options.ctx` to state where the call belongs and
+keep the old placement. The wide event names each tool fact once, in snake_case
+(`tool.input_hash`, `tool.output_hash`, `tool.call_id`, `tool.execution_ms`),
+matching the span attributes. A denial from `recordHumanApproval` sets
+`tool.status: 'blocked'`, because `tool.name` on the span no longer means the
+tool ran.
+
 ```typescript
 import { withScopedTool } from 'autotel-genai/agent';
 
@@ -269,7 +286,8 @@ await withScopedTool(
   / `cache_read.input_tokens` / `cache_creation.input_tokens`. **never**
   `prompt_tokens` / `completion_tokens` / `total_tokens`.
 - Finish reasons: `gen_ai.response.finish_reasons` (plural, string array).
-- Cost (autotel extension): `gen_ai.usage.cost.usd`.
+- Cost (autotel extension): `gen_ai.usage.cost.usd`, or
+  `gen_ai.usage.cost.unpriced_model` when no pricing entry matched.
 - Other autotel extensions (clearly non-spec, namespaced under `gen_ai.*`):
   `gen_ai.guard.*` + `gen_ai.session.*` (guard), `gen_ai.response.time_to_finish`
   / `output_tokens_per_second` / `time_per_output_chunk` (streaming),

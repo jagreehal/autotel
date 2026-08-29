@@ -264,6 +264,35 @@ describe('recordGenAiUsage', () => {
     );
   });
 
+  it('names an unpriced model instead of leaving the cost silently absent', () => {
+    // A model with no pricing entry costs nothing to a cost ceiling and reads
+    // as zero on a dashboard. The span has to say the price is unknown.
+    const ctx = { setAttributes: vi.fn() };
+    const cost = recordGenAiUsage(ctx, 'some-unreleased-model-9', {
+      inputTokens: 1000,
+      outputTokens: 500,
+    });
+
+    expect(cost).toBeUndefined();
+    const attrs = ctx.setAttributes.mock.calls[0][0];
+    expect(attrs).not.toHaveProperty('gen_ai.usage.cost.usd');
+    expect(attrs['gen_ai.usage.cost.unpriced_model']).toBe(
+      'some-unreleased-model-9',
+    );
+  });
+
+  it('does not claim an unpriced model when cost recording was declined', () => {
+    const ctx = { setAttributes: vi.fn() };
+    recordGenAiUsage(
+      ctx,
+      'some-unreleased-model-9',
+      { inputTokens: 10 },
+      { recordCost: false },
+    );
+    const attrs = ctx.setAttributes.mock.calls[0][0];
+    expect(attrs).not.toHaveProperty('gen_ai.usage.cost.unpriced_model');
+  });
+
   it('skips cost when recordCost is false', () => {
     const ctx = { setAttributes: vi.fn() };
     const cost = recordGenAiUsage(

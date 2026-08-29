@@ -55,6 +55,48 @@ pnpm start:canonical # Canonical log lines (one wide event per request)
 
 **See:** [example-canonical-logs/README.md](./example-canonical-logs/README.md) for detailed documentation.
 
+### Experiment, Compare, Keep
+
+**`example-experiment`** - The probe-sense-respond loop end to end: `experiment()` names the guess, one wide event carries the dimensions, `compareCohorts()` finds what separates the slow requests, and `forceKeep()` holds a trace the sampler would drop. The cause of the slowdown is planted, and both scripts assert that autotel finds it.
+
+```bash
+cd apps/example-experiment
+pnpm start        # 800 checkouts across two arms, then rank the differences
+pnpm start:keep   # production sampling on: every decline still kept
+```
+
+**See:** [example-experiment/README.md](./example-experiment/README.md).
+
+### Agent Trace as the Audit Trail
+
+**`example-agent-trace`** runs the test an agent trace has to pass: hand a reviewer only the telemetry and ask them to reconstruct why the agent did what it did. A support agent drafts, fails a check, retries with the complaint as context, and issues a refund; `src/reviewer.ts` then answers eight questions from the spans and events alone. The same work as one span and four log lines answers none of them, and both results are asserted.
+
+```bash
+cd apps/example-agent-trace
+pnpm start
+```
+
+### Agent Gates
+
+**`example-agent-gates`** shows the two refusals an agent system needs. `createGenAiGuard` stops a spin-looping agent before it reaches the tool that moves money, and a human approval gate records its outcome and its evidence. Between runs, a candidate procedure must clear the released version's eval score before it ships, and the refusal names the cases that broke.
+
+```bash
+cd apps/example-agent-gates
+pnpm start             # the gate inside the run
+pnpm start:evolution   # the gate between runs
+```
+
+### Instrumentation Coverage
+
+**`example-hono`** also answers the question a telemetry backend cannot: which entry points have emitted nothing. `autotel map` scores every route and writes a committed `autotel.map.json`; the coverage check joins that map against what arrived and asserts the result.
+
+```bash
+cd apps/example-hono
+pnpm map        # score every entry point
+pnpm map:check  # fail a build on a regression
+pnpm coverage   # call two of five routes, assert the rest report dark
+```
+
 ### Browser/Web Examples
 
 #### Vanilla JavaScript Example

@@ -151,12 +151,12 @@ const events = new Event('my-app', {
 ### Test Your Adapter
 
 ```typescript
-import { AdapterTestHarness } from 'autotel-subscribers/testing';
+import { SubscriberTestHarness } from 'autotel-subscribers/testing';
 
-const harness = new AdapterTestHarness(new MySubscriber('test-key'));
+const harness = new SubscriberTestHarness(new MySubscriber('test-key'));
 const results = await harness.runAll();
 
-AdapterTestHarness.printResults(results);
+SubscriberTestHarness.printResults(results);
 // All tests passed! Your adapter is ready to use.
 ```
 
@@ -619,14 +619,14 @@ const subscriber = applyMiddleware(adapter, [
 
 ## Testing Custom Subscribers
 
-### AdapterTestHarness
+### SubscriberTestHarness
 
 Validate your adapter works correctly:
 
 ```typescript
-import { AdapterTestHarness } from 'autotel-subscribers/testing';
+import { SubscriberTestHarness } from 'autotel-subscribers/testing';
 
-const harness = new AdapterTestHarness(new MySubscriber());
+const harness = new SubscriberTestHarness(new MySubscriber());
 const results = await harness.runAll();
 
 if (results.passed) {
@@ -636,7 +636,7 @@ if (results.passed) {
 }
 
 // Or use the built-in printer
-AdapterTestHarness.printResults(results);
+SubscriberTestHarness.printResults(results);
 ```
 
 Tests include:
@@ -699,7 +699,7 @@ import {
 
 // Testing utilities
 import {
-  AdapterTestHarness,
+  SubscriberTestHarness,
   MockWebhookServer,
   MockEventSubscriber,
 } from 'autotel-subscribers/testing';

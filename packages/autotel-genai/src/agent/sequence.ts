@@ -134,7 +134,7 @@ function correlationValue(
  * up on an anchor as soon as one candidate is out of range, which is only sound
  * if everything after it is further out still.
  *
- * ponytail: restarts the walk at every event matching step 0, so worst case is
+ * Restarts the walk at every event matching step 0, so worst case is
  * O(events² × steps). Sessions are tens to low hundreds of steps, and the
  * single-pass alternative is wrong: anchoring greedily on the first candidate
  * abandons a real chain whenever that candidate's window expires first.

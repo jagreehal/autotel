@@ -11,7 +11,11 @@ import {
 import { getConfig } from './config';
 import { promiseFromThenable } from './is-thenable';
 import { evidenceAttribute } from './evidence';
-import { getConfig as getInitConfig, getSdk } from './init';
+import {
+  getConfig as getInitConfig,
+  getConfiguredSampler,
+  getSdk,
+} from './init';
 import { runInOperationContext } from './operation-context';
 import {
   AlwaysSampler,
@@ -403,6 +407,9 @@ function runWithTraceContextStorage<TResult>(fn: () => TResult): TResult {
   return storage.run({ value: context.active() }, fn);
 }
 
+/** Used when neither the wrapper nor `init()` chose a sampler. */
+const FALLBACK_SAMPLER = new AlwaysSampler();
+
 function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
   fnFactory: (
     ctx: TraceContext,
@@ -412,7 +419,11 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
   variableName?: string,
 ): WrappedFunction<TArgs, TReturn> {
   const { tracer, meter } = getConfig();
-  const sampler: Sampler = options.sampler || new AlwaysSampler();
+  // Resolved per call, not here: a wrapper is usually created at module load,
+  // which for most apps is before `init()` has run. Reading the configured
+  // sampler at wrap time would freeze in whatever was true too early.
+  const resolveSampler = (): Sampler =>
+    options.sampler ?? getConfiguredSampler() ?? FALLBACK_SAMPLER;
   // SAFETY: getSpanName reads only `name` and `displayName` off the function
   // it is given, to infer a span name. A factory has those too - it is the
   // caller's own function - and nothing else about it is read.
@@ -443,6 +454,7 @@ function wrapWithTracingSync<TArgs extends unknown[], TReturn>(
       args,
       metadata: {},
     };
+    const sampler = resolveSampler();
     const shouldSample = sampler.shouldSample(samplingContext);
     const sampleRate = sampler.sampleRate?.(samplingContext);
     const needsTailSampling = sampler.needsTailSampling?.() ?? false;

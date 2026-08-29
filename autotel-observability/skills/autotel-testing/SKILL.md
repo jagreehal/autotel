@@ -39,6 +39,25 @@ import { createTraceCollector } from 'autotel/testing';
 - `collector.reset()`: clear collected spans
 - `collector.shutdown()`: clean up resources
 
+### createMemoryExporter()
+
+Collects finished spans as plain objects, with no OpenTelemetry SDK types to
+satisfy. Use it when you want to assert on span shape directly rather than go
+through the collector.
+
+```typescript
+import { createMemoryExporter } from 'autotel/testing';
+
+const exporter = createMemoryExporter();
+// pass exporter to init(), then:
+exporter.findSpan('checkout'); // one span, or undefined
+exporter.findSpans('db.query'); // all matching spans
+exporter.reset();
+```
+
+Each recorded span has `name`, `traceId`, `parentSpanId`, `durationMs`,
+`attributes` and `status`.
+
 ### InMemorySpanExporter (low-level)
 
 For custom test setups when you need direct access to the exporter.

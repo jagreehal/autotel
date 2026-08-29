@@ -69,22 +69,31 @@ export const loadUser = withTracing({ name: 'user.load' })(
 
 ## Server Endpoints
 
-| Route                                          | What                                                                 |
-| ---------------------------------------------- | -------------------------------------------------------------------- |
-| `POST /v1/traces` · `/v1/logs` · `/v1/metrics` | OTLP receivers: JSON or protobuf (`application/x-protobuf`)          |
-| `GET /`                                        | Dashboard UI (traces, logs, metrics, errors, resources, service map) |
-| `GET /widget.js`                               | Embeddable widget bundle (IIFE)                                      |
-| `GET /healthz`                                 | Health check                                                         |
-| `WS /ws`                                       | WebSocket stream (history replay on connect)                         |
+| Route                                          | What                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `POST /v1/traces` · `/v1/logs` · `/v1/metrics` | OTLP receivers: JSON or protobuf (`application/x-protobuf`)        |
+| `GET /`                                        | Dashboard UI (see Views below)                                     |
+| `POST /api/query/{traces,logs,errors,metrics}` | Server-side query over the durable store                           |
+| `POST /api/query/webmcp`                       | WebMCP tool surface, folded server-side over every page of results |
+| `GET /widget.js`                               | Embeddable widget bundle (IIFE)                                    |
+| `GET /healthz`                                 | Health check                                                       |
+| `WS /ws`                                       | WebSocket stream (history replay on connect)                       |
 
 ## Views in the UI
 
 - **Traces**: waterfall + flame graph, search with 300 ms debounce
-- **Logs**: severity/resource filtering
-- **Metrics**: per-metric time series
-- **Errors**: aggregated and grouped by fingerprint
+- **Agents**: coding-agent sessions (Claude Code, opencode, Codex) folded by `autotel-agents`
+- **GenAI**: LLM calls with tokens, cost and streaming timing
+- **Flow**: request flow across services
 - **Resources**: derived from ingested telemetry
 - **Service map**: visualises call graph
+- **Metrics**: per-metric time series
+- **Logs**: severity/resource filtering
+- **Errors**: aggregated and grouped by fingerprint
+- **Security**: security events and detected signal chains
+- **Compare**: cohort comparison between two selections, including an experiment's arms
+- **Coverage**: entry points that have emitted nothing
+- **WebMCP**: browser tool surface from `autotel-webmcp` spans, which tools the agent can currently see, what the browser dropped, what results cost in bytes. Full-page viewer only, it does not fit the embedded widget's gzip budget
 
 ## Environment Variables
 

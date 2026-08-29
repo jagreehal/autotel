@@ -123,7 +123,7 @@ Only import from these public entry points:
 
 - `autotel`: core: trace, span, instrument, init, getRequestLogger, createStructuredError, parseError
 - `autotel/event`: Event class, track()
-- `autotel/testing`: createTraceCollector()
+- `autotel/testing`: createTraceCollector(), createMemoryExporter()
 - `autotel/exporters`: InMemorySpanExporter
 - `autotel/logger`: Pino integration
 - `autotel/metric`: Metrics helpers

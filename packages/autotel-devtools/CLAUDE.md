@@ -84,6 +84,15 @@ pnpm test:dist          # Built ESM smoke test + widget raw/gzip budgets
 - `autotel-agents` is browser-safe (no `node:*`); all session reduction logic lives there, not in the widget. Add a new agent (e.g. Codex) by adding one adapter in that package: no devtools change.
 - Test data: `src/widget/components/__fixtures__/agents.ts` builds realistic sessions through the real reducers (used by `AgentsView.stories.ts` + `__tests__/AgentsView.test.ts`).
 
+## WebMCP tab
+
+- `autotel-webmcp` emits `webmcp.install` / `.tool.register` / `.tool.execute` / `.tool.withdraw`. `src/server/webmcp-aggregator.ts` folds them into a tool surface; `POST /api/query/webmcp` serves it; `WebMcpView.svelte` renders it. Types live in `widget/types.ts`, so widget code never imports from `src/server`.
+- **The fold drains every page** (the `queryErrors` pattern). A partial fold does not fail, it under-reports — "2 tools dropped annotations" when the answer is 6 — and gets more wrong the more traffic there is.
+- **Lifecycle state is chronological and predates the activity window.** Store pages arrive newest-first, so the fold sorts spans before reducing them. A bounded query reads lifecycle history through the window end, then counts executions only inside the requested window; otherwise a long-lived tool becomes "not observed" as soon as its registration ages out.
+- **"Currently offered" is scoped to the latest `webmcp.installation.id`.** A reload withdraws nothing, so without that scope the previous page load's tools read as still available. A tool seen only in executions is `observedAtRegistration: false` and makes no claim about annotations or schema.
+- **Full-page only.** It carries no chart code and was still 146.4 kB gzip against the embedded bundle's 145 kB. Revisit when something else gets cheaper, not by raising the budget.
+- Captured payloads are masked behind a reveal toggle and scrubbed by the shared `redact()` in `widget/utils.ts` — the same one `AgentsView` uses. Opting into capture is not opting into display.
+
 ## Derived views and the working set
 
 - **Nothing derived reads `tracesSignal` directly.** Service Map, Flow, Security, Resources, GenAI and Errors fold over `windowedTracesSignal` / `windowedErrorGroupsSignal`, which prefer the **store-backed working set** (`workingSet.svelte.ts`) and fall back to the live tail only when the server is unreachable. Reading the raw signal reintroduces the bug this replaced: a view describing the last hundred traces while the toolbar names an hour.

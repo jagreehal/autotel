@@ -939,6 +939,19 @@ export function getDefaultSampler(): Sampler {
 }
 
 /**
+ * The sampler `init()` was configured with, or undefined when it was not.
+ *
+ * Separate from {@link getDefaultSampler} on purpose: the tracing wrapper needs
+ * to know whether a sampler was *chosen*. Falling back to the production preset
+ * there would start dropping spans for every app that never asked to sample.
+ *
+ * @internal
+ */
+export function getConfiguredSampler(): Sampler | undefined {
+  return config?.sampler;
+}
+
+/**
  * Get the string redactor configured via init({ attributeRedactor }).
  * Returns null if no redactor was configured.
  */

@@ -32,7 +32,12 @@
     agentAggregateSignal,
     selectAgentSession,
   } from '../store.svelte';
-  import { formatNumber, formatDuration, formatTimestamp } from '../utils';
+  import {
+    formatNumber,
+    formatDuration,
+    formatTimestamp,
+    redact,
+  } from '../utils';
   import type { AgentEvent, AgentSession } from 'autotel-agents';
   import CopyButton from './CopyButton.svelte';
 
@@ -46,13 +51,6 @@
   // capture), keep it masked until the user reveals it, and scrub obvious
   // secrets either way.
   let reveal = $state(false);
-  function redact(text: string): string {
-    return text
-      .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '«email»')
-      .replace(/\b(sk|pk|ghp|xox[baprs])[-_][A-Za-z0-9]{8,}\b/g, '«secret»')
-      .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '«token»');
-  }
-
   function cost(usd: number): string {
     if (usd === 0) return '$0';
     return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;

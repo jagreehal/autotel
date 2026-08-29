@@ -117,28 +117,35 @@ Repeated calls share one installation and are reference-counted. Each caller uni
 
 Shared concepts use canonical names so WebMCP calls land on the dashboards already built for server-side MCP. WebMCP-specific facts sit under `webmcp.*`.
 
-| Attribute                               | Notes                                            |
-| --------------------------------------- | ------------------------------------------------ |
-| `gen_ai.tool.name` / `webmcp.tool.name` | Tool name                                        |
-| `gen_ai.operation.name`                 | `execute_tool`                                   |
-| `mcp.tool.arguments.size`               | Argument bytes, recorded with capture off        |
-| `mcp.tool.result.size`                  | Result bytes the agent pays for                  |
-| `gen_ai.tool.call.arguments`            | Arguments, only with capture on                  |
-| `gen_ai.tool.call.result`               | The exact string the agent received, capture on  |
-| `webmcp.result.type`                    | The handler's return type before serialisation   |
-| `webmcp.result.envelope`                | The value is an MCP `{ content: [...] }` wrapper |
-| `webmcp.result.substituted`             | The browser replaced an empty result             |
-| `webmcp.annotations.sent`               | Annotation keys you passed                       |
-| `webmcp.annotations.dropped`            | Annotation keys the browser discarded            |
-| `error.type` / `webmcp.result.error`    | Set when `isErrorResult` recognises a failure    |
+| Attribute                               | Notes                                             |
+| --------------------------------------- | ------------------------------------------------- |
+| `gen_ai.tool.name` / `webmcp.tool.name` | Tool name                                         |
+| `webmcp.installation.id`                | The `instrumentWebMCP()` call the span belongs to |
+| `gen_ai.operation.name`                 | `execute_tool`                                    |
+| `mcp.tool.arguments.size`               | Argument bytes, recorded with capture off         |
+| `mcp.tool.result.size`                  | Result bytes the agent pays for                   |
+| `gen_ai.tool.call.arguments`            | Arguments, only with capture on                   |
+| `gen_ai.tool.call.result`               | The exact string the agent received, capture on   |
+| `webmcp.result.type`                    | The handler's return type before serialisation    |
+| `webmcp.result.envelope`                | The value is an MCP `{ content: [...] }` wrapper  |
+| `webmcp.result.substituted`             | The browser replaced an empty result              |
+| `webmcp.annotations.sent`               | Annotation keys you passed                        |
+| `webmcp.annotations.dropped`            | Annotation keys the browser discarded             |
+| `error.type` / `webmcp.result.error`    | Set when `isErrorResult` recognises a failure     |
 
-Spans are named `webmcp.tool.register` and `webmcp.tool.execute`.
+Spans are named `webmcp.install`, `webmcp.tool.register`, `webmcp.tool.execute` and `webmcp.tool.withdraw`.
+
+`webmcp.install` is emitted before the patch goes live, so it exists even when nothing registers afterwards. `webmcp.tool.withdraw` is emitted when the `AbortSignal` passed to `registerTool(tool, { signal })` aborts, which is how the platform takes a tool back. Registrations alone only ever grow: without withdrawals, a tool set gated by page state reads as still offered.
+
+Every span carries `webmcp.installation.id`. A reload tears the page down without aborting any signal, so load 1's tools are registered and never withdrawn; the id is what separates the two loads. Scope "currently offered" to the newest id.
 
 ## What to look for in the spans
 
 **`webmcp.annotations.dropped` is not empty.** Chrome keeps `readOnlyHint` and `untrustedContentHint` and normalises both to booleans. `destructiveHint`, `idempotentHint` and the rest of the server-side MCP vocabulary disappear with no error. A tool you believed was marked destructive is one that never was.
 
 **`webmcp.result.substituted` is true.** The handler returned an empty string and the agent read _Operation succeeded_, a success message nobody wrote.
+
+**An installation with no `webmcp.tool.register` spans.** `instrumentWebMCP()` ran after the tools were registered, so the patch never saw them. Indistinguishable from having no tools at all without the `webmcp.install` span.
 
 **`webmcp.result.envelope` is true.** The handler returned an MCP `{ content: [...] }` wrapper. Chrome does not unwrap it, so the agent got the JSON rather than the text inside. This also catches a library that serialised the envelope to a string first.
 

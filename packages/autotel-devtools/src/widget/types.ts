@@ -143,7 +143,8 @@ export type TabType =
   | 'errors'
   | 'genai'
   | 'flow'
-  | 'security';
+  | 'security'
+  | 'webmcp';
 
 export type CornerPosition =
   'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
@@ -177,4 +178,81 @@ export interface WidgetState {
   selectedTab: TabType;
   selectedTraceId: string | null;
   panelSize: PanelSize;
+}
+
+/**
+ * The WebMCP tool surface, as folded by `server/webmcp-aggregator`.
+ *
+ * A tool is not a span: it is a name whose lifecycle spans a registration, any
+ * number of executions and possibly a withdrawal, and it is only meaningful
+ * within the installation (page load) that registered it.
+ */
+export interface WebMcpCall {
+  timestamp: number;
+  durationMs: number;
+  resultBytes: number;
+  resultType?: string;
+  envelope: boolean;
+  substituted: boolean;
+  error: boolean;
+  /** Present only when the app opted into payload capture. Render masked. */
+  input?: string;
+  /** The exact string the agent received. Present only with payload capture. */
+  result?: string;
+  traceId: string;
+  spanId: string;
+}
+
+export interface WebMcpTool {
+  name: string;
+  /** Installation (page load) this record belongs to. */
+  installationId: string;
+  service: string;
+  sessionId?: string;
+  /** False when the tool was only ever seen executing — see the module note. */
+  observedAtRegistration: boolean;
+  /** True while the tool is offered: registered, and not since withdrawn. */
+  offered: boolean;
+  firstSeen: number;
+  lastSeen: number;
+  descriptionLength?: number;
+  hasInputSchema?: boolean;
+  annotationsSent: string[];
+  /** Annotations the browser discarded. Available nowhere else. */
+  annotationsDropped: string[];
+  calls: number;
+  errors: number;
+  /** Executions whose result was an unwrapped MCP `{ content: [...] }` envelope. */
+  envelopeCalls: number;
+  /** Of `resultBytes`, the part that is envelope wrapper rather than content. */
+  envelopeBytes: number;
+  /** Executions where the browser replaced an empty result with its own text. */
+  substitutedCalls: number;
+  /** UTF-8 bytes of result the agent has paid for across every call. */
+  resultBytes: number;
+  medianResultBytes: number;
+  /** The last few executions, newest first. Bounded — this is not a call log. */
+  recentCalls: WebMcpCall[];
+  traceId?: string;
+  spanId?: string;
+}
+
+export interface WebMcpSummary {
+  installations: number;
+  /** Installations that registered nothing — the "instrumented too late" signature. */
+  emptyInstallations: number;
+  toolsOffered: number;
+  toolsWithdrawn: number;
+  calls: number;
+  errors: number;
+  resultBytes: number;
+  /** Bytes that are envelope wrapper rather than content. See `envelopeOverhead`. */
+  envelopeBytes: number;
+  toolsWithDroppedAnnotations: number;
+  toolsWithoutInputSchema: number;
+}
+
+export interface WebMcpInventory {
+  tools: WebMcpTool[];
+  summary: WebMcpSummary;
 }

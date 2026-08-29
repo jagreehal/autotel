@@ -111,6 +111,12 @@ export const GEN_AI = {
    */
   USAGE_COST_USD: 'gen_ai.usage.cost.usd',
   /**
+   * The model id no pricing entry matched, set instead of a cost. An absent
+   * cost and a zero cost look the same to a dashboard and to a cost ceiling;
+   * this says which model needs a price before either can be trusted.
+   */
+  USAGE_COST_UNPRICED_MODEL: 'gen_ai.usage.cost.unpriced_model',
+  /**
    * The same number under the name the ecosystem converged on before the spec
    * covered cost at all. OpenLLMetry writes it, and Langfuse, among others,
    * reads it to populate its cost column. Emitted alongside

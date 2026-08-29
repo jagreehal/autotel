@@ -199,6 +199,13 @@ export function recordHumanApproval(input: RecordHumanApprovalInput): void {
   if (input.toolName) {
     attrs['tool.name'] = input.toolName;
   }
+  // A refusal is the end of that tool call, and the span now names a tool that
+  // never ran. Say so in the tool's own vocabulary, so `tool.name` plus
+  // `tool.status` still answers whether it happened. An approval says nothing:
+  // the tool call owns `planned` → `complete` itself.
+  if (!input.approved) {
+    attrs['tool.status'] = 'blocked';
+  }
   if (input.controllerId) {
     attrs[AGENT_SECURITY_ATTR.controllerId] = hashIdentifier(
       input.controllerId,
