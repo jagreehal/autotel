@@ -1,5 +1,13 @@
 # @jagreehal/example-mongoose
 
+## 1.0.90
+
+### Patch Changes
+
+- Updated dependencies [78c7131]
+  - autotel@7.3.0
+  - autotel-mongoose@24.0.0
+
 ## 1.0.89
 
 ### Patch Changes

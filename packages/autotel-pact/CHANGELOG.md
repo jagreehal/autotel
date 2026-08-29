@@ -1,5 +1,12 @@
 # autotel-pact
 
+## 19.0.0
+
+### Patch Changes
+
+- Updated dependencies [78c7131]
+  - autotel@7.3.0
+
 ## 18.0.0
 
 ### Patch Changes
