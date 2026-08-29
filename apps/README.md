@@ -35,6 +35,18 @@ Simple working examples demonstrating autotel functionality.
 
 ## Examples
 
+### Three Pillars vs Unified
+
+**`example-pillars-vs-unified`** - Same failed checkout, two telemetry shapes. Pillars mode prints a siloed metric slice, scattered logs, and a bare span. Unified mode emits one Autotel wide event with `user`, `cart`, `payment.provider`, and `error` together. Built for newcomers; no Docker or API keys.
+
+```bash
+cd apps/example-pillars-vs-unified
+pnpm start:pillars   # three cabinets; question unanswerable
+pnpm start:unified   # one dossier; payment.provider is obvious
+```
+
+**See:** [example-pillars-vs-unified/README.md](./example-pillars-vs-unified/README.md).
+
 ### Canonical Log Lines Demo
 
 **`example-canonical-logs`** - Demonstrates canonical log lines (wide events) vs traditional logging. Shows how one comprehensive log line per request with all context enables powerful queries instead of string search.
